@@ -33,6 +33,15 @@ Makefile
 !cmake/*.cmake.in
 !CMakeLists.txt
 
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+*.whl
+.eggs/
+
 # OS
 .DS_Store
 Thumbs.db
