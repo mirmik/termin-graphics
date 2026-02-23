@@ -27,12 +27,25 @@ set(TGFX_C_SOURCES
     src/tgfx_log.c
     src/tgfx_gpu_ops.c
     src/tgfx_types.c
+    src/tgfx_intern_string.c
+    src/tc_pool.c
+    src/tc_resource_map.c
+    src/tc_gpu_context.c
+    src/tc_gpu_share_group.c
+    src/resources/tc_mesh.c
+    src/resources/tc_shader_registry.c
+    src/resources/tc_texture_registry.c
+    src/resources/tc_mesh_registry.c
+    src/resources/tc_material_registry.c
+    src/tgfx_resource_gpu.c
 )
 
 set(TGFX_CXX_SOURCES
     src/opengl/opengl_backend.cpp
     src/opengl/opengl_backend_singleton.cpp
     src/opengl/opengl_framebuffer.cpp
+    src/tgfx_texture_handle.cpp
+    src/tgfx_mesh_handle.cpp
 )
 
 if(TGFX_BUILD_SHARED AND NOT WIN32)
@@ -57,6 +70,13 @@ set_target_properties(termin_graphics PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION 0
 )
+
+# --- Python bindings ---
+option(TGFX_BUILD_PYTHON "Build Python bindings" OFF)
+
+if(TGFX_BUILD_PYTHON)
+    add_subdirectory(python)
+endif()
 
 # --- Tests ---
 option(BUILD_TESTS "Build tests" OFF)
