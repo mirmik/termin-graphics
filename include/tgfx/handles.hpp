@@ -51,6 +51,9 @@ public:
     virtual uint32_t get_id() const = 0;
     virtual int get_width() const = 0;
     virtual int get_height() const = 0;
+
+    /// Check if the underlying GPU texture is still valid.
+    virtual bool is_valid() const { return get_id() != 0; }
 };
 
 // Abstract framebuffer handle.

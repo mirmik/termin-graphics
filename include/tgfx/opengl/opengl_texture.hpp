@@ -40,6 +40,28 @@ public:
     int get_width() const override { return width_; }
     int get_height() const override { return height_; }
 
+    bool is_valid() const override {
+        return handle_ != 0 && glIsTexture(handle_) == GL_TRUE;
+    }
+
+    void update_data(const uint8_t* data, int width, int height, int channels) {
+        if (handle_ == 0) return;
+        GLenum format = (channels == 1) ? GL_RED : GL_RGBA;
+        glBindTexture(GL_TEXTURE_2D, handle_);
+        if (width == width_ && height == height_ && channels == channels_) {
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height,
+                            format, GL_UNSIGNED_BYTE, data);
+        } else {
+            GLenum internal_format = format;
+            glTexImage2D(GL_TEXTURE_2D, 0, internal_format,
+                         width, height, 0, format, GL_UNSIGNED_BYTE, data);
+            width_ = width;
+            height_ = height;
+            channels_ = channels;
+        }
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
 private:
     void upload(const uint8_t* data, bool mipmap, bool clamp) {
         glGenTextures(1, &handle_);
@@ -105,6 +127,10 @@ public:
     uint32_t get_id() const override { return tex_id_; }
     int get_width() const override { return width_; }
     int get_height() const override { return height_; }
+
+    bool is_valid() const override {
+        return tex_id_ != 0 && glIsTexture(tex_id_) == GL_TRUE;
+    }
 
     void set_tex_id(GLuint id) { tex_id_ = id; }
     void set_target(GLenum target) { target_ = target; }

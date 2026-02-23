@@ -226,7 +226,8 @@ void bind_gpu_handles(nb::module_& m) {
         .def("delete", &GPUTextureHandle::release)
         .def("get_id", &GPUTextureHandle::get_id)
         .def("get_width", &GPUTextureHandle::get_width)
-        .def("get_height", &GPUTextureHandle::get_height);
+        .def("get_height", &GPUTextureHandle::get_height)
+        .def("is_valid", &GPUTextureHandle::is_valid);
 
     // FramebufferHandle
     nb::class_<FramebufferHandle>(m, "FramebufferHandle")
@@ -305,6 +306,7 @@ void bind_graphics_backend(nb::module_& m) {
         .def("read_pixel", &GraphicsBackend::read_pixel)
         .def("read_depth_pixel", &GraphicsBackend::read_depth_pixel)
         .def("check_gl_error", &GraphicsBackend::check_gl_error)
+        .def("clear_gl_errors", &GraphicsBackend::clear_gl_errors)
         .def("read_depth_buffer", [](GraphicsBackend& self, FramebufferHandle* fbo) -> nb::object {
             if (fbo == nullptr) return nb::none();
             if (fbo->is_msaa()) return nb::none();
@@ -369,6 +371,14 @@ void bind_graphics_backend(nb::module_& m) {
             int height = nb::cast<int>(size[1]);
             return self.create_texture(const_cast<uint8_t*>(data.data()), width, height, channels, mipmap, clamp);
         }, nb::arg("data"), nb::arg("size"), nb::arg("channels") = 4, nb::arg("mipmap") = true, nb::arg("clamp") = false)
+        .def("update_texture", [](OpenGLGraphicsBackend& self, GPUTextureHandle* handle, nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data, int width, int height, int channels) {
+            self.update_texture(handle, const_cast<uint8_t*>(data.data()), width, height, channels);
+        }, nb::arg("handle"), nb::arg("data"), nb::arg("width"), nb::arg("height"), nb::arg("channels") = 4)
+        .def("update_texture", [](OpenGLGraphicsBackend& self, GPUTextureHandle* handle, nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data, nb::tuple size, int channels) {
+            int width = nb::cast<int>(size[0]);
+            int height = nb::cast<int>(size[1]);
+            self.update_texture(handle, const_cast<uint8_t*>(data.data()), width, height, channels);
+        }, nb::arg("handle"), nb::arg("data"), nb::arg("size"), nb::arg("channels") = 4)
         .def("create_framebuffer", [](OpenGLGraphicsBackend& self, int width, int height, int samples, const std::string& format) {
             return self.create_framebuffer(width, height, samples, format);
         }, nb::arg("width"), nb::arg("height"), nb::arg("samples") = 1, nb::arg("format") = "")

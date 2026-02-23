@@ -798,6 +798,17 @@ public:
         return std::make_unique<OpenGLTextureHandle>(data, width, height, channels, mipmap, clamp);
     }
 
+    void update_texture(GPUTextureHandle* handle,
+                        const uint8_t* data,
+                        int width,
+                        int height,
+                        int channels) {
+        auto* gl_handle = dynamic_cast<OpenGLTextureHandle*>(handle);
+        if (gl_handle) {
+            gl_handle->update_data(data, width, height, channels);
+        }
+    }
+
     FramebufferHandlePtr create_framebuffer(int width, int height, int samples, const std::string& format = "", TextureFilter filter = TextureFilter::LINEAR) override;
     FramebufferHandlePtr create_shadow_framebuffer(int width, int height) override;
 
