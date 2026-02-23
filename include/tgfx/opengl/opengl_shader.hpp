@@ -7,7 +7,7 @@
 #include <cstring>
 
 #include "tgfx/handles.hpp"
-#include "tgfx/tgfx_log.hpp"
+#include <tcbase/tc_log.hpp>
 
 namespace termin {
 
@@ -149,7 +149,7 @@ public:
             static int warn_count = 0;
             if (warn_count < 3) {
                 warn_count++;
-                tgfx::Log::warn("[set_uniform_matrix4_array] uniform '%s' not found (loc=%d)", name, loc);
+                tc::Log::warn("[set_uniform_matrix4_array] uniform '%s' not found (loc=%d)", name, loc);
             }
         }
     }
@@ -170,7 +170,7 @@ private:
             if (glIsProgram(program_)) {
                 return;
             }
-            tgfx::Log::warn("ensure_compiled: program %u invalid, recompiling", program_);
+            tc::Log::warn("ensure_compiled: program %u invalid, recompiling", program_);
         }
 
         program_ = 0;

@@ -1,7 +1,7 @@
 // tc_mesh.c - Mesh reference counting and UUID computation
 #include "tgfx/resources/tc_mesh.h"
 #include "tgfx/resources/tc_mesh_registry.h"
-#include "tgfx/tgfx_log.h"
+#include <tcbase/tc_log.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -20,7 +20,7 @@ bool tc_mesh_release(tc_mesh* mesh) {
         return false;
     }
     if (mesh->header.ref_count == 0) {
-        tgfx_log(TGFX_LOG_WARN, "[tc_mesh_release] uuid=%s name=%s refcount already zero!",
+        tc_log(TC_LOG_WARN, "[tc_mesh_release] uuid=%s name=%s refcount already zero!",
                mesh->header.uuid, mesh->header.name ? mesh->header.name : "(null)");
         return false;
     }

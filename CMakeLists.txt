@@ -12,6 +12,9 @@ option(TGFX_BUILD_SHARED "Build shared library" ON)
 # Find OpenGL
 find_package(OpenGL REQUIRED)
 
+# termin-base (provides tc_log shared logging)
+find_package(termin_base REQUIRED)
+
 # --- GLAD (static library) ---
 add_library(glad STATIC
     third/glad/src/glad.c
@@ -24,7 +27,6 @@ target_link_libraries(glad PUBLIC ${CMAKE_DL_LIBS})
 
 # --- termin_graphics ---
 set(TGFX_C_SOURCES
-    src/tgfx_log.c
     src/tgfx_gpu_ops.c
     src/tgfx_types.c
     src/tgfx_intern_string.c
@@ -63,6 +65,7 @@ target_include_directories(termin_graphics PUBLIC
 target_link_libraries(termin_graphics PUBLIC
     glad
     OpenGL::GL
+    tcbase::termin_base
 )
 
 # Set library version

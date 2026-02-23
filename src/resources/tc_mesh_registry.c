@@ -3,7 +3,7 @@
 #include "tgfx/tc_pool.h"
 #include "tgfx/tc_resource_map.h"
 #include "tgfx/tc_registry_utils.h"
-#include "tgfx/tgfx_log.h"
+#include <tcbase/tc_log.h>
 #include "tgfx/tgfx_intern_string.h"
 #include <stdlib.h>
 #include <string.h>
@@ -39,14 +39,14 @@ void tc_mesh_init(void) {
     TC_REGISTRY_INIT_GUARD(g_initialized, "tc_mesh");
 
     if (!tc_pool_init(&g_mesh_pool, sizeof(tc_mesh), 64)) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_mesh_init: failed to init pool");
+        tc_log(TC_LOG_ERROR, "tc_mesh_init: failed to init pool");
         return;
     }
 
     // UUID map doesn't own resources (indices are packed as void*)
     g_uuid_to_index = tc_resource_map_new(NULL);
     if (!g_uuid_to_index) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_mesh_init: failed to create uuid map");
+        tc_log(TC_LOG_ERROR, "tc_mesh_init: failed to create uuid map");
         tc_pool_free(&g_mesh_pool);
         return;
     }
@@ -87,7 +87,7 @@ tc_mesh_handle tc_mesh_create(const char* uuid) {
 
     if (uuid && uuid[0] != '\0') {
         if (tc_mesh_contains(uuid)) {
-            tgfx_log(TGFX_LOG_WARN, "tc_mesh_create: uuid '%s' already exists", uuid);
+            tc_log(TC_LOG_WARN, "tc_mesh_create: uuid '%s' already exists", uuid);
             return tc_mesh_handle_invalid();
         }
         final_uuid = uuid;
@@ -99,7 +99,7 @@ tc_mesh_handle tc_mesh_create(const char* uuid) {
     // Allocate slot in pool
     tc_handle h = tc_pool_alloc(&g_mesh_pool);
     if (tc_handle_is_invalid(h)) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_mesh_create: pool alloc failed");
+        tc_log(TC_LOG_ERROR, "tc_mesh_create: pool alloc failed");
         return tc_mesh_handle_invalid();
     }
 
@@ -115,7 +115,7 @@ tc_mesh_handle tc_mesh_create(const char* uuid) {
 
     // Add to UUID map
     if (!tc_resource_map_add(g_uuid_to_index, mesh->header.uuid, tc_pack_index(h.index))) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_mesh_create: failed to add to uuid map");
+        tc_log(TC_LOG_ERROR, "tc_mesh_create: failed to add to uuid map");
         tc_pool_free_slot(&g_mesh_pool, h);
         return tc_mesh_handle_invalid();
     }
@@ -170,7 +170,7 @@ tc_mesh_handle tc_mesh_find_by_name(const char* name) {
 
 tc_mesh_handle tc_mesh_get_or_create(const char* uuid) {
     if (!uuid || uuid[0] == '\0') {
-        tgfx_log(TGFX_LOG_WARN, "tc_mesh_get_or_create: empty uuid");
+        tc_log(TC_LOG_WARN, "tc_mesh_get_or_create: empty uuid");
         return tc_mesh_handle_invalid();
     }
 
@@ -200,7 +200,7 @@ tc_mesh_handle tc_mesh_declare(const char* uuid, const char* name) {
     // Allocate slot in pool
     tc_handle h = tc_pool_alloc(&g_mesh_pool);
     if (tc_handle_is_invalid(h)) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_mesh_declare: pool alloc failed");
+        tc_log(TC_LOG_ERROR, "tc_mesh_declare: pool alloc failed");
         return tc_mesh_handle_invalid();
     }
 
@@ -222,7 +222,7 @@ tc_mesh_handle tc_mesh_declare(const char* uuid, const char* name) {
 
     // Add to UUID map
     if (!tc_resource_map_add(g_uuid_to_index, mesh->header.uuid, tc_pack_index(h.index))) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_mesh_declare: failed to add to uuid map");
+        tc_log(TC_LOG_ERROR, "tc_mesh_declare: failed to add to uuid map");
         tc_pool_free_slot(&g_mesh_pool, h);
         return tc_mesh_handle_invalid();
     }
@@ -255,7 +255,7 @@ bool tc_mesh_ensure_loaded(tc_mesh_handle h) {
     if (mesh->header.is_loaded) return true;
 
     if (!mesh->header.load_callback) {
-        tgfx_log(TGFX_LOG_WARN, "tc_mesh_ensure_loaded: mesh '%s' has no load callback", mesh->header.uuid);
+        tc_log(TC_LOG_WARN, "tc_mesh_ensure_loaded: mesh '%s' has no load callback", mesh->header.uuid);
         return false;
     }
 
@@ -263,7 +263,7 @@ bool tc_mesh_ensure_loaded(tc_mesh_handle h) {
     if (success) {
         mesh->header.is_loaded = 1;
     } else {
-        tgfx_log(TGFX_LOG_ERROR, "tc_mesh_ensure_loaded: load callback failed for '%s'", mesh->header.uuid);
+        tc_log(TC_LOG_ERROR, "tc_mesh_ensure_loaded: load callback failed for '%s'", mesh->header.uuid);
     }
 
     return success;
@@ -285,7 +285,7 @@ bool tc_mesh_destroy(tc_mesh_handle h) {
     tc_mesh* mesh = tc_mesh_get(h);
     if (!mesh) return false;
 
-    tgfx_log(TGFX_LOG_INFO, "[tc_mesh_destroy] DESTROYING mesh uuid=%s name=%s refcount=%d",
+    tc_log(TC_LOG_INFO, "[tc_mesh_destroy] DESTROYING mesh uuid=%s name=%s refcount=%d",
            mesh->header.uuid, mesh->header.name ? mesh->header.name : "(null)",
            mesh->header.ref_count);
 
@@ -552,17 +552,17 @@ tc_mesh_info* tc_mesh_get_all_info(size_t* count) {
     *count = 0;
 
     if (!g_initialized) {
-        tgfx_log(TGFX_LOG_INFO, "[tc_mesh_get_all_info] NOT INITIALIZED!");
+        tc_log(TC_LOG_INFO, "[tc_mesh_get_all_info] NOT INITIALIZED!");
         return NULL;
     }
 
     size_t mesh_count = tc_pool_count(&g_mesh_pool);
-    tgfx_log(TGFX_LOG_INFO, "[tc_mesh_get_all_info] pool_count=%zu", mesh_count);
+    tc_log(TC_LOG_INFO, "[tc_mesh_get_all_info] pool_count=%zu", mesh_count);
     if (mesh_count == 0) return NULL;
 
     tc_mesh_info* infos = (tc_mesh_info*)malloc(mesh_count * sizeof(tc_mesh_info));
     if (!infos) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_mesh_get_all_info: allocation failed");
+        tc_log(TC_LOG_ERROR, "tc_mesh_get_all_info: allocation failed");
         return NULL;
     }
 

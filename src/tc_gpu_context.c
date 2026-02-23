@@ -1,7 +1,7 @@
 // tc_gpu_context.c - Per-context GPU resource state implementation
 #include "tgfx/tc_gpu_context.h"
 #include "tgfx/tgfx_gpu_ops.h"
-#include "tgfx/tgfx_log.h"
+#include <tcbase/tc_log.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -26,7 +26,7 @@ static bool ensure_vao_capacity(tc_gpu_context* ctx, uint32_t required_index) {
     tc_gpu_vao_slot* new_array = (tc_gpu_vao_slot*)realloc(
         ctx->mesh_vaos, new_cap * sizeof(tc_gpu_vao_slot));
     if (!new_array) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_gpu_context: vao realloc failed (cap %u -> %u)",
+        tc_log(TC_LOG_ERROR, "tc_gpu_context: vao realloc failed (cap %u -> %u)",
                ctx->mesh_vao_capacity, new_cap);
         return false;
     }
@@ -47,7 +47,7 @@ static bool ensure_vao_capacity(tc_gpu_context* ctx, uint32_t required_index) {
 tc_gpu_context* tc_gpu_context_new(uintptr_t key, tc_gpu_share_group* group) {
     tc_gpu_context* ctx = (tc_gpu_context*)calloc(1, sizeof(tc_gpu_context));
     if (!ctx) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_gpu_context_new: alloc failed");
+        tc_log(TC_LOG_ERROR, "tc_gpu_context_new: alloc failed");
         return NULL;
     }
     ctx->key = key;
@@ -58,7 +58,7 @@ tc_gpu_context* tc_gpu_context_new(uintptr_t key, tc_gpu_share_group* group) {
         // Standalone: create own share group
         ctx->share_group = tc_gpu_share_group_get_or_create(key);
         if (!ctx->share_group) {
-            tgfx_log(TGFX_LOG_ERROR, "tc_gpu_context_new: failed to create share group");
+            tc_log(TC_LOG_ERROR, "tc_gpu_context_new: failed to create share group");
             free(ctx);
             return NULL;
         }

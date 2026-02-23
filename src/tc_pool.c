@@ -1,6 +1,6 @@
 // tc_pool.c - Generic object pool implementation
 #include "tgfx/tc_pool.h"
-#include "tgfx/tgfx_log.h"
+#include <tcbase/tc_log.h>
 #include <string.h>
 
 // ============================================================================
@@ -13,7 +13,7 @@ static bool pool_grow(tc_pool* pool) {
     // Reallocate data array
     void* new_data = realloc(pool->data, new_capacity * pool->item_size);
     if (!new_data) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_pool: failed to grow data array");
+        tc_log(TC_LOG_ERROR, "tc_pool: failed to grow data array");
         return false;
     }
     pool->data = new_data;
@@ -26,7 +26,7 @@ static bool pool_grow(tc_pool* pool) {
     // Reallocate generations
     uint32_t* new_gens = (uint32_t*)realloc(pool->generations, new_capacity * sizeof(uint32_t));
     if (!new_gens) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_pool: failed to grow generations array");
+        tc_log(TC_LOG_ERROR, "tc_pool: failed to grow generations array");
         return false;
     }
     pool->generations = new_gens;
@@ -39,7 +39,7 @@ static bool pool_grow(tc_pool* pool) {
     // Reallocate states
     uint8_t* new_states = (uint8_t*)realloc(pool->states, new_capacity * sizeof(uint8_t));
     if (!new_states) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_pool: failed to grow states array");
+        tc_log(TC_LOG_ERROR, "tc_pool: failed to grow states array");
         return false;
     }
     pool->states = new_states;
@@ -50,7 +50,7 @@ static bool pool_grow(tc_pool* pool) {
     // Reallocate free list
     uint32_t* new_free = (uint32_t*)realloc(pool->free_list, new_capacity * sizeof(uint32_t));
     if (!new_free) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_pool: failed to grow free list");
+        tc_log(TC_LOG_ERROR, "tc_pool: failed to grow free list");
         return false;
     }
     pool->free_list = new_free;

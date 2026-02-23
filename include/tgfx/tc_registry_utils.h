@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include "tgfx/tgfx_log.h"
+#include <tcbase/tc_log.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,7 +46,7 @@ static inline void tc_generate_prefixed_uuid(char* out_uuid, size_t out_size,
 #define TC_REGISTRY_INIT_GUARD(initialized, name) \
     do { \
         if (initialized) { \
-            tgfx_log(TGFX_LOG_WARN, name "_init: already initialized"); \
+            tc_log(TC_LOG_WARN, name "_init: already initialized"); \
             return; \
         } \
     } while(0)
@@ -54,7 +54,7 @@ static inline void tc_generate_prefixed_uuid(char* out_uuid, size_t out_size,
 #define TC_REGISTRY_SHUTDOWN_GUARD(initialized, name) \
     do { \
         if (!initialized) { \
-            tgfx_log(TGFX_LOG_WARN, name "_shutdown: not initialized"); \
+            tc_log(TC_LOG_WARN, name "_shutdown: not initialized"); \
             return; \
         } \
     } while(0)

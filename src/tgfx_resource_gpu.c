@@ -4,7 +4,7 @@
 #include <tgfx/tgfx_gpu_ops.h>
 #include <tgfx/tc_gpu_context.h>
 #include <tgfx/tc_gpu_share_group.h>
-#include <tgfx/tgfx_log.h>
+#include <tcbase/tc_log.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -56,19 +56,19 @@ bool tc_texture_upload_gpu(tc_texture* tex) {
 
     const tgfx_gpu_ops* ops = tgfx_gpu_get_ops();
     if (!ops) {
-        tgfx_log_error("tc_texture_upload_gpu: GPU ops not set");
+        tc_log_error("tc_texture_upload_gpu: GPU ops not set");
         return false;
     }
 
     tc_gpu_context* ctx = tc_gpu_get_context();
     if (!ctx) {
-        tgfx_log_error("tc_texture_upload_gpu: no GPUContext set");
+        tc_log_error("tc_texture_upload_gpu: no GPUContext set");
         return false;
     }
 
     tc_gpu_slot* slot = tc_gpu_context_texture_slot(ctx, tex->header.pool_index);
     if (!slot) {
-        tgfx_log_error("tc_texture_upload_gpu: failed to get context slot");
+        tc_log_error("tc_texture_upload_gpu: failed to get context slot");
         return false;
     }
 
@@ -87,7 +87,7 @@ bool tc_texture_upload_gpu(tc_texture* tex) {
     // Check if this is a depth texture
     if (tex->format == TC_TEXTURE_DEPTH24) {
         if (!ops->depth_texture_upload) {
-            tgfx_log_error("tc_texture_upload_gpu: depth_texture_upload not set");
+            tc_log_error("tc_texture_upload_gpu: depth_texture_upload not set");
             return false;
         }
         gpu_id = ops->depth_texture_upload(
@@ -98,7 +98,7 @@ bool tc_texture_upload_gpu(tc_texture* tex) {
         );
     } else {
         if (!ops->texture_upload) {
-            tgfx_log_error("tc_texture_upload_gpu: texture_upload not set");
+            tc_log_error("tc_texture_upload_gpu: texture_upload not set");
             return false;
         }
         gpu_id = ops->texture_upload(
@@ -112,7 +112,7 @@ bool tc_texture_upload_gpu(tc_texture* tex) {
     }
 
     if (gpu_id == 0) {
-        tgfx_log_error("tc_texture_upload_gpu: upload failed for '%s'",
+        tc_log_error("tc_texture_upload_gpu: upload failed for '%s'",
                tex->header.name ? tex->header.name : tex->header.uuid);
         return false;
     }
@@ -130,7 +130,7 @@ bool tc_texture_bind_gpu(tc_texture* tex, int unit) {
 
     const tgfx_gpu_ops* ops = tgfx_gpu_get_ops();
     if (!ops) {
-        tgfx_log_error("tc_texture_bind_gpu: GPU ops not set");
+        tc_log_error("tc_texture_bind_gpu: GPU ops not set");
         return false;
     }
 
@@ -147,13 +147,13 @@ bool tc_texture_bind_gpu(tc_texture* tex, int unit) {
     // Bind using appropriate function for texture type
     if (tex->format == TC_TEXTURE_DEPTH24) {
         if (!ops->depth_texture_bind) {
-            tgfx_log_error("tc_texture_bind_gpu: depth_texture_bind not set");
+            tc_log_error("tc_texture_bind_gpu: depth_texture_bind not set");
             return false;
         }
         ops->depth_texture_bind(gpu_id, unit);
     } else {
         if (!ops->texture_bind) {
-            tgfx_log_error("tc_texture_bind_gpu: texture_bind not set");
+            tc_log_error("tc_texture_bind_gpu: texture_bind not set");
             return false;
         }
         ops->texture_bind(gpu_id, unit);
@@ -186,25 +186,25 @@ void tc_texture_delete_gpu(tc_texture* tex) {
 
 uint32_t tc_shader_compile_gpu(tc_shader* shader) {
     if (!shader) {
-        tgfx_log_error("tc_shader_compile_gpu: shader is NULL");
+        tc_log_error("tc_shader_compile_gpu: shader is NULL");
         return 0;
     }
 
     const tgfx_gpu_ops* ops = tgfx_gpu_get_ops();
     if (!ops || !ops->shader_compile) {
-        tgfx_log_error("tc_shader_compile_gpu: GPU ops not set");
+        tc_log_error("tc_shader_compile_gpu: GPU ops not set");
         return 0;
     }
 
     tc_gpu_context* ctx = tc_gpu_get_context();
     if (!ctx) {
-        tgfx_log_error("tc_shader_compile_gpu: no GPUContext set");
+        tc_log_error("tc_shader_compile_gpu: no GPUContext set");
         return 0;
     }
 
     tc_gpu_slot* slot = tc_gpu_context_shader_slot(ctx, shader->pool_index);
     if (!slot) {
-        tgfx_log_error("tc_shader_compile_gpu: failed to get context slot");
+        tc_log_error("tc_shader_compile_gpu: failed to get context slot");
         return 0;
     }
 
@@ -215,7 +215,7 @@ uint32_t tc_shader_compile_gpu(tc_shader* shader) {
 
     // Check if sources are available
     if (!shader->vertex_source || !shader->fragment_source) {
-        tgfx_log_error("tc_shader_compile_gpu: missing sources for '%s' (vertex=%p, fragment=%p)",
+        tc_log_error("tc_shader_compile_gpu: missing sources for '%s' (vertex=%p, fragment=%p)",
                shader->name ? shader->name : shader->uuid,
                (void*)shader->vertex_source, (void*)shader->fragment_source);
         return 0;
@@ -271,7 +271,7 @@ uint32_t tc_shader_compile_gpu(tc_shader* shader) {
     free(preprocessed_geometry);
 
     if (program == 0) {
-        tgfx_log_error("tc_shader_compile_gpu: compile failed for '%s'",
+        tc_log_error("tc_shader_compile_gpu: compile failed for '%s'",
                shader_name);
         return 0;
     }
@@ -338,13 +338,13 @@ uint32_t tc_mesh_upload_gpu(tc_mesh* mesh) {
 
     const tgfx_gpu_ops* ops = tgfx_gpu_get_ops();
     if (!ops || !ops->mesh_upload) {
-        tgfx_log_error("tc_mesh_upload_gpu: GPU ops not set");
+        tc_log_error("tc_mesh_upload_gpu: GPU ops not set");
         return 0;
     }
 
     tc_gpu_context* ctx = tc_gpu_get_context();
     if (!ctx) {
-        tgfx_log_error("tc_mesh_upload_gpu: no GPUContext set");
+        tc_log_error("tc_mesh_upload_gpu: no GPUContext set");
         return 0;
     }
 
@@ -352,7 +352,7 @@ uint32_t tc_mesh_upload_gpu(tc_mesh* mesh) {
     tc_gpu_mesh_data_slot* shared = tc_gpu_share_group_mesh_data_slot(group, mesh->header.pool_index);
     tc_gpu_vao_slot* vao_slot = tc_gpu_context_vao_slot(ctx, mesh->header.pool_index);
     if (!shared || !vao_slot) {
-        tgfx_log_error("tc_mesh_upload_gpu: failed to get slots");
+        tc_log_error("tc_mesh_upload_gpu: failed to get slots");
         return 0;
     }
 
@@ -377,7 +377,7 @@ uint32_t tc_mesh_upload_gpu(tc_mesh* mesh) {
             vao = ops->mesh_create_vao(&mesh->layout, shared->vbo, shared->ebo);
         }
         if (vao == 0) {
-            tgfx_log_error("tc_mesh_upload_gpu: mesh_create_vao failed for '%s'",
+            tc_log_error("tc_mesh_upload_gpu: mesh_create_vao failed for '%s'",
                    mesh->header.name ? mesh->header.name : mesh->header.uuid);
             return 0;
         }
@@ -418,7 +418,7 @@ uint32_t tc_mesh_upload_gpu(tc_mesh* mesh) {
         &out_ebo
     );
     if (vao == 0) {
-        tgfx_log_error("tc_mesh_upload_gpu: upload failed for '%s'",
+        tc_log_error("tc_mesh_upload_gpu: upload failed for '%s'",
                mesh->header.name ? mesh->header.name : mesh->header.uuid);
         return 0;
     }

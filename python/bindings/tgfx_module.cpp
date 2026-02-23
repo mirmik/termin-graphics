@@ -11,7 +11,6 @@ namespace tgfx_bindings {
     void bind_shader(nb::module_& m);
     void bind_texture(nb::module_& m);
     void bind_mesh(nb::module_& m);
-    void bind_log(nb::module_& m);
 }
 
 NB_MODULE(_tgfx_native, m) {
@@ -25,7 +24,7 @@ NB_MODULE(_tgfx_native, m) {
     tgfx_bindings::bind_texture(m);
     tgfx_bindings::bind_mesh(m);
 
-    // Log as submodule
-    nb::module_ log_m = m.def_submodule("log", "Logging functions");
-    tgfx_bindings::bind_log(log_m);
+    // Import log from tcbase
+    nb::module_ tcbase = nb::module_::import_("tcbase._tcbase_native");
+    m.attr("log") = tcbase.attr("log");
 }

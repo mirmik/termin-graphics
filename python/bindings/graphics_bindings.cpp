@@ -11,7 +11,7 @@
 #include "tgfx/types.hpp"
 #include "tgfx/opengl/opengl_backend.hpp"
 #include "tgfx/opengl/opengl_mesh.hpp"
-#include "tgfx/tgfx_log.hpp"
+#include <tcbase/tc_log.hpp>
 
 extern "C" {
 #include <tgfx/tc_gpu_context.h>

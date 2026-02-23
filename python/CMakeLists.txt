@@ -13,7 +13,6 @@ nanobind_add_module(_tgfx_native
     bindings/shader_bindings.cpp
     bindings/texture_bindings.cpp
     bindings/mesh_bindings.cpp
-    bindings/log_bindings.cpp
 )
 
 target_link_libraries(_tgfx_native PRIVATE termin_graphics OpenGL::GL)

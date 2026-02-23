@@ -1,5 +1,5 @@
 #include <tgfx/tgfx_texture_handle.hpp>
-#include <tgfx/tgfx_log.hpp>
+#include <tcbase/tc_log.hpp>
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -41,7 +41,7 @@ TcTexture TcTexture::from_data(
     h = tc_texture_create(final_uuid);
     tc_texture* tex = tc_texture_get(h);
     if (!tex) {
-        tgfx::Log::error("TcTexture::from_data: failed to add texture");
+        tc::Log::error("TcTexture::from_data: failed to add texture");
         return TcTexture();
     }
 
@@ -53,7 +53,7 @@ TcTexture TcTexture::from_data(
         name.empty() ? nullptr : name.c_str(),
         source_path.empty() ? nullptr : source_path.c_str()
     )) {
-        tgfx::Log::error("TcTexture::from_data: failed to set data");
+        tc::Log::error("TcTexture::from_data: failed to set data");
         tc_texture_destroy(h);
         return TcTexture();
     }
@@ -98,7 +98,7 @@ TcTexture TcTexture::dummy_shadow_1x1() {
     h = tc_texture_create(SHADOW_UUID);
     tc_texture* tex = tc_texture_get(h);
     if (!tex) {
-        tgfx::Log::error("TcTexture::dummy_shadow_1x1: failed to create texture");
+        tc::Log::error("TcTexture::dummy_shadow_1x1: failed to create texture");
         return TcTexture();
     }
 
@@ -108,7 +108,7 @@ TcTexture TcTexture::dummy_shadow_1x1() {
     // Allocate and copy data
     tex->data = malloc(sizeof(float));
     if (!tex->data) {
-        tgfx::Log::error("TcTexture::dummy_shadow_1x1: failed to allocate data");
+        tc::Log::error("TcTexture::dummy_shadow_1x1: failed to allocate data");
         tc_texture_destroy(h);
         return TcTexture();
     }

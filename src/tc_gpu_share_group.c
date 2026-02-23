@@ -1,7 +1,7 @@
 // tc_gpu_share_group.c - Shared GL resource group implementation
 #include "tgfx/tc_gpu_share_group.h"
 #include "tgfx/tgfx_gpu_ops.h"
-#include "tgfx/tgfx_log.h"
+#include <tcbase/tc_log.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -36,7 +36,7 @@ static bool ensure_capacity(
 
     void* new_array = realloc(*array, new_cap * item_size);
     if (!new_array) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_gpu_share_group: realloc failed (cap %u -> %u)", *capacity, new_cap);
+        tc_log(TC_LOG_ERROR, "tc_gpu_share_group: realloc failed (cap %u -> %u)", *capacity, new_cap);
         return false;
     }
 
@@ -77,13 +77,13 @@ tc_gpu_share_group* tc_gpu_share_group_get_or_create(uintptr_t key) {
 
     // Create new group
     if (g_registry_count >= TC_MAX_SHARE_GROUPS) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_gpu_share_group: registry full (%d groups)", TC_MAX_SHARE_GROUPS);
+        tc_log(TC_LOG_ERROR, "tc_gpu_share_group: registry full (%d groups)", TC_MAX_SHARE_GROUPS);
         return NULL;
     }
 
     tc_gpu_share_group* group = (tc_gpu_share_group*)calloc(1, sizeof(tc_gpu_share_group));
     if (!group) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_gpu_share_group: alloc failed");
+        tc_log(TC_LOG_ERROR, "tc_gpu_share_group: alloc failed");
         return NULL;
     }
 

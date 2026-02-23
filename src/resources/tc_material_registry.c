@@ -4,7 +4,7 @@
 #include "tgfx/tc_pool.h"
 #include "tgfx/tc_resource_map.h"
 #include "tgfx/tc_registry_utils.h"
-#include "tgfx/tgfx_log.h"
+#include <tcbase/tc_log.h>
 #include "tgfx/tgfx_intern_string.h"
 #include <stdlib.h>
 #include <string.h>
@@ -26,13 +26,13 @@ void tc_material_init(void) {
     TC_REGISTRY_INIT_GUARD(g_initialized, "tc_material");
 
     if (!tc_pool_init(&g_material_pool, sizeof(tc_material), 64)) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_material_init: failed to init pool");
+        tc_log(TC_LOG_ERROR, "tc_material_init: failed to init pool");
         return;
     }
 
     g_uuid_to_index = tc_resource_map_new(NULL);
     if (!g_uuid_to_index) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_material_init: failed to create uuid map");
+        tc_log(TC_LOG_ERROR, "tc_material_init: failed to create uuid map");
         tc_pool_free(&g_material_pool);
         return;
     }
@@ -74,7 +74,7 @@ tc_material_handle tc_material_create(const char* uuid, const char* name) {
     }
 
     if (!name || name[0] == '\0') {
-        tgfx_log(TGFX_LOG_ERROR, "tc_material_create: name is required");
+        tc_log(TC_LOG_ERROR, "tc_material_create: name is required");
         return tc_material_handle_invalid();
     }
 
@@ -83,7 +83,7 @@ tc_material_handle tc_material_create(const char* uuid, const char* name) {
 
     if (uuid && uuid[0] != '\0') {
         if (tc_material_contains(uuid)) {
-            tgfx_log(TGFX_LOG_WARN, "tc_material_create: uuid '%s' already exists", uuid);
+            tc_log(TC_LOG_WARN, "tc_material_create: uuid '%s' already exists", uuid);
             return tc_material_handle_invalid();
         }
         final_uuid = uuid;
@@ -94,7 +94,7 @@ tc_material_handle tc_material_create(const char* uuid, const char* name) {
 
     tc_handle h = tc_pool_alloc(&g_material_pool);
     if (tc_handle_is_invalid(h)) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_material_create: pool alloc failed");
+        tc_log(TC_LOG_ERROR, "tc_material_create: pool alloc failed");
         return tc_material_handle_invalid();
     }
 
@@ -108,7 +108,7 @@ tc_material_handle tc_material_create(const char* uuid, const char* name) {
     mat->header.is_loaded = 1;
 
     if (!tc_resource_map_add(g_uuid_to_index, mat->header.uuid, tc_pack_index(h.index))) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_material_create: failed to add to uuid map");
+        tc_log(TC_LOG_ERROR, "tc_material_create: failed to add to uuid map");
         tc_pool_free_slot(&g_material_pool, h);
         return tc_material_handle_invalid();
     }
@@ -163,7 +163,7 @@ tc_material_handle tc_material_find_by_name(const char* name) {
 
 tc_material_handle tc_material_get_or_create(const char* uuid, const char* name) {
     if (!uuid || uuid[0] == '\0') {
-        tgfx_log(TGFX_LOG_WARN, "tc_material_get_or_create: empty uuid");
+        tc_log(TC_LOG_WARN, "tc_material_get_or_create: empty uuid");
         return tc_material_handle_invalid();
     }
 
@@ -606,7 +606,7 @@ tc_material_handle tc_material_copy(tc_material_handle src, const char* new_uuid
     }
 
     if (!src_mat->header.name) {
-        tgfx_log(TGFX_LOG_ERROR, "[tc_material_copy] source material '%s' has no name",
+        tc_log(TC_LOG_ERROR, "[tc_material_copy] source material '%s' has no name",
             src_mat->header.uuid);
         return tc_material_handle_invalid();
     }

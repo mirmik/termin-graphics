@@ -3,7 +3,7 @@
 #include "tgfx/tc_pool.h"
 #include "tgfx/tc_resource_map.h"
 #include "tgfx/tc_registry_utils.h"
-#include "tgfx/tgfx_log.h"
+#include <tcbase/tc_log.h>
 #include "tgfx/tgfx_intern_string.h"
 #include <stdlib.h>
 #include <string.h>
@@ -93,20 +93,20 @@ void tc_shader_init(void) {
     TC_REGISTRY_INIT_GUARD(g_initialized, "tc_shader");
 
     if (!tc_pool_init(&g_shader_pool, sizeof(tc_shader), 64)) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_shader_init: failed to init pool");
+        tc_log(TC_LOG_ERROR, "tc_shader_init: failed to init pool");
         return;
     }
 
     g_uuid_to_index = tc_resource_map_new(NULL);
     if (!g_uuid_to_index) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_shader_init: failed to create uuid map");
+        tc_log(TC_LOG_ERROR, "tc_shader_init: failed to create uuid map");
         tc_pool_free(&g_shader_pool);
         return;
     }
 
     g_hash_to_index = tc_resource_map_new(NULL);
     if (!g_hash_to_index) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_shader_init: failed to create hash map");
+        tc_log(TC_LOG_ERROR, "tc_shader_init: failed to create hash map");
         tc_resource_map_free(g_uuid_to_index);
         g_uuid_to_index = NULL;
         tc_pool_free(&g_shader_pool);
@@ -151,7 +151,7 @@ tc_shader_handle tc_shader_create(const char* uuid) {
 
     if (uuid && uuid[0] != '\0') {
         if (tc_shader_contains(uuid)) {
-            tgfx_log(TGFX_LOG_WARN, "tc_shader_create: uuid '%s' already exists", uuid);
+            tc_log(TC_LOG_WARN, "tc_shader_create: uuid '%s' already exists", uuid);
             return tc_shader_handle_invalid();
         }
         final_uuid = uuid;
@@ -163,7 +163,7 @@ tc_shader_handle tc_shader_create(const char* uuid) {
     // Allocate slot in pool
     tc_handle h = tc_pool_alloc(&g_shader_pool);
     if (tc_handle_is_invalid(h)) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_shader_create: pool alloc failed");
+        tc_log(TC_LOG_ERROR, "tc_shader_create: pool alloc failed");
         return tc_shader_handle_invalid();
     }
 
@@ -179,7 +179,7 @@ tc_shader_handle tc_shader_create(const char* uuid) {
 
     // Add to UUID map
     if (!tc_resource_map_add(g_uuid_to_index, shader->uuid, tc_pack_index(h.index))) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_shader_create: failed to add to uuid map");
+        tc_log(TC_LOG_ERROR, "tc_shader_create: failed to add to uuid map");
         tc_pool_free_slot(&g_shader_pool, h);
         return tc_shader_handle_invalid();
     }
@@ -259,7 +259,7 @@ tc_shader_handle tc_shader_find_by_name(const char* name) {
 
 tc_shader_handle tc_shader_get_or_create(const char* uuid) {
     if (!uuid || uuid[0] == '\0') {
-        tgfx_log(TGFX_LOG_WARN, "tc_shader_get_or_create: empty uuid");
+        tc_log(TC_LOG_WARN, "tc_shader_get_or_create: empty uuid");
         return tc_shader_handle_invalid();
     }
 
@@ -386,7 +386,7 @@ tc_shader_handle tc_shader_from_sources(
     const char* uuid
 ) {
     if (!vertex_source || !fragment_source) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_shader_from_sources: vertex and fragment sources required");
+        tc_log(TC_LOG_ERROR, "tc_shader_from_sources: vertex and fragment sources required");
         return tc_shader_handle_invalid();
     }
 
@@ -448,11 +448,11 @@ void tc_shader_add_ref(tc_shader* shader) {
 
 bool tc_shader_release(tc_shader* shader) {
     if (!shader) {
-        tgfx_log(TGFX_LOG_WARN, "tc_shader_release: null shader");
+        tc_log(TC_LOG_WARN, "tc_shader_release: null shader");
         return false;
     }
     if (shader->ref_count == 0) {
-        tgfx_log(TGFX_LOG_WARN, "tc_shader_release: '%s' [%s] already at ref_count=0",
+        tc_log(TC_LOG_WARN, "tc_shader_release: '%s' [%s] already at ref_count=0",
             shader->name ? shader->name : "?", shader->uuid);
         return false;
     }
@@ -483,7 +483,7 @@ void tc_shader_set_variant_info(
 
     tc_shader* orig = tc_shader_get(original);
     if (!orig) {
-        tgfx_log(TGFX_LOG_WARN, "tc_shader_set_variant_info: invalid original handle");
+        tc_log(TC_LOG_WARN, "tc_shader_set_variant_info: invalid original handle");
         return;
     }
 
@@ -576,7 +576,7 @@ tc_shader_info* tc_shader_get_all_info(size_t* count) {
 
     tc_shader_info* infos = (tc_shader_info*)malloc(shader_count * sizeof(tc_shader_info));
     if (!infos) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_shader_get_all_info: allocation failed");
+        tc_log(TC_LOG_ERROR, "tc_shader_get_all_info: allocation failed");
         return NULL;
     }
 

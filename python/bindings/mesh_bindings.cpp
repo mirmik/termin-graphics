@@ -12,7 +12,7 @@
 #include "tgfx/tgfx_mesh_handle.hpp"
 
 extern "C" {
-#include <tgfx/tgfx_log.h>
+#include <tcbase/tc_log.h>
 }
 
 namespace nb = nanobind;
@@ -51,7 +51,7 @@ static bool python_load_callback_wrapper(tc_mesh* mesh, void* user_data) {
         nb::object result = callback(nb::cast(mesh, nb::rv_policy::reference));
         return nb::cast<bool>(result);
     } catch (const std::exception& e) {
-        tgfx_log_error("Python mesh load callback failed for '%s': %s", uuid.c_str(), e.what());
+        tc_log_error("Python mesh load callback failed for '%s': %s", uuid.c_str(), e.what());
         return false;
     }
 }

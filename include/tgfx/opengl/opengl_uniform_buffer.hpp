@@ -5,7 +5,7 @@
 #include <cstring>
 
 #include "tgfx/handles.hpp"
-#include "tgfx/tgfx_log.hpp"
+#include <tcbase/tc_log.hpp>
 
 namespace termin {
 
@@ -31,7 +31,7 @@ public:
     void update(const void* data, size_t size, size_t offset = 0) override {
         if (handle_ == 0) return;
         if (offset + size > size_) {
-            tgfx::Log::error("OpenGLUniformBufferHandle::update: out of bounds (offset=%zu, size=%zu, buffer_size=%zu)",
+            tc::Log::error("OpenGLUniformBufferHandle::update: out of bounds (offset=%zu, size=%zu, buffer_size=%zu)",
                            offset, size, size_);
             return;
         }

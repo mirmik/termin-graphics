@@ -3,7 +3,7 @@
 #include "tgfx/tc_pool.h"
 #include "tgfx/tc_resource_map.h"
 #include "tgfx/tc_registry_utils.h"
-#include "tgfx/tgfx_log.h"
+#include <tcbase/tc_log.h>
 #include "tgfx/tgfx_intern_string.h"
 #include <stdlib.h>
 #include <string.h>
@@ -34,13 +34,13 @@ void tc_texture_init(void) {
     TC_REGISTRY_INIT_GUARD(g_initialized, "tc_texture");
 
     if (!tc_pool_init(&g_texture_pool, sizeof(tc_texture), 64)) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_texture_init: failed to init pool");
+        tc_log(TC_LOG_ERROR, "tc_texture_init: failed to init pool");
         return;
     }
 
     g_uuid_to_index = tc_resource_map_new(NULL);
     if (!g_uuid_to_index) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_texture_init: failed to create uuid map");
+        tc_log(TC_LOG_ERROR, "tc_texture_init: failed to create uuid map");
         tc_pool_free(&g_texture_pool);
         return;
     }
@@ -81,7 +81,7 @@ tc_texture_handle tc_texture_create(const char* uuid) {
 
     if (uuid && uuid[0] != '\0') {
         if (tc_texture_contains(uuid)) {
-            tgfx_log(TGFX_LOG_WARN, "tc_texture_create: uuid '%s' already exists", uuid);
+            tc_log(TC_LOG_WARN, "tc_texture_create: uuid '%s' already exists", uuid);
             return tc_texture_handle_invalid();
         }
         final_uuid = uuid;
@@ -92,7 +92,7 @@ tc_texture_handle tc_texture_create(const char* uuid) {
 
     tc_handle h = tc_pool_alloc(&g_texture_pool);
     if (tc_handle_is_invalid(h)) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_texture_create: pool alloc failed");
+        tc_log(TC_LOG_ERROR, "tc_texture_create: pool alloc failed");
         return tc_texture_handle_invalid();
     }
 
@@ -106,7 +106,7 @@ tc_texture_handle tc_texture_create(const char* uuid) {
     tex->flip_y = 1;  // Default for OpenGL
 
     if (!tc_resource_map_add(g_uuid_to_index, tex->header.uuid, tc_pack_index(h.index))) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_texture_create: failed to add to uuid map");
+        tc_log(TC_LOG_ERROR, "tc_texture_create: failed to add to uuid map");
         tc_pool_free_slot(&g_texture_pool, h);
         return tc_texture_handle_invalid();
     }
@@ -161,7 +161,7 @@ tc_texture_handle tc_texture_find_by_name(const char* name) {
 
 tc_texture_handle tc_texture_get_or_create(const char* uuid) {
     if (!uuid || uuid[0] == '\0') {
-        tgfx_log(TGFX_LOG_WARN, "tc_texture_get_or_create: empty uuid");
+        tc_log(TC_LOG_WARN, "tc_texture_get_or_create: empty uuid");
         return tc_texture_handle_invalid();
     }
 
@@ -416,7 +416,7 @@ tc_texture_info* tc_texture_get_all_info(size_t* count) {
 
     tc_texture_info* infos = (tc_texture_info*)malloc(tex_count * sizeof(tc_texture_info));
     if (!infos) {
-        tgfx_log(TGFX_LOG_ERROR, "tc_texture_get_all_info: allocation failed");
+        tc_log(TC_LOG_ERROR, "tc_texture_get_all_info: allocation failed");
         return NULL;
     }
 

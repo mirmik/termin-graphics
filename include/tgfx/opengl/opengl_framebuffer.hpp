@@ -7,7 +7,7 @@
 #include "tgfx/handles.hpp"
 #include "tgfx/types.hpp"
 #include "tgfx/opengl/opengl_texture.hpp"
-#include "tgfx/tgfx_log.hpp"
+#include <tcbase/tc_log.hpp>
 
 namespace termin {
 
@@ -228,15 +228,15 @@ private:
 
         GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
         if (status != GL_FRAMEBUFFER_COMPLETE) {
-            tgfx::Log::error("[OpenGLFramebuffer] Framebuffer incomplete!");
-            tgfx::Log::error("  Status: 0x%x", status);
-            tgfx::Log::error("  Size: %dx%d", width_, height_);
-            tgfx::Log::error("  Samples: %d", samples_);
-            tgfx::Log::error("  Format: %s (internal=0x%x)", get_format().c_str(), internal_format);
-            tgfx::Log::error("  FBO: %u, Color tex: %u, Depth RB: %u", fbo_, color_tex_, depth_rb_);
+            tc::Log::error("[OpenGLFramebuffer] Framebuffer incomplete!");
+            tc::Log::error("  Status: 0x%x", status);
+            tc::Log::error("  Size: %dx%d", width_, height_);
+            tc::Log::error("  Samples: %d", samples_);
+            tc::Log::error("  Format: %s (internal=0x%x)", get_format().c_str(), internal_format);
+            tc::Log::error("  FBO: %u, Color tex: %u, Depth RB: %u", fbo_, color_tex_, depth_rb_);
             GLenum err = glGetError();
             if (err != GL_NO_ERROR) {
-                tgfx::Log::error("  OpenGL error: 0x%x", err);
+                tc::Log::error("  OpenGL error: 0x%x", err);
             }
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             throw std::runtime_error("Framebuffer incomplete: 0x" + std::to_string(status));

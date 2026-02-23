@@ -9,7 +9,7 @@ extern "C" {
 #include <tgfx/resources/tc_shader_registry.h>
 #include <tgfx/tc_gpu_context.h>
 #include <tgfx/tgfx_resource_gpu.h>
-#include <tgfx/tgfx_log.h>
+#include <tcbase/tc_log.h>
 }
 
 #include <string>
@@ -290,7 +290,7 @@ public:
     void use() {
         tc_shader* s = get();
         if (!s) {
-            tgfx_log(TGFX_LOG_ERROR, "TcShader::use(): get() returned NULL for handle %d:%d",
+            tc_log(TC_LOG_ERROR, "TcShader::use(): get() returned NULL for handle %d:%d",
                    handle.index, handle.generation);
             return;
         }

@@ -13,7 +13,7 @@ extern "C" {
 #include "tgfx/tgfx_gpu_ops.h"
 }
 
-#include "tgfx/tgfx_log.hpp"
+#include <tcbase/tc_log.hpp>
 #include "tgfx/graphics_backend.hpp"
 #include "tgfx/opengl/opengl_shader.hpp"
 #include "tgfx/opengl/opengl_texture.hpp"
@@ -90,16 +90,16 @@ inline void GLAPIENTRY gl_debug_callback(
     // Log based on severity
     switch (severity) {
         case GL_DEBUG_SEVERITY_HIGH:
-            tgfx::Log::error("[GL %s/%s #%u] %s", src_str, type_str, id, message);
+            tc::Log::error("[GL %s/%s #%u] %s", src_str, type_str, id, message);
             break;
         case GL_DEBUG_SEVERITY_MEDIUM:
-            tgfx::Log::warn("[GL %s/%s #%u] %s", src_str, type_str, id, message);
+            tc::Log::warn("[GL %s/%s #%u] %s", src_str, type_str, id, message);
             break;
         case GL_DEBUG_SEVERITY_LOW:
-            tgfx::Log::info("[GL %s/%s #%u] %s", src_str, type_str, id, message);
+            tc::Log::info("[GL %s/%s #%u] %s", src_str, type_str, id, message);
             break;
         default:
-            tgfx::Log::debug("[GL %s/%s #%u] %s", src_str, type_str, id, message);
+            tc::Log::debug("[GL %s/%s #%u] %s", src_str, type_str, id, message);
             break;
     }
 }
@@ -214,7 +214,7 @@ inline uint32_t shader_compile(
         if (!success) {
             char info_log[512];
             glGetShaderInfoLog(shader, 512, nullptr, info_log);
-            tgfx::Log::error("Shader compile error: %s", info_log);
+            tc::Log::error("Shader compile error: %s", info_log);
             glDeleteShader(shader);
             return 0;
         }
@@ -253,7 +253,7 @@ inline uint32_t shader_compile(
     if (!success) {
         char info_log[512];
         glGetProgramInfoLog(program, 512, nullptr, info_log);
-        tgfx::Log::error("Shader link error: %s", info_log);
+        tc::Log::error("Shader link error: %s", info_log);
         glDeleteProgram(program);
         glDeleteShader(vs);
         glDeleteShader(fs);
@@ -325,7 +325,7 @@ inline void shader_set_mat4_array(uint32_t gpu_id, const char* name, const float
     } else {
         static int debug_count = 0;
         if (debug_count < 5 && std::strstr(name, "bone") != nullptr) {
-            tgfx::Log::warn("[shader_set_mat4_array] Uniform '%s' not found in program %u", name, gpu_id);
+            tc::Log::warn("[shader_set_mat4_array] Uniform '%s' not found in program %u", name, gpu_id);
             debug_count++;
         }
     }
@@ -572,7 +572,7 @@ private:
     static bool glad_initialized_;
 
     OpenGLGraphicsBackend() : initialized_(false) {
-        tgfx::Log::info("[OpenGLGraphicsBackend] Constructor, this=%p, glad_initialized_=%d",
+        tc::Log::info("[OpenGLGraphicsBackend] Constructor, this=%p, glad_initialized_=%d",
                       this, glad_initialized_);
     }
 
@@ -606,7 +606,7 @@ public:
                 glDebugMessageCallback(gl_debug_callback, nullptr);
                 // Filter out notifications (too verbose)
                 glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0, nullptr, GL_FALSE);
-                tgfx::Log::info("OpenGL debug output enabled");
+                tc::Log::info("OpenGL debug output enabled");
             }
             #endif
         }
@@ -815,13 +815,13 @@ public:
 
     void bind_framebuffer(FramebufferHandle* fbo) override {
         if (glad_glBindFramebuffer == nullptr) {
-            tgfx::Log::error("[OpenGLGraphicsBackend] bind_framebuffer: glad_glBindFramebuffer is NULL! GLAD not loaded?");
+            tc::Log::error("[OpenGLGraphicsBackend] bind_framebuffer: glad_glBindFramebuffer is NULL! GLAD not loaded?");
             return;
         }
         // Check GL error state before bind
         GLenum pre_err = glGetError();
         if (pre_err != GL_NO_ERROR) {
-            tgfx::Log::warn("[OpenGLGraphicsBackend] bind_framebuffer: pre-existing GL error: 0x%X", pre_err);
+            tc::Log::warn("[OpenGLGraphicsBackend] bind_framebuffer: pre-existing GL error: 0x%X", pre_err);
         }
 
         GLuint fbo_id = fbo ? fbo->get_fbo_id() : 0;
@@ -1073,7 +1073,7 @@ public:
         glGetIntegerv(GL_CURRENT_PROGRAM, &program);
         glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vao);
 
-        tgfx::Log::error("GL error %s (0x%x) at '%s' [FBO=%d, program=%d, VAO=%d]",
+        tc::Log::error("GL error %s (0x%x) at '%s' [FBO=%d, program=%d, VAO=%d]",
                        name, err, location, fbo, program, vao);
 
         // Validate current shader program for additional info
@@ -1086,7 +1086,7 @@ public:
                 GLsizei log_length = 0;
                 glGetProgramInfoLog(program, sizeof(info_log), &log_length, info_log);
                 if (log_length > 0) {
-                    tgfx::Log::error("  Shader validation failed: %s", info_log);
+                    tc::Log::error("  Shader validation failed: %s", info_log);
                 }
             }
         }
@@ -1106,7 +1106,7 @@ public:
                     case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE: fb_err = "INCOMPLETE_MULTISAMPLE"; break;
                     case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS: fb_err = "INCOMPLETE_LAYER_TARGETS"; break;
                 }
-                tgfx::Log::error("  Framebuffer incomplete: %s", fb_err);
+                tc::Log::error("  Framebuffer incomplete: %s", fb_err);
             }
         }
 
