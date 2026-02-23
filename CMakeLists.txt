@@ -58,6 +58,31 @@ set_target_properties(termin_graphics PROPERTIES
     SOVERSION 0
 )
 
+# --- Tests ---
+option(BUILD_TESTS "Build tests" OFF)
+
+if(BUILD_TESTS)
+    enable_testing()
+
+    add_executable(tgfx_tests
+        tests/main.cpp
+        tests/tests_vertex_layout.cpp
+        tests/tests_log.cpp
+    )
+    target_include_directories(tgfx_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    )
+    target_link_libraries(tgfx_tests PRIVATE termin_graphics)
+
+    add_test(NAME tgfx_tests COMMAND tgfx_tests)
+
+    add_custom_target(run_tests
+        COMMAND tgfx_tests
+        DEPENDS tgfx_tests
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+endif()
+
 # --- Install ---
 include(GNUInstallDirs)
 
