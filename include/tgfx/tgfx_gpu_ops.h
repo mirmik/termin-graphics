@@ -44,9 +44,6 @@ typedef struct tgfx_gpu_ops {
     void (*texture_delete)(uint32_t gpu_id);
 
     // Shader operations
-    // Preprocess shader source (resolve #include), returns new string (caller frees) or NULL
-    char* (*shader_preprocess)(const char* source, const char* source_name);
-
     // Compile shader, returns GPU program ID (0 on failure)
     uint32_t (*shader_compile)(
         const char* vertex_source,
@@ -105,10 +102,6 @@ TGFX_API void tgfx_gpu_set_ops(const tgfx_gpu_ops* ops);
 
 // Get current GPU operations vtable (returns NULL if not set)
 TGFX_API const tgfx_gpu_ops* tgfx_gpu_get_ops(void);
-
-// Set shader preprocessor callback
-typedef char* (*tgfx_shader_preprocess_fn)(const char* source, const char* source_name);
-TGFX_API void tgfx_gpu_set_shader_preprocess(tgfx_shader_preprocess_fn fn);
 
 // Check if GPU ops are available
 TGFX_API bool tgfx_gpu_available(void);

@@ -514,7 +514,6 @@ inline void register_gpu_ops() {
     ops.depth_texture_bind = depth_texture_bind;
     ops.texture_delete = texture_delete;
     // Shader operations
-    ops.shader_preprocess = nullptr;  // set from Python via tgfx_gpu_set_shader_preprocess
     ops.shader_compile = shader_compile;
     ops.shader_use = shader_use;
     ops.shader_delete = shader_delete;
