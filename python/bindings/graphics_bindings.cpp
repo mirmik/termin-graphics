@@ -379,6 +379,14 @@ void bind_graphics_backend(nb::module_& m) {
             int height = nb::cast<int>(size[1]);
             self.update_texture(handle, const_cast<uint8_t*>(data.data()), width, height, channels);
         }, nb::arg("handle"), nb::arg("data"), nb::arg("size"), nb::arg("channels") = 4)
+        .def("update_texture_region", [](OpenGLGraphicsBackend& self, GPUTextureHandle* handle,
+                                         nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data,
+                                         int x, int y, int region_w, int region_h, int channels) {
+            int full_width = static_cast<int>(data.shape(1));
+            self.update_texture_region(handle, const_cast<uint8_t*>(data.data()),
+                                       full_width, x, y, region_w, region_h, channels);
+        }, nb::arg("handle"), nb::arg("data"), nb::arg("x"), nb::arg("y"),
+           nb::arg("region_w"), nb::arg("region_h"), nb::arg("channels") = 4)
         .def("create_framebuffer", [](OpenGLGraphicsBackend& self, int width, int height, int samples, const std::string& format) {
             return self.create_framebuffer(width, height, samples, format);
         }, nb::arg("width"), nb::arg("height"), nb::arg("samples") = 1, nb::arg("format") = "")

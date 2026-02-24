@@ -62,6 +62,20 @@ public:
         glBindTexture(GL_TEXTURE_2D, 0);
     }
 
+    void update_data_region(const uint8_t* data, int full_width,
+                            int x, int y, int region_w, int region_h,
+                            int channels) {
+        if (handle_ == 0) return;
+        GLenum format = (channels == 1) ? GL_RED : GL_RGBA;
+        glBindTexture(GL_TEXTURE_2D, handle_);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, full_width);
+        const uint8_t* region_ptr = data + ((size_t)y * full_width + x) * channels;
+        glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, region_w, region_h,
+                        format, GL_UNSIGNED_BYTE, region_ptr);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
 private:
     void upload(const uint8_t* data, bool mipmap, bool clamp) {
         glGenTextures(1, &handle_);

@@ -809,6 +809,19 @@ public:
         }
     }
 
+    void update_texture_region(GPUTextureHandle* handle,
+                               const uint8_t* data,
+                               int full_width,
+                               int x, int y,
+                               int region_w, int region_h,
+                               int channels) {
+        auto* gl_handle = dynamic_cast<OpenGLTextureHandle*>(handle);
+        if (gl_handle) {
+            gl_handle->update_data_region(data, full_width, x, y,
+                                          region_w, region_h, channels);
+        }
+    }
+
     FramebufferHandlePtr create_framebuffer(int width, int height, int samples, const std::string& format = "", TextureFilter filter = TextureFilter::LINEAR) override;
     FramebufferHandlePtr create_shadow_framebuffer(int width, int height) override;
 
