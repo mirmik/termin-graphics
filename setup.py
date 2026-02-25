@@ -10,23 +10,40 @@ import os
 
 
 def _copytree(src, dst):
-    """Copy directory tree, preserving symlinks."""
+    """Copy directory tree. On Windows, dereferences symlinks."""
     if dst.exists():
         shutil.rmtree(dst)
-    shutil.copytree(src, dst, symlinks=True)
+    follow = sys.platform == "win32"
+    shutil.copytree(src, dst, symlinks=not follow)
 
 
-def _copy_shared_libs(src_dir, dst_dir, name_prefix):
-    """Copy shared library files and symlinks (e.g., libfoo.so*)."""
-    for f in sorted(src_dir.glob(f"{name_prefix}*")):
-        dst = dst_dir / f.name
-        if f.is_symlink():
-            link_target = os.readlink(f)
-            if dst.exists() or dst.is_symlink():
-                dst.unlink()
-            dst.symlink_to(link_target)
-        elif f.is_file():
-            shutil.copy2(f, dst)
+def _copy_upstream_libs(src_lib_dir, dst_lib_dir, dst_pkg_dir, name_prefix):
+    """Copy upstream shared library files into package.
+    On Linux: copies .so files and symlinks to lib/ dir.
+    On Windows: copies .dll to pkg dir (next to .pyd), .lib to lib/ dir.
+    """
+    if not src_lib_dir.exists():
+        return
+
+    dst_lib_dir.mkdir(parents=True, exist_ok=True)
+
+    if sys.platform == "win32":
+        for f in src_lib_dir.glob(f"{name_prefix}*.dll"):
+            shutil.copy2(f, dst_pkg_dir / f.name)
+        for f in src_lib_dir.glob(f"{name_prefix}*.lib"):
+            shutil.copy2(f, dst_lib_dir / f.name)
+    else:
+        # Copy real files first, then symlinks
+        for f in sorted(src_lib_dir.glob(f"{name_prefix}*.so*")):
+            dst = dst_lib_dir / f.name
+            if f.is_file() and not f.is_symlink():
+                shutil.copy2(f, dst)
+        for f in sorted(src_lib_dir.glob(f"{name_prefix}*.so*")):
+            dst = dst_lib_dir / f.name
+            if f.is_symlink():
+                if dst.exists() or dst.is_symlink():
+                    dst.unlink()
+                dst.symlink_to(os.readlink(f))
 
 
 class CMakeBuildExt(build_ext):
@@ -76,61 +93,53 @@ class CMakeBuildExt(build_ext):
             cwd=build_temp,
         )
 
-        # Find the built .so
-        built_files = list((build_temp / "python").glob("_tgfx_native.*"))
+        # Find the built native module
+        patterns = ["_tgfx_native.*.so", "_tgfx_native.*.pyd", "_tgfx_native.pyd"]
+        built_files = []
+        for pat in patterns:
+            built_files.extend((build_temp / "python").glob(pat))
         if not built_files:
             raise RuntimeError("CMake build did not produce _tgfx_native module")
 
-        built_so = built_files[0]
+        built_module = built_files[0]
 
         # Copy to where setuptools expects it (makes install/bdist_wheel work)
         ext_path = Path(self.get_ext_fullpath(ext.name))
         ext_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(built_so, ext_path)
+        shutil.copy2(built_module, ext_path)
 
-        # Copy C++ artifacts next to the .so
+        # Copy C++ artifacts next to the module
         ext_pkg_dir = ext_path.parent
         if (staging_dir / "include").exists():
             _copytree(staging_dir / "include", ext_pkg_dir / "include")
         if (staging_dir / "lib").exists():
             _copytree(staging_dir / "lib", ext_pkg_dir / "lib")
 
-        # Copy libtermin_base.so from tcbase into tgfx/lib/
-        # (libtermin_graphics.so depends on it at runtime)
+        # Copy libtermin_base from tcbase (runtime dependency of libtermin_graphics)
         tcbase_lib_dir = Path(tcbase_prefix) / "lib"
-        installed_lib_dir = ext_pkg_dir / "lib"
-        if tcbase_lib_dir.exists():
-            for f in sorted(tcbase_lib_dir.glob("libtermin_base.so*")):
-                dst = installed_lib_dir / f.name
-                if f.is_symlink():
-                    link_target = os.readlink(f)
-                    if dst.exists() or dst.is_symlink():
-                        dst.unlink()
-                    dst.symlink_to(link_target)
-                elif f.is_file():
-                    shutil.copy2(f, dst)
+        _copy_upstream_libs(tcbase_lib_dir, ext_pkg_dir / "lib", ext_pkg_dir, "libtermin_base")
+        _copy_upstream_libs(tcbase_lib_dir, ext_pkg_dir / "lib", ext_pkg_dir, "termin_base")
+
+        # On Windows, copy DLLs next to the .pyd
+        if sys.platform == "win32":
+            for dll in (staging_dir / "lib").glob("*.dll"):
+                shutil.copy2(dll, ext_pkg_dir / dll.name)
 
         # Also copy to source tree for editable/development use
         tgfx_pkg_dir = source_dir / "python" / "tgfx"
         tgfx_pkg_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(built_so, tgfx_pkg_dir / built_so.name)
+        shutil.copy2(built_module, tgfx_pkg_dir / built_module.name)
         if (staging_dir / "include").exists():
             _copytree(staging_dir / "include", tgfx_pkg_dir / "include")
         if (staging_dir / "lib").exists():
             _copytree(staging_dir / "lib", tgfx_pkg_dir / "lib")
 
-        # Copy libtermin_base.so into source tree lib/ too
-        src_lib_dir = tgfx_pkg_dir / "lib"
-        if tcbase_lib_dir.exists():
-            for f in sorted(tcbase_lib_dir.glob("libtermin_base.so*")):
-                dst = src_lib_dir / f.name
-                if f.is_symlink():
-                    link_target = os.readlink(f)
-                    if dst.exists() or dst.is_symlink():
-                        dst.unlink()
-                    dst.symlink_to(link_target)
-                elif f.is_file():
-                    shutil.copy2(f, dst)
+        _copy_upstream_libs(tcbase_lib_dir, tgfx_pkg_dir / "lib", tgfx_pkg_dir, "libtermin_base")
+        _copy_upstream_libs(tcbase_lib_dir, tgfx_pkg_dir / "lib", tgfx_pkg_dir, "termin_base")
+
+        if sys.platform == "win32":
+            for dll in (staging_dir / "lib").glob("*.dll"):
+                shutil.copy2(dll, tgfx_pkg_dir / dll.name)
 
 
 directory = os.path.dirname(os.path.realpath(__file__))
@@ -150,9 +159,13 @@ setup(
         "tgfx": [
             "include/**/*.h",
             "include/**/*.hpp",
+            # Linux
             "lib/*.so*",
+            # Windows
+            "*.dll",
             "lib/*.dll",
             "lib/*.lib",
+            # CMake configs
             "lib/cmake/termin_graphics/*.cmake",
         ],
     },

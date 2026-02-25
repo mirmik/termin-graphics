@@ -47,6 +47,7 @@ set(TGFX_CXX_SOURCES
     src/tgfx_mesh_handle.cpp
 )
 
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 add_library(termin_graphics SHARED ${TGFX_C_SOURCES} ${TGFX_CXX_SOURCES})
 target_compile_definitions(termin_graphics PRIVATE TGFX_EXPORTS)
 
@@ -65,8 +66,10 @@ target_link_libraries(termin_graphics PUBLIC
 set_target_properties(termin_graphics PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION 0
-    INSTALL_RPATH "$ORIGIN"
 )
+if(NOT WIN32)
+    set_target_properties(termin_graphics PROPERTIES INSTALL_RPATH "$ORIGIN")
+endif()
 
 # --- Python bindings ---
 option(TGFX_BUILD_PYTHON "Build Python bindings" OFF)
@@ -107,7 +110,7 @@ install(TARGETS termin_graphics glad
     EXPORT termin_graphicsTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
 install(DIRECTORY include/tgfx
