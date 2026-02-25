@@ -6,9 +6,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Options
-option(TGFX_BUILD_SHARED "Build shared library" ON)
-
 # Find OpenGL
 find_package(OpenGL REQUIRED)
 
@@ -50,12 +47,8 @@ set(TGFX_CXX_SOURCES
     src/tgfx_mesh_handle.cpp
 )
 
-if(TGFX_BUILD_SHARED AND NOT WIN32)
-    add_library(termin_graphics SHARED ${TGFX_C_SOURCES} ${TGFX_CXX_SOURCES})
-    target_compile_definitions(termin_graphics PRIVATE TGFX_EXPORTS)
-else()
-    add_library(termin_graphics STATIC ${TGFX_C_SOURCES} ${TGFX_CXX_SOURCES})
-endif()
+add_library(termin_graphics SHARED ${TGFX_C_SOURCES} ${TGFX_CXX_SOURCES})
+target_compile_definitions(termin_graphics PRIVATE TGFX_EXPORTS)
 
 target_include_directories(termin_graphics PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -72,6 +65,7 @@ target_link_libraries(termin_graphics PUBLIC
 set_target_properties(termin_graphics PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION 0
+    INSTALL_RPATH "$ORIGIN"
 )
 
 # --- Python bindings ---

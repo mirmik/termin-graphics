@@ -95,6 +95,21 @@ class CMakeBuildExt(build_ext):
         if (staging_dir / "lib").exists():
             _copytree(staging_dir / "lib", ext_pkg_dir / "lib")
 
+        # Copy libtermin_base.so from tcbase into tgfx/lib/
+        # (libtermin_graphics.so depends on it at runtime)
+        tcbase_lib_dir = Path(tcbase_prefix) / "lib"
+        installed_lib_dir = ext_pkg_dir / "lib"
+        if tcbase_lib_dir.exists():
+            for f in sorted(tcbase_lib_dir.glob("libtermin_base.so*")):
+                dst = installed_lib_dir / f.name
+                if f.is_symlink():
+                    link_target = os.readlink(f)
+                    if dst.exists() or dst.is_symlink():
+                        dst.unlink()
+                    dst.symlink_to(link_target)
+                elif f.is_file():
+                    shutil.copy2(f, dst)
+
         # Also copy to source tree for editable/development use
         tgfx_pkg_dir = source_dir / "python" / "tgfx"
         tgfx_pkg_dir.mkdir(parents=True, exist_ok=True)
@@ -103,6 +118,19 @@ class CMakeBuildExt(build_ext):
             _copytree(staging_dir / "include", tgfx_pkg_dir / "include")
         if (staging_dir / "lib").exists():
             _copytree(staging_dir / "lib", tgfx_pkg_dir / "lib")
+
+        # Copy libtermin_base.so into source tree lib/ too
+        src_lib_dir = tgfx_pkg_dir / "lib"
+        if tcbase_lib_dir.exists():
+            for f in sorted(tcbase_lib_dir.glob("libtermin_base.so*")):
+                dst = src_lib_dir / f.name
+                if f.is_symlink():
+                    link_target = os.readlink(f)
+                    if dst.exists() or dst.is_symlink():
+                        dst.unlink()
+                    dst.symlink_to(link_target)
+                elif f.is_file():
+                    shutil.copy2(f, dst)
 
 
 directory = os.path.dirname(os.path.realpath(__file__))
@@ -122,8 +150,9 @@ setup(
         "tgfx": [
             "include/**/*.h",
             "include/**/*.hpp",
-            "lib/*.a",
             "lib/*.so*",
+            "lib/*.dll",
+            "lib/*.lib",
             "lib/cmake/termin_graphics/*.cmake",
         ],
     },
