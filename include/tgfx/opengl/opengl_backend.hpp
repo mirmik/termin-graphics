@@ -1,5 +1,6 @@
 #pragma once
 
+#include <tgfx/tgfx_api.h>
 #include <glad/glad.h>
 #include <array>
 #include <cstring>
@@ -543,7 +544,7 @@ inline void register_gpu_ops() {
 
 // OpenGL 3.3+ graphics backend implementation.
 // Singleton - only one instance can exist.
-class OpenGLGraphicsBackend : public GraphicsBackend {
+class TGFX_API OpenGLGraphicsBackend : public GraphicsBackend {
 private:
     static OpenGLGraphicsBackend* instance_;
 

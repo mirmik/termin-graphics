@@ -10,6 +10,7 @@ extern "C" {
 #include <tgfx/tgfx_resource_gpu.h>
 }
 
+#include <tgfx/tgfx_api.h>
 #include <string>
 #include <cstring>
 #include <vector>
@@ -20,7 +21,7 @@ namespace termin {
 
 // TcTexture - texture wrapper with registry integration
 // Stores handle (index + generation) instead of raw pointer
-class TcTexture {
+class TGFX_API TcTexture {
 public:
     tc_texture_handle handle = tc_texture_handle_invalid();
 

@@ -50,12 +50,8 @@ set(TGFX_CXX_SOURCES
     src/tgfx_mesh_handle.cpp
 )
 
-if(TGFX_BUILD_SHARED AND NOT WIN32)
-    add_library(termin_graphics SHARED ${TGFX_C_SOURCES} ${TGFX_CXX_SOURCES})
-    target_compile_definitions(termin_graphics PRIVATE TGFX_EXPORTS)
-else()
-    add_library(termin_graphics STATIC ${TGFX_C_SOURCES} ${TGFX_CXX_SOURCES})
-endif()
+add_library(termin_graphics SHARED ${TGFX_C_SOURCES} ${TGFX_CXX_SOURCES})
+target_compile_definitions(termin_graphics PRIVATE TGFX_EXPORTS)
 
 target_include_directories(termin_graphics PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

@@ -5,6 +5,7 @@
 #include <optional>
 #include <cstdint>
 
+#include "tgfx/tgfx_api.h"
 #include "tgfx/render_state.hpp"
 #include "tgfx/handles.hpp"
 #include "tgfx/types.hpp"
@@ -17,7 +18,7 @@ namespace termin {
 
 // Abstract graphics backend interface.
 // Provides GPU resource management and render state control.
-class GraphicsBackend {
+class TGFX_API GraphicsBackend {
 public:
     virtual ~GraphicsBackend() = default;
 
