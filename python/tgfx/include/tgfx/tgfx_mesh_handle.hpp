@@ -10,6 +10,7 @@ extern "C" {
 #include <tgfx/tgfx_resource_gpu.h>
 }
 
+#include <tgfx/tgfx_api.h>
 #include <string>
 #include <cstring>
 #include <vector>
@@ -21,7 +22,7 @@ class Mesh3;
 
 // TcMesh - GPU-ready mesh wrapper
 // Stores handle (index + generation) instead of raw pointer
-class TcMesh {
+class TGFX_API TcMesh {
 public:
     tc_mesh_handle handle = tc_mesh_handle_invalid();
 
