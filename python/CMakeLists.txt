@@ -17,3 +17,10 @@ nanobind_add_module(_tgfx_native
 
 target_link_libraries(_tgfx_native PRIVATE termin_graphics OpenGL::GL)
 target_include_directories(_tgfx_native PRIVATE ${CMAKE_SOURCE_DIR}/include)
+
+if(NOT WIN32)
+    set_target_properties(_tgfx_native PROPERTIES
+        BUILD_WITH_INSTALL_RPATH TRUE
+        INSTALL_RPATH "$ORIGIN/lib"
+    )
+endif()

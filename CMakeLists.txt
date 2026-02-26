@@ -6,9 +6,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Options
-option(TGFX_BUILD_SHARED "Build shared library" ON)
-
 # Find OpenGL
 find_package(OpenGL REQUIRED)
 
@@ -69,6 +66,9 @@ set_target_properties(termin_graphics PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION 0
 )
+if(NOT WIN32)
+    set_target_properties(termin_graphics PROPERTIES INSTALL_RPATH "$ORIGIN")
+endif()
 
 # --- Python bindings ---
 option(TGFX_BUILD_PYTHON "Build Python bindings" OFF)
@@ -109,7 +109,7 @@ install(TARGETS termin_graphics glad
     EXPORT termin_graphicsTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
 install(DIRECTORY include/tgfx

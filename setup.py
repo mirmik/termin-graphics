@@ -18,10 +18,41 @@ def _get_sdk_prefix():
     return None
 
 
-def _copy_dlls(lib_dir, dst_dir):
-    """Copy DLL files to target directory (Windows: DLLs must be next to .pyd)."""
-    for dll in lib_dir.glob("*.dll"):
-        shutil.copy2(dll, dst_dir / dll.name)
+def _copytree(src, dst):
+    """Copy directory tree. On Windows, dereferences symlinks."""
+    if dst.exists():
+        shutil.rmtree(dst)
+    follow = sys.platform == "win32"
+    shutil.copytree(src, dst, symlinks=not follow)
+
+
+def _copy_upstream_libs(src_lib_dir, dst_lib_dir, dst_pkg_dir, name_prefix):
+    """Copy upstream shared library files into package.
+    On Linux: copies .so files and symlinks to lib/ dir.
+    On Windows: copies .dll to pkg dir (next to .pyd), .lib to lib/ dir.
+    """
+    if not src_lib_dir.exists():
+        return
+
+    dst_lib_dir.mkdir(parents=True, exist_ok=True)
+
+    if sys.platform == "win32":
+        for f in src_lib_dir.glob(f"{name_prefix}*.dll"):
+            shutil.copy2(f, dst_pkg_dir / f.name)
+        for f in src_lib_dir.glob(f"{name_prefix}*.lib"):
+            shutil.copy2(f, dst_lib_dir / f.name)
+    else:
+        # Copy real files first, then symlinks
+        for f in sorted(src_lib_dir.glob(f"{name_prefix}*.so*")):
+            dst = dst_lib_dir / f.name
+            if f.is_file() and not f.is_symlink():
+                shutil.copy2(f, dst)
+        for f in sorted(src_lib_dir.glob(f"{name_prefix}*.so*")):
+            dst = dst_lib_dir / f.name
+            if f.is_symlink():
+                if dst.exists() or dst.is_symlink():
+                    dst.unlink()
+                dst.symlink_to(os.readlink(f))
 
 
 class CMakeBuild(_build):
@@ -37,6 +68,7 @@ class CMakeBuildExt(build_ext):
     """
     Build nanobind extension via CMake.
     CMake builds termin_graphics library + _tgfx_native module.
+    Also installs C++ artifacts (headers, libs, cmake configs) into the package.
     """
 
     def build_extension(self, ext):
@@ -49,6 +81,14 @@ class CMakeBuildExt(build_ext):
         staging_dir = (build_temp / "install").resolve()
         staging_dir.mkdir(parents=True, exist_ok=True)
 
+        # Find tcbase C++ prefix (headers, lib, cmake configs)
+        try:
+            import tcbase
+            tcbase_prefix = str(Path(tcbase.__file__).parent)
+        except ImportError:
+            tcbase_prefix = None
+
+        # On Windows, prefer SDK directory for cmake find_package
         sdk = _get_sdk_prefix()
 
         cmake_args = [
@@ -59,8 +99,15 @@ class CMakeBuildExt(build_ext):
             f"-DCMAKE_INSTALL_PREFIX={staging_dir}",
             f"-DCMAKE_INSTALL_LIBDIR=lib",
         ]
-        if sdk:
-            cmake_args.append(f"-DCMAKE_PREFIX_PATH={sdk}")
+
+        # Build CMAKE_PREFIX_PATH from available sources
+        prefix_paths = []
+        if sdk and sdk.exists():
+            prefix_paths.append(str(sdk))
+        if tcbase_prefix:
+            prefix_paths.append(tcbase_prefix)
+        if prefix_paths:
+            cmake_args.append(f"-DCMAKE_PREFIX_PATH={';'.join(prefix_paths)}")
 
         subprocess.check_call(["cmake", *cmake_args], cwd=build_temp)
         subprocess.check_call(
@@ -90,26 +137,52 @@ class CMakeBuildExt(build_ext):
         if not built_files:
             raise RuntimeError("CMake build did not produce _tgfx_native module")
 
-        built_so = built_files[0]
+        built_module = built_files[0]
 
         # Copy to where setuptools expects it (makes install/bdist_wheel work)
         ext_path = Path(self.get_ext_fullpath(ext.name))
         ext_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(built_so, ext_path)
+        shutil.copy2(built_module, ext_path)
+
+        # Copy C++ artifacts next to the module
+        ext_pkg_dir = ext_path.parent
+        if (staging_dir / "include").exists():
+            _copytree(staging_dir / "include", ext_pkg_dir / "include")
+        if (staging_dir / "lib").exists():
+            _copytree(staging_dir / "lib", ext_pkg_dir / "lib")
+
+        # Copy libtermin_base from tcbase (runtime dependency of libtermin_graphics)
+        if tcbase_prefix:
+            tcbase_lib_dir = Path(tcbase_prefix) / "lib"
+            _copy_upstream_libs(tcbase_lib_dir, ext_pkg_dir / "lib", ext_pkg_dir, "libtermin_base")
+            _copy_upstream_libs(tcbase_lib_dir, ext_pkg_dir / "lib", ext_pkg_dir, "termin_base")
 
         # On Windows, copy DLLs next to the .pyd
         if sys.platform == "win32":
-            _copy_dlls(staging_dir / "lib", ext_path.parent)
-            _copy_dlls(staging_dir / "bin", ext_path.parent)
+            for dll in (staging_dir / "lib").glob("*.dll"):
+                shutil.copy2(dll, ext_pkg_dir / dll.name)
+            for dll in (staging_dir / "bin").glob("*.dll"):
+                shutil.copy2(dll, ext_pkg_dir / dll.name)
 
         # Also copy to source tree so build_py picks them up via package_data
         tgfx_pkg_dir = source_dir / "python" / "tgfx"
         tgfx_pkg_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(built_so, tgfx_pkg_dir / built_so.name)
+        shutil.copy2(built_module, tgfx_pkg_dir / built_module.name)
+        if (staging_dir / "include").exists():
+            _copytree(staging_dir / "include", tgfx_pkg_dir / "include")
+        if (staging_dir / "lib").exists():
+            _copytree(staging_dir / "lib", tgfx_pkg_dir / "lib")
+
+        if tcbase_prefix:
+            tcbase_lib_dir = Path(tcbase_prefix) / "lib"
+            _copy_upstream_libs(tcbase_lib_dir, tgfx_pkg_dir / "lib", tgfx_pkg_dir, "libtermin_base")
+            _copy_upstream_libs(tcbase_lib_dir, tgfx_pkg_dir / "lib", tgfx_pkg_dir, "termin_base")
 
         if sys.platform == "win32":
-            _copy_dlls(staging_dir / "lib", tgfx_pkg_dir)
-            _copy_dlls(staging_dir / "bin", tgfx_pkg_dir)
+            for dll in (staging_dir / "lib").glob("*.dll"):
+                shutil.copy2(dll, tgfx_pkg_dir / dll.name)
+            for dll in (staging_dir / "bin").glob("*.dll"):
+                shutil.copy2(dll, tgfx_pkg_dir / dll.name)
 
 
 directory = os.path.dirname(os.path.realpath(__file__))
@@ -124,13 +197,21 @@ setup(
     python_requires=">=3.8",
     packages=["tgfx"],
     package_dir={"tgfx": "python/tgfx"},
+    install_requires=["tcbase", "numpy"],
     package_data={
         "tgfx": [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            # Linux
+            "lib/*.so*",
+            # Windows
             "*.dll",
             "lib/*.dll",
+            "lib/*.lib",
+            # CMake configs
+            "lib/cmake/termin_graphics/*.cmake",
         ],
     },
-    install_requires=["numpy"],
     ext_modules=[
         Extension("tgfx._tgfx_native", sources=[]),
     ],
