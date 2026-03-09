@@ -283,7 +283,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install nanobind numpy Pillow PyYAML pytest PyOpenGL glfw
+          pip install nanobind numpy Pillow PyYAML pytest PyOpenGL glfw pysdl2 pysdl2-dll pyassimp scipy
           for lib in termin-base termin-mesh termin-graphics; do
             CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
           done
@@ -298,12 +298,11 @@ jobs:
 
       - name: Install termin Python package
         run: |
-          pip install pyassimp scipy PyQt6 PyOpenGL glfw
           pip install --no-build-isolation ./termin
 
       - name: Run tests
         env:
-          PYTHONPATH: ${{ github.workspace }}/termin/install/lib/python
+          PYTHONPATH: /opt/termin/lib/python:${{ github.workspace }}/termin/install/lib/python
         run: |
           pytest termin/tests/ -v
 
