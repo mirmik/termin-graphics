@@ -298,9 +298,12 @@ jobs:
 
       - name: Install termin Python package
         run: |
-          CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./termin
+          pip install pyassimp scipy PyQt6 PyOpenGL glfw
+          pip install --no-build-isolation ./termin
 
       - name: Run tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/termin/install/lib/python
         run: |
           pytest termin/tests/ -v
 
