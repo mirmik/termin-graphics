@@ -72,6 +72,15 @@ jobs:
           }
 
           rebuild_with_tests termin-base       $GITHUB_WORKSPACE/termin-base       TERMIN_BASE_BUILD_TESTS
+          echo "=== Testing termin-modules ==="
+          cd $GITHUB_WORKSPACE/termin-modules
+          cmake -S . -B build/Release \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=$SDK_PREFIX \
+            -DCMAKE_INSTALL_PREFIX=$SDK_PREFIX \
+            -Dtermin_base_DIR=$SDK_PREFIX/lib/cmake/termin_base \
+            -DTERMIN_MODULES_BUILD_PYTHON=OFF
+          cmake --build build/Release --parallel $(nproc)
           rebuild_with_tests termin-inspect     $GITHUB_WORKSPACE/termin-inspect     TI_BUILD_TESTS
           rebuild_with_tests termin-graphics    $GITHUB_WORKSPACE/termin-graphics    BUILD_TESTS
           rebuild_with_tests termin-scene       $GITHUB_WORKSPACE/termin-scene       TERMIN_SCENE_BUILD_TESTS
@@ -209,7 +218,7 @@ jobs:
       - name: Install pip packages
         run: |
           pip install nanobind numpy Pillow PyYAML
-          for lib in termin-base termin-mesh termin-graphics; do
+          for lib in termin-base termin-modules termin-mesh termin-graphics; do
             CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
           done
           pip install ./termin-gui
@@ -242,7 +251,7 @@ jobs:
       - name: Install pip packages
         run: |
           pip install nanobind numpy Pillow PyYAML pytest
-          for lib in termin-base termin-mesh termin-graphics; do
+          for lib in termin-base termin-modules termin-mesh termin-graphics; do
             CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
           done
           pip install ./termin-gui
@@ -250,6 +259,7 @@ jobs:
 
       - name: Run tests
         run: |
+          python -c "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())"
           pytest termin-base/tests/python/ -v
           pytest termin-graphics/tests/python/ -v
           pytest termin-gui/python/tests/ -v
@@ -284,7 +294,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install nanobind numpy Pillow PyYAML pytest PyOpenGL glfw pysdl2 pysdl2-dll pyassimp scipy
-          for lib in termin-base termin-mesh termin-graphics; do
+          for lib in termin-base termin-modules termin-mesh termin-graphics; do
             CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
           done
           pip install ./termin-gui
@@ -333,7 +343,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install nanobind numpy Pillow PyYAML pytest
-          for lib in termin-base termin-mesh termin-graphics; do
+          for lib in termin-base termin-modules termin-mesh termin-graphics; do
             CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
           done
           pip install ./termin-gui
