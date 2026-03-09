@@ -326,8 +326,7 @@ jobs:
             CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
           done
           pip install ./termin-gui
-          pip install ./diffusion-editor
 
       - name: Run tests
         run: |
-          pytest diffusion-editor/tests/ -v
+          PYTHONPATH=$GITHUB_WORKSPACE/diffusion-editor pytest diffusion-editor/tests/ -v
