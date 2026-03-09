@@ -281,14 +281,23 @@ jobs:
           name: sdk-bindings
           path: /opt/termin/
 
-      - name: Install dependencies and termin
+      - name: Install dependencies
         run: |
-          pip install nanobind numpy Pillow PyYAML pytest
+          pip install nanobind numpy Pillow PyYAML pytest PyOpenGL glfw
           for lib in termin-base termin-mesh termin-graphics; do
             CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
           done
           pip install ./termin-gui
           pip install ./termin-nodegraph
+
+      - name: Build termin (cmake + native modules)
+        run: |
+          cd termin
+          CMAKE_PREFIX_PATH=$SDK_PREFIX ./build.sh
+          sudo ./install_system.sh
+
+      - name: Install termin Python package
+        run: |
           CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./termin
 
       - name: Run tests
