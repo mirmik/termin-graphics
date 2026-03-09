@@ -9,7 +9,8 @@ env:
   BUILD_TYPE: Release
 
 jobs:
-  build-cpp:
+  # ── 1. Build C++ libraries ───────────────────────────────────────
+  build-cpp-libs:
     runs-on: ubuntu-latest
     env:
       LD_LIBRARY_PATH: /opt/termin/lib
@@ -28,7 +29,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev
 
-      - name: Build and test C++ libraries
+      - name: Build C++ libraries
         run: |
           sudo mkdir -p $SDK_PREFIX
           sudo chown $USER:$USER $SDK_PREFIX
@@ -41,8 +42,73 @@ jobs:
           path: /opt/termin/
           retention-days: 1
 
+  # ── 2. Test C++ libraries ─────────────────────────────────────────
+  test-cpp-libs:
+    needs: build-cpp-libs
+    runs-on: ubuntu-latest
+    env:
+      LD_LIBRARY_PATH: /opt/termin/lib
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download SDK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sdk-cpp
+          path: /opt/termin/
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Build and run C++ tests
+        run: |
+          pip install nanobind
+
+          rebuild_with_tests() {
+            local name="$1" dir="$2" test_flag="$3"
+            echo "=== Testing $name ==="
+            cd "$dir"
+            cmake -S . -B build/Release \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_PREFIX_PATH=$SDK_PREFIX \
+              -DCMAKE_INSTALL_PREFIX=$SDK_PREFIX \
+              -D$test_flag=ON
+            cmake --build build/Release --parallel $(nproc)
+            cd build/Release && ctest --output-on-failure
+          }
+
+          rebuild_with_tests termin-base       $GITHUB_WORKSPACE/termin-base       TERMIN_BASE_BUILD_TESTS
+          rebuild_with_tests termin-inspect     $GITHUB_WORKSPACE/termin-inspect     TI_BUILD_TESTS
+          rebuild_with_tests termin-graphics    $GITHUB_WORKSPACE/termin-graphics    BUILD_TESTS
+          rebuild_with_tests termin-scene       $GITHUB_WORKSPACE/termin-scene       TERMIN_SCENE_BUILD_TESTS
+          rebuild_with_tests termin-collision   $GITHUB_WORKSPACE/termin-collision   TERMIN_COLLISION_BUILD_TESTS
+
+          echo "=== Testing termin ==="
+          cd $GITHUB_WORKSPACE/termin
+          cmake -S . -B build/Release \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=$SDK_PREFIX \
+            -DCMAKE_INSTALL_PREFIX=$SDK_PREFIX \
+            -DBUILD_TESTS=ON \
+            -DBUILD_EDITOR_EXE=OFF \
+            -DBUILD_LAUNCHER=OFF \
+            -DBUNDLE_PYTHON=OFF \
+            -DBUILD_CSHARP_BINDINGS=OFF
+          cmake --build build/Release --parallel $(nproc)
+          cd build/Release && ctest --output-on-failure
+
+  # ── 3. Build Python bindings ──────────────────────────────────────
   build-python:
-    needs: build-cpp
+    needs: build-cpp-libs
     runs-on: ubuntu-latest
     env:
       LD_LIBRARY_PATH: /opt/termin/lib
@@ -75,12 +141,135 @@ jobs:
           done
           pip install ./termin-gui
           pip install ./termin-nodegraph
-          CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./termin
+
+      - name: Upload Python environment
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-env
+          path: |
+            ${{ env.pythonLocation }}/lib/python3.10/site-packages/
+          retention-days: 1
+
+  # ── 4. Test Python bindings ───────────────────────────────────────
+  test-python:
+    needs: build-python
+    runs-on: ubuntu-latest
+    env:
+      LD_LIBRARY_PATH: /opt/termin/lib
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev
+
+      - name: Download SDK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sdk-cpp
+          path: /opt/termin/
+
+      - name: Install Python packages
+        run: |
+          pip install nanobind numpy Pillow PyYAML pytest
+          for lib in termin-base termin-mesh termin-graphics; do
+            CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
+          done
+          pip install ./termin-gui
+          pip install ./termin-nodegraph
 
       - name: Run Python tests
         run: |
           pytest termin-base/tests/python/ -v
+          pytest termin-graphics/tests/python/ -v
           pytest termin-gui/python/tests/ -v
           pytest termin-nodegraph/tests/ -v
+
+  # ── 5. Build termin ───────────────────────────────────────────────
+  build-termin:
+    needs: build-python
+    runs-on: ubuntu-latest
+    env:
+      LD_LIBRARY_PATH: /opt/termin/lib
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev
+
+      - name: Download SDK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sdk-cpp
+          path: /opt/termin/
+
+      - name: Install dependencies and termin
+        run: |
+          pip install nanobind numpy Pillow PyYAML pytest
+          for lib in termin-base termin-mesh termin-graphics; do
+            CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
+          done
+          pip install ./termin-gui
+          pip install ./termin-nodegraph
+          CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./termin
+
+      - name: Run termin tests
+        run: |
           pytest termin/tests/ -v
+
+  # ── 6. Test diffusion-editor ──────────────────────────────────────
+  test-diffusion-editor:
+    needs: build-python
+    runs-on: ubuntu-latest
+    env:
+      LD_LIBRARY_PATH: /opt/termin/lib
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev
+
+      - name: Download SDK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sdk-cpp
+          path: /opt/termin/
+
+      - name: Install dependencies
+        run: |
+          pip install nanobind numpy Pillow PyYAML pytest
+          for lib in termin-base termin-mesh termin-graphics; do
+            CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
+          done
+          pip install ./termin-gui
+          pip install ./diffusion-editor
+
+      - name: Run diffusion-editor tests
+        run: |
           pytest diffusion-editor/tests/ -v
