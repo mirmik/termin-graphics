@@ -1,0 +1,8 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(termin_base REQUIRED)
+
+include("${CMAKE_CURRENT_LIST_DIR}/termin_meshTargets.cmake")
+
+check_required_components(termin_mesh)

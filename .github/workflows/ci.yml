@@ -1,0 +1,224 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+env:
+  SDK_PREFIX: /opt/termin
+  BUILD_TYPE: Release
+
+jobs:
+  # ── Detect changed paths ──────────────────────────────────────────
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      nanobind-sdk: ${{ steps.filter.outputs.nanobind-sdk }}
+      base: ${{ steps.filter.outputs.base }}
+      mesh: ${{ steps.filter.outputs.mesh }}
+      graphics: ${{ steps.filter.outputs.graphics }}
+      inspect: ${{ steps.filter.outputs.inspect }}
+      scene: ${{ steps.filter.outputs.scene }}
+      collision: ${{ steps.filter.outputs.collision }}
+      components: ${{ steps.filter.outputs.components }}
+      gui: ${{ steps.filter.outputs.gui }}
+      nodegraph: ${{ steps.filter.outputs.nodegraph }}
+      modules: ${{ steps.filter.outputs.modules }}
+      termin: ${{ steps.filter.outputs.termin }}
+      diffusion-editor: ${{ steps.filter.outputs.diffusion-editor }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            nanobind-sdk:
+              - 'termin-nanobind-sdk/**'
+            base:
+              - 'termin-nanobind-sdk/**'
+              - 'termin-base/**'
+            mesh:
+              - 'termin-nanobind-sdk/**'
+              - 'termin-base/**'
+              - 'termin-mesh/**'
+            graphics:
+              - 'termin-nanobind-sdk/**'
+              - 'termin-base/**'
+              - 'termin-mesh/**'
+              - 'termin-graphics/**'
+            inspect:
+              - 'termin-nanobind-sdk/**'
+              - 'termin-base/**'
+              - 'termin-inspect/**'
+            scene:
+              - 'termin-nanobind-sdk/**'
+              - 'termin-base/**'
+              - 'termin-inspect/**'
+              - 'termin-scene/**'
+            collision:
+              - 'termin-nanobind-sdk/**'
+              - 'termin-base/**'
+              - 'termin-mesh/**'
+              - 'termin-inspect/**'
+              - 'termin-scene/**'
+              - 'termin-collision/**'
+            components:
+              - 'termin-nanobind-sdk/**'
+              - 'termin-base/**'
+              - 'termin-mesh/**'
+              - 'termin-inspect/**'
+              - 'termin-scene/**'
+              - 'termin-collision/**'
+              - 'termin-components/**'
+            gui:
+              - 'termin-base/**'
+              - 'termin-mesh/**'
+              - 'termin-graphics/**'
+              - 'termin-gui/**'
+            nodegraph:
+              - 'termin-base/**'
+              - 'termin-mesh/**'
+              - 'termin-graphics/**'
+              - 'termin-gui/**'
+              - 'termin-nodegraph/**'
+            modules:
+              - 'termin-modules/**'
+            termin:
+              - 'termin/**'
+              - 'termin-base/**'
+              - 'termin-mesh/**'
+              - 'termin-graphics/**'
+              - 'termin-inspect/**'
+              - 'termin-scene/**'
+              - 'termin-collision/**'
+              - 'termin-components/**'
+            diffusion-editor:
+              - 'termin-base/**'
+              - 'termin-mesh/**'
+              - 'termin-graphics/**'
+              - 'termin-gui/**'
+              - 'diffusion-editor/**'
+
+  # ── C++ build chain ───────────────────────────────────────────────
+  build-cpp:
+    needs: changes
+    if: >-
+      needs.changes.outputs.base == 'true' ||
+      needs.changes.outputs.mesh == 'true' ||
+      needs.changes.outputs.graphics == 'true' ||
+      needs.changes.outputs.inspect == 'true' ||
+      needs.changes.outputs.scene == 'true' ||
+      needs.changes.outputs.collision == 'true' ||
+      needs.changes.outputs.components == 'true' ||
+      needs.changes.outputs.termin == 'true'
+    runs-on: ubuntu-latest
+    env:
+      LD_LIBRARY_PATH: /opt/termin/lib
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev
+
+      - name: Build C++ libraries
+        run: |
+          sudo mkdir -p $SDK_PREFIX
+          sudo chown $USER:$USER $SDK_PREFIX
+          ./build-and-install-cpp.sh
+
+      - name: Upload SDK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-cpp
+          path: /opt/termin/
+          retention-days: 1
+
+  # ── Python packages (gui, nodegraph, etc.) ────────────────────────
+  build-python:
+    needs: [changes, build-cpp]
+    if: >-
+      always() && (
+        needs.changes.outputs.gui == 'true' ||
+        needs.changes.outputs.nodegraph == 'true' ||
+        needs.changes.outputs.termin == 'true' ||
+        needs.changes.outputs.diffusion-editor == 'true'
+      )
+    runs-on: ubuntu-latest
+    env:
+      LD_LIBRARY_PATH: /opt/termin/lib
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev
+
+      - name: Download SDK artifact
+        if: needs.build-cpp.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: sdk-cpp
+          path: /opt/termin/
+
+      - name: Build SDK if not cached
+        if: needs.build-cpp.result == 'skipped'
+        run: |
+          sudo mkdir -p $SDK_PREFIX
+          sudo chown $USER:$USER $SDK_PREFIX
+          ./build-and-install-cpp.sh
+
+      - name: Install Python packages
+        run: |
+          pip install nanobind numpy Pillow PyYAML
+          # C++ libs with Python bindings
+          for lib in termin-base termin-mesh termin-graphics; do
+            CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
+          done
+          # Pure Python packages
+          pip install ./termin-gui
+          pip install ./termin-nodegraph
+
+      - name: Install termin
+        if: needs.changes.outputs.termin == 'true'
+        run: |
+          CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./termin
+
+  # ── Full build (master only) ──────────────────────────────────────
+  full-build:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    env:
+      LD_LIBRARY_PATH: /opt/termin/lib
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev
+
+      - name: Full build
+        run: |
+          sudo mkdir -p $SDK_PREFIX
+          sudo chown $USER:$USER $SDK_PREFIX
+          pip install nanobind numpy Pillow PyYAML
+          ./build-and-install.sh
