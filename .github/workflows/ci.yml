@@ -82,5 +82,5 @@ jobs:
           pytest termin-base/tests/python/ -v
           pytest termin-gui/python/tests/ -v
           pytest termin-nodegraph/tests/ -v
-          pytest termin/tests/ -v --ignore=termin/tests/fem --ignore=termin/tests/kinematics --ignore=termin/tests/physics
+          pytest termin/tests/ -v
           pytest diffusion-editor/tests/ -v
