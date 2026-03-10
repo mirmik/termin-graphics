@@ -84,6 +84,7 @@ jobs:
           rebuild_with_tests termin-inspect     $GITHUB_WORKSPACE/termin-inspect     TI_BUILD_TESTS
           rebuild_with_tests termin-graphics    $GITHUB_WORKSPACE/termin-graphics    BUILD_TESTS
           rebuild_with_tests termin-scene       $GITHUB_WORKSPACE/termin-scene       TERMIN_SCENE_BUILD_TESTS
+          rebuild_with_tests termin-render      $GITHUB_WORKSPACE/termin-render      TERMIN_RENDER_BUILD_TESTS
           rebuild_with_tests termin-collision   $GITHUB_WORKSPACE/termin-collision   TERMIN_COLLISION_BUILD_TESTS
 
           echo "=== Testing termin ==="
