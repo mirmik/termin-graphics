@@ -91,6 +91,10 @@ coverage.xml
 **/csharp/termin_wrap.cxx
 **/csharp/termin_wrap.h
 **/csharp/Termin.Native/Generated/
+termin-csharp/**/bin/
+termin-csharp/**/obj/
+termin-csharp/Termin.Native/runtimes/
+termin-csharp/Termin.Native/Generated/
 
 # ── Cache / generated data ─────────────────────────────────────
 **/Cache/

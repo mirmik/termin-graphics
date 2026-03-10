@@ -97,7 +97,6 @@ jobs:
             -DBUILD_EDITOR_EXE=OFF \
             -DBUILD_LAUNCHER=OFF \
             -DBUNDLE_PYTHON=OFF \
-            -DBUILD_CSHARP_BINDINGS=OFF \
             -DTERMIN_BUILD_PYTHON=OFF
           cmake --build build/Release --parallel $(nproc)
           cd build/Release && ctest --output-on-failure
@@ -317,7 +316,65 @@ jobs:
         run: |
           pytest termin/tests/ -v
 
-  # ── 8. Test diffusion-editor ─────────────────────────────────────
+  # ── 8. Build termin-csharp ──────────────────────────────────────
+  test-csharp:
+    needs: test-termin
+    runs-on: ubuntu-latest
+    env:
+      LD_LIBRARY_PATH: /opt/termin/lib
+      DOTNET_CLI_HOME: /tmp/dotnet-home
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev swig
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdk-bindings
+          path: /opt/termin/
+
+      - name: Install dependencies
+        run: |
+          pip install nanobind numpy Pillow PyYAML
+          for lib in termin-base termin-modules termin-mesh termin-graphics; do
+            CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
+          done
+          pip install ./termin-gui
+          pip install ./termin-nodegraph
+
+      - name: Build termin
+        run: |
+          cd termin
+          CMAKE_PREFIX_PATH=$SDK_PREFIX ./build.sh
+          sudo ./install_system.sh
+          pip install --no-build-isolation ./termin
+
+      - name: Build termin-csharp
+        run: |
+          cmake -S termin-csharp -B termin-csharp/build/Release \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=$SDK_PREFIX \
+            -DTERMIN_CSHARP_BUILD_NATIVE=ON \
+            -DTERMIN_CSHARP_BUILD_MANAGED=ON \
+            -DTERMIN_CSHARP_BUILD_TESTS=ON
+          cmake --build termin-csharp/build/Release --parallel $(nproc)
+
+  # ── 9. Test diffusion-editor ─────────────────────────────────────
   test-diffusion-editor:
     needs: build-pip-packages
     runs-on: ubuntu-latest
