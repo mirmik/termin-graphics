@@ -11,6 +11,7 @@ option(TERMIN_RENDER_BUILD_TESTS "Build tests" ON)
 
 find_package(termin_base REQUIRED)
 find_package(termin_graphics REQUIRED)
+find_package(termin_inspect REQUIRED)
 find_package(termin_scene REQUIRED)
 
 set(TERMIN_RENDER_SOURCES
@@ -23,7 +24,15 @@ set(TERMIN_RENDER_SOURCES
     src/tc_scene_render_state.c
     src/tc_scene_skybox.c
     src/tc_viewport_config.c
+    src/tc_pass.c
+    src/tc_pipeline.c
+    src/tc_frame_graph.c
     src/tc_scene_render_ext.cpp
+    src/drawable.cpp
+    src/frame_pass.cpp
+    src/frame_graph_debugger_core.cpp
+    src/tc_inspect_pass_adapter.cpp
+    src/tc_pass_ref.cpp
 )
 
 set(TERMIN_RENDER_HEADERS
@@ -37,7 +46,21 @@ set(TERMIN_RENDER_HEADERS
     include/core/tc_drawable_capability.h
     include/core/tc_drawable_protocol.h
     include/core/tc_scene_drawable.h
+    include/render/tc_pipeline_pool.h
+    include/render/tc_viewport_pool.h
+    include/render/tc_pass.h
+    include/render/tc_pipeline.h
+    include/render/tc_frame_graph.h
+    include/tc_pipeline_registry.h
+    include/inspect/tc_inspect_pass_adapter.h
     include/termin/render/tc_scene_render_accessors.hpp
+    include/termin/render/render_export.hpp
+    include/termin/render/resource_spec.hpp
+    include/termin/render/render_context.hpp
+    include/termin/render/drawable.hpp
+    include/termin/render/tc_pass.hpp
+    include/termin/render/frame_pass.hpp
+    include/termin/render/frame_graph_debugger_core.hpp
     include/tc_viewport_config.h
     include/tc_component_python_drawable.h
 )
@@ -68,7 +91,7 @@ target_include_directories(termin_render
 
 target_compile_features(termin_render PUBLIC cxx_std_20)
 
-target_link_libraries(termin_render PUBLIC tcbase::termin_base tgfx::termin_graphics termin_scene::termin_scene)
+target_link_libraries(termin_render PUBLIC tcbase::termin_base tgfx::termin_graphics termin_scene::termin_scene termin_inspect::termin_inspect)
 
 if(UNIX AND NOT APPLE)
     target_link_libraries(termin_render PRIVATE m)
