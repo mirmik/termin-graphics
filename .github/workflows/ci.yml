@@ -184,6 +184,7 @@ jobs:
           build_binding termin-scene                $GITHUB_WORKSPACE/termin-scene
           build_binding termin-collision            $GITHUB_WORKSPACE/termin-collision
           build_binding termin-components-collision  $GITHUB_WORKSPACE/termin-components/termin-components-collision
+          build_binding termin-components-render     $GITHUB_WORKSPACE/termin-components/termin-components-render
           build_binding termin-components-mesh       $GITHUB_WORKSPACE/termin-components/termin-components-mesh
           build_binding termin-components-kinematic  $GITHUB_WORKSPACE/termin-components/termin-components-kinematic
 
