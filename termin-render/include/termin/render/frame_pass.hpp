@@ -198,10 +198,17 @@ public:
     const std::string get_debug_internal_point() const { return debug_internal_symbol_get(); }
     void set_debug_internal_point(const std::string& sym) { debug_internal_symbol_set(sym); }
 
-    virtual void execute(ExecuteContext& ctx) = 0;
+    virtual void execute(ExecuteContext& ctx) {
+        (void)ctx;
+    }
 
-    virtual std::set<const char*> compute_reads() const = 0;
-    virtual std::set<const char*> compute_writes() const = 0;
+    virtual std::set<const char*> compute_reads() const {
+        return {};
+    }
+
+    virtual std::set<const char*> compute_writes() const {
+        return {};
+    }
 
     virtual std::vector<std::pair<std::string, std::string>> get_inplace_aliases() const {
         return {};
