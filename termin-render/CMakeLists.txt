@@ -8,6 +8,7 @@ option(TERMIN_RENDER_BUILD_SHARED "Build shared library" ON)
 option(TERMIN_RENDER_BUILD_TESTS "Build tests" ON)
 
 find_package(termin_base REQUIRED)
+find_package(termin_graphics REQUIRED)
 find_package(termin_scene REQUIRED)
 
 set(TERMIN_RENDER_SOURCES
@@ -15,14 +16,25 @@ set(TERMIN_RENDER_SOURCES
     src/tc_component_python_drawable.c
     src/tc_drawable_capability.c
     src/tc_scene_drawable.c
+    src/tc_scene_pipeline_template.c
+    src/tc_scene_render_mount.c
+    src/tc_scene_render_state.c
+    src/tc_scene_skybox.c
+    src/tc_viewport_config.c
 )
 
 set(TERMIN_RENDER_HEADERS
     include/termin_render/termin_render.h
     include/termin_render/version.h
+    include/core/tc_scene_lighting.h
+    include/core/tc_scene_pipeline_template.h
+    include/core/tc_scene_render_mount.h
+    include/core/tc_scene_render_state.h
+    include/core/tc_scene_skybox.h
     include/core/tc_drawable_capability.h
     include/core/tc_drawable_protocol.h
     include/core/tc_scene_drawable.h
+    include/tc_viewport_config.h
     include/tc_component_python_drawable.h
 )
 
@@ -50,7 +62,7 @@ target_include_directories(termin_render
         $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(termin_render PUBLIC tcbase::termin_base termin_scene::termin_scene)
+target_link_libraries(termin_render PUBLIC tcbase::termin_base tgfx::termin_graphics termin_scene::termin_scene)
 
 if(UNIX AND NOT APPLE)
     target_link_libraries(termin_render PRIVATE m)

@@ -79,8 +79,10 @@ jobs:
             -DCMAKE_PREFIX_PATH=$SDK_PREFIX \
             -DCMAKE_INSTALL_PREFIX=$SDK_PREFIX \
             -Dtermin_base_DIR=$SDK_PREFIX/lib/cmake/termin_base \
-            -DTERMIN_MODULES_BUILD_PYTHON=OFF
+            -DTERMIN_MODULES_BUILD_PYTHON=OFF \
+            -DTERMIN_MODULES_BUILD_TESTS=ON
           cmake --build build/Release --parallel $(nproc)
+          cd build/Release && ctest --output-on-failure
           rebuild_with_tests termin-inspect     $GITHUB_WORKSPACE/termin-inspect     TI_BUILD_TESTS
           rebuild_with_tests termin-graphics    $GITHUB_WORKSPACE/termin-graphics    BUILD_TESTS
           rebuild_with_tests termin-scene       $GITHUB_WORKSPACE/termin-scene       TERMIN_SCENE_BUILD_TESTS
