@@ -1,8 +1,10 @@
 cmake_minimum_required(VERSION 3.14)
-project(termin_render VERSION 0.1.0 LANGUAGES C)
+project(termin_render VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(TERMIN_RENDER_BUILD_SHARED "Build shared library" ON)
 option(TERMIN_RENDER_BUILD_TESTS "Build tests" ON)
@@ -21,6 +23,7 @@ set(TERMIN_RENDER_SOURCES
     src/tc_scene_render_state.c
     src/tc_scene_skybox.c
     src/tc_viewport_config.c
+    src/tc_scene_render_ext.cpp
 )
 
 set(TERMIN_RENDER_HEADERS
@@ -34,6 +37,7 @@ set(TERMIN_RENDER_HEADERS
     include/core/tc_drawable_capability.h
     include/core/tc_drawable_protocol.h
     include/core/tc_scene_drawable.h
+    include/termin/render/tc_scene_render_accessors.hpp
     include/tc_viewport_config.h
     include/tc_component_python_drawable.h
 )
@@ -61,6 +65,8 @@ target_include_directories(termin_render
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
+
+target_compile_features(termin_render PUBLIC cxx_std_20)
 
 target_link_libraries(termin_render PUBLIC tcbase::termin_base tgfx::termin_graphics termin_scene::termin_scene)
 
