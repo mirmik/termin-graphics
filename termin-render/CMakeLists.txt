@@ -57,6 +57,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/render_export.hpp
     include/termin/render/resource_spec.hpp
     include/termin/render/render_context.hpp
+    include/termin/render/execute_context.hpp
     include/termin/render/drawable.hpp
     include/termin/render/tc_pass.hpp
     include/termin/render/frame_pass.hpp
