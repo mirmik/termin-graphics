@@ -60,6 +60,20 @@ rebuild_with_tests "termin-inspect" "$SCRIPT_DIR/termin-inspect" "TI_BUILD_TESTS
 rebuild_with_tests "termin-graphics" "$SCRIPT_DIR/termin-graphics" "BUILD_TESTS"
 rebuild_with_tests "termin-scene" "$SCRIPT_DIR/termin-scene" "TERMIN_SCENE_BUILD_TESTS"
 rebuild_with_tests "termin-render" "$SCRIPT_DIR/termin-render" "TERMIN_RENDER_BUILD_TESTS"
+
+echo ""
+echo "========================================"
+echo "  Testing termin-engine ($BUILD_TYPE)"
+echo "========================================"
+echo ""
+cd "$SCRIPT_DIR/termin-engine"
+cmake -S . -B "build/${BUILD_TYPE}" \
+    -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+    -DCMAKE_PREFIX_PATH="${SDK_PREFIX}" \
+    -DCMAKE_INSTALL_PREFIX="${SDK_PREFIX}" \
+    -DTERMIN_BUILD_PYTHON=OFF
+cmake --build "build/${BUILD_TYPE}" --parallel "${BUILD_JOBS}"
+
 rebuild_with_tests "termin-collision" "$SCRIPT_DIR/termin-collision" "TERMIN_COLLISION_BUILD_TESTS"
 
 echo ""

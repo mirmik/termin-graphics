@@ -95,6 +95,14 @@ jobs:
             -DCMAKE_INSTALL_PREFIX=$SDK_PREFIX \
             -DTERMIN_BUILD_PYTHON=OFF
           cmake --build build/Release --parallel $(nproc)
+          echo "=== Testing termin-engine ==="
+          cd $GITHUB_WORKSPACE/termin-engine
+          cmake -S . -B build/Release \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=$SDK_PREFIX \
+            -DCMAKE_INSTALL_PREFIX=$SDK_PREFIX \
+            -DTERMIN_BUILD_PYTHON=OFF
+          cmake --build build/Release --parallel $(nproc)
           rebuild_with_tests termin-collision   $GITHUB_WORKSPACE/termin-collision   TERMIN_COLLISION_BUILD_TESTS
 
           echo "=== Testing termin ==="
@@ -190,11 +198,13 @@ jobs:
 
           build_binding termin-inspect              $GITHUB_WORKSPACE/termin-inspect
           build_binding termin-scene                $GITHUB_WORKSPACE/termin-scene
+          build_binding termin-render               $GITHUB_WORKSPACE/termin-render
           build_binding termin-display              $GITHUB_WORKSPACE/termin-display
           build_binding termin-collision            $GITHUB_WORKSPACE/termin-collision
           build_binding termin-components-collision  $GITHUB_WORKSPACE/termin-components/termin-components-collision
           build_binding termin-components-render     $GITHUB_WORKSPACE/termin-components/termin-components-render
           build_binding termin-components-mesh       $GITHUB_WORKSPACE/termin-components/termin-components-mesh
+          build_binding termin-engine                $GITHUB_WORKSPACE/termin-engine
           build_binding termin-components-kinematic  $GITHUB_WORKSPACE/termin-components/termin-components-kinematic
 
       - uses: actions/upload-artifact@v4
