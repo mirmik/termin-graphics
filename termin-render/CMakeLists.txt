@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(TERMIN_RENDER_BUILD_SHARED "Build shared library" ON)
 option(TERMIN_RENDER_BUILD_TESTS "Build tests" ON)
+option(TERMIN_BUILD_PYTHON "Build Python bindings for termin-render" OFF)
 
 find_package(termin_base REQUIRED)
 find_package(termin_graphics REQUIRED)
@@ -23,6 +24,7 @@ set(TERMIN_RENDER_SOURCES
     src/tc_scene_render_mount.c
     src/tc_scene_render_state.c
     src/tc_scene_skybox.c
+    src/tc_viewport.c
     src/tc_viewport_config.c
     src/tc_pass.c
     src/tc_pipeline.c
@@ -48,6 +50,7 @@ set(TERMIN_RENDER_HEADERS
     include/core/tc_scene_drawable.h
     include/render/tc_pipeline_pool.h
     include/render/tc_viewport_pool.h
+    include/render/tc_viewport.h
     include/render/tc_pass.h
     include/render/tc_pipeline.h
     include/render/tc_frame_graph.h
@@ -115,6 +118,25 @@ if(TERMIN_RENDER_BUILD_TESTS)
         termin_render_drawable_test
         PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
+endif()
+
+if(TERMIN_BUILD_PYTHON)
+    find_package(Python 3.8 COMPONENTS Interpreter Development REQUIRED)
+    find_package(nanobind CONFIG REQUIRED)
+
+    nanobind_add_module(_render_framework_native NB_SHARED
+        python/render_framework_bindings.cpp
+    )
+    target_link_libraries(_render_framework_native PRIVATE termin_render termin_inspect::termin_inspect_python)
+    target_include_directories(_render_framework_native PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    set_target_properties(_render_framework_native PROPERTIES
+        INSTALL_RPATH "$ORIGIN;$ORIGIN/..;$ORIGIN/../..;$ORIGIN/../../..;/opt/termin/lib"
+        BUILD_WITH_INSTALL_RPATH TRUE
+    )
+    install(TARGETS _render_framework_native DESTINATION lib/python/termin/render_framework)
+    install(FILES python/termin/render_framework/__init__.py DESTINATION lib/python/termin/render_framework)
 endif()
 
 install(TARGETS termin_render
