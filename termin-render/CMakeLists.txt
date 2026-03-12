@@ -33,8 +33,11 @@ set(TERMIN_RENDER_SOURCES
     src/fbo_pool.cpp
     src/frame_pass.cpp
     src/frame_graph_debugger_core.cpp
+    src/graph_compiler.cpp
+    src/graph_data.cpp
     src/render_pipeline.cpp
     src/render_engine.cpp
+    src/scene_pipeline_template.cpp
     src/shadow.cpp
     src/tc_project_settings.c
     src/tc_inspect_pass_adapter.cpp
@@ -68,8 +71,11 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/tc_pass.hpp
     include/termin/render/frame_pass.hpp
     include/termin/render/frame_graph_debugger_core.hpp
+    include/termin/render/graph_compiler.hpp
+    include/termin/render/graph_data.hpp
     include/termin/render/render_pipeline.hpp
     include/termin/render/render_engine.hpp
+    include/termin/render/scene_pipeline_template.hpp
     include/termin/lighting/shadow.hpp
     include/termin/lighting/shadow_settings.hpp
     include/tc_project_settings.h
@@ -134,6 +140,7 @@ if(TERMIN_BUILD_PYTHON)
 
     nanobind_add_module(_render_framework_native NB_SHARED
         python/render_framework_bindings.cpp
+        python/scene_pipeline_template_bindings.cpp
         python/tc_pass_bindings.cpp
     )
     target_link_libraries(_render_framework_native PRIVATE termin_render termin_inspect::termin_inspect_python)

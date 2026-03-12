@@ -28,6 +28,7 @@ namespace nb = nanobind;
 namespace termin {
 
 void bind_tc_pass_runtime(nb::module_& m);
+void bind_scene_pipeline_template(nb::module_& m);
 
 void bind_render_framework(nb::module_& m) {
     nb::enum_<TextureFilter>(m, "TextureFilter")
@@ -544,6 +545,7 @@ void bind_render_framework(nb::module_& m) {
         }, nb::rv_policy::reference_internal);
 
     bind_tc_pass_runtime(m);
+    bind_scene_pipeline_template(m);
 }
 
 } // namespace termin
