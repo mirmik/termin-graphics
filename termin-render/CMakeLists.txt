@@ -24,15 +24,17 @@ set(TERMIN_RENDER_SOURCES
     src/tc_scene_render_mount.c
     src/tc_scene_render_state.c
     src/tc_scene_skybox.c
-    src/tc_viewport.c
     src/tc_viewport_config.c
     src/tc_pass.c
     src/tc_pipeline.c
     src/tc_frame_graph.c
     src/tc_scene_render_ext.cpp
     src/drawable.cpp
+    src/fbo_pool.cpp
     src/frame_pass.cpp
     src/frame_graph_debugger_core.cpp
+    src/render_pipeline.cpp
+    src/shadow.cpp
     src/tc_inspect_pass_adapter.cpp
     src/tc_pass_ref.cpp
 )
@@ -49,8 +51,6 @@ set(TERMIN_RENDER_HEADERS
     include/core/tc_drawable_protocol.h
     include/core/tc_scene_drawable.h
     include/render/tc_pipeline_pool.h
-    include/render/tc_viewport_pool.h
-    include/render/tc_viewport.h
     include/render/tc_pass.h
     include/render/tc_pipeline.h
     include/render/tc_frame_graph.h
@@ -59,12 +59,16 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/tc_scene_render_accessors.hpp
     include/termin/render/render_export.hpp
     include/termin/render/resource_spec.hpp
+    include/termin/render/fbo_pool.hpp
     include/termin/render/render_context.hpp
     include/termin/render/execute_context.hpp
     include/termin/render/drawable.hpp
     include/termin/render/tc_pass.hpp
     include/termin/render/frame_pass.hpp
     include/termin/render/frame_graph_debugger_core.hpp
+    include/termin/render/render_pipeline.hpp
+    include/termin/lighting/shadow.hpp
+    include/termin/lighting/shadow_settings.hpp
     include/tc_viewport_config.h
     include/tc_component_python_drawable.h
 )
@@ -126,6 +130,7 @@ if(TERMIN_BUILD_PYTHON)
 
     nanobind_add_module(_render_framework_native NB_SHARED
         python/render_framework_bindings.cpp
+        python/tc_pass_bindings.cpp
     )
     target_link_libraries(_render_framework_native PRIVATE termin_render termin_inspect::termin_inspect_python)
     target_include_directories(_render_framework_native PRIVATE
@@ -136,7 +141,7 @@ if(TERMIN_BUILD_PYTHON)
         BUILD_WITH_INSTALL_RPATH TRUE
     )
     install(TARGETS _render_framework_native DESTINATION lib/python/termin/render_framework)
-    install(FILES python/termin/render_framework/__init__.py DESTINATION lib/python/termin/render_framework)
+install(FILES python/termin/render_framework/__init__.py DESTINATION lib/python/termin/render_framework)
 endif()
 
 install(TARGETS termin_render

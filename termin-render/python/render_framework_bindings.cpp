@@ -27,6 +27,8 @@ namespace nb = nanobind;
 
 namespace termin {
 
+void bind_tc_pass_runtime(nb::module_& m);
+
 void bind_render_framework(nb::module_& m) {
     nb::enum_<TextureFilter>(m, "TextureFilter")
         .value("LINEAR", TextureFilter::LINEAR)
@@ -198,27 +200,6 @@ void bind_render_framework(nb::module_& m) {
 
     nb::class_<FrameGraphResource>(m, "FrameGraphResource")
         .def("resource_type", &FrameGraphResource::resource_type);
-
-    nb::class_<TcPassRef>(m, "TcPassRef")
-        .def(nb::init<>())
-        .def("valid", &TcPassRef::valid)
-        .def_prop_rw("pass_name", &TcPassRef::pass_name, &TcPassRef::set_pass_name)
-        .def_prop_ro("type_name", &TcPassRef::type_name)
-        .def_prop_rw("enabled", &TcPassRef::enabled, &TcPassRef::set_enabled)
-        .def_prop_rw("passthrough", &TcPassRef::passthrough, &TcPassRef::set_passthrough)
-        .def("is_inplace", &TcPassRef::is_inplace)
-        .def_prop_ro("inplace", &TcPassRef::is_inplace)
-        .def("get_internal_symbols_with_timing", [](TcPassRef& self) {
-            std::vector<InternalSymbolTiming> result;
-            tc_pass* p = self.ptr();
-            if (p && p->kind == TC_NATIVE_PASS) {
-                CxxFramePass* fp = CxxFramePass::from_tc(p);
-                if (fp) {
-                    return fp->get_internal_symbols_with_timing();
-                }
-            }
-            return result;
-        });
 
     auto dict_to_resource_map = [](nb::dict py_dict) -> ResourceMap {
         ResourceMap result;
@@ -553,6 +534,8 @@ void bind_render_framework(nb::module_& m) {
         .def_prop_ro("presenter", [](FrameGraphDebuggerCore& self) -> FrameGraphPresenter& {
             return self.presenter;
         }, nb::rv_policy::reference_internal);
+
+    bind_tc_pass_runtime(m);
 }
 
 } // namespace termin
