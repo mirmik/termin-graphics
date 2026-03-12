@@ -34,7 +34,9 @@ set(TERMIN_RENDER_SOURCES
     src/frame_pass.cpp
     src/frame_graph_debugger_core.cpp
     src/render_pipeline.cpp
+    src/render_engine.cpp
     src/shadow.cpp
+    src/tc_project_settings.c
     src/tc_inspect_pass_adapter.cpp
     src/tc_pass_ref.cpp
 )
@@ -67,8 +69,10 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/frame_pass.hpp
     include/termin/render/frame_graph_debugger_core.hpp
     include/termin/render/render_pipeline.hpp
+    include/termin/render/render_engine.hpp
     include/termin/lighting/shadow.hpp
     include/termin/lighting/shadow_settings.hpp
+    include/tc_project_settings.h
     include/tc_viewport_config.h
     include/tc_component_python_drawable.h
 )
