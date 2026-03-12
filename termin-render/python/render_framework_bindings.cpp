@@ -10,6 +10,7 @@
 
 #include <termin/geom/mat44.hpp>
 #include <termin/entity/component.hpp>
+#include <termin/entity/entity.hpp>
 #include <termin/render/frame_graph_debugger_core.hpp>
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/render_context.hpp>
@@ -268,12 +269,13 @@ void bind_render_framework(nb::module_& m) {
                     }
                 }
             }
-            if (kwargs.contains("viewport")) {
-                nb::object v = nb::borrow<nb::object>(kwargs["viewport"]);
-                if (!v.is_none() && nb::hasattr(v, "_viewport_handle")) {
-                    auto h = nb::cast<std::tuple<uint32_t, uint32_t>>(v.attr("_viewport_handle")());
-                    self->viewport.index = std::get<0>(h);
-                    self->viewport.generation = std::get<1>(h);
+            if (kwargs.contains("viewport_name")) {
+                self->viewport_name = nb::cast<std::string>(kwargs["viewport_name"]);
+            }
+            if (kwargs.contains("internal_entities")) {
+                nb::object ent = nb::borrow<nb::object>(kwargs["internal_entities"]);
+                if (!ent.is_none()) {
+                    self->internal_entities = nb::cast<Entity>(ent).handle();
                 }
             }
             if (kwargs.contains("lights")) {
@@ -335,24 +337,20 @@ void bind_render_framework(nb::module_& m) {
                 uintptr_t ptr = nb::cast<uintptr_t>(camera_obj.attr("_cxx_component_ptr")());
                 ctx.camera = reinterpret_cast<CameraComponent*>(ptr);
             })
-        .def_prop_rw("viewport",
+        .def_rw("viewport_name", &ExecuteContext::viewport_name)
+        .def_prop_rw("internal_entities",
             [](const ExecuteContext& ctx) -> nb::object {
-                if (!tc_viewport_handle_valid(ctx.viewport)) {
+                if (!tc_entity_handle_valid(ctx.internal_entities)) {
                     return nb::none();
                 }
-                nb::module_ vp_native = nb::module_::import_("termin.viewport._viewport_native");
-                nb::object vp_class = vp_native.attr("Viewport");
-                auto h = std::make_tuple(ctx.viewport.index, ctx.viewport.generation);
-                return vp_class.attr("_from_handle")(h);
+                return nb::cast(Entity(ctx.internal_entities));
             },
-            [](ExecuteContext& ctx, nb::object viewport_obj) {
-                if (viewport_obj.is_none()) {
-                    ctx.viewport = TC_VIEWPORT_HANDLE_INVALID;
+            [](ExecuteContext& ctx, nb::object entity_obj) {
+                if (entity_obj.is_none()) {
+                    ctx.internal_entities = TC_ENTITY_HANDLE_INVALID;
                     return;
                 }
-                auto h = nb::cast<std::tuple<uint32_t, uint32_t>>(viewport_obj.attr("_viewport_handle")());
-                ctx.viewport.index = std::get<0>(h);
-                ctx.viewport.generation = std::get<1>(h);
+                ctx.internal_entities = nb::cast<Entity>(entity_obj).handle();
             })
         .def_rw("rect", &ExecuteContext::rect)
         .def_rw("scene", &ExecuteContext::scene)
@@ -564,7 +562,6 @@ NB_MODULE(_render_framework_native, m) {
 
     nb::module_::import_("tgfx._tgfx_native");
     nb::module_::import_("termin.geombase._geom_native");
-    nb::module_::import_("termin.viewport._viewport_native");
     nb::module_::import_("termin.entity._entity_native");
     nb::module_::import_("termin.lighting._lighting_native");
 

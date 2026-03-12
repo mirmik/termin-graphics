@@ -3,9 +3,9 @@
 
 #include <tc_types.h>
 #include <tc_type_registry.h>
+#include <core/tc_entity_pool.h>
 #include <core/tc_scene_pool.h>
 #include <core/tc_dlist.h>
-#include <render/tc_viewport_pool.h>
 #include <render/tc_pipeline_pool.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -34,7 +34,8 @@ struct tc_execute_context {
     int rect_width;
     int rect_height;
     tc_scene_handle scene;
-    tc_viewport_handle viewport;
+    const char* viewport_name;
+    tc_entity_handle internal_entities;
     void* camera;
     void* lights;
     size_t light_count;

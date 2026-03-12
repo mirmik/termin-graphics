@@ -8,10 +8,7 @@
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/light.hpp>
 #include <termin/tc_scene.hpp>
-
-extern "C" {
-#include "render/tc_viewport_pool.h"
-}
+#include <core/tc_entity_pool.h>
 
 namespace termin {
 
@@ -25,7 +22,8 @@ public:
     Rect4i rect;
     TcSceneRef scene;
     CameraComponent* camera = nullptr;
-    tc_viewport_handle viewport = TC_VIEWPORT_HANDLE_INVALID;
+    std::string viewport_name;
+    tc_entity_handle internal_entities = TC_ENTITY_HANDLE_INVALID;
     std::vector<Light> lights;
     uint64_t layer_mask = 0xFFFFFFFFFFFFFFFFULL;
 };
