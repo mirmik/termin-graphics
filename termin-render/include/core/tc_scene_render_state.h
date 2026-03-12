@@ -3,15 +3,13 @@
 #define TC_SCENE_RENDER_STATE_H
 
 #include "core/tc_scene_pool.h"
+#include "core/tc_scene_extension.h"
 #include "core/tc_scene_lighting.h"
 #include "core/tc_scene_skybox.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-// Builtin scene extension type id for render state.
-#define TC_SCENE_EXT_TYPE_RENDER_STATE UINT64_C(0x72656e6465727374)
 
 typedef struct tc_scene_render_state {
     tc_scene_lighting lighting;

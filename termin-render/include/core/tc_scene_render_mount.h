@@ -3,15 +3,13 @@
 #define TC_SCENE_RENDER_MOUNT_H
 
 #include "core/tc_scene_pool.h"
+#include "core/tc_scene_extension.h"
 #include "core/tc_scene_pipeline_template.h"
 #include "tc_viewport_config.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-// Builtin scene extension type id for render mount state.
-#define TC_SCENE_EXT_TYPE_RENDER_MOUNT UINT64_C(0x72656e6465726d6f)
 
 typedef struct tc_scene_render_mount {
     tc_spt_handle* pipeline_templates;
