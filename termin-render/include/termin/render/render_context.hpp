@@ -3,12 +3,12 @@
 #include <string>
 
 #include <termin/geom/mat44.hpp>
+#include <termin/render/render_camera.hpp>
 #include <termin/tc_scene.hpp>
 #include <tgfx/tgfx_shader_handle.hpp>
 
 namespace termin {
 
-class CameraComponent;
 class GraphicsBackend;
 
 struct RenderContext {
@@ -20,7 +20,7 @@ struct RenderContext {
     TcShader current_tc_shader;
     uint64_t layer_mask = 0xFFFFFFFFFFFFFFFF;
     TcSceneRef scene;
-    CameraComponent* camera = nullptr;
+    RenderCamera* camera = nullptr;
 
     void set_model(const Mat44f& m) { model = m; }
 

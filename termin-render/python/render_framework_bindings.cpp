@@ -9,8 +9,8 @@
 #include <nanobind/stl/vector.h>
 
 #include <termin/geom/mat44.hpp>
-#include <termin/entity/component.hpp>
 #include <termin/entity/entity.hpp>
+#include <termin/render/render_camera.hpp>
 #include <termin/render/frame_graph_debugger_core.hpp>
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/render_context.hpp>
@@ -33,6 +33,19 @@ void bind_render_framework(nb::module_& m) {
     nb::enum_<TextureFilter>(m, "TextureFilter")
         .value("LINEAR", TextureFilter::LINEAR)
         .value("NEAREST", TextureFilter::NEAREST);
+
+    nb::class_<RenderCamera>(m, "RenderCamera")
+        .def(nb::init<>())
+        .def_rw("view", &RenderCamera::view)
+        .def_rw("projection", &RenderCamera::projection)
+        .def_rw("position", &RenderCamera::position)
+        .def_rw("near_clip", &RenderCamera::near_clip)
+        .def_rw("far_clip", &RenderCamera::far_clip)
+        .def("get_view_matrix", &RenderCamera::get_view_matrix)
+        .def("get_projection_matrix", &RenderCamera::get_projection_matrix)
+        .def("view_matrix", &RenderCamera::view_matrix)
+        .def("projection_matrix", &RenderCamera::projection_matrix)
+        .def("get_position", &RenderCamera::get_position);
 
     nb::class_<ResourceSpec>(m, "ResourceSpec")
         .def(nb::init<>())
@@ -300,24 +313,9 @@ void bind_render_framework(nb::module_& m) {
                 ctx.writes_fbos = dict_to_resource_map(py_dict);
             })
         .def_prop_rw("camera",
-            [](const ExecuteContext& ctx) -> nb::object {
-                if (ctx.camera == nullptr) {
-                    return nb::none();
-                }
-                nb::module_ render_components =
-                    nb::module_::import_("termin.render_components._components_render_native");
-                nb::object camera_class = render_components.attr("CameraComponent");
-                uintptr_t ptr = reinterpret_cast<uintptr_t>(ctx.camera);
-                return camera_class.attr("_from_cxx_component_ptr")(ptr);
-            },
-            [](ExecuteContext& ctx, nb::object camera_obj) {
-                if (camera_obj.is_none()) {
-                    ctx.camera = nullptr;
-                    return;
-                }
-                uintptr_t ptr = nb::cast<uintptr_t>(camera_obj.attr("_cxx_component_ptr")());
-                ctx.camera = reinterpret_cast<CameraComponent*>(ptr);
-            })
+            [](const ExecuteContext& ctx) -> RenderCamera* { return ctx.camera; },
+            [](ExecuteContext& ctx, RenderCamera* camera) { ctx.camera = camera; },
+            nb::rv_policy::reference)
         .def_rw("viewport_name", &ExecuteContext::viewport_name)
         .def_prop_rw("internal_entities",
             [](const ExecuteContext& ctx) -> nb::object {
@@ -453,6 +451,12 @@ void bind_render_framework(nb::module_& m) {
                     }
                 }
             }
+            if (kwargs.contains("camera")) {
+                nb::object camera = nb::borrow<nb::object>(kwargs["camera"]);
+                if (!camera.is_none()) {
+                    self->camera = nb::cast<RenderCamera*>(camera);
+                }
+            }
         })
         .def_rw("phase", &RenderContext::phase)
         .def_rw("scene", &RenderContext::scene)
@@ -464,6 +468,10 @@ void bind_render_framework(nb::module_& m) {
         .def_rw("view", &RenderContext::view)
         .def_rw("projection", &RenderContext::projection)
         .def_rw("model", &RenderContext::model)
+        .def_prop_rw("camera",
+            [](const RenderContext& self) -> RenderCamera* { return self.camera; },
+            [](RenderContext& self, RenderCamera* camera) { self.camera = camera; },
+            nb::rv_policy::reference)
         .def("mvp", &RenderContext::mvp);
 
     nb::class_<HDRStats>(m, "HDRStats")
