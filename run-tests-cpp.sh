@@ -56,44 +56,24 @@ echo "========================================"
 echo "  C/C++ tests"
 echo "========================================"
 
-rebuild_with_tests "termin-base" "$SCRIPT_DIR/termin-base" "TERMIN_BASE_BUILD_TESTS"
-rebuild_with_tests "termin-inspect" "$SCRIPT_DIR/termin-inspect" "TI_BUILD_TESTS"
-rebuild_with_tests "termin-graphics" "$SCRIPT_DIR/termin-graphics" "BUILD_TESTS"
-rebuild_with_tests "termin-scene" "$SCRIPT_DIR/termin-scene" "TERMIN_SCENE_BUILD_TESTS"
-rebuild_with_tests "termin-render" "$SCRIPT_DIR/termin-render" "TERMIN_RENDER_BUILD_TESTS"
+# Build modules with tests from modules.conf
+while IFS= read -r line; do
+    line="${line%%#*}"
+    line="$(echo "$line" | xargs)"
+    [[ -z "$line" ]] && continue
+    [[ "$line" == @* ]] && continue
 
-echo ""
-echo "========================================"
-echo "  Testing termin-engine ($BUILD_TYPE)"
-echo "========================================"
-echo ""
-cd "$SCRIPT_DIR/termin-engine"
-cmake -S . -B "build/${BUILD_TYPE}" \
-    -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
-    -DCMAKE_PREFIX_PATH="${SDK_PREFIX}" \
-    -DCMAKE_INSTALL_PREFIX="${SDK_PREFIX}" \
-    -DCMAKE_BUILD_RPATH="${SDK_PREFIX}/lib" \
-    -DTERMIN_BUILD_PYTHON=OFF
-cmake --build "build/${BUILD_TYPE}" --parallel "${BUILD_JOBS}"
+    IFS='|' read -r name dir has_python test_flag _rest <<< "$line"
+    name="$(echo "$name" | xargs)"
+    dir="$(echo "$dir" | xargs)"
+    test_flag="$(echo "$test_flag" | xargs)"
 
-rebuild_with_tests "termin-collision" "$SCRIPT_DIR/termin-collision" "TERMIN_COLLISION_BUILD_TESTS"
+    [[ "$test_flag" == "-" || -z "$test_flag" ]] && continue
 
-echo ""
-echo "========================================"
-echo "  Testing termin-modules"
-echo "========================================"
-echo ""
-cd "$SCRIPT_DIR/termin-modules"
-cmake -S . -B "build/${BUILD_TYPE}" \
-    -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
-    -DCMAKE_PREFIX_PATH="${SDK_PREFIX}" \
-    -DCMAKE_INSTALL_PREFIX="${SDK_PREFIX}" \
-    -DCMAKE_BUILD_RPATH="${SDK_PREFIX}/lib" \
-    -DTERMIN_MODULES_BUILD_PYTHON=OFF \
-    -DTERMIN_MODULES_BUILD_TESTS=ON
-cmake --build "build/${BUILD_TYPE}" --parallel "${BUILD_JOBS}"
-ctest --test-dir "build/${BUILD_TYPE}" --output-on-failure
+    rebuild_with_tests "$name" "$SCRIPT_DIR/$dir" "$test_flag"
+done < "$SCRIPT_DIR/modules.conf"
 
+# Test termin itself
 echo ""
 echo "========================================"
 echo "  Testing termin ($BUILD_TYPE)"
