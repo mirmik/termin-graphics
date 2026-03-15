@@ -84,22 +84,8 @@ install(TARGETS termin_animation
 if(TERMIN_BUILD_PYTHON)
     if(TERMIN_ANIMATION_PYTHON_PREFIX)
         install(TARGETS _animation_native DESTINATION ${TERMIN_ANIMATION_PYTHON_PREFIX}/visualization/animation)
-        install(FILES
-            python/termin/visualization/animation/__init__.py
-            python/termin/visualization/animation/channel.py
-            python/termin/visualization/animation/clip.py
-            python/termin/visualization/animation/clip_io.py
-            DESTINATION ${TERMIN_ANIMATION_PYTHON_PREFIX}/visualization/animation
-        )
     else()
         install(TARGETS _animation_native DESTINATION lib/python/termin/visualization/animation)
-        install(FILES
-            python/termin/visualization/animation/__init__.py
-            python/termin/visualization/animation/channel.py
-            python/termin/visualization/animation/clip.py
-            python/termin/visualization/animation/clip_io.py
-            DESTINATION lib/python/termin/visualization/animation
-        )
     endif()
 endif()
 

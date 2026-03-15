@@ -152,7 +152,6 @@ if(TERMIN_BUILD_PYTHON)
         BUILD_WITH_INSTALL_RPATH TRUE
     )
     install(TARGETS _render_framework_native DESTINATION lib/python/termin/render_framework)
-install(FILES python/termin/render_framework/__init__.py DESTINATION lib/python/termin/render_framework)
 endif()
 
 install(TARGETS termin_render

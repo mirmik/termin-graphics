@@ -84,10 +84,8 @@ install(TARGETS termin_skeleton
 if(TERMIN_BUILD_PYTHON)
     if(TERMIN_SKELETON_PYTHON_PREFIX)
         install(TARGETS _skeleton_native DESTINATION ${TERMIN_SKELETON_PYTHON_PREFIX}/skeleton)
-        install(FILES python/termin/skeleton/__init__.py DESTINATION ${TERMIN_SKELETON_PYTHON_PREFIX}/skeleton)
     else()
         install(TARGETS _skeleton_native DESTINATION lib/python/termin/skeleton)
-        install(FILES python/termin/skeleton/__init__.py DESTINATION lib/python/termin/skeleton)
     endif()
 endif()
 
