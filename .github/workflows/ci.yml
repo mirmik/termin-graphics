@@ -5,7 +5,6 @@ on:
     branches: [master]
 
 env:
-  SDK_PREFIX: /opt/termin
   BUILD_TYPE: Release
 
 jobs:
@@ -23,23 +22,18 @@ jobs:
           sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev
 
       - name: Build
-        run: |
-          sudo mkdir -p $SDK_PREFIX
-          sudo chown $USER:$USER $SDK_PREFIX
-          ./build-and-install-cpp.sh
+        run: ./build-sdk-cpp.sh
 
       - uses: actions/upload-artifact@v4
         with:
           name: sdk-cpp
-          path: /opt/termin/
+          path: sdk/
           retention-days: 1
 
   # ── 2. Test C++ libraries ────────────────────────────────────────
   test-cpp-libs:
     needs: build-cpp-libs
     runs-on: ubuntu-latest
-    env:
-      LD_LIBRARY_PATH: /opt/termin/lib
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,109 +47,14 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: sdk-cpp
-          path: /opt/termin/
+          path: sdk/
 
-      - name: Build and run C++ tests
-        run: |
-          rebuild_with_tests() {
-            local name="$1" dir="$2" test_flag="$3"
-            echo "=== Testing $name ==="
-            cd "$dir"
-            cmake -S . -B build/Release \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DCMAKE_PREFIX_PATH=$SDK_PREFIX \
-              -DCMAKE_INSTALL_PREFIX=$SDK_PREFIX \
-              -DTERMIN_BUILD_PYTHON=OFF \
-              -D$test_flag=ON
-            cmake --build build/Release --parallel $(nproc)
-            cd build/Release && ctest --output-on-failure
-          }
+      - name: Run C++ tests
+        run: ./run-tests-cpp.sh
 
-          rebuild_with_tests termin-base       $GITHUB_WORKSPACE/termin-base       TERMIN_BASE_BUILD_TESTS
-          echo "=== Testing termin-modules ==="
-          cd $GITHUB_WORKSPACE/termin-modules
-          cmake -S . -B build/Release \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH=$SDK_PREFIX \
-            -DCMAKE_INSTALL_PREFIX=$SDK_PREFIX \
-            -Dtermin_base_DIR=$SDK_PREFIX/lib/cmake/termin_base \
-            -DTERMIN_MODULES_BUILD_PYTHON=OFF \
-            -DTERMIN_MODULES_BUILD_TESTS=ON
-          cmake --build build/Release --parallel $(nproc)
-          cd build/Release && ctest --output-on-failure
-          rebuild_with_tests termin-inspect     $GITHUB_WORKSPACE/termin-inspect     TI_BUILD_TESTS
-          rebuild_with_tests termin-graphics    $GITHUB_WORKSPACE/termin-graphics    BUILD_TESTS
-          rebuild_with_tests termin-scene       $GITHUB_WORKSPACE/termin-scene       TERMIN_SCENE_BUILD_TESTS
-          rebuild_with_tests termin-render      $GITHUB_WORKSPACE/termin-render      TERMIN_RENDER_BUILD_TESTS
-          echo "=== Testing termin-display ==="
-          cd $GITHUB_WORKSPACE/termin-display
-          cmake -S . -B build/Release \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH=$SDK_PREFIX \
-            -DCMAKE_INSTALL_PREFIX=$SDK_PREFIX \
-            -DTERMIN_BUILD_PYTHON=OFF
-          cmake --build build/Release --parallel $(nproc)
-          echo "=== Testing termin-engine ==="
-          cd $GITHUB_WORKSPACE/termin-engine
-          cmake -S . -B build/Release \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH=$SDK_PREFIX \
-            -DCMAKE_INSTALL_PREFIX=$SDK_PREFIX \
-            -DTERMIN_BUILD_PYTHON=OFF
-          cmake --build build/Release --parallel $(nproc)
-          rebuild_with_tests termin-collision   $GITHUB_WORKSPACE/termin-collision   TERMIN_COLLISION_BUILD_TESTS
-
-          echo "=== Testing termin ==="
-          cd $GITHUB_WORKSPACE/termin
-          cmake -S . -B build/Release \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH=$SDK_PREFIX \
-            -DCMAKE_INSTALL_PREFIX=$SDK_PREFIX \
-            -DBUILD_TESTS=ON \
-            -DBUILD_EDITOR_EXE=OFF \
-            -DBUILD_LAUNCHER=OFF \
-            -DBUNDLE_PYTHON=OFF \
-            -DTERMIN_BUILD_PYTHON=OFF
-          cmake --build build/Release --parallel $(nproc)
-          cd build/Release && ctest --output-on-failure
-
-  # ── 3. Build nanobind SDK ────────────────────────────────────────
-  build-nanobind-sdk:
+  # ── 3. Build nanobind SDK + Python bindings ────────────────────
+  build-bindings:
     needs: build-cpp-libs
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: sdk-cpp
-          path: /opt/termin/
-
-      - name: Build nanobind SDK
-        run: |
-          pip install nanobind
-          cd termin-nanobind-sdk
-          cmake -S . -B build/Release \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=$SDK_PREFIX \
-            -DPython_EXECUTABLE=$(which python3)
-          cmake --build build/Release --parallel $(nproc)
-          sudo cmake --install build/Release
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: sdk-nanobind
-          path: /opt/termin/
-          retention-days: 1
-
-  # ── 4. Build C++ Python bindings ─────────────────────────────────
-  build-cpp-bindings:
-    needs: build-nanobind-sdk
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -174,51 +73,25 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: sdk-nanobind
-          path: /opt/termin/
+          name: sdk-cpp
+          path: sdk/
 
-      - name: Build C++ Python bindings
-        run: |
-          pip install nanobind
-          PY_EXEC=$(which python3)
+      - name: Install nanobind
+        run: pip install nanobind
 
-          build_binding() {
-            local name="$1" dir="$2"
-            echo "=== Building $name Python bindings ==="
-            cd "$dir"
-            cmake -S . -B build/Release \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DCMAKE_INSTALL_PREFIX=$SDK_PREFIX \
-              -DCMAKE_PREFIX_PATH=$SDK_PREFIX \
-              -DTERMIN_BUILD_PYTHON=ON \
-              -DPython_EXECUTABLE="$PY_EXEC"
-            cmake --build build/Release --parallel $(nproc)
-            sudo cmake --install build/Release
-          }
-
-          build_binding termin-inspect              $GITHUB_WORKSPACE/termin-inspect
-          build_binding termin-scene                $GITHUB_WORKSPACE/termin-scene
-          build_binding termin-render               $GITHUB_WORKSPACE/termin-render
-          build_binding termin-display              $GITHUB_WORKSPACE/termin-display
-          build_binding termin-collision            $GITHUB_WORKSPACE/termin-collision
-          build_binding termin-components-collision  $GITHUB_WORKSPACE/termin-components/termin-components-collision
-          build_binding termin-components-render     $GITHUB_WORKSPACE/termin-components/termin-components-render
-          build_binding termin-components-mesh       $GITHUB_WORKSPACE/termin-components/termin-components-mesh
-          build_binding termin-engine                $GITHUB_WORKSPACE/termin-engine
-          build_binding termin-components-kinematic  $GITHUB_WORKSPACE/termin-components/termin-components-kinematic
+      - name: Build bindings
+        run: ./build-sdk-bindings.sh
 
       - uses: actions/upload-artifact@v4
         with:
-          name: sdk-bindings
-          path: /opt/termin/
+          name: sdk-full
+          path: sdk/
           retention-days: 1
 
-  # ── 5. Build pip packages ────────────────────────────────────────
-  build-pip-packages:
-    needs: build-cpp-bindings
+  # ── 4. Test pip packages ───────────────────────────────────────
+  test-pip-packages:
+    needs: build-bindings
     runs-on: ubuntu-latest
-    env:
-      LD_LIBRARY_PATH: /opt/termin/lib
     steps:
       - uses: actions/checkout@v4
 
@@ -234,52 +107,17 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: sdk-bindings
-          path: /opt/termin/
-
-      - name: Install pip packages
-        run: |
-          pip install nanobind numpy Pillow PyYAML
-          for lib in termin-base termin-modules termin-mesh termin-graphics; do
-            CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
-          done
-          pip install ./termin-gui
-          pip install ./termin-nodegraph
-
-  # ── 6. Test Python bindings ──────────────────────────────────────
-  test-python:
-    needs: build-pip-packages
-    runs-on: ubuntu-latest
-    env:
-      LD_LIBRARY_PATH: /opt/termin/lib
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: sdk-bindings
-          path: /opt/termin/
+          name: sdk-full
+          path: sdk/
 
       - name: Install pip packages
         run: |
           pip install nanobind numpy Pillow PyYAML pytest
-          for lib in termin-base termin-modules termin-mesh termin-graphics; do
-            CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
-          done
-          pip install ./termin-gui
-          pip install ./termin-nodegraph
+          ./install-pip-packages.sh
 
-      - name: Run tests
+      - name: Run Python tests
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
         run: |
           python -c "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())"
           pytest termin-base/tests/python/ -v
@@ -287,12 +125,10 @@ jobs:
           pytest termin-gui/python/tests/ -v
           pytest termin-nodegraph/tests/ -v
 
-  # ── 7. Build & test termin ───────────────────────────────────────
+  # ── 5. Build & test termin ───────────────────────────────────────
   test-termin:
-    needs: build-pip-packages
+    needs: build-bindings
     runs-on: ubuntu-latest
-    env:
-      LD_LIBRARY_PATH: /opt/termin/lib
     steps:
       - uses: actions/checkout@v4
         with:
@@ -310,41 +146,32 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: sdk-bindings
-          path: /opt/termin/
+          name: sdk-full
+          path: sdk/
 
-      - name: Install dependencies
+      - name: Install pip packages
         run: |
           pip install nanobind numpy Pillow PyYAML pytest PyOpenGL glfw pysdl2 pysdl2-dll pyassimp scipy
-          for lib in termin-base termin-modules termin-mesh termin-graphics; do
-            CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
-          done
-          pip install ./termin-gui
-          pip install ./termin-nodegraph
+          ./install-pip-packages.sh --editable
 
-      - name: Build termin (cmake + native modules)
+      - name: Build termin bundle
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
         run: |
           cd termin
-          CMAKE_PREFIX_PATH=$SDK_PREFIX ./build.sh
-          sudo ./install_system.sh
-
-      - name: Install termin Python package
-        run: |
-          pip install --no-build-isolation ./termin
+          SDK_PREFIX=${{ github.workspace }}/sdk CMAKE_PREFIX_PATH=${{ github.workspace }}/sdk ./build.sh
 
       - name: Run tests
         env:
-          PYTHONPATH: /opt/termin/lib/python:${{ github.workspace }}/termin/install/lib/python
+          LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
+          PYTHONPATH: ${{ github.workspace }}/sdk/lib/python:${{ github.workspace }}/termin/install/lib/python
         run: |
           pytest termin/tests/ -v
 
-  # ── 8. Build termin-csharp ──────────────────────────────────────
+  # ── 6. Build termin-csharp ──────────────────────────────────────
   test-csharp:
     needs: test-termin
     runs-on: ubuntu-latest
-    env:
-      LD_LIBRARY_PATH: /opt/termin/lib
-      DOTNET_CLI_HOME: /tmp/dotnet-home
     steps:
       - uses: actions/checkout@v4
         with:
@@ -367,41 +194,35 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: sdk-bindings
-          path: /opt/termin/
+          name: sdk-full
+          path: sdk/
 
-      - name: Install dependencies
+      - name: Install pip packages
         run: |
           pip install nanobind numpy Pillow PyYAML
-          for lib in termin-base termin-modules termin-mesh termin-graphics; do
-            CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
-          done
-          pip install ./termin-gui
-          pip install ./termin-nodegraph
+          ./install-pip-packages.sh
 
       - name: Build termin
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
         run: |
           cd termin
-          CMAKE_PREFIX_PATH=$SDK_PREFIX ./build.sh
-          sudo ./install_system.sh
-          pip install --no-build-isolation ./termin
+          SDK_PREFIX=${{ github.workspace }}/sdk CMAKE_PREFIX_PATH=${{ github.workspace }}/sdk ./build.sh
 
       - name: Build termin-csharp
         run: |
           cmake -S termin-csharp -B termin-csharp/build/Release \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH=$SDK_PREFIX \
+            -DCMAKE_PREFIX_PATH=${{ github.workspace }}/sdk \
             -DTERMIN_CSHARP_BUILD_NATIVE=ON \
             -DTERMIN_CSHARP_BUILD_MANAGED=ON \
             -DTERMIN_CSHARP_BUILD_TESTS=ON
           cmake --build termin-csharp/build/Release --parallel $(nproc)
 
-  # ── 9. Test diffusion-editor ─────────────────────────────────────
+  # ── 7. Test diffusion-editor ─────────────────────────────────────
   test-diffusion-editor:
-    needs: build-pip-packages
+    needs: test-pip-packages
     runs-on: ubuntu-latest
-    env:
-      LD_LIBRARY_PATH: /opt/termin/lib
     steps:
       - uses: actions/checkout@v4
 
@@ -417,17 +238,16 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: sdk-bindings
-          path: /opt/termin/
+          name: sdk-full
+          path: sdk/
 
       - name: Install dependencies
         run: |
           pip install nanobind numpy Pillow PyYAML pytest
-          for lib in termin-base termin-modules termin-mesh termin-graphics; do
-            CMAKE_PREFIX_PATH=$SDK_PREFIX pip install --no-build-isolation ./$lib
-          done
-          pip install ./termin-gui
+          ./install-pip-packages.sh
 
       - name: Run tests
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
         run: |
           PYTHONPATH=$GITHUB_WORKSPACE/diffusion-editor pytest diffusion-editor/tests/ -v
