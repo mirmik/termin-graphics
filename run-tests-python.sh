@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run Python test suites across projects.
 # Assumes SDK and Python packages are already installed, typically via:
-#   ./build-and-install-bindings.sh
+#   ./build-sdk-bindings.sh
 
 set -euo pipefail
 

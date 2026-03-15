@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run C/C++ test suites across projects that define them.
 # Assumes SDK dependencies are already installed, typically via:
-#   ./build-and-install-cpp.sh
+#   ./build-sdk-cpp.sh
 
 set -euo pipefail
 
