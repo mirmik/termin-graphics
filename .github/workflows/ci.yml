@@ -12,7 +12,7 @@ jobs:
   build-cpp-libs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -24,7 +24,7 @@ jobs:
       - name: Build
         run: ./build-sdk-cpp.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: sdk-cpp
           path: sdk/
@@ -35,7 +35,7 @@ jobs:
     needs: build-cpp-libs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -44,7 +44,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: sdk-cpp
           path: sdk/
@@ -57,12 +57,12 @@ jobs:
     needs: build-cpp-libs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
 
@@ -71,7 +71,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: sdk-cpp
           path: sdk/
@@ -82,7 +82,7 @@ jobs:
       - name: Build bindings
         run: ./build-sdk-bindings.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: sdk-full
           path: sdk/
@@ -93,10 +93,10 @@ jobs:
     needs: build-bindings
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
 
@@ -105,7 +105,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: sdk-full
           path: sdk/
@@ -130,12 +130,12 @@ jobs:
     needs: build-bindings
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
 
@@ -144,7 +144,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: sdk-full
           path: sdk/
@@ -173,17 +173,17 @@ jobs:
     needs: test-termin
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
 
@@ -192,7 +192,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev swig
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: sdk-full
           path: sdk/
@@ -224,10 +224,10 @@ jobs:
     needs: test-pip-packages
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
 
@@ -236,7 +236,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: sdk-full
           path: sdk/
