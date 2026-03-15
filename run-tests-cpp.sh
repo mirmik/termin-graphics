@@ -6,7 +6,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SDK_PREFIX="${SDK_PREFIX:-/opt/termin}"
+SDK_PREFIX="${SDK_PREFIX:-$SCRIPT_DIR/sdk}"
 BUILD_TYPE="Release"
 BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 
@@ -43,6 +43,7 @@ rebuild_with_tests() {
         -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
         -DCMAKE_PREFIX_PATH="${SDK_PREFIX}" \
         -DCMAKE_INSTALL_PREFIX="${SDK_PREFIX}" \
+        -DCMAKE_BUILD_RPATH="${SDK_PREFIX}/lib" \
         -DTERMIN_BUILD_PYTHON=OFF \
         -D"${test_flag}"=ON
 
@@ -71,6 +72,7 @@ cmake -S . -B "build/${BUILD_TYPE}" \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
     -DCMAKE_PREFIX_PATH="${SDK_PREFIX}" \
     -DCMAKE_INSTALL_PREFIX="${SDK_PREFIX}" \
+    -DCMAKE_BUILD_RPATH="${SDK_PREFIX}/lib" \
     -DTERMIN_BUILD_PYTHON=OFF
 cmake --build "build/${BUILD_TYPE}" --parallel "${BUILD_JOBS}"
 
@@ -86,6 +88,7 @@ cmake -S . -B "build/${BUILD_TYPE}" \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
     -DCMAKE_PREFIX_PATH="${SDK_PREFIX}" \
     -DCMAKE_INSTALL_PREFIX="${SDK_PREFIX}" \
+    -DCMAKE_BUILD_RPATH="${SDK_PREFIX}/lib" \
     -Dtermin_base_DIR="${SDK_PREFIX}/lib/cmake/termin_base" \
     -DTERMIN_MODULES_BUILD_PYTHON=OFF \
     -DTERMIN_MODULES_BUILD_TESTS=ON
@@ -103,6 +106,7 @@ cmake -S . -B "build/${BUILD_TYPE}" \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
     -DCMAKE_PREFIX_PATH="${SDK_PREFIX}" \
     -DCMAKE_INSTALL_PREFIX="${SDK_PREFIX}" \
+    -DCMAKE_BUILD_RPATH="${SDK_PREFIX}/lib" \
     -DBUILD_TESTS=ON \
     -DBUILD_EDITOR_EXE=OFF \
     -DBUILD_LAUNCHER=OFF \

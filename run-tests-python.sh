@@ -6,7 +6,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SDK_PREFIX="${SDK_PREFIX:-/opt/termin}"
+SDK_PREFIX="${SDK_PREFIX:-$SCRIPT_DIR/sdk}"
 PYTHON_BIN="${PYTHON_BIN:-$(command -v python3 || command -v python)}"
 
 if [[ -z "${PYTHON_BIN}" ]]; then
