@@ -148,7 +148,7 @@ if(TERMIN_BUILD_PYTHON)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
     set_target_properties(_render_framework_native PROPERTIES
-        INSTALL_RPATH "$ORIGIN;$ORIGIN/..;$ORIGIN/../..;$ORIGIN/../../..;/opt/termin/lib"
+        INSTALL_RPATH "$ORIGIN;$ORIGIN/..;$ORIGIN/../..;$ORIGIN/../../..;${CMAKE_INSTALL_PREFIX}/lib"
         BUILD_WITH_INSTALL_RPATH TRUE
     )
     install(TARGETS _render_framework_native DESTINATION lib/python/termin/render_framework)

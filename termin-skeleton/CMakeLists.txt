@@ -66,7 +66,7 @@ if(TERMIN_BUILD_PYTHON)
         termin_inspect::termin_inspect_python
     )
     set_target_properties(_skeleton_native PROPERTIES
-        INSTALL_RPATH "$ORIGIN;$ORIGIN/..;$ORIGIN/../..;$ORIGIN/../../..;/opt/termin/lib"
+        INSTALL_RPATH "$ORIGIN;$ORIGIN/..;$ORIGIN/../..;$ORIGIN/../../..;${CMAKE_INSTALL_PREFIX}/lib"
         BUILD_WITH_INSTALL_RPATH TRUE
     )
 endif()

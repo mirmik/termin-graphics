@@ -14,6 +14,6 @@ target_include_directories(_tgfx_native PRIVATE ${CMAKE_SOURCE_DIR}/include)
 if(NOT WIN32)
     set_target_properties(_tgfx_native PROPERTIES
         BUILD_WITH_INSTALL_RPATH TRUE
-        INSTALL_RPATH "/opt/termin/lib"
+        INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib"
     )
 endif()
