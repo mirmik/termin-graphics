@@ -27,6 +27,35 @@ def _get_sdk_prefix():
     return Path("/opt/termin")
 
 
+def _copytree(src, dst):
+    if dst.exists():
+        shutil.rmtree(dst)
+    follow = sys.platform == "win32"
+    shutil.copytree(src, dst, symlinks=not follow)
+
+
+def _copy_upstream_libs(src_lib_dir, dst_lib_dir, name_prefix):
+    if not src_lib_dir.exists():
+        return
+    dst_lib_dir.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "win32":
+        for f in src_lib_dir.glob(f"{name_prefix}*.dll"):
+            shutil.copy2(f, dst_lib_dir / f.name)
+        for f in src_lib_dir.glob(f"{name_prefix}*.lib"):
+            shutil.copy2(f, dst_lib_dir / f.name)
+    else:
+        for f in sorted(src_lib_dir.glob(f"{name_prefix}*.so*")):
+            dst = dst_lib_dir / f.name
+            if f.is_file() and not f.is_symlink():
+                shutil.copy2(f, dst)
+        for f in sorted(src_lib_dir.glob(f"{name_prefix}*.so*")):
+            dst = dst_lib_dir / f.name
+            if f.is_symlink():
+                if dst.exists() or dst.is_symlink():
+                    dst.unlink()
+                dst.symlink_to(os.readlink(f))
+
+
 class CMakeBuild(_build):
     def run(self):
         self.run_command("build_ext")
@@ -44,6 +73,18 @@ class CMakeBuildExt(build_ext):
         staging_dir = (build_temp / "install").resolve()
         staging_dir.mkdir(parents=True, exist_ok=True)
 
+        try:
+            import tcbase
+            tcbase_prefix = str(Path(tcbase.__file__).parent)
+        except ImportError:
+            tcbase_prefix = None
+
+        try:
+            import tmesh
+            tmesh_prefix = str(Path(tmesh.__file__).parent)
+        except ImportError:
+            tmesh_prefix = None
+
         sdk = _get_sdk_prefix()
 
         cmake_args = [
@@ -58,6 +99,10 @@ class CMakeBuildExt(build_ext):
         prefix_paths = _split_prefix_path(os.environ.get("CMAKE_PREFIX_PATH"))
         if sdk and sdk.exists():
             prefix_paths.append(str(sdk))
+        if tcbase_prefix:
+            prefix_paths.append(tcbase_prefix)
+        if tmesh_prefix:
+            prefix_paths.append(tmesh_prefix)
         if prefix_paths:
             cmake_args.append(f"-DCMAKE_PREFIX_PATH={';'.join(prefix_paths)}")
 
@@ -85,10 +130,48 @@ class CMakeBuildExt(build_ext):
         ext_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(built_module, ext_path)
 
+        ext_pkg_dir = ext_path.parent
+
+        # Bundle native libraries from staging
+        if (staging_dir / "lib").exists():
+            _copytree(staging_dir / "lib", ext_pkg_dir / "lib")
+
+        # Bundle upstream native libraries from dependencies
+        if tcbase_prefix:
+            tcbase_lib_dir = Path(tcbase_prefix) / "lib"
+            _copy_upstream_libs(tcbase_lib_dir, ext_pkg_dir / "lib", "libtermin_base")
+
+        if tmesh_prefix:
+            tmesh_lib_dir = Path(tmesh_prefix) / "lib"
+            _copy_upstream_libs(tmesh_lib_dir, ext_pkg_dir / "lib", "libtermin_mesh")
+
+        if sys.platform == "win32":
+            for dll in (staging_dir / "lib").glob("*.dll"):
+                shutil.copy2(dll, ext_pkg_dir / dll.name)
+            for dll in (staging_dir / "bin").glob("*.dll"):
+                shutil.copy2(dll, ext_pkg_dir / dll.name)
+
         # Also copy to source tree so build_py picks them up
         tgfx_pkg_dir = source_dir / "python" / "tgfx"
         tgfx_pkg_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(built_module, tgfx_pkg_dir / built_module.name)
+
+        if (staging_dir / "lib").exists():
+            _copytree(staging_dir / "lib", tgfx_pkg_dir / "lib")
+
+        if tcbase_prefix:
+            tcbase_lib_dir = Path(tcbase_prefix) / "lib"
+            _copy_upstream_libs(tcbase_lib_dir, tgfx_pkg_dir / "lib", "libtermin_base")
+
+        if tmesh_prefix:
+            tmesh_lib_dir = Path(tmesh_prefix) / "lib"
+            _copy_upstream_libs(tmesh_lib_dir, tgfx_pkg_dir / "lib", "libtermin_mesh")
+
+        if sys.platform == "win32":
+            for dll in (staging_dir / "lib").glob("*.dll"):
+                shutil.copy2(dll, tgfx_pkg_dir / dll.name)
+            for dll in (staging_dir / "bin").glob("*.dll"):
+                shutil.copy2(dll, tgfx_pkg_dir / dll.name)
 
 
 directory = os.path.dirname(os.path.realpath(__file__))
@@ -104,6 +187,14 @@ setup(
     packages=["tgfx"],
     package_dir={"tgfx": "python/tgfx"},
     install_requires=["tcbase", "tmesh", "numpy"],
+    package_data={
+        "tgfx": [
+            "lib/*.so*",
+            "*.dll",
+            "lib/*.dll",
+            "lib/*.lib",
+        ],
+    },
     ext_modules=[
         Extension("tgfx._tgfx_native", sources=[]),
     ],
