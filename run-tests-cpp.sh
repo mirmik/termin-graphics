@@ -30,6 +30,8 @@ rebuild_with_tests() {
     local name="$1"
     local dir="$2"
     local test_flag="$3"
+    shift 3
+    local extra_args=("$@")
 
     echo ""
     echo "========================================"
@@ -45,7 +47,8 @@ rebuild_with_tests() {
         -DCMAKE_INSTALL_PREFIX="${SDK_PREFIX}" \
         -DCMAKE_BUILD_RPATH="${SDK_PREFIX}/lib" \
         -DTERMIN_BUILD_PYTHON=OFF \
-        -D"${test_flag}"=ON
+        -D"${test_flag}"=ON \
+        "${extra_args[@]}"
 
     cmake --build "build/${BUILD_TYPE}" --parallel "${BUILD_JOBS}"
     ctest --test-dir "build/${BUILD_TYPE}" --output-on-failure
@@ -63,14 +66,20 @@ while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     [[ "$line" == @* ]] && continue
 
-    IFS='|' read -r name dir has_python test_flag _rest <<< "$line"
+    IFS='|' read -r name dir has_python test_flag extra_cmake <<< "$line"
     name="$(echo "$name" | xargs)"
     dir="$(echo "$dir" | xargs)"
     test_flag="$(echo "$test_flag" | xargs)"
+    extra_cmake="$(echo "$extra_cmake" | xargs)"
 
     [[ "$test_flag" == "-" || -z "$test_flag" ]] && continue
 
-    rebuild_with_tests "$name" "$SCRIPT_DIR/$dir" "$test_flag"
+    extra_args=()
+    if [[ "$extra_cmake" != "-" && -n "$extra_cmake" ]]; then
+        read -ra extra_args <<< "$extra_cmake"
+    fi
+
+    rebuild_with_tests "$name" "$SCRIPT_DIR/$dir" "$test_flag" "${extra_args[@]}"
 done < "$SCRIPT_DIR/modules.conf"
 
 # Test termin itself
