@@ -124,3 +124,6 @@ pip-log.txt
 pip-delete-this-directory.txt
 .claude/settings.local.json
 tmpclaude*
+
+# ralphex progress logs
+.ralphex/progress/
