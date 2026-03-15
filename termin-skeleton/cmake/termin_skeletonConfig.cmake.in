@@ -3,7 +3,6 @@
 include(CMakeFindDependencyMacro)
 find_dependency(termin_base REQUIRED)
 find_dependency(termin_scene REQUIRED)
-find_dependency(termin_inspect REQUIRED)
 
 include("${CMAKE_CURRENT_LIST_DIR}/termin_skeletonTargets.cmake")
 

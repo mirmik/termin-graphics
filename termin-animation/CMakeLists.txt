@@ -10,19 +10,12 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 option(TERMIN_BUILD_PYTHON "Build Python bindings (_animation_native)" OFF)
 
 find_package(termin_base REQUIRED)
-find_package(termin_scene REQUIRED)
 find_package(termin_inspect REQUIRED)
 find_package(termin_skeleton REQUIRED)
 
-find_library(TERMIN_CORE_LIBRARY
-    NAMES termin_core
-    PATHS ${CMAKE_PREFIX_PATH} /opt/termin
-    PATH_SUFFIXES lib
-    REQUIRED
-)
-
 add_library(termin_animation SHARED
     src/termin_animation_version.cpp
+    src/tc_animation_registry.c
 )
 add_library(termin_animation::termin_animation ALIAS termin_animation)
 
@@ -36,9 +29,7 @@ target_include_directories(termin_animation PUBLIC
 )
 
 target_link_libraries(termin_animation PUBLIC
-    ${TERMIN_CORE_LIBRARY}
     tcbase::termin_base
-    termin_scene::termin_scene
     termin_inspect::termin_inspect
     termin_skeleton::termin_skeleton
 )

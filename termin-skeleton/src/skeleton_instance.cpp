@@ -1,4 +1,5 @@
 #include <termin/skeleton/skeleton_instance.hpp>
+#include "resources/tc_skeleton_registry.h"
 #include <termin/entity/entity.hpp>
 #include <termin/geom/general_transform3.hpp>
 #include <termin/geom/general_pose3.hpp>

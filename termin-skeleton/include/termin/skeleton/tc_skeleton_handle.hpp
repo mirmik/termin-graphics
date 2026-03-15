@@ -4,10 +4,12 @@
 // Uses tc_skeleton_handle with generation checking for safety
 
 extern "C" {
-#include "core_c/termin_core.h"
+#include "resources/tc_skeleton.h"
+#include "resources/tc_skeleton_registry.h"
 }
 
 #include <string>
+#include <tcbase/tgfx_intern_string.h>
 
 namespace termin {
 
@@ -171,7 +173,7 @@ public:
 
         tc_skeleton* s = tc_skeleton_get(h);
         if (s && !name.empty()) {
-            s->header.name = tc_intern_string(name.c_str());
+            s->header.name = tgfx_intern_string(name.c_str());
         }
 
         return TcSkeleton(h);

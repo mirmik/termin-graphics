@@ -2,7 +2,6 @@
 
 include(CMakeFindDependencyMacro)
 find_dependency(termin_base REQUIRED)
-find_dependency(termin_scene REQUIRED)
 find_dependency(termin_inspect REQUIRED)
 find_dependency(termin_skeleton REQUIRED)
 

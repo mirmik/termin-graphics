@@ -4,13 +4,14 @@
 // Uses tc_animation_handle with generation checking for safety
 
 extern "C" {
-#include "core_c/termin_core.h"
+#include "resources/tc_animation.h"
+#include "resources/tc_animation_registry.h"
 #include "inspect/tc_inspect.h"
 }
 
 #include <string>
 #include <vector>
-#include "core/tc_scene.h"
+#include <tcbase/tgfx_intern_string.h>
 
 namespace termin {
 namespace animation {
@@ -269,7 +270,7 @@ public:
 
         tc_animation* a = tc_animation_get(h);
         if (a && !name.empty()) {
-            a->header.name = tc_intern_string(name.c_str());
+            a->header.name = tgfx_intern_string(name.c_str());
         }
 
         return TcAnimationClip(h);

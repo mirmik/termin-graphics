@@ -5,7 +5,7 @@
 #include <string>
 
 extern "C" {
-#include "core_c/termin_core.h"
+#include "resources/tc_skeleton.h"
 }
 
 #include <termin/geom/mat44.hpp>

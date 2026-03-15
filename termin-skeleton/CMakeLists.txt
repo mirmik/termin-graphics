@@ -11,18 +11,11 @@ option(TERMIN_BUILD_PYTHON "Build Python bindings (_skeleton_native)" OFF)
 
 find_package(termin_base REQUIRED)
 find_package(termin_scene REQUIRED)
-find_package(termin_inspect REQUIRED)
-
-find_library(TERMIN_CORE_LIBRARY
-    NAMES termin_core
-    PATHS ${CMAKE_PREFIX_PATH} /opt/termin
-    PATH_SUFFIXES lib
-    REQUIRED
-)
 
 add_library(termin_skeleton SHARED
     src/termin_skeleton_version.cpp
     src/skeleton_instance.cpp
+    src/tc_skeleton_registry.c
 )
 add_library(termin_skeleton::termin_skeleton ALIAS termin_skeleton)
 
@@ -36,10 +29,8 @@ target_include_directories(termin_skeleton PUBLIC
 )
 
 target_link_libraries(termin_skeleton PUBLIC
-    ${TERMIN_CORE_LIBRARY}
     tcbase::termin_base
     termin_scene::termin_scene
-    termin_inspect::termin_inspect
 )
 
 set_target_properties(termin_skeleton PROPERTIES
@@ -61,6 +52,7 @@ if(TERMIN_BUILD_PYTHON)
 
     find_package(Python 3.8 COMPONENTS Interpreter Development REQUIRED)
     find_package(nanobind CONFIG REQUIRED)
+    find_package(termin_inspect REQUIRED)
 
     nanobind_add_module(_skeleton_native NB_SHARED
         ${CMAKE_CURRENT_LIST_DIR}/../termin/cpp/termin/bindings/skeleton/skeleton_module.cpp
