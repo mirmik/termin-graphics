@@ -89,7 +89,6 @@ cmake -S . -B "build/${BUILD_TYPE}" \
     -DCMAKE_PREFIX_PATH="${SDK_PREFIX}" \
     -DCMAKE_INSTALL_PREFIX="${SDK_PREFIX}" \
     -DCMAKE_BUILD_RPATH="${SDK_PREFIX}/lib" \
-    -Dtermin_base_DIR="${SDK_PREFIX}/lib/cmake/termin_base" \
     -DTERMIN_MODULES_BUILD_PYTHON=OFF \
     -DTERMIN_MODULES_BUILD_TESTS=ON
 cmake --build "build/${BUILD_TYPE}" --parallel "${BUILD_JOBS}"
