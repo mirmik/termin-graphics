@@ -15,6 +15,9 @@ find_package(termin_graphics REQUIRED)
 find_package(termin_inspect REQUIRED)
 find_package(termin_scene REQUIRED)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
+include(TerminRpath)
+
 set(TERMIN_RENDER_SOURCES
     src/termin_render_version.c
     src/tc_component_python_drawable.c
@@ -97,9 +100,8 @@ set_target_properties(termin_render PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-    INSTALL_RPATH "$ORIGIN"
-    BUILD_WITH_INSTALL_RPATH TRUE
 )
+termin_set_rpath_lib(termin_render)
 
 target_include_directories(termin_render
     PUBLIC
@@ -147,10 +149,7 @@ if(TERMIN_BUILD_PYTHON)
     target_include_directories(_render_framework_native PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
-    set_target_properties(_render_framework_native PROPERTIES
-        INSTALL_RPATH "$ORIGIN;$ORIGIN/..;$ORIGIN/../..;$ORIGIN/../../..;${CMAKE_INSTALL_PREFIX}/lib"
-        BUILD_WITH_INSTALL_RPATH TRUE
-    )
+    termin_set_rpath_python(_render_framework_native)
     install(TARGETS _render_framework_native DESTINATION lib/python/termin/render_framework)
 endif()
 

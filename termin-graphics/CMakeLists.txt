@@ -13,6 +13,9 @@ find_package(OpenGL REQUIRED)
 find_package(termin_base REQUIRED)
 find_package(termin_mesh REQUIRED)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
+include(TerminRpath)
+
 # --- GLAD (static library) ---
 add_library(glad STATIC
     third/glad/src/glad.c
@@ -62,9 +65,7 @@ set_target_properties(termin_graphics PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION 0
 )
-if(NOT WIN32)
-    set_target_properties(termin_graphics PROPERTIES INSTALL_RPATH "$ORIGIN")
-endif()
+termin_set_rpath_lib(termin_graphics)
 
 # --- Python bindings ---
 option(TERMIN_BUILD_PYTHON "Build Python bindings" OFF)

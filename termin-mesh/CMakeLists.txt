@@ -9,6 +9,9 @@ option(TERMIN_BUILD_PYTHON "Build Python bindings" OFF)
 
 find_package(termin_base REQUIRED)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
+include(TerminRpath)
+
 set(TERMIN_MESH_C_SOURCES
     src/tgfx_types.c
     src/resources/tc_mesh.c
@@ -37,9 +40,7 @@ set_target_properties(termin_mesh PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION 0
 )
-if(NOT WIN32)
-    set_target_properties(termin_mesh PROPERTIES INSTALL_RPATH "$ORIGIN")
-endif()
+termin_set_rpath_lib(termin_mesh)
 
 if(TERMIN_BUILD_PYTHON)
     add_subdirectory(python)

@@ -12,6 +12,9 @@ option(TERMIN_BUILD_PYTHON "Build Python bindings (_skeleton_native)" OFF)
 find_package(termin_base REQUIRED)
 find_package(termin_scene REQUIRED)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
+include(TerminRpath)
+
 add_library(termin_skeleton SHARED
     src/termin_skeleton_version.cpp
     src/skeleton_instance.cpp
@@ -37,9 +40,7 @@ set_target_properties(termin_skeleton PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION 0
 )
-if(NOT WIN32)
-    set_target_properties(termin_skeleton PROPERTIES INSTALL_RPATH "$ORIGIN")
-endif()
+termin_set_rpath_lib(termin_skeleton)
 
 if(TERMIN_BUILD_PYTHON)
     if(NOT Python_EXECUTABLE)
@@ -65,10 +66,7 @@ if(TERMIN_BUILD_PYTHON)
         termin_skeleton
         termin_inspect::termin_inspect_python
     )
-    set_target_properties(_skeleton_native PROPERTIES
-        INSTALL_RPATH "$ORIGIN;$ORIGIN/..;$ORIGIN/../..;$ORIGIN/../../..;${CMAKE_INSTALL_PREFIX}/lib"
-        BUILD_WITH_INSTALL_RPATH TRUE
-    )
+    termin_set_rpath_python(_skeleton_native)
 endif()
 
 include(GNUInstallDirs)

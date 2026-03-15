@@ -13,6 +13,9 @@ find_package(termin_base REQUIRED)
 find_package(termin_inspect REQUIRED)
 find_package(termin_skeleton REQUIRED)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
+include(TerminRpath)
+
 add_library(termin_animation SHARED
     src/termin_animation_version.cpp
     src/tc_animation_registry.c
@@ -38,9 +41,7 @@ set_target_properties(termin_animation PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION 0
 )
-if(NOT WIN32)
-    set_target_properties(termin_animation PROPERTIES INSTALL_RPATH "$ORIGIN")
-endif()
+termin_set_rpath_lib(termin_animation)
 
 if(TERMIN_BUILD_PYTHON)
     if(NOT Python_EXECUTABLE)
@@ -65,10 +66,7 @@ if(TERMIN_BUILD_PYTHON)
         termin_animation
         termin_inspect::termin_inspect_python
     )
-    set_target_properties(_animation_native PROPERTIES
-        INSTALL_RPATH "$ORIGIN;$ORIGIN/..;$ORIGIN/../..;$ORIGIN/../../..;${CMAKE_INSTALL_PREFIX}/lib"
-        BUILD_WITH_INSTALL_RPATH TRUE
-    )
+    termin_set_rpath_python(_animation_native)
 endif()
 
 include(GNUInstallDirs)
