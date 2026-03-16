@@ -9,6 +9,7 @@ $SdkPrefix = if ($env:SDK_PREFIX) { $env:SDK_PREFIX } else { Join-Path $ScriptDi
 
 $BuildType = "Release"
 $Clean = $false
+$UseParallel = $false
 
 foreach ($arg in $args) {
     switch ($arg) {
@@ -16,8 +17,9 @@ foreach ($arg in $args) {
         "-d"       { $BuildType = "Debug" }
         "--clean"  { $Clean = $true }
         "-c"       { $Clean = $true }
-        "--help"   { Write-Host "Usage: .\build-sdk-cpp.ps1 [--debug] [--clean]"; exit 0 }
-        "-h"       { Write-Host "Usage: .\build-sdk-cpp.ps1 [--debug] [--clean]"; exit 0 }
+        "--no-parallel" { $UseParallel = $false }
+        "--help"   { Write-Host "Usage: .\build-sdk-cpp.ps1 [--debug] [--clean] [--no-parallel]"; exit 0 }
+        "-h"       { Write-Host "Usage: .\build-sdk-cpp.ps1 [--debug] [--clean] [--no-parallel]"; exit 0 }
         default    { Write-Error "Unknown option: $arg"; exit 1 }
     }
 }
@@ -61,7 +63,11 @@ function Build-CppLib {
 
         & cmake @cmakeArgs
         if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
-        & cmake --build $buildDir --config $BuildType --parallel
+        $buildArgs = @("--build", $buildDir, "--config", $BuildType)
+        if ($UseParallel) {
+            $buildArgs += "--parallel"
+        }
+        & cmake @buildArgs
         if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
         & cmake --install $buildDir --config $BuildType
         if ($LASTEXITCODE -ne 0) { throw "cmake install failed" }
@@ -109,7 +115,11 @@ function Build-TerminCppOnly {
 
         & cmake @cmakeArgs
         if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
-        & cmake --build $buildDir --config $BuildType --parallel
+        $buildArgs = @("--build", $buildDir, "--config", $BuildType)
+        if ($UseParallel) {
+            $buildArgs += "--parallel"
+        }
+        & cmake @buildArgs
         if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
         & cmake --install $buildDir --config $BuildType
         if ($LASTEXITCODE -ne 0) { throw "cmake install failed" }

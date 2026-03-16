@@ -19,6 +19,7 @@ extern "C" {
 
 #include "tgfx/handles.hpp"
 #include <termin/render/resource_spec.hpp>
+#include <termin/render/render_export.hpp>
 
 namespace termin {
 
@@ -69,7 +70,7 @@ struct FrameDebuggerCallbacks {
     bool is_set() const { return blit_from_pass != nullptr; }
 };
 
-class CxxFramePass {
+class RENDER_API CxxFramePass {
 public:
     tc_pass _c;
     FrameDebuggerCallbacks debugger_callbacks;

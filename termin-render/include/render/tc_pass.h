@@ -208,6 +208,7 @@ TC_API void tc_pass_registry_register(
 TC_API void tc_pass_registry_unregister(const char* type_name);
 TC_API bool tc_pass_registry_has(const char* type_name);
 TC_API tc_pass* tc_pass_registry_create(const char* type_name);
+TC_API void tc_pass_registry_cleanup(void);
 TC_API size_t tc_pass_registry_type_count(void);
 TC_API const char* tc_pass_registry_type_at(size_t index);
 TC_API tc_pass_kind tc_pass_registry_get_kind(const char* type_name);

@@ -10,6 +10,7 @@ $SdkPrefix = if ($env:SDK_PREFIX) { $env:SDK_PREFIX } else { Join-Path $ScriptDi
 
 $BuildType = "Release"
 $Clean = $false
+$UseParallel = $false
 
 foreach ($arg in $args) {
     switch ($arg) {
@@ -17,8 +18,9 @@ foreach ($arg in $args) {
         "-d"       { $BuildType = "Debug" }
         "--clean"  { $Clean = $true }
         "-c"       { $Clean = $true }
-        "--help"   { Write-Host "Usage: .\build-sdk-bindings.ps1 [--debug] [--clean]"; exit 0 }
-        "-h"       { Write-Host "Usage: .\build-sdk-bindings.ps1 [--debug] [--clean]"; exit 0 }
+        "--no-parallel" { $UseParallel = $false }
+        "--help"   { Write-Host "Usage: .\build-sdk-bindings.ps1 [--debug] [--clean] [--no-parallel]"; exit 0 }
+        "-h"       { Write-Host "Usage: .\build-sdk-bindings.ps1 [--debug] [--clean] [--no-parallel]"; exit 0 }
         default    { Write-Error "Unknown option: $arg"; exit 1 }
     }
 }
@@ -49,12 +51,20 @@ try {
     if ($Clean -and (Test-Path $buildDir)) { Remove-Item -Recurse -Force $buildDir }
     if (-not (Test-Path $buildDir)) { New-Item -ItemType Directory -Path $buildDir | Out-Null }
 
-    & cmake -S . -B $buildDir `
-        -DCMAKE_BUILD_TYPE=$BuildType `
-        -DCMAKE_INSTALL_PREFIX=$SdkPrefix `
-        -DPython_EXECUTABLE=$pythonExec
+    $cmakeArgs = @(
+        "-S", ".",
+        "-B", $buildDir,
+        "-DCMAKE_BUILD_TYPE=$BuildType",
+        "-DCMAKE_INSTALL_PREFIX=$SdkPrefix",
+        "-DPython_EXECUTABLE=$pythonExec"
+    )
+    & cmake @cmakeArgs
     if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
-    & cmake --build $buildDir --config $BuildType --parallel
+    $buildArgs = @("--build", $buildDir, "--config", $BuildType)
+    if ($UseParallel) {
+        $buildArgs += "--parallel"
+    }
+    & cmake @buildArgs
     if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
     & cmake --install $buildDir --config $BuildType
     if ($LASTEXITCODE -ne 0) { throw "cmake install failed" }
@@ -80,16 +90,24 @@ function Build-WithPython {
         if ($Clean -and (Test-Path $buildDir)) { Remove-Item -Recurse -Force $buildDir }
         if (-not (Test-Path $buildDir)) { New-Item -ItemType Directory -Path $buildDir | Out-Null }
 
-        & cmake -S . -B $buildDir `
-            -DCMAKE_BUILD_TYPE=$BuildType `
-            -DCMAKE_INSTALL_PREFIX=$SdkPrefix `
-            -DCMAKE_PREFIX_PATH=$SdkPrefix `
-            -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF `
-            -DCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY=ON `
-            -DTERMIN_BUILD_PYTHON=ON `
-            -DPython_EXECUTABLE=$pythonExec
+        $cmakeArgs = @(
+            "-S", ".",
+            "-B", $buildDir,
+            "-DCMAKE_BUILD_TYPE=$BuildType",
+            "-DCMAKE_INSTALL_PREFIX=$SdkPrefix",
+            "-DCMAKE_PREFIX_PATH=$SdkPrefix",
+            "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
+            "-DCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY=ON",
+            "-DTERMIN_BUILD_PYTHON=ON",
+            "-DPython_EXECUTABLE=$pythonExec"
+        )
+        & cmake @cmakeArgs
         if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
-        & cmake --build $buildDir --config $BuildType --parallel
+        $buildArgs = @("--build", $buildDir, "--config", $BuildType)
+        if ($UseParallel) {
+            $buildArgs += "--parallel"
+        }
+        & cmake @buildArgs
         if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
         & cmake --install $buildDir --config $BuildType
         if ($LASTEXITCODE -ne 0) { throw "cmake install failed" }
@@ -140,6 +158,9 @@ try {
     try {
         $env:CMAKE_PREFIX_PATH = if ($oldPrefix) { "$SdkPrefix;$oldPrefix" } else { $SdkPrefix }
         $env:SDK_PREFIX = $SdkPrefix
+        if (-not $UseParallel) {
+            $buildArgs += "-NoParallel"
+        }
         & .\build.ps1 @buildArgs
         if ($LASTEXITCODE -ne 0) { throw "termin build failed" }
     }
@@ -153,7 +174,7 @@ try {
 }
 finally { Pop-Location }
 
-$terminInstall = Join-Path $ScriptDir "termin" "install_win"
+$terminInstall = Join-Path (Join-Path $ScriptDir "termin") "install_win"
 if (Test-Path $terminInstall) {
     Write-Host "Installing termin to $SdkPrefix..."
     Copy-Item -Recurse -Force "$terminInstall\*" $SdkPrefix

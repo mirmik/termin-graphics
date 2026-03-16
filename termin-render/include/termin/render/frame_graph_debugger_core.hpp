@@ -8,6 +8,7 @@
 #include "tgfx/handles.hpp"
 #include <tcbase/tc_log.hpp>
 #include <tgfx/tgfx_shader_handle.hpp>
+#include <termin/render/render_export.hpp>
 
 namespace termin {
 
@@ -45,7 +46,7 @@ struct FBOInfo {
     std::string gl_filter;
 };
 
-class FrameGraphCapture {
+class RENDER_API FrameGraphCapture {
 private:
     FramebufferHandlePtr capture_fbo_;
     int fbo_w_ = 0;
@@ -75,7 +76,7 @@ private:
     void do_blit(FramebufferHandle* src, GraphicsBackend* graphics);
 };
 
-class FrameGraphPresenter {
+class RENDER_API FrameGraphPresenter {
 private:
     TcShader shader_;
     bool shader_ready_ = false;
@@ -105,7 +106,7 @@ private:
     void ensure_shader();
 };
 
-class FrameGraphDebuggerCore {
+class RENDER_API FrameGraphDebuggerCore {
 public:
     FrameGraphCapture capture;
     FrameGraphPresenter presenter;

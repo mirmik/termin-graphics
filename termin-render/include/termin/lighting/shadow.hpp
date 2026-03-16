@@ -3,6 +3,7 @@
 #include <vector>
 
 #include <termin/geom/mat44.hpp>
+#include <termin/render/render_export.hpp>
 
 #include "termin/lighting/shadow_settings.hpp"
 #include "tgfx/frame_graph_resource.hpp"
@@ -12,7 +13,7 @@ namespace termin {
 class FramebufferHandle;
 class GPUTextureHandle;
 
-struct ShadowMapArrayEntry {
+struct RENDER_API ShadowMapArrayEntry {
 public:
     FramebufferHandle* fbo = nullptr;
     Mat44f light_space_matrix;
@@ -41,7 +42,7 @@ public:
     GPUTextureHandle* texture() const;
 };
 
-class ShadowMapArrayResource : public FrameGraphResource {
+class RENDER_API ShadowMapArrayResource : public FrameGraphResource {
 public:
     std::vector<ShadowMapArrayEntry> entries;
     int resolution = 1024;

@@ -189,3 +189,13 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/termin_renderConfigVersion.cmake
     DESTINATION lib/cmake/termin_render
 )
+
+if(MSVC AND TERMIN_RENDER_BUILD_SHARED)
+    # Keep the local SDK import library in sync when Windows install leaves stale files locked.
+    add_custom_command(TARGET termin_render POST_BUILD
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command
+            "try { Copy-Item -Force '$<TARGET_LINKER_FILE:termin_render>' '${CMAKE_CURRENT_SOURCE_DIR}/../sdk/lib/termin_render.lib' -ErrorAction Stop } catch { Write-Host $_.Exception.Message }"
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command
+            "try { Copy-Item -Force '$<TARGET_FILE:termin_render>' '${CMAKE_CURRENT_SOURCE_DIR}/../sdk/bin/termin_render.dll' -ErrorAction Stop } catch { Write-Host $_.Exception.Message }"
+    )
+endif()

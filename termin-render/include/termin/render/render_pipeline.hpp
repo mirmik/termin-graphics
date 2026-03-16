@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include <termin/render/render_export.hpp>
 #include "termin/render/fbo_pool.hpp"
 #include "termin/render/resource_spec.hpp"
 
@@ -17,7 +18,7 @@ namespace termin {
 
 class ShadowMapArrayResource;
 
-class RenderPipeline {
+class RENDER_API RenderPipeline {
 public:
     tc_pipeline_handle handle_;
     std::vector<ResourceSpec> specs_;

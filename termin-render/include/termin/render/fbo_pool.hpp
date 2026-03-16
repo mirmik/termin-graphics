@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "tgfx/graphics_backend.hpp"
+#include "termin/render/render_export.hpp"
 #include "termin/render/resource_spec.hpp"
 
 namespace termin {
@@ -30,12 +31,18 @@ public:
     FBOPoolEntry& operator=(const FBOPoolEntry&) = delete;
 };
 
-class FBOPool {
+class RENDER_API FBOPool {
 public:
     std::vector<FBOPoolEntry> entries;
     std::unordered_map<std::string, std::string> alias_to_canonical;
 
 public:
+    FBOPool() = default;
+    FBOPool(FBOPool&&) = default;
+    FBOPool& operator=(FBOPool&&) = default;
+    FBOPool(const FBOPool&) = delete;
+    FBOPool& operator=(const FBOPool&) = delete;
+
     FramebufferHandle* ensure(
         GraphicsBackend* graphics,
         const std::string& key,

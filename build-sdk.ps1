@@ -18,6 +18,7 @@ foreach ($arg in $args) {
         Write-Host "Options:"
         Write-Host "  --debug, -d       Debug build"
         Write-Host "  --clean, -c       Clean build directories first"
+        Write-Host "  --no-parallel     Disable parallel compilation"
         Write-Host "  --help, -h        Show this help"
         exit 0
     }

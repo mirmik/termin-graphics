@@ -59,12 +59,12 @@ public:
         return marks.find(phase_mark) != marks.end();
     }
 
-    static const tc_drawable_vtable cxx_drawable_vtable;
+    static const tc_drawable_vtable& cxx_drawable_vtable();
 
 protected:
     void install_drawable_vtable(tc_component* c) {
         if (c) {
-            tc_drawable_capability_attach(c, &cxx_drawable_vtable, this);
+            tc_drawable_capability_attach(c, &cxx_drawable_vtable(), this);
         }
     }
 

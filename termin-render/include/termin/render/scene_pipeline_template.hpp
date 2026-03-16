@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <termin/render/render_export.hpp>
 
 extern "C" {
 #include "core/tc_scene_pipeline_template.h"
@@ -14,7 +15,7 @@ class RenderPipeline;
 
 // C++ wrapper for tc_scene_pipeline_template
 // Provides convenient access to graph data and compilation to RenderPipeline
-class TcScenePipelineTemplate {
+class RENDER_API TcScenePipelineTemplate {
     tc_spt_handle handle_;
 
 public:

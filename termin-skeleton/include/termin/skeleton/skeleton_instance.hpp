@@ -3,6 +3,7 @@
 #include <vector>
 #include <array>
 #include <string>
+#include <termin/skeleton/termin_skeleton_api.hpp>
 
 extern "C" {
 #include "resources/tc_skeleton.h"
@@ -21,7 +22,7 @@ namespace termin {
 //
 // Bone matrices are computed in skeleton-local space (not world space),
 // so that u_model can be applied uniformly as with non-skinned meshes.
-class SkeletonInstance {
+class TERMIN_SKELETON_API SkeletonInstance {
 public:
     static constexpr int MAX_BONES = 128;
 

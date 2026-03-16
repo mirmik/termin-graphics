@@ -9,6 +9,7 @@
 #include "termin/render/execute_context.hpp"
 #include "termin/render/render_camera.hpp"
 #include "termin/render/render_pipeline.hpp"
+#include "termin/render/render_export.hpp"
 #include <termin/render/light.hpp>
 #include "termin/lighting/shadow.hpp"
 #include <termin/tc_scene.hpp>
@@ -30,7 +31,7 @@ public:
     FramebufferHandle* output_fbo = nullptr;
 };
 
-class RenderEngine {
+class RENDER_API RenderEngine {
 public:
     GraphicsBackend* graphics = nullptr;
 

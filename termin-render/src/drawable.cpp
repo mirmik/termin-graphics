@@ -67,11 +67,14 @@ Mat44f Drawable::get_model_matrix(const Entity& entity) const {
     return result;
 }
 
-const tc_drawable_vtable Drawable::cxx_drawable_vtable = {
-    &Drawable::_cb_has_phase,
-    &Drawable::_cb_draw_geometry,
-    &Drawable::_cb_get_geometry_draws,
-    &Drawable::_cb_override_shader
-};
+const tc_drawable_vtable& Drawable::cxx_drawable_vtable() {
+    static const tc_drawable_vtable vtable = {
+        &Drawable::_cb_has_phase,
+        &Drawable::_cb_draw_geometry,
+        &Drawable::_cb_get_geometry_draws,
+        &Drawable::_cb_override_shader
+    };
+    return vtable;
+}
 
 } // namespace termin
