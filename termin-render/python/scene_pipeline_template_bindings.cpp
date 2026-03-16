@@ -32,21 +32,6 @@ static nb::object tc_value_to_python(const tc_value& v) {
             return nb::float_(v.data.d);
         case TC_VALUE_STRING:
             return nb::str(v.data.s ? v.data.s : "");
-        case TC_VALUE_VEC3: {
-            nb::list result;
-            result.append(v.data.v3.x);
-            result.append(v.data.v3.y);
-            result.append(v.data.v3.z);
-            return result;
-        }
-        case TC_VALUE_QUAT: {
-            nb::list result;
-            result.append(v.data.q.w);
-            result.append(v.data.q.x);
-            result.append(v.data.q.y);
-            result.append(v.data.q.z);
-            return result;
-        }
         case TC_VALUE_LIST: {
             nb::list result;
             for (size_t i = 0; i < v.data.list.count; i++) {

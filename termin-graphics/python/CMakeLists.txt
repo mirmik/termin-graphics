@@ -17,3 +17,5 @@ if(NOT WIN32)
         INSTALL_RPATH "$ORIGIN/lib;${CMAKE_INSTALL_PREFIX}/lib"
     )
 endif()
+
+install(TARGETS _tgfx_native DESTINATION lib/python/tgfx)

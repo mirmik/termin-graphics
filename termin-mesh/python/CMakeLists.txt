@@ -15,3 +15,5 @@ if(NOT WIN32)
         INSTALL_RPATH "$ORIGIN/lib"
     )
 endif()
+
+install(TARGETS _tmesh_native DESTINATION lib/python/tmesh)
