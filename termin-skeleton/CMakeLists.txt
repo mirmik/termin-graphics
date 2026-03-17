@@ -89,6 +89,11 @@ if(TERMIN_BUILD_PYTHON)
     else()
         install(TARGETS _skeleton_native DESTINATION lib/python/termin/skeleton)
     endif()
+    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/python/termin/skeleton/
+        DESTINATION lib/python/termin/skeleton
+        PATTERN "__pycache__" EXCLUDE
+        PATTERN "*.pyc" EXCLUDE
+    )
 endif()
 
 install(DIRECTORY include/termin

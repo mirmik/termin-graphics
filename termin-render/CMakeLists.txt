@@ -152,6 +152,11 @@ if(TERMIN_BUILD_PYTHON)
     )
     termin_set_rpath_python(_render_framework_native)
     install(TARGETS _render_framework_native DESTINATION lib/python/termin/render_framework)
+    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/python/termin/render_framework/
+        DESTINATION lib/python/termin/render_framework
+        PATTERN "__pycache__" EXCLUDE
+        PATTERN "*.pyc" EXCLUDE
+    )
 endif()
 
 install(TARGETS termin_render

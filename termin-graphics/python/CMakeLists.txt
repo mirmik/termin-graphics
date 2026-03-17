@@ -19,3 +19,8 @@ if(NOT WIN32)
 endif()
 
 install(TARGETS _tgfx_native DESTINATION lib/python/tgfx)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tgfx/
+    DESTINATION lib/python/tgfx
+    PATTERN "__pycache__" EXCLUDE
+    PATTERN "*.pyc" EXCLUDE
+)

@@ -89,6 +89,12 @@ if(TERMIN_BUILD_PYTHON)
     else()
         install(TARGETS _animation_native DESTINATION lib/python/termin/visualization/animation)
     endif()
+
+    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/python/termin/visualization/animation/
+        DESTINATION lib/python/termin/visualization/animation
+        PATTERN "__pycache__" EXCLUDE
+        PATTERN "*.pyc" EXCLUDE
+    )
 endif()
 
 install(DIRECTORY include/termin

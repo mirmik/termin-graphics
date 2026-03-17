@@ -17,3 +17,8 @@ if(NOT WIN32)
 endif()
 
 install(TARGETS _tmesh_native DESTINATION lib/python/tmesh)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tmesh/
+    DESTINATION lib/python/tmesh
+    PATTERN "__pycache__" EXCLUDE
+    PATTERN "*.pyc" EXCLUDE
+)
