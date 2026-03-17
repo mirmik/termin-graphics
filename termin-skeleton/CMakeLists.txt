@@ -22,7 +22,7 @@ add_library(termin_skeleton SHARED
 )
 add_library(termin_skeleton::termin_skeleton ALIAS termin_skeleton)
 
-target_compile_definitions(termin_skeleton PRIVATE TERMIN_SKELETON_EXPORTS)
+target_compile_definitions(termin_skeleton PRIVATE TERMIN_SKELETON_EXPORTS TC_EXPORTS)
 
 target_include_directories(termin_skeleton PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

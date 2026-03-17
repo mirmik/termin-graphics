@@ -25,7 +25,7 @@ set(TERMIN_MESH_CXX_SOURCES
 add_library(termin_mesh SHARED ${TERMIN_MESH_C_SOURCES} ${TERMIN_MESH_CXX_SOURCES})
 add_library(tmesh::termin_mesh ALIAS termin_mesh)
 
-target_compile_definitions(termin_mesh PRIVATE TGFX_EXPORTS)
+target_compile_definitions(termin_mesh PRIVATE TGFX_EXPORTS TC_EXPORTS)
 
 target_include_directories(termin_mesh PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

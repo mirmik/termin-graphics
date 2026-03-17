@@ -22,7 +22,7 @@ add_library(termin_animation SHARED
 )
 add_library(termin_animation::termin_animation ALIAS termin_animation)
 
-target_compile_definitions(termin_animation PRIVATE TERMIN_ANIMATION_EXPORTS)
+target_compile_definitions(termin_animation PRIVATE TERMIN_ANIMATION_EXPORTS TC_EXPORTS)
 
 target_include_directories(termin_animation PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

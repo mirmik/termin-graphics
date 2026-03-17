@@ -6,6 +6,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#define tc_strdup _strdup
+#else
+#define tc_strdup strdup
+#endif
+
 // ============================================================================
 // Pool configuration
 // ============================================================================
@@ -94,7 +100,7 @@ static void tc_spt_extract_viewports(tc_scene_pipeline_template* tpl) {
                 }
             }
             if (!duplicate) {
-                tpl->target_viewports[tpl->target_viewport_count] = strdup(vp_name->data.s);
+                tpl->target_viewports[tpl->target_viewport_count] = tc_strdup(vp_name->data.s);
                 tpl->target_viewport_count++;
             }
         }

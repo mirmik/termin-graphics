@@ -4,6 +4,12 @@
 #include <cstring>
 #include <string>
 
+#ifdef _MSC_VER
+#define tc_strdup _strdup
+#else
+#define tc_strdup strdup
+#endif
+
 extern "C" {
 #include "core/tc_scene.h"
 #include "render/tc_pass.h"
@@ -57,7 +63,7 @@ public:
         if (_c->viewport_name) {
             free((void*)_c->viewport_name);
         }
-        _c->viewport_name = name.empty() ? nullptr : strdup(name.c_str());
+        _c->viewport_name = name.empty() ? nullptr : tc_strdup(name.c_str());
     }
 
     void* object_ptr() const;

@@ -12,6 +12,12 @@
 #include <utility>
 #include <vector>
 
+#ifdef _MSC_VER
+#define tc_strdup _strdup
+#else
+#define tc_strdup strdup
+#endif
+
 extern "C" {
 #include "render/tc_pass.h"
 }
@@ -157,7 +163,7 @@ public:
 
     void viewport_name_set(const std::string& name) {
         if (_c.viewport_name) free(_c.viewport_name);
-        _c.viewport_name = name.empty() ? nullptr : strdup(name.c_str());
+        _c.viewport_name = name.empty() ? nullptr : tc_strdup(name.c_str());
     }
 
     std::string debug_internal_symbol_get() const {
@@ -166,7 +172,7 @@ public:
 
     void debug_internal_symbol_set(const std::string& sym) {
         if (_c.debug_internal_symbol) free(_c.debug_internal_symbol);
-        _c.debug_internal_symbol = sym.empty() ? nullptr : strdup(sym.c_str());
+        _c.debug_internal_symbol = sym.empty() ? nullptr : tc_strdup(sym.c_str());
     }
 
     FrameGraphCapture* debug_capture_get() const {
