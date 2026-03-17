@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <any>
 #include <atomic>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <set>
@@ -23,7 +24,7 @@ extern "C" {
 
 namespace termin {
 
-class ExecuteContext;
+struct ExecuteContext;
 class FrameGraphCapture;
 class GraphicsBackend;
 
