@@ -23,6 +23,7 @@ set(TERMIN_RENDER_SOURCES
     src/tc_component_python_drawable.c
     src/tc_drawable_capability.c
     src/tc_light_capability.c
+    src/tc_camera_capability.c
     src/tc_scene_drawable.c
     src/tc_scene_pipeline_template.c
     src/tc_scene_render_mount.c
@@ -59,6 +60,7 @@ set(TERMIN_RENDER_HEADERS
     include/core/tc_drawable_capability.h
     include/core/tc_drawable_protocol.h
     include/core/tc_light_capability.h
+    include/core/tc_camera_capability.h
     include/core/tc_scene_drawable.h
     include/render/tc_pipeline_pool.h
     include/render/tc_pass.h
