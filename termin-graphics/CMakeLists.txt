@@ -48,6 +48,10 @@ set(TGFX_CXX_SOURCES
 add_library(termin_graphics SHARED ${TGFX_C_SOURCES} ${TGFX_CXX_SOURCES})
 target_compile_definitions(termin_graphics PRIVATE TGFX_EXPORTS TC_EXPORTS)
 
+if(MSVC)
+    target_compile_options(termin_graphics PRIVATE /wd4251 /wd4275)
+endif()
+
 target_include_directories(termin_graphics PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>

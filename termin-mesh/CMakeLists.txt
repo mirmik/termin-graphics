@@ -27,6 +27,10 @@ add_library(tmesh::termin_mesh ALIAS termin_mesh)
 
 target_compile_definitions(termin_mesh PRIVATE TGFX_EXPORTS TC_EXPORTS)
 
+if(MSVC)
+    target_compile_options(termin_mesh PRIVATE /wd4251 /wd4275)
+endif()
+
 target_include_directories(termin_mesh PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>

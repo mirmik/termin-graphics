@@ -24,6 +24,10 @@ add_library(termin_animation::termin_animation ALIAS termin_animation)
 
 target_compile_definitions(termin_animation PRIVATE TERMIN_ANIMATION_EXPORTS TC_EXPORTS)
 
+if(MSVC)
+    target_compile_options(termin_animation PRIVATE /wd4251 /wd4275)
+endif()
+
 target_include_directories(termin_animation PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../termin/core_c/include>
