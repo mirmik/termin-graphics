@@ -88,7 +88,7 @@ set(TERMIN_RENDER_HEADERS
 
 if(TERMIN_RENDER_BUILD_SHARED)
     add_library(termin_render SHARED ${TERMIN_RENDER_SOURCES} ${TERMIN_RENDER_HEADERS})
-    target_compile_definitions(termin_render PRIVATE TERMIN_RENDER_EXPORTS)
+    target_compile_definitions(termin_render PRIVATE TERMIN_RENDER_EXPORTS TC_EXPORTS)
 else()
     add_library(termin_render STATIC ${TERMIN_RENDER_SOURCES} ${TERMIN_RENDER_HEADERS})
 endif()

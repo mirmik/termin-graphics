@@ -46,7 +46,7 @@ set(TGFX_CXX_SOURCES
 )
 
 add_library(termin_graphics SHARED ${TGFX_C_SOURCES} ${TGFX_CXX_SOURCES})
-target_compile_definitions(termin_graphics PRIVATE TGFX_EXPORTS)
+target_compile_definitions(termin_graphics PRIVATE TGFX_EXPORTS TC_EXPORTS)
 
 target_include_directories(termin_graphics PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -111,7 +111,7 @@ install(TARGETS termin_graphics glad
     EXPORT termin_graphicsTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
 install(DIRECTORY include/tgfx
