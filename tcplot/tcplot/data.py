@@ -33,10 +33,22 @@ class ScatterSeries:
 
 
 @dataclass
+class SurfaceSeries:
+    """A 3D surface defined on a grid."""
+    X: np.ndarray  # (rows, cols) grid of x values
+    Y: np.ndarray  # (rows, cols) grid of y values
+    Z: np.ndarray  # (rows, cols) grid of z values
+    color: tuple[float, float, float, float] | None = None
+    wireframe: bool = False
+    label: str = ""
+
+
+@dataclass
 class PlotData:
     """Collection of series for one plot."""
     lines: list[LineSeries] = field(default_factory=list)
     scatters: list[ScatterSeries] = field(default_factory=list)
+    surfaces: list[SurfaceSeries] = field(default_factory=list)
 
     title: str = ""
     x_label: str = ""

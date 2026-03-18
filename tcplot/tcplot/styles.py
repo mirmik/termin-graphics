@@ -27,3 +27,19 @@ PLOT_AREA_BG = (0.13, 0.13, 0.15, 1.0)
 def cycle_color(index: int) -> tuple[float, float, float, float]:
     """Get color from default cycle by index."""
     return DEFAULT_COLORS[index % len(DEFAULT_COLORS)]
+
+
+def jet(t: float) -> tuple[float, float, float]:
+    """Jet colormap: t in [0, 1] → (r, g, b) in [0, 1]."""
+    t = max(0.0, min(1.0, t))
+    if t < 0.125:
+        r, g, b = 0.0, 0.0, 0.5 + t * 4.0
+    elif t < 0.375:
+        r, g, b = 0.0, (t - 0.125) * 4.0, 1.0
+    elif t < 0.625:
+        r, g, b = (t - 0.375) * 4.0, 1.0, 1.0 - (t - 0.375) * 4.0
+    elif t < 0.875:
+        r, g, b = 1.0, 1.0 - (t - 0.625) * 4.0, 0.0
+    else:
+        r, g, b = 1.0 - (t - 0.875) * 4.0, 0.0, 0.0
+    return (r, g, b)
