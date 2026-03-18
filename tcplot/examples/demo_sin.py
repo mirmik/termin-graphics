@@ -15,8 +15,6 @@ from sdl2 import video
 from tgfx import OpenGLGraphicsBackend
 from tcbase import Key, MouseButton, Mods
 from tcgui.widgets.ui import UI
-from tcgui.widgets.containers import VStack, Panel
-from tcgui.widgets.units import px, pct
 
 from tcplot import Plot2D
 
@@ -51,16 +49,8 @@ def main():
     graphics.ensure_ready()
 
     # Build UI
-    root = Panel()
-    root.preferred_width = pct(100)
-    root.preferred_height = pct(100)
-    root.background_color = (0.10, 0.10, 0.12, 1.0)
-    root.padding = 10
-
     plot = Plot2D()
-    plot.stretch = True
 
-    # Add data
     x = np.linspace(0, 4 * np.pi, 500)
     plot.plot(x, np.sin(x), label="sin(x)")
     plot.plot(x, np.cos(x), label="cos(x)")
@@ -69,10 +59,8 @@ def main():
     plot.data.x_label = "x"
     plot.data.y_label = "y"
 
-    root.add_child(plot)
-
     ui = UI(graphics)
-    ui.root = root
+    ui.root = plot
 
     event = sdl2.SDL_Event()
     running = True

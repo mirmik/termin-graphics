@@ -15,8 +15,7 @@ from sdl2 import video
 from tgfx import OpenGLGraphicsBackend
 from tcbase import MouseButton
 from tcgui.widgets.ui import UI
-from tcgui.widgets.containers import HStack, Panel
-from tcgui.widgets.units import pct
+from tcgui.widgets.containers import HStack
 
 from tcplot import Plot2D
 
@@ -45,15 +44,8 @@ def main():
     graphics = OpenGLGraphicsBackend.get_instance()
     graphics.ensure_ready()
 
-    root = Panel()
-    root.preferred_width = pct(100)
-    root.preferred_height = pct(100)
-    root.background_color = (0.10, 0.10, 0.12, 1.0)
-    root.padding = 10
-
     row = HStack()
     row.spacing = 10
-    row.stretch = True
 
     # Plot 1: polynomials
     p1 = Plot2D()
@@ -76,10 +68,9 @@ def main():
 
     row.add_child(p1)
     row.add_child(p2)
-    root.add_child(row)
 
     ui = UI(graphics)
-    ui.root = root
+    ui.root = row
 
     event = sdl2.SDL_Event()
     running = True

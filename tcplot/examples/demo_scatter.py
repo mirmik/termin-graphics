@@ -15,8 +15,6 @@ from sdl2 import video
 from tgfx import OpenGLGraphicsBackend
 from tcbase import MouseButton
 from tcgui.widgets.ui import UI
-from tcgui.widgets.containers import Panel
-from tcgui.widgets.units import pct
 
 from tcplot import Plot2D
 
@@ -45,14 +43,7 @@ def main():
     graphics = OpenGLGraphicsBackend.get_instance()
     graphics.ensure_ready()
 
-    root = Panel()
-    root.preferred_width = pct(100)
-    root.preferred_height = pct(100)
-    root.background_color = (0.10, 0.10, 0.12, 1.0)
-    root.padding = 10
-
     plot = Plot2D()
-    plot.stretch = True
 
     # Generate clustered random data
     rng = np.random.default_rng(42)
@@ -71,10 +62,8 @@ def main():
     plot.data.x_label = "Feature A"
     plot.data.y_label = "Feature B"
 
-    root.add_child(plot)
-
     ui = UI(graphics)
-    ui.root = root
+    ui.root = plot
 
     event = sdl2.SDL_Event()
     running = True
