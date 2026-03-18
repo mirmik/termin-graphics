@@ -11,6 +11,13 @@ if _sys.platform == "win32":
             _os.add_dll_directory(_tcbase_dir)
     except ImportError:
         pass
+    try:
+        import tmesh as _tmesh
+        _tmesh_dir = _os.path.dirname(_tmesh.__file__)
+        if _os.path.isdir(_tmesh_dir):
+            _os.add_dll_directory(_tmesh_dir)
+    except ImportError:
+        pass
 
 from tgfx._tgfx_native import *
 from tgfx._tgfx_native import log
