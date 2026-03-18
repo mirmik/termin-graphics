@@ -131,6 +131,7 @@ class Plot2D(Widget):
 
     def render(self, renderer):
         if self.width <= 0 or self.height <= 0:
+            print(f"[Plot2D] SKIP render: x={self.x} y={self.y} w={self.width} h={self.height}")
             return
 
         # Background
