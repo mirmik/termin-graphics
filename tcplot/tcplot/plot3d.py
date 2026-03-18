@@ -605,16 +605,30 @@ class Plot3D(Widget):
         px = self.x + (ndc_x * 0.5 + 0.5) * self.width
         py = self.y + (-ndc_y * 0.5 + 0.5) * self.height
 
-        # Distance to mouse
-        dist = np.sqrt((px - mx) ** 2 + (py - my) ** 2)
-        idx = np.argmin(dist)
-        min_dist = dist[idx]
+        # Distance to mouse in screen space
+        screen_dist = np.sqrt((px - mx) ** 2 + (py - my) ** 2)
 
-        if min_dist > 50:  # threshold in pixels
-            return None
+        # NDC depth (smaller = closer to camera)
+        ndc_z = np.where(valid, clip[:, 2] / w, np.inf)
+
+        # Two-pass selection:
+        # 1. Find candidates within reasonable screen distance
+        # 2. Among candidates, pick closest to camera
+        threshold = 30.0  # pixels
+        candidates = screen_dist < threshold
+
+        if not np.any(candidates):
+            # Fallback: just pick closest on screen
+            idx = np.argmin(screen_dist)
+            if screen_dist[idx] > 50:
+                return None
+        else:
+            # Among nearby candidates, pick the one closest to camera
+            depth = np.where(candidates, ndc_z, np.inf)
+            idx = np.argmin(depth)
 
         return (float(all_pts[idx, 0]), float(all_pts[idx, 1]),
-                float(all_pts[idx, 2]), float(min_dist))
+                float(all_pts[idx, 2]), float(screen_dist[idx]))
 
     # -- Interaction --
 
