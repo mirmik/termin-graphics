@@ -164,9 +164,9 @@ tc_pipeline_handle tc_pipeline_pool_alloc(const char* name) {
     p->passes = NULL;
     p->pass_count = 0;
     p->pass_capacity = 0;
-    p->cpp_owner = NULL;
-    p->py_wrapper = NULL;
     p->cached_frame_graph = NULL;
+    p->render_cache = NULL;
+    p->render_cache_destructor = NULL;
     p->dirty = true;
 
     g_pool->count++;
@@ -184,6 +184,11 @@ void tc_pipeline_pool_free(tc_pipeline_handle h) {
 
     uint32_t idx = h.index;
     tc_pipeline* p = &g_pool->pipelines[idx];
+
+    if (p->render_cache && p->render_cache_destructor) {
+        p->render_cache_destructor(p->render_cache);
+        p->render_cache = NULL;
+    }
 
     if (p->cached_frame_graph) {
         tc_frame_graph_destroy((tc_frame_graph*)p->cached_frame_graph);
@@ -243,24 +248,19 @@ void tc_pipeline_set_name(tc_pipeline_handle h, const char* name) {
     tc_strset(&g_pool->pipelines[h.index].name, name);
 }
 
-void* tc_pipeline_get_cpp_owner(tc_pipeline_handle h) {
+void* tc_pipeline_get_render_cache(tc_pipeline_handle h) {
     if (!handle_alive(h)) return NULL;
-    return g_pool->pipelines[h.index].cpp_owner;
+    return g_pool->pipelines[h.index].render_cache;
 }
 
-void tc_pipeline_set_cpp_owner(tc_pipeline_handle h, void* owner) {
+void tc_pipeline_set_render_cache(tc_pipeline_handle h, void* cache, void (*destructor)(void*)) {
     if (!handle_alive(h)) return;
-    g_pool->pipelines[h.index].cpp_owner = owner;
-}
-
-void* tc_pipeline_get_py_wrapper(tc_pipeline_handle h) {
-    if (!handle_alive(h)) return NULL;
-    return g_pool->pipelines[h.index].py_wrapper;
-}
-
-void tc_pipeline_set_py_wrapper(tc_pipeline_handle h, void* wrapper) {
-    if (!handle_alive(h)) return;
-    g_pool->pipelines[h.index].py_wrapper = wrapper;
+    tc_pipeline* p = &g_pool->pipelines[h.index];
+    if (p->render_cache && p->render_cache_destructor) {
+        p->render_cache_destructor(p->render_cache);
+    }
+    p->render_cache = cache;
+    p->render_cache_destructor = destructor;
 }
 
 static void pipeline_ensure_capacity(tc_pipeline* p) {

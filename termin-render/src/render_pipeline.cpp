@@ -1,4 +1,4 @@
-// render_pipeline.cpp - C++ RenderPipeline implementation
+// render_pipeline.cpp - Lightweight handle wrapper for tc_pipeline
 #include "termin/render/render_pipeline.hpp"
 
 #include "termin/lighting/shadow.hpp"
@@ -10,60 +10,19 @@ extern "C" {
 
 namespace termin {
 
+static void destroy_render_cache(void* ptr) {
+    delete static_cast<PipelineRenderCache*>(ptr);
+}
+
 RenderPipeline::RenderPipeline(const std::string& name)
-    : handle_(TC_PIPELINE_HANDLE_INVALID),
-      name_(name) {
-    handle_ = tc_pipeline_create(name.c_str());
-    if (tc_pipeline_pool_alive(handle_)) {
-        tc_pipeline_set_cpp_owner(handle_, this);
-    }
-}
+    : handle_(tc_pipeline_create(name.c_str())) {}
 
-RenderPipeline::~RenderPipeline() {
-    if (tc_pipeline_pool_alive(handle_)) {
-        tc_pipeline_set_cpp_owner(handle_, nullptr);
-        tc_pipeline_destroy(handle_);
-    }
-    handle_ = TC_PIPELINE_HANDLE_INVALID;
-}
-
-RenderPipeline::RenderPipeline(RenderPipeline&& other) noexcept
-    : handle_(other.handle_),
-      specs_(std::move(other.specs_)),
-      name_(std::move(other.name_)),
-      fbo_pool_(std::move(other.fbo_pool_)),
-      shadow_arrays_(std::move(other.shadow_arrays_)) {
-    if (tc_pipeline_pool_alive(handle_)) {
-        tc_pipeline_set_cpp_owner(handle_, this);
-    }
-
-    other.handle_ = TC_PIPELINE_HANDLE_INVALID;
-}
-
-RenderPipeline& RenderPipeline::operator=(RenderPipeline&& other) noexcept {
-    if (this != &other) {
-        if (tc_pipeline_pool_alive(handle_)) {
-            tc_pipeline_set_cpp_owner(handle_, nullptr);
-            tc_pipeline_destroy(handle_);
-        }
-
-        handle_ = other.handle_;
-        specs_ = std::move(other.specs_);
-        name_ = std::move(other.name_);
-        fbo_pool_ = std::move(other.fbo_pool_);
-        shadow_arrays_ = std::move(other.shadow_arrays_);
-
-        if (tc_pipeline_pool_alive(handle_)) {
-            tc_pipeline_set_cpp_owner(handle_, this);
-        }
-
-        other.handle_ = TC_PIPELINE_HANDLE_INVALID;
-    }
-    return *this;
+std::string RenderPipeline::name() const {
+    const char* n = tc_pipeline_get_name(handle_);
+    return n ? n : "";
 }
 
 void RenderPipeline::set_name(const std::string& name) {
-    name_ = name;
     tc_pipeline_set_name(handle_, name.c_str());
 }
 
@@ -95,20 +54,55 @@ size_t RenderPipeline::pass_count() const {
     return tc_pipeline_pass_count(handle_);
 }
 
+// -- Render cache (lazy init in pool) --
+
+PipelineRenderCache& RenderPipeline::cache() {
+    void* c = tc_pipeline_get_render_cache(handle_);
+    if (!c) {
+        c = new PipelineRenderCache();
+        tc_pipeline_set_render_cache(handle_, c, destroy_render_cache);
+    }
+    return *static_cast<PipelineRenderCache*>(c);
+}
+
+const FBOPool& RenderPipeline::fbo_pool() const {
+    void* c = tc_pipeline_get_render_cache(handle_);
+    if (!c) {
+        auto* self = const_cast<RenderPipeline*>(this);
+        return self->cache().fbo_pool;
+    }
+    return static_cast<PipelineRenderCache*>(c)->fbo_pool;
+}
+
+// -- Specs (in render cache) --
+
 void RenderPipeline::add_spec(const ResourceSpec& spec) {
-    specs_.push_back(spec);
+    cache().specs.push_back(spec);
 }
 
 void RenderPipeline::clear_specs() {
-    specs_.clear();
+    cache().specs.clear();
+}
+
+size_t RenderPipeline::spec_count() const {
+    void* c = tc_pipeline_get_render_cache(handle_);
+    return c ? static_cast<PipelineRenderCache*>(c)->specs.size() : 0;
 }
 
 const ResourceSpec* RenderPipeline::get_spec_at(size_t index) const {
-    if (index >= specs_.size()) {
-        return nullptr;
-    }
-    return &specs_[index];
+    void* c = tc_pipeline_get_render_cache(handle_);
+    if (!c) return nullptr;
+    auto& specs = static_cast<PipelineRenderCache*>(c)->specs;
+    return index < specs.size() ? &specs[index] : nullptr;
 }
+
+const std::vector<ResourceSpec>& RenderPipeline::specs() const {
+    static const std::vector<ResourceSpec> empty;
+    void* c = tc_pipeline_get_render_cache(handle_);
+    return c ? static_cast<PipelineRenderCache*>(c)->specs : empty;
+}
+
+// -- Dirty --
 
 bool RenderPipeline::is_dirty() const {
     return tc_pipeline_is_dirty(handle_);
@@ -118,9 +112,11 @@ void RenderPipeline::mark_dirty() {
     tc_pipeline_mark_dirty(handle_);
 }
 
+// -- Collect specs --
+
 std::vector<ResourceSpec> RenderPipeline::collect_specs() const {
     std::vector<ResourceSpec> result;
-    result.insert(result.end(), specs_.begin(), specs_.end());
+    result.insert(result.end(), specs().begin(), specs().end());
 
     size_t count = tc_pipeline_pass_count(handle_);
     for (size_t i = 0; i < count; i++) {
@@ -137,12 +133,13 @@ std::vector<ResourceSpec> RenderPipeline::collect_specs() const {
     return result;
 }
 
-RenderPipeline* RenderPipeline::from_handle(tc_pipeline_handle h) {
-    void* owner = tc_pipeline_get_cpp_owner(h);
-    if (!owner) {
-        return nullptr;
+// -- Destroy --
+
+void RenderPipeline::destroy() {
+    if (tc_pipeline_pool_alive(handle_)) {
+        tc_pipeline_destroy(handle_);
     }
-    return static_cast<RenderPipeline*>(owner);
+    handle_ = TC_PIPELINE_HANDLE_INVALID;
 }
 
 } // namespace termin

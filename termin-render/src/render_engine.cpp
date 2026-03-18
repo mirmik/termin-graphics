@@ -20,13 +20,13 @@ RenderEngine::RenderEngine(GraphicsBackend* graphics)
 }
 
 void RenderEngine::render_to_screen(
-    RenderPipeline* pipeline,
+    RenderPipeline& pipeline,
     int width,
     int height,
     tc_scene_handle scene,
     const RenderCamera& camera
 ) {
-    if (!pipeline) {
+    if (!pipeline.is_valid()) {
         tc::Log::error("[render_to_screen] pipeline is NULL");
         return;
     }
@@ -50,20 +50,20 @@ void RenderEngine::render_to_screen(
 }
 
 void RenderEngine::present_to_screen(
-    RenderPipeline* pipeline,
+    RenderPipeline& pipeline,
     int width,
     int height,
     const std::string& resource_name
 ) {
-    if (!pipeline || !graphics) {
+    if (!pipeline.is_valid() || !graphics) {
         tc::Log::warn("[present_to_screen] pipeline=%p graphics=%p", pipeline, graphics);
         return;
     }
 
-    FramebufferHandle* src_fbo = pipeline->fbo_pool().get(resource_name);
+    FramebufferHandle* src_fbo = pipeline.fbo_pool().get(resource_name);
     if (!src_fbo) {
         tc::Log::warn("[present_to_screen] FBO '%s' not found in pipeline. Available FBOs:", resource_name.c_str());
-        auto& pool = pipeline->fbo_pool();
+        auto& pool = pipeline.fbo_pool();
         for (const auto& key : pool.keys()) {
             auto* fbo = pool.get(key);
             tc::Log::warn("  - '%s': %p", key.c_str(), fbo);
@@ -82,7 +82,7 @@ void RenderEngine::present_to_screen(
 }
 
 void RenderEngine::render_view_to_fbo(
-    RenderPipeline* pipeline,
+    RenderPipeline& pipeline,
     FramebufferHandle* target_fbo,
     int width,
     int height,
@@ -93,11 +93,11 @@ void RenderEngine::render_view_to_fbo(
     const std::vector<Light>& lights,
     uint64_t layer_mask
 ) {
-    if (!pipeline) {
+    if (!pipeline.is_valid()) {
         tc::Log::error("RenderEngine::render_view_to_fbo: pipeline is null");
         return;
     }
-    if (!pipeline->is_valid()) {
+    if (!pipeline.is_valid()) {
         tc::Log::error("RenderEngine::render_view_to_fbo: pipeline is invalid");
         return;
     }
@@ -106,7 +106,7 @@ void RenderEngine::render_view_to_fbo(
         return;
     }
 
-    tc_frame_graph* fg = tc_pipeline_get_frame_graph(pipeline->handle());
+    tc_frame_graph* fg = tc_pipeline_get_frame_graph(pipeline.handle());
     if (!fg) {
         tc::Log::error("RenderEngine::render_view_to_fbo: failed to get frame graph");
         return;
@@ -118,7 +118,7 @@ void RenderEngine::render_view_to_fbo(
         return;
     }
 
-    auto specs = pipeline->collect_specs();
+    auto specs = pipeline.collect_specs();
 
     std::unordered_map<std::string, ResourceSpec> spec_map;
     for (const auto& spec : specs) {
@@ -182,7 +182,7 @@ void RenderEngine::render_view_to_fbo(
         }
 
         if (resource_type == "shadow_map_array") {
-            auto& shadow_array = pipeline->shadow_arrays()[canon];
+            auto& shadow_array = pipeline.shadow_arrays()[canon];
             if (!shadow_array) {
                 int resolution = 1024;
                 if (spec && spec->size) {
@@ -224,7 +224,7 @@ void RenderEngine::render_view_to_fbo(
             filter = spec->filter;
         }
 
-        FBOPool& fbo_pool = pipeline->fbo_pool();
+        FBOPool& fbo_pool = pipeline.fbo_pool();
         FramebufferHandle* fbo = fbo_pool.ensure(graphics, canon, fbo_width, fbo_height, samples, format, filter);
 
         const char* aliases[64];
@@ -346,13 +346,13 @@ void RenderEngine::render_view_to_fbo(
 }
 
 void RenderEngine::render_scene_pipeline_offscreen(
-    RenderPipeline* pipeline,
+    RenderPipeline& pipeline,
     tc_scene_handle scene,
     const std::unordered_map<std::string, ViewportContext>& viewport_contexts,
     const std::vector<Light>& lights,
     const std::string& default_viewport
 ) {
-    if (!pipeline) {
+    if (!pipeline.is_valid()) {
         tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: pipeline is null");
         return;
     }
@@ -380,7 +380,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
     int default_height = default_ctx.rect.height;
 
     tc_profiler_begin_section("Get Frame Graph");
-    tc_frame_graph* fg = tc_pipeline_get_frame_graph(pipeline->handle());
+    tc_frame_graph* fg = tc_pipeline_get_frame_graph(pipeline.handle());
     if (!fg) {
         tc_profiler_end_section();
         tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: failed to get frame graph");
@@ -396,7 +396,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
     tc_profiler_end_section();
 
     tc_profiler_begin_section("Collect Specs");
-    auto specs = pipeline->collect_specs();
+    auto specs = pipeline.collect_specs();
 
     std::unordered_map<std::string, ResourceSpec> spec_map;
     for (const auto& spec : specs) {
@@ -462,7 +462,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
 
         if (resource_type == "shadow_map_array") {
-            auto& shadow_array = pipeline->shadow_arrays()[canon];
+            auto& shadow_array = pipeline.shadow_arrays()[canon];
             if (!shadow_array) {
                 int resolution = 1024;
                 if (spec && spec->size) {
@@ -504,7 +504,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
             filter = spec->filter;
         }
 
-        FBOPool& fbo_pool = pipeline->fbo_pool();
+        FBOPool& fbo_pool = pipeline.fbo_pool();
         FramebufferHandle* fbo = fbo_pool.ensure(graphics, canon, fbo_width, fbo_height, samples, format, filter);
 
         const char* aliases[64];

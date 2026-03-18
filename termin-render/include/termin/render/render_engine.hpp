@@ -1,3 +1,4 @@
+// render_engine.hpp - Core render engine for executing pipeline passes
 #pragma once
 
 #include <string>
@@ -40,7 +41,7 @@ public:
     explicit RenderEngine(GraphicsBackend* graphics);
 
     void render_view_to_fbo(
-        RenderPipeline* pipeline,
+        RenderPipeline& pipeline,
         FramebufferHandle* target_fbo,
         int width,
         int height,
@@ -53,7 +54,7 @@ public:
     );
 
     void render_to_screen(
-        RenderPipeline* pipeline,
+        RenderPipeline& pipeline,
         int width,
         int height,
         tc_scene_handle scene,
@@ -61,14 +62,14 @@ public:
     );
 
     void present_to_screen(
-        RenderPipeline* pipeline,
+        RenderPipeline& pipeline,
         int width,
         int height,
         const std::string& resource_name = "color"
     );
 
     void render_scene_pipeline_offscreen(
-        RenderPipeline* pipeline,
+        RenderPipeline& pipeline,
         tc_scene_handle scene,
         const std::unordered_map<std::string, ViewportContext>& viewport_contexts,
         const std::vector<Light>& lights,

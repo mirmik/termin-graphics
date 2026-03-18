@@ -15,9 +15,9 @@ struct tc_pipeline {
     tc_pass** passes;
     size_t pass_count;
     size_t pass_capacity;
-    void* cpp_owner;
-    void* py_wrapper;
     void* cached_frame_graph;
+    void* render_cache;
+    void (*render_cache_destructor)(void*);
     bool dirty;
 };
 
@@ -33,10 +33,8 @@ TC_API tc_pass* tc_pipeline_get_pass_at(tc_pipeline_handle h, size_t index);
 TC_API size_t tc_pipeline_pass_count(tc_pipeline_handle h);
 TC_API const char* tc_pipeline_get_name(tc_pipeline_handle h);
 TC_API void tc_pipeline_set_name(tc_pipeline_handle h, const char* name);
-TC_API void* tc_pipeline_get_cpp_owner(tc_pipeline_handle h);
-TC_API void tc_pipeline_set_cpp_owner(tc_pipeline_handle h, void* owner);
-TC_API void* tc_pipeline_get_py_wrapper(tc_pipeline_handle h);
-TC_API void tc_pipeline_set_py_wrapper(tc_pipeline_handle h, void* wrapper);
+TC_API void* tc_pipeline_get_render_cache(tc_pipeline_handle h);
+TC_API void tc_pipeline_set_render_cache(tc_pipeline_handle h, void* cache, void (*destructor)(void*));
 TC_API bool tc_pipeline_is_dirty(tc_pipeline_handle h);
 TC_API void tc_pipeline_mark_dirty(tc_pipeline_handle h);
 TC_API void tc_pipeline_clear_dirty(tc_pipeline_handle h);
