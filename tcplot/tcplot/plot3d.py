@@ -123,15 +123,11 @@ class Plot3D(Widget):
         # Marker state
         self.marker_mode = False
         self._marker_pos: tuple[float, float, float] | None = None  # data coords
-        self._marker_mesh = None  # TcMesh for cross marker
 
     def _toggle_marker_mode(self):
         self.marker_mode = not self.marker_mode
         if not self.marker_mode:
             self._marker_pos = None
-            if self._marker_mesh:
-                self._marker_mesh.delete_gpu()
-                self._marker_mesh = None
 
     def layout(self, x, y, width, height, viewport_w, viewport_h):
         super().layout(x, y, width, height, viewport_w, viewport_h)
@@ -381,29 +377,8 @@ class Plot3D(Widget):
             self._surface_meshes.append(tc_mesh)
 
     def _update_marker(self, data_pos: tuple[float, float, float]):
-        """Rebuild marker mesh at given data position."""
-        if self._marker_mesh:
-            self._marker_mesh.delete_gpu()
-            self._marker_mesh = None
-
+        """Update marker position (no mesh rebuild — drawn via immediate mode)."""
         self._marker_pos = data_pos
-        x, y, z = data_pos
-        bounds_min, bounds_max = self._data_bounds_3d()
-        data_size = float(np.linalg.norm(bounds_max - bounds_min))
-        cs = data_size * 0.015  # cross arm length
-
-        c = (1.0, 1.0, 0.0, 1.0)  # yellow marker
-        verts = []
-        indices = []
-        idx = 0
-        for dx, dy, dz in [(cs,0,0), (0,cs,0), (0,0,cs)]:
-            verts.extend([x-dx, y-dy, z-dz, *c])
-            verts.extend([x+dx, y+dy, z+dz, *c])
-            indices.extend([idx, idx+1])
-            idx += 2
-
-        self._marker_mesh = self._make_line_mesh(verts, indices)
-        self._marker_mesh.upload_gpu()
 
     def _release_gpu(self):
         for attr in ('_lines_mesh', '_scatter_mesh', '_grid_mesh'):
@@ -417,9 +392,6 @@ class Plot3D(Widget):
         for mesh in self._wireframe_meshes:
             mesh.delete_gpu()
         self._wireframe_meshes.clear()
-        if self._marker_mesh:
-            self._marker_mesh.delete_gpu()
-            self._marker_mesh = None
 
     def _draw_tick_labels_3d(self, aspect, mvp, bounds_min, bounds_max, graphics, renderer):
         """Draw tick value labels as billboard text on axes."""
@@ -529,28 +501,41 @@ class Plot3D(Widget):
         if self._scatter_mesh:
             self._scatter_mesh.draw_gpu()
 
-        # Draw marker (no depth test so it's always visible)
-        if self._marker_mesh and self.marker_mode:
+        # Draw marker via immediate mode (no mesh allocation)
+        if self._marker_pos and self.marker_mode:
             self._shader.use()
             self._shader.set_uniform_mat4("u_mvp", mvp.astype(np.float32), True)
             self._shader.set_uniform_int("u_use_jet", 0)
             graphics.set_depth_test(False)
-            self._marker_mesh.draw_gpu()
+
+            x, y, z = self._marker_pos
+            data_size = float(np.linalg.norm(bounds_max - bounds_min))
+            cs = data_size * 0.015
+            c = [1.0, 1.0, 0.0, 1.0]
+            verts = []
+            for dx, dy, dz in [(cs,0,0), (0,cs,0), (0,0,cs)]:
+                verts.extend([x-dx, y-dy, z-dz, *c])
+                verts.extend([x+dx, y+dy, z+dz, *c])
+            graphics.draw_immediate_lines(np.array(verts, dtype=np.float32))
+
             graphics.set_depth_test(True)
 
         # 3D tick labels (billboard text)
         self._draw_tick_labels_3d(aspect, mvp, bounds_min, bounds_max, graphics, renderer)
 
-        # Marker value label (billboard text)
+        # Marker value label (billboard text, always on top)
         if self._marker_pos and self.marker_mode:
+            graphics.set_depth_test(False)
             x, y, z = self._marker_pos
             label = f"({x:.3g}, {y:.3g}, {z:.3g})"
             data_size = float(np.linalg.norm(bounds_max - bounds_min))
             self._text3d.begin(self.camera, aspect, font=renderer.font)
+            # Pre-apply z_scale to anchor position (text3d MVP has no z_scale)
             pos = [x, y, z * self.z_scale + data_size * 0.04]
             self._text3d.draw(label, pos, color=(1.0, 1.0, 0.0, 1.0),
-                              size=data_size * 0.025)
+                              size=data_size * 0.015)
             self._text3d.end()
+            graphics.set_depth_test(True)
 
         renderer.end_clip()
 
@@ -586,41 +571,27 @@ class Plot3D(Widget):
             model[2, 2] = self.z_scale
             mvp = mvp @ model
 
-        # Collect all data points
-        points = []  # (x, y, z) original data coords
-        world = []   # (x, y, z*z_scale) for projection
-
+        # Collect all data points as numpy arrays
+        arrays = []
         for s in self.data.lines:
-            if s.z is None:
-                continue
-            for i in range(len(s.x)):
-                points.append((s.x[i], s.y[i], s.z[i]))
-                world.append((s.x[i], s.y[i], s.z[i]))
-
+            if s.z is not None and len(s.x) > 0:
+                arrays.append(np.column_stack([s.x, s.y, s.z]))
         for s in self.data.scatters:
-            if s.z is None:
-                continue
-            for i in range(len(s.x)):
-                points.append((s.x[i], s.y[i], s.z[i]))
-                world.append((s.x[i], s.y[i], s.z[i]))
-
+            if s.z is not None and len(s.x) > 0:
+                arrays.append(np.column_stack([s.x, s.y, s.z]))
         for s in self.data.surfaces:
-            rows, cols = s.Z.shape
-            for j in range(rows):
-                for i in range(cols):
-                    points.append((s.X[j, i], s.Y[j, i], s.Z[j, i]))
-                    world.append((s.X[j, i], s.Y[j, i], s.Z[j, i]))
+            arrays.append(np.column_stack([
+                s.X.ravel(), s.Y.ravel(), s.Z.ravel()]))
 
-        if not points:
+        if not arrays:
             return None
 
-        # Project all points to screen: homogeneous coords
-        n = len(world)
+        all_pts = np.vstack(arrays).astype(np.float32)  # (n, 3)
+        n = len(all_pts)
+
+        # Homogeneous coords
         pts = np.ones((n, 4), dtype=np.float32)
-        for i, (x, y, z) in enumerate(world):
-            pts[i, 0] = x
-            pts[i, 1] = y
-            pts[i, 2] = z
+        pts[:, :3] = all_pts
 
         clip = (mvp @ pts.T).T  # (n, 4)
         w = clip[:, 3]
@@ -642,8 +613,8 @@ class Plot3D(Widget):
         if min_dist > 50:  # threshold in pixels
             return None
 
-        ox, oy, oz = points[idx]
-        return (float(ox), float(oy), float(oz), float(min_dist))
+        return (float(all_pts[idx, 0]), float(all_pts[idx, 1]),
+                float(all_pts[idx, 2]), float(min_dist))
 
     # -- Interaction --
 

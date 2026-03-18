@@ -76,19 +76,21 @@ class Text3DRenderer:
         if self._graphics is None:
             self._graphics = OpenGLGraphicsBackend.get_instance()
 
-    def begin(self, camera, aspect: float, font=None):
+    def begin(self, camera, aspect: float, font=None, mvp_override=None):
         """Setup for a batch of text draws. Call once per frame.
 
         Args:
             camera: object with mvp(aspect) and view_matrix() methods
             aspect: viewport width / height
             font: FontTextureAtlas (optional, overrides constructor font)
+            mvp_override: if given, use this MVP instead of camera.mvp()
+                (for z_scale etc. — billboard vectors still come from camera)
         """
         self._ensure_init()
         if font is not None:
             self._font = font
 
-        self._mvp = camera.mvp(aspect)
+        self._mvp = mvp_override if mvp_override is not None else camera.mvp(aspect)
 
         # Extract camera right and up vectors from view matrix
         view = camera.view_matrix()
