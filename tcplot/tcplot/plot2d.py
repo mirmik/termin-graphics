@@ -267,8 +267,7 @@ class Plot2D(Widget):
             self._view_y_max = vy1 + dy_data
 
     def on_mouse_up(self, event: MouseEvent):
-        if event.button == MouseButton.MIDDLE:
-            self._panning = False
+        self._panning = False
 
     def on_mouse_wheel(self, event: MouseWheelEvent) -> bool:
         px, py, pw, ph = self._plot_area()

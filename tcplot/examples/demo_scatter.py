@@ -79,7 +79,8 @@ def main():
             ui.mouse_down(float(ev.button.x), float(ev.button.y),
                           _SDL_BUTTON_MAP.get(ev.button.button, MouseButton.LEFT))
         elif t == sdl2.SDL_MOUSEBUTTONUP:
-            ui.mouse_up(float(ev.button.x), float(ev.button.y))
+            ui.mouse_up(float(ev.button.x), float(ev.button.y),
+                        _SDL_BUTTON_MAP.get(ev.button.button, MouseButton.LEFT))
         elif t == sdl2.SDL_MOUSEWHEEL:
             mx, my = ctypes.c_int(), ctypes.c_int()
             sdl2.SDL_GetMouseState(ctypes.byref(mx), ctypes.byref(my))
