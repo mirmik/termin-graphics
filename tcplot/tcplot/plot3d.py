@@ -12,6 +12,7 @@ from tgfx import OpenGLGraphicsBackend, TcShader
 from tcplot.camera3d import OrbitCamera
 from tcplot.data import PlotData
 from tcplot.axes import nice_ticks, format_tick
+from tgfx.text3d import Text3DRenderer
 from tcplot import styles
 
 # 3D shader with jet colormap in fragment shader
@@ -87,6 +88,7 @@ class Plot3D(Widget):
         self._surface_meshes: list = []       # solid TcMesh
         self._wireframe_meshes: list = []     # wireframe TcMesh
         self._dirty = True  # rebuild meshes on next render
+        self._text3d = Text3DRenderer()
 
         # Interaction
         self._dragging = False
@@ -98,6 +100,7 @@ class Plot3D(Widget):
         self.bg_color = styles.BG_COLOR
         self.show_grid = True
         self.show_wireframe = True
+        self.z_scale: float = 1.0  # vertical exaggeration
 
         # Wireframe toggle button
         from tcgui.widgets.button import Button
@@ -368,6 +371,45 @@ class Plot3D(Widget):
             mesh.delete_gpu()
         self._wireframe_meshes.clear()
 
+    def _draw_tick_labels_3d(self, aspect, mvp, bounds_min, bounds_max, graphics, renderer):
+        """Draw tick value labels as billboard text on axes."""
+        graphics.set_depth_test(True)
+        graphics.set_blend(True)
+
+        font = renderer.font
+        self._text3d.begin(self.camera, aspect, font=font)
+
+        label_color = (0.8, 0.8, 0.8, 1.0)
+        data_size = float(np.linalg.norm(bounds_max - bounds_min))
+        text_size = data_size * 0.02  # scale labels relative to data
+
+        axis_names = ["X", "Y", "Z"]
+        for axis in range(3):
+            lo, hi = float(bounds_min[axis]), float(bounds_max[axis])
+            ticks = nice_ticks(lo, hi, 6)
+            offset = data_size * 0.03  # distance from axis
+
+            for t in ticks:
+                label = format_tick(t)
+                pos = [float(bounds_min[0]), float(bounds_min[1]),
+                       float(bounds_min[2]) * self.z_scale]
+                if axis == 2:
+                    pos[axis] = t * self.z_scale
+                else:
+                    pos[axis] = t
+
+                # Offset label away from plot area
+                if axis == 0:  # X axis: offset in -Y
+                    pos[1] -= offset
+                elif axis == 1:  # Y axis: offset in -X
+                    pos[0] -= offset
+                else:  # Z axis: offset in -X
+                    pos[0] -= offset
+
+                self._text3d.draw(label, pos, color=label_color, size=text_size)
+
+        graphics.set_depth_test(True)
+
     # -- Rendering --
 
     def render(self, renderer):
@@ -395,9 +437,13 @@ class Plot3D(Widget):
         ih = int(self.height)
         renderer.begin_clip(ix, iy, iw, ih)
 
-        # Compute MVP
+        # Compute MVP with z_scale
         aspect = self.width / max(self.height, 1)
         mvp = self.camera.mvp(aspect)
+        if self.z_scale != 1.0:
+            model = np.eye(4, dtype=np.float32)
+            model[2, 2] = self.z_scale
+            mvp = mvp @ model
 
         self._shader.use()
         self._shader.set_uniform_mat4("u_mvp", mvp.astype(np.float32), True)
@@ -432,6 +478,9 @@ class Plot3D(Widget):
             self._lines_mesh.draw_gpu()
         if self._scatter_mesh:
             self._scatter_mesh.draw_gpu()
+
+        # 3D tick labels (billboard text)
+        self._draw_tick_labels_3d(aspect, mvp, bounds_min, bounds_max, graphics, renderer)
 
         renderer.end_clip()
 

@@ -53,14 +53,15 @@ def main():
     plot.data.title = "z = sin(r) / r"
 
     # Generate surface: z = sin(r)/r
-    N = 60
-    u = np.linspace(-5, 5, N)
-    v = np.linspace(-5, 5, N)
+    N = 80
+    u = np.linspace(-10, 10, N)
+    v = np.linspace(-10, 10, N)
     X, Y = np.meshgrid(u, v)
 
     R = np.sqrt(X**2 + Y**2) + 1e-6
     Z = np.sin(R) / R
 
+    plot.z_scale = 5.0
     plot.surface(X, Y, Z, color=(0.12, 0.56, 0.85, 1.0))
     plot.surface(X, Y, Z, color=(0.0, 0.0, 0.0, 1.0), wireframe=True)
 

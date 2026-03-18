@@ -430,6 +430,16 @@ void bind_graphics_backend(nb::module_& m) {
             int count = static_cast<int>(vertices.size() / 4);
             self.draw_ui_textured_quad(const_cast<float*>(vertices.data()), count);
         })
+        .def("draw_immediate_lines", [](OpenGLGraphicsBackend& self, nb::ndarray<float, nb::c_contig, nb::device::cpu> vertices) {
+            int count = static_cast<int>(vertices.size() / 7);
+            self.draw_immediate_lines(const_cast<float*>(vertices.data()), count);
+        }, nb::arg("vertices"),
+           "Draw lines from flat float array [x,y,z,r,g,b,a,...]. 7 floats per vertex.")
+        .def("draw_immediate_triangles", [](OpenGLGraphicsBackend& self, nb::ndarray<float, nb::c_contig, nb::device::cpu> vertices) {
+            int count = static_cast<int>(vertices.size() / 7);
+            self.draw_immediate_triangles(const_cast<float*>(vertices.data()), count);
+        }, nb::arg("vertices"),
+           "Draw triangles from flat float array [x,y,z,r,g,b,a,...]. 7 floats per vertex.")
         .def("create_mesh", [](OpenGLGraphicsBackend& self, nb::object mesh, DrawMode mode) -> std::unique_ptr<GPUMeshHandle> {
             nb::ndarray<float, nb::c_contig, nb::device::cpu> buffer = nb::cast<nb::ndarray<float, nb::c_contig, nb::device::cpu>>(mesh.attr("interleaved_buffer")());
 
