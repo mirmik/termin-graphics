@@ -502,9 +502,90 @@ class Plot3D(Widget):
             if child.visible:
                 child.render(renderer)
 
+    # -- Picking --
+
+    def pick(self, mx: float, my: float) -> tuple[float, float, float, float] | None:
+        """Find nearest data point to mouse pixel position.
+
+        Returns (x, y, z, screen_distance) or None if no data.
+        """
+        aspect = self.width / max(self.height, 1)
+        mvp = self.camera.mvp(aspect)
+        if self.z_scale != 1.0:
+            model = np.eye(4, dtype=np.float32)
+            model[2, 2] = self.z_scale
+            mvp = mvp @ model
+
+        # Collect all data points
+        points = []  # (x, y, z) original data coords
+        world = []   # (x, y, z*z_scale) for projection
+
+        for s in self.data.lines:
+            if s.z is None:
+                continue
+            for i in range(len(s.x)):
+                points.append((s.x[i], s.y[i], s.z[i]))
+                world.append((s.x[i], s.y[i], s.z[i]))
+
+        for s in self.data.scatters:
+            if s.z is None:
+                continue
+            for i in range(len(s.x)):
+                points.append((s.x[i], s.y[i], s.z[i]))
+                world.append((s.x[i], s.y[i], s.z[i]))
+
+        for s in self.data.surfaces:
+            rows, cols = s.Z.shape
+            for j in range(rows):
+                for i in range(cols):
+                    points.append((s.X[j, i], s.Y[j, i], s.Z[j, i]))
+                    world.append((s.X[j, i], s.Y[j, i], s.Z[j, i]))
+
+        if not points:
+            return None
+
+        # Project all points to screen: homogeneous coords
+        n = len(world)
+        pts = np.ones((n, 4), dtype=np.float32)
+        for i, (x, y, z) in enumerate(world):
+            pts[i, 0] = x
+            pts[i, 1] = y
+            pts[i, 2] = z
+
+        clip = (mvp @ pts.T).T  # (n, 4)
+        w = clip[:, 3]
+
+        # Skip points behind camera
+        valid = w > 0.001
+        ndc_x = np.where(valid, clip[:, 0] / w, np.inf)
+        ndc_y = np.where(valid, clip[:, 1] / w, np.inf)
+
+        # NDC to pixel (widget-relative)
+        px = self.x + (ndc_x * 0.5 + 0.5) * self.width
+        py = self.y + (-ndc_y * 0.5 + 0.5) * self.height
+
+        # Distance to mouse
+        dist = np.sqrt((px - mx) ** 2 + (py - my) ** 2)
+        idx = np.argmin(dist)
+        min_dist = dist[idx]
+
+        if min_dist > 50:  # threshold in pixels
+            return None
+
+        ox, oy, oz = points[idx]
+        return (float(ox), float(oy), float(oz), float(min_dist))
+
     # -- Interaction --
 
     def on_mouse_down(self, event: MouseEvent) -> bool:
+        if event.button == MouseButton.RIGHT:
+            result = self.pick(event.x, event.y)
+            if result:
+                x, y, z, d = result
+                print(f"[Pick] x={x:.4f}  y={y:.4f}  z={z:.4f}  (dist={d:.1f}px)")
+            else:
+                print("[Pick] no point nearby")
+            return True
         if event.button in (MouseButton.LEFT, MouseButton.MIDDLE):
             self._dragging = True
             self._drag_button = event.button
