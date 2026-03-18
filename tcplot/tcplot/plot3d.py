@@ -102,9 +102,10 @@ class Plot3D(Widget):
         self.show_wireframe = True
         self.z_scale: float = 1.0  # vertical exaggeration
 
-        # Wireframe toggle button
+        # Toolbar buttons
         from tcgui.widgets.button import Button
         from tcgui.widgets.units import px
+
         self._wire_btn = Button()
         self._wire_btn.text = "W"
         self._wire_btn.preferred_width = px(28)
@@ -112,10 +113,31 @@ class Plot3D(Widget):
         self._wire_btn.on_click = lambda: setattr(self, 'show_wireframe', not self.show_wireframe)
         self.add_child(self._wire_btn)
 
+        self._marker_btn = Button()
+        self._marker_btn.text = "M"
+        self._marker_btn.preferred_width = px(28)
+        self._marker_btn.preferred_height = px(28)
+        self._marker_btn.on_click = self._toggle_marker_mode
+        self.add_child(self._marker_btn)
+
+        # Marker state
+        self.marker_mode = False
+        self._marker_pos: tuple[float, float, float] | None = None  # data coords
+        self._marker_mesh = None  # TcMesh for cross marker
+
+    def _toggle_marker_mode(self):
+        self.marker_mode = not self.marker_mode
+        if not self.marker_mode:
+            self._marker_pos = None
+            if self._marker_mesh:
+                self._marker_mesh.delete_gpu()
+                self._marker_mesh = None
+
     def layout(self, x, y, width, height, viewport_w, viewport_h):
         super().layout(x, y, width, height, viewport_w, viewport_h)
-        # Position button in top-right corner
+        # Position buttons in top-right corner
         self._wire_btn.layout(x + width - 36, y + 8, 28, 28, viewport_w, viewport_h)
+        self._marker_btn.layout(x + width - 68, y + 8, 28, 28, viewport_w, viewport_h)
 
     # -- Public API --
 
@@ -358,6 +380,31 @@ class Plot3D(Widget):
         else:
             self._surface_meshes.append(tc_mesh)
 
+    def _update_marker(self, data_pos: tuple[float, float, float]):
+        """Rebuild marker mesh at given data position."""
+        if self._marker_mesh:
+            self._marker_mesh.delete_gpu()
+            self._marker_mesh = None
+
+        self._marker_pos = data_pos
+        x, y, z = data_pos
+        bounds_min, bounds_max = self._data_bounds_3d()
+        data_size = float(np.linalg.norm(bounds_max - bounds_min))
+        cs = data_size * 0.015  # cross arm length
+
+        c = (1.0, 1.0, 0.0, 1.0)  # yellow marker
+        verts = []
+        indices = []
+        idx = 0
+        for dx, dy, dz in [(cs,0,0), (0,cs,0), (0,0,cs)]:
+            verts.extend([x-dx, y-dy, z-dz, *c])
+            verts.extend([x+dx, y+dy, z+dz, *c])
+            indices.extend([idx, idx+1])
+            idx += 2
+
+        self._marker_mesh = self._make_line_mesh(verts, indices)
+        self._marker_mesh.upload_gpu()
+
     def _release_gpu(self):
         for attr in ('_lines_mesh', '_scatter_mesh', '_grid_mesh'):
             mesh = getattr(self, attr, None)
@@ -370,6 +417,9 @@ class Plot3D(Widget):
         for mesh in self._wireframe_meshes:
             mesh.delete_gpu()
         self._wireframe_meshes.clear()
+        if self._marker_mesh:
+            self._marker_mesh.delete_gpu()
+            self._marker_mesh = None
 
     def _draw_tick_labels_3d(self, aspect, mvp, bounds_min, bounds_max, graphics, renderer):
         """Draw tick value labels as billboard text on axes."""
@@ -479,8 +529,28 @@ class Plot3D(Widget):
         if self._scatter_mesh:
             self._scatter_mesh.draw_gpu()
 
+        # Draw marker (no depth test so it's always visible)
+        if self._marker_mesh and self.marker_mode:
+            self._shader.use()
+            self._shader.set_uniform_mat4("u_mvp", mvp.astype(np.float32), True)
+            self._shader.set_uniform_int("u_use_jet", 0)
+            graphics.set_depth_test(False)
+            self._marker_mesh.draw_gpu()
+            graphics.set_depth_test(True)
+
         # 3D tick labels (billboard text)
         self._draw_tick_labels_3d(aspect, mvp, bounds_min, bounds_max, graphics, renderer)
+
+        # Marker value label (billboard text)
+        if self._marker_pos and self.marker_mode:
+            x, y, z = self._marker_pos
+            label = f"({x:.3g}, {y:.3g}, {z:.3g})"
+            data_size = float(np.linalg.norm(bounds_max - bounds_min))
+            self._text3d.begin(self.camera, aspect, font=renderer.font)
+            pos = [x, y, z * self.z_scale + data_size * 0.04]
+            self._text3d.draw(label, pos, color=(1.0, 1.0, 0.0, 1.0),
+                              size=data_size * 0.025)
+            self._text3d.end()
 
         renderer.end_clip()
 
@@ -595,6 +665,14 @@ class Plot3D(Widget):
         return False
 
     def on_mouse_move(self, event: MouseEvent):
+        # Update marker on hover
+        if self.marker_mode and not self._dragging:
+            result = self.pick(event.x, event.y)
+            if result:
+                self._update_marker((result[0], result[1], result[2]))
+            else:
+                self._marker_pos = None
+
         if not self._dragging:
             return
         dx = event.x - self._drag_start_x
