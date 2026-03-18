@@ -14,23 +14,53 @@ from tcplot.data import PlotData
 from tcplot.axes import nice_ticks, format_tick
 from tcplot import styles
 
-# Minimal 3D shader: MVP transform + per-vertex color
+# 3D shader with jet colormap in fragment shader
 _VERT_SRC = """#version 330 core
 layout(location=0) in vec3 a_position;
 layout(location=1) in vec4 a_color;
 uniform mat4 u_mvp;
+uniform float u_z_min;
+uniform float u_z_max;
+uniform int u_use_jet;
 out vec4 v_color;
+out float v_z_norm;
 void main() {
     gl_Position = u_mvp * vec4(a_position, 1.0);
     v_color = a_color;
+    float z_range = u_z_max - u_z_min;
+    v_z_norm = (z_range > 0.0) ? (a_position.z - u_z_min) / z_range : 0.5;
 }
 """
 
 _FRAG_SRC = """#version 330 core
 in vec4 v_color;
+in float v_z_norm;
+uniform int u_use_jet;
 out vec4 frag_color;
+
+vec3 jet(float t) {
+    t = clamp(t, 0.0, 1.0);
+    float r, g, b;
+    if (t < 0.125) {
+        r = 0.0; g = 0.0; b = 0.5 + t * 4.0;
+    } else if (t < 0.375) {
+        r = 0.0; g = (t - 0.125) * 4.0; b = 1.0;
+    } else if (t < 0.625) {
+        r = (t - 0.375) * 4.0; g = 1.0; b = 1.0 - (t - 0.375) * 4.0;
+    } else if (t < 0.875) {
+        r = 1.0; g = 1.0 - (t - 0.625) * 4.0; b = 0.0;
+    } else {
+        r = 1.0 - (t - 0.875) * 4.0; g = 0.0; b = 0.0;
+    }
+    return vec3(r, g, b);
+}
+
 void main() {
-    frag_color = v_color;
+    if (u_use_jet != 0) {
+        frag_color = vec4(jet(v_z_norm), v_color.a);
+    } else {
+        frag_color = v_color;
+    }
 }
 """
 
@@ -372,16 +402,24 @@ class Plot3D(Widget):
         self._shader.use()
         self._shader.set_uniform_mat4("u_mvp", mvp.astype(np.float32), True)
 
-        # Draw grid first (behind data)
+        # Z range for jet colormap
+        bounds_min, bounds_max = self._data_bounds_3d()
+        self._shader.set_uniform_float("u_z_min", float(bounds_min[2]))
+        self._shader.set_uniform_float("u_z_max", float(bounds_max[2]))
+
+        # Draw grid first (behind data, no jet)
+        self._shader.set_uniform_int("u_use_jet", 0)
         if self._grid_mesh:
             self._grid_mesh.draw_gpu()
 
-        # Draw opaque surfaces
+        # Draw opaque surfaces (with jet)
+        self._shader.set_uniform_int("u_use_jet", 1)
         graphics.set_blend(False)
         for mesh in self._surface_meshes:
             mesh.draw_gpu()
 
-        # Draw wireframe on top without depth test
+        # Draw wireframe on top without depth test (no jet)
+        self._shader.set_uniform_int("u_use_jet", 0)
         if self.show_wireframe:
             graphics.set_depth_test(False)
             graphics.set_blend(True)
@@ -389,7 +427,7 @@ class Plot3D(Widget):
                 mesh.draw_gpu()
             graphics.set_depth_test(True)
 
-        # Draw lines and scatter on top
+        # Draw lines and scatter on top (no jet)
         if self._lines_mesh:
             self._lines_mesh.draw_gpu()
         if self._scatter_mesh:
