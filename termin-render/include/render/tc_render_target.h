@@ -41,6 +41,9 @@ TC_API uint64_t tc_render_target_get_layer_mask(tc_render_target_handle h);
 TC_API void tc_render_target_set_enabled(tc_render_target_handle h, bool enabled);
 TC_API bool tc_render_target_get_enabled(tc_render_target_handle h);
 
+TC_API void tc_render_target_set_locked(tc_render_target_handle h, bool locked);
+TC_API bool tc_render_target_get_locked(tc_render_target_handle h);
+
 #ifdef __cplusplus
 }
 #endif

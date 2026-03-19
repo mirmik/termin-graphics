@@ -1,4 +1,15 @@
+from termin import _dll_setup  # noqa: F401
+
+_dll_setup.extend_package_path(__path__, "render_framework")
+
 from termin.render_framework._render_framework_native import (
+    RenderPipeline,
+    PipelineHandle,
+    RenderTargetHandle,
+    render_target_new,
+    render_target_pool_count,
+    render_target_pool_list,
+    compile_graph_from_json,
     ExecuteContext,
     FrameGraphCapture,
     FrameGraphDebuggerCore,
@@ -51,6 +62,13 @@ from termin.render_framework._render_framework_native import (
 )
 
 __all__ = [
+    "RenderPipeline",
+    "PipelineHandle",
+    "RenderTargetHandle",
+    "render_target_new",
+    "render_target_pool_count",
+    "render_target_pool_list",
+    "compile_graph_from_json",
     "ExecuteContext",
     "FrameGraphCapture",
     "FrameGraphDebuggerCore",

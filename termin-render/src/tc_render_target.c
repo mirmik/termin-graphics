@@ -21,6 +21,7 @@ typedef struct {
     tc_pipeline_handle* pipelines;
     uint64_t* layer_masks;
     bool* enabled;
+    bool* locked;
     uint32_t* free_stack;
     size_t free_count;
     size_t capacity;
@@ -67,6 +68,7 @@ void tc_render_target_pool_init(void) {
     g_pool->pipelines = (tc_pipeline_handle*)calloc(cap, sizeof(tc_pipeline_handle));
     g_pool->layer_masks = (uint64_t*)calloc(cap, sizeof(uint64_t));
     g_pool->enabled = (bool*)calloc(cap, sizeof(bool));
+    g_pool->locked = (bool*)calloc(cap, sizeof(bool));
 
     g_pool->free_stack = (uint32_t*)malloc(cap * sizeof(uint32_t));
     for (size_t i = 0; i < cap; i++) {
@@ -103,6 +105,7 @@ void tc_render_target_pool_shutdown(void) {
     free(g_pool->pipelines);
     free(g_pool->layer_masks);
     free(g_pool->enabled);
+    free(g_pool->locked);
     free(g_pool->free_stack);
     free(g_pool);
     g_pool = NULL;
@@ -128,6 +131,7 @@ static void pool_grow(void) {
     g_pool->pipelines = realloc(g_pool->pipelines, new_cap * sizeof(tc_pipeline_handle));
     g_pool->layer_masks = realloc(g_pool->layer_masks, new_cap * sizeof(uint64_t));
     g_pool->enabled = realloc(g_pool->enabled, new_cap * sizeof(bool));
+    g_pool->locked = realloc(g_pool->locked, new_cap * sizeof(bool));
     g_pool->free_stack = realloc(g_pool->free_stack, new_cap * sizeof(uint32_t));
 
     memset(g_pool->generations + old_cap, 0, (new_cap - old_cap) * sizeof(uint32_t));
@@ -138,6 +142,7 @@ static void pool_grow(void) {
     memset(g_pool->cameras + old_cap, 0, (new_cap - old_cap) * sizeof(tc_component*));
     memset(g_pool->layer_masks + old_cap, 0, (new_cap - old_cap) * sizeof(uint64_t));
     memset(g_pool->enabled + old_cap, 0, (new_cap - old_cap) * sizeof(bool));
+    memset(g_pool->locked + old_cap, 0, (new_cap - old_cap) * sizeof(bool));
 
     for (size_t i = old_cap; i < new_cap; i++) {
         g_pool->scenes[i] = TC_SCENE_HANDLE_INVALID;
@@ -192,6 +197,7 @@ tc_render_target_handle tc_render_target_pool_alloc(const char* name) {
     g_pool->pipelines[idx] = TC_PIPELINE_HANDLE_INVALID;
     g_pool->layer_masks[idx] = 0xFFFFFFFFFFFFFFFFULL;
     g_pool->enabled[idx] = true;
+    g_pool->locked[idx] = false;
     g_pool->count++;
 
     tc_render_target_handle h = { idx, gen };
@@ -318,4 +324,14 @@ void tc_render_target_set_enabled(tc_render_target_handle h, bool enabled) {
 bool tc_render_target_get_enabled(tc_render_target_handle h) {
     if (!handle_alive(h)) return false;
     return g_pool->enabled[h.index];
+}
+
+void tc_render_target_set_locked(tc_render_target_handle h, bool locked) {
+    if (!handle_alive(h)) return;
+    g_pool->locked[h.index] = locked;
+}
+
+bool tc_render_target_get_locked(tc_render_target_handle h) {
+    if (!handle_alive(h)) return false;
+    return g_pool->locked[h.index];
 }

@@ -155,6 +155,7 @@ if(TERMIN_BUILD_PYTHON)
         python/scene_pipeline_template_bindings.cpp
         python/tc_pass_bindings.cpp
         python/tc_render_target_bindings.cpp
+        python/render_pipeline_bindings.cpp
     )
     target_link_libraries(_render_framework_native PRIVATE termin_render termin_inspect::termin_inspect_python)
     target_include_directories(_render_framework_native PRIVATE

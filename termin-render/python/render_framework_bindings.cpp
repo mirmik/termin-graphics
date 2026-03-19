@@ -29,6 +29,7 @@ namespace termin {
 
 void bind_tc_pass_runtime(nb::module_& m);
 void bind_scene_pipeline_template(nb::module_& m);
+void bind_render_pipeline(nb::module_& m);
 
 } // namespace termin
 
@@ -566,5 +567,6 @@ NB_MODULE(_render_framework_native, m) {
     nb::module_::import_("termin.lighting._lighting_native");
 
     termin::bind_render_framework(m);
+    termin::bind_render_pipeline(m);
     bind_tc_render_target(m);
 }

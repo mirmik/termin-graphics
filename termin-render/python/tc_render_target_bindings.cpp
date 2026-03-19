@@ -15,6 +15,12 @@ extern "C" {
 namespace nb = nanobind;
 
 void bind_tc_render_target(nb::module_& m) {
+    nb::class_<tc_pipeline_handle>(m, "PipelineHandle")
+        .def(nb::init<>())
+        .def_rw("index", &tc_pipeline_handle::index)
+        .def_rw("generation", &tc_pipeline_handle::generation)
+        .def_prop_ro("valid", [](const tc_pipeline_handle& h) { return tc_pipeline_handle_valid(h); });
+
     nb::class_<tc_render_target_handle>(m, "RenderTargetHandle")
         .def(nb::init<>())
         .def_rw("index", &tc_render_target_handle::index)
@@ -69,7 +75,8 @@ void bind_tc_render_target(nb::module_& m) {
                     tc_scene_handle s = nb::cast<tc_scene_handle>(handle_obj);
                     tc_render_target_set_scene(h, s);
                 }
-            })
+            },
+            nb::arg().none())
         .def_prop_rw("camera",
             [](const tc_render_target_handle& h) -> nb::object {
                 tc_component* c = tc_render_target_get_camera(h);
@@ -90,12 +97,10 @@ void bind_tc_render_target(nb::module_& m) {
                     tc_render_target_set_camera(h, nullptr);
                     return;
                 }
-                // Get tc_component* from Python camera object
-                if (nb::hasattr(cam_obj, "_c_component_ptr")) {
-                    uintptr_t ptr = nb::cast<uintptr_t>(cam_obj.attr("_c_component_ptr"));
-                    tc_render_target_set_camera(h, reinterpret_cast<tc_component*>(ptr));
-                }
-            })
+                uintptr_t ptr = nb::cast<uintptr_t>(cam_obj.attr("c_component_ptr")());
+                tc_render_target_set_camera(h, reinterpret_cast<tc_component*>(ptr));
+            },
+            nb::arg().none())
         .def_prop_rw("pipeline",
             [](const tc_render_target_handle& h) -> nb::object {
                 tc_pipeline_handle ph = tc_render_target_get_pipeline(h);
@@ -108,12 +113,14 @@ void bind_tc_render_target(nb::module_& m) {
                     tc_render_target_set_pipeline(h, TC_PIPELINE_HANDLE_INVALID);
                     return;
                 }
-                auto t = nb::cast<std::tuple<uint32_t, uint32_t>>(pip_obj.attr("_pipeline_handle"));
-                tc_pipeline_handle ph;
-                ph.index = std::get<0>(t);
-                ph.generation = std::get<1>(t);
+                // RenderPipeline._pipeline_handle returns tc_pipeline_handle
+                tc_pipeline_handle ph = nb::cast<tc_pipeline_handle>(pip_obj.attr("_pipeline_handle"));
                 tc_render_target_set_pipeline(h, ph);
-            })
+            },
+            nb::arg().none())
+        .def_prop_rw("locked",
+            [](const tc_render_target_handle& h) { return tc_render_target_get_locked(h); },
+            [](tc_render_target_handle& h, bool v) { tc_render_target_set_locked(h, v); })
         .def("free", [](tc_render_target_handle& h) { tc_render_target_free(h); });
 
     m.def("render_target_new", [](const std::string& name) {
