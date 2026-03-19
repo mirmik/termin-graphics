@@ -30,6 +30,7 @@ set(TERMIN_RENDER_SOURCES
     src/tc_scene_render_state.c
     src/tc_scene_skybox.c
     src/tc_viewport_config.c
+    src/tc_render_target.c
     src/tc_pass.c
     src/tc_pipeline.c
     src/tc_frame_graph.c
@@ -63,6 +64,8 @@ set(TERMIN_RENDER_HEADERS
     include/core/tc_camera_capability.h
     include/core/tc_scene_drawable.h
     include/render/tc_pipeline_pool.h
+    include/render/tc_render_target_pool.h
+    include/render/tc_render_target.h
     include/render/tc_pass.h
     include/render/tc_pipeline.h
     include/render/tc_frame_graph.h
