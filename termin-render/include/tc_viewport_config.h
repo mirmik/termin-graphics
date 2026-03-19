@@ -12,17 +12,14 @@ extern "C" {
 
 // Viewport configuration structure
 typedef struct tc_viewport_config {
-    const char* name;           // Viewport name (interned)
-    const char* display_name;   // Display name (interned)
-    const char* camera_uuid;    // Camera entity UUID (interned)
-    float region[4];            // Normalized region (x, y, width, height)
-    const char* pipeline_uuid;  // Pipeline asset UUID (interned, nullable)
-    const char* pipeline_name;  // Special pipeline name like "(Editor)" (interned, nullable)
-    int depth;                  // Viewport depth for ordering
-    const char* input_mode;     // Input mode: "none", "simple", "editor" (interned)
-    bool block_input_in_editor; // Block input in editor mode
-    uint64_t layer_mask;        // Layer mask for rendering
-    bool enabled;               // Whether viewport is enabled
+    const char* name;               // Viewport name (interned)
+    const char* display_name;       // Display name (interned)
+    const char* render_target_name; // Render target to display (interned, nullable)
+    float region[4];                // Normalized region (x, y, width, height)
+    int depth;                      // Viewport depth for ordering
+    const char* input_mode;         // Input mode: "none", "simple", "editor" (interned)
+    bool block_input_in_editor;     // Block input in editor mode
+    bool enabled;                   // Whether viewport is enabled
 } tc_viewport_config;
 
 // Initialize viewport config with defaults

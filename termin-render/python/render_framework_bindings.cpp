@@ -30,6 +30,12 @@ namespace termin {
 void bind_tc_pass_runtime(nb::module_& m);
 void bind_scene_pipeline_template(nb::module_& m);
 
+} // namespace termin
+
+void bind_tc_render_target(nb::module_& m);
+
+namespace termin {
+
 void bind_render_framework(nb::module_& m) {
     nb::enum_<TextureFilter>(m, "TextureFilter")
         .value("LINEAR", TextureFilter::LINEAR)
@@ -555,8 +561,10 @@ NB_MODULE(_render_framework_native, m) {
 
     nb::module_::import_("tgfx._tgfx_native");
     nb::module_::import_("termin.geombase._geom_native");
+    nb::module_::import_("termin.scene._scene_native");
     nb::module_::import_("termin.entity._entity_native");
     nb::module_::import_("termin.lighting._lighting_native");
 
     termin::bind_render_framework(m);
+    bind_tc_render_target(m);
 }

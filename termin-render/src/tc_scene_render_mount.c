@@ -91,7 +91,7 @@ static tc_value serialize_viewport_config(const tc_viewport_config* vc) {
 
     if (vc->name && vc->name[0]) tc_value_dict_set(&v, "name", tc_value_string(vc->name));
     if (vc->display_name && vc->display_name[0]) tc_value_dict_set(&v, "display_name", tc_value_string(vc->display_name));
-    if (vc->camera_uuid && vc->camera_uuid[0]) tc_value_dict_set(&v, "camera_uuid", tc_value_string(vc->camera_uuid));
+    if (vc->render_target_name && vc->render_target_name[0]) tc_value_dict_set(&v, "render_target_name", tc_value_string(vc->render_target_name));
 
     tc_value region = tc_value_list_new();
     tc_value_list_push(&region, tc_value_double((double)vc->region[0]));
@@ -103,9 +103,6 @@ static tc_value serialize_viewport_config(const tc_viewport_config* vc) {
     tc_value_dict_set(&v, "depth", tc_value_int((int64_t)vc->depth));
     if (vc->input_mode && vc->input_mode[0]) tc_value_dict_set(&v, "input_mode", tc_value_string(vc->input_mode));
     tc_value_dict_set(&v, "block_input_in_editor", tc_value_bool(vc->block_input_in_editor));
-    if (vc->pipeline_uuid && vc->pipeline_uuid[0]) tc_value_dict_set(&v, "pipeline_uuid", tc_value_string(vc->pipeline_uuid));
-    if (vc->pipeline_name && vc->pipeline_name[0]) tc_value_dict_set(&v, "pipeline_name", tc_value_string(vc->pipeline_name));
-    tc_value_dict_set(&v, "layer_mask", tc_value_int((int64_t)vc->layer_mask));
     tc_value_dict_set(&v, "enabled", tc_value_bool(vc->enabled));
     return v;
 }
@@ -122,8 +119,8 @@ static bool deserialize_viewport_config(const tc_value* data, tc_viewport_config
     tc_value* display_name = tc_value_dict_get((tc_value*)data, "display_name");
     if (display_name && display_name->type == TC_VALUE_STRING) out->display_name = display_name->data.s;
 
-    tc_value* camera_uuid = tc_value_dict_get((tc_value*)data, "camera_uuid");
-    if (camera_uuid && camera_uuid->type == TC_VALUE_STRING) out->camera_uuid = camera_uuid->data.s;
+    tc_value* render_target_name = tc_value_dict_get((tc_value*)data, "render_target_name");
+    if (render_target_name && render_target_name->type == TC_VALUE_STRING) out->render_target_name = render_target_name->data.s;
 
     tc_value* region = tc_value_dict_get((tc_value*)data, "region");
     if (region && region->type == TC_VALUE_LIST && tc_value_list_size(region) >= 4) {
@@ -145,15 +142,6 @@ static bool deserialize_viewport_config(const tc_value* data, tc_viewport_config
 
     tc_value* block_input = tc_value_dict_get((tc_value*)data, "block_input_in_editor");
     if (block_input && block_input->type == TC_VALUE_BOOL) out->block_input_in_editor = block_input->data.b;
-
-    tc_value* pipeline_uuid = tc_value_dict_get((tc_value*)data, "pipeline_uuid");
-    if (pipeline_uuid && pipeline_uuid->type == TC_VALUE_STRING) out->pipeline_uuid = pipeline_uuid->data.s;
-
-    tc_value* pipeline_name = tc_value_dict_get((tc_value*)data, "pipeline_name");
-    if (pipeline_name && pipeline_name->type == TC_VALUE_STRING) out->pipeline_name = pipeline_name->data.s;
-
-    tc_value* layer_mask = tc_value_dict_get((tc_value*)data, "layer_mask");
-    if (layer_mask) value_to_uint64(layer_mask, &out->layer_mask);
 
     tc_value* enabled = tc_value_dict_get((tc_value*)data, "enabled");
     if (enabled && enabled->type == TC_VALUE_BOOL) out->enabled = enabled->data.b;
