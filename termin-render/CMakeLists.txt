@@ -31,6 +31,7 @@ set(TERMIN_RENDER_SOURCES
     src/tc_scene_skybox.c
     src/tc_viewport_config.c
     src/tc_render_target.c
+    src/tc_render_target_config.c
     src/tc_pass.c
     src/tc_pipeline.c
     src/tc_frame_graph.c
@@ -90,6 +91,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/lighting/shadow_settings.hpp
     include/tc_project_settings.h
     include/tc_viewport_config.h
+    include/tc_render_target_config.h
     include/tc_component_python_drawable.h
 )
 
