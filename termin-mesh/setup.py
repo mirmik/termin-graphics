@@ -10,7 +10,7 @@ _DIR = os.path.dirname(os.path.realpath(__file__))
 
 class BuildExt(TerminCMakeBuildExt):
     module_names = ["_tmesh_native"]
-    upstream_packages = {"tcbase": "libtermin_base"}
+    upstream_packages = {"tcbase": "libtermin_base", "termin_nanobind": "libnanobind"}
     bundle_includes = True
     source_dir = _DIR
 
@@ -25,7 +25,7 @@ setup(
     python_requires=">=3.8",
     packages=["tmesh"],
     package_dir={"tmesh": "python/tmesh"},
-    install_requires=["tcbase", "numpy"],
+    install_requires=["tcbase", "termin-nanobind", "numpy"],
     package_data={
         "tmesh": [
             "include/**/*.h",

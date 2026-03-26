@@ -18,10 +18,11 @@ function(termin_set_rpath_lib target)
 endfunction()
 
 # For nanobind Python modules installed into lib/python/termin/<pkg>/
+# Includes $ORIGIN/lib for pip layout (native .so next to lib/ dir)
 function(termin_set_rpath_python target)
     if(NOT WIN32)
         set_target_properties(${target} PROPERTIES
-            INSTALL_RPATH "$ORIGIN;$ORIGIN/..;$ORIGIN/../..;$ORIGIN/../../..;${CMAKE_INSTALL_PREFIX}/lib"
+            INSTALL_RPATH "$ORIGIN/lib;$ORIGIN;$ORIGIN/..;$ORIGIN/../..;$ORIGIN/../../..;${CMAKE_INSTALL_PREFIX}/lib"
             BUILD_WITH_INSTALL_RPATH TRUE
         )
     endif()
