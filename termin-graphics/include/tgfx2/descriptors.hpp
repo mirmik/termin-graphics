@@ -62,7 +62,7 @@ struct PipelineDesc {
     ColorMask color_mask;
 
     std::vector<PixelFormat> color_formats;
-    PixelFormat depth_format = PixelFormat::D24_UNorm_S8_UInt;
+    PixelFormat depth_format = PixelFormat::D32F;
     uint32_t sample_count = 1;
 };
 

@@ -93,6 +93,7 @@ int main() {
     pipe_desc.fragment_shader = fs;
     pipe_desc.topology = tgfx2::PrimitiveTopology::TriangleList;
     pipe_desc.depth_stencil.depth_test = false;
+    pipe_desc.depth_stencil.depth_write = false;
     pipe_desc.raster.cull = tgfx2::CullMode::None;
     pipe_desc.color_formats = {tgfx2::PixelFormat::RGBA8_UNorm};
 
