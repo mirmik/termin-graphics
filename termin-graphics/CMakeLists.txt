@@ -95,8 +95,8 @@ if(TGFX2_ENABLE_VULKAN)
     set(VMA_DYNAMIC_VULKAN_FUNCTIONS ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(vma)
 
-    # shaderc from Vulkan SDK
-    find_library(SHADERC_LIB shaderc_combined
+    # shaderc: prefer shared library, fall back to combined static
+    find_library(SHADERC_LIB NAMES shaderc shaderc_combined
         PATHS "$ENV{VULKAN_SDK}/Lib" "${Vulkan_INCLUDE_DIR}/../Lib"
               "C:/VulkanSDK/1.4.341.1/Lib"
     )

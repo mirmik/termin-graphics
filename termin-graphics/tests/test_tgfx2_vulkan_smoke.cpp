@@ -206,6 +206,7 @@ int main() {
     bool corner_is_blue = (pixels[0] < 10 && pixels[1] < 10 && pixels[2] > 40);
 
     // Cleanup
+    cmd.reset();
     device->destroy(readback_buf);
     device->destroy(rt_tex);
     device->destroy(vb);
