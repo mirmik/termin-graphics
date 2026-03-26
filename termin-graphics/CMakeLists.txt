@@ -77,6 +77,8 @@ set(TGFX2_SOURCES
     src/tgfx2/opengl/opengl_render_device.cpp
     src/tgfx2/opengl/opengl_command_list.cpp
     src/tgfx2/opengl/opengl_type_conversions.cpp
+    src/tgfx2/pipeline_cache.cpp
+    src/tgfx2/render_context.cpp
     src/tgfx2_gpu_ops.cpp
 )
 
@@ -205,6 +207,11 @@ if(BUILD_TGFX2_TESTS)
     add_executable(tgfx2_interop_test tests/test_tgfx2_interop.cpp)
     target_link_libraries(tgfx2_interop_test PRIVATE termin_graphics2 glfw)
     add_test(NAME tgfx2_interop_test COMMAND tgfx2_interop_test)
+
+    # RenderContext2 + PipelineCache test
+    add_executable(tgfx2_render_context_test tests/test_render_context2.cpp)
+    target_link_libraries(tgfx2_render_context_test PRIVATE termin_graphics2 glfw)
+    add_test(NAME tgfx2_render_context_test COMMAND tgfx2_render_context_test)
 
     # Vulkan smoke test (no GLFW needed — offscreen)
     if(TGFX2_ENABLE_VULKAN)
