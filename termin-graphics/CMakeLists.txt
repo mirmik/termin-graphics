@@ -77,6 +77,7 @@ set(TGFX2_SOURCES
     src/tgfx2/opengl/opengl_render_device.cpp
     src/tgfx2/opengl/opengl_command_list.cpp
     src/tgfx2/opengl/opengl_type_conversions.cpp
+    src/tgfx2_gpu_ops.cpp
 )
 
 # --- Optional Vulkan backend ---
@@ -133,6 +134,7 @@ target_include_directories(termin_graphics2 PUBLIC
 target_link_libraries(termin_graphics2 PUBLIC
     glad
     OpenGL::GL
+    termin_graphics
 )
 
 set_target_properties(termin_graphics2 PROPERTIES
@@ -198,6 +200,11 @@ if(BUILD_TGFX2_TESTS)
     add_executable(tgfx2_smoke tests/test_tgfx2_smoke.cpp)
     target_link_libraries(tgfx2_smoke PRIVATE termin_graphics2 glfw)
     add_test(NAME tgfx2_smoke COMMAND tgfx2_smoke)
+
+    # tgfx2 interop test (tgfx2-backed gpu_ops)
+    add_executable(tgfx2_interop_test tests/test_tgfx2_interop.cpp)
+    target_link_libraries(tgfx2_interop_test PRIVATE termin_graphics2 glfw)
+    add_test(NAME tgfx2_interop_test COMMAND tgfx2_interop_test)
 
     # Vulkan smoke test (no GLFW needed — offscreen)
     if(TGFX2_ENABLE_VULKAN)

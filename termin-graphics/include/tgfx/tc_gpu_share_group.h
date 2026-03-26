@@ -17,6 +17,7 @@ extern "C" {
 
 typedef struct tc_gpu_slot {
     uint32_t gl_id;
+    uint32_t tgfx2_id;  // tgfx2 handle id (0 = not managed by tgfx2)
     int32_t  version;    // -1 = never uploaded
 } tc_gpu_slot;
 
@@ -27,7 +28,9 @@ typedef struct tc_gpu_slot {
 typedef struct tc_gpu_mesh_data_slot {
     uint32_t vbo;
     uint32_t ebo;
-    int32_t  version;    // -1 = never uploaded
+    uint32_t tgfx2_vertex_buf;  // tgfx2 BufferHandle id (0 = not managed)
+    uint32_t tgfx2_index_buf;   // tgfx2 BufferHandle id (0 = not managed)
+    int32_t  version;            // -1 = never uploaded
 } tc_gpu_mesh_data_slot;
 
 // ============================================================================
