@@ -79,8 +79,47 @@ set(TGFX2_SOURCES
     src/tgfx2/opengl/opengl_type_conversions.cpp
 )
 
+# --- Optional Vulkan backend ---
+option(TGFX2_ENABLE_VULKAN "Enable Vulkan backend for tgfx2" OFF)
+
+if(TGFX2_ENABLE_VULKAN)
+    find_package(Vulkan REQUIRED)
+
+    # VMA (Vulkan Memory Allocator) via FetchContent
+    include(FetchContent)
+    FetchContent_Declare(vma
+        GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+        GIT_TAG v3.1.0
+    )
+    set(VMA_STATIC_VULKAN_FUNCTIONS OFF CACHE BOOL "" FORCE)
+    set(VMA_DYNAMIC_VULKAN_FUNCTIONS ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(vma)
+
+    # shaderc from Vulkan SDK
+    find_library(SHADERC_LIB shaderc_combined
+        PATHS "$ENV{VULKAN_SDK}/Lib" "${Vulkan_INCLUDE_DIR}/../Lib"
+              "C:/VulkanSDK/1.4.341.1/Lib"
+    )
+
+    list(APPEND TGFX2_SOURCES
+        src/tgfx2/vulkan/vulkan_render_device.cpp
+        src/tgfx2/vulkan/vulkan_command_list.cpp
+        src/tgfx2/vulkan/vulkan_type_conversions.cpp
+        src/tgfx2/vulkan/vulkan_shader_compiler.cpp
+        src/tgfx2/vulkan/vulkan_swapchain.cpp
+    )
+endif()
+
 add_library(termin_graphics2 SHARED ${TGFX2_SOURCES})
 target_compile_definitions(termin_graphics2 PRIVATE TGFX2_EXPORTS)
+
+if(TGFX2_ENABLE_VULKAN)
+    target_compile_definitions(termin_graphics2 PUBLIC TGFX2_HAS_VULKAN)
+    target_link_libraries(termin_graphics2 PUBLIC Vulkan::Vulkan)
+    target_link_libraries(termin_graphics2 PRIVATE ${SHADERC_LIB})
+    # VMA is header-only; link PRIVATE to avoid export issues
+    target_include_directories(termin_graphics2 PRIVATE ${vma_SOURCE_DIR}/include)
+endif()
 
 if(MSVC)
     target_compile_options(termin_graphics2 PRIVATE /wd4251 /wd4275)
@@ -159,6 +198,13 @@ if(BUILD_TGFX2_TESTS)
     add_executable(tgfx2_smoke tests/test_tgfx2_smoke.cpp)
     target_link_libraries(tgfx2_smoke PRIVATE termin_graphics2 glfw)
     add_test(NAME tgfx2_smoke COMMAND tgfx2_smoke)
+
+    # Vulkan smoke test (no GLFW needed — offscreen)
+    if(TGFX2_ENABLE_VULKAN)
+        add_executable(tgfx2_vulkan_smoke tests/test_tgfx2_vulkan_smoke.cpp)
+        target_link_libraries(tgfx2_vulkan_smoke PRIVATE termin_graphics2)
+        add_test(NAME tgfx2_vulkan_smoke COMMAND tgfx2_vulkan_smoke)
+    endif()
 endif()
 
 # --- Install ---
