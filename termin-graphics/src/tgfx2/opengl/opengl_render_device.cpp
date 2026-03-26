@@ -18,6 +18,12 @@ OpenGLRenderDevice::OpenGLRenderDevice() {
 }
 
 OpenGLRenderDevice::~OpenGLRenderDevice() {
+    // Clean up cached FBOs
+    for (auto& [key, fbo] : fbo_cache_) {
+        if (fbo) glDeleteFramebuffers(1, &fbo);
+    }
+    fbo_cache_.clear();
+
     // Clean up all remaining GL resources
     for (auto& [id, buf] : buffers_) {
         if (buf.gl_id) glDeleteBuffers(1, &buf.gl_id);
@@ -310,6 +316,78 @@ void OpenGLRenderDevice::submit(ICommandList& /*cmd*/) {
 void OpenGLRenderDevice::present() {
     // Swap buffer is handled by the windowing system (GLFW, Qt, etc.)
     glFlush();
+}
+
+// --- FBO cache ---
+
+GLuint OpenGLRenderDevice::get_or_create_fbo(const RenderPassDesc& pass) {
+    // Build cache key from attachment textures
+    FBOKey key;
+
+    for (size_t i = 0; i < pass.colors.size(); ++i) {
+        auto* tex = get_texture(pass.colors[i].texture);
+        if (tex) {
+            key.emplace_back(static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i), tex->gl_id);
+        }
+    }
+    if (pass.has_depth) {
+        auto* tex = get_texture(pass.depth.texture);
+        if (tex) {
+            key.emplace_back(GL_DEPTH_ATTACHMENT, tex->gl_id);
+        }
+    }
+
+    // No textures attached = render to default framebuffer
+    if (key.empty()) {
+        return 0;
+    }
+
+    // Check cache
+    auto it = fbo_cache_.find(key);
+    if (it != fbo_cache_.end()) {
+        return it->second;
+    }
+
+    // Create new FBO
+    GLuint fbo = 0;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    bool has_color = false;
+    for (size_t i = 0; i < pass.colors.size(); ++i) {
+        auto* tex = get_texture(pass.colors[i].texture);
+        if (tex) {
+            glFramebufferTexture2D(GL_FRAMEBUFFER,
+                                   static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i),
+                                   tex->target, tex->gl_id, 0);
+            has_color = true;
+        }
+    }
+
+    if (pass.has_depth) {
+        auto* tex = get_texture(pass.depth.texture);
+        if (tex) {
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                                   tex->target, tex->gl_id, 0);
+        }
+    }
+
+    // Depth-only FBO (e.g. shadow map): disable color read/write
+    if (!has_color) {
+        glDrawBuffer(GL_NONE);
+        glReadBuffer(GL_NONE);
+    }
+
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        glDeleteFramebuffers(1, &fbo);
+        throw std::runtime_error("Framebuffer incomplete: 0x" + std::to_string(status));
+    }
+
+    fbo_cache_[key] = fbo;
+    return fbo;
 }
 
 } // namespace tgfx2

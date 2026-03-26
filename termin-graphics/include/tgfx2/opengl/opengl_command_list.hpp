@@ -38,6 +38,7 @@ public:
 private:
     OpenGLRenderDevice& device_;
     GLuint current_vao_ = 0;
+    GLuint current_fbo_ = 0;
     PipelineHandle current_pipeline_;
     GLenum current_topology_ = GL_TRIANGLES;
     GLenum current_index_type_ = GL_UNSIGNED_INT;

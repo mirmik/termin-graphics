@@ -26,10 +26,24 @@ void OpenGLCommandList::end() {
 void OpenGLCommandList::begin_render_pass(const RenderPassDesc& pass) {
     in_render_pass_ = true;
 
-    // For now: bind default framebuffer or FBO based on attachments.
-    // Full FBO management will be added when render targets are implemented.
-    // Currently we clear based on load ops.
+    // Bind FBO (0 = default framebuffer if no textures specified)
+    current_fbo_ = device_.get_or_create_fbo(pass);
+    glBindFramebuffer(GL_FRAMEBUFFER, current_fbo_);
 
+    // Set viewport to match first color attachment size, or depth if no color
+    if (!pass.colors.empty() && pass.colors[0].texture) {
+        auto* tex = device_.get_texture(pass.colors[0].texture);
+        if (tex) {
+            glViewport(0, 0, tex->desc.width, tex->desc.height);
+        }
+    } else if (pass.has_depth && pass.depth.texture) {
+        auto* tex = device_.get_texture(pass.depth.texture);
+        if (tex) {
+            glViewport(0, 0, tex->desc.width, tex->desc.height);
+        }
+    }
+
+    // Clear based on load ops
     GLbitfield clear_mask = 0;
 
     for (const auto& color : pass.colors) {
@@ -48,7 +62,6 @@ void OpenGLCommandList::begin_render_pass(const RenderPassDesc& pass) {
     }
 
     if (clear_mask) {
-        // Ensure depth write is enabled for clear
         if (clear_mask & GL_DEPTH_BUFFER_BIT) {
             glDepthMask(GL_TRUE);
         }
@@ -57,6 +70,11 @@ void OpenGLCommandList::begin_render_pass(const RenderPassDesc& pass) {
 }
 
 void OpenGLCommandList::end_render_pass() {
+    // Restore default framebuffer
+    if (current_fbo_ != 0) {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+    current_fbo_ = 0;
     in_render_pass_ = false;
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glad/glad.h>
+#include <map>
 #include <unordered_map>
 #include <vector>
 
@@ -106,6 +107,11 @@ public:
     GLPipeline* get_pipeline(PipelineHandle h) { return pipelines_.get(h.id); }
     GLResourceSet* get_resource_set(ResourceSetHandle h) { return resource_sets_.get(h.id); }
 
+    // Get or create an FBO for the given attachment combination.
+    // Key: sorted list of (attachment_point, texture_gl_id).
+    // Returns GL FBO id. FBO 0 = default framebuffer (when no textures specified).
+    GLuint get_or_create_fbo(const RenderPassDesc& pass);
+
 private:
     HandlePool<GLBuffer> buffers_;
     HandlePool<GLTexture> textures_;
@@ -116,6 +122,10 @@ private:
 
     BackendCapabilities caps_;
     void query_capabilities();
+
+    // FBO cache: key = sorted vector of (GL attachment enum, GL texture id)
+    using FBOKey = std::vector<std::pair<GLenum, GLuint>>;
+    std::map<FBOKey, GLuint> fbo_cache_;
 };
 
 } // namespace tgfx2

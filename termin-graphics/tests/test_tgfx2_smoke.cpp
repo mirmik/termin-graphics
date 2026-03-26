@@ -11,6 +11,7 @@
 #include "tgfx2/i_command_list.hpp"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/enums.hpp"
+#include "tgfx2/opengl/opengl_render_device.hpp"
 
 static const char* vertex_src = R"(
 #version 330 core
@@ -162,7 +163,73 @@ int main() {
 
     bool corner_is_clear = (corner[0] < 0.15f && corner[1] < 0.15f && corner[2] < 0.15f);
 
-    // Show the rendered frame for 3 seconds
+    // =====================================================
+    // Test 2: Render to texture (offscreen render target)
+    // =====================================================
+    printf("\n--- Render-to-texture test ---\n");
+
+    // Create a 256x256 render target texture
+    tgfx2::TextureDesc rt_desc;
+    rt_desc.width = 256;
+    rt_desc.height = 256;
+    rt_desc.format = tgfx2::PixelFormat::RGBA8_UNorm;
+    rt_desc.usage = tgfx2::TextureUsage::ColorAttachment | tgfx2::TextureUsage::Sampled;
+    auto rt_tex = device->create_texture(rt_desc);
+    printf("Render target texture: id=%u (%ux%u)\n", rt_tex.id, rt_desc.width, rt_desc.height);
+
+    // Draw the same triangle into the texture
+    auto cmd2 = device->create_command_list();
+    cmd2->begin();
+
+    tgfx2::RenderPassDesc rt_pass;
+    tgfx2::ColorAttachmentDesc rt_color;
+    rt_color.texture = rt_tex;
+    rt_color.load = tgfx2::LoadOp::Clear;
+    rt_color.clear_color[0] = 0.0f;
+    rt_color.clear_color[1] = 0.0f;
+    rt_color.clear_color[2] = 0.2f;  // dark blue clear
+    rt_color.clear_color[3] = 1.0f;
+    rt_pass.colors.push_back(rt_color);
+
+    cmd2->begin_render_pass(rt_pass);
+    // viewport auto-set by begin_render_pass to 256x256
+    cmd2->bind_pipeline(pipeline);
+    cmd2->bind_vertex_buffer(0, vb);
+    cmd2->bind_index_buffer(ib, tgfx2::IndexType::Uint32);
+    cmd2->draw_indexed(3);
+    cmd2->end_render_pass();
+
+    cmd2->end();
+    device->submit(*cmd2);
+
+    // Read back from the render target via temporary FBO
+    GLuint readback_fbo = 0;
+    auto* gl_device = static_cast<tgfx2::OpenGLRenderDevice*>(device.get());
+    auto* rt_gl = gl_device->get_texture(rt_tex);
+    glGenFramebuffers(1, &readback_fbo);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, readback_fbo);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           rt_gl->target, rt_gl->gl_id, 0);
+
+    float rt_center[4] = {0};
+    glReadPixels(128, 128, 1, 1, GL_RGBA, GL_FLOAT, rt_center);
+    printf("RT center pixel: (%.2f, %.2f, %.2f, %.2f)\n",
+           rt_center[0], rt_center[1], rt_center[2], rt_center[3]);
+
+    float rt_corner[4] = {0};
+    glReadPixels(0, 0, 1, 1, GL_RGBA, GL_FLOAT, rt_corner);
+    printf("RT corner pixel: (%.2f, %.2f, %.2f, %.2f)\n",
+           rt_corner[0], rt_corner[1], rt_corner[2], rt_corner[3]);
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glDeleteFramebuffers(1, &readback_fbo);
+
+    bool rt_center_drawn = (rt_center[0] > 0.15f || rt_center[1] > 0.15f || rt_center[2] > 0.25f);
+    bool rt_corner_is_blue = (rt_corner[2] > 0.15f && rt_corner[0] < 0.05f && rt_corner[1] < 0.05f);
+
+    printf("RT test: center_drawn=%d, corner_is_blue=%d\n", rt_center_drawn, rt_corner_is_blue);
+
+    // Show the screen-rendered frame for 3 seconds
     glfwSwapBuffers(window);
     printf("Showing window for 3 seconds...\n");
     double start = glfwGetTime();
@@ -171,6 +238,7 @@ int main() {
     }
 
     // --- Cleanup ---
+    device->destroy(rt_tex);
     device->destroy(vb);
     device->destroy(ib);
     device->destroy(pipeline);
@@ -182,12 +250,17 @@ int main() {
     glfwTerminate();
 
     // --- Result ---
-    if (center_not_clear && corner_is_clear) {
-        printf("\nSMOKE TEST PASSED\n");
+    bool test1_ok = center_not_clear && corner_is_clear;
+    bool test2_ok = rt_center_drawn && rt_corner_is_blue;
+
+    printf("\nTest 1 (draw to screen): %s\n", test1_ok ? "PASSED" : "FAILED");
+    printf("Test 2 (render to texture): %s\n", test2_ok ? "PASSED" : "FAILED");
+
+    if (test1_ok && test2_ok) {
+        printf("\nALL TESTS PASSED\n");
         return 0;
     } else {
-        printf("\nSMOKE TEST FAILED\n");
-        printf("  center_not_clear=%d, corner_is_clear=%d\n", center_not_clear, corner_is_clear);
+        printf("\nSOME TESTS FAILED\n");
         return 1;
     }
 }
