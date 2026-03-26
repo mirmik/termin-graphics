@@ -64,6 +64,8 @@ while IFS= read -r so_path; do
     [[ -L "$so_path" ]] && continue
     # Skip csharp runtime copies — NuGet layout requires them
     [[ "$so_path" == */csharp/runtimes/* ]] && continue
+    # Skip third-party Python packages (scipy, numpy, etc.)
+    [[ "$so_path" == */site-packages/* ]] && continue
 
     if [[ -n "${LIB_SEEN[$lib_name]}" ]]; then
         echo "  DUPLICATE: $lib_name"

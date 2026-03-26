@@ -167,6 +167,21 @@ if(TERMIN_BUILD_PYTHON)
         DESTINATION lib/python/termin/render_framework
         PATTERN "__pycache__" EXCLUDE
         PATTERN "*.pyc" EXCLUDE
+        PATTERN "lib" EXCLUDE
+    )
+
+    # Drawable capability bindings (install_drawable_vtable, is_drawable, etc.)
+    nanobind_add_module(_render_native NB_SHARED
+        python/render_native_bindings.cpp
+    )
+    target_link_libraries(_render_native PRIVATE termin_render)
+    termin_set_rpath_python(_render_native)
+    install(TARGETS _render_native DESTINATION lib/python/termin/render)
+    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/python/termin/render/
+        DESTINATION lib/python/termin/render
+        PATTERN "__pycache__" EXCLUDE
+        PATTERN "*.pyc" EXCLUDE
+        PATTERN "lib" EXCLUDE
     )
 endif()
 

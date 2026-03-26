@@ -11,6 +11,7 @@ _DIR = os.path.dirname(os.path.realpath(__file__))
 class BuildExt(TerminCMakeBuildExt):
     module_names = ["_tgfx_native"]
     upstream_packages = {"tcbase": "libtermin_base", "tmesh": "libtermin_mesh", "termin_nanobind": "libnanobind"}
+    bundle_includes = True
     source_dir = _DIR
 
 
