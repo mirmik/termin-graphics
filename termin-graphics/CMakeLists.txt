@@ -71,6 +71,37 @@ set_target_properties(termin_graphics PROPERTIES
 )
 termin_set_rpath_lib(termin_graphics)
 
+# --- termin_graphics2 (new backend-neutral API) ---
+set(TGFX2_SOURCES
+    src/tgfx2/device_factory.cpp
+    src/tgfx2/opengl/opengl_render_device.cpp
+    src/tgfx2/opengl/opengl_command_list.cpp
+    src/tgfx2/opengl/opengl_type_conversions.cpp
+)
+
+add_library(termin_graphics2 SHARED ${TGFX2_SOURCES})
+target_compile_definitions(termin_graphics2 PRIVATE TGFX2_EXPORTS)
+
+if(MSVC)
+    target_compile_options(termin_graphics2 PRIVATE /wd4251 /wd4275)
+endif()
+
+target_include_directories(termin_graphics2 PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+
+target_link_libraries(termin_graphics2 PUBLIC
+    glad
+    OpenGL::GL
+)
+
+set_target_properties(termin_graphics2 PROPERTIES
+    VERSION ${PROJECT_VERSION}
+    SOVERSION 0
+)
+termin_set_rpath_lib(termin_graphics2)
+
 # --- Python bindings ---
 option(TERMIN_BUILD_PYTHON "Build Python bindings" OFF)
 
@@ -108,17 +139,39 @@ if(BUILD_TESTS)
     )
 endif()
 
+# --- tgfx2 smoke test (uses GLFW via FetchContent) ---
+option(BUILD_TGFX2_TESTS "Build tgfx2 smoke tests" OFF)
+
+if(BUILD_TGFX2_TESTS)
+    include(FetchContent)
+    set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(glfw
+        GIT_REPOSITORY https://github.com/glfw/glfw.git
+        GIT_TAG 3.4
+    )
+    FetchContent_MakeAvailable(glfw)
+
+    enable_testing()
+
+    add_executable(tgfx2_smoke tests/test_tgfx2_smoke.cpp)
+    target_link_libraries(tgfx2_smoke PRIVATE termin_graphics2 glfw)
+    add_test(NAME tgfx2_smoke COMMAND tgfx2_smoke)
+endif()
+
 # --- Install ---
 include(GNUInstallDirs)
 
-install(TARGETS termin_graphics glad
+install(TARGETS termin_graphics termin_graphics2 glad
     EXPORT termin_graphicsTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-install(DIRECTORY include/tgfx
+install(DIRECTORY include/tgfx include/tgfx2
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
