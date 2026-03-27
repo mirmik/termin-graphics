@@ -1,4 +1,8 @@
 # termin.render - rendering framework
+from termin import _dll_setup  # noqa: F401
+
+_dll_setup.extend_package_path(__path__, "render")
+
 from termin.render._render_native import (
     drawable_capability_id,
     install_drawable_vtable,
