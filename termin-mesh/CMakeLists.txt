@@ -16,6 +16,7 @@ set(TERMIN_MESH_C_SOURCES
     src/tgfx_types.c
     src/resources/tc_mesh.c
     src/resources/tc_mesh_registry.c
+    src/resources/tc_primitive_mesh.c
 )
 
 set(TERMIN_MESH_CXX_SOURCES
