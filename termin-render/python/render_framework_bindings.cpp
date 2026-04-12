@@ -561,7 +561,7 @@ NB_MODULE(_render_framework_native, m) {
     m.doc() = "Native render framework bindings";
 
     nb::module_::import_("tgfx._tgfx_native");
-    nb::module_::import_("termin.geombase._geom_native");
+    nb::module_::import_("tcbase._geom_native");
     nb::module_::import_("termin.scene._scene_native");
     nb::module_::import_("termin.entity._entity_native");
     nb::module_::import_("termin.lighting._lighting_native");

@@ -1,6 +1,6 @@
-from termin import _dll_setup  # noqa: F401
+from termin_nanobind.runtime import preload_sdk_libs
 
-_dll_setup.extend_package_path(__path__, "render_framework")
+preload_sdk_libs("termin_render")
 
 from termin.render_framework._render_framework_native import (
     RenderPipeline,

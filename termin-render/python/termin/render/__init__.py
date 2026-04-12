@@ -1,7 +1,7 @@
 # termin.render - rendering framework
-from termin import _dll_setup  # noqa: F401
+from termin_nanobind.runtime import preload_sdk_libs
 
-_dll_setup.extend_package_path(__path__, "render")
+preload_sdk_libs("termin_render")
 
 from termin.render._render_native import (
     drawable_capability_id,
