@@ -1,10 +1,12 @@
 #!/bin/bash
 # Build the SDK into ./sdk/ using the dedicated stage scripts:
-#   1. build-sdk-cpp.sh    — C/C++ libraries
+#   1. build-sdk-cpp.sh      — C/C++ libraries
 #   2. build-sdk-bindings.sh — Python bindings (nanobind)
-#   3. build-sdk-csharp.sh  — C# bindings
+#   3. build-sdk-csharp.sh   — C# bindings
+#   4. install-pip-packages.sh --target sdk/lib/python3.*/site-packages
+#      — populate bundled Python's site-packages from the thin pip packages
 #
-# To install pip packages into your Python environment, run separately:
+# To install pip packages into your own user Python environment, run separately:
 #   ./install-pip-packages.sh
 
 set -e
@@ -28,24 +30,47 @@ done
 
 echo ""
 echo "========================================"
-echo "  Stage 1/2: C/C++ libraries"
+echo "  Stage 1/4: C/C++ libraries"
 echo "========================================"
 echo ""
 "$SCRIPT_DIR/build-sdk-cpp.sh" "$@"
 
 echo ""
 echo "========================================"
-echo "  Stage 2/3: Python bindings (nanobind)"
+echo "  Stage 2/4: Python bindings (nanobind)"
 echo "========================================"
 echo ""
 "$SCRIPT_DIR/build-sdk-bindings.sh" "$@"
 
 echo ""
 echo "========================================"
-echo "  Stage 3/3: C# bindings"
+echo "  Stage 3/4: C# bindings"
 echo "========================================"
 echo ""
 bash "$SCRIPT_DIR/build-sdk-csharp.sh" "$@"
+
+echo ""
+echo "========================================"
+echo "  Stage 4/4: Populate bundled Python site-packages"
+echo "========================================"
+echo ""
+# Resolve the Python version used by the bundled interpreter. Stage 1
+# installs the stdlib under sdk/lib/python<MAJOR>.<MINOR>/ (only when
+# BUNDLE_PYTHON=ON during the termin CMake build), so we probe for that
+# directory and target its site-packages.
+BUNDLED_PY_DIR="$(find "$SCRIPT_DIR/sdk/lib" -maxdepth 1 -type d -name 'python3.*' 2>/dev/null | head -1)"
+if [[ -z "$BUNDLED_PY_DIR" ]]; then
+    echo "WARNING: bundled Python stdlib not found under $SCRIPT_DIR/sdk/lib/python3.*" >&2
+    echo "  Skipping pip install into bundled site-packages." >&2
+    echo "  Was BUNDLE_PYTHON=ON during the termin CMake build?" >&2
+else
+    BUNDLED_SITE_PACKAGES="$BUNDLED_PY_DIR/site-packages"
+    echo "Bundled Python stdlib:        $BUNDLED_PY_DIR"
+    echo "Bundled Python site-packages: $BUNDLED_SITE_PACKAGES"
+    echo ""
+    TERMIN_SDK="$SCRIPT_DIR/sdk" \
+        "$SCRIPT_DIR/install-pip-packages.sh" --target "$BUNDLED_SITE_PACKAGES"
+fi
 
 echo ""
 echo "========================================"
