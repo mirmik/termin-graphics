@@ -14,16 +14,31 @@ extern "C" {
 #include "render/tc_pass.h"
 #include "render/tc_pipeline.h"
 #include "core/tc_scene.h"
+#include "core/tc_scene_render_state.h"
+#include "core/tc_scene_render_mount.h"
 #include "core/tc_component.h"
 }
 
 namespace termin {
 
-RenderEngine::RenderEngine() = default;
+// Ensure the scene extensions that passes depend on are registered before
+// the first pipeline runs. Idempotent: each extension init is a no-op if the
+// type is already present. This lets standalone Python scripts that create
+// a RenderEngine directly (without going through EngineCore) still have
+// skybox / render_mount / etc. accessible.
+static void ensure_scene_extensions_for_render() {
+    tc_scene_render_mount_extension_init();
+    tc_scene_render_state_extension_init();
+}
+
+RenderEngine::RenderEngine() {
+    ensure_scene_extensions_for_render();
+}
 
 RenderEngine::RenderEngine(GraphicsBackend* graphics)
     : graphics(graphics)
 {
+    ensure_scene_extensions_for_render();
 }
 
 // Out-of-line destructor so unique_ptr<tgfx2::*> members can use forward
