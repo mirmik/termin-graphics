@@ -210,7 +210,7 @@ void bind_render_pipeline(nb::module_& m) {
 
         .def_static("deserialize", [](nb::dict data, nb::object resource_manager) -> RenderPipeline* {
             nb::module_ core_module = nb::module_::import_("termin.visualization.render.framegraph.core");
-            nb::object FramePass = core_module.attr("FramePass");
+            nb::object deserialize_pass = core_module.attr("deserialize_pass");
             std::string name = "default";
             if (data.contains("name")) name = nb::cast<std::string>(data["name"]);
             RenderPipeline* pipeline = new RenderPipeline(name);
@@ -219,7 +219,7 @@ void bind_render_pipeline(nb::module_& m) {
                 for (size_t i = 0; i < nb::len(passes); i++) {
                     try {
                         nb::dict pass_data = nb::cast<nb::dict>(passes[i]);
-                        nb::object frame_pass = FramePass.attr("deserialize")(pass_data, resource_manager);
+                        nb::object frame_pass = deserialize_pass(pass_data, resource_manager);
                         if (!frame_pass.is_none() && nb::hasattr(frame_pass, "_tc_pass")) {
                             nb::object tc_pass_obj = frame_pass.attr("_tc_pass");
                             if (!tc_pass_obj.is_none() && nb::isinstance<TcPassRef>(tc_pass_obj)) {
