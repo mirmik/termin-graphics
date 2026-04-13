@@ -42,6 +42,7 @@ RenderContext2::RenderContext2(IRenderDevice& device, PipelineCache& cache)
     : device_(device), cache_(cache) {}
 
 RenderContext2::~RenderContext2() {
+    if (current_resource_set_) device_.destroy(current_resource_set_);
     if (fsq_vbo_) device_.destroy(fsq_vbo_);
     if (fsq_ibo_) device_.destroy(fsq_ibo_);
     if (fsq_vs_) device_.destroy(fsq_vs_);
@@ -63,6 +64,13 @@ void RenderContext2::end_frame() {
     cmd_->end();
     device_.submit(*cmd_);
     cmd_.reset();
+
+    if (current_resource_set_) {
+        device_.destroy(current_resource_set_);
+        current_resource_set_ = {};
+    }
+    pending_bindings_.clear();
+    bindings_dirty_ = true;
 }
 
 // ============================================================================
@@ -198,10 +206,67 @@ void RenderContext2::set_topology(PrimitiveTopology topo) {
     }
 }
 
-void RenderContext2::bind_texture(uint32_t /*unit*/, TextureHandle /*tex*/) {
-    // In the OpenGL path, textures are still bound via glActiveTexture/glBindTexture
-    // by the legacy code. This is a placeholder for future resource set integration.
-    // For now, render passes bind textures directly through the GL interop.
+// ============================================================================
+// Resource bindings (UBOs, textures, samplers)
+// ============================================================================
+
+static ResourceBinding* find_binding(std::vector<ResourceBinding>& bindings,
+                                     uint32_t binding, ResourceBinding::Kind kind) {
+    for (auto& b : bindings) {
+        if (b.binding == binding && b.kind == kind) return &b;
+    }
+    return nullptr;
+}
+
+void RenderContext2::bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
+                                          uint64_t offset, uint64_t range) {
+    ResourceBinding* existing =
+        find_binding(pending_bindings_, binding, ResourceBinding::Kind::UniformBuffer);
+    if (existing) {
+        if (existing->buffer == buffer && existing->offset == offset &&
+            existing->range == range) {
+            return;
+        }
+        existing->buffer = buffer;
+        existing->offset = offset;
+        existing->range = range;
+    } else {
+        ResourceBinding b;
+        b.kind = ResourceBinding::Kind::UniformBuffer;
+        b.binding = binding;
+        b.buffer = buffer;
+        b.offset = offset;
+        b.range = range;
+        pending_bindings_.push_back(b);
+    }
+    bindings_dirty_ = true;
+}
+
+void RenderContext2::bind_sampled_texture(uint32_t binding, TextureHandle tex,
+                                           SamplerHandle sampler) {
+    ResourceBinding* existing =
+        find_binding(pending_bindings_, binding, ResourceBinding::Kind::SampledTexture);
+    if (existing) {
+        if (existing->texture == tex && existing->sampler == sampler) {
+            return;
+        }
+        existing->texture = tex;
+        existing->sampler = sampler;
+    } else {
+        ResourceBinding b;
+        b.kind = ResourceBinding::Kind::SampledTexture;
+        b.binding = binding;
+        b.texture = tex;
+        b.sampler = sampler;
+        pending_bindings_.push_back(b);
+    }
+    bindings_dirty_ = true;
+}
+
+void RenderContext2::clear_resource_bindings() {
+    if (pending_bindings_.empty()) return;
+    pending_bindings_.clear();
+    bindings_dirty_ = true;
 }
 
 void RenderContext2::set_color_format(PixelFormat fmt) {
@@ -269,6 +334,24 @@ void RenderContext2::flush_pipeline() {
     pipeline_dirty_ = false;
 }
 
+void RenderContext2::flush_resource_set() {
+    if (!bindings_dirty_) return;
+
+    if (current_resource_set_) {
+        device_.destroy(current_resource_set_);
+        current_resource_set_ = {};
+    }
+
+    if (!pending_bindings_.empty()) {
+        ResourceSetDesc desc;
+        desc.bindings = pending_bindings_;
+        current_resource_set_ = device_.create_resource_set(desc);
+        cmd_->bind_resource_set(current_resource_set_);
+    }
+
+    bindings_dirty_ = false;
+}
+
 // ============================================================================
 // Drawing
 // ============================================================================
@@ -327,6 +410,7 @@ void RenderContext2::draw_fullscreen_quad() {
     }
 
     flush_pipeline();
+    flush_resource_set();
 
     cmd_->bind_vertex_buffer(0, fsq_vbo_);
     cmd_->bind_index_buffer(fsq_ibo_, IndexType::Uint32);
@@ -338,6 +422,7 @@ void RenderContext2::draw(
     uint32_t index_count, IndexType idx_type
 ) {
     flush_pipeline();
+    flush_resource_set();
     cmd_->bind_vertex_buffer(0, vbo);
     cmd_->bind_index_buffer(ibo, idx_type);
     cmd_->draw_indexed(index_count);
@@ -345,6 +430,7 @@ void RenderContext2::draw(
 
 void RenderContext2::draw_arrays(BufferHandle vbo, uint32_t vertex_count) {
     flush_pipeline();
+    flush_resource_set();
     cmd_->bind_vertex_buffer(0, vbo);
     cmd_->draw(vertex_count);
 }
@@ -371,6 +457,7 @@ void RenderContext2::draw_immediate_lines(const float* data, uint32_t vertex_cou
     set_topology(PrimitiveTopology::LineList);
 
     flush_pipeline();
+    flush_resource_set();
     cmd_->bind_vertex_buffer(0, buf);
     cmd_->draw(vertex_count);
 
@@ -399,6 +486,7 @@ void RenderContext2::draw_immediate_triangles(const float* data, uint32_t vertex
     set_topology(PrimitiveTopology::TriangleList);
 
     flush_pipeline();
+    flush_resource_set();
     cmd_->bind_vertex_buffer(0, buf);
     cmd_->draw(vertex_count);
 

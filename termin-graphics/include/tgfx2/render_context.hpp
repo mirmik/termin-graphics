@@ -18,6 +18,7 @@
 
 #include <array>
 #include <memory>
+#include <vector>
 
 #include "tgfx2/tgfx2_api.h"
 #include "tgfx2/enums.hpp"
@@ -71,9 +72,23 @@ public:
     void set_vertex_layout(const VertexBufferLayout& layout);
     void set_topology(PrimitiveTopology topo);
 
-    // --- Texture binding (for legacy uniform-based passes) ---
-    // These set pending texture slots. Actual binding depends on backend.
-    void bind_texture(uint32_t unit, TextureHandle tex);
+    // --- Resource bindings (UBOs, textures, samplers) ---
+    // Register a uniform buffer at the given binding slot. The buffer is
+    // resolved into a ResourceSet lazily at draw time; call-sites do not
+    // manage ResourceSetHandle lifecycles.
+    // Passing range=0 means "bind whole buffer" (backend uses glBindBufferBase).
+    void bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
+                             uint64_t offset = 0, uint64_t range = 0);
+
+    // Register a sampled texture at the given binding slot. The sampler is
+    // optional; if omitted, the backend uses the texture's default sampling
+    // parameters (useful for GL 3.3 style shaders without separate samplers).
+    void bind_sampled_texture(uint32_t binding, TextureHandle tex,
+                              SamplerHandle sampler = {});
+
+    // Drop all pending resource bindings — next draw starts from an empty
+    // resource set.
+    void clear_resource_bindings();
 
     // --- Target format info (for pipeline cache key) ---
     void set_color_format(PixelFormat fmt);
@@ -153,12 +168,18 @@ private:
     bool in_pass_ = false;
     bool pipeline_dirty_ = true;
 
+    // Pending resource bindings, rebuilt into a ResourceSet on dirty.
+    std::vector<ResourceBinding> pending_bindings_;
+    bool bindings_dirty_ = true;
+    ResourceSetHandle current_resource_set_;
+
     // Fullscreen quad resources (created on first use)
     BufferHandle fsq_vbo_;
     BufferHandle fsq_ibo_;
     ShaderHandle fsq_vs_;
 
     void ensure_fsq_resources();
+    void flush_resource_set();
 };
 
 } // namespace tgfx2
