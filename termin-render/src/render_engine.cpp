@@ -1,5 +1,7 @@
 #include <termin/render/render_engine.hpp>
 
+#include <cstdlib>
+
 #include <tcbase/tc_log.hpp>
 #include "tc_profiler.h"
 #include "tc_project_settings.h"
@@ -46,6 +48,18 @@ RenderEngine::RenderEngine(GraphicsBackend* graphics)
 RenderEngine::~RenderEngine() = default;
 
 void RenderEngine::ensure_tgfx2() {
+    // Diagnostic escape hatch: setting TERMIN_DISABLE_TGFX2=1 keeps the tgfx2
+    // stack un-initialised, so ctx.ctx2 stays nullptr and every migrated pass
+    // takes its legacy fallback path. Used to isolate whether a rendering
+    // regression is caused by the tgfx2 path or not.
+    static const bool disable_tgfx2 = []() {
+        const char* env = std::getenv("TERMIN_DISABLE_TGFX2");
+        return env && env[0] && env[0] != '0';
+    }();
+    if (disable_tgfx2) {
+        return;
+    }
+
     if (tgfx2_ctx_) {
         return;
     }
