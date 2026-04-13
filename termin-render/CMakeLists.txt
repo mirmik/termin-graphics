@@ -120,7 +120,13 @@ target_include_directories(termin_render
 
 target_compile_features(termin_render PUBLIC cxx_std_20)
 
-target_link_libraries(termin_render PUBLIC tcbase::termin_base tgfx::termin_graphics termin_scene::termin_scene termin_inspect::termin_inspect)
+target_link_libraries(termin_render PUBLIC
+    tcbase::termin_base
+    tgfx::termin_graphics
+    tgfx::termin_graphics2
+    termin_scene::termin_scene
+    termin_inspect::termin_inspect
+)
 
 if(UNIX AND NOT APPLE)
     target_link_libraries(termin_render PRIVATE m)

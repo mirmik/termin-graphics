@@ -4,6 +4,10 @@
 #include "tc_profiler.h"
 #include "tc_project_settings.h"
 
+#include "tgfx2/opengl/opengl_render_device.hpp"
+#include "tgfx2/pipeline_cache.hpp"
+#include "tgfx2/render_context.hpp"
+
 extern "C" {
 #include "render/tc_frame_graph.h"
 #include "render/tc_pass.h"
@@ -14,9 +18,28 @@ extern "C" {
 
 namespace termin {
 
+RenderEngine::RenderEngine() = default;
+
 RenderEngine::RenderEngine(GraphicsBackend* graphics)
     : graphics(graphics)
 {
+}
+
+// Out-of-line destructor so unique_ptr<tgfx2::*> members can use forward
+// declarations in the header; the full tgfx2 types are visible here.
+RenderEngine::~RenderEngine() = default;
+
+void RenderEngine::ensure_tgfx2() {
+    if (tgfx2_ctx_) {
+        return;
+    }
+    if (!graphics) {
+        return;
+    }
+    // Assumes the GL context is current (caller is inside a render frame).
+    tgfx2_device_ = std::make_unique<tgfx2::OpenGLRenderDevice>();
+    tgfx2_cache_ = std::make_unique<tgfx2::PipelineCache>(*tgfx2_device_);
+    tgfx2_ctx_ = std::make_unique<tgfx2::RenderContext2>(*tgfx2_device_, *tgfx2_cache_);
 }
 
 void RenderEngine::render_to_screen(
@@ -288,6 +311,13 @@ void RenderEngine::render_view_to_fbo(
 
     size_t schedule_count = tc_frame_graph_schedule_count(fg);
 
+    // Lazily spin up tgfx2 stack so Phase 2 passes can use ctx.ctx2.
+    // Does nothing on repeat calls or when graphics backend is unavailable.
+    ensure_tgfx2();
+    if (tgfx2_ctx_) {
+        tgfx2_ctx_->begin_frame();
+    }
+
     tc_profiler_begin_section("Execute Passes");
     for (size_t i = 0; i < schedule_count; i++) {
         tc_pass* pass = tc_frame_graph_schedule_at(fg, i);
@@ -319,6 +349,7 @@ void RenderEngine::render_view_to_fbo(
 
         ExecuteContext ctx;
         ctx.graphics = graphics;
+        ctx.ctx2 = tgfx2_ctx_.get();
         ctx.reads_fbos = std::move(pass_reads);
         ctx.writes_fbos = std::move(pass_writes);
         ctx.rect = Rect4i{0, 0, width, height};
@@ -343,6 +374,10 @@ void RenderEngine::render_view_to_fbo(
         tc_profiler_end_section();
     }
     tc_profiler_end_section();
+
+    if (tgfx2_ctx_) {
+        tgfx2_ctx_->end_frame();
+    }
 }
 
 void RenderEngine::render_scene_pipeline_offscreen(
@@ -571,6 +606,12 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
     size_t schedule_count = tc_frame_graph_schedule_count(fg);
 
+    // Lazily spin up tgfx2 stack so Phase 2 passes can use ctx.ctx2.
+    ensure_tgfx2();
+    if (tgfx2_ctx_) {
+        tgfx2_ctx_->begin_frame();
+    }
+
     tc_profiler_begin_section("Execute Passes");
     for (size_t i = 0; i < schedule_count; i++) {
         tc_pass* pass = tc_frame_graph_schedule_at(fg, i);
@@ -621,6 +662,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
         ExecuteContext ctx;
         ctx.graphics = graphics;
+        ctx.ctx2 = tgfx2_ctx_.get();
         ctx.reads_fbos = std::move(pass_reads);
         ctx.writes_fbos = std::move(pass_writes);
         ctx.rect = vp_ctx.rect;
@@ -643,6 +685,10 @@ void RenderEngine::render_scene_pipeline_offscreen(
         tc_profiler_end_section();
     }
     tc_profiler_end_section();
+
+    if (tgfx2_ctx_) {
+        tgfx2_ctx_->end_frame();
+    }
 }
 
 } // namespace termin

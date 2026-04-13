@@ -1,6 +1,7 @@
 // render_engine.hpp - Core render engine for executing pipeline passes
 #pragma once
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -20,6 +21,15 @@ extern "C" {
 #include "core/tc_scene.h"
 }
 
+// tgfx2 forward declarations — RenderEngine lazily owns an OpenGL device,
+// pipeline cache, and mid-level RenderContext2 that migrated passes use via
+// ExecuteContext::ctx2 (see Phase 2 of tgfx2 migration).
+namespace tgfx2 {
+class IRenderDevice;
+class PipelineCache;
+class RenderContext2;
+}
+
 namespace termin {
 
 struct ViewportContext {
@@ -36,9 +46,21 @@ class RENDER_API RenderEngine {
 public:
     GraphicsBackend* graphics = nullptr;
 
+private:
+    // tgfx2 stack — lazily constructed on first render_view_to_fbo when
+    // the active GL backend is available. Used to populate
+    // ExecuteContext::ctx2 so Phase 2 passes can draw through the
+    // pipeline+command-buffer API while legacy passes keep using `graphics`.
+    std::unique_ptr<tgfx2::IRenderDevice> tgfx2_device_;
+    std::unique_ptr<tgfx2::PipelineCache> tgfx2_cache_;
+    std::unique_ptr<tgfx2::RenderContext2> tgfx2_ctx_;
+
+    void ensure_tgfx2();
+
 public:
-    RenderEngine() = default;
+    RenderEngine();
     explicit RenderEngine(GraphicsBackend* graphics);
+    ~RenderEngine();
 
     void render_view_to_fbo(
         RenderPipeline& pipeline,
