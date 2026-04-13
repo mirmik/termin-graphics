@@ -89,7 +89,7 @@ build_termin_cpp_only() {
     echo "========================================"
     echo ""
 
-    cd "$SCRIPT_DIR/termin"
+    cd "$SCRIPT_DIR/termin-app"
 
     local build_dir="build_standalone_cpp/${BUILD_TYPE}"
     if [[ $CLEAN -eq 1 ]]; then

@@ -89,7 +89,7 @@ echo "  Testing termin ($BUILD_TYPE)"
 echo "========================================"
 echo ""
 
-cd "$SCRIPT_DIR/termin"
+cd "$SCRIPT_DIR/termin-app"
 cmake -S . -B "build/${BUILD_TYPE}" \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
     -DCMAKE_PREFIX_PATH="${SDK_PREFIX}" \

@@ -151,17 +151,17 @@ if [[ $NO_PARALLEL -eq 1 ]]; then
     CMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
     CMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY=ON \
     SDK_PREFIX="$SDK_PREFIX" \
-    "$SCRIPT_DIR/termin/build.sh" "${build_args[@]}"
+    "$SCRIPT_DIR/termin-app/build.sh" "${build_args[@]}"
 else
     CMAKE_PREFIX_PATH="$SDK_PREFIX" \
     CMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
     CMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY=ON \
     SDK_PREFIX="$SDK_PREFIX" \
-    "$SCRIPT_DIR/termin/build.sh" "${build_args[@]}"
+    "$SCRIPT_DIR/termin-app/build.sh" "${build_args[@]}"
 fi
 
 echo "Installing termin to ${SDK_PREFIX}..."
-cp -a "$SCRIPT_DIR/termin/install/." "$SDK_PREFIX/"
+cp -a "$SCRIPT_DIR/termin-app/install/." "$SDK_PREFIX/"
 
 # Build post-termin Python bindings (modules after @termin-cpp in modules.conf)
 _after_termin=0

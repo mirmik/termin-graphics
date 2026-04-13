@@ -86,7 +86,7 @@ function Build-TerminCppOnly {
     Write-Host "========================================"
     Write-Host ""
 
-    Push-Location (Join-Path $ScriptDir "termin")
+    Push-Location (Join-Path $ScriptDir "termin-app")
     try {
         $buildDir = Join-Path "build_standalone_cpp" $BuildType
 

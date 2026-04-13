@@ -15,7 +15,7 @@ if [[ -z "${PYTHON_BIN}" ]]; then
 fi
 
 export LD_LIBRARY_PATH="${SDK_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export PYTHONPATH="${SDK_PREFIX}/lib/python:${SCRIPT_DIR}/termin/install/lib/python:${SCRIPT_DIR}/diffusion-editor${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="${SDK_PREFIX}/lib/python:${SCRIPT_DIR}/termin-app/install/lib/python:${SCRIPT_DIR}/diffusion-editor${PYTHONPATH:+:$PYTHONPATH}"
 
 echo ""
 echo "========================================"

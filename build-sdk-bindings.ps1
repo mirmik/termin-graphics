@@ -148,7 +148,7 @@ Write-Host "  Building termin ($BuildType)"
 Write-Host "========================================"
 Write-Host ""
 
-Push-Location (Join-Path $ScriptDir "termin")
+Push-Location (Join-Path $ScriptDir "termin-app")
 try {
     $buildArgs = @()
     if ($BuildType -eq "Debug") { $buildArgs += "-Debug" }
@@ -174,7 +174,7 @@ try {
 }
 finally { Pop-Location }
 
-$terminInstall = Join-Path (Join-Path $ScriptDir "termin") "install_win"
+$terminInstall = Join-Path (Join-Path $ScriptDir "termin-app") "install_win"
 if (Test-Path $terminInstall) {
     Write-Host "Installing termin to $SdkPrefix..."
     Copy-Item -Recurse -Force "$terminInstall\*" $SdkPrefix

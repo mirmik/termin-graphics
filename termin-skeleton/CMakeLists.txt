@@ -30,7 +30,7 @@ endif()
 
 target_include_directories(termin_skeleton PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../termin/core_c/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../termin-app/core_c/include>
     $<INSTALL_INTERFACE:include>
     $<INSTALL_INTERFACE:include/core_c>
 )
@@ -60,11 +60,11 @@ if(TERMIN_BUILD_PYTHON)
     find_package(termin_inspect REQUIRED)
 
     nanobind_add_module(_skeleton_native NB_SHARED
-        ${CMAKE_CURRENT_LIST_DIR}/../termin/cpp/termin/bindings/skeleton/skeleton_module.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/../termin-app/cpp/termin/bindings/skeleton/skeleton_module.cpp
     )
     target_include_directories(_skeleton_native PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_LIST_DIR}/../termin/cpp
+        ${CMAKE_CURRENT_LIST_DIR}/../termin-app/cpp
     )
     target_link_libraries(_skeleton_native PRIVATE
         termin_skeleton
@@ -100,7 +100,7 @@ install(DIRECTORY include/termin
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-install(DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/../termin/core_c/include/
+install(DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/../termin-app/core_c/include/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/core_c
 )
 
