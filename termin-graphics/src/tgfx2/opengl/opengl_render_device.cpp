@@ -4,6 +4,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <cstdio>
 #include <cstring>
 
 namespace tgfx2 {
@@ -240,7 +241,10 @@ TextureHandle OpenGLRenderDevice::register_external_texture(GLuint gl_id, const 
     GLTexture tex;
     tex.gl_id = gl_id;
     tex.desc = desc;
-    tex.target = GL_TEXTURE_2D;
+    // Pick the right GL target based on sample count: multisample textures
+    // must be attached with GL_TEXTURE_2D_MULTISAMPLE, or glFramebufferTexture2D
+    // rejects the attachment and the FBO ends up INCOMPLETE_MISSING_ATTACHMENT.
+    tex.target = (desc.sample_count > 1) ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
     tex.external = true;
     TextureHandle h;
     h.id = textures_.add(std::move(tex));
@@ -393,8 +397,40 @@ GLuint OpenGLRenderDevice::get_or_create_fbo(const RenderPassDesc& pass) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     if (status != GL_FRAMEBUFFER_COMPLETE) {
+        // Diagnostic dump: which attachments were actually bound.
+        std::string detail;
+        char buf[128];
+        std::snprintf(buf, sizeof(buf), "status=0x%04X colors=%zu has_depth=%d has_color_attached=%d",
+                      status, pass.colors.size(), pass.has_depth ? 1 : 0, has_color ? 1 : 0);
+        detail = buf;
+        for (size_t i = 0; i < pass.colors.size(); ++i) {
+            auto* t = get_texture(pass.colors[i].texture);
+            std::snprintf(buf, sizeof(buf), " color[%zu]={handle_id=%u tex=%s",
+                          i, pass.colors[i].texture.id, t ? "found" : "NULL");
+            detail += buf;
+            if (t) {
+                std::snprintf(buf, sizeof(buf), " gl_id=%u target=0x%04X %ux%u samples=%u}",
+                              t->gl_id, t->target, t->desc.width, t->desc.height, t->desc.sample_count);
+                detail += buf;
+            } else {
+                detail += "}";
+            }
+        }
+        if (pass.has_depth) {
+            auto* t = get_texture(pass.depth.texture);
+            std::snprintf(buf, sizeof(buf), " depth={handle_id=%u tex=%s",
+                          pass.depth.texture.id, t ? "found" : "NULL");
+            detail += buf;
+            if (t) {
+                std::snprintf(buf, sizeof(buf), " gl_id=%u target=0x%04X %ux%u samples=%u}",
+                              t->gl_id, t->target, t->desc.width, t->desc.height, t->desc.sample_count);
+                detail += buf;
+            } else {
+                detail += "}";
+            }
+        }
         glDeleteFramebuffers(1, &fbo);
-        throw std::runtime_error("Framebuffer incomplete: 0x" + std::to_string(status));
+        throw std::runtime_error("Framebuffer incomplete: " + detail);
     }
 
     fbo_cache_[key] = fbo;
