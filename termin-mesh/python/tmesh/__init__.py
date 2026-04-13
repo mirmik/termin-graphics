@@ -4,3 +4,14 @@ preload_sdk_libs("termin_mesh")
 
 from tmesh._tmesh_native import *
 from tmesh._tmesh_native import log
+from tmesh.primitives import (
+    CubeMesh,
+    TexturedCubeMesh,
+    UVSphereMesh,
+    IcoSphereMesh,
+    PlaneMesh,
+    CylinderMesh,
+    ConeMesh,
+    TorusMesh,
+    RingMesh,
+)
