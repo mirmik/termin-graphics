@@ -17,8 +17,21 @@ extern "C" {
 
 typedef struct tc_gpu_slot {
     uint32_t gl_id;
-    uint32_t tgfx2_id;  // tgfx2 handle id (0 = not managed by tgfx2)
-    int32_t  version;    // -1 = never uploaded
+    uint32_t tgfx2_id;          // tgfx2 handle id (0 = not managed by tgfx2);
+                                // for texture slots this is the tgfx2 texture id,
+                                // for shader slots it is unused (see *_shader_* fields below).
+    int32_t  version;           // -1 = never uploaded; tracks gl_id's source version.
+
+    // Shader-specific tgfx2 handles. Populated lazily by
+    // tc_shader_ensure_tgfx2() when a migrated pass needs a tgfx2 ShaderHandle
+    // pair for the shader. Coexist with gl_id (legacy path) to let both
+    // pipelines work during the migration window.
+    uint32_t tgfx2_shader_vs_id;
+    uint32_t tgfx2_shader_fs_id;
+    int32_t  tgfx2_shader_version;  // version the tgfx2 handles were compiled from.
+    void*    tgfx2_shader_device;   // opaque IRenderDevice* captured at compile,
+                                    // used to destroy handles on slot teardown or
+                                    // recompile. NULL if never populated.
 } tc_gpu_slot;
 
 // ============================================================================

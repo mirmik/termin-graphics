@@ -79,6 +79,7 @@ set(TGFX2_SOURCES
     src/tgfx2/opengl/opengl_type_conversions.cpp
     src/tgfx2/pipeline_cache.cpp
     src/tgfx2/render_context.cpp
+    src/tgfx2/tc_shader_bridge.cpp
     src/tgfx2_gpu_ops.cpp
 )
 

@@ -49,6 +49,7 @@ static bool ensure_capacity(
         tc_gpu_slot* slots = (tc_gpu_slot*)new_array;
         for (uint32_t i = *capacity; i < new_cap; i++) {
             slots[i].version = -1;
+            slots[i].tgfx2_shader_version = -1;
         }
     } else if (item_size == sizeof(tc_gpu_mesh_data_slot)) {
         tc_gpu_mesh_data_slot* slots = (tc_gpu_mesh_data_slot*)new_array;

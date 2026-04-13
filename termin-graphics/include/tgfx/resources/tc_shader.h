@@ -46,6 +46,19 @@ typedef enum tc_shader_feature {
 // ============================================================================
 
 #define TC_SHADER_HASH_LEN 17  // 16 hex chars + null terminator
+#define TC_MATERIAL_UBO_NAME_MAX 64
+#define TC_MATERIAL_UBO_TYPE_MAX 16
+
+// One field inside a shader's generated std140 material UBO block.
+// Populated by the shader parser (see termin-app/cpp/termin/render/shader_parser.cpp)
+// and pushed onto the shader via tc_shader_set_material_ubo_layout() so that
+// migrated passes can pack material values into the UBO at draw time.
+typedef struct tc_material_ubo_entry {
+    char name[TC_MATERIAL_UBO_NAME_MAX];
+    char property_type[TC_MATERIAL_UBO_TYPE_MAX];
+    uint32_t offset;
+    uint32_t size;
+} tc_material_ubo_entry;
 
 typedef struct tc_shader {
     char* vertex_source;         // vertex shader source (owned)
@@ -64,6 +77,14 @@ typedef struct tc_shader {
     uint32_t original_version;   // version of original when variant was created
     uint32_t features;           // tc_shader_feature bitflags
     uint32_t pool_index;         // index in shader pool (for GPUContext lookup)
+
+    // Optional std140 material UBO layout, populated by the shader parser
+    // when the `.shader` program declares `@features material_ubo`. Consumed
+    // by migrated passes via tc_shader_get_material_ubo_* accessors. Owned
+    // by the shader; freed on destroy.
+    tc_material_ubo_entry* material_ubo_entries;
+    uint32_t material_ubo_entry_count;
+    uint32_t material_ubo_block_size;
 } tc_shader;
 
 // ============================================================================
@@ -124,6 +145,26 @@ TGFX_API void tc_shader_compute_hash(
 
 // Recompute and update shader's source_hash field
 TGFX_API void tc_shader_update_hash(tc_shader* shader);
+
+// ============================================================================
+// Material UBO layout (populated by the shader parser after set_sources)
+// ============================================================================
+
+// Replace the shader's material UBO layout. A copy of `entries` is made;
+// caller retains ownership of its buffer. Pass count=0 to clear the layout.
+// Version is NOT bumped — layout changes travel together with source changes,
+// which already bump version via tc_shader_set_sources.
+TGFX_API void tc_shader_set_material_ubo_layout(
+    tc_shader* shader,
+    const tc_material_ubo_entry* entries,
+    uint32_t count,
+    uint32_t block_size
+);
+
+// Read access for consumers (e.g., material UBO packer in migrated passes).
+TGFX_API uint32_t tc_shader_material_ubo_entry_count(const tc_shader* shader);
+TGFX_API const tc_material_ubo_entry* tc_shader_material_ubo_entries(const tc_shader* shader);
+TGFX_API uint32_t tc_shader_material_ubo_block_size(const tc_shader* shader);
 
 #ifdef __cplusplus
 }

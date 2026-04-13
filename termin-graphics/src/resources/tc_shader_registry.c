@@ -43,6 +43,12 @@ static void shader_free_data(tc_shader* shader) {
         free(shader->geometry_source);
         shader->geometry_source = NULL;
     }
+    if (shader->material_ubo_entries) {
+        free(shader->material_ubo_entries);
+        shader->material_ubo_entries = NULL;
+    }
+    shader->material_ubo_entry_count = 0;
+    shader->material_ubo_block_size = 0;
 }
 
 // ============================================================================
@@ -585,4 +591,51 @@ tc_shader_info* tc_shader_get_all_info(size_t* count) {
 
     *count = collector.count;
     return infos;
+}
+
+// ============================================================================
+// Material UBO layout transport
+// ============================================================================
+
+void tc_shader_set_material_ubo_layout(
+    tc_shader* shader,
+    const tc_material_ubo_entry* entries,
+    uint32_t count,
+    uint32_t block_size
+) {
+    if (!shader) return;
+
+    // Release any previous layout.
+    if (shader->material_ubo_entries) {
+        free(shader->material_ubo_entries);
+        shader->material_ubo_entries = NULL;
+    }
+    shader->material_ubo_entry_count = 0;
+    shader->material_ubo_block_size = 0;
+
+    if (count == 0 || !entries) return;
+
+    size_t bytes = (size_t)count * sizeof(tc_material_ubo_entry);
+    tc_material_ubo_entry* copy = (tc_material_ubo_entry*)malloc(bytes);
+    if (!copy) {
+        tc_log(TC_LOG_ERROR, "tc_shader_set_material_ubo_layout: allocation failed (%u entries)", count);
+        return;
+    }
+    memcpy(copy, entries, bytes);
+
+    shader->material_ubo_entries = copy;
+    shader->material_ubo_entry_count = count;
+    shader->material_ubo_block_size = block_size;
+}
+
+uint32_t tc_shader_material_ubo_entry_count(const tc_shader* shader) {
+    return shader ? shader->material_ubo_entry_count : 0u;
+}
+
+const tc_material_ubo_entry* tc_shader_material_ubo_entries(const tc_shader* shader) {
+    return shader ? shader->material_ubo_entries : NULL;
+}
+
+uint32_t tc_shader_material_ubo_block_size(const tc_shader* shader) {
+    return shader ? shader->material_ubo_block_size : 0u;
 }
