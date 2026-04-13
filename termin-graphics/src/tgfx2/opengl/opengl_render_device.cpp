@@ -231,9 +231,20 @@ void OpenGLRenderDevice::destroy(BufferHandle handle) {
 
 void OpenGLRenderDevice::destroy(TextureHandle handle) {
     if (auto* tex = textures_.get(handle.id)) {
-        if (tex->gl_id) glDeleteTextures(1, &tex->gl_id);
+        if (tex->gl_id && !tex->external) glDeleteTextures(1, &tex->gl_id);
         textures_.remove(handle.id);
     }
+}
+
+TextureHandle OpenGLRenderDevice::register_external_texture(GLuint gl_id, const TextureDesc& desc) {
+    GLTexture tex;
+    tex.gl_id = gl_id;
+    tex.desc = desc;
+    tex.target = GL_TEXTURE_2D;
+    tex.external = true;
+    TextureHandle h;
+    h.id = textures_.add(std::move(tex));
+    return h;
 }
 
 void OpenGLRenderDevice::destroy(SamplerHandle handle) {

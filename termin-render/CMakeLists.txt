@@ -44,6 +44,7 @@ set(TERMIN_RENDER_SOURCES
     src/graph_data.cpp
     src/render_pipeline.cpp
     src/render_engine.cpp
+    src/tgfx2_bridge.cpp
     src/scene_pipeline_template.cpp
     src/shadow.cpp
     src/tc_project_settings.c

@@ -303,6 +303,11 @@ void RenderContext2::ensure_fsq_resources() {
     fsq_vs_ = device_.create_shader(vs_desc);
 }
 
+ShaderHandle RenderContext2::fsq_vertex_shader() {
+    ensure_fsq_resources();
+    return fsq_vs_;
+}
+
 void RenderContext2::draw_fullscreen_quad() {
     ensure_fsq_resources();
 

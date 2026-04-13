@@ -22,6 +22,11 @@ struct GLTexture {
     GLuint gl_id = 0;
     TextureDesc desc;
     GLenum target = GL_TEXTURE_2D;
+    // When true the GL texture object is owned externally (e.g. by legacy
+    // tgfx code) and must NOT be glDeleteTextures'd when this handle is
+    // destroyed. Used by register_external_texture() to wrap existing GL
+    // textures as tgfx2 handles for interop during the Phase 2 migration.
+    bool external = false;
 };
 
 struct GLSampler {
@@ -111,6 +116,16 @@ public:
     // Key: sorted list of (attachment_point, texture_gl_id).
     // Returns GL FBO id. FBO 0 = default framebuffer (when no textures specified).
     GLuint get_or_create_fbo(const RenderPassDesc& pass);
+
+    // Wrap an externally-owned GL texture object as a tgfx2::TextureHandle.
+    //
+    // Use this to interop with legacy tgfx FBOs during Phase 2 migration:
+    // pass the GL texture id from a legacy color/depth attachment together
+    // with the texture's logical description. The returned TextureHandle
+    // can be used with RenderContext2::begin_pass() and bind_texture() just
+    // like any tgfx2 texture. When the handle is destroyed the underlying
+    // GL object is NOT deleted — ownership stays with the original creator.
+    TextureHandle register_external_texture(GLuint gl_id, const TextureDesc& desc);
 
 private:
     HandlePool<GLBuffer> buffers_;

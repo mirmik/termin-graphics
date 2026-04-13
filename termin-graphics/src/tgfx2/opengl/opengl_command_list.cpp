@@ -144,27 +144,15 @@ void OpenGLCommandList::setup_vao_for_pipeline(GLPipeline* pipeline) {
     glGenVertexArrays(1, &current_vao_);
     glBindVertexArray(current_vao_);
 
-    // Configure vertex attributes from layout (buffers bound later via bind_vertex_buffer)
+    // Enable the attribute slots that the pipeline expects. We must NOT
+    // call glVertexAttribPointer here: in the OpenGL core profile calling
+    // that function without a bound GL_ARRAY_BUFFER raises
+    // GL_INVALID_OPERATION and has no effect. bind_vertex_buffer() runs
+    // after this with the VBO already bound and performs the actual
+    // attribute-pointer configuration.
     for (const auto& layout : pipeline->desc.vertex_layouts) {
         for (const auto& attr : layout.attributes) {
             glEnableVertexAttribArray(attr.location);
-
-            auto gl_type = gl::vertex_format_gl_type(attr.format);
-            auto count = gl::vertex_format_component_count(attr.format);
-
-            if (gl::vertex_format_is_integer(attr.format)) {
-                glVertexAttribIPointer(
-                    attr.location, count, gl_type,
-                    layout.stride,
-                    reinterpret_cast<const void*>(static_cast<uintptr_t>(attr.offset)));
-            } else {
-                glVertexAttribPointer(
-                    attr.location, count, gl_type,
-                    gl::vertex_format_is_normalized(attr.format) ? GL_TRUE : GL_FALSE,
-                    layout.stride,
-                    reinterpret_cast<const void*>(static_cast<uintptr_t>(attr.offset)));
-            }
-
             if (layout.per_instance) {
                 glVertexAttribDivisor(attr.location, 1);
             }

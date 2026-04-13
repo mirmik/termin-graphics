@@ -7,6 +7,7 @@
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #include "tgfx2/pipeline_cache.hpp"
 #include "tgfx2/render_context.hpp"
+#include "termin/render/tgfx2_bridge.hpp"
 
 extern "C" {
 #include "render/tc_frame_graph.h"
@@ -318,6 +319,28 @@ void RenderEngine::render_view_to_fbo(
         tgfx2_ctx_->begin_frame();
     }
 
+    // Wrap every allocated FBO's color texture as a tgfx2 TextureHandle
+    // ONCE for this frame, so migrated passes can consume them from
+    // ExecuteContext::tex2_{reads,writes} without doing any resource
+    // allocation themselves. The wrappers are destroyed right after the
+    // pass loop; the underlying GL texture objects are preserved because
+    // register_external_texture marks them as external.
+    std::unordered_map<std::string, tgfx2::TextureHandle> tex2_resources;
+    if (tgfx2_ctx_ && tgfx2_device_) {
+        auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(tgfx2_device_.get());
+        if (gl_dev) {
+            for (const auto& [name, res] : resources) {
+                if (!res) continue;
+                auto* fbo = dynamic_cast<FramebufferHandle*>(res);
+                if (!fbo) continue;
+                auto handle = wrap_fbo_color_as_tgfx2(*gl_dev, fbo);
+                if (handle) {
+                    tex2_resources[name] = handle;
+                }
+            }
+        }
+    }
+
     tc_profiler_begin_section("Execute Passes");
     for (size_t i = 0; i < schedule_count; i++) {
         tc_pass* pass = tc_frame_graph_schedule_at(fg, i);
@@ -337,14 +360,24 @@ void RenderEngine::render_view_to_fbo(
 
         FBOMap pass_reads;
         FBOMap pass_writes;
+        Tex2Map pass_tex2_reads;
+        Tex2Map pass_tex2_writes;
 
         for (size_t j = 0; j < read_count; j++) {
             auto it = resources.find(reads[j]);
             pass_reads[reads[j]] = (it != resources.end()) ? it->second : nullptr;
+            auto t_it = tex2_resources.find(reads[j]);
+            if (t_it != tex2_resources.end()) {
+                pass_tex2_reads[reads[j]] = t_it->second;
+            }
         }
         for (size_t j = 0; j < write_count; j++) {
             auto it = resources.find(writes[j]);
             pass_writes[writes[j]] = (it != resources.end()) ? it->second : nullptr;
+            auto t_it = tex2_resources.find(writes[j]);
+            if (t_it != tex2_resources.end()) {
+                pass_tex2_writes[writes[j]] = t_it->second;
+            }
         }
 
         ExecuteContext ctx;
@@ -352,6 +385,8 @@ void RenderEngine::render_view_to_fbo(
         ctx.ctx2 = tgfx2_ctx_.get();
         ctx.reads_fbos = std::move(pass_reads);
         ctx.writes_fbos = std::move(pass_writes);
+        ctx.tex2_reads = std::move(pass_tex2_reads);
+        ctx.tex2_writes = std::move(pass_tex2_writes);
         ctx.rect = Rect4i{0, 0, width, height};
         ctx.scene = TcSceneRef(scene);
         ctx.viewport_name = viewport_name;
@@ -377,6 +412,15 @@ void RenderEngine::render_view_to_fbo(
 
     if (tgfx2_ctx_) {
         tgfx2_ctx_->end_frame();
+    }
+
+    // Release the per-frame tgfx2 wrappers. The underlying GL texture
+    // objects survive because register_external_texture marked them as
+    // external — only the HandlePool entries are removed here.
+    if (tgfx2_device_) {
+        for (auto& [name, handle] : tex2_resources) {
+            tgfx2_device_->destroy(handle);
+        }
     }
 }
 

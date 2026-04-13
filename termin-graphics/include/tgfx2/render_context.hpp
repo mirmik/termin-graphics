@@ -110,8 +110,27 @@ public:
     IRenderDevice& device() { return device_; }
     ICommandList* cmd() { return cmd_.get(); }
 
+    // Force pending render state to be resolved into an active pipeline.
+    // Normally called internally from draw*() methods; exposed publicly as
+    // an escape hatch for Phase 2 pass migration where a pass needs to set
+    // uniforms or bind textures on the underlying GL program BEFORE issuing
+    // a draw call — via glGetIntegerv(GL_CURRENT_PROGRAM) + glUniform*.
+    // After this method returns, the backend-specific pipeline (e.g. GL
+    // program) is bound and ready for state setting.
+    void flush_pipeline();
+
+    // Return the built-in fullscreen-quad vertex shader, lazily creating it
+    // and the FSQ VBO/IBO on first access. Exposed so Phase 2 passes can
+    // bind_shader(fsq_vertex_shader(), their_fs) explicitly and then
+    // flush_pipeline() before setting uniforms via raw GL, avoiding the
+    // "Pipeline requires valid vertex and fragment shaders" error that
+    // would otherwise fire when flush_pipeline() runs while bound_vs_ is
+    // still empty (the VS substitution inside draw_fullscreen_quad() only
+    // happens at the start of that method, too late for a pre-draw uniform
+    // set).
+    ShaderHandle fsq_vertex_shader();
+
 private:
-    void flush_pipeline();  // resolve pending state → bind pipeline
 
     IRenderDevice& device_;
     PipelineCache& cache_;
