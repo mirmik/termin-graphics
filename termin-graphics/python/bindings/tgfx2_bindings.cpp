@@ -17,11 +17,16 @@
 #include <tgfx2/opengl/opengl_render_device.hpp>
 #include <tgfx2/handles.hpp>
 #include <tgfx2/enums.hpp>
+#include <tgfx2/vertex_layout.hpp>
 #include <tgfx2/tc_shader_bridge.hpp>
 
 #include <tgfx/opengl/opengl_framebuffer.hpp>
 #include <tgfx/tgfx_shader_handle.hpp>
+#include <tgfx/tgfx_mesh_handle.hpp>
 #include <tgfx/resources/tc_shader_registry.h>
+#include <tgfx/tc_gpu_context.h>
+#include <tgfx/tc_gpu_share_group.h>
+#include <tgfx/tgfx_types.h>
 
 namespace nb = nanobind;
 
@@ -102,7 +107,9 @@ void bind_tgfx2(nb::module_& m) {
              [](tgfx2::RenderContext2& self, int fmt) {
                  self.set_color_format(static_cast<tgfx2::PixelFormat>(fmt));
              })
+        .def("set_color_mask", &tgfx2::RenderContext2::set_color_mask)
         .def("set_viewport", &tgfx2::RenderContext2::set_viewport)
+        .def("clear_scissor", &tgfx2::RenderContext2::clear_scissor)
 
         // Shader
         .def("bind_shader",
@@ -141,6 +148,24 @@ void bind_tgfx2(nb::module_& m) {
                 float x, float y, float z, float w) {
                  self.set_uniform_vec4(name.c_str(), x, y, z, w);
              })
+        .def("set_uniform_mat4",
+             [](tgfx2::RenderContext2& self, const std::string& name,
+                nb::handle data, bool transpose) {
+                 // Accept any buffer-like object (Mat44.data, list of 16 floats,
+                 // numpy array). nanobind's nb::ndarray would be cleanest but
+                 // requires extra includes — simpler: iterate and cast.
+                 float m[16];
+                 auto seq = nb::cast<nb::sequence>(data);
+                 int i = 0;
+                 for (auto v : seq) {
+                     if (i >= 16) break;
+                     m[i++] = nb::cast<float>(v);
+                 }
+                 if (i == 16) {
+                     self.set_uniform_mat4(name.c_str(), m, transpose);
+                 }
+             },
+             nb::arg("name"), nb::arg("data"), nb::arg("transpose") = false)
         .def("set_block_binding",
              [](tgfx2::RenderContext2& self, const std::string& name, uint32_t slot) {
                  self.set_block_binding(name.c_str(), slot);
@@ -199,6 +224,106 @@ void bind_tgfx2(nb::module_& m) {
     m.attr("PIXEL_RGBA8")   = static_cast<int>(tgfx2::PixelFormat::RGBA8_UNorm);
     m.attr("PIXEL_RGBA16F") = static_cast<int>(tgfx2::PixelFormat::RGBA16F);
     m.attr("PIXEL_D32F")    = static_cast<int>(tgfx2::PixelFormat::D32F);
+
+    // --- Mesh draw helper ---
+    //
+    // draw_tc_mesh wraps a TcMesh's share-group VBO/EBO as tgfx2
+    // external buffers, translates its tgfx_vertex_layout into a
+    // tgfx2::VertexBufferLayout, sets the pipeline's vertex layout +
+    // topology + draws, and destroys the non-owning handles
+    // afterwards. All in one call so Python callers don't need to
+    // manage intermediate handles themselves.
+    //
+    // Used by migrated gizmo / immediate passes that want ctx2-native
+    // draws without the legacy shader.use() + mesh_gpu.draw() path.
+    m.def("draw_tc_mesh",
+        [](tgfx2::RenderContext2& ctx, termin::TcMesh& mesh_wrapper) {
+            tc_mesh* mesh = tc_mesh_get(mesh_wrapper.handle);
+            if (!mesh) return;
+
+            auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&ctx.device());
+            if (!gl_dev) return;
+
+            // Materialize VBO/EBO via legacy upload path.
+            if (tc_mesh_upload_gpu(mesh) == 0) return;
+
+            tc_gpu_context* gctx = tc_gpu_get_context();
+            if (!gctx || !gctx->share_group) return;
+            tc_gpu_mesh_data_slot* slot = tc_gpu_share_group_mesh_data_slot(
+                gctx->share_group, mesh->header.pool_index);
+            if (!slot || slot->vbo == 0 || slot->ebo == 0) return;
+
+            tgfx2::BufferDesc vb_desc;
+            vb_desc.size = static_cast<uint64_t>(mesh->vertex_count) *
+                           static_cast<uint64_t>(mesh->layout.stride);
+            vb_desc.usage = tgfx2::BufferUsage::Vertex;
+            tgfx2::BufferHandle vbo = gl_dev->register_external_buffer(slot->vbo, vb_desc);
+
+            tgfx2::BufferDesc ib_desc;
+            ib_desc.size = static_cast<uint64_t>(mesh->index_count) * sizeof(uint32_t);
+            ib_desc.usage = tgfx2::BufferUsage::Index;
+            tgfx2::BufferHandle ibo = gl_dev->register_external_buffer(slot->ebo, ib_desc);
+
+            // Translate tgfx_vertex_layout → tgfx2::VertexBufferLayout.
+            tgfx2::VertexBufferLayout layout;
+            layout.stride = mesh->layout.stride;
+            layout.attributes.reserve(mesh->layout.attrib_count);
+            for (uint8_t i = 0; i < mesh->layout.attrib_count; i++) {
+                const tgfx_vertex_attrib& a = mesh->layout.attribs[i];
+                tgfx2::VertexAttribute va;
+                va.location = a.location;
+                va.offset = a.offset;
+                bool ok = true;
+                switch (static_cast<tgfx_attrib_type>(a.type)) {
+                    case TGFX_ATTRIB_FLOAT32:
+                        switch (a.size) {
+                            case 1: va.format = tgfx2::VertexFormat::Float;  break;
+                            case 2: va.format = tgfx2::VertexFormat::Float2; break;
+                            case 3: va.format = tgfx2::VertexFormat::Float3; break;
+                            case 4: va.format = tgfx2::VertexFormat::Float4; break;
+                            default: ok = false; break;
+                        }
+                        break;
+                    case TGFX_ATTRIB_UINT8:
+                        if (a.size == 4) va.format = tgfx2::VertexFormat::UByte4;
+                        else ok = false;
+                        break;
+                    case TGFX_ATTRIB_INT8:
+                        if (a.size == 4) va.format = tgfx2::VertexFormat::Byte4;
+                        else ok = false;
+                        break;
+                    case TGFX_ATTRIB_UINT16:
+                        switch (a.size) {
+                            case 1: va.format = tgfx2::VertexFormat::UShort;  break;
+                            case 2: va.format = tgfx2::VertexFormat::UShort2; break;
+                            case 3: va.format = tgfx2::VertexFormat::UShort3; break;
+                            case 4: va.format = tgfx2::VertexFormat::UShort4; break;
+                            default: ok = false; break;
+                        }
+                        break;
+                    default:
+                        ok = false;
+                        break;
+                }
+                if (!ok) {
+                    va.format = tgfx2::VertexFormat::Float3;
+                }
+                layout.attributes.push_back(va);
+            }
+
+            tgfx2::PrimitiveTopology topo = (mesh->draw_mode == TC_DRAW_LINES)
+                ? tgfx2::PrimitiveTopology::LineList
+                : tgfx2::PrimitiveTopology::TriangleList;
+
+            ctx.set_vertex_layout(layout);
+            ctx.set_topology(topo);
+            ctx.draw(vbo, ibo, static_cast<uint32_t>(mesh->index_count),
+                     tgfx2::IndexType::Uint32);
+
+            gl_dev->destroy(vbo);
+            gl_dev->destroy(ibo);
+        },
+        nb::arg("ctx"), nb::arg("mesh"));
 }
 
 } // namespace tgfx_bindings
