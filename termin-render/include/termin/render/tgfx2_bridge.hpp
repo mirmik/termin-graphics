@@ -15,6 +15,10 @@
 
 #include "termin/render/render_export.hpp"
 
+extern "C" {
+#include "tgfx/resources/tc_texture.h"
+}
+
 struct tc_mesh;
 
 namespace tgfx2 {
@@ -49,6 +53,23 @@ RENDER_API tgfx2::TextureHandle wrap_fbo_color_as_tgfx2(
 RENDER_API tgfx2::TextureHandle wrap_fbo_depth_as_tgfx2(
     tgfx2::OpenGLRenderDevice& device,
     FramebufferHandle* fbo
+);
+
+// Wrap a legacy tc_texture as a tgfx2 TextureHandle that is non-owning.
+// Triggers tc_texture_upload_gpu first so the share group's GL texture
+// object exists, then reads the GL id from the current context's
+// texture slot and registers it as an external tgfx2 texture.
+//
+// The returned handle can be fed into ctx2.bind_sampled_texture or
+// apply_material_phase_ubo's texture list. It must be destroyed via
+// device.destroy() after use; the underlying GL texture survives
+// because register_external_texture marked it external.
+//
+// Returns an invalid handle (id == 0) if the texture handle is
+// invalid, upload fails, or no GPU context is active.
+RENDER_API tgfx2::TextureHandle wrap_tc_texture_as_tgfx2(
+    tgfx2::OpenGLRenderDevice& device,
+    tc_texture_handle handle
 );
 
 // Result of wrapping a tc_mesh as tgfx2 buffers + layout for one draw.

@@ -7,12 +7,41 @@
 
 #include "tgfx/handles.hpp"
 #include "tgfx/resources/tc_mesh.h"
+#include "tgfx/resources/tc_texture.h"
+#include "tgfx/resources/tc_texture_registry.h"
 #include "tgfx/tc_gpu_context.h"
 #include "tgfx/tc_gpu_share_group.h"
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #include "tgfx2/descriptors.hpp"
 
+extern "C" {
+// tc_texture_upload_gpu is declared in tgfx_resource_gpu.h; we only
+// need the forward decl since this translation unit is C++.
+bool tc_texture_upload_gpu(tc_texture* tex);
+}
+
 namespace termin {
+
+namespace {
+
+// Translate tc_texture_format into the closest tgfx2::PixelFormat. The
+// tgfx2 format is only used as a pipeline cache tag here — the actual
+// GL texture object is already configured by the legacy upload path, so
+// a cache-key mismatch at worst causes an extra pipeline compile.
+tgfx2::PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
+    switch (fmt) {
+        case TC_TEXTURE_RGBA8:   return tgfx2::PixelFormat::RGBA8_UNorm;
+        case TC_TEXTURE_RGB8:    return tgfx2::PixelFormat::RGB8_UNorm;
+        case TC_TEXTURE_RG8:     return tgfx2::PixelFormat::RG8_UNorm;
+        case TC_TEXTURE_R8:      return tgfx2::PixelFormat::R8_UNorm;
+        case TC_TEXTURE_RGBA16F: return tgfx2::PixelFormat::RGBA16F;
+        case TC_TEXTURE_RGB16F:  return tgfx2::PixelFormat::RGBA16F;  // no RGB16F in tgfx2 enum
+        case TC_TEXTURE_DEPTH24: return tgfx2::PixelFormat::D24_UNorm_S8_UInt;
+    }
+    return tgfx2::PixelFormat::RGBA8_UNorm;
+}
+
+} // anonymous namespace
 
 tgfx2::PixelFormat fbo_format_string_to_tgfx2(const char* format) {
     if (!format) return tgfx2::PixelFormat::RGBA8_UNorm;
@@ -44,6 +73,59 @@ tgfx2::TextureHandle wrap_fbo_color_as_tgfx2(
 
     return device.register_external_texture(
         static_cast<GLuint>(color->get_id()),
+        desc
+    );
+}
+
+tgfx2::TextureHandle wrap_tc_texture_as_tgfx2(
+    tgfx2::OpenGLRenderDevice& device,
+    tc_texture_handle handle
+) {
+    if (tc_texture_handle_is_invalid(handle)) return {};
+
+    tc_texture* tex = tc_texture_get(handle);
+    if (!tex) {
+        tc::Log::error("wrap_tc_texture_as_tgfx2: tc_texture not found "
+                       "for handle (index=%u gen=%u)",
+                       handle.index, handle.generation);
+        return {};
+    }
+
+    // Materialize the legacy GL texture object. Per-context upload
+    // goes through tc_gpu_ops and stores the GL id on the share
+    // group's texture slot at tex->header.pool_index.
+    if (!tc_texture_upload_gpu(tex)) {
+        tc::Log::error("wrap_tc_texture_as_tgfx2: upload failed for '%s'",
+                       tex->header.name ? tex->header.name : tex->header.uuid);
+        return {};
+    }
+
+    tc_gpu_context* ctx = tc_gpu_get_context();
+    if (!ctx) {
+        tc::Log::error("wrap_tc_texture_as_tgfx2: no active GPU context");
+        return {};
+    }
+    tc_gpu_slot* slot = tc_gpu_context_texture_slot(ctx, tex->header.pool_index);
+    if (!slot || slot->gl_id == 0) {
+        tc::Log::error("wrap_tc_texture_as_tgfx2: slot has no GL id for '%s'",
+                       tex->header.name ? tex->header.name : tex->header.uuid);
+        return {};
+    }
+
+    tgfx2::TextureDesc desc;
+    desc.width = tex->width;
+    desc.height = tex->height;
+    desc.mip_levels = tex->mipmap ? 0 : 1;  // 0 means "respect existing"
+    desc.sample_count = 1;
+    desc.format = tc_format_to_tgfx2(
+        static_cast<tc_texture_format>(tex->format));
+    desc.usage = tgfx2::TextureUsage::Sampled;
+    if (tex->format == TC_TEXTURE_DEPTH24) {
+        desc.usage = desc.usage | tgfx2::TextureUsage::DepthStencilAttachment;
+    }
+
+    return device.register_external_texture(
+        static_cast<GLuint>(slot->gl_id),
         desc
     );
 }

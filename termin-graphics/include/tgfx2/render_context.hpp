@@ -92,6 +92,15 @@ public:
     // draw — avoids the churn of uploading/rebinding a full UBO.
     void set_push_constants(const void* data, uint32_t size);
 
+    // Queue a handle for destruction at the end of the current frame.
+    // Used by pass code that wraps legacy GL resources as non-owning
+    // tgfx2 handles (register_external_texture / register_external_buffer)
+    // and needs them alive only for the draws in this frame. The
+    // underlying GL object is preserved; only the tgfx2 HandlePool entry
+    // is removed.
+    void defer_destroy(TextureHandle handle);
+    void defer_destroy(BufferHandle handle);
+
     // Register a sampled texture at the given binding slot. The sampler is
     // optional; if omitted, the backend uses the texture's default sampling
     // parameters (useful for GL 3.3 style shaders without separate samplers).
@@ -184,6 +193,12 @@ private:
     std::vector<ResourceBinding> pending_bindings_;
     bool bindings_dirty_ = true;
     ResourceSetHandle current_resource_set_;
+
+    // Per-frame deferred-destruction list for non-owning external
+    // wrappers (register_external_texture / register_external_buffer)
+    // created and used inside a single frame. Drained in end_frame().
+    std::vector<TextureHandle> deferred_destroy_textures_;
+    std::vector<BufferHandle>  deferred_destroy_buffers_;
 
     // Fullscreen quad resources (created on first use)
     BufferHandle fsq_vbo_;

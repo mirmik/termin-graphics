@@ -73,6 +73,16 @@ void RenderContext2::end_frame() {
     pending_bindings_.clear();
     bindings_dirty_ = true;
 
+    // Drain deferred-destroy lists. Pass code accumulated non-owning
+    // external wrappers during the frame (e.g. material textures,
+    // temporary mesh buffers); now that the command list is submitted
+    // and the GL bindings have been copied out, the wrapper HandlePool
+    // entries can be safely released. Underlying GL objects survive.
+    for (auto h : deferred_destroy_textures_) device_.destroy(h);
+    for (auto h : deferred_destroy_buffers_)  device_.destroy(h);
+    deferred_destroy_textures_.clear();
+    deferred_destroy_buffers_.clear();
+
     // TEMPORARY (Phase 2 migration scaffold). Drop the OpenGL FBO cache.
     //
     // During the tgfx2 migration, render targets are owned by the legacy
@@ -302,6 +312,14 @@ void RenderContext2::clear_resource_bindings() {
 void RenderContext2::set_push_constants(const void* data, uint32_t size) {
     if (!cmd_) return;
     cmd_->set_push_constants(data, size);
+}
+
+void RenderContext2::defer_destroy(TextureHandle handle) {
+    if (handle) deferred_destroy_textures_.push_back(handle);
+}
+
+void RenderContext2::defer_destroy(BufferHandle handle) {
+    if (handle) deferred_destroy_buffers_.push_back(handle);
 }
 
 void RenderContext2::set_color_format(PixelFormat fmt) {
