@@ -16,6 +16,12 @@ struct GLBuffer {
     GLuint gl_id = 0;
     BufferDesc desc;
     GLenum target = GL_ARRAY_BUFFER;
+    // When true the GL buffer object is owned externally (e.g. by legacy
+    // tgfx mesh code) and must NOT be glDeleteBuffers'd when this handle
+    // is destroyed. Set by register_external_buffer() during the Phase 2
+    // migration so that tgfx2 passes can draw against legacy-owned VBOs
+    // and EBOs without taking ownership of them.
+    bool external = false;
 };
 
 struct GLTexture {
@@ -148,6 +154,16 @@ public:
     // like any tgfx2 texture. When the handle is destroyed the underlying
     // GL object is NOT deleted — ownership stays with the original creator.
     TextureHandle register_external_texture(GLuint gl_id, const TextureDesc& desc);
+
+    // Wrap an externally-owned GL buffer object as a tgfx2::BufferHandle.
+    //
+    // Same migration role as register_external_texture but for VBOs / EBOs
+    // / UBOs from the legacy mesh path. The returned BufferHandle can be
+    // used with bind_vertex_buffer / bind_index_buffer / bind_uniform_buffer
+    // just like any tgfx2 buffer. When the handle is destroyed the
+    // underlying GL buffer object is NOT deleted — ownership stays with
+    // the original creator (typically OpenGLLayoutMeshHandle).
+    BufferHandle register_external_buffer(GLuint gl_id, const BufferDesc& desc);
 
 private:
     HandlePool<GLBuffer> buffers_;

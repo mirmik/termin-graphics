@@ -225,7 +225,7 @@ ResourceSetHandle OpenGLRenderDevice::create_resource_set(const ResourceSetDesc&
 
 void OpenGLRenderDevice::destroy(BufferHandle handle) {
     if (auto* buf = buffers_.get(handle.id)) {
-        if (buf->gl_id) glDeleteBuffers(1, &buf->gl_id);
+        if (buf->gl_id && !buf->external) glDeleteBuffers(1, &buf->gl_id);
         buffers_.remove(handle.id);
     }
 }
@@ -248,6 +248,17 @@ TextureHandle OpenGLRenderDevice::register_external_texture(GLuint gl_id, const 
     tex.external = true;
     TextureHandle h;
     h.id = textures_.add(std::move(tex));
+    return h;
+}
+
+BufferHandle OpenGLRenderDevice::register_external_buffer(GLuint gl_id, const BufferDesc& desc) {
+    GLBuffer buf;
+    buf.gl_id = gl_id;
+    buf.desc = desc;
+    buf.target = gl::to_gl_buffer_target(desc.usage);
+    buf.external = true;
+    BufferHandle h;
+    h.id = buffers_.add(std::move(buf));
     return h;
 }
 
