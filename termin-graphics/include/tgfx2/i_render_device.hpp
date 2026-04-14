@@ -42,6 +42,12 @@ public:
     // --- Data readback ---
     virtual void read_buffer(BufferHandle src, std::span<uint8_t> data, uint64_t offset = 0) = 0;
 
+    // --- Introspection ---
+    // Query the descriptor (width/height/format/...) that a texture was
+    // created or registered with. Returns a default-initialised
+    // TextureDesc if the handle is invalid or unknown to this device.
+    virtual TextureDesc texture_desc(TextureHandle handle) const = 0;
+
     // --- Command submission ---
     virtual std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) = 0;
     virtual void submit(ICommandList& cmd) = 0;

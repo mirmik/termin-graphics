@@ -356,6 +356,12 @@ void OpenGLRenderDevice::read_buffer(BufferHandle src, std::span<uint8_t> data, 
     glBindBuffer(buf->target, 0);
 }
 
+TextureDesc OpenGLRenderDevice::texture_desc(TextureHandle handle) const {
+    auto it = textures_.get_const(handle.id);
+    if (!it) return {};
+    return it->desc;
+}
+
 // --- Command list ---
 
 std::unique_ptr<ICommandList> OpenGLRenderDevice::create_command_list(QueueType /*queue*/) {

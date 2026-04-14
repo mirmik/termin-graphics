@@ -68,6 +68,11 @@ public:
         return (it != pool_.end()) ? &it->second : nullptr;
     }
 
+    const T* get_const(uint32_t id) const {
+        auto it = pool_.find(id);
+        return (it != pool_.end()) ? &it->second : nullptr;
+    }
+
     bool remove(uint32_t id) {
         return pool_.erase(id) > 0;
     }
@@ -105,6 +110,8 @@ public:
     void upload_buffer(BufferHandle dst, std::span<const uint8_t> data, uint64_t offset = 0) override;
     void upload_texture(TextureHandle dst, std::span<const uint8_t> data, uint32_t mip = 0) override;
     void read_buffer(BufferHandle src, std::span<uint8_t> data, uint64_t offset = 0) override;
+
+    TextureDesc texture_desc(TextureHandle handle) const override;
 
     std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) override;
     void submit(ICommandList& cmd) override;
