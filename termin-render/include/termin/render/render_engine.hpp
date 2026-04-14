@@ -55,7 +55,13 @@ private:
     std::unique_ptr<tgfx2::PipelineCache> tgfx2_cache_;
     std::unique_ptr<tgfx2::RenderContext2> tgfx2_ctx_;
 
+public:
     void ensure_tgfx2();
+
+    // Access the engine's tgfx2 render context. May return nullptr if
+    // ensure_tgfx2() has not yet been called or TERMIN_DISABLE_TGFX2 is
+    // set. The returned pointer remains owned by the RenderEngine.
+    tgfx2::RenderContext2* tgfx2_ctx() { return tgfx2_ctx_.get(); }
 
 public:
     RenderEngine();

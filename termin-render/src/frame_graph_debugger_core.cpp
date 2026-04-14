@@ -1,5 +1,12 @@
 #include <termin/render/frame_graph_debugger_core.hpp>
 #include <termin/render/frame_pass.hpp>
+#include <termin/render/tgfx2_bridge.hpp>
+
+#include <tgfx2/render_context.hpp>
+#include <tgfx2/descriptors.hpp>
+#include <tgfx2/enums.hpp>
+#include <tgfx2/i_render_device.hpp>
+#include <tgfx2/opengl/opengl_render_device.hpp>
 
 extern "C" {
 #include <tcbase/tc_log.h>
@@ -58,101 +65,120 @@ void FrameGraphCapture::do_blit(FramebufferHandle* src, GraphicsBackend* graphic
     graphics->bind_framebuffer(src);
 }
 
-void FrameGraphPresenter::ensure_shader() {
-    if (shader_ready_) {
-        return;
+static const char* PRESENTER_FRAG_SRC = R"(
+#version 330 core
+in vec2 vUV;
+uniform sampler2D u_tex;
+uniform int u_channel;
+uniform int u_highlight_hdr;
+out vec4 FragColor;
+void main() {
+    vec4 c = texture(u_tex, vUV);
+    vec3 result;
+    if (u_channel == 1)      result = vec3(c.r);
+    else if (u_channel == 2) result = vec3(c.g);
+    else if (u_channel == 3) result = vec3(c.b);
+    else if (u_channel == 4) result = vec3(c.a);
+    else                     result = c.rgb;
+    if (u_highlight_hdr == 1) {
+        float max_val = max(max(c.r, c.g), c.b);
+        if (max_val > 1.0) {
+            float intensity = clamp((max_val - 1.0) / 2.0, 0.0, 1.0);
+            result = mix(result, vec3(1.0, 0.0, 1.0), 0.5 + intensity * 0.5);
+        }
     }
+    FragColor = vec4(result, 1.0);
+}
+)";
 
-    const char* vert_src = R"(
-        #version 330 core
-        layout(location = 0) in vec2 a_pos;
-        layout(location = 1) in vec2 a_uv;
-        out vec2 v_uv;
-        void main() {
-            v_uv = a_uv;
-            gl_Position = vec4(a_pos, 0.0, 1.0);
-        }
-    )";
+FrameGraphPresenter::~FrameGraphPresenter() {
+    release_tgfx2_resources();
+}
 
-    const char* frag_src = R"(
-        #version 330 core
-        in vec2 v_uv;
-        uniform sampler2D u_tex;
-        uniform int u_channel;
-        uniform int u_highlight_hdr;
-        out vec4 FragColor;
-        void main() {
-            vec4 c = texture(u_tex, v_uv);
-            vec3 result;
+void FrameGraphPresenter::release_tgfx2_resources() {
+    if (device2_ && fs2_) {
+        device2_->destroy(fs2_);
+        fs2_ = {};
+    }
+    device2_ = nullptr;
+}
 
-            if (u_channel == 1) {
-                result = vec3(c.r);
-            } else if (u_channel == 2) {
-                result = vec3(c.g);
-            } else if (u_channel == 3) {
-                result = vec3(c.b);
-            } else if (u_channel == 4) {
-                result = vec3(c.a);
-            } else {
-                result = c.rgb;
-            }
+void FrameGraphPresenter::ensure_fs(tgfx2::IRenderDevice& device) {
+    if (fs2_ && device2_ == &device) return;
+    if (device2_ && device2_ != &device) {
+        release_tgfx2_resources();
+    }
+    device2_ = &device;
 
-            if (u_highlight_hdr == 1) {
-                float max_val = max(max(c.r, c.g), c.b);
-                if (max_val > 1.0) {
-                    float intensity = clamp((max_val - 1.0) / 2.0, 0.0, 1.0);
-                    result = mix(result, vec3(1.0, 0.0, 1.0), 0.5 + intensity * 0.5);
-                }
-            }
-
-            FragColor = vec4(result, 1.0);
-        }
-    )";
-
-    shader_ = TcShader::from_sources(vert_src, frag_src, "", "FrameGraphDebuggerPresenter");
-    shader_ready_ = shader_.is_valid();
-    if (!shader_ready_) {
-        tc::Log::error("FrameGraphPresenter: failed to create shader");
+    tgfx2::ShaderDesc desc;
+    desc.stage = tgfx2::ShaderStage::Fragment;
+    desc.source = PRESENTER_FRAG_SRC;
+    fs2_ = device.create_shader(desc);
+    if (!fs2_) {
+        tc::Log::error("FrameGraphPresenter: failed to create fs2");
     }
 }
 
 void FrameGraphPresenter::render(
-    GraphicsBackend* graphics,
+    tgfx2::RenderContext2* ctx2,
     FramebufferHandle* capture_fbo,
+    FramebufferHandle* target_fbo,
+    int dst_x,
+    int dst_y,
     int dst_w,
     int dst_h,
     int channel_mode,
     bool highlight_hdr
 ) {
-    if (!graphics || !capture_fbo) {
+    if (!ctx2 || !capture_fbo || !target_fbo) {
         return;
     }
 
-    ensure_shader();
-    if (!shader_ready_) {
+    auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&ctx2->device());
+    if (!gl_dev) {
+        tc::Log::error("FrameGraphPresenter/tgfx2: device is not OpenGLRenderDevice");
         return;
     }
 
-    GPUTextureHandle* tex = capture_fbo->color_texture();
-    if (!tex) {
+    ensure_fs(ctx2->device());
+    if (!fs2_) {
         return;
     }
 
-    graphics->set_viewport(0, 0, dst_w, dst_h);
-    graphics->clear_color(0.1f, 0.1f, 0.1f, 1.0f);
-    graphics->set_depth_test(false);
-    graphics->set_depth_mask(false);
+    tgfx2::TextureHandle source_tex = wrap_fbo_color_as_tgfx2(*gl_dev, capture_fbo);
+    if (!source_tex) {
+        return;
+    }
+    tgfx2::TextureHandle target_tex = wrap_fbo_color_as_tgfx2(*gl_dev, target_fbo);
+    if (!target_tex) {
+        gl_dev->destroy(source_tex);
+        return;
+    }
 
-    shader_.use();
-    shader_.set_uniform_int("u_tex", 0);
-    shader_.set_uniform_int("u_channel", channel_mode);
-    shader_.set_uniform_int("u_highlight_hdr", highlight_hdr ? 1 : 0);
+    ctx2->begin_pass(target_tex, tgfx2::TextureHandle{}, nullptr, 1.0f, false);
+    ctx2->set_viewport(dst_x, dst_y, dst_w, dst_h);
+    // tcgui clip rect may be active when the debugger widget calls into
+    // us; the FSQ draw must cover the full sub-region, not whatever
+    // parent clip was last set.
+    ctx2->clear_scissor();
+    ctx2->set_depth_test(false);
+    ctx2->set_depth_write(false);
+    ctx2->set_blend(false);
+    ctx2->set_cull(tgfx2::CullMode::None);
+    ctx2->set_color_format(tgfx2::PixelFormat::RGBA8_UNorm);
 
-    tex->bind(0);
-    graphics->draw_ui_textured_quad();
+    ctx2->bind_shader(ctx2->fsq_vertex_shader(), fs2_);
 
-    graphics->set_depth_test(true);
-    graphics->set_depth_mask(true);
+    ctx2->bind_sampled_texture(0, source_tex);
+    ctx2->set_uniform_int("u_tex", 0);
+    ctx2->set_uniform_int("u_channel", channel_mode);
+    ctx2->set_uniform_int("u_highlight_hdr", highlight_hdr ? 1 : 0);
+
+    ctx2->draw_fullscreen_quad();
+    ctx2->end_pass();
+
+    gl_dev->destroy(source_tex);
+    gl_dev->destroy(target_tex);
 }
 
 HDRStats FrameGraphPresenter::compute_hdr_stats(GraphicsBackend* graphics, FramebufferHandle* fbo) {

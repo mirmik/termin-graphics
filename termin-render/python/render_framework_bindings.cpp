@@ -558,7 +558,8 @@ void bind_render_framework(nb::module_& m) {
     nb::class_<FrameGraphPresenter>(m, "FrameGraphPresenter")
         .def(nb::init<>())
         .def("render", &FrameGraphPresenter::render,
-             nb::arg("graphics"), nb::arg("capture_fbo"),
+             nb::arg("ctx2"), nb::arg("capture_fbo"), nb::arg("target_fbo"),
+             nb::arg("dst_x"), nb::arg("dst_y"),
              nb::arg("dst_w"), nb::arg("dst_h"),
              nb::arg("channel_mode"), nb::arg("highlight_hdr"))
         .def("compute_hdr_stats", &FrameGraphPresenter::compute_hdr_stats,

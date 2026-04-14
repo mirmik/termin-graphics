@@ -7,8 +7,13 @@
 #include "tgfx/graphics_backend.hpp"
 #include "tgfx/handles.hpp"
 #include <tcbase/tc_log.hpp>
-#include <tgfx/tgfx_shader_handle.hpp>
+#include "tgfx2/handles.hpp"
 #include <termin/render/render_export.hpp>
+
+namespace tgfx2 {
+class RenderContext2;
+class IRenderDevice;
+}
 
 namespace termin {
 
@@ -78,13 +83,22 @@ private:
 
 class RENDER_API FrameGraphPresenter {
 private:
-    TcShader shader_;
-    bool shader_ready_ = false;
+    tgfx2::IRenderDevice* device2_ = nullptr;
+    tgfx2::ShaderHandle fs2_;
 
 public:
+    ~FrameGraphPresenter();
+
+    // Blit captured_fbo onto a sub-region of target_fbo using the
+    // channel / HDR-highlight fragment shader. Goes through ctx2:
+    // wraps both FBOs as tgfx2 textures, opens a render pass on the
+    // target, binds built-in FSQ vertex shader + our FS, draws.
     void render(
-        GraphicsBackend* graphics,
+        tgfx2::RenderContext2* ctx2,
         FramebufferHandle* capture_fbo,
+        FramebufferHandle* target_fbo,
+        int dst_x,
+        int dst_y,
         int dst_w,
         int dst_h,
         int channel_mode,
@@ -103,7 +117,8 @@ public:
     static FBOInfo get_fbo_info(FramebufferHandle* fbo);
 
 private:
-    void ensure_shader();
+    void ensure_fs(tgfx2::IRenderDevice& device);
+    void release_tgfx2_resources();
 };
 
 class RENDER_API FrameGraphDebuggerCore {
