@@ -9,6 +9,7 @@
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #include "tgfx2/pipeline_cache.hpp"
 #include "tgfx2/render_context.hpp"
+#include "tgfx/tgfx2_interop.h"
 #include "termin/render/tgfx2_bridge.hpp"
 
 extern "C" {
@@ -70,6 +71,25 @@ void RenderEngine::ensure_tgfx2() {
     tgfx2_device_ = std::make_unique<tgfx2::OpenGLRenderDevice>();
     tgfx2_cache_ = std::make_unique<tgfx2::PipelineCache>(*tgfx2_device_);
     tgfx2_ctx_ = std::make_unique<tgfx2::RenderContext2>(*tgfx2_device_, *tgfx2_cache_);
+
+    // Stage 6: swap the tgfx_gpu_ops vtable from the raw-GL implementation
+    // installed by OpenGLGraphicsBackend::ensure_ready() to the tgfx2-backed
+    // one. From now on tc_shader_compile_gpu, tc_mesh_upload_gpu and
+    // tc_texture_upload_gpu route through IRenderDevice::create_shader,
+    // create_buffer and create_texture. Returned GL ids are still
+    // extracted from the tgfx2 handles and stored in tc_gpu_slot for
+    // backward-compat with the legacy TcShader::use / set_uniform_*
+    // surface (Stage 7 will delete those callers; Stage 8 will remove
+    // gpu_ops_impl entirely).
+    //
+    // This runs once per process: RenderEngine::ensure_tgfx2() is
+    // idempotent via the tgfx2_ctx_ guard above, and ops registration
+    // only happens on first init. Resources created through the raw-GL
+    // ops path before this point keep their existing GL ids; tgfx2
+    // doesn't know about them, but neither does anything that would
+    // later ask tgfx2 to destroy them. New resources go through tgfx2.
+    tgfx2_interop_set_device(tgfx2_device_.get());
+    tgfx2_gpu_ops_register();
 }
 
 void RenderEngine::render_to_screen(

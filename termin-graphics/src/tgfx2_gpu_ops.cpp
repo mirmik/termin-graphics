@@ -186,6 +186,12 @@ static void tgfx2_texture_delete(uint32_t gpu_id) {
     if (it != g_texture_map.end() && dev) {
         dev->destroy(tgfx2::TextureHandle{it->second});
         g_texture_map.erase(it);
+    } else {
+        // Stage 6 transition: textures created via the legacy gpu_ops
+        // (before RenderEngine::ensure_tgfx2 swapped the vtable) are
+        // not tracked by tgfx2. Delete directly so they don't leak.
+        GLuint id = gpu_id;
+        glDeleteTextures(1, &id);
     }
 }
 
@@ -277,13 +283,18 @@ static void tgfx2_shader_use(uint32_t gpu_id) {
 
 static void tgfx2_shader_delete(uint32_t gpu_id) {
     auto* dev = get_device();
-    if (!dev) return;
 
     auto pipe_it = g_pipeline_map.find(gpu_id);
-    if (pipe_it != g_pipeline_map.end()) {
+    if (pipe_it != g_pipeline_map.end() && dev) {
         dev->destroy(tgfx2::PipelineHandle{pipe_it->second});
         g_pipeline_map.erase(pipe_it);
+    } else {
+        // Stage 6 transition: program created via legacy gpu_ops before
+        // the vtable swap — not tracked. Delete the GL program directly.
+        if (gpu_id != 0) glDeleteProgram(gpu_id);
     }
+
+    if (!dev) return;
 
     auto vs_it = g_shader_vs_map.find(gpu_id);
     if (vs_it != g_shader_vs_map.end()) {
