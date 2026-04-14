@@ -164,7 +164,46 @@ typedef struct tc_material_phase {
     // Per-mark render states (optional overrides)
     tc_render_state mark_states[TC_MATERIAL_MAX_MARKS];
     uint8_t mark_state_valid[TC_MATERIAL_MAX_MARKS];  // which mark_states are set
+
+    // --- Material UBO (tgfx2 dispatch) ---
+    //
+    // Per-phase std140 uniform buffer matching tc_shader.material_ubo_entries.
+    // Allocated lazily on first apply through the tgfx2 dispatcher
+    // (tc_material_phase_ensure_ubo), resized on shader hot-reload when
+    // block_size changes, released in tc_material_release / reset via
+    // tc_material_phase_release_ubo (implementation lives in C++ because
+    // the UBO is owned by a tgfx2::IRenderDevice).
+    //
+    // ubo_id is an opaque uint32 (a tgfx2::BufferHandle id). 0 = none.
+    // ubo_size/version track the allocation so we can detect resize/
+    // recompile events. ubo_device is a void* IRenderDevice back-pointer
+    // used by release code to call destroy(). Same pattern as
+    // tc_gpu_slot.tgfx2_shader_device during Phase 2 migration.
+    uint32_t ubo_id;
+    uint32_t ubo_size;
+    int32_t  ubo_version;
+    void*    ubo_device;
 } tc_material_phase;
+
+// ============================================================================
+// Material phase UBO lifecycle callback (tgfx2 dispatch)
+// ============================================================================
+
+// When a tc_material_phase is being destroyed (tc_material_release) and it
+// owns a tgfx2 material UBO, the C layer cannot call IRenderDevice::destroy
+// directly (C++ boundary). It defers to this callback, registered once by
+// the tgfx2 glue code at startup. No-op if never registered.
+typedef void (*tc_material_phase_release_ubo_fn)(tc_material_phase* phase);
+
+TGFX_API void tc_material_phase_set_release_ubo_callback(
+    tc_material_phase_release_ubo_fn cb
+);
+
+// Release the phase's UBO (if any). Safe to call on phases that never
+// allocated one — in that case just clears the fields. Called from
+// tc_material_destroy and from hot-reload paths that detect a layout
+// size change.
+TGFX_API void tc_material_phase_release_ubo(tc_material_phase* phase);
 
 // ============================================================================
 // Material

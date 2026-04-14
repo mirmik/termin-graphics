@@ -603,7 +603,16 @@ void tc_shader_set_material_ubo_layout(
     uint32_t count,
     uint32_t block_size
 ) {
-    if (!shader) return;
+    if (!shader) {
+        tc_log(TC_LOG_ERROR, "[Stage 5.H bridge] set_material_ubo_layout called with NULL shader");
+        return;
+    }
+
+    tc_log(TC_LOG_ERROR,
+           "[Stage 5.H bridge] set_material_ubo_layout: shader uuid=%s name=%s count=%u block_size=%u",
+           shader->uuid,
+           shader->name ? shader->name : "<null>",
+           count, block_size);
 
     // Release any previous layout.
     if (shader->material_ubo_entries) {

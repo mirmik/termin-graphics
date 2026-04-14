@@ -1,9 +1,15 @@
 // shader_bindings.cpp - TcShader Python bindings
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
+#include <nanobind/stl/tuple.h>
 #include <nanobind/ndarray.h>
 
+#include <cstring>
+#include <vector>
+
 #include "tgfx/tgfx_shader_handle.hpp"
+#include "tgfx/resources/tc_shader.h"
 
 namespace nb = nanobind;
 
@@ -73,6 +79,51 @@ void bind_shader(nb::module_& m) {
             nb::arg("vertex"), nb::arg("fragment"),
             nb::arg("geometry") = "", nb::arg("name") = "", nb::arg("source_path") = "",
             "Set shader sources (bumps version if changed)")
+        // Push a std140 material UBO layout onto the shader. `entries`
+        // is a list of (name, property_type, offset, size) tuples
+        // produced by the parser (see ShaderPhase.material_ubo_layout).
+        // Called from ShaderAsset._update_tc_shaders after set_sources
+        // so the layout always matches the current source version.
+        .def("set_material_ubo_layout",
+            [](TcShader& self,
+               const std::vector<std::tuple<std::string, std::string, uint32_t, uint32_t>>& entries,
+               uint32_t block_size
+            ) {
+                tc_shader* s = self.get();
+                if (!s) return;
+                if (entries.empty()) {
+                    tc_shader_set_material_ubo_layout(s, nullptr, 0, 0);
+                    return;
+                }
+                std::vector<tc_material_ubo_entry> buf;
+                buf.reserve(entries.size());
+                for (const auto& t : entries) {
+                    tc_material_ubo_entry e{};
+                    const std::string& name = std::get<0>(t);
+                    const std::string& type = std::get<1>(t);
+                    std::strncpy(e.name, name.c_str(), TC_MATERIAL_UBO_NAME_MAX - 1);
+                    e.name[TC_MATERIAL_UBO_NAME_MAX - 1] = '\0';
+                    std::strncpy(e.property_type, type.c_str(), TC_MATERIAL_UBO_TYPE_MAX - 1);
+                    e.property_type[TC_MATERIAL_UBO_TYPE_MAX - 1] = '\0';
+                    e.offset = std::get<2>(t);
+                    e.size   = std::get<3>(t);
+                    buf.push_back(e);
+                }
+                tc_shader_set_material_ubo_layout(
+                    s, buf.data(), static_cast<uint32_t>(buf.size()), block_size);
+            },
+            nb::arg("entries"), nb::arg("block_size"),
+            "Push std140 material UBO layout from parser onto this shader")
+        .def_prop_ro("material_ubo_block_size",
+            [](const TcShader& self) {
+                tc_shader* s = self.get();
+                return s ? s->material_ubo_block_size : 0u;
+            })
+        .def_prop_ro("material_ubo_entry_count",
+            [](const TcShader& self) {
+                tc_shader* s = self.get();
+                return s ? s->material_ubo_entry_count : 0u;
+            })
         .def("__repr__", [](const TcShader& s) {
             if (!s.is_valid()) return std::string("<TcShader invalid>");
             std::string name = s.name();
