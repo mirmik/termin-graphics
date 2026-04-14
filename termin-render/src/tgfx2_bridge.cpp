@@ -48,6 +48,33 @@ tgfx2::TextureHandle wrap_fbo_color_as_tgfx2(
     );
 }
 
+tgfx2::TextureHandle wrap_fbo_depth_as_tgfx2(
+    tgfx2::OpenGLRenderDevice& device,
+    FramebufferHandle* fbo
+) {
+    if (!fbo) return {};
+    GPUTextureHandle* depth = fbo->depth_texture();
+    if (!depth || !depth->is_valid()) return {};
+
+    tgfx2::TextureDesc desc;
+    desc.width = static_cast<uint32_t>(fbo->get_width());
+    desc.height = static_cast<uint32_t>(fbo->get_height());
+    // Shadow FBOs created by create_shadow_framebuffer use GL_DEPTH_COMPONENT24
+    // under the hood; D32F is the closest tgfx2 PixelFormat enum value and is
+    // only used here as a format tag for the pipeline cache key — the GL
+    // texture object is already fully configured by the legacy path.
+    desc.format = tgfx2::PixelFormat::D32F;
+    desc.usage = tgfx2::TextureUsage::DepthStencilAttachment |
+                 tgfx2::TextureUsage::Sampled;
+    desc.mip_levels = 1;
+    desc.sample_count = static_cast<uint32_t>(fbo->get_samples() > 0 ? fbo->get_samples() : 1);
+
+    return device.register_external_texture(
+        static_cast<GLuint>(depth->get_id()),
+        desc
+    );
+}
+
 Tgfx2MeshBinding wrap_mesh_as_tgfx2(
     tgfx2::OpenGLRenderDevice& device,
     tc_mesh* mesh

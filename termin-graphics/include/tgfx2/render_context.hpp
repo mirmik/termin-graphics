@@ -48,10 +48,14 @@ public:
 
     // --- Render pass ---
     // Begin render pass with color attachment (and optional depth).
-    // clear_color = nullptr means LoadOp::Load (don't clear).
+    // clear_color = nullptr means LoadOp::Load for the color attachment.
+    // Pass `color = {}` (id=0) for a depth-only pass (e.g. shadow maps);
+    // the backend will set glDrawBuffer/ReadBuffer = NONE.
+    // `clear_depth_enabled` controls depth LoadOp independently of color.
     void begin_pass(TextureHandle color, TextureHandle depth = {},
                     const float* clear_color = nullptr,
-                    float clear_depth = 1.0f);
+                    float clear_depth = 1.0f,
+                    bool clear_depth_enabled = true);
     void end_pass();
 
     // --- Mutable render state (applied at draw time) ---

@@ -102,7 +102,8 @@ void RenderContext2::end_frame() {
 
 void RenderContext2::begin_pass(
     TextureHandle color, TextureHandle depth,
-    const float* clear_color, float clear_depth
+    const float* clear_color, float clear_depth,
+    bool clear_depth_enabled
 ) {
     if (in_pass_) {
         end_pass();
@@ -110,20 +111,26 @@ void RenderContext2::begin_pass(
 
     RenderPassDesc pass;
 
-    ColorAttachmentDesc color_att;
-    color_att.texture = color;
-    if (clear_color) {
-        color_att.load = LoadOp::Clear;
-        memcpy(color_att.clear_color, clear_color, sizeof(float) * 4);
-    } else {
-        color_att.load = LoadOp::Load;
+    // Only push the color attachment when caller supplied a valid
+    // texture handle — a default-constructed TextureHandle (id == 0)
+    // means "depth-only pass", and pushing a placeholder entry would
+    // try to attach a nonexistent texture in get_or_create_fbo().
+    if (color) {
+        ColorAttachmentDesc color_att;
+        color_att.texture = color;
+        if (clear_color) {
+            color_att.load = LoadOp::Clear;
+            memcpy(color_att.clear_color, clear_color, sizeof(float) * 4);
+        } else {
+            color_att.load = LoadOp::Load;
+        }
+        pass.colors.push_back(color_att);
     }
-    pass.colors.push_back(color_att);
 
     if (depth) {
         DepthAttachmentDesc depth_att;
         depth_att.texture = depth;
-        depth_att.load = clear_color ? LoadOp::Clear : LoadOp::Load;
+        depth_att.load = clear_depth_enabled ? LoadOp::Clear : LoadOp::Load;
         depth_att.clear_depth = clear_depth;
         pass.depth = depth_att;
         pass.has_depth = true;

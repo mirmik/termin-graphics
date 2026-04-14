@@ -41,6 +41,16 @@ RENDER_API tgfx2::TextureHandle wrap_fbo_color_as_tgfx2(
     FramebufferHandle* fbo
 );
 
+// Wrap the depth attachment of a legacy FramebufferHandle as a tgfx2
+// TextureHandle that is non-owning. Same contract as
+// wrap_fbo_color_as_tgfx2 but targets `fbo->depth_texture()`. Used by
+// Phase 2 ShadowPass to open a tgfx2 render pass on the shadow map's
+// depth attachment without touching the legacy FBO pool.
+RENDER_API tgfx2::TextureHandle wrap_fbo_depth_as_tgfx2(
+    tgfx2::OpenGLRenderDevice& device,
+    FramebufferHandle* fbo
+);
+
 // Result of wrapping a tc_mesh as tgfx2 buffers + layout for one draw.
 //
 // vertex_buffer / index_buffer are non-owning external handles around the

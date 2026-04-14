@@ -11,6 +11,8 @@ extern "C" {
 #include "tc_value.h"
 }
 
+struct tc_mesh;
+
 #include <termin/entity/component.hpp>
 #include <termin/entity/entity.hpp>
 #include <termin/geom/mat44.hpp>
@@ -50,6 +52,24 @@ public:
         TcShader original_shader
     ) {
         return original_shader;
+    }
+
+    // Expose the underlying tc_mesh for a given phase + geometry id so
+    // tgfx2-migrated passes (ShadowPass, IdPass, ColorPass) can wrap it
+    // via wrap_mesh_as_tgfx2() and draw through RenderContext2 instead
+    // of going through the legacy draw_geometry()/tc_mesh_draw_gpu path.
+    //
+    // Default returns nullptr; drawables that are still on the legacy
+    // path fall back to draw_geometry(). MeshRenderer overrides to
+    // return its TcMesh. Returning non-null opts a drawable in to the
+    // tgfx2 shadow/id/color rendering paths one type at a time.
+    virtual tc_mesh* get_mesh_for_phase(
+        const std::string& phase_mark,
+        int geometry_id
+    ) const {
+        (void)phase_mark;
+        (void)geometry_id;
+        return nullptr;
     }
 
     virtual Mat44f get_model_matrix(const Entity& entity) const;
