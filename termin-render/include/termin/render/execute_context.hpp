@@ -34,8 +34,16 @@ public:
     tgfx2::RenderContext2* ctx2 = nullptr;
     FBOMap reads_fbos;
     FBOMap writes_fbos;
+    // Color attachments of pipeline resources as tgfx2 textures — the
+    // canonical path for passes that draw through ctx2. Matches the
+    // same resource names as reads_fbos / writes_fbos.
     Tex2Map tex2_reads;
     Tex2Map tex2_writes;
+    // Depth attachments. Only populated for FBO resources that have a
+    // depth texture (not for renderbuffer-backed depth or color-only
+    // FBOs). Empty entry = no depth texture available for that name.
+    Tex2Map tex2_depth_reads;
+    Tex2Map tex2_depth_writes;
     Rect4i rect;
     TcSceneRef scene;
     RenderCamera* camera = nullptr;

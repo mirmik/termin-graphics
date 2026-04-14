@@ -411,6 +411,8 @@ void RenderEngine::render_view_to_fbo(
         FBOMap pass_writes;
         Tex2Map pass_tex2_reads;
         Tex2Map pass_tex2_writes;
+        Tex2Map pass_tex2_depth_reads;
+        Tex2Map pass_tex2_depth_writes;
 
         for (size_t j = 0; j < read_count; j++) {
             auto it = resources.find(reads[j]);
@@ -419,6 +421,10 @@ void RenderEngine::render_view_to_fbo(
             if (t_it != tex2_resources.end()) {
                 pass_tex2_reads[reads[j]] = t_it->second;
             }
+            auto d_it = tex2_depth_resources.find(reads[j]);
+            if (d_it != tex2_depth_resources.end()) {
+                pass_tex2_depth_reads[reads[j]] = d_it->second;
+            }
         }
         for (size_t j = 0; j < write_count; j++) {
             auto it = resources.find(writes[j]);
@@ -426,6 +432,10 @@ void RenderEngine::render_view_to_fbo(
             auto t_it = tex2_resources.find(writes[j]);
             if (t_it != tex2_resources.end()) {
                 pass_tex2_writes[writes[j]] = t_it->second;
+            }
+            auto d_it = tex2_depth_resources.find(writes[j]);
+            if (d_it != tex2_depth_resources.end()) {
+                pass_tex2_depth_writes[writes[j]] = d_it->second;
             }
         }
 
@@ -436,6 +446,8 @@ void RenderEngine::render_view_to_fbo(
         ctx.writes_fbos = std::move(pass_writes);
         ctx.tex2_reads = std::move(pass_tex2_reads);
         ctx.tex2_writes = std::move(pass_tex2_writes);
+        ctx.tex2_depth_reads = std::move(pass_tex2_depth_reads);
+        ctx.tex2_depth_writes = std::move(pass_tex2_depth_writes);
         ctx.rect = Rect4i{0, 0, width, height};
         ctx.scene = TcSceneRef(scene);
         ctx.viewport_name = viewport_name;
@@ -755,6 +767,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
         FBOMap pass_writes;
         Tex2Map pass_tex2_reads;
         Tex2Map pass_tex2_writes;
+        Tex2Map pass_tex2_depth_reads;
+        Tex2Map pass_tex2_depth_writes;
 
         for (size_t j = 0; j < read_count; j++) {
             auto it = resources.find(reads[j]);
@@ -763,6 +777,10 @@ void RenderEngine::render_scene_pipeline_offscreen(
             auto t_it = tex2_resources.find(reads[j]);
             if (t_it != tex2_resources.end()) {
                 pass_tex2_reads[reads[j]] = t_it->second;
+            }
+            auto d_it = tex2_depth_resources.find(reads[j]);
+            if (d_it != tex2_depth_resources.end()) {
+                pass_tex2_depth_reads[reads[j]] = d_it->second;
             }
         }
 
@@ -778,6 +796,10 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 if (t_it != tex2_resources.end()) {
                     pass_tex2_writes[write_name] = t_it->second;
                 }
+                auto d_it = tex2_depth_resources.find(write_name);
+                if (d_it != tex2_depth_resources.end()) {
+                    pass_tex2_depth_writes[write_name] = d_it->second;
+                }
             }
         }
 
@@ -788,6 +810,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
         ctx.writes_fbos = std::move(pass_writes);
         ctx.tex2_reads = std::move(pass_tex2_reads);
         ctx.tex2_writes = std::move(pass_tex2_writes);
+        ctx.tex2_depth_reads = std::move(pass_tex2_depth_reads);
+        ctx.tex2_depth_writes = std::move(pass_tex2_depth_writes);
         ctx.rect = vp_ctx.rect;
         ctx.scene = TcSceneRef(scene);
         ctx.viewport_name = vp_ctx.name;
