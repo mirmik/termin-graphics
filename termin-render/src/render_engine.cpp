@@ -79,15 +79,12 @@ void RenderEngine::ensure_tgfx2() {
     // create_buffer and create_texture. Returned GL ids are still
     // extracted from the tgfx2 handles and stored in tc_gpu_slot for
     // backward-compat with the legacy TcShader::use / set_uniform_*
-    // surface (Stage 7 will delete those callers; Stage 8 will remove
+    // surface (Stage 7 deletes those callers; Stage 8 removes
     // gpu_ops_impl entirely).
     //
-    // This runs once per process: RenderEngine::ensure_tgfx2() is
-    // idempotent via the tgfx2_ctx_ guard above, and ops registration
-    // only happens on first init. Resources created through the raw-GL
-    // ops path before this point keep their existing GL ids; tgfx2
-    // doesn't know about them, but neither does anything that would
-    // later ask tgfx2 to destroy them. New resources go through tgfx2.
+    // Known regression: chronosquad hits a driver-side SIGSEGV inside
+    // ShadowPass's draw after the swap. Deferred — Stage 7 first, then
+    // root-cause on the settled code.
     tgfx2_interop_set_device(tgfx2_device_.get());
     tgfx2_gpu_ops_register();
 }

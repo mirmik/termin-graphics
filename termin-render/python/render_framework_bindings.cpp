@@ -20,6 +20,7 @@
 #include <core/tc_component.h>
 
 #include <tgfx/graphics_backend.hpp>
+#include <tgfx2/render_context.hpp>
 
 #include <termin/tc_scene.hpp>
 
@@ -38,6 +39,21 @@ void bind_tc_render_target(nb::module_& m);
 namespace termin {
 
 void bind_render_framework(nb::module_& m) {
+    // Force-import _tgfx_native so that its nb::class_<tgfx2::RenderContext2>
+    // and other tgfx2 handle registrations are live before we start
+    // binding properties that return those types. Without this, the
+    // first access of ctx.ctx2 from Python crashes with "Unable to
+    // convert function return value to a Python type!" — the global
+    // nanobind type map for RenderContext2 is still empty because
+    // _tgfx_native hasn't been loaded yet at that moment.
+    try {
+        nb::module_::import_("tgfx._tgfx_native");
+    } catch (const std::exception& e) {
+        // If tgfx isn't available (minimal builds), ctx2 property will
+        // degrade but everything else still works.
+        (void)e;
+    }
+
     nb::enum_<TextureFilter>(m, "TextureFilter")
         .value("LINEAR", TextureFilter::LINEAR)
         .value("NEAREST", TextureFilter::NEAREST);
@@ -342,7 +358,17 @@ void bind_render_framework(nb::module_& m) {
         .def_rw("rect", &ExecuteContext::rect)
         .def_rw("scene", &ExecuteContext::scene)
         .def_rw("lights", &ExecuteContext::lights)
-        .def_rw("layer_mask", &ExecuteContext::layer_mask);
+        .def_rw("layer_mask", &ExecuteContext::layer_mask)
+        // Stage 7: expose the tgfx2 RenderContext2 pointer so Python
+        // passes can open a ctx2 render pass, bind shaders/textures,
+        // and dispatch draws without going through the legacy
+        // GraphicsBackend. None if the frame was set up without tgfx2
+        // (e.g., TERMIN_DISABLE_TGFX2=1 escape hatch).
+        .def_prop_ro("ctx2",
+            [](const ExecuteContext& ctx) -> tgfx2::RenderContext2* {
+                return ctx.ctx2;
+            },
+            nb::rv_policy::reference);
 
     nb::class_<CxxFramePass>(m, "FramePass")
         .def_prop_rw("pass_name",

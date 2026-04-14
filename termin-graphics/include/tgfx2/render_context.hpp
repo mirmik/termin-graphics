@@ -36,7 +36,14 @@ class PipelineCache;
 class TGFX2_API RenderContext2 {
 public:
     RenderContext2(IRenderDevice& device, PipelineCache& cache);
-    ~RenderContext2();
+    // Virtual so the compiler emits a vtable + typeinfo in a single
+    // translation unit (render_context.cpp) and exports them from
+    // libtermin_graphics2.so. Without this, each nanobind extension
+    // module that includes render_context.hpp generates its own
+    // hidden-visibility typeinfo, and cross-module
+    // nb::class_<RenderContext2> lookups fail with
+    // "Unable to convert function return value to a Python type".
+    virtual ~RenderContext2();
 
     // Non-copyable
     RenderContext2(const RenderContext2&) = delete;
