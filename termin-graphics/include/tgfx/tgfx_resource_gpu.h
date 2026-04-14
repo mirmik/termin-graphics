@@ -25,6 +25,13 @@ typedef char* (*tgfx_shader_preprocess_fn)(const char* source, const char* sourc
 // Set shader preprocessor callback
 TGFX_API void tgfx_gpu_set_shader_preprocess(tgfx_shader_preprocess_fn fn);
 
+// Read the currently-set shader preprocessor callback (NULL if none).
+// Exposed so the tgfx2 OpenGL backend can reuse the same preprocessor
+// that the legacy path uses — that's where #include "lighting.glsl"
+// and friends get resolved. Without this, tgfx2-compiled shaders
+// would fail on any .shader that relies on includes.
+TGFX_API tgfx_shader_preprocess_fn tgfx_gpu_get_shader_preprocess(void);
+
 // ============================================================================
 // Texture GPU operations
 // ============================================================================

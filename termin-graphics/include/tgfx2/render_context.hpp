@@ -101,6 +101,31 @@ public:
     void defer_destroy(TextureHandle handle);
     void defer_destroy(BufferHandle handle);
 
+    // --- Transitional legacy-uniform setters ---
+    //
+    // These exist to bridge pre-existing .shader files that still declare
+    // plain `uniform mat4 u_view` / `uniform sampler2D u_shadow_map_0`
+    // etc. onto the tgfx2 draw path. They flush the pending pipeline
+    // (so the shader program is actually bound in GL) and then route
+    // through glUniform*/glUniformMatrix*/glUniform1i on the currently-
+    // bound program.
+    //
+    // Vulkan has no equivalent — Vulkan shaders must use UBOs or push
+    // constants. On a Vulkan backend these methods would be no-ops or
+    // assertions. Treat them as *temporary*: every caller is a candidate
+    // for migration to bind_uniform_buffer / set_push_constants.
+    void set_uniform_int(const char* name, int value);
+    void set_uniform_float(const char* name, float value);
+    void set_uniform_mat4(const char* name, const float* data,
+                          bool transpose = false);
+
+    // Link a `layout(std140) uniform NAME { ... }` block declared in
+    // the currently bound program to a binding slot. On Vulkan the
+    // binding is compiled into the shader via SPIR-V; this call is
+    // GL-only transitional, wrapping glUniformBlockBinding on the
+    // current program.
+    void set_block_binding(const char* block_name, uint32_t binding_slot);
+
     // Register a sampled texture at the given binding slot. The sampler is
     // optional; if omitted, the backend uses the texture's default sampling
     // parameters (useful for GL 3.3 style shaders without separate samplers).

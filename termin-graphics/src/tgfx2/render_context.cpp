@@ -5,6 +5,7 @@
 #include "tgfx2/i_command_list.hpp"
 #include "tgfx2/opengl/opengl_render_device.hpp"
 
+#include <glad/glad.h>
 #include <cstring>
 
 namespace tgfx2 {
@@ -320,6 +321,54 @@ void RenderContext2::defer_destroy(TextureHandle handle) {
 
 void RenderContext2::defer_destroy(BufferHandle handle) {
     if (handle) deferred_destroy_buffers_.push_back(handle);
+}
+
+// --- Transitional legacy-uniform setters ---
+
+void RenderContext2::set_uniform_int(const char* name, int value) {
+    if (!name) return;
+    flush_pipeline();
+    GLint prog = 0;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
+    if (prog == 0) return;
+    GLint loc = glGetUniformLocation(static_cast<GLuint>(prog), name);
+    if (loc >= 0) glUniform1i(loc, value);
+}
+
+void RenderContext2::set_uniform_float(const char* name, float value) {
+    if (!name) return;
+    flush_pipeline();
+    GLint prog = 0;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
+    if (prog == 0) return;
+    GLint loc = glGetUniformLocation(static_cast<GLuint>(prog), name);
+    if (loc >= 0) glUniform1f(loc, value);
+}
+
+void RenderContext2::set_uniform_mat4(const char* name, const float* data,
+                                      bool transpose) {
+    if (!name || !data) return;
+    flush_pipeline();
+    GLint prog = 0;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
+    if (prog == 0) return;
+    GLint loc = glGetUniformLocation(static_cast<GLuint>(prog), name);
+    if (loc >= 0) {
+        glUniformMatrix4fv(loc, 1,
+                           transpose ? GL_TRUE : GL_FALSE,
+                           data);
+    }
+}
+
+void RenderContext2::set_block_binding(const char* block_name, uint32_t binding_slot) {
+    if (!block_name) return;
+    flush_pipeline();
+    GLint prog = 0;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
+    if (prog == 0) return;
+    GLuint idx = glGetUniformBlockIndex(static_cast<GLuint>(prog), block_name);
+    if (idx == GL_INVALID_INDEX) return;
+    glUniformBlockBinding(static_cast<GLuint>(prog), idx, binding_slot);
 }
 
 void RenderContext2::set_color_format(PixelFormat fmt) {

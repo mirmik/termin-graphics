@@ -6,8 +6,13 @@
 #include <stdexcept>
 #include <string>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <tcbase/tc_log.hpp>
+
+extern "C" {
+#include "tgfx/tgfx_resource_gpu.h"
+}
 
 namespace tgfx2 {
 
@@ -167,7 +172,20 @@ ShaderHandle OpenGLRenderDevice::create_shader(const ShaderDesc& desc) {
     GLenum gl_stage = gl::to_gl_shader_stage(desc.stage);
     mod.gl_shader = glCreateShader(gl_stage);
 
+    // Run the same GLSL preprocessor the legacy tgfx path uses (see
+    // tgfx_gpu_set_shader_preprocess / glsl_preprocessor in termin-app).
+    // Without this, #include "lighting.glsl" and friends in material
+    // shaders fail to compile when routed through tgfx2.
     const char* src = desc.source.c_str();
+    char* preprocessed = nullptr;
+    tgfx_shader_preprocess_fn preprocess = tgfx_gpu_get_shader_preprocess();
+    if (preprocess) {
+        preprocessed = preprocess(desc.source.c_str(), "<tgfx2 shader>");
+        if (preprocessed) {
+            src = preprocessed;
+        }
+    }
+
     glShaderSource(mod.gl_shader, 1, &src, nullptr);
     glCompileShader(mod.gl_shader);
 
@@ -177,9 +195,11 @@ ShaderHandle OpenGLRenderDevice::create_shader(const ShaderDesc& desc) {
         char log[1024];
         glGetShaderInfoLog(mod.gl_shader, sizeof(log), nullptr, log);
         glDeleteShader(mod.gl_shader);
+        if (preprocessed) std::free(preprocessed);
         throw std::runtime_error(std::string("Shader compile error: ") + log);
     }
 
+    if (preprocessed) std::free(preprocessed);
     return {shaders_.add(std::move(mod))};
 }
 
