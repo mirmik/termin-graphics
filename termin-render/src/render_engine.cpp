@@ -171,6 +171,10 @@ void RenderEngine::render_view_to_fbo(
         return;
     }
 
+    // Bring up tgfx2 stack BEFORE FBO allocation so FBOPool::ensure can
+    // attach persistent tgfx2 wrappers on the very first frame.
+    ensure_tgfx2();
+
     auto specs = pipeline.collect_specs();
 
     std::unordered_map<std::string, ResourceSpec> spec_map;
@@ -345,9 +349,6 @@ void RenderEngine::render_view_to_fbo(
 
     size_t schedule_count = tc_frame_graph_schedule_count(fg);
 
-    // Lazily spin up tgfx2 stack so Phase 2 passes can use ctx.ctx2.
-    // Does nothing on repeat calls or when graphics backend is unavailable.
-    ensure_tgfx2();
     if (tgfx2_ctx_) {
         tgfx2_ctx_->begin_frame();
     }
@@ -496,6 +497,10 @@ void RenderEngine::render_scene_pipeline_offscreen(
         return;
     }
     tc_profiler_end_section();
+
+    // Bring up tgfx2 stack BEFORE FBO allocation so FBOPool::ensure can
+    // attach persistent tgfx2 wrappers on the very first frame.
+    ensure_tgfx2();
 
     tc_profiler_begin_section("Collect Specs");
     auto specs = pipeline.collect_specs();
@@ -677,8 +682,6 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
     size_t schedule_count = tc_frame_graph_schedule_count(fg);
 
-    // Lazily spin up tgfx2 stack so Phase 2 passes can use ctx.ctx2.
-    ensure_tgfx2();
     if (tgfx2_ctx_) {
         tgfx2_ctx_->begin_frame();
     }
