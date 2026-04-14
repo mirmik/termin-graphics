@@ -118,6 +118,8 @@ public:
     void set_uniform_float(const char* name, float value);
     void set_uniform_mat4(const char* name, const float* data,
                           bool transpose = false);
+    void set_uniform_mat4_array(const char* name, const float* data,
+                                int count, bool transpose = false);
 
     // Link a `layout(std140) uniform NAME { ... }` block declared in
     // the currently bound program to a binding slot. On Vulkan the

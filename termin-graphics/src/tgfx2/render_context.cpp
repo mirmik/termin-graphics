@@ -357,6 +357,21 @@ void RenderContext2::set_uniform_mat4(const char* name, const float* data,
     }
 }
 
+void RenderContext2::set_uniform_mat4_array(const char* name, const float* data,
+                                             int count, bool transpose) {
+    if (!name || !data || count <= 0) return;
+    flush_pipeline();
+    GLint prog = 0;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
+    if (prog == 0) return;
+    GLint loc = glGetUniformLocation(static_cast<GLuint>(prog), name);
+    if (loc >= 0) {
+        glUniformMatrix4fv(loc, count,
+                           transpose ? GL_TRUE : GL_FALSE,
+                           data);
+    }
+}
+
 void RenderContext2::set_block_binding(const char* block_name, uint32_t binding_slot) {
     if (!block_name) return;
     flush_pipeline();
