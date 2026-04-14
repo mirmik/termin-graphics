@@ -120,27 +120,108 @@ Tgfx2MeshBinding wrap_mesh_as_tgfx2(
     out.layout.attributes.reserve(mesh->layout.attrib_count);
     for (uint8_t i = 0; i < mesh->layout.attrib_count; i++) {
         const tgfx_vertex_attrib& a = mesh->layout.attribs[i];
-        // tgfx2::VertexFormat currently only enumerates float variants
-        // (Float, Float2, Float3, Float4) and UByte4{,N}. The layouts
-        // produced by tc_vertex_layout_pos* helpers are all FLOAT32 with
-        // size 1..4, which matches cleanly. Integer attribute types
-        // (used only by skinning joint indices today) need a VertexFormat
-        // extension before Stage 5.B can wire skinning through tgfx2.
         tgfx2::VertexAttribute va;
         va.location = a.location;
         va.offset = a.offset;
-        switch (a.size) {
-            case 1: va.format = tgfx2::VertexFormat::Float;  break;
-            case 2: va.format = tgfx2::VertexFormat::Float2; break;
-            case 3: va.format = tgfx2::VertexFormat::Float3; break;
-            case 4: va.format = tgfx2::VertexFormat::Float4; break;
+
+        // Map (tgfx_attrib_type, size) → tgfx2::VertexFormat. Covers
+        // the full 1..4 component range for FLOAT32, INT32, UINT32,
+        // INT16, UINT16 and the 4-component packed int8/uint8 forms.
+        // Integer attribute types read via glVertexAttribIPointer in
+        // the OpenGL backend — see vertex_format_is_integer() in
+        // opengl_type_conversions.cpp and the branch in
+        // OpenGLCommandList::bind_vertex_buffer.
+        bool ok = true;
+        switch (static_cast<tgfx_attrib_type>(a.type)) {
+            case TGFX_ATTRIB_FLOAT32:
+                switch (a.size) {
+                    case 1: va.format = tgfx2::VertexFormat::Float;  break;
+                    case 2: va.format = tgfx2::VertexFormat::Float2; break;
+                    case 3: va.format = tgfx2::VertexFormat::Float3; break;
+                    case 4: va.format = tgfx2::VertexFormat::Float4; break;
+                    default: ok = false; break;
+                }
+                break;
+            case TGFX_ATTRIB_INT32:
+                switch (a.size) {
+                    case 1: va.format = tgfx2::VertexFormat::Int;  break;
+                    case 2: va.format = tgfx2::VertexFormat::Int2; break;
+                    case 3: va.format = tgfx2::VertexFormat::Int3; break;
+                    case 4: va.format = tgfx2::VertexFormat::Int4; break;
+                    default: ok = false; break;
+                }
+                break;
+            case TGFX_ATTRIB_UINT32:
+                switch (a.size) {
+                    case 1: va.format = tgfx2::VertexFormat::UInt;  break;
+                    case 2: va.format = tgfx2::VertexFormat::UInt2; break;
+                    case 3: va.format = tgfx2::VertexFormat::UInt3; break;
+                    case 4: va.format = tgfx2::VertexFormat::UInt4; break;
+                    default: ok = false; break;
+                }
+                break;
+            case TGFX_ATTRIB_INT16:
+                switch (a.size) {
+                    case 1: va.format = tgfx2::VertexFormat::Short;  break;
+                    case 2: va.format = tgfx2::VertexFormat::Short2; break;
+                    case 3: va.format = tgfx2::VertexFormat::Short3; break;
+                    case 4: va.format = tgfx2::VertexFormat::Short4; break;
+                    default: ok = false; break;
+                }
+                break;
+            case TGFX_ATTRIB_UINT16:
+                switch (a.size) {
+                    case 1: va.format = tgfx2::VertexFormat::UShort;  break;
+                    case 2: va.format = tgfx2::VertexFormat::UShort2; break;
+                    case 3: va.format = tgfx2::VertexFormat::UShort3; break;
+                    case 4: va.format = tgfx2::VertexFormat::UShort4; break;
+                    default: ok = false; break;
+                }
+                break;
+            case TGFX_ATTRIB_INT8:
+                // 1..3-component int8 attrs are exotic; we only cover
+                // the common 4-component skinning-like case.
+                if (a.size == 4) {
+                    va.format = tgfx2::VertexFormat::Byte4;
+                } else {
+                    ok = false;
+                }
+                break;
+            case TGFX_ATTRIB_UINT8:
+                // UByte4 = raw integer (glVertexAttribIPointer). Legacy
+                // vertex colors were historically passed as UInt8 with
+                // normalization — that corresponds to UByte4N, which the
+                // current tgfx1 layout helpers don't request. If a mesh
+                // really needs normalized uint8, extend tgfx_attrib_type
+                // with a normalized flag; for now map to the raw variant.
+                if (a.size == 4) {
+                    va.format = tgfx2::VertexFormat::UByte4;
+                } else {
+                    ok = false;
+                }
+                break;
             default:
-                tc::Log::error("wrap_mesh_as_tgfx2: unsupported attrib size %u for '%s'",
-                               unsigned(a.size),
-                               mesh->header.name ? mesh->header.name : mesh->header.uuid);
-                va.format = tgfx2::VertexFormat::Float3;
+                ok = false;
                 break;
         }
+
+        if (!ok) {
+            tc::Log::error(
+                "wrap_mesh_as_tgfx2: unsupported attrib (type=%u, size=%u) "
+                "for '%s' — substituting Float%u",
+                unsigned(a.type), unsigned(a.size),
+                mesh->header.name ? mesh->header.name : mesh->header.uuid,
+                unsigned(a.size >= 1 && a.size <= 4 ? a.size : 3));
+            // Fall back to a float variant so the draw at least doesn't
+            // crash. Shader will read garbage but the pipeline stays alive.
+            switch (a.size) {
+                case 1: va.format = tgfx2::VertexFormat::Float;  break;
+                case 2: va.format = tgfx2::VertexFormat::Float2; break;
+                case 4: va.format = tgfx2::VertexFormat::Float4; break;
+                default: va.format = tgfx2::VertexFormat::Float3; break;
+            }
+        }
+
         out.layout.attributes.push_back(va);
     }
 

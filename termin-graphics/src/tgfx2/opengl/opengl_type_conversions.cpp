@@ -144,12 +144,32 @@ GLenum to_gl_shader_stage(ShaderStage stage) {
 
 int vertex_format_component_count(VertexFormat fmt) {
     switch (fmt) {
-        case VertexFormat::Float:   return 1;
-        case VertexFormat::Float2:  return 2;
-        case VertexFormat::Float3:  return 3;
-        case VertexFormat::Float4:  return 4;
-        case VertexFormat::UByte4:  return 4;
-        case VertexFormat::UByte4N: return 4;
+        case VertexFormat::Float:
+        case VertexFormat::Int:
+        case VertexFormat::UInt:
+        case VertexFormat::Short:
+        case VertexFormat::UShort:   return 1;
+
+        case VertexFormat::Float2:
+        case VertexFormat::Int2:
+        case VertexFormat::UInt2:
+        case VertexFormat::Short2:
+        case VertexFormat::UShort2:  return 2;
+
+        case VertexFormat::Float3:
+        case VertexFormat::Int3:
+        case VertexFormat::UInt3:
+        case VertexFormat::Short3:
+        case VertexFormat::UShort3:  return 3;
+
+        case VertexFormat::Float4:
+        case VertexFormat::Int4:
+        case VertexFormat::UInt4:
+        case VertexFormat::Short4:
+        case VertexFormat::UShort4:
+        case VertexFormat::Byte4:
+        case VertexFormat::UByte4:
+        case VertexFormat::UByte4N:  return 4;
     }
     return 4;
 }
@@ -159,15 +179,64 @@ GLenum vertex_format_gl_type(VertexFormat fmt) {
         case VertexFormat::Float:
         case VertexFormat::Float2:
         case VertexFormat::Float3:
-        case VertexFormat::Float4:  return GL_FLOAT;
+        case VertexFormat::Float4:   return GL_FLOAT;
+
+        case VertexFormat::Int:
+        case VertexFormat::Int2:
+        case VertexFormat::Int3:
+        case VertexFormat::Int4:     return GL_INT;
+
+        case VertexFormat::UInt:
+        case VertexFormat::UInt2:
+        case VertexFormat::UInt3:
+        case VertexFormat::UInt4:    return GL_UNSIGNED_INT;
+
+        case VertexFormat::Short:
+        case VertexFormat::Short2:
+        case VertexFormat::Short3:
+        case VertexFormat::Short4:   return GL_SHORT;
+
+        case VertexFormat::UShort:
+        case VertexFormat::UShort2:
+        case VertexFormat::UShort3:
+        case VertexFormat::UShort4:  return GL_UNSIGNED_SHORT;
+
+        case VertexFormat::Byte4:    return GL_BYTE;
+
         case VertexFormat::UByte4:
-        case VertexFormat::UByte4N: return GL_UNSIGNED_BYTE;
+        case VertexFormat::UByte4N:  return GL_UNSIGNED_BYTE;
     }
     return GL_FLOAT;
 }
 
 bool vertex_format_is_integer(VertexFormat fmt) {
-    return fmt == VertexFormat::UByte4;
+    // An "integer" format here means one that must be fed to the
+    // vertex shader via glVertexAttribIPointer (so the shader reads
+    // `in ivec4` / `in uvec4` etc.) rather than being converted to
+    // floating point. UByte4N (normalized) stays floating-point.
+    switch (fmt) {
+        case VertexFormat::Int:
+        case VertexFormat::Int2:
+        case VertexFormat::Int3:
+        case VertexFormat::Int4:
+        case VertexFormat::UInt:
+        case VertexFormat::UInt2:
+        case VertexFormat::UInt3:
+        case VertexFormat::UInt4:
+        case VertexFormat::Short:
+        case VertexFormat::Short2:
+        case VertexFormat::Short3:
+        case VertexFormat::Short4:
+        case VertexFormat::UShort:
+        case VertexFormat::UShort2:
+        case VertexFormat::UShort3:
+        case VertexFormat::UShort4:
+        case VertexFormat::Byte4:
+        case VertexFormat::UByte4:
+            return true;
+        default:
+            return false;
+    }
 }
 
 bool vertex_format_is_normalized(VertexFormat fmt) {
