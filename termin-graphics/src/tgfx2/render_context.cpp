@@ -83,25 +83,6 @@ void RenderContext2::end_frame() {
     for (auto h : deferred_destroy_buffers_)  device_.destroy(h);
     deferred_destroy_textures_.clear();
     deferred_destroy_buffers_.clear();
-
-    // Drop the per-device GL FBO cache at end of frame.
-    //
-    // Even though FBOPool persists its tgfx2 texture wrappers across
-    // frames (Phase 3), the editor pipeline still mixes tgfx2 passes
-    // with legacy passes (e.g. PostProcessPass) that bind and mutate
-    // the underlying FBOs directly through GraphicsBackend. That leaves
-    // the cached GL FBOs in an inconsistent state for subsequent tgfx2
-    // passes — the cache-hit reuses a framebuffer whose attachments or
-    // draw buffers were altered by legacy code, producing the "black
-    // output after TonemapPass" symptom.
-    //
-    // Invalidating here is cheap (a handful of glDeleteFramebuffers per
-    // frame) and guarantees begin_render_pass always rebuilds a fresh
-    // FBO from the tgfx2 attachment descriptors. Remove once every pass
-    // is migrated off the legacy GraphicsBackend path.
-    if (auto* gl_dev = dynamic_cast<OpenGLRenderDevice*>(&device_)) {
-        gl_dev->invalidate_fbo_cache();
-    }
 }
 
 // ============================================================================
