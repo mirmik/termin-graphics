@@ -299,6 +299,11 @@ void RenderContext2::clear_resource_bindings() {
     bindings_dirty_ = true;
 }
 
+void RenderContext2::set_push_constants(const void* data, uint32_t size) {
+    if (!cmd_) return;
+    cmd_->set_push_constants(data, size);
+}
+
 void RenderContext2::set_color_format(PixelFormat fmt) {
     if (color_format_ != fmt) {
         color_format_ = fmt;

@@ -22,6 +22,7 @@ public:
 
     void bind_pipeline(PipelineHandle pipeline) override;
     void bind_resource_set(ResourceSetHandle set) override;
+    void set_push_constants(const void* data, uint32_t size) override;
 
     void bind_vertex_buffer(uint32_t slot, BufferHandle buffer, uint64_t offset = 0) override;
     void bind_index_buffer(BufferHandle buffer, IndexType type, uint64_t offset = 0) override;

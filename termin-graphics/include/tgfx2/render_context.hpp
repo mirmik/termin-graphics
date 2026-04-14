@@ -84,6 +84,14 @@ public:
     void bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
                              uint64_t offset = 0, uint64_t range = 0);
 
+    // Set per-draw push constants. Payload becomes visible to the next
+    // draw call at binding slot TGFX2_PUSH_CONSTANTS_BINDING (GL) or via
+    // `layout(push_constant)` on Vulkan. Max payload is
+    // TGFX2_PUSH_CONSTANTS_MAX_BYTES (128 bytes, Vulkan-compat). Typical
+    // use: model matrix and other per-object data that changes every
+    // draw — avoids the churn of uploading/rebinding a full UBO.
+    void set_push_constants(const void* data, uint32_t size);
+
     // Register a sampled texture at the given binding slot. The sampler is
     // optional; if omitted, the backend uses the texture's default sampling
     // parameters (useful for GL 3.3 style shaders without separate samplers).

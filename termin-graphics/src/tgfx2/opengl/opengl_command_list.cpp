@@ -14,7 +14,12 @@ OpenGLCommandList::~OpenGLCommandList() {
 }
 
 void OpenGLCommandList::begin() {
-    // Nothing to do for immediate mode
+    // Reset the device's push constants ring buffer offset. This is
+    // conceptually "start of a new command recording" — we own the
+    // ring for the duration of this command list's execution.
+    device_.push_constants_reset_frame();
+    pending_push_offset_ = 0;
+    pending_push_size_ = 0;
 }
 
 void OpenGLCommandList::end() {
@@ -160,6 +165,32 @@ void OpenGLCommandList::setup_vao_for_pipeline(GLPipeline* pipeline) {
     }
 }
 
+// --- Push constants ---
+
+void OpenGLCommandList::set_push_constants(const void* data, uint32_t size) {
+    if (!data || size == 0) {
+        pending_push_size_ = 0;
+        return;
+    }
+    GLintptr offset = device_.push_constants_write(data, size);
+    if (offset < 0) {
+        // write failed or payload too large — skip binding, draw will
+        // use whatever was previously bound (or nothing).
+        pending_push_size_ = 0;
+        return;
+    }
+    pending_push_offset_ = offset;
+    pending_push_size_ = static_cast<GLsizeiptr>(size);
+}
+
+void OpenGLCommandList::apply_pending_push_constants() {
+    if (pending_push_size_ == 0) return;
+    GLuint ubo = device_.push_constants_ring_buffer();
+    if (ubo == 0) return;
+    glBindBufferRange(GL_UNIFORM_BUFFER, TGFX2_PUSH_CONSTANTS_BINDING, ubo,
+                      pending_push_offset_, pending_push_size_);
+}
+
 // --- Resource binding ---
 
 void OpenGLCommandList::bind_resource_set(ResourceSetHandle set) {
@@ -262,11 +293,13 @@ void OpenGLCommandList::bind_index_buffer(BufferHandle buffer, IndexType type, u
 
 void OpenGLCommandList::draw(uint32_t vertex_count, uint32_t first_vertex) {
     if (current_vao_) glBindVertexArray(current_vao_);
+    apply_pending_push_constants();
     glDrawArrays(current_topology_, first_vertex, vertex_count);
 }
 
 void OpenGLCommandList::draw_indexed(uint32_t index_count, uint32_t first_index, int32_t vertex_offset) {
     if (current_vao_) glBindVertexArray(current_vao_);
+    apply_pending_push_constants();
 
     auto index_size = (current_index_type_ == GL_UNSIGNED_SHORT) ? 2u : 4u;
     auto byte_offset = current_index_offset_ + first_index * index_size;

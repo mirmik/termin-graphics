@@ -149,6 +149,16 @@ void VulkanCommandList::bind_resource_set(ResourceSetHandle set) {
                              current_layout_, 0, 1, &rs->descriptor_set, 0, nullptr);
 }
 
+void VulkanCommandList::set_push_constants(const void* data, uint32_t size) {
+    if (!data || size == 0 || !current_layout_) return;
+    // Push to all shader stages for now. Pipeline layouts must declare
+    // a VkPushConstantRange that covers [0, size] for all stages; the
+    // Vulkan backend's pipeline creation path is responsible for that
+    // (TBD — Vulkan backend has no push constants wiring yet).
+    vkCmdPushConstants(cmd_, current_layout_,
+                       VK_SHADER_STAGE_ALL_GRAPHICS, 0, size, data);
+}
+
 // --- Vertex / index ---
 
 void VulkanCommandList::bind_vertex_buffer(uint32_t slot, BufferHandle buffer, uint64_t offset) {

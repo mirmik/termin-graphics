@@ -1,11 +1,13 @@
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #include "tgfx2/opengl/opengl_command_list.hpp"
 #include "tgfx2/opengl/opengl_type_conversions.hpp"
+#include "tgfx2/i_command_list.hpp"
 
 #include <stdexcept>
 #include <string>
 #include <cstdio>
 #include <cstring>
+#include <tcbase/tc_log.hpp>
 
 namespace tgfx2 {
 
@@ -24,6 +26,12 @@ OpenGLRenderDevice::~OpenGLRenderDevice() {
         if (fbo) glDeleteFramebuffers(1, &fbo);
     }
     fbo_cache_.clear();
+
+    // Clean up push constants ring buffer
+    if (push_ring_buf_) {
+        glDeleteBuffers(1, &push_ring_buf_);
+        push_ring_buf_ = 0;
+    }
 
     // Clean up all remaining GL resources
     for (auto& [id, buf] : buffers_) {
@@ -455,6 +463,70 @@ void OpenGLRenderDevice::invalidate_fbo_cache() {
         }
     }
     fbo_cache_.clear();
+}
+
+// --- Push constants ring buffer ---
+
+void OpenGLRenderDevice::ensure_push_ring() {
+    if (push_ring_initialized_) return;
+
+    glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &push_ring_alignment_);
+    if (push_ring_alignment_ <= 0) {
+        push_ring_alignment_ = 256;
+    }
+
+    glGenBuffers(1, &push_ring_buf_);
+    glBindBuffer(GL_UNIFORM_BUFFER, push_ring_buf_);
+    // GL_STREAM_DRAW hints "written once, used a few times, re-written".
+    // Paired with buffer orphaning (glBufferData NULL on overflow) this
+    // avoids GPU stalls on reuse.
+    glBufferData(GL_UNIFORM_BUFFER, push_ring_size_, nullptr, GL_STREAM_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    push_ring_offset_ = 0;
+    push_ring_initialized_ = true;
+}
+
+void OpenGLRenderDevice::push_constants_reset_frame() {
+    push_ring_offset_ = 0;
+}
+
+GLintptr OpenGLRenderDevice::push_constants_write(const void* data, uint32_t size) {
+    if (!data || size == 0) {
+        return -1;
+    }
+    if (size > TGFX2_PUSH_CONSTANTS_MAX_BYTES) {
+        tc::Log::error("tgfx2: push constants payload %u bytes exceeds max %u",
+                       size, TGFX2_PUSH_CONSTANTS_MAX_BYTES);
+        return -1;
+    }
+
+    ensure_push_ring();
+
+    const GLintptr align  = static_cast<GLintptr>(push_ring_alignment_);
+    const GLintptr padded = (static_cast<GLintptr>(size) + align - 1) / align * align;
+
+    // Align current offset to the UBO alignment requirement.
+    GLintptr offset = (push_ring_offset_ + align - 1) / align * align;
+
+    if (offset + padded > push_ring_size_) {
+        // Ring overflow: orphan the buffer storage so the driver gives
+        // us a fresh GPU allocation without stalling on old contents,
+        // then rewind the write cursor. This is the "invalidate the
+        // whole buffer" idiom (equivalent to glInvalidateBufferData on
+        // GL 4.3+).
+        glBindBuffer(GL_UNIFORM_BUFFER, push_ring_buf_);
+        glBufferData(GL_UNIFORM_BUFFER, push_ring_size_, nullptr, GL_STREAM_DRAW);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+        offset = 0;
+    }
+
+    glBindBuffer(GL_UNIFORM_BUFFER, push_ring_buf_);
+    glBufferSubData(GL_UNIFORM_BUFFER, offset, static_cast<GLsizeiptr>(size), data);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    push_ring_offset_ = offset + padded;
+    return offset;
 }
 
 } // namespace tgfx2

@@ -165,6 +165,33 @@ public:
     // the original creator (typically OpenGLLayoutMeshHandle).
     BufferHandle register_external_buffer(GLuint gl_id, const BufferDesc& desc);
 
+    // --- Push constants ring buffer ---
+    //
+    // OpenGL has no push constants; we emulate them via a single large
+    // GL_UNIFORM_BUFFER used as a ring. Each set_push_constants() writes
+    // a new aligned chunk and the next draw_indexed() binds it with
+    // glBindBufferRange at TGFX2_PUSH_CONSTANTS_BINDING.
+    //
+    // The ring is reset once per frame when OpenGLCommandList::begin()
+    // is called. On overflow within a single frame we orphan the
+    // storage (glBufferData NULL) and restart — simple and stall-free
+    // under normal draw counts. Max ~4096 pushes per frame at 256-byte
+    // alignment, 1 MB ring. Larger scenes will wrap and re-orphan.
+
+    // Allocate a push-constants slot and copy `size` bytes from `data`
+    // into it. Returns the byte offset inside the ring buffer. The
+    // caller must bind the range at offset [offset, size] to
+    // TGFX2_PUSH_CONSTANTS_BINDING before the next draw. Returns 0 and
+    // logs on failure (caller should skip the draw).
+    GLintptr push_constants_write(const void* data, uint32_t size);
+
+    // Current ring buffer object (0 if not yet allocated).
+    GLuint push_constants_ring_buffer() const { return push_ring_buf_; }
+
+    // Reset the ring offset to 0. Called once per frame from
+    // OpenGLCommandList::begin().
+    void push_constants_reset_frame();
+
 private:
     HandlePool<GLBuffer> buffers_;
     HandlePool<GLTexture> textures_;
@@ -179,6 +206,15 @@ private:
     // FBO cache: key = sorted vector of (GL attachment enum, GL texture id)
     using FBOKey = std::vector<std::pair<GLenum, GLuint>>;
     std::map<FBOKey, GLuint> fbo_cache_;
+
+    // Push constants ring buffer state (see push_constants_write).
+    GLuint     push_ring_buf_       = 0;
+    GLsizeiptr push_ring_size_      = 1 << 20;   // 1 MB
+    GLintptr   push_ring_offset_    = 0;
+    GLint      push_ring_alignment_ = 256;       // queried from GL at first use
+    bool       push_ring_initialized_ = false;
+
+    void ensure_push_ring();
 };
 
 } // namespace tgfx2
