@@ -117,6 +117,28 @@ public:
     // Returns GL FBO id. FBO 0 = default framebuffer (when no textures specified).
     GLuint get_or_create_fbo(const RenderPassDesc& pass);
 
+    // Drop every cached GL FBO.
+    //
+    // TEMPORARY — exists for the duration of the tgfx2 migration only.
+    // It papers over an ownership inconsistency: during Phase 2, render
+    // targets are owned by the legacy FBOPool, and tgfx2 passes borrow
+    // them for the duration of a single frame via register_external_texture
+    // (see termin-render/src/tgfx2_bridge.cpp::wrap_fbo_color_as_tgfx2).
+    // At end-of-frame those borrows are released; the fbo_cache_ entries
+    // built around them are no longer safe because legacy code is free
+    // to mutate the underlying GL attachment state between frames without
+    // going through tgfx2. Rebuilding FBOs each frame costs 1–3 FBO
+    // allocations per frame — negligible.
+    //
+    // Remove this once Phase 3 of migration-tgfx2.md (FBOPool moves to
+    // tgfx2-backed allocation) ships: render targets will then be tgfx2
+    // resources from birth, there is no bridge, cache entries live as
+    // long as their texture handles live, and FBOs can be cached safely
+    // across frames.
+    //
+    // Called from RenderContext2::end_frame().
+    void invalidate_fbo_cache();
+
     // Wrap an externally-owned GL texture object as a tgfx2::TextureHandle.
     //
     // Use this to interop with legacy tgfx FBOs during Phase 2 migration:

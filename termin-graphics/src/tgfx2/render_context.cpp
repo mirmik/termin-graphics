@@ -3,6 +3,7 @@
 #include "tgfx2/pipeline_cache.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/i_command_list.hpp"
+#include "tgfx2/opengl/opengl_render_device.hpp"
 
 #include <cstring>
 
@@ -71,6 +72,28 @@ void RenderContext2::end_frame() {
     }
     pending_bindings_.clear();
     bindings_dirty_ = true;
+
+    // TEMPORARY (Phase 2 migration scaffold). Drop the OpenGL FBO cache.
+    //
+    // During the tgfx2 migration, render targets are owned by the legacy
+    // FBOPool; tgfx2 passes see them via register_external_texture and
+    // those wrappers are destroyed at end_frame (see render_engine.cpp).
+    // The fbo_cache_ in OpenGLRenderDevice is keyed by the underlying GL
+    // texture id, so it outlives the wrappers and points into resources
+    // whose GL attachment state legacy passes are free to mutate between
+    // frames. We hit this as the "editor viewport is black after frame 1"
+    // regression — frame 1 drew fine, frame 2 reused a cached FBO and
+    // rendered into nowhere.
+    //
+    // Removing this call is blocked by Phase 3 of migration-tgfx2.md
+    // ("Framebuffer → tgfx2 render targets"). Once FBOPool allocates
+    // through IRenderDevice::create_texture and render targets are tgfx2
+    // resources from birth, there is no borrow, cache entries live as
+    // long as their texture handles, and this invalidation becomes
+    // unnecessary.
+    if (auto* gl_dev = dynamic_cast<OpenGLRenderDevice*>(&device_)) {
+        gl_dev->invalidate_fbo_cache();
+    }
 }
 
 // ============================================================================

@@ -437,4 +437,13 @@ GLuint OpenGLRenderDevice::get_or_create_fbo(const RenderPassDesc& pass) {
     return fbo;
 }
 
+void OpenGLRenderDevice::invalidate_fbo_cache() {
+    for (auto& [key, fbo] : fbo_cache_) {
+        if (fbo != 0) {
+            glDeleteFramebuffers(1, &fbo);
+        }
+    }
+    fbo_cache_.clear();
+}
+
 } // namespace tgfx2
