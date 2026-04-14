@@ -21,10 +21,31 @@ static bool g_initialized = false;
 // Callback set by tgfx2 C++ glue to release per-phase UBOs (tc_material.h).
 static tc_material_phase_release_ubo_fn g_phase_release_ubo_cb = NULL;
 
+// Callback set by tgfx2 C++ glue for the raw-GL UBO dispatcher.
+static tc_material_phase_apply_ubo_gl_fn g_phase_apply_ubo_gl_cb = NULL;
+
 void tc_material_phase_set_release_ubo_callback(
     tc_material_phase_release_ubo_fn cb
 ) {
     g_phase_release_ubo_cb = cb;
+}
+
+void tc_material_phase_set_apply_ubo_gl_callback(
+    tc_material_phase_apply_ubo_gl_fn cb
+) {
+    g_phase_apply_ubo_gl_cb = cb;
+}
+
+bool tc_material_phase_apply_ubo_gl(
+    tc_material_phase* phase,
+    const tc_shader* shader,
+    uint32_t binding_slot,
+    void* tgfx2_device
+) {
+    if (!phase || !shader || !tgfx2_device) return false;
+    if (shader->material_ubo_block_size == 0) return false;
+    if (!g_phase_apply_ubo_gl_cb) return false;
+    return g_phase_apply_ubo_gl_cb(phase, shader, binding_slot, tgfx2_device);
 }
 
 void tc_material_phase_release_ubo(tc_material_phase* phase) {
