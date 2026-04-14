@@ -83,34 +83,6 @@ void RenderContext2::end_frame() {
     for (auto h : deferred_destroy_buffers_)  device_.destroy(h);
     deferred_destroy_textures_.clear();
     deferred_destroy_buffers_.clear();
-
-    // Drop the per-device GL FBO cache at end of frame.
-    //
-    // Stage 8.5 third attempt notes: ColliderGizmoPass migrated +
-    // WireframeRenderer killed + RenderEngine's pre-frame clear loop
-    // rewritten through ctx2->begin_pass, and the hack is *still*
-    // required. Remaining suspected paths:
-    //
-    //   - tcgui's UIRenderer draws every widget through raw-GL calls
-    //     on OpenGLGraphicsBackend (glBindFramebuffer, glUseProgram,
-    //     glScissor, glDrawArrays...) between viewport frames. ctx2
-    //     doesn't own the GL state here and its fbo cache can't
-    //     observe mutations that happen through the GraphicsBackend
-    //     path.
-    //
-    //   - FBOPool resize recreates wrappers but an old cache entry
-    //     keyed by the previous gl_id may still reference a deleted
-    //     FBO object; the gl driver can recycle the id and a stale
-    //     lookup returns the wrong FBO.
-    //
-    // Both fixes are substantial: tcgui rendering through tgfx2 is a
-    // separate migration track, and FBOPool native tgfx2 targets is
-    // Stage 8.3. For now we keep the per-frame invalidate as a cheap
-    // barrier — ~O(N) glDeleteFramebuffers per frame where N is the
-    // number of distinct pass/FBO combinations.
-    if (auto* gl_dev = dynamic_cast<OpenGLRenderDevice*>(&device_)) {
-        gl_dev->invalidate_fbo_cache();
-    }
 }
 
 // ============================================================================

@@ -71,6 +71,12 @@ FramebufferHandle* FBOPool::ensure(
                     entry.format = format;
                     entry.filter = filter;
                     wrap_entry_for_tgfx2(entry, tgfx2_device);
+                    // The old GL FBO / textures are deleted. Any ctx2
+                    // fbo_cache entries keyed on the old gl_ids are now
+                    // stale — the driver may recycle those ids for new
+                    // textures. Invalidate to force begin_pass to
+                    // rebuild fresh FBOs from current attachments.
+                    if (tgfx2_device) tgfx2_device->invalidate_fbo_cache();
                 }
                 return entry.fbo.get();
             }
@@ -81,6 +87,9 @@ FramebufferHandle* FBOPool::ensure(
                 entry.width = width;
                 entry.height = height;
                 wrap_entry_for_tgfx2(entry, tgfx2_device);
+                // Same rationale as the recreate branch above — resize
+                // deletes the backing GL textures.
+                if (tgfx2_device) tgfx2_device->invalidate_fbo_cache();
             } else if (tgfx2_device && !entry.tgfx2_device) {
                 // Entry was allocated without a tgfx2 device; attach
                 // now so subsequent frames can pull pre-cached handles.
