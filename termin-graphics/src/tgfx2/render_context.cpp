@@ -83,6 +83,31 @@ void RenderContext2::end_frame() {
     for (auto h : deferred_destroy_buffers_)  device_.destroy(h);
     deferred_destroy_textures_.clear();
     deferred_destroy_buffers_.clear();
+
+    // Drop the per-device GL FBO cache at end of frame.
+    //
+    // Stage 8.5 second attempt: migrated ColliderGizmoPass to ctx2 and
+    // killed WireframeRenderer — that closed one legacy-GL-in-passes
+    // hole but did not fix the black screen. Remaining blockers:
+    //
+    //   - RenderEngine::render_view_to_fbo and
+    //     render_scene_pipeline_offscreen each run a pre-frame loop
+    //     that does graphics->bind_framebuffer(fbo) +
+    //     clear_color_depth(...) for every pipeline resource BEFORE
+    //     tgfx2_ctx_->begin_frame(). That leaves the GL framebuffer
+    //     binding in an unknown state from ctx2's perspective.
+    //
+    //   - FrameGraphCapture::do_blit (debug-only) also calls
+    //     graphics->bind_framebuffer during frame execute.
+    //
+    // Both paths predate the pipeline+command-buffer model and will
+    // disappear once Stage 8.3 (FBOPool on native tgfx2 render targets)
+    // and Stage 8.4 (drop ctx.graphics / FBOMap from ExecuteContext)
+    // land. At that point RenderEngine's clearing happens through
+    // ctx2->begin_pass(..., clear=true, ...) instead of legacy glClear.
+    if (auto* gl_dev = dynamic_cast<OpenGLRenderDevice*>(&device_)) {
+        gl_dev->invalidate_fbo_cache();
+    }
 }
 
 // ============================================================================
