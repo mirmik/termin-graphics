@@ -683,6 +683,23 @@ void RenderEngine::render_scene_pipeline_offscreen(
         tgfx2_ctx_->begin_frame();
     }
 
+    // Pull persistent tgfx2 wrappers from FBOPool for every resource
+    // the pipeline exposes. Mirrors render_view_to_fbo so ctx.tex2_*
+    // maps match for Skybox/Bloom/Tonemap/etc. in this offscreen path.
+    std::unordered_map<std::string, tgfx2::TextureHandle> tex2_resources;
+    if (tgfx2_ctx_ && tgfx2_device_) {
+        FBOPool& fbo_pool = pipeline.fbo_pool();
+        for (const auto& [name, res] : resources) {
+            if (!res) continue;
+            auto* fbo = dynamic_cast<FramebufferHandle*>(res);
+            if (!fbo) continue;
+            tgfx2::TextureHandle handle = fbo_pool.get_color_tgfx2(name);
+            if (handle) {
+                tex2_resources[name] = handle;
+            }
+        }
+    }
+
     tc_profiler_begin_section("Execute Passes");
     for (size_t i = 0; i < schedule_count; i++) {
         tc_pass* pass = tc_frame_graph_schedule_at(fg, i);
@@ -713,11 +730,17 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
         FBOMap pass_reads;
         FBOMap pass_writes;
+        Tex2Map pass_tex2_reads;
+        Tex2Map pass_tex2_writes;
 
         for (size_t j = 0; j < read_count; j++) {
             auto it = resources.find(reads[j]);
             FrameGraphResource* res = (it != resources.end()) ? it->second : nullptr;
             pass_reads[reads[j]] = res;
+            auto t_it = tex2_resources.find(reads[j]);
+            if (t_it != tex2_resources.end()) {
+                pass_tex2_reads[reads[j]] = t_it->second;
+            }
         }
 
         for (size_t j = 0; j < write_count; j++) {
@@ -728,6 +751,10 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 auto it = resources.find(write_name);
                 FrameGraphResource* res = (it != resources.end()) ? it->second : nullptr;
                 pass_writes[write_name] = res;
+                auto t_it = tex2_resources.find(write_name);
+                if (t_it != tex2_resources.end()) {
+                    pass_tex2_writes[write_name] = t_it->second;
+                }
             }
         }
 
@@ -736,6 +763,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
         ctx.ctx2 = tgfx2_ctx_.get();
         ctx.reads_fbos = std::move(pass_reads);
         ctx.writes_fbos = std::move(pass_writes);
+        ctx.tex2_reads = std::move(pass_tex2_reads);
+        ctx.tex2_writes = std::move(pass_tex2_writes);
         ctx.rect = vp_ctx.rect;
         ctx.scene = TcSceneRef(scene);
         ctx.viewport_name = vp_ctx.name;

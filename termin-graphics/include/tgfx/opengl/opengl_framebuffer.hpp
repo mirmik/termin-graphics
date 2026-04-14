@@ -32,12 +32,15 @@ inline FBOFormat parse_fbo_format(const std::string& format_str) {
 
 // Standard framebuffer with color and depth attachments.
 // Supports MSAA (samples > 1) and various texture formats.
+// Depth attachment is a texture (not a renderbuffer) so it can be
+// wrapped as a tgfx2::TextureHandle and consumed by ctx2.begin_pass
+// or sampled as input (e.g. for SSAO / depth-of-field passes).
 class OpenGLFramebufferHandle : public FramebufferHandle {
 public:
     OpenGLFramebufferHandle(int width, int height, int samples = 1, FBOFormat format = FBOFormat::RGBA8, TextureFilter filter = TextureFilter::LINEAR)
-        : fbo_(0), color_tex_(0), depth_rb_(0),
+        : fbo_(0), color_tex_(0), depth_tex_(0),
           width_(width), height_(height), samples_(samples), format_(format), filter_(filter),
-          owns_attachments_(true), color_ref_(0) {
+          owns_attachments_(true), color_ref_(0), depth_ref_(0) {
         create();
     }
 
@@ -52,9 +55,9 @@ public:
 
 private:
     OpenGLFramebufferHandle(uint32_t fbo_id, int width, int height, bool /*external*/)
-        : fbo_(fbo_id), color_tex_(0), depth_rb_(0),
+        : fbo_(fbo_id), color_tex_(0), depth_tex_(0),
           width_(width), height_(height), samples_(1), format_(FBOFormat::RGBA8),
-          owns_attachments_(false), color_ref_(0) {}
+          owns_attachments_(false), color_ref_(0), depth_ref_(0) {}
 
 public:
     ~OpenGLFramebufferHandle() override;
@@ -81,7 +84,7 @@ public:
         }
         if (fbo_ != 0) { glDeleteFramebuffers(1, &fbo_); fbo_ = 0; }
         if (color_tex_ != 0) { glDeleteTextures(1, &color_tex_); color_tex_ = 0; }
-        if (depth_rb_ != 0) { glDeleteRenderbuffers(1, &depth_rb_); depth_rb_ = 0; }
+        if (depth_tex_ != 0) { glDeleteTextures(1, &depth_tex_); depth_tex_ = 0; }
     }
 
     void set_external_target(uint32_t fbo_id, int width, int height) override {
@@ -91,7 +94,7 @@ public:
         width_ = width;
         height_ = height;
         color_tex_ = 0;
-        depth_rb_ = 0;
+        depth_tex_ = 0;
     }
 
     uint32_t get_fbo_id() const override { return fbo_; }
@@ -176,7 +179,10 @@ public:
     }
 
     GPUTextureHandle* depth_texture() override {
-        return nullptr;
+        if (depth_tex_ == 0) return nullptr;
+        depth_ref_.set_tex_id(depth_tex_);
+        depth_ref_.set_target(samples_ > 1 ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D);
+        return &depth_ref_;
     }
 
 private:
@@ -199,16 +205,23 @@ private:
         get_format_params(internal_format, pixel_format, pixel_type);
 
         if (samples_ > 1) {
+            // Color: multisample texture.
             glGenTextures(1, &color_tex_);
             glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, color_tex_);
             glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples_, internal_format, width_, height_, GL_TRUE);
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, color_tex_, 0);
 
-            glGenRenderbuffers(1, &depth_rb_);
-            glBindRenderbuffer(GL_RENDERBUFFER, depth_rb_);
-            glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples_, GL_DEPTH_COMPONENT24, width_, height_);
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_rb_);
+            // Depth: multisample texture (previously a renderbuffer).
+            // Texture form is required so the depth can be wrapped as a
+            // tgfx2::TextureHandle and fed into ctx2.begin_pass.
+            glGenTextures(1, &depth_tex_);
+            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, depth_tex_);
+            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples_,
+                                    GL_DEPTH_COMPONENT24, width_, height_, GL_TRUE);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                                   GL_TEXTURE_2D_MULTISAMPLE, depth_tex_, 0);
         } else {
+            // Color: regular texture.
             glGenTextures(1, &color_tex_);
             glBindTexture(GL_TEXTURE_2D, color_tex_);
             glTexImage2D(GL_TEXTURE_2D, 0, internal_format, width_, height_, 0, pixel_format, pixel_type, nullptr);
@@ -220,10 +233,22 @@ private:
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_tex_, 0);
 
-            glGenRenderbuffers(1, &depth_rb_);
-            glBindRenderbuffer(GL_RENDERBUFFER, depth_rb_);
-            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width_, height_);
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_rb_);
+            // Depth: regular texture instead of a renderbuffer.
+            // NEAREST filter is the safest default for depth texel
+            // lookups used by SSAO / blit; if a pass really wants
+            // bilinear depth it can sample through a sampler with
+            // GL_LINEAR set explicitly.
+            glGenTextures(1, &depth_tex_);
+            glBindTexture(GL_TEXTURE_2D, depth_tex_);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24,
+                         width_, height_, 0,
+                         GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                                   GL_TEXTURE_2D, depth_tex_, 0);
         }
 
         GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
@@ -233,7 +258,7 @@ private:
             tc::Log::error("  Size: %dx%d", width_, height_);
             tc::Log::error("  Samples: %d", samples_);
             tc::Log::error("  Format: %s (internal=0x%x)", get_format().c_str(), internal_format);
-            tc::Log::error("  FBO: %u, Color tex: %u, Depth RB: %u", fbo_, color_tex_, depth_rb_);
+            tc::Log::error("  FBO: %u, Color tex: %u, Depth tex: %u", fbo_, color_tex_, depth_tex_);
             GLenum err = glGetError();
             if (err != GL_NO_ERROR) {
                 tc::Log::error("  OpenGL error: 0x%x", err);
@@ -247,7 +272,7 @@ private:
 
     GLuint fbo_;
     GLuint color_tex_;
-    GLuint depth_rb_;
+    GLuint depth_tex_;
     int width_;
     int height_;
     int samples_;
@@ -255,6 +280,7 @@ private:
     TextureFilter filter_;
     bool owns_attachments_;
     OpenGLTextureRef color_ref_;
+    OpenGLTextureRef depth_ref_;
 };
 
 // Shadow framebuffer with depth texture for shadow mapping.
