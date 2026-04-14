@@ -278,7 +278,11 @@ void RenderEngine::render_view_to_fbo(
         }
 
         FBOPool& fbo_pool = pipeline.fbo_pool();
-        FramebufferHandle* fbo = fbo_pool.ensure(graphics, canon, fbo_width, fbo_height, samples, format, filter);
+        auto* tgfx2_gl_dev =
+            dynamic_cast<tgfx2::OpenGLRenderDevice*>(tgfx2_device_.get());
+        FramebufferHandle* fbo = fbo_pool.ensure(
+            graphics, canon, fbo_width, fbo_height, samples, format, filter,
+            tgfx2_gl_dev);
 
         const char* aliases[64];
         size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
@@ -348,24 +352,20 @@ void RenderEngine::render_view_to_fbo(
         tgfx2_ctx_->begin_frame();
     }
 
-    // Wrap every allocated FBO's color texture as a tgfx2 TextureHandle
-    // ONCE for this frame, so migrated passes can consume them from
-    // ExecuteContext::tex2_{reads,writes} without doing any resource
-    // allocation themselves. The wrappers are destroyed right after the
-    // pass loop; the underlying GL texture objects are preserved because
-    // register_external_texture marks them as external.
+    // Pull the persistent tgfx2 wrappers that FBOPool::ensure cached
+    // at allocation time. No per-frame wrap/destroy churn — the
+    // wrappers live as long as the FBO they reference, so ctx2's
+    // fbo_cache entries remain valid across frames.
     std::unordered_map<std::string, tgfx2::TextureHandle> tex2_resources;
     if (tgfx2_ctx_ && tgfx2_device_) {
-        auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(tgfx2_device_.get());
-        if (gl_dev) {
-            for (const auto& [name, res] : resources) {
-                if (!res) continue;
-                auto* fbo = dynamic_cast<FramebufferHandle*>(res);
-                if (!fbo) continue;
-                auto handle = wrap_fbo_color_as_tgfx2(*gl_dev, fbo);
-                if (handle) {
-                    tex2_resources[name] = handle;
-                }
+        FBOPool& fbo_pool = pipeline.fbo_pool();
+        for (const auto& [name, res] : resources) {
+            if (!res) continue;
+            auto* fbo = dynamic_cast<FramebufferHandle*>(res);
+            if (!fbo) continue;
+            tgfx2::TextureHandle handle = fbo_pool.get_color_tgfx2(name);
+            if (handle) {
+                tex2_resources[name] = handle;
             }
         }
     }
@@ -443,14 +443,8 @@ void RenderEngine::render_view_to_fbo(
         tgfx2_ctx_->end_frame();
     }
 
-    // Release the per-frame tgfx2 wrappers. The underlying GL texture
-    // objects survive because register_external_texture marked them as
-    // external — only the HandlePool entries are removed here.
-    if (tgfx2_device_) {
-        for (auto& [name, handle] : tex2_resources) {
-            tgfx2_device_->destroy(handle);
-        }
-    }
+    // Phase 3: wrappers live on FBOPoolEntry now. No per-frame destroy.
+    // They persist until the FBO is resized, reformatted, or cleared.
 }
 
 void RenderEngine::render_scene_pipeline_offscreen(
@@ -613,7 +607,11 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
 
         FBOPool& fbo_pool = pipeline.fbo_pool();
-        FramebufferHandle* fbo = fbo_pool.ensure(graphics, canon, fbo_width, fbo_height, samples, format, filter);
+        auto* tgfx2_gl_dev =
+            dynamic_cast<tgfx2::OpenGLRenderDevice*>(tgfx2_device_.get());
+        FramebufferHandle* fbo = fbo_pool.ensure(
+            graphics, canon, fbo_width, fbo_height, samples, format, filter,
+            tgfx2_gl_dev);
 
         const char* aliases[64];
         size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
