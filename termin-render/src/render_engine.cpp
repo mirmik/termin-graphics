@@ -426,16 +426,38 @@ void RenderEngine::render_view_to_fbo(
                 pass_tex2_depth_reads[reads[j]] = d_it->second;
             }
         }
+        // Transient wrapper for target_fbo — see render_scene_pipeline_offscreen
+        // for the OUTPUT/DISPLAY story. Created lazily if any write
+        // references these virtual names.
+        tgfx2::TextureHandle target_output_tex2{};
+        auto* target_tgfx2_gl_dev =
+            dynamic_cast<tgfx2::OpenGLRenderDevice*>(tgfx2_device_.get());
+
         for (size_t j = 0; j < write_count; j++) {
-            auto it = resources.find(writes[j]);
-            pass_writes[writes[j]] = (it != resources.end()) ? it->second : nullptr;
-            auto t_it = tex2_resources.find(writes[j]);
-            if (t_it != tex2_resources.end()) {
-                pass_tex2_writes[writes[j]] = t_it->second;
+            const char* write_name = writes[j];
+            if ((strcmp(write_name, "OUTPUT") == 0 || strcmp(write_name, "DISPLAY") == 0)
+                && target_fbo) {
+                pass_writes[write_name] = target_fbo;
+                if (target_tgfx2_gl_dev) {
+                    if (!target_output_tex2) {
+                        target_output_tex2 =
+                            wrap_fbo_color_as_tgfx2(*target_tgfx2_gl_dev, target_fbo);
+                    }
+                    if (target_output_tex2) {
+                        pass_tex2_writes[write_name] = target_output_tex2;
+                    }
+                }
+                continue;
             }
-            auto d_it = tex2_depth_resources.find(writes[j]);
+            auto it = resources.find(write_name);
+            pass_writes[write_name] = (it != resources.end()) ? it->second : nullptr;
+            auto t_it = tex2_resources.find(write_name);
+            if (t_it != tex2_resources.end()) {
+                pass_tex2_writes[write_name] = t_it->second;
+            }
+            auto d_it = tex2_depth_resources.find(write_name);
             if (d_it != tex2_depth_resources.end()) {
-                pass_tex2_depth_writes[writes[j]] = d_it->second;
+                pass_tex2_depth_writes[write_name] = d_it->second;
             }
         }
 
@@ -457,6 +479,10 @@ void RenderEngine::render_view_to_fbo(
         ctx.layer_mask = layer_mask;
 
         tc_pass_execute(pass, &ctx);
+
+        if (target_output_tex2 && target_tgfx2_gl_dev) {
+            target_tgfx2_gl_dev->destroy(target_output_tex2);
+        }
 
         tc_profiler_begin_section("Sync Operations");
         tc_render_sync_mode sync_mode = tc_project_settings_get_render_sync_mode();
@@ -735,6 +761,11 @@ void RenderEngine::render_scene_pipeline_offscreen(
     }
     tc_profiler_end_section();
 
+    // OpenGL tgfx2 device pointer for wrapping viewport output FBOs
+    // as tgfx2 textures. Null if tgfx2 is disabled.
+    auto* execute_tgfx2_gl_dev =
+        dynamic_cast<tgfx2::OpenGLRenderDevice*>(tgfx2_device_.get());
+
     tc_profiler_begin_section("Execute Passes");
     for (size_t i = 0; i < schedule_count; i++) {
         tc_pass* pass = tc_frame_graph_schedule_at(fg, i);
@@ -784,10 +815,26 @@ void RenderEngine::render_scene_pipeline_offscreen(
             }
         }
 
+        // Transient tgfx2 wrapper for the viewport's output FBO.
+        // Only created when a pass writes to OUTPUT/DISPLAY — these
+        // resources aren't part of FBOPool so they're not in
+        // tex2_resources, but passes (e.g. PresentToScreenPass) need
+        // them in ctx.tex2_writes.
+        tgfx2::TextureHandle vp_output_tex2{};
+
         for (size_t j = 0; j < write_count; j++) {
             const char* write_name = writes[j];
             if (strcmp(write_name, "OUTPUT") == 0 || strcmp(write_name, "DISPLAY") == 0) {
                 pass_writes[write_name] = vp_ctx.output_fbo;
+                auto* fb = dynamic_cast<FramebufferHandle*>(vp_ctx.output_fbo);
+                if (fb && execute_tgfx2_gl_dev) {
+                    if (!vp_output_tex2) {
+                        vp_output_tex2 = wrap_fbo_color_as_tgfx2(*execute_tgfx2_gl_dev, fb);
+                    }
+                    if (vp_output_tex2) {
+                        pass_tex2_writes[write_name] = vp_output_tex2;
+                    }
+                }
             } else {
                 auto it = resources.find(write_name);
                 FrameGraphResource* res = (it != resources.end()) ? it->second : nullptr;
@@ -821,6 +868,12 @@ void RenderEngine::render_scene_pipeline_offscreen(
         ctx.layer_mask = vp_ctx.layer_mask;
 
         tc_pass_execute(pass, &ctx);
+
+        // Per-pass transient viewport output wrapper: release now that
+        // the pass is done. Underlying GL texture survives (external).
+        if (vp_output_tex2 && execute_tgfx2_gl_dev) {
+            execute_tgfx2_gl_dev->destroy(vp_output_tex2);
+        }
 
         tc_render_sync_mode sync_mode = tc_project_settings_get_render_sync_mode();
         if (sync_mode == TC_RENDER_SYNC_FLUSH) {
