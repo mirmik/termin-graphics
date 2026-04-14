@@ -357,6 +357,36 @@ void RenderContext2::set_uniform_mat4(const char* name, const float* data,
     }
 }
 
+void RenderContext2::set_uniform_vec2(const char* name, float x, float y) {
+    if (!name) return;
+    flush_pipeline();
+    GLint prog = 0;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
+    if (prog == 0) return;
+    GLint loc = glGetUniformLocation(static_cast<GLuint>(prog), name);
+    if (loc >= 0) glUniform2f(loc, x, y);
+}
+
+void RenderContext2::set_uniform_vec3(const char* name, float x, float y, float z) {
+    if (!name) return;
+    flush_pipeline();
+    GLint prog = 0;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
+    if (prog == 0) return;
+    GLint loc = glGetUniformLocation(static_cast<GLuint>(prog), name);
+    if (loc >= 0) glUniform3f(loc, x, y, z);
+}
+
+void RenderContext2::set_uniform_vec4(const char* name, float x, float y, float z, float w) {
+    if (!name) return;
+    flush_pipeline();
+    GLint prog = 0;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
+    if (prog == 0) return;
+    GLint loc = glGetUniformLocation(static_cast<GLuint>(prog), name);
+    if (loc >= 0) glUniform4f(loc, x, y, z, w);
+}
+
 void RenderContext2::set_uniform_mat4_array(const char* name, const float* data,
                                              int count, bool transpose) {
     if (!name || !data || count <= 0) return;

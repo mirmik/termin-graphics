@@ -116,6 +116,9 @@ public:
     // for migration to bind_uniform_buffer / set_push_constants.
     void set_uniform_int(const char* name, int value);
     void set_uniform_float(const char* name, float value);
+    void set_uniform_vec2(const char* name, float x, float y);
+    void set_uniform_vec3(const char* name, float x, float y, float z);
+    void set_uniform_vec4(const char* name, float x, float y, float z, float w);
     void set_uniform_mat4(const char* name, const float* data,
                           bool transpose = false);
     void set_uniform_mat4_array(const char* name, const float* data,
