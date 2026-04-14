@@ -86,25 +86,28 @@ void RenderContext2::end_frame() {
 
     // Drop the per-device GL FBO cache at end of frame.
     //
-    // Stage 8.5 second attempt: migrated ColliderGizmoPass to ctx2 and
-    // killed WireframeRenderer — that closed one legacy-GL-in-passes
-    // hole but did not fix the black screen. Remaining blockers:
+    // Stage 8.5 third attempt notes: ColliderGizmoPass migrated +
+    // WireframeRenderer killed + RenderEngine's pre-frame clear loop
+    // rewritten through ctx2->begin_pass, and the hack is *still*
+    // required. Remaining suspected paths:
     //
-    //   - RenderEngine::render_view_to_fbo and
-    //     render_scene_pipeline_offscreen each run a pre-frame loop
-    //     that does graphics->bind_framebuffer(fbo) +
-    //     clear_color_depth(...) for every pipeline resource BEFORE
-    //     tgfx2_ctx_->begin_frame(). That leaves the GL framebuffer
-    //     binding in an unknown state from ctx2's perspective.
+    //   - tcgui's UIRenderer draws every widget through raw-GL calls
+    //     on OpenGLGraphicsBackend (glBindFramebuffer, glUseProgram,
+    //     glScissor, glDrawArrays...) between viewport frames. ctx2
+    //     doesn't own the GL state here and its fbo cache can't
+    //     observe mutations that happen through the GraphicsBackend
+    //     path.
     //
-    //   - FrameGraphCapture::do_blit (debug-only) also calls
-    //     graphics->bind_framebuffer during frame execute.
+    //   - FBOPool resize recreates wrappers but an old cache entry
+    //     keyed by the previous gl_id may still reference a deleted
+    //     FBO object; the gl driver can recycle the id and a stale
+    //     lookup returns the wrong FBO.
     //
-    // Both paths predate the pipeline+command-buffer model and will
-    // disappear once Stage 8.3 (FBOPool on native tgfx2 render targets)
-    // and Stage 8.4 (drop ctx.graphics / FBOMap from ExecuteContext)
-    // land. At that point RenderEngine's clearing happens through
-    // ctx2->begin_pass(..., clear=true, ...) instead of legacy glClear.
+    // Both fixes are substantial: tcgui rendering through tgfx2 is a
+    // separate migration track, and FBOPool native tgfx2 targets is
+    // Stage 8.3. For now we keep the per-frame invalidate as a cheap
+    // barrier — ~O(N) glDeleteFramebuffers per frame where N is the
+    // number of distinct pass/FBO combinations.
     if (auto* gl_dev = dynamic_cast<OpenGLRenderDevice*>(&device_)) {
         gl_dev->invalidate_fbo_cache();
     }

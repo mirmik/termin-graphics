@@ -313,57 +313,6 @@ void RenderEngine::render_view_to_fbo(
         }
     }
 
-    for (const auto& spec : specs) {
-        if (spec.resource_type != "fbo" && !spec.resource_type.empty()) {
-            continue;
-        }
-        if (!spec.clear_color && !spec.clear_depth) {
-            continue;
-        }
-
-        auto it = resources.find(spec.resource);
-        if (it == resources.end() || it->second == nullptr) {
-            continue;
-        }
-
-        FrameGraphResource* resource = it->second;
-        FramebufferHandle* fbo = nullptr;
-        try {
-            fbo = dynamic_cast<FramebufferHandle*>(resource);
-        } catch (const std::exception& e) {
-            tc::Log::error("[render_view_to_fbo] dynamic_cast failed: %s", e.what());
-            continue;
-        }
-
-        if (!fbo) {
-            tc::Log::warn("[render_view_to_fbo] dynamic_cast returned nullptr for resource='%s'",
-                          spec.resource.c_str());
-            continue;
-        }
-
-        graphics->bind_framebuffer(fbo);
-
-        int fb_w = spec.size ? spec.size->first : width;
-        int fb_h = spec.size ? spec.size->second : height;
-        graphics->set_viewport(0, 0, fb_w, fb_h);
-
-        if (spec.clear_color && spec.clear_depth) {
-            const auto& cc = *spec.clear_color;
-            graphics->clear_color_depth(
-                static_cast<float>(cc[0]), static_cast<float>(cc[1]),
-                static_cast<float>(cc[2]), static_cast<float>(cc[3])
-            );
-        } else if (spec.clear_color) {
-            const auto& cc = *spec.clear_color;
-            graphics->clear_color(
-                static_cast<float>(cc[0]), static_cast<float>(cc[1]),
-                static_cast<float>(cc[2]), static_cast<float>(cc[3])
-            );
-        } else if (spec.clear_depth) {
-            graphics->clear_depth(*spec.clear_depth);
-        }
-    }
-
     size_t schedule_count = tc_frame_graph_schedule_count(fg);
 
     if (tgfx2_ctx_) {
@@ -375,16 +324,69 @@ void RenderEngine::render_view_to_fbo(
     // wrappers live as long as the FBO they reference, so ctx2's
     // fbo_cache entries remain valid across frames.
     std::unordered_map<std::string, tgfx2::TextureHandle> tex2_resources;
+    std::unordered_map<std::string, tgfx2::TextureHandle> tex2_depth_resources;
     if (tgfx2_ctx_ && tgfx2_device_) {
         FBOPool& fbo_pool = pipeline.fbo_pool();
         for (const auto& [name, res] : resources) {
             if (!res) continue;
             auto* fbo = dynamic_cast<FramebufferHandle*>(res);
             if (!fbo) continue;
-            tgfx2::TextureHandle handle = fbo_pool.get_color_tgfx2(name);
-            if (handle) {
-                tex2_resources[name] = handle;
+            tgfx2::TextureHandle color_handle = fbo_pool.get_color_tgfx2(name);
+            if (color_handle) tex2_resources[name] = color_handle;
+            tgfx2::TextureHandle depth_handle = fbo_pool.get_depth_tgfx2(name);
+            if (depth_handle) tex2_depth_resources[name] = depth_handle;
+        }
+    }
+
+    // Pre-frame clear phase: open a transient ctx2 render pass on each
+    // resource that wants clearing. This replaces the legacy
+    // graphics->bind_framebuffer + clear_color_depth loop that used to
+    // run BEFORE begin_frame and mutated GL state behind ctx2's back.
+    if (tgfx2_ctx_) {
+        for (const auto& spec : specs) {
+            if (spec.resource_type != "fbo" && !spec.resource_type.empty()) {
+                continue;
             }
+            if (!spec.clear_color && !spec.clear_depth) {
+                continue;
+            }
+
+            auto it = resources.find(spec.resource);
+            if (it == resources.end() || it->second == nullptr) continue;
+            auto* fbo = dynamic_cast<FramebufferHandle*>(it->second);
+            if (!fbo) continue;
+
+            auto ct = tex2_resources.find(spec.resource);
+            auto dt = tex2_depth_resources.find(spec.resource);
+            tgfx2::TextureHandle color_tex =
+                (ct != tex2_resources.end()) ? ct->second : tgfx2::TextureHandle{};
+            tgfx2::TextureHandle depth_tex =
+                (dt != tex2_depth_resources.end()) ? dt->second : tgfx2::TextureHandle{};
+            if (!color_tex && !depth_tex) continue;
+
+            float clear_rgba[4] = {0, 0, 0, 1};
+            const float* clear_color_ptr = nullptr;
+            if (spec.clear_color) {
+                const auto& cc = *spec.clear_color;
+                clear_rgba[0] = static_cast<float>(cc[0]);
+                clear_rgba[1] = static_cast<float>(cc[1]);
+                clear_rgba[2] = static_cast<float>(cc[2]);
+                clear_rgba[3] = static_cast<float>(cc[3]);
+                clear_color_ptr = clear_rgba;
+            }
+            float clear_depth_val =
+                spec.clear_depth ? static_cast<float>(*spec.clear_depth) : 1.0f;
+            bool clear_depth_enabled = spec.clear_depth.has_value();
+
+            int fb_w = spec.size ? spec.size->first : width;
+            int fb_h = spec.size ? spec.size->second : height;
+
+            tgfx2_ctx_->begin_pass(
+                color_tex, depth_tex,
+                clear_color_ptr, clear_depth_val, clear_depth_enabled
+            );
+            tgfx2_ctx_->set_viewport(0, 0, fb_w, fb_h);
+            tgfx2_ctx_->end_pass();
         }
     }
 
@@ -644,59 +646,6 @@ void RenderEngine::render_scene_pipeline_offscreen(
     }
     tc_profiler_end_section();
 
-    tc_profiler_begin_section("Clear Resources");
-    for (const auto& spec : specs) {
-        if (spec.resource_type != "fbo" && !spec.resource_type.empty()) {
-            continue;
-        }
-        if (!spec.clear_color && !spec.clear_depth) {
-            continue;
-        }
-
-        auto it = resources.find(spec.resource);
-        if (it == resources.end() || it->second == nullptr) {
-            continue;
-        }
-
-        FrameGraphResource* resource = it->second;
-        FramebufferHandle* fbo = nullptr;
-        try {
-            fbo = dynamic_cast<FramebufferHandle*>(resource);
-        } catch (const std::exception& e) {
-            tc::Log::error("[render_scene_pipeline_offscreen] dynamic_cast failed: %s", e.what());
-            continue;
-        }
-
-        if (!fbo) {
-            tc::Log::warn("[render_scene_pipeline_offscreen] dynamic_cast returned nullptr for resource='%s'",
-                          spec.resource.c_str());
-            continue;
-        }
-
-        graphics->bind_framebuffer(fbo);
-
-        int fb_w = spec.size ? spec.size->first : default_width;
-        int fb_h = spec.size ? spec.size->second : default_height;
-        graphics->set_viewport(0, 0, fb_w, fb_h);
-
-        if (spec.clear_color && spec.clear_depth) {
-            const auto& cc = *spec.clear_color;
-            graphics->clear_color_depth(
-                static_cast<float>(cc[0]), static_cast<float>(cc[1]),
-                static_cast<float>(cc[2]), static_cast<float>(cc[3])
-            );
-        } else if (spec.clear_color) {
-            const auto& cc = *spec.clear_color;
-            graphics->clear_color(
-                static_cast<float>(cc[0]), static_cast<float>(cc[1]),
-                static_cast<float>(cc[2]), static_cast<float>(cc[3])
-            );
-        } else if (spec.clear_depth) {
-            graphics->clear_depth(*spec.clear_depth);
-        }
-    }
-    tc_profiler_end_section();
-
     size_t schedule_count = tc_frame_graph_schedule_count(fg);
 
     if (tgfx2_ctx_) {
@@ -707,18 +656,72 @@ void RenderEngine::render_scene_pipeline_offscreen(
     // the pipeline exposes. Mirrors render_view_to_fbo so ctx.tex2_*
     // maps match for Skybox/Bloom/Tonemap/etc. in this offscreen path.
     std::unordered_map<std::string, tgfx2::TextureHandle> tex2_resources;
+    std::unordered_map<std::string, tgfx2::TextureHandle> tex2_depth_resources;
     if (tgfx2_ctx_ && tgfx2_device_) {
         FBOPool& fbo_pool = pipeline.fbo_pool();
         for (const auto& [name, res] : resources) {
             if (!res) continue;
             auto* fbo = dynamic_cast<FramebufferHandle*>(res);
             if (!fbo) continue;
-            tgfx2::TextureHandle handle = fbo_pool.get_color_tgfx2(name);
-            if (handle) {
-                tex2_resources[name] = handle;
-            }
+            tgfx2::TextureHandle color_handle = fbo_pool.get_color_tgfx2(name);
+            if (color_handle) tex2_resources[name] = color_handle;
+            tgfx2::TextureHandle depth_handle = fbo_pool.get_depth_tgfx2(name);
+            if (depth_handle) tex2_depth_resources[name] = depth_handle;
         }
     }
+
+    // Pre-frame clear phase via transient ctx2 passes. Replaces legacy
+    // graphics->bind_framebuffer + clear_color_depth loop — see
+    // render_view_to_fbo for the rationale.
+    tc_profiler_begin_section("Clear Resources");
+    if (tgfx2_ctx_) {
+        for (const auto& spec : specs) {
+            if (spec.resource_type != "fbo" && !spec.resource_type.empty()) {
+                continue;
+            }
+            if (!spec.clear_color && !spec.clear_depth) {
+                continue;
+            }
+
+            auto it = resources.find(spec.resource);
+            if (it == resources.end() || it->second == nullptr) continue;
+            auto* fbo = dynamic_cast<FramebufferHandle*>(it->second);
+            if (!fbo) continue;
+
+            auto ct = tex2_resources.find(spec.resource);
+            auto dt = tex2_depth_resources.find(spec.resource);
+            tgfx2::TextureHandle color_tex =
+                (ct != tex2_resources.end()) ? ct->second : tgfx2::TextureHandle{};
+            tgfx2::TextureHandle depth_tex =
+                (dt != tex2_depth_resources.end()) ? dt->second : tgfx2::TextureHandle{};
+            if (!color_tex && !depth_tex) continue;
+
+            float clear_rgba[4] = {0, 0, 0, 1};
+            const float* clear_color_ptr = nullptr;
+            if (spec.clear_color) {
+                const auto& cc = *spec.clear_color;
+                clear_rgba[0] = static_cast<float>(cc[0]);
+                clear_rgba[1] = static_cast<float>(cc[1]);
+                clear_rgba[2] = static_cast<float>(cc[2]);
+                clear_rgba[3] = static_cast<float>(cc[3]);
+                clear_color_ptr = clear_rgba;
+            }
+            float clear_depth_val =
+                spec.clear_depth ? static_cast<float>(*spec.clear_depth) : 1.0f;
+            bool clear_depth_enabled = spec.clear_depth.has_value();
+
+            int fb_w = spec.size ? spec.size->first : default_width;
+            int fb_h = spec.size ? spec.size->second : default_height;
+
+            tgfx2_ctx_->begin_pass(
+                color_tex, depth_tex,
+                clear_color_ptr, clear_depth_val, clear_depth_enabled
+            );
+            tgfx2_ctx_->set_viewport(0, 0, fb_w, fb_h);
+            tgfx2_ctx_->end_pass();
+        }
+    }
+    tc_profiler_end_section();
 
     tc_profiler_begin_section("Execute Passes");
     for (size_t i = 0; i < schedule_count; i++) {
