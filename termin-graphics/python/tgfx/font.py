@@ -25,6 +25,7 @@ from tgfx import log
 
 if TYPE_CHECKING:
     from tgfx import GPUTextureHandle
+    from tgfx._tgfx_native import Tgfx2Context, Tgfx2TextureHandle
 
 # ---------------------------------------------------------------------------
 # Atlas constants
@@ -124,41 +125,55 @@ class FontTextureAtlas:
         # CPU atlas
         self._atlas = Image.new("L", (_ATLAS_W, _ATLAS_H), 0)
         self._atlas_np: np.ndarray | None = None  # lazy numpy view
-        self._dirty = False
+
+        # Per-backend dirty flags. Rasterising a new glyph sets both;
+        # each backend clears only its own flag on successful upload.
+        # This lets tgfx1 and tgfx2 consumers share one atlas during
+        # the migration without stomping on each other's state.
+        self._dirty_tgfx1 = False
+        self._dirty_tgfx2 = False
 
         # Shelf packer state
         self._shelf_x = 0
         self._shelf_y = 0
         self._shelf_h = 0
 
-        # GPU handle (uploaded lazily)
+        # GPU handles (uploaded lazily, per backend).
         self._handle: GPUTextureHandle | None = None
+        self._handle_tgfx2: Tgfx2TextureHandle | None = None
+        self._owner_tgfx2: Tgfx2Context | None = None
 
         # Warm up with common chars so first frame has no re-uploads
         for ch in _PRELOAD:
             self._rasterize(ch)
         # Mark dirty so ensure_texture will upload on first call
-        self._dirty = True
+        self._dirty_tgfx1 = True
+        self._dirty_tgfx2 = True
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    def ensure_glyphs(self, text: str, graphics=None) -> None:
+    def ensure_glyphs(self, text: str, graphics=None, tgfx2_ctx=None) -> None:
         """Ensure every character in *text* is rasterized.
 
-        If *graphics* is given and any new glyph was added, the GPU
-        texture is refreshed immediately.
+        If *graphics* (tgfx1) or *tgfx2_ctx* (Tgfx2Context) is given and
+        any new glyph was added, the corresponding GPU texture is
+        refreshed immediately.
         """
         added = False
         for ch in text:
             if self._rasterize(ch):
                 added = True
-        if added and graphics is not None:
+        if not added:
+            return
+        if graphics is not None:
             self._sync_gpu(graphics)
+        if tgfx2_ctx is not None:
+            self._sync_gpu_tgfx2(tgfx2_ctx)
 
     def ensure_texture(self, graphics) -> GPUTextureHandle:
-        """Return the GPU texture handle, uploading / syncing if needed."""
+        """Return the tgfx1 GPU texture handle, uploading / syncing if needed."""
         if self._handle is not None and not self._handle.is_valid():
             log.warning(
                 f"[Font] Texture {self._handle.get_id()} became invalid; recreating"
@@ -170,11 +185,48 @@ class FontTextureAtlas:
             self._handle = graphics.create_texture(
                 data, _ATLAS_W, _ATLAS_H, channels=1, mipmap=False, clamp=True
             )
-            self._dirty = False
-        elif self._dirty:
+            self._dirty_tgfx1 = False
+        elif self._dirty_tgfx1:
             self._sync_gpu(graphics)
 
         return self._handle
+
+    def ensure_texture_tgfx2(self, holder: "Tgfx2Context") -> "Tgfx2TextureHandle":
+        """Return a tgfx2 texture handle, uploading / syncing if needed.
+
+        ``holder`` is the `Tgfx2Context` that owns the tgfx2 device.
+        Subsequent calls with the same holder return the cached handle.
+        Calling with a different holder destroys the old handle and
+        re-creates on the new device (not expected in practice — one
+        holder per application).
+        """
+        # If holder changed (context lost / re-created), drop the old
+        # handle before creating a new one.
+        if (
+            self._handle_tgfx2 is not None
+            and self._owner_tgfx2 is not None
+            and self._owner_tgfx2 is not holder
+        ):
+            try:
+                self._owner_tgfx2.destroy_texture(self._handle_tgfx2)
+            except Exception as e:
+                log.warning(f"[Font] Failed to destroy old tgfx2 handle: {e}")
+            self._handle_tgfx2 = None
+            self._owner_tgfx2 = None
+
+        if self._handle_tgfx2 is None:
+            data = self._atlas_array()
+            # tgfx2 expects a flat byte buffer; pass the numpy view directly
+            # (c_contig, uint8). create_texture_r8 uploads the initial data.
+            self._handle_tgfx2 = holder.create_texture_r8(
+                _ATLAS_W, _ATLAS_H, data.reshape(-1)
+            )
+            self._owner_tgfx2 = holder
+            self._dirty_tgfx2 = False
+        elif self._dirty_tgfx2:
+            self._sync_gpu_tgfx2(holder)
+
+        return self._handle_tgfx2
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -229,7 +281,8 @@ class FontTextureAtlas:
 
         self._shelf_x += cell_w
         self._shelf_h = max(self._shelf_h, cell_h)
-        self._dirty = True
+        self._dirty_tgfx1 = True
+        self._dirty_tgfx2 = True
         return True
 
     def _atlas_array(self) -> np.ndarray:
@@ -239,9 +292,22 @@ class FontTextureAtlas:
         return self._atlas_np
 
     def _sync_gpu(self, graphics) -> None:
-        """Push CPU atlas to GPU (full update)."""
+        """Push CPU atlas to tgfx1 GPU handle (full update)."""
         if self._handle is None:
             return
         data = self._atlas_array()
         graphics.update_texture(self._handle, data, _ATLAS_W, _ATLAS_H, 1)
-        self._dirty = False
+        self._dirty_tgfx1 = False
+
+    def _sync_gpu_tgfx2(self, holder: "Tgfx2Context") -> None:
+        """Push CPU atlas to tgfx2 GPU handle (full re-upload).
+
+        tgfx2 ``IRenderDevice`` does not currently expose a region
+        upload — the whole 2048×2048 R8 (~4 MB) is re-uploaded. Fine
+        for the once-per-new-glyph cadence of this atlas.
+        """
+        if self._handle_tgfx2 is None:
+            return
+        data = self._atlas_array()
+        holder.upload_texture(self._handle_tgfx2, data.reshape(-1))
+        self._dirty_tgfx2 = False
