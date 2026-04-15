@@ -87,6 +87,13 @@ public:
     tgfx2::TextureHandle get_color_tgfx2(const std::string& key) const;
     tgfx2::TextureHandle get_depth_tgfx2(const std::string& key) const;
 
+    // Device that owns the entries' native textures (null if the
+    // pool is empty). All entries must share the same device during
+    // normal pipeline execution.
+    tgfx2::IRenderDevice* device() const {
+        return entries.empty() ? nullptr : entries.front().native_device;
+    }
+
     void add_alias(const std::string& alias, const std::string& canonical);
     void clear();
 

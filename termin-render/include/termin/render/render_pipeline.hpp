@@ -76,6 +76,16 @@ public:
         return fbo_pool().get(name);
     }
 
+    tgfx2::TextureHandle get_color_tex2(const std::string& name) {
+        return fbo_pool().get_color_tgfx2(name);
+    }
+    tgfx2::TextureHandle get_depth_tex2(const std::string& name) {
+        return fbo_pool().get_depth_tgfx2(name);
+    }
+    tgfx2::IRenderDevice* tex2_device() {
+        return fbo_pool().device();
+    }
+
     std::unordered_map<std::string, std::unique_ptr<ShadowMapArrayResource>>& shadow_arrays() {
         return cache().shadow_arrays;
     }

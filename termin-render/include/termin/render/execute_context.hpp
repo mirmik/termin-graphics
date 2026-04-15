@@ -13,37 +13,44 @@
 
 #include <tgfx2/handles.hpp>
 
-// Forward declaration — tgfx2 is the new backend-neutral graphics API.
-// Passes migrated to Phase 2 use ctx2 instead of graphics. Legacy passes
-// continue to use graphics; both pointers are valid simultaneously during
-// the dual-path migration window.
+// Forward declaration — tgfx2 is the backend-neutral graphics API.
+// `graphics` still exists on the context as a transitional escape
+// hatch for paths that haven't migrated yet (debug capture, posteffect
+// temp FBOs, Python UI widget renderer). It will go away in a later
+// stage.
 namespace tgfx2 {
 class RenderContext2;
 }
 
 namespace termin {
 
-// Per-resource tgfx2 texture map, parallel to FBOMap. Phase 2 passes that
-// draw through ctx2 consume entries from tex2_reads/tex2_writes instead of
-// wrapping FBOs themselves. Wrapping is owned by RenderEngine.
+class ShadowMapArrayResource;
+
+// Per-resource tgfx2 texture map. Passes that draw through ctx2
+// consume entries from tex2_reads/tex2_writes (and the depth variants
+// below) directly.
 using Tex2Map = std::unordered_map<std::string, tgfx2::TextureHandle>;
+
+// Non-FBO framegraph resources indexed by canonical name. Currently
+// only populated for shadow_map_array resources — ShadowPass writes
+// into one, ColorPass reads from one.
+using ShadowArrayMap = std::unordered_map<std::string, ShadowMapArrayResource*>;
 
 struct ExecuteContext {
 public:
     GraphicsBackend* graphics = nullptr;
     tgfx2::RenderContext2* ctx2 = nullptr;
-    FBOMap reads_fbos;
-    FBOMap writes_fbos;
-    // Color attachments of pipeline resources as tgfx2 textures — the
-    // canonical path for passes that draw through ctx2. Matches the
-    // same resource names as reads_fbos / writes_fbos.
+    // Color attachments of pipeline resources as tgfx2 textures.
     Tex2Map tex2_reads;
     Tex2Map tex2_writes;
-    // Depth attachments. Only populated for FBO resources that have a
-    // depth texture (not for renderbuffer-backed depth or color-only
-    // FBOs). Empty entry = no depth texture available for that name.
+    // Depth attachments. Only populated for resources with a depth
+    // texture; empty entry = no depth texture available.
     Tex2Map tex2_depth_reads;
     Tex2Map tex2_depth_writes;
+    // Non-FBO framegraph resources (shadow map arrays). Keyed by
+    // canonical name; same key serves reads and writes since shadow
+    // arrays are written by one pass and read by another.
+    ShadowArrayMap shadow_arrays;
     Rect4i rect;
     TcSceneRef scene;
     RenderCamera* camera = nullptr;

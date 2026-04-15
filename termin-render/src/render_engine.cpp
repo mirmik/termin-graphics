@@ -406,16 +406,22 @@ void RenderEngine::render_view_to_fbo(
         size_t read_count = tc_pass_get_reads(pass, reads, 16);
         size_t write_count = tc_pass_get_writes(pass, writes, 8);
 
-        FBOMap pass_reads;
-        FBOMap pass_writes;
         Tex2Map pass_tex2_reads;
         Tex2Map pass_tex2_writes;
         Tex2Map pass_tex2_depth_reads;
         Tex2Map pass_tex2_depth_writes;
+        ShadowArrayMap pass_shadow_arrays;
+
+        auto collect_shadow_array = [&](const char* name) {
+            auto it = resources.find(name);
+            if (it != resources.end() && it->second) {
+                auto* arr = dynamic_cast<ShadowMapArrayResource*>(it->second);
+                if (arr) pass_shadow_arrays[name] = arr;
+            }
+        };
 
         for (size_t j = 0; j < read_count; j++) {
-            auto it = resources.find(reads[j]);
-            pass_reads[reads[j]] = (it != resources.end()) ? it->second : nullptr;
+            collect_shadow_array(reads[j]);
             auto t_it = tex2_resources.find(reads[j]);
             if (t_it != tex2_resources.end()) {
                 pass_tex2_reads[reads[j]] = t_it->second;
@@ -436,7 +442,6 @@ void RenderEngine::render_view_to_fbo(
             const char* write_name = writes[j];
             if ((strcmp(write_name, "OUTPUT") == 0 || strcmp(write_name, "DISPLAY") == 0)
                 && target_fbo) {
-                pass_writes[write_name] = target_fbo;
                 if (target_tgfx2_gl_dev) {
                     if (!target_output_tex2) {
                         target_output_tex2 =
@@ -448,8 +453,7 @@ void RenderEngine::render_view_to_fbo(
                 }
                 continue;
             }
-            auto it = resources.find(write_name);
-            pass_writes[write_name] = (it != resources.end()) ? it->second : nullptr;
+            collect_shadow_array(write_name);
             auto t_it = tex2_resources.find(write_name);
             if (t_it != tex2_resources.end()) {
                 pass_tex2_writes[write_name] = t_it->second;
@@ -463,12 +467,11 @@ void RenderEngine::render_view_to_fbo(
         ExecuteContext ctx;
         ctx.graphics = graphics;
         ctx.ctx2 = tgfx2_ctx_.get();
-        ctx.reads_fbos = std::move(pass_reads);
-        ctx.writes_fbos = std::move(pass_writes);
         ctx.tex2_reads = std::move(pass_tex2_reads);
         ctx.tex2_writes = std::move(pass_tex2_writes);
         ctx.tex2_depth_reads = std::move(pass_tex2_depth_reads);
         ctx.tex2_depth_writes = std::move(pass_tex2_depth_writes);
+        ctx.shadow_arrays = std::move(pass_shadow_arrays);
         ctx.rect = Rect4i{0, 0, width, height};
         ctx.scene = TcSceneRef(scene);
         ctx.viewport_name = viewport_name;
@@ -792,17 +795,22 @@ void RenderEngine::render_scene_pipeline_offscreen(
         size_t read_count = tc_pass_get_reads(pass, reads, 16);
         size_t write_count = tc_pass_get_writes(pass, writes, 8);
 
-        FBOMap pass_reads;
-        FBOMap pass_writes;
         Tex2Map pass_tex2_reads;
         Tex2Map pass_tex2_writes;
         Tex2Map pass_tex2_depth_reads;
         Tex2Map pass_tex2_depth_writes;
+        ShadowArrayMap pass_shadow_arrays;
+
+        auto collect_shadow_array = [&](const char* name) {
+            auto it = resources.find(name);
+            if (it != resources.end() && it->second) {
+                auto* arr = dynamic_cast<ShadowMapArrayResource*>(it->second);
+                if (arr) pass_shadow_arrays[name] = arr;
+            }
+        };
 
         for (size_t j = 0; j < read_count; j++) {
-            auto it = resources.find(reads[j]);
-            FrameGraphResource* res = (it != resources.end()) ? it->second : nullptr;
-            pass_reads[reads[j]] = res;
+            collect_shadow_array(reads[j]);
             auto t_it = tex2_resources.find(reads[j]);
             if (t_it != tex2_resources.end()) {
                 pass_tex2_reads[reads[j]] = t_it->second;
@@ -823,7 +831,6 @@ void RenderEngine::render_scene_pipeline_offscreen(
         for (size_t j = 0; j < write_count; j++) {
             const char* write_name = writes[j];
             if (strcmp(write_name, "OUTPUT") == 0 || strcmp(write_name, "DISPLAY") == 0) {
-                pass_writes[write_name] = vp_ctx.output_fbo;
                 auto* fb = dynamic_cast<FramebufferHandle*>(vp_ctx.output_fbo);
                 if (fb && execute_tgfx2_gl_dev) {
                     if (!vp_output_tex2) {
@@ -834,9 +841,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
                     }
                 }
             } else {
-                auto it = resources.find(write_name);
-                FrameGraphResource* res = (it != resources.end()) ? it->second : nullptr;
-                pass_writes[write_name] = res;
+                collect_shadow_array(write_name);
                 auto t_it = tex2_resources.find(write_name);
                 if (t_it != tex2_resources.end()) {
                     pass_tex2_writes[write_name] = t_it->second;
@@ -851,12 +856,11 @@ void RenderEngine::render_scene_pipeline_offscreen(
         ExecuteContext ctx;
         ctx.graphics = graphics;
         ctx.ctx2 = tgfx2_ctx_.get();
-        ctx.reads_fbos = std::move(pass_reads);
-        ctx.writes_fbos = std::move(pass_writes);
         ctx.tex2_reads = std::move(pass_tex2_reads);
         ctx.tex2_writes = std::move(pass_tex2_writes);
         ctx.tex2_depth_reads = std::move(pass_tex2_depth_reads);
         ctx.tex2_depth_writes = std::move(pass_tex2_depth_writes);
+        ctx.shadow_arrays = std::move(pass_shadow_arrays);
         ctx.rect = vp_ctx.rect;
         ctx.scene = TcSceneRef(scene);
         ctx.viewport_name = vp_ctx.name;

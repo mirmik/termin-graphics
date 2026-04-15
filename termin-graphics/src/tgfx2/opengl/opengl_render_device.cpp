@@ -547,6 +547,37 @@ GLuint OpenGLRenderDevice::get_or_create_fbo(const RenderPassDesc& pass) {
     return fbo;
 }
 
+bool OpenGLRenderDevice::read_pixel_rgba8(
+    TextureHandle tex, int x, int y, float out_rgba[4]
+) {
+    auto* t = get_texture(tex);
+    if (!t || !out_rgba) return false;
+
+    GLint prev_read_fbo = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prev_read_fbo);
+
+    GLuint fbo = 0;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           t->target, t->gl_id, 0);
+
+    bool ok = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    if (ok) {
+        uint8_t pixel[4] = {0, 0, 0, 0};
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+        out_rgba[0] = pixel[0] / 255.0f;
+        out_rgba[1] = pixel[1] / 255.0f;
+        out_rgba[2] = pixel[2] / 255.0f;
+        out_rgba[3] = pixel[3] / 255.0f;
+    }
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_read_fbo));
+    glDeleteFramebuffers(1, &fbo);
+    return ok;
+}
+
 void OpenGLRenderDevice::invalidate_fbo_cache() {
     for (auto& [key, fbo] : fbo_cache_) {
         if (fbo != 0) {

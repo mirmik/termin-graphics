@@ -238,37 +238,15 @@ void bind_render_framework(nb::module_& m) {
     nb::class_<FrameGraphResource>(m, "FrameGraphResource")
         .def("resource_type", &FrameGraphResource::resource_type);
 
-    auto dict_to_resource_map = [](nb::dict py_dict) -> ResourceMap {
-        ResourceMap result;
-        for (auto item : py_dict) {
-            std::string key = nb::cast<std::string>(nb::str(item.first));
-            nb::object val = nb::borrow<nb::object>(item.second);
-            if (!val.is_none()) {
-                try {
-                    result[key] = nb::cast<FramebufferHandle*>(val);
-                    continue;
-                } catch (const nb::cast_error&) {
-                }
-            }
-        }
-        return result;
-    };
-
     nb::class_<ExecuteContext>(m, "ExecuteContext")
         .def(nb::init<>())
-        .def("__init__", [dict_to_resource_map](ExecuteContext* self, nb::kwargs kwargs) {
+        .def("__init__", [](ExecuteContext* self, nb::kwargs kwargs) {
             new (self) ExecuteContext();
             if (kwargs.contains("graphics")) {
                 nb::object g = nb::borrow<nb::object>(kwargs["graphics"]);
                 if (!g.is_none()) {
                     self->graphics = nb::cast<GraphicsBackend*>(g);
                 }
-            }
-            if (kwargs.contains("reads_fbos")) {
-                self->reads_fbos = dict_to_resource_map(nb::cast<nb::dict>(kwargs["reads_fbos"]));
-            }
-            if (kwargs.contains("writes_fbos")) {
-                self->writes_fbos = dict_to_resource_map(nb::cast<nb::dict>(kwargs["writes_fbos"]));
             }
             if (kwargs.contains("rect")) {
                 nb::tuple t = nb::cast<nb::tuple>(kwargs["rect"]);
@@ -310,32 +288,6 @@ void bind_render_framework(nb::module_& m) {
             [](const ExecuteContext& ctx) { return ctx.graphics; },
             [](ExecuteContext& ctx, GraphicsBackend* g) { ctx.graphics = g; },
             nb::rv_policy::reference)
-        .def_prop_rw("reads_fbos",
-            [](const ExecuteContext& ctx) -> nb::dict {
-                nb::dict result;
-                for (const auto& [key, val] : ctx.reads_fbos) {
-                    if (auto* fbo = dynamic_cast<FramebufferHandle*>(val)) {
-                        result[nb::str(key.c_str())] = nb::cast(fbo, nb::rv_policy::reference);
-                    }
-                }
-                return result;
-            },
-            [dict_to_resource_map](ExecuteContext& ctx, nb::dict py_dict) {
-                ctx.reads_fbos = dict_to_resource_map(py_dict);
-            })
-        .def_prop_rw("writes_fbos",
-            [](const ExecuteContext& ctx) -> nb::dict {
-                nb::dict result;
-                for (const auto& [key, val] : ctx.writes_fbos) {
-                    if (auto* fbo = dynamic_cast<FramebufferHandle*>(val)) {
-                        result[nb::str(key.c_str())] = nb::cast(fbo, nb::rv_policy::reference);
-                    }
-                }
-                return result;
-            },
-            [dict_to_resource_map](ExecuteContext& ctx, nb::dict py_dict) {
-                ctx.writes_fbos = dict_to_resource_map(py_dict);
-            })
         .def_prop_rw("camera",
             [](const ExecuteContext& ctx) -> RenderCamera* { return ctx.camera; },
             [](ExecuteContext& ctx, RenderCamera* camera) { ctx.camera = camera; },
