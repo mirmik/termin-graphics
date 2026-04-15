@@ -17,7 +17,7 @@ class BuildExt(TerminCMakeBuildExt):
 
 setup(
     name="tmesh",
-    version="0.1.0",
+    version=BuildExt.compute_local_version("0.1.0"),
     license="MIT",
     description="Mesh library with Python bindings",
     author="mirmik",

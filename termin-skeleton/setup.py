@@ -14,7 +14,7 @@ class BuildExt(TerminCMakeBuildExt):
 
 setup(
     name="termin-skeleton",
-    version="0.1.0",
+    version=BuildExt.compute_local_version("0.1.0"),
     license="MIT",
     description="Skeleton Python bindings (thin; requires termin SDK at runtime)",
     author="mirmik",

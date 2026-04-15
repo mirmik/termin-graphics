@@ -43,30 +43,6 @@ typedef struct tgfx_gpu_ops {
     // Delete GPU texture
     void (*texture_delete)(uint32_t gpu_id);
 
-    // Shader operations
-    // Compile shader, returns GPU program ID (0 on failure)
-    uint32_t (*shader_compile)(
-        const char* vertex_source,
-        const char* fragment_source,
-        const char* geometry_source  // may be NULL
-    );
-
-    // Use shader program
-    void (*shader_use)(uint32_t gpu_id);
-
-    // Delete shader program
-    void (*shader_delete)(uint32_t gpu_id);
-
-    // Uniform setters (gpu_id must be active program)
-    void (*shader_set_int)(uint32_t gpu_id, const char* name, int value);
-    void (*shader_set_float)(uint32_t gpu_id, const char* name, float value);
-    void (*shader_set_vec2)(uint32_t gpu_id, const char* name, float x, float y);
-    void (*shader_set_vec3)(uint32_t gpu_id, const char* name, float x, float y, float z);
-    void (*shader_set_vec4)(uint32_t gpu_id, const char* name, float x, float y, float z, float w);
-    void (*shader_set_mat4)(uint32_t gpu_id, const char* name, const float* data, bool transpose);
-    void (*shader_set_mat4_array)(uint32_t gpu_id, const char* name, const float* data, int count, bool transpose);
-    void (*shader_set_block_binding)(uint32_t gpu_id, const char* block_name, int binding_point);
-
     // Mesh operations
     // Upload mesh to GPU (creates VBO+EBO+VAO), returns GPU VAO ID (0 on failure)
     // Outputs VBO/EBO IDs through out_vbo/out_ebo pointers.

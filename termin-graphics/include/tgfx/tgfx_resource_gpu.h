@@ -49,30 +49,6 @@ TGFX_API void tc_texture_delete_gpu(tc_texture* tex);
 TGFX_API bool tc_texture_needs_upload(const tc_texture* tex);
 
 // ============================================================================
-// Shader GPU operations
-// ============================================================================
-
-// Compile shader if not already compiled
-// Returns GPU program ID (0 on failure)
-TGFX_API uint32_t tc_shader_compile_gpu(tc_shader* shader);
-
-// Use shader program
-TGFX_API void tc_shader_use_gpu(tc_shader* shader);
-
-// Delete shader from GPU
-TGFX_API void tc_shader_delete_gpu(tc_shader* shader);
-
-// Uniform setters (shader must be in use)
-TGFX_API void tc_shader_set_int(tc_shader* shader, const char* name, int value);
-TGFX_API void tc_shader_set_float(tc_shader* shader, const char* name, float value);
-TGFX_API void tc_shader_set_vec2(tc_shader* shader, const char* name, float x, float y);
-TGFX_API void tc_shader_set_vec3(tc_shader* shader, const char* name, float x, float y, float z);
-TGFX_API void tc_shader_set_vec4(tc_shader* shader, const char* name, float x, float y, float z, float w);
-TGFX_API void tc_shader_set_mat4(tc_shader* shader, const char* name, const float* data, bool transpose);
-TGFX_API void tc_shader_set_mat4_array(tc_shader* shader, const char* name, const float* data, int count, bool transpose);
-TGFX_API void tc_shader_set_block_binding(tc_shader* shader, const char* block_name, int binding_point);
-
-// ============================================================================
 // Mesh GPU operations (OpenGL implementation)
 // These are the actual GPU backends; registered via tc_mesh_set_gpu_ops().
 // ============================================================================

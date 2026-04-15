@@ -20,19 +20,6 @@ static int pass_count = 0;
     else { printf("  FAIL: %s\n", msg); } \
 } while(0)
 
-// Simple vertex/fragment shaders
-static const char* vert_src = R"(
-#version 330 core
-layout(location = 0) in vec3 aPos;
-void main() { gl_Position = vec4(aPos, 1.0); }
-)";
-
-static const char* frag_src = R"(
-#version 330 core
-out vec4 FragColor;
-void main() { FragColor = vec4(1.0, 0.0, 0.0, 1.0); }
-)";
-
 static void test_texture_upload() {
     printf("\n--- Texture Upload ---\n");
     const tgfx_gpu_ops* ops = tgfx_gpu_get_ops();
@@ -70,29 +57,6 @@ static void test_depth_texture_upload() {
     glBindTexture(GL_TEXTURE_2D, 0);
 
     ops->texture_delete(tex_id);
-}
-
-static void test_shader_compile() {
-    printf("\n--- Shader Compile ---\n");
-    const tgfx_gpu_ops* ops = tgfx_gpu_get_ops();
-
-    uint32_t program = ops->shader_compile(vert_src, frag_src, nullptr);
-    CHECK(program != 0, "shader_compile returns non-zero program");
-    CHECK(glIsProgram(program), "returned id is a valid GL program");
-
-    // Use and set uniform
-    ops->shader_use(program);
-    GLint current_prog = 0;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &current_prog);
-    CHECK((uint32_t)current_prog == program, "program is active after shader_use");
-
-    // Set a uniform (should not crash even if uniform doesn't exist)
-    ops->shader_set_float(program, "u_time", 1.5f);
-    ops->shader_set_mat4(program, "u_mvp", nullptr, false); // may not exist, just check no crash
-
-    glUseProgram(0); // unbind before delete
-    ops->shader_delete(program);
-    CHECK(!glIsProgram(program), "program deleted successfully");
 }
 
 static void test_mesh_upload() {
@@ -170,7 +134,6 @@ int main() {
     // Run tests
     test_texture_upload();
     test_depth_texture_upload();
-    test_shader_compile();
     test_mesh_upload();
 
     printf("\n=== Results: %d/%d passed ===\n", pass_count, test_count);
