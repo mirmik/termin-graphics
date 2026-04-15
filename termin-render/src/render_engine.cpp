@@ -120,35 +120,23 @@ void RenderEngine::render_to_screen(
 }
 
 void RenderEngine::present_to_screen(
-    RenderPipeline& pipeline,
-    int width,
-    int height,
-    const std::string& resource_name
+    RenderPipeline& /*pipeline*/,
+    int /*width*/,
+    int /*height*/,
+    const std::string& /*resource_name*/
 ) {
-    if (!pipeline.is_valid() || !graphics) {
-        tc::Log::warn("[present_to_screen] pipeline=%p graphics=%p", pipeline, graphics);
-        return;
+    // Deprecated after Stage 8.3: FBOPool no longer owns legacy
+    // FramebufferHandle objects, so there's no `FramebufferHandle*`
+    // to pass to `graphics->blit_framebuffer`. No production C++ /
+    // Python code calls this; only a SWIG export for C#. Kept as
+    // a warning stub so the binding surface stays stable until the
+    // C# path is migrated to `PresentToScreenPass`.
+    static bool warned = false;
+    if (!warned) {
+        warned = true;
+        tc::Log::warn("[RenderEngine::present_to_screen] deprecated no-op; "
+                      "use PresentToScreenPass in the framegraph instead.");
     }
-
-    FramebufferHandle* src_fbo = pipeline.fbo_pool().get(resource_name);
-    if (!src_fbo) {
-        tc::Log::warn("[present_to_screen] FBO '%s' not found in pipeline. Available FBOs:", resource_name.c_str());
-        auto& pool = pipeline.fbo_pool();
-        for (const auto& key : pool.keys()) {
-            auto* fbo = pool.get(key);
-            tc::Log::warn("  - '%s': %p", key.c_str(), fbo);
-        }
-        return;
-    }
-
-    graphics->blit_framebuffer(
-        src_fbo,
-        nullptr,
-        0, 0, src_fbo->get_width(), src_fbo->get_height(),
-        0, 0, width, height,
-        true,
-        false
-    );
 }
 
 void RenderEngine::render_view_to_fbo(
@@ -465,7 +453,6 @@ void RenderEngine::render_view_to_fbo(
         }
 
         ExecuteContext ctx;
-        ctx.graphics = graphics;
         ctx.ctx2 = tgfx2_ctx_.get();
         ctx.tex2_reads = std::move(pass_tex2_reads);
         ctx.tex2_writes = std::move(pass_tex2_writes);
@@ -854,7 +841,6 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
 
         ExecuteContext ctx;
-        ctx.graphics = graphics;
         ctx.ctx2 = tgfx2_ctx_.get();
         ctx.tex2_reads = std::move(pass_tex2_reads);
         ctx.tex2_writes = std::move(pass_tex2_writes);

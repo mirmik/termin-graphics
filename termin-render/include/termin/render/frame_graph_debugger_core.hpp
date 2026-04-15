@@ -69,18 +69,16 @@ public:
         return caller && caller == target_pass_;
     }
 
-    void capture(CxxFramePass* caller, FramebufferHandle* src, GraphicsBackend* graphics);
-    void capture_direct(FramebufferHandle* src, GraphicsBackend* graphics);
-
-    // Stage 8.3: capture a native tgfx2 texture via ctx2->blit. A
-    // legacy `capture_fbo_` is still allocated (through `graphics`)
-    // because the presenter blits it into the debug SDL window via
-    // legacy API; the blit into capture_fbo_ goes through an external
-    // wrap of its color attachment so the write is done natively.
+    // Capture a native tgfx2 texture into an internal legacy FBO so
+    // the Qt-editor presenter can still blit it into a debug SDL
+    // window. The legacy FBO is sourced from
+    // OpenGLGraphicsBackend::get_instance() — no per-call graphics
+    // handle needed. Internally opens a ctx2 blit pass from
+    // `src_tex` to a tgfx2 wrapper of the capture FBO's color
+    // attachment.
     void capture_direct_via_ctx2(
         tgfx2::RenderContext2* ctx2,
         tgfx2::TextureHandle src_tex,
-        GraphicsBackend* graphics,
         int width,
         int height,
         const std::string& format
@@ -91,9 +89,7 @@ public:
     void reset_capture() { captured_ = false; }
 
 private:
-    void ensure_capture_fbo(FramebufferHandle* src, GraphicsBackend* graphics);
-    void ensure_capture_fbo_raw(GraphicsBackend* graphics, int w, int h, const std::string& format);
-    void do_blit(FramebufferHandle* src, GraphicsBackend* graphics);
+    void ensure_capture_fbo_raw(int w, int h, const std::string& format);
 };
 
 class RENDER_API FrameGraphPresenter {
@@ -120,10 +116,9 @@ public:
         bool highlight_hdr
     );
 
-    HDRStats compute_hdr_stats(GraphicsBackend* graphics, FramebufferHandle* fbo);
+    HDRStats compute_hdr_stats(FramebufferHandle* fbo);
 
     std::vector<uint8_t> read_depth_normalized(
-        GraphicsBackend* graphics,
         FramebufferHandle* fbo,
         int* out_w,
         int* out_h

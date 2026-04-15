@@ -13,11 +13,6 @@
 
 #include <tgfx2/handles.hpp>
 
-// Forward declaration — tgfx2 is the backend-neutral graphics API.
-// `graphics` still exists on the context as a transitional escape
-// hatch for paths that haven't migrated yet (debug capture, posteffect
-// temp FBOs, Python UI widget renderer). It will go away in a later
-// stage.
 namespace tgfx2 {
 class RenderContext2;
 }
@@ -38,7 +33,6 @@ using ShadowArrayMap = std::unordered_map<std::string, ShadowMapArrayResource*>;
 
 struct ExecuteContext {
 public:
-    GraphicsBackend* graphics = nullptr;
     tgfx2::RenderContext2* ctx2 = nullptr;
     // Color attachments of pipeline resources as tgfx2 textures.
     Tex2Map tex2_reads;

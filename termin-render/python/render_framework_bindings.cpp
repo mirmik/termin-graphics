@@ -242,12 +242,6 @@ void bind_render_framework(nb::module_& m) {
         .def(nb::init<>())
         .def("__init__", [](ExecuteContext* self, nb::kwargs kwargs) {
             new (self) ExecuteContext();
-            if (kwargs.contains("graphics")) {
-                nb::object g = nb::borrow<nb::object>(kwargs["graphics"]);
-                if (!g.is_none()) {
-                    self->graphics = nb::cast<GraphicsBackend*>(g);
-                }
-            }
             if (kwargs.contains("rect")) {
                 nb::tuple t = nb::cast<nb::tuple>(kwargs["rect"]);
                 self->rect.x = nb::cast<int>(t[0]);
@@ -284,10 +278,6 @@ void bind_render_framework(nb::module_& m) {
                 self->layer_mask = nb::cast<uint64_t>(kwargs["layer_mask"]);
             }
         })
-        .def_prop_rw("graphics",
-            [](const ExecuteContext& ctx) { return ctx.graphics; },
-            [](ExecuteContext& ctx, GraphicsBackend* g) { ctx.graphics = g; },
-            nb::rv_policy::reference)
         .def_prop_rw("camera",
             [](const ExecuteContext& ctx) -> RenderCamera* { return ctx.camera; },
             [](ExecuteContext& ctx, RenderCamera* camera) { ctx.camera = camera; },
@@ -533,13 +523,9 @@ void bind_render_framework(nb::module_& m) {
             self.set_target(pass);
         }, nb::arg("pass"), nb::rv_policy::reference)
         .def("clear_target", &FrameGraphCapture::clear_target)
-        .def("capture", &FrameGraphCapture::capture,
-             nb::arg("caller"), nb::arg("src"), nb::arg("graphics"))
-        .def("capture_direct", &FrameGraphCapture::capture_direct,
-             nb::arg("src"), nb::arg("graphics"))
         .def("capture_direct_via_ctx2",
              &FrameGraphCapture::capture_direct_via_ctx2,
-             nb::arg("ctx2"), nb::arg("src_tex"), nb::arg("graphics"),
+             nb::arg("ctx2"), nb::arg("src_tex"),
              nb::arg("width"), nb::arg("height"), nb::arg("format"))
         .def("has_capture", &FrameGraphCapture::has_capture)
         .def("reset_capture", &FrameGraphCapture::reset_capture)
@@ -554,7 +540,7 @@ void bind_render_framework(nb::module_& m) {
              nb::arg("dst_w"), nb::arg("dst_h"),
              nb::arg("channel_mode"), nb::arg("highlight_hdr"))
         .def("compute_hdr_stats", &FrameGraphPresenter::compute_hdr_stats,
-             nb::arg("graphics"), nb::arg("fbo"))
+             nb::arg("fbo"))
         .def_static("get_fbo_info", &FrameGraphPresenter::get_fbo_info,
                      nb::arg("fbo"));
 
