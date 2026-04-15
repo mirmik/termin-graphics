@@ -109,6 +109,11 @@ public:
 
     void upload_buffer(BufferHandle dst, std::span<const uint8_t> data, uint64_t offset = 0) override;
     void upload_texture(TextureHandle dst, std::span<const uint8_t> data, uint32_t mip = 0) override;
+    void upload_texture_region(TextureHandle dst,
+                               uint32_t x, uint32_t y,
+                               uint32_t w, uint32_t h,
+                               std::span<const uint8_t> data,
+                               uint32_t mip = 0) override;
     void read_buffer(BufferHandle src, std::span<uint8_t> data, uint64_t offset = 0) override;
 
     TextureDesc texture_desc(TextureHandle handle) const override;

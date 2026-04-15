@@ -39,6 +39,15 @@ public:
     virtual void upload_buffer(BufferHandle dst, std::span<const uint8_t> data, uint64_t offset = 0) = 0;
     virtual void upload_texture(TextureHandle dst, std::span<const uint8_t> data, uint32_t mip = 0) = 0;
 
+    // Upload a rectangular sub-region of a texture. `data` is a tightly
+    // packed `w * h * bytes_per_pixel` buffer in the texture's format.
+    // Useful for incremental overlay updates (e.g. paint strokes).
+    virtual void upload_texture_region(TextureHandle dst,
+                                       uint32_t x, uint32_t y,
+                                       uint32_t w, uint32_t h,
+                                       std::span<const uint8_t> data,
+                                       uint32_t mip = 0) = 0;
+
     // --- Data readback ---
     virtual void read_buffer(BufferHandle src, std::span<uint8_t> data, uint64_t offset = 0) = 0;
 

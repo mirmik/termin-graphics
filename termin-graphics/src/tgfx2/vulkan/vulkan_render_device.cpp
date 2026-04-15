@@ -913,6 +913,18 @@ void VulkanRenderDevice::upload_texture(TextureHandle dst, std::span<const uint8
     vmaDestroyBuffer(allocator_, staging, staging_alloc);
 }
 
+void VulkanRenderDevice::upload_texture_region(TextureHandle /*dst*/,
+                                               uint32_t /*x*/, uint32_t /*y*/,
+                                               uint32_t /*w*/, uint32_t /*h*/,
+                                               std::span<const uint8_t> /*data*/,
+                                               uint32_t /*mip*/) {
+    // TODO: implement proper region upload via staging buffer +
+    // vkCmdCopyBufferToImage with VkBufferImageCopy.imageOffset /
+    // imageExtent. The OpenGL path (glTexSubImage2D) is the primary
+    // consumer right now; Vulkan gets a stub so the interface stays
+    // abstract-class compatible.
+}
+
 // --- Readback ---
 
 void VulkanRenderDevice::read_buffer(BufferHandle src, std::span<uint8_t> data, uint64_t offset) {

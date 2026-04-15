@@ -340,6 +340,24 @@ void OpenGLRenderDevice::upload_texture(TextureHandle dst, std::span<const uint8
     glBindTexture(tex->target, 0);
 }
 
+void OpenGLRenderDevice::upload_texture_region(TextureHandle dst,
+                                               uint32_t x, uint32_t y,
+                                               uint32_t w, uint32_t h,
+                                               std::span<const uint8_t> data,
+                                               uint32_t mip) {
+    auto* tex = textures_.get(dst.id);
+    if (!tex) return;
+
+    auto fmt = gl::to_gl_format(tex->desc.format);
+
+    glBindTexture(tex->target, tex->gl_id);
+    glTexSubImage2D(tex->target, mip,
+                    static_cast<GLint>(x), static_cast<GLint>(y),
+                    static_cast<GLsizei>(w), static_cast<GLsizei>(h),
+                    fmt.format, fmt.type, data.data());
+    glBindTexture(tex->target, 0);
+}
+
 // --- Readback ---
 
 void OpenGLRenderDevice::read_buffer(BufferHandle src, std::span<uint8_t> data, uint64_t offset) {

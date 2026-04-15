@@ -315,11 +315,7 @@ void bind_tgfx2(nb::module_& m) {
             },
             nb::arg("width"), nb::arg("height"), nb::arg("data"))
 
-        // Full-texture re-upload. tgfx2 does not currently expose a
-        // partial-rect upload in IRenderDevice, so callers that were
-        // using tgfx1 `update_texture_region` fall back to re-uploading
-        // the whole image. For a 2048x2048 R8 atlas this is ~4 MB —
-        // fine for text atlases that repack once per new glyph.
+        // Full-texture re-upload.
         .def("upload_texture",
             [](Tgfx2ContextHolder& self, tgfx2::TextureHandle handle,
                nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
@@ -327,6 +323,22 @@ void bind_tgfx2(nb::module_& m) {
                     std::span<const uint8_t>(data.data(), data.size()));
             },
             nb::arg("handle"), nb::arg("data"))
+
+        // Upload a rectangular sub-region of a texture. ``data`` is a
+        // tightly packed ``w * h * bytes_per_pixel`` buffer. Used by
+        // incremental update paths (e.g. Canvas overlay stroke).
+        .def("upload_texture_region",
+            [](Tgfx2ContextHolder& self, tgfx2::TextureHandle handle,
+               uint32_t x, uint32_t y, uint32_t w, uint32_t h,
+               nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
+                self.device->upload_texture_region(
+                    handle, x, y, w, h,
+                    std::span<const uint8_t>(data.data(), data.size()));
+            },
+            nb::arg("handle"),
+            nb::arg("x"), nb::arg("y"),
+            nb::arg("w"), nb::arg("h"),
+            nb::arg("data"))
 
         // Destroy a texture owned by this device.
         .def("destroy_texture",
