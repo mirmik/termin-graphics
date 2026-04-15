@@ -18,6 +18,11 @@ import numpy as np
 from tcbase import MouseButton
 from tgfx import TcShader
 from tgfx.text3d import Text3DRenderer
+from tgfx._tgfx_native import (
+    tc_shader_ensure_tgfx2,
+    draw_tc_mesh,
+    CULL_NONE,
+)
 
 from tcplot.camera3d import OrbitCamera
 from tcplot.data import PlotData, SurfaceSeries
@@ -96,7 +101,10 @@ class PlotEngine3D:
         self._vh = 0.0
 
         # GPU resources (lazy init)
-        self._shader: TcShader | None = None
+        self._shader: TcShader | None = None  # tgfx1 source container
+        self._vs = None  # Tgfx2ShaderHandle
+        self._fs = None  # Tgfx2ShaderHandle
+        self._compiled_for_holder = None
         self._lines_mesh = None
         self._scatter_mesh = None
         self._grid_mesh = None
@@ -203,10 +211,26 @@ class PlotEngine3D:
 
     # -- GPU mesh building --
 
-    def _ensure_shader(self):
+    def _ensure_shader(self, holder) -> None:
+        """Compile the tcplot3d shader and bridge it to tgfx2 handles.
+
+        Results are cached per-holder so a window reopen (new holder)
+        triggers recompilation.
+        """
         if self._shader is None:
-            self._shader = TcShader.from_sources(_VERT_SRC, _FRAG_SRC, "", "tcplot3d")
+            self._shader = TcShader.from_sources(
+                _VERT_SRC, _FRAG_SRC, "", "tcplot3d")
             self._shader.ensure_ready()
+
+        if self._compiled_for_holder is not holder or self._vs is None:
+            pair = tc_shader_ensure_tgfx2(holder.context, self._shader)
+            if not pair.vs or not pair.fs:
+                raise RuntimeError(
+                    "PlotEngine3D: tc_shader_ensure_tgfx2 returned null handles"
+                )
+            self._vs = pair.vs
+            self._fs = pair.fs
+            self._compiled_for_holder = holder
 
     def _rebuild_meshes(self):
         self._release_gpu()
@@ -404,68 +428,73 @@ class PlotEngine3D:
             mvp = mvp @ model
         return aspect, mvp
 
-    def render(self, graphics, font) -> None:
-        """Render the 3D scene.
+    def render(self, holder, font) -> None:
+        """Render the 3D scene through a ``Tgfx2Context``.
 
-        ``graphics`` is a tgfx graphics backend (currently
-        ``OpenGLGraphicsBackend``).  ``font`` is a ``FontTextureAtlas``
-        used for billboard tick labels.  The host is responsible for
-        background fill, scissor/clip to the viewport, and any 2D
-        overlay rendered outside this call.
+        ``holder`` is the ``Tgfx2Context`` the caller uses for its
+        own rendering (typically ``UIRenderer.holder``). The engine
+        draws through ``holder.context``. ``font`` is a
+        ``FontTextureAtlas`` used for billboard tick labels.
+
+        The host is responsible for background fill, scissor/clip
+        to the viewport, and any 2D overlay rendered outside this
+        call.
         """
         if self._vw <= 0 or self._vh <= 0:
             return
 
-        self._ensure_shader()
+        self._ensure_shader(holder)
         if self._dirty:
             self._rebuild_meshes()
 
-        graphics.set_depth_test(True)
-        graphics.set_blend(True)
-        graphics.set_cull_face(False)
+        ctx = holder.context
+        ctx.set_depth_test(False)
+        ctx.set_blend(True)
+        ctx.set_cull(CULL_NONE)
 
         aspect, mvp = self._compute_mvp()
+        mvp_flat = np.ascontiguousarray(mvp, dtype=np.float32).flatten().tolist()
 
-        self._shader.use()
-        self._shader.set_uniform_mat4("u_mvp", mvp.astype(np.float32), True)
+        ctx.bind_shader(self._vs, self._fs)
+        ctx.set_uniform_mat4("u_mvp", mvp_flat, True)
 
         # Z range for jet colormap
         bounds_min, bounds_max = self._data_bounds_3d()
-        self._shader.set_uniform_float("u_z_min", float(bounds_min[2]))
-        self._shader.set_uniform_float("u_z_max", float(bounds_max[2]))
+        ctx.set_uniform_float("u_z_min", float(bounds_min[2]))
+        ctx.set_uniform_float("u_z_max", float(bounds_max[2]))
 
         # Draw grid first (behind data, no jet)
-        self._shader.set_uniform_int("u_use_jet", 0)
+        ctx.set_uniform_int("u_use_jet", 0)
         if self._grid_mesh:
-            self._grid_mesh.draw_gpu()
+            draw_tc_mesh(ctx, self._grid_mesh)
 
         # Draw opaque surfaces (with jet)
-        self._shader.set_uniform_int("u_use_jet", 1)
-        graphics.set_blend(False)
+        ctx.set_uniform_int("u_use_jet", 1)
+        ctx.set_blend(False)
         for mesh in self._surface_meshes:
-            mesh.draw_gpu()
+            draw_tc_mesh(ctx, mesh)
 
         # Draw wireframe on top without depth test (no jet)
-        self._shader.set_uniform_int("u_use_jet", 0)
+        ctx.set_uniform_int("u_use_jet", 0)
         if self.show_wireframe:
-            graphics.set_depth_test(False)
-            graphics.set_blend(True)
+            ctx.set_depth_test(False)
+            ctx.set_blend(True)
             for mesh in self._wireframe_meshes:
-                mesh.draw_gpu()
-            graphics.set_depth_test(True)
+                draw_tc_mesh(ctx, mesh)
+            ctx.set_depth_test(True)
 
         # Draw lines and scatter on top (no jet)
         if self._lines_mesh:
-            self._lines_mesh.draw_gpu()
+            draw_tc_mesh(ctx, self._lines_mesh)
         if self._scatter_mesh:
-            self._scatter_mesh.draw_gpu()
+            draw_tc_mesh(ctx, self._scatter_mesh)
 
         # Draw marker via immediate mode (no mesh allocation)
         if self._marker_pos and self.marker_mode:
-            self._shader.use()
-            self._shader.set_uniform_mat4("u_mvp", mvp.astype(np.float32), True)
-            self._shader.set_uniform_int("u_use_jet", 0)
-            graphics.set_depth_test(False)
+            ctx.bind_shader(self._vs, self._fs)
+            ctx.set_uniform_mat4("u_mvp", mvp_flat, True)
+            ctx.set_uniform_int("u_use_jet", 0)
+            ctx.set_depth_test(False)
 
             x, y, z = self._marker_pos
             data_size = float(np.linalg.norm(bounds_max - bounds_min))
@@ -475,36 +504,38 @@ class PlotEngine3D:
             for dx, dy, dz in [(cs, 0, 0), (0, cs, 0), (0, 0, cs)]:
                 verts.extend([x - dx, y - dy, z - dz, *c])
                 verts.extend([x + dx, y + dy, z + dz, *c])
-            graphics.draw_immediate_lines(np.array(verts, dtype=np.float32))
+            verts_np = np.asarray(verts, dtype=np.float32)
+            ctx.draw_immediate_lines(verts_np, len(verts) // 7)
 
-            graphics.set_depth_test(True)
+            ctx.set_depth_test(True)
 
         # 3D tick labels (billboard text)
-        self._draw_tick_labels_3d(aspect, bounds_min, bounds_max, graphics, font)
+        self._draw_tick_labels_3d(holder, aspect, bounds_min, bounds_max, font)
 
         # Marker value label (billboard text, always on top)
         if self._marker_pos and self.marker_mode:
-            graphics.set_depth_test(False)
+            ctx.set_depth_test(False)
             x, y, z = self._marker_pos
             label = f"({x:.3g}, {y:.3g}, {z:.3g})"
             data_size = float(np.linalg.norm(bounds_max - bounds_min))
-            self._text3d.begin(self.camera, aspect, font=font)
+            self._text3d.begin(holder, self.camera, aspect, font=font)
             # Pre-apply z_scale to anchor position (text3d MVP has no z_scale)
             pos = [x, y, z * self.z_scale + data_size * 0.04]
             self._text3d.draw(label, pos, color=(1.0, 1.0, 0.0, 1.0),
                               size=data_size * 0.015)
             self._text3d.end()
-            graphics.set_depth_test(True)
+            ctx.set_depth_test(True)
 
         # Restore 2D state for subsequent UI rendering
-        graphics.set_depth_test(False)
+        ctx.set_depth_test(False)
 
-    def _draw_tick_labels_3d(self, aspect, bounds_min, bounds_max, graphics, font):
+    def _draw_tick_labels_3d(self, holder, aspect, bounds_min, bounds_max, font):
         """Draw tick value labels as billboard text on axes."""
-        graphics.set_depth_test(True)
-        graphics.set_blend(True)
+        ctx = holder.context
+        ctx.set_depth_test(True)
+        ctx.set_blend(True)
 
-        self._text3d.begin(self.camera, aspect, font=font)
+        self._text3d.begin(holder, self.camera, aspect, font=font)
 
         label_color = (0.8, 0.8, 0.8, 1.0)
         data_size = float(np.linalg.norm(bounds_max - bounds_min))
@@ -533,8 +564,7 @@ class PlotEngine3D:
 
                 self._text3d.draw(format_tick(t), pos,
                                   color=label_color, size=text_size)
-
-        graphics.set_depth_test(True)
+        self._text3d.end()
 
     # -- Picking --
 

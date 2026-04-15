@@ -622,4 +622,11 @@ void RenderContext2::blit(TextureHandle src, TextureHandle dst) {
     cmd_->copy_texture(src, dst);
 }
 
+uint32_t RenderContext2::last_gl_error() {
+    // glad lives in this translation unit's module, so glGetError
+    // is always a valid function pointer here even when the caller
+    // is in another DLL (e.g. the Python binding module).
+    return static_cast<uint32_t>(glGetError());
+}
+
 } // namespace tgfx2

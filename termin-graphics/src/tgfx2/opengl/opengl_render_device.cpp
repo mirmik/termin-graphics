@@ -51,8 +51,8 @@ OpenGLRenderDevice::~OpenGLRenderDevice() {
     for (auto& [id, sh] : shaders_) {
         if (sh.gl_shader) glDeleteShader(sh.gl_shader);
     }
-    for (auto& [id, p] : pipelines_) {
-        if (p.program) glDeleteProgram(p.program);
+    for (auto& [key, shared] : program_cache_) {
+        if (shared.program) glDeleteProgram(shared.program);
     }
 }
 
@@ -205,39 +205,77 @@ ShaderHandle OpenGLRenderDevice::create_shader(const ShaderDesc& desc) {
 
 // --- Pipeline ---
 
-PipelineHandle OpenGLRenderDevice::create_pipeline(const PipelineDesc& desc) {
-    GLPipeline pipe;
-    pipe.desc = desc;
+GLuint OpenGLRenderDevice::acquire_program(const PipelineDesc& desc) {
+    GLProgramKey key{
+        desc.vertex_shader.id,
+        desc.fragment_shader.id,
+        desc.geometry_shader.id,
+    };
+    auto it = program_cache_.find(key);
+    if (it != program_cache_.end()) {
+        it->second.ref_count += 1;
+        return it->second.program;
+    }
 
-    // Link shader program
     auto* vs = get_shader(desc.vertex_shader);
     auto* fs = get_shader(desc.fragment_shader);
     if (!vs || !fs) {
         throw std::runtime_error("Pipeline requires valid vertex and fragment shaders");
     }
 
-    pipe.program = glCreateProgram();
-    glAttachShader(pipe.program, vs->gl_shader);
-    glAttachShader(pipe.program, fs->gl_shader);
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vs->gl_shader);
+    glAttachShader(program, fs->gl_shader);
 
     if (desc.geometry_shader && desc.geometry_shader.id != 0) {
         auto* gs = get_shader(desc.geometry_shader);
         if (gs) {
-            glAttachShader(pipe.program, gs->gl_shader);
+            glAttachShader(program, gs->gl_shader);
         }
     }
 
-    glLinkProgram(pipe.program);
+    glLinkProgram(program);
 
     GLint status;
-    glGetProgramiv(pipe.program, GL_LINK_STATUS, &status);
+    glGetProgramiv(program, GL_LINK_STATUS, &status);
     if (!status) {
         char log[1024];
-        glGetProgramInfoLog(pipe.program, sizeof(log), nullptr, log);
-        glDeleteProgram(pipe.program);
+        glGetProgramInfoLog(program, sizeof(log), nullptr, log);
+        glDeleteProgram(program);
         throw std::runtime_error(std::string("Program link error: ") + log);
     }
 
+    program_cache_[key] = GLSharedProgram{program, 1};
+    program_to_key_[program] = key;
+    return program;
+}
+
+void OpenGLRenderDevice::release_program(GLuint program) {
+    if (program == 0) return;
+    auto key_it = program_to_key_.find(program);
+    if (key_it == program_to_key_.end()) {
+        glDeleteProgram(program);
+        return;
+    }
+    auto cache_it = program_cache_.find(key_it->second);
+    if (cache_it == program_cache_.end()) {
+        program_to_key_.erase(key_it);
+        glDeleteProgram(program);
+        return;
+    }
+    if (cache_it->second.ref_count > 1) {
+        cache_it->second.ref_count -= 1;
+        return;
+    }
+    glDeleteProgram(cache_it->second.program);
+    program_cache_.erase(cache_it);
+    program_to_key_.erase(key_it);
+}
+
+PipelineHandle OpenGLRenderDevice::create_pipeline(const PipelineDesc& desc) {
+    GLPipeline pipe;
+    pipe.desc = desc;
+    pipe.program = acquire_program(desc);
     return {pipelines_.add(std::move(pipe))};
 }
 
@@ -306,7 +344,7 @@ void OpenGLRenderDevice::destroy(ShaderHandle handle) {
 
 void OpenGLRenderDevice::destroy(PipelineHandle handle) {
     if (auto* p = pipelines_.get(handle.id)) {
-        if (p->program) glDeleteProgram(p->program);
+        release_program(p->program);
         pipelines_.remove(handle.id);
     }
 }

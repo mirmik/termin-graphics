@@ -49,6 +49,32 @@ struct GLPipeline {
     PipelineDesc desc;
 };
 
+struct GLProgramKey {
+    uint32_t vertex_shader = 0;
+    uint32_t fragment_shader = 0;
+    uint32_t geometry_shader = 0;
+
+    bool operator==(const GLProgramKey& o) const {
+        return vertex_shader == o.vertex_shader &&
+               fragment_shader == o.fragment_shader &&
+               geometry_shader == o.geometry_shader;
+    }
+};
+
+struct GLSharedProgram {
+    GLuint program = 0;
+    uint32_t ref_count = 0;
+};
+
+struct GLProgramKeyHash {
+    size_t operator()(const GLProgramKey& k) const noexcept {
+        size_t h = std::hash<uint32_t>{}(k.vertex_shader);
+        h ^= std::hash<uint32_t>{}(k.fragment_shader) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<uint32_t>{}(k.geometry_shader) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        return h;
+    }
+};
+
 struct GLResourceSet {
     ResourceSetDesc desc;
 };
@@ -205,6 +231,9 @@ public:
     void push_constants_reset_frame();
 
 private:
+    GLuint acquire_program(const PipelineDesc& desc);
+    void release_program(GLuint program);
+
     HandlePool<GLBuffer> buffers_;
     HandlePool<GLTexture> textures_;
     HandlePool<GLSampler> samplers_;
@@ -225,6 +254,9 @@ private:
     GLintptr   push_ring_offset_    = 0;
     GLint      push_ring_alignment_ = 256;       // queried from GL at first use
     bool       push_ring_initialized_ = false;
+
+    std::unordered_map<GLProgramKey, GLSharedProgram, GLProgramKeyHash> program_cache_;
+    std::unordered_map<GLuint, GLProgramKey> program_to_key_;
 
     void ensure_push_ring();
 };

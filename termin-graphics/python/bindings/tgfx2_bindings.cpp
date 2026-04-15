@@ -127,6 +127,12 @@ void bind_tgfx2(nb::module_& m) {
         // Blit (src → dst texture).
         .def("blit", &tgfx2::RenderContext2::blit)
 
+        // Diagnostic: glGetError() wrapper. glad lives inside
+        // termin_graphics2.dll and is initialised by the host, so
+        // this call is always safe from the binding side where a
+        // direct glGetError would crash on a null function pointer.
+        .def("last_gl_error", &tgfx2::RenderContext2::last_gl_error)
+
         // Shader
         .def("bind_shader",
              [](tgfx2::RenderContext2& self,

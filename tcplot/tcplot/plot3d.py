@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from tcgui.widgets.widget import Widget
 from tcgui.widgets.events import MouseEvent, MouseWheelEvent
-from tgfx import OpenGLGraphicsBackend
-
 from tcplot.engine3d import PlotEngine3D
 from tcplot import styles
 
@@ -109,8 +107,9 @@ class Plot3D(Widget):
         self.engine.set_viewport(self.x, self.y, self.width, self.height)
         renderer.begin_clip(int(self.x), int(self.y), int(self.width), int(self.height))
 
-        graphics = OpenGLGraphicsBackend.get_instance()
-        self.engine.render(graphics, renderer.font)
+        holder = renderer.holder
+        if holder is not None:
+            self.engine.render(holder, renderer.font)
 
         renderer.end_clip()
 

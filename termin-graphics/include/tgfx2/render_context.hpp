@@ -179,6 +179,14 @@ public:
     // --- Blit ---
     void blit(TextureHandle src, TextureHandle dst);
 
+    // --- Diagnostics ---
+    // Return the most recent GL error code (backend-specific) and
+    // clear it. On OpenGL this forwards to ``glGetError()``. Useful
+    // for ad-hoc debugging from higher layers (Python bindings,
+    // tests) where glad is not initialised and the direct symbol is
+    // not available.
+    uint32_t last_gl_error();
+
     // --- Access ---
     IRenderDevice& device() { return device_; }
     ICommandList* cmd() { return cmd_.get(); }
