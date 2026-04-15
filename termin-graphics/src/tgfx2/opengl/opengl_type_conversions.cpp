@@ -15,6 +15,7 @@ GLFormatInfo to_gl_format(PixelFormat fmt) {
         case PixelFormat::R32F:               return {GL_R32F, GL_RED, GL_FLOAT};
         case PixelFormat::RG32F:              return {GL_RG32F, GL_RG, GL_FLOAT};
         case PixelFormat::RGBA32F:            return {GL_RGBA32F, GL_RGBA, GL_FLOAT};
+        case PixelFormat::D24_UNorm:          return {GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT};
         case PixelFormat::D24_UNorm_S8_UInt:  return {GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8};
         case PixelFormat::D32F:               return {GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT};
     }

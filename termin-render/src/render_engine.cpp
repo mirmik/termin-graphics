@@ -299,16 +299,23 @@ void RenderEngine::render_view_to_fbo(
         }
 
         FBOPool& fbo_pool = pipeline.fbo_pool();
-        auto* tgfx2_gl_dev =
-            dynamic_cast<tgfx2::OpenGLRenderDevice*>(tgfx2_device_.get());
-        FramebufferHandle* fbo = fbo_pool.ensure(
-            graphics, canon, fbo_width, fbo_height, samples, format, filter,
-            tgfx2_gl_dev);
+
+        tgfx2::PixelFormat color_fmt = tgfx2::PixelFormat::RGBA8_UNorm;
+        if (format == "r8") color_fmt = tgfx2::PixelFormat::R8_UNorm;
+        else if (format == "r16f") color_fmt = tgfx2::PixelFormat::R16F;
+        else if (format == "r32f") color_fmt = tgfx2::PixelFormat::R32F;
+        else if (format == "rgba16f") color_fmt = tgfx2::PixelFormat::RGBA16F;
+        else if (format == "rgba32f") color_fmt = tgfx2::PixelFormat::RGBA32F;
+
+        fbo_pool.ensure_native(
+            *tgfx2_device_, canon, fbo_width, fbo_height,
+            color_fmt, /*has_depth=*/true, tgfx2::PixelFormat::D24_UNorm, samples);
+        (void)filter;
 
         const char* aliases[64];
         size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
         for (size_t j = 0; j < alias_count; j++) {
-            resources[aliases[j]] = fbo;
+            resources[aliases[j]] = nullptr;
             fbo_pool.add_alias(aliases[j], canon);
         }
     }
@@ -661,16 +668,23 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
 
         FBOPool& fbo_pool = pipeline.fbo_pool();
-        auto* tgfx2_gl_dev =
-            dynamic_cast<tgfx2::OpenGLRenderDevice*>(tgfx2_device_.get());
-        FramebufferHandle* fbo = fbo_pool.ensure(
-            graphics, canon, fbo_width, fbo_height, samples, format, filter,
-            tgfx2_gl_dev);
+
+        tgfx2::PixelFormat color_fmt = tgfx2::PixelFormat::RGBA8_UNorm;
+        if (format == "r8") color_fmt = tgfx2::PixelFormat::R8_UNorm;
+        else if (format == "r16f") color_fmt = tgfx2::PixelFormat::R16F;
+        else if (format == "r32f") color_fmt = tgfx2::PixelFormat::R32F;
+        else if (format == "rgba16f") color_fmt = tgfx2::PixelFormat::RGBA16F;
+        else if (format == "rgba32f") color_fmt = tgfx2::PixelFormat::RGBA32F;
+
+        fbo_pool.ensure_native(
+            *tgfx2_device_, canon, fbo_width, fbo_height,
+            color_fmt, /*has_depth=*/true, tgfx2::PixelFormat::D32F, samples);
+        (void)filter;
 
         const char* aliases[64];
         size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
         for (size_t j = 0; j < alias_count; j++) {
-            resources[aliases[j]] = fbo;
+            resources[aliases[j]] = nullptr;
             fbo_pool.add_alias(aliases[j], canon);
         }
     }
@@ -682,16 +696,14 @@ void RenderEngine::render_scene_pipeline_offscreen(
         tgfx2_ctx_->begin_frame();
     }
 
-    // Pull the persistent tgfx2 wrappers that FBOPool::ensure cached
-    // at allocation time.
+    // Assemble per-resource tgfx2 texture maps from the pool. Native
+    // path: handles are owned by IRenderDevice, persistent across
+    // frames without any wrap/destroy churn.
     std::unordered_map<std::string, tgfx2::TextureHandle> tex2_resources;
     std::unordered_map<std::string, tgfx2::TextureHandle> tex2_depth_resources;
     if (tgfx2_ctx_ && tgfx2_device_) {
         FBOPool& fbo_pool = pipeline.fbo_pool();
         for (const auto& [name, res] : resources) {
-            if (!res) continue;
-            auto* fbo = dynamic_cast<FramebufferHandle*>(res);
-            if (!fbo) continue;
             tgfx2::TextureHandle color_handle = fbo_pool.get_color_tgfx2(name);
             if (color_handle) tex2_resources[name] = color_handle;
             tgfx2::TextureHandle depth_handle = fbo_pool.get_depth_tgfx2(name);

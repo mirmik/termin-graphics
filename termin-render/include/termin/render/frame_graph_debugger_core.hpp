@@ -72,12 +72,27 @@ public:
     void capture(CxxFramePass* caller, FramebufferHandle* src, GraphicsBackend* graphics);
     void capture_direct(FramebufferHandle* src, GraphicsBackend* graphics);
 
+    // Stage 8.3: capture a native tgfx2 texture via ctx2->blit. A
+    // legacy `capture_fbo_` is still allocated (through `graphics`)
+    // because the presenter blits it into the debug SDL window via
+    // legacy API; the blit into capture_fbo_ goes through an external
+    // wrap of its color attachment so the write is done natively.
+    void capture_direct_via_ctx2(
+        tgfx2::RenderContext2* ctx2,
+        tgfx2::TextureHandle src_tex,
+        GraphicsBackend* graphics,
+        int width,
+        int height,
+        const std::string& format
+    );
+
     FramebufferHandle* capture_fbo() const { return capture_fbo_.get(); }
     bool has_capture() const { return captured_; }
     void reset_capture() { captured_ = false; }
 
 private:
     void ensure_capture_fbo(FramebufferHandle* src, GraphicsBackend* graphics);
+    void ensure_capture_fbo_raw(GraphicsBackend* graphics, int w, int h, const std::string& format);
     void do_blit(FramebufferHandle* src, GraphicsBackend* graphics);
 };
 

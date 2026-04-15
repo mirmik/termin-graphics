@@ -124,7 +124,16 @@ TextureHandle OpenGLRenderDevice::create_texture(const TextureDesc& desc) {
             glTexImage2D(tex.target, mip, fmt.internal_format, w, h, 0,
                          fmt.format, fmt.type, nullptr);
         }
-        // Sensible defaults (can be overridden via sampler)
+        // Mandatory defaults: without these GL treats the texture as
+        // incomplete (default MIN filter is NEAREST_MIPMAP_LINEAR,
+        // which requires a full mip chain). Any `bind_sampled_texture`
+        // call against an incomplete texture returns black.
+        // Samplers bound at draw time override these per-unit, so
+        // they're just a "valid baseline".
+        glTexParameteri(tex.target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(tex.target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(tex.target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(tex.target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(tex.target, GL_TEXTURE_MAX_LEVEL, desc.mip_levels - 1);
     }
 

@@ -585,6 +585,10 @@ void bind_render_framework(nb::module_& m) {
              nb::arg("caller"), nb::arg("src"), nb::arg("graphics"))
         .def("capture_direct", &FrameGraphCapture::capture_direct,
              nb::arg("src"), nb::arg("graphics"))
+        .def("capture_direct_via_ctx2",
+             &FrameGraphCapture::capture_direct_via_ctx2,
+             nb::arg("ctx2"), nb::arg("src_tex"), nb::arg("graphics"),
+             nb::arg("width"), nb::arg("height"), nb::arg("format"))
         .def("has_capture", &FrameGraphCapture::has_capture)
         .def("reset_capture", &FrameGraphCapture::reset_capture)
         .def_prop_ro("capture_fbo", &FrameGraphCapture::capture_fbo,

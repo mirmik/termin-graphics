@@ -40,7 +40,12 @@ void FrameGraphCapture::ensure_capture_fbo(FramebufferHandle* src, GraphicsBacke
     int w = src->get_width();
     int h = src->get_height();
     std::string fmt = src->get_format();
+    ensure_capture_fbo_raw(graphics, w, h, fmt);
+}
 
+void FrameGraphCapture::ensure_capture_fbo_raw(
+    GraphicsBackend* graphics, int w, int h, const std::string& fmt
+) {
     if (capture_fbo_ && fbo_w_ == w && fbo_h_ == h && fbo_format_ == fmt) {
         return;
     }
@@ -49,6 +54,39 @@ void FrameGraphCapture::ensure_capture_fbo(FramebufferHandle* src, GraphicsBacke
     fbo_w_ = w;
     fbo_h_ = h;
     fbo_format_ = fmt;
+}
+
+void FrameGraphCapture::capture_direct_via_ctx2(
+    tgfx2::RenderContext2* ctx2,
+    tgfx2::TextureHandle src_tex,
+    GraphicsBackend* graphics,
+    int width,
+    int height,
+    const std::string& format
+) {
+    if (!ctx2 || !src_tex || !graphics || width <= 0 || height <= 0) {
+        return;
+    }
+
+    ensure_capture_fbo_raw(graphics, width, height, format);
+    if (!capture_fbo_) {
+        return;
+    }
+
+    auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&ctx2->device());
+    if (!gl_dev) {
+        return;
+    }
+
+    tgfx2::TextureHandle dst = wrap_fbo_color_as_tgfx2(*gl_dev, capture_fbo_.get());
+    if (!dst) {
+        return;
+    }
+
+    ctx2->blit(src_tex, dst);
+    gl_dev->destroy(dst);
+
+    captured_ = true;
 }
 
 void FrameGraphCapture::do_blit(FramebufferHandle* src, GraphicsBackend* graphics) {

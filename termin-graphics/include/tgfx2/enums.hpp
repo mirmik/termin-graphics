@@ -61,6 +61,7 @@ enum class PixelFormat {
     R32F,
     RG32F,
     RGBA32F,
+    D24_UNorm,
     D24_UNorm_S8_UInt,
     D32F,
 };

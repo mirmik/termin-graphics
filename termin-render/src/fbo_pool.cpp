@@ -190,6 +190,15 @@ bool FBOPool::ensure_native(
             return true;
         }
         release_tgfx2_wrappers(entry);
+        // The GL textures we just destroyed may have their gl_ids
+        // immediately reused by create_texture below. Any FBO the
+        // device cached keyed on the old gl_id would then point at
+        // fresh attachments whose size/format may differ — silent
+        // black-screen territory. Dump the whole cache here so
+        // begin_pass rebuilds FBOs against the new textures.
+        if (auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&device)) {
+            gl_dev->invalidate_fbo_cache();
+        }
         entry.fbo.reset();
         entry.external = false;
         entry.native = true;
