@@ -448,7 +448,7 @@ class PlotEngine3D:
             self._rebuild_meshes()
 
         ctx = holder.context
-        ctx.set_depth_test(False)
+        ctx.set_depth_test(True)
         ctx.set_blend(True)
         ctx.set_cull(CULL_NONE)
 
