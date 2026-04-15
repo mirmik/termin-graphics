@@ -368,7 +368,42 @@ void bind_render_framework(nb::module_& m) {
             [](const ExecuteContext& ctx) -> tgfx2::RenderContext2* {
                 return ctx.ctx2;
             },
-            nb::rv_policy::reference);
+            nb::rv_policy::reference)
+        // Stage 8.3: tgfx2 texture maps for render pass inputs/outputs,
+        // parallel to reads_fbos/writes_fbos. New Python passes read from
+        // these directly and call ctx2 methods; no FBO wrapping.
+        .def_prop_ro("tex2_reads",
+            [](const ExecuteContext& ctx) -> nb::dict {
+                nb::dict result;
+                for (const auto& [key, val] : ctx.tex2_reads) {
+                    result[nb::str(key.c_str())] = nb::cast(val);
+                }
+                return result;
+            })
+        .def_prop_ro("tex2_writes",
+            [](const ExecuteContext& ctx) -> nb::dict {
+                nb::dict result;
+                for (const auto& [key, val] : ctx.tex2_writes) {
+                    result[nb::str(key.c_str())] = nb::cast(val);
+                }
+                return result;
+            })
+        .def_prop_ro("tex2_depth_reads",
+            [](const ExecuteContext& ctx) -> nb::dict {
+                nb::dict result;
+                for (const auto& [key, val] : ctx.tex2_depth_reads) {
+                    result[nb::str(key.c_str())] = nb::cast(val);
+                }
+                return result;
+            })
+        .def_prop_ro("tex2_depth_writes",
+            [](const ExecuteContext& ctx) -> nb::dict {
+                nb::dict result;
+                for (const auto& [key, val] : ctx.tex2_depth_writes) {
+                    result[nb::str(key.c_str())] = nb::cast(val);
+                }
+                return result;
+            });
 
     nb::class_<CxxFramePass>(m, "FramePass")
         .def_prop_rw("pass_name",

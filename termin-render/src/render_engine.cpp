@@ -319,18 +319,15 @@ void RenderEngine::render_view_to_fbo(
         tgfx2_ctx_->begin_frame();
     }
 
-    // Pull the persistent tgfx2 wrappers that FBOPool::ensure cached
-    // at allocation time. No per-frame wrap/destroy churn — the
-    // wrappers live as long as the FBO they reference, so ctx2's
-    // fbo_cache entries remain valid across frames.
+    // Assemble per-resource tgfx2 texture maps from the pool. Native
+    // path: both the pool entries and these handles are owned by
+    // IRenderDevice, so they persist across frames without any
+    // wrap/destroy churn.
     std::unordered_map<std::string, tgfx2::TextureHandle> tex2_resources;
     std::unordered_map<std::string, tgfx2::TextureHandle> tex2_depth_resources;
     if (tgfx2_ctx_ && tgfx2_device_) {
         FBOPool& fbo_pool = pipeline.fbo_pool();
         for (const auto& [name, res] : resources) {
-            if (!res) continue;
-            auto* fbo = dynamic_cast<FramebufferHandle*>(res);
-            if (!fbo) continue;
             tgfx2::TextureHandle color_handle = fbo_pool.get_color_tgfx2(name);
             if (color_handle) tex2_resources[name] = color_handle;
             tgfx2::TextureHandle depth_handle = fbo_pool.get_depth_tgfx2(name);
@@ -350,11 +347,6 @@ void RenderEngine::render_view_to_fbo(
             if (!spec.clear_color && !spec.clear_depth) {
                 continue;
             }
-
-            auto it = resources.find(spec.resource);
-            if (it == resources.end() || it->second == nullptr) continue;
-            auto* fbo = dynamic_cast<FramebufferHandle*>(it->second);
-            if (!fbo) continue;
 
             auto ct = tex2_resources.find(spec.resource);
             auto dt = tex2_depth_resources.find(spec.resource);
@@ -690,9 +682,9 @@ void RenderEngine::render_scene_pipeline_offscreen(
         tgfx2_ctx_->begin_frame();
     }
 
-    // Pull persistent tgfx2 wrappers from FBOPool for every resource
-    // the pipeline exposes. Mirrors render_view_to_fbo so ctx.tex2_*
-    // maps match for Skybox/Bloom/Tonemap/etc. in this offscreen path.
+    // Pull the persistent tgfx2 wrappers that FBOPool::ensure cached
+    // at allocation time. No per-frame wrap/destroy churn — the
+    // wrappers live as long as the FBO they reference.
     std::unordered_map<std::string, tgfx2::TextureHandle> tex2_resources;
     std::unordered_map<std::string, tgfx2::TextureHandle> tex2_depth_resources;
     if (tgfx2_ctx_ && tgfx2_device_) {
@@ -720,11 +712,6 @@ void RenderEngine::render_scene_pipeline_offscreen(
             if (!spec.clear_color && !spec.clear_depth) {
                 continue;
             }
-
-            auto it = resources.find(spec.resource);
-            if (it == resources.end() || it->second == nullptr) continue;
-            auto* fbo = dynamic_cast<FramebufferHandle*>(it->second);
-            if (!fbo) continue;
 
             auto ct = tex2_resources.find(spec.resource);
             auto dt = tex2_depth_resources.find(spec.resource);

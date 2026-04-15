@@ -2,6 +2,8 @@
 #include "termin/render/fbo_pool.hpp"
 #include "termin/render/tgfx2_bridge.hpp"
 
+#include "tgfx2/descriptors.hpp"
+#include "tgfx2/i_render_device.hpp"
 #include "tgfx2/opengl/opengl_render_device.hpp"
 
 #include <tcbase/tc_log.hpp>
@@ -10,10 +12,25 @@ namespace termin {
 
 namespace {
 
-// Destroy any tgfx2 wrappers attached to an entry. Called whenever
-// the underlying FBO is replaced (ensure recreate, resize), set()
-// clears the owned FBO, or the entry is removed from the pool.
+// Destroy any tgfx2 textures attached to an entry. Handles both the
+// native path (owned handles from native_device->create_texture) and
+// the legacy path (external wrappers via register_external_texture).
 void release_tgfx2_wrappers(FBOPoolEntry& entry) {
+    if (entry.native) {
+        if (entry.native_device) {
+            if (entry.color_tgfx2) {
+                entry.native_device->destroy(entry.color_tgfx2);
+            }
+            if (entry.depth_tgfx2) {
+                entry.native_device->destroy(entry.depth_tgfx2);
+            }
+        }
+        entry.color_tgfx2 = {};
+        entry.depth_tgfx2 = {};
+        entry.native_device = nullptr;
+        entry.native = false;
+        return;
+    }
     if (!entry.tgfx2_device) return;
     if (entry.color_tgfx2) {
         entry.tgfx2_device->destroy(entry.color_tgfx2);
@@ -125,6 +142,81 @@ FramebufferHandle* FBOPool::ensure(
     entries.push_back(std::move(entry));
 
     return ptr;
+}
+
+bool FBOPool::ensure_native(
+    tgfx2::IRenderDevice& device,
+    const std::string& key,
+    int width,
+    int height,
+    tgfx2::PixelFormat color_format,
+    bool has_depth,
+    tgfx2::PixelFormat depth_format,
+    int samples
+) {
+    auto alloc_textures = [&](FBOPoolEntry& entry) {
+        tgfx2::TextureDesc cdesc;
+        cdesc.width = static_cast<uint32_t>(width);
+        cdesc.height = static_cast<uint32_t>(height);
+        cdesc.format = color_format;
+        cdesc.sample_count = static_cast<uint32_t>(samples);
+        cdesc.usage = tgfx2::TextureUsage::Sampled |
+                      tgfx2::TextureUsage::ColorAttachment;
+        entry.color_tgfx2 = device.create_texture(cdesc);
+        if (has_depth) {
+            tgfx2::TextureDesc ddesc;
+            ddesc.width = static_cast<uint32_t>(width);
+            ddesc.height = static_cast<uint32_t>(height);
+            ddesc.format = depth_format;
+            ddesc.sample_count = static_cast<uint32_t>(samples);
+            ddesc.usage = tgfx2::TextureUsage::Sampled |
+                          tgfx2::TextureUsage::DepthStencilAttachment;
+            entry.depth_tgfx2 = device.create_texture(ddesc);
+        }
+    };
+
+    for (auto& entry : entries) {
+        if (entry.key != key) continue;
+
+        bool needs_recreate = !entry.native ||
+                              entry.native_device != &device ||
+                              entry.width != width ||
+                              entry.height != height ||
+                              entry.samples != samples ||
+                              entry.color_format != color_format ||
+                              entry.has_depth != has_depth ||
+                              (has_depth && entry.depth_format != depth_format);
+        if (!needs_recreate) {
+            return true;
+        }
+        release_tgfx2_wrappers(entry);
+        entry.fbo.reset();
+        entry.external = false;
+        entry.native = true;
+        entry.native_device = &device;
+        entry.width = width;
+        entry.height = height;
+        entry.samples = samples;
+        entry.color_format = color_format;
+        entry.depth_format = depth_format;
+        entry.has_depth = has_depth;
+        alloc_textures(entry);
+        return true;
+    }
+
+    FBOPoolEntry entry;
+    entry.key = key;
+    entry.native = true;
+    entry.native_device = &device;
+    entry.width = width;
+    entry.height = height;
+    entry.samples = samples;
+    entry.color_format = color_format;
+    entry.depth_format = depth_format;
+    entry.has_depth = has_depth;
+    alloc_textures(entry);
+    entries.push_back(std::move(entry));
+    return true;
 }
 
 tgfx2::TextureHandle FBOPool::get_color_tgfx2(const std::string& key) const {

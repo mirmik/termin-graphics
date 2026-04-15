@@ -7,37 +7,50 @@
 #include <vector>
 
 #include "tgfx/graphics_backend.hpp"
+#include "tgfx2/enums.hpp"
 #include "tgfx2/handles.hpp"
 #include "termin/render/render_export.hpp"
 #include "termin/render/resource_spec.hpp"
 
-namespace tgfx2 { class OpenGLRenderDevice; }
+namespace tgfx2 {
+class IRenderDevice;
+class OpenGLRenderDevice;
+}
 
 namespace termin {
 
 struct FBOPoolEntry {
 public:
     std::string key;
-    FramebufferHandlePtr fbo;
     int width = 0;
     int height = 0;
     int samples = 1;
+
+    // --- Native tgfx2 path (Stage 8.3+) ---
+    // When `native` is true, color_tgfx2 / depth_tgfx2 are owned
+    // textures created via native_device->create_texture(). `fbo`
+    // and legacy fields are unused.
+    bool native = false;
+    tgfx2::IRenderDevice* native_device = nullptr;
+    tgfx2::PixelFormat color_format = tgfx2::PixelFormat::RGBA8_UNorm;
+    tgfx2::PixelFormat depth_format = tgfx2::PixelFormat::D32F;
+    bool has_depth = false;
+
+    // --- Legacy path (kept for present_to_screen and interim interop) ---
+    FramebufferHandlePtr fbo;
     std::string format;
     TextureFilter filter = TextureFilter::LINEAR;
     bool external = false;
 
-    // tgfx2 wrappers around the legacy FBO's color+depth GL textures,
-    // created once at ensure() time and reused across frames. Replace
-    // the old per-frame wrap_fbo_*_as_tgfx2 churn that forced
-    // RenderContext2 to invalidate its FBO cache every end_frame.
-    // Empty when the FBO has no matching attachment (e.g. color FBO
-    // whose depth is a renderbuffer — depth_tgfx2 stays {}).
+    // tgfx2 texture handles for this render target.
+    // - Native path: owned via native_device, destroyed on recreate/clear.
+    // - Legacy path: external wrappers around the FBO's GL textures
+    //   (register_external_texture), destroyed via tgfx2_device.
     tgfx2::TextureHandle color_tgfx2;
     tgfx2::TextureHandle depth_tgfx2;
 
-    // Device back-pointer used to destroy the wrappers when the entry
-    // is re-allocated, resized, or cleared. The device outlives the
-    // pool so a raw pointer is safe.
+    // Device back-pointer for legacy external-wrap path. Unused when
+    // `native` is true (native_device handles destroy instead).
     tgfx2::OpenGLRenderDevice* tgfx2_device = nullptr;
 
 public:
@@ -75,6 +88,26 @@ public:
         const std::string& format = "",
         TextureFilter filter = TextureFilter::LINEAR,
         tgfx2::OpenGLRenderDevice* tgfx2_device = nullptr
+    );
+
+    // Stage 8.3: native tgfx2 path. Allocates a pair of owned
+    // `tgfx2::TextureHandle`s (color + optional depth) via the render
+    // device. No legacy `FramebufferHandle` is created — callers use
+    // the returned handles directly with `RenderContext2::begin_pass`,
+    // which assembles a cached GL FBO inside the device on demand.
+    //
+    // Returns true on success. Resize/format changes on subsequent
+    // calls transparently destroy the old handles and allocate fresh
+    // ones.
+    bool ensure_native(
+        tgfx2::IRenderDevice& device,
+        const std::string& key,
+        int width,
+        int height,
+        tgfx2::PixelFormat color_format = tgfx2::PixelFormat::RGBA8_UNorm,
+        bool has_depth = true,
+        tgfx2::PixelFormat depth_format = tgfx2::PixelFormat::D32F,
+        int samples = 1
     );
 
     FramebufferHandle* get(const std::string& key);
