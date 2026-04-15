@@ -108,7 +108,6 @@ class Text2DRenderer:
             self._tc_shader = TcShader.from_sources(
                 _TEXT2D_VERT, _TEXT2D_FRAG, "", "tgfx_text2d"
             )
-            self._tc_shader.ensure_ready()
         if self._compiled_for_holder is not holder or self._vs is None:
             pair = tc_shader_ensure_tgfx2(holder.context, self._tc_shader)
             if not pair.vs or not pair.fs:

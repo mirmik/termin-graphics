@@ -220,7 +220,6 @@ class PlotEngine3D:
         if self._shader is None:
             self._shader = TcShader.from_sources(
                 _VERT_SRC, _FRAG_SRC, "", "tcplot3d")
-            self._shader.ensure_ready()
 
         if self._compiled_for_holder is not holder or self._vs is None:
             pair = tc_shader_ensure_tgfx2(holder.context, self._shader)

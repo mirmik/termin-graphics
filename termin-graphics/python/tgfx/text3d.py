@@ -101,7 +101,6 @@ class Text3DRenderer:
             self._tc_shader = TcShader.from_sources(
                 _TEXT_VERT, _TEXT_FRAG, "", "tgfx_text3d"
             )
-            self._tc_shader.ensure_ready()
 
         # Re-compile if holder changed (e.g. GL context recreated).
         if self._compiled_for_holder is not holder or self._vs is None:

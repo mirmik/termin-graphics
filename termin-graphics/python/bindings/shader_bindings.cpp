@@ -129,34 +129,7 @@ void bind_shader(nb::module_& m) {
             std::string name = s.name();
             if (name.empty()) name = s.uuid();
             return "<TcShader " + name + " v" + std::to_string(s.version()) + ">";
-        })
-        // GL operations
-        .def("compile", &TcShader::compile, "Compile shader if needed, returns GPU program ID")
-        .def("use", &TcShader::use, "Use this shader (compiles if needed)")
-        .def("ensure_ready", &TcShader::ensure_ready, "Compile shader if needed, returns True on success")
-        .def_prop_ro("gpu_program", &TcShader::gpu_program, "Get GPU program ID (0 if not compiled)")
-        // Uniform setters
-        .def("set_uniform_int", &TcShader::set_uniform_int, nb::arg("name"), nb::arg("value"))
-        .def("set_uniform_float", &TcShader::set_uniform_float, nb::arg("name"), nb::arg("value"))
-        .def("set_uniform_vec2", &TcShader::set_uniform_vec2, nb::arg("name"), nb::arg("x"), nb::arg("y"))
-        .def("set_uniform_vec2", [](TcShader& self, const char* name, nb::ndarray<nb::numpy, float, nb::shape<2>> v) {
-            self.set_uniform_vec2(name, v(0), v(1));
-        }, nb::arg("name"), nb::arg("v"))
-        .def("set_uniform_vec3", &TcShader::set_uniform_vec3, nb::arg("name"), nb::arg("x"), nb::arg("y"), nb::arg("z"))
-        .def("set_uniform_vec3", [](TcShader& self, const char* name, nb::ndarray<nb::numpy, float, nb::shape<3>> v) {
-            self.set_uniform_vec3(name, v(0), v(1), v(2));
-        }, nb::arg("name"), nb::arg("v"))
-        .def("set_uniform_vec4", &TcShader::set_uniform_vec4, nb::arg("name"), nb::arg("x"), nb::arg("y"), nb::arg("z"), nb::arg("w"))
-        .def("set_uniform_vec4", [](TcShader& self, const char* name, nb::ndarray<nb::numpy, float, nb::shape<4>> v) {
-            self.set_uniform_vec4(name, v(0), v(1), v(2), v(3));
-        }, nb::arg("name"), nb::arg("v"))
-        .def("set_uniform_mat4", [](TcShader& self, const char* name, nb::ndarray<nb::numpy, float, nb::shape<4, 4>> m, bool transpose) {
-            self.set_uniform_mat4(name, m.data(), transpose);
-        }, nb::arg("name"), nb::arg("matrix"), nb::arg("transpose") = true)
-        .def("set_uniform_mat4_array", [](TcShader& self, const char* name, nb::ndarray<nb::numpy, float> m, int count, bool transpose) {
-            self.set_uniform_mat4_array(name, m.data(), count, transpose);
-        }, nb::arg("name"), nb::arg("matrices"), nb::arg("count"), nb::arg("transpose") = true)
-        .def("set_block_binding", &TcShader::set_block_binding, nb::arg("block_name"), nb::arg("binding_point"));
+        });
 
     // Shader registry info functions
     m.def("shader_count", []() { return tc_shader_count(); });
