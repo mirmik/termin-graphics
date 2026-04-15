@@ -97,6 +97,7 @@ class Text2DRenderer:
 
         self._holder: "Tgfx2Context | None" = None
         self._ctx = None
+        self._proj_flat: list[float] | None = None
 
     # ------------------------------------------------------------------
     # Lazy resources
@@ -137,16 +138,17 @@ class Text2DRenderer:
         self._ensure_shader(holder)
 
         self._holder = holder
-        ctx = holder.context
-        self._ctx = ctx
+        self._ctx = holder.context
 
-        proj = _build_ortho_pixel_to_ndc(float(viewport_w), float(viewport_h))
-        atlas_handle = self._font.ensure_texture_tgfx2(holder)
-
-        ctx.bind_shader(self._vs, self._fs)
-        ctx.set_uniform_mat4("u_projection", proj.flatten().tolist(), True)
-        ctx.set_uniform_int("u_font_atlas", 0)
-        ctx.bind_sampled_texture(0, atlas_handle)
+        # Cache the projection matrix so draw() can rebind it every
+        # call without re-computing. draw() must rebind shader +
+        # atlas + projection on every call because callers are
+        # allowed to interleave Text2D draws with other draws that
+        # change the bound shader (e.g. UIRenderer.draw_rect /
+        # draw_image between two draw_text calls).
+        self._proj_flat = _build_ortho_pixel_to_ndc(
+            float(viewport_w), float(viewport_h),
+        ).flatten().tolist()
 
     def measure(self, text: str, size: float = 14.0) -> tuple[float, float]:
         """Measure pixel (width, height) of ``text`` rendered at ``size``.
@@ -200,7 +202,17 @@ class Text2DRenderer:
             start_x = x
             start_y = y
 
-        self._ctx.set_uniform_vec4(
+        # Rebind shader + projection + atlas on every draw — a caller
+        # (e.g. UIRenderer) may have bound a different shader between
+        # our own begin() and this draw. Cheap in practice: one
+        # bind_shader + three uniform sets + one texture bind.
+        ctx = self._ctx
+        ctx.bind_shader(self._vs, self._fs)
+        ctx.set_uniform_mat4("u_projection", self._proj_flat, True)
+        ctx.set_uniform_int("u_font_atlas", 0)
+        atlas_handle = self._font.ensure_texture_tgfx2(self._holder)
+        ctx.bind_sampled_texture(0, atlas_handle)
+        ctx.set_uniform_vec4(
             "u_color",
             float(color[0]), float(color[1]),
             float(color[2]), float(color[3]),

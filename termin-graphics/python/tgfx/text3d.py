@@ -87,6 +87,9 @@ class Text3DRenderer:
         # Active frame state (valid between begin() and end()).
         self._holder: "Tgfx2Context | None" = None
         self._ctx = None  # Tgfx2RenderContext
+        self._mvp_flat: list[float] | None = None
+        self._cam_right: tuple[float, float, float] = (1.0, 0.0, 0.0)
+        self._cam_up: tuple[float, float, float] = (0.0, 1.0, 0.0)
 
     # ------------------------------------------------------------------
     # Lazy resource setup
@@ -143,28 +146,23 @@ class Text3DRenderer:
         self._ensure_shader(holder)
 
         self._holder = holder
-        ctx = holder.context
-        self._ctx = ctx
+        self._ctx = holder.context
 
-        # MVP — either user-supplied (z-scale etc.) or straight from camera.
+        # Cache per-frame values so draw() can rebind them every call.
+        # draw() must rebind shader + atlas + uniforms every time
+        # because callers may interleave Text3D draws with other draws
+        # that change the currently bound shader.
         mvp = mvp_override if mvp_override is not None else camera.mvp(aspect)
         mvp_np = np.ascontiguousarray(mvp, dtype=np.float32)
+        self._mvp_flat = mvp_np.flatten().tolist()
 
-        # Billboard right/up come from the view matrix rows (world→view
-        # transform, so row 0/1 give world-space camera-right/camera-up).
         view = camera.view_matrix()
-        cam_right = (float(view[0, 0]), float(view[0, 1]), float(view[0, 2]))
-        cam_up    = (float(view[1, 0]), float(view[1, 1]), float(view[1, 2]))
-
-        # Make sure the atlas lives on this tgfx2 device.
-        atlas_handle = self._font.ensure_texture_tgfx2(holder)
-
-        ctx.bind_shader(self._vs, self._fs)
-        ctx.set_uniform_mat4("u_mvp", mvp_np.flatten().tolist(), True)
-        ctx.set_uniform_vec3("u_cam_right", *cam_right)
-        ctx.set_uniform_vec3("u_cam_up", *cam_up)
-        ctx.set_uniform_int("u_font_atlas", 0)
-        ctx.bind_sampled_texture(0, atlas_handle)
+        self._cam_right = (
+            float(view[0, 0]), float(view[0, 1]), float(view[0, 2]),
+        )
+        self._cam_up = (
+            float(view[1, 0]), float(view[1, 1]), float(view[1, 2]),
+        )
 
     def draw(
         self,
@@ -202,7 +200,17 @@ class Text3DRenderer:
         else:
             start_x = 0.0
 
-        self._ctx.set_uniform_vec4(
+        # Rebind shader + atlas + per-frame uniforms on every draw so
+        # we survive state changes made by interleaved callers.
+        ctx = self._ctx
+        ctx.bind_shader(self._vs, self._fs)
+        ctx.set_uniform_mat4("u_mvp", self._mvp_flat, True)
+        ctx.set_uniform_vec3("u_cam_right", *self._cam_right)
+        ctx.set_uniform_vec3("u_cam_up", *self._cam_up)
+        ctx.set_uniform_int("u_font_atlas", 0)
+        atlas_handle = self._font.ensure_texture_tgfx2(self._holder)
+        ctx.bind_sampled_texture(0, atlas_handle)
+        ctx.set_uniform_vec4(
             "u_color",
             float(color[0]), float(color[1]),
             float(color[2]), float(color[3]),
