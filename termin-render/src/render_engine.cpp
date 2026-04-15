@@ -683,8 +683,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
     }
 
     // Pull the persistent tgfx2 wrappers that FBOPool::ensure cached
-    // at allocation time. No per-frame wrap/destroy churn — the
-    // wrappers live as long as the FBO they reference.
+    // at allocation time.
     std::unordered_map<std::string, tgfx2::TextureHandle> tex2_resources;
     std::unordered_map<std::string, tgfx2::TextureHandle> tex2_depth_resources;
     if (tgfx2_ctx_ && tgfx2_device_) {
