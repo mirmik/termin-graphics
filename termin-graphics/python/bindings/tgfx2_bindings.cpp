@@ -11,18 +11,24 @@
 
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/ndarray.h>
+
+#include <memory>
 
 #include <tgfx2/render_context.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/opengl/opengl_render_device.hpp>
+#include <tgfx2/pipeline_cache.hpp>
 #include <tgfx2/handles.hpp>
 #include <tgfx2/enums.hpp>
+#include <tgfx2/descriptors.hpp>
 #include <tgfx2/vertex_layout.hpp>
 #include <tgfx2/tc_shader_bridge.hpp>
 
 #include <tgfx/opengl/opengl_framebuffer.hpp>
 #include <tgfx/tgfx_shader_handle.hpp>
 #include <tgfx/tgfx_mesh_handle.hpp>
+#include <tgfx/tgfx2_interop.h>
 #include <tgfx/resources/tc_shader_registry.h>
 #include <tgfx/tc_gpu_context.h>
 #include <tgfx/tc_gpu_share_group.h>
@@ -95,6 +101,12 @@ void bind_tgfx2(nb::module_& m) {
              nb::arg("clear_depth_enabled") = false)
         .def("end_pass", &tgfx2::RenderContext2::end_pass)
 
+        // Frame lifecycle — standalone Python hosts (SDL window, tests)
+        // must call these manually once per frame. Inside the engine
+        // render loop the C++ frame graph handles this already.
+        .def("begin_frame", &tgfx2::RenderContext2::begin_frame)
+        .def("end_frame", &tgfx2::RenderContext2::end_frame)
+
         // State
         .def("set_depth_test", &tgfx2::RenderContext2::set_depth_test)
         .def("set_depth_write", &tgfx2::RenderContext2::set_depth_write)
@@ -109,7 +121,11 @@ void bind_tgfx2(nb::module_& m) {
              })
         .def("set_color_mask", &tgfx2::RenderContext2::set_color_mask)
         .def("set_viewport", &tgfx2::RenderContext2::set_viewport)
+        .def("set_scissor", &tgfx2::RenderContext2::set_scissor)
         .def("clear_scissor", &tgfx2::RenderContext2::clear_scissor)
+
+        // Blit (src → dst texture).
+        .def("blit", &tgfx2::RenderContext2::blit)
 
         // Shader
         .def("bind_shader",
@@ -172,7 +188,171 @@ void bind_tgfx2(nb::module_& m) {
              })
 
         // Draw
-        .def("draw_fullscreen_quad", &tgfx2::RenderContext2::draw_fullscreen_quad);
+        .def("draw_fullscreen_quad", &tgfx2::RenderContext2::draw_fullscreen_quad)
+
+        // Immediate drawing — creates a throwaway VBO, draws, destroys.
+        // Vertex format is fixed to 7 floats per vertex:
+        //   [x, y, z,  r, g, b, a]
+        // At the GL level this is loc 0 = vec3 (position) and
+        // loc 1 = vec4 (color). Consumers are free to reinterpret loc 1
+        // inside their shader (e.g. pack offset.xy + uv.xy into a vec4
+        // for billboard text) as long as the stride and attribute sizes
+        // match.
+        // The currently bound shader (via bind_shader) is used.
+        .def("draw_immediate_triangles",
+             [](tgfx2::RenderContext2& self,
+                nb::ndarray<float, nb::c_contig, nb::device::cpu> verts,
+                uint32_t vertex_count) {
+                 self.draw_immediate_triangles(verts.data(), vertex_count);
+             },
+             nb::arg("verts"), nb::arg("vertex_count"))
+        .def("draw_immediate_lines",
+             [](tgfx2::RenderContext2& self,
+                nb::ndarray<float, nb::c_contig, nb::device::cpu> verts,
+                uint32_t vertex_count) {
+                 self.draw_immediate_lines(verts.data(), vertex_count);
+             },
+             nb::arg("verts"), nb::arg("vertex_count"));
+
+    // --- Tgfx2Context holder ---
+    //
+    // Owns a tgfx2::OpenGLRenderDevice + PipelineCache + RenderContext2
+    // triple. Mirrors what RenderEngine::ensure_tgfx2 does in C++:
+    // device is created over the current GL context (no explicit GL
+    // handle — it just assumes the context is current when the first
+    // resource is created), cache wraps the device, ctx wraps both.
+    //
+    // Standalone Python hosts (SDL demos, tests, the migrated tcgui
+    // UIRenderer) construct one of these once after the GL context is
+    // made current and keep it alive for the lifetime of the window.
+    //
+    // Destruction order is declaration-reverse: ctx, then cache, then
+    // device — which is the correct dependency order.
+    struct Tgfx2ContextHolder {
+        std::unique_ptr<tgfx2::OpenGLRenderDevice> device;
+        std::unique_ptr<tgfx2::PipelineCache> cache;
+        std::unique_ptr<tgfx2::RenderContext2> ctx;
+
+        Tgfx2ContextHolder() {
+            device = std::make_unique<tgfx2::OpenGLRenderDevice>();
+            cache = std::make_unique<tgfx2::PipelineCache>(*device);
+            ctx = std::make_unique<tgfx2::RenderContext2>(*device, *cache);
+        }
+    };
+
+    nb::class_<Tgfx2ContextHolder>(m, "Tgfx2Context")
+        .def(nb::init<>())
+
+        // The underlying RenderContext2. Lifetime is tied to the
+        // holder; the reference stays valid until the holder is
+        // destroyed.
+        .def_prop_ro("context",
+            [](Tgfx2ContextHolder& self) -> tgfx2::RenderContext2& {
+                return *self.ctx;
+            },
+            nb::rv_policy::reference_internal)
+
+        // Switch the tgfx1 resource system (tc_shader_compile_gpu,
+        // tc_mesh_upload_gpu, tc_texture_upload_gpu) onto this tgfx2
+        // device. After this call, legacy tgfx1-style resource creation
+        // routes through IRenderDevice, and the GL ids extracted from
+        // tgfx2 handles are what legacy shader.use() / mesh.draw_gpu()
+        // see. Required for mixed tgfx1/tgfx2 frames where tgfx1 code
+        // still compiles shaders or uploads meshes alongside tgfx2
+        // draws.
+        //
+        // Call once per process. Idempotent in practice — re-registering
+        // the same device is a no-op on the vtable install.
+        .def("register_interop",
+            [](Tgfx2ContextHolder& self) {
+                tgfx2_interop_set_device(self.device.get());
+                tgfx2_gpu_ops_register();
+            })
+
+        // --- Texture helpers (narrow API; the full IRenderDevice is
+        // not exposed to Python) ---
+
+        // Create an R8 texture (typical use: font atlas). `data` is
+        // width*height uint8 bytes; pass None-like empty array to skip
+        // upload. Returned handle is Sampled | CopyDst.
+        .def("create_texture_r8",
+            [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h,
+               nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data)
+            -> tgfx2::TextureHandle {
+                tgfx2::TextureDesc desc;
+                desc.width = w;
+                desc.height = h;
+                desc.format = tgfx2::PixelFormat::R8_UNorm;
+                desc.usage = tgfx2::TextureUsage::Sampled |
+                             tgfx2::TextureUsage::CopyDst;
+                auto handle = self.device->create_texture(desc);
+                if (data.size() > 0) {
+                    self.device->upload_texture(handle,
+                        std::span<const uint8_t>(data.data(), data.size()));
+                }
+                return handle;
+            },
+            nb::arg("width"), nb::arg("height"), nb::arg("data"))
+
+        // Create an RGBA8 texture (typical use: UI images). Layout is
+        // tightly packed 4-bytes-per-pixel row-major.
+        .def("create_texture_rgba8",
+            [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h,
+               nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data)
+            -> tgfx2::TextureHandle {
+                tgfx2::TextureDesc desc;
+                desc.width = w;
+                desc.height = h;
+                desc.format = tgfx2::PixelFormat::RGBA8_UNorm;
+                desc.usage = tgfx2::TextureUsage::Sampled |
+                             tgfx2::TextureUsage::CopyDst;
+                auto handle = self.device->create_texture(desc);
+                if (data.size() > 0) {
+                    self.device->upload_texture(handle,
+                        std::span<const uint8_t>(data.data(), data.size()));
+                }
+                return handle;
+            },
+            nb::arg("width"), nb::arg("height"), nb::arg("data"))
+
+        // Full-texture re-upload. tgfx2 does not currently expose a
+        // partial-rect upload in IRenderDevice, so callers that were
+        // using tgfx1 `update_texture_region` fall back to re-uploading
+        // the whole image. For a 2048x2048 R8 atlas this is ~4 MB —
+        // fine for text atlases that repack once per new glyph.
+        .def("upload_texture",
+            [](Tgfx2ContextHolder& self, tgfx2::TextureHandle handle,
+               nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
+                self.device->upload_texture(handle,
+                    std::span<const uint8_t>(data.data(), data.size()));
+            },
+            nb::arg("handle"), nb::arg("data"))
+
+        // Destroy a texture owned by this device.
+        .def("destroy_texture",
+            [](Tgfx2ContextHolder& self, tgfx2::TextureHandle handle) {
+                self.device->destroy(handle);
+            },
+            nb::arg("handle"));
+
+    // Wrap an existing GL texture id as a non-owning tgfx2 handle.
+    // Useful during the tgfx1→tgfx2 transition: a tgfx1 FontTextureAtlas
+    // or similar can keep its GL texture and hand its id to a tgfx2
+    // pass. The wrapper is non-owning; destroying it (or letting the
+    // holder die) does NOT delete the GL texture.
+    m.def("wrap_gl_texture_as_tgfx2",
+        [](Tgfx2ContextHolder& holder, uint32_t gl_id,
+           uint32_t w, uint32_t h, int format_int) -> tgfx2::TextureHandle {
+            tgfx2::TextureDesc desc;
+            desc.width = w;
+            desc.height = h;
+            desc.format = static_cast<tgfx2::PixelFormat>(format_int);
+            desc.usage = tgfx2::TextureUsage::Sampled;
+            return holder.device->register_external_texture(
+                static_cast<GLuint>(gl_id), desc);
+        },
+        nb::arg("ctx"), nb::arg("gl_id"),
+        nb::arg("width"), nb::arg("height"), nb::arg("format"));
 
     // --- Helpers: bridge legacy tgfx resources to tgfx2 handles ---
     //
@@ -221,6 +401,7 @@ void bind_tgfx2(nb::module_& m) {
     m.attr("CULL_BACK")  = static_cast<int>(tgfx2::CullMode::Back);
     m.attr("CULL_FRONT") = static_cast<int>(tgfx2::CullMode::Front);
 
+    m.attr("PIXEL_R8")      = static_cast<int>(tgfx2::PixelFormat::R8_UNorm);
     m.attr("PIXEL_RGBA8")   = static_cast<int>(tgfx2::PixelFormat::RGBA8_UNorm);
     m.attr("PIXEL_RGBA16F") = static_cast<int>(tgfx2::PixelFormat::RGBA16F);
     m.attr("PIXEL_D32F")    = static_cast<int>(tgfx2::PixelFormat::D32F);
