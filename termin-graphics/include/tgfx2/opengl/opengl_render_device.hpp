@@ -223,6 +223,15 @@ public:
                               int src_x, int src_y, int src_w, int src_h,
                               int dst_x, int dst_y, int dst_w, int dst_h);
 
+    // Bind an externally-owned GL FBO (id=0 = window default) and clear
+    // it to the given RGBA + depth. Host window code uses this to paint
+    // a background colour behind the UI composite.
+    void clear_external_fbo(uint32_t dst_fbo_id,
+                            float r, float g, float b, float a,
+                            float depth,
+                            int viewport_x, int viewport_y,
+                            int viewport_w, int viewport_h);
+
     // Wrap an externally-owned GL texture object as a tgfx2::TextureHandle.
     //
     // Use this to interop with legacy tgfx FBOs during Phase 2 migration:

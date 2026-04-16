@@ -213,6 +213,26 @@ void bind_tgfx2(nb::module_& m) {
              nb::arg("dst_x"), nb::arg("dst_y"),
              nb::arg("dst_w"), nb::arg("dst_h"))
 
+        // Bind an externally-owned GL FBO (0 = default window FBO)
+        // and clear it to the given colour / depth. Host window code
+        // uses this to paint the background before compositing UI.
+        .def("clear_external_fbo",
+             [](tgfx2::RenderContext2& self, uint32_t dst_fbo_id,
+                float r, float g, float b, float a, float depth,
+                int viewport_x, int viewport_y,
+                int viewport_w, int viewport_h) {
+                 auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&self.device());
+                 if (!gl_dev) return;
+                 gl_dev->clear_external_fbo(
+                     dst_fbo_id, r, g, b, a, depth,
+                     viewport_x, viewport_y, viewport_w, viewport_h);
+             },
+             nb::arg("dst_fbo_id"),
+             nb::arg("r"), nb::arg("g"), nb::arg("b"), nb::arg("a"),
+             nb::arg("depth"),
+             nb::arg("viewport_x"), nb::arg("viewport_y"),
+             nb::arg("viewport_w"), nb::arg("viewport_h"))
+
         // Diagnostic: glGetError() wrapper. glad lives inside
         // termin_graphics2.dll and is initialised by the host, so
         // this call is always safe from the binding side where a

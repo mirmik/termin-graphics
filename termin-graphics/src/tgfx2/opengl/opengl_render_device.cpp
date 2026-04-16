@@ -710,6 +710,40 @@ void OpenGLRenderDevice::blit_to_external_fbo(
     glDeleteFramebuffers(1, &read_fbo);
 }
 
+void OpenGLRenderDevice::clear_external_fbo(
+    uint32_t dst_fbo_id,
+    float r, float g, float b, float a,
+    float depth,
+    int viewport_x, int viewport_y,
+    int viewport_w, int viewport_h
+) {
+    GLint prev_draw = 0;
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prev_draw);
+    GLint prev_vp[4] = {0, 0, 0, 0};
+    glGetIntegerv(GL_VIEWPORT, prev_vp);
+
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dst_fbo_id);
+    glViewport(viewport_x, viewport_y, viewport_w, viewport_h);
+    glClearColor(r, g, b, a);
+    glClearDepth(depth);
+    // Ensure writes aren't masked by prior shader state; save/restore
+    // the mask bits so we don't override caller intent.
+    GLboolean prev_depth_mask = GL_TRUE;
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &prev_depth_mask);
+    glDepthMask(GL_TRUE);
+    GLboolean prev_color_mask[4] = {GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE};
+    glGetBooleanv(GL_COLOR_WRITEMASK, prev_color_mask);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glColorMask(prev_color_mask[0], prev_color_mask[1],
+                prev_color_mask[2], prev_color_mask[3]);
+    glDepthMask(prev_depth_mask);
+    glViewport(prev_vp[0], prev_vp[1], prev_vp[2], prev_vp[3]);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(prev_draw));
+}
+
 void OpenGLRenderDevice::invalidate_fbo_cache() {
     for (auto& [key, fbo] : fbo_cache_) {
         if (fbo != 0) {
