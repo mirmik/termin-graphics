@@ -81,6 +81,21 @@ void bind_tgfx2(nb::module_& m) {
     // Tgfx2ContextHolder). Python code only passes the pointer around.
     nb::class_<tgfx2::IRenderDevice>(m, "Tgfx2Device");
 
+    // BlendFactor enum — exposed so Python callers can request
+    // premultiplied / additive / standard blending via set_blend_func.
+    nb::enum_<tgfx2::BlendFactor>(m, "Tgfx2BlendFactor", nb::is_arithmetic())
+        .value("Zero",              tgfx2::BlendFactor::Zero)
+        .value("One",               tgfx2::BlendFactor::One)
+        .value("SrcAlpha",          tgfx2::BlendFactor::SrcAlpha)
+        .value("OneMinusSrcAlpha",  tgfx2::BlendFactor::OneMinusSrcAlpha)
+        .value("DstAlpha",          tgfx2::BlendFactor::DstAlpha)
+        .value("OneMinusDstAlpha",  tgfx2::BlendFactor::OneMinusDstAlpha)
+        .value("SrcColor",          tgfx2::BlendFactor::SrcColor)
+        .value("OneMinusSrcColor",  tgfx2::BlendFactor::OneMinusSrcColor)
+        .value("DstColor",          tgfx2::BlendFactor::DstColor)
+        .value("OneMinusDstColor",  tgfx2::BlendFactor::OneMinusDstColor)
+        .export_values();
+
     // Register PixelFormat as an nb::enum_ so other native modules can
     // bind functions with `tgfx2::PixelFormat` parameters and defaults.
     // The `is_arithmetic` flag lets Python int callers pass values via
@@ -145,6 +160,8 @@ void bind_tgfx2(nb::module_& m) {
         .def("set_depth_test", &tgfx2::RenderContext2::set_depth_test)
         .def("set_depth_write", &tgfx2::RenderContext2::set_depth_write)
         .def("set_blend", &tgfx2::RenderContext2::set_blend)
+        .def("set_blend_func", &tgfx2::RenderContext2::set_blend_func,
+             nb::arg("src"), nb::arg("dst"))
         .def("set_cull",
              [](tgfx2::RenderContext2& self, int mode) {
                  self.set_cull(static_cast<tgfx2::CullMode>(mode));
@@ -349,6 +366,11 @@ void bind_tgfx2(nb::module_& m) {
             device = std::make_unique<tgfx2::OpenGLRenderDevice>();
             cache = std::make_unique<tgfx2::PipelineCache>(*device);
             ctx = std::make_unique<tgfx2::RenderContext2>(*device, *cache);
+            // Ensure a default tc_gpu_context exists and is current so
+            // tc_shader_ensure_tgfx2 / TcShader compile can find a GPU
+            // slot to cache into. Standalone Python hosts that skip the
+            // legacy GraphicsBackend.ensure_ready() need this here.
+            tc_ensure_default_gpu_context();
         }
     };
 
@@ -456,6 +478,18 @@ void bind_tgfx2(nb::module_& m) {
         .def("destroy_texture",
             [](Tgfx2ContextHolder& self, tgfx2::TextureHandle handle) {
                 self.device->destroy(handle);
+            },
+            nb::arg("handle"))
+
+        // Return the raw GL texture id for a handle in this device.
+        // Used when a caller needs to hand the texture off to a
+        // different Tgfx2Context (e.g. GPUCompositor → UIRenderer) —
+        // the receiving holder can wrap the GL id as a non-owning
+        // external handle in its own device.
+        .def("get_gl_id",
+            [](Tgfx2ContextHolder& self, tgfx2::TextureHandle handle) -> uint32_t {
+                return static_cast<uint32_t>(
+                    self.device->gl_texture_id(handle));
             },
             nb::arg("handle"))
 

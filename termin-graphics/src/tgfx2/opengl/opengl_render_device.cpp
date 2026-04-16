@@ -744,6 +744,11 @@ void OpenGLRenderDevice::clear_external_fbo(
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(prev_draw));
 }
 
+GLuint OpenGLRenderDevice::gl_texture_id(TextureHandle handle) {
+    auto* tex = textures_.get(handle.id);
+    return tex ? tex->gl_id : 0;
+}
+
 void OpenGLRenderDevice::reset_state() {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);

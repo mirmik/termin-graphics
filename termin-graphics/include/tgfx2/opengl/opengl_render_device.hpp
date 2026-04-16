@@ -244,6 +244,13 @@ public:
     void flush();
     void finish();
 
+    // Return the raw GL texture id backing a TextureHandle, or 0 if
+    // the handle is invalid / unknown to this device. Used when a
+    // caller needs to hand a texture to a different tgfx2 device
+    // (e.g. an app-wide compositor returning textures to a renderer
+    // living in another holder).
+    GLuint gl_texture_id(TextureHandle handle);
+
     // Wrap an externally-owned GL texture object as a tgfx2::TextureHandle.
     //
     // Use this to interop with legacy tgfx FBOs during Phase 2 migration:
