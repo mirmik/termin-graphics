@@ -53,10 +53,6 @@ static tgfx2::PixelFormat channels_to_format(int channels) {
 // We maintain separate maps per resource type.
 static std::unordered_map<uint32_t, uint32_t> g_texture_map;   // gl_id -> TextureHandle.id
 static std::unordered_map<uint32_t, uint32_t> g_sampler_map;   // gl_id -> SamplerHandle.id
-static std::unordered_map<uint32_t, uint32_t> g_shader_vs_map; // program gl_id -> vertex ShaderHandle.id
-static std::unordered_map<uint32_t, uint32_t> g_shader_fs_map; // program gl_id -> fragment ShaderHandle.id
-static std::unordered_map<uint32_t, uint32_t> g_shader_gs_map; // program gl_id -> geometry ShaderHandle.id
-static std::unordered_map<uint32_t, uint32_t> g_pipeline_map;  // program gl_id -> PipelineHandle.id
 static std::unordered_map<uint32_t, uint32_t> g_buffer_map;    // gl_id -> BufferHandle.id
 
 // ============================================================================
@@ -192,171 +188,6 @@ static void tgfx2_texture_delete(uint32_t gpu_id) {
         // not tracked by tgfx2. Delete directly so they don't leak.
         GLuint id = gpu_id;
         glDeleteTextures(1, &id);
-    }
-}
-
-// ============================================================================
-// Shader operations
-// ============================================================================
-
-static uint32_t tgfx2_shader_compile(
-    const char* vertex_source,
-    const char* fragment_source,
-    const char* geometry_source
-) {
-    auto* dev = get_device();
-    auto* gl_dev = get_gl_device();
-    if (!dev || !gl_dev) return 0;
-
-    // Create shader modules
-    tgfx2::ShaderDesc vs_desc;
-    vs_desc.stage = tgfx2::ShaderStage::Vertex;
-    vs_desc.source = vertex_source;
-
-    tgfx2::ShaderDesc fs_desc;
-    fs_desc.stage = tgfx2::ShaderStage::Fragment;
-    fs_desc.source = fragment_source;
-
-    tgfx2::ShaderHandle vs, fs, gs;
-    try {
-        vs = dev->create_shader(vs_desc);
-        fs = dev->create_shader(fs_desc);
-    } catch (const std::exception& e) {
-        tc_log_error("tgfx2_shader_compile: %s", e.what());
-        if (vs) dev->destroy(vs);
-        return 0;
-    }
-
-    if (geometry_source && geometry_source[0] != '\0') {
-        tgfx2::ShaderDesc gs_desc;
-        gs_desc.stage = tgfx2::ShaderStage::Geometry;
-        gs_desc.source = geometry_source;
-        try {
-            gs = dev->create_shader(gs_desc);
-        } catch (const std::exception& e) {
-            tc_log_error("tgfx2_shader_compile (geometry): %s", e.what());
-            dev->destroy(vs);
-            dev->destroy(fs);
-            return 0;
-        }
-    }
-
-    // Create pipeline (links the program)
-    tgfx2::PipelineDesc pipe_desc;
-    pipe_desc.vertex_shader = vs;
-    pipe_desc.fragment_shader = fs;
-    pipe_desc.geometry_shader = gs;
-
-    tgfx2::PipelineHandle pipeline;
-    try {
-        pipeline = dev->create_pipeline(pipe_desc);
-    } catch (const std::exception& e) {
-        tc_log_error("tgfx2_shader_compile (link): %s", e.what());
-        dev->destroy(vs);
-        dev->destroy(fs);
-        if (gs) dev->destroy(gs);
-        return 0;
-    }
-
-    // Extract GL program ID
-    auto* gl_pipe = gl_dev->get_pipeline(pipeline);
-    if (!gl_pipe) {
-        dev->destroy(pipeline);
-        dev->destroy(vs);
-        dev->destroy(fs);
-        if (gs) dev->destroy(gs);
-        return 0;
-    }
-
-    uint32_t program = gl_pipe->program;
-    g_pipeline_map[program] = pipeline.id;
-    g_shader_vs_map[program] = vs.id;
-    g_shader_fs_map[program] = fs.id;
-    if (gs) g_shader_gs_map[program] = gs.id;
-
-    return program;
-}
-
-static void tgfx2_shader_use(uint32_t gpu_id) {
-    glUseProgram(gpu_id);
-}
-
-static void tgfx2_shader_delete(uint32_t gpu_id) {
-    auto* dev = get_device();
-
-    auto pipe_it = g_pipeline_map.find(gpu_id);
-    if (pipe_it != g_pipeline_map.end() && dev) {
-        dev->destroy(tgfx2::PipelineHandle{pipe_it->second});
-        g_pipeline_map.erase(pipe_it);
-    } else {
-        // Stage 6 transition: program created via legacy gpu_ops before
-        // the vtable swap — not tracked. Delete the GL program directly.
-        if (gpu_id != 0) glDeleteProgram(gpu_id);
-    }
-
-    if (!dev) return;
-
-    auto vs_it = g_shader_vs_map.find(gpu_id);
-    if (vs_it != g_shader_vs_map.end()) {
-        dev->destroy(tgfx2::ShaderHandle{vs_it->second});
-        g_shader_vs_map.erase(vs_it);
-    }
-
-    auto fs_it = g_shader_fs_map.find(gpu_id);
-    if (fs_it != g_shader_fs_map.end()) {
-        dev->destroy(tgfx2::ShaderHandle{fs_it->second});
-        g_shader_fs_map.erase(fs_it);
-    }
-
-    auto gs_it = g_shader_gs_map.find(gpu_id);
-    if (gs_it != g_shader_gs_map.end()) {
-        dev->destroy(tgfx2::ShaderHandle{gs_it->second});
-        g_shader_gs_map.erase(gs_it);
-    }
-}
-
-// Uniform setters — direct GL calls (same as legacy)
-// tgfx2 uniform model (UBO/resource sets) is for Phase 4
-
-static void tgfx2_shader_set_int(uint32_t gpu_id, const char* name, int value) {
-    GLint loc = glGetUniformLocation(gpu_id, name);
-    if (loc >= 0) glUniform1i(loc, value);
-}
-
-static void tgfx2_shader_set_float(uint32_t gpu_id, const char* name, float value) {
-    GLint loc = glGetUniformLocation(gpu_id, name);
-    if (loc >= 0) glUniform1f(loc, value);
-}
-
-static void tgfx2_shader_set_vec2(uint32_t gpu_id, const char* name, float x, float y) {
-    GLint loc = glGetUniformLocation(gpu_id, name);
-    if (loc >= 0) glUniform2f(loc, x, y);
-}
-
-static void tgfx2_shader_set_vec3(uint32_t gpu_id, const char* name, float x, float y, float z) {
-    GLint loc = glGetUniformLocation(gpu_id, name);
-    if (loc >= 0) glUniform3f(loc, x, y, z);
-}
-
-static void tgfx2_shader_set_vec4(uint32_t gpu_id, const char* name, float x, float y, float z, float w) {
-    GLint loc = glGetUniformLocation(gpu_id, name);
-    if (loc >= 0) glUniform4f(loc, x, y, z, w);
-}
-
-static void tgfx2_shader_set_mat4(uint32_t gpu_id, const char* name, const float* data, bool transpose) {
-    GLint loc = glGetUniformLocation(gpu_id, name);
-    if (loc >= 0) glUniformMatrix4fv(loc, 1, transpose ? GL_TRUE : GL_FALSE, data);
-}
-
-static void tgfx2_shader_set_mat4_array(uint32_t gpu_id, const char* name, const float* data, int count, bool transpose) {
-    GLint loc = glGetUniformLocation(gpu_id, name);
-    if (loc >= 0) glUniformMatrix4fv(loc, count, transpose ? GL_TRUE : GL_FALSE, data);
-}
-
-static void tgfx2_shader_set_block_binding(uint32_t gpu_id, const char* block_name, int binding_point) {
-    GLuint block_index = glGetUniformBlockIndex(gpu_id, block_name);
-    if (block_index != GL_INVALID_INDEX) {
-        glUniformBlockBinding(gpu_id, block_index, binding_point);
     }
 }
 
@@ -538,18 +369,6 @@ void tgfx2_gpu_ops_register(void) {
     ops.depth_texture_bind = tgfx2_depth_texture_bind;
     ops.texture_delete = tgfx2_texture_delete;
 
-    ops.shader_compile = tgfx2_shader_compile;
-    ops.shader_use = tgfx2_shader_use;
-    ops.shader_delete = tgfx2_shader_delete;
-
-    ops.shader_set_int = tgfx2_shader_set_int;
-    ops.shader_set_float = tgfx2_shader_set_float;
-    ops.shader_set_vec2 = tgfx2_shader_set_vec2;
-    ops.shader_set_vec3 = tgfx2_shader_set_vec3;
-    ops.shader_set_vec4 = tgfx2_shader_set_vec4;
-    ops.shader_set_mat4 = tgfx2_shader_set_mat4;
-    ops.shader_set_mat4_array = tgfx2_shader_set_mat4_array;
-    ops.shader_set_block_binding = tgfx2_shader_set_block_binding;
 
     ops.mesh_upload = tgfx2_mesh_upload;
     ops.mesh_draw = tgfx2_mesh_draw;

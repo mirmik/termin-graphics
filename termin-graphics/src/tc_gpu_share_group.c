@@ -117,12 +117,6 @@ void tc_gpu_share_group_unref(tc_gpu_share_group* group) {
                 ops->texture_delete(group->textures[i].gl_id);
             }
         }
-        // Delete shaders
-        for (uint32_t i = 0; i < group->shader_capacity; i++) {
-            if (group->shaders[i].gl_id != 0 && ops->shader_delete) {
-                ops->shader_delete(group->shaders[i].gl_id);
-            }
-        }
         // Delete mesh VBO/EBO
         for (uint32_t i = 0; i < group->mesh_data_capacity; i++) {
             if (group->mesh_data[i].vbo != 0 && ops->buffer_delete) {

@@ -120,35 +120,23 @@ void RenderEngine::render_to_screen(
 }
 
 void RenderEngine::present_to_screen(
-    RenderPipeline& pipeline,
-    int width,
-    int height,
-    const std::string& resource_name
+    RenderPipeline& /*pipeline*/,
+    int /*width*/,
+    int /*height*/,
+    const std::string& /*resource_name*/
 ) {
-    if (!pipeline.is_valid() || !graphics) {
-        tc::Log::warn("[present_to_screen] pipeline=%p graphics=%p", pipeline, graphics);
-        return;
+    // Deprecated after Stage 8.3: FBOPool no longer owns legacy
+    // FramebufferHandle objects, so there's no `FramebufferHandle*`
+    // to pass to `graphics->blit_framebuffer`. No production C++ /
+    // Python code calls this; only a SWIG export for C#. Kept as
+    // a warning stub so the binding surface stays stable until the
+    // C# path is migrated to `PresentToScreenPass`.
+    static bool warned = false;
+    if (!warned) {
+        warned = true;
+        tc::Log::warn("[RenderEngine::present_to_screen] deprecated no-op; "
+                      "use PresentToScreenPass in the framegraph instead.");
     }
-
-    FramebufferHandle* src_fbo = pipeline.fbo_pool().get(resource_name);
-    if (!src_fbo) {
-        tc::Log::warn("[present_to_screen] FBO '%s' not found in pipeline. Available FBOs:", resource_name.c_str());
-        auto& pool = pipeline.fbo_pool();
-        for (const auto& key : pool.keys()) {
-            auto* fbo = pool.get(key);
-            tc::Log::warn("  - '%s': %p", key.c_str(), fbo);
-        }
-        return;
-    }
-
-    graphics->blit_framebuffer(
-        src_fbo,
-        nullptr,
-        0, 0, src_fbo->get_width(), src_fbo->get_height(),
-        0, 0, width, height,
-        true,
-        false
-    );
 }
 
 void RenderEngine::render_view_to_fbo(
@@ -299,16 +287,23 @@ void RenderEngine::render_view_to_fbo(
         }
 
         FBOPool& fbo_pool = pipeline.fbo_pool();
-        auto* tgfx2_gl_dev =
-            dynamic_cast<tgfx2::OpenGLRenderDevice*>(tgfx2_device_.get());
-        FramebufferHandle* fbo = fbo_pool.ensure(
-            graphics, canon, fbo_width, fbo_height, samples, format, filter,
-            tgfx2_gl_dev);
+
+        tgfx2::PixelFormat color_fmt = tgfx2::PixelFormat::RGBA8_UNorm;
+        if (format == "r8") color_fmt = tgfx2::PixelFormat::R8_UNorm;
+        else if (format == "r16f") color_fmt = tgfx2::PixelFormat::R16F;
+        else if (format == "r32f") color_fmt = tgfx2::PixelFormat::R32F;
+        else if (format == "rgba16f") color_fmt = tgfx2::PixelFormat::RGBA16F;
+        else if (format == "rgba32f") color_fmt = tgfx2::PixelFormat::RGBA32F;
+
+        fbo_pool.ensure_native(
+            *tgfx2_device_, canon, fbo_width, fbo_height,
+            color_fmt, /*has_depth=*/true, tgfx2::PixelFormat::D24_UNorm, samples);
+        (void)filter;
 
         const char* aliases[64];
         size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
         for (size_t j = 0; j < alias_count; j++) {
-            resources[aliases[j]] = fbo;
+            resources[aliases[j]] = nullptr;
             fbo_pool.add_alias(aliases[j], canon);
         }
     }
@@ -319,18 +314,15 @@ void RenderEngine::render_view_to_fbo(
         tgfx2_ctx_->begin_frame();
     }
 
-    // Pull the persistent tgfx2 wrappers that FBOPool::ensure cached
-    // at allocation time. No per-frame wrap/destroy churn — the
-    // wrappers live as long as the FBO they reference, so ctx2's
-    // fbo_cache entries remain valid across frames.
+    // Assemble per-resource tgfx2 texture maps from the pool. Native
+    // path: both the pool entries and these handles are owned by
+    // IRenderDevice, so they persist across frames without any
+    // wrap/destroy churn.
     std::unordered_map<std::string, tgfx2::TextureHandle> tex2_resources;
     std::unordered_map<std::string, tgfx2::TextureHandle> tex2_depth_resources;
     if (tgfx2_ctx_ && tgfx2_device_) {
         FBOPool& fbo_pool = pipeline.fbo_pool();
         for (const auto& [name, res] : resources) {
-            if (!res) continue;
-            auto* fbo = dynamic_cast<FramebufferHandle*>(res);
-            if (!fbo) continue;
             tgfx2::TextureHandle color_handle = fbo_pool.get_color_tgfx2(name);
             if (color_handle) tex2_resources[name] = color_handle;
             tgfx2::TextureHandle depth_handle = fbo_pool.get_depth_tgfx2(name);
@@ -350,11 +342,6 @@ void RenderEngine::render_view_to_fbo(
             if (!spec.clear_color && !spec.clear_depth) {
                 continue;
             }
-
-            auto it = resources.find(spec.resource);
-            if (it == resources.end() || it->second == nullptr) continue;
-            auto* fbo = dynamic_cast<FramebufferHandle*>(it->second);
-            if (!fbo) continue;
 
             auto ct = tex2_resources.find(spec.resource);
             auto dt = tex2_depth_resources.find(spec.resource);
@@ -407,16 +394,22 @@ void RenderEngine::render_view_to_fbo(
         size_t read_count = tc_pass_get_reads(pass, reads, 16);
         size_t write_count = tc_pass_get_writes(pass, writes, 8);
 
-        FBOMap pass_reads;
-        FBOMap pass_writes;
         Tex2Map pass_tex2_reads;
         Tex2Map pass_tex2_writes;
         Tex2Map pass_tex2_depth_reads;
         Tex2Map pass_tex2_depth_writes;
+        ShadowArrayMap pass_shadow_arrays;
+
+        auto collect_shadow_array = [&](const char* name) {
+            auto it = resources.find(name);
+            if (it != resources.end() && it->second) {
+                auto* arr = dynamic_cast<ShadowMapArrayResource*>(it->second);
+                if (arr) pass_shadow_arrays[name] = arr;
+            }
+        };
 
         for (size_t j = 0; j < read_count; j++) {
-            auto it = resources.find(reads[j]);
-            pass_reads[reads[j]] = (it != resources.end()) ? it->second : nullptr;
+            collect_shadow_array(reads[j]);
             auto t_it = tex2_resources.find(reads[j]);
             if (t_it != tex2_resources.end()) {
                 pass_tex2_reads[reads[j]] = t_it->second;
@@ -437,7 +430,6 @@ void RenderEngine::render_view_to_fbo(
             const char* write_name = writes[j];
             if ((strcmp(write_name, "OUTPUT") == 0 || strcmp(write_name, "DISPLAY") == 0)
                 && target_fbo) {
-                pass_writes[write_name] = target_fbo;
                 if (target_tgfx2_gl_dev) {
                     if (!target_output_tex2) {
                         target_output_tex2 =
@@ -449,8 +441,7 @@ void RenderEngine::render_view_to_fbo(
                 }
                 continue;
             }
-            auto it = resources.find(write_name);
-            pass_writes[write_name] = (it != resources.end()) ? it->second : nullptr;
+            collect_shadow_array(write_name);
             auto t_it = tex2_resources.find(write_name);
             if (t_it != tex2_resources.end()) {
                 pass_tex2_writes[write_name] = t_it->second;
@@ -462,14 +453,12 @@ void RenderEngine::render_view_to_fbo(
         }
 
         ExecuteContext ctx;
-        ctx.graphics = graphics;
         ctx.ctx2 = tgfx2_ctx_.get();
-        ctx.reads_fbos = std::move(pass_reads);
-        ctx.writes_fbos = std::move(pass_writes);
         ctx.tex2_reads = std::move(pass_tex2_reads);
         ctx.tex2_writes = std::move(pass_tex2_writes);
         ctx.tex2_depth_reads = std::move(pass_tex2_depth_reads);
         ctx.tex2_depth_writes = std::move(pass_tex2_depth_writes);
+        ctx.shadow_arrays = std::move(pass_shadow_arrays);
         ctx.rect = Rect4i{0, 0, width, height};
         ctx.scene = TcSceneRef(scene);
         ctx.viewport_name = viewport_name;
@@ -669,16 +658,23 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
 
         FBOPool& fbo_pool = pipeline.fbo_pool();
-        auto* tgfx2_gl_dev =
-            dynamic_cast<tgfx2::OpenGLRenderDevice*>(tgfx2_device_.get());
-        FramebufferHandle* fbo = fbo_pool.ensure(
-            graphics, canon, fbo_width, fbo_height, samples, format, filter,
-            tgfx2_gl_dev);
+
+        tgfx2::PixelFormat color_fmt = tgfx2::PixelFormat::RGBA8_UNorm;
+        if (format == "r8") color_fmt = tgfx2::PixelFormat::R8_UNorm;
+        else if (format == "r16f") color_fmt = tgfx2::PixelFormat::R16F;
+        else if (format == "r32f") color_fmt = tgfx2::PixelFormat::R32F;
+        else if (format == "rgba16f") color_fmt = tgfx2::PixelFormat::RGBA16F;
+        else if (format == "rgba32f") color_fmt = tgfx2::PixelFormat::RGBA32F;
+
+        fbo_pool.ensure_native(
+            *tgfx2_device_, canon, fbo_width, fbo_height,
+            color_fmt, /*has_depth=*/true, tgfx2::PixelFormat::D32F, samples);
+        (void)filter;
 
         const char* aliases[64];
         size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
         for (size_t j = 0; j < alias_count; j++) {
-            resources[aliases[j]] = fbo;
+            resources[aliases[j]] = nullptr;
             fbo_pool.add_alias(aliases[j], canon);
         }
     }
@@ -690,17 +686,14 @@ void RenderEngine::render_scene_pipeline_offscreen(
         tgfx2_ctx_->begin_frame();
     }
 
-    // Pull persistent tgfx2 wrappers from FBOPool for every resource
-    // the pipeline exposes. Mirrors render_view_to_fbo so ctx.tex2_*
-    // maps match for Skybox/Bloom/Tonemap/etc. in this offscreen path.
+    // Assemble per-resource tgfx2 texture maps from the pool. Native
+    // path: handles are owned by IRenderDevice, persistent across
+    // frames without any wrap/destroy churn.
     std::unordered_map<std::string, tgfx2::TextureHandle> tex2_resources;
     std::unordered_map<std::string, tgfx2::TextureHandle> tex2_depth_resources;
     if (tgfx2_ctx_ && tgfx2_device_) {
         FBOPool& fbo_pool = pipeline.fbo_pool();
         for (const auto& [name, res] : resources) {
-            if (!res) continue;
-            auto* fbo = dynamic_cast<FramebufferHandle*>(res);
-            if (!fbo) continue;
             tgfx2::TextureHandle color_handle = fbo_pool.get_color_tgfx2(name);
             if (color_handle) tex2_resources[name] = color_handle;
             tgfx2::TextureHandle depth_handle = fbo_pool.get_depth_tgfx2(name);
@@ -720,11 +713,6 @@ void RenderEngine::render_scene_pipeline_offscreen(
             if (!spec.clear_color && !spec.clear_depth) {
                 continue;
             }
-
-            auto it = resources.find(spec.resource);
-            if (it == resources.end() || it->second == nullptr) continue;
-            auto* fbo = dynamic_cast<FramebufferHandle*>(it->second);
-            if (!fbo) continue;
 
             auto ct = tex2_resources.find(spec.resource);
             auto dt = tex2_depth_resources.find(spec.resource);
@@ -794,17 +782,22 @@ void RenderEngine::render_scene_pipeline_offscreen(
         size_t read_count = tc_pass_get_reads(pass, reads, 16);
         size_t write_count = tc_pass_get_writes(pass, writes, 8);
 
-        FBOMap pass_reads;
-        FBOMap pass_writes;
         Tex2Map pass_tex2_reads;
         Tex2Map pass_tex2_writes;
         Tex2Map pass_tex2_depth_reads;
         Tex2Map pass_tex2_depth_writes;
+        ShadowArrayMap pass_shadow_arrays;
+
+        auto collect_shadow_array = [&](const char* name) {
+            auto it = resources.find(name);
+            if (it != resources.end() && it->second) {
+                auto* arr = dynamic_cast<ShadowMapArrayResource*>(it->second);
+                if (arr) pass_shadow_arrays[name] = arr;
+            }
+        };
 
         for (size_t j = 0; j < read_count; j++) {
-            auto it = resources.find(reads[j]);
-            FrameGraphResource* res = (it != resources.end()) ? it->second : nullptr;
-            pass_reads[reads[j]] = res;
+            collect_shadow_array(reads[j]);
             auto t_it = tex2_resources.find(reads[j]);
             if (t_it != tex2_resources.end()) {
                 pass_tex2_reads[reads[j]] = t_it->second;
@@ -825,7 +818,6 @@ void RenderEngine::render_scene_pipeline_offscreen(
         for (size_t j = 0; j < write_count; j++) {
             const char* write_name = writes[j];
             if (strcmp(write_name, "OUTPUT") == 0 || strcmp(write_name, "DISPLAY") == 0) {
-                pass_writes[write_name] = vp_ctx.output_fbo;
                 auto* fb = dynamic_cast<FramebufferHandle*>(vp_ctx.output_fbo);
                 if (fb && execute_tgfx2_gl_dev) {
                     if (!vp_output_tex2) {
@@ -836,9 +828,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
                     }
                 }
             } else {
-                auto it = resources.find(write_name);
-                FrameGraphResource* res = (it != resources.end()) ? it->second : nullptr;
-                pass_writes[write_name] = res;
+                collect_shadow_array(write_name);
                 auto t_it = tex2_resources.find(write_name);
                 if (t_it != tex2_resources.end()) {
                     pass_tex2_writes[write_name] = t_it->second;
@@ -851,14 +841,12 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
 
         ExecuteContext ctx;
-        ctx.graphics = graphics;
         ctx.ctx2 = tgfx2_ctx_.get();
-        ctx.reads_fbos = std::move(pass_reads);
-        ctx.writes_fbos = std::move(pass_writes);
         ctx.tex2_reads = std::move(pass_tex2_reads);
         ctx.tex2_writes = std::move(pass_tex2_writes);
         ctx.tex2_depth_reads = std::move(pass_tex2_depth_reads);
         ctx.tex2_depth_writes = std::move(pass_tex2_depth_writes);
+        ctx.shadow_arrays = std::move(pass_shadow_arrays);
         ctx.rect = vp_ctx.rect;
         ctx.scene = TcSceneRef(scene);
         ctx.viewport_name = vp_ctx.name;

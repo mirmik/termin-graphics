@@ -1,14 +1,11 @@
 #pragma once
 
-// TcShader - RAII wrapper with handle-based access to tc_shader
-// Uses tc_shader_handle with generation checking for safety
-// Includes GL methods via tc_gpu: ensure_ready, use, set_uniform_*
+// TcShader - RAII wrapper with handle-based access to tc_shader.
+// CPU-side shader resource only — all GPU operations live in tgfx2.
 
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
 #include <tgfx/resources/tc_shader_registry.h>
-#include <tgfx/tc_gpu_context.h>
-#include <tgfx/tgfx_resource_gpu.h>
 #include <tcbase/tc_log.h>
 }
 
@@ -276,84 +273,6 @@ public:
         return TcShader(h);
     }
 
-    // ========================================================================
-    // GL operations (via tc_gpu)
-    // ========================================================================
-
-    // Compile shader if needed, returns GPU program ID (0 on failure)
-    uint32_t compile() {
-        tc_shader* s = get();
-        return s ? tc_shader_compile_gpu(s) : 0;
-    }
-
-    // Use this shader (compiles if needed)
-    void use() {
-        tc_shader* s = get();
-        if (!s) {
-            tc_log(TC_LOG_ERROR, "TcShader::use(): get() returned NULL for handle %d:%d",
-                   handle.index, handle.generation);
-            return;
-        }
-        tc_shader_use_gpu(s);
-    }
-
-    // Ensure shader is ready (compiled with current sources)
-    bool ensure_ready() {
-        tc_shader* s = get();
-        if (!s) return false;
-        return tc_shader_compile_gpu(s) != 0;
-    }
-
-    // Get GPU program ID for current context (0 if not compiled)
-    uint32_t gpu_program() const {
-        tc_shader* s = get();
-        if (!s) return 0;
-        tc_gpu_context* ctx = tc_gpu_get_context();
-        if (!ctx) return 0;
-        tc_gpu_slot* slot = tc_gpu_context_shader_slot(ctx, s->pool_index);
-        return slot ? slot->gl_id : 0;
-    }
-
-    // Uniform setters (shader must be in use)
-    void set_uniform_int(const char* name, int value) {
-        tc_shader* s = get();
-        if (s) tc_shader_set_int(s, name, value);
-    }
-
-    void set_uniform_float(const char* name, float value) {
-        tc_shader* s = get();
-        if (s) tc_shader_set_float(s, name, value);
-    }
-
-    void set_uniform_vec2(const char* name, float x, float y) {
-        tc_shader* s = get();
-        if (s) tc_shader_set_vec2(s, name, x, y);
-    }
-
-    void set_uniform_vec3(const char* name, float x, float y, float z) {
-        tc_shader* s = get();
-        if (s) tc_shader_set_vec3(s, name, x, y, z);
-    }
-
-    void set_uniform_vec4(const char* name, float x, float y, float z, float w) {
-        tc_shader* s = get();
-        if (s) tc_shader_set_vec4(s, name, x, y, z, w);
-    }
-
-    void set_uniform_mat4(const char* name, const float* data, bool transpose = false) {
-        tc_shader* s = get();
-        if (s) tc_shader_set_mat4(s, name, data, transpose);
-    }
-
-    void set_uniform_mat4_array(const char* name, const float* data, int count, bool transpose = false) {
-        tc_shader* s = get();
-        if (s) tc_shader_set_mat4_array(s, name, data, count, transpose);
-    }
-
-    void set_block_binding(const char* block_name, int binding_point) {
-        tc_shader* s = get();
-        if (s) tc_shader_set_block_binding(s, block_name, binding_point);
-    }
 };
 
 } // namespace termin

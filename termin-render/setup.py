@@ -14,7 +14,7 @@ class BuildExt(TerminCMakeBuildExt):
 
 setup(
     name="termin-render",
-    version="0.1.0",
+    version=BuildExt.compute_local_version("0.1.0"),
     license="MIT",
     description="Rendering framework Python bindings (thin; requires termin SDK at runtime)",
     author="mirmik",

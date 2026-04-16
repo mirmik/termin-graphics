@@ -17,7 +17,7 @@ class BuildExt(TerminCMakeBuildExt):
 
 setup(
     name="tgfx",
-    version="0.1.0",
+    version=BuildExt.compute_local_version("0.1.0"),
     license="MIT",
     description="Graphics backend library with Python bindings",
     author="mirmik",

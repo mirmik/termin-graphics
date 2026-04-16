@@ -183,6 +183,14 @@ public:
     // Called from RenderContext2::end_frame().
     void invalidate_fbo_cache();
 
+    // Read a single RGBA8 pixel from the given texture. Used by the
+    // editor picking code to sample the id buffer. Creates a
+    // throw-away FBO, binds it as the read framebuffer, calls
+    // glReadPixels, and leaves no state changes behind (restores the
+    // previously-bound read FBO). Returns true on success; writes
+    // four floats in [0,1] to `out_rgba`.
+    bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]);
+
     // Wrap an externally-owned GL texture object as a tgfx2::TextureHandle.
     //
     // Use this to interop with legacy tgfx FBOs during Phase 2 migration:

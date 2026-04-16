@@ -50,37 +50,9 @@ struct Rect4i {
 using ResourceMap = std::unordered_map<std::string, FrameGraphResource*>;
 using FBOMap = ResourceMap;
 
-struct FrameDebuggerCallbacks {
-    void* user_data = nullptr;
-
-    void (*blit_from_pass)(
-        void* user_data,
-        FramebufferHandle* fb,
-        GraphicsBackend* graphics,
-        int width,
-        int height
-    ) = nullptr;
-
-    void (*capture_depth)(
-        void* user_data,
-        FramebufferHandle* fb,
-        int width,
-        int height,
-        float* out_data
-    ) = nullptr;
-
-    void (*on_error)(
-        void* user_data,
-        const char* message
-    ) = nullptr;
-
-    bool is_set() const { return blit_from_pass != nullptr; }
-};
-
 class RENDER_API CxxFramePass {
 public:
     tc_pass _c;
-    FrameDebuggerCallbacks debugger_callbacks;
 
 private:
     std::atomic<int> _ref_count{0};
@@ -235,18 +207,6 @@ public:
     }
 
     virtual void destroy() {}
-
-    void set_debugger_callbacks(const FrameDebuggerCallbacks& callbacks) {
-        debugger_callbacks = callbacks;
-    }
-
-    void clear_debugger_callbacks() {
-        debugger_callbacks = {};
-    }
-
-    bool has_debugger() const {
-        return debugger_callbacks.is_set();
-    }
 
     bool is_inplace() const {
         return !get_inplace_aliases().empty();

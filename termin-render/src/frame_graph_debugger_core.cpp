@@ -2,6 +2,7 @@
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/tgfx2_bridge.hpp>
 
+#include <tgfx/opengl/opengl_backend.hpp>
 #include <tgfx2/render_context.hpp>
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/enums.hpp>
@@ -17,52 +18,50 @@ extern "C" {
 
 namespace termin {
 
-void FrameGraphCapture::capture(CxxFramePass* caller, FramebufferHandle* src, GraphicsBackend* graphics) {
-    if (!should_capture(caller)) {
-        return;
-    }
-    capture_direct(src, graphics);
-}
-
-void FrameGraphCapture::capture_direct(FramebufferHandle* src, GraphicsBackend* graphics) {
-    if (!src || !graphics) {
-        return;
-    }
-    ensure_capture_fbo(src, graphics);
-    if (!capture_fbo_) {
-        return;
-    }
-    do_blit(src, graphics);
-    captured_ = true;
-}
-
-void FrameGraphCapture::ensure_capture_fbo(FramebufferHandle* src, GraphicsBackend* graphics) {
-    int w = src->get_width();
-    int h = src->get_height();
-    std::string fmt = src->get_format();
-
+void FrameGraphCapture::ensure_capture_fbo_raw(
+    int w, int h, const std::string& fmt
+) {
     if (capture_fbo_ && fbo_w_ == w && fbo_h_ == h && fbo_format_ == fmt) {
         return;
     }
 
-    capture_fbo_ = graphics->create_framebuffer(w, h, 1, fmt);
+    auto& gfx = OpenGLGraphicsBackend::get_instance();
+    capture_fbo_ = gfx.create_framebuffer(w, h, 1, fmt);
     fbo_w_ = w;
     fbo_h_ = h;
     fbo_format_ = fmt;
 }
 
-void FrameGraphCapture::do_blit(FramebufferHandle* src, GraphicsBackend* graphics) {
-    int w = src->get_width();
-    int h = src->get_height();
-
-    if (src->is_msaa()) {
-        graphics->blit_framebuffer(src, capture_fbo_.get(), 0, 0, w, h, 0, 0, w, h, true, false);
-        graphics->blit_framebuffer(src, capture_fbo_.get(), 0, 0, w, h, 0, 0, w, h, false, true);
-    } else {
-        graphics->blit_framebuffer(src, capture_fbo_.get(), 0, 0, w, h, 0, 0, w, h, true, true);
+void FrameGraphCapture::capture_direct_via_ctx2(
+    tgfx2::RenderContext2* ctx2,
+    tgfx2::TextureHandle src_tex,
+    int width,
+    int height,
+    const std::string& format
+) {
+    if (!ctx2 || !src_tex || width <= 0 || height <= 0) {
+        return;
     }
 
-    graphics->bind_framebuffer(src);
+    ensure_capture_fbo_raw(width, height, format);
+    if (!capture_fbo_) {
+        return;
+    }
+
+    auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&ctx2->device());
+    if (!gl_dev) {
+        return;
+    }
+
+    tgfx2::TextureHandle dst = wrap_fbo_color_as_tgfx2(*gl_dev, capture_fbo_.get());
+    if (!dst) {
+        return;
+    }
+
+    ctx2->blit(src_tex, dst);
+    gl_dev->destroy(dst);
+
+    captured_ = true;
 }
 
 static const char* PRESENTER_FRAG_SRC = R"(
@@ -181,10 +180,10 @@ void FrameGraphPresenter::render(
     gl_dev->destroy(target_tex);
 }
 
-HDRStats FrameGraphPresenter::compute_hdr_stats(GraphicsBackend* graphics, FramebufferHandle* fbo) {
+HDRStats FrameGraphPresenter::compute_hdr_stats(FramebufferHandle* fbo) {
     HDRStats stats{};
 
-    if (!graphics || !fbo) {
+    if (!fbo) {
         return stats;
     }
 
@@ -195,8 +194,9 @@ HDRStats FrameGraphPresenter::compute_hdr_stats(GraphicsBackend* graphics, Frame
         return stats;
     }
 
+    auto& gfx = OpenGLGraphicsBackend::get_instance();
     std::vector<float> pixels(total * 4);
-    if (!graphics->read_color_buffer_float(fbo, pixels.data())) {
+    if (!gfx.read_color_buffer_float(fbo, pixels.data())) {
         tc::Log::error("FrameGraphPresenter: read_color_buffer_float failed");
         return stats;
     }
@@ -251,7 +251,6 @@ HDRStats FrameGraphPresenter::compute_hdr_stats(GraphicsBackend* graphics, Frame
 }
 
 std::vector<uint8_t> FrameGraphPresenter::read_depth_normalized(
-    GraphicsBackend* graphics,
     FramebufferHandle* fbo,
     int* out_w,
     int* out_h
@@ -259,7 +258,7 @@ std::vector<uint8_t> FrameGraphPresenter::read_depth_normalized(
     if (out_w) *out_w = 0;
     if (out_h) *out_h = 0;
 
-    if (!graphics || !fbo) {
+    if (!fbo) {
         return {};
     }
 
@@ -271,8 +270,9 @@ std::vector<uint8_t> FrameGraphPresenter::read_depth_normalized(
         return {};
     }
 
+    auto& gfx = OpenGLGraphicsBackend::get_instance();
     std::vector<float> depth(w * h);
-    if (!graphics->read_depth_buffer(fbo, depth.data())) {
+    if (!gfx.read_depth_buffer(fbo, depth.data())) {
         tc::Log::error("FrameGraphPresenter: read_depth_buffer failed");
         return {};
     }

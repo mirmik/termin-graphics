@@ -6,39 +6,34 @@
 #include <unordered_map>
 #include <vector>
 
-#include "tgfx/graphics_backend.hpp"
+#include "tgfx/handles.hpp"     // for FramebufferHandle forward-friendly decl
+#include "tgfx2/enums.hpp"
 #include "tgfx2/handles.hpp"
 #include "termin/render/render_export.hpp"
-#include "termin/render/resource_spec.hpp"
 
-namespace tgfx2 { class OpenGLRenderDevice; }
+namespace tgfx2 {
+class IRenderDevice;
+}
 
 namespace termin {
 
+class FramebufferHandle;
+
+// FBO pool entry — owns a pair of tgfx2 textures (color + optional
+// depth) that `RenderContext2::begin_pass` can attach into a cached
+// GL FBO. The legacy `FramebufferHandle` field is gone (Stage 8.3).
 struct FBOPoolEntry {
 public:
     std::string key;
-    FramebufferHandlePtr fbo;
     int width = 0;
     int height = 0;
     int samples = 1;
-    std::string format;
-    TextureFilter filter = TextureFilter::LINEAR;
-    bool external = false;
-
-    // tgfx2 wrappers around the legacy FBO's color+depth GL textures,
-    // created once at ensure() time and reused across frames. Replace
-    // the old per-frame wrap_fbo_*_as_tgfx2 churn that forced
-    // RenderContext2 to invalidate its FBO cache every end_frame.
-    // Empty when the FBO has no matching attachment (e.g. color FBO
-    // whose depth is a renderbuffer — depth_tgfx2 stays {}).
+    tgfx2::IRenderDevice* native_device = nullptr;
+    tgfx2::PixelFormat color_format = tgfx2::PixelFormat::RGBA8_UNorm;
+    tgfx2::PixelFormat depth_format = tgfx2::PixelFormat::D24_UNorm;
+    bool has_depth = false;
     tgfx2::TextureHandle color_tgfx2;
     tgfx2::TextureHandle depth_tgfx2;
-
-    // Device back-pointer used to destroy the wrappers when the entry
-    // is re-allocated, resized, or cleared. The device outlives the
-    // pool so a raw pointer is safe.
-    tgfx2::OpenGLRenderDevice* tgfx2_device = nullptr;
 
 public:
     FBOPoolEntry() = default;
@@ -61,33 +56,44 @@ public:
     FBOPool& operator=(const FBOPool&) = delete;
     ~FBOPool() { clear(); }
 
-    // Create or reuse a legacy FBO. When `tgfx2_device` is non-null,
-    // the FBO's color (and depth, if texture-backed) GL objects are
-    // also wrapped as tgfx2 external textures and stored on the entry
-    // — persistent across frames, destroyed together with the FBO on
-    // resize/clear.
-    FramebufferHandle* ensure(
-        GraphicsBackend* graphics,
+    // Allocate a pair of owned `tgfx2::TextureHandle`s (color + optional
+    // depth) via the render device. Callers use the returned handles
+    // with `RenderContext2::begin_pass`, which assembles a cached GL FBO
+    // inside the device on demand.
+    //
+    // On resize/format change the old handles are destroyed and new
+    // ones are allocated; the device's internal FBO cache is also
+    // invalidated because the driver may recycle gl_ids.
+    bool ensure_native(
+        tgfx2::IRenderDevice& device,
         const std::string& key,
         int width,
         int height,
-        int samples = 1,
-        const std::string& format = "",
-        TextureFilter filter = TextureFilter::LINEAR,
-        tgfx2::OpenGLRenderDevice* tgfx2_device = nullptr
+        tgfx2::PixelFormat color_format = tgfx2::PixelFormat::RGBA8_UNorm,
+        bool has_depth = true,
+        tgfx2::PixelFormat depth_format = tgfx2::PixelFormat::D24_UNorm,
+        int samples = 1
     );
 
-    FramebufferHandle* get(const std::string& key);
+    // Legacy binding surface for Python pipeline debugger, which still
+    // asks `pipeline.get_fbo(key)`. Native entries have no
+    // `FramebufferHandle` behind them, so this always returns nullptr
+    // — the debugger treats that as "resource not inspectable as an
+    // FBO". Removed entirely in a later cleanup.
+    FramebufferHandle* get(const std::string&) { return nullptr; }
 
-    // Return the persistent tgfx2 wrapper for the FBO's color (or
-    // depth) attachment. Resolves through alias mapping. Returns an
-    // invalid handle when the entry was allocated without a tgfx2
-    // device, or when the underlying attachment is a renderbuffer
-    // (depth_tgfx2).
+    // Persistent tgfx2 texture handles for this entry's color / depth
+    // attachment. Alias-resolving.
     tgfx2::TextureHandle get_color_tgfx2(const std::string& key) const;
     tgfx2::TextureHandle get_depth_tgfx2(const std::string& key) const;
 
-    void set(const std::string& key, FramebufferHandle* fbo);
+    // Device that owns the entries' native textures (null if the
+    // pool is empty). All entries must share the same device during
+    // normal pipeline execution.
+    tgfx2::IRenderDevice* device() const {
+        return entries.empty() ? nullptr : entries.front().native_device;
+    }
+
     void add_alias(const std::string& alias, const std::string& canonical);
     void clear();
 
