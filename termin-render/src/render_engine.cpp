@@ -38,12 +38,6 @@ RenderEngine::RenderEngine() {
     ensure_scene_extensions_for_render();
 }
 
-RenderEngine::RenderEngine(GraphicsBackend* graphics)
-    : graphics(graphics)
-{
-    ensure_scene_extensions_for_render();
-}
-
 // Out-of-line destructor so unique_ptr<tgfx2::*> members can use forward
 // declarations in the header; the full tgfx2 types are visible here.
 RenderEngine::~RenderEngine() {
@@ -67,9 +61,6 @@ void RenderEngine::ensure_tgfx2() {
     }
 
     if (tgfx2_ctx_) {
-        return;
-    }
-    if (!graphics) {
         return;
     }
     // Assumes the GL context is current (caller is inside a render frame).
@@ -164,8 +155,9 @@ void RenderEngine::render_view_to_fbo(
         tc::Log::error("RenderEngine::render_view_to_fbo: pipeline is invalid");
         return;
     }
-    if (!graphics) {
-        tc::Log::error("RenderEngine::render_view_to_fbo: graphics is null");
+    ensure_tgfx2();
+    if (!tgfx2_device_) {
+        tc::Log::error("RenderEngine::render_view_to_fbo: tgfx2 device unavailable");
         return;
     }
 
@@ -592,8 +584,9 @@ void RenderEngine::render_scene_pipeline_offscreen(
         tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: pipeline is null");
         return;
     }
-    if (!graphics) {
-        tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: graphics is null");
+    ensure_tgfx2();
+    if (!tgfx2_device_) {
+        tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: tgfx2 device unavailable");
         return;
     }
     if (viewport_contexts.empty()) {
