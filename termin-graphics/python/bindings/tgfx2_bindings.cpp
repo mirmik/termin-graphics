@@ -81,6 +81,30 @@ void bind_tgfx2(nb::module_& m) {
     // Tgfx2ContextHolder). Python code only passes the pointer around.
     nb::class_<tgfx2::IRenderDevice>(m, "Tgfx2Device");
 
+    // Register PixelFormat as an nb::enum_ so other native modules can
+    // bind functions with `tgfx2::PixelFormat` parameters and defaults.
+    // The `is_arithmetic` flag lets Python int callers pass values via
+    // the legacy `PIXEL_*` module-level int constants below.
+    // Must be registered BEFORE any binding that uses PixelFormat as
+    // an argument type or default value (otherwise nanobind's
+    // enum_from_cpp() throws std::bad_cast at module init).
+    nb::enum_<tgfx2::PixelFormat>(m, "Tgfx2PixelFormat", nb::is_arithmetic())
+        .value("R8_UNorm",          tgfx2::PixelFormat::R8_UNorm)
+        .value("RG8_UNorm",         tgfx2::PixelFormat::RG8_UNorm)
+        .value("RGB8_UNorm",        tgfx2::PixelFormat::RGB8_UNorm)
+        .value("RGBA8_UNorm",       tgfx2::PixelFormat::RGBA8_UNorm)
+        .value("BGRA8_UNorm",       tgfx2::PixelFormat::BGRA8_UNorm)
+        .value("R16F",              tgfx2::PixelFormat::R16F)
+        .value("RG16F",             tgfx2::PixelFormat::RG16F)
+        .value("RGBA16F",           tgfx2::PixelFormat::RGBA16F)
+        .value("R32F",              tgfx2::PixelFormat::R32F)
+        .value("RG32F",             tgfx2::PixelFormat::RG32F)
+        .value("RGBA32F",           tgfx2::PixelFormat::RGBA32F)
+        .value("D24_UNorm",         tgfx2::PixelFormat::D24_UNorm)
+        .value("D24_UNorm_S8_UInt", tgfx2::PixelFormat::D24_UNorm_S8_UInt)
+        .value("D32F",              tgfx2::PixelFormat::D32F)
+        .export_values();
+
     // --- RenderContext2 ---
     //
     // Only the methods Python passes actually need are exposed. The
@@ -413,7 +437,43 @@ void bind_tgfx2(nb::module_& m) {
             [](Tgfx2ContextHolder& self, tgfx2::TextureHandle handle) {
                 self.device->destroy(handle);
             },
-            nb::arg("handle"));
+            nb::arg("handle"))
+
+        // Create an offscreen color attachment. Usage is
+        // Sampled|ColorAttachment|CopyDst — safe for passes that read
+        // the texture back and for blits (e.g. final composite onto
+        // the default framebuffer via blit_to_external_fbo).
+        .def("create_color_attachment",
+            [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h,
+               tgfx2::PixelFormat fmt) -> tgfx2::TextureHandle {
+                tgfx2::TextureDesc desc;
+                desc.width = w;
+                desc.height = h;
+                desc.format = fmt;
+                desc.usage = tgfx2::TextureUsage::Sampled |
+                             tgfx2::TextureUsage::ColorAttachment |
+                             tgfx2::TextureUsage::CopyDst;
+                return self.device->create_texture(desc);
+            },
+            nb::arg("width"), nb::arg("height"),
+            nb::arg("format") = tgfx2::PixelFormat::RGBA8_UNorm)
+
+        // Create an offscreen depth attachment. Usage is
+        // DepthStencilAttachment|Sampled so passes can both write
+        // depth and sample it (shadow maps, depth-based effects).
+        .def("create_depth_attachment",
+            [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h,
+               tgfx2::PixelFormat fmt) -> tgfx2::TextureHandle {
+                tgfx2::TextureDesc desc;
+                desc.width = w;
+                desc.height = h;
+                desc.format = fmt;
+                desc.usage = tgfx2::TextureUsage::DepthStencilAttachment |
+                             tgfx2::TextureUsage::Sampled;
+                return self.device->create_texture(desc);
+            },
+            nb::arg("width"), nb::arg("height"),
+            nb::arg("format") = tgfx2::PixelFormat::D24_UNorm);
 
     // Wrap an existing GL texture id as a non-owning tgfx2 handle.
     // Useful during the tgfx1→tgfx2 transition: a tgfx1 FontTextureAtlas
@@ -532,27 +592,6 @@ void bind_tgfx2(nb::module_& m) {
     m.attr("PIXEL_RGBA8")   = static_cast<int>(tgfx2::PixelFormat::RGBA8_UNorm);
     m.attr("PIXEL_RGBA16F") = static_cast<int>(tgfx2::PixelFormat::RGBA16F);
     m.attr("PIXEL_D32F")    = static_cast<int>(tgfx2::PixelFormat::D32F);
-
-    // Register PixelFormat as an nb::enum_ so other native modules can
-    // bind functions with `tgfx2::PixelFormat` parameters and defaults.
-    // The `is_arithmetic` flag lets Python int callers pass values via
-    // the legacy `PIXEL_*` module-level int constants above.
-    nb::enum_<tgfx2::PixelFormat>(m, "Tgfx2PixelFormat", nb::is_arithmetic())
-        .value("R8_UNorm",          tgfx2::PixelFormat::R8_UNorm)
-        .value("RG8_UNorm",         tgfx2::PixelFormat::RG8_UNorm)
-        .value("RGB8_UNorm",        tgfx2::PixelFormat::RGB8_UNorm)
-        .value("RGBA8_UNorm",       tgfx2::PixelFormat::RGBA8_UNorm)
-        .value("BGRA8_UNorm",       tgfx2::PixelFormat::BGRA8_UNorm)
-        .value("R16F",              tgfx2::PixelFormat::R16F)
-        .value("RG16F",             tgfx2::PixelFormat::RG16F)
-        .value("RGBA16F",           tgfx2::PixelFormat::RGBA16F)
-        .value("R32F",              tgfx2::PixelFormat::R32F)
-        .value("RG32F",             tgfx2::PixelFormat::RG32F)
-        .value("RGBA32F",           tgfx2::PixelFormat::RGBA32F)
-        .value("D24_UNorm",         tgfx2::PixelFormat::D24_UNorm)
-        .value("D24_UNorm_S8_UInt", tgfx2::PixelFormat::D24_UNorm_S8_UInt)
-        .value("D32F",              tgfx2::PixelFormat::D32F)
-        .export_values();
 
     // --- Mesh draw helper ---
     //
