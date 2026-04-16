@@ -191,6 +191,26 @@ public:
     // four floats in [0,1] to `out_rgba`.
     bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]);
 
+    // Blit a tgfx2 color texture onto an externally-owned GL
+    // framebuffer object (FBO id, 0 = default window FB).
+    //
+    // This is the OpenGL-specific presentation primitive used when
+    // the host owns the final framebuffer (WPF GLWpfControl, Qt
+    // QOpenGLWidget, SDL default FB, ...) and tcplot / other
+    // renderers need to composite their offscreen tgfx2 texture into
+    // it. Kept inside the backend so raw gl*Framebuffer calls live
+    // only in the one translation unit where glad is guaranteed
+    // loaded (via OpenGLRenderDevice's constructor).
+    //
+    // When the Vulkan backend is added, the analogue will be
+    // `VulkanRenderDevice::present_to_swapchain_image(VkImage, ...)`.
+    // Cross-backend callers should branch on the concrete device
+    // type.
+    void blit_to_external_fbo(uint32_t dst_fbo_id,
+                              TextureHandle src_color,
+                              int src_x, int src_y, int src_w, int src_h,
+                              int dst_x, int dst_y, int dst_w, int dst_h);
+
     // Wrap an externally-owned GL texture object as a tgfx2::TextureHandle.
     //
     // Use this to interop with legacy tgfx FBOs during Phase 2 migration:

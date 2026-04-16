@@ -8,6 +8,8 @@
 #include <memory>
 #include <string>
 
+#include <tgfx2/handles.hpp>
+
 #include "tcplot/plot_data.hpp"
 #include "tcplot/styles.hpp"
 #include "tcplot/tcplot_api.h"
@@ -69,8 +71,7 @@ private:
     std::unique_ptr<tgfx2::FontAtlas> font_;
     std::unique_ptr<PlotEngine2D> engine_;
 
-    uint32_t offscreen_fbo_ = 0;
-    uint32_t offscreen_color_tex_ = 0;
+    tgfx2::TextureHandle offscreen_color_{};
     int offscreen_w_ = 0;
     int offscreen_h_ = 0;
 };

@@ -29,6 +29,8 @@
 #include <string>
 #include <vector>
 
+#include <tgfx2/handles.hpp>
+
 #include "tcplot/orbit_camera.hpp"
 #include "tcplot/plot_data.hpp"
 #include "tcplot/styles.hpp"
@@ -136,11 +138,10 @@ private:
     std::unique_ptr<tgfx2::FontAtlas> font_;
     std::unique_ptr<PlotEngine3D> engine_;
 
-    // Offscreen FBO and attachments managed via raw GL so this
-    // library stays free of tgfx1.
-    uint32_t offscreen_fbo_ = 0;
-    uint32_t offscreen_color_tex_ = 0;
-    uint32_t offscreen_depth_tex_ = 0;
+    // Offscreen color + depth are plain tgfx2 textures; begin_pass
+    // owns the FBO they compose into.
+    tgfx2::TextureHandle offscreen_color_{};
+    tgfx2::TextureHandle offscreen_depth_{};
     int offscreen_w_ = 0;
     int offscreen_h_ = 0;
 };

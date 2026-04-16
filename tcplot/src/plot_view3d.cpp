@@ -1,11 +1,18 @@
-// plot_view3d.cpp - implementation.
+// plot_view3d.cpp - tcplot PlotView3D implementation.
+//
+// All GL-state is confined to tgfx2. Offscreen color + depth are
+// tgfx2::TextureHandle owned by the device; begin_pass internally
+// manages the FBO via OpenGLRenderDevice::get_or_create_fbo. The
+// single OpenGL-backend-specific call is blit_to_external_fbo at
+// end-of-frame, which composites our offscreen color into the host's
+// GL FBO. When Vulkan arrives, that last call dispatches to
+// VulkanRenderDevice::present_to_swapchain_image; no code above that
+// line is backend-aware.
 
 #include "tcplot/plot_view3d.hpp"
 
 #include <cmath>
 #include <utility>
-
-#include <glad/glad.h>
 
 #include <tcbase/input_enums.hpp>
 #include <tgfx2/descriptors.hpp>
@@ -23,8 +30,6 @@ namespace tcplot {
 namespace {
 
 std::optional<Color4> opt_color(float r, float g, float b, float a) {
-    // A NaN anywhere means "unset — use palette cycle". Matches the
-    // sentinel documented in plot_view3d.hpp.
     if (std::isnan(r) || std::isnan(g) || std::isnan(b) || std::isnan(a)) {
         return std::nullopt;
     }
@@ -56,61 +61,38 @@ PlotView3D::~PlotView3D() {
 }
 
 // ---------------------------------------------------------------------------
-// Offscreen FBO management
+// Offscreen attachments via tgfx2
 // ---------------------------------------------------------------------------
 
 void PlotView3D::ensure_offscreen_(int w, int h) {
-    if (offscreen_fbo_ != 0 && offscreen_w_ == w && offscreen_h_ == h) return;
-
-    if (offscreen_fbo_ != 0) {
-        glDeleteFramebuffers(1, &offscreen_fbo_);
-        glDeleteTextures(1, &offscreen_color_tex_);
-        glDeleteTextures(1, &offscreen_depth_tex_);
-        offscreen_fbo_ = 0;
-        offscreen_color_tex_ = 0;
-        offscreen_depth_tex_ = 0;
+    if (offscreen_w_ == w && offscreen_h_ == h &&
+        offscreen_color_.id != 0 && offscreen_depth_.id != 0) {
+        return;
     }
+    // Drop prior attachments — device.destroy is safe on zero ids.
+    if (offscreen_color_.id != 0) device_->destroy(offscreen_color_);
+    if (offscreen_depth_.id != 0) device_->destroy(offscreen_depth_);
+    offscreen_color_ = tgfx2::TextureHandle{};
+    offscreen_depth_ = tgfx2::TextureHandle{};
 
-    // Preserve caller's currently-bound FBO so we restore it on exit.
-    GLint prev_fbo = 0;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev_fbo);
+    tgfx2::TextureDesc color_desc;
+    color_desc.width = static_cast<uint32_t>(w);
+    color_desc.height = static_cast<uint32_t>(h);
+    color_desc.format = tgfx2::PixelFormat::RGBA8_UNorm;
+    color_desc.usage = tgfx2::TextureUsage::Sampled
+                     | tgfx2::TextureUsage::ColorAttachment
+                     | tgfx2::TextureUsage::CopySrc;
+    offscreen_color_ = device_->create_texture(color_desc);
 
-    glGenFramebuffers(1, &offscreen_fbo_);
-    glBindFramebuffer(GL_FRAMEBUFFER, offscreen_fbo_);
-
-    glGenTextures(1, &offscreen_color_tex_);
-    glBindTexture(GL_TEXTURE_2D, offscreen_color_tex_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                           GL_TEXTURE_2D, offscreen_color_tex_, 0);
-
-    glGenTextures(1, &offscreen_depth_tex_);
-    glBindTexture(GL_TEXTURE_2D, offscreen_depth_tex_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, w, h, 0,
-                 GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-                           GL_TEXTURE_2D, offscreen_depth_tex_, 0);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prev_fbo));
+    tgfx2::TextureDesc depth_desc;
+    depth_desc.width = static_cast<uint32_t>(w);
+    depth_desc.height = static_cast<uint32_t>(h);
+    depth_desc.format = tgfx2::PixelFormat::D32F;
+    depth_desc.usage = tgfx2::TextureUsage::DepthStencilAttachment;
+    offscreen_depth_ = device_->create_texture(depth_desc);
 
     offscreen_w_ = w;
     offscreen_h_ = h;
-}
-
-void PlotView3D::blit_to_dst_(int w, int h, uint32_t dst_gl_fbo) {
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, offscreen_fbo_);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dst_gl_fbo);
-    glBlitFramebuffer(0, 0, w, h,
-                      0, 0, w, h,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -218,60 +200,36 @@ void PlotView3D::render(int width, int height, uint32_t dst_gl_fbo) {
 
     ctx_->begin_frame();
 
-    // Wrap our raw-GL offscreen textures as non-owning tgfx2 handles.
-    // defer_destroy queues them for removal at end_frame() — tgfx2
-    // releases the wrapper but leaves the GL objects alone because
-    // register_external_texture marked them `external`.
-    tgfx2::TextureDesc color_desc;
-    color_desc.width = (uint32_t)width;
-    color_desc.height = (uint32_t)height;
-    color_desc.format = tgfx2::PixelFormat::RGBA8_UNorm;
-    color_desc.usage = tgfx2::TextureUsage::Sampled
-                     | tgfx2::TextureUsage::ColorAttachment
-                     | tgfx2::TextureUsage::CopySrc;
-    tgfx2::TextureHandle color_h =
-        device_->register_external_texture(offscreen_color_tex_, color_desc);
-
-    tgfx2::TextureDesc depth_desc;
-    depth_desc.width = (uint32_t)width;
-    depth_desc.height = (uint32_t)height;
-    depth_desc.format = tgfx2::PixelFormat::D32F;
-    depth_desc.usage = tgfx2::TextureUsage::DepthStencilAttachment;
-    tgfx2::TextureHandle depth_h =
-        device_->register_external_texture(offscreen_depth_tex_, depth_desc);
-
     const Color4 bg = styles::bg_color();
     const float clear_col[4] = {bg.r, bg.g, bg.b, bg.a};
-    ctx_->begin_pass(color_h, depth_h, clear_col, 1.0f, true);
-
+    ctx_->begin_pass(offscreen_color_, offscreen_depth_,
+                     clear_col, 1.0f, true);
     engine_->render(ctx_.get(), font_.get());
-
     ctx_->end_pass();
-
-    // Release external wrappers at end of frame.
-    ctx_->defer_destroy(color_h);
-    ctx_->defer_destroy(depth_h);
-
     ctx_->end_frame();
 
-    // Composite to the caller's framebuffer.
-    blit_to_dst_(width, height, dst_gl_fbo);
+    // Backend-specific presentation. Lives entirely inside
+    // termin_graphics2.dll (where glad is guaranteed loaded). When
+    // Vulkan ships, this call will branch on device type.
+    auto* gl_dev = static_cast<tgfx2::OpenGLRenderDevice*>(device_.get());
+    gl_dev->blit_to_external_fbo(
+        dst_gl_fbo, offscreen_color_,
+        0, 0, width, height,
+        0, 0, width, height);
 }
 
 void PlotView3D::release_gpu() {
     if (engine_) engine_->release_gpu_resources();
     if (font_)   font_->release_gpu();
 
-    if (offscreen_fbo_ != 0) {
-        glDeleteFramebuffers(1, &offscreen_fbo_);
-        glDeleteTextures(1, &offscreen_color_tex_);
-        glDeleteTextures(1, &offscreen_depth_tex_);
-        offscreen_fbo_ = 0;
-        offscreen_color_tex_ = 0;
-        offscreen_depth_tex_ = 0;
-        offscreen_w_ = 0;
-        offscreen_h_ = 0;
+    if (device_) {
+        if (offscreen_color_.id != 0) device_->destroy(offscreen_color_);
+        if (offscreen_depth_.id != 0) device_->destroy(offscreen_depth_);
     }
+    offscreen_color_ = tgfx2::TextureHandle{};
+    offscreen_depth_ = tgfx2::TextureHandle{};
+    offscreen_w_ = 0;
+    offscreen_h_ = 0;
 }
 
 }  // namespace tcplot

@@ -1,12 +1,10 @@
-// plot_view2d.cpp
+// plot_view2d.cpp - see plot_view3d.cpp for the architectural note.
+// Same pattern, minus depth attachment.
 
 #include "tcplot/plot_view2d.hpp"
 
 #include <cmath>
 #include <optional>
-#include <utility>
-
-#include <glad/glad.h>
 
 #include <tcbase/input_enums.hpp>
 #include <tgfx2/descriptors.hpp>
@@ -51,43 +49,23 @@ PlotView2D::~PlotView2D() {
 }
 
 void PlotView2D::ensure_offscreen_(int w, int h) {
-    if (offscreen_fbo_ != 0 && offscreen_w_ == w && offscreen_h_ == h) return;
-    if (offscreen_fbo_ != 0) {
-        glDeleteFramebuffers(1, &offscreen_fbo_);
-        glDeleteTextures(1, &offscreen_color_tex_);
-        offscreen_fbo_ = 0;
-        offscreen_color_tex_ = 0;
+    if (offscreen_w_ == w && offscreen_h_ == h && offscreen_color_.id != 0) {
+        return;
     }
+    if (offscreen_color_.id != 0) device_->destroy(offscreen_color_);
+    offscreen_color_ = tgfx2::TextureHandle{};
 
-    GLint prev_fbo = 0;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev_fbo);
+    tgfx2::TextureDesc desc;
+    desc.width = static_cast<uint32_t>(w);
+    desc.height = static_cast<uint32_t>(h);
+    desc.format = tgfx2::PixelFormat::RGBA8_UNorm;
+    desc.usage = tgfx2::TextureUsage::Sampled
+               | tgfx2::TextureUsage::ColorAttachment
+               | tgfx2::TextureUsage::CopySrc;
+    offscreen_color_ = device_->create_texture(desc);
 
-    glGenFramebuffers(1, &offscreen_fbo_);
-    glBindFramebuffer(GL_FRAMEBUFFER, offscreen_fbo_);
-
-    glGenTextures(1, &offscreen_color_tex_);
-    glBindTexture(GL_TEXTURE_2D, offscreen_color_tex_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                           GL_TEXTURE_2D, offscreen_color_tex_, 0);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prev_fbo));
     offscreen_w_ = w;
     offscreen_h_ = h;
-}
-
-void PlotView2D::blit_to_dst_(int w, int h, uint32_t dst_gl_fbo) {
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, offscreen_fbo_);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dst_gl_fbo);
-    glBlitFramebuffer(0, 0, w, h,
-                      0, 0, w, h,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void PlotView2D::plot(const double* x, const double* y, size_t n,
@@ -147,43 +125,34 @@ void PlotView2D::render(int width, int height, uint32_t dst_gl_fbo) {
 
     ctx_->begin_frame();
 
-    tgfx2::TextureDesc color_desc;
-    color_desc.width = (uint32_t)width;
-    color_desc.height = (uint32_t)height;
-    color_desc.format = tgfx2::PixelFormat::RGBA8_UNorm;
-    color_desc.usage = tgfx2::TextureUsage::Sampled
-                     | tgfx2::TextureUsage::ColorAttachment
-                     | tgfx2::TextureUsage::CopySrc;
-    tgfx2::TextureHandle color_h =
-        device_->register_external_texture(offscreen_color_tex_, color_desc);
-
     const Color4 bg = styles::bg_color();
     const float clear_col[4] = {bg.r, bg.g, bg.b, bg.a};
-    // No depth attachment: engine2d doesn't use depth.
-    ctx_->begin_pass(color_h, {}, clear_col, 1.0f, false);
+    // 2D pass: no depth attachment, no depth clear.
+    ctx_->begin_pass(offscreen_color_, tgfx2::TextureHandle{},
+                     clear_col, 1.0f, false);
 
     engine_->render(ctx_.get(), font_.get());
 
     ctx_->end_pass();
-
-    ctx_->defer_destroy(color_h);
     ctx_->end_frame();
 
-    blit_to_dst_(width, height, dst_gl_fbo);
+    auto* gl_dev = static_cast<tgfx2::OpenGLRenderDevice*>(device_.get());
+    gl_dev->blit_to_external_fbo(
+        dst_gl_fbo, offscreen_color_,
+        0, 0, width, height,
+        0, 0, width, height);
 }
 
 void PlotView2D::release_gpu() {
     if (engine_) engine_->release_gpu_resources();
     if (font_)   font_->release_gpu();
 
-    if (offscreen_fbo_ != 0) {
-        glDeleteFramebuffers(1, &offscreen_fbo_);
-        glDeleteTextures(1, &offscreen_color_tex_);
-        offscreen_fbo_ = 0;
-        offscreen_color_tex_ = 0;
-        offscreen_w_ = 0;
-        offscreen_h_ = 0;
+    if (device_ && offscreen_color_.id != 0) {
+        device_->destroy(offscreen_color_);
     }
+    offscreen_color_ = tgfx2::TextureHandle{};
+    offscreen_w_ = 0;
+    offscreen_h_ = 0;
 }
 
 }  // namespace tcplot

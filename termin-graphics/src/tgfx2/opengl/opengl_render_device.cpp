@@ -307,8 +307,40 @@ void OpenGLRenderDevice::destroy(BufferHandle handle) {
 
 void OpenGLRenderDevice::destroy(TextureHandle handle) {
     if (auto* tex = textures_.get(handle.id)) {
+        const GLuint deleted_gl_id = tex->gl_id;
+
         if (tex->gl_id && !tex->external) glDeleteTextures(1, &tex->gl_id);
         textures_.remove(handle.id);
+
+        // Drop any FBO cache entry that referenced this GL texture id.
+        // Without this, a subsequent resize (PlotView*::ensure_offscreen_)
+        // destroys the old color/depth textures, creates new ones, and
+        // begin_pass may hit the old FBO cache entry — whose
+        // glFramebufferTexture2D attachment still points at the
+        // now-deleted texture object. OpenGL then silently renders into
+        // nothing (black screen) because the FBO is effectively
+        // incomplete or its attachments are dangling.
+        //
+        // External (non-owning) textures go through the same path —
+        // the GL object is preserved but any FBO attached to its id is
+        // still stale from tgfx2's point of view.
+        if (deleted_gl_id != 0) {
+            for (auto it = fbo_cache_.begin(); it != fbo_cache_.end(); ) {
+                bool match = false;
+                for (const auto& [attach_point, tex_id] : it->first) {
+                    if (tex_id == deleted_gl_id) {
+                        match = true;
+                        break;
+                    }
+                }
+                if (match) {
+                    if (it->second != 0) glDeleteFramebuffers(1, &it->second);
+                    it = fbo_cache_.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
     }
 }
 
@@ -576,6 +608,45 @@ bool OpenGLRenderDevice::read_pixel_rgba8(
     glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_read_fbo));
     glDeleteFramebuffers(1, &fbo);
     return ok;
+}
+
+void OpenGLRenderDevice::blit_to_external_fbo(
+    uint32_t dst_fbo_id,
+    TextureHandle src_color,
+    int src_x, int src_y, int src_w, int src_h,
+    int dst_x, int dst_y, int dst_w, int dst_h
+) {
+    GLTexture* tex = textures_.get(src_color.id);
+    if (!tex) return;
+
+    // Preserve any FBO the caller had bound so we don't clobber their
+    // state. After the blit the previous bindings are restored.
+    GLint prev_read = 0, prev_draw = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prev_read);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prev_draw);
+
+    // Temporary read FBO anchored at the source texture. A throwaway
+    // is cheaper than a cache lookup here because the caller's
+    // textures change size on viewport resize; cache hit rate would
+    // be low.
+    GLuint read_fbo = 0;
+    glGenFramebuffers(1, &read_fbo);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, read_fbo);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           tex->target, tex->gl_id, 0);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dst_fbo_id);
+
+    glBlitFramebuffer(
+        src_x, src_y, src_x + src_w, src_y + src_h,
+        dst_x, dst_y, dst_x + dst_w, dst_y + dst_h,
+        GL_COLOR_BUFFER_BIT, GL_NEAREST
+    );
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_read));
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(prev_draw));
+    glDeleteFramebuffers(1, &read_fbo);
 }
 
 void OpenGLRenderDevice::invalidate_fbo_cache() {
