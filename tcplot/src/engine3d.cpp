@@ -463,7 +463,11 @@ void PlotEngine3D::build_grid_mesh_(const double bounds_min[3],
     std::vector<float> verts;
     std::vector<uint32_t> indices;
     uint32_t idx = 0;
-    const Color4 gc = styles::grid_color();
+    // Brighter 3D grid than the 2D default. 1-pixel GL lines under MSAA
+    // get very dim if sampled with low coverage; full alpha + mid-gray
+    // keeps the grid legible without drowning the data series.
+    // styles::grid_color() = (0.3, 0.3, 0.3, 0.5) stays the 2D choice.
+    const Color4 gc{0.55f, 0.55f, 0.55f, 1.0f};
 
     // For each axis, draw ticks as line segments running along the
     // bounding box's "floor" on one of the other two axes. Matches

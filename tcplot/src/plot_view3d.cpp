@@ -82,13 +82,21 @@ void PlotView3D::ensure_offscreen_(int w, int h) {
     color_desc.usage = tgfx2::TextureUsage::Sampled
                      | tgfx2::TextureUsage::ColorAttachment
                      | tgfx2::TextureUsage::CopySrc;
+    color_desc.sample_count = static_cast<uint32_t>(msaa_samples_);
     offscreen_color_ = device_->create_texture(color_desc);
 
+    // D24 (GL_DEPTH_COMPONENT24) is the most portable multisample
+    // depth format — every GL 3.3 driver supports it. D32F +
+    // multisample is valid per-spec but some drivers reject or
+    // silently fail the glTexImage2DMultisample call, which surfaces
+    // as the dreaded "white screen + silent crash" path WPF can't
+    // trace. Stick with D24 for MSAA attachments.
     tgfx2::TextureDesc depth_desc;
     depth_desc.width = static_cast<uint32_t>(w);
     depth_desc.height = static_cast<uint32_t>(h);
-    depth_desc.format = tgfx2::PixelFormat::D32F;
+    depth_desc.format = tgfx2::PixelFormat::D24_UNorm;
     depth_desc.usage = tgfx2::TextureUsage::DepthStencilAttachment;
+    depth_desc.sample_count = static_cast<uint32_t>(msaa_samples_);
     offscreen_depth_ = device_->create_texture(depth_desc);
 
     offscreen_w_ = w;
@@ -139,6 +147,22 @@ void PlotView3D::toggle_wireframe()    { engine_->toggle_wireframe(); }
 void PlotView3D::toggle_marker_mode()  { engine_->toggle_marker_mode(); }
 void PlotView3D::set_z_scale(float s)  { engine_->z_scale = s; }
 float PlotView3D::get_z_scale() const  { return engine_->z_scale; }
+
+void PlotView3D::set_msaa_samples(int samples) {
+    if (samples < 1) samples = 1;
+    if (samples == msaa_samples_) return;
+    msaa_samples_ = samples;
+    // Drop the current attachments; next render will re-allocate with
+    // the new sample count via ensure_offscreen_.
+    if (device_) {
+        if (offscreen_color_.id != 0) device_->destroy(offscreen_color_);
+        if (offscreen_depth_.id != 0) device_->destroy(offscreen_depth_);
+    }
+    offscreen_color_ = tgfx2::TextureHandle{};
+    offscreen_depth_ = tgfx2::TextureHandle{};
+    offscreen_w_ = 0;
+    offscreen_h_ = 0;
+}
 
 OrbitCamera& PlotView3D::camera() { return engine_->camera; }
 
@@ -199,6 +223,12 @@ void PlotView3D::render(int width, int height, uint32_t dst_gl_fbo) {
     engine_->set_viewport(0, 0, (float)width, (float)height);
 
     ctx_->begin_frame();
+
+    // Pipelines need to match the target FBO sample count, else GL
+    // raises INVALID_FRAMEBUFFER_OPERATION on draw. set_sample_count
+    // feeds the pipeline cache key; cached pipelines for MSAA vs
+    // non-MSAA targets are distinct.
+    ctx_->set_sample_count(static_cast<uint32_t>(msaa_samples_));
 
     const Color4 bg = styles::bg_color();
     const float clear_col[4] = {bg.r, bg.g, bg.b, bg.a};

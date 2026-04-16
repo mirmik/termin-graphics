@@ -111,6 +111,15 @@ public:
               double* out_x, double* out_y, double* out_z,
               double* out_screen_dist_px);
 
+    // --- MSAA ---
+    //
+    // Multisample sample count for the offscreen color + depth
+    // attachments. Legal values: 1 (no AA), 2, 4, 8 depending on GL
+    // driver. The FBO resolves down to the host's single-sample FBO
+    // inside blit_to_external_fbo. Default 4.
+    void set_msaa_samples(int samples);
+    int  msaa_samples() const { return msaa_samples_; }
+
     // --- Render one frame ---
     //
     // `dst_gl_fbo` - target framebuffer object id (0 = default FB).
@@ -139,11 +148,14 @@ private:
     std::unique_ptr<PlotEngine3D> engine_;
 
     // Offscreen color + depth are plain tgfx2 textures; begin_pass
-    // owns the FBO they compose into.
+    // owns the FBO they compose into. When msaa_samples_ > 1 both
+    // attachments are multisample, and glBlitFramebuffer inside
+    // blit_to_external_fbo resolves down to the single-sample host FBO.
     tgfx2::TextureHandle offscreen_color_{};
     tgfx2::TextureHandle offscreen_depth_{};
     int offscreen_w_ = 0;
     int offscreen_h_ = 0;
+    int msaa_samples_ = 4;
 };
 
 }  // namespace tcplot

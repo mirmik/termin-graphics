@@ -56,6 +56,11 @@ public:
     void on_mouse_up(float x, float y, int button);
     bool on_mouse_wheel(float x, float y, float dy);
 
+    // MSAA sample count for the offscreen color attachment. See
+    // plot_view3d.hpp for the contract. Default 4.
+    void set_msaa_samples(int samples);
+    int  msaa_samples() const { return msaa_samples_; }
+
     void render(int width, int height, uint32_t dst_gl_fbo);
     void release_gpu();
 
@@ -74,6 +79,7 @@ private:
     tgfx2::TextureHandle offscreen_color_{};
     int offscreen_w_ = 0;
     int offscreen_h_ = 0;
+    int msaa_samples_ = 4;
 };
 
 }  // namespace tcplot

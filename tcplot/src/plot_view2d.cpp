@@ -62,6 +62,7 @@ void PlotView2D::ensure_offscreen_(int w, int h) {
     desc.usage = tgfx2::TextureUsage::Sampled
                | tgfx2::TextureUsage::ColorAttachment
                | tgfx2::TextureUsage::CopySrc;
+    desc.sample_count = static_cast<uint32_t>(msaa_samples_);
     offscreen_color_ = device_->create_texture(desc);
 
     offscreen_w_ = w;
@@ -88,6 +89,18 @@ void PlotView2D::scatter(const double* x, const double* y, size_t n,
 
 void PlotView2D::clear() { engine_->clear(); }
 void PlotView2D::fit()   { engine_->fit(); }
+
+void PlotView2D::set_msaa_samples(int samples) {
+    if (samples < 1) samples = 1;
+    if (samples == msaa_samples_) return;
+    msaa_samples_ = samples;
+    if (device_ && offscreen_color_.id != 0) {
+        device_->destroy(offscreen_color_);
+    }
+    offscreen_color_ = tgfx2::TextureHandle{};
+    offscreen_w_ = 0;
+    offscreen_h_ = 0;
+}
 
 void PlotView2D::set_view(double x_min, double x_max,
                             double y_min, double y_max) {
@@ -124,6 +137,9 @@ void PlotView2D::render(int width, int height, uint32_t dst_gl_fbo) {
     engine_->set_viewport(0, 0, (float)width, (float)height);
 
     ctx_->begin_frame();
+
+    // Pipelines need to match target FBO sample count (see PlotView3D).
+    ctx_->set_sample_count(static_cast<uint32_t>(msaa_samples_));
 
     const Color4 bg = styles::bg_color();
     const float clear_col[4] = {bg.r, bg.g, bg.b, bg.a};
