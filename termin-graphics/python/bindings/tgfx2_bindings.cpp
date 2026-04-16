@@ -24,6 +24,7 @@
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/vertex_layout.hpp>
 #include <tgfx2/tc_shader_bridge.hpp>
+#include <tgfx2/font_atlas.hpp>
 
 #include <tgfx/opengl/opengl_framebuffer.hpp>
 #include <tgfx/tgfx_shader_handle.hpp>
@@ -549,6 +550,84 @@ void bind_tgfx2(nb::module_& m) {
             gl_dev->destroy(ibo);
         },
         nb::arg("ctx"), nb::arg("mesh"));
+
+    // --- FontAtlas ---
+    //
+    // Public C++ FontAtlas (tgfx2/font_atlas.hpp) exposed under the
+    // historical Python name "FontTextureAtlas". The class replaces
+    // the hand-written tgfx/font.py atlas; Python callers that
+    // previously held a FontTextureAtlas instance see the same
+    // interface shape (ensure_glyphs / ensure_texture / measure_text)
+    // — with RenderContext2 references in place of the prior
+    // Tgfx2Context holder.
+    nb::class_<tgfx2::FontAtlas::Size2f>(m, "FontMeasure")
+        .def_ro("width", &tgfx2::FontAtlas::Size2f::width)
+        .def_ro("height", &tgfx2::FontAtlas::Size2f::height);
+
+    nb::class_<tgfx2::FontAtlas>(m, "FontTextureAtlas")
+        .def(nb::init<const std::string&, int, int, int>(),
+             nb::arg("path"),
+             nb::arg("size") = 32,
+             nb::arg("atlas_width") = 2048,
+             nb::arg("atlas_height") = 2048)
+
+        // Rasterise every glyph in `text` (UTF-8). If `ctx` is given
+        // and any new glyph was added, triggers a GPU re-upload so
+        // the next draw sees the fresh atlas.
+        .def("ensure_glyphs",
+             [](tgfx2::FontAtlas& self,
+                const std::string& text,
+                tgfx2::RenderContext2* ctx) {
+                 self.ensure_glyphs(text, ctx);
+             },
+             nb::arg("text"),
+             nb::arg("ctx").none() = nb::none())
+
+        // Measure pixel (width, height) of `text` at display `size`.
+        // Returns a tuple for Python ergonomics — callers typically
+        // unpack as `w, h = font.measure_text(...)`.
+        .def("measure_text",
+             [](const tgfx2::FontAtlas& self,
+                const std::string& text,
+                float size) {
+                 auto m = self.measure_text(text, size);
+                 return nb::make_tuple(m.width, m.height);
+             },
+             nb::arg("text"), nb::arg("size") = 14.0f)
+
+        // Create or refresh the GPU atlas texture. Returns the cached
+        // Tgfx2TextureHandle (same handle across calls with the same
+        // ctx; dropped + recreated on ctx change).
+        .def("ensure_texture",
+             [](tgfx2::FontAtlas& self, tgfx2::RenderContext2* ctx)
+             -> tgfx2::TextureHandle {
+                 return self.ensure_texture(ctx);
+             },
+             nb::arg("ctx"))
+
+        // Look up one glyph's atlas entry. Returns a 6-tuple
+        // (u0, v0, u1, v1, width_px, height_px) at the rasterise
+        // size, or None if the glyph has not been rasterised.
+        .def("get_glyph",
+             [](const tgfx2::FontAtlas& self, uint32_t codepoint) -> nb::object {
+                 const auto* g = self.get_glyph(codepoint);
+                 if (!g) return nb::none();
+                 return nb::make_tuple(g->u0, g->v0, g->u1, g->v1,
+                                       g->width_px, g->height_px);
+             },
+             nb::arg("codepoint"))
+
+        // Drop the GPU texture. Safe when the underlying device has
+        // already been torn down — no GL calls are issued.
+        .def("release_gpu", &tgfx2::FontAtlas::release_gpu)
+
+        // --- Read-only metrics ---
+        .def_prop_ro("size", &tgfx2::FontAtlas::rasterize_size)
+        .def_prop_ro("ascent", &tgfx2::FontAtlas::ascent_px)
+        .def_prop_ro("descent", &tgfx2::FontAtlas::descent_px)
+        .def_prop_ro("line_height", &tgfx2::FontAtlas::line_height)
+        .def_prop_ro("atlas_width", &tgfx2::FontAtlas::atlas_width)
+        .def_prop_ro("atlas_height", &tgfx2::FontAtlas::atlas_height);
 }
 
 } // namespace tgfx_bindings

@@ -177,9 +177,8 @@ class Text3DRenderer:
         if not text or self._font is None or self._ctx is None:
             return
 
-        # Rasterise any new glyphs and push to the atlas if needed. The
-        # holder reference stored in begin() gives us the upload path.
-        self._font.ensure_glyphs(text, tgfx2_ctx=self._holder)
+        # Rasterise any new glyphs and push to the atlas if needed.
+        self._font.ensure_glyphs(text, ctx=self._ctx)
 
         pos = np.asarray(position, dtype=np.float32)
 
@@ -187,11 +186,7 @@ class Text3DRenderer:
         ascent = self._font.ascent * scale
 
         # Measure total text width for anchoring.
-        total_w = 0.0
-        for ch in text:
-            if ch in self._font.glyphs:
-                gw, _ = self._font.glyphs[ch]["size"]
-                total_w += gw * scale
+        total_w, _ = self._font.measure_text(text, size)
 
         if anchor == "center":
             start_x = -total_w / 2
@@ -208,7 +203,7 @@ class Text3DRenderer:
         ctx.set_uniform_vec3("u_cam_right", *self._cam_right)
         ctx.set_uniform_vec3("u_cam_up", *self._cam_up)
         ctx.set_uniform_int("u_font_atlas", 0)
-        atlas_handle = self._font.ensure_texture_tgfx2(self._holder)
+        atlas_handle = self._font.ensure_texture(self._ctx)
         ctx.bind_sampled_texture(0, atlas_handle)
         ctx.set_uniform_vec4(
             "u_color",
@@ -222,12 +217,10 @@ class Text3DRenderer:
         px, py, pz = float(pos[0]), float(pos[1]), float(pos[2])
 
         for ch in text:
-            if ch not in self._font.glyphs:
+            glyph = self._font.get_glyph(ord(ch))
+            if glyph is None:
                 continue
-
-            glyph = self._font.glyphs[ch]
-            gw, gh = glyph["size"]
-            u0, v0, u1, v1 = glyph["uv"]
+            u0, v0, u1, v1, gw, gh = glyph
 
             char_w = gw * scale
             char_h = gh * scale

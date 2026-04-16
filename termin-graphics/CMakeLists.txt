@@ -74,6 +74,7 @@ termin_set_rpath_lib(termin_graphics)
 # --- termin_graphics2 (new backend-neutral API) ---
 set(TGFX2_SOURCES
     src/tgfx2/device_factory.cpp
+    src/tgfx2/font_atlas.cpp
     src/tgfx2/opengl/opengl_render_device.cpp
     src/tgfx2/opengl/opengl_command_list.cpp
     src/tgfx2/opengl/opengl_type_conversions.cpp
@@ -132,6 +133,13 @@ endif()
 target_include_directories(termin_graphics2 PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
+)
+
+# stb_truetype (vendored) — PRIVATE: only the font_atlas.cpp
+# implementation needs it; the public header keeps stb out of its
+# include surface by pimpl-wrapping stbtt_fontinfo.
+target_include_directories(termin_graphics2 PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/third/stb
 )
 
 target_link_libraries(termin_graphics2 PUBLIC

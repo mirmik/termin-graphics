@@ -158,13 +158,7 @@ class Text2DRenderer:
         """
         if not text or self._font is None:
             return (0.0, 0.0)
-        scale = size / self._font.size
-        total_w = 0.0
-        for ch in text:
-            g = self._font.glyphs.get(ch)
-            if g is not None:
-                total_w += g["size"][0] * scale
-        return (total_w, float(size))
+        return self._font.measure_text(text, size)
 
     def draw(
         self,
@@ -187,7 +181,7 @@ class Text2DRenderer:
             return
 
         # Make sure the atlas has every char and re-uploads on new glyphs.
-        self._font.ensure_glyphs(text, tgfx2_ctx=self._holder)
+        self._font.ensure_glyphs(text, ctx=self._ctx)
 
         scale = size / self._font.size
         total_w, _ = self.measure(text, size)
@@ -210,7 +204,7 @@ class Text2DRenderer:
         ctx.bind_shader(self._vs, self._fs)
         ctx.set_uniform_mat4("u_projection", self._proj_flat, True)
         ctx.set_uniform_int("u_font_atlas", 0)
-        atlas_handle = self._font.ensure_texture_tgfx2(self._holder)
+        atlas_handle = self._font.ensure_texture(self._ctx)
         ctx.bind_sampled_texture(0, atlas_handle)
         ctx.set_uniform_vec4(
             "u_color",
@@ -221,11 +215,10 @@ class Text2DRenderer:
         verts: list[float] = []
         cursor_x = start_x
         for ch in text:
-            g = self._font.glyphs.get(ch)
+            g = self._font.get_glyph(ord(ch))
             if g is None:
                 continue
-            gw, gh = g["size"]
-            u0, v0, u1, v1 = g["uv"]
+            u0, v0, u1, v1, gw, gh = g
 
             char_w = gw * scale
             char_h = gh * scale
