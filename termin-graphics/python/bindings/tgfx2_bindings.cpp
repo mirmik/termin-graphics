@@ -75,6 +75,12 @@ void bind_tgfx2(nb::module_& m) {
         .def_ro("vs", &ShaderPair::vs)
         .def_ro("fs", &ShaderPair::fs);
 
+    // IRenderDevice — opaque handle exposed so other native modules
+    // (render_framework) can accept a pointer to it from Python.
+    // The device is owned by whoever created it (RenderEngine,
+    // Tgfx2ContextHolder). Python code only passes the pointer around.
+    nb::class_<tgfx2::IRenderDevice>(m, "Tgfx2Device");
+
     // --- RenderContext2 ---
     //
     // Only the methods Python passes actually need are exposed. The
@@ -130,6 +136,58 @@ void bind_tgfx2(nb::module_& m) {
 
         // Blit (src → dst texture).
         .def("blit", &tgfx2::RenderContext2::blit)
+
+        // Wrap a raw GL texture id as a non-owning tgfx2 TextureHandle
+        // using this context's device. Used by Python debugger code
+        // that needs to turn a host-owned GL texture (e.g. tcgui
+        // FBOSurface's color attachment) into a texture handle the
+        // presenter can render into.
+        .def("wrap_gl_texture",
+             [](tgfx2::RenderContext2& self, uint32_t gl_id,
+                uint32_t w, uint32_t h, int format_int) -> tgfx2::TextureHandle {
+                 auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&self.device());
+                 if (!gl_dev) return {};
+                 tgfx2::TextureDesc desc;
+                 desc.width = w;
+                 desc.height = h;
+                 desc.format = static_cast<tgfx2::PixelFormat>(format_int);
+                 desc.usage = tgfx2::TextureUsage::Sampled |
+                              tgfx2::TextureUsage::ColorAttachment;
+                 return gl_dev->register_external_texture(
+                     static_cast<GLuint>(gl_id), desc);
+             },
+             nb::arg("gl_id"), nb::arg("width"), nb::arg("height"),
+             nb::arg("format"))
+
+        // Destroy a texture handle on this context's device. For
+        // external wraps this just frees the HandlePool entry; the
+        // GL texture stays owned by the caller.
+        .def("destroy_texture",
+             [](tgfx2::RenderContext2& self, tgfx2::TextureHandle h) {
+                 if (h) self.device().destroy(h);
+             })
+
+        // Present a texture to an externally-owned GL FBO (0 = host
+        // window default framebuffer). Used by legacy Qt debugger
+        // window to composite the debugger capture onto its SDL
+        // debug window.
+        .def("blit_to_external_fbo",
+             [](tgfx2::RenderContext2& self, uint32_t dst_fbo_id,
+                tgfx2::TextureHandle src,
+                int src_x, int src_y, int src_w, int src_h,
+                int dst_x, int dst_y, int dst_w, int dst_h) {
+                 auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&self.device());
+                 if (!gl_dev) return;
+                 gl_dev->blit_to_external_fbo(
+                     dst_fbo_id, src,
+                     src_x, src_y, src_w, src_h,
+                     dst_x, dst_y, dst_w, dst_h);
+             },
+             nb::arg("dst_fbo_id"), nb::arg("src"),
+             nb::arg("src_x"), nb::arg("src_y"),
+             nb::arg("src_w"), nb::arg("src_h"),
+             nb::arg("dst_x"), nb::arg("dst_y"),
+             nb::arg("dst_w"), nb::arg("dst_h"))
 
         // Diagnostic: glGetError() wrapper. glad lives inside
         // termin_graphics2.dll and is initialised by the host, so
@@ -362,6 +420,27 @@ void bind_tgfx2(nb::module_& m) {
     // or similar can keep its GL texture and hand its id to a tgfx2
     // pass. The wrapper is non-owning; destroying it (or letting the
     // holder die) does NOT delete the GL texture.
+    // Blit a tgfx2 color texture into an externally-owned GL FBO
+    // (id=0 means the default window framebuffer). Thin wrapper
+    // around OpenGLRenderDevice::blit_to_external_fbo for Python
+    // callers that need to present a debug capture onto a host
+    // window (Qt framegraph debugger, SDL debug window).
+    m.def("ctx2_blit_to_external_fbo",
+        [](Tgfx2ContextHolder& holder, uint32_t dst_fbo_id,
+           tgfx2::TextureHandle src,
+           int src_x, int src_y, int src_w, int src_h,
+           int dst_x, int dst_y, int dst_w, int dst_h) {
+            holder.device->blit_to_external_fbo(
+                dst_fbo_id, src,
+                src_x, src_y, src_w, src_h,
+                dst_x, dst_y, dst_w, dst_h);
+        },
+        nb::arg("ctx"), nb::arg("dst_fbo_id"), nb::arg("src"),
+        nb::arg("src_x"), nb::arg("src_y"),
+        nb::arg("src_w"), nb::arg("src_h"),
+        nb::arg("dst_x"), nb::arg("dst_y"),
+        nb::arg("dst_w"), nb::arg("dst_h"));
+
     m.def("wrap_gl_texture_as_tgfx2",
         [](Tgfx2ContextHolder& holder, uint32_t gl_id,
            uint32_t w, uint32_t h, int format_int) -> tgfx2::TextureHandle {
@@ -453,6 +532,27 @@ void bind_tgfx2(nb::module_& m) {
     m.attr("PIXEL_RGBA8")   = static_cast<int>(tgfx2::PixelFormat::RGBA8_UNorm);
     m.attr("PIXEL_RGBA16F") = static_cast<int>(tgfx2::PixelFormat::RGBA16F);
     m.attr("PIXEL_D32F")    = static_cast<int>(tgfx2::PixelFormat::D32F);
+
+    // Register PixelFormat as an nb::enum_ so other native modules can
+    // bind functions with `tgfx2::PixelFormat` parameters and defaults.
+    // The `is_arithmetic` flag lets Python int callers pass values via
+    // the legacy `PIXEL_*` module-level int constants above.
+    nb::enum_<tgfx2::PixelFormat>(m, "Tgfx2PixelFormat", nb::is_arithmetic())
+        .value("R8_UNorm",          tgfx2::PixelFormat::R8_UNorm)
+        .value("RG8_UNorm",         tgfx2::PixelFormat::RG8_UNorm)
+        .value("RGB8_UNorm",        tgfx2::PixelFormat::RGB8_UNorm)
+        .value("RGBA8_UNorm",       tgfx2::PixelFormat::RGBA8_UNorm)
+        .value("BGRA8_UNorm",       tgfx2::PixelFormat::BGRA8_UNorm)
+        .value("R16F",              tgfx2::PixelFormat::R16F)
+        .value("RG16F",             tgfx2::PixelFormat::RG16F)
+        .value("RGBA16F",           tgfx2::PixelFormat::RGBA16F)
+        .value("R32F",              tgfx2::PixelFormat::R32F)
+        .value("RG32F",             tgfx2::PixelFormat::RG32F)
+        .value("RGBA32F",           tgfx2::PixelFormat::RGBA32F)
+        .value("D24_UNorm",         tgfx2::PixelFormat::D24_UNorm)
+        .value("D24_UNorm_S8_UInt", tgfx2::PixelFormat::D24_UNorm_S8_UInt)
+        .value("D32F",              tgfx2::PixelFormat::D32F)
+        .export_values();
 
     // --- Mesh draw helper ---
     //

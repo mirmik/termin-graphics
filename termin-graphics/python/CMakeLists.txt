@@ -24,4 +24,5 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tgfx/
     DESTINATION lib/python/tgfx
     PATTERN "__pycache__" EXCLUDE
     PATTERN "*.pyc" EXCLUDE
+    PATTERN "*.so" EXCLUDE
 )

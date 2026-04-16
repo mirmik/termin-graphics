@@ -1,8 +1,6 @@
 #include <termin/render/frame_graph_debugger_core.hpp>
 #include <termin/render/frame_pass.hpp>
-#include <termin/render/tgfx2_bridge.hpp>
 
-#include <tgfx/opengl/opengl_backend.hpp>
 #include <tgfx2/render_context.hpp>
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/enums.hpp>
@@ -18,18 +16,78 @@ extern "C" {
 
 namespace termin {
 
-void FrameGraphCapture::ensure_capture_fbo_raw(
-    int w, int h, const std::string& fmt
+namespace {
+
+bool is_depth_format(tgfx2::PixelFormat fmt) {
+    return fmt == tgfx2::PixelFormat::D24_UNorm
+        || fmt == tgfx2::PixelFormat::D24_UNorm_S8_UInt
+        || fmt == tgfx2::PixelFormat::D32F;
+}
+
+std::string pixel_format_name(tgfx2::PixelFormat fmt) {
+    switch (fmt) {
+        case tgfx2::PixelFormat::R8_UNorm:           return "r8";
+        case tgfx2::PixelFormat::RG8_UNorm:          return "rg8";
+        case tgfx2::PixelFormat::RGB8_UNorm:         return "rgb8";
+        case tgfx2::PixelFormat::RGBA8_UNorm:        return "rgba8";
+        case tgfx2::PixelFormat::BGRA8_UNorm:        return "bgra8";
+        case tgfx2::PixelFormat::R16F:               return "r16f";
+        case tgfx2::PixelFormat::RG16F:              return "rg16f";
+        case tgfx2::PixelFormat::RGBA16F:            return "rgba16f";
+        case tgfx2::PixelFormat::R32F:               return "r32f";
+        case tgfx2::PixelFormat::RG32F:              return "rg32f";
+        case tgfx2::PixelFormat::RGBA32F:            return "rgba32f";
+        case tgfx2::PixelFormat::D24_UNorm:          return "depth24";
+        case tgfx2::PixelFormat::D24_UNorm_S8_UInt:  return "depth24_stencil8";
+        case tgfx2::PixelFormat::D32F:               return "depth32f";
+    }
+    return "unknown";
+}
+
+} // namespace
+
+FrameGraphCapture::~FrameGraphCapture() {
+    release();
+}
+
+void FrameGraphCapture::release() {
+    if (device_ && capture_tex_) {
+        device_->destroy(capture_tex_);
+    }
+    capture_tex_ = {};
+    device_ = nullptr;
+    width_ = 0;
+    height_ = 0;
+    captured_ = false;
+}
+
+void FrameGraphCapture::ensure_capture_tex(
+    tgfx2::IRenderDevice& device, int w, int h, tgfx2::PixelFormat fmt
 ) {
-    if (capture_fbo_ && fbo_w_ == w && fbo_h_ == h && fbo_format_ == fmt) {
+    if (device_ == &device && capture_tex_ &&
+        width_ == w && height_ == h && format_ == fmt) {
         return;
     }
+    // Size, format, or device changed — drop the old texture and
+    // allocate afresh.
+    if (device_ && capture_tex_) {
+        device_->destroy(capture_tex_);
+        capture_tex_ = {};
+    }
+    device_ = &device;
+    width_ = w;
+    height_ = h;
+    format_ = fmt;
 
-    auto& gfx = OpenGLGraphicsBackend::get_instance();
-    capture_fbo_ = gfx.create_framebuffer(w, h, 1, fmt);
-    fbo_w_ = w;
-    fbo_h_ = h;
-    fbo_format_ = fmt;
+    tgfx2::TextureDesc desc;
+    desc.width = static_cast<uint32_t>(w);
+    desc.height = static_cast<uint32_t>(h);
+    desc.format = fmt;
+    desc.sample_count = 1;
+    desc.usage = tgfx2::TextureUsage::Sampled |
+                 tgfx2::TextureUsage::ColorAttachment |
+                 tgfx2::TextureUsage::CopyDst;
+    capture_tex_ = device.create_texture(desc);
 }
 
 void FrameGraphCapture::capture_direct_via_ctx2(
@@ -37,30 +95,18 @@ void FrameGraphCapture::capture_direct_via_ctx2(
     tgfx2::TextureHandle src_tex,
     int width,
     int height,
-    const std::string& format
+    tgfx2::PixelFormat format
 ) {
     if (!ctx2 || !src_tex || width <= 0 || height <= 0) {
         return;
     }
 
-    ensure_capture_fbo_raw(width, height, format);
-    if (!capture_fbo_) {
+    ensure_capture_tex(ctx2->device(), width, height, format);
+    if (!capture_tex_) {
         return;
     }
 
-    auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&ctx2->device());
-    if (!gl_dev) {
-        return;
-    }
-
-    tgfx2::TextureHandle dst = wrap_fbo_color_as_tgfx2(*gl_dev, capture_fbo_.get());
-    if (!dst) {
-        return;
-    }
-
-    ctx2->blit(src_tex, dst);
-    gl_dev->destroy(dst);
-
+    ctx2->blit(src_tex, capture_tex_);
     captured_ = true;
 }
 
@@ -120,8 +166,8 @@ void FrameGraphPresenter::ensure_fs(tgfx2::IRenderDevice& device) {
 
 void FrameGraphPresenter::render(
     tgfx2::RenderContext2* ctx2,
-    FramebufferHandle* capture_fbo,
-    FramebufferHandle* target_fbo,
+    tgfx2::TextureHandle capture_tex,
+    tgfx2::TextureHandle target_tex,
     int dst_x,
     int dst_y,
     int dst_w,
@@ -129,13 +175,7 @@ void FrameGraphPresenter::render(
     int channel_mode,
     bool highlight_hdr
 ) {
-    if (!ctx2 || !capture_fbo || !target_fbo) {
-        return;
-    }
-
-    auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&ctx2->device());
-    if (!gl_dev) {
-        tc::Log::error("FrameGraphPresenter/tgfx2: device is not OpenGLRenderDevice");
+    if (!ctx2 || !capture_tex || !target_tex) {
         return;
     }
 
@@ -144,21 +184,10 @@ void FrameGraphPresenter::render(
         return;
     }
 
-    tgfx2::TextureHandle source_tex = wrap_fbo_color_as_tgfx2(*gl_dev, capture_fbo);
-    if (!source_tex) {
-        return;
-    }
-    tgfx2::TextureHandle target_tex = wrap_fbo_color_as_tgfx2(*gl_dev, target_fbo);
-    if (!target_tex) {
-        gl_dev->destroy(source_tex);
-        return;
-    }
-
     ctx2->begin_pass(target_tex, tgfx2::TextureHandle{}, nullptr, 1.0f, false);
     ctx2->set_viewport(dst_x, dst_y, dst_w, dst_h);
-    // tcgui clip rect may be active when the debugger widget calls into
-    // us; the FSQ draw must cover the full sub-region, not whatever
-    // parent clip was last set.
+    // The debugger widget may be called with an active tcgui clip
+    // rect. Make sure our fullscreen-quad draw isn't trimmed.
     ctx2->clear_scissor();
     ctx2->set_depth_test(false);
     ctx2->set_depth_write(false);
@@ -168,36 +197,36 @@ void FrameGraphPresenter::render(
 
     ctx2->bind_shader(ctx2->fsq_vertex_shader(), fs2_);
 
-    ctx2->bind_sampled_texture(0, source_tex);
+    ctx2->bind_sampled_texture(0, capture_tex);
     ctx2->set_uniform_int("u_tex", 0);
     ctx2->set_uniform_int("u_channel", channel_mode);
     ctx2->set_uniform_int("u_highlight_hdr", highlight_hdr ? 1 : 0);
 
     ctx2->draw_fullscreen_quad();
     ctx2->end_pass();
-
-    gl_dev->destroy(source_tex);
-    gl_dev->destroy(target_tex);
 }
 
-HDRStats FrameGraphPresenter::compute_hdr_stats(FramebufferHandle* fbo) {
+HDRStats FrameGraphPresenter::compute_hdr_stats(
+    tgfx2::IRenderDevice* device,
+    tgfx2::TextureHandle tex
+) {
     HDRStats stats{};
 
-    if (!fbo) {
+    auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(device);
+    if (!gl_dev || !tex) {
         return stats;
     }
-
-    int w = fbo->get_width();
-    int h = fbo->get_height();
+    auto desc = gl_dev->texture_desc(tex);
+    int w = static_cast<int>(desc.width);
+    int h = static_cast<int>(desc.height);
     int total = w * h;
     if (total <= 0) {
         return stats;
     }
 
-    auto& gfx = OpenGLGraphicsBackend::get_instance();
     std::vector<float> pixels(total * 4);
-    if (!gfx.read_color_buffer_float(fbo, pixels.data())) {
-        tc::Log::error("FrameGraphPresenter: read_color_buffer_float failed");
+    if (!gl_dev->read_texture_rgba_float(tex, pixels.data())) {
+        tc::Log::error("FrameGraphPresenter: read_texture_rgba_float failed");
         return stats;
     }
 
@@ -251,29 +280,31 @@ HDRStats FrameGraphPresenter::compute_hdr_stats(FramebufferHandle* fbo) {
 }
 
 std::vector<uint8_t> FrameGraphPresenter::read_depth_normalized(
-    FramebufferHandle* fbo,
+    tgfx2::IRenderDevice* device,
+    tgfx2::TextureHandle tex,
     int* out_w,
     int* out_h
 ) {
     if (out_w) *out_w = 0;
     if (out_h) *out_h = 0;
 
-    if (!fbo) {
+    auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(device);
+    if (!gl_dev || !tex) {
         return {};
     }
 
-    int w = fbo->get_width();
-    int h = fbo->get_height();
+    auto desc = gl_dev->texture_desc(tex);
+    int w = static_cast<int>(desc.width);
+    int h = static_cast<int>(desc.height);
     if (out_w) *out_w = w;
     if (out_h) *out_h = h;
     if (w <= 0 || h <= 0) {
         return {};
     }
 
-    auto& gfx = OpenGLGraphicsBackend::get_instance();
     std::vector<float> depth(w * h);
-    if (!gfx.read_depth_buffer(fbo, depth.data())) {
-        tc::Log::error("FrameGraphPresenter: read_depth_buffer failed");
+    if (!gl_dev->read_texture_depth_float(tex, depth.data())) {
+        tc::Log::error("FrameGraphPresenter: read_texture_depth_float failed");
         return {};
     }
 
@@ -297,25 +328,21 @@ std::vector<uint8_t> FrameGraphPresenter::read_depth_normalized(
     return out;
 }
 
-FBOInfo FrameGraphPresenter::get_fbo_info(FramebufferHandle* fbo) {
-    FBOInfo info;
-    if (!fbo) {
+TextureInfo FrameGraphPresenter::get_texture_info(
+    tgfx2::IRenderDevice* device,
+    tgfx2::TextureHandle tex
+) {
+    TextureInfo info;
+    if (!device || !tex) {
         return info;
     }
-
-    info.type_name = fbo->resource_type();
-    info.width = fbo->get_width();
-    info.height = fbo->get_height();
-    info.samples = fbo->get_samples();
-    info.is_msaa = fbo->is_msaa();
-    info.format = fbo->get_format();
-    info.fbo_id = fbo->get_fbo_id();
-    info.gl_width = info.width;
-    info.gl_height = info.height;
-    info.gl_samples = info.samples;
-    info.gl_format = info.format;
-    info.filter = fbo->is_msaa() ? "n/a" : "linear";
-    info.gl_filter = info.filter;
+    auto desc = device->texture_desc(tex);
+    info.width = static_cast<int>(desc.width);
+    info.height = static_cast<int>(desc.height);
+    info.samples = static_cast<int>(desc.sample_count);
+    info.is_msaa = desc.sample_count > 1;
+    info.format = desc.format;
+    info.format_name = pixel_format_name(desc.format);
     return info;
 }
 

@@ -191,6 +191,18 @@ public:
     // four floats in [0,1] to `out_rgba`.
     bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]);
 
+    // Read the full contents of a color texture as tightly-packed
+    // RGBA float32 in `out` (must point to at least width*height*4
+    // floats). Used by the framegraph debugger's HDR stats. Creates
+    // and destroys a temporary FBO; restores previous READ_FRAMEBUFFER.
+    bool read_texture_rgba_float(TextureHandle tex, float* out);
+
+    // Read the full contents of a depth texture as tightly-packed
+    // float32 depth values in `out` (must point to at least
+    // width*height floats). Used by the framegraph debugger's depth
+    // preview. Same FBO-restore semantics as read_texture_rgba_float.
+    bool read_texture_depth_float(TextureHandle tex, float* out);
+
     // Blit a tgfx2 color texture onto an externally-owned GL
     // framebuffer object (FBO id, 0 = default window FB).
     //

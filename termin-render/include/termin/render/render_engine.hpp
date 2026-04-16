@@ -63,6 +63,10 @@ public:
     // set. The returned pointer remains owned by the RenderEngine.
     tgfx2::RenderContext2* tgfx2_ctx() { return tgfx2_ctx_.get(); }
 
+    // Access the tgfx2 render device that owns all texture/buffer
+    // handles used by the engine. Lifetime-tied to the RenderEngine.
+    tgfx2::IRenderDevice* tgfx2_device() { return tgfx2_device_.get(); }
+
 public:
     RenderEngine();
     explicit RenderEngine(GraphicsBackend* graphics);

@@ -12,6 +12,7 @@
 #include <termin/entity/entity.hpp>
 #include <termin/render/render_camera.hpp>
 #include <termin/render/frame_graph_debugger_core.hpp>
+#include <tgfx2/i_render_device.hpp>
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/render_context.hpp>
 #include <termin/render/resource_spec.hpp>
@@ -501,21 +502,14 @@ void bind_render_framework(nb::module_& m) {
         .def_ro("hdr_percent", &HDRStats::hdr_percent)
         .def_ro("max_value", &HDRStats::max_value);
 
-    nb::class_<FBOInfo>(m, "FBOInfo")
+    nb::class_<TextureInfo>(m, "TextureInfo")
         .def(nb::init<>())
-        .def_ro("type_name", &FBOInfo::type_name)
-        .def_ro("width", &FBOInfo::width)
-        .def_ro("height", &FBOInfo::height)
-        .def_ro("samples", &FBOInfo::samples)
-        .def_ro("is_msaa", &FBOInfo::is_msaa)
-        .def_ro("format", &FBOInfo::format)
-        .def_ro("fbo_id", &FBOInfo::fbo_id)
-        .def_ro("gl_format", &FBOInfo::gl_format)
-        .def_ro("gl_width", &FBOInfo::gl_width)
-        .def_ro("gl_height", &FBOInfo::gl_height)
-        .def_ro("gl_samples", &FBOInfo::gl_samples)
-        .def_ro("filter", &FBOInfo::filter)
-        .def_ro("gl_filter", &FBOInfo::gl_filter);
+        .def_ro("width", &TextureInfo::width)
+        .def_ro("height", &TextureInfo::height)
+        .def_ro("samples", &TextureInfo::samples)
+        .def_ro("is_msaa", &TextureInfo::is_msaa)
+        .def_ro("format", &TextureInfo::format)
+        .def_ro("format_name", &TextureInfo::format_name);
 
     nb::class_<FrameGraphCapture>(m, "FrameGraphCapture")
         .def(nb::init<>())
@@ -526,28 +520,45 @@ void bind_render_framework(nb::module_& m) {
         .def("capture_direct_via_ctx2",
              &FrameGraphCapture::capture_direct_via_ctx2,
              nb::arg("ctx2"), nb::arg("src_tex"),
-             nb::arg("width"), nb::arg("height"), nb::arg("format"))
+             nb::arg("width"), nb::arg("height"),
+             nb::arg("format") = tgfx2::PixelFormat::RGBA8_UNorm)
         .def("has_capture", &FrameGraphCapture::has_capture)
         .def("reset_capture", &FrameGraphCapture::reset_capture)
-        .def_prop_ro("capture_fbo", &FrameGraphCapture::capture_fbo,
-                     nb::rv_policy::reference);
+        .def_prop_ro("capture_tex", &FrameGraphCapture::capture_tex)
+        .def_prop_ro("width", &FrameGraphCapture::width)
+        .def_prop_ro("height", &FrameGraphCapture::height)
+        .def_prop_ro("format", &FrameGraphCapture::format);
 
     nb::class_<FrameGraphPresenter>(m, "FrameGraphPresenter")
         .def(nb::init<>())
         .def("render", &FrameGraphPresenter::render,
-             nb::arg("ctx2"), nb::arg("capture_fbo"), nb::arg("target_fbo"),
+             nb::arg("ctx2"), nb::arg("capture_tex"), nb::arg("target_tex"),
              nb::arg("dst_x"), nb::arg("dst_y"),
              nb::arg("dst_w"), nb::arg("dst_h"),
              nb::arg("channel_mode"), nb::arg("highlight_hdr"))
         .def("compute_hdr_stats", &FrameGraphPresenter::compute_hdr_stats,
-             nb::arg("fbo"))
-        .def_static("get_fbo_info", &FrameGraphPresenter::get_fbo_info,
-                     nb::arg("fbo"));
+             nb::arg("device"), nb::arg("tex"))
+        .def("read_depth_normalized",
+             [](FrameGraphPresenter& self, tgfx2::IRenderDevice* device,
+                tgfx2::TextureHandle tex) -> nb::object {
+                 int w = 0, h = 0;
+                 auto data = self.read_depth_normalized(device, tex, &w, &h);
+                 if (data.empty()) {
+                     return nb::none();
+                 }
+                 nb::bytes bytes_obj(
+                     reinterpret_cast<const char*>(data.data()),
+                     data.size());
+                 return nb::make_tuple(bytes_obj, w, h);
+             },
+             nb::arg("device"), nb::arg("tex"))
+        .def_static("get_texture_info",
+             &FrameGraphPresenter::get_texture_info,
+             nb::arg("device"), nb::arg("tex"));
 
     nb::class_<FrameGraphDebuggerCore>(m, "FrameGraphDebuggerCore")
         .def(nb::init<>())
-        .def_prop_ro("capture_fbo", &FrameGraphDebuggerCore::capture_fbo,
-                     nb::rv_policy::reference)
+        .def_prop_ro("capture_tex", &FrameGraphDebuggerCore::capture_tex)
         .def_prop_ro("capture", [](FrameGraphDebuggerCore& self) -> FrameGraphCapture& {
             return self.capture;
         }, nb::rv_policy::reference_internal)

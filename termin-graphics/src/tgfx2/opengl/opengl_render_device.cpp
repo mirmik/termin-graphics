@@ -579,6 +579,67 @@ GLuint OpenGLRenderDevice::get_or_create_fbo(const RenderPassDesc& pass) {
     return fbo;
 }
 
+bool OpenGLRenderDevice::read_texture_rgba_float(
+    TextureHandle tex, float* out
+) {
+    auto* t = get_texture(tex);
+    if (!t || !out) return false;
+
+    GLint prev_read_fbo = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prev_read_fbo);
+
+    GLuint fbo = 0;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           t->target, t->gl_id, 0);
+
+    bool ok = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    if (ok) {
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glReadPixels(0, 0,
+                     static_cast<GLsizei>(t->desc.width),
+                     static_cast<GLsizei>(t->desc.height),
+                     GL_RGBA, GL_FLOAT, out);
+    }
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_read_fbo));
+    glDeleteFramebuffers(1, &fbo);
+    return ok;
+}
+
+bool OpenGLRenderDevice::read_texture_depth_float(
+    TextureHandle tex, float* out
+) {
+    auto* t = get_texture(tex);
+    if (!t || !out) return false;
+
+    GLint prev_read_fbo = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prev_read_fbo);
+
+    GLuint fbo = 0;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                           t->target, t->gl_id, 0);
+    // Depth-only FBO — disable color read/draw explicitly, otherwise
+    // some drivers report incomplete.
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+
+    bool ok = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    if (ok) {
+        glReadPixels(0, 0,
+                     static_cast<GLsizei>(t->desc.width),
+                     static_cast<GLsizei>(t->desc.height),
+                     GL_DEPTH_COMPONENT, GL_FLOAT, out);
+    }
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_read_fbo));
+    glDeleteFramebuffers(1, &fbo);
+    return ok;
+}
+
 bool OpenGLRenderDevice::read_pixel_rgba8(
     TextureHandle tex, int x, int y, float out_rgba[4]
 ) {
