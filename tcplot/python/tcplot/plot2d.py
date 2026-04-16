@@ -1,19 +1,20 @@
-"""2D Plot widget for tcgui — thin adapter over PlotEngine2D."""
+"""2D Plot widget for tcgui - thin adapter over the C++ PlotEngine2D."""
 
 from __future__ import annotations
 
 from tcgui.widgets.widget import Widget
 from tcgui.widgets.events import MouseEvent, MouseWheelEvent
 
-from tcplot.engine2d import PlotEngine2D
+from tcplot._tcplot_native import PlotEngine2D
 
 
 class Plot2D(Widget):
-    """tcgui Widget that hosts a ``PlotEngine2D``.
+    """tcgui Widget that hosts a C++ ``PlotEngine2D``.
 
-    All plot state, rendering and interaction logic live in the engine.
-    This class only translates tcgui lifecycle/events into engine calls
-    and exposes the engine's public API for the demo scripts.
+    The engine owns all plot state, rendering and interaction logic —
+    this class only translates tcgui's widget lifecycle and events
+    into engine calls, and relays the engine's public API so the demo
+    scripts keep their ``plot.plot(x, y)`` idiom.
     """
 
     def __init__(self):
@@ -45,7 +46,10 @@ class Plot2D(Widget):
 
     def render(self, renderer):
         self.engine.set_viewport(self.x, self.y, self.width, self.height)
-        self.engine.render(renderer)
+        holder = renderer.holder
+        if holder is None:
+            return
+        self.engine.render(holder.context, renderer.font)
 
     def on_mouse_down(self, event: MouseEvent) -> bool:
         self.engine.set_viewport(self.x, self.y, self.width, self.height)

@@ -1,29 +1,35 @@
-"""3D Plot widget for tcgui — thin adapter over PlotEngine3D."""
+"""3D Plot widget for tcgui - thin adapter over the C++ PlotEngine3D."""
 
 from __future__ import annotations
 
 from tcgui.widgets.widget import Widget
 from tcgui.widgets.events import MouseEvent, MouseWheelEvent
-from tcplot.engine3d import PlotEngine3D
-from tcplot import styles
+
+from tcplot._tcplot_native import PlotEngine3D
 
 
 class Plot3D(Widget):
-    """tcgui Widget that hosts a ``PlotEngine3D``.
+    """tcgui Widget that hosts a C++ ``PlotEngine3D``.
 
-    The engine owns 3D scene, data, camera and input logic. The widget
-    adds tcgui-specific composition: background fill, clip rect, title
-    overlay and toolbar buttons that toggle engine flags.
+    Adds widget-local composition on top of the engine: background
+    fill, title overlay (drawn via the renderer's Text2D), and
+    toolbar buttons that toggle engine flags (wireframe, marker).
     """
+
+    # Fall back to the first entry of the default palette for the
+    # widget background if the palette changes. Matches the pre-port
+    # styles.BG_COLOR constant.
+    _BG_COLOR = (0.10, 0.10, 0.12, 1.0)
+    _LABEL_COLOR = (0.8, 0.8, 0.8, 1.0)
 
     def __init__(self):
         super().__init__()
         self.engine = PlotEngine3D()
 
-        # Overlay styling (widget-local, engine doesn't know about it)
-        self.bg_color = styles.BG_COLOR
+        # Widget overlay styling (engine doesn't know about it).
+        self.bg_color = self._BG_COLOR
 
-        # Toolbar buttons — tcgui-specific composition
+        # Toolbar buttons — tcgui-specific composition.
         from tcgui.widgets.button import Button
         from tcgui.widgets.units import px
 
@@ -74,7 +80,18 @@ class Plot3D(Widget):
         self.engine.scatter(x, y, z, color=color, size=size, label=label)
 
     def surface(self, X, Y, Z, *, color=None, wireframe=False, label=""):
-        self.engine.surface(X, Y, Z, color=color, wireframe=wireframe, label=label)
+        # Accept 2D numpy arrays; flatten + pass rows/cols to the
+        # native engine which speaks flat buffers only.
+        import numpy as np
+        Xa = np.ascontiguousarray(X, dtype=np.float64)
+        Ya = np.ascontiguousarray(Y, dtype=np.float64)
+        Za = np.ascontiguousarray(Z, dtype=np.float64)
+        rows, cols = Za.shape
+        self.engine.surface(
+            Xa.ravel(), Ya.ravel(), Za.ravel(),
+            rows, cols,
+            color=color, wireframe=wireframe, label=label,
+        )
 
     def clear(self):
         self.engine.clear()
@@ -87,7 +104,7 @@ class Plot3D(Widget):
 
     def layout(self, x, y, width, height, viewport_w, viewport_h):
         super().layout(x, y, width, height, viewport_w, viewport_h)
-        # Position buttons in top-right corner
+        # Position buttons in top-right corner.
         self._wire_btn.layout(x + width - 36, y + 8, 28, 28, viewport_w, viewport_h)
         self._marker_btn.layout(x + width - 68, y + 8, 28, 28, viewport_w, viewport_h)
 
@@ -100,30 +117,30 @@ class Plot3D(Widget):
         if self.width <= 0 or self.height <= 0:
             return
 
-        # Background overlay
+        # Background overlay.
         renderer.draw_rect(self.x, self.y, self.width, self.height, self.bg_color)
 
-        # Viewport + scissor for the 3D scene
+        # Viewport + scissor for the 3D scene.
         self.engine.set_viewport(self.x, self.y, self.width, self.height)
         renderer.begin_clip(int(self.x), int(self.y), int(self.width), int(self.height))
 
         holder = renderer.holder
         if holder is not None:
-            self.engine.render(holder, renderer.font)
+            self.engine.render(holder.context, renderer.font)
 
         renderer.end_clip()
 
-        # Title overlay
+        # Title overlay drawn through renderer's Text2D.
         if self.data.title:
             renderer.draw_text_centered(
                 self.x + self.width / 2,
                 self.y + 16,
                 self.data.title,
-                styles.LABEL_COLOR,
+                self._LABEL_COLOR,
                 14.0,
             )
 
-        # Render child widgets (toolbar buttons)
+        # Render child widgets (toolbar buttons).
         for child in self.children:
             if child.visible:
                 child.render(renderer)

@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-option(TCPLOT_BUILD_PYTHON "Build Python bindings" OFF)
+option(TERMIN_BUILD_PYTHON "Build Python bindings" OFF)
 
 find_package(termin_base REQUIRED)
 find_package(termin_mesh REQUIRED)
@@ -63,7 +63,7 @@ set_target_properties(tcplot PROPERTIES
 termin_set_rpath_lib(tcplot)
 
 # --- Python bindings (optional, Phase D) ---
-if(TCPLOT_BUILD_PYTHON)
+if(TERMIN_BUILD_PYTHON)
     add_subdirectory(python)
 endif()
 
