@@ -1,0 +1,10 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(termin_base REQUIRED)
+find_dependency(termin_mesh REQUIRED)
+find_dependency(termin_graphics REQUIRED)
+
+include("${CMAKE_CURRENT_LIST_DIR}/tcplotTargets.cmake")
+
+check_required_components(tcplot)
