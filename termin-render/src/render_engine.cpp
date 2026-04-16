@@ -375,6 +375,12 @@ void RenderEngine::render_view_to_fbo(
         }
     }
 
+    // tgfx2 OpenGL device: used per-pass for defensive state reset,
+    // GL sync (flush/finish), and for wrapping the legacy target_fbo
+    // as a sampled tgfx2 texture when a pass writes to OUTPUT/DISPLAY.
+    auto* target_tgfx2_gl_dev =
+        dynamic_cast<tgfx2::OpenGLRenderDevice*>(tgfx2_device_.get());
+
     tc_profiler_begin_section("Execute Passes");
     for (size_t i = 0; i < schedule_count; i++) {
         tc_pass* pass = tc_frame_graph_schedule_at(fg, i);
@@ -385,7 +391,7 @@ void RenderEngine::render_view_to_fbo(
         const char* pass_name = pass->pass_name ? pass->pass_name : "UnnamedPass";
         tc_profiler_begin_section(pass_name);
 
-        graphics->reset_state();
+        if (target_tgfx2_gl_dev) target_tgfx2_gl_dev->reset_state();
 
         const char* reads[16];
         const char* writes[8];
@@ -417,12 +423,10 @@ void RenderEngine::render_view_to_fbo(
                 pass_tex2_depth_reads[reads[j]] = d_it->second;
             }
         }
-        // Transient wrapper for target_fbo — see render_scene_pipeline_offscreen
-        // for the OUTPUT/DISPLAY story. Created lazily if any write
-        // references these virtual names.
+        // Transient wrapper for the legacy target_fbo — created only
+        // when a pass writes to OUTPUT/DISPLAY. Destroyed after the
+        // pass. The underlying GL texture is owned by the caller.
         tgfx2::TextureHandle target_output_tex2{};
-        auto* target_tgfx2_gl_dev =
-            dynamic_cast<tgfx2::OpenGLRenderDevice*>(tgfx2_device_.get());
 
         for (size_t j = 0; j < write_count; j++) {
             const char* write_name = writes[j];
@@ -472,11 +476,13 @@ void RenderEngine::render_view_to_fbo(
         }
 
         tc_profiler_begin_section("Sync Operations");
-        tc_render_sync_mode sync_mode = tc_project_settings_get_render_sync_mode();
-        if (sync_mode == TC_RENDER_SYNC_FLUSH) {
-            graphics->flush();
-        } else if (sync_mode == TC_RENDER_SYNC_FINISH) {
-            graphics->finish();
+        if (target_tgfx2_gl_dev) {
+            tc_render_sync_mode sync_mode = tc_project_settings_get_render_sync_mode();
+            if (sync_mode == TC_RENDER_SYNC_FLUSH) {
+                target_tgfx2_gl_dev->flush();
+            } else if (sync_mode == TC_RENDER_SYNC_FINISH) {
+                target_tgfx2_gl_dev->finish();
+            }
         }
         tc_profiler_end_section();
 
@@ -746,8 +752,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
     }
     tc_profiler_end_section();
 
-    // OpenGL tgfx2 device pointer for wrapping viewport output FBOs
-    // as tgfx2 textures. Null if tgfx2 is disabled.
+    // tgfx2 OpenGL device: per-pass state reset + GL sync.
     auto* execute_tgfx2_gl_dev =
         dynamic_cast<tgfx2::OpenGLRenderDevice*>(tgfx2_device_.get());
 
@@ -761,7 +766,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
         const char* pass_name = pass->pass_name ? pass->pass_name : "UnnamedPass";
         tc_profiler_begin_section(pass_name);
 
-        graphics->reset_state();
+        if (execute_tgfx2_gl_dev) execute_tgfx2_gl_dev->reset_state();
 
         std::string pass_viewport_name = default_vp;
         if (pass->viewport_name && pass->viewport_name[0] != '\0') {
@@ -856,11 +861,13 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
         tc_pass_execute(pass, &ctx);
 
-        tc_render_sync_mode sync_mode = tc_project_settings_get_render_sync_mode();
-        if (sync_mode == TC_RENDER_SYNC_FLUSH) {
-            graphics->flush();
-        } else if (sync_mode == TC_RENDER_SYNC_FINISH) {
-            graphics->finish();
+        if (execute_tgfx2_gl_dev) {
+            tc_render_sync_mode sync_mode = tc_project_settings_get_render_sync_mode();
+            if (sync_mode == TC_RENDER_SYNC_FLUSH) {
+                execute_tgfx2_gl_dev->flush();
+            } else if (sync_mode == TC_RENDER_SYNC_FINISH) {
+                execute_tgfx2_gl_dev->finish();
+            }
         }
 
         tc_profiler_end_section();

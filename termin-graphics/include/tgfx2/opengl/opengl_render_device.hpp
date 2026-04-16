@@ -232,6 +232,18 @@ public:
                             int viewport_x, int viewport_y,
                             int viewport_w, int viewport_h);
 
+    // Restore the canonical GL render-state baseline (depth test on,
+    // blend off, cull back, polygon fill, full colour/depth mask,
+    // scissor/stencil off). Called between frame-graph passes as a
+    // defensive reset — cheap and protects legacy passes that still
+    // read raw GL state from leaks left by previous passes.
+    void reset_state();
+
+    // GL sync primitives exposed for per-pass / per-frame sync control
+    // (legacy tc_render_sync_mode values map to these).
+    void flush();
+    void finish();
+
     // Wrap an externally-owned GL texture object as a tgfx2::TextureHandle.
     //
     // Use this to interop with legacy tgfx FBOs during Phase 2 migration:

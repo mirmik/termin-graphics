@@ -744,6 +744,28 @@ void OpenGLRenderDevice::clear_external_fbo(
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(prev_draw));
 }
 
+void OpenGLRenderDevice::reset_state() {
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+
+    glDisable(GL_BLEND);
+
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CCW);
+
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_SCISSOR_TEST);
+}
+
+void OpenGLRenderDevice::flush() { glFlush(); }
+void OpenGLRenderDevice::finish() { glFinish(); }
+
 void OpenGLRenderDevice::invalidate_fbo_cache() {
     for (auto& [key, fbo] : fbo_cache_) {
         if (fbo != 0) {
