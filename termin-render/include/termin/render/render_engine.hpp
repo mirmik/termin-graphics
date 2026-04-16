@@ -82,20 +82,7 @@ public:
     RenderEngine();
     ~RenderEngine();
 
-    void render_view_to_fbo(
-        RenderPipeline& pipeline,
-        FramebufferHandle* target_fbo,
-        int width,
-        int height,
-        tc_scene_handle scene,
-        const RenderCamera& camera,
-        const std::string& viewport_name,
-        tc_entity_handle internal_entities,
-        const std::vector<Light>& lights,
-        uint64_t layer_mask = 0xFFFFFFFFFFFFFFFFULL
-    );
-
-    // Native tgfx2 analogue of render_view_to_fbo — renders `pipeline`
+    // Native tgfx2 renderer — renders `pipeline`
     // for `scene` with `camera` into an internal offscreen color+depth
     // texture pair (created lazily / resized on demand), then blits the
     // color texture into the given external GL framebuffer id. Clients

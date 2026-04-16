@@ -17,7 +17,6 @@ import numpy as np
 import sdl2
 from sdl2 import video
 
-from tgfx import OpenGLGraphicsBackend
 from tcbase import MouseButton
 from tcgui.widgets.ui import UI
 
@@ -46,8 +45,6 @@ _SDL_BUTTON_MAP = {1: MouseButton.LEFT, 2: MouseButton.MIDDLE, 3: MouseButton.RI
 
 def main():
     window, gl_ctx = create_window("tcplot — 3D Surface", 900, 700)
-    graphics = OpenGLGraphicsBackend.get_instance()
-    graphics.ensure_ready()
 
     plot = Plot3D()
     plot.data.title = "z = sin(r) / r"
@@ -65,7 +62,7 @@ def main():
     plot.surface(X, Y, Z, color=(0.12, 0.56, 0.85, 1.0))
     plot.surface(X, Y, Z, color=(0.0, 0.0, 0.0, 1.0), wireframe=True)
 
-    ui = UI(graphics)
+    ui = UI()
     ui.root = plot
 
     event = sdl2.SDL_Event()
@@ -99,10 +96,7 @@ def main():
 
         w, h = ctypes.c_int(), ctypes.c_int()
         video.SDL_GL_GetDrawableSize(window, ctypes.byref(w), ctypes.byref(h))
-        graphics.bind_framebuffer(None)
-        graphics.set_viewport(0, 0, w.value, h.value)
-        graphics.clear_color_depth(0.10, 0.10, 0.12, 1.0)
-        ui.render(w.value, h.value)
+        ui.render(w.value, h.value, background_color=(0.10, 0.10, 0.12, 1.0))
         video.SDL_GL_SwapWindow(window)
 
     video.SDL_GL_DeleteContext(gl_ctx)

@@ -15,7 +15,6 @@ from tcgui.widgets import Checkbox, ComboBox, SpinBox, TextInput
 from tcgui.widgets.ui import UI
 from tcgui.widgets.units import pct
 from tcgui.widgets.vstack import VStack
-from tgfx import OpenGLGraphicsBackend
 
 from tcnodegraph import Graph, GraphController, NodeGraphView
 
@@ -323,7 +322,7 @@ def build_ui(graphics) -> UI:
     view.offset_y = 330
 
     root.add_child(view)
-    ui = UI(graphics)
+    ui = UI()
     ui.root = root
     return ui
 
@@ -331,8 +330,6 @@ def build_ui(graphics) -> UI:
 def main():
     window, gl_ctx = create_window("termin-nodegraph demo", 1280, 820)
     try:
-        graphics = OpenGLGraphicsBackend.get_instance()
-        graphics.ensure_ready()
         glEnable(GL_MULTISAMPLE)
         ui = build_ui(graphics)
 
@@ -384,10 +381,7 @@ def main():
             ui.process_deferred()
 
             w, h = get_drawable_size(window)
-            graphics.bind_framebuffer(None)
-            graphics.set_viewport(0, 0, w, h)
-            graphics.clear_color_depth(0.08, 0.08, 0.10, 1.0)
-            ui.render(w, h)
+            ui.render(w, h, background_color=(0.08, 0.08, 0.10, 1.0))
             video.SDL_GL_SwapWindow(window)
     finally:
         video.SDL_GL_DeleteContext(gl_ctx)
