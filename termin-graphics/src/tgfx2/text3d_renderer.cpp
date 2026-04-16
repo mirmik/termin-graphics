@@ -150,7 +150,12 @@ void Text3DRenderer::draw(std::string_view text_utf8,
     // survive state changes made by interleaved callers.
     RenderContext2& ctx = *ctx_;
     ctx.bind_shader(vs_, fs_);
-    ctx.set_uniform_mat4("u_mvp", mvp_, /*transpose=*/true);
+    // mvp_ arrived column-major from the caller (PlotEngine3D /
+    // orbit_camera). GL expects column-major too; no transpose.
+    // Text2DRenderer's projection is built row-major in a local
+    // helper, so THERE transpose=true is correct — don't mirror that
+    // flag here.
+    ctx.set_uniform_mat4("u_mvp", mvp_, /*transpose=*/false);
     ctx.set_uniform_vec3("u_cam_right", cam_right_[0], cam_right_[1], cam_right_[2]);
     ctx.set_uniform_vec3("u_cam_up",    cam_up_[0],    cam_up_[1],    cam_up_[2]);
     ctx.set_uniform_int("u_font_atlas", 0);
