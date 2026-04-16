@@ -11,6 +11,7 @@
 
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/tuple.h>
 #include <nanobind/ndarray.h>
 
 #include <memory>
@@ -25,6 +26,8 @@
 #include <tgfx2/vertex_layout.hpp>
 #include <tgfx2/tc_shader_bridge.hpp>
 #include <tgfx2/font_atlas.hpp>
+#include <tgfx2/text2d_renderer.hpp>
+#include <tgfx2/text3d_renderer.hpp>
 
 #include <tgfx/opengl/opengl_framebuffer.hpp>
 #include <tgfx/tgfx_shader_handle.hpp>
@@ -628,6 +631,147 @@ void bind_tgfx2(nb::module_& m) {
         .def_prop_ro("line_height", &tgfx2::FontAtlas::line_height)
         .def_prop_ro("atlas_width", &tgfx2::FontAtlas::atlas_width)
         .def_prop_ro("atlas_height", &tgfx2::FontAtlas::atlas_height);
+
+    // --- Text2DRenderer / Text3DRenderer ---
+    //
+    // Pixel-space and billboard text renderers backed by the C++
+    // FontAtlas. API shape mirrors the prior Python Text2D / Text3D
+    // classes so existing callers (UIRenderer, Text3DRenderer-using
+    // tcplot code) need only replace `from tgfx.text2d import …` with
+    // a re-export — the method signatures are intentionally identical
+    // modulo `color` becoming a 4-tuple on the Python side.
+
+    nb::enum_<tgfx2::Text2DRenderer::Anchor>(m, "Text2DAnchor")
+        .value("Left",   tgfx2::Text2DRenderer::Anchor::Left)
+        .value("Center", tgfx2::Text2DRenderer::Anchor::Center)
+        .value("Right",  tgfx2::Text2DRenderer::Anchor::Right)
+        .export_values();
+    nb::enum_<tgfx2::Text3DRenderer::Anchor>(m, "Text3DAnchor")
+        .value("Left",   tgfx2::Text3DRenderer::Anchor::Left)
+        .value("Center", tgfx2::Text3DRenderer::Anchor::Center)
+        .value("Right",  tgfx2::Text3DRenderer::Anchor::Right)
+        .export_values();
+
+    // Anchor resolution: accept both the enum values and the legacy
+    // lower-case string form ("left"/"center"/"right") used by the
+    // prior Python implementation — existing callers pass strings.
+    auto resolve_text2d_anchor = [](nb::object obj) -> tgfx2::Text2DRenderer::Anchor {
+        if (nb::isinstance<nb::str>(obj)) {
+            std::string s = nb::cast<std::string>(obj);
+            if (s == "center") return tgfx2::Text2DRenderer::Anchor::Center;
+            if (s == "right")  return tgfx2::Text2DRenderer::Anchor::Right;
+            return tgfx2::Text2DRenderer::Anchor::Left;
+        }
+        return nb::cast<tgfx2::Text2DRenderer::Anchor>(obj);
+    };
+    auto resolve_text3d_anchor = [](nb::object obj) -> tgfx2::Text3DRenderer::Anchor {
+        if (nb::isinstance<nb::str>(obj)) {
+            std::string s = nb::cast<std::string>(obj);
+            if (s == "left")  return tgfx2::Text3DRenderer::Anchor::Left;
+            if (s == "right") return tgfx2::Text3DRenderer::Anchor::Right;
+            return tgfx2::Text3DRenderer::Anchor::Center;
+        }
+        return nb::cast<tgfx2::Text3DRenderer::Anchor>(obj);
+    };
+
+    nb::class_<tgfx2::Text2DRenderer>(m, "Text2DRenderer")
+        .def(nb::init<tgfx2::FontAtlas*>(),
+             nb::arg("font") = nullptr,
+             nb::keep_alive<1, 2>())  // keep font alive while renderer lives
+
+        // begin: (ctx, viewport_w, viewport_h, font=None).
+        .def("begin",
+             [](tgfx2::Text2DRenderer& self,
+                tgfx2::RenderContext2* ctx,
+                int viewport_w, int viewport_h,
+                tgfx2::FontAtlas* font) {
+                 self.begin(ctx, viewport_w, viewport_h, font);
+             },
+             nb::arg("ctx"),
+             nb::arg("viewport_w"),
+             nb::arg("viewport_h"),
+             nb::arg("font").none() = nb::none(),
+             nb::keep_alive<1, 5>())
+
+        .def("draw",
+             [resolve_text2d_anchor](tgfx2::Text2DRenderer& self,
+                const std::string& text,
+                float x, float y,
+                std::tuple<float, float, float, float> color,
+                float size,
+                nb::object anchor) {
+                 auto [r, g, b, a] = color;
+                 self.draw(text, x, y, r, g, b, a, size,
+                           resolve_text2d_anchor(anchor));
+             },
+             nb::arg("text"),
+             nb::arg("x"), nb::arg("y"),
+             nb::arg("color") = std::make_tuple(1.0f, 1.0f, 1.0f, 1.0f),
+             nb::arg("size") = 14.0f,
+             nb::arg("anchor") = "left")
+
+        .def("measure",
+             [](tgfx2::Text2DRenderer& self, const std::string& text, float size) {
+                 if (!self.font()) return std::make_tuple(0.0f, 0.0f);
+                 auto m = self.font()->measure_text(text, size);
+                 return std::make_tuple(m.width, m.height);
+             },
+             nb::arg("text"), nb::arg("size") = 14.0f)
+
+        .def("end", &tgfx2::Text2DRenderer::end)
+        .def("release_gpu", &tgfx2::Text2DRenderer::release_gpu);
+
+    nb::class_<tgfx2::Text3DRenderer>(m, "Text3DRenderer")
+        .def(nb::init<tgfx2::FontAtlas*>(),
+             nb::arg("font") = nullptr,
+             nb::keep_alive<1, 2>())
+
+        // begin takes flat mvp[16] + cam_right[3] + cam_up[3] as
+        // numpy arrays. Callers that have a Python-side camera object
+        // should extract these themselves — the renderer is now
+        // decoupled from any specific camera interface.
+        .def("begin",
+             [](tgfx2::Text3DRenderer& self,
+                tgfx2::RenderContext2* ctx,
+                nb::ndarray<float, nb::c_contig, nb::device::cpu> mvp,
+                nb::ndarray<float, nb::c_contig, nb::device::cpu> cam_right,
+                nb::ndarray<float, nb::c_contig, nb::device::cpu> cam_up,
+                tgfx2::FontAtlas* font) {
+                 if (mvp.size() < 16 || cam_right.size() < 3 || cam_up.size() < 3) {
+                     throw std::invalid_argument(
+                         "Text3DRenderer.begin: mvp needs 16 floats, "
+                         "cam_right/cam_up need 3 each");
+                 }
+                 self.begin(ctx, mvp.data(), cam_right.data(), cam_up.data(), font);
+             },
+             nb::arg("ctx"),
+             nb::arg("mvp"),
+             nb::arg("cam_right"),
+             nb::arg("cam_up"),
+             nb::arg("font").none() = nb::none(),
+             nb::keep_alive<1, 6>())
+
+        .def("draw",
+             [resolve_text3d_anchor](tgfx2::Text3DRenderer& self,
+                const std::string& text,
+                std::tuple<float, float, float> position,
+                std::tuple<float, float, float, float> color,
+                float size,
+                nb::object anchor) {
+                 auto [px, py, pz] = position;
+                 float pos[3] = {px, py, pz};
+                 auto [r, g, b, a] = color;
+                 self.draw(text, pos, r, g, b, a, size,
+                           resolve_text3d_anchor(anchor));
+             },
+             nb::arg("text"),
+             nb::arg("position"),
+             nb::arg("color") = std::make_tuple(1.0f, 1.0f, 1.0f, 1.0f),
+             nb::arg("size") = 0.05f,
+             nb::arg("anchor") = "center")
+
+        .def("end", &tgfx2::Text3DRenderer::end)
+        .def("release_gpu", &tgfx2::Text3DRenderer::release_gpu);
 }
 
 } // namespace tgfx_bindings

@@ -31,6 +31,8 @@ extern "C" {
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/render_context.hpp"
 
+#include "internal/utf8_decode.hpp"
+
 // stb_truetype - single-header; define the implementation in this TU
 // only. The header itself lives at termin-graphics/third/stb/.
 #define STB_TRUETYPE_IMPLEMENTATION
@@ -59,54 +61,6 @@ static const char* kPreloadUtf8 =
     "\xE2\x96\xB7\xE2\x96\xBD\xE2\x97\x81\xE2\x96\xB3"  // ▷▽◁△
     "\xE2\x86\x90\xE2\x86\x92\xE2\x86\x91\xE2\x86\x93"  // ←→↑↓
     "\xE2\x8C\x82";                                     // ⌂
-
-// Small, liberal UTF-8 → uint32 decoder. Returns the codepoint and
-// advances `i` past the sequence. On malformed input emits U+FFFD and
-// advances one byte so the caller always makes progress.
-uint32_t utf8_decode(const std::string_view& s, size_t& i) {
-    if (i >= s.size()) return 0;
-    unsigned char b0 = static_cast<unsigned char>(s[i]);
-
-    auto take_cont = [&](size_t off) -> int {
-        if (i + off >= s.size()) return -1;
-        unsigned char b = static_cast<unsigned char>(s[i + off]);
-        if ((b & 0xC0) != 0x80) return -1;
-        return b & 0x3F;
-    };
-
-    if (b0 < 0x80) {
-        i += 1;
-        return b0;
-    }
-    if ((b0 & 0xE0) == 0xC0) {
-        int b1 = take_cont(1);
-        if (b1 < 0) { i += 1; return 0xFFFD; }
-        i += 2;
-        return (static_cast<uint32_t>(b0 & 0x1F) << 6) | static_cast<uint32_t>(b1);
-    }
-    if ((b0 & 0xF0) == 0xE0) {
-        int b1 = take_cont(1);
-        int b2 = take_cont(2);
-        if (b1 < 0 || b2 < 0) { i += 1; return 0xFFFD; }
-        i += 3;
-        return (static_cast<uint32_t>(b0 & 0x0F) << 12) |
-               (static_cast<uint32_t>(b1) << 6) |
-               static_cast<uint32_t>(b2);
-    }
-    if ((b0 & 0xF8) == 0xF0) {
-        int b1 = take_cont(1);
-        int b2 = take_cont(2);
-        int b3 = take_cont(3);
-        if (b1 < 0 || b2 < 0 || b3 < 0) { i += 1; return 0xFFFD; }
-        i += 4;
-        return (static_cast<uint32_t>(b0 & 0x07) << 18) |
-               (static_cast<uint32_t>(b1) << 12) |
-               (static_cast<uint32_t>(b2) << 6) |
-               static_cast<uint32_t>(b3);
-    }
-    i += 1;
-    return 0xFFFD;
-}
 
 std::vector<uint8_t> read_file_bytes(const std::string& path) {
     std::ifstream f(path, std::ios::binary | std::ios::ate);
@@ -175,7 +129,7 @@ FontAtlas::FontAtlas(const std::string& ttf_path,
     size_t i = 0;
     std::string_view preload{kPreloadUtf8};
     while (i < preload.size()) {
-        uint32_t cp = utf8_decode(preload, i);
+        uint32_t cp = internal::utf8_decode(preload, i);
         ensure_glyph(cp);
     }
     // Mark dirty so the first ensure_texture() uploads the preload.
@@ -316,7 +270,7 @@ void FontAtlas::ensure_glyphs(std::string_view text_utf8, RenderContext2* ctx) {
     bool added_any = false;
     size_t i = 0;
     while (i < text_utf8.size()) {
-        uint32_t cp = utf8_decode(text_utf8, i);
+        uint32_t cp = internal::utf8_decode(text_utf8, i);
         if (ensure_glyph(cp)) {
             added_any = true;
         }
@@ -339,7 +293,7 @@ FontAtlas::Size2f FontAtlas::measure_text(std::string_view text_utf8,
     size_t i = 0;
     float width = 0.0f;
     while (i < text_utf8.size()) {
-        uint32_t cp = utf8_decode(text_utf8, i);
+        uint32_t cp = internal::utf8_decode(text_utf8, i);
         auto it = glyphs_.find(cp);
         if (it != glyphs_.end()) {
             width += it->second.width_px * scale;

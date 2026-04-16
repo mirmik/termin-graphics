@@ -75,6 +75,8 @@ termin_set_rpath_lib(termin_graphics)
 set(TGFX2_SOURCES
     src/tgfx2/device_factory.cpp
     src/tgfx2/font_atlas.cpp
+    src/tgfx2/text2d_renderer.cpp
+    src/tgfx2/text3d_renderer.cpp
     src/tgfx2/opengl/opengl_render_device.cpp
     src/tgfx2/opengl/opengl_command_list.cpp
     src/tgfx2/opengl/opengl_type_conversions.cpp
