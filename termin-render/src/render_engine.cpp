@@ -46,7 +46,12 @@ RenderEngine::RenderEngine(GraphicsBackend* graphics)
 
 // Out-of-line destructor so unique_ptr<tgfx2::*> members can use forward
 // declarations in the header; the full tgfx2 types are visible here.
-RenderEngine::~RenderEngine() = default;
+RenderEngine::~RenderEngine() {
+    if (tgfx2_device_) {
+        if (external_target_color_) tgfx2_device_->destroy(external_target_color_);
+        if (external_target_depth_) tgfx2_device_->destroy(external_target_depth_);
+    }
+}
 
 void RenderEngine::ensure_tgfx2() {
     // Diagnostic escape hatch: setting TERMIN_DISABLE_TGFX2=1 keeps the tgfx2
@@ -496,6 +501,84 @@ void RenderEngine::render_view_to_fbo(
 
     // Phase 3: wrappers live on FBOPoolEntry now. No per-frame destroy.
     // They persist until the FBO is resized, reformatted, or cleared.
+}
+
+void RenderEngine::render_view_to_fbo_id(
+    RenderPipeline& pipeline,
+    uint32_t target_fbo_id,
+    int width,
+    int height,
+    tc_scene_handle scene,
+    const RenderCamera& camera,
+    const std::string& viewport_name,
+    tc_entity_handle internal_entities,
+    const std::vector<Light>& lights,
+    uint64_t layer_mask
+) {
+    if (width <= 0 || height <= 0) return;
+    ensure_tgfx2();
+    if (!tgfx2_device_) {
+        tc::Log::error("RenderEngine::render_view_to_fbo_id: tgfx2 device unavailable");
+        return;
+    }
+
+    // Resize internal color+depth attachments on demand.
+    if (!external_target_color_ ||
+        external_target_w_ != width || external_target_h_ != height) {
+        if (external_target_color_) {
+            tgfx2_device_->destroy(external_target_color_);
+            external_target_color_ = {};
+        }
+        if (external_target_depth_) {
+            tgfx2_device_->destroy(external_target_depth_);
+            external_target_depth_ = {};
+        }
+        tgfx2::TextureDesc color_desc;
+        color_desc.width = static_cast<uint32_t>(width);
+        color_desc.height = static_cast<uint32_t>(height);
+        color_desc.format = tgfx2::PixelFormat::RGBA8_UNorm;
+        color_desc.usage = tgfx2::TextureUsage::Sampled |
+                           tgfx2::TextureUsage::ColorAttachment |
+                           tgfx2::TextureUsage::CopyDst;
+        external_target_color_ = tgfx2_device_->create_texture(color_desc);
+
+        tgfx2::TextureDesc depth_desc;
+        depth_desc.width = static_cast<uint32_t>(width);
+        depth_desc.height = static_cast<uint32_t>(height);
+        depth_desc.format = tgfx2::PixelFormat::D24_UNorm;
+        depth_desc.usage = tgfx2::TextureUsage::DepthStencilAttachment |
+                           tgfx2::TextureUsage::Sampled;
+        external_target_depth_ = tgfx2_device_->create_texture(depth_desc);
+
+        external_target_w_ = width;
+        external_target_h_ = height;
+    }
+
+    // Render pipeline into the internal color+depth textures via the
+    // single-viewport offscreen path.
+    std::unordered_map<std::string, ViewportContext> contexts;
+    ViewportContext ctx;
+    ctx.name = viewport_name;
+    ctx.camera = camera;
+    ctx.rect = {0, 0, width, height};
+    ctx.internal_entities = internal_entities;
+    ctx.layer_mask = layer_mask;
+    ctx.output_color_tex = external_target_color_;
+    ctx.output_depth_tex = external_target_depth_;
+    contexts[viewport_name] = std::move(ctx);
+    render_scene_pipeline_offscreen(
+        pipeline, scene, contexts, lights, viewport_name
+    );
+
+    // Present: blit internal color → external GL framebuffer id.
+    auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(tgfx2_device_.get());
+    if (gl_dev) {
+        gl_dev->blit_to_external_fbo(
+            target_fbo_id, external_target_color_,
+            0, 0, width, height,
+            0, 0, width, height
+        );
+    }
 }
 
 void RenderEngine::render_scene_pipeline_offscreen(
