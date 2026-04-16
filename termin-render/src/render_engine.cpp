@@ -205,8 +205,9 @@ void RenderEngine::render_view_to_fbo(
     }
 
     FBOMap resources;
-    resources["OUTPUT"] = target_fbo;
-    resources["DISPLAY"] = target_fbo;
+    // OUTPUT/DISPLAY no longer go through the FBOMap — we wrap the
+    // legacy target_fbo's color attachment into a transient tgfx2
+    // handle below and feed it to passes through tex2_writes.
 
     const char* canonical_names[256];
     size_t canon_count = tc_frame_graph_get_canonical_resources(fg, canonical_names, 256);
@@ -215,11 +216,8 @@ void RenderEngine::render_view_to_fbo(
         const char* canon = canonical_names[i];
 
         if (strcmp(canon, "OUTPUT") == 0 || strcmp(canon, "DISPLAY") == 0) {
-            const char* aliases[64];
-            size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
-            for (size_t j = 0; j < alias_count; j++) {
-                resources[aliases[j]] = target_fbo;
-            }
+            // Skip FBOMap allocation — the legacy target_fbo is wrapped
+            // per-pass later and delivered via tex2_writes.
             continue;
         }
 
@@ -576,8 +574,9 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
     tc_profiler_begin_section("Allocate Resources");
     FBOMap resources;
-    resources["OUTPUT"] = default_ctx.output_fbo;
-    resources["DISPLAY"] = default_ctx.output_fbo;
+    // OUTPUT/DISPLAY no longer travel through the FBOMap — they're
+    // native tgfx2 textures owned by the caller (ViewportRenderState)
+    // and plumbed straight into tex2_writes below.
 
     const char* canonical_names[256];
     size_t canon_count = tc_frame_graph_get_canonical_resources(fg, canonical_names, 256);
@@ -586,11 +585,9 @@ void RenderEngine::render_scene_pipeline_offscreen(
         const char* canon = canonical_names[i];
 
         if (strcmp(canon, "OUTPUT") == 0 || strcmp(canon, "DISPLAY") == 0) {
-            const char* aliases[64];
-            size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
-            for (size_t j = 0; j < alias_count; j++) {
-                resources[aliases[j]] = default_ctx.output_fbo;
-            }
+            // OUTPUT/DISPLAY are viewport-owned native textures
+            // (vp_ctx.output_color_tex / output_depth_tex). Skip the
+            // FBOMap allocation — passes receive them directly.
             continue;
         }
 
@@ -797,35 +794,37 @@ void RenderEngine::render_scene_pipeline_offscreen(
         };
 
         for (size_t j = 0; j < read_count; j++) {
-            collect_shadow_array(reads[j]);
-            auto t_it = tex2_resources.find(reads[j]);
-            if (t_it != tex2_resources.end()) {
-                pass_tex2_reads[reads[j]] = t_it->second;
+            const char* read_name = reads[j];
+            if (strcmp(read_name, "OUTPUT") == 0 || strcmp(read_name, "DISPLAY") == 0) {
+                if (vp_ctx.output_color_tex) {
+                    pass_tex2_reads[read_name] = vp_ctx.output_color_tex;
+                }
+                if (vp_ctx.output_depth_tex) {
+                    pass_tex2_depth_reads[read_name] = vp_ctx.output_depth_tex;
+                }
+                continue;
             }
-            auto d_it = tex2_depth_resources.find(reads[j]);
+            collect_shadow_array(read_name);
+            auto t_it = tex2_resources.find(read_name);
+            if (t_it != tex2_resources.end()) {
+                pass_tex2_reads[read_name] = t_it->second;
+            }
+            auto d_it = tex2_depth_resources.find(read_name);
             if (d_it != tex2_depth_resources.end()) {
-                pass_tex2_depth_reads[reads[j]] = d_it->second;
+                pass_tex2_depth_reads[read_name] = d_it->second;
             }
         }
-
-        // Transient tgfx2 wrapper for the viewport's output FBO.
-        // Only created when a pass writes to OUTPUT/DISPLAY — these
-        // resources aren't part of FBOPool so they're not in
-        // tex2_resources, but passes (e.g. PresentToScreenPass) need
-        // them in ctx.tex2_writes.
-        tgfx2::TextureHandle vp_output_tex2{};
 
         for (size_t j = 0; j < write_count; j++) {
             const char* write_name = writes[j];
             if (strcmp(write_name, "OUTPUT") == 0 || strcmp(write_name, "DISPLAY") == 0) {
-                auto* fb = dynamic_cast<FramebufferHandle*>(vp_ctx.output_fbo);
-                if (fb && execute_tgfx2_gl_dev) {
-                    if (!vp_output_tex2) {
-                        vp_output_tex2 = wrap_fbo_color_as_tgfx2(*execute_tgfx2_gl_dev, fb);
-                    }
-                    if (vp_output_tex2) {
-                        pass_tex2_writes[write_name] = vp_output_tex2;
-                    }
+                // OUTPUT/DISPLAY come straight from ViewportContext's
+                // owned native textures — no FBO wrap needed anymore.
+                if (vp_ctx.output_color_tex) {
+                    pass_tex2_writes[write_name] = vp_ctx.output_color_tex;
+                }
+                if (vp_ctx.output_depth_tex) {
+                    pass_tex2_depth_writes[write_name] = vp_ctx.output_depth_tex;
                 }
             } else {
                 collect_shadow_array(write_name);
@@ -856,12 +855,6 @@ void RenderEngine::render_scene_pipeline_offscreen(
         ctx.layer_mask = vp_ctx.layer_mask;
 
         tc_pass_execute(pass, &ctx);
-
-        // Per-pass transient viewport output wrapper: release now that
-        // the pass is done. Underlying GL texture survives (external).
-        if (vp_output_tex2 && execute_tgfx2_gl_dev) {
-            execute_tgfx2_gl_dev->destroy(vp_output_tex2);
-        }
 
         tc_render_sync_mode sync_mode = tc_project_settings_get_render_sync_mode();
         if (sync_mode == TC_RENDER_SYNC_FLUSH) {

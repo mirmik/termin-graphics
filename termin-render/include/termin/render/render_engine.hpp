@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "tgfx/graphics_backend.hpp"
+#include <tgfx2/handles.hpp>
 #include "termin/render/frame_pass.hpp"
 #include "termin/render/execute_context.hpp"
 #include "termin/render/render_camera.hpp"
@@ -39,7 +40,13 @@ public:
     Rect4i rect{0, 0, 0, 0};
     tc_entity_handle internal_entities = TC_ENTITY_HANDLE_INVALID;
     uint64_t layer_mask = 0xFFFFFFFFFFFFFFFFULL;
-    FramebufferHandle* output_fbo = nullptr;
+
+    // Final render target — native tgfx2 color + depth textures owned
+    // by the caller (typically ViewportRenderState). Passes in the
+    // pipeline receive these through ExecuteContext::tex2_writes under
+    // the OUTPUT/DISPLAY alias.
+    tgfx2::TextureHandle output_color_tex;
+    tgfx2::TextureHandle output_depth_tex;
 };
 
 class RENDER_API RenderEngine {
