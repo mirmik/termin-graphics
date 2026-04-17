@@ -238,12 +238,12 @@ void PlotView3D::render(int width, int height, uint32_t dst_gl_fbo) {
     ctx_->end_pass();
     ctx_->end_frame();
 
-    // Backend-specific presentation. Lives entirely inside
-    // termin_graphics2.dll (where glad is guaranteed loaded). When
-    // Vulkan ships, this call will branch on device type.
-    auto* gl_dev = static_cast<tgfx::OpenGLRenderDevice*>(device_.get());
-    gl_dev->blit_to_external_fbo(
-        dst_gl_fbo, offscreen_color_,
+    // Present through the backend-neutral interface. On OpenGL this
+    // is a glBlitFramebuffer; Vulkan will implement the analogous
+    // swapchain-image blit. Host still passes a GL FBO id via
+    // dst_gl_fbo for now — uintptr_t cast is a no-op identity.
+    device_->blit_to_external_target(
+        static_cast<uintptr_t>(dst_gl_fbo), offscreen_color_,
         0, 0, width, height,
         0, 0, width, height);
 }

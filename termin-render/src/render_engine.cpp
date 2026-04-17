@@ -201,15 +201,13 @@ void RenderEngine::render_view_to_fbo_id(
         pipeline, scene, contexts, lights, viewport_name
     );
 
-    // Present: blit internal color → external GL framebuffer id.
-    auto* gl_dev = dynamic_cast<tgfx::OpenGLRenderDevice*>(tgfx2_device_.get());
-    if (gl_dev) {
-        gl_dev->blit_to_external_fbo(
-            target_fbo_id, external_target_color_,
-            0, 0, width, height,
-            0, 0, width, height
-        );
-    }
+    // Present: blit internal color → external target id (GL FBO for
+    // OpenGL, swapchain image index for Vulkan once wired up).
+    tgfx2_device_->blit_to_external_target(
+        static_cast<uintptr_t>(target_fbo_id), external_target_color_,
+        0, 0, width, height,
+        0, 0, width, height
+    );
 }
 
 void RenderEngine::render_scene_pipeline_offscreen(
@@ -467,10 +465,6 @@ void RenderEngine::render_scene_pipeline_offscreen(
     }
     tc_profiler_end_section();
 
-    // tgfx2 OpenGL device: per-pass state reset + GL sync.
-    auto* execute_tgfx2_gl_dev =
-        dynamic_cast<tgfx::OpenGLRenderDevice*>(tgfx2_device_.get());
-
     tc_profiler_begin_section("Execute Passes");
     for (size_t i = 0; i < schedule_count; i++) {
         tc_pass* pass = tc_frame_graph_schedule_at(fg, i);
@@ -481,7 +475,9 @@ void RenderEngine::render_scene_pipeline_offscreen(
         const char* pass_name = pass->pass_name ? pass->pass_name : "UnnamedPass";
         tc_profiler_begin_section(pass_name);
 
-        if (execute_tgfx2_gl_dev) execute_tgfx2_gl_dev->reset_state();
+        // Per-pass state reset — no-op on backends with explicit state
+        // (Vulkan), restores GL baseline on OpenGL.
+        tgfx2_device_->reset_state();
 
         std::string pass_viewport_name = default_vp;
         if (pass->viewport_name && pass->viewport_name[0] != '\0') {
@@ -576,13 +572,12 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
         tc_pass_execute(pass, &ctx);
 
-        if (execute_tgfx2_gl_dev) {
-            tc_render_sync_mode sync_mode = tc_project_settings_get_render_sync_mode();
-            if (sync_mode == TC_RENDER_SYNC_FLUSH) {
-                execute_tgfx2_gl_dev->flush();
-            } else if (sync_mode == TC_RENDER_SYNC_FINISH) {
-                execute_tgfx2_gl_dev->finish();
-            }
+        // Per-pass sync — no-op on explicit-submission backends.
+        tc_render_sync_mode sync_mode = tc_project_settings_get_render_sync_mode();
+        if (sync_mode == TC_RENDER_SYNC_FLUSH) {
+            tgfx2_device_->flush();
+        } else if (sync_mode == TC_RENDER_SYNC_FINISH) {
+            tgfx2_device_->finish();
         }
 
         tc_profiler_end_section();

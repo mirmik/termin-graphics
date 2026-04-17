@@ -152,9 +152,8 @@ void PlotView2D::render(int width, int height, uint32_t dst_gl_fbo) {
     ctx_->end_pass();
     ctx_->end_frame();
 
-    auto* gl_dev = static_cast<tgfx::OpenGLRenderDevice*>(device_.get());
-    gl_dev->blit_to_external_fbo(
-        dst_gl_fbo, offscreen_color_,
+    device_->blit_to_external_target(
+        static_cast<uintptr_t>(dst_gl_fbo), offscreen_color_,
         0, 0, width, height,
         0, 0, width, height);
 }

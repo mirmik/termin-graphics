@@ -186,16 +186,16 @@ void bind_tgfx2(nb::module_& m) {
         .def("wrap_gl_texture",
              [](tgfx::RenderContext2& self, uint32_t gl_id,
                 uint32_t w, uint32_t h, int format_int) -> tgfx::TextureHandle {
-                 auto* gl_dev = dynamic_cast<tgfx::OpenGLRenderDevice*>(&self.device());
-                 if (!gl_dev) return {};
                  tgfx::TextureDesc desc;
                  desc.width = w;
                  desc.height = h;
                  desc.format = static_cast<tgfx::PixelFormat>(format_int);
                  desc.usage = tgfx::TextureUsage::Sampled |
                               tgfx::TextureUsage::ColorAttachment;
-                 return gl_dev->register_external_texture(
-                     static_cast<GLuint>(gl_id), desc);
+                 // Throws on non-GL backends; the `wrap_gl_texture` name
+                 // advertises the GL-specific semantics.
+                 return self.device().register_external_texture(
+                     static_cast<uintptr_t>(gl_id), desc);
              },
              nb::arg("gl_id"), nb::arg("width"), nb::arg("height"),
              nb::arg("format"))
@@ -236,10 +236,8 @@ void bind_tgfx2(nb::module_& m) {
                 tgfx::TextureHandle src,
                 int src_x, int src_y, int src_w, int src_h,
                 int dst_x, int dst_y, int dst_w, int dst_h) {
-                 auto* gl_dev = dynamic_cast<tgfx::OpenGLRenderDevice*>(&self.device());
-                 if (!gl_dev) return;
-                 gl_dev->blit_to_external_fbo(
-                     dst_fbo_id, src,
+                 self.device().blit_to_external_target(
+                     static_cast<uintptr_t>(dst_fbo_id), src,
                      src_x, src_y, src_w, src_h,
                      dst_x, dst_y, dst_w, dst_h);
              },
@@ -257,10 +255,8 @@ void bind_tgfx2(nb::module_& m) {
                 float r, float g, float b, float a, float depth,
                 int viewport_x, int viewport_y,
                 int viewport_w, int viewport_h) {
-                 auto* gl_dev = dynamic_cast<tgfx::OpenGLRenderDevice*>(&self.device());
-                 if (!gl_dev) return;
-                 gl_dev->clear_external_fbo(
-                     dst_fbo_id, r, g, b, a, depth,
+                 self.device().clear_external_target(
+                     static_cast<uintptr_t>(dst_fbo_id), r, g, b, a, depth,
                      viewport_x, viewport_y, viewport_w, viewport_h);
              },
              nb::arg("dst_fbo_id"),
@@ -525,9 +521,8 @@ void bind_tgfx2(nb::module_& m) {
         // external handle in its own device.
         .def("get_gl_id",
             [](Tgfx2ContextHolder& self, tgfx::TextureHandle handle) -> uint32_t {
-                auto* gl = dynamic_cast<tgfx::OpenGLRenderDevice*>(self.device.get());
-                if (!gl) throw std::runtime_error("get_gl_id: not an OpenGL backend");
-                return static_cast<uint32_t>(gl->gl_texture_id(handle));
+                // Returns 0 on non-GL backends or on unknown handle.
+                return static_cast<uint32_t>(self.device->native_texture_handle(handle));
             },
             nb::arg("handle"))
 
@@ -582,10 +577,8 @@ void bind_tgfx2(nb::module_& m) {
            tgfx::TextureHandle src,
            int src_x, int src_y, int src_w, int src_h,
            int dst_x, int dst_y, int dst_w, int dst_h) {
-            auto* gl = dynamic_cast<tgfx::OpenGLRenderDevice*>(holder.device.get());
-            if (!gl) throw std::runtime_error("ctx2_blit_to_external_fbo: not an OpenGL backend");
-            gl->blit_to_external_fbo(
-                dst_fbo_id, src,
+            holder.device->blit_to_external_target(
+                static_cast<uintptr_t>(dst_fbo_id), src,
                 src_x, src_y, src_w, src_h,
                 dst_x, dst_y, dst_w, dst_h);
         },
@@ -598,15 +591,15 @@ void bind_tgfx2(nb::module_& m) {
     m.def("wrap_gl_texture_as_tgfx2",
         [](Tgfx2ContextHolder& holder, uint32_t gl_id,
            uint32_t w, uint32_t h, int format_int) -> tgfx::TextureHandle {
-            auto* gl = dynamic_cast<tgfx::OpenGLRenderDevice*>(holder.device.get());
-            if (!gl) throw std::runtime_error("wrap_gl_texture_as_tgfx2: not an OpenGL backend");
             tgfx::TextureDesc desc;
             desc.width = w;
             desc.height = h;
             desc.format = static_cast<tgfx::PixelFormat>(format_int);
             desc.usage = tgfx::TextureUsage::Sampled;
-            return gl->register_external_texture(
-                static_cast<GLuint>(gl_id), desc);
+            // register_external_texture throws on backends without
+            // external-handle support.
+            return holder.device->register_external_texture(
+                static_cast<uintptr_t>(gl_id), desc);
         },
         nb::arg("ctx"), nb::arg("gl_id"),
         nb::arg("width"), nb::arg("height"), nb::arg("format"));

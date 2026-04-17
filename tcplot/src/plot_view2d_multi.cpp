@@ -277,10 +277,10 @@ void PlotView2DMulti::ensure_offscreen_(int w, int h) {
 }
 
 void PlotView2DMulti::blit_to_dst_(int w, int h, uint32_t dst_gl_fbo) {
-    auto* gl_dev = static_cast<tgfx::OpenGLRenderDevice*>(device_.get());
-    gl_dev->blit_to_external_fbo(dst_gl_fbo, offscreen_color_,
-                                 0, 0, w, h,
-                                 0, 0, w, h);
+    device_->blit_to_external_target(static_cast<uintptr_t>(dst_gl_fbo),
+                                     offscreen_color_,
+                                     0, 0, w, h,
+                                     0, 0, w, h);
 }
 
 // ---------------------------------------------------------------------------

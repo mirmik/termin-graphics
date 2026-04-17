@@ -344,9 +344,10 @@ void OpenGLRenderDevice::destroy(TextureHandle handle) {
     }
 }
 
-TextureHandle OpenGLRenderDevice::register_external_texture(GLuint gl_id, const TextureDesc& desc) {
+TextureHandle OpenGLRenderDevice::register_external_texture(
+    uintptr_t native_handle, const TextureDesc& desc) {
     GLTexture tex;
-    tex.gl_id = gl_id;
+    tex.gl_id = static_cast<GLuint>(native_handle);
     tex.desc = desc;
     // Pick the right GL target based on sample count: multisample textures
     // must be attached with GL_TEXTURE_2D_MULTISAMPLE, or glFramebufferTexture2D
@@ -358,9 +359,10 @@ TextureHandle OpenGLRenderDevice::register_external_texture(GLuint gl_id, const 
     return h;
 }
 
-BufferHandle OpenGLRenderDevice::register_external_buffer(GLuint gl_id, const BufferDesc& desc) {
+BufferHandle OpenGLRenderDevice::register_external_buffer(
+    uintptr_t native_handle, const BufferDesc& desc) {
     GLBuffer buf;
-    buf.gl_id = gl_id;
+    buf.gl_id = static_cast<GLuint>(native_handle);
     buf.desc = desc;
     buf.target = gl::to_gl_buffer_target(desc.usage);
     buf.external = true;
@@ -671,12 +673,13 @@ bool OpenGLRenderDevice::read_pixel_rgba8(
     return ok;
 }
 
-void OpenGLRenderDevice::blit_to_external_fbo(
-    uint32_t dst_fbo_id,
+void OpenGLRenderDevice::blit_to_external_target(
+    uintptr_t dst,
     TextureHandle src_color,
     int src_x, int src_y, int src_w, int src_h,
     int dst_x, int dst_y, int dst_w, int dst_h
 ) {
+    const GLuint dst_fbo_id = static_cast<GLuint>(dst);
     GLTexture* tex = textures_.get(src_color.id);
     if (!tex) return;
 
@@ -710,13 +713,14 @@ void OpenGLRenderDevice::blit_to_external_fbo(
     glDeleteFramebuffers(1, &read_fbo);
 }
 
-void OpenGLRenderDevice::clear_external_fbo(
-    uint32_t dst_fbo_id,
+void OpenGLRenderDevice::clear_external_target(
+    uintptr_t dst,
     float r, float g, float b, float a,
     float depth,
     int viewport_x, int viewport_y,
     int viewport_w, int viewport_h
 ) {
+    const GLuint dst_fbo_id = static_cast<GLuint>(dst);
     GLint prev_draw = 0;
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prev_draw);
     GLint prev_vp[4] = {0, 0, 0, 0};
@@ -744,9 +748,10 @@ void OpenGLRenderDevice::clear_external_fbo(
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(prev_draw));
 }
 
-GLuint OpenGLRenderDevice::gl_texture_id(TextureHandle handle) {
-    auto* tex = textures_.get(handle.id);
-    return tex ? tex->gl_id : 0;
+uintptr_t OpenGLRenderDevice::native_texture_handle(TextureHandle handle) const {
+    // HandlePool::get is non-const; safe to const_cast for read-only lookup.
+    auto* tex = const_cast<OpenGLRenderDevice*>(this)->textures_.get(handle.id);
+    return tex ? static_cast<uintptr_t>(tex->gl_id) : 0;
 }
 
 void OpenGLRenderDevice::reset_state() {

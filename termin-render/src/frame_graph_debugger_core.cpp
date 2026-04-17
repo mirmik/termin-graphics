@@ -212,11 +212,10 @@ HDRStats FrameGraphPresenter::compute_hdr_stats(
 ) {
     HDRStats stats{};
 
-    auto* gl_dev = dynamic_cast<tgfx::OpenGLRenderDevice*>(device);
-    if (!gl_dev || !tex) {
+    if (!device || !tex) {
         return stats;
     }
-    auto desc = gl_dev->texture_desc(tex);
+    auto desc = device->texture_desc(tex);
     int w = static_cast<int>(desc.width);
     int h = static_cast<int>(desc.height);
     int total = w * h;
@@ -225,7 +224,7 @@ HDRStats FrameGraphPresenter::compute_hdr_stats(
     }
 
     std::vector<float> pixels(total * 4);
-    if (!gl_dev->read_texture_rgba_float(tex, pixels.data())) {
+    if (!device->read_texture_rgba_float(tex, pixels.data())) {
         tc::Log::error("FrameGraphPresenter: read_texture_rgba_float failed");
         return stats;
     }
@@ -288,12 +287,11 @@ std::vector<uint8_t> FrameGraphPresenter::read_depth_normalized(
     if (out_w) *out_w = 0;
     if (out_h) *out_h = 0;
 
-    auto* gl_dev = dynamic_cast<tgfx::OpenGLRenderDevice*>(device);
-    if (!gl_dev || !tex) {
+    if (!device || !tex) {
         return {};
     }
 
-    auto desc = gl_dev->texture_desc(tex);
+    auto desc = device->texture_desc(tex);
     int w = static_cast<int>(desc.width);
     int h = static_cast<int>(desc.height);
     if (out_w) *out_w = w;
@@ -303,7 +301,7 @@ std::vector<uint8_t> FrameGraphPresenter::read_depth_normalized(
     }
 
     std::vector<float> depth(w * h);
-    if (!gl_dev->read_texture_depth_float(tex, depth.data())) {
+    if (!device->read_texture_depth_float(tex, depth.data())) {
         tc::Log::error("FrameGraphPresenter: read_texture_depth_float failed");
         return {};
     }

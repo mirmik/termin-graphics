@@ -183,93 +183,50 @@ public:
     // Called from RenderContext2::end_frame().
     void invalidate_fbo_cache();
 
-    // Read a single RGBA8 pixel from the given texture. Used by the
-    // editor picking code to sample the id buffer. Creates a
-    // throw-away FBO, binds it as the read framebuffer, calls
-    // glReadPixels, and leaves no state changes behind (restores the
-    // previously-bound read FBO). Returns true on success; writes
-    // four floats in [0,1] to `out_rgba`.
-    bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]);
+    // IRenderDevice readback / external-target / interop overrides.
+    // Documentation lives on the base class — these are the OpenGL
+    // implementations of the backend-neutral virtual interface.
+    bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]) override;
+    bool read_texture_rgba_float(TextureHandle tex, float* out) override;
+    bool read_texture_depth_float(TextureHandle tex, float* out) override;
 
-    // Read the full contents of a color texture as tightly-packed
-    // RGBA float32 in `out` (must point to at least width*height*4
-    // floats). Used by the framegraph debugger's HDR stats. Creates
-    // and destroys a temporary FBO; restores previous READ_FRAMEBUFFER.
-    bool read_texture_rgba_float(TextureHandle tex, float* out);
+    void blit_to_external_target(
+        uintptr_t dst,
+        TextureHandle src_color,
+        int src_x, int src_y, int src_w, int src_h,
+        int dst_x, int dst_y, int dst_w, int dst_h) override;
 
-    // Read the full contents of a depth texture as tightly-packed
-    // float32 depth values in `out` (must point to at least
-    // width*height floats). Used by the framegraph debugger's depth
-    // preview. Same FBO-restore semantics as read_texture_rgba_float.
-    bool read_texture_depth_float(TextureHandle tex, float* out);
+    void clear_external_target(
+        uintptr_t dst,
+        float r, float g, float b, float a,
+        float depth,
+        int viewport_x, int viewport_y,
+        int viewport_w, int viewport_h) override;
 
-    // Blit a tgfx2 color texture onto an externally-owned GL
-    // framebuffer object (FBO id, 0 = default window FB).
-    //
-    // This is the OpenGL-specific presentation primitive used when
-    // the host owns the final framebuffer (WPF GLWpfControl, Qt
-    // QOpenGLWidget, SDL default FB, ...) and tcplot / other
-    // renderers need to composite their offscreen tgfx2 texture into
-    // it. Kept inside the backend so raw gl*Framebuffer calls live
-    // only in the one translation unit where glad is guaranteed
-    // loaded (via OpenGLRenderDevice's constructor).
-    //
-    // When the Vulkan backend is added, the analogue will be
-    // `VulkanRenderDevice::present_to_swapchain_image(VkImage, ...)`.
-    // Cross-backend callers should branch on the concrete device
-    // type.
-    void blit_to_external_fbo(uint32_t dst_fbo_id,
-                              TextureHandle src_color,
-                              int src_x, int src_y, int src_w, int src_h,
-                              int dst_x, int dst_y, int dst_w, int dst_h);
+    void reset_state() override;
+    void flush() override;
+    void finish() override;
 
-    // Bind an externally-owned GL FBO (id=0 = window default) and clear
-    // it to the given RGBA + depth. Host window code uses this to paint
-    // a background colour behind the UI composite.
-    void clear_external_fbo(uint32_t dst_fbo_id,
-                            float r, float g, float b, float a,
-                            float depth,
-                            int viewport_x, int viewport_y,
-                            int viewport_w, int viewport_h);
+    uintptr_t native_texture_handle(TextureHandle handle) const override;
 
-    // Restore the canonical GL render-state baseline (depth test on,
-    // blend off, cull back, polygon fill, full colour/depth mask,
-    // scissor/stencil off). Called between frame-graph passes as a
-    // defensive reset — cheap and protects legacy passes that still
-    // read raw GL state from leaks left by previous passes.
-    void reset_state();
+    TextureHandle register_external_texture(
+        uintptr_t native_handle, const TextureDesc& desc) override;
+    BufferHandle register_external_buffer(
+        uintptr_t native_handle, const BufferDesc& desc) override;
 
-    // GL sync primitives exposed for per-pass / per-frame sync control
-    // (legacy tc_render_sync_mode values map to these).
-    void flush();
-    void finish();
-
-    // Return the raw GL texture id backing a TextureHandle, or 0 if
-    // the handle is invalid / unknown to this device. Used when a
-    // caller needs to hand a texture to a different tgfx2 device
-    // (e.g. an app-wide compositor returning textures to a renderer
-    // living in another holder).
-    GLuint gl_texture_id(TextureHandle handle);
-
-    // Wrap an externally-owned GL texture object as a tgfx::TextureHandle.
-    //
-    // Use this to interop with legacy tgfx FBOs during Phase 2 migration:
-    // pass the GL texture id from a legacy color/depth attachment together
-    // with the texture's logical description. The returned TextureHandle
-    // can be used with RenderContext2::begin_pass() and bind_texture() just
-    // like any tgfx2 texture. When the handle is destroyed the underlying
-    // GL object is NOT deleted — ownership stays with the original creator.
-    TextureHandle register_external_texture(GLuint gl_id, const TextureDesc& desc);
-
-    // Wrap an externally-owned GL buffer object as a tgfx::BufferHandle.
-    //
-    // Same migration role as register_external_texture but for VBOs / EBOs
-    // / UBOs from the legacy mesh path. The returned BufferHandle can be
-    // used with bind_vertex_buffer / bind_index_buffer / bind_uniform_buffer
-    // just like any tgfx2 buffer. When the handle is destroyed the
-    // underlying GL buffer object is NOT deleted — ownership stays with
-    // the original creator (typically OpenGLLayoutMeshHandle).
-    BufferHandle register_external_buffer(GLuint gl_id, const BufferDesc& desc);
+    // GL-typed convenience overloads. Equivalent to the uintptr_t
+    // versions above but spare the `static_cast<uintptr_t>(glid)` at
+    // callsites that speak raw GL. Kept for GL-only code (picking,
+    // tcplot, legacy tc_mesh bridge).
+    GLuint gl_texture_id(TextureHandle handle) {
+        return static_cast<GLuint>(native_texture_handle(handle));
+    }
+    TextureHandle register_external_texture(GLuint gl_id, const TextureDesc& desc) {
+        return register_external_texture(static_cast<uintptr_t>(gl_id), desc);
+    }
+    BufferHandle register_external_buffer(GLuint gl_id, const BufferDesc& desc) {
+        return register_external_buffer(static_cast<uintptr_t>(gl_id), desc);
+    }
 
     // --- Push constants ring buffer ---
     //
