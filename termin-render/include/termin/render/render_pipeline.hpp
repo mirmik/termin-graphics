@@ -72,10 +72,6 @@ public:
     FBOPool& fbo_pool() { return cache().fbo_pool; }
     const FBOPool& fbo_pool() const;
 
-    FramebufferHandle* get_fbo(const std::string& name) {
-        return fbo_pool().get(name);
-    }
-
     tgfx2::TextureHandle get_color_tex2(const std::string& name) {
         return fbo_pool().get_color_tgfx2(name);
     }

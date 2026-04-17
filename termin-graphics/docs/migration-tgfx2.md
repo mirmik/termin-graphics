@@ -441,3 +441,166 @@ manual smoke test of the editor.
 
 3-4 calendar months with one person, 2-2.5 months with two people parallelising
 Stages 5 and 7.
+
+---
+
+## Progress & remaining work (2026-04-17)
+
+### Done
+
+- **Stages 0-7** — all complete. Every render pass runs on `ctx2`; tcgui /
+  tcplot / nodegraph ported; Python `TcShader` immediate-mode usage gone;
+  `.shader` + material UBO path is the default.
+- **Stage 8.1** — legacy `TcShader::use/set_uniform_*/compile/ensure_ready/
+  gpu_program/set_block_binding` + `tc_shader_*_gpu` + `gpu_ops_impl::shader_*`
+  removed.
+- **Stage 8.2** — `tc_material_phase_apply_uniforms` removed.
+- **Stage 8.3** — `FBOPool` on native `tgfx2::TextureHandle` via
+  `ensure_native(device, key, …)`; ShadowPass on native depth textures with
+  D24 + CLAMP_TO_BORDER + REF_TO_TEXTURE/LEQUAL for hardware PCF;
+  `ShadowMapArrayEntry.depth_tex2` replaces legacy `FramebufferHandle*`;
+  picking rewritten to `pipeline.get_color_tex2("id") + read_pixel_rgba8`.
+- **Stage 8.4** — `ExecuteContext` no longer has `graphics/reads_fbos/
+  writes_fbos`; shadow arrays pass through `ctx.shadow_arrays`;
+  `FrameDebuggerCallbacks` + `maybe_blit_to_debugger` deleted.
+- **Stage 8.5** — `invalidate_fbo_cache()` moved into
+  `FBOPool::ensure_native` on resize/recreate.
+- **Stage 8.6** — **Python surface fully cleaned, C++ classes still alive
+  but unused**:
+  - `FrameGraphCapture` / `FrameGraphPresenter` on native textures;
+    `OpenGLRenderDevice::read_texture_rgba_float` / `read_texture_depth_float` /
+    `blit_to_external_fbo` / `clear_external_fbo` / `gl_texture_id` added.
+  - `UIRenderer` owns native color+depth attachments; composite via
+    `ctx.blit_to_external_fbo(0, color_tex, …)`. `UIRenderer.__init__(font=None)`
+    and `UI.__init__(font=None)` — `graphics` dropped.
+  - C++ `SDLWindow` / `SDLWindowRenderSurface` stripped of
+    `OpenGLGraphicsBackend*` + `FramebufferHandlePtr` + `set_graphics` +
+    `get_window_framebuffer`. Duplicate headers under
+    `termin-app/cpp/termin/platform/sdl_*` deleted.
+  - `RenderingManager::set_graphics` + `graphics_` + `graphics()` gone.
+    `PullRenderingManager` same.
+  - `EditorInteractionSystem::set_graphics` + `_graphics` (never read) gone.
+  - `RenderEngine(GraphicsBackend*)` constructor + `graphics` field gone.
+    `ensure_tgfx2()` no longer gates on `graphics`.
+  - `render_view_to_fbo(FramebufferHandle*)` (~358 LoC) deleted; new
+    `render_view_to_fbo_id(uint32_t target_fbo_id, …)` keeps internal
+    color+depth attachments and blits to external GL fbo id.
+  - `ViewportRenderState` / `ViewportContext` now own native
+    `(output_color_tex, output_depth_tex)` pair instead of legacy
+    `FramebufferHandlePtr`; OUTPUT/DISPLAY go straight into `ctx.tex2_writes`
+    in `RenderEngine::render_view_to_fbo_id` +
+    `render_scene_pipeline_offscreen`.
+  - posteffects (`bloom.py`, `postprocess.py`) use native
+    `ctx2.create_color_attachment` (new `RenderContext2.create_color_attachment`
+    binding) for their mip chain / ping-pong temp attachments.
+  - `Tgfx2ContextHolder` constructor now runs
+    `tc_ensure_default_gpu_context()` + `tgfx2_interop_set_device` +
+    `tgfx2_gpu_ops_register()` so **every standalone Python host works
+    without `OpenGLGraphicsBackend.get_instance().ensure_ready()`** — that
+    call is gone from launcher, both editor entry points, tcplot /
+    termin-gui / termin-nodegraph examples, diffusion-editor, physics demo.
+  - Diffusion-editor GPU compositor (`gpu_compositor.py`, ~380 LoC) fully
+    rewritten on tgfx2 (own holder, native main / display / temp-pool
+    attachments, `TcShader.from_sources + tc_shader_ensure_tgfx2`, immediate
+    quad draw, `device.read_texture_rgba_float` readback). Cross-device
+    texture handoff to `UIRenderer` via `get_gl_id()` +
+    `wrap_gl_texture_as_tgfx2` (different holders, same GL context).
+  - Python surface: `termin/graphics/__init__.py` no longer re-exports
+    `GraphicsBackend`/`OpenGLGraphicsBackend`/`FramebufferHandle`/
+    `GPUTextureHandle`/`ShaderHandle`/`GPUMeshHandle` — only `RenderState`,
+    `Color4`, `RenderSyncMode` are kept (navmesh/voxels debug overlays).
+    `backends/__init__.py` collapsed to SDL-embedded only; Python stubs
+    `nop_graphics.py`, `nop_window.py`, `glfw.py`, `opengl.py` deleted.
+    Dead tests / orphan files (`passes_test.py`, `gizmo_immediate.py`,
+    `sdl_backend.py`, `platform/window.py`, `backends/sdl.py`, `backends/qt.py`)
+    deleted.
+  - SWIG: `RenderingManager.set_graphics`, `PullRenderingManager.set_graphics`,
+    `RenderEngine(GraphicsBackend*)` / `RenderEngine::graphics` stripped
+    from `termin.i`.
+  - Examples restored and migrated (5 tcplot, 7 termin-gui, 1 termin-nodegraph,
+    1 root `sdl_cube.py` rewritten from scratch on `render_view_to_fbo_id(0, …)`).
+
+### Remaining
+
+**Stage 8.6 final — delete the dead C++ classes** (probably one session):
+
+1. Drop nanobind binding sections in
+   `termin-graphics/python/bindings/graphics_bindings.cpp` for
+   `GraphicsBackend`, `OpenGLGraphicsBackend`, `FramebufferHandle`. Keep
+   `ShaderHandle` / `GPUMeshHandle` / `GPUTextureHandle` / `TcShader` /
+   `Color4` / `Size2i` / `Rect2i` / `PolygonMode` / `BlendFactor` / `DepthFunc`
+   / `RenderState` / `DrawMode` / `init_opengl` — those are still used by
+   `tmesh`, navmesh, voxels debug overlays, and tgfx2 state structs.
+2. Delete class files:
+   - `termin-graphics/include/tgfx/graphics_backend.hpp`
+   - `termin-graphics/include/tgfx/opengl/opengl_backend.hpp` (**big — also
+     contains the `gpu_ops_impl::register_gpu_ops` inline functions; they go
+     in Stage 8.7**)
+   - `termin-graphics/src/opengl/opengl_backend.cpp`
+   - `termin-graphics/src/opengl/opengl_backend_singleton.cpp`
+   - `termin-graphics/include/tgfx/opengl/opengl_framebuffer.hpp`
+   - FramebufferHandle entries in `termin-graphics/include/tgfx/handles.hpp`
+3. SWIG: remove `FramebufferHandle` class from `termin-csharp/termin.i` +
+   drop `RenderPipeline::get_fbo(name) -> FramebufferHandle*` export.
+4. Fix the resulting compile errors (expected: `RenderPipeline::get_fbo` is
+   the only C++ core user; everything else has been cleaned).
+
+**Stage 8.7 — `tgfx2_gpu_ops` forwarder + `tc_gpu_slot`**:
+
+- Before Stage 8.1 the `tgfx_gpu_ops` vtable had two implementations: raw-GL
+  in `opengl_backend.hpp::gpu_ops_impl::register_gpu_ops` (installed by
+  `ensure_ready`) and tgfx2-backed in `tgfx2_gpu_ops.cpp::tgfx2_gpu_ops_register`
+  (installed by `RenderEngine::ensure_tgfx2` and, since 2026-04-17, by
+  `Tgfx2ContextHolder` ctor). The raw-GL one has no remaining callers —
+  **delete it** and the forwarder layer becomes trivial / can be inlined.
+- `tc_gpu_slot` was a cache that backed `TcShader.use() / set_uniform_*` —
+  those are gone since Stage 8.1 so the cache is unread. Delete.
+- `tgfx2_interop_set_device` gets folded or removed once the slot system goes.
+
+**Stage 8.8 — rename `tgfx2 → tgfx`**:
+
+- `tgfx2::` → `tgfx::` across all source.
+- `include/tgfx2/` directory → `include/tgfx/` (the legacy `tgfx/` should be
+  empty after 8.6/8.7).
+- Python bindings: `Tgfx2Context`/`Tgfx2RenderContext`/`Tgfx2TextureHandle`/
+  `Tgfx2BlendFactor`/`Tgfx2PixelFormat`/etc. → `TgfxContext` / `TgfxRenderContext`
+  / `TgfxTextureHandle` / `TgfxBlendFactor` / `TgfxPixelFormat`.
+- CMake: `termin_graphics2` library → `termin_graphics`.
+- C# SWIG: regenerate after rename.
+
+### Post-migration (not Stage 8)
+
+- **Vulkan backend**: `device_factory.cpp::create_device(BackendType)` +
+  `VulkanRenderDevice` already exist behind `TGFX2_HAS_VULKAN`. Two
+  hardcodes to remove: `Tgfx2ContextHolder` ctor and
+  `RenderEngine::ensure_tgfx2` both `std::make_unique<OpenGLRenderDevice>()`
+  directly. Also generalise the OpenGL-specific methods on `RenderContext2`
+  (`blit_to_external_fbo` / `wrap_gl_texture` / `clear_external_fbo` — all
+  `dynamic_cast<OpenGLRenderDevice*>`) either via an abstract `present/clear`
+  API or by routing everything through `begin_pass(native_texture)`. Plus
+  GLSL → SPIR-V compile step (glslang / shaderc) for Vulkan.
+- **#97 chronosquad ShadowPass crash** — driver-level SIGSEGV after the
+  gpu_ops vtable swap. Not a blocker; deferred for post-Stage-8 debug.
+
+### Verified working on 2026-04-17
+
+Launcher (sdk/bin/termin_launcher), Qt editor (both launcher-spawned and
+directly), tcgui editor, diffusion-editor, tcplot examples (demo_sin,
+demo_multi, demo_scatter, demo_3d_helix, demo_3d_surface), termin-gui
+examples (sdl_hello / sdl_tree / sdl_showcase / sdl_canvas_demo / etc.),
+termin-nodegraph demo, physics demo, root `sdl_cube.py`.
+
+### Build-system quirks to remember
+
+- `install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tgfx/)` in
+  `termin-graphics/python/CMakeLists.txt` used to overwrite fresh
+  `_tgfx_native.so` with a stale source-tree copy; fixed with
+  `PATTERN "*.so" EXCLUDE`. Watch other `python/CMakeLists.txt` for the same
+  pattern.
+- After modifying tgfx2 bindings, sometimes `cmake --build` doesn't rebuild
+  the .o; use `cmake --build . --clean-first` once if a newly-added symbol
+  is missing.
+- Pip wheel version is derived from max mtime of `$TERMIN_SDK/lib/python/**/*.so`
+  (`TerminCMakeBuildExt.compute_local_version`). Without an explicit
+  `cmake --install .` between build and `install-pip-packages.sh`, the
+  cached wheel wins and ships stale .so.

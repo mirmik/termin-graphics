@@ -5,7 +5,6 @@
 
 #include <tcbase/tc_log.hpp>
 
-#include "tgfx/handles.hpp"
 #include "tgfx/resources/tc_mesh.h"
 #include "tgfx/resources/tc_texture.h"
 #include "tgfx/resources/tc_texture_registry.h"
@@ -42,40 +41,6 @@ tgfx2::PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
 }
 
 } // anonymous namespace
-
-tgfx2::PixelFormat fbo_format_string_to_tgfx2(const char* format) {
-    if (!format) return tgfx2::PixelFormat::RGBA8_UNorm;
-    std::string_view s(format);
-    if (s == "r8")      return tgfx2::PixelFormat::R8_UNorm;
-    if (s == "r16f")    return tgfx2::PixelFormat::R16F;
-    if (s == "r32f")    return tgfx2::PixelFormat::R32F;
-    if (s == "rgba16f") return tgfx2::PixelFormat::RGBA16F;
-    if (s == "rgba32f") return tgfx2::PixelFormat::RGBA32F;
-    return tgfx2::PixelFormat::RGBA8_UNorm;
-}
-
-tgfx2::TextureHandle wrap_fbo_color_as_tgfx2(
-    tgfx2::OpenGLRenderDevice& device,
-    FramebufferHandle* fbo
-) {
-    if (!fbo) return {};
-    GPUTextureHandle* color = fbo->color_texture();
-    if (!color || !color->is_valid()) return {};
-
-    tgfx2::TextureDesc desc;
-    desc.width = static_cast<uint32_t>(fbo->get_width());
-    desc.height = static_cast<uint32_t>(fbo->get_height());
-    desc.format = fbo_format_string_to_tgfx2(fbo->get_format().c_str());
-    desc.usage = tgfx2::TextureUsage::ColorAttachment |
-                 tgfx2::TextureUsage::Sampled;
-    desc.mip_levels = 1;
-    desc.sample_count = static_cast<uint32_t>(fbo->get_samples() > 0 ? fbo->get_samples() : 1);
-
-    return device.register_external_texture(
-        static_cast<GLuint>(color->get_id()),
-        desc
-    );
-}
 
 tgfx2::TextureHandle wrap_tc_texture_as_tgfx2(
     tgfx2::OpenGLRenderDevice& device,
@@ -126,33 +91,6 @@ tgfx2::TextureHandle wrap_tc_texture_as_tgfx2(
 
     return device.register_external_texture(
         static_cast<GLuint>(slot->gl_id),
-        desc
-    );
-}
-
-tgfx2::TextureHandle wrap_fbo_depth_as_tgfx2(
-    tgfx2::OpenGLRenderDevice& device,
-    FramebufferHandle* fbo
-) {
-    if (!fbo) return {};
-    GPUTextureHandle* depth = fbo->depth_texture();
-    if (!depth || !depth->is_valid()) return {};
-
-    tgfx2::TextureDesc desc;
-    desc.width = static_cast<uint32_t>(fbo->get_width());
-    desc.height = static_cast<uint32_t>(fbo->get_height());
-    // Shadow FBOs created by create_shadow_framebuffer use GL_DEPTH_COMPONENT24
-    // under the hood; D32F is the closest tgfx2 PixelFormat enum value and is
-    // only used here as a format tag for the pipeline cache key — the GL
-    // texture object is already fully configured by the legacy path.
-    desc.format = tgfx2::PixelFormat::D32F;
-    desc.usage = tgfx2::TextureUsage::DepthStencilAttachment |
-                 tgfx2::TextureUsage::Sampled;
-    desc.mip_levels = 1;
-    desc.sample_count = static_cast<uint32_t>(fbo->get_samples() > 0 ? fbo->get_samples() : 1);
-
-    return device.register_external_texture(
-        static_cast<GLuint>(depth->get_id()),
         desc
     );
 }

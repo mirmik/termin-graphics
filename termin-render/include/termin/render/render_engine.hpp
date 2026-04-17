@@ -6,7 +6,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "tgfx/graphics_backend.hpp"
 #include <tgfx2/handles.hpp>
 #include "termin/render/frame_pass.hpp"
 #include "termin/render/execute_context.hpp"

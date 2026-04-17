@@ -32,7 +32,6 @@ namespace termin {
 
 struct ExecuteContext;
 class FrameGraphCapture;
-class GraphicsBackend;
 
 struct InternalSymbolTiming {
     std::string name;

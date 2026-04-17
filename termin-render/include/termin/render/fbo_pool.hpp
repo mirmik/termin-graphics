@@ -6,7 +6,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "tgfx/handles.hpp"     // for FramebufferHandle forward-friendly decl
 #include "tgfx2/enums.hpp"
 #include "tgfx2/handles.hpp"
 #include "termin/render/render_export.hpp"
@@ -17,11 +16,9 @@ class IRenderDevice;
 
 namespace termin {
 
-class FramebufferHandle;
-
 // FBO pool entry — owns a pair of tgfx2 textures (color + optional
 // depth) that `RenderContext2::begin_pass` can attach into a cached
-// GL FBO. The legacy `FramebufferHandle` field is gone (Stage 8.3).
+// GL FBO.
 struct FBOPoolEntry {
 public:
     std::string key;
@@ -74,13 +71,6 @@ public:
         tgfx2::PixelFormat depth_format = tgfx2::PixelFormat::D24_UNorm,
         int samples = 1
     );
-
-    // Legacy binding surface for Python pipeline debugger, which still
-    // asks `pipeline.get_fbo(key)`. Native entries have no
-    // `FramebufferHandle` behind them, so this always returns nullptr
-    // — the debugger treats that as "resource not inspectable as an
-    // FBO". Removed entirely in a later cleanup.
-    FramebufferHandle* get(const std::string&) { return nullptr; }
 
     // Persistent tgfx2 texture handles for this entry's color / depth
     // attachment. Alias-resolving.

@@ -20,7 +20,6 @@
 #include <termin/render/execute_context.hpp>
 #include <core/tc_component.h>
 
-#include <tgfx/graphics_backend.hpp>
 #include <tgfx2/render_context.hpp>
 
 #include <termin/tc_scene.hpp>
@@ -418,12 +417,6 @@ void bind_render_framework(nb::module_& m) {
             if (kwargs.contains("layer_mask")) {
                 self->layer_mask = nb::cast<uint64_t>(kwargs["layer_mask"]);
             }
-            if (kwargs.contains("graphics")) {
-                nb::object g_obj = nb::borrow<nb::object>(kwargs["graphics"]);
-                if (!g_obj.is_none()) {
-                    self->graphics = nb::cast<GraphicsBackend*>(g_obj);
-                }
-            }
             if (kwargs.contains("view")) {
                 nb::object v = nb::borrow<nb::object>(kwargs["view"]);
                 if (nb::isinstance<Mat44>(v)) {
@@ -473,10 +466,6 @@ void bind_render_framework(nb::module_& m) {
         .def_rw("phase", &RenderContext::phase)
         .def_rw("scene", &RenderContext::scene)
         .def_rw("layer_mask", &RenderContext::layer_mask)
-        .def_prop_rw("graphics",
-            [](const RenderContext& self) -> GraphicsBackend* { return self.graphics; },
-            [](RenderContext& self, GraphicsBackend* g) { self.graphics = g; },
-            nb::rv_policy::reference)
         .def_rw("view", &RenderContext::view)
         .def_rw("projection", &RenderContext::projection)
         .def_rw("model", &RenderContext::model)

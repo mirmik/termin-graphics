@@ -9,12 +9,9 @@
 
 namespace termin {
 
-class GraphicsBackend;
-
 struct RenderContext {
     Mat44f view;
     Mat44f projection;
-    GraphicsBackend* graphics = nullptr;
     std::string phase = "main";
     Mat44f model = Mat44f::identity();
     TcShader current_tc_shader;

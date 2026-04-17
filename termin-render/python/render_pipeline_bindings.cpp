@@ -163,9 +163,6 @@ void bind_render_pipeline(nb::module_& m) {
 
         .def("destroy", [](RenderPipeline&) {})
 
-        .def("get_fbo", [](RenderPipeline& self, const std::string& key) -> FramebufferHandle* {
-            return self.fbo_pool().get(key);
-        }, nb::arg("key"), nb::rv_policy::reference)
         .def("get_fbo_keys", [](RenderPipeline& self) { return self.fbo_pool().keys(); })
         .def("clear_fbo_pool", [](RenderPipeline& self) { self.fbo_pool().clear(); })
 

@@ -26,8 +26,6 @@ namespace tgfx2 { class RenderContext2; }
 
 namespace termin {
 
-class GraphicsBackend;
-
 struct GeometryDrawCall {
     tc_material_phase* phase = nullptr;
     int geometry_id = 0;

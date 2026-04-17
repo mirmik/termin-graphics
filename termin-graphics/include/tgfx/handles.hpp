@@ -56,47 +56,6 @@ public:
     virtual bool is_valid() const { return get_id() != 0; }
 };
 
-// Abstract framebuffer handle.
-class FramebufferHandle : public FrameGraphResource {
-public:
-    virtual ~FramebufferHandle() = default;
-
-    const char* resource_type() const override { return "fbo"; }
-
-    virtual void resize(int width, int height) = 0;
-    virtual void release() = 0;
-
-    // Rebind to an externally managed FBO (e.g., Qt's default framebuffer).
-    virtual void set_external_target(uint32_t fbo_id, int width, int height) = 0;
-
-    virtual uint32_t get_fbo_id() const = 0;
-    virtual int get_width() const = 0;
-    virtual int get_height() const = 0;
-    virtual int get_samples() const = 0;
-    virtual bool is_msaa() const = 0;
-    virtual std::string get_format() const = 0;
-
-    // Query actual GL parameters from the color texture (for debugging)
-    virtual std::string get_actual_gl_format() const { return "unknown"; }
-    virtual int get_actual_gl_width() const { return 0; }
-    virtual int get_actual_gl_height() const { return 0; }
-    virtual int get_actual_gl_samples() const { return 0; }
-
-    // Filter mode (requested and actual)
-    virtual std::string get_filter() const { return "unknown"; }
-    virtual std::string get_actual_gl_filter() const { return "unknown"; }
-
-    // Convenience methods
-    Size2i get_size() const { return Size2i(get_width(), get_height()); }
-    void resize(Size2i size) { resize(size.width, size.height); }
-    void set_external_target(uint32_t fbo_id, Size2i size) {
-        set_external_target(fbo_id, size.width, size.height);
-    }
-
-    virtual GPUTextureHandle* color_texture() = 0;
-    virtual GPUTextureHandle* depth_texture() = 0;
-};
-
 // Abstract uniform buffer handle (UBO).
 class UniformBufferHandle {
 public:
@@ -115,7 +74,6 @@ public:
 using ShaderHandlePtr = std::unique_ptr<ShaderHandle>;
 using GPUMeshHandlePtr = std::unique_ptr<GPUMeshHandle>;
 using GPUTextureHandlePtr = std::unique_ptr<GPUTextureHandle>;
-using FramebufferHandlePtr = std::unique_ptr<FramebufferHandle>;
 using UniformBufferHandlePtr = std::unique_ptr<UniformBufferHandle>;
 
 } // namespace termin

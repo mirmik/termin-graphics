@@ -1,10 +1,4 @@
-// tgfx2_bridge.hpp - Interop helpers between legacy tgfx FBOs and tgfx2 textures
-//
-// Phase 2 of the tgfx2 migration lets individual passes draw through
-// tgfx2::RenderContext2 while the surrounding pipeline still manages
-// framebuffers via the legacy FBOPool. These helpers wrap a legacy
-// FramebufferHandle's color/depth attachment as a non-owning tgfx2
-// TextureHandle suitable for begin_pass() and bind_texture().
+// tgfx2_bridge.hpp - Interop helpers between legacy tc_mesh / tc_texture and tgfx2
 #pragma once
 
 #include <cstdint>
@@ -26,34 +20,6 @@ class OpenGLRenderDevice;
 }
 
 namespace termin {
-
-class FramebufferHandle;
-
-// Translate a legacy tgfx framebuffer format string ("rgba8", "r8",
-// "rgba16f", ...) to the tgfx2 PixelFormat enum. Defaults to RGBA8_UNorm
-// for unknown strings.
-RENDER_API tgfx2::PixelFormat fbo_format_string_to_tgfx2(const char* format);
-
-// Wrap the color attachment of a legacy FramebufferHandle as a tgfx2
-// TextureHandle that is non-owning. The caller should `destroy()` the
-// handle when done; the underlying GL texture is preserved.
-//
-// Returns an invalid handle (id == 0) if either argument is null or the
-// FBO has no color attachment.
-RENDER_API tgfx2::TextureHandle wrap_fbo_color_as_tgfx2(
-    tgfx2::OpenGLRenderDevice& device,
-    FramebufferHandle* fbo
-);
-
-// Wrap the depth attachment of a legacy FramebufferHandle as a tgfx2
-// TextureHandle that is non-owning. Same contract as
-// wrap_fbo_color_as_tgfx2 but targets `fbo->depth_texture()`. Used by
-// Phase 2 ShadowPass to open a tgfx2 render pass on the shadow map's
-// depth attachment without touching the legacy FBO pool.
-RENDER_API tgfx2::TextureHandle wrap_fbo_depth_as_tgfx2(
-    tgfx2::OpenGLRenderDevice& device,
-    FramebufferHandle* fbo
-);
 
 // Wrap a legacy tc_texture as a tgfx2 TextureHandle that is non-owning.
 // Triggers tc_texture_upload_gpu first so the share group's GL texture

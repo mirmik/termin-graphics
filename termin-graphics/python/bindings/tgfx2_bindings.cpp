@@ -29,7 +29,6 @@
 #include <tgfx2/text2d_renderer.hpp>
 #include <tgfx2/text3d_renderer.hpp>
 
-#include <tgfx/opengl/opengl_framebuffer.hpp>
 #include <tgfx/tgfx_shader_handle.hpp>
 #include <tgfx/tgfx_mesh_handle.hpp>
 #include <tgfx/tgfx2_interop.h>
@@ -597,58 +596,6 @@ void bind_tgfx2(nb::module_& m) {
         nb::arg("width"), nb::arg("height"), nb::arg("format"));
 
     // --- Helpers: bridge legacy tgfx resources to tgfx2 handles ---
-    //
-    // Wrap a legacy FramebufferHandle's color attachment as a tgfx2
-    // sampled texture. The wrapper is non-owning — the FBO keeps owning
-    // the underlying GL texture. Caller uses the handle for a single
-    // draw then drops it (or hands it to RenderContext2::defer_destroy
-    // to release at end_frame).
-    m.def("wrap_fbo_color_as_tgfx2",
-          [](tgfx2::RenderContext2& ctx, termin::FramebufferHandle* fbo)
-              -> tgfx2::TextureHandle {
-              if (!fbo) return {};
-              auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&ctx.device());
-              if (!gl_dev) return {};
-              auto* color = fbo->color_texture();
-              if (!color) return {};
-
-              tgfx2::TextureDesc desc;
-              desc.width = static_cast<uint32_t>(fbo->get_width());
-              desc.height = static_cast<uint32_t>(fbo->get_height());
-              desc.format = tgfx2::PixelFormat::RGBA8_UNorm;
-              desc.usage = tgfx2::TextureUsage::Sampled;
-              desc.sample_count = static_cast<uint32_t>(fbo->get_samples());
-              return gl_dev->register_external_texture(
-                  static_cast<GLuint>(color->get_id()), desc);
-          },
-          nb::arg("ctx"), nb::arg("fbo"));
-
-    // Wrap a legacy FramebufferHandle's depth attachment as a tgfx2
-    // depth texture. Non-owning: the underlying GL depth texture is
-    // owned by the tgfx1 FBO. Use in combination with
-    // wrap_fbo_color_as_tgfx2 to feed begin_pass(color, depth, ...)
-    // when you need depth testing during a tgfx2 pass that renders
-    // into a tgfx1 FBO.
-    m.def("wrap_fbo_depth_as_tgfx2",
-          [](tgfx2::RenderContext2& ctx, termin::FramebufferHandle* fbo)
-              -> tgfx2::TextureHandle {
-              if (!fbo) return {};
-              auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&ctx.device());
-              if (!gl_dev) return {};
-              auto* depth = fbo->depth_texture();
-              if (!depth) return {};
-
-              tgfx2::TextureDesc desc;
-              desc.width = static_cast<uint32_t>(fbo->get_width());
-              desc.height = static_cast<uint32_t>(fbo->get_height());
-              desc.format = tgfx2::PixelFormat::D32F;
-              desc.usage = tgfx2::TextureUsage::DepthStencilAttachment;
-              desc.sample_count = static_cast<uint32_t>(fbo->get_samples());
-              return gl_dev->register_external_texture(
-                  static_cast<GLuint>(depth->get_id()), desc);
-          },
-          nb::arg("ctx"), nb::arg("fbo"));
-
     // Compile a TcShader's GLSL sources into a tgfx2 VS/FS pair.
     // Uses the same tc_shader_ensure_tgfx2 bridge that C++ passes use,
     // so the result is cached on the tc_gpu_slot and shared across

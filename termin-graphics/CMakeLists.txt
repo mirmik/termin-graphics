@@ -39,9 +39,6 @@ set(TGFX_C_SOURCES
 )
 
 set(TGFX_CXX_SOURCES
-    src/opengl/opengl_backend.cpp
-    src/opengl/opengl_backend_singleton.cpp
-    src/opengl/opengl_framebuffer.cpp
     src/tgfx_texture_handle.cpp
 )
 

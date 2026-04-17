@@ -11,16 +11,8 @@
 
 namespace termin {
 
-class FramebufferHandle;
-class GPUTextureHandle;
-
 struct RENDER_API ShadowMapArrayEntry {
 public:
-    // Stage 8.3: depth texture is now a native tgfx2 handle owned by
-    // ShadowPass (allocated via IRenderDevice). `fbo` stays for any
-    // legacy consumer still reaching through FramebufferHandle*, but
-    // the primary field is `depth_tex2`.
-    FramebufferHandle* fbo = nullptr;
     tgfx2::TextureHandle depth_tex2;
     int width = 0;
     int height = 0;
@@ -50,7 +42,6 @@ public:
         cascade_split_near(split_near),
         cascade_split_far(split_far) {}
 
-    GPUTextureHandle* texture() const;
 };
 
 class RENDER_API ShadowMapArrayResource : public FrameGraphResource {
