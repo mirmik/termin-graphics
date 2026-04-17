@@ -208,6 +208,25 @@ void bind_tgfx2(nb::module_& m) {
                  if (h) self.device().destroy(h);
              })
 
+        // Create an offscreen color attachment via the context's
+        // device. Mirrors Tgfx2Context.create_color_attachment for
+        // callers that only hold a RenderContext2 (effects running
+        // inside a pipeline pass, etc.).
+        .def("create_color_attachment",
+             [](tgfx2::RenderContext2& self, uint32_t w, uint32_t h,
+                tgfx2::PixelFormat fmt) -> tgfx2::TextureHandle {
+                 tgfx2::TextureDesc desc;
+                 desc.width = w;
+                 desc.height = h;
+                 desc.format = fmt;
+                 desc.usage = tgfx2::TextureUsage::Sampled |
+                              tgfx2::TextureUsage::ColorAttachment |
+                              tgfx2::TextureUsage::CopyDst;
+                 return self.device().create_texture(desc);
+             },
+             nb::arg("width"), nb::arg("height"),
+             nb::arg("format") = tgfx2::PixelFormat::RGBA8_UNorm)
+
         // Present a texture to an externally-owned GL FBO (0 = host
         // window default framebuffer). Used by legacy Qt debugger
         // window to composite the debugger capture onto its SDL
@@ -371,6 +390,14 @@ void bind_tgfx2(nb::module_& m) {
             // slot to cache into. Standalone Python hosts that skip the
             // legacy GraphicsBackend.ensure_ready() need this here.
             tc_ensure_default_gpu_context();
+            // Install the tgfx2-backed gpu_ops vtable so legacy
+            // tc_shader_compile_gpu / tc_mesh_upload_gpu /
+            // tc_texture_upload_gpu resource upload paths route through
+            // this device. Without this, tmesh-based widgets
+            // (Plot3D, ImmediateRenderer with a TcMesh) crash with
+            // "GPU ops not set".
+            tgfx2_interop_set_device(device.get());
+            tgfx2_gpu_ops_register();
         }
     };
 
