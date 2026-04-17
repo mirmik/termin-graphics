@@ -6,10 +6,10 @@
 #include <nanobind/stl/array.h>
 #include <nanobind/ndarray.h>
 
+#include "tgfx/handles.hpp"
 #include "tgfx/render_state.hpp"
 #include "tgfx/types.hpp"
 #include "tgfx/opengl/opengl_backend.hpp"
-#include "tgfx/opengl/opengl_mesh.hpp"
 #include <tcbase/tc_log.hpp>
 
 extern "C" {
