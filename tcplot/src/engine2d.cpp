@@ -683,7 +683,9 @@ void PlotEngine2D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
         const int max_y_ticks = std::max(int(pa.h / 50.0f), 3);
         const std::vector<double> x_ticks = axes::nice_ticks(v.x_min, v.x_max, max_x_ticks);
         const std::vector<double> y_ticks = axes::nice_ticks(v.y_min, v.y_max, max_y_ticks);
-        const float tick_sz = font_size - 1.0f;
+        // Ticks a notch smaller than axis labels — keeps the axis-label
+        // / tick-label hierarchy visible even at similar sizes.
+        const float tick_sz = font_size - 2.0f;
 
         // Our Text2DRenderer expects viewport-pixel coords starting at
         // (0, 0) top-left of the viewport. Our engine2d may be offset
@@ -718,13 +720,22 @@ void PlotEngine2D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
         }
 
         if (!data.title.empty()) {
+            // Title: left-anchored at the top of the plot area.
+            // Pick its colour from the first line series if any, so
+            // stacked panels read at a glance as "sin is blue, cos is
+            // orange, ..." instead of drowning every title in the
+            // same label_color grey.
+            Color4 tc = label_color;
+            if (!data.lines.empty()) {
+                const auto& s = data.lines.front();
+                tc = s.color.has_value() ? *s.color : styles::cycle_color(0u);
+            }
             text2d_->draw(data.title,
-                          T_x(vx_ + vw_ * 0.5f),
+                          T_x(pa.x),
                           T_y(vy_ + margin_top * 0.5f),
-                          label_color.r, label_color.g,
-                          label_color.b, label_color.a,
+                          tc.r, tc.g, tc.b, tc.a,
                           title_font_size,
-                          tgfx2::Text2DRenderer::Anchor::Center);
+                          tgfx2::Text2DRenderer::Anchor::Left);
         }
         if (!data.x_label.empty()) {
             text2d_->draw(data.x_label,
@@ -788,6 +799,21 @@ void PlotEngine2D::on_mouse_move(float x, float y) {
 void PlotEngine2D::on_mouse_up(float /*x*/, float /*y*/,
                                  tcbase::MouseButton /*button*/) {
     panning_ = false;
+}
+
+bool PlotEngine2D::on_mouse_wheel_x(float x, float y, float dy) {
+    const Rect pa = plot_area_();
+    if (x < pa.x || x > pa.x + pa.w || y < pa.y || y > pa.y + pa.h) return false;
+
+    const float factor = (dy > 0) ? 0.85f : 1.0f / 0.85f;
+
+    double cx, cy;
+    pixel_to_data_(x, y, cx, cy);
+    const ViewRange v = view_range_();
+
+    view_x_min_ = cx + (v.x_min - cx) * factor;
+    view_x_max_ = cx + (v.x_max - cx) * factor;
+    return true;
 }
 
 bool PlotEngine2D::on_mouse_wheel(float x, float y, float dy) {

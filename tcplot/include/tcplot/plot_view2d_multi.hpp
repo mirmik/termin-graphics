@@ -90,6 +90,23 @@ public:
     // grow-only from this baseline.
     void set_panel_view_y(int panel_idx, double y_min, double y_max);
 
+    // --- Virtual scrolling ---
+    // Fixed panel height in pixels. When > 0 the view lays panels out
+    // on a virtual canvas of (panel_count * panel_height) px, clipped
+    // by the actual render height; set_scroll_offset slides the canvas.
+    // When 0 (default) the old behavior applies: panels divide the
+    // render height equally and no virtualization happens.
+    void set_panel_height(float h);
+
+    // Virtual scroll offset in pixels (0 = top of canvas). Clamped
+    // to [0, max(total_virtual_height - render_height, 0)] at render
+    // time. Host is responsible for driving the actual WPF scrollbar.
+    void set_scroll_offset(float offset);
+
+    // Virtual canvas height in pixels (panel_count * panel_height).
+    // Returns 0 when panel_height is unset (classic layout).
+    float total_virtual_height() const;
+
     // --- Frame lifecycle ---
 
     void render(int width, int height, uint32_t dst_gl_fbo);
@@ -103,6 +120,8 @@ public:
     void on_mouse_move(float x, float y);
     void on_mouse_up(float x, float y, int button);
     bool on_mouse_wheel(float x, float y, float dy);
+    // Ctrl+wheel: zoom shared X only, leave per-panel Y alone.
+    bool on_mouse_wheel_x(float x, float y, float dy);
 
 private:
     void ensure_offscreen_(int w, int h);
@@ -148,6 +167,17 @@ private:
     int offscreen_w_ = 0;
     int offscreen_h_ = 0;
     int msaa_samples_ = 4;
+
+    // Virtual scrolling state.
+    // panel_height_ > 0 enables virtualised layout; 0 falls back to
+    // classic "equal strips over full render height".
+    float panel_height_  = 0.0f;
+    float scroll_offset_ = 0.0f;
+
+    // Cached visibility: indices of panels whose rect intersects the
+    // current render area. Filled by layout_panels_; render/mouse use
+    // this to skip off-screen panels without touching their engines.
+    std::vector<int> visible_panels_;
 };
 
 }  // namespace tcplot

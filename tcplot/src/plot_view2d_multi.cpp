@@ -185,6 +185,23 @@ void PlotView2DMulti::set_panel_view_y(int panel_idx,
     panels_[panel_idx]->set_view_y(y_min, y_max);
 }
 
+// ---------------------------------------------------------------------------
+// Virtual scrolling
+// ---------------------------------------------------------------------------
+
+void PlotView2DMulti::set_panel_height(float h) {
+    panel_height_ = (h > 0.0f) ? h : 0.0f;
+}
+
+void PlotView2DMulti::set_scroll_offset(float offset) {
+    scroll_offset_ = (offset > 0.0f) ? offset : 0.0f;
+}
+
+float PlotView2DMulti::total_virtual_height() const {
+    if (panel_height_ <= 0.0f) return 0.0f;
+    return panel_height_ * static_cast<float>(panels_.size());
+}
+
 void PlotView2DMulti::update_shared_x_() {
     if (!have_shared_x_) return;
 
@@ -238,30 +255,56 @@ void PlotView2DMulti::blit_to_dst_(int w, int h, uint32_t dst_gl_fbo) {
 
 void PlotView2DMulti::layout_panels_(int w, int h) {
     panel_rects_.resize(panels_.size());
+    visible_panels_.clear();
     if (panels_.empty() || h <= 0 || w <= 0) return;
 
-    // Equal-height strips, pixel-aligned. Rounding dust goes to the
-    // last panel so we never lose a row.
-    const float panel_h = static_cast<float>(h) / panels_.size();
-    float y = 0.0f;
-    for (size_t i = 0; i < panels_.size(); ++i) {
-        Rect r;
-        r.x = 0.0f;
-        r.y = std::floor(y);
-        r.w = static_cast<float>(w);
-        // Last panel soaks up the remainder so total == h.
-        r.h = (i + 1 == panels_.size())
-            ? (static_cast<float>(h) - r.y)
-            : std::floor(y + panel_h) - r.y;
-        panel_rects_[i] = r;
-        y += panel_h;
+    const float fw = static_cast<float>(w);
+    const float fh = static_cast<float>(h);
+
+    if (panel_height_ > 0.0f) {
+        // Virtualised layout: panels sit on a virtual canvas of
+        // (N * panel_height_) px; scroll_offset_ slides the canvas
+        // upward. Clamp the offset so we can't scroll past the end.
+        const float total = panel_height_ * static_cast<float>(panels_.size());
+        const float max_off = std::max(0.0f, total - fh);
+        if (scroll_offset_ > max_off) scroll_offset_ = max_off;
+
+        for (size_t i = 0; i < panels_.size(); ++i) {
+            Rect r;
+            r.x = 0.0f;
+            r.y = std::floor(i * panel_height_ - scroll_offset_);
+            r.w = fw;
+            r.h = std::floor(panel_height_);
+            panel_rects_[i] = r;
+            // Skip panels fully outside the viewport.
+            if (r.y + r.h <= 0.0f || r.y >= fh) continue;
+            visible_panels_.push_back(static_cast<int>(i));
+        }
+    } else {
+        // Classic: equal-height strips filling the full render height.
+        const float panel_h = fh / panels_.size();
+        float y = 0.0f;
+        for (size_t i = 0; i < panels_.size(); ++i) {
+            Rect r;
+            r.x = 0.0f;
+            r.y = std::floor(y);
+            r.w = fw;
+            r.h = (i + 1 == panels_.size())
+                ? (fh - r.y)
+                : std::floor(y + panel_h) - r.y;
+            panel_rects_[i] = r;
+            visible_panels_.push_back(static_cast<int>(i));
+            y += panel_h;
+        }
     }
 }
 
 int PlotView2DMulti::panel_at_(float y) const {
-    for (size_t i = 0; i < panel_rects_.size(); ++i) {
-        const Rect& r = panel_rects_[i];
-        if (y >= r.y && y < r.y + r.h) return static_cast<int>(i);
+    // Walk only the currently visible panels — in virtualised mode
+    // off-screen rects have stale y values we shouldn't hit-test.
+    for (int idx : visible_panels_) {
+        const Rect& r = panel_rects_[idx];
+        if (y >= r.y && y < r.y + r.h) return idx;
     }
     return -1;
 }
@@ -285,7 +328,10 @@ void PlotView2DMulti::render(int width, int height, uint32_t dst_gl_fbo) {
     ctx_->begin_pass(offscreen_color_, tgfx2::TextureHandle{},
                      clear_col, 1.0f, /*clear_depth_enabled=*/false);
 
-    for (size_t i = 0; i < panels_.size(); ++i) {
+    // Only render panels whose rect intersects the viewport. In
+    // virtualised mode this is usually 2-6 out of N; the rest pay
+    // nothing per frame (no VBO ensure, no text pass, no draw calls).
+    for (int i : visible_panels_) {
         PlotEngine2D& eng = *panels_[i];
         const Rect& r = panel_rects_[i];
         eng.set_viewport(r.x, r.y, r.w, r.h);
@@ -382,6 +428,28 @@ bool PlotView2DMulti::on_mouse_wheel(float x, float y, float dy) {
 
     // Wheel is zoom-around-cursor; the engine updated its view X.
     // Broadcast shared X to siblings so they stay locked.
+    double x_min, x_max, y_min, y_max;
+    eng.get_view(x_min, x_max, y_min, y_max);
+    shared_x_min_ = x_min;
+    shared_x_max_ = x_max;
+    have_shared_x_ = true;
+    autoscroll_ = false;
+    for (size_t i = 0; i < panels_.size(); ++i) {
+        if ((int)i == idx) continue;
+        panels_[i]->set_view_x(x_min, x_max);
+    }
+    return true;
+}
+
+bool PlotView2DMulti::on_mouse_wheel_x(float x, float y, float dy) {
+    // Same as on_mouse_wheel but the hit-panel only zooms its X; Y
+    // stays put. Used for Ctrl+wheel in the shared-X dashboard UX.
+    const int idx = panel_at_(y);
+    if (idx < 0) return false;
+    PlotEngine2D& eng = *panels_[idx];
+    const bool handled = eng.on_mouse_wheel_x(x, y, dy);
+    if (!handled) return false;
+
     double x_min, x_max, y_min, y_max;
     eng.get_view(x_min, x_max, y_min, y_max);
     shared_x_min_ = x_min;

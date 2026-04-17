@@ -35,10 +35,13 @@ public:
     PlotData data;
 
     // Inner-rect margins, in pixels (left, right, top, bottom).
-    int margin_left = 60;
+    // Sized around the default font metrics below — if a host cranks
+    // font_size up these should grow too, otherwise tick labels collide
+    // with the plot border.
+    int margin_left = 76;
     int margin_right = 15;
-    int margin_top = 30;
-    int margin_bottom = 35;
+    int margin_top = 44;
+    int margin_bottom = 52;
 
     // Style
     bool show_grid = true;
@@ -47,8 +50,11 @@ public:
     Color4 label_color = styles::label_color();
     Color4 bg_color = styles::bg_color();
     Color4 plot_bg_color = styles::plot_area_bg();
-    float font_size = 11.0f;
-    float title_font_size = 14.0f;
+    // Pixel sizes follow common dashboard-typography norms: axis labels
+    // ≈ 15 px (tick labels -2 → 13 px), title at 22 px so it reads as
+    // a header rather than another label (ratio ~1.7× to ticks).
+    float font_size = 15.0f;
+    float title_font_size = 22.0f;
 
     PlotEngine2D();
     ~PlotEngine2D();
@@ -126,6 +132,8 @@ public:
     void on_mouse_move(float x, float y);
     void on_mouse_up(float x, float y, tcbase::MouseButton button);
     bool on_mouse_wheel(float x, float y, float dy);
+    // Zoom X axis only (shared-X multi-panel UX: Ctrl+wheel).
+    bool on_mouse_wheel_x(float x, float y, float dy);
 
 private:
     // Plot area in viewport pixel coords.
