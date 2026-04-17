@@ -15,6 +15,7 @@
 #include <vector>
 
 #include <tcbase/input_enums.hpp>
+#include <tgfx2/handles.hpp>
 
 #include "tcplot/plot_data.hpp"
 #include "tcplot/styles.hpp"
@@ -58,6 +59,14 @@ public:
     // --- Viewport (host-supplied pixel rect; origin top-left, y+ down) ---
     void set_viewport(float x, float y, float width, float height);
 
+    // Total FBO height in pixels. Required for multi-strip rendering:
+    // the engine's (vx_, vy_) rect is specified in y+down coords, but
+    // glViewport / glScissor want y measured from the FBO bottom, so
+    // we need to know the total height to flip. If left at 0 (default),
+    // the engine assumes single-strip rendering (vy_=0, vh_=fbo height),
+    // i.e. no flip is applied and behavior matches PlotView2D.
+    void set_fbo_height(float h);
+
     // --- Series API ---
     void plot(std::vector<double> x, std::vector<double> y,
               std::optional<Color4> color = std::nullopt,
@@ -76,6 +85,30 @@ public:
 
     // Explicit view range in data coords.
     void set_view(double x_min, double x_max, double y_min, double y_max);
+
+    // --- Time-series / streaming API ---
+    //
+    // Append `n` points to an existing line series (indexed by the
+    // order they were added via plot()). Data-space coords; stored in
+    // the series' x/y vectors and uploaded to the tail of the series'
+    // persistent VBO on the next render(). Silent no-op if idx is out
+    // of range.
+    void append_to_line(size_t idx, const double* x, const double* y, size_t n);
+
+    size_t line_count() const { return data.lines.size(); }
+
+    // Expose the last X of an existing line series (for autoscroll
+    // logic at the host level). Returns false if idx is out of range
+    // or the series is empty.
+    bool last_x_of_line(size_t idx, double& out_x) const;
+
+    // Read the current view range (auto-fits on first access). Mostly
+    // for shared-X coordination across multi-panel layouts.
+    void get_view(double& x_min, double& x_max,
+                  double& y_min, double& y_max);
+    // Set only the X part of the view; Y left unchanged.
+    void set_view_x(double x_min, double x_max);
+    void set_view_y(double y_min, double y_max);
 
     // --- Rendering ---
     //
@@ -108,6 +141,20 @@ private:
     // Build a pos+color ortho shader on the given device. Cached.
     void ensure_shader_(tgfx2::IRenderDevice& device);
 
+    // Build a data-space-only VS + uniform-color FS shader used for
+    // persistent-VBO line series. Cached per device.
+    void ensure_line_shader_(tgfx2::IRenderDevice& device);
+
+    // Ensure series `idx` has a GPU buffer big enough for its current
+    // point count and that the tail (gpu_count..x.size()) has been
+    // uploaded. Grows the VBO (doubling) when capacity is exceeded.
+    void ensure_line_gpu_(tgfx2::IRenderDevice& device, size_t idx);
+
+    // Compose the data-space → NDC matrix (4x4 column-major) for the
+    // current plot area, view range, and viewport. Used as a uniform
+    // by the line shader — panning / zooming only changes this matrix.
+    void compute_data_to_clip_(float out16[16]);
+
     // Draw helpers — each collects verts into a scratch buffer the
     // caller owns, lets the caller issue one ctx.draw_immediate_*()
     // call. This is the antidote to the "399 segments = 399 draws"
@@ -127,6 +174,9 @@ private:
 
     // --- Viewport rect ---
     float vx_ = 0.0f, vy_ = 0.0f, vw_ = 0.0f, vh_ = 0.0f;
+    // 0 = unset → treat as single-strip (no y-flip for GL). Otherwise
+    // used to compute glViewport/glScissor y from bottom.
+    float fbo_height_ = 0.0f;
 
     // --- View range (nullopt = auto-fit on first use) ---
     std::optional<double> view_x_min_;
@@ -140,10 +190,26 @@ private:
     float pan_start_my_ = 0.0f;
     double pan_start_view_[4] = {0, 1, 0, 1};
 
-    // --- Cached shader ---
+    // --- Cached shader (rects/grid/scatter — pos+color, ortho pixel). ---
     tgfx2::IRenderDevice* shader_device_ = nullptr;
     uint32_t shader_vs_id_ = 0;
     uint32_t shader_fs_id_ = 0;
+
+    // --- Cached shader (line series — data-space pos + uniform color). ---
+    tgfx2::IRenderDevice* line_shader_device_ = nullptr;
+    uint32_t line_shader_vs_id_ = 0;
+    uint32_t line_shader_fs_id_ = 0;
+
+    // Per-line-series persistent GPU state, parallel to `data.lines`.
+    // capacity is measured in vertices; each vertex is a vec2 float
+    // (8 bytes). gpu_count <= x.size(); the render path tops it up
+    // with glBufferSubData to the tail on each frame.
+    struct LineGpuState {
+        tgfx2::BufferHandle vbo{};
+        uint32_t capacity = 0;
+        uint32_t gpu_count = 0;
+    };
+    std::vector<LineGpuState> line_gpu_;
 
     // --- Text renderer (unique_ptr to keep header free of Text2D include) ---
     std::unique_ptr<tgfx2::Text2DRenderer> text2d_;

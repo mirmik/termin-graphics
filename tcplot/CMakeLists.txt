@@ -35,6 +35,7 @@ set(TCPLOT_SOURCES
     src/engine2d.cpp
     src/plot_view3d.cpp
     src/plot_view2d.cpp
+    src/plot_view2d_multi.cpp
 )
 
 add_library(tcplot SHARED ${TCPLOT_SOURCES})

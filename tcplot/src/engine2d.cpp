@@ -46,6 +46,26 @@ out vec4 frag_color;
 void main() { frag_color = v_color; }
 )";
 
+// --- Persistent-VBO line series shader ---
+//
+// Vertex input is a raw data-space vec2. The VS-side mat4
+// u_data_to_clip converts directly to clip space; panning/zooming
+// only changes this uniform, VBO never needs re-upload.
+// Color is a per-series uniform (not per-vertex).
+constexpr const char* kLineVert = R"(#version 330 core
+layout(location=0) in vec2 a_data_pos;
+uniform mat4 u_data_to_clip;
+void main() {
+    gl_Position = u_data_to_clip * vec4(a_data_pos, 0.0, 1.0);
+}
+)";
+
+constexpr const char* kLineFrag = R"(#version 330 core
+uniform vec4 u_color;
+out vec4 frag_color;
+void main() { frag_color = u_color; }
+)";
+
 // Ortho pixel→NDC, y+down input → y+up NDC.
 void build_ortho(float w, float h, float out[16]) {
     if (w <= 0.0f || h <= 0.0f) {
@@ -84,6 +104,10 @@ void PlotEngine2D::set_viewport(float x, float y, float width, float height) {
     vh_ = height;
 }
 
+void PlotEngine2D::set_fbo_height(float h) {
+    fbo_height_ = (h > 0.0f) ? h : 0.0f;
+}
+
 // ---------------------------------------------------------------------------
 // Series
 // ---------------------------------------------------------------------------
@@ -110,6 +134,16 @@ void PlotEngine2D::clear() {
     view_x_max_.reset();
     view_y_min_.reset();
     view_y_max_.reset();
+
+    // Release each series' persistent VBO — data is gone, no point
+    // keeping GPU storage around. The shader handles stay so the
+    // next frame after a re-plot doesn't pay a shader-compile.
+    if (line_shader_device_) {
+        for (auto& gs : line_gpu_) {
+            if (gs.vbo.id != 0) line_shader_device_->destroy(gs.vbo);
+        }
+    }
+    line_gpu_.clear();
 }
 
 void PlotEngine2D::fit() {
@@ -217,7 +251,197 @@ void PlotEngine2D::release_gpu_resources() {
     shader_vs_id_ = 0;
     shader_fs_id_ = 0;
     shader_device_ = nullptr;
+
+    if (line_shader_device_) {
+        if (line_shader_vs_id_ != 0) {
+            tgfx2::ShaderHandle h; h.id = line_shader_vs_id_;
+            line_shader_device_->destroy(h);
+        }
+        if (line_shader_fs_id_ != 0) {
+            tgfx2::ShaderHandle h; h.id = line_shader_fs_id_;
+            line_shader_device_->destroy(h);
+        }
+        for (auto& gs : line_gpu_) {
+            if (gs.vbo.id != 0) line_shader_device_->destroy(gs.vbo);
+        }
+    }
+    line_shader_vs_id_ = 0;
+    line_shader_fs_id_ = 0;
+    line_shader_device_ = nullptr;
+    line_gpu_.clear();
+
     if (text2d_) text2d_->release_gpu();
+}
+
+// ---------------------------------------------------------------------------
+// Line persistent-VBO helpers
+// ---------------------------------------------------------------------------
+
+void PlotEngine2D::ensure_line_shader_(tgfx2::IRenderDevice& device) {
+    if (line_shader_device_ == &device
+        && line_shader_vs_id_ != 0 && line_shader_fs_id_ != 0) {
+        return;
+    }
+    if (line_shader_device_) {
+        if (line_shader_vs_id_ != 0) {
+            tgfx2::ShaderHandle h; h.id = line_shader_vs_id_;
+            line_shader_device_->destroy(h);
+        }
+        if (line_shader_fs_id_ != 0) {
+            tgfx2::ShaderHandle h; h.id = line_shader_fs_id_;
+            line_shader_device_->destroy(h);
+        }
+        // Device change invalidates all VBOs too.
+        for (auto& gs : line_gpu_) {
+            if (gs.vbo.id != 0) line_shader_device_->destroy(gs.vbo);
+            gs = LineGpuState{};
+        }
+    }
+
+    tgfx2::ShaderDesc vd;
+    vd.stage = tgfx2::ShaderStage::Vertex;
+    vd.source = kLineVert;
+    line_shader_vs_id_ = device.create_shader(vd).id;
+
+    tgfx2::ShaderDesc fd;
+    fd.stage = tgfx2::ShaderStage::Fragment;
+    fd.source = kLineFrag;
+    line_shader_fs_id_ = device.create_shader(fd).id;
+
+    line_shader_device_ = &device;
+}
+
+void PlotEngine2D::ensure_line_gpu_(tgfx2::IRenderDevice& device, size_t idx) {
+    if (idx >= data.lines.size()) return;
+    LineGpuState& gs = line_gpu_[idx];
+    const LineSeries& s = data.lines[idx];
+    const uint32_t want = static_cast<uint32_t>(s.x.size());
+
+    // Grow (or allocate) the VBO when capacity is insufficient. Double
+    // the capacity each time — amortised O(1) append per point.
+    if (want > gs.capacity) {
+        uint32_t new_cap = gs.capacity ? gs.capacity * 2 : 256u;
+        while (new_cap < want) new_cap *= 2;
+
+        if (gs.vbo.id != 0) device.destroy(gs.vbo);
+
+        tgfx2::BufferDesc desc;
+        desc.size = static_cast<uint64_t>(new_cap) * 2 * sizeof(float);
+        desc.usage = tgfx2::BufferUsage::Vertex
+                   | tgfx2::BufferUsage::CopyDst;
+        gs.vbo = device.create_buffer(desc);
+        gs.capacity = new_cap;
+        gs.gpu_count = 0;  // force full re-upload into new buffer
+    }
+
+    if (gs.gpu_count >= want || gs.vbo.id == 0) return;
+
+    // Convert tail [gpu_count..want) from double pairs to float pairs
+    // and upload to the VBO at the right byte offset.
+    const uint32_t n_new = want - gs.gpu_count;
+    std::vector<float> tail;
+    tail.reserve(static_cast<size_t>(n_new) * 2);
+    for (uint32_t i = gs.gpu_count; i < want; ++i) {
+        tail.push_back(static_cast<float>(s.x[i]));
+        tail.push_back(static_cast<float>(s.y[i]));
+    }
+    const uint64_t byte_offset =
+        static_cast<uint64_t>(gs.gpu_count) * 2 * sizeof(float);
+
+    std::span<const uint8_t> bytes(
+        reinterpret_cast<const uint8_t*>(tail.data()),
+        tail.size() * sizeof(float));
+    device.upload_buffer(gs.vbo, bytes, byte_offset);
+    gs.gpu_count = want;
+}
+
+void PlotEngine2D::compute_data_to_clip_(float out16[16]) {
+    // Linear transform:
+    //   x_clip = S_x * x_data + C_x
+    //   y_clip = S_y * y_data + C_y
+    // See engine2d.hpp for the full derivation. We also normalise
+    // pixel coords against the CURRENT viewport rect (vw_, vh_), so
+    // the transform works regardless of how the host positioned the
+    // engine within a bigger render target.
+    std::memset(out16, 0, sizeof(float) * 16);
+    out16[10] = 1.0f;  // pass Z through
+    out16[15] = 1.0f;
+
+    const Rect pa = plot_area_();
+    const ViewRange v = view_range_();
+    const double span_x = v.x_max - v.x_min;
+    const double span_y = v.y_max - v.y_min;
+
+    const double vw = std::max(vw_, 1.0f);
+    const double vh = std::max(vh_, 1.0f);
+
+    // Pixel-coord of plot area relative to viewport origin.
+    const double pa_x_local = pa.x - vx_;
+    const double pa_y_local = pa.y - vy_;
+
+    // Derivation: fx = 2/vw * (pa_x + (x - x_min)/span_x * pa_w) - 1.
+    const double S_x = (span_x != 0.0)
+        ? 2.0 * pa.w / vw / span_x : 0.0;
+    const double C_x = 2.0 * pa_x_local / vw - 1.0 - S_x * v.x_min;
+
+    // fy = 1 - 2/vh * (pa_y + (1 - (y - y_min)/span_y) * pa_h)
+    //    = 1 - 2*pa_y/vh - 2*pa_h/vh + (2*pa_h/vh/span_y) * (y - y_min)
+    const double S_y = (span_y != 0.0)
+        ? 2.0 * pa.h / vh / span_y : 0.0;
+    const double C_y = 1.0 - 2.0 * pa_y_local / vh - 2.0 * pa.h / vh
+                     - S_y * v.y_min;
+
+    // Column-major 4x4 storage: out16[col*4 + row].
+    // (col 0, row 0) = S_x; (col 3, row 0) = C_x.
+    out16[0 * 4 + 0] = static_cast<float>(S_x);
+    out16[3 * 4 + 0] = static_cast<float>(C_x);
+    out16[1 * 4 + 1] = static_cast<float>(S_y);
+    out16[3 * 4 + 1] = static_cast<float>(C_y);
+}
+
+// ---------------------------------------------------------------------------
+// Time-series / streaming API
+// ---------------------------------------------------------------------------
+
+void PlotEngine2D::append_to_line(size_t idx,
+                                    const double* x, const double* y,
+                                    size_t n) {
+    if (idx >= data.lines.size() || n == 0 || !x || !y) return;
+    LineSeries& s = data.lines[idx];
+    s.x.reserve(s.x.size() + n);
+    s.y.reserve(s.y.size() + n);
+    for (size_t i = 0; i < n; ++i) {
+        s.x.push_back(x[i]);
+        s.y.push_back(y[i]);
+    }
+    // The VBO is topped up with the tail on the next render() via
+    // ensure_line_gpu_ — no GPU work happens here.
+}
+
+bool PlotEngine2D::last_x_of_line(size_t idx, double& out_x) const {
+    if (idx >= data.lines.size()) return false;
+    const LineSeries& s = data.lines[idx];
+    if (s.x.empty()) return false;
+    out_x = s.x.back();
+    return true;
+}
+
+void PlotEngine2D::get_view(double& x_min, double& x_max,
+                              double& y_min, double& y_max) {
+    const ViewRange v = view_range_();
+    x_min = v.x_min; x_max = v.x_max;
+    y_min = v.y_min; y_max = v.y_max;
+}
+
+void PlotEngine2D::set_view_x(double x_min, double x_max) {
+    view_x_min_ = x_min;
+    view_x_max_ = x_max;
+    // Y preserved as-is (auto-fitted on first use if still unset).
+}
+
+void PlotEngine2D::set_view_y(double y_min, double y_max) {
+    view_y_min_ = y_min;
+    view_y_max_ = y_max;
 }
 
 // ---------------------------------------------------------------------------
@@ -286,28 +510,41 @@ void PlotEngine2D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
 
     ensure_shader_(ctx->device());
 
+    // Restrict GL to our strip of the render target. Without this
+    // every PlotEngine2D running in a multi-panel host would paint
+    // to the full framebuffer: scissor stops draws outside the
+    // plot area but glViewport decides the NDC → pixel mapping
+    // for everything that *is* drawn. Setting it per-engine means
+    // emit_* helpers + the line shader can speak local pixel coords
+    // (0..vw_, 0..vh_) and text metrics stay proportional to the
+    // strip rather than stretching across the whole surface.
+    //
+    // Engine-input y goes top-down, but glViewport expects y from the
+    // FBO bottom. In multi-strip mode the host supplies fbo_height_
+    // and we flip; single-strip (fbo_height_ == 0) keeps the old path.
+    const int gl_vy = (fbo_height_ > 0.0f)
+        ? (int)(fbo_height_ - vy_ - vh_)
+        : (int)vy_;
+    ctx->set_viewport((int)vx_, gl_vy, (int)vw_, (int)vh_);
+
     // Render state.
     ctx->set_depth_test(false);
     ctx->set_blend(true);
     ctx->set_cull(tgfx2::CullMode::None);
 
-    // Bind UI shader + ortho projection once per frame. Text2D below
-    // rebinds its own shader on every draw, so we must re-bind ours
-    // between text and further immediate draws.
+    // Bind UI shader + ortho projection. Vertex emitters below write
+    // GLOBAL viewport coords (pa.x = vx_ + margin_left, etc.), but
+    // with set_viewport above NDC [-1..1] maps to LOCAL pixels. The
+    // ortho subtracts (vx_, vy_) in NDC space so a global pa.x lands
+    // at the right place within the strip.
     auto bind_ui = [&](tgfx2::RenderContext2& c) {
         tgfx2::ShaderHandle vs; vs.id = shader_vs_id_;
         tgfx2::ShaderHandle fs; fs.id = shader_fs_id_;
         c.bind_shader(vs, fs);
         float proj[16];
         build_ortho((float)vw_, (float)vh_, proj);
-        // Because (vx_, vy_) may not be (0, 0) (we're inside a bigger
-        // viewport), we need to translate pixel coords into the ortho
-        // frame. Simplest: set_viewport to the visible region and use
-        // a 0-based ortho. But we need to mirror the translation the
-        // Python version implicitly does by mapping (vx_, vy_) to
-        // pixel (0, 0). Do it here in the shader projection.
-        float tx = -vx_;
-        float ty = -vy_;
+        const float tx = -vx_;
+        const float ty = -vy_;
         proj[3] += 2.0f * tx / std::max(vw_, 1.0f);
         proj[7] += -2.0f * ty / std::max(vh_, 1.0f);
         c.set_uniform_mat4("u_projection", proj, /*transpose=*/true);
@@ -327,13 +564,13 @@ void PlotEngine2D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
     const ViewRange v = view_range_();
 
     // Batch #2 — grid inside clip.
+    // Same y-flip convention as glViewport above: pa.y is in engine
+    // input coords (y+ down), glScissor wants y from the FBO bottom.
+    const int gl_sy = (fbo_height_ > 0.0f)
+        ? (int)(fbo_height_ - pa.y - pa.h)
+        : (int)pa.y;
     if (show_grid) {
-        // Enable scissor to plot area. Scissor is in GL pixel coords
-        // (y+ up, origin bottom-left of the framebuffer).
-        // Our FBO size is (vw_, vh_) with (vx_, vy_) = top-left; pass
-        // set_scissor in window pixel coords: the OpenGL device handles
-        // the y-flip internally for us (see OpenGLCommandList).
-        ctx->set_scissor((int)pa.x, (int)pa.y, (int)pa.w, (int)pa.h);
+        ctx->set_scissor((int)pa.x, gl_sy, (int)pa.w, (int)pa.h);
         bind_ui(*ctx);  // scissor sometimes drops bound state on some drivers
 
         const int max_x_ticks = std::max(int(pa.w / 80.0f), 3);
@@ -354,29 +591,57 @@ void PlotEngine2D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
         }
         flush_lines_(*ctx, line_verts);
     } else {
-        ctx->set_scissor((int)pa.x, (int)pa.y, (int)pa.w, (int)pa.h);
+        ctx->set_scissor((int)pa.x, gl_sy, (int)pa.w, (int)pa.h);
         bind_ui(*ctx);
     }
 
-    // Batch #3 — line series (one draw per series; all segments in
-    // one buffer). Fixes the 400-segment = 400-draw-calls perf bug.
+    // Batch #3 — line series via persistent VBOs + VS-side data→clip.
+    // Each series' points live in its own GPU buffer; append_to_line
+    // only uploads the new tail. Pan/zoom is a uniform change, no
+    // vertex re-upload. Scaling to time-series with 100k+ points is
+    // trivial here — data never returns to the CPU per-frame.
     {
-        uint32_t palette_i = 0;
-        for (const auto& s : data.lines) {
-            if (s.x.size() < 2) { palette_i++; continue; }
-            const Color4 c = s.color.has_value()
-                ? *s.color : styles::cycle_color(palette_i);
-            std::vector<float> verts;
-            verts.reserve((s.x.size() - 1) * 2 * 7);
-            for (size_t i = 0; i + 1 < s.x.size(); i++) {
-                float x1, y1, x2, y2;
-                data_to_pixel_(s.x[i], s.y[i], x1, y1);
-                data_to_pixel_(s.x[i + 1], s.y[i + 1], x2, y2);
-                emit_line_(verts, x1, y1, x2, y2, c);
-            }
-            flush_lines_(*ctx, verts);
-            palette_i++;
+        ensure_line_shader_(ctx->device());
+        line_gpu_.resize(data.lines.size());
+
+        tgfx2::ShaderHandle lvs; lvs.id = line_shader_vs_id_;
+        tgfx2::ShaderHandle lfs; lfs.id = line_shader_fs_id_;
+        ctx->bind_shader(lvs, lfs);
+
+        float data_to_clip[16];
+        compute_data_to_clip_(data_to_clip);
+        ctx->set_uniform_mat4("u_data_to_clip", data_to_clip,
+                              /*transpose=*/false);
+
+        tgfx2::VertexBufferLayout line_layout;
+        line_layout.stride = 2 * sizeof(float);
+        {
+            tgfx2::VertexAttribute a;
+            a.location = 0;
+            a.format = tgfx2::VertexFormat::Float2;
+            a.offset = 0;
+            line_layout.attributes.push_back(a);
         }
+        ctx->set_vertex_layout(line_layout);
+        ctx->set_topology(tgfx2::PrimitiveTopology::LineStrip);
+
+        for (size_t i = 0; i < data.lines.size(); ++i) {
+            const LineSeries& s = data.lines[i];
+            if (s.x.size() < 2) continue;
+
+            ensure_line_gpu_(ctx->device(), i);
+            const LineGpuState& gs = line_gpu_[i];
+            if (gs.gpu_count < 2 || gs.vbo.id == 0) continue;
+
+            const Color4 c = s.color.has_value()
+                ? *s.color : styles::cycle_color((uint32_t)i);
+            ctx->set_uniform_vec4("u_color", c.r, c.g, c.b, c.a);
+
+            ctx->draw_arrays(gs.vbo, gs.gpu_count);
+        }
+
+        // Restore the ui shader for subsequent scatter/outline batches.
+        bind_ui(*ctx);
     }
 
     // Batch #4 — scatter (squares via triangle pairs).
