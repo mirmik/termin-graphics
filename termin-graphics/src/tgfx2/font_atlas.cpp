@@ -184,12 +184,20 @@ bool FontAtlas::ensure_glyph(uint32_t codepoint) {
     int gw = x1 - x0;
     int gh = line_height_;  // Python: constant line_height for every cell.
 
+    // Horizontal advance — correct metric for cursor motion. Differs
+    // from the ink-bbox width (that's just how much of the glyph is
+    // painted). Space glyphs have ink width == 0 but a real advance.
+    int adv_w = 0, lsb = 0;
+    stbtt_GetGlyphHMetrics(&impl_->font, glyph_idx, &adv_w, &lsb);
+    const float advance_px = adv_w * impl_->scale;
+
     if (gw <= 0) {
-        // Zero-advance glyph (combining marks, some whitespace) —
-        // register with empty UVs so measure_text sees 0 width.
+        // No ink but still occupies layout space (U+0020 and similar).
+        // Register with real advance so cursor moves; UVs stay zero.
         GlyphInfo g{};
         g.width_px = 0.0f;
         g.height_px = static_cast<float>(gh);
+        g.advance_px = advance_px;
         glyphs_[codepoint] = g;
         return true;
     }
@@ -260,6 +268,7 @@ bool FontAtlas::ensure_glyph(uint32_t codepoint) {
     g.v1 = static_cast<float>(cell.y + gh) / static_cast<float>(atlas_h_);
     g.width_px = static_cast<float>(gw);
     g.height_px = static_cast<float>(gh);
+    g.advance_px = advance_px;
     glyphs_[codepoint] = g;
 
     dirty_ = true;
@@ -296,7 +305,8 @@ FontAtlas::Size2f FontAtlas::measure_text(std::string_view text_utf8,
         uint32_t cp = internal::utf8_decode(text_utf8, i);
         auto it = glyphs_.find(cp);
         if (it != glyphs_.end()) {
-            width += it->second.width_px * scale;
+            // Sum advance, not ink width — same reasoning as Text2DRenderer.
+            width += it->second.advance_px * scale;
         }
     }
     out.width = width;

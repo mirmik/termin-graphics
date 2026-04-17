@@ -204,7 +204,9 @@ void Text3DRenderer::draw(std::string_view text_utf8,
         };
         verts.insert(verts.end(), std::begin(quad), std::end(quad));
 
-        cursor_x += char_w;
+        // See Text2DRenderer: advance by the glyph's true advance, not
+        // ink width — so space glyphs actually move the cursor.
+        cursor_x += gi->advance_px * scale;
     }
 
     if (verts.empty()) return;

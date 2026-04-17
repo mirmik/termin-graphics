@@ -34,8 +34,11 @@ uint32_t default_colors_count() { return kDefaultColorsCount; }
 Color4 axis_color()    { return {0.7f, 0.7f, 0.7f, 1.0f}; }
 Color4 grid_color()    { return {0.3f, 0.3f, 0.3f, 0.5f}; }
 Color4 label_color()   { return {0.8f, 0.8f, 0.8f, 1.0f}; }
-Color4 bg_color()      { return {0.10f, 0.10f, 0.12f, 1.0f}; }
-Color4 plot_area_bg()  { return {0.13f, 0.13f, 0.15f, 1.0f}; }
+// Neutral greys — R = G = B so hosts on a pure-grey dark theme
+// (#1A1A1A / #242424) don't see a subtle blue cast. If a host wants a
+// tinted look they override via set_bg_color / set_plot_bg_color.
+Color4 bg_color()      { return {0.14f, 0.14f, 0.14f, 1.0f}; }
+Color4 plot_area_bg()  { return {0.10f, 0.10f, 0.10f, 1.0f}; }
 
 Color4 cycle_color(uint32_t index) {
     return kDefaultColors[index % kDefaultColorsCount];

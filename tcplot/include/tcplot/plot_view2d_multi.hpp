@@ -90,6 +90,18 @@ public:
     // grow-only from this baseline.
     void set_panel_view_y(int panel_idx, double y_min, double y_max);
 
+    // --- Colour + typography overrides (propagated to every panel) ---
+    // Strip background (behind margin area), plot-area background, grid,
+    // axis, labels. Pass 0..1 RGBA. Useful for matching a host theme.
+    void set_bg_color        (float r, float g, float b, float a);
+    void set_plot_bg_color   (float r, float g, float b, float a);
+    void set_grid_color      (float r, float g, float b, float a);
+    void set_axis_color      (float r, float g, float b, float a);
+    void set_label_color     (float r, float g, float b, float a);
+    // Per-panel font sizes in pixels. Margins auto-scale to fit.
+    void set_font_size       (float label_px, float title_px);
+    void set_panel_margins   (int left, int right, int top, int bottom);
+
     // --- Virtual scrolling ---
     // Fixed panel height in pixels. When > 0 the view lays panels out
     // on a virtual canvas of (panel_count * panel_height) px, clipped

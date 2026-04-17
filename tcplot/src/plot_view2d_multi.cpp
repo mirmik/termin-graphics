@@ -186,6 +186,40 @@ void PlotView2DMulti::set_panel_view_y(int panel_idx,
 }
 
 // ---------------------------------------------------------------------------
+// Colour + typography overrides
+// ---------------------------------------------------------------------------
+
+void PlotView2DMulti::set_bg_color(float r, float g, float b, float a) {
+    for (auto& p : panels_) p->bg_color = {r, g, b, a};
+}
+void PlotView2DMulti::set_plot_bg_color(float r, float g, float b, float a) {
+    for (auto& p : panels_) p->plot_bg_color = {r, g, b, a};
+}
+void PlotView2DMulti::set_grid_color(float r, float g, float b, float a) {
+    for (auto& p : panels_) p->grid_color = {r, g, b, a};
+}
+void PlotView2DMulti::set_axis_color(float r, float g, float b, float a) {
+    for (auto& p : panels_) p->axis_color = {r, g, b, a};
+}
+void PlotView2DMulti::set_label_color(float r, float g, float b, float a) {
+    for (auto& p : panels_) p->label_color = {r, g, b, a};
+}
+void PlotView2DMulti::set_font_size(float label_px, float title_px) {
+    for (auto& p : panels_) {
+        p->font_size = label_px;
+        p->title_font_size = title_px;
+    }
+}
+void PlotView2DMulti::set_panel_margins(int left, int right, int top, int bottom) {
+    for (auto& p : panels_) {
+        p->margin_left = left;
+        p->margin_right = right;
+        p->margin_top = top;
+        p->margin_bottom = bottom;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Virtual scrolling
 // ---------------------------------------------------------------------------
 
@@ -323,7 +357,12 @@ void PlotView2DMulti::render(int width, int height, uint32_t dst_gl_fbo) {
     ctx_->begin_frame();
     ctx_->set_sample_count(static_cast<uint32_t>(msaa_samples_));
 
-    const Color4 bg = styles::bg_color();
+    // Clear to the first panel's bg_color so host overrides via
+    // set_bg_color are visible even in the gaps between panel rects
+    // (virtualised scrolling leaves a strip at the bottom when fewer
+    // panels fit than PanelCount). Fallback to the style default for
+    // an empty panel list.
+    const Color4 bg = panels_.empty() ? styles::bg_color() : panels_[0]->bg_color;
     const float clear_col[4] = {bg.r, bg.g, bg.b, bg.a};
     ctx_->begin_pass(offscreen_color_, tgfx2::TextureHandle{},
                      clear_col, 1.0f, /*clear_depth_enabled=*/false);

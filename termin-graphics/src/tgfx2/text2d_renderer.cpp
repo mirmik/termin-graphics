@@ -225,7 +225,11 @@ void Text2DRenderer::draw(std::string_view text_utf8,
         };
         verts.insert(verts.end(), std::begin(quad), std::end(quad));
 
-        cursor_x += char_w;
+        // Advance by the glyph's true horizontal advance, not the ink
+        // width: the quad is sized by ink (what we rasterise), the
+        // cursor moves by advance (metric that includes sidebearings
+        // and gives space characters their width).
+        cursor_x += gi->advance_px * scale;
     }
 
     if (verts.empty()) return;

@@ -43,9 +43,15 @@ public:
         // Atlas UVs.
         float u0 = 0.0f, v0 = 0.0f, u1 = 0.0f, v1 = 0.0f;
         // Ink size in pixels at the atlas rasterise_size. Callers scale
-        // by (display_size / rasterise_size).
+        // by (display_size / rasterise_size). Matches the rendered quad
+        // dimensions — use these for layout of the glyph rectangle.
         float width_px = 0.0f;
         float height_px = 0.0f;
+        // Horizontal advance in pixels at the atlas rasterise_size.
+        // This is what the cursor moves between glyphs — differs from
+        // width_px for anything with sidebearings, and is the *only*
+        // sensible value for zero-ink glyphs like space.
+        float advance_px = 0.0f;
     };
 
     // Load a TTF, default rasterise at 32 px, default atlas 2048x2048.
