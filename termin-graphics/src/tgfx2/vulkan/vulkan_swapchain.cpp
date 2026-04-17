@@ -47,11 +47,31 @@ VulkanSwapchain::VulkanSwapchain(VulkanRenderDevice& dev,
 {
     create_swapchain();
     create_sync_objects();
+
+    // Pre-allocate one command buffer per in-flight slot for
+    // compose_and_present; they're reset-and-recorded each frame.
+    compose_command_buffers_.resize(MAX_FRAMES_IN_FLIGHT);
+    VkCommandBufferAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    ai.commandPool = device_.command_pool();
+    ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    ai.commandBufferCount = MAX_FRAMES_IN_FLIGHT;
+    if (vkAllocateCommandBuffers(device_.device(), &ai,
+                                  compose_command_buffers_.data()) != VK_SUCCESS) {
+        throw std::runtime_error("VulkanSwapchain: failed to allocate compose command buffers");
+    }
 }
 
 VulkanSwapchain::~VulkanSwapchain() {
     if (device_.device()) {
         vkDeviceWaitIdle(device_.device());
+    }
+    if (!compose_command_buffers_.empty()) {
+        vkFreeCommandBuffers(device_.device(),
+                              device_.command_pool(),
+                              static_cast<uint32_t>(compose_command_buffers_.size()),
+                              compose_command_buffers_.data());
+        compose_command_buffers_.clear();
     }
     destroy_sync_objects();
     destroy_swapchain();
@@ -257,6 +277,162 @@ void VulkanSwapchain::recreate(uint32_t width, uint32_t height) {
     width_ = width;
     height_ = height;
     create_swapchain();
+}
+
+// ---------------------------------------------------------------------------
+// Compose + present — the one-shot frame publisher
+// ---------------------------------------------------------------------------
+
+bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
+    // 1. Wait until the command buffer + sync objects for this slot
+    //    are free.
+    wait_for_current_frame();
+
+    // 2. Acquire an image from the swapchain.
+    uint32_t image_idx = 0;
+    VkSemaphore image_available = VK_NULL_HANDLE;
+    VkResult ar = acquire(&image_idx, &image_available);
+    if (ar == VK_ERROR_OUT_OF_DATE_KHR) {
+        // Nothing submitted this frame — fence stays signalled after
+        // we reset it above, so re-signal it to keep things balanced.
+        VkSubmitInfo empty{};
+        empty.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        vkQueueSubmit(device_.graphics_queue(), 1, &empty,
+                      in_flight_fences_[current_frame_]);
+        return true; // caller should recreate
+    }
+    if (ar != VK_SUCCESS && ar != VK_SUBOPTIMAL_KHR) {
+        return true;
+    }
+    bool suboptimal = (ar == VK_SUBOPTIMAL_KHR);
+
+    // 3. Look up the color texture on the device.
+    VkTextureResource* rt = device_.get_texture(color_tex);
+    if (!rt || !rt->image) {
+        // Can't compose — just submit an empty batch to signal the
+        // fence and move on. The screen stays on the previous frame
+        // which is fine for a dropped render.
+        VkSubmitInfo empty{};
+        empty.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        empty.waitSemaphoreCount = 1;
+        empty.pWaitSemaphores = &image_available;
+        VkPipelineStageFlags stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        empty.pWaitDstStageMask = &stage;
+        vkQueueSubmit(device_.graphics_queue(), 1, &empty,
+                      in_flight_fences_[current_frame_]);
+        present(image_idx, render_finished_semaphores_[current_frame_]);
+        advance_frame();
+        return false;
+    }
+
+    // 4. Record the compose command buffer: transitions + blit +
+    //    present-src transition.
+    VkCommandBuffer cb = compose_command_buffers_[current_frame_];
+    vkResetCommandBuffer(cb, 0);
+
+    VkCommandBufferBeginInfo begin{};
+    begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cb, &begin);
+
+    VkImage sc_image = images_[image_idx];
+    VkImageSubresourceRange range{};
+    range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    range.levelCount = 1;
+    range.layerCount = 1;
+
+    // rt_tex: current layout → TRANSFER_SRC.
+    VkImageMemoryBarrier rt_to_src{};
+    rt_to_src.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    rt_to_src.oldLayout = rt->current_layout;
+    rt_to_src.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    rt_to_src.image = rt->image;
+    rt_to_src.subresourceRange = range;
+    rt_to_src.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                               VK_ACCESS_SHADER_WRITE_BIT;
+    rt_to_src.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    vkCmdPipelineBarrier(cb,
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &rt_to_src);
+
+    // swapchain image: UNDEFINED → TRANSFER_DST.
+    VkImageMemoryBarrier sc_to_dst{};
+    sc_to_dst.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    sc_to_dst.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    sc_to_dst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    sc_to_dst.image = sc_image;
+    sc_to_dst.subresourceRange = range;
+    sc_to_dst.srcAccessMask = 0;
+    sc_to_dst.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    vkCmdPipelineBarrier(cb,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &sc_to_dst);
+
+    // Blit rt_tex → swapchain image (linear filter for any scale).
+    VkImageBlit blit{};
+    blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    blit.srcSubresource.layerCount = 1;
+    blit.srcOffsets[0] = {0, 0, 0};
+    blit.srcOffsets[1] = {static_cast<int32_t>(rt->desc.width),
+                           static_cast<int32_t>(rt->desc.height), 1};
+    blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    blit.dstSubresource.layerCount = 1;
+    blit.dstOffsets[0] = {0, 0, 0};
+    blit.dstOffsets[1] = {static_cast<int32_t>(width_),
+                           static_cast<int32_t>(height_), 1};
+    vkCmdBlitImage(cb,
+        rt->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        sc_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1, &blit, VK_FILTER_LINEAR);
+
+    // swapchain image: TRANSFER_DST → PRESENT_SRC.
+    VkImageMemoryBarrier sc_to_present{};
+    sc_to_present.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    sc_to_present.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    sc_to_present.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    sc_to_present.image = sc_image;
+    sc_to_present.subresourceRange = range;
+    sc_to_present.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    sc_to_present.dstAccessMask = 0;
+    vkCmdPipelineBarrier(cb,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &sc_to_present);
+
+    // Reflect the transition on the tgfx2 side — next render pass
+    // will see TRANSFER_SRC and transition appropriately.
+    rt->current_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+    vkEndCommandBuffer(cb);
+
+    // 5. Submit waiting on image_available, signalling render_finished
+    //    for this slot and tripping the in-flight fence.
+    VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    VkSemaphore render_done = render_finished_semaphores_[current_frame_];
+
+    VkSubmitInfo si{};
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    si.waitSemaphoreCount = 1;
+    si.pWaitSemaphores = &image_available;
+    si.pWaitDstStageMask = &wait_stage;
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &cb;
+    si.signalSemaphoreCount = 1;
+    si.pSignalSemaphores = &render_done;
+    vkQueueSubmit(device_.graphics_queue(), 1, &si,
+                  in_flight_fences_[current_frame_]);
+
+    // 6. Present — returns OUT_OF_DATE / SUBOPTIMAL if the surface
+    //    lost sync with the window (typical after resize).
+    VkResult pr = present(image_idx, render_done);
+    bool should_recreate = suboptimal ||
+                           pr == VK_ERROR_OUT_OF_DATE_KHR ||
+                           pr == VK_SUBOPTIMAL_KHR;
+
+    advance_frame();
+    return should_recreate;
 }
 
 } // namespace tgfx

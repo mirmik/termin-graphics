@@ -196,29 +196,10 @@ void main() {
     tgfx::BufferHandle ib = device->create_buffer(ib_desc);
     device->upload_buffer(ib, {reinterpret_cast<const uint8_t*>(indices), sizeof(indices)});
 
-    // ------------------------------------------------------------------
-    // Allocate one "compose" command buffer per in-flight frame. It
-    // does the swapchain transitions + blit from rt_tex onto the
-    // acquired swapchain image + transition back to PRESENT_SRC.
-    // ------------------------------------------------------------------
-    VkDevice vk_dev = device->device();
-    VkCommandPool pool = device->command_pool();
-    std::vector<VkCommandBuffer> compose_cbs(tgfx::VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
-    {
-        VkCommandBufferAllocateInfo ai{};
-        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        ai.commandPool = pool;
-        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        ai.commandBufferCount = static_cast<uint32_t>(compose_cbs.size());
-        vkAllocateCommandBuffers(vk_dev, &ai, compose_cbs.data());
-    }
-
     auto start = std::chrono::steady_clock::now();
     uint64_t frame_index = 0;
     bool running = true;
     SDL_Event ev;
-
-    VkImage rt_image = device->get_texture(rt_tex)->image;
 
     while (running) {
         while (SDL_PollEvent(&ev)) {
@@ -232,25 +213,10 @@ void main() {
         float t = std::chrono::duration<float>(now - start).count();
         if (t > 3.0f) running = false;
 
-        sc->wait_for_current_frame();
-
-        uint32_t img_idx = 0;
-        VkSemaphore img_available = VK_NULL_HANDLE;
-        VkResult r = sc->acquire(&img_idx, &img_available);
-        if (r == VK_ERROR_OUT_OF_DATE_KHR) {
-            sc->recreate(sc->width(), sc->height());
-            continue;
-        }
-        if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR) {
-            fprintf(stderr, "acquire returned %d\n", r);
-            break;
-        }
-
         // ------------------------------------------------------------
-        // Pass 1: draw the triangle into rt_tex via the tgfx2 API.
+        // Draw the triangle into rt_tex via the tgfx2 API.
         // submit() here also does vkQueueWaitIdle — by the time it
-        // returns, rt_tex is in COLOR_ATTACHMENT_OPTIMAL layout and
-        // the fragment shader has written the frame.
+        // returns, rt_tex has the fragment shader's output.
         // ------------------------------------------------------------
         {
             auto cmd = device->create_command_list();
@@ -276,134 +242,19 @@ void main() {
             cmd->end();
             device->submit(*cmd);
         }
-        auto* rt = device->get_texture(rt_tex);
 
-        // ------------------------------------------------------------
-        // Pass 2: transition rt_tex → TRANSFER_SRC, swapchain image
-        // UNDEFINED → TRANSFER_DST, vkCmdBlitImage, swapchain →
-        // PRESENT_SRC. Uses the per-frame semaphores owned by
-        // VulkanSwapchain.
-        // ------------------------------------------------------------
-        uint32_t slot = frame_index % tgfx::VulkanSwapchain::MAX_FRAMES_IN_FLIGHT;
-        VkCommandBuffer cb = compose_cbs[slot];
-        vkResetCommandBuffer(cb, 0);
-
-        VkCommandBufferBeginInfo begin{};
-        begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        vkBeginCommandBuffer(cb, &begin);
-
-        VkImage sc_image = sc->image(img_idx);
-        VkImageSubresourceRange range_color{};
-        range_color.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        range_color.levelCount = 1;
-        range_color.layerCount = 1;
-
-        // rt_tex: COLOR_ATTACHMENT → TRANSFER_SRC
-        VkImageMemoryBarrier rt_to_src{};
-        rt_to_src.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        rt_to_src.oldLayout = rt->current_layout;
-        rt_to_src.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        rt_to_src.image = rt_image;
-        rt_to_src.subresourceRange = range_color;
-        rt_to_src.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        rt_to_src.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        vkCmdPipelineBarrier(cb,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0, 0, nullptr, 0, nullptr, 1, &rt_to_src);
-
-        // swapchain: UNDEFINED → TRANSFER_DST
-        VkImageMemoryBarrier sc_to_dst{};
-        sc_to_dst.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        sc_to_dst.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        sc_to_dst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        sc_to_dst.image = sc_image;
-        sc_to_dst.subresourceRange = range_color;
-        sc_to_dst.srcAccessMask = 0;
-        sc_to_dst.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        vkCmdPipelineBarrier(cb,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0, 0, nullptr, 0, nullptr, 1, &sc_to_dst);
-
-        // Blit rt_tex onto swapchain image (scales from kWidth×kHeight
-        // to surface extent — identity when they match).
-        VkImageBlit blit{};
-        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blit.srcSubresource.layerCount = 1;
-        blit.srcOffsets[0] = {0, 0, 0};
-        blit.srcOffsets[1] = {kWidth, kHeight, 1};
-        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blit.dstSubresource.layerCount = 1;
-        blit.dstOffsets[0] = {0, 0, 0};
-        blit.dstOffsets[1] = {static_cast<int32_t>(sc->width()),
-                               static_cast<int32_t>(sc->height()), 1};
-        vkCmdBlitImage(cb,
-            rt_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            sc_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1, &blit, VK_FILTER_LINEAR);
-
-        // swapchain: TRANSFER_DST → PRESENT_SRC
-        VkImageMemoryBarrier sc_to_present{};
-        sc_to_present.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        sc_to_present.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        sc_to_present.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        sc_to_present.image = sc_image;
-        sc_to_present.subresourceRange = range_color;
-        sc_to_present.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        sc_to_present.dstAccessMask = 0;
-        vkCmdPipelineBarrier(cb,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-            0, 0, nullptr, 0, nullptr, 1, &sc_to_present);
-
-        // Track that rt_tex's layout will be COLOR_ATTACHMENT again
-        // after the next render pass (the next frame's begin_pass
-        // issues its own transition); leave current_layout at the
-        // transfer-src state we just moved it to so any stray tgfx2
-        // lookup stays consistent.
-        rt->current_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-
-        vkEndCommandBuffer(cb);
-
-        VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        // Ad-hoc render_finished semaphore; vkDeviceWaitIdle below
-        // lets us destroy it safely this frame. A production frame
-        // loop would keep N=MAX_FRAMES_IN_FLIGHT pre-allocated.
-        VkSemaphore render_done = VK_NULL_HANDLE;
-        VkSemaphoreCreateInfo sci{};
-        sci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-        vkCreateSemaphore(vk_dev, &sci, nullptr, &render_done);
-
-        VkSubmitInfo si{};
-        si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        si.waitSemaphoreCount = 1;
-        si.pWaitSemaphores = &img_available;
-        si.pWaitDstStageMask = &wait_stage;
-        si.commandBufferCount = 1;
-        si.pCommandBuffers = &cb;
-        si.signalSemaphoreCount = 1;
-        si.pSignalSemaphores = &render_done;
-        vkQueueSubmit(device->graphics_queue(), 1, &si, sc->current_fence());
-
-        VkResult pr = sc->present(img_idx, render_done);
-        if (pr == VK_ERROR_OUT_OF_DATE_KHR || pr == VK_SUBOPTIMAL_KHR) {
+        // One-liner present: swapchain handles acquire/compose/submit/
+        // present/advance internally. Returns true on OUT_OF_DATE —
+        // recreate before next frame.
+        if (sc->compose_and_present(rt_tex)) {
             int w, h;
             SDL_Vulkan_GetDrawableSize(window, &w, &h);
             sc->recreate(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
         }
-
-        vkDeviceWaitIdle(vk_dev);
-        vkDestroySemaphore(vk_dev, render_done, nullptr);
-        sc->advance_frame();
         ++frame_index;
     }
 
-    vkDeviceWaitIdle(vk_dev);
-    vkFreeCommandBuffers(vk_dev, pool,
-                          static_cast<uint32_t>(compose_cbs.size()),
-                          compose_cbs.data());
+    vkDeviceWaitIdle(device->device());
 
     device->destroy(ib);
     device->destroy(vb);

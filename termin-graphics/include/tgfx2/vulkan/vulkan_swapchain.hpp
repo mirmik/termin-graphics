@@ -13,6 +13,7 @@
 #include <cstdint>
 
 #include "tgfx2/tgfx2_api.h"
+#include "tgfx2/handles.hpp"
 
 namespace tgfx {
 
@@ -66,6 +67,19 @@ public:
     void advance_frame();
     VkFence current_fence() const { return in_flight_fences_[current_frame_]; }
 
+    // One-shot helper: composite `color_tex` onto the next swapchain
+    // image and publish the frame. Handles the full wait → acquire →
+    // layout transitions → vkCmdBlitImage → submit → present →
+    // advance cycle internally, so the host only needs one call per
+    // frame. `color_tex` must have been created on the same device
+    // as this swapchain and can be any size — it's scaled to the
+    // swapchain extent with VK_FILTER_LINEAR.
+    //
+    // Returns whether a recreate is recommended (OUT_OF_DATE /
+    // SUBOPTIMAL from acquire or present). True means the caller
+    // should call recreate(w, h) before the next frame.
+    bool compose_and_present(tgfx::TextureHandle color_tex);
+
     // Introspection
     VkSwapchainKHR handle() const { return swapchain_; }
     VkFormat format() const { return format_; }
@@ -99,6 +113,11 @@ private:
     std::vector<VkSemaphore> image_available_semaphores_;
     std::vector<VkSemaphore> render_finished_semaphores_;
     std::vector<VkFence> in_flight_fences_;
+
+    // Per-in-flight-frame command buffer for compose_and_present.
+    // Allocated once at swapchain construction, reused each cycle.
+    std::vector<VkCommandBuffer> compose_command_buffers_;
+
     uint32_t current_frame_ = 0;
 };
 
