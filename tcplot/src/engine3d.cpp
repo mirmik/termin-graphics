@@ -711,13 +711,6 @@ void PlotEngine3D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
 
     // Tick labels + marker value label via Text3D.
     if (font) {
-        const float cam_right[3] = {
-            // view rows 0 and 1 give us the camera basis in world space.
-            // Build view once and read rows.
-            0, 0, 0
-        };
-        (void)cam_right;  // placeholder — actual extraction below.
-
         float view[16];
         camera.view_matrix(view);
         // view is column-major 4x4. Row 0: world-space camera-right;
@@ -725,10 +718,19 @@ void PlotEngine3D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
         const float cr[3] = {view[0 * 4 + 0], view[1 * 4 + 0], view[2 * 4 + 0]};
         const float cu[3] = {view[0 * 4 + 1], view[1 * 4 + 1], view[2 * 4 + 1]};
 
+        // For Text3D we pass the UNSCALED camera MVP: label positions
+        // already have z_scale baked into their world-Z (see pos[2]
+        // below). If we used the z_scaled mvp here, z would be
+        // multiplied twice and — worse — the billboard quad's offset
+        // through u_cam_up / u_cam_right would get stretched by z_scale
+        // whenever cam_up has any world-Z component.
+        float label_mvp[16];
+        camera.mvp(aspect, label_mvp);
+
         // Tick labels on axes.
         ctx->set_depth_test(true);
         ctx->set_blend(true);
-        text3d_->begin(ctx, mvp, cr, cu, font);
+        text3d_->begin(ctx, label_mvp, cr, cu, font);
 
         const Color4 label_color{0.8f, 0.8f, 0.8f, 1.0f};
         const double data_size = std::sqrt(
@@ -770,7 +772,7 @@ void PlotEngine3D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
         // Marker value label (always on top).
         if (has_marker_ && marker_mode) {
             ctx->set_depth_test(false);
-            text3d_->begin(ctx, mvp, cr, cu, font);
+            text3d_->begin(ctx, label_mvp, cr, cu, font);
             char label_buf[64];
             std::snprintf(label_buf, sizeof(label_buf),
                           "(%.3g, %.3g, %.3g)",
