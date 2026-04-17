@@ -95,6 +95,7 @@ public:
 
     BufferHandle create_buffer(const BufferDesc& desc) override;
     TextureHandle create_texture(const TextureDesc& desc) override;
+    TextureDesc texture_desc(TextureHandle handle) const override;
     SamplerHandle create_sampler(const SamplerDesc& desc) override;
     ShaderHandle create_shader(const ShaderDesc& desc) override;
     PipelineHandle create_pipeline(const PipelineDesc& desc) override;

@@ -772,6 +772,17 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
 
 // --- Destroy ---
 
+TextureDesc VulkanRenderDevice::texture_desc(TextureHandle handle) const {
+    // Re-declare a local VkTextureResource* lookup because the member
+    // accessor is non-const; this is a read-only query so const_cast
+    // is safe — the pool's map is the only thing we touch.
+    auto* self = const_cast<VulkanRenderDevice*>(this);
+    if (auto* r = self->textures_.get(handle.id)) {
+        return r->desc;
+    }
+    return {};
+}
+
 void VulkanRenderDevice::destroy(BufferHandle h) {
     if (auto* r = buffers_.get(h.id)) {
         vkDeviceWaitIdle(device_);

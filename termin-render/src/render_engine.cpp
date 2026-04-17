@@ -6,6 +6,7 @@
 #include "tc_profiler.h"
 #include "tc_project_settings.h"
 
+#include "tgfx2/device_factory.hpp"
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #include "tgfx2/pipeline_cache.hpp"
 #include "tgfx2/render_context.hpp"
@@ -63,26 +64,24 @@ void RenderEngine::ensure_tgfx2() {
     if (tgfx2_ctx_) {
         return;
     }
-    // Assumes the GL context is current (caller is inside a render frame).
-    tgfx2_device_ = std::make_unique<tgfx::OpenGLRenderDevice>();
+    // Backend selected by TERMIN_BACKEND env-var (default OpenGL).
+    // For OpenGL the GL context must already be current (caller is
+    // inside a render frame). For Vulkan the device creates its own
+    // VkInstance + VkDevice.
+    tgfx2_device_ = tgfx::create_device(tgfx::default_backend_from_env());
     tgfx2_cache_ = std::make_unique<tgfx::PipelineCache>(*tgfx2_device_);
     tgfx2_ctx_ = std::make_unique<tgfx::RenderContext2>(*tgfx2_device_, *tgfx2_cache_);
 
-    // Stage 6: swap the tgfx_gpu_ops vtable from the raw-GL implementation
-    // installed by OpenGLGraphicsBackend::ensure_ready() to the tgfx2-backed
-    // one. From now on tc_shader_compile_gpu, tc_mesh_upload_gpu and
-    // tc_texture_upload_gpu route through IRenderDevice::create_shader,
-    // create_buffer and create_texture. Returned GL ids are still
-    // extracted from the tgfx2 handles and stored in tc_gpu_slot for
-    // backward-compat with the legacy TcShader::use / set_uniform_*
-    // surface (Stage 7 deletes those callers; Stage 8 removes
-    // gpu_ops_impl entirely).
-    //
-    // Known regression: chronosquad hits a driver-side SIGSEGV inside
-    // ShadowPass's draw after the swap. Deferred — Stage 7 first, then
-    // root-cause on the settled code.
-    tgfx2_interop_set_device(tgfx2_device_.get());
-    tgfx2_gpu_ops_register();
+    // Legacy tgfx_gpu_ops vtable is GL-specific (it extracts GL ids
+    // from tgfx2 handles for backward-compat with tc_mesh_upload_gpu
+    // / tc_texture_upload_gpu / tc_shader_compile_gpu). Install only
+    // on OpenGL backend. Non-GL backends don't have this interop
+    // yet — hosts running under Vulkan must avoid legacy resource
+    // upload entry points.
+    if (dynamic_cast<tgfx::OpenGLRenderDevice*>(tgfx2_device_.get())) {
+        tgfx2_interop_set_device(tgfx2_device_.get());
+        tgfx2_gpu_ops_register();
+    }
 }
 
 void RenderEngine::render_to_screen(

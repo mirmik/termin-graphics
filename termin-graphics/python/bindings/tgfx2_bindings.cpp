@@ -18,6 +18,7 @@
 
 #include <tgfx2/render_context.hpp>
 #include <tgfx2/i_render_device.hpp>
+#include <tgfx2/device_factory.hpp>
 #include <tgfx2/opengl/opengl_render_device.hpp>
 #include <tgfx2/pipeline_cache.hpp>
 #include <tgfx2/handles.hpp>
@@ -376,12 +377,13 @@ void bind_tgfx2(nb::module_& m) {
     // Destruction order is declaration-reverse: ctx, then cache, then
     // device — which is the correct dependency order.
     struct Tgfx2ContextHolder {
-        std::unique_ptr<tgfx::OpenGLRenderDevice> device;
+        std::unique_ptr<tgfx::IRenderDevice> device;
         std::unique_ptr<tgfx::PipelineCache> cache;
         std::unique_ptr<tgfx::RenderContext2> ctx;
 
         Tgfx2ContextHolder() {
-            device = std::make_unique<tgfx::OpenGLRenderDevice>();
+            // Backend selected by TERMIN_BACKEND env-var (default OpenGL).
+            device = tgfx::create_device(tgfx::default_backend_from_env());
             cache = std::make_unique<tgfx::PipelineCache>(*device);
             ctx = std::make_unique<tgfx::RenderContext2>(*device, *cache);
             // Ensure a default tc_gpu_context exists and is current so
@@ -392,11 +394,15 @@ void bind_tgfx2(nb::module_& m) {
             // Install the tgfx2-backed gpu_ops vtable so legacy
             // tc_shader_compile_gpu / tc_mesh_upload_gpu /
             // tc_texture_upload_gpu resource upload paths route through
-            // this device. Without this, tmesh-based widgets
-            // (Plot3D, ImmediateRenderer with a TcMesh) crash with
-            // "GPU ops not set".
-            tgfx2_interop_set_device(device.get());
-            tgfx2_gpu_ops_register();
+            // this device. The legacy gpu_ops forwarder reads back raw
+            // GL ids from tgfx2 handles for backward-compat with
+            // code that still speaks GL (tmesh widgets, TcShader.use).
+            // It is GL-specific — skip for non-GL backends, those hosts
+            // must avoid the legacy tc_mesh/tc_texture upload paths.
+            if (dynamic_cast<tgfx::OpenGLRenderDevice*>(device.get())) {
+                tgfx2_interop_set_device(device.get());
+                tgfx2_gpu_ops_register();
+            }
         }
     };
 
@@ -425,8 +431,13 @@ void bind_tgfx2(nb::module_& m) {
         // the same device is a no-op on the vtable install.
         .def("register_interop",
             [](Tgfx2ContextHolder& self) {
-                tgfx2_interop_set_device(self.device.get());
-                tgfx2_gpu_ops_register();
+                // Legacy gpu_ops forwarder is GL-specific. No-op on
+                // other backends — the host must avoid legacy
+                // tc_mesh_upload_gpu / tc_texture_upload_gpu entirely.
+                if (dynamic_cast<tgfx::OpenGLRenderDevice*>(self.device.get())) {
+                    tgfx2_interop_set_device(self.device.get());
+                    tgfx2_gpu_ops_register();
+                }
             })
 
         // --- Texture helpers (narrow API; the full IRenderDevice is
@@ -514,8 +525,9 @@ void bind_tgfx2(nb::module_& m) {
         // external handle in its own device.
         .def("get_gl_id",
             [](Tgfx2ContextHolder& self, tgfx::TextureHandle handle) -> uint32_t {
-                return static_cast<uint32_t>(
-                    self.device->gl_texture_id(handle));
+                auto* gl = dynamic_cast<tgfx::OpenGLRenderDevice*>(self.device.get());
+                if (!gl) throw std::runtime_error("get_gl_id: not an OpenGL backend");
+                return static_cast<uint32_t>(gl->gl_texture_id(handle));
             },
             nb::arg("handle"))
 
@@ -570,7 +582,9 @@ void bind_tgfx2(nb::module_& m) {
            tgfx::TextureHandle src,
            int src_x, int src_y, int src_w, int src_h,
            int dst_x, int dst_y, int dst_w, int dst_h) {
-            holder.device->blit_to_external_fbo(
+            auto* gl = dynamic_cast<tgfx::OpenGLRenderDevice*>(holder.device.get());
+            if (!gl) throw std::runtime_error("ctx2_blit_to_external_fbo: not an OpenGL backend");
+            gl->blit_to_external_fbo(
                 dst_fbo_id, src,
                 src_x, src_y, src_w, src_h,
                 dst_x, dst_y, dst_w, dst_h);
@@ -584,12 +598,14 @@ void bind_tgfx2(nb::module_& m) {
     m.def("wrap_gl_texture_as_tgfx2",
         [](Tgfx2ContextHolder& holder, uint32_t gl_id,
            uint32_t w, uint32_t h, int format_int) -> tgfx::TextureHandle {
+            auto* gl = dynamic_cast<tgfx::OpenGLRenderDevice*>(holder.device.get());
+            if (!gl) throw std::runtime_error("wrap_gl_texture_as_tgfx2: not an OpenGL backend");
             tgfx::TextureDesc desc;
             desc.width = w;
             desc.height = h;
             desc.format = static_cast<tgfx::PixelFormat>(format_int);
             desc.usage = tgfx::TextureUsage::Sampled;
-            return holder.device->register_external_texture(
+            return gl->register_external_texture(
                 static_cast<GLuint>(gl_id), desc);
         },
         nb::arg("ctx"), nb::arg("gl_id"),
