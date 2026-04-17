@@ -118,8 +118,13 @@ add_library(termin_graphics2 SHARED ${TGFX2_SOURCES})
 target_compile_definitions(termin_graphics2 PRIVATE TGFX2_EXPORTS)
 
 if(TGFX2_ENABLE_VULKAN)
-    target_compile_definitions(termin_graphics2 PUBLIC TGFX2_HAS_VULKAN)
-    target_link_libraries(termin_graphics2 PUBLIC Vulkan::Vulkan)
+    # PRIVATE on purpose: downstream consumers (termin-render,
+    # termin-engine, termin-app) only touch tgfx2 through IRenderDevice
+    # and never include tgfx2/vulkan/* headers. Keeping the Vulkan
+    # target and TGFX2_HAS_VULKAN internal stops the SDK install from
+    # requiring every consumer to `find_package(Vulkan)` themselves.
+    target_compile_definitions(termin_graphics2 PRIVATE TGFX2_HAS_VULKAN)
+    target_link_libraries(termin_graphics2 PRIVATE Vulkan::Vulkan)
     target_link_libraries(termin_graphics2 PRIVATE ${SHADERC_LIB})
     # VMA is header-only; link PRIVATE to avoid export issues
     target_include_directories(termin_graphics2 PRIVATE ${vma_SOURCE_DIR}/include)
