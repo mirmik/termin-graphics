@@ -5,7 +5,7 @@
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/enums.hpp"
 
-namespace tgfx2 {
+namespace tgfx {
 
 // Reserved UBO binding slot used by the OpenGL backend to emulate
 // push constants. Shaders that consume push constants must declare
@@ -79,4 +79,4 @@ public:
     virtual void set_scissor(int x, int y, int width, int height) = 0;
 };
 
-} // namespace tgfx2
+} // namespace tgfx

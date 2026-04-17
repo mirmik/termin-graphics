@@ -34,10 +34,10 @@ PlotView2DMulti::PlotView2DMulti(const std::string& ttf_path, int panel_count)
     : ttf_path_(ttf_path) {
     if (panel_count < 1) panel_count = 1;
 
-    device_ = std::make_unique<tgfx2::OpenGLRenderDevice>();
-    cache_  = std::make_unique<tgfx2::PipelineCache>(*device_);
-    ctx_    = std::make_unique<tgfx2::RenderContext2>(*device_, *cache_);
-    font_   = std::make_unique<tgfx2::FontAtlas>(ttf_path);
+    device_ = std::make_unique<tgfx::OpenGLRenderDevice>();
+    cache_  = std::make_unique<tgfx::PipelineCache>(*device_);
+    ctx_    = std::make_unique<tgfx::RenderContext2>(*device_, *cache_);
+    font_   = std::make_unique<tgfx::FontAtlas>(ttf_path);
 
     panels_.reserve(panel_count);
     for (int i = 0; i < panel_count; ++i) {
@@ -159,7 +159,7 @@ void PlotView2DMulti::set_msaa_samples(int samples) {
     if (device_ && offscreen_color_.id != 0) {
         device_->destroy(offscreen_color_);
     }
-    offscreen_color_ = tgfx2::TextureHandle{};
+    offscreen_color_ = tgfx::TextureHandle{};
     offscreen_w_ = 0;
     offscreen_h_ = 0;
 }
@@ -260,15 +260,15 @@ void PlotView2DMulti::update_shared_x_() {
 void PlotView2DMulti::ensure_offscreen_(int w, int h) {
     if (offscreen_color_.id != 0 && offscreen_w_ == w && offscreen_h_ == h) return;
     if (offscreen_color_.id != 0) device_->destroy(offscreen_color_);
-    offscreen_color_ = tgfx2::TextureHandle{};
+    offscreen_color_ = tgfx::TextureHandle{};
 
-    tgfx2::TextureDesc desc;
+    tgfx::TextureDesc desc;
     desc.width  = static_cast<uint32_t>(w);
     desc.height = static_cast<uint32_t>(h);
-    desc.format = tgfx2::PixelFormat::RGBA8_UNorm;
-    desc.usage  = tgfx2::TextureUsage::Sampled
-                | tgfx2::TextureUsage::ColorAttachment
-                | tgfx2::TextureUsage::CopySrc;
+    desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    desc.usage  = tgfx::TextureUsage::Sampled
+                | tgfx::TextureUsage::ColorAttachment
+                | tgfx::TextureUsage::CopySrc;
     desc.sample_count = static_cast<uint32_t>(msaa_samples_);
     offscreen_color_ = device_->create_texture(desc);
 
@@ -277,7 +277,7 @@ void PlotView2DMulti::ensure_offscreen_(int w, int h) {
 }
 
 void PlotView2DMulti::blit_to_dst_(int w, int h, uint32_t dst_gl_fbo) {
-    auto* gl_dev = static_cast<tgfx2::OpenGLRenderDevice*>(device_.get());
+    auto* gl_dev = static_cast<tgfx::OpenGLRenderDevice*>(device_.get());
     gl_dev->blit_to_external_fbo(dst_gl_fbo, offscreen_color_,
                                  0, 0, w, h,
                                  0, 0, w, h);
@@ -364,7 +364,7 @@ void PlotView2DMulti::render(int width, int height, uint32_t dst_gl_fbo) {
     // an empty panel list.
     const Color4 bg = panels_.empty() ? styles::bg_color() : panels_[0]->bg_color;
     const float clear_col[4] = {bg.r, bg.g, bg.b, bg.a};
-    ctx_->begin_pass(offscreen_color_, tgfx2::TextureHandle{},
+    ctx_->begin_pass(offscreen_color_, tgfx::TextureHandle{},
                      clear_col, 1.0f, /*clear_depth_enabled=*/false);
 
     // Only render panels whose rect intersects the viewport. In
@@ -404,7 +404,7 @@ void PlotView2DMulti::release_gpu() {
     if (device_ && offscreen_color_.id != 0) {
         device_->destroy(offscreen_color_);
     }
-    offscreen_color_ = tgfx2::TextureHandle{};
+    offscreen_color_ = tgfx::TextureHandle{};
     offscreen_w_ = 0;
     offscreen_h_ = 0;
 }

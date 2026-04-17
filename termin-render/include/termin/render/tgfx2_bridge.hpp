@@ -15,7 +15,7 @@ extern "C" {
 
 struct tc_mesh;
 
-namespace tgfx2 {
+namespace tgfx {
 class OpenGLRenderDevice;
 }
 
@@ -33,8 +33,8 @@ namespace termin {
 //
 // Returns an invalid handle (id == 0) if the texture handle is
 // invalid, upload fails, or no GPU context is active.
-RENDER_API tgfx2::TextureHandle wrap_tc_texture_as_tgfx2(
-    tgfx2::OpenGLRenderDevice& device,
+RENDER_API tgfx::TextureHandle wrap_tc_texture_as_tgfx2(
+    tgfx::OpenGLRenderDevice& device,
     tc_texture_handle handle
 );
 
@@ -47,12 +47,12 @@ RENDER_API tgfx2::TextureHandle wrap_tc_texture_as_tgfx2(
 // marked them external. index_count == 0 means the wrap failed and the
 // binding should not be used.
 struct Tgfx2MeshBinding {
-    tgfx2::BufferHandle vertex_buffer;
-    tgfx2::BufferHandle index_buffer;
-    tgfx2::VertexBufferLayout layout;
+    tgfx::BufferHandle vertex_buffer;
+    tgfx::BufferHandle index_buffer;
+    tgfx::VertexBufferLayout layout;
     uint32_t index_count = 0;
-    tgfx2::IndexType index_type = tgfx2::IndexType::Uint32;
-    tgfx2::PrimitiveTopology topology = tgfx2::PrimitiveTopology::TriangleList;
+    tgfx::IndexType index_type = tgfx::IndexType::Uint32;
+    tgfx::PrimitiveTopology topology = tgfx::PrimitiveTopology::TriangleList;
 };
 
 // Wrap a tc_mesh's GPU shadow as a tgfx2 vertex/index buffer pair plus
@@ -62,7 +62,7 @@ struct Tgfx2MeshBinding {
 // through tgfx2 while TcMesh itself still allocates GL buffers via
 // the legacy ops vtable.
 RENDER_API Tgfx2MeshBinding wrap_mesh_as_tgfx2(
-    tgfx2::OpenGLRenderDevice& device,
+    tgfx::OpenGLRenderDevice& device,
     tc_mesh* mesh
 );
 

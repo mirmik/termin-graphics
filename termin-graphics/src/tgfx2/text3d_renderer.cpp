@@ -23,7 +23,7 @@
 
 #include "internal/utf8_decode.hpp"
 
-namespace tgfx2 {
+namespace tgfx {
 
 namespace {
 
@@ -219,4 +219,4 @@ void Text3DRenderer::end() {
     ctx_ = nullptr;
 }
 
-}  // namespace tgfx2
+}  // namespace tgfx

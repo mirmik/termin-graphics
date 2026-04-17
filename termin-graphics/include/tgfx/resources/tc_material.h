@@ -172,9 +172,9 @@ typedef struct tc_material_phase {
     // (tc_material_phase_ensure_ubo), resized on shader hot-reload when
     // block_size changes, released in tc_material_release / reset via
     // tc_material_phase_release_ubo (implementation lives in C++ because
-    // the UBO is owned by a tgfx2::IRenderDevice).
+    // the UBO is owned by a tgfx::IRenderDevice).
     //
-    // ubo_id is an opaque uint32 (a tgfx2::BufferHandle id). 0 = none.
+    // ubo_id is an opaque uint32 (a tgfx::BufferHandle id). 0 = none.
     // ubo_size/version track the allocation so we can detect resize/
     // recompile events. ubo_device is a void* IRenderDevice back-pointer
     // used by release code to call destroy(). Same pattern as
@@ -224,7 +224,7 @@ TGFX_API void tc_material_phase_release_ubo(tc_material_phase* phase);
 // callback was never registered — in that case the caller should fall
 // back to legacy per-uniform dispatch.
 //
-// `tgfx2_device` is an opaque tgfx2::IRenderDevice* (C++ type erased to
+// `tgfx2_device` is an opaque tgfx::IRenderDevice* (C++ type erased to
 // void* at the C ABI boundary).
 typedef bool (*tc_material_phase_apply_ubo_gl_fn)(
     tc_material_phase* phase,

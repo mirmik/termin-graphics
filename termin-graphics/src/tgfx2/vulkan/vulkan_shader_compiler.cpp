@@ -3,7 +3,7 @@
 #include "tgfx2/vulkan/vulkan_shader_compiler.hpp"
 #include <shaderc/shaderc.hpp>
 
-namespace tgfx2::vk {
+namespace tgfx::vk {
 
 static shaderc_shader_kind to_shaderc_kind(ShaderStage stage) {
     switch (stage) {
@@ -47,6 +47,6 @@ SpirvCompileResult compile_glsl_to_spirv(
     return result;
 }
 
-} // namespace tgfx2::vk
+} // namespace tgfx::vk
 
 #endif // TGFX2_HAS_VULKAN

@@ -8,7 +8,7 @@
 
 #include "tgfx2/enums.hpp"
 
-namespace tgfx2::vk {
+namespace tgfx::vk {
 
 struct SpirvCompileResult {
     std::vector<uint32_t> spirv;
@@ -24,6 +24,6 @@ SpirvCompileResult compile_glsl_to_spirv(
     const std::string& entry_point = "main"
 );
 
-} // namespace tgfx2::vk
+} // namespace tgfx::vk
 
 #endif // TGFX2_HAS_VULKAN

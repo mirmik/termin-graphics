@@ -39,7 +39,7 @@ void bind_tc_render_target(nb::module_& m);
 namespace termin {
 
 void bind_render_framework(nb::module_& m) {
-    // Force-import _tgfx_native so that its nb::class_<tgfx2::RenderContext2>
+    // Force-import _tgfx_native so that its nb::class_<tgfx::RenderContext2>
     // and other tgfx2 handle registrations are live before we start
     // binding properties that return those types. Without this, the
     // first access of ctx.ctx2 from Python crashes with "Unable to
@@ -307,7 +307,7 @@ void bind_render_framework(nb::module_& m) {
         // GraphicsBackend. None if the frame was set up without tgfx2
         // (e.g., TERMIN_DISABLE_TGFX2=1 escape hatch).
         .def_prop_ro("ctx2",
-            [](const ExecuteContext& ctx) -> tgfx2::RenderContext2* {
+            [](const ExecuteContext& ctx) -> tgfx::RenderContext2* {
                 return ctx.ctx2;
             },
             nb::rv_policy::reference)
@@ -510,7 +510,7 @@ void bind_render_framework(nb::module_& m) {
              &FrameGraphCapture::capture_direct_via_ctx2,
              nb::arg("ctx2"), nb::arg("src_tex"),
              nb::arg("width"), nb::arg("height"),
-             nb::arg("format") = tgfx2::PixelFormat::RGBA8_UNorm)
+             nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm)
         .def("has_capture", &FrameGraphCapture::has_capture)
         .def("reset_capture", &FrameGraphCapture::reset_capture)
         .def_prop_ro("capture_tex", &FrameGraphCapture::capture_tex)
@@ -528,8 +528,8 @@ void bind_render_framework(nb::module_& m) {
         .def("compute_hdr_stats", &FrameGraphPresenter::compute_hdr_stats,
              nb::arg("device"), nb::arg("tex"))
         .def("read_depth_normalized",
-             [](FrameGraphPresenter& self, tgfx2::IRenderDevice* device,
-                tgfx2::TextureHandle tex) -> nb::object {
+             [](FrameGraphPresenter& self, tgfx::IRenderDevice* device,
+                tgfx::TextureHandle tex) -> nb::object {
                  int w = 0, h = 0;
                  auto data = self.read_depth_normalized(device, tex, &w, &h);
                  if (data.empty()) {

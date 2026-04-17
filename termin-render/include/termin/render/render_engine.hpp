@@ -24,7 +24,7 @@ extern "C" {
 // tgfx2 forward declarations — RenderEngine lazily owns an OpenGL device,
 // pipeline cache, and mid-level RenderContext2 that migrated passes use via
 // ExecuteContext::ctx2 (see Phase 2 of tgfx2 migration).
-namespace tgfx2 {
+namespace tgfx {
 class IRenderDevice;
 class PipelineCache;
 class RenderContext2;
@@ -44,8 +44,8 @@ public:
     // by the caller (typically ViewportRenderState). Passes in the
     // pipeline receive these through ExecuteContext::tex2_writes under
     // the OUTPUT/DISPLAY alias.
-    tgfx2::TextureHandle output_color_tex;
-    tgfx2::TextureHandle output_depth_tex;
+    tgfx::TextureHandle output_color_tex;
+    tgfx::TextureHandle output_depth_tex;
 };
 
 class RENDER_API RenderEngine {
@@ -53,15 +53,15 @@ private:
     // tgfx2 stack — lazily constructed on first render call. All
     // rendering now goes through this stack; the legacy graphics
     // backend is no longer involved.
-    std::unique_ptr<tgfx2::IRenderDevice> tgfx2_device_;
-    std::unique_ptr<tgfx2::PipelineCache> tgfx2_cache_;
-    std::unique_ptr<tgfx2::RenderContext2> tgfx2_ctx_;
+    std::unique_ptr<tgfx::IRenderDevice> tgfx2_device_;
+    std::unique_ptr<tgfx::PipelineCache> tgfx2_cache_;
+    std::unique_ptr<tgfx::RenderContext2> tgfx2_ctx_;
 
     // Reusable offscreen color+depth textures backing
     // render_view_to_fbo_id(). Resized on demand, destroyed with the
     // engine.
-    tgfx2::TextureHandle external_target_color_;
-    tgfx2::TextureHandle external_target_depth_;
+    tgfx::TextureHandle external_target_color_;
+    tgfx::TextureHandle external_target_depth_;
     int external_target_w_ = 0;
     int external_target_h_ = 0;
 
@@ -71,11 +71,11 @@ public:
     // Access the engine's tgfx2 render context. May return nullptr if
     // ensure_tgfx2() has not yet been called or TERMIN_DISABLE_TGFX2 is
     // set. The returned pointer remains owned by the RenderEngine.
-    tgfx2::RenderContext2* tgfx2_ctx() { return tgfx2_ctx_.get(); }
+    tgfx::RenderContext2* tgfx2_ctx() { return tgfx2_ctx_.get(); }
 
     // Access the tgfx2 render device that owns all texture/buffer
     // handles used by the engine. Lifetime-tied to the RenderEngine.
-    tgfx2::IRenderDevice* tgfx2_device() { return tgfx2_device_.get(); }
+    tgfx::IRenderDevice* tgfx2_device() { return tgfx2_device_.get(); }
 
 public:
     RenderEngine();

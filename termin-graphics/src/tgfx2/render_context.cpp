@@ -8,7 +8,7 @@
 #include <glad/glad.h>
 #include <cstring>
 
-namespace tgfx2 {
+namespace tgfx {
 
 // ============================================================================
 // Fullscreen quad shader (built-in, minimal)
@@ -629,4 +629,4 @@ uint32_t RenderContext2::last_gl_error() {
     return static_cast<uint32_t>(glGetError());
 }
 
-} // namespace tgfx2
+} // namespace tgfx

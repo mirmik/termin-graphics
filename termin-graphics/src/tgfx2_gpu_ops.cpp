@@ -1,4 +1,4 @@
-// tgfx2_gpu_ops.cpp - tgfx_gpu_ops vtable implementation backed by tgfx2::IRenderDevice
+// tgfx2_gpu_ops.cpp - tgfx_gpu_ops vtable implementation backed by tgfx::IRenderDevice
 // Routes resource creation through tgfx2 and extracts GL IDs for backward compatibility.
 
 #include <tgfx/tgfx2_interop.h>
@@ -29,22 +29,22 @@ void* tgfx2_interop_get_device(void) {
 // Helpers
 // ============================================================================
 
-static tgfx2::IRenderDevice* get_device() {
-    return static_cast<tgfx2::IRenderDevice*>(g_tgfx2_device);
+static tgfx::IRenderDevice* get_device() {
+    return static_cast<tgfx::IRenderDevice*>(g_tgfx2_device);
 }
 
-static tgfx2::OpenGLRenderDevice* get_gl_device() {
-    return static_cast<tgfx2::OpenGLRenderDevice*>(g_tgfx2_device);
+static tgfx::OpenGLRenderDevice* get_gl_device() {
+    return static_cast<tgfx::OpenGLRenderDevice*>(g_tgfx2_device);
 }
 
 // Map channels to tgfx2 pixel format
-static tgfx2::PixelFormat channels_to_format(int channels) {
+static tgfx::PixelFormat channels_to_format(int channels) {
     switch (channels) {
-        case 1: return tgfx2::PixelFormat::R8_UNorm;
-        case 2: return tgfx2::PixelFormat::RG8_UNorm;
-        case 3: return tgfx2::PixelFormat::RGB8_UNorm;
-        case 4: return tgfx2::PixelFormat::RGBA8_UNorm;
-        default: return tgfx2::PixelFormat::RGBA8_UNorm;
+        case 1: return tgfx::PixelFormat::R8_UNorm;
+        case 2: return tgfx::PixelFormat::RG8_UNorm;
+        case 3: return tgfx::PixelFormat::RGB8_UNorm;
+        case 4: return tgfx::PixelFormat::RGBA8_UNorm;
+        default: return tgfx::PixelFormat::RGBA8_UNorm;
     }
 }
 
@@ -68,11 +68,11 @@ static uint32_t tgfx2_texture_upload(
     auto* gl_dev = get_gl_device();
     if (!dev || !gl_dev) return 0;
 
-    tgfx2::TextureDesc desc;
+    tgfx::TextureDesc desc;
     desc.width = (uint32_t)width;
     desc.height = (uint32_t)height;
     desc.format = channels_to_format(channels);
-    desc.usage = tgfx2::TextureUsage::Sampled;
+    desc.usage = tgfx::TextureUsage::Sampled;
     desc.mip_levels = mipmap ? 0 : 1; // 0 = auto mipmap
 
     auto handle = dev->create_texture(desc);
@@ -123,11 +123,11 @@ static uint32_t tgfx2_depth_texture_upload(
     auto* gl_dev = get_gl_device();
     if (!dev || !gl_dev) return 0;
 
-    tgfx2::TextureDesc desc;
+    tgfx::TextureDesc desc;
     desc.width = (uint32_t)width;
     desc.height = (uint32_t)height;
-    desc.format = tgfx2::PixelFormat::D24_UNorm_S8_UInt;
-    desc.usage = tgfx2::TextureUsage::DepthStencilAttachment | tgfx2::TextureUsage::Sampled;
+    desc.format = tgfx::PixelFormat::D24_UNorm_S8_UInt;
+    desc.usage = tgfx::TextureUsage::DepthStencilAttachment | tgfx::TextureUsage::Sampled;
     desc.mip_levels = 1;
 
     auto handle = dev->create_texture(desc);
@@ -180,7 +180,7 @@ static void tgfx2_texture_delete(uint32_t gpu_id) {
     auto* dev = get_device();
     auto it = g_texture_map.find(gpu_id);
     if (it != g_texture_map.end() && dev) {
-        dev->destroy(tgfx2::TextureHandle{it->second});
+        dev->destroy(tgfx::TextureHandle{it->second});
         g_texture_map.erase(it);
     } else {
         // Stage 6 transition: textures created via the legacy gpu_ops
@@ -212,9 +212,9 @@ static uint32_t tgfx2_mesh_upload(
     size_t ebo_size = index_count * sizeof(uint32_t);
 
     // Create VBO through tgfx2
-    tgfx2::BufferDesc vbo_desc;
+    tgfx::BufferDesc vbo_desc;
     vbo_desc.size = vbo_size;
-    vbo_desc.usage = tgfx2::BufferUsage::Vertex;
+    vbo_desc.usage = tgfx::BufferUsage::Vertex;
     auto vbo_handle = dev->create_buffer(vbo_desc);
     if (!vbo_handle) return 0;
 
@@ -222,9 +222,9 @@ static uint32_t tgfx2_mesh_upload(
         {reinterpret_cast<const uint8_t*>(vertex_data), vbo_size});
 
     // Create EBO through tgfx2
-    tgfx2::BufferDesc ebo_desc;
+    tgfx::BufferDesc ebo_desc;
     ebo_desc.size = ebo_size;
-    ebo_desc.usage = tgfx2::BufferUsage::Index;
+    ebo_desc.usage = tgfx::BufferUsage::Index;
     auto ebo_handle = dev->create_buffer(ebo_desc);
     if (!ebo_handle) {
         dev->destroy(vbo_handle);
@@ -343,7 +343,7 @@ static void tgfx2_buffer_delete(uint32_t buffer_id) {
     auto* dev = get_device();
     auto it = g_buffer_map.find(buffer_id);
     if (it != g_buffer_map.end() && dev) {
-        dev->destroy(tgfx2::BufferHandle{it->second});
+        dev->destroy(tgfx::BufferHandle{it->second});
         g_buffer_map.erase(it);
     } else {
         // Fallback: not tracked by tgfx2, delete directly

@@ -10,7 +10,7 @@
 #include "tgfx2/handles.hpp"
 #include "termin/render/render_export.hpp"
 
-namespace tgfx2 {
+namespace tgfx {
 class IRenderDevice;
 }
 
@@ -25,12 +25,12 @@ public:
     int width = 0;
     int height = 0;
     int samples = 1;
-    tgfx2::IRenderDevice* native_device = nullptr;
-    tgfx2::PixelFormat color_format = tgfx2::PixelFormat::RGBA8_UNorm;
-    tgfx2::PixelFormat depth_format = tgfx2::PixelFormat::D24_UNorm;
+    tgfx::IRenderDevice* native_device = nullptr;
+    tgfx::PixelFormat color_format = tgfx::PixelFormat::RGBA8_UNorm;
+    tgfx::PixelFormat depth_format = tgfx::PixelFormat::D24_UNorm;
     bool has_depth = false;
-    tgfx2::TextureHandle color_tgfx2;
-    tgfx2::TextureHandle depth_tgfx2;
+    tgfx::TextureHandle color_tgfx2;
+    tgfx::TextureHandle depth_tgfx2;
 
 public:
     FBOPoolEntry() = default;
@@ -53,7 +53,7 @@ public:
     FBOPool& operator=(const FBOPool&) = delete;
     ~FBOPool() { clear(); }
 
-    // Allocate a pair of owned `tgfx2::TextureHandle`s (color + optional
+    // Allocate a pair of owned `tgfx::TextureHandle`s (color + optional
     // depth) via the render device. Callers use the returned handles
     // with `RenderContext2::begin_pass`, which assembles a cached GL FBO
     // inside the device on demand.
@@ -62,25 +62,25 @@ public:
     // ones are allocated; the device's internal FBO cache is also
     // invalidated because the driver may recycle gl_ids.
     bool ensure_native(
-        tgfx2::IRenderDevice& device,
+        tgfx::IRenderDevice& device,
         const std::string& key,
         int width,
         int height,
-        tgfx2::PixelFormat color_format = tgfx2::PixelFormat::RGBA8_UNorm,
+        tgfx::PixelFormat color_format = tgfx::PixelFormat::RGBA8_UNorm,
         bool has_depth = true,
-        tgfx2::PixelFormat depth_format = tgfx2::PixelFormat::D24_UNorm,
+        tgfx::PixelFormat depth_format = tgfx::PixelFormat::D24_UNorm,
         int samples = 1
     );
 
     // Persistent tgfx2 texture handles for this entry's color / depth
     // attachment. Alias-resolving.
-    tgfx2::TextureHandle get_color_tgfx2(const std::string& key) const;
-    tgfx2::TextureHandle get_depth_tgfx2(const std::string& key) const;
+    tgfx::TextureHandle get_color_tgfx2(const std::string& key) const;
+    tgfx::TextureHandle get_depth_tgfx2(const std::string& key) const;
 
     // Device that owns the entries' native textures (null if the
     // pool is empty). All entries must share the same device during
     // normal pipeline execution.
-    tgfx2::IRenderDevice* device() const {
+    tgfx::IRenderDevice* device() const {
         return entries.empty() ? nullptr : entries.front().native_device;
     }
 

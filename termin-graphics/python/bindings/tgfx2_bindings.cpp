@@ -49,26 +49,26 @@ void bind_tgfx2(nb::module_& m) {
     // can be passed between Python calls without copies. The handles
     // themselves are POD structs with a single uint32_t member.
 
-    nb::class_<tgfx2::TextureHandle>(m, "Tgfx2TextureHandle")
+    nb::class_<tgfx::TextureHandle>(m, "Tgfx2TextureHandle")
         .def(nb::init<>())
-        .def_prop_ro("id", [](const tgfx2::TextureHandle& h) { return h.id; })
-        .def("__bool__", [](const tgfx2::TextureHandle& h) { return static_cast<bool>(h); });
+        .def_prop_ro("id", [](const tgfx::TextureHandle& h) { return h.id; })
+        .def("__bool__", [](const tgfx::TextureHandle& h) { return static_cast<bool>(h); });
 
-    nb::class_<tgfx2::BufferHandle>(m, "Tgfx2BufferHandle")
+    nb::class_<tgfx::BufferHandle>(m, "Tgfx2BufferHandle")
         .def(nb::init<>())
-        .def_prop_ro("id", [](const tgfx2::BufferHandle& h) { return h.id; })
-        .def("__bool__", [](const tgfx2::BufferHandle& h) { return static_cast<bool>(h); });
+        .def_prop_ro("id", [](const tgfx::BufferHandle& h) { return h.id; })
+        .def("__bool__", [](const tgfx::BufferHandle& h) { return static_cast<bool>(h); });
 
-    nb::class_<tgfx2::ShaderHandle>(m, "Tgfx2ShaderHandle")
+    nb::class_<tgfx::ShaderHandle>(m, "Tgfx2ShaderHandle")
         .def(nb::init<>())
-        .def_prop_ro("id", [](const tgfx2::ShaderHandle& h) { return h.id; })
-        .def("__bool__", [](const tgfx2::ShaderHandle& h) { return static_cast<bool>(h); });
+        .def_prop_ro("id", [](const tgfx::ShaderHandle& h) { return h.id; })
+        .def("__bool__", [](const tgfx::ShaderHandle& h) { return static_cast<bool>(h); });
 
     // Paired (vs, fs) return type for tc_shader_ensure_tgfx2 — easier
     // to return one object than two out parameters.
     struct ShaderPair {
-        tgfx2::ShaderHandle vs;
-        tgfx2::ShaderHandle fs;
+        tgfx::ShaderHandle vs;
+        tgfx::ShaderHandle fs;
     };
     nb::class_<ShaderPair>(m, "Tgfx2ShaderPair")
         .def_ro("vs", &ShaderPair::vs)
@@ -78,45 +78,45 @@ void bind_tgfx2(nb::module_& m) {
     // (render_framework) can accept a pointer to it from Python.
     // The device is owned by whoever created it (RenderEngine,
     // Tgfx2ContextHolder). Python code only passes the pointer around.
-    nb::class_<tgfx2::IRenderDevice>(m, "Tgfx2Device");
+    nb::class_<tgfx::IRenderDevice>(m, "Tgfx2Device");
 
     // BlendFactor enum — exposed so Python callers can request
     // premultiplied / additive / standard blending via set_blend_func.
-    nb::enum_<tgfx2::BlendFactor>(m, "Tgfx2BlendFactor", nb::is_arithmetic())
-        .value("Zero",              tgfx2::BlendFactor::Zero)
-        .value("One",               tgfx2::BlendFactor::One)
-        .value("SrcAlpha",          tgfx2::BlendFactor::SrcAlpha)
-        .value("OneMinusSrcAlpha",  tgfx2::BlendFactor::OneMinusSrcAlpha)
-        .value("DstAlpha",          tgfx2::BlendFactor::DstAlpha)
-        .value("OneMinusDstAlpha",  tgfx2::BlendFactor::OneMinusDstAlpha)
-        .value("SrcColor",          tgfx2::BlendFactor::SrcColor)
-        .value("OneMinusSrcColor",  tgfx2::BlendFactor::OneMinusSrcColor)
-        .value("DstColor",          tgfx2::BlendFactor::DstColor)
-        .value("OneMinusDstColor",  tgfx2::BlendFactor::OneMinusDstColor)
+    nb::enum_<tgfx::BlendFactor>(m, "Tgfx2BlendFactor", nb::is_arithmetic())
+        .value("Zero",              tgfx::BlendFactor::Zero)
+        .value("One",               tgfx::BlendFactor::One)
+        .value("SrcAlpha",          tgfx::BlendFactor::SrcAlpha)
+        .value("OneMinusSrcAlpha",  tgfx::BlendFactor::OneMinusSrcAlpha)
+        .value("DstAlpha",          tgfx::BlendFactor::DstAlpha)
+        .value("OneMinusDstAlpha",  tgfx::BlendFactor::OneMinusDstAlpha)
+        .value("SrcColor",          tgfx::BlendFactor::SrcColor)
+        .value("OneMinusSrcColor",  tgfx::BlendFactor::OneMinusSrcColor)
+        .value("DstColor",          tgfx::BlendFactor::DstColor)
+        .value("OneMinusDstColor",  tgfx::BlendFactor::OneMinusDstColor)
         .export_values();
 
     // Register PixelFormat as an nb::enum_ so other native modules can
-    // bind functions with `tgfx2::PixelFormat` parameters and defaults.
+    // bind functions with `tgfx::PixelFormat` parameters and defaults.
     // The `is_arithmetic` flag lets Python int callers pass values via
     // the legacy `PIXEL_*` module-level int constants below.
     // Must be registered BEFORE any binding that uses PixelFormat as
     // an argument type or default value (otherwise nanobind's
     // enum_from_cpp() throws std::bad_cast at module init).
-    nb::enum_<tgfx2::PixelFormat>(m, "Tgfx2PixelFormat", nb::is_arithmetic())
-        .value("R8_UNorm",          tgfx2::PixelFormat::R8_UNorm)
-        .value("RG8_UNorm",         tgfx2::PixelFormat::RG8_UNorm)
-        .value("RGB8_UNorm",        tgfx2::PixelFormat::RGB8_UNorm)
-        .value("RGBA8_UNorm",       tgfx2::PixelFormat::RGBA8_UNorm)
-        .value("BGRA8_UNorm",       tgfx2::PixelFormat::BGRA8_UNorm)
-        .value("R16F",              tgfx2::PixelFormat::R16F)
-        .value("RG16F",             tgfx2::PixelFormat::RG16F)
-        .value("RGBA16F",           tgfx2::PixelFormat::RGBA16F)
-        .value("R32F",              tgfx2::PixelFormat::R32F)
-        .value("RG32F",             tgfx2::PixelFormat::RG32F)
-        .value("RGBA32F",           tgfx2::PixelFormat::RGBA32F)
-        .value("D24_UNorm",         tgfx2::PixelFormat::D24_UNorm)
-        .value("D24_UNorm_S8_UInt", tgfx2::PixelFormat::D24_UNorm_S8_UInt)
-        .value("D32F",              tgfx2::PixelFormat::D32F)
+    nb::enum_<tgfx::PixelFormat>(m, "Tgfx2PixelFormat", nb::is_arithmetic())
+        .value("R8_UNorm",          tgfx::PixelFormat::R8_UNorm)
+        .value("RG8_UNorm",         tgfx::PixelFormat::RG8_UNorm)
+        .value("RGB8_UNorm",        tgfx::PixelFormat::RGB8_UNorm)
+        .value("RGBA8_UNorm",       tgfx::PixelFormat::RGBA8_UNorm)
+        .value("BGRA8_UNorm",       tgfx::PixelFormat::BGRA8_UNorm)
+        .value("R16F",              tgfx::PixelFormat::R16F)
+        .value("RG16F",             tgfx::PixelFormat::RG16F)
+        .value("RGBA16F",           tgfx::PixelFormat::RGBA16F)
+        .value("R32F",              tgfx::PixelFormat::R32F)
+        .value("RG32F",             tgfx::PixelFormat::RG32F)
+        .value("RGBA32F",           tgfx::PixelFormat::RGBA32F)
+        .value("D24_UNorm",         tgfx::PixelFormat::D24_UNorm)
+        .value("D24_UNorm_S8_UInt", tgfx::PixelFormat::D24_UNorm_S8_UInt)
+        .value("D32F",              tgfx::PixelFormat::D32F)
         .export_values();
 
     // --- RenderContext2 ---
@@ -125,11 +125,11 @@ void bind_tgfx2(nb::module_& m) {
     // rest (bind_uniform_buffer, set_vertex_layout, push constants, ...)
     // stay C++-only because their Python form would require binding
     // descriptor structs that Python code doesn't need.
-    nb::class_<tgfx2::RenderContext2>(m, "Tgfx2RenderContext")
+    nb::class_<tgfx::RenderContext2>(m, "Tgfx2RenderContext")
         .def("begin_pass",
-             [](tgfx2::RenderContext2& self,
-                tgfx2::TextureHandle color,
-                tgfx2::TextureHandle depth,
+             [](tgfx::RenderContext2& self,
+                tgfx::TextureHandle color,
+                tgfx::TextureHandle depth,
                 bool clear_color_enabled,
                 float r, float g, float b, float a,
                 float clear_depth,
@@ -141,41 +141,41 @@ void bind_tgfx2(nb::module_& m) {
                                  clear_depth_enabled);
              },
              nb::arg("color"),
-             nb::arg("depth") = tgfx2::TextureHandle{},
+             nb::arg("depth") = tgfx::TextureHandle{},
              nb::arg("clear_color_enabled") = false,
              nb::arg("r") = 0.0f, nb::arg("g") = 0.0f,
              nb::arg("b") = 0.0f, nb::arg("a") = 1.0f,
              nb::arg("clear_depth") = 1.0f,
              nb::arg("clear_depth_enabled") = false)
-        .def("end_pass", &tgfx2::RenderContext2::end_pass)
+        .def("end_pass", &tgfx::RenderContext2::end_pass)
 
         // Frame lifecycle — standalone Python hosts (SDL window, tests)
         // must call these manually once per frame. Inside the engine
         // render loop the C++ frame graph handles this already.
-        .def("begin_frame", &tgfx2::RenderContext2::begin_frame)
-        .def("end_frame", &tgfx2::RenderContext2::end_frame)
+        .def("begin_frame", &tgfx::RenderContext2::begin_frame)
+        .def("end_frame", &tgfx::RenderContext2::end_frame)
 
         // State
-        .def("set_depth_test", &tgfx2::RenderContext2::set_depth_test)
-        .def("set_depth_write", &tgfx2::RenderContext2::set_depth_write)
-        .def("set_blend", &tgfx2::RenderContext2::set_blend)
-        .def("set_blend_func", &tgfx2::RenderContext2::set_blend_func,
+        .def("set_depth_test", &tgfx::RenderContext2::set_depth_test)
+        .def("set_depth_write", &tgfx::RenderContext2::set_depth_write)
+        .def("set_blend", &tgfx::RenderContext2::set_blend)
+        .def("set_blend_func", &tgfx::RenderContext2::set_blend_func,
              nb::arg("src"), nb::arg("dst"))
         .def("set_cull",
-             [](tgfx2::RenderContext2& self, int mode) {
-                 self.set_cull(static_cast<tgfx2::CullMode>(mode));
+             [](tgfx::RenderContext2& self, int mode) {
+                 self.set_cull(static_cast<tgfx::CullMode>(mode));
              })
         .def("set_color_format",
-             [](tgfx2::RenderContext2& self, int fmt) {
-                 self.set_color_format(static_cast<tgfx2::PixelFormat>(fmt));
+             [](tgfx::RenderContext2& self, int fmt) {
+                 self.set_color_format(static_cast<tgfx::PixelFormat>(fmt));
              })
-        .def("set_color_mask", &tgfx2::RenderContext2::set_color_mask)
-        .def("set_viewport", &tgfx2::RenderContext2::set_viewport)
-        .def("set_scissor", &tgfx2::RenderContext2::set_scissor)
-        .def("clear_scissor", &tgfx2::RenderContext2::clear_scissor)
+        .def("set_color_mask", &tgfx::RenderContext2::set_color_mask)
+        .def("set_viewport", &tgfx::RenderContext2::set_viewport)
+        .def("set_scissor", &tgfx::RenderContext2::set_scissor)
+        .def("clear_scissor", &tgfx::RenderContext2::clear_scissor)
 
         // Blit (src → dst texture).
-        .def("blit", &tgfx2::RenderContext2::blit)
+        .def("blit", &tgfx::RenderContext2::blit)
 
         // Wrap a raw GL texture id as a non-owning tgfx2 TextureHandle
         // using this context's device. Used by Python debugger code
@@ -183,16 +183,16 @@ void bind_tgfx2(nb::module_& m) {
         // FBOSurface's color attachment) into a texture handle the
         // presenter can render into.
         .def("wrap_gl_texture",
-             [](tgfx2::RenderContext2& self, uint32_t gl_id,
-                uint32_t w, uint32_t h, int format_int) -> tgfx2::TextureHandle {
-                 auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&self.device());
+             [](tgfx::RenderContext2& self, uint32_t gl_id,
+                uint32_t w, uint32_t h, int format_int) -> tgfx::TextureHandle {
+                 auto* gl_dev = dynamic_cast<tgfx::OpenGLRenderDevice*>(&self.device());
                  if (!gl_dev) return {};
-                 tgfx2::TextureDesc desc;
+                 tgfx::TextureDesc desc;
                  desc.width = w;
                  desc.height = h;
-                 desc.format = static_cast<tgfx2::PixelFormat>(format_int);
-                 desc.usage = tgfx2::TextureUsage::Sampled |
-                              tgfx2::TextureUsage::ColorAttachment;
+                 desc.format = static_cast<tgfx::PixelFormat>(format_int);
+                 desc.usage = tgfx::TextureUsage::Sampled |
+                              tgfx::TextureUsage::ColorAttachment;
                  return gl_dev->register_external_texture(
                      static_cast<GLuint>(gl_id), desc);
              },
@@ -203,7 +203,7 @@ void bind_tgfx2(nb::module_& m) {
         // external wraps this just frees the HandlePool entry; the
         // GL texture stays owned by the caller.
         .def("destroy_texture",
-             [](tgfx2::RenderContext2& self, tgfx2::TextureHandle h) {
+             [](tgfx::RenderContext2& self, tgfx::TextureHandle h) {
                  if (h) self.device().destroy(h);
              })
 
@@ -212,30 +212,30 @@ void bind_tgfx2(nb::module_& m) {
         // callers that only hold a RenderContext2 (effects running
         // inside a pipeline pass, etc.).
         .def("create_color_attachment",
-             [](tgfx2::RenderContext2& self, uint32_t w, uint32_t h,
-                tgfx2::PixelFormat fmt) -> tgfx2::TextureHandle {
-                 tgfx2::TextureDesc desc;
+             [](tgfx::RenderContext2& self, uint32_t w, uint32_t h,
+                tgfx::PixelFormat fmt) -> tgfx::TextureHandle {
+                 tgfx::TextureDesc desc;
                  desc.width = w;
                  desc.height = h;
                  desc.format = fmt;
-                 desc.usage = tgfx2::TextureUsage::Sampled |
-                              tgfx2::TextureUsage::ColorAttachment |
-                              tgfx2::TextureUsage::CopyDst;
+                 desc.usage = tgfx::TextureUsage::Sampled |
+                              tgfx::TextureUsage::ColorAttachment |
+                              tgfx::TextureUsage::CopyDst;
                  return self.device().create_texture(desc);
              },
              nb::arg("width"), nb::arg("height"),
-             nb::arg("format") = tgfx2::PixelFormat::RGBA8_UNorm)
+             nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm)
 
         // Present a texture to an externally-owned GL FBO (0 = host
         // window default framebuffer). Used by legacy Qt debugger
         // window to composite the debugger capture onto its SDL
         // debug window.
         .def("blit_to_external_fbo",
-             [](tgfx2::RenderContext2& self, uint32_t dst_fbo_id,
-                tgfx2::TextureHandle src,
+             [](tgfx::RenderContext2& self, uint32_t dst_fbo_id,
+                tgfx::TextureHandle src,
                 int src_x, int src_y, int src_w, int src_h,
                 int dst_x, int dst_y, int dst_w, int dst_h) {
-                 auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&self.device());
+                 auto* gl_dev = dynamic_cast<tgfx::OpenGLRenderDevice*>(&self.device());
                  if (!gl_dev) return;
                  gl_dev->blit_to_external_fbo(
                      dst_fbo_id, src,
@@ -252,11 +252,11 @@ void bind_tgfx2(nb::module_& m) {
         // and clear it to the given colour / depth. Host window code
         // uses this to paint the background before compositing UI.
         .def("clear_external_fbo",
-             [](tgfx2::RenderContext2& self, uint32_t dst_fbo_id,
+             [](tgfx::RenderContext2& self, uint32_t dst_fbo_id,
                 float r, float g, float b, float a, float depth,
                 int viewport_x, int viewport_y,
                 int viewport_w, int viewport_h) {
-                 auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&self.device());
+                 auto* gl_dev = dynamic_cast<tgfx::OpenGLRenderDevice*>(&self.device());
                  if (!gl_dev) return;
                  gl_dev->clear_external_fbo(
                      dst_fbo_id, r, g, b, a, depth,
@@ -272,47 +272,47 @@ void bind_tgfx2(nb::module_& m) {
         // termin_graphics2.dll and is initialised by the host, so
         // this call is always safe from the binding side where a
         // direct glGetError would crash on a null function pointer.
-        .def("last_gl_error", &tgfx2::RenderContext2::last_gl_error)
+        .def("last_gl_error", &tgfx::RenderContext2::last_gl_error)
 
         // Shader
         .def("bind_shader",
-             [](tgfx2::RenderContext2& self,
-                tgfx2::ShaderHandle vs, tgfx2::ShaderHandle fs) {
+             [](tgfx::RenderContext2& self,
+                tgfx::ShaderHandle vs, tgfx::ShaderHandle fs) {
                  self.bind_shader(vs, fs, {});
              })
 
         // Resource bindings
         .def("bind_sampled_texture",
-             [](tgfx2::RenderContext2& self, uint32_t slot, tgfx2::TextureHandle tex) {
+             [](tgfx::RenderContext2& self, uint32_t slot, tgfx::TextureHandle tex) {
                  self.bind_sampled_texture(slot, tex, {});
              })
 
         // Transitional plain-uniform setters
         .def("set_uniform_int",
-             [](tgfx2::RenderContext2& self, const std::string& name, int value) {
+             [](tgfx::RenderContext2& self, const std::string& name, int value) {
                  self.set_uniform_int(name.c_str(), value);
              })
         .def("set_uniform_float",
-             [](tgfx2::RenderContext2& self, const std::string& name, float value) {
+             [](tgfx::RenderContext2& self, const std::string& name, float value) {
                  self.set_uniform_float(name.c_str(), value);
              })
         .def("set_uniform_vec2",
-             [](tgfx2::RenderContext2& self, const std::string& name,
+             [](tgfx::RenderContext2& self, const std::string& name,
                 float x, float y) {
                  self.set_uniform_vec2(name.c_str(), x, y);
              })
         .def("set_uniform_vec3",
-             [](tgfx2::RenderContext2& self, const std::string& name,
+             [](tgfx::RenderContext2& self, const std::string& name,
                 float x, float y, float z) {
                  self.set_uniform_vec3(name.c_str(), x, y, z);
              })
         .def("set_uniform_vec4",
-             [](tgfx2::RenderContext2& self, const std::string& name,
+             [](tgfx::RenderContext2& self, const std::string& name,
                 float x, float y, float z, float w) {
                  self.set_uniform_vec4(name.c_str(), x, y, z, w);
              })
         .def("set_uniform_mat4",
-             [](tgfx2::RenderContext2& self, const std::string& name,
+             [](tgfx::RenderContext2& self, const std::string& name,
                 nb::handle data, bool transpose) {
                  // Accept any buffer-like object (Mat44.data, list of 16 floats,
                  // numpy array). nanobind's nb::ndarray would be cleanest but
@@ -330,12 +330,12 @@ void bind_tgfx2(nb::module_& m) {
              },
              nb::arg("name"), nb::arg("data"), nb::arg("transpose") = false)
         .def("set_block_binding",
-             [](tgfx2::RenderContext2& self, const std::string& name, uint32_t slot) {
+             [](tgfx::RenderContext2& self, const std::string& name, uint32_t slot) {
                  self.set_block_binding(name.c_str(), slot);
              })
 
         // Draw
-        .def("draw_fullscreen_quad", &tgfx2::RenderContext2::draw_fullscreen_quad)
+        .def("draw_fullscreen_quad", &tgfx::RenderContext2::draw_fullscreen_quad)
 
         // Immediate drawing — creates a throwaway VBO, draws, destroys.
         // Vertex format is fixed to 7 floats per vertex:
@@ -347,14 +347,14 @@ void bind_tgfx2(nb::module_& m) {
         // match.
         // The currently bound shader (via bind_shader) is used.
         .def("draw_immediate_triangles",
-             [](tgfx2::RenderContext2& self,
+             [](tgfx::RenderContext2& self,
                 nb::ndarray<float, nb::c_contig, nb::device::cpu> verts,
                 uint32_t vertex_count) {
                  self.draw_immediate_triangles(verts.data(), vertex_count);
              },
              nb::arg("verts"), nb::arg("vertex_count"))
         .def("draw_immediate_lines",
-             [](tgfx2::RenderContext2& self,
+             [](tgfx::RenderContext2& self,
                 nb::ndarray<float, nb::c_contig, nb::device::cpu> verts,
                 uint32_t vertex_count) {
                  self.draw_immediate_lines(verts.data(), vertex_count);
@@ -363,7 +363,7 @@ void bind_tgfx2(nb::module_& m) {
 
     // --- Tgfx2Context holder ---
     //
-    // Owns a tgfx2::OpenGLRenderDevice + PipelineCache + RenderContext2
+    // Owns a tgfx::OpenGLRenderDevice + PipelineCache + RenderContext2
     // triple. Mirrors what RenderEngine::ensure_tgfx2 does in C++:
     // device is created over the current GL context (no explicit GL
     // handle — it just assumes the context is current when the first
@@ -376,14 +376,14 @@ void bind_tgfx2(nb::module_& m) {
     // Destruction order is declaration-reverse: ctx, then cache, then
     // device — which is the correct dependency order.
     struct Tgfx2ContextHolder {
-        std::unique_ptr<tgfx2::OpenGLRenderDevice> device;
-        std::unique_ptr<tgfx2::PipelineCache> cache;
-        std::unique_ptr<tgfx2::RenderContext2> ctx;
+        std::unique_ptr<tgfx::OpenGLRenderDevice> device;
+        std::unique_ptr<tgfx::PipelineCache> cache;
+        std::unique_ptr<tgfx::RenderContext2> ctx;
 
         Tgfx2ContextHolder() {
-            device = std::make_unique<tgfx2::OpenGLRenderDevice>();
-            cache = std::make_unique<tgfx2::PipelineCache>(*device);
-            ctx = std::make_unique<tgfx2::RenderContext2>(*device, *cache);
+            device = std::make_unique<tgfx::OpenGLRenderDevice>();
+            cache = std::make_unique<tgfx::PipelineCache>(*device);
+            ctx = std::make_unique<tgfx::RenderContext2>(*device, *cache);
             // Ensure a default tc_gpu_context exists and is current so
             // tc_shader_ensure_tgfx2 / TcShader compile can find a GPU
             // slot to cache into. Standalone Python hosts that skip the
@@ -407,7 +407,7 @@ void bind_tgfx2(nb::module_& m) {
         // holder; the reference stays valid until the holder is
         // destroyed.
         .def_prop_ro("context",
-            [](Tgfx2ContextHolder& self) -> tgfx2::RenderContext2& {
+            [](Tgfx2ContextHolder& self) -> tgfx::RenderContext2& {
                 return *self.ctx;
             },
             nb::rv_policy::reference_internal)
@@ -438,13 +438,13 @@ void bind_tgfx2(nb::module_& m) {
         .def("create_texture_r8",
             [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h,
                nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data)
-            -> tgfx2::TextureHandle {
-                tgfx2::TextureDesc desc;
+            -> tgfx::TextureHandle {
+                tgfx::TextureDesc desc;
                 desc.width = w;
                 desc.height = h;
-                desc.format = tgfx2::PixelFormat::R8_UNorm;
-                desc.usage = tgfx2::TextureUsage::Sampled |
-                             tgfx2::TextureUsage::CopyDst;
+                desc.format = tgfx::PixelFormat::R8_UNorm;
+                desc.usage = tgfx::TextureUsage::Sampled |
+                             tgfx::TextureUsage::CopyDst;
                 auto handle = self.device->create_texture(desc);
                 if (data.size() > 0) {
                     self.device->upload_texture(handle,
@@ -459,13 +459,13 @@ void bind_tgfx2(nb::module_& m) {
         .def("create_texture_rgba8",
             [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h,
                nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data)
-            -> tgfx2::TextureHandle {
-                tgfx2::TextureDesc desc;
+            -> tgfx::TextureHandle {
+                tgfx::TextureDesc desc;
                 desc.width = w;
                 desc.height = h;
-                desc.format = tgfx2::PixelFormat::RGBA8_UNorm;
-                desc.usage = tgfx2::TextureUsage::Sampled |
-                             tgfx2::TextureUsage::CopyDst;
+                desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+                desc.usage = tgfx::TextureUsage::Sampled |
+                             tgfx::TextureUsage::CopyDst;
                 auto handle = self.device->create_texture(desc);
                 if (data.size() > 0) {
                     self.device->upload_texture(handle,
@@ -477,7 +477,7 @@ void bind_tgfx2(nb::module_& m) {
 
         // Full-texture re-upload.
         .def("upload_texture",
-            [](Tgfx2ContextHolder& self, tgfx2::TextureHandle handle,
+            [](Tgfx2ContextHolder& self, tgfx::TextureHandle handle,
                nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
                 self.device->upload_texture(handle,
                     std::span<const uint8_t>(data.data(), data.size()));
@@ -488,7 +488,7 @@ void bind_tgfx2(nb::module_& m) {
         // tightly packed ``w * h * bytes_per_pixel`` buffer. Used by
         // incremental update paths (e.g. Canvas overlay stroke).
         .def("upload_texture_region",
-            [](Tgfx2ContextHolder& self, tgfx2::TextureHandle handle,
+            [](Tgfx2ContextHolder& self, tgfx::TextureHandle handle,
                uint32_t x, uint32_t y, uint32_t w, uint32_t h,
                nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
                 self.device->upload_texture_region(
@@ -502,7 +502,7 @@ void bind_tgfx2(nb::module_& m) {
 
         // Destroy a texture owned by this device.
         .def("destroy_texture",
-            [](Tgfx2ContextHolder& self, tgfx2::TextureHandle handle) {
+            [](Tgfx2ContextHolder& self, tgfx::TextureHandle handle) {
                 self.device->destroy(handle);
             },
             nb::arg("handle"))
@@ -513,7 +513,7 @@ void bind_tgfx2(nb::module_& m) {
         // the receiving holder can wrap the GL id as a non-owning
         // external handle in its own device.
         .def("get_gl_id",
-            [](Tgfx2ContextHolder& self, tgfx2::TextureHandle handle) -> uint32_t {
+            [](Tgfx2ContextHolder& self, tgfx::TextureHandle handle) -> uint32_t {
                 return static_cast<uint32_t>(
                     self.device->gl_texture_id(handle));
             },
@@ -525,35 +525,35 @@ void bind_tgfx2(nb::module_& m) {
         // the default framebuffer via blit_to_external_fbo).
         .def("create_color_attachment",
             [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h,
-               tgfx2::PixelFormat fmt) -> tgfx2::TextureHandle {
-                tgfx2::TextureDesc desc;
+               tgfx::PixelFormat fmt) -> tgfx::TextureHandle {
+                tgfx::TextureDesc desc;
                 desc.width = w;
                 desc.height = h;
                 desc.format = fmt;
-                desc.usage = tgfx2::TextureUsage::Sampled |
-                             tgfx2::TextureUsage::ColorAttachment |
-                             tgfx2::TextureUsage::CopyDst;
+                desc.usage = tgfx::TextureUsage::Sampled |
+                             tgfx::TextureUsage::ColorAttachment |
+                             tgfx::TextureUsage::CopyDst;
                 return self.device->create_texture(desc);
             },
             nb::arg("width"), nb::arg("height"),
-            nb::arg("format") = tgfx2::PixelFormat::RGBA8_UNorm)
+            nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm)
 
         // Create an offscreen depth attachment. Usage is
         // DepthStencilAttachment|Sampled so passes can both write
         // depth and sample it (shadow maps, depth-based effects).
         .def("create_depth_attachment",
             [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h,
-               tgfx2::PixelFormat fmt) -> tgfx2::TextureHandle {
-                tgfx2::TextureDesc desc;
+               tgfx::PixelFormat fmt) -> tgfx::TextureHandle {
+                tgfx::TextureDesc desc;
                 desc.width = w;
                 desc.height = h;
                 desc.format = fmt;
-                desc.usage = tgfx2::TextureUsage::DepthStencilAttachment |
-                             tgfx2::TextureUsage::Sampled;
+                desc.usage = tgfx::TextureUsage::DepthStencilAttachment |
+                             tgfx::TextureUsage::Sampled;
                 return self.device->create_texture(desc);
             },
             nb::arg("width"), nb::arg("height"),
-            nb::arg("format") = tgfx2::PixelFormat::D24_UNorm);
+            nb::arg("format") = tgfx::PixelFormat::D24_UNorm);
 
     // Wrap an existing GL texture id as a non-owning tgfx2 handle.
     // Useful during the tgfx1→tgfx2 transition: a tgfx1 FontTextureAtlas
@@ -567,7 +567,7 @@ void bind_tgfx2(nb::module_& m) {
     // window (Qt framegraph debugger, SDL debug window).
     m.def("ctx2_blit_to_external_fbo",
         [](Tgfx2ContextHolder& holder, uint32_t dst_fbo_id,
-           tgfx2::TextureHandle src,
+           tgfx::TextureHandle src,
            int src_x, int src_y, int src_w, int src_h,
            int dst_x, int dst_y, int dst_w, int dst_h) {
             holder.device->blit_to_external_fbo(
@@ -583,12 +583,12 @@ void bind_tgfx2(nb::module_& m) {
 
     m.def("wrap_gl_texture_as_tgfx2",
         [](Tgfx2ContextHolder& holder, uint32_t gl_id,
-           uint32_t w, uint32_t h, int format_int) -> tgfx2::TextureHandle {
-            tgfx2::TextureDesc desc;
+           uint32_t w, uint32_t h, int format_int) -> tgfx::TextureHandle {
+            tgfx::TextureDesc desc;
             desc.width = w;
             desc.height = h;
-            desc.format = static_cast<tgfx2::PixelFormat>(format_int);
-            desc.usage = tgfx2::TextureUsage::Sampled;
+            desc.format = static_cast<tgfx::PixelFormat>(format_int);
+            desc.usage = tgfx::TextureUsage::Sampled;
             return holder.device->register_external_texture(
                 static_cast<GLuint>(gl_id), desc);
         },
@@ -602,7 +602,7 @@ void bind_tgfx2(nb::module_& m) {
     // Python/C++ callers. Returns (vs, fs) as a Tgfx2ShaderPair;
     // both handles are zero on compile failure.
     m.def("tc_shader_ensure_tgfx2",
-          [](tgfx2::RenderContext2& ctx, termin::TcShader shader) -> ShaderPair {
+          [](tgfx::RenderContext2& ctx, termin::TcShader shader) -> ShaderPair {
               ShaderPair out;
               tc_shader* raw = tc_shader_get(shader.handle);
               if (!raw) return out;
@@ -612,20 +612,20 @@ void bind_tgfx2(nb::module_& m) {
           nb::arg("ctx"), nb::arg("shader"));
 
     // CullMode values exposed as module ints.
-    m.attr("CULL_NONE")  = static_cast<int>(tgfx2::CullMode::None);
-    m.attr("CULL_BACK")  = static_cast<int>(tgfx2::CullMode::Back);
-    m.attr("CULL_FRONT") = static_cast<int>(tgfx2::CullMode::Front);
+    m.attr("CULL_NONE")  = static_cast<int>(tgfx::CullMode::None);
+    m.attr("CULL_BACK")  = static_cast<int>(tgfx::CullMode::Back);
+    m.attr("CULL_FRONT") = static_cast<int>(tgfx::CullMode::Front);
 
-    m.attr("PIXEL_R8")      = static_cast<int>(tgfx2::PixelFormat::R8_UNorm);
-    m.attr("PIXEL_RGBA8")   = static_cast<int>(tgfx2::PixelFormat::RGBA8_UNorm);
-    m.attr("PIXEL_RGBA16F") = static_cast<int>(tgfx2::PixelFormat::RGBA16F);
-    m.attr("PIXEL_D32F")    = static_cast<int>(tgfx2::PixelFormat::D32F);
+    m.attr("PIXEL_R8")      = static_cast<int>(tgfx::PixelFormat::R8_UNorm);
+    m.attr("PIXEL_RGBA8")   = static_cast<int>(tgfx::PixelFormat::RGBA8_UNorm);
+    m.attr("PIXEL_RGBA16F") = static_cast<int>(tgfx::PixelFormat::RGBA16F);
+    m.attr("PIXEL_D32F")    = static_cast<int>(tgfx::PixelFormat::D32F);
 
     // --- Mesh draw helper ---
     //
     // draw_tc_mesh wraps a TcMesh's share-group VBO/EBO as tgfx2
     // external buffers, translates its tgfx_vertex_layout into a
-    // tgfx2::VertexBufferLayout, sets the pipeline's vertex layout +
+    // tgfx::VertexBufferLayout, sets the pipeline's vertex layout +
     // topology + draws, and destroys the non-owning handles
     // afterwards. All in one call so Python callers don't need to
     // manage intermediate handles themselves.
@@ -633,11 +633,11 @@ void bind_tgfx2(nb::module_& m) {
     // Used by migrated gizmo / immediate passes that want ctx2-native
     // draws without the legacy shader.use() + mesh_gpu.draw() path.
     m.def("draw_tc_mesh",
-        [](tgfx2::RenderContext2& ctx, termin::TcMesh& mesh_wrapper) {
+        [](tgfx::RenderContext2& ctx, termin::TcMesh& mesh_wrapper) {
             tc_mesh* mesh = tc_mesh_get(mesh_wrapper.handle);
             if (!mesh) return;
 
-            auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&ctx.device());
+            auto* gl_dev = dynamic_cast<tgfx::OpenGLRenderDevice*>(&ctx.device());
             if (!gl_dev) return;
 
             // Materialize VBO/EBO via legacy upload path.
@@ -649,51 +649,51 @@ void bind_tgfx2(nb::module_& m) {
                 gctx->share_group, mesh->header.pool_index);
             if (!slot || slot->vbo == 0 || slot->ebo == 0) return;
 
-            tgfx2::BufferDesc vb_desc;
+            tgfx::BufferDesc vb_desc;
             vb_desc.size = static_cast<uint64_t>(mesh->vertex_count) *
                            static_cast<uint64_t>(mesh->layout.stride);
-            vb_desc.usage = tgfx2::BufferUsage::Vertex;
-            tgfx2::BufferHandle vbo = gl_dev->register_external_buffer(slot->vbo, vb_desc);
+            vb_desc.usage = tgfx::BufferUsage::Vertex;
+            tgfx::BufferHandle vbo = gl_dev->register_external_buffer(slot->vbo, vb_desc);
 
-            tgfx2::BufferDesc ib_desc;
+            tgfx::BufferDesc ib_desc;
             ib_desc.size = static_cast<uint64_t>(mesh->index_count) * sizeof(uint32_t);
-            ib_desc.usage = tgfx2::BufferUsage::Index;
-            tgfx2::BufferHandle ibo = gl_dev->register_external_buffer(slot->ebo, ib_desc);
+            ib_desc.usage = tgfx::BufferUsage::Index;
+            tgfx::BufferHandle ibo = gl_dev->register_external_buffer(slot->ebo, ib_desc);
 
-            // Translate tgfx_vertex_layout → tgfx2::VertexBufferLayout.
-            tgfx2::VertexBufferLayout layout;
+            // Translate tgfx_vertex_layout → tgfx::VertexBufferLayout.
+            tgfx::VertexBufferLayout layout;
             layout.stride = mesh->layout.stride;
             layout.attributes.reserve(mesh->layout.attrib_count);
             for (uint8_t i = 0; i < mesh->layout.attrib_count; i++) {
                 const tgfx_vertex_attrib& a = mesh->layout.attribs[i];
-                tgfx2::VertexAttribute va;
+                tgfx::VertexAttribute va;
                 va.location = a.location;
                 va.offset = a.offset;
                 bool ok = true;
                 switch (static_cast<tgfx_attrib_type>(a.type)) {
                     case TGFX_ATTRIB_FLOAT32:
                         switch (a.size) {
-                            case 1: va.format = tgfx2::VertexFormat::Float;  break;
-                            case 2: va.format = tgfx2::VertexFormat::Float2; break;
-                            case 3: va.format = tgfx2::VertexFormat::Float3; break;
-                            case 4: va.format = tgfx2::VertexFormat::Float4; break;
+                            case 1: va.format = tgfx::VertexFormat::Float;  break;
+                            case 2: va.format = tgfx::VertexFormat::Float2; break;
+                            case 3: va.format = tgfx::VertexFormat::Float3; break;
+                            case 4: va.format = tgfx::VertexFormat::Float4; break;
                             default: ok = false; break;
                         }
                         break;
                     case TGFX_ATTRIB_UINT8:
-                        if (a.size == 4) va.format = tgfx2::VertexFormat::UByte4;
+                        if (a.size == 4) va.format = tgfx::VertexFormat::UByte4;
                         else ok = false;
                         break;
                     case TGFX_ATTRIB_INT8:
-                        if (a.size == 4) va.format = tgfx2::VertexFormat::Byte4;
+                        if (a.size == 4) va.format = tgfx::VertexFormat::Byte4;
                         else ok = false;
                         break;
                     case TGFX_ATTRIB_UINT16:
                         switch (a.size) {
-                            case 1: va.format = tgfx2::VertexFormat::UShort;  break;
-                            case 2: va.format = tgfx2::VertexFormat::UShort2; break;
-                            case 3: va.format = tgfx2::VertexFormat::UShort3; break;
-                            case 4: va.format = tgfx2::VertexFormat::UShort4; break;
+                            case 1: va.format = tgfx::VertexFormat::UShort;  break;
+                            case 2: va.format = tgfx::VertexFormat::UShort2; break;
+                            case 3: va.format = tgfx::VertexFormat::UShort3; break;
+                            case 4: va.format = tgfx::VertexFormat::UShort4; break;
                             default: ok = false; break;
                         }
                         break;
@@ -702,19 +702,19 @@ void bind_tgfx2(nb::module_& m) {
                         break;
                 }
                 if (!ok) {
-                    va.format = tgfx2::VertexFormat::Float3;
+                    va.format = tgfx::VertexFormat::Float3;
                 }
                 layout.attributes.push_back(va);
             }
 
-            tgfx2::PrimitiveTopology topo = (mesh->draw_mode == TC_DRAW_LINES)
-                ? tgfx2::PrimitiveTopology::LineList
-                : tgfx2::PrimitiveTopology::TriangleList;
+            tgfx::PrimitiveTopology topo = (mesh->draw_mode == TC_DRAW_LINES)
+                ? tgfx::PrimitiveTopology::LineList
+                : tgfx::PrimitiveTopology::TriangleList;
 
             ctx.set_vertex_layout(layout);
             ctx.set_topology(topo);
             ctx.draw(vbo, ibo, static_cast<uint32_t>(mesh->index_count),
-                     tgfx2::IndexType::Uint32);
+                     tgfx::IndexType::Uint32);
 
             gl_dev->destroy(vbo);
             gl_dev->destroy(ibo);
@@ -730,11 +730,11 @@ void bind_tgfx2(nb::module_& m) {
     // interface shape (ensure_glyphs / ensure_texture / measure_text)
     // — with RenderContext2 references in place of the prior
     // Tgfx2Context holder.
-    nb::class_<tgfx2::FontAtlas::Size2f>(m, "FontMeasure")
-        .def_ro("width", &tgfx2::FontAtlas::Size2f::width)
-        .def_ro("height", &tgfx2::FontAtlas::Size2f::height);
+    nb::class_<tgfx::FontAtlas::Size2f>(m, "FontMeasure")
+        .def_ro("width", &tgfx::FontAtlas::Size2f::width)
+        .def_ro("height", &tgfx::FontAtlas::Size2f::height);
 
-    nb::class_<tgfx2::FontAtlas>(m, "FontTextureAtlas")
+    nb::class_<tgfx::FontAtlas>(m, "FontTextureAtlas")
         .def(nb::init<const std::string&, int, int, int>(),
              nb::arg("path"),
              nb::arg("size") = 32,
@@ -745,9 +745,9 @@ void bind_tgfx2(nb::module_& m) {
         // and any new glyph was added, triggers a GPU re-upload so
         // the next draw sees the fresh atlas.
         .def("ensure_glyphs",
-             [](tgfx2::FontAtlas& self,
+             [](tgfx::FontAtlas& self,
                 const std::string& text,
-                tgfx2::RenderContext2* ctx) {
+                tgfx::RenderContext2* ctx) {
                  self.ensure_glyphs(text, ctx);
              },
              nb::arg("text"),
@@ -757,7 +757,7 @@ void bind_tgfx2(nb::module_& m) {
         // Returns a tuple for Python ergonomics — callers typically
         // unpack as `w, h = font.measure_text(...)`.
         .def("measure_text",
-             [](const tgfx2::FontAtlas& self,
+             [](const tgfx::FontAtlas& self,
                 const std::string& text,
                 float size) {
                  auto m = self.measure_text(text, size);
@@ -769,8 +769,8 @@ void bind_tgfx2(nb::module_& m) {
         // Tgfx2TextureHandle (same handle across calls with the same
         // ctx; dropped + recreated on ctx change).
         .def("ensure_texture",
-             [](tgfx2::FontAtlas& self, tgfx2::RenderContext2* ctx)
-             -> tgfx2::TextureHandle {
+             [](tgfx::FontAtlas& self, tgfx::RenderContext2* ctx)
+             -> tgfx::TextureHandle {
                  return self.ensure_texture(ctx);
              },
              nb::arg("ctx"))
@@ -779,7 +779,7 @@ void bind_tgfx2(nb::module_& m) {
         // (u0, v0, u1, v1, width_px, height_px) at the rasterise
         // size, or None if the glyph has not been rasterised.
         .def("get_glyph",
-             [](const tgfx2::FontAtlas& self, uint32_t codepoint) -> nb::object {
+             [](const tgfx::FontAtlas& self, uint32_t codepoint) -> nb::object {
                  const auto* g = self.get_glyph(codepoint);
                  if (!g) return nb::none();
                  return nb::make_tuple(g->u0, g->v0, g->u1, g->v1,
@@ -789,15 +789,15 @@ void bind_tgfx2(nb::module_& m) {
 
         // Drop the GPU texture. Safe when the underlying device has
         // already been torn down — no GL calls are issued.
-        .def("release_gpu", &tgfx2::FontAtlas::release_gpu)
+        .def("release_gpu", &tgfx::FontAtlas::release_gpu)
 
         // --- Read-only metrics ---
-        .def_prop_ro("size", &tgfx2::FontAtlas::rasterize_size)
-        .def_prop_ro("ascent", &tgfx2::FontAtlas::ascent_px)
-        .def_prop_ro("descent", &tgfx2::FontAtlas::descent_px)
-        .def_prop_ro("line_height", &tgfx2::FontAtlas::line_height)
-        .def_prop_ro("atlas_width", &tgfx2::FontAtlas::atlas_width)
-        .def_prop_ro("atlas_height", &tgfx2::FontAtlas::atlas_height);
+        .def_prop_ro("size", &tgfx::FontAtlas::rasterize_size)
+        .def_prop_ro("ascent", &tgfx::FontAtlas::ascent_px)
+        .def_prop_ro("descent", &tgfx::FontAtlas::descent_px)
+        .def_prop_ro("line_height", &tgfx::FontAtlas::line_height)
+        .def_prop_ro("atlas_width", &tgfx::FontAtlas::atlas_width)
+        .def_prop_ro("atlas_height", &tgfx::FontAtlas::atlas_height);
 
     // --- Text2DRenderer / Text3DRenderer ---
     //
@@ -808,50 +808,50 @@ void bind_tgfx2(nb::module_& m) {
     // a re-export — the method signatures are intentionally identical
     // modulo `color` becoming a 4-tuple on the Python side.
 
-    nb::enum_<tgfx2::Text2DRenderer::Anchor>(m, "Text2DAnchor")
-        .value("Left",   tgfx2::Text2DRenderer::Anchor::Left)
-        .value("Center", tgfx2::Text2DRenderer::Anchor::Center)
-        .value("Right",  tgfx2::Text2DRenderer::Anchor::Right)
+    nb::enum_<tgfx::Text2DRenderer::Anchor>(m, "Text2DAnchor")
+        .value("Left",   tgfx::Text2DRenderer::Anchor::Left)
+        .value("Center", tgfx::Text2DRenderer::Anchor::Center)
+        .value("Right",  tgfx::Text2DRenderer::Anchor::Right)
         .export_values();
-    nb::enum_<tgfx2::Text3DRenderer::Anchor>(m, "Text3DAnchor")
-        .value("Left",   tgfx2::Text3DRenderer::Anchor::Left)
-        .value("Center", tgfx2::Text3DRenderer::Anchor::Center)
-        .value("Right",  tgfx2::Text3DRenderer::Anchor::Right)
+    nb::enum_<tgfx::Text3DRenderer::Anchor>(m, "Text3DAnchor")
+        .value("Left",   tgfx::Text3DRenderer::Anchor::Left)
+        .value("Center", tgfx::Text3DRenderer::Anchor::Center)
+        .value("Right",  tgfx::Text3DRenderer::Anchor::Right)
         .export_values();
 
     // Anchor resolution: accept both the enum values and the legacy
     // lower-case string form ("left"/"center"/"right") used by the
     // prior Python implementation — existing callers pass strings.
-    auto resolve_text2d_anchor = [](nb::object obj) -> tgfx2::Text2DRenderer::Anchor {
+    auto resolve_text2d_anchor = [](nb::object obj) -> tgfx::Text2DRenderer::Anchor {
         if (nb::isinstance<nb::str>(obj)) {
             std::string s = nb::cast<std::string>(obj);
-            if (s == "center") return tgfx2::Text2DRenderer::Anchor::Center;
-            if (s == "right")  return tgfx2::Text2DRenderer::Anchor::Right;
-            return tgfx2::Text2DRenderer::Anchor::Left;
+            if (s == "center") return tgfx::Text2DRenderer::Anchor::Center;
+            if (s == "right")  return tgfx::Text2DRenderer::Anchor::Right;
+            return tgfx::Text2DRenderer::Anchor::Left;
         }
-        return nb::cast<tgfx2::Text2DRenderer::Anchor>(obj);
+        return nb::cast<tgfx::Text2DRenderer::Anchor>(obj);
     };
-    auto resolve_text3d_anchor = [](nb::object obj) -> tgfx2::Text3DRenderer::Anchor {
+    auto resolve_text3d_anchor = [](nb::object obj) -> tgfx::Text3DRenderer::Anchor {
         if (nb::isinstance<nb::str>(obj)) {
             std::string s = nb::cast<std::string>(obj);
-            if (s == "left")  return tgfx2::Text3DRenderer::Anchor::Left;
-            if (s == "right") return tgfx2::Text3DRenderer::Anchor::Right;
-            return tgfx2::Text3DRenderer::Anchor::Center;
+            if (s == "left")  return tgfx::Text3DRenderer::Anchor::Left;
+            if (s == "right") return tgfx::Text3DRenderer::Anchor::Right;
+            return tgfx::Text3DRenderer::Anchor::Center;
         }
-        return nb::cast<tgfx2::Text3DRenderer::Anchor>(obj);
+        return nb::cast<tgfx::Text3DRenderer::Anchor>(obj);
     };
 
-    nb::class_<tgfx2::Text2DRenderer>(m, "Text2DRenderer")
-        .def(nb::init<tgfx2::FontAtlas*>(),
+    nb::class_<tgfx::Text2DRenderer>(m, "Text2DRenderer")
+        .def(nb::init<tgfx::FontAtlas*>(),
              nb::arg("font") = nullptr,
              nb::keep_alive<1, 2>())  // keep font alive while renderer lives
 
         // begin: (ctx, viewport_w, viewport_h, font=None).
         .def("begin",
-             [](tgfx2::Text2DRenderer& self,
-                tgfx2::RenderContext2* ctx,
+             [](tgfx::Text2DRenderer& self,
+                tgfx::RenderContext2* ctx,
                 int viewport_w, int viewport_h,
-                tgfx2::FontAtlas* font) {
+                tgfx::FontAtlas* font) {
                  self.begin(ctx, viewport_w, viewport_h, font);
              },
              nb::arg("ctx"),
@@ -861,7 +861,7 @@ void bind_tgfx2(nb::module_& m) {
              nb::keep_alive<1, 5>())
 
         .def("draw",
-             [resolve_text2d_anchor](tgfx2::Text2DRenderer& self,
+             [resolve_text2d_anchor](tgfx::Text2DRenderer& self,
                 const std::string& text,
                 float x, float y,
                 std::tuple<float, float, float, float> color,
@@ -878,18 +878,18 @@ void bind_tgfx2(nb::module_& m) {
              nb::arg("anchor") = "left")
 
         .def("measure",
-             [](tgfx2::Text2DRenderer& self, const std::string& text, float size) {
+             [](tgfx::Text2DRenderer& self, const std::string& text, float size) {
                  if (!self.font()) return std::make_tuple(0.0f, 0.0f);
                  auto m = self.font()->measure_text(text, size);
                  return std::make_tuple(m.width, m.height);
              },
              nb::arg("text"), nb::arg("size") = 14.0f)
 
-        .def("end", &tgfx2::Text2DRenderer::end)
-        .def("release_gpu", &tgfx2::Text2DRenderer::release_gpu);
+        .def("end", &tgfx::Text2DRenderer::end)
+        .def("release_gpu", &tgfx::Text2DRenderer::release_gpu);
 
-    nb::class_<tgfx2::Text3DRenderer>(m, "Text3DRenderer")
-        .def(nb::init<tgfx2::FontAtlas*>(),
+    nb::class_<tgfx::Text3DRenderer>(m, "Text3DRenderer")
+        .def(nb::init<tgfx::FontAtlas*>(),
              nb::arg("font") = nullptr,
              nb::keep_alive<1, 2>())
 
@@ -898,12 +898,12 @@ void bind_tgfx2(nb::module_& m) {
         // should extract these themselves — the renderer is now
         // decoupled from any specific camera interface.
         .def("begin",
-             [](tgfx2::Text3DRenderer& self,
-                tgfx2::RenderContext2* ctx,
+             [](tgfx::Text3DRenderer& self,
+                tgfx::RenderContext2* ctx,
                 nb::ndarray<float, nb::c_contig, nb::device::cpu> mvp,
                 nb::ndarray<float, nb::c_contig, nb::device::cpu> cam_right,
                 nb::ndarray<float, nb::c_contig, nb::device::cpu> cam_up,
-                tgfx2::FontAtlas* font) {
+                tgfx::FontAtlas* font) {
                  if (mvp.size() < 16 || cam_right.size() < 3 || cam_up.size() < 3) {
                      throw std::invalid_argument(
                          "Text3DRenderer.begin: mvp needs 16 floats, "
@@ -919,7 +919,7 @@ void bind_tgfx2(nb::module_& m) {
              nb::keep_alive<1, 6>())
 
         .def("draw",
-             [resolve_text3d_anchor](tgfx2::Text3DRenderer& self,
+             [resolve_text3d_anchor](tgfx::Text3DRenderer& self,
                 const std::string& text,
                 std::tuple<float, float, float> position,
                 std::tuple<float, float, float, float> color,
@@ -937,8 +937,8 @@ void bind_tgfx2(nb::module_& m) {
              nb::arg("size") = 0.05f,
              nb::arg("anchor") = "center")
 
-        .def("end", &tgfx2::Text3DRenderer::end)
-        .def("release_gpu", &tgfx2::Text3DRenderer::release_gpu);
+        .def("end", &tgfx::Text3DRenderer::end)
+        .def("release_gpu", &tgfx::Text3DRenderer::release_gpu);
 }
 
 } // namespace tgfx_bindings

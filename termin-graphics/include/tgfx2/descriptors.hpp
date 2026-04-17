@@ -9,7 +9,7 @@
 #include "tgfx2/render_state.hpp"
 #include "tgfx2/vertex_layout.hpp"
 
-namespace tgfx2 {
+namespace tgfx {
 
 // --- Resource descriptors ---
 
@@ -108,4 +108,4 @@ struct ResourceSetDesc {
     std::vector<ResourceBinding> bindings;
 };
 
-} // namespace tgfx2
+} // namespace tgfx

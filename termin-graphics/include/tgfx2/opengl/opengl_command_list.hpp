@@ -5,7 +5,7 @@
 #include "tgfx2/i_command_list.hpp"
 #include "tgfx2/opengl/opengl_render_device.hpp"
 
-namespace tgfx2 {
+namespace tgfx {
 
 class TGFX2_API OpenGLCommandList : public ICommandList {
 public:
@@ -59,4 +59,4 @@ private:
     void rebind_vertex_attribs(const VertexBufferLayout& layout, uint64_t base_offset);
 };
 
-} // namespace tgfx2
+} // namespace tgfx

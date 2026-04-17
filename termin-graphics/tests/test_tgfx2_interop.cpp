@@ -125,7 +125,7 @@ int main() {
     printf("GL: %s\n", glGetString(GL_RENDERER));
 
     // Create tgfx2 OpenGL device
-    tgfx2::OpenGLRenderDevice device;
+    tgfx::OpenGLRenderDevice device;
 
     // Register tgfx2-backed gpu_ops
     tgfx2_interop_set_device(&device);

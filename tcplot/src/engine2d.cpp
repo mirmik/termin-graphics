@@ -91,7 +91,7 @@ void build_ortho(float w, float h, float out[16]) {
 // ---------------------------------------------------------------------------
 
 PlotEngine2D::PlotEngine2D()
-    : text2d_(std::make_unique<tgfx2::Text2DRenderer>()) {}
+    : text2d_(std::make_unique<tgfx::Text2DRenderer>()) {}
 
 PlotEngine2D::~PlotEngine2D() {
     release_gpu_resources();
@@ -210,27 +210,27 @@ void PlotEngine2D::pixel_to_data_(float wx, float wy,
 // Shader lifecycle
 // ---------------------------------------------------------------------------
 
-void PlotEngine2D::ensure_shader_(tgfx2::IRenderDevice& device) {
+void PlotEngine2D::ensure_shader_(tgfx::IRenderDevice& device) {
     if (shader_device_ == &device && shader_vs_id_ != 0) return;
 
     if (shader_device_) {
         if (shader_vs_id_ != 0) {
-            tgfx2::ShaderHandle h; h.id = shader_vs_id_;
+            tgfx::ShaderHandle h; h.id = shader_vs_id_;
             shader_device_->destroy(h);
         }
         if (shader_fs_id_ != 0) {
-            tgfx2::ShaderHandle h; h.id = shader_fs_id_;
+            tgfx::ShaderHandle h; h.id = shader_fs_id_;
             shader_device_->destroy(h);
         }
     }
 
-    tgfx2::ShaderDesc vd;
-    vd.stage = tgfx2::ShaderStage::Vertex;
+    tgfx::ShaderDesc vd;
+    vd.stage = tgfx::ShaderStage::Vertex;
     vd.source = kVert;
     shader_vs_id_ = device.create_shader(vd).id;
 
-    tgfx2::ShaderDesc fd;
-    fd.stage = tgfx2::ShaderStage::Fragment;
+    tgfx::ShaderDesc fd;
+    fd.stage = tgfx::ShaderStage::Fragment;
     fd.source = kFrag;
     shader_fs_id_ = device.create_shader(fd).id;
 
@@ -240,11 +240,11 @@ void PlotEngine2D::ensure_shader_(tgfx2::IRenderDevice& device) {
 void PlotEngine2D::release_gpu_resources() {
     if (shader_device_) {
         if (shader_vs_id_ != 0) {
-            tgfx2::ShaderHandle h; h.id = shader_vs_id_;
+            tgfx::ShaderHandle h; h.id = shader_vs_id_;
             shader_device_->destroy(h);
         }
         if (shader_fs_id_ != 0) {
-            tgfx2::ShaderHandle h; h.id = shader_fs_id_;
+            tgfx::ShaderHandle h; h.id = shader_fs_id_;
             shader_device_->destroy(h);
         }
     }
@@ -254,11 +254,11 @@ void PlotEngine2D::release_gpu_resources() {
 
     if (line_shader_device_) {
         if (line_shader_vs_id_ != 0) {
-            tgfx2::ShaderHandle h; h.id = line_shader_vs_id_;
+            tgfx::ShaderHandle h; h.id = line_shader_vs_id_;
             line_shader_device_->destroy(h);
         }
         if (line_shader_fs_id_ != 0) {
-            tgfx2::ShaderHandle h; h.id = line_shader_fs_id_;
+            tgfx::ShaderHandle h; h.id = line_shader_fs_id_;
             line_shader_device_->destroy(h);
         }
         for (auto& gs : line_gpu_) {
@@ -277,18 +277,18 @@ void PlotEngine2D::release_gpu_resources() {
 // Line persistent-VBO helpers
 // ---------------------------------------------------------------------------
 
-void PlotEngine2D::ensure_line_shader_(tgfx2::IRenderDevice& device) {
+void PlotEngine2D::ensure_line_shader_(tgfx::IRenderDevice& device) {
     if (line_shader_device_ == &device
         && line_shader_vs_id_ != 0 && line_shader_fs_id_ != 0) {
         return;
     }
     if (line_shader_device_) {
         if (line_shader_vs_id_ != 0) {
-            tgfx2::ShaderHandle h; h.id = line_shader_vs_id_;
+            tgfx::ShaderHandle h; h.id = line_shader_vs_id_;
             line_shader_device_->destroy(h);
         }
         if (line_shader_fs_id_ != 0) {
-            tgfx2::ShaderHandle h; h.id = line_shader_fs_id_;
+            tgfx::ShaderHandle h; h.id = line_shader_fs_id_;
             line_shader_device_->destroy(h);
         }
         // Device change invalidates all VBOs too.
@@ -298,20 +298,20 @@ void PlotEngine2D::ensure_line_shader_(tgfx2::IRenderDevice& device) {
         }
     }
 
-    tgfx2::ShaderDesc vd;
-    vd.stage = tgfx2::ShaderStage::Vertex;
+    tgfx::ShaderDesc vd;
+    vd.stage = tgfx::ShaderStage::Vertex;
     vd.source = kLineVert;
     line_shader_vs_id_ = device.create_shader(vd).id;
 
-    tgfx2::ShaderDesc fd;
-    fd.stage = tgfx2::ShaderStage::Fragment;
+    tgfx::ShaderDesc fd;
+    fd.stage = tgfx::ShaderStage::Fragment;
     fd.source = kLineFrag;
     line_shader_fs_id_ = device.create_shader(fd).id;
 
     line_shader_device_ = &device;
 }
 
-void PlotEngine2D::ensure_line_gpu_(tgfx2::IRenderDevice& device, size_t idx) {
+void PlotEngine2D::ensure_line_gpu_(tgfx::IRenderDevice& device, size_t idx) {
     if (idx >= data.lines.size()) return;
     LineGpuState& gs = line_gpu_[idx];
     const LineSeries& s = data.lines[idx];
@@ -325,10 +325,10 @@ void PlotEngine2D::ensure_line_gpu_(tgfx2::IRenderDevice& device, size_t idx) {
 
         if (gs.vbo.id != 0) device.destroy(gs.vbo);
 
-        tgfx2::BufferDesc desc;
+        tgfx::BufferDesc desc;
         desc.size = static_cast<uint64_t>(new_cap) * 2 * sizeof(float);
-        desc.usage = tgfx2::BufferUsage::Vertex
-                   | tgfx2::BufferUsage::CopyDst;
+        desc.usage = tgfx::BufferUsage::Vertex
+                   | tgfx::BufferUsage::CopyDst;
         gs.vbo = device.create_buffer(desc);
         gs.capacity = new_cap;
         gs.gpu_count = 0;  // force full re-upload into new buffer
@@ -487,14 +487,14 @@ void PlotEngine2D::emit_line_(std::vector<float>& v,
     push(x2, y2);
 }
 
-void PlotEngine2D::flush_triangles_(tgfx2::RenderContext2& ctx,
+void PlotEngine2D::flush_triangles_(tgfx::RenderContext2& ctx,
                                       std::vector<float>& v) {
     if (v.empty()) return;
     ctx.draw_immediate_triangles(v.data(), (uint32_t)(v.size() / 7));
     v.clear();
 }
 
-void PlotEngine2D::flush_lines_(tgfx2::RenderContext2& ctx,
+void PlotEngine2D::flush_lines_(tgfx::RenderContext2& ctx,
                                   std::vector<float>& v) {
     if (v.empty()) return;
     ctx.draw_immediate_lines(v.data(), (uint32_t)(v.size() / 7));
@@ -505,7 +505,7 @@ void PlotEngine2D::flush_lines_(tgfx2::RenderContext2& ctx,
 // Rendering
 // ---------------------------------------------------------------------------
 
-void PlotEngine2D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
+void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     if (!ctx || vw_ <= 0 || vh_ <= 0) return;
 
     ensure_shader_(ctx->device());
@@ -530,16 +530,16 @@ void PlotEngine2D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
     // Render state.
     ctx->set_depth_test(false);
     ctx->set_blend(true);
-    ctx->set_cull(tgfx2::CullMode::None);
+    ctx->set_cull(tgfx::CullMode::None);
 
     // Bind UI shader + ortho projection. Vertex emitters below write
     // GLOBAL viewport coords (pa.x = vx_ + margin_left, etc.), but
     // with set_viewport above NDC [-1..1] maps to LOCAL pixels. The
     // ortho subtracts (vx_, vy_) in NDC space so a global pa.x lands
     // at the right place within the strip.
-    auto bind_ui = [&](tgfx2::RenderContext2& c) {
-        tgfx2::ShaderHandle vs; vs.id = shader_vs_id_;
-        tgfx2::ShaderHandle fs; fs.id = shader_fs_id_;
+    auto bind_ui = [&](tgfx::RenderContext2& c) {
+        tgfx::ShaderHandle vs; vs.id = shader_vs_id_;
+        tgfx::ShaderHandle fs; fs.id = shader_fs_id_;
         c.bind_shader(vs, fs);
         float proj[16];
         build_ortho((float)vw_, (float)vh_, proj);
@@ -604,8 +604,8 @@ void PlotEngine2D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
         ensure_line_shader_(ctx->device());
         line_gpu_.resize(data.lines.size());
 
-        tgfx2::ShaderHandle lvs; lvs.id = line_shader_vs_id_;
-        tgfx2::ShaderHandle lfs; lfs.id = line_shader_fs_id_;
+        tgfx::ShaderHandle lvs; lvs.id = line_shader_vs_id_;
+        tgfx::ShaderHandle lfs; lfs.id = line_shader_fs_id_;
         ctx->bind_shader(lvs, lfs);
 
         float data_to_clip[16];
@@ -613,17 +613,17 @@ void PlotEngine2D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
         ctx->set_uniform_mat4("u_data_to_clip", data_to_clip,
                               /*transpose=*/false);
 
-        tgfx2::VertexBufferLayout line_layout;
+        tgfx::VertexBufferLayout line_layout;
         line_layout.stride = 2 * sizeof(float);
         {
-            tgfx2::VertexAttribute a;
+            tgfx::VertexAttribute a;
             a.location = 0;
-            a.format = tgfx2::VertexFormat::Float2;
+            a.format = tgfx::VertexFormat::Float2;
             a.offset = 0;
             line_layout.attributes.push_back(a);
         }
         ctx->set_vertex_layout(line_layout);
-        ctx->set_topology(tgfx2::PrimitiveTopology::LineStrip);
+        ctx->set_topology(tgfx::PrimitiveTopology::LineStrip);
 
         for (size_t i = 0; i < data.lines.size(); ++i) {
             const LineSeries& s = data.lines[i];
@@ -703,7 +703,7 @@ void PlotEngine2D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
                           label_color.r, label_color.g,
                           label_color.b, label_color.a,
                           tick_sz,
-                          tgfx2::Text2DRenderer::Anchor::Center);
+                          tgfx::Text2DRenderer::Anchor::Center);
         }
         for (double ty : y_ticks) {
             float _sx, sy;
@@ -716,7 +716,7 @@ void PlotEngine2D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
                           label_color.r, label_color.g,
                           label_color.b, label_color.a,
                           tick_sz,
-                          tgfx2::Text2DRenderer::Anchor::Left);
+                          tgfx::Text2DRenderer::Anchor::Left);
         }
 
         if (!data.title.empty()) {
@@ -735,7 +735,7 @@ void PlotEngine2D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
                           T_y(vy_ + margin_top * 0.5f),
                           tc.r, tc.g, tc.b, tc.a,
                           title_font_size,
-                          tgfx2::Text2DRenderer::Anchor::Left);
+                          tgfx::Text2DRenderer::Anchor::Left);
         }
         if (!data.x_label.empty()) {
             text2d_->draw(data.x_label,
@@ -744,7 +744,7 @@ void PlotEngine2D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
                           label_color.r, label_color.g,
                           label_color.b, label_color.a,
                           font_size,
-                          tgfx2::Text2DRenderer::Anchor::Center);
+                          tgfx::Text2DRenderer::Anchor::Center);
         }
         if (!data.y_label.empty()) {
             text2d_->draw(data.y_label,
@@ -753,7 +753,7 @@ void PlotEngine2D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
                           label_color.r, label_color.g,
                           label_color.b, label_color.a,
                           font_size,
-                          tgfx2::Text2DRenderer::Anchor::Center);
+                          tgfx::Text2DRenderer::Anchor::Center);
         }
 
         text2d_->end();

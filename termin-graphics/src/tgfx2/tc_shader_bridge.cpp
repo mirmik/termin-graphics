@@ -16,22 +16,22 @@ namespace termin {
 
 // Reinterpret the slot's opaque `tgfx2_shader_device` as an IRenderDevice
 // pointer. The slot stores whatever device instance first populated it.
-static tgfx2::IRenderDevice* slot_device(const tc_gpu_slot* slot) {
+static tgfx::IRenderDevice* slot_device(const tc_gpu_slot* slot) {
     if (!slot || !slot->tgfx2_shader_device) return nullptr;
-    return static_cast<tgfx2::IRenderDevice*>(slot->tgfx2_shader_device);
+    return static_cast<tgfx::IRenderDevice*>(slot->tgfx2_shader_device);
 }
 
 static void destroy_cached_tgfx2_shaders(tc_gpu_slot* slot) {
     if (!slot) return;
-    tgfx2::IRenderDevice* dev = slot_device(slot);
+    tgfx::IRenderDevice* dev = slot_device(slot);
     if (dev) {
         if (slot->tgfx2_shader_vs_id != 0) {
-            tgfx2::ShaderHandle h;
+            tgfx::ShaderHandle h;
             h.id = slot->tgfx2_shader_vs_id;
             dev->destroy(h);
         }
         if (slot->tgfx2_shader_fs_id != 0) {
-            tgfx2::ShaderHandle h;
+            tgfx::ShaderHandle h;
             h.id = slot->tgfx2_shader_fs_id;
             dev->destroy(h);
         }
@@ -44,9 +44,9 @@ static void destroy_cached_tgfx2_shaders(tc_gpu_slot* slot) {
 
 bool tc_shader_ensure_tgfx2(
     ::tc_shader* shader,
-    tgfx2::IRenderDevice* device,
-    tgfx2::ShaderHandle* out_vs,
-    tgfx2::ShaderHandle* out_fs)
+    tgfx::IRenderDevice* device,
+    tgfx::ShaderHandle* out_vs,
+    tgfx::ShaderHandle* out_fs)
 {
     if (!shader) {
         tc_log(TC_LOG_ERROR, "tc_shader_ensure_tgfx2: shader is NULL");
@@ -96,10 +96,10 @@ bool tc_shader_ensure_tgfx2(
         return false;
     }
 
-    tgfx2::ShaderDesc vs_desc;
-    vs_desc.stage = tgfx2::ShaderStage::Vertex;
+    tgfx::ShaderDesc vs_desc;
+    vs_desc.stage = tgfx::ShaderStage::Vertex;
     vs_desc.source = shader->vertex_source;
-    tgfx2::ShaderHandle vs = device->create_shader(vs_desc);
+    tgfx::ShaderHandle vs = device->create_shader(vs_desc);
     if (!vs) {
         tc_log(TC_LOG_ERROR,
                "tc_shader_ensure_tgfx2: VS compile failed for '%s'",
@@ -107,10 +107,10 @@ bool tc_shader_ensure_tgfx2(
         return false;
     }
 
-    tgfx2::ShaderDesc fs_desc;
-    fs_desc.stage = tgfx2::ShaderStage::Fragment;
+    tgfx::ShaderDesc fs_desc;
+    fs_desc.stage = tgfx::ShaderStage::Fragment;
     fs_desc.source = shader->fragment_source;
-    tgfx2::ShaderHandle fs = device->create_shader(fs_desc);
+    tgfx::ShaderHandle fs = device->create_shader(fs_desc);
     if (!fs) {
         // Roll back VS to avoid leaking on partial failure.
         device->destroy(vs);

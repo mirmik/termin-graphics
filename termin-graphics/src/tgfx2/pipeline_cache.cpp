@@ -4,7 +4,7 @@
 
 #include <functional>
 
-namespace tgfx2 {
+namespace tgfx {
 
 // ============================================================================
 // Key equality
@@ -137,4 +137,4 @@ void PipelineCache::clear() {
     cache_.clear();
 }
 
-} // namespace tgfx2
+} // namespace tgfx

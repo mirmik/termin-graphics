@@ -42,12 +42,12 @@ int main() {
     printf("--- tgfx2 Vulkan smoke test (offscreen) ---\n");
 
     // Create Vulkan device (no surface — offscreen only)
-    tgfx2::VulkanDeviceCreateInfo info;
+    tgfx::VulkanDeviceCreateInfo info;
     info.enable_validation = true;
 
-    std::unique_ptr<tgfx2::IRenderDevice> device;
+    std::unique_ptr<tgfx::IRenderDevice> device;
     try {
-        device = std::make_unique<tgfx2::VulkanRenderDevice>(info);
+        device = std::make_unique<tgfx::VulkanRenderDevice>(info);
     } catch (const std::exception& e) {
         fprintf(stderr, "Failed to create Vulkan device: %s\n", e.what());
         return 1;
@@ -60,15 +60,15 @@ int main() {
            caps.supports_geometry_shaders ? "yes" : "no");
 
     // --- Create shaders (GLSL source — compiled to SPIR-V by shaderc) ---
-    tgfx2::ShaderHandle vs, fs;
+    tgfx::ShaderHandle vs, fs;
     try {
-        tgfx2::ShaderDesc vs_desc;
-        vs_desc.stage = tgfx2::ShaderStage::Vertex;
+        tgfx::ShaderDesc vs_desc;
+        vs_desc.stage = tgfx::ShaderStage::Vertex;
         vs_desc.source = vertex_src;
         vs = device->create_shader(vs_desc);
 
-        tgfx2::ShaderDesc fs_desc;
-        fs_desc.stage = tgfx2::ShaderStage::Fragment;
+        tgfx::ShaderDesc fs_desc;
+        fs_desc.stage = tgfx::ShaderStage::Fragment;
         fs_desc.source = fragment_src;
         fs = device->create_shader(fs_desc);
     } catch (const std::exception& e) {
@@ -79,29 +79,29 @@ int main() {
     printf("Shaders created: vs=%u, fs=%u\n", vs.id, fs.id);
 
     // --- Create render target texture (256x256) ---
-    tgfx2::TextureDesc rt_desc;
+    tgfx::TextureDesc rt_desc;
     rt_desc.width = 256;
     rt_desc.height = 256;
-    rt_desc.format = tgfx2::PixelFormat::RGBA8_UNorm;
-    rt_desc.usage = tgfx2::TextureUsage::ColorAttachment | tgfx2::TextureUsage::CopySrc;
+    rt_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    rt_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
     auto rt_tex = device->create_texture(rt_desc);
     printf("Render target: id=%u\n", rt_tex.id);
 
     // --- Create pipeline ---
-    tgfx2::PipelineDesc pipe_desc;
+    tgfx::PipelineDesc pipe_desc;
     pipe_desc.vertex_shader = vs;
     pipe_desc.fragment_shader = fs;
-    pipe_desc.topology = tgfx2::PrimitiveTopology::TriangleList;
+    pipe_desc.topology = tgfx::PrimitiveTopology::TriangleList;
     pipe_desc.depth_stencil.depth_test = false;
     pipe_desc.depth_stencil.depth_write = false;
-    pipe_desc.raster.cull = tgfx2::CullMode::None;
-    pipe_desc.color_formats = {tgfx2::PixelFormat::RGBA8_UNorm};
+    pipe_desc.raster.cull = tgfx::CullMode::None;
+    pipe_desc.color_formats = {tgfx::PixelFormat::RGBA8_UNorm};
 
-    tgfx2::VertexBufferLayout layout;
+    tgfx::VertexBufferLayout layout;
     layout.stride = 5 * sizeof(float);
     layout.attributes = {
-        {0, tgfx2::VertexFormat::Float2, 0},
-        {1, tgfx2::VertexFormat::Float3, 2 * sizeof(float)},
+        {0, tgfx::VertexFormat::Float2, 0},
+        {1, tgfx::VertexFormat::Float3, 2 * sizeof(float)},
     };
     pipe_desc.vertex_layouts.push_back(layout);
 
@@ -115,17 +115,17 @@ int main() {
          0.5f, -0.5f,  0.f, 0.f, 1.f,
     };
 
-    tgfx2::BufferDesc vb_desc;
+    tgfx::BufferDesc vb_desc;
     vb_desc.size = sizeof(vertices);
-    vb_desc.usage = tgfx2::BufferUsage::Vertex;
+    vb_desc.usage = tgfx::BufferUsage::Vertex;
     vb_desc.cpu_visible = true;
     auto vb = device->create_buffer(vb_desc);
     device->upload_buffer(vb, {reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)});
 
     uint32_t indices[] = {0, 1, 2};
-    tgfx2::BufferDesc ib_desc;
+    tgfx::BufferDesc ib_desc;
     ib_desc.size = sizeof(indices);
-    ib_desc.usage = tgfx2::BufferUsage::Index;
+    ib_desc.usage = tgfx::BufferUsage::Index;
     ib_desc.cpu_visible = true;
     auto ib = device->create_buffer(ib_desc);
     device->upload_buffer(ib, {reinterpret_cast<const uint8_t*>(indices), sizeof(indices)});
@@ -136,10 +136,10 @@ int main() {
     auto cmd = device->create_command_list();
     cmd->begin();
 
-    tgfx2::RenderPassDesc pass;
-    tgfx2::ColorAttachmentDesc color_att;
+    tgfx::RenderPassDesc pass;
+    tgfx::ColorAttachmentDesc color_att;
     color_att.texture = rt_tex;
-    color_att.load = tgfx2::LoadOp::Clear;
+    color_att.load = tgfx::LoadOp::Clear;
     color_att.clear_color[0] = 0.0f;
     color_att.clear_color[1] = 0.0f;
     color_att.clear_color[2] = 0.2f;
@@ -149,7 +149,7 @@ int main() {
     cmd->begin_render_pass(pass);
     cmd->bind_pipeline(pipeline);
     cmd->bind_vertex_buffer(0, vb);
-    cmd->bind_index_buffer(ib, tgfx2::IndexType::Uint32);
+    cmd->bind_index_buffer(ib, tgfx::IndexType::Uint32);
     cmd->draw_indexed(3);
     cmd->end_render_pass();
 
@@ -162,14 +162,14 @@ int main() {
     const uint32_t pixel_count = 256 * 256;
     const uint32_t byte_size = pixel_count * 4; // RGBA8
 
-    tgfx2::BufferDesc readback_desc;
+    tgfx::BufferDesc readback_desc;
     readback_desc.size = byte_size;
-    readback_desc.usage = tgfx2::BufferUsage::CopyDst;
+    readback_desc.usage = tgfx::BufferUsage::CopyDst;
     readback_desc.cpu_visible = true;
     auto readback_buf = device->create_buffer(readback_desc);
 
     // Copy texture to buffer
-    auto* vk_device = static_cast<tgfx2::VulkanRenderDevice*>(device.get());
+    auto* vk_device = static_cast<tgfx::VulkanRenderDevice*>(device.get());
     auto* rt = vk_device->get_texture(rt_tex);
     auto* rb = vk_device->get_buffer(readback_buf);
 

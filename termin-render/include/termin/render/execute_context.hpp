@@ -13,7 +13,7 @@
 
 #include <tgfx2/handles.hpp>
 
-namespace tgfx2 {
+namespace tgfx {
 class RenderContext2;
 }
 
@@ -24,7 +24,7 @@ class ShadowMapArrayResource;
 // Per-resource tgfx2 texture map. Passes that draw through ctx2
 // consume entries from tex2_reads/tex2_writes (and the depth variants
 // below) directly.
-using Tex2Map = std::unordered_map<std::string, tgfx2::TextureHandle>;
+using Tex2Map = std::unordered_map<std::string, tgfx::TextureHandle>;
 
 // Non-FBO framegraph resources indexed by canonical name. Currently
 // only populated for shadow_map_array resources — ShadowPass writes
@@ -33,7 +33,7 @@ using ShadowArrayMap = std::unordered_map<std::string, ShadowMapArrayResource*>;
 
 struct ExecuteContext {
 public:
-    tgfx2::RenderContext2* ctx2 = nullptr;
+    tgfx::RenderContext2* ctx2 = nullptr;
     // Color attachments of pipeline resources as tgfx2 textures.
     Tex2Map tex2_reads;
     Tex2Map tex2_writes;

@@ -7,7 +7,7 @@
 
 #include <stdexcept>
 
-namespace tgfx2 {
+namespace tgfx {
 
 std::unique_ptr<IRenderDevice> create_device(BackendType type) {
     switch (type) {
@@ -36,4 +36,4 @@ std::unique_ptr<IRenderDevice> create_device(BackendType type) {
     throw std::runtime_error("Unknown backend type");
 }
 
-} // namespace tgfx2
+} // namespace tgfx

@@ -13,7 +13,7 @@
 #include <algorithm>
 #include <set>
 
-namespace tgfx2 {
+namespace tgfx {
 
 // --- Debug callback ---
 
@@ -1111,6 +1111,6 @@ VkFramebuffer VulkanRenderDevice::get_or_create_framebuffer(
     return fb;
 }
 
-} // namespace tgfx2
+} // namespace tgfx
 
 #endif // TGFX2_HAS_VULKAN

@@ -5,8 +5,8 @@
 #include "tgfx2/enums.hpp"
 #include "tgfx2/i_render_device.hpp"
 
-namespace tgfx2 {
+namespace tgfx {
 
 TGFX2_API std::unique_ptr<IRenderDevice> create_device(BackendType type);
 
-} // namespace tgfx2
+} // namespace tgfx

@@ -1,4 +1,4 @@
-// font_atlas.cpp - stb_truetype-backed implementation of tgfx2::FontAtlas.
+// font_atlas.cpp - stb_truetype-backed implementation of tgfx::FontAtlas.
 //
 // Layout parity with the prior Python implementation (tgfx/font.py):
 //   - Cell size: (ink_width, line_height) where ink_width = x1 - x0
@@ -39,7 +39,7 @@ extern "C" {
 #define STBTT_STATIC
 #include "stb_truetype.h"
 
-namespace tgfx2 {
+namespace tgfx {
 
 namespace {
 
@@ -375,4 +375,4 @@ void FontAtlas::release_gpu() {
     dirty_ = true;
 }
 
-}  // namespace tgfx2
+}  // namespace tgfx

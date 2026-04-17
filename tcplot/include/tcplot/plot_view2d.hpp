@@ -14,7 +14,7 @@
 #include "tcplot/styles.hpp"
 #include "tcplot/tcplot_api.h"
 
-namespace tgfx2 {
+namespace tgfx {
 class OpenGLRenderDevice;
 class PipelineCache;
 class RenderContext2;
@@ -70,13 +70,13 @@ private:
 
     std::string ttf_path_;
 
-    std::unique_ptr<tgfx2::OpenGLRenderDevice> device_;
-    std::unique_ptr<tgfx2::PipelineCache> cache_;
-    std::unique_ptr<tgfx2::RenderContext2> ctx_;
-    std::unique_ptr<tgfx2::FontAtlas> font_;
+    std::unique_ptr<tgfx::OpenGLRenderDevice> device_;
+    std::unique_ptr<tgfx::PipelineCache> cache_;
+    std::unique_ptr<tgfx::RenderContext2> ctx_;
+    std::unique_ptr<tgfx::FontAtlas> font_;
     std::unique_ptr<PlotEngine2D> engine_;
 
-    tgfx2::TextureHandle offscreen_color_{};
+    tgfx::TextureHandle offscreen_color_{};
     int offscreen_w_ = 0;
     int offscreen_h_ = 0;
     int msaa_samples_ = 4;

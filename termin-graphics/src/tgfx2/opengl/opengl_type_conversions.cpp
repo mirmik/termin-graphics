@@ -1,6 +1,6 @@
 #include "tgfx2/opengl/opengl_type_conversions.hpp"
 
-namespace tgfx2::gl {
+namespace tgfx::gl {
 
 GLFormatInfo to_gl_format(PixelFormat fmt) {
     switch (fmt) {
@@ -257,4 +257,4 @@ GLenum to_gl_buffer_usage(bool cpu_visible) {
     return cpu_visible ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW;
 }
 
-} // namespace tgfx2::gl
+} // namespace tgfx::gl

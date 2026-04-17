@@ -2,7 +2,7 @@
 
 #include "tgfx2/enums.hpp"
 
-namespace tgfx2 {
+namespace tgfx {
 
 struct RasterState {
     CullMode cull = CullMode::Back;
@@ -33,4 +33,4 @@ struct ColorMask {
     bool a = true;
 };
 
-} // namespace tgfx2
+} // namespace tgfx

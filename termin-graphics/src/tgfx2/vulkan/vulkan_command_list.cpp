@@ -3,7 +3,7 @@
 #include "tgfx2/vulkan/vulkan_command_list.hpp"
 #include "tgfx2/vulkan/vulkan_type_conversions.hpp"
 
-namespace tgfx2 {
+namespace tgfx {
 
 VulkanCommandList::VulkanCommandList(VulkanRenderDevice& device)
     : device_(device)
@@ -239,6 +239,6 @@ void VulkanCommandList::set_scissor(int x, int y, int width, int height) {
     vkCmdSetScissor(cmd_, 0, 1, &scissor);
 }
 
-} // namespace tgfx2
+} // namespace tgfx
 
 #endif // TGFX2_HAS_VULKAN

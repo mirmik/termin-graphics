@@ -14,7 +14,7 @@ extern "C" {
 #include "tgfx/tgfx_resource_gpu.h"
 }
 
-namespace tgfx2 {
+namespace tgfx {
 
 OpenGLRenderDevice::OpenGLRenderDevice() {
     // glad is a static library — each DLL/exe gets its own copy of function pointers.
@@ -844,4 +844,4 @@ GLintptr OpenGLRenderDevice::push_constants_write(const void* data, uint32_t siz
     return offset;
 }
 
-} // namespace tgfx2
+} // namespace tgfx

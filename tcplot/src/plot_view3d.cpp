@@ -1,7 +1,7 @@
 // plot_view3d.cpp - tcplot PlotView3D implementation.
 //
 // All GL-state is confined to tgfx2. Offscreen color + depth are
-// tgfx2::TextureHandle owned by the device; begin_pass internally
+// tgfx::TextureHandle owned by the device; begin_pass internally
 // manages the FBO via OpenGLRenderDevice::get_or_create_fbo. The
 // single OpenGL-backend-specific call is blit_to_external_fbo at
 // end-of-frame, which composites our offscreen color into the host's
@@ -49,10 +49,10 @@ std::vector<double> copy_array(const double* src, size_t n) {
 
 PlotView3D::PlotView3D(const std::string& ttf_path)
     : ttf_path_(ttf_path) {
-    device_  = std::make_unique<tgfx2::OpenGLRenderDevice>();
-    cache_   = std::make_unique<tgfx2::PipelineCache>(*device_);
-    ctx_     = std::make_unique<tgfx2::RenderContext2>(*device_, *cache_);
-    font_    = std::make_unique<tgfx2::FontAtlas>(ttf_path);
+    device_  = std::make_unique<tgfx::OpenGLRenderDevice>();
+    cache_   = std::make_unique<tgfx::PipelineCache>(*device_);
+    ctx_     = std::make_unique<tgfx::RenderContext2>(*device_, *cache_);
+    font_    = std::make_unique<tgfx::FontAtlas>(ttf_path);
     engine_  = std::make_unique<PlotEngine3D>();
 }
 
@@ -72,16 +72,16 @@ void PlotView3D::ensure_offscreen_(int w, int h) {
     // Drop prior attachments — device.destroy is safe on zero ids.
     if (offscreen_color_.id != 0) device_->destroy(offscreen_color_);
     if (offscreen_depth_.id != 0) device_->destroy(offscreen_depth_);
-    offscreen_color_ = tgfx2::TextureHandle{};
-    offscreen_depth_ = tgfx2::TextureHandle{};
+    offscreen_color_ = tgfx::TextureHandle{};
+    offscreen_depth_ = tgfx::TextureHandle{};
 
-    tgfx2::TextureDesc color_desc;
+    tgfx::TextureDesc color_desc;
     color_desc.width = static_cast<uint32_t>(w);
     color_desc.height = static_cast<uint32_t>(h);
-    color_desc.format = tgfx2::PixelFormat::RGBA8_UNorm;
-    color_desc.usage = tgfx2::TextureUsage::Sampled
-                     | tgfx2::TextureUsage::ColorAttachment
-                     | tgfx2::TextureUsage::CopySrc;
+    color_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    color_desc.usage = tgfx::TextureUsage::Sampled
+                     | tgfx::TextureUsage::ColorAttachment
+                     | tgfx::TextureUsage::CopySrc;
     color_desc.sample_count = static_cast<uint32_t>(msaa_samples_);
     offscreen_color_ = device_->create_texture(color_desc);
 
@@ -91,11 +91,11 @@ void PlotView3D::ensure_offscreen_(int w, int h) {
     // silently fail the glTexImage2DMultisample call, which surfaces
     // as the dreaded "white screen + silent crash" path WPF can't
     // trace. Stick with D24 for MSAA attachments.
-    tgfx2::TextureDesc depth_desc;
+    tgfx::TextureDesc depth_desc;
     depth_desc.width = static_cast<uint32_t>(w);
     depth_desc.height = static_cast<uint32_t>(h);
-    depth_desc.format = tgfx2::PixelFormat::D24_UNorm;
-    depth_desc.usage = tgfx2::TextureUsage::DepthStencilAttachment;
+    depth_desc.format = tgfx::PixelFormat::D24_UNorm;
+    depth_desc.usage = tgfx::TextureUsage::DepthStencilAttachment;
     depth_desc.sample_count = static_cast<uint32_t>(msaa_samples_);
     offscreen_depth_ = device_->create_texture(depth_desc);
 
@@ -158,8 +158,8 @@ void PlotView3D::set_msaa_samples(int samples) {
         if (offscreen_color_.id != 0) device_->destroy(offscreen_color_);
         if (offscreen_depth_.id != 0) device_->destroy(offscreen_depth_);
     }
-    offscreen_color_ = tgfx2::TextureHandle{};
-    offscreen_depth_ = tgfx2::TextureHandle{};
+    offscreen_color_ = tgfx::TextureHandle{};
+    offscreen_depth_ = tgfx::TextureHandle{};
     offscreen_w_ = 0;
     offscreen_h_ = 0;
 }
@@ -241,7 +241,7 @@ void PlotView3D::render(int width, int height, uint32_t dst_gl_fbo) {
     // Backend-specific presentation. Lives entirely inside
     // termin_graphics2.dll (where glad is guaranteed loaded). When
     // Vulkan ships, this call will branch on device type.
-    auto* gl_dev = static_cast<tgfx2::OpenGLRenderDevice*>(device_.get());
+    auto* gl_dev = static_cast<tgfx::OpenGLRenderDevice*>(device_.get());
     gl_dev->blit_to_external_fbo(
         dst_gl_fbo, offscreen_color_,
         0, 0, width, height,
@@ -256,8 +256,8 @@ void PlotView3D::release_gpu() {
         if (offscreen_color_.id != 0) device_->destroy(offscreen_color_);
         if (offscreen_depth_.id != 0) device_->destroy(offscreen_depth_);
     }
-    offscreen_color_ = tgfx2::TextureHandle{};
-    offscreen_depth_ = tgfx2::TextureHandle{};
+    offscreen_color_ = tgfx::TextureHandle{};
+    offscreen_depth_ = tgfx::TextureHandle{};
     offscreen_w_ = 0;
     offscreen_h_ = 0;
 }

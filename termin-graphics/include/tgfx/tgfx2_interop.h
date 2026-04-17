@@ -7,7 +7,7 @@
 
 #ifdef __cplusplus
 
-namespace tgfx2 { class IRenderDevice; }
+namespace tgfx { class IRenderDevice; }
 
 extern "C" {
 #endif
@@ -21,7 +21,7 @@ TGFX_API void* tgfx2_interop_get_device(void);
 
 // Register tgfx2-backed gpu_ops vtable.
 // Requires tgfx2_interop_set_device() to have been called first.
-// The vtable routes resource creation through tgfx2::IRenderDevice
+// The vtable routes resource creation through tgfx::IRenderDevice
 // and extracts GL IDs for backward compatibility with existing code.
 TGFX_API void tgfx2_gpu_ops_register(void);
 
@@ -31,12 +31,12 @@ TGFX_API void tgfx2_gpu_ops_register(void);
 // C++ typed accessors
 namespace tgfx {
 
-inline void set_tgfx2_device(tgfx2::IRenderDevice* device) {
+inline void set_tgfx2_device(tgfx::IRenderDevice* device) {
     tgfx2_interop_set_device(static_cast<void*>(device));
 }
 
-inline tgfx2::IRenderDevice* get_tgfx2_device() {
-    return static_cast<tgfx2::IRenderDevice*>(tgfx2_interop_get_device());
+inline tgfx::IRenderDevice* get_tgfx2_device() {
+    return static_cast<tgfx::IRenderDevice*>(tgfx2_interop_get_device());
 }
 
 } // namespace tgfx

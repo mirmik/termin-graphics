@@ -27,7 +27,7 @@
 #include "tgfx2/vertex_layout.hpp"
 #include "tgfx2/descriptors.hpp"
 
-namespace tgfx2 {
+namespace tgfx {
 
 class IRenderDevice;
 class ICommandList;
@@ -254,4 +254,4 @@ private:
     void flush_resource_set();
 };
 
-} // namespace tgfx2
+} // namespace tgfx

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace tgfx2 {
+namespace tgfx {
 
 #define TGFX2_DEFINE_HANDLE(Name) \
     struct Name { \
@@ -22,4 +22,4 @@ TGFX2_DEFINE_HANDLE(RenderTargetHandle);
 
 #undef TGFX2_DEFINE_HANDLE
 
-} // namespace tgfx2
+} // namespace tgfx

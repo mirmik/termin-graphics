@@ -4,7 +4,7 @@
 #include "tgfx2/enums.hpp"
 #include "tgfx2/vertex_layout.hpp"
 
-namespace tgfx2::gl {
+namespace tgfx::gl {
 
 // Pixel format -> GL internal format, data format, data type
 struct GLFormatInfo {
@@ -37,4 +37,4 @@ bool vertex_format_is_normalized(VertexFormat fmt);
 GLenum to_gl_buffer_target(BufferUsage usage);
 GLenum to_gl_buffer_usage(bool cpu_visible);
 
-} // namespace tgfx2::gl
+} // namespace tgfx::gl

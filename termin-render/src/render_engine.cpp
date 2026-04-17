@@ -38,7 +38,7 @@ RenderEngine::RenderEngine() {
     ensure_scene_extensions_for_render();
 }
 
-// Out-of-line destructor so unique_ptr<tgfx2::*> members can use forward
+// Out-of-line destructor so unique_ptr<tgfx::*> members can use forward
 // declarations in the header; the full tgfx2 types are visible here.
 RenderEngine::~RenderEngine() {
     if (tgfx2_device_) {
@@ -64,9 +64,9 @@ void RenderEngine::ensure_tgfx2() {
         return;
     }
     // Assumes the GL context is current (caller is inside a render frame).
-    tgfx2_device_ = std::make_unique<tgfx2::OpenGLRenderDevice>();
-    tgfx2_cache_ = std::make_unique<tgfx2::PipelineCache>(*tgfx2_device_);
-    tgfx2_ctx_ = std::make_unique<tgfx2::RenderContext2>(*tgfx2_device_, *tgfx2_cache_);
+    tgfx2_device_ = std::make_unique<tgfx::OpenGLRenderDevice>();
+    tgfx2_cache_ = std::make_unique<tgfx::PipelineCache>(*tgfx2_device_);
+    tgfx2_ctx_ = std::make_unique<tgfx::RenderContext2>(*tgfx2_device_, *tgfx2_cache_);
 
     // Stage 6: swap the tgfx_gpu_ops vtable from the raw-GL implementation
     // installed by OpenGLGraphicsBackend::ensure_ready() to the tgfx2-backed
@@ -165,21 +165,21 @@ void RenderEngine::render_view_to_fbo_id(
             tgfx2_device_->destroy(external_target_depth_);
             external_target_depth_ = {};
         }
-        tgfx2::TextureDesc color_desc;
+        tgfx::TextureDesc color_desc;
         color_desc.width = static_cast<uint32_t>(width);
         color_desc.height = static_cast<uint32_t>(height);
-        color_desc.format = tgfx2::PixelFormat::RGBA8_UNorm;
-        color_desc.usage = tgfx2::TextureUsage::Sampled |
-                           tgfx2::TextureUsage::ColorAttachment |
-                           tgfx2::TextureUsage::CopyDst;
+        color_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+        color_desc.usage = tgfx::TextureUsage::Sampled |
+                           tgfx::TextureUsage::ColorAttachment |
+                           tgfx::TextureUsage::CopyDst;
         external_target_color_ = tgfx2_device_->create_texture(color_desc);
 
-        tgfx2::TextureDesc depth_desc;
+        tgfx::TextureDesc depth_desc;
         depth_desc.width = static_cast<uint32_t>(width);
         depth_desc.height = static_cast<uint32_t>(height);
-        depth_desc.format = tgfx2::PixelFormat::D24_UNorm;
-        depth_desc.usage = tgfx2::TextureUsage::DepthStencilAttachment |
-                           tgfx2::TextureUsage::Sampled;
+        depth_desc.format = tgfx::PixelFormat::D24_UNorm;
+        depth_desc.usage = tgfx::TextureUsage::DepthStencilAttachment |
+                           tgfx::TextureUsage::Sampled;
         external_target_depth_ = tgfx2_device_->create_texture(depth_desc);
 
         external_target_w_ = width;
@@ -203,7 +203,7 @@ void RenderEngine::render_view_to_fbo_id(
     );
 
     // Present: blit internal color → external GL framebuffer id.
-    auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(tgfx2_device_.get());
+    auto* gl_dev = dynamic_cast<tgfx::OpenGLRenderDevice*>(tgfx2_device_.get());
     if (gl_dev) {
         gl_dev->blit_to_external_fbo(
             target_fbo_id, external_target_color_,
@@ -378,16 +378,16 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
         FBOPool& fbo_pool = pipeline.fbo_pool();
 
-        tgfx2::PixelFormat color_fmt = tgfx2::PixelFormat::RGBA8_UNorm;
-        if (format == "r8") color_fmt = tgfx2::PixelFormat::R8_UNorm;
-        else if (format == "r16f") color_fmt = tgfx2::PixelFormat::R16F;
-        else if (format == "r32f") color_fmt = tgfx2::PixelFormat::R32F;
-        else if (format == "rgba16f") color_fmt = tgfx2::PixelFormat::RGBA16F;
-        else if (format == "rgba32f") color_fmt = tgfx2::PixelFormat::RGBA32F;
+        tgfx::PixelFormat color_fmt = tgfx::PixelFormat::RGBA8_UNorm;
+        if (format == "r8") color_fmt = tgfx::PixelFormat::R8_UNorm;
+        else if (format == "r16f") color_fmt = tgfx::PixelFormat::R16F;
+        else if (format == "r32f") color_fmt = tgfx::PixelFormat::R32F;
+        else if (format == "rgba16f") color_fmt = tgfx::PixelFormat::RGBA16F;
+        else if (format == "rgba32f") color_fmt = tgfx::PixelFormat::RGBA32F;
 
         fbo_pool.ensure_native(
             *tgfx2_device_, canon, fbo_width, fbo_height,
-            color_fmt, /*has_depth=*/true, tgfx2::PixelFormat::D32F, samples);
+            color_fmt, /*has_depth=*/true, tgfx::PixelFormat::D32F, samples);
         (void)filter;
 
         const char* aliases[64];
@@ -408,14 +408,14 @@ void RenderEngine::render_scene_pipeline_offscreen(
     // Assemble per-resource tgfx2 texture maps from the pool. Native
     // path: handles are owned by IRenderDevice, persistent across
     // frames without any wrap/destroy churn.
-    std::unordered_map<std::string, tgfx2::TextureHandle> tex2_resources;
-    std::unordered_map<std::string, tgfx2::TextureHandle> tex2_depth_resources;
+    std::unordered_map<std::string, tgfx::TextureHandle> tex2_resources;
+    std::unordered_map<std::string, tgfx::TextureHandle> tex2_depth_resources;
     if (tgfx2_ctx_ && tgfx2_device_) {
         FBOPool& fbo_pool = pipeline.fbo_pool();
         for (const auto& [name, res] : resources) {
-            tgfx2::TextureHandle color_handle = fbo_pool.get_color_tgfx2(name);
+            tgfx::TextureHandle color_handle = fbo_pool.get_color_tgfx2(name);
             if (color_handle) tex2_resources[name] = color_handle;
-            tgfx2::TextureHandle depth_handle = fbo_pool.get_depth_tgfx2(name);
+            tgfx::TextureHandle depth_handle = fbo_pool.get_depth_tgfx2(name);
             if (depth_handle) tex2_depth_resources[name] = depth_handle;
         }
     }
@@ -435,10 +435,10 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
             auto ct = tex2_resources.find(spec.resource);
             auto dt = tex2_depth_resources.find(spec.resource);
-            tgfx2::TextureHandle color_tex =
-                (ct != tex2_resources.end()) ? ct->second : tgfx2::TextureHandle{};
-            tgfx2::TextureHandle depth_tex =
-                (dt != tex2_depth_resources.end()) ? dt->second : tgfx2::TextureHandle{};
+            tgfx::TextureHandle color_tex =
+                (ct != tex2_resources.end()) ? ct->second : tgfx::TextureHandle{};
+            tgfx::TextureHandle depth_tex =
+                (dt != tex2_depth_resources.end()) ? dt->second : tgfx::TextureHandle{};
             if (!color_tex && !depth_tex) continue;
 
             float clear_rgba[4] = {0, 0, 0, 1};
@@ -470,7 +470,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
     // tgfx2 OpenGL device: per-pass state reset + GL sync.
     auto* execute_tgfx2_gl_dev =
-        dynamic_cast<tgfx2::OpenGLRenderDevice*>(tgfx2_device_.get());
+        dynamic_cast<tgfx::OpenGLRenderDevice*>(tgfx2_device_.get());
 
     tc_profiler_begin_section("Execute Passes");
     for (size_t i = 0; i < schedule_count; i++) {

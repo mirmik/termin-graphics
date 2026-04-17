@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace tgfx2 {
+namespace tgfx {
 namespace internal {
 
 // Decode one codepoint starting at `i`. Advances `i` past the sequence.
@@ -64,4 +64,4 @@ inline uint32_t utf8_decode(std::string_view s, size_t& i) {
 }
 
 }  // namespace internal
-}  // namespace tgfx2
+}  // namespace tgfx

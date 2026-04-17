@@ -24,7 +24,7 @@
 #include "tgfx2/handles.hpp"
 #include "tgfx2/tgfx2_api.h"
 
-namespace tgfx2 {
+namespace tgfx {
 
 class RenderContext2;
 class IRenderDevice;
@@ -83,4 +83,4 @@ private:
     float proj_[16]{};
 };
 
-}  // namespace tgfx2
+}  // namespace tgfx

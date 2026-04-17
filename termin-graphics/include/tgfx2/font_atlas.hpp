@@ -2,7 +2,7 @@
 //
 // Single grayscale (R8) atlas, default 2048x2048. Glyphs are rasterised
 // on demand via stb_truetype and packed into shelves. The atlas is
-// backed by one tgfx2::TextureHandle; new glyphs set a dirty flag and
+// backed by one tgfx::TextureHandle; new glyphs set a dirty flag and
 // the next ensure_texture() call re-uploads the full image.
 //
 // Data model follows the Python tgfx.font implementation it replaces:
@@ -25,7 +25,7 @@
 #include "tgfx2/handles.hpp"
 #include "tgfx2/tgfx2_api.h"
 
-namespace tgfx2 {
+namespace tgfx {
 
 class RenderContext2;
 class IRenderDevice;
@@ -150,4 +150,4 @@ private:
     bool dirty_ = false;
 };
 
-}  // namespace tgfx2
+}  // namespace tgfx

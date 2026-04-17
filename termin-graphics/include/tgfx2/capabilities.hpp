@@ -3,7 +3,7 @@
 #include <cstdint>
 #include "tgfx2/enums.hpp"
 
-namespace tgfx2 {
+namespace tgfx {
 
 struct BackendCapabilities {
     BackendType backend = BackendType::Null;
@@ -16,4 +16,4 @@ struct BackendCapabilities {
     uint32_t max_texture_units = 16;
 };
 
-} // namespace tgfx2
+} // namespace tgfx

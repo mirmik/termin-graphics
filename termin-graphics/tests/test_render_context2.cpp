@@ -50,28 +50,28 @@ void main() {
 }
 )";
 
-static void test_triangle_draw(tgfx2::IRenderDevice& device, tgfx2::PipelineCache& cache) {
+static void test_triangle_draw(tgfx::IRenderDevice& device, tgfx::PipelineCache& cache) {
     printf("\n--- Triangle Draw via RenderContext2 ---\n");
 
     const uint32_t W = 64, H = 64;
 
     // Create render target
-    tgfx2::TextureDesc rt_desc;
+    tgfx::TextureDesc rt_desc;
     rt_desc.width = W;
     rt_desc.height = H;
-    rt_desc.format = tgfx2::PixelFormat::RGBA8_UNorm;
-    rt_desc.usage = tgfx2::TextureUsage::ColorAttachment | tgfx2::TextureUsage::CopySrc;
+    rt_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    rt_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
     auto rt = device.create_texture(rt_desc);
     CHECK(bool(rt), "render target created");
 
     // Create shaders
-    tgfx2::ShaderDesc vs_desc;
-    vs_desc.stage = tgfx2::ShaderStage::Vertex;
+    tgfx::ShaderDesc vs_desc;
+    vs_desc.stage = tgfx::ShaderStage::Vertex;
     vs_desc.source = VERT_SRC;
     auto vs = device.create_shader(vs_desc);
 
-    tgfx2::ShaderDesc fs_desc;
-    fs_desc.stage = tgfx2::ShaderStage::Fragment;
+    tgfx::ShaderDesc fs_desc;
+    fs_desc.stage = tgfx::ShaderStage::Fragment;
     fs_desc.source = FRAG_SRC;
     auto fs = device.create_shader(fs_desc);
 
@@ -85,20 +85,20 @@ static void test_triangle_draw(tgfx2::IRenderDevice& device, tgfx2::PipelineCach
     };
     uint32_t indices[] = {0, 1, 2};
 
-    tgfx2::BufferDesc vbo_desc;
+    tgfx::BufferDesc vbo_desc;
     vbo_desc.size = sizeof(vertices);
-    vbo_desc.usage = tgfx2::BufferUsage::Vertex;
+    vbo_desc.usage = tgfx::BufferUsage::Vertex;
     auto vbo = device.create_buffer(vbo_desc);
     device.upload_buffer(vbo, {reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)});
 
-    tgfx2::BufferDesc ibo_desc;
+    tgfx::BufferDesc ibo_desc;
     ibo_desc.size = sizeof(indices);
-    ibo_desc.usage = tgfx2::BufferUsage::Index;
+    ibo_desc.usage = tgfx::BufferUsage::Index;
     auto ibo = device.create_buffer(ibo_desc);
     device.upload_buffer(ibo, {reinterpret_cast<const uint8_t*>(indices), sizeof(indices)});
 
     // --- Draw using RenderContext2 ---
-    tgfx2::RenderContext2 ctx(device, cache);
+    tgfx::RenderContext2 ctx(device, cache);
     ctx.begin_frame();
 
     float clear[] = {0.f, 0.f, 0.2f, 1.f};  // dark blue background
@@ -107,15 +107,15 @@ static void test_triangle_draw(tgfx2::IRenderDevice& device, tgfx2::PipelineCach
 
     ctx.set_depth_test(false);
     ctx.set_blend(false);
-    ctx.set_cull(tgfx2::CullMode::None);
+    ctx.set_cull(tgfx::CullMode::None);
 
     ctx.bind_shader(vs, fs);
 
-    tgfx2::VertexBufferLayout layout;
+    tgfx::VertexBufferLayout layout;
     layout.stride = 5 * sizeof(float);
     layout.attributes = {
-        {0, tgfx2::VertexFormat::Float2, 0},
-        {1, tgfx2::VertexFormat::Float3, 2 * sizeof(float)},
+        {0, tgfx::VertexFormat::Float2, 0},
+        {1, tgfx::VertexFormat::Float3, 2 * sizeof(float)},
     };
     ctx.set_vertex_layout(layout);
 
@@ -126,7 +126,7 @@ static void test_triangle_draw(tgfx2::IRenderDevice& device, tgfx2::PipelineCach
 
     // --- Read back pixels via glReadPixels ---
     // Need to bind the texture to an FBO for reading
-    auto* gl_dev = static_cast<tgfx2::OpenGLRenderDevice*>(&device);
+    auto* gl_dev = static_cast<tgfx::OpenGLRenderDevice*>(&device);
     auto* gl_tex = gl_dev->get_texture(rt);
     CHECK(gl_tex != nullptr, "can access GL texture");
 
@@ -166,34 +166,34 @@ static void test_triangle_draw(tgfx2::IRenderDevice& device, tgfx2::PipelineCach
     device.destroy(rt);
 }
 
-static void test_fullscreen_quad(tgfx2::IRenderDevice& device, tgfx2::PipelineCache& cache) {
+static void test_fullscreen_quad(tgfx::IRenderDevice& device, tgfx::PipelineCache& cache) {
     printf("\n--- Fullscreen Quad via RenderContext2 ---\n");
 
     const uint32_t W = 32, H = 32;
 
     // Create render target
-    tgfx2::TextureDesc rt_desc;
+    tgfx::TextureDesc rt_desc;
     rt_desc.width = W;
     rt_desc.height = H;
-    rt_desc.format = tgfx2::PixelFormat::RGBA8_UNorm;
-    rt_desc.usage = tgfx2::TextureUsage::ColorAttachment | tgfx2::TextureUsage::CopySrc;
+    rt_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    rt_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
     auto rt = device.create_texture(rt_desc);
 
     // Create fragment shader (outputs solid red)
-    tgfx2::ShaderDesc fs_desc;
-    fs_desc.stage = tgfx2::ShaderStage::Fragment;
+    tgfx::ShaderDesc fs_desc;
+    fs_desc.stage = tgfx::ShaderStage::Fragment;
     fs_desc.source = RED_FRAG_SRC;
     auto fs = device.create_shader(fs_desc);
 
     // --- Draw FSQ ---
-    tgfx2::RenderContext2 ctx(device, cache);
+    tgfx::RenderContext2 ctx(device, cache);
     ctx.begin_frame();
 
     float clear[] = {0.f, 0.f, 0.f, 1.f};
     ctx.begin_pass(rt, {}, clear);
     ctx.set_viewport(0, 0, W, H);
     ctx.set_depth_test(false);
-    ctx.set_cull(tgfx2::CullMode::None);
+    ctx.set_cull(tgfx::CullMode::None);
 
     // Bind both VS (built-in from FSQ) and our FS explicitly
     // Ensure FSQ resources are created first by calling draw_fullscreen_quad
@@ -228,7 +228,7 @@ static void test_fullscreen_quad(tgfx2::IRenderDevice& device, tgfx2::PipelineCa
     ctx.end_frame();
 
     // --- Read back ---
-    auto* gl_dev = static_cast<tgfx2::OpenGLRenderDevice*>(&device);
+    auto* gl_dev = static_cast<tgfx::OpenGLRenderDevice*>(&device);
     auto* gl_tex = gl_dev->get_texture(rt);
 
     GLuint read_fbo;
@@ -257,24 +257,24 @@ static void test_fullscreen_quad(tgfx2::IRenderDevice& device, tgfx2::PipelineCa
     device.destroy(rt);
 }
 
-static void test_pipeline_cache_reuse(tgfx2::IRenderDevice& device, tgfx2::PipelineCache& cache) {
+static void test_pipeline_cache_reuse(tgfx::IRenderDevice& device, tgfx::PipelineCache& cache) {
     printf("\n--- Pipeline Cache Reuse ---\n");
 
     size_t before = cache.size();
 
     // Create same shaders and draw twice — should reuse pipeline
-    tgfx2::ShaderDesc vs_desc;
-    vs_desc.stage = tgfx2::ShaderStage::Vertex;
+    tgfx::ShaderDesc vs_desc;
+    vs_desc.stage = tgfx::ShaderStage::Vertex;
     vs_desc.source = VERT_SRC;
     auto vs = device.create_shader(vs_desc);
 
-    tgfx2::ShaderDesc fs_desc;
-    fs_desc.stage = tgfx2::ShaderStage::Fragment;
+    tgfx::ShaderDesc fs_desc;
+    fs_desc.stage = tgfx::ShaderStage::Fragment;
     fs_desc.source = FRAG_SRC;
     auto fs = device.create_shader(fs_desc);
 
     // First pipeline lookup
-    tgfx2::PipelineCacheKey key;
+    tgfx::PipelineCacheKey key;
     key.vertex_shader = vs;
     key.fragment_shader = fs;
     auto p1 = cache.get(key);
@@ -325,18 +325,18 @@ int main() {
     // Each test uses its own device+cache to avoid FBO cache conflicts
     // when GL texture IDs are reused after deletion.
     {
-        tgfx2::OpenGLRenderDevice device;
-        tgfx2::PipelineCache cache(device);
+        tgfx::OpenGLRenderDevice device;
+        tgfx::PipelineCache cache(device);
         test_triangle_draw(device, cache);
     }
     {
-        tgfx2::OpenGLRenderDevice device;
-        tgfx2::PipelineCache cache(device);
+        tgfx::OpenGLRenderDevice device;
+        tgfx::PipelineCache cache(device);
         test_fullscreen_quad(device, cache);
     }
     {
-        tgfx2::OpenGLRenderDevice device;
-        tgfx2::PipelineCache cache(device);
+        tgfx::OpenGLRenderDevice device;
+        tgfx::PipelineCache cache(device);
         test_pipeline_cache_reuse(device, cache);
     }
 

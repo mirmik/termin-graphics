@@ -25,7 +25,7 @@
 #include "tgfx2/handles.hpp"
 #include "tgfx2/tgfx2_api.h"
 
-namespace tgfx2 {
+namespace tgfx {
 
 class RenderContext2;
 class IRenderDevice;
@@ -78,4 +78,4 @@ private:
     float cam_up_[3]{};
 };
 
-}  // namespace tgfx2
+}  // namespace tgfx

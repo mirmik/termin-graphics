@@ -118,8 +118,8 @@ void bind_engines(nb::module_& m) {
 
         .def("render",
              [](tcplot::PlotEngine2D& self,
-                tgfx2::RenderContext2* ctx,
-                tgfx2::FontAtlas* font) {
+                tgfx::RenderContext2* ctx,
+                tgfx::FontAtlas* font) {
                  self.render(ctx, font);
              },
              nb::arg("ctx"), nb::arg("font").none() = nb::none())
@@ -219,8 +219,8 @@ void bind_engines(nb::module_& m) {
 
         .def("render",
              [](tcplot::PlotEngine3D& self,
-                tgfx2::RenderContext2* ctx,
-                tgfx2::FontAtlas* font) {
+                tgfx::RenderContext2* ctx,
+                tgfx::FontAtlas* font) {
                  self.render(ctx, font);
              },
              nb::arg("ctx"), nb::arg("font").none() = nb::none())

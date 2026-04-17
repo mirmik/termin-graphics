@@ -1,7 +1,7 @@
 // engine2d.hpp - Host-agnostic 2D plot engine for tcplot.
 //
 // Port of tcplot/tcplot/engine2d.py. Renders straight through a
-// tgfx2::RenderContext2 without any tcgui dependency — a small
+// tgfx::RenderContext2 without any tcgui dependency — a small
 // private UI shader handles rects/lines, Text2DRenderer handles
 // labels. One key behavioural improvement over the Python version:
 // every line series emits a single draw_immediate_lines call, so
@@ -21,12 +21,12 @@
 #include "tcplot/styles.hpp"
 #include "tcplot/tcplot_api.h"
 
-namespace tgfx2 {
+namespace tgfx {
 class RenderContext2;
 class IRenderDevice;
 class FontAtlas;
 class Text2DRenderer;
-}  // namespace tgfx2
+}  // namespace tgfx
 
 namespace tcplot {
 
@@ -121,7 +121,7 @@ public:
     // Host passes an active RenderContext2 (inside its own pass) plus
     // a FontAtlas for labels. The engine leaves scissor + shader state
     // unspecified on return.
-    void render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font);
+    void render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font);
 
     // Release GPU resources (shader handles). Safe after device
     // teardown.
@@ -147,16 +147,16 @@ private:
     void pixel_to_data_(float wx, float wy, double& out_x, double& out_y);
 
     // Build a pos+color ortho shader on the given device. Cached.
-    void ensure_shader_(tgfx2::IRenderDevice& device);
+    void ensure_shader_(tgfx::IRenderDevice& device);
 
     // Build a data-space-only VS + uniform-color FS shader used for
     // persistent-VBO line series. Cached per device.
-    void ensure_line_shader_(tgfx2::IRenderDevice& device);
+    void ensure_line_shader_(tgfx::IRenderDevice& device);
 
     // Ensure series `idx` has a GPU buffer big enough for its current
     // point count and that the tail (gpu_count..x.size()) has been
     // uploaded. Grows the VBO (doubling) when capacity is exceeded.
-    void ensure_line_gpu_(tgfx2::IRenderDevice& device, size_t idx);
+    void ensure_line_gpu_(tgfx::IRenderDevice& device, size_t idx);
 
     // Compose the data-space → NDC matrix (4x4 column-major) for the
     // current plot area, view range, and viewport. Used as a uniform
@@ -177,8 +177,8 @@ private:
                     float x1, float y1, float x2, float y2,
                     const Color4& c) const;
 
-    void flush_triangles_(tgfx2::RenderContext2& ctx, std::vector<float>& verts);
-    void flush_lines_(tgfx2::RenderContext2& ctx, std::vector<float>& verts);
+    void flush_triangles_(tgfx::RenderContext2& ctx, std::vector<float>& verts);
+    void flush_lines_(tgfx::RenderContext2& ctx, std::vector<float>& verts);
 
     // --- Viewport rect ---
     float vx_ = 0.0f, vy_ = 0.0f, vw_ = 0.0f, vh_ = 0.0f;
@@ -199,12 +199,12 @@ private:
     double pan_start_view_[4] = {0, 1, 0, 1};
 
     // --- Cached shader (rects/grid/scatter — pos+color, ortho pixel). ---
-    tgfx2::IRenderDevice* shader_device_ = nullptr;
+    tgfx::IRenderDevice* shader_device_ = nullptr;
     uint32_t shader_vs_id_ = 0;
     uint32_t shader_fs_id_ = 0;
 
     // --- Cached shader (line series — data-space pos + uniform color). ---
-    tgfx2::IRenderDevice* line_shader_device_ = nullptr;
+    tgfx::IRenderDevice* line_shader_device_ = nullptr;
     uint32_t line_shader_vs_id_ = 0;
     uint32_t line_shader_fs_id_ = 0;
 
@@ -213,14 +213,14 @@ private:
     // (8 bytes). gpu_count <= x.size(); the render path tops it up
     // with glBufferSubData to the tail on each frame.
     struct LineGpuState {
-        tgfx2::BufferHandle vbo{};
+        tgfx::BufferHandle vbo{};
         uint32_t capacity = 0;
         uint32_t gpu_count = 0;
     };
     std::vector<LineGpuState> line_gpu_;
 
     // --- Text renderer (unique_ptr to keep header free of Text2D include) ---
-    std::unique_ptr<tgfx2::Text2DRenderer> text2d_;
+    std::unique_ptr<tgfx::Text2DRenderer> text2d_;
 };
 
 }  // namespace tcplot

@@ -36,7 +36,7 @@
 #include "tcplot/styles.hpp"
 #include "tcplot/tcplot_api.h"
 
-namespace tgfx2 {
+namespace tgfx {
 class OpenGLRenderDevice;
 class PipelineCache;
 class RenderContext2;
@@ -141,18 +141,18 @@ private:
     // → reuse cycle if the host re-enters render after a context drop.
     std::string ttf_path_;
 
-    std::unique_ptr<tgfx2::OpenGLRenderDevice> device_;
-    std::unique_ptr<tgfx2::PipelineCache> cache_;
-    std::unique_ptr<tgfx2::RenderContext2> ctx_;
-    std::unique_ptr<tgfx2::FontAtlas> font_;
+    std::unique_ptr<tgfx::OpenGLRenderDevice> device_;
+    std::unique_ptr<tgfx::PipelineCache> cache_;
+    std::unique_ptr<tgfx::RenderContext2> ctx_;
+    std::unique_ptr<tgfx::FontAtlas> font_;
     std::unique_ptr<PlotEngine3D> engine_;
 
     // Offscreen color + depth are plain tgfx2 textures; begin_pass
     // owns the FBO they compose into. When msaa_samples_ > 1 both
     // attachments are multisample, and glBlitFramebuffer inside
     // blit_to_external_fbo resolves down to the single-sample host FBO.
-    tgfx2::TextureHandle offscreen_color_{};
-    tgfx2::TextureHandle offscreen_depth_{};
+    tgfx::TextureHandle offscreen_color_{};
+    tgfx::TextureHandle offscreen_depth_{};
     int offscreen_w_ = 0;
     int offscreen_h_ = 0;
     int msaa_samples_ = 4;

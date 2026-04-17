@@ -2,7 +2,7 @@
 
 #include "tgfx2/vulkan/vulkan_type_conversions.hpp"
 
-namespace tgfx2::vk {
+namespace tgfx::vk {
 
 VkFormat to_vk_format(PixelFormat fmt) {
     switch (fmt) {
@@ -188,6 +188,6 @@ bool is_depth_format(PixelFormat fmt) {
     return fmt == PixelFormat::D24_UNorm_S8_UInt || fmt == PixelFormat::D32F;
 }
 
-} // namespace tgfx2::vk
+} // namespace tgfx::vk
 
 #endif // TGFX2_HAS_VULKAN

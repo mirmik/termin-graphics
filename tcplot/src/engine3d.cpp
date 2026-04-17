@@ -108,11 +108,11 @@ tc_vertex_layout pos_color_layout() {
 // first call (via legacy tc_mesh_upload_gpu), wraps them as external
 // tgfx2 buffer handles, pushes the vertex layout, and emits one
 // indexed draw. Matches the logic in tgfx2_bindings.cpp::draw_tc_mesh.
-void draw_tc_mesh(tgfx2::RenderContext2& ctx, termin::TcMesh& mesh_wrapper) {
+void draw_tc_mesh(tgfx::RenderContext2& ctx, termin::TcMesh& mesh_wrapper) {
     tc_mesh* mesh = tc_mesh_get(mesh_wrapper.handle);
     if (!mesh) return;
 
-    auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&ctx.device());
+    auto* gl_dev = dynamic_cast<tgfx::OpenGLRenderDevice*>(&ctx.device());
     if (!gl_dev) return;
 
     if (tc_mesh_upload_gpu(mesh) == 0) return;
@@ -123,46 +123,46 @@ void draw_tc_mesh(tgfx2::RenderContext2& ctx, termin::TcMesh& mesh_wrapper) {
         gctx->share_group, mesh->header.pool_index);
     if (!slot || slot->vbo == 0 || slot->ebo == 0) return;
 
-    tgfx2::BufferDesc vb_desc;
+    tgfx::BufferDesc vb_desc;
     vb_desc.size = static_cast<uint64_t>(mesh->vertex_count) *
                    static_cast<uint64_t>(mesh->layout.stride);
-    vb_desc.usage = tgfx2::BufferUsage::Vertex;
-    tgfx2::BufferHandle vbo = gl_dev->register_external_buffer(slot->vbo, vb_desc);
+    vb_desc.usage = tgfx::BufferUsage::Vertex;
+    tgfx::BufferHandle vbo = gl_dev->register_external_buffer(slot->vbo, vb_desc);
 
-    tgfx2::BufferDesc ib_desc;
+    tgfx::BufferDesc ib_desc;
     ib_desc.size = static_cast<uint64_t>(mesh->index_count) * sizeof(uint32_t);
-    ib_desc.usage = tgfx2::BufferUsage::Index;
-    tgfx2::BufferHandle ibo = gl_dev->register_external_buffer(slot->ebo, ib_desc);
+    ib_desc.usage = tgfx::BufferUsage::Index;
+    tgfx::BufferHandle ibo = gl_dev->register_external_buffer(slot->ebo, ib_desc);
 
-    tgfx2::VertexBufferLayout layout;
+    tgfx::VertexBufferLayout layout;
     layout.stride = mesh->layout.stride;
     layout.attributes.reserve(mesh->layout.attrib_count);
     for (uint8_t i = 0; i < mesh->layout.attrib_count; i++) {
         const tgfx_vertex_attrib& a = mesh->layout.attribs[i];
-        tgfx2::VertexAttribute va;
+        tgfx::VertexAttribute va;
         va.location = a.location;
         va.offset = a.offset;
         // For engine3d we only ever emit float attributes; keep a
         // minimal switch to cover the sizes we actually use. Anything
         // else would indicate a mesh created outside our rebuild_meshes_.
         switch (a.size) {
-            case 1: va.format = tgfx2::VertexFormat::Float; break;
-            case 2: va.format = tgfx2::VertexFormat::Float2; break;
-            case 3: va.format = tgfx2::VertexFormat::Float3; break;
-            case 4: va.format = tgfx2::VertexFormat::Float4; break;
-            default: va.format = tgfx2::VertexFormat::Float3; break;
+            case 1: va.format = tgfx::VertexFormat::Float; break;
+            case 2: va.format = tgfx::VertexFormat::Float2; break;
+            case 3: va.format = tgfx::VertexFormat::Float3; break;
+            case 4: va.format = tgfx::VertexFormat::Float4; break;
+            default: va.format = tgfx::VertexFormat::Float3; break;
         }
         layout.attributes.push_back(va);
     }
 
-    tgfx2::PrimitiveTopology topo = (mesh->draw_mode == TC_DRAW_LINES)
-        ? tgfx2::PrimitiveTopology::LineList
-        : tgfx2::PrimitiveTopology::TriangleList;
+    tgfx::PrimitiveTopology topo = (mesh->draw_mode == TC_DRAW_LINES)
+        ? tgfx::PrimitiveTopology::LineList
+        : tgfx::PrimitiveTopology::TriangleList;
 
     ctx.set_vertex_layout(layout);
     ctx.set_topology(topo);
     ctx.draw(vbo, ibo, static_cast<uint32_t>(mesh->index_count),
-             tgfx2::IndexType::Uint32);
+             tgfx::IndexType::Uint32);
 
     gl_dev->destroy(vbo);
     gl_dev->destroy(ibo);
@@ -196,7 +196,7 @@ Color4 resolve_color(const std::optional<Color4>& c, uint32_t palette_idx,
 // ---------------------------------------------------------------------------
 
 PlotEngine3D::PlotEngine3D()
-    : text3d_(std::make_unique<tgfx2::Text3DRenderer>()) {}
+    : text3d_(std::make_unique<tgfx::Text3DRenderer>()) {}
 
 PlotEngine3D::~PlotEngine3D() {
     release_gpu_resources();
@@ -313,11 +313,11 @@ void PlotEngine3D::release_gpu_resources() {
     release_meshes_();
     if (shader_device_) {
         if (shader_vs_id_ != 0) {
-            tgfx2::ShaderHandle h; h.id = shader_vs_id_;
+            tgfx::ShaderHandle h; h.id = shader_vs_id_;
             shader_device_->destroy(h);
         }
         if (shader_fs_id_ != 0) {
-            tgfx2::ShaderHandle h; h.id = shader_fs_id_;
+            tgfx::ShaderHandle h; h.id = shader_fs_id_;
             shader_device_->destroy(h);
         }
     }
@@ -327,29 +327,29 @@ void PlotEngine3D::release_gpu_resources() {
     if (text3d_) text3d_->release_gpu();
 }
 
-void PlotEngine3D::ensure_shader_(tgfx2::IRenderDevice& device) {
+void PlotEngine3D::ensure_shader_(tgfx::IRenderDevice& device) {
     if (shader_device_ == &device && shader_vs_id_ != 0 && shader_fs_id_ != 0) {
         return;
     }
     // Device changed or first call — drop old and recompile.
     if (shader_device_) {
         if (shader_vs_id_ != 0) {
-            tgfx2::ShaderHandle h; h.id = shader_vs_id_;
+            tgfx::ShaderHandle h; h.id = shader_vs_id_;
             shader_device_->destroy(h);
         }
         if (shader_fs_id_ != 0) {
-            tgfx2::ShaderHandle h; h.id = shader_fs_id_;
+            tgfx::ShaderHandle h; h.id = shader_fs_id_;
             shader_device_->destroy(h);
         }
     }
 
-    tgfx2::ShaderDesc vd;
-    vd.stage = tgfx2::ShaderStage::Vertex;
+    tgfx::ShaderDesc vd;
+    vd.stage = tgfx::ShaderStage::Vertex;
     vd.source = kVertSrc;
     shader_vs_id_ = device.create_shader(vd).id;
 
-    tgfx2::ShaderDesc fd;
-    fd.stage = tgfx2::ShaderStage::Fragment;
+    tgfx::ShaderDesc fd;
+    fd.stage = tgfx::ShaderStage::Fragment;
     fd.source = kFragSrc;
     shader_fs_id_ = device.create_shader(fd).id;
 
@@ -631,7 +631,7 @@ void PlotEngine3D::compute_mvp_(float aspect, float out16[16]) const {
     }
 }
 
-void PlotEngine3D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
+void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     if (!ctx || vw_ <= 0 || vh_ <= 0) return;
 
     ensure_shader_(ctx->device());
@@ -639,14 +639,14 @@ void PlotEngine3D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
 
     ctx->set_depth_test(true);
     ctx->set_blend(true);
-    ctx->set_cull(tgfx2::CullMode::None);
+    ctx->set_cull(tgfx::CullMode::None);
 
     const float aspect = vw_ / std::max(vh_, 1.0f);
     float mvp[16];
     compute_mvp_(aspect, mvp);
 
-    tgfx2::ShaderHandle vs; vs.id = shader_vs_id_;
-    tgfx2::ShaderHandle fs; fs.id = shader_fs_id_;
+    tgfx::ShaderHandle vs; vs.id = shader_vs_id_;
+    tgfx::ShaderHandle fs; fs.id = shader_fs_id_;
     ctx->bind_shader(vs, fs);
     ctx->set_uniform_mat4("u_mvp", mvp, /*transpose=*/false);
 
@@ -764,7 +764,7 @@ void PlotEngine3D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
                               label_color.r, label_color.g,
                               label_color.b, label_color.a,
                               text_size,
-                              tgfx2::Text3DRenderer::Anchor::Center);
+                              tgfx::Text3DRenderer::Anchor::Center);
             }
         }
         text3d_->end();
@@ -785,7 +785,7 @@ void PlotEngine3D::render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font) {
             text3d_->draw(label_buf, pos,
                           1.0f, 1.0f, 0.0f, 1.0f,
                           (float)(data_size * 0.015),
-                          tgfx2::Text3DRenderer::Anchor::Center);
+                          tgfx::Text3DRenderer::Anchor::Center);
             text3d_->end();
             ctx->set_depth_test(true);
         }

@@ -16,7 +16,7 @@ VK_DEFINE_HANDLE(VmaAllocation)
 #include "tgfx2/tgfx2_api.h"
 #include "tgfx2/i_render_device.hpp"
 
-namespace tgfx2 {
+namespace tgfx {
 
 // Internal Vulkan resource types
 
@@ -202,6 +202,6 @@ private:
     bool validation_enabled_ = false;
 };
 
-} // namespace tgfx2
+} // namespace tgfx
 
 #endif // TGFX2_HAS_VULKAN

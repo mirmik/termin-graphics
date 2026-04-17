@@ -64,38 +64,38 @@ int main() {
     printf("Renderer: %s\n", glGetString(GL_RENDERER));
 
     // --- Create device ---
-    auto device = tgfx2::create_device(tgfx2::BackendType::OpenGL);
+    auto device = tgfx::create_device(tgfx::BackendType::OpenGL);
     auto caps = device->capabilities();
     printf("Backend: OpenGL, max_tex: %u, compute: %s\n",
            caps.max_texture_dimension_2d,
            caps.supports_compute ? "yes" : "no");
 
     // --- Create shaders ---
-    tgfx2::ShaderDesc vs_desc;
-    vs_desc.stage = tgfx2::ShaderStage::Vertex;
+    tgfx::ShaderDesc vs_desc;
+    vs_desc.stage = tgfx::ShaderStage::Vertex;
     vs_desc.source = vertex_src;
     auto vs = device->create_shader(vs_desc);
 
-    tgfx2::ShaderDesc fs_desc;
-    fs_desc.stage = tgfx2::ShaderStage::Fragment;
+    tgfx::ShaderDesc fs_desc;
+    fs_desc.stage = tgfx::ShaderStage::Fragment;
     fs_desc.source = fragment_src;
     auto fs = device->create_shader(fs_desc);
 
     printf("Shaders created: vs=%u, fs=%u\n", vs.id, fs.id);
 
     // --- Create pipeline ---
-    tgfx2::PipelineDesc pipe_desc;
+    tgfx::PipelineDesc pipe_desc;
     pipe_desc.vertex_shader = vs;
     pipe_desc.fragment_shader = fs;
-    pipe_desc.topology = tgfx2::PrimitiveTopology::TriangleList;
+    pipe_desc.topology = tgfx::PrimitiveTopology::TriangleList;
     pipe_desc.depth_stencil.depth_test = false;
-    pipe_desc.raster.cull = tgfx2::CullMode::None;
+    pipe_desc.raster.cull = tgfx::CullMode::None;
 
-    tgfx2::VertexBufferLayout layout;
+    tgfx::VertexBufferLayout layout;
     layout.stride = 5 * sizeof(float); // x, y, r, g, b
     layout.attributes = {
-        {0, tgfx2::VertexFormat::Float2, 0},                      // aPos
-        {1, tgfx2::VertexFormat::Float3, 2 * sizeof(float)},      // aColor
+        {0, tgfx::VertexFormat::Float2, 0},                      // aPos
+        {1, tgfx::VertexFormat::Float3, 2 * sizeof(float)},      // aColor
     };
     pipe_desc.vertex_layouts.push_back(layout);
 
@@ -109,9 +109,9 @@ int main() {
          0.5f, -0.5f,  0.f, 0.f, 1.f,  // right (blue)
     };
 
-    tgfx2::BufferDesc vb_desc;
+    tgfx::BufferDesc vb_desc;
     vb_desc.size = sizeof(vertices);
-    vb_desc.usage = tgfx2::BufferUsage::Vertex;
+    vb_desc.usage = tgfx::BufferUsage::Vertex;
     auto vb = device->create_buffer(vb_desc);
     device->upload_buffer(vb, {reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)});
     printf("Vertex buffer: id=%u\n", vb.id);
@@ -119,9 +119,9 @@ int main() {
     // --- Create index buffer ---
     uint32_t indices[] = {0, 1, 2};
 
-    tgfx2::BufferDesc ib_desc;
+    tgfx::BufferDesc ib_desc;
     ib_desc.size = sizeof(indices);
-    ib_desc.usage = tgfx2::BufferUsage::Index;
+    ib_desc.usage = tgfx::BufferUsage::Index;
     auto ib = device->create_buffer(ib_desc);
     device->upload_buffer(ib, {reinterpret_cast<const uint8_t*>(indices), sizeof(indices)});
     printf("Index buffer: id=%u\n", ib.id);
@@ -130,9 +130,9 @@ int main() {
     auto cmd = device->create_command_list();
     cmd->begin();
 
-    tgfx2::RenderPassDesc pass;
-    tgfx2::ColorAttachmentDesc color_att;
-    color_att.load = tgfx2::LoadOp::Clear;
+    tgfx::RenderPassDesc pass;
+    tgfx::ColorAttachmentDesc color_att;
+    color_att.load = tgfx::LoadOp::Clear;
     color_att.clear_color[0] = 0.1f;
     color_att.clear_color[1] = 0.1f;
     color_att.clear_color[2] = 0.1f;
@@ -143,7 +143,7 @@ int main() {
     cmd->set_viewport(0, 0, 640, 480);
     cmd->bind_pipeline(pipeline);
     cmd->bind_vertex_buffer(0, vb);
-    cmd->bind_index_buffer(ib, tgfx2::IndexType::Uint32);
+    cmd->bind_index_buffer(ib, tgfx::IndexType::Uint32);
     cmd->draw_indexed(3);
     cmd->end_render_pass();
 
@@ -169,11 +169,11 @@ int main() {
     printf("\n--- Render-to-texture test ---\n");
 
     // Create a 256x256 render target texture
-    tgfx2::TextureDesc rt_desc;
+    tgfx::TextureDesc rt_desc;
     rt_desc.width = 256;
     rt_desc.height = 256;
-    rt_desc.format = tgfx2::PixelFormat::RGBA8_UNorm;
-    rt_desc.usage = tgfx2::TextureUsage::ColorAttachment | tgfx2::TextureUsage::Sampled;
+    rt_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    rt_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::Sampled;
     auto rt_tex = device->create_texture(rt_desc);
     printf("Render target texture: id=%u (%ux%u)\n", rt_tex.id, rt_desc.width, rt_desc.height);
 
@@ -181,10 +181,10 @@ int main() {
     auto cmd2 = device->create_command_list();
     cmd2->begin();
 
-    tgfx2::RenderPassDesc rt_pass;
-    tgfx2::ColorAttachmentDesc rt_color;
+    tgfx::RenderPassDesc rt_pass;
+    tgfx::ColorAttachmentDesc rt_color;
     rt_color.texture = rt_tex;
-    rt_color.load = tgfx2::LoadOp::Clear;
+    rt_color.load = tgfx::LoadOp::Clear;
     rt_color.clear_color[0] = 0.0f;
     rt_color.clear_color[1] = 0.0f;
     rt_color.clear_color[2] = 0.2f;  // dark blue clear
@@ -195,7 +195,7 @@ int main() {
     // viewport auto-set by begin_render_pass to 256x256
     cmd2->bind_pipeline(pipeline);
     cmd2->bind_vertex_buffer(0, vb);
-    cmd2->bind_index_buffer(ib, tgfx2::IndexType::Uint32);
+    cmd2->bind_index_buffer(ib, tgfx::IndexType::Uint32);
     cmd2->draw_indexed(3);
     cmd2->end_render_pass();
 
@@ -204,7 +204,7 @@ int main() {
 
     // Read back from the render target via temporary FBO
     GLuint readback_fbo = 0;
-    auto* gl_device = static_cast<tgfx2::OpenGLRenderDevice*>(device.get());
+    auto* gl_device = static_cast<tgfx::OpenGLRenderDevice*>(device.get());
     auto* rt_gl = gl_device->get_texture(rt_tex);
     glGenFramebuffers(1, &readback_fbo);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, readback_fbo);

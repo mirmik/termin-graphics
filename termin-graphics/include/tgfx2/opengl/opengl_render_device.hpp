@@ -8,7 +8,7 @@
 #include "tgfx2/tgfx2_api.h"
 #include "tgfx2/i_render_device.hpp"
 
-namespace tgfx2 {
+namespace tgfx {
 
 // Internal GL resource types
 
@@ -251,7 +251,7 @@ public:
     // living in another holder).
     GLuint gl_texture_id(TextureHandle handle);
 
-    // Wrap an externally-owned GL texture object as a tgfx2::TextureHandle.
+    // Wrap an externally-owned GL texture object as a tgfx::TextureHandle.
     //
     // Use this to interop with legacy tgfx FBOs during Phase 2 migration:
     // pass the GL texture id from a legacy color/depth attachment together
@@ -261,7 +261,7 @@ public:
     // GL object is NOT deleted — ownership stays with the original creator.
     TextureHandle register_external_texture(GLuint gl_id, const TextureDesc& desc);
 
-    // Wrap an externally-owned GL buffer object as a tgfx2::BufferHandle.
+    // Wrap an externally-owned GL buffer object as a tgfx::BufferHandle.
     //
     // Same migration role as register_external_texture but for VBOs / EBOs
     // / UBOs from the legacy mesh path. The returned BufferHandle can be
@@ -329,4 +329,4 @@ private:
     void ensure_push_ring();
 };
 
-} // namespace tgfx2
+} // namespace tgfx

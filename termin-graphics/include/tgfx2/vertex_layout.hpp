@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace tgfx2 {
+namespace tgfx {
 
 enum class VertexFormat {
     // Floating point (glVertexAttribPointer)
@@ -50,4 +50,4 @@ struct VertexBufferLayout {
     bool per_instance = false;
 };
 
-} // namespace tgfx2
+} // namespace tgfx

@@ -2,7 +2,7 @@
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #include "tgfx2/opengl/opengl_type_conversions.hpp"
 
-namespace tgfx2 {
+namespace tgfx {
 
 OpenGLCommandList::OpenGLCommandList(OpenGLRenderDevice& device)
     : device_(device) {}
@@ -375,4 +375,4 @@ void OpenGLCommandList::set_scissor(int x, int y, int width, int height) {
     }
 }
 
-} // namespace tgfx2
+} // namespace tgfx

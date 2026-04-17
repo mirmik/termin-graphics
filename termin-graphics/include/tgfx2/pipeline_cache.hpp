@@ -1,6 +1,6 @@
 // pipeline_cache.hpp - Lazy pipeline creation from mutable render state.
 // Bridges the state-machine mental model (set_depth_test, set_blend, etc.)
-// to the pipeline-object model (tgfx2::PipelineHandle).
+// to the pipeline-object model (tgfx::PipelineHandle).
 #pragma once
 
 #include <cstdint>
@@ -13,7 +13,7 @@
 #include "tgfx2/vertex_layout.hpp"
 #include "tgfx2/descriptors.hpp"
 
-namespace tgfx2 {
+namespace tgfx {
 
 class IRenderDevice;
 
@@ -63,4 +63,4 @@ private:
     std::unordered_map<PipelineCacheKey, PipelineHandle, PipelineCacheKeyHash> cache_;
 };
 
-} // namespace tgfx2
+} // namespace tgfx

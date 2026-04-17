@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace tgfx2 {
+namespace tgfx {
 
 enum class BackendType { OpenGL, Vulkan, Metal, D3D12, Null };
 enum class QueueType { Graphics, Compute, Transfer };
@@ -109,4 +109,4 @@ enum class AddressMode {
     Repeat, MirroredRepeat, ClampToEdge, ClampToBorder,
 };
 
-} // namespace tgfx2
+} // namespace tgfx

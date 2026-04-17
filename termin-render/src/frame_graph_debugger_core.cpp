@@ -18,28 +18,28 @@ namespace termin {
 
 namespace {
 
-bool is_depth_format(tgfx2::PixelFormat fmt) {
-    return fmt == tgfx2::PixelFormat::D24_UNorm
-        || fmt == tgfx2::PixelFormat::D24_UNorm_S8_UInt
-        || fmt == tgfx2::PixelFormat::D32F;
+bool is_depth_format(tgfx::PixelFormat fmt) {
+    return fmt == tgfx::PixelFormat::D24_UNorm
+        || fmt == tgfx::PixelFormat::D24_UNorm_S8_UInt
+        || fmt == tgfx::PixelFormat::D32F;
 }
 
-std::string pixel_format_name(tgfx2::PixelFormat fmt) {
+std::string pixel_format_name(tgfx::PixelFormat fmt) {
     switch (fmt) {
-        case tgfx2::PixelFormat::R8_UNorm:           return "r8";
-        case tgfx2::PixelFormat::RG8_UNorm:          return "rg8";
-        case tgfx2::PixelFormat::RGB8_UNorm:         return "rgb8";
-        case tgfx2::PixelFormat::RGBA8_UNorm:        return "rgba8";
-        case tgfx2::PixelFormat::BGRA8_UNorm:        return "bgra8";
-        case tgfx2::PixelFormat::R16F:               return "r16f";
-        case tgfx2::PixelFormat::RG16F:              return "rg16f";
-        case tgfx2::PixelFormat::RGBA16F:            return "rgba16f";
-        case tgfx2::PixelFormat::R32F:               return "r32f";
-        case tgfx2::PixelFormat::RG32F:              return "rg32f";
-        case tgfx2::PixelFormat::RGBA32F:            return "rgba32f";
-        case tgfx2::PixelFormat::D24_UNorm:          return "depth24";
-        case tgfx2::PixelFormat::D24_UNorm_S8_UInt:  return "depth24_stencil8";
-        case tgfx2::PixelFormat::D32F:               return "depth32f";
+        case tgfx::PixelFormat::R8_UNorm:           return "r8";
+        case tgfx::PixelFormat::RG8_UNorm:          return "rg8";
+        case tgfx::PixelFormat::RGB8_UNorm:         return "rgb8";
+        case tgfx::PixelFormat::RGBA8_UNorm:        return "rgba8";
+        case tgfx::PixelFormat::BGRA8_UNorm:        return "bgra8";
+        case tgfx::PixelFormat::R16F:               return "r16f";
+        case tgfx::PixelFormat::RG16F:              return "rg16f";
+        case tgfx::PixelFormat::RGBA16F:            return "rgba16f";
+        case tgfx::PixelFormat::R32F:               return "r32f";
+        case tgfx::PixelFormat::RG32F:              return "rg32f";
+        case tgfx::PixelFormat::RGBA32F:            return "rgba32f";
+        case tgfx::PixelFormat::D24_UNorm:          return "depth24";
+        case tgfx::PixelFormat::D24_UNorm_S8_UInt:  return "depth24_stencil8";
+        case tgfx::PixelFormat::D32F:               return "depth32f";
     }
     return "unknown";
 }
@@ -62,7 +62,7 @@ void FrameGraphCapture::release() {
 }
 
 void FrameGraphCapture::ensure_capture_tex(
-    tgfx2::IRenderDevice& device, int w, int h, tgfx2::PixelFormat fmt
+    tgfx::IRenderDevice& device, int w, int h, tgfx::PixelFormat fmt
 ) {
     if (device_ == &device && capture_tex_ &&
         width_ == w && height_ == h && format_ == fmt) {
@@ -79,23 +79,23 @@ void FrameGraphCapture::ensure_capture_tex(
     height_ = h;
     format_ = fmt;
 
-    tgfx2::TextureDesc desc;
+    tgfx::TextureDesc desc;
     desc.width = static_cast<uint32_t>(w);
     desc.height = static_cast<uint32_t>(h);
     desc.format = fmt;
     desc.sample_count = 1;
-    desc.usage = tgfx2::TextureUsage::Sampled |
-                 tgfx2::TextureUsage::ColorAttachment |
-                 tgfx2::TextureUsage::CopyDst;
+    desc.usage = tgfx::TextureUsage::Sampled |
+                 tgfx::TextureUsage::ColorAttachment |
+                 tgfx::TextureUsage::CopyDst;
     capture_tex_ = device.create_texture(desc);
 }
 
 void FrameGraphCapture::capture_direct_via_ctx2(
-    tgfx2::RenderContext2* ctx2,
-    tgfx2::TextureHandle src_tex,
+    tgfx::RenderContext2* ctx2,
+    tgfx::TextureHandle src_tex,
     int width,
     int height,
-    tgfx2::PixelFormat format
+    tgfx::PixelFormat format
 ) {
     if (!ctx2 || !src_tex || width <= 0 || height <= 0) {
         return;
@@ -148,15 +148,15 @@ void FrameGraphPresenter::release_tgfx2_resources() {
     device2_ = nullptr;
 }
 
-void FrameGraphPresenter::ensure_fs(tgfx2::IRenderDevice& device) {
+void FrameGraphPresenter::ensure_fs(tgfx::IRenderDevice& device) {
     if (fs2_ && device2_ == &device) return;
     if (device2_ && device2_ != &device) {
         release_tgfx2_resources();
     }
     device2_ = &device;
 
-    tgfx2::ShaderDesc desc;
-    desc.stage = tgfx2::ShaderStage::Fragment;
+    tgfx::ShaderDesc desc;
+    desc.stage = tgfx::ShaderStage::Fragment;
     desc.source = PRESENTER_FRAG_SRC;
     fs2_ = device.create_shader(desc);
     if (!fs2_) {
@@ -165,9 +165,9 @@ void FrameGraphPresenter::ensure_fs(tgfx2::IRenderDevice& device) {
 }
 
 void FrameGraphPresenter::render(
-    tgfx2::RenderContext2* ctx2,
-    tgfx2::TextureHandle capture_tex,
-    tgfx2::TextureHandle target_tex,
+    tgfx::RenderContext2* ctx2,
+    tgfx::TextureHandle capture_tex,
+    tgfx::TextureHandle target_tex,
     int dst_x,
     int dst_y,
     int dst_w,
@@ -184,7 +184,7 @@ void FrameGraphPresenter::render(
         return;
     }
 
-    ctx2->begin_pass(target_tex, tgfx2::TextureHandle{}, nullptr, 1.0f, false);
+    ctx2->begin_pass(target_tex, tgfx::TextureHandle{}, nullptr, 1.0f, false);
     ctx2->set_viewport(dst_x, dst_y, dst_w, dst_h);
     // The debugger widget may be called with an active tcgui clip
     // rect. Make sure our fullscreen-quad draw isn't trimmed.
@@ -192,8 +192,8 @@ void FrameGraphPresenter::render(
     ctx2->set_depth_test(false);
     ctx2->set_depth_write(false);
     ctx2->set_blend(false);
-    ctx2->set_cull(tgfx2::CullMode::None);
-    ctx2->set_color_format(tgfx2::PixelFormat::RGBA8_UNorm);
+    ctx2->set_cull(tgfx::CullMode::None);
+    ctx2->set_color_format(tgfx::PixelFormat::RGBA8_UNorm);
 
     ctx2->bind_shader(ctx2->fsq_vertex_shader(), fs2_);
 
@@ -207,12 +207,12 @@ void FrameGraphPresenter::render(
 }
 
 HDRStats FrameGraphPresenter::compute_hdr_stats(
-    tgfx2::IRenderDevice* device,
-    tgfx2::TextureHandle tex
+    tgfx::IRenderDevice* device,
+    tgfx::TextureHandle tex
 ) {
     HDRStats stats{};
 
-    auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(device);
+    auto* gl_dev = dynamic_cast<tgfx::OpenGLRenderDevice*>(device);
     if (!gl_dev || !tex) {
         return stats;
     }
@@ -280,15 +280,15 @@ HDRStats FrameGraphPresenter::compute_hdr_stats(
 }
 
 std::vector<uint8_t> FrameGraphPresenter::read_depth_normalized(
-    tgfx2::IRenderDevice* device,
-    tgfx2::TextureHandle tex,
+    tgfx::IRenderDevice* device,
+    tgfx::TextureHandle tex,
     int* out_w,
     int* out_h
 ) {
     if (out_w) *out_w = 0;
     if (out_h) *out_h = 0;
 
-    auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(device);
+    auto* gl_dev = dynamic_cast<tgfx::OpenGLRenderDevice*>(device);
     if (!gl_dev || !tex) {
         return {};
     }
@@ -329,8 +329,8 @@ std::vector<uint8_t> FrameGraphPresenter::read_depth_normalized(
 }
 
 TextureInfo FrameGraphPresenter::get_texture_info(
-    tgfx2::IRenderDevice* device,
-    tgfx2::TextureHandle tex
+    tgfx::IRenderDevice* device,
+    tgfx::TextureHandle tex
 ) {
     TextureInfo info;
     if (!device || !tex) {

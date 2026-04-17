@@ -7,7 +7,7 @@
 #include "tgfx2/i_command_list.hpp"
 #include "tgfx2/vulkan/vulkan_render_device.hpp"
 
-namespace tgfx2 {
+namespace tgfx {
 
 class TGFX2_API VulkanCommandList : public ICommandList {
 public:
@@ -47,6 +47,6 @@ private:
     bool in_render_pass_ = false;
 };
 
-} // namespace tgfx2
+} // namespace tgfx
 
 #endif // TGFX2_HAS_VULKAN

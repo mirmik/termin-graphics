@@ -1,7 +1,7 @@
 // engine3d.hpp - Host-agnostic 3D plot engine for tcplot.
 //
 // Port of tcplot/tcplot/engine3d.py. Owns data, camera, GPU meshes
-// and input state. Renders through a tgfx2::RenderContext2 supplied
+// and input state. Renders through a tgfx::RenderContext2 supplied
 // by the host. Has no dependency on tcgui — host provides:
 //   - viewport rect (pixel coords)
 //   - RenderContext2 pointer at render time
@@ -22,12 +22,12 @@
 #include "tcplot/styles.hpp"
 #include "tcplot/tcplot_api.h"
 
-namespace tgfx2 {
+namespace tgfx {
 class RenderContext2;
 class IRenderDevice;
 class FontAtlas;
 class Text3DRenderer;
-}  // namespace tgfx2
+}  // namespace tgfx
 
 namespace tcplot {
 
@@ -88,7 +88,7 @@ public:
     // Host calls render() inside its own tgfx2 pass. The engine leaves
     // ctx in an unspecified state afterwards — host should re-assert
     // any state it relies on for subsequent draws (depth, blend, cull).
-    void render(tgfx2::RenderContext2* ctx, tgfx2::FontAtlas* font);
+    void render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font);
 
     // Release all GPU-owned resources. Safe to call after GL context
     // teardown — no GL calls issued if owner device is not set.
@@ -120,14 +120,14 @@ private:
     void release_meshes_();
 
     // Ensure the 3D plot shader is compiled for the current device.
-    void ensure_shader_(tgfx2::IRenderDevice& device);
+    void ensure_shader_(tgfx::IRenderDevice& device);
 
     // --- Viewport rect ---
     float vx_ = 0.0f, vy_ = 0.0f, vw_ = 0.0f, vh_ = 0.0f;
 
     // --- GPU resources (lazy) ---
     // Shader handles live with this device; dropped on device change.
-    tgfx2::IRenderDevice* shader_device_ = nullptr;
+    tgfx::IRenderDevice* shader_device_ = nullptr;
     // ShaderHandle is a plain id in tgfx2; use uint32_t storage to keep
     // the header free of tgfx2/handles.hpp dependency cycles.
     uint32_t shader_vs_id_ = 0;
@@ -143,7 +143,7 @@ private:
     // Text renderer for billboard tick/marker labels. Owned here; the
     // pimpl-style unique_ptr keeps the engine header free of Text3D
     // header includes.
-    std::unique_ptr<tgfx2::Text3DRenderer> text3d_;
+    std::unique_ptr<tgfx::Text3DRenderer> text3d_;
 
     bool dirty_ = true;
 

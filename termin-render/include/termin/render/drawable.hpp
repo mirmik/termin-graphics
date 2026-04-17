@@ -22,7 +22,7 @@ struct tc_mesh;
 #include <termin/render/render_context.hpp>
 #include <termin/render/render_export.hpp>
 
-namespace tgfx2 { class RenderContext2; }
+namespace tgfx { class RenderContext2; }
 
 namespace termin {
 
@@ -79,7 +79,7 @@ public:
     // SkinnedMeshRenderer overrides this to push u_bone_matrices.
     // Default: no-op.
     virtual void upload_per_draw_uniforms_tgfx2(
-        tgfx2::RenderContext2& ctx2,
+        tgfx::RenderContext2& ctx2,
         int geometry_id
     ) {
         (void)ctx2;

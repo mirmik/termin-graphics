@@ -13,7 +13,7 @@ namespace termin {
 
 struct RENDER_API ShadowMapArrayEntry {
 public:
-    tgfx2::TextureHandle depth_tex2;
+    tgfx::TextureHandle depth_tex2;
     int width = 0;
     int height = 0;
     Mat44f light_space_matrix;
@@ -26,7 +26,7 @@ public:
     ShadowMapArrayEntry() = default;
 
     ShadowMapArrayEntry(
-        tgfx2::TextureHandle depth,
+        tgfx::TextureHandle depth,
         int w, int h,
         const Mat44f& matrix,
         int light_idx,
@@ -63,7 +63,7 @@ public:
     }
 
     void add_entry(
-        tgfx2::TextureHandle depth_tex2,
+        tgfx::TextureHandle depth_tex2,
         int width,
         int height,
         const Mat44f& light_space_matrix,

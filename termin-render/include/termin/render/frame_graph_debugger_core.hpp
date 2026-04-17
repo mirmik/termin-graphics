@@ -9,7 +9,7 @@
 #include "tgfx2/handles.hpp"
 #include <termin/render/render_export.hpp>
 
-namespace tgfx2 {
+namespace tgfx {
 class RenderContext2;
 class IRenderDevice;
 }
@@ -42,7 +42,7 @@ struct TextureInfo {
     int height = 0;
     int samples = 0;
     bool is_msaa = false;
-    tgfx2::PixelFormat format = tgfx2::PixelFormat::RGBA8_UNorm;
+    tgfx::PixelFormat format = tgfx::PixelFormat::RGBA8_UNorm;
     std::string format_name;
 };
 
@@ -52,11 +52,11 @@ struct TextureInfo {
 // the host RenderContext2 draws with.
 class RENDER_API FrameGraphCapture {
 private:
-    tgfx2::IRenderDevice* device_ = nullptr;
-    tgfx2::TextureHandle capture_tex_;
+    tgfx::IRenderDevice* device_ = nullptr;
+    tgfx::TextureHandle capture_tex_;
     int width_ = 0;
     int height_ = 0;
-    tgfx2::PixelFormat format_ = tgfx2::PixelFormat::RGBA8_UNorm;
+    tgfx::PixelFormat format_ = tgfx::PixelFormat::RGBA8_UNorm;
     bool captured_ = false;
     CxxFramePass* target_pass_ = nullptr;
 
@@ -75,44 +75,44 @@ public:
     // `width x height`. Reallocates on size / format mismatch, re-uses
     // the texture otherwise. `ctx2->blit` performs the copy.
     void capture_direct_via_ctx2(
-        tgfx2::RenderContext2* ctx2,
-        tgfx2::TextureHandle src_tex,
+        tgfx::RenderContext2* ctx2,
+        tgfx::TextureHandle src_tex,
         int width,
         int height,
-        tgfx2::PixelFormat format = tgfx2::PixelFormat::RGBA8_UNorm
+        tgfx::PixelFormat format = tgfx::PixelFormat::RGBA8_UNorm
     );
 
-    tgfx2::TextureHandle capture_tex() const { return capture_tex_; }
+    tgfx::TextureHandle capture_tex() const { return capture_tex_; }
     int width() const { return width_; }
     int height() const { return height_; }
-    tgfx2::PixelFormat format() const { return format_; }
+    tgfx::PixelFormat format() const { return format_; }
     bool has_capture() const { return captured_; }
     void reset_capture() { captured_ = false; }
 
 private:
     void release();
     void ensure_capture_tex(
-        tgfx2::IRenderDevice& device,
-        int w, int h, tgfx2::PixelFormat fmt
+        tgfx::IRenderDevice& device,
+        int w, int h, tgfx::PixelFormat fmt
     );
 };
 
 // Draws a captured tgfx2 texture into a target texture with a
 // channel-picker / HDR-highlight fragment shader. Target is a
-// tgfx2::TextureHandle — either a native pool entry or an external
+// tgfx::TextureHandle — either a native pool entry or an external
 // wrap of the debug window's default framebuffer.
 class RENDER_API FrameGraphPresenter {
 private:
-    tgfx2::IRenderDevice* device2_ = nullptr;
-    tgfx2::ShaderHandle fs2_;
+    tgfx::IRenderDevice* device2_ = nullptr;
+    tgfx::ShaderHandle fs2_;
 
 public:
     ~FrameGraphPresenter();
 
     void render(
-        tgfx2::RenderContext2* ctx2,
-        tgfx2::TextureHandle capture_tex,
-        tgfx2::TextureHandle target_tex,
+        tgfx::RenderContext2* ctx2,
+        tgfx::TextureHandle capture_tex,
+        tgfx::TextureHandle target_tex,
         int dst_x,
         int dst_y,
         int dst_w,
@@ -124,24 +124,24 @@ public:
     // HDR / depth readback helpers take a native tgfx2 texture and
     // pull pixels through the device's read_texture_* primitives.
     HDRStats compute_hdr_stats(
-        tgfx2::IRenderDevice* device,
-        tgfx2::TextureHandle tex
+        tgfx::IRenderDevice* device,
+        tgfx::TextureHandle tex
     );
 
     std::vector<uint8_t> read_depth_normalized(
-        tgfx2::IRenderDevice* device,
-        tgfx2::TextureHandle tex,
+        tgfx::IRenderDevice* device,
+        tgfx::TextureHandle tex,
         int* out_w,
         int* out_h
     );
 
     static TextureInfo get_texture_info(
-        tgfx2::IRenderDevice* device,
-        tgfx2::TextureHandle tex
+        tgfx::IRenderDevice* device,
+        tgfx::TextureHandle tex
     );
 
 private:
-    void ensure_fs(tgfx2::IRenderDevice& device);
+    void ensure_fs(tgfx::IRenderDevice& device);
     void release_tgfx2_resources();
 };
 
@@ -150,7 +150,7 @@ public:
     FrameGraphCapture capture;
     FrameGraphPresenter presenter;
 
-    tgfx2::TextureHandle capture_tex() const { return capture.capture_tex(); }
+    tgfx::TextureHandle capture_tex() const { return capture.capture_tex(); }
 };
 
 } // namespace termin

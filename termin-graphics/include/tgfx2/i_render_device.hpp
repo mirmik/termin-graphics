@@ -10,7 +10,7 @@
 #include "tgfx2/capabilities.hpp"
 #include "tgfx2/i_command_list.hpp"
 
-namespace tgfx2 {
+namespace tgfx {
 
 class IRenderDevice {
 public:
@@ -65,4 +65,4 @@ public:
     virtual void present() = 0;
 };
 
-} // namespace tgfx2
+} // namespace tgfx

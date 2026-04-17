@@ -6,7 +6,7 @@
 #include "tgfx2/enums.hpp"
 #include "tgfx2/vertex_layout.hpp"
 
-namespace tgfx2::vk {
+namespace tgfx::vk {
 
 VkFormat to_vk_format(PixelFormat fmt);
 VkCompareOp to_vk_compare(CompareOp op);
@@ -30,6 +30,6 @@ VkImageUsageFlags to_vk_image_usage(TextureUsage usage);
 VkImageAspectFlags format_aspect_flags(PixelFormat fmt);
 bool is_depth_format(PixelFormat fmt);
 
-} // namespace tgfx2::vk
+} // namespace tgfx::vk
 
 #endif // TGFX2_HAS_VULKAN

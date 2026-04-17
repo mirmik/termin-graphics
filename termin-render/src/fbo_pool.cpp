@@ -29,32 +29,32 @@ void release_tgfx2_wrappers(FBOPoolEntry& entry) {
 } // anonymous namespace
 
 bool FBOPool::ensure_native(
-    tgfx2::IRenderDevice& device,
+    tgfx::IRenderDevice& device,
     const std::string& key,
     int width,
     int height,
-    tgfx2::PixelFormat color_format,
+    tgfx::PixelFormat color_format,
     bool has_depth,
-    tgfx2::PixelFormat depth_format,
+    tgfx::PixelFormat depth_format,
     int samples
 ) {
     auto alloc_textures = [&](FBOPoolEntry& entry) {
-        tgfx2::TextureDesc cdesc;
+        tgfx::TextureDesc cdesc;
         cdesc.width = static_cast<uint32_t>(width);
         cdesc.height = static_cast<uint32_t>(height);
         cdesc.format = color_format;
         cdesc.sample_count = static_cast<uint32_t>(samples);
-        cdesc.usage = tgfx2::TextureUsage::Sampled |
-                      tgfx2::TextureUsage::ColorAttachment;
+        cdesc.usage = tgfx::TextureUsage::Sampled |
+                      tgfx::TextureUsage::ColorAttachment;
         entry.color_tgfx2 = device.create_texture(cdesc);
         if (has_depth) {
-            tgfx2::TextureDesc ddesc;
+            tgfx::TextureDesc ddesc;
             ddesc.width = static_cast<uint32_t>(width);
             ddesc.height = static_cast<uint32_t>(height);
             ddesc.format = depth_format;
             ddesc.sample_count = static_cast<uint32_t>(samples);
-            ddesc.usage = tgfx2::TextureUsage::Sampled |
-                          tgfx2::TextureUsage::DepthStencilAttachment;
+            ddesc.usage = tgfx::TextureUsage::Sampled |
+                          tgfx::TextureUsage::DepthStencilAttachment;
             entry.depth_tgfx2 = device.create_texture(ddesc);
         }
     };
@@ -79,7 +79,7 @@ bool FBOPool::ensure_native(
         // fresh attachments whose size/format may differ — silent
         // black-screen territory. Dump the whole cache here so
         // begin_pass rebuilds FBOs against the new textures.
-        if (auto* gl_dev = dynamic_cast<tgfx2::OpenGLRenderDevice*>(&device)) {
+        if (auto* gl_dev = dynamic_cast<tgfx::OpenGLRenderDevice*>(&device)) {
             gl_dev->invalidate_fbo_cache();
         }
         entry.native_device = &device;
@@ -107,7 +107,7 @@ bool FBOPool::ensure_native(
     return true;
 }
 
-tgfx2::TextureHandle FBOPool::get_color_tgfx2(const std::string& key) const {
+tgfx::TextureHandle FBOPool::get_color_tgfx2(const std::string& key) const {
     for (const auto& entry : entries) {
         if (entry.key == key) return entry.color_tgfx2;
     }
@@ -120,7 +120,7 @@ tgfx2::TextureHandle FBOPool::get_color_tgfx2(const std::string& key) const {
     return {};
 }
 
-tgfx2::TextureHandle FBOPool::get_depth_tgfx2(const std::string& key) const {
+tgfx::TextureHandle FBOPool::get_depth_tgfx2(const std::string& key) const {
     for (const auto& entry : entries) {
         if (entry.key == key) return entry.depth_tgfx2;
     }

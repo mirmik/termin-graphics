@@ -8,7 +8,7 @@
 //
 // Usage from a migrated pass:
 //
-//     tgfx2::ShaderHandle vs, fs;
+//     tgfx::ShaderHandle vs, fs;
 //     if (termin::tc_shader_ensure_tgfx2(tc_shader_ptr, &ctx.ctx2->device(),
 //                                        &vs, &fs)) {
 //         ctx.ctx2->bind_shader(vs, fs);
@@ -22,7 +22,7 @@ extern "C" {
 struct tc_shader;
 }
 
-namespace tgfx2 {
+namespace tgfx {
 class IRenderDevice;
 }
 
@@ -38,8 +38,8 @@ namespace termin {
 // arguments are left in whatever state they had on entry.
 TGFX2_API bool tc_shader_ensure_tgfx2(
     ::tc_shader* shader,
-    tgfx2::IRenderDevice* device,
-    tgfx2::ShaderHandle* out_vs,
-    tgfx2::ShaderHandle* out_fs);
+    tgfx::IRenderDevice* device,
+    tgfx::ShaderHandle* out_vs,
+    tgfx::ShaderHandle* out_fs);
 
 } // namespace termin
