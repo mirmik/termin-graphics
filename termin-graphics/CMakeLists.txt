@@ -229,8 +229,17 @@ if(BUILD_TGFX2_TESTS)
     # Vulkan smoke test (no GLFW needed — offscreen)
     if(TGFX2_ENABLE_VULKAN)
         add_executable(tgfx2_vulkan_smoke tests/test_tgfx2_vulkan_smoke.cpp)
-        target_link_libraries(tgfx2_vulkan_smoke PRIVATE termin_graphics2)
+        target_link_libraries(tgfx2_vulkan_smoke PRIVATE termin_graphics2 Vulkan::Vulkan)
         add_test(NAME tgfx2_vulkan_smoke COMMAND tgfx2_vulkan_smoke)
+
+        # On-screen Vulkan smoke test (SDL2 required).
+        find_package(SDL2 QUIET)
+        if(SDL2_FOUND)
+            add_executable(tgfx2_vulkan_window tests/test_tgfx2_vulkan_window.cpp)
+            target_link_libraries(tgfx2_vulkan_window
+                PRIVATE termin_graphics2 Vulkan::Vulkan SDL2::SDL2)
+            # Interactive; don't wire into ctest automatically.
+        endif()
     endif()
 endif()
 

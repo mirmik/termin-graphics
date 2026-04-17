@@ -5,6 +5,7 @@
 #include <vk_mem_alloc.h>
 #include "tgfx2/vulkan/vulkan_render_device.hpp"
 #include "tgfx2/vulkan/vulkan_command_list.hpp"
+#include "tgfx2/vulkan/vulkan_swapchain.hpp"
 #include "tgfx2/vulkan/vulkan_type_conversions.hpp"
 #include "tgfx2/vulkan/vulkan_shader_compiler.hpp"
 #include "tgfx2/internal/shader_preprocess.hpp"
@@ -36,8 +37,22 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     validation_enabled_ = info.enable_validation;
     init_instance(info);
 
+    // Resolve the surface. Two supply paths:
+    //   1. info.surface — pre-made surface (embedded hosts with their
+    //      own VkInstance via shared layers; rare).
+    //   2. info.surface_factory — a callback invoked with our freshly
+    //      created instance. This is the SDL/GLFW path: the host
+    //      supplies required instance extensions via
+    //      info.instance_extensions, then hands us a factory that
+    //      wraps SDL_Vulkan_CreateSurface(window, instance, &surf)
+    //      / glfwCreateWindowSurface(instance, window, ...).
     if (info.surface != VK_NULL_HANDLE) {
         surface_ = info.surface;
+    } else if (info.surface_factory) {
+        surface_ = info.surface_factory(instance_);
+        if (surface_ == VK_NULL_HANDLE) {
+            throw std::runtime_error("VulkanRenderDevice: surface_factory returned VK_NULL_HANDLE");
+        }
     }
 
     pick_physical_device();
@@ -46,6 +61,17 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     create_command_pool();
     create_descriptor_pool();
     create_shared_layouts();
+
+    // Build the swapchain now that queues/allocator are ready. A
+    // surface without a size is a hosting bug; refuse to guess.
+    if (surface_ != VK_NULL_HANDLE) {
+        if (info.swapchain_width == 0 || info.swapchain_height == 0) {
+            throw std::runtime_error(
+                "VulkanRenderDevice: surface provided but swapchain_width/height is 0");
+        }
+        swapchain_ = std::make_unique<VulkanSwapchain>(
+            *this, surface_, info.swapchain_width, info.swapchain_height);
+    }
 
     // Query capabilities
     VkPhysicalDeviceProperties props;
@@ -65,6 +91,10 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
 
 VulkanRenderDevice::~VulkanRenderDevice() {
     if (device_) vkDeviceWaitIdle(device_);
+
+    // Tear down the swapchain first — its sync objects and image
+    // views are bound to device_ which is still alive at this point.
+    swapchain_.reset();
 
     // Destroy cached framebuffers
     for (auto& [k, fb] : framebuffer_cache_)
