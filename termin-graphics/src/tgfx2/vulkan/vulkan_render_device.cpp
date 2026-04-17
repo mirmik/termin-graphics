@@ -135,7 +135,12 @@ VulkanRenderDevice::~VulkanRenderDevice() {
             vkGetInstanceProcAddr(instance_, "vkDestroyDebugUtilsMessengerEXT");
         if (func) func(instance_, debug_messenger_, nullptr);
     }
-    // Note: surface_ is NOT destroyed here — it's owned by the caller
+    // Surface is a child of instance — must go BEFORE instance
+    // destruction. We own it (either passed via info.surface, where
+    // caller cedes ownership, or produced by surface_factory).
+    if (surface_ && instance_) {
+        vkDestroySurfaceKHR(instance_, surface_, nullptr);
+    }
     if (instance_) vkDestroyInstance(instance_, nullptr);
 }
 

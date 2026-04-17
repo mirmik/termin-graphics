@@ -232,12 +232,27 @@ if(BUILD_TGFX2_TESTS)
         target_link_libraries(tgfx2_vulkan_smoke PRIVATE termin_graphics2 Vulkan::Vulkan)
         add_test(NAME tgfx2_vulkan_smoke COMMAND tgfx2_vulkan_smoke)
 
-        # On-screen Vulkan smoke test (SDL2 required).
-        find_package(SDL2 QUIET)
-        if(SDL2_FOUND)
+        # On-screen Vulkan smoke test. SDL2 lookup: Ubuntu's SDL2
+        # ships `sdl2-config.cmake` (lowercase, non-standard) so we
+        # skip find_package and go straight to find_path/find_library.
+        set(SDL2_SMOKE_FOUND FALSE)
+        find_path(SDL2_SMOKE_INCLUDE_DIR SDL.h PATH_SUFFIXES SDL2)
+        find_library(SDL2_SMOKE_LIBRARY SDL2)
+        if(SDL2_SMOKE_INCLUDE_DIR AND SDL2_SMOKE_LIBRARY)
+            set(SDL2_SMOKE_FOUND TRUE)
+            message(STATUS "tgfx2 Vulkan window smoke: SDL2 at ${SDL2_SMOKE_LIBRARY}")
+        else()
+            message(STATUS "tgfx2 Vulkan window smoke: SDL2 not found; skipping")
+        endif()
+        if(SDL2_SMOKE_FOUND)
             add_executable(tgfx2_vulkan_window tests/test_tgfx2_vulkan_window.cpp)
+            target_include_directories(tgfx2_vulkan_window PRIVATE ${SDL2_SMOKE_INCLUDE_DIR})
+            # TGFX2_HAS_VULKAN is PRIVATE on the lib (we don't want it
+            # leaking into downstream SDK consumers); re-add it here
+            # explicitly for the test translation unit.
+            target_compile_definitions(tgfx2_vulkan_window PRIVATE TGFX2_HAS_VULKAN)
             target_link_libraries(tgfx2_vulkan_window
-                PRIVATE termin_graphics2 Vulkan::Vulkan SDL2::SDL2)
+                PRIVATE termin_graphics2 Vulkan::Vulkan ${SDL2_SMOKE_LIBRARY})
             # Interactive; don't wire into ctest automatically.
         endif()
     endif()
