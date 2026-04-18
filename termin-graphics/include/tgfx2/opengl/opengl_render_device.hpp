@@ -116,6 +116,7 @@ public:
     OpenGLRenderDevice();
     ~OpenGLRenderDevice() override;
 
+    BackendType backend_type() const override { return BackendType::OpenGL; }
     BackendCapabilities capabilities() const override;
     void wait_idle() override;
 
@@ -180,8 +181,12 @@ public:
     // long as their texture handles live, and FBOs can be cached safely
     // across frames.
     //
-    // Called from RenderContext2::end_frame().
+    // Called from RenderContext2::end_frame() and exposed on the base
+    // IRenderDevice as invalidate_render_target_cache() so callers can
+    // drop the OpenGL-specific dynamic_cast.
     void invalidate_fbo_cache();
+
+    void invalidate_render_target_cache() override { invalidate_fbo_cache(); }
 
     // IRenderDevice readback / external-target / interop overrides.
     // Documentation lives on the base class — these are the OpenGL

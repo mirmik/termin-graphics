@@ -112,6 +112,7 @@ public:
     explicit VulkanRenderDevice(const VulkanDeviceCreateInfo& info);
     ~VulkanRenderDevice() override;
 
+    BackendType backend_type() const override { return BackendType::Vulkan; }
     BackendCapabilities capabilities() const override;
     void wait_idle() override;
 

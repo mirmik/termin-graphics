@@ -7,7 +7,7 @@
 #include "tc_project_settings.h"
 
 #include "tgfx2/device_factory.hpp"
-#include "tgfx2/opengl/opengl_render_device.hpp"
+#include "tgfx2/enums.hpp"
 #include "tgfx2/pipeline_cache.hpp"
 #include "tgfx2/render_context.hpp"
 #include "tgfx/tgfx2_interop.h"
@@ -78,7 +78,7 @@ void RenderEngine::ensure_tgfx2() {
     // on OpenGL backend. Non-GL backends don't have this interop
     // yet — hosts running under Vulkan must avoid legacy resource
     // upload entry points.
-    if (dynamic_cast<tgfx::OpenGLRenderDevice*>(tgfx2_device_.get())) {
+    if (tgfx2_device_->backend_type() == tgfx::BackendType::OpenGL) {
         tgfx2_interop_set_device(tgfx2_device_.get());
         tgfx2_gpu_ops_register();
     }

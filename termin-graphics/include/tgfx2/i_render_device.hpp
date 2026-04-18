@@ -17,8 +17,20 @@ class IRenderDevice {
 public:
     virtual ~IRenderDevice() = default;
 
+    // Backend identity — lets callers branch on GL-only vs Vulkan-only
+    // host integration (FBO invalidation, legacy gpu_ops interop, …)
+    // without a dynamic_cast to the concrete device class.
+    virtual BackendType backend_type() const = 0;
+
     virtual BackendCapabilities capabilities() const = 0;
     virtual void wait_idle() = 0;
+
+    // Drop any cached backend-side render target objects (OpenGL FBOs,
+    // Vulkan VkFramebuffers) keyed on texture identity. Called after
+    // host code destroys + re-creates textures whose gl_id / VkImage may
+    // be reused for attachments of a different size or format. Default
+    // is a no-op for backends that don't cache render targets.
+    virtual void invalidate_render_target_cache() {}
 
     // --- Resource creation ---
     virtual BufferHandle create_buffer(const BufferDesc& desc) = 0;
