@@ -84,7 +84,19 @@ set(TGFX2_SOURCES
 )
 
 # --- Optional Vulkan backend ---
-option(TGFX2_ENABLE_VULKAN "Enable Vulkan backend for tgfx2" OFF)
+# Auto-enabled when the Vulkan SDK is available on the host. Downstream
+# packages (termin-display, termin-app) also auto-detect Vulkan and
+# expect termin_graphics2 to carry the Vulkan backend code — if this
+# option silently defaults to OFF on a Vulkan-capable host, libtermin_
+# graphics2.so ships without VulkanRenderDevice symbols and any
+# downstream link fails with "undefined reference to VulkanRenderDevice".
+find_package(Vulkan QUIET)
+if(Vulkan_FOUND)
+    set(_TGFX2_VULKAN_DEFAULT ON)
+else()
+    set(_TGFX2_VULKAN_DEFAULT OFF)
+endif()
+option(TGFX2_ENABLE_VULKAN "Enable Vulkan backend for tgfx2" ${_TGFX2_VULKAN_DEFAULT})
 
 if(TGFX2_ENABLE_VULKAN)
     find_package(Vulkan REQUIRED)
