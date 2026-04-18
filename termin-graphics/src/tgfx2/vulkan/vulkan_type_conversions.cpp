@@ -187,7 +187,9 @@ VkImageAspectFlags format_aspect_flags(PixelFormat fmt) {
 }
 
 bool is_depth_format(PixelFormat fmt) {
-    return fmt == PixelFormat::D24_UNorm_S8_UInt || fmt == PixelFormat::D32F;
+    return fmt == PixelFormat::D24_UNorm_S8_UInt
+        || fmt == PixelFormat::D24_UNorm
+        || fmt == PixelFormat::D32F;
 }
 
 } // namespace tgfx::vk

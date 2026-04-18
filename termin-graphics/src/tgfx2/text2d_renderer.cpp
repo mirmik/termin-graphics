@@ -27,33 +27,60 @@ namespace tgfx {
 
 namespace {
 
-constexpr const char* kText2DVert = R"(#version 330 core
-layout(location=0) in vec3 a_pos;    // (x_pixel, y_pixel, 0)
-layout(location=1) in vec4 a_uv_pad; // (u, v, _, _)
+// Single source that compiles on both backends. The `#ifdef VULKAN`
+// is tripped by the `-DVULKAN=1` macro definition the Vulkan shader
+// compiler adds (see vulkan_shader_compiler.cpp). Under GL we take
+// the std140 UBO branch bound at the same slot tgfx2's push-constant
+// ring buffer uses (TGFX2_PUSH_CONSTANTS_BINDING = 14). Data layout
+// matches `Text2DPush` in this TU.
+constexpr const char* kText2DCommon = R"(
+struct Text2DPushData {
+    mat4 u_projection;
+    vec4 u_color;
+};
+#ifdef VULKAN
+layout(push_constant) uniform Text2DPushBlock { Text2DPushData pc; };
+#else
+layout(std140, binding = 14) uniform Text2DPushBlock { Text2DPushData pc; };
+#endif
+)";
 
-uniform mat4 u_projection;
+static std::string make_text2d_vert() {
+    return std::string("#version 450 core\n") + kText2DCommon + R"(
+layout(location=0) in vec3 a_pos;
+layout(location=1) in vec4 a_uv_pad;
 
-out vec2 v_uv;
+layout(location=0) out vec2 v_uv;
 
 void main() {
-    gl_Position = u_projection * vec4(a_pos.xy, 0.0, 1.0);
+    gl_Position = pc.u_projection * vec4(a_pos.xy, 0.0, 1.0);
     v_uv = a_uv_pad.xy;
 }
 )";
+}
 
-constexpr const char* kText2DFrag = R"(#version 330 core
-uniform sampler2D u_font_atlas;
-uniform vec4 u_color;
+static std::string make_text2d_frag() {
+    return std::string("#version 450 core\n") + kText2DCommon + R"(
+layout(binding = 4) uniform sampler2D u_font_atlas;
 
-in vec2 v_uv;
-out vec4 frag_color;
+layout(location=0) in vec2 v_uv;
+layout(location=0) out vec4 frag_color;
 
 void main() {
-    float a = texture(u_font_atlas, v_uv).r * u_color.a;
+    float a = texture(u_font_atlas, v_uv).r * pc.u_color.a;
     if (a < 0.01) discard;
-    frag_color = vec4(u_color.rgb, a);
+    frag_color = vec4(pc.u_color.rgb, a);
 }
 )";
+}
+
+// Python-side struct Text2DPushData mirror. mat4 (64B) + vec4 (16B) = 80B.
+struct Text2DPushData {
+    float projection[16];
+    float color[4];
+};
+static_assert(sizeof(Text2DPushData) == 80,
+              "Text2DPushData layout drift — shader and C++ disagree");
 
 // Build an ortho matrix (column-major) that maps pixel coords y+down
 // → NDC y+up. (0,0) pixel → (-1,+1) NDC (top-left corner).
@@ -110,12 +137,12 @@ void Text2DRenderer::ensure_shader_(IRenderDevice& device) {
 
     ShaderDesc vs_desc;
     vs_desc.stage = ShaderStage::Vertex;
-    vs_desc.source = kText2DVert;
+    vs_desc.source = make_text2d_vert();
     vs_ = device.create_shader(vs_desc);
 
     ShaderDesc fs_desc;
     fs_desc.stage = ShaderStage::Fragment;
-    fs_desc.source = kText2DFrag;
+    fs_desc.source = make_text2d_frag();
     fs_ = device.create_shader(fs_desc);
 
     compiled_on_ = &device;
@@ -192,17 +219,33 @@ void Text2DRenderer::draw(std::string_view text_utf8,
             break;
     }
 
-    // Rebind shader + projection + atlas on every draw — a caller
+    // Rebind shader + push-constants + atlas on every draw — a caller
     // (e.g. UIRenderer) may have bound a different shader between
-    // our own begin() and this draw. Cheap in practice: one
-    // bind_shader + three uniform sets + one texture bind.
+    // our own begin() and this draw. Uses push-constants on both
+    // backends: Vulkan ships them via vkCmdPushConstants, OpenGL
+    // through the ring UBO at TGFX2_PUSH_CONSTANTS_BINDING.
     RenderContext2& ctx = *ctx_;
     ctx.bind_shader(vs_, fs_);
-    ctx.set_uniform_mat4("u_projection", proj_, /*transpose=*/true);
-    ctx.set_uniform_int("u_font_atlas", 0);
+
+    Text2DPushData push;
+    // Shader expects column-major mat4; `proj_` was stored row-major
+    // (see build_ortho_pixel_to_ndc's comment). Transpose here before
+    // shipping raw bytes to GPU.
+    for (int row = 0; row < 4; ++row) {
+        for (int col = 0; col < 4; ++col) {
+            push.projection[col * 4 + row] = proj_[row * 4 + col];
+        }
+    }
+    push.color[0] = r;
+    push.color[1] = g;
+    push.color[2] = b;
+    push.color[3] = a;
+    ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
+
     TextureHandle atlas = font_->ensure_texture(&ctx);
-    ctx.bind_sampled_texture(0, atlas);
-    ctx.set_uniform_vec4("u_color", r, g, b, a);
+    // Binding 4 matches `layout(binding=4) uniform sampler2D
+    // u_font_atlas` in make_text2d_frag().
+    ctx.bind_sampled_texture(4, atlas);
 
     // Build one flat vertex array for the whole string.
     std::vector<float> verts;

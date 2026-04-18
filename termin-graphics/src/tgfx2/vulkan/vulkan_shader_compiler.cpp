@@ -33,6 +33,12 @@ SpirvCompileResult compile_glsl_to_spirv(
     // Force GLSL 450 profile to handle #version 330 sources
     options.SetForcedVersionProfile(450, shaderc_profile_core);
 
+    // Shaders fork their declarations with `#ifdef VULKAN` — shaderc
+    // auto-defines `VULKAN=100` when `shaderc_target_env_vulkan` is
+    // set (see SetTargetEnvironment above), so we rely on that and
+    // don't redefine the macro ourselves (redefining with a different
+    // substitution gives "Macro redefined" errors).
+
     auto kind = to_shaderc_kind(stage);
     auto module = compiler.CompileGlslToSpv(source, kind, "shader", entry_point.c_str(), options);
 

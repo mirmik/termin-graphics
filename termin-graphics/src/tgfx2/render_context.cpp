@@ -81,8 +81,10 @@ void RenderContext2::end_frame() {
     // entries can be safely released. Underlying GL objects survive.
     for (auto h : deferred_destroy_textures_) device_.destroy(h);
     for (auto h : deferred_destroy_buffers_)  device_.destroy(h);
+    for (auto h : deferred_destroy_resource_sets_) device_.destroy(h);
     deferred_destroy_textures_.clear();
     deferred_destroy_buffers_.clear();
+    deferred_destroy_resource_sets_.clear();
 }
 
 // ============================================================================
@@ -310,7 +312,19 @@ void RenderContext2::clear_resource_bindings() {
 
 void RenderContext2::set_push_constants(const void* data, uint32_t size) {
     if (!cmd_) return;
-    cmd_->set_push_constants(data, size);
+    // vkCmdPushConstants requires a bound pipeline. Callers typically
+    // do bind_shader → set_push_constants → draw; at this point the
+    // vertex layout is still unset, so flushing now would build an
+    // invalid pipeline. Queue the data and re-emit it after each
+    // flush_pipeline — that way push-constants always land on a valid
+    // layout that matches the upcoming draw.
+    if (data == nullptr || size == 0) {
+        pending_push_constants_.clear();
+        return;
+    }
+    pending_push_constants_.assign(
+        reinterpret_cast<const uint8_t*>(data),
+        reinterpret_cast<const uint8_t*>(data) + size);
 }
 
 void RenderContext2::defer_destroy(TextureHandle handle) {
@@ -477,13 +491,28 @@ void RenderContext2::flush_pipeline() {
     auto pipeline = cache_.get(key);
     cmd_->bind_pipeline(pipeline);
     pipeline_dirty_ = false;
+
+    // Re-apply any pending push-constants now that the new pipeline is
+    // bound — vkCmdPushConstants needs a current pipeline layout, and
+    // the VkPipelineLayout we just bound may differ from the one the
+    // previous push-constant write targeted. On OpenGL the ring UBO
+    // binding is independent of pipeline, so the re-apply is cheap.
+    if (!pending_push_constants_.empty()) {
+        cmd_->set_push_constants(pending_push_constants_.data(),
+                                 static_cast<uint32_t>(pending_push_constants_.size()));
+    }
 }
 
 void RenderContext2::flush_resource_set() {
     if (!bindings_dirty_) return;
 
+    // Defer-destroy the previous set: the command buffer we're still
+    // recording into may reference it, and Vulkan forbids mutating
+    // bindings that a live cmd buf holds. Drained in end_frame() after
+    // submit + fence wait. On OpenGL `destroy(ResourceSetHandle)` is
+    // cheap and this deferment is harmless.
     if (current_resource_set_) {
-        device_.destroy(current_resource_set_);
+        deferred_destroy_resource_sets_.push_back(current_resource_set_);
         current_resource_set_ = {};
     }
 

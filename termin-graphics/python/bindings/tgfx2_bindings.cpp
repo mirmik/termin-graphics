@@ -384,7 +384,21 @@ void bind_tgfx2(nb::module_& m) {
                 uint32_t vertex_count) {
                  self.draw_immediate_lines(verts.data(), vertex_count);
              },
-             nb::arg("verts"), nb::arg("vertex_count"));
+             nb::arg("verts"), nb::arg("vertex_count"))
+
+        // Set push-constant block. Data layout must match the shader's
+        // `layout(push_constant) uniform ...` declaration (std140 rules
+        // with push-constant tightening). Intended for Vulkan — on
+        // OpenGL it is a no-op in the current backend (GL callers keep
+        // using set_uniform_* for now). 128 bytes max (pipeline layout
+        // reserves exactly that — see VulkanRenderDevice::create_shared_layouts).
+        .def("set_push_constants",
+             [](tgfx::RenderContext2& self,
+                nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
+                 self.set_push_constants(data.data(),
+                                         static_cast<uint32_t>(data.size()));
+             },
+             nb::arg("data"));
 
     // --- Tgfx2Context holder ---
     //
@@ -504,6 +518,16 @@ void bind_tgfx2(nb::module_& m) {
         .def_prop_ro("context",
             [](Tgfx2ContextHolder& self) -> tgfx::RenderContext2& {
                 return *self.ctx_ptr();
+            },
+            nb::rv_policy::reference_internal)
+
+        // The underlying IRenderDevice. Same lifetime story as `context`.
+        // Exposed so Python code that wants to call backend-neutral
+        // device methods (create_shader, create_buffer, ...) can reach
+        // them without digging through BackendWindow.
+        .def_prop_ro("device",
+            [](Tgfx2ContextHolder& self) -> tgfx::IRenderDevice& {
+                return *self.device_ptr();
             },
             nb::rv_policy::reference_internal)
 

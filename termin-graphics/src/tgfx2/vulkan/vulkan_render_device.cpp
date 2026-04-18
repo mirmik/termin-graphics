@@ -123,6 +123,7 @@ VulkanRenderDevice::~VulkanRenderDevice() {
         // layout and render_pass are shared/cached, cleaned separately
     }
 
+    if (default_sampler_) vkDestroySampler(device_, default_sampler_, nullptr);
     if (shared_pipeline_layout_) vkDestroyPipelineLayout(device_, shared_pipeline_layout_, nullptr);
     if (descriptor_set_layout_) vkDestroyDescriptorSetLayout(device_, descriptor_set_layout_, nullptr);
     if (descriptor_pool_) vkDestroyDescriptorPool(device_, descriptor_pool_, nullptr);
@@ -346,18 +347,19 @@ void VulkanRenderDevice::create_shared_layouts() {
         b.stageFlags = VK_SHADER_STAGE_ALL;
         bindings.push_back(b);
     }
+    // Bindings 4-7 are combined image+sampler. GLSL `sampler2D` maps
+    // to a single COMBINED_IMAGE_SAMPLER descriptor in SPIR-V, not
+    // separate SAMPLED_IMAGE + SAMPLER. Matching the descriptor type
+    // here lets stock Vulkan-targeted GLSL (`layout(binding=4)
+    // uniform sampler2D ...`) compile against our shared layout
+    // without the caller needing to split uniform sampler + uniform
+    // texture2D. bind_sampled_texture on the render_context side
+    // still carries both a TextureHandle and a SamplerHandle — the
+    // Vulkan write path packs them into one VkDescriptorImageInfo.
     for (uint32_t i = 4; i < 8; ++i) {
         VkDescriptorSetLayoutBinding b{};
         b.binding = i;
-        b.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        b.descriptorCount = 1;
-        b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-        bindings.push_back(b);
-    }
-    for (uint32_t i = 8; i < 12; ++i) {
-        VkDescriptorSetLayoutBinding b{};
-        b.binding = i;
-        b.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+        b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         b.descriptorCount = 1;
         b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         bindings.push_back(b);
@@ -372,14 +374,44 @@ void VulkanRenderDevice::create_shared_layouts() {
         throw std::runtime_error("Failed to create descriptor set layout");
     }
 
+    // Push-constant range: 128 bytes accessible from every graphics
+    // stage. That is the minimum guaranteed by `maxPushConstantsSize`
+    // in Vulkan 1.0 (lots of mobile GPUs stop at exactly 128). Fits
+    // a mat4 + a vec4 + spare ints, which covers the UIRenderer /
+    // Text2D / Text3D style where a single `layout(push_constant)`
+    // block carries all per-draw state. Shaders that need more must
+    // fall back to UBO bindings 0-3.
+    VkPushConstantRange pc_range{};
+    pc_range.stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
+    pc_range.offset = 0;
+    pc_range.size = 128;
+
     VkPipelineLayoutCreateInfo pl_ci{};
     pl_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pl_ci.setLayoutCount = 1;
     pl_ci.pSetLayouts = &descriptor_set_layout_;
+    pl_ci.pushConstantRangeCount = 1;
+    pl_ci.pPushConstantRanges = &pc_range;
 
     if (vkCreatePipelineLayout(device_, &pl_ci, nullptr, &shared_pipeline_layout_) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create pipeline layout");
     }
+}
+
+VkSampler VulkanRenderDevice::ensure_default_sampler() {
+    if (default_sampler_) return default_sampler_;
+    VkSamplerCreateInfo sci{};
+    sci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    sci.magFilter = VK_FILTER_LINEAR;
+    sci.minFilter = VK_FILTER_LINEAR;
+    sci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    sci.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    sci.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    sci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    sci.anisotropyEnable = VK_FALSE;
+    sci.maxLod = VK_LOD_CLAMP_NONE;
+    vkCreateSampler(device_, &sci, nullptr, &default_sampler_);
+    return default_sampler_;
 }
 
 // --- Capabilities ---
@@ -790,14 +822,33 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
                 break;
             }
             case ResourceBinding::Kind::SampledTexture: {
+                // GLSL `sampler2D` compiles to a COMBINED_IMAGE_SAMPLER
+                // descriptor in SPIR-V; layout bindings 4-7 are of that
+                // type. Pack the view + sampler into a single image info.
+                // If caller didn't supply a sampler, fall back to a
+                // cached default linear-clamp one so the slot is never
+                // descriptor-wise empty.
                 auto* tex = get_texture(b.texture);
                 if (!tex) continue;
-                img_infos.push_back({VK_NULL_HANDLE, tex->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
-                w.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+                VkSampler samp_vk = VK_NULL_HANDLE;
+                if (b.sampler) {
+                    auto* samp = get_sampler(b.sampler);
+                    if (samp) samp_vk = samp->sampler;
+                }
+                if (samp_vk == VK_NULL_HANDLE) {
+                    samp_vk = ensure_default_sampler();
+                }
+                img_infos.push_back({samp_vk, tex->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+                w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
                 w.pImageInfo = &img_infos.back();
                 break;
             }
             case ResourceBinding::Kind::Sampler: {
+                // Kept for forward compatibility with shaders using the
+                // separate texture2D + sampler split. No layout slots
+                // for it in the current descriptor set layout; the
+                // write is effectively a no-op on the shared layout
+                // but other layouts may use it.
                 auto* samp = get_sampler(b.sampler);
                 if (!samp) continue;
                 img_infos.push_back({samp->sampler, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED});

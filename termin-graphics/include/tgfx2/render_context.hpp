@@ -243,11 +243,18 @@ private:
     bool bindings_dirty_ = true;
     ResourceSetHandle current_resource_set_;
 
+    // Queued push-constant bytes. Re-emitted after every flush_pipeline
+    // so the data lands on the freshly-bound VkPipelineLayout (Vulkan)
+    // or the current ring UBO offset (OpenGL). Cleared when the caller
+    // passes an empty payload.
+    std::vector<uint8_t> pending_push_constants_;
+
     // Per-frame deferred-destruction list for non-owning external
     // wrappers (register_external_texture / register_external_buffer)
     // created and used inside a single frame. Drained in end_frame().
     std::vector<TextureHandle> deferred_destroy_textures_;
     std::vector<BufferHandle>  deferred_destroy_buffers_;
+    std::vector<ResourceSetHandle> deferred_destroy_resource_sets_;
 
     // Fullscreen quad resources (created on first use)
     BufferHandle fsq_vbo_;

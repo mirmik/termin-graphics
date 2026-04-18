@@ -202,6 +202,13 @@ public:
     VkDescriptorSetLayout descriptor_set_layout() const { return descriptor_set_layout_; }
     VkPipelineLayout shared_pipeline_layout() const { return shared_pipeline_layout_; }
 
+    // Lazy-create a default linear/clamp sampler used when a caller
+    // binds a SampledTexture without an explicit sampler. One per
+    // device; destroyed with the device. Returned as raw VkSampler so
+    // the descriptor write path can drop it into VkDescriptorImageInfo
+    // without translating through SamplerHandle.
+    VkSampler ensure_default_sampler();
+
     // Non-null when the device was created with a surface (via
     // `info.surface` or `info.surface_factory`). Hosts drive on-screen
     // frames through this — acquire() at start of frame, present() at
@@ -234,6 +241,9 @@ private:
     // Shared layouts (MVP: one universal layout)
     VkDescriptorSetLayout descriptor_set_layout_ = VK_NULL_HANDLE;
     VkPipelineLayout shared_pipeline_layout_ = VK_NULL_HANDLE;
+
+    // Lazy-created default sampler (see ensure_default_sampler()).
+    VkSampler default_sampler_ = VK_NULL_HANDLE;
 
     BackendCapabilities caps_;
 
