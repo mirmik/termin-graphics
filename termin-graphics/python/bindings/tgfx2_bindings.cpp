@@ -172,6 +172,15 @@ void bind_tgfx2(nb::module_& m) {
              nb::arg("clear_depth_enabled") = false)
         .def("end_pass", &tgfx::RenderContext2::end_pass)
 
+        // Underlying render device — lets Python-side renderers (UIRenderer,
+        // PostEffect subclasses, …) call create_shader / create_buffer
+        // without stashing the owning Tgfx2Context separately.
+        .def_prop_ro("device",
+            [](tgfx::RenderContext2& self) -> tgfx::IRenderDevice& {
+                return self.device();
+            },
+            nb::rv_policy::reference_internal)
+
         // Frame lifecycle — standalone Python hosts (SDL window, tests)
         // must call these manually once per frame. Inside the engine
         // render loop the C++ frame graph handles this already.
