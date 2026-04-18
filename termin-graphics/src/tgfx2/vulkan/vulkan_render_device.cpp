@@ -612,10 +612,16 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
     res.desc = desc;
     res.layout = shared_pipeline_layout_;
 
-    // Get or create render pass from formats
+    // Get or create render pass from formats. `needs_depth` is driven
+    // by the attachment presence (depth_format != Undefined), NOT by the
+    // depth_test/depth_write flags — a pipeline that has depth_test off
+    // still needs a render pass compatible with passes that carry a
+    // depth attachment. Conversely a pass with no depth attachment must
+    // produce a pipeline whose cached RP also has no depth slot, or
+    // vkCmdDraw fails with "RenderPasses incompatible".
     std::vector<PixelFormat> color_fmts = desc.color_formats;
     if (color_fmts.empty()) color_fmts.push_back(PixelFormat::RGBA8_UNorm);
-    bool needs_depth = desc.depth_stencil.depth_test || desc.depth_stencil.depth_write;
+    bool needs_depth = desc.depth_format != PixelFormat::Undefined;
     res.render_pass = get_or_create_render_pass(
         color_fmts, desc.depth_format, needs_depth, desc.sample_count,
         LoadOp::Clear, LoadOp::Clear);

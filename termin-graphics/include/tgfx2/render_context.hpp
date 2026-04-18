@@ -227,8 +227,12 @@ private:
     VertexBufferLayout vertex_layout_;
     PrimitiveTopology topology_ = PrimitiveTopology::TriangleList;
 
-    PixelFormat color_format_ = PixelFormat::RGBA8_UNorm;
-    PixelFormat depth_format_ = PixelFormat::D32F;
+    // Synced from begin_pass() with the actual attachment formats.
+    // `Undefined` means "no attachment of this kind in the current
+    // pass" — the pipeline cache builds a VkRenderPass with matching
+    // attachment count, so vkCmdDraw's compatibility check passes.
+    PixelFormat color_format_ = PixelFormat::Undefined;
+    PixelFormat depth_format_ = PixelFormat::Undefined;
     uint32_t sample_count_ = 1;
 
     bool in_pass_ = false;

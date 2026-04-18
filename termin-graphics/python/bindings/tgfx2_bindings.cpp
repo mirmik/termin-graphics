@@ -79,7 +79,29 @@ void bind_tgfx2(nb::module_& m) {
     // (render_framework) can accept a pointer to it from Python.
     // The device is owned by whoever created it (RenderEngine,
     // Tgfx2ContextHolder). Python code only passes the pointer around.
-    nb::class_<tgfx::IRenderDevice>(m, "Tgfx2Device");
+    nb::class_<tgfx::IRenderDevice>(m, "Tgfx2Device")
+        // Backend-neutral shader compile. GLSL input; internally
+        // glCompileShader on OpenGL, shaderc GLSL→SPIR-V on Vulkan
+        // (both paths run the same preprocessor first, see V.3).
+        // `stage` maps to tgfx::ShaderStage: 0=Vertex, 1=Fragment,
+        // 2=Geometry, 3=Compute.
+        .def("create_shader",
+             [](tgfx::IRenderDevice& self, int stage, const std::string& src) {
+                 tgfx::ShaderDesc d;
+                 d.stage = static_cast<tgfx::ShaderStage>(stage);
+                 d.source = src;
+                 return self.create_shader(d);
+             },
+             nb::arg("stage"), nb::arg("source"))
+        .def("destroy_shader",
+             [](tgfx::IRenderDevice& self, tgfx::ShaderHandle h) { self.destroy(h); });
+
+    nb::enum_<tgfx::ShaderStage>(m, "Tgfx2ShaderStage", nb::is_arithmetic())
+        .value("Vertex",   tgfx::ShaderStage::Vertex)
+        .value("Fragment", tgfx::ShaderStage::Fragment)
+        .value("Compute",  tgfx::ShaderStage::Compute)
+        .value("Geometry", tgfx::ShaderStage::Geometry)
+        .export_values();
 
     // BlendFactor enum — exposed so Python callers can request
     // premultiplied / additive / standard blending via set_blend_func.
@@ -212,6 +234,11 @@ void bind_tgfx2(nb::module_& m) {
         // device. Mirrors Tgfx2Context.create_color_attachment for
         // callers that only hold a RenderContext2 (effects running
         // inside a pipeline pass, etc.).
+        //
+        // Usage: Sampled | ColorAttachment | CopySrc | CopyDst. CopySrc
+        // is mandatory on Vulkan — otherwise `BackendWindow::present`
+        // (which blits this texture onto the swapchain image) fails
+        // validation with `VK_IMAGE_USAGE_TRANSFER_SRC_BIT required`.
         .def("create_color_attachment",
              [](tgfx::RenderContext2& self, uint32_t w, uint32_t h,
                 tgfx::PixelFormat fmt) -> tgfx::TextureHandle {
@@ -221,6 +248,7 @@ void bind_tgfx2(nb::module_& m) {
                  desc.format = fmt;
                  desc.usage = tgfx::TextureUsage::Sampled |
                               tgfx::TextureUsage::ColorAttachment |
+                              tgfx::TextureUsage::CopySrc |
                               tgfx::TextureUsage::CopyDst;
                  return self.device().create_texture(desc);
              },
@@ -527,9 +555,10 @@ void bind_tgfx2(nb::module_& m) {
             nb::arg("handle"))
 
         // Create an offscreen color attachment. Usage is
-        // Sampled|ColorAttachment|CopyDst — safe for passes that read
-        // the texture back and for blits (e.g. final composite onto
-        // the default framebuffer via blit_to_external_fbo).
+        // Sampled|ColorAttachment|CopySrc|CopyDst — safe for passes that
+        // read the texture back and for blits in both directions (CopySrc
+        // is mandatory on Vulkan for `BackendWindow::present` to blit
+        // this texture onto the swapchain image).
         .def("create_color_attachment",
             [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h,
                tgfx::PixelFormat fmt) -> tgfx::TextureHandle {
@@ -539,6 +568,7 @@ void bind_tgfx2(nb::module_& m) {
                 desc.format = fmt;
                 desc.usage = tgfx::TextureUsage::Sampled |
                              tgfx::TextureUsage::ColorAttachment |
+                             tgfx::TextureUsage::CopySrc |
                              tgfx::TextureUsage::CopyDst;
                 return self.device->create_texture(desc);
             },

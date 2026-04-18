@@ -125,6 +125,26 @@ void RenderContext2::begin_pass(
         pass.has_depth = true;
     }
 
+    // Sync the pipeline-key formats with what the pass actually carries.
+    // Without this the cache keeps whatever format was set earlier (or
+    // the D32F default for depth) and builds a VkRenderPass that doesn't
+    // match begin_render_pass — Vulkan then fails with
+    //   vkCmdDraw: RenderPasses incompatible (attachment count mismatch).
+    PixelFormat new_color = color
+        ? device_.texture_desc(color).format
+        : PixelFormat::Undefined;
+    PixelFormat new_depth = depth
+        ? device_.texture_desc(depth).format
+        : PixelFormat::Undefined;
+    if (color_format_ != new_color) {
+        color_format_ = new_color;
+        pipeline_dirty_ = true;
+    }
+    if (depth_format_ != new_depth) {
+        depth_format_ = new_depth;
+        pipeline_dirty_ = true;
+    }
+
     cmd_->begin_render_pass(pass);
     in_pass_ = true;
     pipeline_dirty_ = true;
@@ -586,8 +606,12 @@ void RenderContext2::draw_immediate_lines(const float* data, uint32_t vertex_cou
     cmd_->bind_vertex_buffer(0, buf);
     cmd_->draw(vertex_count);
 
-    // Cleanup temp buffer
-    device_.destroy(buf);
+    // Defer destroy — on Vulkan the command buffer runs asynchronously
+    // after vkQueueSubmit, so the VkBuffer must outlive end_frame().
+    // The deferred list is drained in end_frame() after device_.submit
+    // has waited on the frame fence. OpenGL is equally happy either way
+    // (glBufferData copies host memory immediately).
+    deferred_destroy_buffers_.push_back(buf);
 }
 
 void RenderContext2::draw_immediate_triangles(const float* data, uint32_t vertex_count) {
@@ -615,7 +639,8 @@ void RenderContext2::draw_immediate_triangles(const float* data, uint32_t vertex
     cmd_->bind_vertex_buffer(0, buf);
     cmd_->draw(vertex_count);
 
-    device_.destroy(buf);
+    // Defer destroy — see draw_immediate_lines for the lifetime story.
+    deferred_destroy_buffers_.push_back(buf);
 }
 
 void RenderContext2::blit(TextureHandle src, TextureHandle dst) {

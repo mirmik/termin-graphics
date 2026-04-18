@@ -18,6 +18,7 @@ GLFormatInfo to_gl_format(PixelFormat fmt) {
         case PixelFormat::D24_UNorm:          return {GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT};
         case PixelFormat::D24_UNorm_S8_UInt:  return {GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8};
         case PixelFormat::D32F:               return {GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT};
+        case PixelFormat::Undefined:          return {0, 0, 0};
     }
     return {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
 }
