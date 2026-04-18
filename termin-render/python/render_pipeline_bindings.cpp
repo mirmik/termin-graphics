@@ -15,6 +15,8 @@ extern "C" {
 #include "termin/render/render_pipeline.hpp"
 #include "termin/render/tc_pass.hpp"
 #include "termin/render/graph_compiler.hpp"
+#include "termin/render/fbo_pool.hpp"
+#include "tgfx2/i_render_device.hpp"
 
 namespace nb = nanobind;
 
@@ -165,6 +167,42 @@ void bind_render_pipeline(nb::module_& m) {
 
         .def("get_fbo_keys", [](RenderPipeline& self) { return self.fbo_pool().keys(); })
         .def("clear_fbo_pool", [](RenderPipeline& self) { self.fbo_pool().clear(); })
+
+        // Returns a dict describing the named FBOPool entry, or None
+        // when the key is unknown. Resolves aliases via get_color_tgfx2.
+        // Framegraph debugger consumes width/height to show per-resource
+        // info; format / has_depth / native handles are exposed for
+        // future preview hooks.
+        .def("get_fbo", [](RenderPipeline& self, const std::string& key) -> nb::object {
+            const FBOPool& pool = self.fbo_pool();
+            auto it = pool.alias_to_canonical.find(key);
+            const std::string& resolved = (it != pool.alias_to_canonical.end()) ? it->second : key;
+            for (const auto& entry : pool.entries) {
+                if (entry.key != resolved) continue;
+                nb::dict d;
+                d["key"] = entry.key;
+                d["width"] = entry.width;
+                d["height"] = entry.height;
+                d["samples"] = entry.samples;
+                d["has_depth"] = entry.has_depth;
+                d["color_format"] = static_cast<int>(entry.color_format);
+                d["depth_format"] = static_cast<int>(entry.depth_format);
+                uintptr_t color_native = 0;
+                uintptr_t depth_native = 0;
+                if (entry.native_device) {
+                    if (entry.color_tgfx2) {
+                        color_native = entry.native_device->native_texture_handle(entry.color_tgfx2);
+                    }
+                    if (entry.has_depth && entry.depth_tgfx2) {
+                        depth_native = entry.native_device->native_texture_handle(entry.depth_tgfx2);
+                    }
+                }
+                d["color_native_handle"] = color_native;
+                d["depth_native_handle"] = depth_native;
+                return d;
+            }
+            return nb::none();
+        })
 
         .def_prop_ro("is_dirty", &RenderPipeline::is_dirty)
         .def("mark_dirty", &RenderPipeline::mark_dirty)

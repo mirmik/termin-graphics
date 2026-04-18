@@ -315,9 +315,14 @@ void RenderContext2::set_push_constants(const void* data, uint32_t size) {
     // vkCmdPushConstants requires a bound pipeline. Callers typically
     // do bind_shader → set_push_constants → draw; at this point the
     // vertex layout is still unset, so flushing now would build an
-    // invalid pipeline. Queue the data and re-emit it after each
-    // flush_pipeline — that way push-constants always land on a valid
-    // layout that matches the upcoming draw.
+    // invalid pipeline. Queue the data so flush_pipeline re-emits it
+    // after each pipeline bind.
+    //
+    // If a pipeline is already bound (pipeline_dirty_ == false), apply
+    // immediately. Without this, a second draw that reuses the same
+    // pipeline would skip flush_pipeline and silently drop the new
+    // push-constants — manifests as every-other-draw artefacts (e.g.
+    // gizmos where only the first primitive of a shader is visible).
     if (data == nullptr || size == 0) {
         pending_push_constants_.clear();
         return;
@@ -325,6 +330,10 @@ void RenderContext2::set_push_constants(const void* data, uint32_t size) {
     pending_push_constants_.assign(
         reinterpret_cast<const uint8_t*>(data),
         reinterpret_cast<const uint8_t*>(data) + size);
+    if (!pipeline_dirty_ && bound_vs_) {
+        cmd_->set_push_constants(pending_push_constants_.data(),
+                                 static_cast<uint32_t>(pending_push_constants_.size()));
+    }
 }
 
 void RenderContext2::defer_destroy(TextureHandle handle) {
@@ -576,6 +585,12 @@ void RenderContext2::draw_fullscreen_quad() {
         {1, VertexFormat::Float2, 2 * sizeof(float)},    // aUV
     };
     set_vertex_layout(fsq_layout);
+    // Explicit topology — previous draws (ImmediateRenderer line/point
+    // batches) may leave topology_ pointing at LineList, which makes
+    // the FSQ index list `{0,1,2, 0,2,3}` render as three line segments
+    // instead of two triangles. Was showing up as a diagonal sliver in
+    // PostFX output.
+    set_topology(PrimitiveTopology::TriangleList);
 
     // If no vertex shader bound, use built-in FSQ vertex shader
     ShaderHandle vs = bound_vs_ ? bound_vs_ : fsq_vs_;

@@ -2,6 +2,8 @@
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #include "tgfx2/opengl/opengl_type_conversions.hpp"
 
+#include <algorithm>
+
 namespace tgfx {
 
 OpenGLCommandList::OpenGLCommandList(OpenGLRenderDevice& device)
@@ -340,7 +342,20 @@ void OpenGLCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
     auto* d = device_.get_texture(dst);
     if (!s || !d) return;
 
-    // glCopyImageSubData requires GL 4.3; fallback via FBO blit
+    // glBlitFramebuffer honours GL_SCISSOR_TEST and the color write mask.
+    // Previous UI/clipping passes may leave scissor enabled with a tiny
+    // rect — then blit copies only that rect and PostFX's color_pp shows
+    // up as a diagonal sliver (or whatever leaked through). Save and
+    // disable both, restore afterwards. glCopyImageSubData (GL 4.3)
+    // would sidestep this entirely but glad in this project is loaded
+    // for GL 4.1 only.
+    GLboolean was_scissor = glIsEnabled(GL_SCISSOR_TEST);
+    GLboolean color_mask[4];
+    glGetBooleanv(GL_COLOR_WRITEMASK, color_mask);
+
+    if (was_scissor) glDisable(GL_SCISSOR_TEST);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
     GLuint fbo_read = 0, fbo_draw = 0;
     glGenFramebuffers(1, &fbo_read);
     glGenFramebuffers(1, &fbo_draw);
@@ -358,6 +373,9 @@ void OpenGLCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glDeleteFramebuffers(1, &fbo_read);
     glDeleteFramebuffers(1, &fbo_draw);
+
+    glColorMask(color_mask[0], color_mask[1], color_mask[2], color_mask[3]);
+    if (was_scissor) glEnable(GL_SCISSOR_TEST);
 }
 
 // --- Dynamic state ---
