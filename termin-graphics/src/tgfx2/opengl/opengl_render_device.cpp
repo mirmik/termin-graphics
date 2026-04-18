@@ -740,6 +740,77 @@ void OpenGLRenderDevice::clear_external_target(
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(prev_draw));
 }
 
+void OpenGLRenderDevice::blit_to_texture(
+    TextureHandle dst_color,
+    TextureHandle src_color,
+    int src_x, int src_y, int src_w, int src_h,
+    int dst_x, int dst_y, int dst_w, int dst_h
+) {
+    GLTexture* src = textures_.get(src_color.id);
+    GLTexture* dst = textures_.get(dst_color.id);
+    if (!src || !dst) return;
+
+    GLint prev_read = 0, prev_draw = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prev_read);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prev_draw);
+
+    GLuint fbos[2] = {0, 0};
+    glGenFramebuffers(2, fbos);
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbos[0]);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           src->target, src->gl_id, 0);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbos[1]);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           dst->target, dst->gl_id, 0);
+
+    glBlitFramebuffer(
+        src_x, src_y, src_x + src_w, src_y + src_h,
+        dst_x, dst_y, dst_x + dst_w, dst_y + dst_h,
+        GL_COLOR_BUFFER_BIT, GL_LINEAR
+    );
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_read));
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(prev_draw));
+    glDeleteFramebuffers(2, fbos);
+}
+
+void OpenGLRenderDevice::clear_texture(
+    TextureHandle dst_color,
+    float r, float g, float b, float a,
+    int viewport_x, int viewport_y,
+    int viewport_w, int viewport_h
+) {
+    GLTexture* dst = textures_.get(dst_color.id);
+    if (!dst) return;
+
+    GLint prev_draw = 0;
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prev_draw);
+    GLint prev_vp[4] = {0, 0, 0, 0};
+    glGetIntegerv(GL_VIEWPORT, prev_vp);
+
+    GLuint fbo = 0;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           dst->target, dst->gl_id, 0);
+    glViewport(viewport_x, viewport_y, viewport_w, viewport_h);
+    glClearColor(r, g, b, a);
+    GLboolean prev_color_mask[4] = {GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE};
+    glGetBooleanv(GL_COLOR_WRITEMASK, prev_color_mask);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    glColorMask(prev_color_mask[0], prev_color_mask[1],
+                prev_color_mask[2], prev_color_mask[3]);
+    glViewport(prev_vp[0], prev_vp[1], prev_vp[2], prev_vp[3]);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(prev_draw));
+    glDeleteFramebuffers(1, &fbo);
+}
+
 uintptr_t OpenGLRenderDevice::native_texture_handle(TextureHandle handle) const {
     // HandlePool::get is non-const; safe to const_cast for read-only lookup.
     auto* tex = const_cast<OpenGLRenderDevice*>(this)->textures_.get(handle.id);

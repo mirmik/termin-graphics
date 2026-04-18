@@ -401,9 +401,25 @@ void bind_tgfx2(nb::module_& m) {
     // Destruction order is declaration-reverse: ctx, then cache, then
     // device — which is the correct dependency order.
     struct Tgfx2ContextHolder {
+        // Owned triple, used in standalone mode (no BackendWindow). When
+        // `borrowed_*` pointers are non-null, these unique_ptrs stay empty
+        // and the public accessors forward to the borrowed ones.
         std::unique_ptr<tgfx::IRenderDevice> device;
         std::unique_ptr<tgfx::PipelineCache> cache;
         std::unique_ptr<tgfx::RenderContext2> ctx;
+
+        // Borrow mode: the device/ctx live in BackendWindow (or another
+        // long-lived host). We only observe them — no ownership, no
+        // destruction. The host promises they outlive the holder.
+        tgfx::IRenderDevice* borrowed_device = nullptr;
+        tgfx::RenderContext2* borrowed_ctx = nullptr;
+
+        tgfx::IRenderDevice* device_ptr() {
+            return borrowed_device ? borrowed_device : device.get();
+        }
+        tgfx::RenderContext2* ctx_ptr() {
+            return borrowed_ctx ? borrowed_ctx : ctx.get();
+        }
 
         Tgfx2ContextHolder() {
             // Backend selected by TERMIN_BACKEND env-var (default OpenGL).
@@ -428,17 +444,54 @@ void bind_tgfx2(nb::module_& m) {
                 tgfx2_gpu_ops_register();
             }
         }
+
+        // Borrow mode: attach to an existing device + ctx (typically from
+        // BackendWindow). The process-wide single-device invariant for
+        // cross-window TextureHandle sharing under Vulkan requires every
+        // Python helper (UIRenderer, RenderEngine, FBOSurface) to end up
+        // on the same device; this ctor is the handshake.
+        Tgfx2ContextHolder(tgfx::IRenderDevice* dev, tgfx::RenderContext2* rctx) {
+            borrowed_device = dev;
+            borrowed_ctx = rctx;
+            // Legacy gpu_ops interop is still GL-only. Register the
+            // borrowed device as the interop target so tgfx1-era code
+            // routes through the same handles instead of silently
+            // creating a second device.
+            if (dynamic_cast<tgfx::OpenGLRenderDevice*>(dev)) {
+                tc_ensure_default_gpu_context();
+                tgfx2_interop_set_device(dev);
+                tgfx2_gpu_ops_register();
+            }
+        }
     };
 
     nb::class_<Tgfx2ContextHolder>(m, "Tgfx2Context")
         .def(nb::init<>())
 
+        // Borrow-mode factory: wrap an existing IRenderDevice +
+        // RenderContext2 (e.g. from a BackendWindow) instead of creating
+        // our own. Callers pass the raw C++ pointers cast to uintptr_t
+        // (cross-module — nanobind types for IRenderDevice / RenderContext2
+        // live in different Python modules; uintptr_t is the stable
+        // wire format). The host owns the lifetimes: both pointers must
+        // outlive this holder.
+        .def_static("borrow",
+            [](uintptr_t device_ptr, uintptr_t ctx_ptr) -> Tgfx2ContextHolder* {
+                auto* dev = reinterpret_cast<tgfx::IRenderDevice*>(device_ptr);
+                auto* rctx = reinterpret_cast<tgfx::RenderContext2*>(ctx_ptr);
+                if (!dev || !rctx) return nullptr;
+                return new Tgfx2ContextHolder(dev, rctx);
+            },
+            nb::arg("device_ptr"), nb::arg("ctx_ptr"),
+            nb::rv_policy::take_ownership,
+            "Build a Tgfx2Context that borrows an externally-owned device "
+            "and RenderContext2. Used by BackendWindow.tgfx2_context().")
+
         // The underlying RenderContext2. Lifetime is tied to the
-        // holder; the reference stays valid until the holder is
-        // destroyed.
+        // holder (owning mode) or to the lender (borrow mode).
         .def_prop_ro("context",
             [](Tgfx2ContextHolder& self) -> tgfx::RenderContext2& {
-                return *self.ctx;
+                return *self.ctx_ptr();
             },
             nb::rv_policy::reference_internal)
 
@@ -458,8 +511,9 @@ void bind_tgfx2(nb::module_& m) {
                 // Legacy gpu_ops forwarder is GL-specific. No-op on
                 // other backends — the host must avoid legacy
                 // tc_mesh_upload_gpu / tc_texture_upload_gpu entirely.
-                if (dynamic_cast<tgfx::OpenGLRenderDevice*>(self.device.get())) {
-                    tgfx2_interop_set_device(self.device.get());
+                auto* dev = self.device_ptr();
+                if (dynamic_cast<tgfx::OpenGLRenderDevice*>(dev)) {
+                    tgfx2_interop_set_device(dev);
                     tgfx2_gpu_ops_register();
                 }
             })
@@ -480,9 +534,9 @@ void bind_tgfx2(nb::module_& m) {
                 desc.format = tgfx::PixelFormat::R8_UNorm;
                 desc.usage = tgfx::TextureUsage::Sampled |
                              tgfx::TextureUsage::CopyDst;
-                auto handle = self.device->create_texture(desc);
+                auto handle = self.device_ptr()->create_texture(desc);
                 if (data.size() > 0) {
-                    self.device->upload_texture(handle,
+                    self.device_ptr()->upload_texture(handle,
                         std::span<const uint8_t>(data.data(), data.size()));
                 }
                 return handle;
@@ -501,9 +555,9 @@ void bind_tgfx2(nb::module_& m) {
                 desc.format = tgfx::PixelFormat::RGBA8_UNorm;
                 desc.usage = tgfx::TextureUsage::Sampled |
                              tgfx::TextureUsage::CopyDst;
-                auto handle = self.device->create_texture(desc);
+                auto handle = self.device_ptr()->create_texture(desc);
                 if (data.size() > 0) {
-                    self.device->upload_texture(handle,
+                    self.device_ptr()->upload_texture(handle,
                         std::span<const uint8_t>(data.data(), data.size()));
                 }
                 return handle;
@@ -514,7 +568,7 @@ void bind_tgfx2(nb::module_& m) {
         .def("upload_texture",
             [](Tgfx2ContextHolder& self, tgfx::TextureHandle handle,
                nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
-                self.device->upload_texture(handle,
+                self.device_ptr()->upload_texture(handle,
                     std::span<const uint8_t>(data.data(), data.size()));
             },
             nb::arg("handle"), nb::arg("data"))
@@ -526,7 +580,7 @@ void bind_tgfx2(nb::module_& m) {
             [](Tgfx2ContextHolder& self, tgfx::TextureHandle handle,
                uint32_t x, uint32_t y, uint32_t w, uint32_t h,
                nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
-                self.device->upload_texture_region(
+                self.device_ptr()->upload_texture_region(
                     handle, x, y, w, h,
                     std::span<const uint8_t>(data.data(), data.size()));
             },
@@ -538,7 +592,7 @@ void bind_tgfx2(nb::module_& m) {
         // Destroy a texture owned by this device.
         .def("destroy_texture",
             [](Tgfx2ContextHolder& self, tgfx::TextureHandle handle) {
-                self.device->destroy(handle);
+                self.device_ptr()->destroy(handle);
             },
             nb::arg("handle"))
 
@@ -550,7 +604,7 @@ void bind_tgfx2(nb::module_& m) {
         .def("get_gl_id",
             [](Tgfx2ContextHolder& self, tgfx::TextureHandle handle) -> uint32_t {
                 // Returns 0 on non-GL backends or on unknown handle.
-                return static_cast<uint32_t>(self.device->native_texture_handle(handle));
+                return static_cast<uint32_t>(self.device_ptr()->native_texture_handle(handle));
             },
             nb::arg("handle"))
 
@@ -570,7 +624,7 @@ void bind_tgfx2(nb::module_& m) {
                              tgfx::TextureUsage::ColorAttachment |
                              tgfx::TextureUsage::CopySrc |
                              tgfx::TextureUsage::CopyDst;
-                return self.device->create_texture(desc);
+                return self.device_ptr()->create_texture(desc);
             },
             nb::arg("width"), nb::arg("height"),
             nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm)
@@ -587,7 +641,7 @@ void bind_tgfx2(nb::module_& m) {
                 desc.format = fmt;
                 desc.usage = tgfx::TextureUsage::DepthStencilAttachment |
                              tgfx::TextureUsage::Sampled;
-                return self.device->create_texture(desc);
+                return self.device_ptr()->create_texture(desc);
             },
             nb::arg("width"), nb::arg("height"),
             nb::arg("format") = tgfx::PixelFormat::D24_UNorm);
@@ -607,7 +661,7 @@ void bind_tgfx2(nb::module_& m) {
            tgfx::TextureHandle src,
            int src_x, int src_y, int src_w, int src_h,
            int dst_x, int dst_y, int dst_w, int dst_h) {
-            holder.device->blit_to_external_target(
+            holder.device_ptr()->blit_to_external_target(
                 static_cast<uintptr_t>(dst_fbo_id), src,
                 src_x, src_y, src_w, src_h,
                 dst_x, dst_y, dst_w, dst_h);
@@ -628,7 +682,7 @@ void bind_tgfx2(nb::module_& m) {
             desc.usage = tgfx::TextureUsage::Sampled;
             // register_external_texture throws on backends without
             // external-handle support.
-            return holder.device->register_external_texture(
+            return holder.device_ptr()->register_external_texture(
                 static_cast<uintptr_t>(gl_id), desc);
         },
         nb::arg("ctx"), nb::arg("gl_id"),
