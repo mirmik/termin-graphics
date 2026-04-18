@@ -53,6 +53,15 @@ private:
     GLintptr   pending_push_offset_ = 0;
     GLsizeiptr pending_push_size_ = 0;
 
+    // Cached viewport height — set in set_viewport, consumed by
+    // set_scissor to flip the caller's top-left-origin rect into the
+    // bottom-left-origin rect glScissor expects. tcgui / host editors
+    // always set the viewport to cover the whole framebuffer, so
+    // viewport height == fb height here. If a future caller uses a
+    // smaller viewport with scissor, this fails quietly; we'll
+    // revisit the API then.
+    int cached_viewport_height_ = 0;
+
     void apply_pending_push_constants();
 
     void setup_vao_for_pipeline(GLPipeline* pipeline);
