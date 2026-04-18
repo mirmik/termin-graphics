@@ -380,3 +380,57 @@ void tgfx2_gpu_ops_register(void) {
 
     tgfx_gpu_set_ops(&ops);
 }
+
+// ============================================================================
+// External GL texture registration — plain-C bridge for host code
+// that can't talk to `tgfx::IRenderDevice&` directly (C#/P-Invoke, …).
+// Both functions assume the interop device is an OpenGL backend; they
+// fail fast with 0 / no-op when it isn't so the caller can fall back
+// to the legacy FBO path during the GL→Vulkan transition.
+// ============================================================================
+
+extern "C" uint32_t tgfx2_interop_register_external_gl_texture(
+    uint32_t gl_tex_id,
+    uint32_t width, uint32_t height,
+    int format,
+    uint32_t usage
+) {
+    auto* dev = get_device();
+    if (!dev) {
+        tc_log_error("tgfx2_interop_register_external_gl_texture: device not set");
+        return 0;
+    }
+    if (dev->backend_type() != tgfx::BackendType::OpenGL) {
+        tc_log_error("tgfx2_interop_register_external_gl_texture: "
+                     "device is not OpenGL — external GL wrapping is GL-only");
+        return 0;
+    }
+    if (gl_tex_id == 0 || width == 0 || height == 0) {
+        tc_log_error("tgfx2_interop_register_external_gl_texture: invalid args "
+                     "(gl_tex_id=%u, width=%u, height=%u)",
+                     gl_tex_id, width, height);
+        return 0;
+    }
+
+    tgfx::TextureDesc desc;
+    desc.width = width;
+    desc.height = height;
+    desc.format = static_cast<tgfx::PixelFormat>(format);
+    desc.usage = static_cast<tgfx::TextureUsage>(usage);
+    desc.sample_count = 1;
+    desc.mip_levels = 1;
+
+    auto* gl_dev = static_cast<tgfx::OpenGLRenderDevice*>(dev);
+    auto handle = gl_dev->register_external_texture(
+        static_cast<GLuint>(gl_tex_id), desc);
+    return handle.id;
+}
+
+extern "C" void tgfx2_interop_destroy_texture_handle(uint32_t handle_id) {
+    if (handle_id == 0) return;
+    auto* dev = get_device();
+    if (!dev) return;
+    tgfx::TextureHandle h;
+    h.id = handle_id;
+    dev->destroy(h);
+}
