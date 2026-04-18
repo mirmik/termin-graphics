@@ -19,6 +19,10 @@
 
 #include "internal/utf8_decode.hpp"
 
+extern "C" {
+#include "tgfx/tgfx2_interop.h"
+}
+
 namespace tgfx {
 
 namespace {
@@ -118,9 +122,20 @@ void Text2DRenderer::ensure_shader_(IRenderDevice& device) {
 }
 
 void Text2DRenderer::release_gpu() {
+    // Only destroy shaders if the device pointer is still the live
+    // interop target. At Python interpreter shutdown the BackendWindow
+    // that owned the device may be torn down before we get here, in
+    // which case `compiled_on_` is dangling and calling ->destroy on it
+    // segfaults. Leaking the handles at shutdown is safe: the driver
+    // reclaims them on process exit. The interop pointer is cleared by
+    // Tgfx2ContextHolder's destructor, so a null here means "device is
+    // gone; leak and move on".
     if (compiled_on_ != nullptr) {
-        if (vs_.id != 0) compiled_on_->destroy(vs_);
-        if (fs_.id != 0) compiled_on_->destroy(fs_);
+        void* live = tgfx2_interop_get_device();
+        if (live == compiled_on_) {
+            if (vs_.id != 0) compiled_on_->destroy(vs_);
+            if (fs_.id != 0) compiled_on_->destroy(fs_);
+        }
     }
     vs_ = ShaderHandle{};
     fs_ = ShaderHandle{};

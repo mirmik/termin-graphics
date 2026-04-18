@@ -9,6 +9,7 @@ extern "C" {
 #include "tgfx/resources/tc_shader.h"
 #include "tgfx/tc_gpu_context.h"
 #include "tgfx/tc_gpu_share_group.h"
+#include "tgfx/tgfx2_interop.h"
 #include <tcbase/tc_log.h>
 }
 
@@ -24,7 +25,14 @@ static tgfx::IRenderDevice* slot_device(const tc_gpu_slot* slot) {
 static void destroy_cached_tgfx2_shaders(tc_gpu_slot* slot) {
     if (!slot) return;
     tgfx::IRenderDevice* dev = slot_device(slot);
-    if (dev) {
+    // Skip the destroy calls when the cached device is no longer the
+    // live interop target — Python interpreter shutdown tears down
+    // BackendWindow (and its device) before the shader registry gets
+    // cleared, leaving slot->tgfx2_shader_device dangling. Calling
+    // destroy on a dead device segfaults. Leaking at shutdown is OK:
+    // the GPU driver reclaims resources on process exit anyway.
+    void* live = tgfx2_interop_get_device();
+    if (dev && dev == live) {
         if (slot->tgfx2_shader_vs_id != 0) {
             tgfx::ShaderHandle h;
             h.id = slot->tgfx2_shader_vs_id;

@@ -23,6 +23,10 @@
 
 #include "internal/utf8_decode.hpp"
 
+extern "C" {
+#include "tgfx/tgfx2_interop.h"
+}
+
 namespace tgfx {
 
 namespace {
@@ -95,9 +99,14 @@ void Text3DRenderer::ensure_shader_(IRenderDevice& device) {
 }
 
 void Text3DRenderer::release_gpu() {
+    // See Text2DRenderer::release_gpu for the lifetime story. Leak at
+    // interpreter shutdown when the device is already gone.
     if (compiled_on_ != nullptr) {
-        if (vs_.id != 0) compiled_on_->destroy(vs_);
-        if (fs_.id != 0) compiled_on_->destroy(fs_);
+        void* live = tgfx2_interop_get_device();
+        if (live == compiled_on_) {
+            if (vs_.id != 0) compiled_on_->destroy(vs_);
+            if (fs_.id != 0) compiled_on_->destroy(fs_);
+        }
     }
     vs_ = ShaderHandle{};
     fs_ = ShaderHandle{};

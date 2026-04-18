@@ -463,6 +463,18 @@ void bind_tgfx2(nb::module_& m) {
                 tgfx2_gpu_ops_register();
             }
         }
+
+        // Clear the process-global interop device pointer when *this*
+        // holder was the one that set it. Without this the pointer
+        // dangles past the holder's (or BackendWindow's) destruction,
+        // and CPython's interpreter shutdown later deref's it from a
+        // cached TcShader / tc_mesh destructor — segfault.
+        ~Tgfx2ContextHolder() {
+            auto* this_dev = device_ptr();
+            if (this_dev && tgfx2_interop_get_device() == this_dev) {
+                tgfx2_interop_set_device(nullptr);
+            }
+        }
     };
 
     nb::class_<Tgfx2ContextHolder>(m, "Tgfx2Context")

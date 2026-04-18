@@ -33,6 +33,10 @@ extern "C" {
 
 #include "internal/utf8_decode.hpp"
 
+extern "C" {
+#include "tgfx/tgfx2_interop.h"
+}
+
 // stb_truetype - single-header; define the implementation in this TU
 // only. The header itself lives at termin-graphics/third/stb/.
 #define STB_TRUETYPE_IMPLEMENTATION
@@ -364,8 +368,15 @@ void FontAtlas::sync_gpu_(RenderContext2* ctx) {
 }
 
 void FontAtlas::release_gpu() {
+    // Same lifetime story as Text2DRenderer::release_gpu: on Python
+    // interpreter shutdown BackendWindow may tear down the device
+    // before we get here, leaving `gpu_device_` dangling. Only destroy
+    // when the pointer is still the live interop target.
     if (gpu_device_ != nullptr && gpu_texture_.id != 0) {
-        gpu_device_->destroy(gpu_texture_);
+        void* live = tgfx2_interop_get_device();
+        if (live == gpu_device_) {
+            gpu_device_->destroy(gpu_texture_);
+        }
     }
     gpu_texture_ = TextureHandle{};
     gpu_owner_ = nullptr;
