@@ -143,6 +143,22 @@ public:
     void submit(ICommandList& cmd) override;
     void present() override;
 
+    // Backend-neutral replacements for blit_to_external_target /
+    // clear_external_target. The destination is a tgfx2 TextureHandle,
+    // letting render surfaces own their composite target as a texture
+    // instead of a raw GL FBO id (which has no Vulkan analogue).
+    void blit_to_texture(
+        TextureHandle dst,
+        TextureHandle src,
+        int src_x, int src_y, int src_w, int src_h,
+        int dst_x, int dst_y, int dst_w, int dst_h) override;
+
+    void clear_texture(
+        TextureHandle dst,
+        float r, float g, float b, float a,
+        int viewport_x, int viewport_y,
+        int viewport_w, int viewport_h) override;
+
     // Internal access for command list
     VkDevice device() const { return device_; }
     VkBufferResource* get_buffer(BufferHandle h) { return buffers_.get(h.id); }

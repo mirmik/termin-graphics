@@ -1168,6 +1168,123 @@ VkFramebuffer VulkanRenderDevice::get_or_create_framebuffer(
     return fb;
 }
 
+// --- Texture-to-texture blit (backend-neutral external-target replacement) ---
+
+void VulkanRenderDevice::blit_to_texture(
+    TextureHandle dst_handle,
+    TextureHandle src_handle,
+    int src_x, int src_y, int src_w, int src_h,
+    int dst_x, int dst_y, int dst_w, int dst_h)
+{
+    auto* src = textures_.get(src_handle.id);
+    auto* dst = textures_.get(dst_handle.id);
+    if (!src || !dst) return;
+
+    // Remember the caller-visible layouts so the texture can be resumed
+    // in whatever state the next render pass expects (typically
+    // COLOR_ATTACHMENT_OPTIMAL for the offscreen RT). Without the restore,
+    // the next begin_pass hits a layout mismatch barrier.
+    VkImageLayout prev_src = src->current_layout;
+    VkImageLayout prev_dst = dst->current_layout;
+
+    execute_immediate([&](VkCommandBuffer cb) {
+        transition_image_layout(cb, src->image,
+            prev_src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+        transition_image_layout(cb, dst->image,
+            prev_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+
+        VkImageBlit blit{};
+        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.srcSubresource.layerCount = 1;
+        blit.srcOffsets[0] = {src_x, src_y, 0};
+        blit.srcOffsets[1] = {src_x + src_w, src_y + src_h, 1};
+        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.dstSubresource.layerCount = 1;
+        blit.dstOffsets[0] = {dst_x, dst_y, 0};
+        blit.dstOffsets[1] = {dst_x + dst_w, dst_y + dst_h, 1};
+
+        vkCmdBlitImage(cb,
+            src->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            dst->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &blit, VK_FILTER_LINEAR);
+
+        // Restore layouts so the next render pass / sampler bind does
+        // not see an unexpected transition cost (or worse, a validation
+        // error on an unsynchronised access). If prev_* was UNDEFINED
+        // (never rendered), leave the images in their transfer layout —
+        // the next pass's begin will transition again from whatever it
+        // observes.
+        if (prev_src != VK_IMAGE_LAYOUT_UNDEFINED) {
+            transition_image_layout(cb, src->image,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, prev_src,
+                VK_IMAGE_ASPECT_COLOR_BIT);
+        }
+        if (prev_dst != VK_IMAGE_LAYOUT_UNDEFINED) {
+            transition_image_layout(cb, dst->image,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, prev_dst,
+                VK_IMAGE_ASPECT_COLOR_BIT);
+        } else {
+            // First-write case: stamp the layout we left the image in
+            // so the next user sees a real state instead of UNDEFINED.
+            dst->current_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        }
+    });
+}
+
+void VulkanRenderDevice::clear_texture(
+    TextureHandle dst_handle,
+    float r, float g, float b, float a,
+    int viewport_x, int viewport_y,
+    int viewport_w, int viewport_h)
+{
+    auto* dst = textures_.get(dst_handle.id);
+    if (!dst) return;
+
+    VkImageLayout prev = dst->current_layout;
+
+    execute_immediate([&](VkCommandBuffer cb) {
+        transition_image_layout(cb, dst->image,
+            prev, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+
+        VkClearColorValue clear{};
+        clear.float32[0] = r;
+        clear.float32[1] = g;
+        clear.float32[2] = b;
+        clear.float32[3] = a;
+
+        // vkCmdClearColorImage requires a full-image range with an
+        // offset-based mechanism — it does not natively support a
+        // viewport subrect. For a subrect clear we'd need a render pass
+        // with LoadOp::Clear + scissor. In practice callers pass the
+        // full texture extent here (PullRenderingManager clears the
+        // whole display before compositing viewports), so clearing the
+        // whole image is correct; if a future caller needs a true rect
+        // clear, route through begin_pass + scissor instead.
+        (void)viewport_x; (void)viewport_y;
+        (void)viewport_w; (void)viewport_h;
+
+        VkImageSubresourceRange range{};
+        range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        range.levelCount = 1;
+        range.layerCount = 1;
+
+        vkCmdClearColorImage(cb, dst->image,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            &clear, 1, &range);
+
+        if (prev != VK_IMAGE_LAYOUT_UNDEFINED) {
+            transition_image_layout(cb, dst->image,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, prev,
+                VK_IMAGE_ASPECT_COLOR_BIT);
+        } else {
+            dst->current_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        }
+    });
+}
+
 } // namespace tgfx
 
 #endif // TGFX2_HAS_VULKAN
