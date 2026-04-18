@@ -2,6 +2,7 @@
 
 #ifdef TGFX2_HAS_VULKAN
 
+#include <vector>
 #include <vulkan/vulkan.h>
 #include "tgfx2/tgfx2_api.h"
 #include "tgfx2/i_command_list.hpp"
@@ -45,6 +46,14 @@ private:
     VkCommandBuffer cmd_ = VK_NULL_HANDLE;
     VkPipelineLayout current_layout_ = VK_NULL_HANDLE;
     bool in_render_pass_ = false;
+
+    // Color attachments of the currently-open render pass. Stashed in
+    // begin_render_pass, drained in end_render_pass — where each is
+    // transitioned from COLOR_ATTACHMENT_OPTIMAL to SHADER_READ_ONLY_
+    // OPTIMAL so the next pass can sample from it without the layout
+    // mismatch validation error. Cheap even when the texture is not
+    // sampled next — one barrier per attachment.
+    std::vector<TextureHandle> current_pass_color_attachments_;
 };
 
 } // namespace tgfx

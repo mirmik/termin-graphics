@@ -48,6 +48,7 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
     uint32_t width = 0, height = 0;
 
     LoadOp color_load = LoadOp::Clear;
+    current_pass_color_attachments_.clear();
     for (const auto& c : pass.colors) {
         color_load = c.load;
         if (c.texture) {
@@ -65,6 +66,7 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
                         VK_IMAGE_ASPECT_COLOR_BIT);
                     tex->current_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
                 }
+                current_pass_color_attachments_.push_back(c.texture);
             }
         } else {
             color_fmts.push_back(PixelFormat::RGBA8_UNorm);
@@ -129,6 +131,25 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
 void VulkanCommandList::end_render_pass() {
     vkCmdEndRenderPass(cmd_);
     in_render_pass_ = false;
+
+    // Transition color attachments out of COLOR_ATTACHMENT_OPTIMAL and
+    // into SHADER_READ_ONLY_OPTIMAL so a subsequent pass that samples
+    // from them finds the layout the descriptor write expects. Without
+    // this the validator flags "layout mismatch" as soon as the next
+    // pass's draw uses the texture (the compositor's premul → unpremul
+    // chain is the canonical case). If the next pass renders into the
+    // same texture again, begin_render_pass will transition back to
+    // COLOR_ATTACHMENT_OPTIMAL — cheap.
+    for (auto h : current_pass_color_attachments_) {
+        auto* tex = device_.get_texture(h);
+        if (!tex || tex->image == VK_NULL_HANDLE) continue;
+        if (tex->current_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) continue;
+        device_.transition_image_layout(cmd_, tex->image,
+            tex->current_layout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+        tex->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
+    current_pass_color_attachments_.clear();
 }
 
 // --- Pipeline ---
@@ -144,6 +165,24 @@ void VulkanCommandList::bind_pipeline(PipelineHandle pipeline) {
 void VulkanCommandList::bind_resource_set(ResourceSetHandle set) {
     auto* rs = device_.get_resource_set(set);
     if (!rs || !current_layout_) return;
+
+    // Walk the set's SampledTexture bindings and transition each image
+    // to SHADER_READ_ONLY_OPTIMAL. Textures that were just rendered into
+    // (and so are sitting in COLOR_ATTACHMENT_OPTIMAL) fail validation
+    // otherwise, because the descriptor write baked in SHADER_READ_ONLY_
+    // OPTIMAL as the "expected" layout. This is the compositor case:
+    // render into `_main_tex`, then sample from it in the unpremul
+    // pass. Caller doesn't need to emit explicit barriers.
+    for (const auto& b : rs->desc.bindings) {
+        if (b.kind != ResourceBinding::Kind::SampledTexture) continue;
+        auto* tex = device_.get_texture(b.texture);
+        if (!tex || tex->image == VK_NULL_HANDLE) continue;
+        if (tex->current_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) continue;
+        device_.transition_image_layout(cmd_, tex->image,
+            tex->current_layout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+        tex->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
 
     vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS,
                              current_layout_, 0, 1, &rs->descriptor_set, 0, nullptr);
