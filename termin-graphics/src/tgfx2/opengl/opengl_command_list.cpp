@@ -354,6 +354,22 @@ void OpenGLCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
     auto* d = device_.get_texture(dst);
     if (!s || !d) return;
 
+    // Attachment point + blit mask depend on whether this is colour
+    // or depth/stencil. Previously we hard-wired COLOR_ATTACHMENT0 +
+    // COLOR_BUFFER_BIT, which made the FBO incomplete for depth textures
+    // and blit silently no-op'd — shadow-map captures in Frame Debugger
+    // came back all zero.
+    auto is_depth = [](PixelFormat f) {
+        return f == PixelFormat::D24_UNorm ||
+               f == PixelFormat::D24_UNorm_S8_UInt ||
+               f == PixelFormat::D32F;
+    };
+    const bool depth_copy = is_depth(s->desc.format);
+    const GLenum attach = depth_copy ? GL_DEPTH_ATTACHMENT : GL_COLOR_ATTACHMENT0;
+    const GLbitfield bit = depth_copy ? GL_DEPTH_BUFFER_BIT : GL_COLOR_BUFFER_BIT;
+    // Depth blits must be GL_NEAREST per spec; linear only valid for color.
+    const GLenum filter = depth_copy ? GL_NEAREST : GL_NEAREST;
+
     // glBlitFramebuffer honours GL_SCISSOR_TEST and the color write mask.
     // Previous UI/clipping passes may leave scissor enabled with a tiny
     // rect — then blit copies only that rect and PostFX's color_pp shows
@@ -364,29 +380,43 @@ void OpenGLCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
     GLboolean was_scissor = glIsEnabled(GL_SCISSOR_TEST);
     GLboolean color_mask[4];
     glGetBooleanv(GL_COLOR_WRITEMASK, color_mask);
+    GLboolean depth_mask = GL_TRUE;
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &depth_mask);
 
     if (was_scissor) glDisable(GL_SCISSOR_TEST);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDepthMask(GL_TRUE);
 
     GLuint fbo_read = 0, fbo_draw = 0;
     glGenFramebuffers(1, &fbo_read);
     glGenFramebuffers(1, &fbo_draw);
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo_read);
-    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, s->target, s->gl_id, 0);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, attach, s->target, s->gl_id, 0);
+    if (!depth_copy) {
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+    }
 
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo_draw);
-    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, d->target, d->gl_id, 0);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, attach, d->target, d->gl_id, 0);
+    if (!depth_copy) {
+        GLenum draw_buf = GL_COLOR_ATTACHMENT0;
+        glDrawBuffers(1, &draw_buf);
+    } else {
+        glDrawBuffer(GL_NONE);
+        glReadBuffer(GL_NONE);
+    }
 
     glBlitFramebuffer(0, 0, s->desc.width, s->desc.height,
                       0, 0, d->desc.width, d->desc.height,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                      bit, filter);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glDeleteFramebuffers(1, &fbo_read);
     glDeleteFramebuffers(1, &fbo_draw);
 
     glColorMask(color_mask[0], color_mask[1], color_mask[2], color_mask[3]);
+    glDepthMask(depth_mask);
     if (was_scissor) glEnable(GL_SCISSOR_TEST);
 }
 

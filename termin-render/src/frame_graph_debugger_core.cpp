@@ -79,15 +79,32 @@ void FrameGraphCapture::ensure_capture_tex(
     height_ = h;
     format_ = fmt;
 
+    auto is_depth = [](tgfx::PixelFormat f) {
+        return f == tgfx::PixelFormat::D24_UNorm ||
+               f == tgfx::PixelFormat::D24_UNorm_S8_UInt ||
+               f == tgfx::PixelFormat::D32F;
+    };
+
     tgfx::TextureDesc desc;
     desc.width = static_cast<uint32_t>(w);
     desc.height = static_cast<uint32_t>(h);
     desc.format = fmt;
     desc.sample_count = 1;
-    desc.usage = tgfx::TextureUsage::Sampled |
-                 tgfx::TextureUsage::ColorAttachment |
-                 tgfx::TextureUsage::CopySrc |
-                 tgfx::TextureUsage::CopyDst;
+    // Color vs depth-stencil attachment is mutually exclusive on Vulkan;
+    // picking the right bit lets blit targets for shadow maps succeed.
+    // CopySrc/CopyDst stay on both paths — Frame Debugger eventually
+    // reads the capture out and/or re-blits it.
+    if (is_depth(fmt)) {
+        desc.usage = tgfx::TextureUsage::Sampled |
+                     tgfx::TextureUsage::DepthStencilAttachment |
+                     tgfx::TextureUsage::CopySrc |
+                     tgfx::TextureUsage::CopyDst;
+    } else {
+        desc.usage = tgfx::TextureUsage::Sampled |
+                     tgfx::TextureUsage::ColorAttachment |
+                     tgfx::TextureUsage::CopySrc |
+                     tgfx::TextureUsage::CopyDst;
+    }
     capture_tex_ = device.create_texture(desc);
 }
 
