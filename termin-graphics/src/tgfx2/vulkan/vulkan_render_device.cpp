@@ -1363,9 +1363,15 @@ void VulkanRenderDevice::blit_to_texture(
     // single → MSAA has no single Vulkan command — semantically ambiguous
     // (how do you broadcast one sample across N?). Reject with a warn.
     if (dst->desc.sample_count > 1 && src->desc.sample_count == 1) {
-        fprintf(stderr, "[Vulkan] blit_to_texture: single → MSAA (dst=%u "
-                        "samples) is not representable — skipping\n",
-                dst->desc.sample_count);
+        fprintf(stderr, "[Vulkan] blit_to_texture: single → MSAA — skipping "
+                        "(src h=%u %ux%u fmt=%d samples=1 usage=0x%x, "
+                        "dst h=%u %ux%u fmt=%d samples=%u usage=0x%x)\n",
+                src_handle.id, src->desc.width, src->desc.height,
+                (int)src->desc.format,
+                (unsigned)src->desc.usage,
+                dst_handle.id, dst->desc.width, dst->desc.height,
+                (int)dst->desc.format, dst->desc.sample_count,
+                (unsigned)dst->desc.usage);
         return;
     }
 
