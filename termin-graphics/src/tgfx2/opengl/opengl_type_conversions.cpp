@@ -23,6 +23,27 @@ GLFormatInfo to_gl_format(PixelFormat fmt) {
     return {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
 }
 
+uint32_t pixel_bytes(PixelFormat fmt) {
+    switch (fmt) {
+        case PixelFormat::R8_UNorm:           return 1;
+        case PixelFormat::RG8_UNorm:          return 2;
+        case PixelFormat::RGB8_UNorm:         return 3;
+        case PixelFormat::RGBA8_UNorm:        return 4;
+        case PixelFormat::BGRA8_UNorm:        return 4;
+        case PixelFormat::R16F:               return 2;
+        case PixelFormat::RG16F:              return 4;
+        case PixelFormat::RGBA16F:            return 8;
+        case PixelFormat::R32F:               return 4;
+        case PixelFormat::RG32F:              return 8;
+        case PixelFormat::RGBA32F:            return 16;
+        case PixelFormat::D24_UNorm:          return 4;
+        case PixelFormat::D24_UNorm_S8_UInt:  return 4;
+        case PixelFormat::D32F:               return 4;
+        case PixelFormat::Undefined:          return 0;
+    }
+    return 0;
+}
+
 GLenum to_gl_compare(CompareOp op) {
     switch (op) {
         case CompareOp::Never:        return GL_NEVER;

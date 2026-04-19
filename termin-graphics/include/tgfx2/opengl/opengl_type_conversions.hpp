@@ -15,6 +15,10 @@ struct GLFormatInfo {
 
 GLFormatInfo to_gl_format(PixelFormat fmt);
 
+// Bytes per pixel for the given format — used by the OpenGL backend to
+// Y-flip texture upload payloads (see coord_system.md §4).
+uint32_t pixel_bytes(PixelFormat fmt);
+
 GLenum to_gl_compare(CompareOp op);
 GLenum to_gl_blend_factor(BlendFactor f);
 GLenum to_gl_blend_op(BlendOp op);

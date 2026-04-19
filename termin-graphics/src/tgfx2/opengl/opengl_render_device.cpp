@@ -194,6 +194,78 @@ SamplerHandle OpenGLRenderDevice::create_sampler(const SamplerDesc& desc) {
 
 // --- Shader ---
 
+// GLSL overlay injected after #version / extension lines on OpenGL
+// shaders. Pairs with the Y-flip of upload_texture payloads so that
+// sampling reads the "Vulkan row 0 = visual top" convention uniformly
+// on both backends. See docs/coord_system.md §4.
+//
+// Rules:
+//   - Only sampler2D / sampler2DShadow get the V-flip. 3D / Cube / array
+//     shadow variants pass the coord through unchanged.
+//   - textureLod, textureGrad, texelFetch keep the same flip behaviour.
+//   - Other overloads (textureGather, textureProj, etc.) are *not*
+//     covered yet — add them here if a shader needs them.
+//   - The helpers are declared before the `#define` so that their bodies
+//     can still call the original builtin `texture()` / `texelFetch()`.
+//     Macros only expand in source that follows the `#define` lines,
+//     so the helpers' internal use of `texture` / `texelFetch` resolves
+//     to the builtin, not to itself.
+static constexpr const char* kGLSamplingFlipOverlay =
+    "// tgfx2-GL-sampling-flip\n"
+    "vec4  _tgfx_gl_tex(sampler2D s, vec2 uv)             { return texture(s, vec2(uv.x, 1.0 - uv.y)); }\n"
+    "vec4  _tgfx_gl_tex(sampler2D s, vec2 uv, float lod)  { return textureLod(s, vec2(uv.x, 1.0 - uv.y), lod); }\n"
+    "vec4  _tgfx_gl_tex(sampler3D s, vec3 uvw)            { return texture(s, uvw); }\n"
+    "vec4  _tgfx_gl_tex(samplerCube s, vec3 dir)          { return texture(s, dir); }\n"
+    "float _tgfx_gl_tex(sampler2DShadow s, vec3 uvz)      { return texture(s, vec3(uvz.x, 1.0 - uvz.y, uvz.z)); }\n"
+    "vec4  _tgfx_gl_texel(sampler2D s, ivec2 p, int lod) {\n"
+    "    ivec2 sz = textureSize(s, lod);\n"
+    "    return texelFetch(s, ivec2(p.x, sz.y - 1 - p.y), lod);\n"
+    "}\n"
+    "#define texture _tgfx_gl_tex\n"
+    "#define texelFetch _tgfx_gl_texel\n";
+
+// Find the end of the #version directive (and subsequent #extension
+// lines — they must precede any non-preprocessor code in GLSL) and
+// insert `overlay` there. If no #version is present, insert at the
+// very start.
+static std::string inject_after_version(const std::string& source,
+                                        const char* overlay) {
+    size_t ver_pos = source.find("#version");
+    if (ver_pos == std::string::npos) {
+        return std::string(overlay) + source;
+    }
+    // Find the end of the line that contains #version.
+    size_t eol = source.find('\n', ver_pos);
+    if (eol == std::string::npos) {
+        return source + "\n" + overlay;
+    }
+    // Consume any subsequent #extension lines so we don't split the
+    // preprocessor block.
+    size_t insert_pos = eol + 1;
+    while (insert_pos < source.size()) {
+        // Skip whitespace/newlines between directives.
+        size_t line_start = insert_pos;
+        while (line_start < source.size() &&
+               (source[line_start] == ' ' || source[line_start] == '\t' ||
+                source[line_start] == '\r' || source[line_start] == '\n')) {
+            ++line_start;
+        }
+        if (source.compare(line_start, 10, "#extension") != 0) break;
+        size_t next_eol = source.find('\n', line_start);
+        if (next_eol == std::string::npos) {
+            insert_pos = source.size();
+            break;
+        }
+        insert_pos = next_eol + 1;
+    }
+    std::string out;
+    out.reserve(source.size() + std::strlen(overlay));
+    out.append(source, 0, insert_pos);
+    out.append(overlay);
+    out.append(source, insert_pos, std::string::npos);
+    return out;
+}
+
 ShaderHandle OpenGLRenderDevice::create_shader(const ShaderDesc& desc) {
     if (desc.source.empty()) {
         return {0};
@@ -210,6 +282,10 @@ ShaderHandle OpenGLRenderDevice::create_shader(const ShaderDesc& desc) {
     // create_shader runs the exact same step so shaders line up
     // across backends.
     std::string resolved = internal::preprocess_shader_source(desc.source);
+    // On OpenGL, wrap sampling builtins so v=0 = top of content
+    // regardless of whether the texture was uploaded from CPU (flipped
+    // in upload_texture) or rendered into (bottom-up FBO memory).
+    resolved = inject_after_version(resolved, kGLSamplingFlipOverlay);
     const char* src = resolved.c_str();
 
     glShaderSource(mod.gl_shader, 1, &src, nullptr);
@@ -423,6 +499,20 @@ void OpenGLRenderDevice::upload_buffer(BufferHandle dst, std::span<const uint8_t
     glBindBuffer(buf->target, 0);
 }
 
+// Fill `dst` with the byte-reversed rows of `src`. Caller supplies
+// `row_bytes` (bytes per row) and `rows` (number of rows). dst and src
+// must not overlap. Used by the OpenGL backend to Y-flip upload payloads
+// so that sampling (also Y-flipped in shaders) pairs up to produce
+// Vulkan-native behaviour — see docs/coord_system.md §4.
+static void flip_rows(uint8_t* dst, const uint8_t* src,
+                      uint32_t row_bytes, uint32_t rows) {
+    for (uint32_t r = 0; r < rows; ++r) {
+        std::memcpy(dst + r * row_bytes,
+                    src + (rows - 1 - r) * row_bytes,
+                    row_bytes);
+    }
+}
+
 void OpenGLRenderDevice::upload_texture(TextureHandle dst, std::span<const uint8_t> data, uint32_t mip) {
     auto* tex = textures_.get(dst.id);
     if (!tex) return;
@@ -430,9 +520,22 @@ void OpenGLRenderDevice::upload_texture(TextureHandle dst, std::span<const uint8
     auto fmt = gl::to_gl_format(tex->desc.format);
     uint32_t w = std::max(1u, tex->desc.width >> mip);
     uint32_t h = std::max(1u, tex->desc.height >> mip);
+    uint32_t row_bytes = w * gl::pixel_bytes(tex->desc.format);
+
+    // Y-flip the payload: user supplies row 0 = top of image (Vulkan
+    // convention), but GL sampling is Y-flipped as well (see the GLSL
+    // macro injection in create_shader), so storing the image upside
+    // down here cancels out and gives v=0 = user's top on sampling.
+    std::vector<uint8_t> flipped;
+    const uint8_t* upload_ptr = data.data();
+    if (row_bytes > 0 && h > 1 && data.size() >= static_cast<size_t>(row_bytes) * h) {
+        flipped.resize(static_cast<size_t>(row_bytes) * h);
+        flip_rows(flipped.data(), data.data(), row_bytes, h);
+        upload_ptr = flipped.data();
+    }
 
     glBindTexture(tex->target, tex->gl_id);
-    glTexSubImage2D(tex->target, mip, 0, 0, w, h, fmt.format, fmt.type, data.data());
+    glTexSubImage2D(tex->target, mip, 0, 0, w, h, fmt.format, fmt.type, upload_ptr);
     glBindTexture(tex->target, 0);
 }
 
@@ -445,12 +548,27 @@ void OpenGLRenderDevice::upload_texture_region(TextureHandle dst,
     if (!tex) return;
 
     auto fmt = gl::to_gl_format(tex->desc.format);
+    uint32_t row_bytes = w * gl::pixel_bytes(tex->desc.format);
+
+    // Flip the region's rows in place (so data's row 0 = top of the
+    // sub-image ends up at the bottom of the GL upload) and translate
+    // the destination Y from top-left to bottom-left framebuffer coords.
+    std::vector<uint8_t> flipped;
+    const uint8_t* upload_ptr = data.data();
+    if (row_bytes > 0 && h > 1 && data.size() >= static_cast<size_t>(row_bytes) * h) {
+        flipped.resize(static_cast<size_t>(row_bytes) * h);
+        flip_rows(flipped.data(), data.data(), row_bytes, h);
+        upload_ptr = flipped.data();
+    }
+
+    uint32_t tex_h = std::max(1u, tex->desc.height >> mip);
+    uint32_t gl_y = (tex_h > y + h) ? (tex_h - y - h) : 0;
 
     glBindTexture(tex->target, tex->gl_id);
     glTexSubImage2D(tex->target, mip,
-                    static_cast<GLint>(x), static_cast<GLint>(y),
+                    static_cast<GLint>(x), static_cast<GLint>(gl_y),
                     static_cast<GLsizei>(w), static_cast<GLsizei>(h),
-                    fmt.format, fmt.type, data.data());
+                    fmt.format, fmt.type, upload_ptr);
     glBindTexture(tex->target, 0);
 }
 

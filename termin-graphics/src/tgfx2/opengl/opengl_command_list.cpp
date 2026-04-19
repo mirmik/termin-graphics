@@ -42,11 +42,13 @@ void OpenGLCommandList::begin_render_pass(const RenderPassDesc& pass) {
         auto* tex = device_.get_texture(pass.colors[0].texture);
         if (tex) {
             glViewport(0, 0, tex->desc.width, tex->desc.height);
+            cached_fb_height_ = static_cast<int>(tex->desc.height);
         }
     } else if (pass.has_depth && pass.depth.texture) {
         auto* tex = device_.get_texture(pass.depth.texture);
         if (tex) {
             glViewport(0, 0, tex->desc.width, tex->desc.height);
+            cached_fb_height_ = static_cast<int>(tex->desc.height);
         }
     }
 
@@ -381,19 +383,27 @@ void OpenGLCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
 // --- Dynamic state ---
 
 void OpenGLCommandList::set_viewport(int x, int y, int width, int height) {
-    glViewport(x, y, width, height);
-    cached_viewport_height_ = height;
+    // Caller contract is top-left origin (matches Vulkan / tcgui).
+    // glViewport's y is bottom-up — glClipControl(GL_UPPER_LEFT) only
+    // flips the clip→window mapping, not the viewport origin itself.
+    // Flip here using the framebuffer height recorded in
+    // begin_render_pass.
+    const int gl_y = (cached_fb_height_ > 0)
+        ? (cached_fb_height_ - (y + height))
+        : y;
+    glViewport(x, gl_y, width, height);
 }
 
 void OpenGLCommandList::set_scissor(int x, int y, int width, int height) {
     if (width == 0 && height == 0) {
         glDisable(GL_SCISSOR_TEST);
     } else {
-        // glClipControl(GL_UPPER_LEFT) in OpenGLRenderDevice makes window
-        // coordinates top-left-origin, so glScissor already accepts the
-        // Vulkan-native contract (y=0 = top row). No flip needed.
+        // Same top-left → bottom-left flip as set_viewport.
+        const int gl_y = (cached_fb_height_ > 0)
+            ? (cached_fb_height_ - (y + height))
+            : y;
         glEnable(GL_SCISSOR_TEST);
-        glScissor(x, y, width, height);
+        glScissor(x, gl_y, width, height);
     }
 }
 
