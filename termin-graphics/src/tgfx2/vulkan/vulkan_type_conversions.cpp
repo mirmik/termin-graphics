@@ -76,11 +76,21 @@ VkCullModeFlags to_vk_cull_mode(CullMode mode) {
 }
 
 VkFrontFace to_vk_front_face(FrontFace face) {
+    // tgfx2 FrontFace is defined in *view-space* (= mesh-authoring
+    // space before the Y-flip projection). Both backends go through
+    // the same Y-down Vulkan-native clip; OpenGL reaches it via
+    // glClipControl(GL_UPPER_LEFT), which according to Khronos
+    // reverses glFrontFace semantics relative to the default LOWER_LEFT
+    // convention. Vulkan's own winding rule stays as in the spec.
+    //
+    // Net effect: for the same API enum, the two backends need
+    // opposite native constants. The mapping below swaps on Vulkan;
+    // OpenGL keeps the direct enum→GL_* match.
     switch (face) {
-        case FrontFace::CCW: return VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        case FrontFace::CW:  return VK_FRONT_FACE_CLOCKWISE;
+        case FrontFace::CCW: return VK_FRONT_FACE_CLOCKWISE;
+        case FrontFace::CW:  return VK_FRONT_FACE_COUNTER_CLOCKWISE;
     }
-    return VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    return VK_FRONT_FACE_CLOCKWISE;
 }
 
 VkPolygonMode to_vk_polygon_mode(PolygonMode mode) {
