@@ -1,7 +1,10 @@
 #include "termin/render/tgfx2_bridge.hpp"
 
+#include <mutex>
+#include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 
 #include <tcbase/tc_log.hpp>
 
@@ -10,6 +13,7 @@
 #include "tgfx/resources/tc_texture_registry.h"
 #include "tgfx/tc_gpu_context.h"
 #include "tgfx/tc_gpu_share_group.h"
+#include "tgfx2/i_render_device.hpp"
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #include "tgfx2/descriptors.hpp"
 
@@ -95,47 +99,109 @@ tgfx::TextureHandle wrap_tc_texture_as_tgfx2(
     );
 }
 
-Tgfx2MeshBinding wrap_mesh_as_tgfx2(
-    tgfx::OpenGLRenderDevice& device,
-    tc_mesh* mesh
-) {
-    Tgfx2MeshBinding out;
-    if (!mesh) {
-        tc::Log::error("wrap_mesh_as_tgfx2: null mesh");
-        return out;
-    }
+namespace {
 
-    // Materialize the share group's VBO/EBO via the legacy upload path.
-    // Returns 0 on failure.
-    if (tc_mesh_upload_gpu(mesh) == 0) {
-        tc::Log::error("wrap_mesh_as_tgfx2: tc_mesh_upload_gpu failed for '%s'",
+// Cached per-(mesh, device) tgfx2 buffers for non-GL backends. The GL
+// path keeps using register_external_buffer against the share group's
+// VBO/EBO, so it doesn't need this cache.
+struct CachedMeshBuffers {
+    tgfx::IRenderDevice* device = nullptr;
+    tgfx::BufferHandle   vbo;
+    tgfx::BufferHandle   ebo;
+    uint32_t             version = 0;
+};
+
+struct CacheKey {
+    tc_mesh*             mesh;
+    tgfx::IRenderDevice* device;
+    bool operator==(const CacheKey& o) const noexcept {
+        return mesh == o.mesh && device == o.device;
+    }
+};
+
+struct CacheKeyHash {
+    size_t operator()(const CacheKey& k) const noexcept {
+        auto h1 = std::hash<void*>{}(static_cast<void*>(k.mesh));
+        auto h2 = std::hash<void*>{}(static_cast<void*>(k.device));
+        return h1 ^ (h2 * 0x9e3779b97f4a7c15ull);
+    }
+};
+
+std::mutex g_mesh_cache_mtx;
+std::unordered_map<CacheKey, CachedMeshBuffers, CacheKeyHash> g_mesh_cache;
+
+// Create tgfx2 VBO/EBO from a tc_mesh's CPU-side vertex/index blobs.
+// Used on non-GL backends where there is no legacy share-group slot to
+// wrap. Failures log and return an empty CachedMeshBuffers (vbo/ebo
+// stay zero-initialised so the caller can short-circuit).
+CachedMeshBuffers upload_mesh_to_device(
+    tgfx::IRenderDevice& device, tc_mesh* mesh
+) {
+    CachedMeshBuffers out;
+    out.device = &device;
+    out.version = mesh->header.version;
+
+    if (!mesh->vertices || mesh->vertex_count == 0 ||
+        !mesh->indices  || mesh->index_count == 0)
+    {
+        tc::Log::error("wrap_mesh_as_tgfx2/vk: mesh '%s' has no CPU data",
                        mesh->header.name ? mesh->header.name : mesh->header.uuid);
         return out;
     }
 
-    tc_gpu_context* ctx = tc_gpu_get_context();
-    if (!ctx || !ctx->share_group) {
-        tc::Log::error("wrap_mesh_as_tgfx2: no active GPU context");
-        return out;
-    }
-    tc_gpu_mesh_data_slot* slot = tc_gpu_share_group_mesh_data_slot(
-        ctx->share_group, mesh->header.pool_index);
-    if (!slot || slot->vbo == 0 || slot->ebo == 0) {
-        tc::Log::error("wrap_mesh_as_tgfx2: mesh data slot has no VBO/EBO");
-        return out;
-    }
+    const size_t vb_size = mesh->vertex_count *
+                           static_cast<size_t>(mesh->layout.stride);
+    const size_t ib_size = mesh->index_count * sizeof(uint32_t);
 
     tgfx::BufferDesc vb_desc;
-    vb_desc.size = static_cast<uint64_t>(mesh->vertex_count) *
-                   static_cast<uint64_t>(mesh->layout.stride);
-    vb_desc.usage = tgfx::BufferUsage::Vertex;
-    out.vertex_buffer = device.register_external_buffer(slot->vbo, vb_desc);
+    vb_desc.size  = vb_size;
+    vb_desc.usage = tgfx::BufferUsage::Vertex | tgfx::BufferUsage::CopyDst;
+    out.vbo = device.create_buffer(vb_desc);
+    device.upload_buffer(
+        out.vbo,
+        std::span<const uint8_t>(
+            static_cast<const uint8_t*>(mesh->vertices), vb_size));
 
     tgfx::BufferDesc ib_desc;
-    ib_desc.size = static_cast<uint64_t>(mesh->index_count) * sizeof(uint32_t);
-    ib_desc.usage = tgfx::BufferUsage::Index;
-    out.index_buffer = device.register_external_buffer(slot->ebo, ib_desc);
+    ib_desc.size  = ib_size;
+    ib_desc.usage = tgfx::BufferUsage::Index | tgfx::BufferUsage::CopyDst;
+    out.ebo = device.create_buffer(ib_desc);
+    device.upload_buffer(
+        out.ebo,
+        std::span<const uint8_t>(
+            reinterpret_cast<const uint8_t*>(mesh->indices), ib_size));
 
+    return out;
+}
+
+// Look up (mesh, device) in the cache. Re-uploads when mesh version
+// bumped or cache miss. Returns pointer to the cache entry (stable —
+// the cache is an unordered_map that only rehashes on insert).
+CachedMeshBuffers* ensure_cached_mesh_buffers(
+    tgfx::IRenderDevice& device, tc_mesh* mesh
+) {
+    std::lock_guard<std::mutex> lock(g_mesh_cache_mtx);
+    CacheKey key{mesh, &device};
+    auto it = g_mesh_cache.find(key);
+    if (it != g_mesh_cache.end()) {
+        CachedMeshBuffers& cached = it->second;
+        if (cached.version == mesh->header.version) {
+            return &cached;
+        }
+        // Version bumped — destroy the old buffers and re-upload.
+        if (cached.vbo) device.destroy(cached.vbo);
+        if (cached.ebo) device.destroy(cached.ebo);
+        cached = upload_mesh_to_device(device, mesh);
+        return &cached;
+    }
+    auto [ins_it, _] = g_mesh_cache.emplace(
+        key, upload_mesh_to_device(device, mesh));
+    return &ins_it->second;
+}
+
+// Build the layout + index_count + topology portion of the binding
+// from the tc_mesh — shared between GL and non-GL paths.
+bool fill_binding_from_mesh(Tgfx2MeshBinding& out, tc_mesh* mesh) {
     out.layout.stride = mesh->layout.stride;
     out.layout.attributes.reserve(mesh->layout.attrib_count);
     for (uint8_t i = 0; i < mesh->layout.attrib_count; i++) {
@@ -251,7 +317,105 @@ Tgfx2MeshBinding wrap_mesh_as_tgfx2(
         ? tgfx::PrimitiveTopology::LineList
         : tgfx::PrimitiveTopology::TriangleList;
 
+    return true;
+}
+
+// OpenGL-specific branch: materialize via the legacy share-group slot
+// and register_external_buffer. Buffers are non-owning and must be
+// destroy()'d by the caller (done in release_mesh_binding).
+Tgfx2MeshBinding wrap_mesh_gl(
+    tgfx::OpenGLRenderDevice& device, tc_mesh* mesh
+) {
+    Tgfx2MeshBinding out;
+
+    if (tc_mesh_upload_gpu(mesh) == 0) {
+        tc::Log::error("wrap_mesh_as_tgfx2: tc_mesh_upload_gpu failed for '%s'",
+                       mesh->header.name ? mesh->header.name : mesh->header.uuid);
+        return out;
+    }
+
+    tc_gpu_context* ctx = tc_gpu_get_context();
+    if (!ctx || !ctx->share_group) {
+        tc::Log::error("wrap_mesh_as_tgfx2: no active GPU context");
+        return out;
+    }
+    tc_gpu_mesh_data_slot* slot = tc_gpu_share_group_mesh_data_slot(
+        ctx->share_group, mesh->header.pool_index);
+    if (!slot || slot->vbo == 0 || slot->ebo == 0) {
+        tc::Log::error("wrap_mesh_as_tgfx2: mesh data slot has no VBO/EBO");
+        return out;
+    }
+
+    tgfx::BufferDesc vb_desc;
+    vb_desc.size = static_cast<uint64_t>(mesh->vertex_count) *
+                   static_cast<uint64_t>(mesh->layout.stride);
+    vb_desc.usage = tgfx::BufferUsage::Vertex;
+    out.vertex_buffer = device.register_external_buffer(slot->vbo, vb_desc);
+
+    tgfx::BufferDesc ib_desc;
+    ib_desc.size = static_cast<uint64_t>(mesh->index_count) * sizeof(uint32_t);
+    ib_desc.usage = tgfx::BufferUsage::Index;
+    out.index_buffer = device.register_external_buffer(slot->ebo, ib_desc);
+
+    if (!fill_binding_from_mesh(out, mesh)) {
+        out = Tgfx2MeshBinding{};
+    }
     return out;
+}
+
+} // anonymous namespace
+
+Tgfx2MeshBinding wrap_mesh_as_tgfx2(
+    tgfx::IRenderDevice& device,
+    tc_mesh* mesh
+) {
+    Tgfx2MeshBinding out;
+    if (!mesh) {
+        tc::Log::error("wrap_mesh_as_tgfx2: null mesh");
+        return out;
+    }
+
+    // OpenGL keeps the legacy share-group path so existing callers that
+    // also use tc_mesh_draw_gpu / raw GL side-by-side stay consistent.
+    if (device.backend_type() == tgfx::BackendType::OpenGL) {
+        return wrap_mesh_gl(
+            static_cast<tgfx::OpenGLRenderDevice&>(device), mesh);
+    }
+
+    // Non-GL backend (currently Vulkan): there is no share-group slot to
+    // wrap, so we maintain our own (mesh, device) → (VBO, EBO) cache.
+    // Buffers are created once and reused across frames; mesh version
+    // bumps trigger a re-upload.
+    CachedMeshBuffers* cached = ensure_cached_mesh_buffers(device, mesh);
+    if (!cached || !cached->vbo || !cached->ebo) return out;
+
+    out.vertex_buffer = cached->vbo;
+    out.index_buffer  = cached->ebo;
+    if (!fill_binding_from_mesh(out, mesh)) {
+        out = Tgfx2MeshBinding{};
+    }
+    return out;
+}
+
+void release_mesh_binding(
+    tgfx::IRenderDevice& device,
+    const Tgfx2MeshBinding& binding
+) {
+    if (binding.index_count == 0) return;
+
+    if (device.backend_type() == tgfx::BackendType::OpenGL) {
+        // Handles returned by register_external_buffer are per-call
+        // non-owning wrappers around the share-group VBO/EBO. Destroy
+        // them to keep the handle pool bounded; underlying GL objects
+        // survive because they're marked external.
+        if (binding.vertex_buffer) device.destroy(binding.vertex_buffer);
+        if (binding.index_buffer)  device.destroy(binding.index_buffer);
+        return;
+    }
+
+    // Non-GL path: buffers are owned by the cache, reused across frames.
+    // Nothing to do per-draw.
+    (void)binding;
 }
 
 } // namespace termin

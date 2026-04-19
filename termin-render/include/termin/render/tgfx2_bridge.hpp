@@ -17,6 +17,7 @@ struct tc_mesh;
 
 namespace tgfx {
 class OpenGLRenderDevice;
+class IRenderDevice;
 }
 
 namespace termin {
@@ -56,14 +57,38 @@ struct Tgfx2MeshBinding {
 };
 
 // Wrap a tc_mesh's GPU shadow as a tgfx2 vertex/index buffer pair plus
-// its translated vertex layout. Triggers the legacy upload path first
-// (tc_mesh_upload_gpu) so the share group's VBO/EBO are guaranteed to
-// exist. Used by Phase 2 passes (ShadowPass, IdPass, ...) that draw
-// through tgfx2 while TcMesh itself still allocates GL buffers via
-// the legacy ops vtable.
+// its translated vertex layout. Used by Phase 2 passes (ShadowPass,
+// IdPass, ColorPass, ...) that draw through tgfx2 while tc_mesh still
+// owns the source CPU data.
+//
+// OpenGL path: triggers the legacy upload (tc_mesh_upload_gpu) so the
+// share group's VBO/EBO exist, then wraps them as non-owning tgfx2
+// buffers via register_external_buffer. The caller MUST destroy(handle)
+// both buffers after the draw — underlying GL objects survive.
+//
+// Non-GL path (Vulkan / future): uploads tc_mesh->vertices / ->indices
+// into freshly-created tgfx2 BufferHandles and caches them keyed on
+// (mesh, device). Returned handles stay owned by the cache; the caller
+// must NOT destroy them — they are reused across frames and released
+// when the cache entry is evicted (mesh version change / device
+// teardown).
+//
+// Call-site rule: always pair every non-empty wrap_mesh_as_tgfx2 result
+// with `release_mesh_binding(device, binding)` after the draw. That
+// function is a no-op on the cached (Vulkan) path and does the legacy
+// destroy() on the OpenGL path — one call site, both backends happy.
 RENDER_API Tgfx2MeshBinding wrap_mesh_as_tgfx2(
-    tgfx::OpenGLRenderDevice& device,
+    tgfx::IRenderDevice& device,
     tc_mesh* mesh
+);
+
+// Complement to wrap_mesh_as_tgfx2 — frees the buffers on the legacy
+// OpenGL path (where register_external_buffer'd handles leak otherwise),
+// and is a no-op on the cached non-GL path. Safe on a default-
+// constructed Tgfx2MeshBinding (index_count == 0).
+RENDER_API void release_mesh_binding(
+    tgfx::IRenderDevice& device,
+    const Tgfx2MeshBinding& binding
 );
 
 } // namespace termin
