@@ -102,7 +102,24 @@ void FrameGraphCapture::capture_direct_via_ctx2(
         return;
     }
 
-    ensure_capture_tex(ctx2->device(), width, height, format);
+    // The caller-supplied `format` is a hint — e.g. the classic call
+    // paths default it to RGBA8_UNorm. But Vulkan's blit refuses to
+    // mix aspects (depth → color produces a validation error and a
+    // silent no-op), and depth-stencil resources can't be sampled as
+    // plain RGBA anyway. So we look up the actual source format via
+    // the device and override the hint whenever the source is depth.
+    auto src_desc = ctx2->device().texture_desc(src_tex);
+    tgfx::PixelFormat effective = format;
+    auto is_depth = [](tgfx::PixelFormat f) {
+        return f == tgfx::PixelFormat::D24_UNorm ||
+               f == tgfx::PixelFormat::D24_UNorm_S8_UInt ||
+               f == tgfx::PixelFormat::D32F;
+    };
+    if (is_depth(src_desc.format)) {
+        effective = src_desc.format;
+    }
+
+    ensure_capture_tex(ctx2->device(), width, height, effective);
     if (!capture_tex_) {
         return;
     }
