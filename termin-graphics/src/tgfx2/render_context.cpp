@@ -365,9 +365,30 @@ void RenderContext2::defer_destroy(BufferHandle handle) {
 }
 
 // --- Transitional legacy-uniform setters ---
+//
+// These exist only for shaders that still declare plain `uniform sampler2D
+// u_foo;` / `uniform mat4 u_view;` style legacy uniforms on the GL path.
+// On Vulkan the whole mechanism is a dead end: SPIR-V has no name-based
+// uniform lookup, samplers and matrices live in descriptor sets + UBOs
+// that are wired by explicit `layout(binding = N)`. So every one of these
+// helpers short-circuits when the process has no GL loader — we detect
+// that through glad's function-pointer table being zeroed out.
+
+namespace {
+// True only when glad loaded a real OpenGL function. If the process
+// picked the Vulkan backend, `gladLoadGLLoader` was never called and
+// `glad_glGetIntegerv` (the macro behind `glGetIntegerv`) is still
+// nullptr. Calling through it crashes — this guard turns all the
+// helpers below into silent no-ops on Vulkan, which matches the
+// semantic they already have on a Vulkan shader (no legacy plain
+// uniforms to bind).
+inline bool gl_loader_ready() {
+    return glad_glGetIntegerv != nullptr;
+}
+} // namespace
 
 void RenderContext2::set_uniform_int(const char* name, int value) {
-    if (!name) return;
+    if (!name || !gl_loader_ready()) return;
     flush_pipeline();
     GLint prog = 0;
     glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
@@ -377,7 +398,7 @@ void RenderContext2::set_uniform_int(const char* name, int value) {
 }
 
 void RenderContext2::set_uniform_float(const char* name, float value) {
-    if (!name) return;
+    if (!name || !gl_loader_ready()) return;
     flush_pipeline();
     GLint prog = 0;
     glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
@@ -388,7 +409,7 @@ void RenderContext2::set_uniform_float(const char* name, float value) {
 
 void RenderContext2::set_uniform_mat4(const char* name, const float* data,
                                       bool transpose) {
-    if (!name || !data) return;
+    if (!name || !data || !gl_loader_ready()) return;
     flush_pipeline();
     GLint prog = 0;
     glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
@@ -402,7 +423,7 @@ void RenderContext2::set_uniform_mat4(const char* name, const float* data,
 }
 
 void RenderContext2::set_uniform_vec2(const char* name, float x, float y) {
-    if (!name) return;
+    if (!name || !gl_loader_ready()) return;
     flush_pipeline();
     GLint prog = 0;
     glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
@@ -412,7 +433,7 @@ void RenderContext2::set_uniform_vec2(const char* name, float x, float y) {
 }
 
 void RenderContext2::set_uniform_vec3(const char* name, float x, float y, float z) {
-    if (!name) return;
+    if (!name || !gl_loader_ready()) return;
     flush_pipeline();
     GLint prog = 0;
     glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
@@ -422,7 +443,7 @@ void RenderContext2::set_uniform_vec3(const char* name, float x, float y, float 
 }
 
 void RenderContext2::set_uniform_vec4(const char* name, float x, float y, float z, float w) {
-    if (!name) return;
+    if (!name || !gl_loader_ready()) return;
     flush_pipeline();
     GLint prog = 0;
     glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
@@ -433,7 +454,7 @@ void RenderContext2::set_uniform_vec4(const char* name, float x, float y, float 
 
 void RenderContext2::set_uniform_mat4_array(const char* name, const float* data,
                                              int count, bool transpose) {
-    if (!name || !data || count <= 0) return;
+    if (!name || !data || count <= 0 || !gl_loader_ready()) return;
     flush_pipeline();
     GLint prog = 0;
     glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
@@ -447,7 +468,7 @@ void RenderContext2::set_uniform_mat4_array(const char* name, const float* data,
 }
 
 void RenderContext2::set_block_binding(const char* block_name, uint32_t binding_slot) {
-    if (!block_name) return;
+    if (!block_name || !gl_loader_ready()) return;
     flush_pipeline();
     GLint prog = 0;
     glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
