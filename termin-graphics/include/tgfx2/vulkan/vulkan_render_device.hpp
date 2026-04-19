@@ -263,6 +263,63 @@ private:
     std::map<std::vector<VkImageView>, VkFramebuffer> framebuffer_cache_;
 
     bool validation_enabled_ = false;
+
+    // --- Frame sync / deferred destroy -----------------------------------
+    //
+    // One fence tracks the most-recent `submit()`. Every `destroy(XxxHandle)`
+    // queues the handle into `pending_destroy_current_`; at the next submit
+    // we wait on the in-flight fence (usually no real wait — GPU has caught
+    // up), then drain `pending_destroy_in_flight_` (resources from the
+    // previous frame, now GPU-safe to release). The current-frame queue
+    // becomes the next in-flight queue.
+    //
+    // This replaces the previous `vkDeviceWaitIdle`-per-destroy + `vkQueue-
+    // WaitIdle`-per-submit pattern, which stalled the CPU on every frame
+    // end and every deferred-destroyed resource set. On a typical editor
+    // frame that's 50-200 device-wide waits serialised into the hot path.
+    // With fence-based sync, rendering can overlap with CPU work and
+    // destroys only block if the GPU really hasn't finished yet.
+    //
+    // Callers must keep handles untouched after `destroy()` returns — the
+    // actual Vk objects are freed later, but `HandlePool` entries stay
+    // reserved until then, so reading through a destroyed handle returns
+    // stale (but valid memory) pointers. That's fine: it matches the
+    // previous behavior except for the lack of immediate wait.
+    struct PendingDestroyQueue {
+        std::vector<BufferHandle> buffers;
+        std::vector<TextureHandle> textures;
+        std::vector<SamplerHandle> samplers;
+        std::vector<ShaderHandle> shaders;
+        std::vector<PipelineHandle> pipelines;
+        std::vector<ResourceSetHandle> resource_sets;
+        // Raw VkCommandBuffers freed via `defer_cmd_buffer_free()` — used
+        // by VulkanCommandList's destructor to avoid freeing while the
+        // buffer is still in-flight on the queue.
+        std::vector<VkCommandBuffer> cmd_buffers;
+        bool empty() const {
+            return buffers.empty() && textures.empty() && samplers.empty()
+                && shaders.empty() && pipelines.empty()
+                && resource_sets.empty() && cmd_buffers.empty();
+        }
+    };
+    VkFence frame_fence_ = VK_NULL_HANDLE;
+    bool frame_fence_in_flight_ = false;
+    PendingDestroyQueue pending_destroy_current_;
+    PendingDestroyQueue pending_destroy_in_flight_;
+
+    // Drain `q` now — actually free the underlying Vk objects. Caller is
+    // responsible for ensuring GPU has finished using these resources.
+    void drain_pending_destroy(PendingDestroyQueue& q);
+
+public:
+    // Queue a VkCommandBuffer for deferred release. Called from
+    // VulkanCommandList's destructor — freeing a command buffer while its
+    // work is still in-flight on the queue is UB. The buffer will be
+    // released together with other in-flight resources after the next
+    // fence signal in `submit()`.
+    void defer_cmd_buffer_free(VkCommandBuffer cb) {
+        if (cb != VK_NULL_HANDLE) pending_destroy_current_.cmd_buffers.push_back(cb);
+    }
 };
 
 } // namespace tgfx

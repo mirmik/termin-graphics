@@ -21,8 +21,13 @@ VulkanCommandList::VulkanCommandList(VulkanRenderDevice& device)
 }
 
 VulkanCommandList::~VulkanCommandList() {
+    // Don't free immediately — the command buffer may still be in-flight
+    // on the graphics queue. Hand it off to the device's pending-destroy
+    // queue; it'll be released after the next fence signals in
+    // `VulkanRenderDevice::submit()`.
     if (cmd_) {
-        vkFreeCommandBuffers(device_.device(), device_.command_pool(), 1, &cmd_);
+        device_.defer_cmd_buffer_free(cmd_);
+        cmd_ = VK_NULL_HANDLE;
     }
 }
 

@@ -62,6 +62,17 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     create_descriptor_pool();
     create_shared_layouts();
 
+    // Frame fence: tracks in-flight submits. Created unsignaled — the
+    // first `submit()` sees `frame_fence_in_flight_ == false` and skips
+    // the wait; subsequent submits wait on it before reusing it.
+    {
+        VkFenceCreateInfo fci{};
+        fci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        if (vkCreateFence(device_, &fci, nullptr, &frame_fence_) != VK_SUCCESS) {
+            throw std::runtime_error("VulkanRenderDevice: vkCreateFence failed");
+        }
+    }
+
     // Build the swapchain now that queues/allocator are ready. A
     // surface without a size is a hosting bug; refuse to guess.
     if (surface_ != VK_NULL_HANDLE) {
@@ -90,11 +101,25 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
 }
 
 VulkanRenderDevice::~VulkanRenderDevice() {
+    // Shutdown is the one place where a full device-wide wait is actually
+    // correct: everything queued must finish before we tear down VkImages,
+    // VkBuffers, VkShaderModules etc. (freeing while in-flight is UB).
+    // During normal frame lifecycle `destroy()` queues into
+    // pending_destroy_{current,in_flight}_ and the per-submit fence keeps
+    // them safe — see VulkanRenderDevice::submit.
     if (device_) vkDeviceWaitIdle(device_);
 
     // Tear down the swapchain first — its sync objects and image
     // views are bound to device_ which is still alive at this point.
     swapchain_.reset();
+
+    // Both deferred-destroy queues are now safe to release (GPU is idle).
+    // The `in_flight` queue represents handles the previous frame freed;
+    // `current` holds handles freed during the current frame that were
+    // never submitted. Handle-pool lookups are still valid at this point,
+    // so drain them through the normal per-type helper.
+    drain_pending_destroy(pending_destroy_in_flight_);
+    drain_pending_destroy(pending_destroy_current_);
 
     // Destroy cached framebuffers
     for (auto& [k, fb] : framebuffer_cache_)
@@ -104,7 +129,9 @@ VulkanRenderDevice::~VulkanRenderDevice() {
     for (auto& [k, rp] : render_pass_cache_)
         vkDestroyRenderPass(device_, rp, nullptr);
 
-    // Destroy resources
+    // Destroy any resources that were never explicitly `destroy()`-ed and
+    // are still live in the handle pools. Keeps shutdown leak-free for
+    // callers that forgot to clean up.
     for (auto& [id, r] : buffers_) {
         if (r.buffer) vmaDestroyBuffer(allocator_, r.buffer, r.allocation);
     }
@@ -123,6 +150,7 @@ VulkanRenderDevice::~VulkanRenderDevice() {
         // layout and render_pass are shared/cached, cleaned separately
     }
 
+    if (frame_fence_) vkDestroyFence(device_, frame_fence_, nullptr);
     if (default_sampler_) vkDestroySampler(device_, default_sampler_, nullptr);
     if (shared_pipeline_layout_) vkDestroyPipelineLayout(device_, shared_pipeline_layout_, nullptr);
     if (descriptor_set_layout_) vkDestroyDescriptorSetLayout(device_, descriptor_set_layout_, nullptr);
@@ -977,55 +1005,80 @@ TextureDesc VulkanRenderDevice::texture_desc(TextureHandle handle) const {
     return {};
 }
 
+// All `destroy(*Handle)` calls queue the handle into
+// `pending_destroy_current_`; actual Vk releases happen after the
+// current frame's fence signals (see `submit()`). Caller's handle is
+// invalid to use after this returns — the pool entry stays reserved
+// until drain time.
+
 void VulkanRenderDevice::destroy(BufferHandle h) {
-    if (auto* r = buffers_.get(h.id)) {
-        vkDeviceWaitIdle(device_);
-        if (r->buffer) vmaDestroyBuffer(allocator_, r->buffer, r->allocation);
-        buffers_.remove(h.id);
-    }
+    if (h.id != 0) pending_destroy_current_.buffers.push_back(h);
 }
 
 void VulkanRenderDevice::destroy(TextureHandle h) {
-    if (auto* r = textures_.get(h.id)) {
-        vkDeviceWaitIdle(device_);
-        if (r->view) vkDestroyImageView(device_, r->view, nullptr);
-        if (r->image) vmaDestroyImage(allocator_, r->image, r->allocation);
-        textures_.remove(h.id);
-    }
+    if (h.id != 0) pending_destroy_current_.textures.push_back(h);
 }
 
 void VulkanRenderDevice::destroy(SamplerHandle h) {
-    if (auto* r = samplers_.get(h.id)) {
-        vkDeviceWaitIdle(device_);
-        if (r->sampler) vkDestroySampler(device_, r->sampler, nullptr);
-        samplers_.remove(h.id);
-    }
+    if (h.id != 0) pending_destroy_current_.samplers.push_back(h);
 }
 
 void VulkanRenderDevice::destroy(ShaderHandle h) {
-    if (auto* r = shaders_.get(h.id)) {
-        vkDeviceWaitIdle(device_);
-        if (r->module) vkDestroyShaderModule(device_, r->module, nullptr);
-        shaders_.remove(h.id);
-    }
+    if (h.id != 0) pending_destroy_current_.shaders.push_back(h);
 }
 
 void VulkanRenderDevice::destroy(PipelineHandle h) {
-    if (auto* r = pipelines_.get(h.id)) {
-        vkDeviceWaitIdle(device_);
-        if (r->pipeline) vkDestroyPipeline(device_, r->pipeline, nullptr);
-        pipelines_.remove(h.id);
-    }
+    if (h.id != 0) pending_destroy_current_.pipelines.push_back(h);
 }
 
 void VulkanRenderDevice::destroy(ResourceSetHandle h) {
-    if (auto* r = resource_sets_.get(h.id)) {
-        vkDeviceWaitIdle(device_);
-        if (r->descriptor_set) {
-            vkFreeDescriptorSets(device_, descriptor_pool_, 1, &r->descriptor_set);
+    if (h.id != 0) pending_destroy_current_.resource_sets.push_back(h);
+}
+
+void VulkanRenderDevice::drain_pending_destroy(PendingDestroyQueue& q) {
+    for (auto h : q.buffers) {
+        if (auto* r = buffers_.get(h.id)) {
+            if (r->buffer) vmaDestroyBuffer(allocator_, r->buffer, r->allocation);
+            buffers_.remove(h.id);
         }
-        resource_sets_.remove(h.id);
     }
+    for (auto h : q.textures) {
+        if (auto* r = textures_.get(h.id)) {
+            if (r->view) vkDestroyImageView(device_, r->view, nullptr);
+            if (r->image) vmaDestroyImage(allocator_, r->image, r->allocation);
+            textures_.remove(h.id);
+        }
+    }
+    for (auto h : q.samplers) {
+        if (auto* r = samplers_.get(h.id)) {
+            if (r->sampler) vkDestroySampler(device_, r->sampler, nullptr);
+            samplers_.remove(h.id);
+        }
+    }
+    for (auto h : q.shaders) {
+        if (auto* r = shaders_.get(h.id)) {
+            if (r->module) vkDestroyShaderModule(device_, r->module, nullptr);
+            shaders_.remove(h.id);
+        }
+    }
+    for (auto h : q.pipelines) {
+        if (auto* r = pipelines_.get(h.id)) {
+            if (r->pipeline) vkDestroyPipeline(device_, r->pipeline, nullptr);
+            pipelines_.remove(h.id);
+        }
+    }
+    for (auto h : q.resource_sets) {
+        if (auto* r = resource_sets_.get(h.id)) {
+            if (r->descriptor_set) {
+                vkFreeDescriptorSets(device_, descriptor_pool_, 1, &r->descriptor_set);
+            }
+            resource_sets_.remove(h.id);
+        }
+    }
+    for (auto cb : q.cmd_buffers) {
+        vkFreeCommandBuffers(device_, command_pool_, 1, &cb);
+    }
+    q = {};
 }
 
 // --- Upload ---
@@ -1180,13 +1233,30 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     auto& vcmd = static_cast<VulkanCommandList&>(cmd);
     VkCommandBuffer cb = vcmd.command_buffer();
 
+    // Before kicking off a new submit, retire the previous one. If the
+    // fence is in-flight we wait (usually signaled already by the time we
+    // get here — GPU rendering a shadow cascade takes a few ms at most),
+    // then drain the destroy queue that was waiting on it. These
+    // resources are now GPU-safe to free.
+    if (frame_fence_in_flight_) {
+        vkWaitForFences(device_, 1, &frame_fence_, VK_TRUE, UINT64_MAX);
+        vkResetFences(device_, 1, &frame_fence_);
+        drain_pending_destroy(pending_destroy_in_flight_);
+        frame_fence_in_flight_ = false;
+    }
+
+    // Destroys queued during *this* submit's recording graduate to
+    // in-flight status and will be freed after the fence signals.
+    pending_destroy_in_flight_ = std::move(pending_destroy_current_);
+    pending_destroy_current_ = {};
+
     VkSubmitInfo si{};
     si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     si.commandBufferCount = 1;
     si.pCommandBuffers = &cb;
 
-    vkQueueSubmit(graphics_queue_, 1, &si, VK_NULL_HANDLE);
-    vkQueueWaitIdle(graphics_queue_); // MVP: simple sync
+    vkQueueSubmit(graphics_queue_, 1, &si, frame_fence_);
+    frame_fence_in_flight_ = true;
 }
 
 void VulkanRenderDevice::present() {
