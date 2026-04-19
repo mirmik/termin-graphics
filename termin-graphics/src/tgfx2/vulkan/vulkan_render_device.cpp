@@ -1360,19 +1360,20 @@ void VulkanRenderDevice::blit_to_texture(
         fprintf(stderr, "[Vulkan] blit_to_texture: dst missing CopyDst usage — skipping\n");
         return;
     }
-    // vkCmdBlitImage rejects MSAA dst. MSAA→single resolve needs
-    // vkCmdResolveImage; a single→MSAA transition isn't representable in
-    // one command.
-    if (dst->desc.sample_count > 1) {
-        fprintf(stderr, "[Vulkan] blit_to_texture: dst is MSAA (%u samples) — "
-                        "not supported, skipping\n", dst->desc.sample_count);
+    // single → MSAA has no single Vulkan command — semantically ambiguous
+    // (how do you broadcast one sample across N?). Reject with a warn.
+    if (dst->desc.sample_count > 1 && src->desc.sample_count == 1) {
+        fprintf(stderr, "[Vulkan] blit_to_texture: single → MSAA (dst=%u "
+                        "samples) is not representable — skipping\n",
+                dst->desc.sample_count);
         return;
     }
 
     VkImageLayout prev_src = src->current_layout;
     VkImageLayout prev_dst = dst->current_layout;
 
-    bool msaa_resolve = src->desc.sample_count > 1;
+    bool msaa_resolve = src->desc.sample_count > 1 && dst->desc.sample_count == 1;
+    bool msaa_copy = src->desc.sample_count > 1 && dst->desc.sample_count == src->desc.sample_count;
 
     execute_immediate([&](VkCommandBuffer cb) {
         transition_image_layout(cb, src->image,
@@ -1402,6 +1403,32 @@ void VulkanRenderDevice::blit_to_texture(
                     src->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                     dst->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                     1, &resolve);
+            }
+        } else if (msaa_copy) {
+            // Matching MSAA→MSAA. vkCmdCopyImage requires matching
+            // formats + samples and no scaling. vkCmdBlitImage forbids
+            // MSAA dst, so a scale+MSAA combined op isn't legal — warn
+            // if sizes differ.
+            if (src_w != dst_w || src_h != dst_h) {
+                fprintf(stderr, "[Vulkan] blit_to_texture: MSAA→MSAA cannot "
+                                "rescale (%dx%d → %dx%d)\n",
+                        src_w, src_h, dst_w, dst_h);
+            } else if (src->desc.format != dst->desc.format) {
+                fprintf(stderr, "[Vulkan] blit_to_texture: MSAA→MSAA format "
+                                "mismatch (src fmt=%d, dst fmt=%d)\n",
+                        (int)src->desc.format, (int)dst->desc.format);
+            } else {
+                VkImageCopy region{};
+                region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                region.srcOffset = {src_x, src_y, 0};
+                region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                region.dstOffset = {dst_x, dst_y, 0};
+                region.extent = {static_cast<uint32_t>(src_w),
+                                 static_cast<uint32_t>(src_h), 1};
+                vkCmdCopyImage(cb,
+                    src->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    dst->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    1, &region);
             }
         } else {
             VkImageBlit blit{};
