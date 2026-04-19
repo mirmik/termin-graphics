@@ -651,8 +651,19 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
     // depth attachment. Conversely a pass with no depth attachment must
     // produce a pipeline whose cached RP also has no depth slot, or
     // vkCmdDraw fails with "RenderPasses incompatible".
+    // Pass the raw color_formats through — depth-only passes (ShadowPass,
+    // DepthPass) carry an empty list, and the pipeline's cached render
+    // pass must also have zero color attachments to stay compatible with
+    // the framebuffer begin_render_pass binds. Previous behaviour of
+    // force-pushing RGBA8_UNorm produced a 1-color RP that mismatched a
+    // 0-color framebuffer → vkCreateFramebuffer attachmentCount error.
     std::vector<PixelFormat> color_fmts = desc.color_formats;
-    if (color_fmts.empty()) color_fmts.push_back(PixelFormat::RGBA8_UNorm);
+    // Drop any `Undefined` entries — caller may have zero-initialised
+    // slots we should not attach.
+    color_fmts.erase(
+        std::remove(color_fmts.begin(), color_fmts.end(),
+                    PixelFormat::Undefined),
+        color_fmts.end());
     bool needs_depth = desc.depth_format != PixelFormat::Undefined;
     res.render_pass = get_or_create_render_pass(
         color_fmts, desc.depth_format, needs_depth, desc.sample_count,

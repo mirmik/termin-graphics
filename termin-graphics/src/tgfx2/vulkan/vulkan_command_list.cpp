@@ -48,31 +48,35 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
     uint32_t width = 0, height = 0;
 
     LoadOp color_load = LoadOp::Clear;
+    uint32_t sample_count = 1;
     current_pass_color_attachments_.clear();
+    // Collect real color attachments. Entries with a null texture or a
+    // missing device-side record are dropped — pushing a placeholder
+    // format for them made the render-pass cache build a 1-color RP
+    // that then mismatched a framebuffer carrying zero color views
+    // (depth-only passes like ShadowPass/DepthPass). The pass description
+    // `colors` list is authoritative for the attachment count.
     for (const auto& c : pass.colors) {
-        color_load = c.load;
-        if (c.texture) {
-            auto* tex = device_.get_texture(c.texture);
-            if (tex) {
-                color_fmts.push_back(tex->desc.format);
-                views.push_back(tex->view);
-                width = tex->desc.width;
-                height = tex->desc.height;
+        if (!c.texture) continue;
+        auto* tex = device_.get_texture(c.texture);
+        if (!tex) continue;
 
-                // Transition to color attachment if needed
-                if (tex->current_layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
-                    device_.transition_image_layout(cmd_, tex->image,
-                        tex->current_layout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                        VK_IMAGE_ASPECT_COLOR_BIT);
-                    tex->current_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-                }
-                current_pass_color_attachments_.push_back(c.texture);
-            }
-        } else {
-            color_fmts.push_back(PixelFormat::RGBA8_UNorm);
+        color_load = c.load;
+        color_fmts.push_back(tex->desc.format);
+        views.push_back(tex->view);
+        width = tex->desc.width;
+        height = tex->desc.height;
+        sample_count = tex->desc.sample_count;
+
+        // Transition to color attachment if needed
+        if (tex->current_layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+            device_.transition_image_layout(cmd_, tex->image,
+                tex->current_layout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                VK_IMAGE_ASPECT_COLOR_BIT);
+            tex->current_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         }
+        current_pass_color_attachments_.push_back(c.texture);
     }
-    if (color_fmts.empty()) color_fmts.push_back(PixelFormat::RGBA8_UNorm);
 
     PixelFormat depth_fmt = PixelFormat::D24_UNorm_S8_UInt;
     LoadOp depth_load = LoadOp::Clear;
@@ -83,21 +87,39 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
             depth_load = pass.depth.load;
             views.push_back(tex->view);
             if (width == 0) { width = tex->desc.width; height = tex->desc.height; }
+            // Depth attachment must match the color sample count. If we
+            // have no color, take it from here.
+            if (sample_count == 1 && tex->desc.sample_count > 1) {
+                sample_count = tex->desc.sample_count;
+            }
         }
     }
+    if (sample_count == 0) sample_count = 1;
 
     auto rp = device_.get_or_create_render_pass(color_fmts, depth_fmt, pass.has_depth,
-                                                  1, color_load, depth_load);
+                                                  sample_count, color_load, depth_load);
     auto fb = device_.get_or_create_framebuffer(rp, views, width, height);
 
-    // Clear values
+    // Clear values: one per attachment in the same order as the render
+    // pass was built. Colors first (only those actually attached —
+    // entries dropped above must not push a clear), then the optional
+    // depth slot.
     std::vector<VkClearValue> clears;
-    for (const auto& c : pass.colors) {
-        VkClearValue cv{};
-        cv.color = {{c.clear_color[0], c.clear_color[1], c.clear_color[2], c.clear_color[3]}};
-        clears.push_back(cv);
+    {
+        size_t color_idx = 0;
+        for (const auto& c : pass.colors) {
+            if (!c.texture) continue;
+            if (!device_.get_texture(c.texture)) continue;
+            if (color_idx >= color_fmts.size()) break;
+            VkClearValue cv{};
+            cv.color = {{c.clear_color[0], c.clear_color[1],
+                         c.clear_color[2], c.clear_color[3]}};
+            clears.push_back(cv);
+            ++color_idx;
+        }
     }
-    if (pass.has_depth) {
+    if (pass.has_depth && pass.depth.texture &&
+        device_.get_texture(pass.depth.texture)) {
         VkClearValue cv{};
         cv.depthStencil = {pass.depth.clear_depth, pass.depth.clear_stencil};
         clears.push_back(cv);

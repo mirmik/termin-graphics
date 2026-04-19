@@ -149,6 +149,24 @@ void RenderContext2::begin_pass(
         pipeline_dirty_ = true;
     }
 
+    // Sync the pipeline's multisample state with the attachment's actual
+    // sample count. FBOPool may allocate MSAA textures (e.g. scene color
+    // at 4x) while the pipeline cache key defaults to sample_count=1 —
+    // Vulkan then refuses vkCreateFramebuffer with SAMPLE_COUNT_4 vs
+    // SAMPLE_COUNT_1 mismatch. Pick the attachment that's present; if
+    // both are, trust the color (depth should match by construction).
+    uint32_t new_samples = 1;
+    if (color) {
+        new_samples = device_.texture_desc(color).sample_count;
+    } else if (depth) {
+        new_samples = device_.texture_desc(depth).sample_count;
+    }
+    if (new_samples == 0) new_samples = 1;
+    if (sample_count_ != new_samples) {
+        sample_count_ = new_samples;
+        pipeline_dirty_ = true;
+    }
+
     cmd_->begin_render_pass(pass);
     in_pass_ = true;
     pipeline_dirty_ = true;
