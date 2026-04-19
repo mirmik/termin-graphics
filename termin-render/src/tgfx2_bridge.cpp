@@ -46,20 +46,12 @@ tgfx::PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
 
 } // anonymous namespace
 
-tgfx::TextureHandle wrap_tc_texture_as_tgfx2(
+namespace {
+
+tgfx::TextureHandle wrap_tc_texture_gl(
     tgfx::OpenGLRenderDevice& device,
-    tc_texture_handle handle
+    tc_texture* tex
 ) {
-    if (tc_texture_handle_is_invalid(handle)) return {};
-
-    tc_texture* tex = tc_texture_get(handle);
-    if (!tex) {
-        tc::Log::error("wrap_tc_texture_as_tgfx2: tc_texture not found "
-                       "for handle (index=%u gen=%u)",
-                       handle.index, handle.generation);
-        return {};
-    }
-
     // Materialize the legacy GL texture object. Per-context upload
     // goes through tc_gpu_ops and stores the GL id on the share
     // group's texture slot at tex->header.pool_index.
@@ -97,6 +89,147 @@ tgfx::TextureHandle wrap_tc_texture_as_tgfx2(
         static_cast<GLuint>(slot->gl_id),
         desc
     );
+}
+
+// Non-GL backends have no share-group slot to wrap. Upload tc_texture's
+// pixel data into a real tgfx2 texture and cache (tex.pool_index,
+// device) → handle. Cached handle is reused until tex->version bumps.
+struct CachedTextureEntry {
+    tgfx::IRenderDevice* device = nullptr;
+    tgfx::TextureHandle  handle;
+    uint32_t             version = 0;
+};
+
+struct TexCacheKey {
+    uint32_t             pool_index;
+    tgfx::IRenderDevice* device;
+    bool operator==(const TexCacheKey& o) const noexcept {
+        return pool_index == o.pool_index && device == o.device;
+    }
+};
+
+struct TexCacheKeyHash {
+    size_t operator()(const TexCacheKey& k) const noexcept {
+        auto h1 = std::hash<uint32_t>{}(k.pool_index);
+        auto h2 = std::hash<void*>{}(static_cast<void*>(k.device));
+        return h1 ^ (h2 * 0x9e3779b97f4a7c15ull);
+    }
+};
+
+std::mutex g_tex_cache_mtx;
+std::unordered_map<TexCacheKey, CachedTextureEntry, TexCacheKeyHash> g_tex_cache;
+
+// Normalise tc_texture pixel data + format to something tgfx2 can upload
+// on every backend. RGB8 is not always supported on Vulkan, so expand to
+// RGBA8 (alpha = 255) here. Everything else is passed through unchanged.
+std::vector<uint8_t> normalize_pixels(
+    const tc_texture* tex, tgfx::PixelFormat& out_fmt
+) {
+    const auto fmt = static_cast<tc_texture_format>(tex->format);
+    const size_t src_bytes = tc_texture_data_size(tex);
+    const auto* src = static_cast<const uint8_t*>(tex->data);
+
+    std::vector<uint8_t> pixels;
+    if (fmt == TC_TEXTURE_RGB8) {
+        out_fmt = tgfx::PixelFormat::RGBA8_UNorm;
+        pixels.resize(size_t(tex->width) * tex->height * 4);
+        for (size_t i = 0, j = 0; i < src_bytes; i += 3, j += 4) {
+            pixels[j + 0] = src[i + 0];
+            pixels[j + 1] = src[i + 1];
+            pixels[j + 2] = src[i + 2];
+            pixels[j + 3] = 0xFF;
+        }
+        return pixels;
+    }
+
+    out_fmt = tc_format_to_tgfx2(fmt);
+    pixels.assign(src, src + src_bytes);
+    return pixels;
+}
+
+tgfx::TextureHandle wrap_tc_texture_non_gl(
+    tgfx::IRenderDevice& device, tc_texture* tex
+) {
+    if (!tex->data || tex->width == 0 || tex->height == 0) {
+        tc::Log::error("wrap_tc_texture_as_tgfx2: tc_texture '%s' has no CPU pixels",
+                       tex->header.name ? tex->header.name : tex->header.uuid);
+        return {};
+    }
+
+    std::lock_guard<std::mutex> lock(g_tex_cache_mtx);
+    TexCacheKey key{tex->header.pool_index, &device};
+    auto it = g_tex_cache.find(key);
+    if (it != g_tex_cache.end() && it->second.version == tex->header.version) {
+        return it->second.handle;
+    }
+
+    if (it != g_tex_cache.end()) {
+        if (it->second.handle) device.destroy(it->second.handle);
+        g_tex_cache.erase(it);
+    }
+
+    tgfx::PixelFormat fmt = tgfx::PixelFormat::RGBA8_UNorm;
+    std::vector<uint8_t> pixels = normalize_pixels(tex, fmt);
+    if (pixels.empty()) return {};
+
+    tgfx::TextureDesc desc;
+    desc.width = tex->width;
+    desc.height = tex->height;
+    desc.mip_levels = 1;
+    desc.sample_count = 1;
+    desc.format = fmt;
+    desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
+
+    tgfx::TextureHandle handle = device.create_texture(desc);
+    if (!handle) {
+        tc::Log::error("wrap_tc_texture_as_tgfx2: create_texture failed for '%s'",
+                       tex->header.name ? tex->header.name : tex->header.uuid);
+        return {};
+    }
+    device.upload_texture(
+        handle,
+        std::span<const uint8_t>(pixels.data(), pixels.size()));
+
+    CachedTextureEntry entry;
+    entry.device = &device;
+    entry.handle = handle;
+    entry.version = tex->header.version;
+    g_tex_cache.emplace(key, entry);
+    return handle;
+}
+
+} // anonymous namespace
+
+tgfx::TextureHandle wrap_tc_texture_as_tgfx2(
+    tgfx::IRenderDevice& device,
+    tc_texture_handle handle
+) {
+    if (tc_texture_handle_is_invalid(handle)) return {};
+
+    tc_texture* tex = tc_texture_get(handle);
+    if (!tex) {
+        tc::Log::error("wrap_tc_texture_as_tgfx2: tc_texture not found "
+                       "for handle (index=%u gen=%u)",
+                       handle.index, handle.generation);
+        return {};
+    }
+
+    if (device.backend_type() == tgfx::BackendType::OpenGL) {
+        return wrap_tc_texture_gl(
+            static_cast<tgfx::OpenGLRenderDevice&>(device), tex);
+    }
+    return wrap_tc_texture_non_gl(device, tex);
+}
+
+void release_texture_binding(
+    tgfx::IRenderDevice& device,
+    tgfx::TextureHandle binding
+) {
+    if (!binding) return;
+    if (device.backend_type() == tgfx::BackendType::OpenGL) {
+        device.destroy(binding);
+    }
+    // Non-GL path: cache owns the handle, don't destroy.
 }
 
 namespace {

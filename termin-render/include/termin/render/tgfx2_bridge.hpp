@@ -22,21 +22,36 @@ class IRenderDevice;
 
 namespace termin {
 
-// Wrap a legacy tc_texture as a tgfx2 TextureHandle that is non-owning.
-// Triggers tc_texture_upload_gpu first so the share group's GL texture
-// object exists, then reads the GL id from the current context's
-// texture slot and registers it as an external tgfx2 texture.
+// Wrap a legacy tc_texture as a tgfx2 TextureHandle for the duration of a
+// draw. Backend-agnostic:
 //
-// The returned handle can be fed into ctx2.bind_sampled_texture or
-// apply_material_phase_ubo's texture list. It must be destroyed via
-// device.destroy() after use; the underlying GL texture survives
-// because register_external_texture marked it external.
+//  - OpenGL: triggers tc_texture_upload_gpu, pulls the GL id out of the
+//    share group's texture slot, and registers it as an external
+//    non-owning tgfx2 texture. Call release_texture_binding (or
+//    device.destroy directly) to free the handle; the GL object
+//    survives because register_external_texture marked it external.
 //
-// Returns an invalid handle (id == 0) if the texture handle is
-// invalid, upload fails, or no GPU context is active.
+//  - Non-GL (Vulkan, ...): there is no share group slot to wrap. The
+//    first call creates a real tgfx2 texture and uploads tc_texture->data
+//    into it, caches the handle keyed on (texture, device) (by pool_index
+//    + version). Subsequent calls reuse the cache entry until the
+//    tc_texture's version bumps. Handles stay owned by the cache — the
+//    caller must NOT destroy them. release_texture_binding is a no-op
+//    here.
+//
+// Returns an invalid handle (id == 0) if the tc_texture handle is
+// invalid, the tc_texture has no pixel data, or the upload fails.
 RENDER_API tgfx::TextureHandle wrap_tc_texture_as_tgfx2(
-    tgfx::OpenGLRenderDevice& device,
+    tgfx::IRenderDevice& device,
     tc_texture_handle handle
+);
+
+// Complement to wrap_tc_texture_as_tgfx2. OpenGL path destroys the
+// non-owning external wrapper; non-GL path is a no-op (cache owns the
+// handle). Safe on an empty handle.
+RENDER_API void release_texture_binding(
+    tgfx::IRenderDevice& device,
+    tgfx::TextureHandle binding
 );
 
 // Result of wrapping a tc_mesh as tgfx2 buffers + layout for one draw.
