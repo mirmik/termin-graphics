@@ -37,6 +37,16 @@ void OpenGLCommandList::begin_render_pass(const RenderPassDesc& pass) {
     current_fbo_ = device_.get_or_create_fbo(pass);
     glBindFramebuffer(GL_FRAMEBUFFER, current_fbo_);
 
+    // Reset GL scissor — it is global state and survives across passes
+    // and frames. If a previous pass (a UI widget with a begin_clip,
+    // say) left scissor enabled with its widget's rect, the upcoming
+    // glClear + draws in *this* pass would be clipped to that stale
+    // rectangle. Disabling here gives every pass a clean slate; the
+    // caller re-enables with set_scissor when it actually wants to
+    // clip. Vulkan has no equivalent leak because scissor there is
+    // part of the command buffer, not global state.
+    glDisable(GL_SCISSOR_TEST);
+
     // Set viewport to match first color attachment size, or depth if no color
     if (!pass.colors.empty() && pass.colors[0].texture) {
         auto* tex = device_.get_texture(pass.colors[0].texture);
@@ -382,13 +392,30 @@ void OpenGLCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
 
 // --- Dynamic state ---
 
+// Toggle for the OpenGL glViewport/glScissor Y-origin.
+//
+// Desktop GL spec says glClipControl(GL_UPPER_LEFT) flips the
+// clip→window mapping but *not* the origin of glViewport / glScissor
+// (both stay bottom-left). Some drivers (notably Mesa 24+ on NVIDIA)
+// do flip scissor/viewport along with the clip origin; the spec-pure
+// path then double-flips and crops everything.
+//
+// We expose `TGFX_GL_NO_FRAMEBUFFER_FLIP=1` to let callers bypass the
+// manual flip and use raw (x, y) as-is — helpful on drivers that
+// already agree with the Vulkan contract on their own. Default keeps
+// the spec-pure flip so correctness on compliant drivers is not
+// surprised.
+static bool gl_no_fb_flip() {
+    static const bool v = []{
+        const char* e = std::getenv("TGFX_GL_NO_FRAMEBUFFER_FLIP");
+        return e && e[0] && e[0] != '0';
+    }();
+    return v;
+}
+
 void OpenGLCommandList::set_viewport(int x, int y, int width, int height) {
     // Caller contract is top-left origin (matches Vulkan / tcgui).
-    // glViewport's y is bottom-up — glClipControl(GL_UPPER_LEFT) only
-    // flips the clip→window mapping, not the viewport origin itself.
-    // Flip here using the framebuffer height recorded in
-    // begin_render_pass.
-    const int gl_y = (cached_fb_height_ > 0)
+    const int gl_y = (cached_fb_height_ > 0 && !gl_no_fb_flip())
         ? (cached_fb_height_ - (y + height))
         : y;
     glViewport(x, gl_y, width, height);
@@ -398,8 +425,7 @@ void OpenGLCommandList::set_scissor(int x, int y, int width, int height) {
     if (width == 0 && height == 0) {
         glDisable(GL_SCISSOR_TEST);
     } else {
-        // Same top-left → bottom-left flip as set_viewport.
-        const int gl_y = (cached_fb_height_ > 0)
+        const int gl_y = (cached_fb_height_ > 0 && !gl_no_fb_flip())
             ? (cached_fb_height_ - (y + height))
             : y;
         glEnable(GL_SCISSOR_TEST);
