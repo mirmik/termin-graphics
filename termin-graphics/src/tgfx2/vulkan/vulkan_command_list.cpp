@@ -334,11 +334,20 @@ void VulkanCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
 
     // Pick the right transfer op:
     //   MSAA src + single dst, same format  → vkCmdResolveImage
-    //   Same samples, same format           → vkCmdCopyImage
-    //   Same samples, different format      → vkCmdBlitImage (handles conversion)
+    //   Same extent + same fmt + same samp  → vkCmdCopyImage (fastest)
+    //   Different extent or format          → vkCmdBlitImage (scales)
     //   MSAA src + format conversion        → not supported by Vulkan in one step.
+    //
+    // The OpenGL counterpart uses glBlitFramebuffer, which *always*
+    // rescales source to destination. A capture texture sized to the
+    // viewport vs. a shadow map sized to shadow-map resolution is a
+    // common case for Frame Debugger: vkCmdCopyImage would only copy
+    // the overlapping rectangle and leave the rest garbage, while
+    // vkCmdBlitImage stretches — matching the GL path.
     bool same_format = s->desc.format == d->desc.format;
     bool same_samples = s->desc.sample_count == d->desc.sample_count;
+    bool same_extent = s->desc.width == d->desc.width &&
+                       s->desc.height == d->desc.height;
     bool msaa_to_single = s->desc.sample_count > 1 && d->desc.sample_count == 1;
 
     if (msaa_to_single && same_format) {
@@ -350,7 +359,7 @@ void VulkanCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
             s->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
             d->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1, &resolve);
-    } else if (same_samples && same_format) {
+    } else if (same_samples && same_format && same_extent) {
         VkImageCopy region{};
         region.srcSubresource = {src_aspect, 0, 0, 1};
         region.dstSubresource = {dst_aspect, 0, 0, 1};

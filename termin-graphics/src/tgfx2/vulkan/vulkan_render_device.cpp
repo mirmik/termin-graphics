@@ -816,22 +816,28 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
     depth_stencil.depthWriteEnable = desc.depth_stencil.depth_write ? VK_TRUE : VK_FALSE;
     depth_stencil.depthCompareOp = vk::to_vk_compare(desc.depth_stencil.depth_compare);
 
-    // Blend
-    VkPipelineColorBlendAttachmentState blend_att{};
-    blend_att.blendEnable = desc.blend.enabled ? VK_TRUE : VK_FALSE;
-    blend_att.srcColorBlendFactor = vk::to_vk_blend_factor(desc.blend.src_color);
-    blend_att.dstColorBlendFactor = vk::to_vk_blend_factor(desc.blend.dst_color);
-    blend_att.colorBlendOp = vk::to_vk_blend_op(desc.blend.color_op);
-    blend_att.srcAlphaBlendFactor = vk::to_vk_blend_factor(desc.blend.src_alpha);
-    blend_att.dstAlphaBlendFactor = vk::to_vk_blend_factor(desc.blend.dst_alpha);
-    blend_att.alphaBlendOp = vk::to_vk_blend_op(desc.blend.alpha_op);
-    blend_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                                VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    // Blend — one attachment per color output. Must match subpass's
+    // colorAttachmentCount, else VUID-VkGraphicsPipelineCreateInfo-
+    // renderPass-06041 fires and some drivers silently reject the draw
+    // (shadow/depth-only passes were hit by this — 0 color attachments
+    // in the subpass but attachmentCount=1 on the pipeline).
+    std::vector<VkPipelineColorBlendAttachmentState> blend_atts(color_fmts.size());
+    for (auto& ba : blend_atts) {
+        ba.blendEnable = desc.blend.enabled ? VK_TRUE : VK_FALSE;
+        ba.srcColorBlendFactor = vk::to_vk_blend_factor(desc.blend.src_color);
+        ba.dstColorBlendFactor = vk::to_vk_blend_factor(desc.blend.dst_color);
+        ba.colorBlendOp = vk::to_vk_blend_op(desc.blend.color_op);
+        ba.srcAlphaBlendFactor = vk::to_vk_blend_factor(desc.blend.src_alpha);
+        ba.dstAlphaBlendFactor = vk::to_vk_blend_factor(desc.blend.dst_alpha);
+        ba.alphaBlendOp = vk::to_vk_blend_op(desc.blend.alpha_op);
+        ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                             VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    }
 
     VkPipelineColorBlendStateCreateInfo blend{};
     blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    blend.attachmentCount = 1;
-    blend.pAttachments = &blend_att;
+    blend.attachmentCount = static_cast<uint32_t>(blend_atts.size());
+    blend.pAttachments = blend_atts.empty() ? nullptr : blend_atts.data();
 
     // Create pipeline
     VkGraphicsPipelineCreateInfo pi{};
