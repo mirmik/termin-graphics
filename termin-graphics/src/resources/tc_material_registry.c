@@ -684,6 +684,18 @@ tc_material_handle tc_material_copy(tc_material_handle src, const char* new_uuid
     dst_mat->phase_count = src_mat->phase_count;
     for (size_t i = 0; i < src_mat->phase_count; i++) {
         dst_mat->phases[i] = src_mat->phases[i];
+        // The tgfx2 material UBO is per-phase GPU-side state: carrying its
+        // handle id over to the copy would give two materials the same
+        // ubo_id while only one buffer exists on the GPU — a dangling-
+        // handle bug that appears after a play->stop cycle in the editor
+        // (both the editor and game scene end up sharing the original
+        // buffer, then release on scene destroy frees it for the other).
+        // Zero the UBO bookkeeping so the copy lazily allocates its own
+        // buffer on the next ensure_material_phase_ubo call.
+        dst_mat->phases[i].ubo_id = 0;
+        dst_mat->phases[i].ubo_size = 0;
+        dst_mat->phases[i].ubo_version = -1;
+        dst_mat->phases[i].ubo_device = NULL;
         // Add reference to shader for the copied phase
         tc_shader* s = tc_shader_get(dst_mat->phases[i].shader);
         if (s) {
