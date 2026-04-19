@@ -124,9 +124,9 @@ class Plot3D(Widget):
         self.engine.set_viewport(self.x, self.y, self.width, self.height)
         renderer.begin_clip(int(self.x), int(self.y), int(self.width), int(self.height))
 
-        holder = renderer.holder
-        if holder is not None:
-            self.engine.render(holder.context, renderer.font)
+        graphics = renderer.graphics
+        if graphics is not None:
+            self.engine.render(graphics.context, renderer.font)
 
         renderer.end_clip()
 

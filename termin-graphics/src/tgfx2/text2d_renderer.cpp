@@ -83,7 +83,9 @@ static_assert(sizeof(Text2DPushData) == 80,
               "Text2DPushData layout drift — shader and C++ disagree");
 
 // Build an ortho matrix (column-major) that maps pixel coords y+down
-// → NDC y+up. (0,0) pixel → (-1,+1) NDC (top-left corner).
+// → clip-space y+down (Vulkan-native; OpenGL reaches this via
+// glClipControl(GL_UPPER_LEFT) in OpenGLRenderDevice). Pixel (0,0)
+// maps to clip (-1,-1), i.e. the top-left corner of the viewport.
 //
 // The matrix is written here in math (row-major) notation but stored
 // column-major so we pass `transpose=true` to set_uniform_mat4. That
@@ -97,13 +99,13 @@ void build_ortho_pixel_to_ndc(float w, float h, float out[16]) {
     }
     // Row-major layout (we upload with transpose=true):
     //   [ 2/w,  0,     0,   -1 ]
-    //   [ 0,   -2/h,   0,    1 ]
-    //   [ 0,    0,    -1,    0 ]
+    //   [ 0,    2/h,   0,   -1 ]
+    //   [ 0,    0,     1,    0 ]
     //   [ 0,    0,     0,    1 ]
     float m[16] = {
         2.0f / w,  0.0f,      0.0f, -1.0f,
-        0.0f,     -2.0f / h,  0.0f,  1.0f,
-        0.0f,      0.0f,     -1.0f,  0.0f,
+        0.0f,      2.0f / h,  0.0f, -1.0f,
+        0.0f,      0.0f,      1.0f,  0.0f,
         0.0f,      0.0f,      0.0f,  1.0f,
     };
     std::memcpy(out, m, sizeof(m));

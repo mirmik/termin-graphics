@@ -72,16 +72,21 @@ void look_at(const float eye[3], const float target[3], const float up[3],
     M(m, 3, 2) = dot3(f, eye);
 }
 
-// OpenGL-standard perspective projection (depth in [-1, 1]).
+// Vulkan-native perspective projection: clip-space Y down, Z ∈ [0, 1].
+// Camera looks along its own -Z (standard graphics convention). Matches
+// the rest of termin-env (termin-base/geom/mat44.hpp, shadow_camera),
+// so OpenGL (via glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE) in
+// OpenGLRenderDevice) and Vulkan render with the same orientation.
 void perspective(float fov_y, float aspect, float near, float far,
                  float m[16]) {
     for (int i = 0; i < 16; ++i) m[i] = 0.0f;
     const float f = 1.0f / std::tan(fov_y * 0.5f);
+    const float fn = far - near;
     M(m, 0, 0) = f / aspect;
-    M(m, 1, 1) = f;
-    M(m, 2, 2) = (far + near) / (near - far);
-    M(m, 3, 2) = (2.0f * far * near) / (near - far);
-    M(m, 2, 3) = -1.0f;
+    M(m, 1, 1) = -f;                       // Y flipped (clip y down)
+    M(m, 2, 2) = -far / fn;                // Z ∈ [0, 1]
+    M(m, 3, 2) = -(far * near) / fn;
+    M(m, 2, 3) = -1.0f;                    // clip_w = -view_z
 }
 
 // Column-major 4x4 multiply: out = a * b.

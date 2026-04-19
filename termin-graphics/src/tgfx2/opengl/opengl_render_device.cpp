@@ -11,20 +11,17 @@
 #include <cstring>
 #include <tcbase/tc_log.hpp>
 
-#ifndef _WIN32
-#include <dlfcn.h>
-#endif
-
 // glClipControl is GL 4.5 / ARB_clip_control. Our glad generator targets
-// 3.3 core and doesn't expose it, so we resolve the entrypoint ourselves
-// at device creation.
+// 3.3 core and doesn't expose it, but termin_graphics2 links libGL
+// directly (see CMakeLists.txt), so we just forward-declare the symbol
+// and let the dynamic linker resolve it at load time.
 #ifndef GL_UPPER_LEFT
 #define GL_UPPER_LEFT 0x8CA2
 #endif
 #ifndef GL_ZERO_TO_ONE
 #define GL_ZERO_TO_ONE 0x935F
 #endif
-using PFN_glClipControl = void (*)(GLenum origin, GLenum depth);
+extern "C" void glClipControl(GLenum origin, GLenum depth);
 
 extern "C" {
 #include "tgfx/tgfx_resource_gpu.h"
@@ -47,24 +44,7 @@ OpenGLRenderDevice::OpenGLRenderDevice() {
     // All our projection matrices (termin-base/geom/mat44.hpp) target
     // this convention; shaders write clip-space Y pointing down already.
     // Requires GL 4.5 or ARB_clip_control (ubiquitous on desktop GL).
-    PFN_glClipControl clip_control_fn = nullptr;
-#ifndef _WIN32
-    // Try the process-already-loaded libGL first; fall back to the
-    // global symbol table so apps that linked libGL directly still win.
-    if (void* h = dlopen("libGL.so.1", RTLD_LAZY | RTLD_NOLOAD)) {
-        clip_control_fn = (PFN_glClipControl)dlsym(h, "glClipControl");
-        dlclose(h);
-    }
-    if (!clip_control_fn) {
-        clip_control_fn = (PFN_glClipControl)dlsym(RTLD_DEFAULT, "glClipControl");
-    }
-#endif
-    if (clip_control_fn) {
-        clip_control_fn(GL_UPPER_LEFT, GL_ZERO_TO_ONE);
-    } else {
-        tc::Log::error("OpenGLRenderDevice: glClipControl unavailable — "
-                       "Y/Z convention will not match Vulkan");
-    }
+    glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE);
 
     query_capabilities();
 }

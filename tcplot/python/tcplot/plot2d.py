@@ -46,10 +46,10 @@ class Plot2D(Widget):
 
     def render(self, renderer):
         self.engine.set_viewport(self.x, self.y, self.width, self.height)
-        holder = renderer.holder
-        if holder is None:
+        graphics = renderer.graphics
+        if graphics is None:
             return
-        self.engine.render(holder.context, renderer.font)
+        self.engine.render(graphics.context, renderer.font)
 
     def on_mouse_down(self, event: MouseEvent) -> bool:
         self.engine.set_viewport(self.x, self.y, self.width, self.height)
