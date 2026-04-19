@@ -152,12 +152,20 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
 
     vkCmdBeginRenderPass(cmd_, &rp_bi, VK_SUBPASS_CONTENTS_INLINE);
 
-    // Auto-set viewport (with Y-flip for Vulkan)
+    // Auto-set viewport. No Y-flip trick here: it makes the render-pass
+    // output memory read-compatible with OpenGL conventions for on-screen
+    // presentation, but it breaks inter-pass sampling (shader writes to
+    // pixel Y=h-1 when it thinks it's writing to Y=0, then a later pass
+    // samples with UV.y=0 and reads the actual top texel — producing e.g.
+    // shadow-map lookups that always land outside the rendered frustum).
+    // Instead, every render-target memory is in native Vulkan top-left
+    // layout, and the final display composite (Viewport3D) skips its
+    // flip_v on Vulkan to keep the presented image upright.
     VkViewport vp{};
     vp.x = 0;
-    vp.y = static_cast<float>(height);
+    vp.y = 0;
     vp.width = static_cast<float>(width);
-    vp.height = -static_cast<float>(height); // Y-flip
+    vp.height = static_cast<float>(height);
     vp.minDepth = 0.0f;
     vp.maxDepth = 1.0f;
     vkCmdSetViewport(cmd_, 0, 1, &vp);
@@ -405,6 +413,12 @@ void VulkanCommandList::set_viewport(int x, int y, int width, int height) {
 }
 
 void VulkanCommandList::set_scissor(int x, int y, int width, int height) {
+    // Negative width/height crossed into `uint32_t` becomes a huge value
+    // that trips `offset + extent > INT32_MAX` in validation. Clamp here
+    // so caller bugs (e.g. a widget with negative size after layout)
+    // produce an empty-clip no-op rather than a Vulkan error.
+    if (width < 0) width = 0;
+    if (height < 0) height = 0;
     VkRect2D scissor{};
     scissor.offset = {x, y};
     scissor.extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};

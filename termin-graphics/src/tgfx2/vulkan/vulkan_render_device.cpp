@@ -260,14 +260,33 @@ void VulkanRenderDevice::create_logical_device() {
 
     VkPhysicalDeviceFeatures features{};
     features.fillModeNonSolid = VK_TRUE; // for wireframe
+    // Shadow shaders index `sampler2DShadow u_shadow_map[N]` with a
+    // runtime loop variable. In Vulkan that requires the
+    // `shaderSampledImageArrayDynamicIndexing` feature — without it
+    // access is undefined and shadow lookups silently return 1.0 (no
+    // shadow) on most drivers. Matches GL's always-available dynamic
+    // indexing of sampler arrays.
+    features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
 
     std::vector<const char*> extensions;
     if (surface_) {
         extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     }
+    // VK_EXT_depth_clip_control lets the pipeline opt into OpenGL-style
+    // clip-space Z ([-1..1] instead of Vulkan's native [0..1]). All our
+    // shaders and projection matrices (shadow ortho, scene perspective)
+    // assume GL NDC Z — without this, Vulkan clips the near half of
+    // every frustum and shadow maps end up with content only in the far
+    // half, breaking sampler2DShadow compares.
+    extensions.push_back("VK_EXT_depth_clip_control");
+
+    VkPhysicalDeviceDepthClipControlFeaturesEXT dcc_feat{};
+    dcc_feat.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT;
+    dcc_feat.depthClipControl = VK_TRUE;
 
     VkDeviceCreateInfo ci{};
     ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    ci.pNext = &dcc_feat;
     ci.queueCreateInfoCount = static_cast<uint32_t>(queue_cis.size());
     ci.pQueueCreateInfos = queue_cis.data();
     ci.pEnabledFeatures = &features;
@@ -770,8 +789,18 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
     input_assembly.topology = vk::to_vk_topology(desc.topology);
 
     // Dynamic viewport/scissor
+    // Opt into OpenGL-style clip-space Z ([-1..1]) via
+    // VK_EXT_depth_clip_control. See create_logical_device() for the
+    // feature enable — our shaders and projection matrices produce
+    // gl_Position.z in [-1..1], so without this the near half of every
+    // frustum gets clipped and shadow maps render empty.
+    VkPipelineViewportDepthClipControlCreateInfoEXT clip_ctl{};
+    clip_ctl.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT;
+    clip_ctl.negativeOneToOne = VK_TRUE;
+
     VkPipelineViewportStateCreateInfo viewport_state{};
     viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewport_state.pNext = &clip_ctl;
     viewport_state.viewportCount = 1;
     viewport_state.scissorCount = 1;
 
