@@ -337,7 +337,18 @@ void VulkanRenderDevice::create_descriptor_pool() {
 // --- Shared layouts (MVP: universal layout) ---
 
 void VulkanRenderDevice::create_shared_layouts() {
-    // Universal descriptor set layout: binding 0-3 = UBO, 4-7 = sampled image, 8-11 = sampler
+    // Universal descriptor set layout:
+    //   binding 0..3   = UBO  (lighting, material, per-frame, spare)
+    //   binding 4..15  = COMBINED_IMAGE_SAMPLER (material 4..7,
+    //                    shadow maps 8..11, extra slots 12..15)
+    //
+    // The sampler range is generous so ColorPass can mix material
+    // textures (MATERIAL_TEX_SLOT_BASE = 4) with up to MAX_SHADOW_MAPS
+    // shadow maps (SHADOW_SLOT_BASE = 8) inside a single descriptor set,
+    // plus a few extras for debug overlays etc. Vulkan 1.0 guarantees
+    // `maxPerStageDescriptorSamplers = 16`, so 16 combined slots fit
+    // with margin on every conforming device.
+    constexpr uint32_t SAMPLER_COUNT = 12;
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     for (uint32_t i = 0; i < 4; ++i) {
         VkDescriptorSetLayoutBinding b{};
@@ -347,16 +358,16 @@ void VulkanRenderDevice::create_shared_layouts() {
         b.stageFlags = VK_SHADER_STAGE_ALL;
         bindings.push_back(b);
     }
-    // Bindings 4-7 are combined image+sampler. GLSL `sampler2D` maps
-    // to a single COMBINED_IMAGE_SAMPLER descriptor in SPIR-V, not
-    // separate SAMPLED_IMAGE + SAMPLER. Matching the descriptor type
-    // here lets stock Vulkan-targeted GLSL (`layout(binding=4)
-    // uniform sampler2D ...`) compile against our shared layout
-    // without the caller needing to split uniform sampler + uniform
-    // texture2D. bind_sampled_texture on the render_context side
-    // still carries both a TextureHandle and a SamplerHandle — the
-    // Vulkan write path packs them into one VkDescriptorImageInfo.
-    for (uint32_t i = 4; i < 8; ++i) {
+    // Combined image+sampler slots. GLSL `sampler2D` maps to a single
+    // COMBINED_IMAGE_SAMPLER descriptor in SPIR-V, not separate
+    // SAMPLED_IMAGE + SAMPLER. Matching the descriptor type here lets
+    // stock Vulkan-targeted GLSL (`layout(binding=N) uniform sampler2D
+    // ...`) compile against our shared layout without the caller needing
+    // to split uniform sampler + uniform texture2D. bind_sampled_texture
+    // on the render_context side still carries both a TextureHandle and
+    // a SamplerHandle — the Vulkan write path packs them into one
+    // VkDescriptorImageInfo.
+    for (uint32_t i = 4; i < 4 + SAMPLER_COUNT; ++i) {
         VkDescriptorSetLayoutBinding b{};
         b.binding = i;
         b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;

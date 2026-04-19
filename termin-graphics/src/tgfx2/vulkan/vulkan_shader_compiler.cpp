@@ -33,6 +33,21 @@ SpirvCompileResult compile_glsl_to_spirv(
     // Force GLSL 450 profile to handle #version 330 sources
     options.SetForcedVersionProfile(450, shaderc_profile_core);
 
+    // Auto-assign `layout(location=N)` to `in`/`out` varyings that
+    // lack an explicit qualifier. Legacy shaders inherited from the
+    // GL 3.3 era declare `in vec3 a_position;` / `out vec3 v_normal;`
+    // without locations — SPIR-V requires locations for user inputs
+    // and outputs, and shaderc honours this flag to emit them
+    // automatically (in declaration order).
+    //
+    // Auto-bind for resources at the same time: auto-picks binding
+    // slots for `uniform sampler2D u_foo;` declarations lacking an
+    // explicit `layout(binding=N)`. UBOs/SSBOs we always tag with
+    // explicit bindings in the engine, so auto-bind for those would
+    // never fire; leaving it on is free.
+    options.SetAutoMapLocations(true);
+    options.SetAutoBindUniforms(true);
+
     // Shaders fork their declarations with `#ifdef VULKAN`. shaderc is
     // supposed to auto-define `VULKAN=100` when targeting Vulkan, but in
     // practice that depends on the target env + SPIR-V version combo and
