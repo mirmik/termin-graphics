@@ -304,6 +304,12 @@ void VulkanCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
     auto* d = device_.get_texture(dst);
     if (!s || !d) return;
 
+    // Self-blit is a caller-side logic bug — Vulkan disallows
+    // vkCmdBlitImage/CopyImage where src and dst are the same image with
+    // overlapping regions, and there's no meaningful work to do. Skip
+    // quietly instead of emitting conflicting TRANSFER_SRC/DST barriers.
+    if (s == d) return;
+
     // Transfer commands must be recorded outside of a render pass. Callers
     // using ctx2.blit() between begin_frame/end_frame are fine as long as
     // no begin_render_pass is active.

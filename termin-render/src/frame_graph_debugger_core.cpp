@@ -86,6 +86,7 @@ void FrameGraphCapture::ensure_capture_tex(
     desc.sample_count = 1;
     desc.usage = tgfx::TextureUsage::Sampled |
                  tgfx::TextureUsage::ColorAttachment |
+                 tgfx::TextureUsage::CopySrc |
                  tgfx::TextureUsage::CopyDst;
     capture_tex_ = device.create_texture(desc);
 }

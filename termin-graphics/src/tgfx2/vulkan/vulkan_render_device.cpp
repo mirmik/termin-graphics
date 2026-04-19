@@ -1157,11 +1157,20 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
     uint32_t sample_count,
     LoadOp color_load, LoadOp depth_load)
 {
-    // Build key
+    // Build key — formats + sample_count + load ops. LoadOp must be part
+    // of the key: for LoadOp::Load the render pass is built with
+    // initialLayout = COLOR/DEPTH_ATTACHMENT_OPTIMAL (the layout
+    // begin_render_pass transitions the attachment into); for Clear/
+    // DontCare we keep initialLayout = UNDEFINED. Collapsing Load and
+    // Clear into one cache entry would either cause a "loadOp=LOAD with
+    // initialLayout=UNDEFINED" validation error or silently clear
+    // content the caller wanted preserved.
     std::vector<VkFormat> key;
     for (auto f : color_formats) key.push_back(vk::to_vk_format(f));
     if (has_depth) key.push_back(vk::to_vk_format(depth_format));
-    key.push_back(static_cast<VkFormat>(sample_count)); // encode sample count in key
+    key.push_back(static_cast<VkFormat>(sample_count));
+    key.push_back(static_cast<VkFormat>(static_cast<int>(color_load) + 0x10000));
+    key.push_back(static_cast<VkFormat>(static_cast<int>(depth_load) + 0x20000));
 
     auto it = render_pass_cache_.find(key);
     if (it != render_pass_cache_.end()) return it->second;
@@ -1187,7 +1196,9 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
         att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        att.initialLayout = (color_load == LoadOp::Load)
+            ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+            : VK_IMAGE_LAYOUT_UNDEFINED;
         att.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         attachments.push_back(att);
 
@@ -1203,7 +1214,9 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
         att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        att.initialLayout = (depth_load == LoadOp::Load)
+            ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+            : VK_IMAGE_LAYOUT_UNDEFINED;
         att.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         attachments.push_back(att);
 
@@ -1284,12 +1297,38 @@ void VulkanRenderDevice::blit_to_texture(
     auto* dst = textures_.get(dst_handle.id);
     if (!src || !dst) return;
 
-    // Remember the caller-visible layouts so the texture can be resumed
-    // in whatever state the next render pass expects (typically
-    // COLOR_ATTACHMENT_OPTIMAL for the offscreen RT). Without the restore,
-    // the next begin_pass hits a layout mismatch barrier.
+    // Self-blit is meaningless and would emit contradictory
+    // TRANSFER_SRC/DST barriers on the same image.
+    if (src == dst) return;
+
+    // Require the usage flags that the transitions below need. Without
+    // them Vulkan rejects the layout transition outright. Callers are
+    // expected to create host-owned scan-out textures with CopyDst and
+    // renderer outputs with CopySrc.
+    auto has = [](TextureUsage u, TextureUsage bit) {
+        return (static_cast<uint32_t>(u) & static_cast<uint32_t>(bit)) != 0;
+    };
+    if (!has(src->desc.usage, TextureUsage::CopySrc)) {
+        fprintf(stderr, "[Vulkan] blit_to_texture: src missing CopySrc usage — skipping\n");
+        return;
+    }
+    if (!has(dst->desc.usage, TextureUsage::CopyDst)) {
+        fprintf(stderr, "[Vulkan] blit_to_texture: dst missing CopyDst usage — skipping\n");
+        return;
+    }
+    // vkCmdBlitImage rejects MSAA dst. MSAA→single resolve needs
+    // vkCmdResolveImage; a single→MSAA transition isn't representable in
+    // one command.
+    if (dst->desc.sample_count > 1) {
+        fprintf(stderr, "[Vulkan] blit_to_texture: dst is MSAA (%u samples) — "
+                        "not supported, skipping\n", dst->desc.sample_count);
+        return;
+    }
+
     VkImageLayout prev_src = src->current_layout;
     VkImageLayout prev_dst = dst->current_layout;
+
+    bool msaa_resolve = src->desc.sample_count > 1;
 
     execute_immediate([&](VkCommandBuffer cb) {
         transition_image_layout(cb, src->image,
@@ -1299,27 +1338,46 @@ void VulkanRenderDevice::blit_to_texture(
             prev_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_IMAGE_ASPECT_COLOR_BIT);
 
-        VkImageBlit blit{};
-        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blit.srcSubresource.layerCount = 1;
-        blit.srcOffsets[0] = {src_x, src_y, 0};
-        blit.srcOffsets[1] = {src_x + src_w, src_y + src_h, 1};
-        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blit.dstSubresource.layerCount = 1;
-        blit.dstOffsets[0] = {dst_x, dst_y, 0};
-        blit.dstOffsets[1] = {dst_x + dst_w, dst_y + dst_h, 1};
-
-        vkCmdBlitImage(cb,
-            src->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            dst->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1, &blit, VK_FILTER_LINEAR);
+        if (msaa_resolve) {
+            // Resolve copies exactly the same rect in src/dst — no
+            // scaling. If the caller requested different dst dims, fall
+            // back to a no-op (vkCmdResolveImage can't rescale).
+            if (src_w != dst_w || src_h != dst_h) {
+                fprintf(stderr, "[Vulkan] blit_to_texture: MSAA resolve "
+                                "cannot rescale (%dx%d → %dx%d)\n",
+                        src_w, src_h, dst_w, dst_h);
+            } else {
+                VkImageResolve resolve{};
+                resolve.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                resolve.srcOffset = {src_x, src_y, 0};
+                resolve.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                resolve.dstOffset = {dst_x, dst_y, 0};
+                resolve.extent = {static_cast<uint32_t>(src_w),
+                                  static_cast<uint32_t>(src_h), 1};
+                vkCmdResolveImage(cb,
+                    src->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    dst->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    1, &resolve);
+            }
+        } else {
+            VkImageBlit blit{};
+            blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            blit.srcOffsets[0] = {src_x, src_y, 0};
+            blit.srcOffsets[1] = {src_x + src_w, src_y + src_h, 1};
+            blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            blit.dstOffsets[0] = {dst_x, dst_y, 0};
+            blit.dstOffsets[1] = {dst_x + dst_w, dst_y + dst_h, 1};
+            vkCmdBlitImage(cb,
+                src->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                dst->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1, &blit, VK_FILTER_LINEAR);
+        }
 
         // Restore layouts so the next render pass / sampler bind does
-        // not see an unexpected transition cost (or worse, a validation
-        // error on an unsynchronised access). If prev_* was UNDEFINED
-        // (never rendered), leave the images in their transfer layout —
-        // the next pass's begin will transition again from whatever it
-        // observes.
+        // not see an unexpected transition cost. If prev_* was
+        // UNDEFINED (never rendered), leave the images in their transfer
+        // layout — the next pass's begin will transition again from
+        // whatever it observes.
         if (prev_src != VK_IMAGE_LAYOUT_UNDEFINED) {
             transition_image_layout(cb, src->image,
                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, prev_src,
@@ -1330,8 +1388,6 @@ void VulkanRenderDevice::blit_to_texture(
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, prev_dst,
                 VK_IMAGE_ASPECT_COLOR_BIT);
         } else {
-            // First-write case: stamp the layout we left the image in
-            // so the next user sees a real state instead of UNDEFINED.
             dst->current_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         }
     });
