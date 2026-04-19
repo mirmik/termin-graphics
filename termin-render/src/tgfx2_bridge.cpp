@@ -551,4 +551,22 @@ void release_mesh_binding(
     (void)binding;
 }
 
+tgfx::VertexBufferLayout filter_vertex_layout_to_locations(
+    const tgfx::VertexBufferLayout& layout,
+    std::initializer_list<uint32_t> used_locations
+) {
+    tgfx::VertexBufferLayout out;
+    out.stride = layout.stride;
+    out.per_instance = layout.per_instance;
+    for (const auto& attr : layout.attributes) {
+        for (uint32_t loc : used_locations) {
+            if (attr.location == loc) {
+                out.attributes.push_back(attr);
+                break;
+            }
+        }
+    }
+    return out;
+}
+
 } // namespace termin
