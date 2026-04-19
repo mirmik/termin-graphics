@@ -14,11 +14,13 @@ namespace tgfx {
 // Fullscreen quad shader (built-in, minimal)
 // ============================================================================
 
-static const char* FSQ_VERT_SRC = R"(
-#version 330 core
+// Built-in FSQ vertex shader. `#version 450 core` + explicit location
+// qualifiers on varyings — both required for Vulkan shaderc (SPIR-V).
+// GL 4.3+ accepts the same source via core GL_ARB_shading_language_420pack.
+static const char* FSQ_VERT_SRC = R"(#version 450 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aUV;
-out vec2 vUV;
+layout(location = 0) out vec2 vUV;
 void main() {
     gl_Position = vec4(aPos, 0.0, 1.0);
     vUV = aUV;
