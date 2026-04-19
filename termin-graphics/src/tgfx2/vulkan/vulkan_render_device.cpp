@@ -597,6 +597,29 @@ TextureHandle VulkanRenderDevice::create_texture(const TextureDesc& desc) {
     }
 
     res.current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    // If the caller flagged this as a sampled texture, pre-transition to
+    // SHADER_READ_ONLY_OPTIMAL so a bind that happens before any
+    // upload / blit / render-pass write doesn't see UNDEFINED at submit
+    // time. Contents are undefined until something writes in — that's
+    // the caller's concern — but the layout matches the descriptor the
+    // pipeline expects. begin_render_pass will transition out to
+    // COLOR/DEPTH attachment if the texture is used as an attachment
+    // first. Cheap (one immediate barrier, no allocation).
+    bool is_sampled = (static_cast<uint32_t>(desc.usage) &
+                       static_cast<uint32_t>(TextureUsage::Sampled)) != 0;
+    if (is_sampled) {
+        VkImage image = res.image;
+        VkImageAspectFlags aspect = vk::format_aspect_flags(desc.format);
+        execute_immediate([&](VkCommandBuffer cb) {
+            transition_image_layout(cb, image,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                aspect);
+        });
+        res.current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
+
     return {textures_.add(std::move(res))};
 }
 
@@ -1230,14 +1253,35 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
     subpass.pColorAttachments = color_refs.data();
     subpass.pDepthStencilAttachment = has_depth ? &depth_ref : nullptr;
 
+    // Single EXTERNAL→0 dependency covering color/depth writes and
+    // fragment reads. No self-dependency: inside the pass we never emit
+    // vkCmdPipelineBarrier. Every caller is required to deliver sampled
+    // textures already in SHADER_READ_ONLY_OPTIMAL (via upload_texture,
+    // end_render_pass or copy_texture/blit_to_texture, all of which
+    // leave that layout on exit).
+    //
+    // dstStageMask/dstAccessMask must only reference stages supported by
+    // a graphics subpass (the VUID-00838 check). TRANSFER stays on the
+    // EXTERNAL side so that transitions to SHADER_READ_ONLY done before
+    // vkCmdBeginRenderPass synchronize into the pass's fragment shader
+    // reads.
     VkSubpassDependency dep{};
     dep.srcSubpass = VK_SUBPASS_EXTERNAL;
     dep.dstSubpass = 0;
     dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dep.dstStageMask = dep.srcStageMask;
-    dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                       VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                       VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                       VK_PIPELINE_STAGE_TRANSFER_BIT;
+    dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                       VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                       VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dep.srcAccessMask = VK_ACCESS_SHADER_READ_BIT |
+                        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                        VK_ACCESS_TRANSFER_WRITE_BIT;
+    dep.dstAccessMask = VK_ACCESS_SHADER_READ_BIT |
+                        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
     VkRenderPassCreateInfo rp_ci{};
     rp_ci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -1373,23 +1417,21 @@ void VulkanRenderDevice::blit_to_texture(
                 1, &blit, VK_FILTER_LINEAR);
         }
 
-        // Restore layouts so the next render pass / sampler bind does
-        // not see an unexpected transition cost. If prev_* was
-        // UNDEFINED (never rendered), leave the images in their transfer
-        // layout — the next pass's begin will transition again from
-        // whatever it observes.
-        if (prev_src != VK_IMAGE_LAYOUT_UNDEFINED) {
-            transition_image_layout(cb, src->image,
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, prev_src,
-                VK_IMAGE_ASPECT_COLOR_BIT);
-        }
-        if (prev_dst != VK_IMAGE_LAYOUT_UNDEFINED) {
-            transition_image_layout(cb, dst->image,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, prev_dst,
-                VK_IMAGE_ASPECT_COLOR_BIT);
-        } else {
-            dst->current_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        }
+        // Leave both images in SHADER_READ_ONLY_OPTIMAL so downstream
+        // samplers (including bind_resource_set, which cannot transition
+        // from inside a render pass) work without further fix-ups. If
+        // prev_src was COLOR_ATTACHMENT_OPTIMAL the next render-pass
+        // begin will transition it back — one cheap barrier.
+        transition_image_layout(cb, src->image,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+        transition_image_layout(cb, dst->image,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+        src->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        dst->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     });
 }
 

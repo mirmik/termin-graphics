@@ -221,24 +221,15 @@ void VulkanCommandList::bind_resource_set(ResourceSetHandle set) {
     auto* rs = device_.get_resource_set(set);
     if (!rs || !current_layout_) return;
 
-    // Walk the set's SampledTexture bindings and transition each image
-    // to SHADER_READ_ONLY_OPTIMAL. Textures that were just rendered into
-    // (and so are sitting in COLOR_ATTACHMENT_OPTIMAL) fail validation
-    // otherwise, because the descriptor write baked in SHADER_READ_ONLY_
-    // OPTIMAL as the "expected" layout. This is the compositor case:
-    // render into `_main_tex`, then sample from it in the unpremul
-    // pass. Caller doesn't need to emit explicit barriers.
-    for (const auto& b : rs->desc.bindings) {
-        if (b.kind != ResourceBinding::Kind::SampledTexture) continue;
-        auto* tex = device_.get_texture(b.texture);
-        if (!tex || tex->image == VK_NULL_HANDLE) continue;
-        if (tex->current_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) continue;
-        device_.transition_image_layout(cmd_, tex->image,
-            tex->current_layout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            vk::format_aspect_flags(tex->desc.format));
-        tex->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    }
-
+    // Sampled textures are required to already be in
+    // SHADER_READ_ONLY_OPTIMAL here. Producers handle it:
+    //   - upload_texture / copy_texture / blit_to_texture leave dst in
+    //     SHADER_READ_ONLY_OPTIMAL.
+    //   - end_render_pass transitions color and depth attachments.
+    // vkCmdPipelineBarrier from inside a render pass is forbidden for
+    // non-attachment images and cannot change layout regardless, so
+    // there is no correct fix-up we could apply here — a mismatch is a
+    // caller/producer bug upstream.
     vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS,
                              current_layout_, 0, 1, &rs->descriptor_set, 0, nullptr);
 }
@@ -385,8 +376,19 @@ void VulkanCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
         return;
     }
 
-    s->current_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    d->current_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    // Leave both images in SHADER_READ_ONLY_OPTIMAL. Downstream
+    // bind_resource_set requires sampled textures to be in this layout
+    // already (it cannot transition inside a render pass), and most
+    // callers of copy_texture intend to sample the dst next.
+    device_.transition_image_layout(cmd_, s->image,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, src_aspect);
+    device_.transition_image_layout(cmd_, d->image,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, dst_aspect);
+
+    s->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    d->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 }
 
 // --- Dynamic state ---
