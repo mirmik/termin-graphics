@@ -53,7 +53,16 @@ private:
     // tgfx2 stack — lazily constructed on first render call. All
     // rendering now goes through this stack; the legacy graphics
     // backend is no longer involved.
+    //
+    // `tgfx2_device_` may be either engine-owned (we called
+    // create_device) or borrowed from the application host
+    // (Tgfx2Context.from_window already installed an interop device
+    // before we ever ran). `tgfx2_device_owned_` tells the destructor
+    // which one it is — must not delete a host-owned device. This is
+    // the process-wide-single-device invariant: host owns the one
+    // IRenderDevice and every renderer points at it.
     std::unique_ptr<tgfx::IRenderDevice> tgfx2_device_;
+    bool tgfx2_device_owned_ = true;
     std::unique_ptr<tgfx::PipelineCache> tgfx2_cache_;
     std::unique_ptr<tgfx::RenderContext2> tgfx2_ctx_;
 

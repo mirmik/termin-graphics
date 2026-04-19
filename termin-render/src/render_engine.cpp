@@ -46,6 +46,14 @@ RenderEngine::~RenderEngine() {
         if (external_target_color_) tgfx2_device_->destroy(external_target_color_);
         if (external_target_depth_) tgfx2_device_->destroy(external_target_depth_);
     }
+    // Don't let unique_ptr delete a device we only borrowed from the
+    // host — releasing the pointer skips the deleter. The ctx/cache we
+    // created ourselves on top of that device DO get destroyed first
+    // (declared after the device in the header), which is the right
+    // order regardless of device ownership.
+    if (!tgfx2_device_owned_) {
+        (void)tgfx2_device_.release();
+    }
 }
 
 void RenderEngine::ensure_tgfx2() {
@@ -64,24 +72,31 @@ void RenderEngine::ensure_tgfx2() {
     if (tgfx2_ctx_) {
         return;
     }
-    // Backend selected by TERMIN_BACKEND env-var (default OpenGL).
-    // For OpenGL the GL context must already be current (caller is
-    // inside a render frame). For Vulkan the device creates its own
-    // VkInstance + VkDevice.
-    tgfx2_device_ = tgfx::create_device(tgfx::default_backend_from_env());
+
+    // Prefer the host-owned device if it's already registered as the
+    // process-wide interop target (Tgfx2Context.from_window did this
+    // at editor startup). Creating a second device here would mint a
+    // new HandlePool — scene textures end up on one pool, the UI /
+    // FBOSurface on another, and blit_to_texture silently drops
+    // cross-pool calls. Symptom was an entirely grey viewport with
+    // no Vulkan/GL errors.
+    if (auto* host_dev = static_cast<tgfx::IRenderDevice*>(tgfx2_interop_get_device())) {
+        tgfx2_device_ = std::unique_ptr<tgfx::IRenderDevice>(host_dev);
+        tgfx2_device_owned_ = false;
+    } else {
+        // No host — standalone render test / headless case. Create our
+        // own device and register it as the interop target so any
+        // later Python helper that checks interop lands on it.
+        // Backend selected by TERMIN_BACKEND env-var (default OpenGL).
+        tgfx2_device_ = tgfx::create_device(tgfx::default_backend_from_env());
+        tgfx2_device_owned_ = true;
+        if (tgfx2_device_->backend_type() == tgfx::BackendType::OpenGL) {
+            tgfx2_interop_set_device(tgfx2_device_.get());
+            tgfx2_gpu_ops_register();
+        }
+    }
     tgfx2_cache_ = std::make_unique<tgfx::PipelineCache>(*tgfx2_device_);
     tgfx2_ctx_ = std::make_unique<tgfx::RenderContext2>(*tgfx2_device_, *tgfx2_cache_);
-
-    // Legacy tgfx_gpu_ops vtable is GL-specific (it extracts GL ids
-    // from tgfx2 handles for backward-compat with tc_mesh_upload_gpu
-    // / tc_texture_upload_gpu / tc_shader_compile_gpu). Install only
-    // on OpenGL backend. Non-GL backends don't have this interop
-    // yet — hosts running under Vulkan must avoid legacy resource
-    // upload entry points.
-    if (tgfx2_device_->backend_type() == tgfx::BackendType::OpenGL) {
-        tgfx2_interop_set_device(tgfx2_device_.get());
-        tgfx2_gpu_ops_register();
-    }
 }
 
 void RenderEngine::render_to_screen(
