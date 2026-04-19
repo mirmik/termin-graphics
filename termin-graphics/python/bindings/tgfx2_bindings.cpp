@@ -454,15 +454,19 @@ void bind_tgfx2(nb::module_& m) {
                 auto* dev = reinterpret_cast<tgfx::IRenderDevice*>(device_ptr);
                 auto* rctx = reinterpret_cast<tgfx::RenderContext2*>(ctx_ptr);
                 if (!dev || !rctx) return nullptr;
-                // The application host is the one wiring legacy tgfx1
-                // resource upload (tc_shader_compile_gpu, tc_mesh_upload_gpu,
-                // tc_texture_upload_gpu) onto this device. Do it here —
-                // by the time any renderer constructs its first Tgfx2Context
-                // the interop must already point at the host's device, or
-                // tgfx1 paths silently create a second one.
+                // Interop must be set for every backend — RenderEngine
+                // consults `tgfx2_interop_get_device()` and falls back
+                // to minting its own device when it's null. On Vulkan
+                // that produced a second HandlePool; blits between
+                // FBOSurface (device A) and scene RTs (device B) then
+                // resolve to unrelated textures (single→MSAA warnings).
+                tgfx2_interop_set_device(dev);
+                // Legacy tgfx1 resource-upload bridge is GL-only
+                // (tc_shader_compile_gpu, tc_mesh_upload_gpu,
+                // tc_texture_upload_gpu route through OpenGL). Do the
+                // GL-side bootstrap only when the host is GL.
                 if (dynamic_cast<tgfx::OpenGLRenderDevice*>(dev)) {
                     tc_ensure_default_gpu_context();
-                    tgfx2_interop_set_device(dev);
                     tgfx2_gpu_ops_register();
                 }
                 return new Tgfx2ContextHolder(dev, rctx);

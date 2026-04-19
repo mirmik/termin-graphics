@@ -620,7 +620,11 @@ TextureHandle VulkanRenderDevice::create_texture(const TextureDesc& desc) {
         res.current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 
-    return {textures_.add(std::move(res))};
+    uint32_t id = textures_.add(std::move(res));
+    fprintf(stderr, "[Vulkan] create_texture: id=%u %ux%u fmt=%d samples=%u usage=0x%x\n",
+            id, desc.width, desc.height, (int)desc.format,
+            desc.sample_count, (unsigned)desc.usage);
+    return {id};
 }
 
 // --- Sampler ---
