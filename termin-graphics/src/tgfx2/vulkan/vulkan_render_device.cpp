@@ -272,21 +272,15 @@ void VulkanRenderDevice::create_logical_device() {
     if (surface_) {
         extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     }
-    // VK_EXT_depth_clip_control lets the pipeline opt into OpenGL-style
-    // clip-space Z ([-1..1] instead of Vulkan's native [0..1]). All our
-    // shaders and projection matrices (shadow ortho, scene perspective)
-    // assume GL NDC Z — without this, Vulkan clips the near half of
-    // every frustum and shadow maps end up with content only in the far
-    // half, breaking sampler2DShadow compares.
-    extensions.push_back("VK_EXT_depth_clip_control");
-
-    VkPhysicalDeviceDepthClipControlFeaturesEXT dcc_feat{};
-    dcc_feat.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT;
-    dcc_feat.depthClipControl = VK_TRUE;
+    // NDC-Z convention: Vulkan-native Z ∈ [0, 1]. OpenGL reaches the
+    // same convention via a one-time glClipControl(GL_UPPER_LEFT,
+    // GL_ZERO_TO_ONE) in OpenGLRenderDevice, and scene/shadow
+    // projection matrices (see termin-base/geom/mat44.hpp) build
+    // matrices that target exactly that. No VK_EXT_depth_clip_control
+    // needed.
 
     VkDeviceCreateInfo ci{};
     ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    ci.pNext = &dcc_feat;
     ci.queueCreateInfoCount = static_cast<uint32_t>(queue_cis.size());
     ci.pQueueCreateInfos = queue_cis.data();
     ci.pEnabledFeatures = &features;
@@ -788,19 +782,11 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
     input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     input_assembly.topology = vk::to_vk_topology(desc.topology);
 
-    // Dynamic viewport/scissor
-    // Opt into OpenGL-style clip-space Z ([-1..1]) via
-    // VK_EXT_depth_clip_control. See create_logical_device() for the
-    // feature enable — our shaders and projection matrices produce
-    // gl_Position.z in [-1..1], so without this the near half of every
-    // frustum gets clipped and shadow maps render empty.
-    VkPipelineViewportDepthClipControlCreateInfoEXT clip_ctl{};
-    clip_ctl.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT;
-    clip_ctl.negativeOneToOne = VK_TRUE;
-
+    // Dynamic viewport/scissor. No VkPipelineViewportDepthClipControl —
+    // we target Vulkan-native NDC Z ∈ [0,1] everywhere; OpenGL reaches
+    // the same convention via glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE).
     VkPipelineViewportStateCreateInfo viewport_state{};
     viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewport_state.pNext = &clip_ctl;
     viewport_state.viewportCount = 1;
     viewport_state.scissorCount = 1;
 

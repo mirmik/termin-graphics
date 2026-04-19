@@ -402,11 +402,15 @@ void VulkanCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
 // --- Dynamic state ---
 
 void VulkanCommandList::set_viewport(int x, int y, int width, int height) {
+    // Vulkan-native viewport — no Y-flip here. Projection matrices
+    // (termin-base/geom/mat44.hpp) target clip-space Y-down already,
+    // so clip_y=-1 maps to the top row of framebuffer memory. OpenGL
+    // reaches the same convention via glClipControl(GL_UPPER_LEFT).
     VkViewport vp{};
     vp.x = static_cast<float>(x);
-    vp.y = static_cast<float>(y + height); // Y-flip
+    vp.y = static_cast<float>(y);
     vp.width = static_cast<float>(width);
-    vp.height = -static_cast<float>(height); // Y-flip
+    vp.height = static_cast<float>(height);
     vp.minDepth = 0.0f;
     vp.maxDepth = 1.0f;
     vkCmdSetViewport(cmd_, 0, 1, &vp);

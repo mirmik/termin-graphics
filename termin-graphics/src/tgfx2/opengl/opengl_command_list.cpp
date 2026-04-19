@@ -389,15 +389,11 @@ void OpenGLCommandList::set_scissor(int x, int y, int width, int height) {
     if (width == 0 && height == 0) {
         glDisable(GL_SCISSOR_TEST);
     } else {
-        // Backend-neutral contract: caller passes top-left-origin
-        // coords (matching Vulkan framebuffer space). glScissor wants
-        // bottom-left-origin — flip using the cached viewport height.
-        // Without this flip a TextInput clip rect near the top of the
-        // widget gets applied near the bottom of the framebuffer on
-        // Vulkan vs. OpenGL — text never shows, edges crop wrong.
-        int y_flipped = cached_viewport_height_ - (y + height);
+        // glClipControl(GL_UPPER_LEFT) in OpenGLRenderDevice makes window
+        // coordinates top-left-origin, so glScissor already accepts the
+        // Vulkan-native contract (y=0 = top row). No flip needed.
         glEnable(GL_SCISSOR_TEST);
-        glScissor(x, y_flipped, width, height);
+        glScissor(x, y, width, height);
     }
 }
 
