@@ -65,6 +65,22 @@ SpirvCompileResult compile_glsl_to_spirv(
     if (module.GetCompilationStatus() != shaderc_compilation_status_success) {
         result.success = false;
         result.error_message = module.GetErrorMessage();
+        // Dump the offending source with line numbers so the error
+        // position ("shader:11:") actually means something. Stderr
+        // because the log channel may be routed elsewhere.
+        fprintf(stderr, "=== shader compile failed — source dump ===\n");
+        size_t line_no = 1;
+        size_t pos = 0;
+        while (pos < source.size()) {
+            size_t eol = source.find('\n', pos);
+            size_t end = (eol == std::string::npos) ? source.size() : eol;
+            fprintf(stderr, "%3zu: %.*s\n",
+                    line_no, static_cast<int>(end - pos), source.data() + pos);
+            if (eol == std::string::npos) break;
+            pos = eol + 1;
+            ++line_no;
+        }
+        fprintf(stderr, "=== end source dump ===\n");
         return result;
     }
 

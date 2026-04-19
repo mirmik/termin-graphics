@@ -338,17 +338,16 @@ void VulkanRenderDevice::create_descriptor_pool() {
 
 void VulkanRenderDevice::create_shared_layouts() {
     // Universal descriptor set layout:
-    //   binding 0..3   = UBO  (lighting, material, per-frame, spare)
-    //   binding 4..15  = COMBINED_IMAGE_SAMPLER (material 4..7,
-    //                    shadow maps 8..11, extra slots 12..15)
+    //   binding 0..3  = UBO  (lighting=0, material=1, per-frame=2, shadow-block=3)
+    //   binding 4..7  = COMBINED_IMAGE_SAMPLER, 1 each (material textures)
+    //   binding 8     = COMBINED_IMAGE_SAMPLER, MAX_SHADOW_MAPS (shadow depth array;
+    //                    `layout(binding = 8) sampler2DShadow u_shadow_map[N]`
+    //                    compiles to a single array descriptor, so Vulkan
+    //                    needs descriptorCount = N on binding 8)
+    //   binding 9..15 = COMBINED_IMAGE_SAMPLER, 1 each (extra slots)
     //
-    // The sampler range is generous so ColorPass can mix material
-    // textures (MATERIAL_TEX_SLOT_BASE = 4) with up to MAX_SHADOW_MAPS
-    // shadow maps (SHADOW_SLOT_BASE = 8) inside a single descriptor set,
-    // plus a few extras for debug overlays etc. Vulkan 1.0 guarantees
-    // `maxPerStageDescriptorSamplers = 16`, so 16 combined slots fit
-    // with margin on every conforming device.
-    constexpr uint32_t SAMPLER_COUNT = 12;
+    // MAX_SHADOW_MAPS must match the GLSL macro in shadows.glsl (currently 16).
+    constexpr uint32_t MAX_SHADOW_MAPS = 16;
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     for (uint32_t i = 0; i < 4; ++i) {
         VkDescriptorSetLayoutBinding b{};
@@ -358,16 +357,26 @@ void VulkanRenderDevice::create_shared_layouts() {
         b.stageFlags = VK_SHADER_STAGE_ALL;
         bindings.push_back(b);
     }
-    // Combined image+sampler slots. GLSL `sampler2D` maps to a single
-    // COMBINED_IMAGE_SAMPLER descriptor in SPIR-V, not separate
-    // SAMPLED_IMAGE + SAMPLER. Matching the descriptor type here lets
-    // stock Vulkan-targeted GLSL (`layout(binding=N) uniform sampler2D
-    // ...`) compile against our shared layout without the caller needing
-    // to split uniform sampler + uniform texture2D. bind_sampled_texture
-    // on the render_context side still carries both a TextureHandle and
-    // a SamplerHandle — the Vulkan write path packs them into one
-    // VkDescriptorImageInfo.
-    for (uint32_t i = 4; i < 4 + SAMPLER_COUNT; ++i) {
+    // Material samplers 4..7 (individual).
+    for (uint32_t i = 4; i < 8; ++i) {
+        VkDescriptorSetLayoutBinding b{};
+        b.binding = i;
+        b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        b.descriptorCount = 1;
+        b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        bindings.push_back(b);
+    }
+    // Shadow-map array at binding 8 (MAX_SHADOW_MAPS descriptors).
+    {
+        VkDescriptorSetLayoutBinding b{};
+        b.binding = 8;
+        b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        b.descriptorCount = MAX_SHADOW_MAPS;
+        b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        bindings.push_back(b);
+    }
+    // Extras 9..15 (individual — debug overlays etc.).
+    for (uint32_t i = 9; i < 16; ++i) {
         VkDescriptorSetLayoutBinding b{};
         b.binding = i;
         b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -824,6 +833,14 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
     buf_infos.reserve(desc.bindings.size());
     img_infos.reserve(desc.bindings.size());
 
+    // Shadow-map array spans slots 8..8+MAX_SHADOW_MAPS-1 (matches
+    // SHADOW_SLOT_BASE in ColorPass and the `u_shadow_map[N]` array in
+    // shadows.glsl). The shared descriptor set layout folds those slots
+    // into a single binding=8 with descriptorCount=N, so writes in that
+    // range must be re-targeted to binding=8, dstArrayElement=slot-8.
+    constexpr uint32_t SHADOW_SLOT_BASE  = 8;
+    constexpr uint32_t MAX_SHADOW_MAPS_W = 16;
+
     for (const auto& b : desc.bindings) {
         VkWriteDescriptorSet w{};
         w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -831,6 +848,11 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
         w.dstBinding = b.binding;
         w.dstArrayElement = 0;
         w.descriptorCount = 1;
+        if (b.binding >= SHADOW_SLOT_BASE &&
+            b.binding <  SHADOW_SLOT_BASE + MAX_SHADOW_MAPS_W) {
+            w.dstBinding = SHADOW_SLOT_BASE;
+            w.dstArrayElement = b.binding - SHADOW_SLOT_BASE;
+        }
 
         switch (b.kind) {
             case ResourceBinding::Kind::UniformBuffer:
