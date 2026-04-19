@@ -856,9 +856,11 @@ std::optional<PickResult3D> PlotEngine3D::pick(float mx, float my) const {
         const double ndc_y = clip_y / clip_w;
         const double ndc_z = clip_z / clip_w;
 
-        // NDC → viewport pixel. Matches Python.
+        // NDC → viewport pixel. Clip-space Y points down (Vulkan-native;
+        // OpenGL matches via glClipControl(GL_UPPER_LEFT)), so pixel_y
+        // grows together with ndc_y — no sign flip here.
         const double spx = vx_ + (ndc_x * 0.5 + 0.5) * vw_;
-        const double spy = vy_ + (-ndc_y * 0.5 + 0.5) * vh_;
+        const double spy = vy_ + (ndc_y * 0.5 + 0.5) * vh_;
         const double d = std::sqrt((spx - mx) * (spx - mx) + (spy - my) * (spy - my));
 
         if (d < fallback_dist) {

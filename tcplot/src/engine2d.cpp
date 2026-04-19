@@ -27,61 +27,96 @@ namespace tcplot {
 
 namespace {
 
+// Shared push-constant layout: one 4x4 matrix + one vec4 colour.
+// Covers both shader pairs — rects/grid/series and persistent-VBO
+// lines — so the pipeline-layout stays uniform across the engine.
+struct Plot2DPushData {
+    float matrix[16];   // column-major (sent as-is)
+    float color[4];
+};
+static_assert(sizeof(Plot2DPushData) == 80,
+              "Plot2DPushData layout drift — shader + C++ disagree");
+
+// Shared push-constant block. On Vulkan the shader compiler defines
+// `VULKAN=1`; on OpenGL we fall back to a std140 UBO at binding 14,
+// which is the slot tgfx2 uses for its push-constants ring buffer.
+constexpr const char* kPC = R"(
+struct Plot2DPC { mat4 u_matrix; vec4 u_color; };
+#ifdef VULKAN
+layout(push_constant) uniform PCBlock { Plot2DPC pc; };
+#else
+layout(std140, binding = 14) uniform PCBlock { Plot2DPC pc; };
+#endif
+)";
+
 // Pos + color shader used by rects, grid and series lines.
-// Ortho pixel→NDC projection, y+ down.
-constexpr const char* kVert = R"(#version 330 core
+// Pixel→clip ortho projection matching the rest of termin-env:
+// y+ down in pixel coords → y+ down in clip space (Vulkan-native).
+// OpenGL reaches the same convention via glClipControl(UPPER_LEFT).
+static std::string make_vert() {
+    return std::string("#version 450 core\n") + kPC + R"(
 layout(location=0) in vec3 a_pos;
 layout(location=1) in vec4 a_color;
-uniform mat4 u_projection;
-out vec4 v_color;
+layout(location=0) out vec4 v_color;
 void main() {
-    gl_Position = u_projection * vec4(a_pos.xy, 0.0, 1.0);
+    gl_Position = pc.u_matrix * vec4(a_pos.xy, 0.0, 1.0);
     v_color = a_color;
 }
 )";
+}
 
-constexpr const char* kFrag = R"(#version 330 core
-in vec4 v_color;
-out vec4 frag_color;
+static std::string make_frag() {
+    return std::string("#version 450 core\n") + R"(
+layout(location=0) in vec4 v_color;
+layout(location=0) out vec4 frag_color;
 void main() { frag_color = v_color; }
 )";
+}
 
 // --- Persistent-VBO line series shader ---
 //
-// Vertex input is a raw data-space vec2. The VS-side mat4
-// u_data_to_clip converts directly to clip space; panning/zooming
-// only changes this uniform, VBO never needs re-upload.
-// Color is a per-series uniform (not per-vertex).
-constexpr const char* kLineVert = R"(#version 330 core
+// Vertex input is a raw data-space vec2. pc.u_matrix converts directly
+// to clip space; panning/zooming only changes this push-constant, the
+// VBO never needs re-upload. Colour is per-series via pc.u_color.
+static std::string make_line_vert() {
+    return std::string("#version 450 core\n") + kPC + R"(
 layout(location=0) in vec2 a_data_pos;
-uniform mat4 u_data_to_clip;
 void main() {
-    gl_Position = u_data_to_clip * vec4(a_data_pos, 0.0, 1.0);
+    gl_Position = pc.u_matrix * vec4(a_data_pos, 0.0, 1.0);
 }
 )";
+}
 
-constexpr const char* kLineFrag = R"(#version 330 core
-uniform vec4 u_color;
-out vec4 frag_color;
-void main() { frag_color = u_color; }
+static std::string make_line_frag() {
+    return std::string("#version 450 core\n") + kPC + R"(
+layout(location=0) out vec4 frag_color;
+void main() { frag_color = pc.u_color; }
 )";
+}
 
-// Ortho pixel→NDC, y+down input → y+up NDC.
+// Ortho pixel→clip (y+down everywhere). Pixel (0,0) → clip (-1,-1).
 void build_ortho(float w, float h, float out[16]) {
     if (w <= 0.0f || h <= 0.0f) {
         std::memset(out, 0, 16 * sizeof(float));
         out[0] = out[5] = out[10] = out[15] = 1.0f;
         return;
     }
-    // Row-major here (we upload with transpose=true). Mirrors what
-    // Text2D does, to stay consistent across the engine.
+    // Row-major here (transposed into column-major when we copy into
+    // the push-constant struct below).
     const float m[16] = {
         2.0f / w,  0.0f,      0.0f, -1.0f,
-        0.0f,     -2.0f / h,  0.0f,  1.0f,
-        0.0f,      0.0f,     -1.0f,  0.0f,
+        0.0f,      2.0f / h,  0.0f, -1.0f,
+        0.0f,      0.0f,      1.0f,  0.0f,
         0.0f,      0.0f,      0.0f,  1.0f,
     };
     std::memcpy(out, m, sizeof(m));
+}
+
+// Copy row-major m[16] → column-major dst[16] (what shaders receive).
+inline void transpose4x4(const float src[16], float dst[16]) {
+    for (int r = 0; r < 4; ++r)
+        for (int c = 0; c < 4; ++c)
+            dst[c * 4 + r] = src[r * 4 + c];
 }
 
 }  // namespace
@@ -226,12 +261,12 @@ void PlotEngine2D::ensure_shader_(tgfx::IRenderDevice& device) {
 
     tgfx::ShaderDesc vd;
     vd.stage = tgfx::ShaderStage::Vertex;
-    vd.source = kVert;
+    vd.source = make_vert();
     shader_vs_id_ = device.create_shader(vd).id;
 
     tgfx::ShaderDesc fd;
     fd.stage = tgfx::ShaderStage::Fragment;
-    fd.source = kFrag;
+    fd.source = make_frag();
     shader_fs_id_ = device.create_shader(fd).id;
 
     shader_device_ = &device;
@@ -300,12 +335,12 @@ void PlotEngine2D::ensure_line_shader_(tgfx::IRenderDevice& device) {
 
     tgfx::ShaderDesc vd;
     vd.stage = tgfx::ShaderStage::Vertex;
-    vd.source = kLineVert;
+    vd.source = make_line_vert();
     line_shader_vs_id_ = device.create_shader(vd).id;
 
     tgfx::ShaderDesc fd;
     fd.stage = tgfx::ShaderStage::Fragment;
-    fd.source = kLineFrag;
+    fd.source = make_line_frag();
     line_shader_fs_id_ = device.create_shader(fd).id;
 
     line_shader_device_ = &device;
@@ -384,11 +419,17 @@ void PlotEngine2D::compute_data_to_clip_(float out16[16]) {
         ? 2.0 * pa.w / vw / span_x : 0.0;
     const double C_x = 2.0 * pa_x_local / vw - 1.0 - S_x * v.x_min;
 
-    // fy = 1 - 2/vh * (pa_y + (1 - (y - y_min)/span_y) * pa_h)
-    //    = 1 - 2*pa_y/vh - 2*pa_h/vh + (2*pa_h/vh/span_y) * (y - y_min)
+    // Y-down clip space: data y+up should map to clip y-down (top of
+    // plot = y_max, bottom = y_min). Derivation:
+    //   pixel_y  = pa_y + (y_max - y) / span_y * pa.h
+    //   fy       = 2 * pixel_y / vh - 1
+    //            = (-2*pa.h / vh / span_y) * y
+    //            + (-1 + 2*pa_y/vh + 2*pa.h*y_max / span_y / vh)
+    // Rewriting the constant in terms of y_min = y_max - span_y so we
+    // stay symmetric with the X derivation above.
     const double S_y = (span_y != 0.0)
-        ? 2.0 * pa.h / vh / span_y : 0.0;
-    const double C_y = 1.0 - 2.0 * pa_y_local / vh - 2.0 * pa.h / vh
+        ? -2.0 * pa.h / vh / span_y : 0.0;
+    const double C_y = -1.0 + 2.0 * pa_y_local / vh + 2.0 * pa.h / vh
                      - S_y * v.y_min;
 
     // Column-major 4x4 storage: out16[col*4 + row].
@@ -510,44 +551,42 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
 
     ensure_shader_(ctx->device());
 
-    // Restrict GL to our strip of the render target. Without this
-    // every PlotEngine2D running in a multi-panel host would paint
-    // to the full framebuffer: scissor stops draws outside the
-    // plot area but glViewport decides the NDC → pixel mapping
-    // for everything that *is* drawn. Setting it per-engine means
-    // emit_* helpers + the line shader can speak local pixel coords
-    // (0..vw_, 0..vh_) and text metrics stay proportional to the
-    // strip rather than stretching across the whole surface.
-    //
-    // Engine-input y goes top-down, but glViewport expects y from the
-    // FBO bottom. In multi-strip mode the host supplies fbo_height_
-    // and we flip; single-strip (fbo_height_ == 0) keeps the old path.
-    const int gl_vy = (fbo_height_ > 0.0f)
-        ? (int)(fbo_height_ - vy_ - vh_)
-        : (int)vy_;
-    ctx->set_viewport((int)vx_, gl_vy, (int)vw_, (int)vh_);
+    // Restrict the render target to our strip. Input y is top-left
+    // origin (tcgui convention) and tgfx2's set_viewport / set_scissor
+    // agree — no Y-flip, no fbo_height_ fallback needed anymore.
+    ctx->set_viewport((int)vx_, (int)vy_, (int)vw_, (int)vh_);
 
     // Render state.
     ctx->set_depth_test(false);
     ctx->set_blend(true);
     ctx->set_cull(tgfx::CullMode::None);
 
-    // Bind UI shader + ortho projection. Vertex emitters below write
-    // GLOBAL viewport coords (pa.x = vx_ + margin_left, etc.), but
-    // with set_viewport above NDC [-1..1] maps to LOCAL pixels. The
-    // ortho subtracts (vx_, vy_) in NDC space so a global pa.x lands
-    // at the right place within the strip.
+    // Build an ortho that maps GLOBAL pixel coords (pa.x = vx_ +
+    // margin_left, etc.) into the LOCAL viewport we just set. set_viewport
+    // makes clip space cover pixels (0..vw_, 0..vh_) of the strip; the
+    // ortho pre-subtracts (vx_, vy_) so callers can keep passing global
+    // coords everywhere.
+    Plot2DPushData pc_ui{};
+    pc_ui.color[0] = pc_ui.color[1] = pc_ui.color[2] = pc_ui.color[3] = 0.0f;
+    {
+        float proj_rm[16];
+        build_ortho((float)vw_, (float)vh_, proj_rm);
+        const float tx = -vx_;
+        const float ty = -vy_;
+        // y-down ortho: proj_rm[3]=-1, proj_rm[7]=-1. Shifting the
+        // input origin by (tx, ty) adds 2*tx/vw to column 3 of row 0
+        // and -2*ty/vh to column 3 of row 1 (same sign on both axes
+        // because the diagonal is positive in both).
+        proj_rm[3]  += 2.0f * tx / std::max(vw_, 1.0f);
+        proj_rm[7]  += 2.0f * ty / std::max(vh_, 1.0f);
+        transpose4x4(proj_rm, pc_ui.matrix);
+    }
+
     auto bind_ui = [&](tgfx::RenderContext2& c) {
         tgfx::ShaderHandle vs; vs.id = shader_vs_id_;
         tgfx::ShaderHandle fs; fs.id = shader_fs_id_;
         c.bind_shader(vs, fs);
-        float proj[16];
-        build_ortho((float)vw_, (float)vh_, proj);
-        const float tx = -vx_;
-        const float ty = -vy_;
-        proj[3] += 2.0f * tx / std::max(vw_, 1.0f);
-        proj[7] += -2.0f * ty / std::max(vh_, 1.0f);
-        c.set_uniform_mat4("u_projection", proj, /*transpose=*/true);
+        c.set_push_constants(&pc_ui, static_cast<uint32_t>(sizeof(pc_ui)));
     };
     bind_ui(*ctx);
 
@@ -563,14 +602,11 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     const Rect pa = plot_area_();
     const ViewRange v = view_range_();
 
-    // Batch #2 — grid inside clip.
-    // Same y-flip convention as glViewport above: pa.y is in engine
-    // input coords (y+ down), glScissor wants y from the FBO bottom.
-    const int gl_sy = (fbo_height_ > 0.0f)
-        ? (int)(fbo_height_ - pa.y - pa.h)
-        : (int)pa.y;
+    // Batch #2 — grid inside clip. Scissor takes top-left origin
+    // coords (Vulkan-native; OpenGL coerced into the same convention
+    // by glClipControl(GL_UPPER_LEFT)).
     if (show_grid) {
-        ctx->set_scissor((int)pa.x, gl_sy, (int)pa.w, (int)pa.h);
+        ctx->set_scissor((int)pa.x, (int)pa.y, (int)pa.w, (int)pa.h);
         bind_ui(*ctx);  // scissor sometimes drops bound state on some drivers
 
         const int max_x_ticks = std::max(int(pa.w / 80.0f), 3);
@@ -591,7 +627,7 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         }
         flush_lines_(*ctx, line_verts);
     } else {
-        ctx->set_scissor((int)pa.x, gl_sy, (int)pa.w, (int)pa.h);
+        ctx->set_scissor((int)pa.x, (int)pa.y, (int)pa.w, (int)pa.h);
         bind_ui(*ctx);
     }
 
@@ -608,10 +644,8 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         tgfx::ShaderHandle lfs; lfs.id = line_shader_fs_id_;
         ctx->bind_shader(lvs, lfs);
 
-        float data_to_clip[16];
-        compute_data_to_clip_(data_to_clip);
-        ctx->set_uniform_mat4("u_data_to_clip", data_to_clip,
-                              /*transpose=*/false);
+        Plot2DPushData pc_line{};
+        compute_data_to_clip_(pc_line.matrix);  // already column-major
 
         tgfx::VertexBufferLayout line_layout;
         line_layout.stride = 2 * sizeof(float);
@@ -635,7 +669,12 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
 
             const Color4 c = s.color.has_value()
                 ? *s.color : styles::cycle_color((uint32_t)i);
-            ctx->set_uniform_vec4("u_color", c.r, c.g, c.b, c.a);
+            pc_line.color[0] = c.r;
+            pc_line.color[1] = c.g;
+            pc_line.color[2] = c.b;
+            pc_line.color[3] = c.a;
+            ctx->set_push_constants(&pc_line,
+                                    static_cast<uint32_t>(sizeof(pc_line)));
 
             ctx->draw_arrays(gs.vbo, gs.gpu_count);
         }
@@ -788,8 +827,14 @@ void PlotEngine2D::on_mouse_move(float x, float y) {
     const double vy1 = pan_start_view_[3];
     const double dx_px = x - pan_start_mx_;
     const double dy_px = y - pan_start_my_;
+    // Pan follows the cursor: the data point under the mouse stays
+    // glued to it. pixel_x = pa_x + (x - x_min)/span_x * pa_w, so
+    // dx_data = -dx_px/pa.w * span_x keeps the point fixed on X.
+    // pixel_y = pa_y + (y_max - y)/span_y * pa_h grows downward as
+    // data y shrinks — the opposite direction, so the Y sign is
+    // positive here.
     const double dx_data = -dx_px / pa.w * (vx1 - vx0);
-    const double dy_data = dy_px / pa.h * (vy1 - vy0);  // Y flipped
+    const double dy_data =  dy_px / pa.h * (vy1 - vy0);
     view_x_min_ = vx0 + dx_data;
     view_x_max_ = vx1 + dx_data;
     view_y_min_ = vy0 + dy_data;
