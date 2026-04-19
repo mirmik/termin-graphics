@@ -193,7 +193,6 @@ void FrameGraphPresenter::render(
     ctx2->set_depth_write(false);
     ctx2->set_blend(false);
     ctx2->set_cull(tgfx::CullMode::None);
-    ctx2->set_color_format(tgfx::PixelFormat::RGBA8_UNorm);
 
     ctx2->bind_shader(ctx2->fsq_vertex_shader(), fs2_);
 

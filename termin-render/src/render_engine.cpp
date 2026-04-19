@@ -185,6 +185,7 @@ void RenderEngine::render_view_to_fbo_id(
         color_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
         color_desc.usage = tgfx::TextureUsage::Sampled |
                            tgfx::TextureUsage::ColorAttachment |
+                           tgfx::TextureUsage::CopySrc |
                            tgfx::TextureUsage::CopyDst;
         external_target_color_ = tgfx2_device_->create_texture(color_desc);
 

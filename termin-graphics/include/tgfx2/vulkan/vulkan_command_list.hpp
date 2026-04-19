@@ -54,6 +54,7 @@ private:
     // mismatch validation error. Cheap even when the texture is not
     // sampled next — one barrier per attachment.
     std::vector<TextureHandle> current_pass_color_attachments_;
+    TextureHandle current_pass_depth_attachment_{};
 };
 
 } // namespace tgfx

@@ -153,11 +153,6 @@ public:
     // resource set.
     void clear_resource_bindings();
 
-    // --- Target format info (for pipeline cache key) ---
-    void set_color_format(PixelFormat fmt);
-    void set_depth_format(PixelFormat fmt);
-    void set_sample_count(uint32_t samples);
-
     // --- Viewport / Scissor ---
     void set_viewport(int x, int y, int w, int h);
     void set_scissor(int x, int y, int w, int h);

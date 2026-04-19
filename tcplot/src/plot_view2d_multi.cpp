@@ -355,7 +355,6 @@ void PlotView2DMulti::render(int width, int height, uint32_t dst_gl_fbo) {
     update_shared_x_();
 
     ctx_->begin_frame();
-    ctx_->set_sample_count(static_cast<uint32_t>(msaa_samples_));
 
     // Clear to the first panel's bg_color so host overrides via
     // set_bg_color are visible even in the gaps between panel rects

@@ -3,6 +3,9 @@
 #include "tgfx2/vulkan/vulkan_command_list.hpp"
 #include "tgfx2/vulkan/vulkan_type_conversions.hpp"
 
+#include <algorithm>
+#include <cstdio>
+
 namespace tgfx {
 
 VulkanCommandList::VulkanCommandList(VulkanRenderDevice& device)
@@ -80,6 +83,7 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
 
     PixelFormat depth_fmt = PixelFormat::D24_UNorm_S8_UInt;
     LoadOp depth_load = LoadOp::Clear;
+    current_pass_depth_attachment_ = {};
     if (pass.has_depth && pass.depth.texture) {
         auto* tex = device_.get_texture(pass.depth.texture);
         if (tex) {
@@ -92,6 +96,19 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
             if (sample_count == 1 && tex->desc.sample_count > 1) {
                 sample_count = tex->desc.sample_count;
             }
+            // Transition depth to DEPTH_STENCIL_ATTACHMENT_OPTIMAL before
+            // the pass starts. Without this, a shadow-depth texture left
+            // in SHADER_READ_ONLY_OPTIMAL by a previous sampler use
+            // survives into the next shadow pass's render-pass load op.
+            VkImageAspectFlags dep_aspect = vk::format_aspect_flags(tex->desc.format);
+            if (tex->current_layout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+                device_.transition_image_layout(cmd_, tex->image,
+                    tex->current_layout,
+                    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                    dep_aspect);
+                tex->current_layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            }
+            current_pass_depth_attachment_ = pass.depth.texture;
         }
     }
     if (sample_count == 0) sample_count = 1;
@@ -172,6 +189,22 @@ void VulkanCommandList::end_render_pass() {
         tex->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
     current_pass_color_attachments_.clear();
+
+    // Do the same for the depth attachment so shadow-depth textures are
+    // directly samplable afterwards (ShadowPass → any pass that binds the
+    // shadow map as a SampledTexture).
+    if (current_pass_depth_attachment_) {
+        auto* tex = device_.get_texture(current_pass_depth_attachment_);
+        if (tex && tex->image != VK_NULL_HANDLE &&
+            tex->current_layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+            device_.transition_image_layout(cmd_, tex->image,
+                tex->current_layout,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                vk::format_aspect_flags(tex->desc.format));
+            tex->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
+        current_pass_depth_attachment_ = {};
+    }
 }
 
 // --- Pipeline ---
@@ -202,7 +235,7 @@ void VulkanCommandList::bind_resource_set(ResourceSetHandle set) {
         if (tex->current_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) continue;
         device_.transition_image_layout(cmd_, tex->image,
             tex->current_layout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT);
+            vk::format_aspect_flags(tex->desc.format));
         tex->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 
@@ -271,13 +304,83 @@ void VulkanCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
     auto* d = device_.get_texture(dst);
     if (!s || !d) return;
 
-    VkImageCopy region{};
-    region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-    region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-    region.extent = {s->desc.width, s->desc.height, 1};
+    // Transfer commands must be recorded outside of a render pass. Callers
+    // using ctx2.blit() between begin_frame/end_frame are fine as long as
+    // no begin_render_pass is active.
+    if (in_render_pass_) {
+        fprintf(stderr, "[Vulkan] copy_texture called inside an active "
+                        "render pass — skipping (call blit outside begin/end_pass)\n");
+        return;
+    }
 
-    vkCmdCopyImage(cmd_, s->image, s->current_layout,
-                    d->image, d->current_layout, 1, &region);
+    VkImageAspectFlags src_aspect = vk::format_aspect_flags(s->desc.format);
+    VkImageAspectFlags dst_aspect = vk::format_aspect_flags(d->desc.format);
+
+    VkImageLayout prev_src = s->current_layout;
+    VkImageLayout prev_dst = d->current_layout;
+
+    device_.transition_image_layout(cmd_, s->image,
+        prev_src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, src_aspect);
+    device_.transition_image_layout(cmd_, d->image,
+        prev_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, dst_aspect);
+
+    uint32_t w = std::min(s->desc.width, d->desc.width);
+    uint32_t h = std::min(s->desc.height, d->desc.height);
+
+    // Pick the right transfer op:
+    //   MSAA src + single dst, same format  → vkCmdResolveImage
+    //   Same samples, same format           → vkCmdCopyImage
+    //   Same samples, different format      → vkCmdBlitImage (handles conversion)
+    //   MSAA src + format conversion        → not supported by Vulkan in one step.
+    bool same_format = s->desc.format == d->desc.format;
+    bool same_samples = s->desc.sample_count == d->desc.sample_count;
+    bool msaa_to_single = s->desc.sample_count > 1 && d->desc.sample_count == 1;
+
+    if (msaa_to_single && same_format) {
+        VkImageResolve resolve{};
+        resolve.srcSubresource = {src_aspect, 0, 0, 1};
+        resolve.dstSubresource = {dst_aspect, 0, 0, 1};
+        resolve.extent = {w, h, 1};
+        vkCmdResolveImage(cmd_,
+            s->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            d->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &resolve);
+    } else if (same_samples && same_format) {
+        VkImageCopy region{};
+        region.srcSubresource = {src_aspect, 0, 0, 1};
+        region.dstSubresource = {dst_aspect, 0, 0, 1};
+        region.extent = {w, h, 1};
+        vkCmdCopyImage(cmd_,
+            s->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            d->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &region);
+    } else if (same_samples) {
+        VkImageBlit blit{};
+        blit.srcSubresource = {src_aspect, 0, 0, 1};
+        blit.srcOffsets[0] = {0, 0, 0};
+        blit.srcOffsets[1] = {int32_t(s->desc.width), int32_t(s->desc.height), 1};
+        blit.dstSubresource = {dst_aspect, 0, 0, 1};
+        blit.dstOffsets[0] = {0, 0, 0};
+        blit.dstOffsets[1] = {int32_t(d->desc.width), int32_t(d->desc.height), 1};
+        // Linear for color (LDR/HDR filtering ok), nearest for depth — depth
+        // formats forbid linear filtering in blit.
+        VkFilter filter = (src_aspect & VK_IMAGE_ASPECT_DEPTH_BIT)
+                          ? VK_FILTER_NEAREST : VK_FILTER_LINEAR;
+        vkCmdBlitImage(cmd_,
+            s->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            d->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &blit, filter);
+    } else {
+        fprintf(stderr, "[Vulkan] copy_texture cannot MSAA-resolve with "
+                        "format conversion in one step (src samples=%u fmt=%d, "
+                        "dst samples=%u fmt=%d) — skipping\n",
+                s->desc.sample_count, (int)s->desc.format,
+                d->desc.sample_count, (int)d->desc.format);
+        return;
+    }
+
+    s->current_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    d->current_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 }
 
 // --- Dynamic state ---

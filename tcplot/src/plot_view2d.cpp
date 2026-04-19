@@ -138,9 +138,6 @@ void PlotView2D::render(int width, int height, uint32_t dst_gl_fbo) {
 
     ctx_->begin_frame();
 
-    // Pipelines need to match target FBO sample count (see PlotView3D).
-    ctx_->set_sample_count(static_cast<uint32_t>(msaa_samples_));
-
     const Color4 bg = styles::bg_color();
     const float clear_col[4] = {bg.r, bg.g, bg.b, bg.a};
     // 2D pass: no depth attachment, no depth clear.

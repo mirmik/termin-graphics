@@ -224,12 +224,6 @@ void PlotView3D::render(int width, int height, uint32_t dst_gl_fbo) {
 
     ctx_->begin_frame();
 
-    // Pipelines need to match the target FBO sample count, else GL
-    // raises INVALID_FRAMEBUFFER_OPERATION on draw. set_sample_count
-    // feeds the pipeline cache key; cached pipelines for MSAA vs
-    // non-MSAA targets are distinct.
-    ctx_->set_sample_count(static_cast<uint32_t>(msaa_samples_));
-
     const Color4 bg = styles::bg_color();
     const float clear_col[4] = {bg.r, bg.g, bg.b, bg.a};
     ctx_->begin_pass(offscreen_color_, offscreen_depth_,

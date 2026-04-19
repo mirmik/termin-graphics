@@ -198,10 +198,6 @@ void bind_tgfx2(nb::module_& m) {
              [](tgfx::RenderContext2& self, int mode) {
                  self.set_cull(static_cast<tgfx::CullMode>(mode));
              })
-        .def("set_color_format",
-             [](tgfx::RenderContext2& self, int fmt) {
-                 self.set_color_format(static_cast<tgfx::PixelFormat>(fmt));
-             })
         .def("set_color_mask", &tgfx::RenderContext2::set_color_mask)
         .def("set_viewport", &tgfx::RenderContext2::set_viewport)
         .def("set_scissor", &tgfx::RenderContext2::set_scissor)

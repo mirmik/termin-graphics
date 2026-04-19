@@ -478,27 +478,6 @@ void RenderContext2::set_block_binding(const char* block_name, uint32_t binding_
     glUniformBlockBinding(static_cast<GLuint>(prog), idx, binding_slot);
 }
 
-void RenderContext2::set_color_format(PixelFormat fmt) {
-    if (color_format_ != fmt) {
-        color_format_ = fmt;
-        pipeline_dirty_ = true;
-    }
-}
-
-void RenderContext2::set_depth_format(PixelFormat fmt) {
-    if (depth_format_ != fmt) {
-        depth_format_ = fmt;
-        pipeline_dirty_ = true;
-    }
-}
-
-void RenderContext2::set_sample_count(uint32_t samples) {
-    if (sample_count_ != samples) {
-        sample_count_ = samples;
-        pipeline_dirty_ = true;
-    }
-}
-
 // ============================================================================
 // Viewport / Scissor
 // ============================================================================

@@ -44,7 +44,9 @@ bool FBOPool::ensure_native(
         cdesc.format = color_format;
         cdesc.sample_count = static_cast<uint32_t>(samples);
         cdesc.usage = tgfx::TextureUsage::Sampled |
-                      tgfx::TextureUsage::ColorAttachment;
+                      tgfx::TextureUsage::ColorAttachment |
+                      tgfx::TextureUsage::CopySrc |
+                      tgfx::TextureUsage::CopyDst;
         entry.color_tgfx2 = device.create_texture(cdesc);
         if (has_depth) {
             tgfx::TextureDesc ddesc;
