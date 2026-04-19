@@ -392,30 +392,15 @@ void OpenGLCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
 
 // --- Dynamic state ---
 
-// Toggle for the OpenGL glViewport/glScissor Y-origin.
-//
-// Desktop GL spec says glClipControl(GL_UPPER_LEFT) flips the
-// clip→window mapping but *not* the origin of glViewport / glScissor
-// (both stay bottom-left). Some drivers (notably Mesa 24+ on NVIDIA)
-// do flip scissor/viewport along with the clip origin; the spec-pure
-// path then double-flips and crops everything.
-//
-// We expose `TGFX_GL_NO_FRAMEBUFFER_FLIP=1` to let callers bypass the
-// manual flip and use raw (x, y) as-is — helpful on drivers that
-// already agree with the Vulkan contract on their own. Default keeps
-// the spec-pure flip so correctness on compliant drivers is not
-// surprised.
-static bool gl_no_fb_flip() {
-    static const bool v = []{
-        const char* e = std::getenv("TGFX_GL_NO_FRAMEBUFFER_FLIP");
-        return e && e[0] && e[0] != '0';
-    }();
-    return v;
-}
+// Caller contract for set_viewport/set_scissor is top-left origin
+// pixel coords (matches Vulkan and tcgui). GL's glViewport / glScissor
+// still use bottom-left origin in window coordinates — glClipControl
+// changes the clip→window mapping only, not the viewport/scissor
+// origin. We flip the y here using the framebuffer height recorded
+// in begin_render_pass so callers can stay backend-agnostic.
 
 void OpenGLCommandList::set_viewport(int x, int y, int width, int height) {
-    // Caller contract is top-left origin (matches Vulkan / tcgui).
-    const int gl_y = (cached_fb_height_ > 0 && !gl_no_fb_flip())
+    const int gl_y = (cached_fb_height_ > 0)
         ? (cached_fb_height_ - (y + height))
         : y;
     glViewport(x, gl_y, width, height);
@@ -425,7 +410,7 @@ void OpenGLCommandList::set_scissor(int x, int y, int width, int height) {
     if (width == 0 && height == 0) {
         glDisable(GL_SCISSOR_TEST);
     } else {
-        const int gl_y = (cached_fb_height_ > 0 && !gl_no_fb_flip())
+        const int gl_y = (cached_fb_height_ > 0)
             ? (cached_fb_height_ - (y + height))
             : y;
         glEnable(GL_SCISSOR_TEST);
