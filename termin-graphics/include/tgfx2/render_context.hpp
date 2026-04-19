@@ -52,6 +52,11 @@ public:
     // --- Frame lifecycle ---
     void begin_frame();
     void end_frame();   // submits command list
+    // True between begin_frame() and end_frame() — i.e. command list
+    // is live and draws/passes can be recorded. Used by guest renderers
+    // (UIRenderer, posteffects) to decide whether they need to open a
+    // frame themselves or the host already has one running.
+    bool in_frame() const { return cmd_ != nullptr; }
 
     // --- Render pass ---
     // Begin render pass with color attachment (and optional depth).
