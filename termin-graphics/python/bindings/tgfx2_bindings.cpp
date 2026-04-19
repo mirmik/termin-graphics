@@ -522,6 +522,23 @@ void bind_tgfx2(nb::module_& m) {
             "Build a Tgfx2Context that borrows an externally-owned device "
             "and RenderContext2. Used by BackendWindow.tgfx2_context().")
 
+        // Same as borrow() but takes the live RenderContext2 wrapper
+        // instead of raw uintptr_t pointers — the device is inferred
+        // from the ctx. Used by UIComponent / other in-scene helpers
+        // that already have a RenderContext2 in hand (framegraph
+        // ExecuteContext.ctx2) and want to route their renderer through
+        // the same device, otherwise per-device HandlePools are separate
+        // and TextureHandles created by the helper cannot be blit/
+        // sampled through the external ctx.
+        .def_static("borrow_from_context",
+            [](tgfx::RenderContext2& ctx) -> Tgfx2ContextHolder* {
+                return new Tgfx2ContextHolder(&ctx.device(), &ctx);
+            },
+            nb::arg("ctx"),
+            nb::rv_policy::take_ownership,
+            "Build a Tgfx2Context that borrows the device+ctx from an "
+            "existing RenderContext2.")
+
         // The underlying RenderContext2. Lifetime is tied to the
         // holder (owning mode) or to the lender (borrow mode).
         .def_prop_ro("context",
