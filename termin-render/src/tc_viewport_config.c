@@ -20,6 +20,7 @@ void tc_viewport_config_copy(tc_viewport_config* dst, const tc_viewport_config* 
     dst->name = src->name ? tgfx_intern_string(src->name) : NULL;
     dst->display_name = src->display_name ? tgfx_intern_string(src->display_name) : tgfx_intern_string("Main");
     dst->render_target_name = src->render_target_name ? tgfx_intern_string(src->render_target_name) : NULL;
+    dst->camera_uuid = src->camera_uuid ? tgfx_intern_string(src->camera_uuid) : NULL;
     dst->region[0] = src->region[0];
     dst->region[1] = src->region[1];
     dst->region[2] = src->region[2];

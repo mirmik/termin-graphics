@@ -15,6 +15,7 @@ typedef struct tc_viewport_config {
     const char* name;               // Viewport name (interned)
     const char* display_name;       // Display name (interned)
     const char* render_target_name; // Render target to display (interned, nullable)
+    const char* camera_uuid;        // UUID of the camera entity — stable match key (interned, nullable)
     float region[4];                // Normalized region (x, y, width, height)
     int depth;                      // Viewport depth for ordering
     const char* input_mode;         // Input mode: "none", "simple", "editor" (interned)
