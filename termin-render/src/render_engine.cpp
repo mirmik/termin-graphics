@@ -521,7 +521,18 @@ void RenderEngine::render_scene_pipeline_offscreen(
             auto it = resources.find(name);
             if (it != resources.end() && it->second) {
                 auto* arr = dynamic_cast<ShadowMapArrayResource*>(it->second);
-                if (arr) pass_shadow_arrays[name] = arr;
+                if (arr) {
+                    pass_shadow_arrays[name] = arr;
+                    // Also expose the array's first cascade as a regular
+                    // tex2 read, so generic passes (e.g. FrameDebugger)
+                    // can sample / blit shadow_maps without knowing about
+                    // the ShadowArrayMap side-channel. ColorPass still
+                    // iterates shadow_arrays for the full cascade set.
+                    if (!arr->entries.empty() &&
+                        arr->entries[0].depth_tex2) {
+                        pass_tex2_reads[name] = arr->entries[0].depth_tex2;
+                    }
+                }
             }
         };
 
