@@ -510,6 +510,22 @@ void bind_tgfx2(nb::module_& m) {
             },
             nb::rv_policy::reference_internal)
 
+        // Backend identifier as a lowercase string: "opengl", "vulkan",
+        // "metal", "d3d12", "null". Drives per-backend branches in
+        // compositing code (e.g. Viewport3D's flip_v, which depends on
+        // the scene render target's texel origin convention).
+        .def_prop_ro("backend",
+            [](Tgfx2ContextHolder& self) -> std::string {
+                switch (self.device->backend_type()) {
+                    case tgfx::BackendType::OpenGL: return "opengl";
+                    case tgfx::BackendType::Vulkan: return "vulkan";
+                    case tgfx::BackendType::Metal:  return "metal";
+                    case tgfx::BackendType::D3D12:  return "d3d12";
+                    case tgfx::BackendType::Null:   return "null";
+                }
+                return "unknown";
+            })
+
         // --- Texture helpers (narrow API; the full IRenderDevice is
         // not exposed to Python) ---
 
