@@ -111,7 +111,13 @@ tgfx_vertex_layout tgfx_vertex_layout_skinned(void) {
     tgfx_vertex_layout_add(&layout, "position", 3, TGFX_ATTRIB_FLOAT32, 0);
     tgfx_vertex_layout_add(&layout, "normal", 3, TGFX_ATTRIB_FLOAT32, 1);
     tgfx_vertex_layout_add(&layout, "uv", 2, TGFX_ATTRIB_FLOAT32, 2);
-    tgfx_vertex_layout_add(&layout, "joints", 4, TGFX_ATTRIB_FLOAT32, 3);
-    tgfx_vertex_layout_add(&layout, "weights", 4, TGFX_ATTRIB_FLOAT32, 4);
+    // joints/weights live at locations 6/7 to avoid overlap with `tangent`
+    // (location 3 in tgfx_vertex_layout_pos_normal_uv_tangent) and `color`
+    // (location 5 in tgfx_vertex_layout_pos_normal_uv_color). shaderc for
+    // Vulkan rejects overlapping `in` declarations — the previous slots 3/4
+    // only worked on GL because the driver silently reused tangent storage
+    // for joints data.
+    tgfx_vertex_layout_add(&layout, "joints", 4, TGFX_ATTRIB_FLOAT32, 6);
+    tgfx_vertex_layout_add(&layout, "weights", 4, TGFX_ATTRIB_FLOAT32, 7);
     return layout;
 }
