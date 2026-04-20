@@ -823,9 +823,14 @@ bool OpenGLRenderDevice::read_pixel_rgba8(
 
     bool ok = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
     if (ok) {
+        // IRenderDevice::read_pixel_rgba8 takes top-down pixel coords
+        // (window-space convention). glReadPixels wants bottom-up, so
+        // flip Y here — stays a backend-local detail instead of leaking
+        // into the caller.
+        const int gl_y = static_cast<int>(t->desc.height) - y - 1;
         uint8_t pixel[4] = {0, 0, 0, 0};
         glReadBuffer(GL_COLOR_ATTACHMENT0);
-        glReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+        glReadPixels(x, gl_y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
         out_rgba[0] = pixel[0] / 255.0f;
         out_rgba[1] = pixel[1] / 255.0f;
         out_rgba[2] = pixel[2] / 255.0f;

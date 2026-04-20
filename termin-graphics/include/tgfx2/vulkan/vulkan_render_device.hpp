@@ -152,6 +152,11 @@ public:
                                uint32_t mip = 0) override;
     void read_buffer(BufferHandle src, std::span<uint8_t> data, uint64_t offset = 0) override;
 
+    // Editor picking readback path: sample one RGBA8 pixel from a color
+    // texture. Synchronous — waits on a one-shot transfer submit. Rare
+    // call (once per mouse-move for hover), so the wait is acceptable.
+    bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]) override;
+
     std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) override;
     void submit(ICommandList& cmd) override;
     void present() override;

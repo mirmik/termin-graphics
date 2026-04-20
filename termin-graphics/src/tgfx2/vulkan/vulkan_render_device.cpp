@@ -1577,6 +1577,103 @@ void VulkanRenderDevice::read_buffer(BufferHandle src, std::span<uint8_t> data, 
     }
 }
 
+bool VulkanRenderDevice::read_pixel_rgba8(
+    TextureHandle tex, int x, int y, float out_rgba[4]
+) {
+    auto* res = textures_.get(tex.id);
+    if (!res || !out_rgba) return false;
+
+    // Clamp to texture bounds — caller's (x, y) in pixel coords from the
+    // editor picking path is not guaranteed to land inside the attachment.
+    const int w = static_cast<int>(res->desc.width);
+    const int h = static_cast<int>(res->desc.height);
+    if (x < 0 || y < 0 || x >= w || y >= h) return false;
+
+    VkBufferCreateInfo stage_ci{};
+    stage_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    stage_ci.size = 4;
+    stage_ci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+    VmaAllocationCreateInfo stage_alloc{};
+    stage_alloc.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
+
+    VkBuffer staging = VK_NULL_HANDLE;
+    VmaAllocation staging_alloc_h = VK_NULL_HANDLE;
+    if (vmaCreateBuffer(allocator_, &stage_ci, &stage_alloc,
+                        &staging, &staging_alloc_h, nullptr) != VK_SUCCESS) {
+        return false;
+    }
+
+    VkCommandBufferAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    ai.commandPool = command_pool_;
+    ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    ai.commandBufferCount = 1;
+    VkCommandBuffer cb = VK_NULL_HANDLE;
+    vkAllocateCommandBuffers(device_, &ai, &cb);
+
+    VkCommandBufferBeginInfo bi{};
+    bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cb, &bi);
+
+    // Move the image from whatever layout it is in now into TRANSFER_SRC
+    // for the copy; the end_render_pass hook already transitions color
+    // attachments to SHADER_READ_ONLY_OPTIMAL, so that is the common
+    // source layout, but we don't assume — transition_image_layout
+    // handles the generic case.
+    VkImageLayout prev_layout = res->current_layout;
+    transition_image_layout(cb, res->image, prev_layout,
+                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                            VK_IMAGE_ASPECT_COLOR_BIT);
+
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+    region.imageOffset = {x, y, 0};
+    region.imageExtent = {1, 1, 1};
+    vkCmdCopyImageToBuffer(cb, res->image,
+                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           staging, 1, &region);
+
+    // Put the image back where we found it so the next frame's
+    // sampling / render-pass-load doesn't start from an unexpected layout.
+    transition_image_layout(cb, res->image,
+                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                            prev_layout, VK_IMAGE_ASPECT_COLOR_BIT);
+    res->current_layout = prev_layout;
+
+    vkEndCommandBuffer(cb);
+
+    VkSubmitInfo si{};
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &cb;
+    vkQueueSubmit(graphics_queue_, 1, &si, VK_NULL_HANDLE);
+    vkQueueWaitIdle(graphics_queue_);
+
+    void* mapped = nullptr;
+    uint8_t pixel[4] = {0, 0, 0, 0};
+    if (vmaMapMemory(allocator_, staging_alloc_h, &mapped) == VK_SUCCESS && mapped) {
+        std::memcpy(pixel, mapped, 4);
+        vmaUnmapMemory(allocator_, staging_alloc_h);
+    }
+
+    vmaDestroyBuffer(allocator_, staging, staging_alloc_h);
+    vkFreeCommandBuffers(device_, command_pool_, 1, &cb);
+
+    out_rgba[0] = pixel[0] / 255.0f;
+    out_rgba[1] = pixel[1] / 255.0f;
+    out_rgba[2] = pixel[2] / 255.0f;
+    out_rgba[3] = pixel[3] / 255.0f;
+    return true;
+}
+
 // --- Command list ---
 
 std::unique_ptr<ICommandList> VulkanRenderDevice::create_command_list(QueueType /*queue*/) {
