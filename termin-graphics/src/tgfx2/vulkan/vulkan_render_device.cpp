@@ -155,6 +155,10 @@ VulkanRenderDevice::~VulkanRenderDevice() {
         // layout and render_pass are shared/cached, cleaned separately
     }
 
+    if (immediate_cb_ != VK_NULL_HANDLE) {
+        vkFreeCommandBuffers(device_, command_pool_, 1, &immediate_cb_);
+        immediate_cb_ = VK_NULL_HANDLE;
+    }
     if (frame_fence_) vkDestroyFence(device_, frame_fence_, nullptr);
     if (default_sampler_) vkDestroySampler(device_, default_sampler_, nullptr);
     if (shared_pipeline_layout_) vkDestroyPipelineLayout(device_, shared_pipeline_layout_, nullptr);
@@ -520,56 +524,40 @@ void VulkanRenderDevice::wait_idle() { vkDeviceWaitIdle(device_); }
 
 // --- Immediate command execution ---
 
-void VulkanRenderDevice::execute_immediate(std::function<void(VkCommandBuffer)> fn) {
-    // Profiling: count calls and cumulative wait time per "window"
-    // (~1 sec between prints). Lets us eyeball whether execute_immediate
-    // is the hot-path stall source — blit/clear/texture uploads all
-    // route through here with a full vkQueueWaitIdle afterwards.
-    static thread_local uint64_t s_calls = 0;
-    static thread_local double   s_wait_us = 0.0;
-    static thread_local auto     s_window_start = std::chrono::steady_clock::now();
+VkCommandBuffer VulkanRenderDevice::ensure_immediate_cb() {
+    if (immediate_cb_open_) return immediate_cb_;
 
+    // Always allocate a fresh cb. The previous frame's immediate_cb was
+    // handed over to pending_destroy_current_ in submit(), so it will
+    // be freed after the frame fence signals — safe. Re-recording the
+    // same cb here would hit "buffer is in use" validation because
+    // submit()'s fence wait hasn't necessarily run yet between calls.
     VkCommandBufferAllocateInfo ai{};
     ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     ai.commandPool = command_pool_;
     ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     ai.commandBufferCount = 1;
-
-    VkCommandBuffer cmd;
-    vkAllocateCommandBuffers(device_, &ai, &cmd);
+    vkAllocateCommandBuffers(device_, &ai, &immediate_cb_);
 
     VkCommandBufferBeginInfo bi{};
     bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkBeginCommandBuffer(cmd, &bi);
+    vkBeginCommandBuffer(immediate_cb_, &bi);
 
-    fn(cmd);
+    immediate_cb_open_ = true;
+    return immediate_cb_;
+}
 
-    vkEndCommandBuffer(cmd);
-
-    VkSubmitInfo si{};
-    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    si.commandBufferCount = 1;
-    si.pCommandBuffers = &cmd;
-
-    auto t0 = std::chrono::steady_clock::now();
-    vkQueueSubmit(graphics_queue_, 1, &si, VK_NULL_HANDLE);
-    vkQueueWaitIdle(graphics_queue_);
-    auto t1 = std::chrono::steady_clock::now();
-    s_calls++;
-    s_wait_us += std::chrono::duration<double, std::micro>(t1 - t0).count();
-
-    vkFreeCommandBuffers(device_, command_pool_, 1, &cmd);
-
-    auto now = std::chrono::steady_clock::now();
-    if (std::chrono::duration<double>(now - s_window_start).count() >= 1.0) {
-        tc_log(TC_LOG_INFO,
-               "[VkHotPath] execute_immediate: %llu calls, %.2f ms cumulative wait over ~1s",
-               (unsigned long long)s_calls, s_wait_us / 1000.0);
-        s_calls = 0;
-        s_wait_us = 0.0;
-        s_window_start = now;
-    }
+void VulkanRenderDevice::execute_immediate(std::function<void(VkCommandBuffer)> fn) {
+    // Record into the shared immediate cb. No submit, no wait — the cb
+    // gets submitted together with the main draw cb in `submit()`, as
+    // entry 0 of a multi-cb `vkQueueSubmit` so the copies/transitions
+    // complete before the draws that depend on them.
+    //
+    // Callers that used to do `staging; execute_immediate; destroy
+    // staging;` must now push staging into `defer_vma_buffer_destroy` —
+    // the GPU hasn't run the copy by the time this function returns.
+    fn(ensure_immediate_cb());
 }
 
 // --- Image layout transition ---
@@ -1177,6 +1165,9 @@ void VulkanRenderDevice::drain_pending_destroy(PendingDestroyQueue& q) {
     for (auto cb : q.cmd_buffers) {
         vkFreeCommandBuffers(device_, command_pool_, 1, &cb);
     }
+    for (auto& [buf, alloc] : q.vma_buffers) {
+        vmaDestroyBuffer(allocator_, buf, alloc);
+    }
     q = {};
 }
 
@@ -1230,7 +1221,8 @@ void VulkanRenderDevice::upload_buffer(BufferHandle dst, std::span<const uint8_t
             vkCmdCopyBuffer(cmd, staging, res->buffer, 1, &region);
         });
 
-        vmaDestroyBuffer(allocator_, staging, staging_alloc);
+        // Defer staging destroy — GPU runs the copy after the frame submit.
+        defer_vma_buffer_destroy(staging, staging_alloc);
     }
 }
 
@@ -1279,7 +1271,7 @@ void VulkanRenderDevice::upload_texture(TextureHandle dst, std::span<const uint8
     });
 
     res->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    vmaDestroyBuffer(allocator_, staging, staging_alloc);
+    defer_vma_buffer_destroy(staging, staging_alloc);
 }
 
 void VulkanRenderDevice::upload_texture_region(TextureHandle /*dst*/,
@@ -1306,7 +1298,11 @@ void VulkanRenderDevice::read_buffer(BufferHandle src, std::span<uint8_t> data, 
         std::memcpy(data.data(), static_cast<uint8_t*>(mapped) + offset, data.size());
         vmaUnmapMemory(allocator_, res->allocation);
     } else {
-        // Staging readback
+        // Blocking readback — caller needs CPU-side bytes right after
+        // this returns. Deliberately NOT routed through the shared
+        // immediate_cb_ path, because that one is batched and drained
+        // asynchronously by submit(). A readback call is rare (screen-
+        // shot / GPU debug) so the extra submit+wait here is fine.
         VkBufferCreateInfo stage_ci{};
         stage_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         stage_ci.size = data.size();
@@ -1319,18 +1315,37 @@ void VulkanRenderDevice::read_buffer(BufferHandle src, std::span<uint8_t> data, 
         VmaAllocation staging_alloc_h;
         vmaCreateBuffer(allocator_, &stage_ci, &stage_alloc, &staging, &staging_alloc_h, nullptr);
 
-        execute_immediate([&](VkCommandBuffer cmd) {
-            VkBufferCopy region{};
-            region.srcOffset = offset;
-            region.size = data.size();
-            vkCmdCopyBuffer(cmd, res->buffer, staging, 1, &region);
-        });
+        VkCommandBufferAllocateInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        ai.commandPool = command_pool_;
+        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        ai.commandBufferCount = 1;
+        VkCommandBuffer cb;
+        vkAllocateCommandBuffers(device_, &ai, &cb);
+
+        VkCommandBufferBeginInfo bi{};
+        bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        vkBeginCommandBuffer(cb, &bi);
+        VkBufferCopy region{};
+        region.srcOffset = offset;
+        region.size = data.size();
+        vkCmdCopyBuffer(cb, res->buffer, staging, 1, &region);
+        vkEndCommandBuffer(cb);
+
+        VkSubmitInfo si{};
+        si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        si.commandBufferCount = 1;
+        si.pCommandBuffers = &cb;
+        vkQueueSubmit(graphics_queue_, 1, &si, VK_NULL_HANDLE);
+        vkQueueWaitIdle(graphics_queue_);
 
         void* mapped;
         vmaMapMemory(allocator_, staging_alloc_h, &mapped);
         std::memcpy(data.data(), mapped, data.size());
         vmaUnmapMemory(allocator_, staging_alloc_h);
         vmaDestroyBuffer(allocator_, staging, staging_alloc_h);
+        vkFreeCommandBuffers(device_, command_pool_, 1, &cb);
     }
 }
 
@@ -1342,7 +1357,7 @@ std::unique_ptr<ICommandList> VulkanRenderDevice::create_command_list(QueueType 
 
 void VulkanRenderDevice::submit(ICommandList& cmd) {
     auto& vcmd = static_cast<VulkanCommandList&>(cmd);
-    VkCommandBuffer cb = vcmd.command_buffer();
+    VkCommandBuffer main_cb = vcmd.command_buffer();
 
     // Before kicking off a new submit, retire the previous one. If the
     // fence is in-flight we wait (usually signaled already by the time we
@@ -1370,13 +1385,38 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     current_pool_idx_ = 1 - current_pool_idx_;
     vkResetDescriptorPool(device_, descriptor_pools_[current_pool_idx_], 0);
 
+    // Close the immediate cb (copies / transitions / clears accumulated
+    // since last submit) and submit it together with the main draw cb in
+    // ONE vkQueueSubmit. Queue-submit ordering guarantees immediate_cb's
+    // GPU work completes before the main cb starts — no explicit barrier
+    // needed for the "staging → device UBO, then draw reads UBO" pattern.
+    VkCommandBuffer cbs[2];
+    uint32_t cb_count = 0;
+    VkCommandBuffer submitted_immediate_cb = VK_NULL_HANDLE;
+    if (immediate_cb_open_) {
+        vkEndCommandBuffer(immediate_cb_);
+        immediate_cb_open_ = false;
+        cbs[cb_count++] = immediate_cb_;
+        submitted_immediate_cb = immediate_cb_;
+        immediate_cb_ = VK_NULL_HANDLE;  // next frame allocates a fresh one
+    }
+    cbs[cb_count++] = main_cb;
+
     VkSubmitInfo si{};
     si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    si.commandBufferCount = 1;
-    si.pCommandBuffers = &cb;
+    si.commandBufferCount = cb_count;
+    si.pCommandBuffers = cbs;
 
     vkQueueSubmit(graphics_queue_, 1, &si, frame_fence_);
     frame_fence_in_flight_ = true;
+
+    // Defer-free the immediate cb we just submitted — it's in-flight on
+    // the graphics queue, so vkFreeCommandBuffers can only run after the
+    // frame fence signals. The drain at the top of the NEXT submit()
+    // picks this up.
+    if (submitted_immediate_cb != VK_NULL_HANDLE) {
+        pending_destroy_current_.cmd_buffers.push_back(submitted_immediate_cb);
+    }
 }
 
 void VulkanRenderDevice::present() {

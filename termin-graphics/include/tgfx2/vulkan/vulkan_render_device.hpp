@@ -309,10 +309,15 @@ private:
         // by VulkanCommandList's destructor to avoid freeing while the
         // buffer is still in-flight on the queue.
         std::vector<VkCommandBuffer> cmd_buffers;
+        // Raw (VkBuffer, VmaAllocation) pairs from staging buffers that
+        // the immediate-cb batch is still going to read. Freed after the
+        // frame fence signals.
+        std::vector<std::pair<VkBuffer, VmaAllocation>> vma_buffers;
         bool empty() const {
             return buffers.empty() && textures.empty() && samplers.empty()
                 && shaders.empty() && pipelines.empty()
-                && resource_sets.empty() && cmd_buffers.empty();
+                && resource_sets.empty() && cmd_buffers.empty()
+                && vma_buffers.empty();
         }
     };
     VkFence frame_fence_ = VK_NULL_HANDLE;
@@ -333,6 +338,29 @@ public:
     void defer_cmd_buffer_free(VkCommandBuffer cb) {
         if (cb != VK_NULL_HANDLE) pending_destroy_current_.cmd_buffers.push_back(cb);
     }
+
+    // Queue a staging-style VMA buffer for deferred destroy after the
+    // frame fence signals. Used by upload_buffer / upload_texture /
+    // blit_to_texture / read_buffer — they fill a staging buffer, batch
+    // a copy into immediate_cb_, and must NOT destroy the staging
+    // synchronously because the GPU hasn't executed the copy yet.
+    void defer_vma_buffer_destroy(VkBuffer buffer, VmaAllocation alloc) {
+        if (buffer != VK_NULL_HANDLE) {
+            pending_destroy_current_.vma_buffers.emplace_back(buffer, alloc);
+        }
+    }
+
+    // Get (and lazily open) the shared immediate command buffer. Every
+    // copy / layout-transition / clear that used to be its own submit
+    // now records into this single cb; it's ended and flushed inside
+    // `submit()` as the first entry of the frame's multi-cb submit.
+    // One vkQueueSubmit per frame replaces the previous ~200 tiny
+    // submit + vkQueueWaitIdle pairs that dominated Vulkan CPU time.
+    VkCommandBuffer ensure_immediate_cb();
+
+private:
+    VkCommandBuffer immediate_cb_ = VK_NULL_HANDLE;
+    bool immediate_cb_open_ = false;
 };
 
 } // namespace tgfx
