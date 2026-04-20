@@ -72,7 +72,10 @@ typedef struct tc_shader {
     const char* source_path;     // optional source file path (interned string)
     uint8_t is_variant;          // true if this is a derived variant
     uint8_t variant_op;          // tc_shader_variant_op if is_variant
-    uint8_t _pad[2];
+    uint8_t is_static;           // true if registered via tc_shader_register_static
+                                 // (engine shader, never destroyed — see
+                                 // tc_shader_register_static in tc_shader_registry.h)
+    uint8_t _pad[1];
     tc_shader_handle original_handle;  // handle to original shader (if is_variant)
     uint32_t original_version;   // version of original when variant was created
     uint32_t features;           // tc_shader_feature bitflags

@@ -446,6 +446,29 @@ tc_shader_handle tc_shader_from_sources(
     return h;
 }
 
+tc_shader_handle tc_shader_register_static(
+    const char* vertex_source,
+    const char* fragment_source,
+    const char* geometry_source,
+    const char* name
+) {
+    // Re-use the normal creation / hash-dedup path, then mark the shader
+    // as static and install the registry-held ref. The `is_static` flag
+    // guards against double-ref on repeated calls with the same source
+    // (hash hit returns the already-static handle — no extra add_ref).
+    tc_shader_handle h = tc_shader_from_sources(
+        vertex_source, fragment_source, geometry_source,
+        name, /*source_path=*/NULL, /*uuid=*/NULL);
+    if (tc_shader_handle_is_invalid(h)) return h;
+
+    tc_shader* shader = tc_shader_get(h);
+    if (shader && !shader->is_static) {
+        shader->is_static = 1;
+        tc_shader_add_ref(shader);
+    }
+    return h;
+}
+
 // ============================================================================
 // Reference counting
 // ============================================================================

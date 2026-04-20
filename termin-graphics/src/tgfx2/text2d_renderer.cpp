@@ -137,9 +137,8 @@ void Text2DRenderer::ensure_shader_(IRenderDevice& device) {
     if (tc_shader_handle_is_invalid(shader_handle_)) {
         std::string vs = make_text2d_vert();
         std::string fs = make_text2d_frag();
-        shader_handle_ = tc_shader_from_sources(
-            vs.c_str(), fs.c_str(), nullptr,
-            "Text2DEngineVSFS", nullptr, nullptr);
+        shader_handle_ = tc_shader_register_static(
+            vs.c_str(), fs.c_str(), nullptr, "Text2DEngineVSFS");
     }
 
     vs_ = ShaderHandle{};

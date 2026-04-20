@@ -51,6 +51,26 @@ TGFX_API tc_shader_handle tc_shader_from_sources(
     const char* uuid
 );
 
+// Register a shader with process-lifetime ownership. The registry holds
+// a permanent ref on the returned handle — the shader will NOT be
+// destroyed when external refs reach zero, so callers don't need to
+// manage add_ref / release. Use this for engine-owned shaders whose
+// source is a hardcoded C literal (Shadow/Depth/Id/Normal passes, Skybox,
+// Bloom, Immediate etc.) and must outlive arbitrary pass re-creations.
+//
+// Returns the same handle on repeated calls with identical sources
+// (hash-based dedup). The registry's eternal ref is installed exactly
+// once per shader; subsequent calls are cheap hash lookups.
+//
+// NOT for material-authored shaders — those come from `.shader` files
+// and want normal ref-counted lifetime via TcShader wrappers.
+TGFX_API tc_shader_handle tc_shader_register_static(
+    const char* vertex_source,
+    const char* fragment_source,
+    const char* geometry_source,
+    const char* name
+);
+
 // ============================================================================
 // Variant support
 // ============================================================================

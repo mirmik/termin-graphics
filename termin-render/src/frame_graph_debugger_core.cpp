@@ -188,9 +188,8 @@ void FrameGraphPresenter::release_tgfx2_resources() {
 void FrameGraphPresenter::ensure_fs(tgfx::IRenderDevice& device) {
     device2_ = &device;
     if (tc_shader_handle_is_invalid(shader_handle_)) {
-        shader_handle_ = tc_shader_from_sources(
-            nullptr, PRESENTER_FRAG_SRC, nullptr,
-            "FrameGraphPresenterFS", nullptr, nullptr);
+        shader_handle_ = tc_shader_register_static(
+            nullptr, PRESENTER_FRAG_SRC, nullptr, "FrameGraphPresenterFS");
     }
 }
 
