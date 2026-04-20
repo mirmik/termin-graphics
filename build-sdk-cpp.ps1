@@ -10,6 +10,17 @@ $SdkPrefix = if ($env:SDK_PREFIX) { $env:SDK_PREFIX } else { Join-Path $ScriptDi
 $BuildType = "Release"
 $Clean = $false
 $UseParallel = $false
+# Vulkan backend: default "auto" — CMake auto-detects via find_package(Vulkan QUIET).
+# Use --no-vulkan to force off (recommended for distributable bundles so the
+# binaries don't carry a static import on vulkan-1.dll, which is absent on
+# machines without a VulkanSDK install or modern GPU driver).
+$VulkanMode = "auto"
+# SDL2 backend in termin-display: auto-detected at CMake time. Use --no-sdl to
+# force off — recommended for WPF/C#-only distributable bundles, so
+# termin_display.dll doesn't pull in SDL2.dll (the SDL surface and the
+# SDL+Vulkan backend window are only used by standalone editor / Python
+# examples, not by WpfRenderSurface in AppsUIMonorepo).
+$SdlMode = "auto"
 
 foreach ($arg in $args) {
     switch ($arg) {
@@ -18,10 +29,28 @@ foreach ($arg in $args) {
         "--clean"  { $Clean = $true }
         "-c"       { $Clean = $true }
         "--no-parallel" { $UseParallel = $false }
-        "--help"   { Write-Host "Usage: .\build-sdk-cpp.ps1 [--debug] [--clean] [--no-parallel]"; exit 0 }
-        "-h"       { Write-Host "Usage: .\build-sdk-cpp.ps1 [--debug] [--clean] [--no-parallel]"; exit 0 }
+        "--no-vulkan"   { $VulkanMode = "off" }
+        "--vulkan"      { $VulkanMode = "on" }
+        "--no-sdl"      { $SdlMode = "off" }
+        "--sdl"         { $SdlMode = "on"  }
+        "--help"   { Write-Host "Usage: .\build-sdk-cpp.ps1 [--debug] [--clean] [--no-parallel] [--no-vulkan|--vulkan] [--no-sdl|--sdl]"; exit 0 }
+        "-h"       { Write-Host "Usage: .\build-sdk-cpp.ps1 [--debug] [--clean] [--no-parallel] [--no-vulkan|--vulkan] [--no-sdl|--sdl]"; exit 0 }
         default    { Write-Error "Unknown option: $arg"; exit 1 }
     }
+}
+
+# Translate VulkanMode to the extra CMake flag we'll pass to every module
+# that has a TGFX2_ENABLE_VULKAN option. "auto" means don't pass anything
+# and let each module's own find_package(Vulkan QUIET) decide.
+$VulkanCmakeArg = switch ($VulkanMode) {
+    "off"  { "-DTGFX2_ENABLE_VULKAN=OFF" }
+    "on"   { "-DTGFX2_ENABLE_VULKAN=ON"  }
+    default { $null }
+}
+$SdlCmakeArg = switch ($SdlMode) {
+    "off"  { "-DUSE_SYSTEM_SDL2=OFF" }
+    "on"   { "-DUSE_SYSTEM_SDL2=ON"  }
+    default { $null }
 }
 
 function Build-CppLib {
@@ -60,6 +89,8 @@ function Build-CppLib {
             "-DCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY=ON",
             "-DTERMIN_BUILD_PYTHON=OFF"
         ) + $ExtraCmakeArgs
+        if ($VulkanCmakeArg) { $cmakeArgs += $VulkanCmakeArg }
+        if ($SdlCmakeArg)    { $cmakeArgs += $SdlCmakeArg    }
 
         & cmake @cmakeArgs
         if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
@@ -112,6 +143,8 @@ function Build-TerminCppOnly {
             "-DBUNDLE_PYTHON=OFF",
             "-DTERMIN_BUILD_PYTHON=OFF"
         )
+        if ($VulkanCmakeArg) { $cmakeArgs += $VulkanCmakeArg }
+        if ($SdlCmakeArg)    { $cmakeArgs += $SdlCmakeArg    }
 
         & cmake @cmakeArgs
         if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }

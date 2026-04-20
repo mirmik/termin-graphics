@@ -22,6 +22,13 @@
 #ifndef GL_ZERO_TO_ONE
 #define GL_ZERO_TO_ONE 0x935F
 #endif
+// Enum queries from GL 4.5, not in our glad-3.3 header.
+#ifndef GL_CLIP_ORIGIN
+#define GL_CLIP_ORIGIN 0x935C
+#endif
+#ifndef GL_CLIP_DEPTH_MODE
+#define GL_CLIP_DEPTH_MODE 0x935D
+#endif
 #if defined(_WIN32)
 // windows.h drags in min/max macros that collide with std::min/std::max
 // (and with std::numeric_limits<T>::max()). Suppress them.

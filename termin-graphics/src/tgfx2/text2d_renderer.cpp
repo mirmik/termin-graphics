@@ -89,24 +89,19 @@ static_assert(sizeof(Text2DPushData) == 80,
 
 // Build an ortho matrix (column-major) that maps pixel coords y+down
 // → clip-space y+down (Vulkan-native; OpenGL reaches this via
-// glClipControl(GL_UPPER_LEFT) in OpenGLRenderDevice). Pixel (0,0)
-// maps to clip (-1,-1), i.e. the top-left corner of the viewport.
+// glClipControl(GL_UPPER_LEFT), which tgfx2 re-applies at the start
+// of every render pass in OpenGLCommandList::begin_render_pass).
+// Pixel (0,0) maps to clip (-1,-1), i.e. the top-left corner.
 //
-// The matrix is written here in math (row-major) notation but stored
+// The matrix is written in math (row-major) notation but stored
 // column-major so we pass `transpose=true` to set_uniform_mat4. That
 // mirrors what the Python version does with np.array + flatten.
 void build_ortho_pixel_to_ndc(float w, float h, float out[16]) {
-    // Identity for degenerate viewport — avoids NaN downstream.
     if (w <= 0.0f || h <= 0.0f) {
         std::memset(out, 0, 16 * sizeof(float));
         out[0] = out[5] = out[10] = out[15] = 1.0f;
         return;
     }
-    // Row-major layout (we upload with transpose=true):
-    //   [ 2/w,  0,     0,   -1 ]
-    //   [ 0,    2/h,   0,   -1 ]
-    //   [ 0,    0,     1,    0 ]
-    //   [ 0,    0,     0,    1 ]
     float m[16] = {
         2.0f / w,  0.0f,      0.0f, -1.0f,
         0.0f,      2.0f / h,  0.0f, -1.0f,
