@@ -154,7 +154,11 @@ VulkanRenderDevice::~VulkanRenderDevice() {
     if (default_sampler_) vkDestroySampler(device_, default_sampler_, nullptr);
     if (shared_pipeline_layout_) vkDestroyPipelineLayout(device_, shared_pipeline_layout_, nullptr);
     if (descriptor_set_layout_) vkDestroyDescriptorSetLayout(device_, descriptor_set_layout_, nullptr);
-    if (descriptor_pool_) vkDestroyDescriptorPool(device_, descriptor_pool_, nullptr);
+    for (int i = 0; i < 2; ++i) {
+        if (descriptor_pools_[i]) {
+            vkDestroyDescriptorPool(device_, descriptor_pools_[i], nullptr);
+        }
+    }
     if (command_pool_) vkDestroyCommandPool(device_, command_pool_, nullptr);
     if (allocator_) vmaDestroyAllocator(allocator_);
     if (device_) vkDestroyDevice(device_, nullptr);
@@ -355,23 +359,38 @@ void VulkanRenderDevice::create_command_pool() {
 // --- Descriptor pool ---
 
 void VulkanRenderDevice::create_descriptor_pool() {
+    // Two pools, double-buffered with the frame fence. Each frame's draws
+    // allocate from `descriptor_pools_[current_pool_idx_]`; at submit(),
+    // after the previous submit's fence signals, we flip to the other
+    // pool and `vkResetDescriptorPool` it in one call — no individual
+    // `vkFreeDescriptorSets`, no FREE_DESCRIPTOR_SET_BIT flag (the driver
+    // can use a faster bump allocator internally).
+    //
+    // Pool size covers a single frame's worst case for chronosquad-like
+    // scenes: ~30 skinned meshes × 4 shadow cascades + color/depth/id/
+    // normal + UI draws ≈ 500-800 sets. Headroom to 2048 accommodates
+    // heavier future scenes without re-sizing. Each set may touch up to
+    // ~5 UBOs and ~6 samplers, hence the pool-size multipliers below.
     VkDescriptorPoolSize pool_sizes[] = {
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 256},
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 64},
-        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 256},
-        {VK_DESCRIPTOR_TYPE_SAMPLER, 256},
-        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 256},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,          8 * 2048},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,          512},
+        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,           2 * 2048},
+        {VK_DESCRIPTOR_TYPE_SAMPLER,                 2 * 2048},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 20 * 2048},
     };
 
     VkDescriptorPoolCreateInfo ci{};
     ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    ci.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-    ci.maxSets = 256;
+    ci.flags = 0;  // No per-set free — pool reset frees everything at once.
+    ci.maxSets = 2048;
     ci.poolSizeCount = 5;
     ci.pPoolSizes = pool_sizes;
 
-    if (vkCreateDescriptorPool(device_, &ci, nullptr, &descriptor_pool_) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create descriptor pool");
+    for (int i = 0; i < 2; ++i) {
+        if (vkCreateDescriptorPool(device_, &ci, nullptr, &descriptor_pools_[i])
+                != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create descriptor pool");
+        }
     }
 }
 
@@ -386,6 +405,8 @@ void VulkanRenderDevice::create_shared_layouts() {
     //                    compiles to a single array descriptor, so Vulkan
     //                    needs descriptorCount = N on binding 8)
     //   binding 9..15 = COMBINED_IMAGE_SAMPLER, 1 each (extra slots)
+    //   binding 16    = UBO  (BoneBlock — SkinnedMeshRenderer bone matrices,
+    //                          used by VS only, see shader_skinning.cpp)
     //
     // MAX_SHADOW_MAPS must match the GLSL macro in shadows.glsl (currently 16).
     constexpr uint32_t MAX_SHADOW_MAPS = 16;
@@ -423,6 +444,18 @@ void VulkanRenderDevice::create_shared_layouts() {
         b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         b.descriptorCount = 1;
         b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        bindings.push_back(b);
+    }
+    // BoneBlock UBO at binding 16 (skinning variant VS, see
+    // shader_skinning.cpp). Kept out of the 0..3 UBO block because the
+    // skinned path is optional — materials without skinning never touch
+    // this slot and Vulkan allows declared-but-unused descriptors.
+    {
+        VkDescriptorSetLayoutBinding b{};
+        b.binding = 16;
+        b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        b.descriptorCount = 1;
+        b.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
         bindings.push_back(b);
     }
 
@@ -899,7 +932,7 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
 
     VkDescriptorSetAllocateInfo ai{};
     ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    ai.descriptorPool = descriptor_pool_;
+    ai.descriptorPool = descriptor_pools_[current_pool_idx_];
     ai.descriptorSetCount = 1;
     ai.pSetLayouts = &descriptor_set_layout_;
 
@@ -917,8 +950,16 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
     // Shadow-map array spans slots 8..8+MAX_SHADOW_MAPS-1 (matches
     // SHADOW_SLOT_BASE in ColorPass and the `u_shadow_map[N]` array in
     // shadows.glsl). The shared descriptor set layout folds those slots
-    // into a single binding=8 with descriptorCount=N, so writes in that
-    // range must be re-targeted to binding=8, dstArrayElement=slot-8.
+    // into a single binding=8 with descriptorCount=N, so sampler writes
+    // in that range must be re-targeted to binding=8,
+    // dstArrayElement=slot-8.
+    //
+    // IMPORTANT: the re-target only applies to SampledTexture bindings —
+    // UBOs on the same numeric slot live at their own binding in the
+    // layout (e.g. BoneBlock at binding 16, inside the shadow-array
+    // numeric range). Without this check the UBO write gets retargeted
+    // to binding=8 and Vulkan complains about type mismatch
+    // (VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER vs COMBINED_IMAGE_SAMPLER).
     constexpr uint32_t SHADOW_SLOT_BASE  = 8;
     constexpr uint32_t MAX_SHADOW_MAPS_W = 16;
 
@@ -929,7 +970,9 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
         w.dstBinding = b.binding;
         w.dstArrayElement = 0;
         w.descriptorCount = 1;
-        if (b.binding >= SHADOW_SLOT_BASE &&
+        const bool is_sampled = (b.kind == ResourceBinding::Kind::SampledTexture);
+        if (is_sampled &&
+            b.binding >= SHADOW_SLOT_BASE &&
             b.binding <  SHADOW_SLOT_BASE + MAX_SHADOW_MAPS_W) {
             w.dstBinding = SHADOW_SLOT_BASE;
             w.dstArrayElement = b.binding - SHADOW_SLOT_BASE;
@@ -1068,10 +1111,12 @@ void VulkanRenderDevice::drain_pending_destroy(PendingDestroyQueue& q) {
         }
     }
     for (auto h : q.resource_sets) {
+        // The underlying VkDescriptorSet does not need an individual free:
+        // it lives on a pool that gets `vkResetDescriptorPool`-ed wholesale
+        // when we flip pools at submit(). All we drop here is the handle
+        // entry so its id can be reused.
         if (auto* r = resource_sets_.get(h.id)) {
-            if (r->descriptor_set) {
-                vkFreeDescriptorSets(device_, descriptor_pool_, 1, &r->descriptor_set);
-            }
+            (void)r;
             resource_sets_.remove(h.id);
         }
     }
@@ -1249,6 +1294,15 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     // in-flight status and will be freed after the fence signals.
     pending_destroy_in_flight_ = std::move(pending_destroy_current_);
     pending_destroy_current_ = {};
+
+    // Flip descriptor pools. The pool we're about to switch *into* has
+    // just been retired (its fence — the one we waited on above — was
+    // from the frame that used it), so it is GPU-safe to reset. Reset
+    // as a single call returns every descriptor set in that pool to the
+    // free list; much cheaper than per-set vkFreeDescriptorSets and
+    // completely removes the "pool fills during a long frame" failure.
+    current_pool_idx_ = 1 - current_pool_idx_;
+    vkResetDescriptorPool(device_, descriptor_pools_[current_pool_idx_], 0);
 
     VkSubmitInfo si{};
     si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;

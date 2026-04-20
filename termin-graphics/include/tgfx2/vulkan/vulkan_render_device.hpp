@@ -237,7 +237,16 @@ private:
 
     VmaAllocator allocator_ = VK_NULL_HANDLE;
     VkCommandPool command_pool_ = VK_NULL_HANDLE;
-    VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
+
+    // Double-buffered descriptor pools. Each frame allocates descriptor
+    // sets out of `descriptor_pools_[current_pool_idx_]`; at `submit()`
+    // (after the fence of the *other* pool signals → its sets are no
+    // longer referenced by the GPU), we swap and `vkResetDescriptorPool`
+    // the freshly-retired pool in one call — cheaper than freeing each
+    // set with `vkFreeDescriptorSets`, and completely removes the "pool
+    // fills up across the frame" failure mode.
+    VkDescriptorPool descriptor_pools_[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    uint32_t current_pool_idx_ = 0;
 
     // Shared layouts (MVP: one universal layout)
     VkDescriptorSetLayout descriptor_set_layout_ = VK_NULL_HANDLE;
