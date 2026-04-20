@@ -8,6 +8,7 @@
 VK_DEFINE_HANDLE(VmaAllocator)
 VK_DEFINE_HANDLE(VmaAllocation)
 
+#include <atomic>
 #include <map>
 #include <memory>
 #include <unordered_map>
@@ -61,6 +62,13 @@ struct VkPipelineResource {
 struct VkResourceSetResource {
     VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
     ResourceSetDesc desc;
+    // Dynamic offsets emitted at bind time, in the order the layout
+    // declares DYNAMIC bindings (currently 0, 1, 2, 3, 16 → 5 offsets).
+    // Populated by create_resource_set() from ResourceBinding::offset on
+    // the matching slots; unset slots stay at 0 so the descriptor is
+    // always valid (ring buffer is range-checked against WHOLE_SIZE).
+    static constexpr uint32_t DYNAMIC_UBO_COUNT = 5;
+    uint32_t dynamic_offsets[DYNAMIC_UBO_COUNT] = {0, 0, 0, 0, 0};
 };
 
 // Reuse HandlePool from OpenGL backend concept
@@ -214,6 +222,38 @@ public:
     // without translating through SamplerHandle.
     VkSampler ensure_default_sampler();
 
+    // --- Ring UBO (for dynamic-offset descriptor path) ------------------
+    //
+    // A single large host-visible, persistently-mapped VkBuffer that
+    // accumulates per-draw UBO data across one frame. Callers (render-pass
+    // code, SkinnedMeshRenderer, material params) write their block via
+    // `ring_ubo_write(data, size)` which returns an aligned byte offset;
+    // the offset is then handed to `vkCmdBindDescriptorSets` as a dynamic
+    // offset for bindings declared UNIFORM_BUFFER_DYNAMIC.
+    //
+    // Replaces per-draw UBO buffers + per-draw descriptor-set allocations.
+    // Expected to drop resource-sets/sec by ~2 orders of magnitude — see
+    // memory/vulkan_perf_dynamic_ubo_plan.md for the rationale.
+    //
+    // Head pointer is reset at the start of every submit() after the
+    // previous frame's fence signals (GPU has finished reading the ring's
+    // previous contents). Wraparound mid-frame would corrupt in-flight
+    // data, so the buffer is sized generously (16 MB ≈ 10 KB × 1600 draws)
+    // and an overflow is an error we log rather than silently wrap.
+    uint32_t ring_ubo_write(const void* data, uint32_t size) override;
+    VkBuffer ring_ubo_buffer() const { return ring_ubo_buffer_; }
+    // The ring buffer exposed as a normal BufferHandle so that ring-backed
+    // UBO bindings route through the existing ResourceBinding path
+    // (create_resource_set treats any binding on this handle as a DYNAMIC
+    // UBO and emits the offset as a dynamic descriptor offset).
+    BufferHandle ring_ubo_handle() const override { return ring_ubo_handle_; }
+    // minUniformBufferOffsetAlignment from VkPhysicalDeviceLimits. 256 on
+    // NVIDIA desktop, 64 on AMD desktop, up to 256 on mobile. Used by the
+    // ring writer to round each allocation up to a legal dynamic offset,
+    // and by the shared descriptor-set creator to set buffer range = max
+    // UBO block size (cannot exceed buffer range at bind time).
+    uint32_t ubo_alignment() const override { return ubo_alignment_; }
+
     // Non-null when the device was created with a surface (via
     // `info.surface` or `info.surface_factory`). Hosts drive on-screen
     // frames through this — acquire() at start of frame, present() at
@@ -228,6 +268,7 @@ private:
     void create_command_pool();
     void create_descriptor_pool();
     void create_shared_layouts();
+    void create_ring_ubo();
 
     VkInstance instance_ = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT debug_messenger_ = VK_NULL_HANDLE;
@@ -369,6 +410,35 @@ public:
 private:
     VkCommandBuffer immediate_cb_ = VK_NULL_HANDLE;
     bool immediate_cb_open_ = false;
+
+    // Ring UBO — backing storage for UNIFORM_BUFFER_DYNAMIC bindings.
+    // Created once in create_ring_ubo(), freed in ~VulkanRenderDevice.
+    //
+    // Split into two halves (slots). Frame N records into slot X; while
+    // its GPU work is in-flight, frame N+1 records into slot 1-X. After
+    // the fence for frame N signals (next submit's wait), slot X becomes
+    // reusable. The flip / reset pattern is identical to descriptor_pools_
+    // above and piggybacks on the same frame_fence_ guarantee. Writing
+    // into a single head would race: the just-submitted frame's GPU read
+    // overlaps the next frame's host write into the same offset range.
+    VkBuffer      ring_ubo_buffer_     = VK_NULL_HANDLE;
+    VmaAllocation ring_ubo_allocation_ = VK_NULL_HANDLE;
+    void*         ring_ubo_mapped_     = nullptr;
+    uint64_t      ring_ubo_size_       = 0;  // total (both slots)
+    uint64_t      ring_ubo_slot_size_  = 0;  // = ring_ubo_size_ / 2
+    // Per-slot head — advances with every write into that slot, reset to
+    // 0 when we flip INTO the slot in submit(). Atomic for forward-compat
+    // with multi-threaded recording; only the render thread writes today,
+    // so relaxed ordering is sufficient.
+    std::atomic<uint64_t> ring_ubo_heads_[2] = {};
+    uint32_t ring_ubo_slot_idx_ = 0;
+    // BufferHandle that aliases ring_ubo_buffer_ in buffers_. Used by the
+    // RenderContext2::bind_uniform_buffer_ring() path and recognised by
+    // create_resource_set() / bind_resource_set() to emit a dynamic offset
+    // rather than update the descriptor on each bind.
+    BufferHandle ring_ubo_handle_ = {};
+    // Cached VkPhysicalDeviceLimits::minUniformBufferOffsetAlignment.
+    uint32_t ubo_alignment_ = 256;
 };
 
 } // namespace tgfx

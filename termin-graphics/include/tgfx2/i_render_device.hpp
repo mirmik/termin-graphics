@@ -189,6 +189,25 @@ public:
         return false;
     }
 
+    // --- Dynamic-offset ring UBO ------------------------------------
+    //
+    // A backend-managed host-visible ring buffer used by the
+    // `RenderContext2::bind_uniform_buffer_ring()` API. Pass code writes
+    // per-draw UBO data into the ring via `ring_ubo_write(data, size)`
+    // which returns an aligned byte offset; the offset is then attached
+    // to a normal UniformBuffer binding on `ring_ubo_handle()`, letting
+    // one shared backing store replace a per-draw `vkCreateBuffer` +
+    // `vkUpdateDescriptorSets` pair.
+    //
+    // Default returns on backends without a ring implementation are safe
+    // ({}/0) — callers should treat `ring_ubo_handle().id == 0` as "no
+    // ring, fall back to the classic per-draw UBO path".
+    virtual BufferHandle ring_ubo_handle() const { return {}; }
+    virtual uint32_t ring_ubo_write(const void* /*data*/, uint32_t /*size*/) {
+        return 0;
+    }
+    virtual uint32_t ubo_alignment() const { return 1; }
+
     // --- Legacy state / sync helpers ---
     // Restore the canonical render-state baseline between frame-graph
     // passes. On OpenGL: glEnable(DEPTH_TEST)/glDisable(BLEND)/etc.

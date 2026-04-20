@@ -231,7 +231,9 @@ void VulkanCommandList::bind_pipeline(PipelineHandle pipeline) {
     current_layout_ = p->layout;
 }
 
-void VulkanCommandList::bind_resource_set(ResourceSetHandle set) {
+void VulkanCommandList::bind_resource_set(ResourceSetHandle set,
+                                           const uint32_t* dynamic_offsets,
+                                           uint32_t dynamic_offset_count) {
     auto* rs = device_.get_resource_set(set);
     if (!rs || !current_layout_) return;
 
@@ -244,8 +246,26 @@ void VulkanCommandList::bind_resource_set(ResourceSetHandle set) {
     // non-attachment images and cannot change layout regardless, so
     // there is no correct fix-up we could apply here — a mismatch is a
     // caller/producer bug upstream.
+
+    // The shared pipeline layout declares DYNAMIC_UBO_COUNT dynamic-UBO
+    // bindings. Vulkan requires the exact same count passed to
+    // vkCmdBindDescriptorSets: short payloads would leave descriptors
+    // "bound to invalid offsets" and trip validation, while over-long
+    // payloads trip a count-mismatch VUID. Fall back to the per-set
+    // offsets stashed at create_resource_set() time when the caller
+    // doesn't supply any.
+    constexpr uint32_t EXPECTED = VkResourceSetResource::DYNAMIC_UBO_COUNT;
+    uint32_t offsets_tmp[EXPECTED] = {0, 0, 0, 0, 0};
+    const uint32_t* offsets_ptr = offsets_tmp;
+    if (dynamic_offsets && dynamic_offset_count == EXPECTED) {
+        offsets_ptr = dynamic_offsets;
+    } else {
+        for (uint32_t i = 0; i < EXPECTED; ++i) offsets_tmp[i] = rs->dynamic_offsets[i];
+    }
+
     vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                             current_layout_, 0, 1, &rs->descriptor_set, 0, nullptr);
+                             current_layout_, 0, 1, &rs->descriptor_set,
+                             EXPECTED, offsets_ptr);
 }
 
 void VulkanCommandList::set_push_constants(const void* data, uint32_t size) {

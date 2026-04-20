@@ -303,6 +303,31 @@ void RenderContext2::bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
     bindings_dirty_ = true;
 }
 
+void RenderContext2::bind_uniform_buffer_ring(uint32_t binding,
+                                                const void* data, uint32_t size) {
+    if (!data || size == 0) return;
+    // Write into the device ring; the returned offset is aligned to
+    // minUniformBufferOffsetAlignment. An invalid ring (handle.id == 0)
+    // means the backend hasn't implemented the ring path — fall back to
+    // a transient UBO via the classic API so behaviour stays correct.
+    BufferHandle ring = device_.ring_ubo_handle();
+    if (ring.id == 0) {
+        // Transient UBO fallback — creates garbage at the callrate of
+        // whoever used this API before the backend grew a real ring.
+        BufferDesc bd;
+        bd.size = size;
+        bd.usage = BufferUsage::Uniform;
+        bd.cpu_visible = true;
+        BufferHandle tmp = device_.create_buffer(bd);
+        device_.upload_buffer(tmp, {reinterpret_cast<const uint8_t*>(data), size});
+        defer_destroy(tmp);
+        bind_uniform_buffer(binding, tmp, 0, size);
+        return;
+    }
+    uint32_t offset = device_.ring_ubo_write(data, size);
+    bind_uniform_buffer(binding, ring, offset, size);
+}
+
 void RenderContext2::bind_sampled_texture(uint32_t binding, TextureHandle tex,
                                            SamplerHandle sampler) {
     ResourceBinding* existing =
@@ -549,7 +574,28 @@ void RenderContext2::flush_resource_set() {
         ResourceSetDesc desc;
         desc.bindings = pending_bindings_;
         current_resource_set_ = device_.create_resource_set(desc);
-        cmd_->bind_resource_set(current_resource_set_);
+
+        // Dynamic UBO offsets: Vulkan's shared layout declares five
+        // UNIFORM_BUFFER_DYNAMIC slots — bindings 0, 1, 2, 3, 16 (lighting,
+        // material, per-frame, shadow, bone block) — and expects their
+        // offsets in that ascending order at bind time. Pick them out of
+        // pending_bindings_ by matching binding numbers; slots left unset
+        // default to 0 (the descriptor write already points them at the
+        // ring buffer with range=WHOLE, so offset=0 is always in bounds).
+        // OpenGL ignores the offsets array and reads offset straight from
+        // the ResourceBinding — same source of truth, no duplication.
+        static constexpr uint32_t DYN_BINDINGS[5] = {0, 1, 2, 3, 16};
+        uint32_t offsets[5] = {0, 0, 0, 0, 0};
+        for (const auto& b : pending_bindings_) {
+            if (b.kind != ResourceBinding::Kind::UniformBuffer) continue;
+            for (uint32_t i = 0; i < 5; ++i) {
+                if (DYN_BINDINGS[i] == b.binding) {
+                    offsets[i] = static_cast<uint32_t>(b.offset);
+                    break;
+                }
+            }
+        }
+        cmd_->bind_resource_set(current_resource_set_, offsets, 5);
     }
 
     bindings_dirty_ = false;

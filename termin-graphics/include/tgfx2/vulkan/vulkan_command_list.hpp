@@ -22,7 +22,9 @@ public:
     void end_render_pass() override;
 
     void bind_pipeline(PipelineHandle pipeline) override;
-    void bind_resource_set(ResourceSetHandle set) override;
+    void bind_resource_set(ResourceSetHandle set,
+                           const uint32_t* dynamic_offsets = nullptr,
+                           uint32_t dynamic_offset_count = 0) override;
     void set_push_constants(const void* data, uint32_t size) override;
 
     void bind_vertex_buffer(uint32_t slot, BufferHandle buffer, uint64_t offset = 0) override;

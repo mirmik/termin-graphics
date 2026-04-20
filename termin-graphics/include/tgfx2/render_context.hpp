@@ -96,6 +96,19 @@ public:
     void bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
                              uint64_t offset = 0, uint64_t range = 0);
 
+    // Write `size` bytes of `data` into the backend's shared ring UBO
+    // and bind it at `binding`. No caller-managed BufferHandle, no
+    // per-draw upload_buffer, no descriptor-set allocation for UBO-only
+    // differences between draws: on Vulkan this lands as a dynamic
+    // descriptor offset on the shared set; on OpenGL as a
+    // `glBindBufferRange` into the ring buffer. `size` must be ≤ the
+    // UBO block size declared by the shader.
+    //
+    // `binding` must be one of the layout's UNIFORM_BUFFER_DYNAMIC slots
+    // (0..3, 16). Other slots fall back to the classic bind_uniform_buffer
+    // path and pay the old per-draw churn.
+    void bind_uniform_buffer_ring(uint32_t binding, const void* data, uint32_t size);
+
     // Set per-draw push constants. Payload becomes visible to the next
     // draw call at binding slot TGFX2_PUSH_CONSTANTS_BINDING (GL) or via
     // `layout(push_constant)` on Vulkan. Max payload is

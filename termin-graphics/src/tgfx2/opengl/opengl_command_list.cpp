@@ -259,9 +259,16 @@ void OpenGLCommandList::apply_pending_push_constants() {
 
 // --- Resource binding ---
 
-void OpenGLCommandList::bind_resource_set(ResourceSetHandle set) {
+void OpenGLCommandList::bind_resource_set(ResourceSetHandle set,
+                                           const uint32_t* /*dynamic_offsets*/,
+                                           uint32_t /*dynamic_offset_count*/) {
     auto* rs = device_.get_resource_set(set);
     if (!rs) return;
+
+    // OpenGL doesn't have Vulkan-style dynamic descriptor offsets — each
+    // UBO binding carries its own offset via glBindBufferRange baked into
+    // ResourceBinding::offset. The Vulkan-only `dynamic_offsets` argument
+    // is ignored here.
 
     for (const auto& b : rs->desc.bindings) {
         switch (b.kind) {

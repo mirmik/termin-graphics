@@ -77,6 +77,7 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     create_command_pool();
     create_descriptor_pool();
     create_shared_layouts();
+    create_ring_ubo();
 
     // Frame fence: tracks in-flight submits. Created unsignaled — the
     // first `submit()` sees `frame_fence_in_flight_ == false` and skips
@@ -169,6 +170,12 @@ VulkanRenderDevice::~VulkanRenderDevice() {
     if (immediate_cb_ != VK_NULL_HANDLE) {
         vkFreeCommandBuffers(device_, command_pool_, 1, &immediate_cb_);
         immediate_cb_ = VK_NULL_HANDLE;
+    }
+    if (ring_ubo_buffer_ != VK_NULL_HANDLE) {
+        vmaDestroyBuffer(allocator_, ring_ubo_buffer_, ring_ubo_allocation_);
+        ring_ubo_buffer_ = VK_NULL_HANDLE;
+        ring_ubo_allocation_ = VK_NULL_HANDLE;
+        ring_ubo_mapped_ = nullptr;
     }
     if (frame_fence_) vkDestroyFence(device_, frame_fence_, nullptr);
     if (default_sampler_) vkDestroySampler(device_, default_sampler_, nullptr);
@@ -431,10 +438,14 @@ void VulkanRenderDevice::create_shared_layouts() {
     // MAX_SHADOW_MAPS must match the GLSL macro in shadows.glsl (currently 16).
     constexpr uint32_t MAX_SHADOW_MAPS = 16;
     std::vector<VkDescriptorSetLayoutBinding> bindings;
+    // UBO bindings 0..3 are DYNAMIC: per-draw offset supplied via the
+    // last argument of vkCmdBindDescriptorSets, not baked into the
+    // descriptor write. Lets a single ring buffer back many draws without
+    // per-draw vkUpdateDescriptorSets churn (see create_ring_ubo).
     for (uint32_t i = 0; i < 4; ++i) {
         VkDescriptorSetLayoutBinding b{};
         b.binding = i;
-        b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         b.descriptorCount = 1;
         b.stageFlags = VK_SHADER_STAGE_ALL;
         bindings.push_back(b);
@@ -470,10 +481,12 @@ void VulkanRenderDevice::create_shared_layouts() {
     // shader_skinning.cpp). Kept out of the 0..3 UBO block because the
     // skinned path is optional — materials without skinning never touch
     // this slot and Vulkan allows declared-but-unused descriptors.
+    // DYNAMIC for the same reason as 0..3 — SkinnedMeshRenderer will
+    // route bone matrices through the ring buffer.
     {
         VkDescriptorSetLayoutBinding b{};
         b.binding = 16;
-        b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         b.descriptorCount = 1;
         b.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
         bindings.push_back(b);
@@ -510,6 +523,100 @@ void VulkanRenderDevice::create_shared_layouts() {
     if (vkCreatePipelineLayout(device_, &pl_ci, nullptr, &shared_pipeline_layout_) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create pipeline layout");
     }
+}
+
+// --- Ring UBO ---
+
+void VulkanRenderDevice::create_ring_ubo() {
+    // Cache the alignment required by dynamic UBO offsets. Every write into
+    // the ring rounds up to this granularity. Queried from the physical
+    // device rather than hard-coded because it varies: 256 on NVIDIA desktop,
+    // 64 on AMD desktop, 256 on most mobile GPUs.
+    VkPhysicalDeviceProperties props;
+    vkGetPhysicalDeviceProperties(physical_device_, &props);
+    ubo_alignment_ = static_cast<uint32_t>(
+        std::max<VkDeviceSize>(props.limits.minUniformBufferOffsetAlignment, 1));
+
+    // 16 MB total — 8 MB per slot. Budget ~10 KB UBO data per draw × 1600
+    // worst-case draws/frame = 16 MB needed, so per-slot headroom is tight
+    // on adversarial scenes; logged (rare) overflow falls back to offset 0.
+    // If that ever fires in practice, grow the ring or shrink per-pass UBOs.
+    ring_ubo_size_ = 16 * 1024 * 1024;
+    ring_ubo_slot_size_ = ring_ubo_size_ / 2;
+
+    VkBufferCreateInfo bi{};
+    bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bi.size = ring_ubo_size_;
+    // TRANSFER_DST kept cheap — we don't copy into the ring (host writes only),
+    // but leaving it set costs nothing and makes future debug copies legal.
+    bi.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VmaAllocationCreateInfo ai{};
+    ai.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+    ai.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+    VmaAllocationInfo alloc_info{};
+    if (vmaCreateBuffer(allocator_, &bi, &ai, &ring_ubo_buffer_,
+                        &ring_ubo_allocation_, &alloc_info) != VK_SUCCESS) {
+        throw std::runtime_error("VulkanRenderDevice: failed to allocate ring UBO");
+    }
+    ring_ubo_mapped_ = alloc_info.pMappedData;
+    ring_ubo_heads_[0].store(0, std::memory_order_relaxed);
+    ring_ubo_heads_[1].store(0, std::memory_order_relaxed);
+    ring_ubo_slot_idx_ = 0;
+
+    // Expose the ring as a BufferHandle so callers can route per-draw UBO
+    // bindings through it via the normal ResourceBinding path. The entry
+    // in buffers_ carries no allocation of its own (VK_NULL_HANDLE alloc),
+    // and destroy(ring_ubo_handle_) is a no-op guarded below — the real
+    // buffer lives until ~VulkanRenderDevice.
+    VkBufferResource ring_res{};
+    ring_res.buffer = ring_ubo_buffer_;
+    ring_res.allocation = VK_NULL_HANDLE; // not owned by the handle pool
+    ring_res.desc.size = ring_ubo_size_;
+    ring_res.desc.usage = BufferUsage::Uniform;
+    ring_res.desc.cpu_visible = true;
+    ring_res.mapped_ptr = ring_ubo_mapped_;
+    ring_ubo_handle_.id = buffers_.add(std::move(ring_res));
+}
+
+uint32_t VulkanRenderDevice::ring_ubo_write(const void* data, uint32_t size) {
+    // Reserve an aligned slice at the head. fetch_add returns the pre-update
+    // value → that's our offset within the slot. The advance is aligned(size)
+    // so the NEXT allocation starts on a legal dynamic-offset boundary.
+    const uint32_t align = ubo_alignment_;
+    const uint32_t padded = (size + align - 1) & ~(align - 1);
+
+    const uint32_t slot = ring_ubo_slot_idx_;
+    const uint64_t base = static_cast<uint64_t>(slot) * ring_ubo_slot_size_;
+
+    uint64_t offset_in_slot =
+        ring_ubo_heads_[slot].fetch_add(padded, std::memory_order_relaxed);
+
+    if (offset_in_slot + padded > ring_ubo_slot_size_) {
+        // Per-slot overflow: rest of the frame's UBO writes are invalid.
+        // Log once so it's obvious in a profile run; return the slot base
+        // so the caller still gets a legal (but stale) offset instead of
+        // crashing. A real fix either raises ring_ubo_size_ or trims a pass.
+        static thread_local bool s_warned = false;
+        if (!s_warned) {
+            tc_log(TC_LOG_ERROR,
+                   "[RingUBO] slot %u overflow: head=%llu size=%u slot_cap=%llu — raise ring_ubo_size_",
+                   slot, (unsigned long long)offset_in_slot, size,
+                   (unsigned long long)ring_ubo_slot_size_);
+            s_warned = true;
+        }
+        return static_cast<uint32_t>(base);
+    }
+
+    const uint64_t offset = base + offset_in_slot;
+    // Persistent-mapped + (typically) HOST_COHERENT on all discrete-GPU
+    // Linux drivers, so the memcpy is all the host-side work. Flush keeps
+    // non-coherent types correct — VMA makes it a no-op when coherent.
+    std::memcpy(static_cast<uint8_t*>(ring_ubo_mapped_) + offset, data, size);
+    vmaFlushAllocation(allocator_, ring_ubo_allocation_, offset, size);
+    return static_cast<uint32_t>(offset);
 }
 
 VkSampler VulkanRenderDevice::ensure_default_sampler() {
@@ -984,6 +1091,13 @@ static uint64_t hash_resource_set_desc(const ResourceSetDesc& desc) {
     // FNV-1a over the stable-key fields of each binding. Handles live in
     // HandlePool slots and are stable within a frame, so we can hash the
     // raw ids without worrying about pointer churn.
+    //
+    // UBO offsets are INTENTIONALLY excluded from the hash: UBOs on the
+    // DYNAMIC slots supply their per-draw offset through the
+    // dynamic_offsets[] argument at bind time, not through the descriptor
+    // write, so two draws that differ only in ring-offset must reuse the
+    // same descriptor set instead of paying another vkAllocateDescriptorSets.
+    // Range still participates (different range → different buffer_info).
     uint64_t h = 0xcbf29ce484222325ull;
     auto mix = [&h](uint64_t v) {
         h ^= v;
@@ -992,12 +1106,10 @@ static uint64_t hash_resource_set_desc(const ResourceSetDesc& desc) {
     for (const auto& b : desc.bindings) {
         mix(b.binding);
         mix(static_cast<uint64_t>(b.kind));
-        // Mix every possible id/field — no enum-case discrimination needed,
-        // unused fields are zero. Keeps the hasher agnostic of the exact
-        // set of ResourceBinding::Kind values (avoids breaking when new
-        // kinds are added).
         mix(b.buffer.id);
-        mix(b.offset);
+        if (b.kind != ResourceBinding::Kind::UniformBuffer) {
+            mix(b.offset);
+        }
         mix(b.range);
         mix(b.texture.id);
         mix(b.sampler.id);
@@ -1055,6 +1167,18 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
     constexpr uint32_t SHADOW_SLOT_BASE  = 8;
     constexpr uint32_t MAX_SHADOW_MAPS_W = 16;
 
+    // Dynamic-UBO bindings declared by the shared layout, in the exact
+    // order vkCmdBindDescriptorSets consumes the dynamic_offsets[] array
+    // (sorted ascending by binding, per Vulkan spec).
+    // Keep in sync with create_shared_layouts().
+    constexpr uint32_t DYNAMIC_UBO_BINDINGS[VkResourceSetResource::DYNAMIC_UBO_COUNT] =
+        {0, 1, 2, 3, 16};
+    auto dynamic_idx_for_binding = [&](uint32_t binding) -> int {
+        for (uint32_t i = 0; i < VkResourceSetResource::DYNAMIC_UBO_COUNT; ++i)
+            if (DYNAMIC_UBO_BINDINGS[i] == binding) return static_cast<int>(i);
+        return -1;
+    };
+
     for (const auto& b : desc.bindings) {
         VkWriteDescriptorSet w{};
         w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1075,9 +1199,22 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
             case ResourceBinding::Kind::StorageBuffer: {
                 auto* buf = get_buffer(b.buffer);
                 if (!buf) continue;
-                buf_infos.push_back({buf->buffer, b.offset, b.range ? b.range : VK_WHOLE_SIZE});
-                w.descriptorType = (b.kind == ResourceBinding::Kind::UniformBuffer)
-                    ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                // UBOs on the five DYNAMIC slots route their offset through
+                // the dynamic_offsets[] argument at bind time — the write
+                // itself uses offset=0, leaving the full buffer visible
+                // behind the per-draw offset window.
+                const int dyn_idx = (b.kind == ResourceBinding::Kind::UniformBuffer)
+                    ? dynamic_idx_for_binding(b.binding) : -1;
+                const bool is_dynamic_ubo = (dyn_idx >= 0);
+                if (is_dynamic_ubo) {
+                    buf_infos.push_back({buf->buffer, 0, VK_WHOLE_SIZE});
+                    w.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+                    res.dynamic_offsets[dyn_idx] = static_cast<uint32_t>(b.offset);
+                } else {
+                    buf_infos.push_back({buf->buffer, b.offset, b.range ? b.range : VK_WHOLE_SIZE});
+                    w.descriptorType = (b.kind == ResourceBinding::Kind::UniformBuffer)
+                        ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                }
                 w.pBufferInfo = &buf_infos.back();
                 break;
             }
@@ -1149,7 +1286,12 @@ TextureDesc VulkanRenderDevice::texture_desc(TextureHandle handle) const {
 // until drain time.
 
 void VulkanRenderDevice::destroy(BufferHandle h) {
-    if (h.id != 0) pending_destroy_current_.buffers.push_back(h);
+    if (h.id == 0) return;
+    // The ring UBO handle aliases a device-owned buffer; its real lifetime
+    // is tied to the device, and destroying it mid-frame would wipe the
+    // UBO store for every pending dynamic-offset binding.
+    if (ring_ubo_handle_.id != 0 && h.id == ring_ubo_handle_.id) return;
+    pending_destroy_current_.buffers.push_back(h);
 }
 
 void VulkanRenderDevice::destroy(TextureHandle h) {
@@ -1454,6 +1596,14 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
         resource_sets_.remove(h.id);
     }
     descriptor_cache_[current_pool_idx_].clear();
+
+    // Flip the ring-UBO slot. Same double-buffered logic as the descriptor
+    // pool above: the slot we switch INTO was last written two frames ago
+    // (its fence long since signaled). Resetting its head lets the upcoming
+    // frame start writing at offset 0 of that slot while the just-submitted
+    // frame's GPU work keeps reading from the other slot.
+    ring_ubo_slot_idx_ = 1 - ring_ubo_slot_idx_;
+    ring_ubo_heads_[ring_ubo_slot_idx_].store(0, std::memory_order_relaxed);
 
     // Close the immediate cb (copies / transitions / clears accumulated
     // since last submit) and submit it together with the main draw cb in
