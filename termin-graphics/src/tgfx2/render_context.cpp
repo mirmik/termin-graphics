@@ -262,6 +262,20 @@ void RenderContext2::bind_shader(ShaderHandle vs, ShaderHandle fs, ShaderHandle 
 
 void RenderContext2::set_vertex_layout(const VertexBufferLayout& layout) {
     vertex_layout_ = layout;
+    // Cache the layout's hash once here so flush_pipeline's cache lookup
+    // doesn't have to iterate the attributes vector on every draw.
+    size_t h = 0;
+    auto mix = [&h](size_t v) {
+        h ^= v + 0x9e3779b9 + (h << 6) + (h >> 2);
+    };
+    mix(std::hash<uint32_t>{}(layout.stride));
+    mix(std::hash<size_t>{}(layout.attributes.size()));
+    for (const auto& a : layout.attributes) {
+        mix(std::hash<uint32_t>{}(a.location));
+        mix(std::hash<int>{}(static_cast<int>(a.format)));
+        mix(std::hash<uint32_t>{}(a.offset));
+    }
+    vertex_layout_hash_ = h;
     pipeline_dirty_ = true;
 }
 
@@ -362,28 +376,22 @@ void RenderContext2::clear_resource_bindings() {
 
 void RenderContext2::set_push_constants(const void* data, uint32_t size) {
     if (!cmd_) return;
-    // vkCmdPushConstants requires a bound pipeline. Callers typically
-    // do bind_shader → set_push_constants → draw; at this point the
-    // vertex layout is still unset, so flushing now would build an
-    // invalid pipeline. Queue the data so flush_pipeline re-emits it
-    // after each pipeline bind.
-    //
-    // If a pipeline is already bound (pipeline_dirty_ == false), apply
-    // immediately. Without this, a second draw that reuses the same
-    // pipeline would skip flush_pipeline and silently drop the new
-    // push-constants — manifests as every-other-draw artefacts (e.g.
-    // gizmos where only the first primitive of a shader is visible).
+    // Stash the bytes and mark dirty — the actual vkCmdPushConstants
+    // happens inside flush_pipeline() right before the draw, which also
+    // handles the re-emit-on-new-layout case after a pipeline change.
+    // The old path emitted immediately when pipeline_dirty_ was false,
+    // which produced a double emit every time callers did
+    // set_push_constants() → set_blend(...) → draw() — ~20% of draws,
+    // visible as pushC ≈ 1.4 per draw in the hot-path summary.
     if (data == nullptr || size == 0) {
         pending_push_constants_.clear();
+        push_constants_dirty_ = false;
         return;
     }
     pending_push_constants_.assign(
         reinterpret_cast<const uint8_t*>(data),
         reinterpret_cast<const uint8_t*>(data) + size);
-    if (!pipeline_dirty_ && bound_vs_) {
-        cmd_->set_push_constants(pending_push_constants_.data(),
-                                 static_cast<uint32_t>(pending_push_constants_.size()));
-    }
+    push_constants_dirty_ = true;
 }
 
 void RenderContext2::defer_destroy(TextureHandle handle) {
@@ -531,13 +539,25 @@ void RenderContext2::clear_scissor() {
 // ============================================================================
 
 void RenderContext2::flush_pipeline() {
-    if (!pipeline_dirty_) return;
+    if (!pipeline_dirty_) {
+        // Pipeline wasn't touched, but push-constants might still be
+        // pending from a set_push_constants() call that came after the
+        // previous draw. Emit them here so the next draw sees fresh
+        // bytes without paying the pipeline-cache lookup.
+        if (push_constants_dirty_ && !pending_push_constants_.empty()) {
+            cmd_->set_push_constants(pending_push_constants_.data(),
+                                     static_cast<uint32_t>(pending_push_constants_.size()));
+            push_constants_dirty_ = false;
+        }
+        return;
+    }
 
     PipelineCacheKey key;
     key.vertex_shader = bound_vs_;
     key.fragment_shader = bound_fs_;
     key.geometry_shader = bound_gs_;
     key.vertex_layout = vertex_layout_;
+    key.vertex_layout_hash = vertex_layout_hash_;
     key.topology = topology_;
     key.raster = raster_;
     key.depth_stencil = depth_stencil_;
@@ -559,21 +579,17 @@ void RenderContext2::flush_pipeline() {
     if (pipeline_changed) {
         cmd_->bind_pipeline(pipeline);
         last_bound_pipeline_ = pipeline;
+        // A new VkPipeline brings a (possibly new) VkPipelineLayout — the
+        // previous push-constant bytes are no longer guaranteed to be
+        // visible to the next draw. Force a re-emit.
+        push_constants_dirty_ = true;
     }
     pipeline_dirty_ = false;
 
-    // Re-emit pending push-constants every flush when we got here through
-    // a set_* call that flipped pipeline_dirty_ on — the `if (!pipeline_
-    // dirty_) return;` early-out above already skipped the no-op case.
-    // Callers that set_push_constants() WHILE pipeline_dirty_ was true
-    // stashed the bytes in pending_push_constants_ without emitting, so
-    // we have to flush them here even when the resolved VkPipeline turns
-    // out to be the same as before — otherwise the next draw reads stale
-    // push-constant bytes and e.g. all instanced cubes collapse onto one
-    // model matrix.
-    if (!pending_push_constants_.empty()) {
+    if (push_constants_dirty_ && !pending_push_constants_.empty()) {
         cmd_->set_push_constants(pending_push_constants_.data(),
                                  static_cast<uint32_t>(pending_push_constants_.size()));
+        push_constants_dirty_ = false;
     }
 }
 

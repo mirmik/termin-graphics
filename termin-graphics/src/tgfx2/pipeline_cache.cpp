@@ -66,13 +66,10 @@ size_t PipelineCacheKeyHash::operator()(const PipelineCacheKey& k) const {
     hash_combine(h, std::hash<uint32_t>{}(k.fragment_shader.id));
     hash_combine(h, std::hash<uint32_t>{}(k.geometry_shader.id));
 
-    hash_combine(h, std::hash<uint32_t>{}(k.vertex_layout.stride));
-    hash_combine(h, std::hash<size_t>{}(k.vertex_layout.attributes.size()));
-    for (auto& a : k.vertex_layout.attributes) {
-        hash_combine(h, std::hash<uint32_t>{}(a.location));
-        hash_combine(h, std::hash<int>{}(static_cast<int>(a.format)));
-        hash_combine(h, std::hash<uint32_t>{}(a.offset));
-    }
+    // Use the precomputed layout hash — the caller is responsible for
+    // keeping it in sync with `vertex_layout`. Skips an O(attributes)
+    // loop on every cache lookup (see PipelineCacheKey::vertex_layout_hash).
+    hash_combine(h, k.vertex_layout_hash);
 
     hash_combine(h, std::hash<int>{}(static_cast<int>(k.topology)));
     hash_combine(h, std::hash<int>{}(static_cast<int>(k.raster.cull)));

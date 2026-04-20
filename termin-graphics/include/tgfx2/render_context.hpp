@@ -238,6 +238,10 @@ private:
 
     ShaderHandle bound_vs_, bound_fs_, bound_gs_;
     VertexBufferLayout vertex_layout_;
+    // Hash of `vertex_layout_`, recomputed only when set_vertex_layout is
+    // called. Fed into PipelineCacheKey so flush_pipeline's lookup skips
+    // re-hashing the attributes vector on every draw.
+    size_t vertex_layout_hash_ = 0;
     PrimitiveTopology topology_ = PrimitiveTopology::TriangleList;
 
     // Synced from begin_pass() with the actual attachment formats.
@@ -261,6 +265,12 @@ private:
     // or the current ring UBO offset (OpenGL). Cleared when the caller
     // passes an empty payload.
     std::vector<uint8_t> pending_push_constants_;
+    // True when pending_push_constants_ hasn't been emitted into the cmd
+    // buffer yet since the last set_push_constants() call. Cleared after
+    // flush_pipeline() pushes them. Kills the double-emit that happened
+    // when set_push_constants() pushed immediately *and* flush_pipeline
+    // re-pushed after a state change — visible as pushC ~1.4 per draw.
+    bool push_constants_dirty_ = false;
 
     // Per-frame deferred-destruction list for non-owning external
     // wrappers (register_external_texture / register_external_buffer)
