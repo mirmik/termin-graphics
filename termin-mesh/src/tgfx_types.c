@@ -111,12 +111,16 @@ tgfx_vertex_layout tgfx_vertex_layout_skinned(void) {
     tgfx_vertex_layout_add(&layout, "position", 3, TGFX_ATTRIB_FLOAT32, 0);
     tgfx_vertex_layout_add(&layout, "normal", 3, TGFX_ATTRIB_FLOAT32, 1);
     tgfx_vertex_layout_add(&layout, "uv", 2, TGFX_ATTRIB_FLOAT32, 2);
-    // joints/weights live at locations 6/7 to avoid overlap with `tangent`
-    // (location 3 in tgfx_vertex_layout_pos_normal_uv_tangent) and `color`
-    // (location 5 in tgfx_vertex_layout_pos_normal_uv_color). shaderc for
-    // Vulkan rejects overlapping `in` declarations — the previous slots 3/4
-    // only worked on GL because the driver silently reused tangent storage
-    // for joints data.
+    // Always reserve slot 3 for `tangent` so PBR shaders (which declare
+    // `in vec4 a_tangent (loc=3)`) can be paired with skinned meshes
+    // without vertex-input mismatch on Vulkan. GLB loader fills zeros when
+    // the source model has no tangent data — the shader's Gram-Schmidt
+    // branch already handles vec3(0) via the `length > 0.001` test.
+    tgfx_vertex_layout_add(&layout, "tangent", 4, TGFX_ATTRIB_FLOAT32, 3);
+    // joints/weights on locations 6/7 — past tangent (3) and `color` (5
+    // in tgfx_vertex_layout_pos_normal_uv_color). shaderc for Vulkan
+    // rejects overlapping `in` declarations; the previous slots 3/4 only
+    // worked on GL because the driver silently reused tangent storage.
     tgfx_vertex_layout_add(&layout, "joints", 4, TGFX_ATTRIB_FLOAT32, 6);
     tgfx_vertex_layout_add(&layout, "weights", 4, TGFX_ATTRIB_FLOAT32, 7);
     return layout;
