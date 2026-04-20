@@ -16,6 +16,11 @@
 #include "tgfx2/font_atlas.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/render_context.hpp"
+#include "tgfx2/tc_shader_bridge.hpp"
+
+extern "C" {
+#include <tgfx/resources/tc_shader.h>
+}
 
 #include "internal/utf8_decode.hpp"
 
@@ -125,47 +130,50 @@ Text2DRenderer::~Text2DRenderer() {
 }
 
 void Text2DRenderer::ensure_shader_(IRenderDevice& device) {
-    if (compiled_on_ == &device && vs_.id != 0 && fs_.id != 0) {
-        return;
+    if (compiled_on_ == &device && vs_.id != 0 && fs_.id != 0) return;
+    compiled_on_ = &device;
+
+    // Try the tc_shader registry path first — hash-based dedup keeps
+    // compiled VkShaderModules alive across Text2DRenderer instances
+    // (relevant because each new RenderContext2 on Play/Stop builds a
+    // fresh Text2DRenderer). The registry needs tc_gpu_context, which
+    // the full editor sets up but the bare launcher UI does not; fall
+    // back to direct create_shader for that case.
+    if (tc_shader_handle_is_invalid(shader_handle_)) {
+        std::string vs = make_text2d_vert();
+        std::string fs = make_text2d_frag();
+        shader_handle_ = tc_shader_from_sources(
+            vs.c_str(), fs.c_str(), nullptr,
+            "Text2DEngineVSFS", nullptr, nullptr);
     }
-    // Device changed or first time — drop any prior handles and
-    // recompile. Handles only live across a single device's lifetime.
-    if (compiled_on_ != nullptr) {
-        if (vs_.id != 0) compiled_on_->destroy(vs_);
-        if (fs_.id != 0) compiled_on_->destroy(fs_);
-    }
+
     vs_ = ShaderHandle{};
     fs_ = ShaderHandle{};
+    if (!tc_shader_handle_is_invalid(shader_handle_)) {
+        tc_shader* raw = tc_shader_get(shader_handle_);
+        if (raw) {
+            termin::tc_shader_ensure_tgfx2(raw, &device, &vs_, &fs_);
+        }
+    }
 
-    ShaderDesc vs_desc;
-    vs_desc.stage = ShaderStage::Vertex;
-    vs_desc.source = make_text2d_vert();
-    vs_ = device.create_shader(vs_desc);
+    if (vs_.id == 0 || fs_.id == 0) {
+        ShaderDesc vs_desc;
+        vs_desc.stage = ShaderStage::Vertex;
+        vs_desc.source = make_text2d_vert();
+        vs_ = device.create_shader(vs_desc);
 
-    ShaderDesc fs_desc;
-    fs_desc.stage = ShaderStage::Fragment;
-    fs_desc.source = make_text2d_frag();
-    fs_ = device.create_shader(fs_desc);
-
-    compiled_on_ = &device;
+        ShaderDesc fs_desc;
+        fs_desc.stage = ShaderStage::Fragment;
+        fs_desc.source = make_text2d_frag();
+        fs_ = device.create_shader(fs_desc);
+    }
 }
 
 void Text2DRenderer::release_gpu() {
-    // Only destroy shaders if the device pointer is still the live
-    // interop target. At Python interpreter shutdown the BackendWindow
-    // that owned the device may be torn down before we get here, in
-    // which case `compiled_on_` is dangling and calling ->destroy on it
-    // segfaults. Leaking the handles at shutdown is safe: the driver
-    // reclaims them on process exit. The interop pointer is cleared by
-    // Tgfx2ContextHolder's destructor, so a null here means "device is
-    // gone; leak and move on".
-    if (compiled_on_ != nullptr) {
-        void* live = tgfx2_interop_get_device();
-        if (live == compiled_on_) {
-            if (vs_.id != 0) compiled_on_->destroy(vs_);
-            if (fs_.id != 0) compiled_on_->destroy(fs_);
-        }
-    }
+    // Shaders live on the tc_shader registry (`shader_handle_`) and are
+    // shared across Text2DRenderer instances — nothing to destroy here.
+    // Cached handles (vs_/fs_) are just local views into the slot's
+    // current tgfx2 ids, stale after the device goes away.
     vs_ = ShaderHandle{};
     fs_ = ShaderHandle{};
     compiled_on_ = nullptr;

@@ -391,8 +391,12 @@ tc_shader_handle tc_shader_from_sources(
     const char* source_path,
     const char* uuid
 ) {
-    if (!vertex_source || !fragment_source) {
-        tc_log(TC_LOG_ERROR, "tc_shader_from_sources: vertex and fragment sources required");
+    // NULL vertex_source is permitted for FS-only shaders — e.g. post-
+    // effect passes that reuse RenderContext2's built-in FSQ vertex shader
+    // and only need to register the FS in the tc_shader registry for
+    // hash-based dedup + compile caching.
+    if (!fragment_source) {
+        tc_log(TC_LOG_ERROR, "tc_shader_from_sources: fragment_source required");
         return tc_shader_handle_invalid();
     }
 

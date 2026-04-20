@@ -64,11 +64,19 @@ bool tc_shader_ensure_tgfx2(
         tc_log(TC_LOG_ERROR, "tc_shader_ensure_tgfx2: device is NULL");
         return false;
     }
-    if (!out_vs || !out_fs) {
-        tc_log(TC_LOG_ERROR, "tc_shader_ensure_tgfx2: out handles are NULL");
+    if (!out_fs) {
+        tc_log(TC_LOG_ERROR, "tc_shader_ensure_tgfx2: out_fs is NULL");
         return false;
     }
 
+    // Ensure a tc_gpu_context is active for slot lookup. Callers that
+    // own real GPU contexts (editor WindowManager, engine rendering
+    // manager) set their own via tc_gpu_set_context before draw; for
+    // standalone paths (launcher UI, examples) there's no such setup,
+    // so we fall back to a process-wide default. This lets hash-based
+    // shader caching work everywhere without forcing every caller to
+    // thread GPU-context plumbing through.
+    tc_ensure_default_gpu_context();
     tc_gpu_context* ctx = tc_gpu_get_context();
     if (!ctx) {
         tc_log(TC_LOG_ERROR, "tc_shader_ensure_tgfx2: no GPU context set");
@@ -81,12 +89,20 @@ bool tc_shader_ensure_tgfx2(
         return false;
     }
 
-    // Cache hit: handles populated, version matches current, same device.
-    if (slot->tgfx2_shader_vs_id != 0 &&
-        slot->tgfx2_shader_fs_id != 0 &&
+    // FS-only shaders (vertex_source == NULL) are used by postprocess
+    // passes that share the built-in FSQ vertex shader from RenderContext2.
+    // The slot caches just the FS module; VS id stays 0 and callers pass
+    // nullptr for out_vs.
+    const bool has_vs = (shader->vertex_source != nullptr
+                         && shader->vertex_source[0] != '\0');
+
+    // Cache hit: FS populated, version and device match. For non-FS-only
+    // shaders, VS must also be populated.
+    if (slot->tgfx2_shader_fs_id != 0 &&
         slot->tgfx2_shader_version == static_cast<int32_t>(shader->version) &&
-        slot->tgfx2_shader_device == static_cast<void*>(device)) {
-        out_vs->id = slot->tgfx2_shader_vs_id;
+        slot->tgfx2_shader_device == static_cast<void*>(device) &&
+        (!has_vs || slot->tgfx2_shader_vs_id != 0)) {
+        if (out_vs) out_vs->id = slot->tgfx2_shader_vs_id;
         out_fs->id = slot->tgfx2_shader_fs_id;
         return true;
     }
@@ -95,24 +111,25 @@ bool tc_shader_ensure_tgfx2(
     // were created on, then recompile for the incoming device.
     destroy_cached_tgfx2_shaders(slot);
 
-    if (!shader->vertex_source || !shader->fragment_source) {
+    if (!shader->fragment_source) {
         tc_log(TC_LOG_ERROR,
-               "tc_shader_ensure_tgfx2: missing sources for '%s' (vs=%p, fs=%p)",
-               shader->name ? shader->name : shader->uuid,
-               static_cast<const void*>(shader->vertex_source),
-               static_cast<const void*>(shader->fragment_source));
+               "tc_shader_ensure_tgfx2: missing fragment_source for '%s'",
+               shader->name ? shader->name : shader->uuid);
         return false;
     }
 
-    tgfx::ShaderDesc vs_desc;
-    vs_desc.stage = tgfx::ShaderStage::Vertex;
-    vs_desc.source = shader->vertex_source;
-    tgfx::ShaderHandle vs = device->create_shader(vs_desc);
-    if (!vs) {
-        tc_log(TC_LOG_ERROR,
-               "tc_shader_ensure_tgfx2: VS compile failed for '%s'",
-               shader->name ? shader->name : shader->uuid);
-        return false;
+    tgfx::ShaderHandle vs;
+    if (has_vs) {
+        tgfx::ShaderDesc vs_desc;
+        vs_desc.stage = tgfx::ShaderStage::Vertex;
+        vs_desc.source = shader->vertex_source;
+        vs = device->create_shader(vs_desc);
+        if (!vs) {
+            tc_log(TC_LOG_ERROR,
+                   "tc_shader_ensure_tgfx2: VS compile failed for '%s'",
+                   shader->name ? shader->name : shader->uuid);
+            return false;
+        }
     }
 
     tgfx::ShaderDesc fs_desc;
@@ -121,20 +138,20 @@ bool tc_shader_ensure_tgfx2(
     tgfx::ShaderHandle fs = device->create_shader(fs_desc);
     if (!fs) {
         // Roll back VS to avoid leaking on partial failure.
-        device->destroy(vs);
+        if (has_vs) device->destroy(vs);
         tc_log(TC_LOG_ERROR,
                "tc_shader_ensure_tgfx2: FS compile failed for '%s'",
                shader->name ? shader->name : shader->uuid);
         return false;
     }
 
-    slot->tgfx2_shader_vs_id = vs.id;
+    slot->tgfx2_shader_vs_id = has_vs ? vs.id : 0;
     slot->tgfx2_shader_fs_id = fs.id;
     slot->tgfx2_shader_version = static_cast<int32_t>(shader->version);
     slot->tgfx2_shader_device = static_cast<void*>(device);
 
-    *out_vs = vs;
-    *out_fs = fs;
+    if (out_vs) out_vs->id = has_vs ? vs.id : 0;
+    out_fs->id = fs.id;
     return true;
 }
 

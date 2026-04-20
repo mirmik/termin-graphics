@@ -23,6 +23,9 @@
 
 #include "tgfx2/handles.hpp"
 #include "tgfx2/tgfx2_api.h"
+extern "C" {
+#include <tgfx/resources/tc_shader_registry.h>
+}
 
 namespace tgfx {
 
@@ -72,8 +75,11 @@ public:
 private:
     void ensure_shader_(IRenderDevice& device);
 
-    // Compiled-once shader, tied to the device it was built against.
+    // Shader lives on the tc_shader registry — shared across
+    // Text2DRenderer instances so Play/Stop doesn't re-run shaderc.
+    // vs_/fs_ are per-frame cached views into the slot's current ids.
     IRenderDevice* compiled_on_ = nullptr;
+    tc_shader_handle shader_handle_ = tc_shader_handle_invalid();
     ShaderHandle vs_{};
     ShaderHandle fs_{};
 

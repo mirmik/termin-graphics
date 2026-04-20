@@ -6,6 +6,11 @@
 #include <tgfx2/enums.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/opengl/opengl_render_device.hpp>
+#include <tgfx2/tc_shader_bridge.hpp>
+
+extern "C" {
+#include <tgfx/resources/tc_shader.h>
+}
 
 extern "C" {
 #include <tcbase/tc_log.h>
@@ -176,26 +181,16 @@ FrameGraphPresenter::~FrameGraphPresenter() {
 }
 
 void FrameGraphPresenter::release_tgfx2_resources() {
-    if (device2_ && fs2_) {
-        device2_->destroy(fs2_);
-        fs2_ = {};
-    }
+    // FS handle lives on the tc_shader registry; not owned here.
     device2_ = nullptr;
 }
 
 void FrameGraphPresenter::ensure_fs(tgfx::IRenderDevice& device) {
-    if (fs2_ && device2_ == &device) return;
-    if (device2_ && device2_ != &device) {
-        release_tgfx2_resources();
-    }
     device2_ = &device;
-
-    tgfx::ShaderDesc desc;
-    desc.stage = tgfx::ShaderStage::Fragment;
-    desc.source = PRESENTER_FRAG_SRC;
-    fs2_ = device.create_shader(desc);
-    if (!fs2_) {
-        tc::Log::error("FrameGraphPresenter: failed to create fs2");
+    if (tc_shader_handle_is_invalid(shader_handle_)) {
+        shader_handle_ = tc_shader_from_sources(
+            nullptr, PRESENTER_FRAG_SRC, nullptr,
+            "FrameGraphPresenterFS", nullptr, nullptr);
     }
 }
 
@@ -215,8 +210,12 @@ void FrameGraphPresenter::render(
     }
 
     ensure_fs(ctx2->device());
-    if (!fs2_) {
-        return;
+    tgfx::ShaderHandle fs;
+    {
+        tc_shader* raw = tc_shader_get(shader_handle_);
+        if (!raw || !tc_shader_ensure_tgfx2(raw, device2_, nullptr, &fs)) {
+            return;
+        }
     }
 
     ctx2->begin_pass(target_tex, tgfx::TextureHandle{}, nullptr, 1.0f, false);
@@ -229,7 +228,7 @@ void FrameGraphPresenter::render(
     ctx2->set_blend(false);
     ctx2->set_cull(tgfx::CullMode::None);
 
-    ctx2->bind_shader(ctx2->fsq_vertex_shader(), fs2_);
+    ctx2->bind_shader(ctx2->fsq_vertex_shader(), fs);
 
     ctx2->bind_sampled_texture(0, capture_tex);
     ctx2->set_uniform_int("u_tex", 0);

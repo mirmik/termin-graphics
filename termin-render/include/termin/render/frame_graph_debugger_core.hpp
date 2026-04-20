@@ -8,6 +8,9 @@
 #include "tgfx2/enums.hpp"
 #include "tgfx2/handles.hpp"
 #include <termin/render/render_export.hpp>
+extern "C" {
+#include <tgfx/resources/tc_shader_registry.h>
+}
 
 namespace tgfx {
 class RenderContext2;
@@ -104,7 +107,10 @@ private:
 class RENDER_API FrameGraphPresenter {
 private:
     tgfx::IRenderDevice* device2_ = nullptr;
-    tgfx::ShaderHandle fs2_;
+    // FS-only shader via tc_shader registry (VS comes from ctx2->fsq_vertex_shader()).
+    // Hash-based dedup keeps the VkShaderModule alive across presenter
+    // re-creations on Play/Stop — see GrayscalePass for the same pattern.
+    tc_shader_handle shader_handle_ = tc_shader_handle_invalid();
 
 public:
     ~FrameGraphPresenter();
