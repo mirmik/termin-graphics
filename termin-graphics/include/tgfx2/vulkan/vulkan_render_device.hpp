@@ -27,6 +27,10 @@ struct VkBufferResource {
     VkBuffer buffer = VK_NULL_HANDLE;
     VmaAllocation allocation = VK_NULL_HANDLE;
     BufferDesc desc;
+    // Non-null for host-visible buffers created with
+    // VMA_ALLOCATION_CREATE_MAPPED_BIT — upload_buffer just memcpy's
+    // into this pointer, no map/unmap churn per upload.
+    void* mapped_ptr = nullptr;
 };
 
 struct VkTextureResource {

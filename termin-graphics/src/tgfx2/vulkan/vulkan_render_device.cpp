@@ -13,7 +13,12 @@
 #include <stdexcept>
 #include <cstring>
 #include <algorithm>
+#include <chrono>
 #include <set>
+
+extern "C" {
+#include <tcbase/tc_log.h>
+}
 
 namespace tgfx {
 
@@ -516,6 +521,14 @@ void VulkanRenderDevice::wait_idle() { vkDeviceWaitIdle(device_); }
 // --- Immediate command execution ---
 
 void VulkanRenderDevice::execute_immediate(std::function<void(VkCommandBuffer)> fn) {
+    // Profiling: count calls and cumulative wait time per "window"
+    // (~1 sec between prints). Lets us eyeball whether execute_immediate
+    // is the hot-path stall source — blit/clear/texture uploads all
+    // route through here with a full vkQueueWaitIdle afterwards.
+    static thread_local uint64_t s_calls = 0;
+    static thread_local double   s_wait_us = 0.0;
+    static thread_local auto     s_window_start = std::chrono::steady_clock::now();
+
     VkCommandBufferAllocateInfo ai{};
     ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     ai.commandPool = command_pool_;
@@ -539,10 +552,24 @@ void VulkanRenderDevice::execute_immediate(std::function<void(VkCommandBuffer)> 
     si.commandBufferCount = 1;
     si.pCommandBuffers = &cmd;
 
+    auto t0 = std::chrono::steady_clock::now();
     vkQueueSubmit(graphics_queue_, 1, &si, VK_NULL_HANDLE);
     vkQueueWaitIdle(graphics_queue_);
+    auto t1 = std::chrono::steady_clock::now();
+    s_calls++;
+    s_wait_us += std::chrono::duration<double, std::micro>(t1 - t0).count();
 
     vkFreeCommandBuffers(device_, command_pool_, 1, &cmd);
+
+    auto now = std::chrono::steady_clock::now();
+    if (std::chrono::duration<double>(now - s_window_start).count() >= 1.0) {
+        tc_log(TC_LOG_INFO,
+               "[VkHotPath] execute_immediate: %llu calls, %.2f ms cumulative wait over ~1s",
+               (unsigned long long)s_calls, s_wait_us / 1000.0);
+        s_calls = 0;
+        s_wait_us = 0.0;
+        s_window_start = now;
+    }
 }
 
 // --- Image layout transition ---
@@ -617,12 +644,39 @@ BufferHandle VulkanRenderDevice::create_buffer(const BufferDesc& desc) {
     ci.usage = vk::to_vk_buffer_usage(desc.usage);
     ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    VmaAllocationCreateInfo alloc_ci{};
-    alloc_ci.usage = desc.cpu_visible ? VMA_MEMORY_USAGE_CPU_TO_GPU : VMA_MEMORY_USAGE_GPU_ONLY;
+    // Uniform buffers are effectively always per-frame data (camera
+    // matrices, material params, bones, ...) — uploaded every frame
+    // and read once. Placing them in HOST_VISIBLE|DEVICE_LOCAL memory
+    // (CPU_TO_GPU) lets upload_buffer go through a plain map+memcpy,
+    // skipping the staging buffer + execute_immediate + vkQueueWaitIdle
+    // path entirely. Without this, a frame with ~30 UBO uploads would
+    // do ~30 full GPU stalls — the dominant Vulkan perf regression vs
+    // OpenGL on shadow/color passes.
+    //
+    // The caller-set `cpu_visible` still forces HOST_VISIBLE for other
+    // use cases (e.g. readback staging mirrors). Vertex/index buffers
+    // and large static textures stay GPU_ONLY as intended.
+    const bool want_host_visible =
+        desc.cpu_visible ||
+        (static_cast<uint32_t>(desc.usage & BufferUsage::Uniform) != 0);
+    res.desc.cpu_visible = want_host_visible;
 
-    if (vmaCreateBuffer(allocator_, &ci, &alloc_ci, &res.buffer, &res.allocation, nullptr) != VK_SUCCESS) {
+    VmaAllocationCreateInfo alloc_ci{};
+    alloc_ci.usage = want_host_visible ? VMA_MEMORY_USAGE_CPU_TO_GPU
+                                       : VMA_MEMORY_USAGE_GPU_ONLY;
+    // Persistently-mapped host-visible buffers: VMA keeps a pointer on
+    // `VmaAllocationInfo::pMappedData`, so upload_buffer skips
+    // vmaMapMemory/vmaUnmapMemory and does a plain memcpy.
+    if (want_host_visible) {
+        alloc_ci.flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    }
+
+    VmaAllocationInfo alloc_info{};
+    if (vmaCreateBuffer(allocator_, &ci, &alloc_ci,
+                        &res.buffer, &res.allocation, &alloc_info) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create Vulkan buffer");
     }
+    res.mapped_ptr = alloc_info.pMappedData;  // NULL for GPU-only buffers
 
     return {buffers_.add(std::move(res))};
 }
@@ -1132,7 +1186,19 @@ void VulkanRenderDevice::upload_buffer(BufferHandle dst, std::span<const uint8_t
     auto* res = buffers_.get(dst.id);
     if (!res) return;
 
-    if (res->desc.cpu_visible) {
+    if (res->mapped_ptr) {
+        // Persistently-mapped host-visible buffer. The common path for
+        // every per-frame UBO (PerFrame / ShadowBlock / BoneBlock /
+        // material params). One memcpy — no map/unmap, no submit, no
+        // stall. vmaFlushAllocation covers non-coherent memory types
+        // (NVIDIA/AMD desktop Linux is coherent in practice, but flush
+        // is a no-op when the allocation is coherent, so always call).
+        std::memcpy(static_cast<uint8_t*>(res->mapped_ptr) + offset,
+                    data.data(), data.size());
+        vmaFlushAllocation(allocator_, res->allocation, offset, data.size());
+    } else if (res->desc.cpu_visible) {
+        // Fallback: host-visible but not persistently mapped (e.g. buffer
+        // registered externally). Keep the old explicit map path.
         void* mapped;
         vmaMapMemory(allocator_, res->allocation, &mapped);
         std::memcpy(static_cast<uint8_t*>(mapped) + offset, data.data(), data.size());

@@ -40,7 +40,13 @@ std::unique_ptr<IRenderDevice> create_device(BackendType type) {
 #ifdef TGFX2_HAS_VULKAN
         {
             VulkanDeviceCreateInfo info;
-            info.enable_validation = true;
+            // Validation layer is opt-in via TGFX2_VULKAN_VALIDATION=1.
+            // Leaving it on in release costs 3-5× on ShadowPass / ColorPass
+            // because every vkCmdDraw, descriptor update and submit routes
+            // through the layer's CPU-side checks. Dev builds turn it on
+            // explicitly when chasing a GPU validation issue.
+            const char* val = std::getenv("TGFX2_VULKAN_VALIDATION");
+            info.enable_validation = (val && val[0] == '1');
             return std::make_unique<VulkanRenderDevice>(info);
         }
 #else
