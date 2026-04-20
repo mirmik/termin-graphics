@@ -5,9 +5,18 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 
 namespace tgfx {
+
+extern std::atomic<uint64_t> g_draw_count;
+extern std::atomic<uint64_t> g_bind_pipeline_count;
+extern std::atomic<uint64_t> g_bind_rset_count;
+extern std::atomic<uint64_t> g_bind_vbo_count;
+extern std::atomic<uint64_t> g_bind_ibo_count;
+extern std::atomic<uint64_t> g_push_constants_count;
+extern std::atomic<uint64_t> g_record_us;
 
 VulkanCommandList::VulkanCommandList(VulkanRenderDevice& device)
     : device_(device)
@@ -40,10 +49,15 @@ void VulkanCommandList::begin() {
     bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
     vkBeginCommandBuffer(cmd_, &bi);
+    record_start_ = std::chrono::steady_clock::now();
 }
 
 void VulkanCommandList::end() {
     vkEndCommandBuffer(cmd_);
+    auto dt = std::chrono::steady_clock::now() - record_start_;
+    g_record_us.fetch_add(
+        std::chrono::duration_cast<std::chrono::microseconds>(dt).count(),
+        std::memory_order_relaxed);
 }
 
 // --- Render pass ---
@@ -229,6 +243,7 @@ void VulkanCommandList::bind_pipeline(PipelineHandle pipeline) {
 
     vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, p->pipeline);
     current_layout_ = p->layout;
+    g_bind_pipeline_count.fetch_add(1, std::memory_order_relaxed);
 }
 
 void VulkanCommandList::bind_resource_set(ResourceSetHandle set,
@@ -266,6 +281,7 @@ void VulkanCommandList::bind_resource_set(ResourceSetHandle set,
     vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS,
                              current_layout_, 0, 1, &rs->descriptor_set,
                              EXPECTED, offsets_ptr);
+    g_bind_rset_count.fetch_add(1, std::memory_order_relaxed);
 }
 
 void VulkanCommandList::set_push_constants(const void* data, uint32_t size) {
@@ -276,6 +292,7 @@ void VulkanCommandList::set_push_constants(const void* data, uint32_t size) {
     // (TBD — Vulkan backend has no push constants wiring yet).
     vkCmdPushConstants(cmd_, current_layout_,
                        VK_SHADER_STAGE_ALL_GRAPHICS, 0, size, data);
+    g_push_constants_count.fetch_add(1, std::memory_order_relaxed);
 }
 
 // --- Vertex / index ---
@@ -286,6 +303,7 @@ void VulkanCommandList::bind_vertex_buffer(uint32_t slot, BufferHandle buffer, u
 
     VkDeviceSize vk_offset = offset;
     vkCmdBindVertexBuffers(cmd_, slot, 1, &buf->buffer, &vk_offset);
+    g_bind_vbo_count.fetch_add(1, std::memory_order_relaxed);
 }
 
 void VulkanCommandList::bind_index_buffer(BufferHandle buffer, IndexType type, uint64_t offset) {
@@ -293,6 +311,7 @@ void VulkanCommandList::bind_index_buffer(BufferHandle buffer, IndexType type, u
     if (!buf) return;
 
     vkCmdBindIndexBuffer(cmd_, buf->buffer, offset, vk::to_vk_index_type(type));
+    g_bind_ibo_count.fetch_add(1, std::memory_order_relaxed);
 }
 
 // --- Draw ---

@@ -439,6 +439,13 @@ private:
     BufferHandle ring_ubo_handle_ = {};
     // Cached VkPhysicalDeviceLimits::minUniformBufferOffsetAlignment.
     uint32_t ubo_alignment_ = 256;
+    // True when the ring's memory type advertises HOST_COHERENT — the
+    // memcpy is immediately visible to the GPU and no vmaFlushAllocation
+    // is needed. On desktop Linux (NVIDIA / AMD discrete) the CPU_TO_GPU
+    // allocation pool is always coherent, so skipping the flush call
+    // removes ~1 function call × hundreds of writes/frame from the hot
+    // path. Queried once in create_ring_ubo().
+    bool ring_ubo_coherent_ = false;
 };
 
 } // namespace tgfx

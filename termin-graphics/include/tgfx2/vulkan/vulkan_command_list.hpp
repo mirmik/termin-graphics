@@ -2,6 +2,7 @@
 
 #ifdef TGFX2_HAS_VULKAN
 
+#include <chrono>
 #include <vector>
 #include <vulkan/vulkan.h>
 #include "tgfx2/tgfx2_api.h"
@@ -57,6 +58,10 @@ private:
     // sampled next — one barrier per attachment.
     std::vector<TextureHandle> current_pass_color_attachments_;
     TextureHandle current_pass_depth_attachment_{};
+
+    // Timestamp of the most recent begin(); subtracted in end() to feed
+    // the cumulative cmd-recording counter in the Vulkan hot-path summary.
+    std::chrono::steady_clock::time_point record_start_{};
 };
 
 } // namespace tgfx

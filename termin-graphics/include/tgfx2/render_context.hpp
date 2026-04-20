@@ -274,6 +274,19 @@ private:
     BufferHandle fsq_ibo_;
     ShaderHandle fsq_vs_;
 
+    // Last vbo/ibo bound on the command list — lets draw() skip the
+    // redundant vkCmdBindVertexBuffers / vkCmdBindIndexBuffer when the
+    // next draw reuses the same mesh (chronosquad scenes hit the same
+    // VBO for hundreds of instanced draws — thousand-scale reduction in
+    // bind cmd recording). Reset to {} at begin_pass so a new pass
+    // always re-binds.
+    BufferHandle last_bound_vbo_ = {};
+    BufferHandle last_bound_ibo_ = {};
+    // Last pipeline handle passed to cmd_->bind_pipeline(). Used by
+    // flush_pipeline() to skip a redundant vkCmdBindPipeline when the
+    // pipeline cache returned the same handle again (same state combo).
+    PipelineHandle last_bound_pipeline_ = {};
+
     void ensure_fsq_resources();
     void flush_resource_set();
 };

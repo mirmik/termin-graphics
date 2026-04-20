@@ -169,6 +169,11 @@ void RenderContext2::begin_pass(
 
     cmd_->begin_render_pass(pass);
     in_pass_ = true;
+    // Vulkan's cmd-buffer-level binds don't survive a render pass
+    // boundary — reset cached state so draw() re-binds on first use.
+    last_bound_vbo_ = {};
+    last_bound_ibo_ = {};
+    last_bound_pipeline_ = {};
     pipeline_dirty_ = true;
 }
 
@@ -543,14 +548,29 @@ void RenderContext2::flush_pipeline() {
     key.sample_count = sample_count_;
 
     auto pipeline = cache_.get(key);
-    cmd_->bind_pipeline(pipeline);
+    // Redundant-bind culling at the pipeline level. Pass code often
+    // calls set_depth_test/set_blend/set_cull/bind_shader per draw, which
+    // flips pipeline_dirty_ even when the final pipeline ends up
+    // identical (same state combo hashes into the same VkPipeline).
+    // Skipping the vkCmdBindPipeline when the handle didn't actually
+    // change drops the cmd-recording cost in half on scenes with many
+    // draws sharing one material.
+    bool pipeline_changed = (pipeline.id != last_bound_pipeline_.id);
+    if (pipeline_changed) {
+        cmd_->bind_pipeline(pipeline);
+        last_bound_pipeline_ = pipeline;
+    }
     pipeline_dirty_ = false;
 
-    // Re-apply any pending push-constants now that the new pipeline is
-    // bound — vkCmdPushConstants needs a current pipeline layout, and
-    // the VkPipelineLayout we just bound may differ from the one the
-    // previous push-constant write targeted. On OpenGL the ring UBO
-    // binding is independent of pipeline, so the re-apply is cheap.
+    // Re-emit pending push-constants every flush when we got here through
+    // a set_* call that flipped pipeline_dirty_ on — the `if (!pipeline_
+    // dirty_) return;` early-out above already skipped the no-op case.
+    // Callers that set_push_constants() WHILE pipeline_dirty_ was true
+    // stashed the bytes in pending_push_constants_ without emitting, so
+    // we have to flush them here even when the resolved VkPipeline turns
+    // out to be the same as before — otherwise the next draw reads stale
+    // push-constant bytes and e.g. all instanced cubes collapse onto one
+    // model matrix.
     if (!pending_push_constants_.empty()) {
         cmd_->set_push_constants(pending_push_constants_.data(),
                                  static_cast<uint32_t>(pending_push_constants_.size()));
@@ -678,15 +698,30 @@ void RenderContext2::draw(
 ) {
     flush_pipeline();
     flush_resource_set();
-    cmd_->bind_vertex_buffer(0, vbo);
-    cmd_->bind_index_buffer(ibo, idx_type);
+    // Redundant-bind culling: a pipeline-compatible sequence of draws
+    // over the same mesh (think: several chronosquad enemies rendered
+    // from the same instanced VBO) hits this path hundreds of times.
+    // vkCmdBindVertexBuffers / vkCmdBindIndexBuffer each cost a cmd-buffer
+    // word + driver trampoline — redundant ones add up to a measurable
+    // slice of cmd-recording time.
+    if (vbo != last_bound_vbo_) {
+        cmd_->bind_vertex_buffer(0, vbo);
+        last_bound_vbo_ = vbo;
+    }
+    if (ibo != last_bound_ibo_) {
+        cmd_->bind_index_buffer(ibo, idx_type);
+        last_bound_ibo_ = ibo;
+    }
     cmd_->draw_indexed(index_count);
 }
 
 void RenderContext2::draw_arrays(BufferHandle vbo, uint32_t vertex_count) {
     flush_pipeline();
     flush_resource_set();
-    cmd_->bind_vertex_buffer(0, vbo);
+    if (vbo != last_bound_vbo_) {
+        cmd_->bind_vertex_buffer(0, vbo);
+        last_bound_vbo_ = vbo;
+    }
     cmd_->draw(vertex_count);
 }
 

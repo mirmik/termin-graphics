@@ -26,9 +26,16 @@ namespace tgfx {
 static std::atomic<uint64_t> g_resource_set_count{0};
 static std::atomic<uint64_t> g_pipeline_count{0};
 // Defined here (non-static), incremented from vulkan_command_list.cpp's
-// draw()/draw_indexed(). The extern decl in that file is inside
-// `namespace tgfx`, so the fully-qualified symbol is `tgfx::g_draw_count`.
+// per-command methods. The extern decls in that file live inside
+// `namespace tgfx`, so the fully-qualified symbols are `tgfx::g_*`.
 std::atomic<uint64_t> g_draw_count{0};
+std::atomic<uint64_t> g_bind_pipeline_count{0};
+std::atomic<uint64_t> g_bind_rset_count{0};
+std::atomic<uint64_t> g_bind_vbo_count{0};
+std::atomic<uint64_t> g_bind_ibo_count{0};
+std::atomic<uint64_t> g_push_constants_count{0};
+std::atomic<uint64_t> g_record_us{0};
+std::atomic<uint64_t> g_submit_us{0};
 }
 
 namespace tgfx {
@@ -562,6 +569,15 @@ void VulkanRenderDevice::create_ring_ubo() {
         throw std::runtime_error("VulkanRenderDevice: failed to allocate ring UBO");
     }
     ring_ubo_mapped_ = alloc_info.pMappedData;
+
+    // Query the memory type's coherency flag so writes can skip
+    // vmaFlushAllocation on desktop Linux drivers (always coherent on
+    // NVIDIA/AMD discrete).
+    VkPhysicalDeviceMemoryProperties mem_props;
+    vkGetPhysicalDeviceMemoryProperties(physical_device_, &mem_props);
+    ring_ubo_coherent_ =
+        (mem_props.memoryTypes[alloc_info.memoryType].propertyFlags
+         & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
     ring_ubo_heads_[0].store(0, std::memory_order_relaxed);
     ring_ubo_heads_[1].store(0, std::memory_order_relaxed);
     ring_ubo_slot_idx_ = 0;
@@ -611,11 +627,14 @@ uint32_t VulkanRenderDevice::ring_ubo_write(const void* data, uint32_t size) {
     }
 
     const uint64_t offset = base + offset_in_slot;
-    // Persistent-mapped + (typically) HOST_COHERENT on all discrete-GPU
-    // Linux drivers, so the memcpy is all the host-side work. Flush keeps
-    // non-coherent types correct — VMA makes it a no-op when coherent.
+    // Persistent-mapped memcpy is the whole host-side cost on desktop
+    // Linux (HOST_COHERENT → flush is a no-op). The coherent-aware skip
+    // drops the vmaFlushAllocation call overhead on the hundreds of
+    // ring_ubo_write()s per frame.
     std::memcpy(static_cast<uint8_t*>(ring_ubo_mapped_) + offset, data, size);
-    vmaFlushAllocation(allocator_, ring_ubo_allocation_, offset, size);
+    if (!ring_ubo_coherent_) {
+        vmaFlushAllocation(allocator_, ring_ubo_allocation_, offset, size);
+    }
     return static_cast<uint32_t>(offset);
 }
 
@@ -1645,7 +1664,12 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     si.commandBufferCount = cb_count;
     si.pCommandBuffers = cbs;
 
+    auto t_submit0 = std::chrono::steady_clock::now();
     vkQueueSubmit(graphics_queue_, 1, &si, frame_fence_);
+    auto t_submit1 = std::chrono::steady_clock::now();
+    g_submit_us.fetch_add(
+        std::chrono::duration_cast<std::chrono::microseconds>(t_submit1 - t_submit0).count(),
+        std::memory_order_relaxed);
     frame_fence_in_flight_ = true;
 
     // Defer-free the immediate cb we just submitted — it's in-flight on
@@ -1663,14 +1687,30 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
         uint64_t draws    = g_draw_count.exchange(0, std::memory_order_relaxed);
         uint64_t rsets    = g_resource_set_count.exchange(0, std::memory_order_relaxed);
         uint64_t pipes    = g_pipeline_count.exchange(0, std::memory_order_relaxed);
+        uint64_t bp       = g_bind_pipeline_count.exchange(0, std::memory_order_relaxed);
+        uint64_t brs      = g_bind_rset_count.exchange(0, std::memory_order_relaxed);
+        uint64_t bvb      = g_bind_vbo_count.exchange(0, std::memory_order_relaxed);
+        uint64_t bib      = g_bind_ibo_count.exchange(0, std::memory_order_relaxed);
+        uint64_t bpc      = g_push_constants_count.exchange(0, std::memory_order_relaxed);
+        uint64_t rec_us   = g_record_us.exchange(0, std::memory_order_relaxed);
+        uint64_t subm_us  = g_submit_us.exchange(0, std::memory_order_relaxed);
         tc_log(TC_LOG_INFO,
-               "[VkHotPath] %llu submits, %llu draws, %llu resource-sets, "
-               "%llu new-pipelines, %.2f ms cumulative fence-wait — over ~1s",
+               "[VkHotPath] %llu submits, %llu draws, %llu rsets, %llu new-pipelines, "
+               "%.1f fence-ms — "
+               "bindPipe=%llu bindRS=%llu bindVBO=%llu bindIBO=%llu pushC=%llu — "
+               "record=%.1fms submit=%.2fms",
                (unsigned long long)s_submits,
                (unsigned long long)draws,
                (unsigned long long)rsets,
                (unsigned long long)pipes,
-               s_last_fence_wait_us / 1000.0);
+               s_last_fence_wait_us / 1000.0,
+               (unsigned long long)bp,
+               (unsigned long long)brs,
+               (unsigned long long)bvb,
+               (unsigned long long)bib,
+               (unsigned long long)bpc,
+               rec_us / 1000.0,
+               subm_us / 1000.0);
         s_submits = 0;
         s_last_fence_wait_us = 0;
         s_window_start = now;
