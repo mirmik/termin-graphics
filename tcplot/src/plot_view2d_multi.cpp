@@ -9,10 +9,10 @@
 
 #include <tcbase/input_enums.hpp>
 #include <tgfx2/descriptors.hpp>
+#include <tgfx2/device_factory.hpp>
 #include <tgfx2/enums.hpp>
 #include <tgfx2/font_atlas.hpp>
 #include <tgfx2/handles.hpp>
-#include <tgfx2/opengl/opengl_render_device.hpp>
 #include <tgfx2/pipeline_cache.hpp>
 #include <tgfx2/render_context.hpp>
 
@@ -31,10 +31,15 @@ std::vector<double> to_vec(const double* p, size_t n) {
 // ---------------------------------------------------------------------------
 
 PlotView2DMulti::PlotView2DMulti(const std::string& ttf_path, int panel_count)
+    : PlotView2DMulti(ttf_path, panel_count,
+                      tgfx::default_backend_from_env()) {}
+
+PlotView2DMulti::PlotView2DMulti(const std::string& ttf_path, int panel_count,
+                                 tgfx::BackendType backend)
     : ttf_path_(ttf_path) {
     if (panel_count < 1) panel_count = 1;
 
-    device_ = std::make_unique<tgfx::OpenGLRenderDevice>();
+    device_ = tgfx::create_device(backend);
     cache_  = std::make_unique<tgfx::PipelineCache>(*device_);
     ctx_    = std::make_unique<tgfx::RenderContext2>(*device_, *cache_);
     font_   = std::make_unique<tgfx::FontAtlas>(ttf_path);

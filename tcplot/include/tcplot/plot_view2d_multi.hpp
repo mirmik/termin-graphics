@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include <tgfx2/enums.hpp>
 #include <tgfx2/handles.hpp>
 
 #include "tcplot/plot_data.hpp"
@@ -26,7 +27,7 @@
 #include "tcplot/tcplot_api.h"
 
 namespace tgfx {
-class OpenGLRenderDevice;
+class IRenderDevice;
 class PipelineCache;
 class RenderContext2;
 class FontAtlas;
@@ -38,7 +39,13 @@ class PlotEngine2D;
 
 class TCPLOT_API PlotView2DMulti {
 public:
+    // Default constructor — backend picked by env (TERMIN_BACKEND).
+    // Pass an explicit BackendType to override (mostly useful for the
+    // Vulkan → D3D11Image WPF interop path where the host knows it
+    // needs Vulkan regardless of env).
     PlotView2DMulti(const std::string& ttf_path, int panel_count);
+    PlotView2DMulti(const std::string& ttf_path, int panel_count,
+                    tgfx::BackendType backend);
     ~PlotView2DMulti();
 
     PlotView2DMulti(const PlotView2DMulti&) = delete;
@@ -151,7 +158,7 @@ private:
 
     std::string ttf_path_;
 
-    std::unique_ptr<tgfx::OpenGLRenderDevice> device_;
+    std::unique_ptr<tgfx::IRenderDevice>      device_;
     std::unique_ptr<tgfx::PipelineCache>      cache_;
     std::unique_ptr<tgfx::RenderContext2>     ctx_;
     std::unique_ptr<tgfx::FontAtlas>          font_;
