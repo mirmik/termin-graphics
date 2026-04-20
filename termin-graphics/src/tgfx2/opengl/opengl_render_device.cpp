@@ -12,16 +12,40 @@
 #include <tcbase/tc_log.hpp>
 
 // glClipControl is GL 4.5 / ARB_clip_control. Our glad generator targets
-// 3.3 core and doesn't expose it, but termin_graphics2 links libGL
-// directly (see CMakeLists.txt), so we just forward-declare the symbol
-// and let the dynamic linker resolve it at load time.
+// 3.3 core and doesn't expose it. On Linux libGL.so exports the symbol
+// so a forward-declare + dynamic link resolves it; on Windows
+// opengl32.lib only exports GL 1.1, so we have to fetch the entry
+// point through wglGetProcAddress at runtime.
 #ifndef GL_UPPER_LEFT
 #define GL_UPPER_LEFT 0x8CA2
 #endif
 #ifndef GL_ZERO_TO_ONE
 #define GL_ZERO_TO_ONE 0x935F
 #endif
+#if defined(_WIN32)
+// windows.h drags in min/max macros that collide with std::min/std::max
+// (and with std::numeric_limits<T>::max()). Suppress them.
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+typedef void (APIENTRY *PFN_glClipControl)(GLenum, GLenum);
+static PFN_glClipControl s_glClipControl = nullptr;
+static void load_clip_control_win32() {
+    if (s_glClipControl) return;
+    s_glClipControl = reinterpret_cast<PFN_glClipControl>(
+        wglGetProcAddress("glClipControl"));
+}
+static void glClipControl(GLenum origin, GLenum depth) {
+    load_clip_control_win32();
+    if (s_glClipControl) s_glClipControl(origin, depth);
+}
+#else
 extern "C" void glClipControl(GLenum origin, GLenum depth);
+#endif
 
 extern "C" {
 #include "tgfx/tgfx_resource_gpu.h"

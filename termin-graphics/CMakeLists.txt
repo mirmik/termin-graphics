@@ -111,8 +111,19 @@ if(TGFX2_ENABLE_VULKAN)
     set(VMA_DYNAMIC_VULKAN_FUNCTIONS ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(vma)
 
-    # shaderc: prefer shared library, fall back to combined static
-    find_library(SHADERC_LIB NAMES shaderc shaderc_combined
+    # shaderc lookup. Windows VulkanSDK ships three flavours and the
+    # bare `shaderc.lib` is a trap — it's the static lib that needs
+    # glslang/SPIRV-Tools/shaderc_util alongside, none of which we
+    # link. Prefer `shaderc_combined` (single static blob, no DLL to
+    # copy at runtime) and `shaderc_shared` (DLL stub) ahead of it.
+    # Linux keeps the historical order: distro packages typically
+    # install only `libshaderc_shared.so` under the name `shaderc`.
+    if(WIN32)
+        set(_SHADERC_NAMES shaderc_combined shaderc_shared shaderc)
+    else()
+        set(_SHADERC_NAMES shaderc shaderc_combined)
+    endif()
+    find_library(SHADERC_LIB NAMES ${_SHADERC_NAMES}
         PATHS "$ENV{VULKAN_SDK}/Lib" "${Vulkan_INCLUDE_DIR}/../Lib"
               "C:/VulkanSDK/1.4.341.1/Lib"
     )
