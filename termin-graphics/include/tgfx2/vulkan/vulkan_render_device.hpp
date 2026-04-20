@@ -252,6 +252,14 @@ private:
     VkDescriptorPool descriptor_pools_[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
     uint32_t current_pool_idx_ = 0;
 
+    // Per-pool descriptor-set cache keyed on the hash of
+    // ResourceSetDesc::bindings. A draw that binds the same UBOs and
+    // samplers as an earlier draw in the same frame reuses the already-
+    // allocated VkDescriptorSet instead of paying for another
+    // vkAllocateDescriptorSets + vkUpdateDescriptorSets. Cleared when
+    // the corresponding pool is reset in `submit()`.
+    std::unordered_map<uint64_t, ResourceSetHandle> descriptor_cache_[2];
+
     // Shared layouts (MVP: one universal layout)
     VkDescriptorSetLayout descriptor_set_layout_ = VK_NULL_HANDLE;
     VkPipelineLayout shared_pipeline_layout_ = VK_NULL_HANDLE;

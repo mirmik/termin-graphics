@@ -4,6 +4,7 @@
 #include "tgfx2/vulkan/vulkan_type_conversions.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 
 namespace tgfx {
@@ -276,12 +277,16 @@ void VulkanCommandList::bind_index_buffer(BufferHandle buffer, IndexType type, u
 
 // --- Draw ---
 
+extern std::atomic<uint64_t> g_draw_count;
+
 void VulkanCommandList::draw(uint32_t vertex_count, uint32_t first_vertex) {
     vkCmdDraw(cmd_, vertex_count, 1, first_vertex, 0);
+    g_draw_count.fetch_add(1, std::memory_order_relaxed);
 }
 
 void VulkanCommandList::draw_indexed(uint32_t index_count, uint32_t first_index, int32_t vertex_offset) {
     vkCmdDrawIndexed(cmd_, index_count, 1, first_index, vertex_offset, 0);
+    g_draw_count.fetch_add(1, std::memory_order_relaxed);
 }
 
 void VulkanCommandList::dispatch(uint32_t group_x, uint32_t group_y, uint32_t group_z) {

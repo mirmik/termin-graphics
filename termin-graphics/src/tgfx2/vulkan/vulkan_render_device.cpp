@@ -13,11 +13,22 @@
 #include <stdexcept>
 #include <cstring>
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <set>
 
 extern "C" {
 #include <tcbase/tc_log.h>
+}
+
+namespace tgfx {
+// Vulkan hot-path counters — swept once per second from submit().
+static std::atomic<uint64_t> g_resource_set_count{0};
+static std::atomic<uint64_t> g_pipeline_count{0};
+// Defined here (non-static), incremented from vulkan_command_list.cpp's
+// draw()/draw_indexed(). The extern decl in that file is inside
+// `namespace tgfx`, so the fully-qualified symbol is `tgfx::g_draw_count`.
+std::atomic<uint64_t> g_draw_count{0};
 }
 
 namespace tgfx {
@@ -962,13 +973,52 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
     if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pi, nullptr, &res.pipeline) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create graphics pipeline");
     }
+    g_pipeline_count.fetch_add(1, std::memory_order_relaxed);
 
     return {pipelines_.add(std::move(res))};
 }
 
 // --- Resource set ---
 
+static uint64_t hash_resource_set_desc(const ResourceSetDesc& desc) {
+    // FNV-1a over the stable-key fields of each binding. Handles live in
+    // HandlePool slots and are stable within a frame, so we can hash the
+    // raw ids without worrying about pointer churn.
+    uint64_t h = 0xcbf29ce484222325ull;
+    auto mix = [&h](uint64_t v) {
+        h ^= v;
+        h *= 0x100000001b3ull;
+    };
+    for (const auto& b : desc.bindings) {
+        mix(b.binding);
+        mix(static_cast<uint64_t>(b.kind));
+        // Mix every possible id/field — no enum-case discrimination needed,
+        // unused fields are zero. Keeps the hasher agnostic of the exact
+        // set of ResourceBinding::Kind values (avoids breaking when new
+        // kinds are added).
+        mix(b.buffer.id);
+        mix(b.offset);
+        mix(b.range);
+        mix(b.texture.id);
+        mix(b.sampler.id);
+    }
+    return h;
+}
+
 ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc& desc) {
+    // Per-frame cache: multiple draws with the same bindings (typical —
+    // many meshes share a material + PerFrame UBO + shadow array) reuse
+    // one VkDescriptorSet instead of paying for another
+    // vkAllocateDescriptorSets + vkUpdateDescriptorSets. Cache is
+    // cleared when the pool is reset in submit(), so every entry is
+    // always backed by a live set in descriptor_pools_[current_pool_idx_].
+    const uint64_t key = hash_resource_set_desc(desc);
+    auto& cache = descriptor_cache_[current_pool_idx_];
+    if (auto it = cache.find(key); it != cache.end()) {
+        return it->second;
+    }
+
+    g_resource_set_count.fetch_add(1, std::memory_order_relaxed);
     VkResourceSetResource res;
     res.desc = desc;
 
@@ -1074,7 +1124,9 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
         vkUpdateDescriptorSets(device_, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
     }
 
-    return {resource_sets_.add(std::move(res))};
+    ResourceSetHandle handle{resource_sets_.add(std::move(res))};
+    cache[key] = handle;
+    return handle;
 }
 
 // --- Destroy ---
@@ -1152,16 +1204,13 @@ void VulkanRenderDevice::drain_pending_destroy(PendingDestroyQueue& q) {
             pipelines_.remove(h.id);
         }
     }
-    for (auto h : q.resource_sets) {
-        // The underlying VkDescriptorSet does not need an individual free:
-        // it lives on a pool that gets `vkResetDescriptorPool`-ed wholesale
-        // when we flip pools at submit(). All we drop here is the handle
-        // entry so its id can be reused.
-        if (auto* r = resource_sets_.get(h.id)) {
-            (void)r;
-            resource_sets_.remove(h.id);
-        }
-    }
+    // Resource-set handles are owned by the per-pool descriptor cache —
+    // removed together with the VkDescriptorSet when the pool is reset
+    // (see `descriptor_cache_[current_pool_idx_].clear()` in submit()).
+    // Do NOT remove from HandlePool here: the same handle id may still
+    // be live in the cache for its slot, and a subsequent cache-hit
+    // would otherwise return a dangling entry.
+    (void)q.resource_sets;
     for (auto cb : q.cmd_buffers) {
         vkFreeCommandBuffers(device_, command_pool_, 1, &cb);
     }
@@ -1359,6 +1408,17 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     auto& vcmd = static_cast<VulkanCommandList&>(cmd);
     VkCommandBuffer main_cb = vcmd.command_buffer();
 
+    // Per-second Vulkan hot-path summary. Counts since last submit, and
+    // cumulative over the ~1s sliding window: draws, resource-set
+    // allocations, and pipeline creations. Pipelines should drop to ~0
+    // after startup if the PipelineCache is doing its job; resource
+    // sets should scale with draws (one per pipeline-state change).
+    static thread_local uint64_t s_submits = 0;
+    static thread_local auto     s_window_start = std::chrono::steady_clock::now();
+    static thread_local uint64_t s_last_fence_wait_us = 0;
+
+    auto t_wait0 = std::chrono::steady_clock::now();
+
     // Before kicking off a new submit, retire the previous one. If the
     // fence is in-flight we wait (usually signaled already by the time we
     // get here — GPU rendering a shadow cascade takes a few ms at most),
@@ -1370,6 +1430,9 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
         drain_pending_destroy(pending_destroy_in_flight_);
         frame_fence_in_flight_ = false;
     }
+    auto t_wait1 = std::chrono::steady_clock::now();
+    s_last_fence_wait_us +=
+        std::chrono::duration<double, std::micro>(t_wait1 - t_wait0).count();
 
     // Destroys queued during *this* submit's recording graduate to
     // in-flight status and will be freed after the fence signals.
@@ -1384,6 +1447,13 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     // completely removes the "pool fills during a long frame" failure.
     current_pool_idx_ = 1 - current_pool_idx_;
     vkResetDescriptorPool(device_, descriptor_pools_[current_pool_idx_], 0);
+    // Cache entries point into the pool we just reset — their VkDescriptorSets
+    // are gone. Also retire the HandlePool entries they aliased so freed
+    // ids can be reused in the new frame.
+    for (const auto& [_, h] : descriptor_cache_[current_pool_idx_]) {
+        resource_sets_.remove(h.id);
+    }
+    descriptor_cache_[current_pool_idx_].clear();
 
     // Close the immediate cb (copies / transitions / clears accumulated
     // since last submit) and submit it together with the main draw cb in
@@ -1416,6 +1486,26 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     // picks this up.
     if (submitted_immediate_cb != VK_NULL_HANDLE) {
         pending_destroy_current_.cmd_buffers.push_back(submitted_immediate_cb);
+    }
+
+    ++s_submits;
+
+    auto now = std::chrono::steady_clock::now();
+    if (std::chrono::duration<double>(now - s_window_start).count() >= 1.0) {
+        uint64_t draws    = g_draw_count.exchange(0, std::memory_order_relaxed);
+        uint64_t rsets    = g_resource_set_count.exchange(0, std::memory_order_relaxed);
+        uint64_t pipes    = g_pipeline_count.exchange(0, std::memory_order_relaxed);
+        tc_log(TC_LOG_INFO,
+               "[VkHotPath] %llu submits, %llu draws, %llu resource-sets, "
+               "%llu new-pipelines, %.2f ms cumulative fence-wait — over ~1s",
+               (unsigned long long)s_submits,
+               (unsigned long long)draws,
+               (unsigned long long)rsets,
+               (unsigned long long)pipes,
+               s_last_fence_wait_us / 1000.0);
+        s_submits = 0;
+        s_last_fence_wait_us = 0;
+        s_window_start = now;
     }
 }
 
