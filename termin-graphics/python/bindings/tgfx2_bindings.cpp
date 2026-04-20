@@ -94,7 +94,19 @@ void bind_tgfx2(nb::module_& m) {
              },
              nb::arg("stage"), nb::arg("source"))
         .def("destroy_shader",
-             [](tgfx::IRenderDevice& self, tgfx::ShaderHandle h) { self.destroy(h); });
+             [](tgfx::IRenderDevice& self, tgfx::ShaderHandle h) { self.destroy(h); })
+        // Thin tcgui-only hosts (diffusion-editor) need to read whole
+        // render targets back to the CPU without dragging in the editor
+        // runtime. Delegates to IRenderDevice::read_texture_rgba_float
+        // (GL: one glReadPixels into a framebuffer bound to `tex`;
+        // Vulkan: not implemented yet — returns False). Caller supplies
+        // a pre-sized float numpy array of width*height*4 elements.
+        .def("read_texture_rgba_float",
+             [](tgfx::IRenderDevice& self, tgfx::TextureHandle tex,
+                nb::ndarray<float, nb::c_contig, nb::device::cpu> buf) {
+                 return self.read_texture_rgba_float(tex, buf.data());
+             },
+             nb::arg("texture"), nb::arg("out"));
 
     nb::enum_<tgfx::ShaderStage>(m, "Tgfx2ShaderStage", nb::is_arithmetic())
         .value("Vertex",   tgfx::ShaderStage::Vertex)
