@@ -1201,13 +1201,31 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
                 if (!buf) continue;
                 // UBOs on the five DYNAMIC slots route their offset through
                 // the dynamic_offsets[] argument at bind time — the write
-                // itself uses offset=0, leaving the full buffer visible
-                // behind the per-draw offset window.
+                // itself uses offset=0 with an explicit range. Two hard
+                // Vulkan rules apply to this binding type:
+                //   1. range must be <= maxUniformBufferRange (64 KB min).
+                //      Setting VK_WHOLE_SIZE on a 16 MB ring buffer
+                //      trips VUID-VkWriteDescriptorSet-descriptorType-00332.
+                //   2. With VK_WHOLE_SIZE the dynamic offset must be 0
+                //      (VUID-vkCmdBindDescriptorSets-pDescriptorSets-06715) —
+                //      defeating the whole point of dynamic bindings.
+                // So we *always* bake an explicit range. Callers supply
+                // the block size through ResourceBinding::range; for the
+                // legacy bind_uniform_buffer(handle) path where range==0
+                // we fall back to min(buffer.size, 64 KB) — the per-UBO
+                // buffers are small (a few KB), so this lands at the real
+                // size and not a truncated view.
                 const int dyn_idx = (b.kind == ResourceBinding::Kind::UniformBuffer)
                     ? dynamic_idx_for_binding(b.binding) : -1;
                 const bool is_dynamic_ubo = (dyn_idx >= 0);
                 if (is_dynamic_ubo) {
-                    buf_infos.push_back({buf->buffer, 0, VK_WHOLE_SIZE});
+                    constexpr uint64_t VK_MIN_MAX_UBO_RANGE = 65536;
+                    uint64_t range = b.range;
+                    if (range == 0) {
+                        range = std::min<uint64_t>(buf->desc.size, VK_MIN_MAX_UBO_RANGE);
+                    }
+                    if (range > VK_MIN_MAX_UBO_RANGE) range = VK_MIN_MAX_UBO_RANGE;
+                    buf_infos.push_back({buf->buffer, 0, range});
                     w.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
                     res.dynamic_offsets[dyn_idx] = static_cast<uint32_t>(b.offset);
                 } else {
