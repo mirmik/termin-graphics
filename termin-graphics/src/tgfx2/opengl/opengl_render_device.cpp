@@ -93,6 +93,20 @@ OpenGLRenderDevice::~OpenGLRenderDevice() {
         push_ring_buf_ = 0;
     }
 
+    // Clean up transient vertex ring
+    if (transient_vb_gl_) {
+        glDeleteBuffers(1, &transient_vb_gl_);
+        transient_vb_gl_ = 0;
+        // Release the BufferHandle slot in our HandlePool too.
+        if (transient_vb_handle_) {
+            // Don't route through destroy(BufferHandle) — that would
+            // glDeleteBuffers the id we just freed above. Just drop the
+            // slot.
+            buffers_.remove(transient_vb_handle_.id);
+            transient_vb_handle_ = {};
+        }
+    }
+
     // Clean up all remaining GL resources
     for (auto& [id, buf] : buffers_) {
         if (buf.gl_id) glDeleteBuffers(1, &buf.gl_id);
@@ -1087,6 +1101,68 @@ GLintptr OpenGLRenderDevice::push_constants_write(const void* data, uint32_t siz
 
     push_ring_offset_ = offset + padded;
     return offset;
+}
+
+// --- Transient vertex ring ---
+//
+// Mirrors push_ring_: a persistent VBO the immediate-mode draw paths
+// sub-upload into. No alignment requirement on vertex buffers (unlike
+// UBOs), so the cursor advances by raw size. On overflow the whole
+// storage is orphaned via glBufferData(NULL) and the cursor rewinds —
+// same pattern, same stall avoidance.
+//
+// The HandlePool slot is allocated once; transient_vertex_buffer()
+// returns the same BufferHandle for the process lifetime. Destructor
+// takes care of releasing both the GL id and the slot.
+
+void OpenGLRenderDevice::ensure_transient_vb() {
+    if (transient_vb_initialized_) return;
+
+    glGenBuffers(1, &transient_vb_gl_);
+    glBindBuffer(GL_ARRAY_BUFFER, transient_vb_gl_);
+    glBufferData(GL_ARRAY_BUFFER, transient_vb_size_, nullptr, GL_STREAM_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    GLBuffer b;
+    b.gl_id = transient_vb_gl_;
+    b.desc.size = static_cast<uint64_t>(transient_vb_size_);
+    b.desc.usage = BufferUsage::Vertex;
+    b.target = GL_ARRAY_BUFFER;
+    b.external = false;
+    transient_vb_handle_ = BufferHandle{buffers_.add(std::move(b))};
+
+    transient_vb_offset_ = 0;
+    transient_vb_initialized_ = true;
+}
+
+BufferHandle OpenGLRenderDevice::transient_vertex_buffer() {
+    ensure_transient_vb();
+    return transient_vb_handle_;
+}
+
+uint64_t OpenGLRenderDevice::transient_vertex_write(const void* data,
+                                                   uint32_t size) {
+    if (!data || size == 0 || size > static_cast<uint32_t>(transient_vb_size_)) {
+        return UINT64_MAX;
+    }
+
+    ensure_transient_vb();
+
+    GLintptr offset = transient_vb_offset_;
+    if (offset + static_cast<GLintptr>(size) > transient_vb_size_) {
+        // Orphan + rewind.
+        glBindBuffer(GL_ARRAY_BUFFER, transient_vb_gl_);
+        glBufferData(GL_ARRAY_BUFFER, transient_vb_size_, nullptr, GL_STREAM_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        offset = 0;
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, transient_vb_gl_);
+    glBufferSubData(GL_ARRAY_BUFFER, offset, static_cast<GLsizeiptr>(size), data);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    transient_vb_offset_ = offset + static_cast<GLintptr>(size);
+    return static_cast<uint64_t>(offset);
 }
 
 } // namespace tgfx

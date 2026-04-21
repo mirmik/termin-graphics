@@ -182,11 +182,13 @@ public:
     // Draw non-indexed.
     void draw_arrays(BufferHandle vbo, uint32_t vertex_count);
 
-    // --- Immediate drawing (creates temp buffers) ---
-    // Lines: vertex data is [x,y,z, r,g,b,a] per vertex.
+    // --- Immediate drawing ---
+    // Fast-path for transient UI/debug streams: hands vertices to the
+    // device's transient vertex ring (persistent VBO with sub-upload)
+    // when available, falls back to per-draw buffer creation when the
+    // backend doesn't provide a ring. Vertex layout is fixed:
+    // [x,y,z, r,g,b,a] — 7 floats per vertex.
     void draw_immediate_lines(const float* data, uint32_t vertex_count);
-
-    // Triangles: same vertex format.
     void draw_immediate_triangles(const float* data, uint32_t vertex_count);
 
     // --- Blit ---
@@ -225,6 +227,9 @@ public:
     ShaderHandle fsq_vertex_shader();
 
 private:
+    // Shared body for draw_immediate_lines / draw_immediate_triangles.
+    void draw_immediate_generic(const float* data, uint32_t vertex_count,
+                                PrimitiveTopology topo);
 
     IRenderDevice& device_;
     PipelineCache& cache_;

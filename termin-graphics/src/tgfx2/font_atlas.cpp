@@ -24,6 +24,7 @@
 
 extern "C" {
 #include <tcbase/tc_log.h>
+#include <tc_profiler.h>
 }
 
 #include "tgfx2/descriptors.hpp"
@@ -330,13 +331,33 @@ const FontAtlas::GlyphInfo* FontAtlas::get_glyph(uint32_t codepoint) const {
 TextureHandle FontAtlas::ensure_texture(RenderContext2* ctx) {
     if (!ctx) return TextureHandle{};
 
-    // Holder identity change → drop old handle.
-    if (gpu_owner_ != nullptr && gpu_owner_ != ctx) {
+    const bool profile = tc_profiler_enabled();
+
+    IRenderDevice& device = ctx->device();
+
+    // Ownership is keyed on the IRenderDevice, not the RenderContext2.
+    // Every tgfx2 RenderContext2 that wraps the same process-global
+    // IRenderDevice shares handle pools, so a TextureHandle minted by
+    // one context resolves on the other without re-upload. Keying on
+    // RenderContext2* caused editor setups with an in-scene UIRenderer
+    // and a parent editor UIRenderer (both on one device, different
+    // RenderContext2 wrappers) to release+recreate the atlas every
+    // single frame — an expensive round-trip for an R8 texture and the
+    // dominant cost inside UIWidgetPass on OpenGL. Only real device
+    // swaps (hot-reload, multi-device hosts if we ever support those)
+    // actually need to drop the GPU texture.
+    if (gpu_device_ != nullptr && gpu_device_ != &device) {
+        if (profile) tc_profiler_begin_section("atlas.device_swap");
         release_gpu();
+        if (profile) tc_profiler_end_section();
     }
 
+    // Track the last context for diagnostics / legacy callers; ownership
+    // is still the device above.
+    gpu_owner_ = ctx;
+
     if (gpu_texture_.id == 0) {
-        IRenderDevice& device = ctx->device();
+        if (profile) tc_profiler_begin_section("atlas.create+upload");
         TextureDesc desc{};
         desc.width = static_cast<uint32_t>(atlas_w_);
         desc.height = static_cast<uint32_t>(atlas_h_);
@@ -345,15 +366,17 @@ TextureHandle FontAtlas::ensure_texture(RenderContext2* ctx) {
         desc.format = PixelFormat::R8_UNorm;
         desc.usage = TextureUsage::Sampled | TextureUsage::CopyDst;
         gpu_texture_ = device.create_texture(desc);
-        gpu_owner_ = ctx;
         gpu_device_ = &device;
 
         device.upload_texture(
             gpu_texture_,
             std::span<const uint8_t>(atlas_.data(), atlas_.size()));
         dirty_ = false;
+        if (profile) tc_profiler_end_section();
     } else if (dirty_) {
+        if (profile) tc_profiler_begin_section("atlas.reupload");
         sync_gpu_(ctx);
+        if (profile) tc_profiler_end_section();
     }
     return gpu_texture_;
 }

@@ -19,6 +19,10 @@
 #include "tgfx2/tc_shader_bridge.hpp"
 
 extern "C" {
+#include "tc_profiler.h"
+}
+
+extern "C" {
 #include <tgfx/resources/tc_shader.h>
 }
 
@@ -201,12 +205,18 @@ void Text2DRenderer::draw(std::string_view text_utf8,
                            Anchor anchor) {
     if (text_utf8.empty() || font_ == nullptr || ctx_ == nullptr) return;
 
-    // Rasterise any missing glyphs and re-upload the atlas if needed.
-    font_->ensure_glyphs(text_utf8, ctx_);
+    const bool profile = tc_profiler_enabled();
 
+    // Rasterise any missing glyphs and re-upload the atlas if needed.
+    if (profile) tc_profiler_begin_section("text.ensure_glyphs");
+    font_->ensure_glyphs(text_utf8, ctx_);
+    if (profile) tc_profiler_end_section();
+
+    if (profile) tc_profiler_begin_section("text.measure");
     const float scale = size / static_cast<float>(font_->rasterize_size());
     auto total = font_->measure_text(text_utf8, size);
     const float total_w = total.width;
+    if (profile) tc_profiler_end_section();
 
     float start_x = x;
     float start_y = y;
@@ -229,8 +239,12 @@ void Text2DRenderer::draw(std::string_view text_utf8,
     // backends: Vulkan ships them via vkCmdPushConstants, OpenGL
     // through the ring UBO at TGFX2_PUSH_CONSTANTS_BINDING.
     RenderContext2& ctx = *ctx_;
-    ctx.bind_shader(vs_, fs_);
 
+    if (profile) tc_profiler_begin_section("text.bind_shader");
+    ctx.bind_shader(vs_, fs_);
+    if (profile) tc_profiler_end_section();
+
+    if (profile) tc_profiler_begin_section("text.push_constants");
     Text2DPushData push;
     // Shader expects column-major mat4; `proj_` was stored row-major
     // (see build_ortho_pixel_to_ndc's comment). Transpose here before
@@ -245,13 +259,20 @@ void Text2DRenderer::draw(std::string_view text_utf8,
     push.color[2] = b;
     push.color[3] = a;
     ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
+    if (profile) tc_profiler_end_section();
 
+    if (profile) tc_profiler_begin_section("text.ensure_texture");
     TextureHandle atlas = font_->ensure_texture(&ctx);
+    if (profile) tc_profiler_end_section();
+
+    if (profile) tc_profiler_begin_section("text.bind_texture");
     // Binding 4 matches `layout(binding=4) uniform sampler2D
     // u_font_atlas` in make_text2d_frag().
     ctx.bind_sampled_texture(4, atlas);
+    if (profile) tc_profiler_end_section();
 
     // Build one flat vertex array for the whole string.
+    if (profile) tc_profiler_begin_section("text.build_quads");
     std::vector<float> verts;
     verts.reserve(text_utf8.size() * 6 * 7);  // rough upper bound
 
@@ -293,6 +314,8 @@ void Text2DRenderer::draw(std::string_view text_utf8,
         // and gives space characters their width).
         cursor_x += gi->advance_px * scale;
     }
+
+    if (profile) tc_profiler_end_section();  // text.build_quads
 
     if (verts.empty()) return;
 

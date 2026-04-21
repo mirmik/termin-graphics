@@ -272,6 +272,14 @@ public:
     // OpenGLCommandList::begin().
     void push_constants_reset_frame();
 
+    // --- Transient vertex ring (IRenderDevice override) ---
+    // Persistent VBO the Python/C++ immediate-mode draw paths sub-
+    // upload small vertex streams into, so each rect / debug line
+    // doesn't pay glGenBuffers+glBufferData+glDeleteBuffers. Wraps
+    // with orphaning on overflow (same pattern as push_ring).
+    BufferHandle transient_vertex_buffer() override;
+    uint64_t transient_vertex_write(const void* data, uint32_t size) override;
+
 private:
     GLuint acquire_program(const PipelineDesc& desc);
     void release_program(GLuint program);
@@ -301,6 +309,15 @@ private:
     std::unordered_map<GLuint, GLProgramKey> program_to_key_;
 
     void ensure_push_ring();
+
+    // Transient vertex ring state (see transient_vertex_write).
+    BufferHandle transient_vb_handle_;
+    GLuint       transient_vb_gl_         = 0;
+    GLsizeiptr   transient_vb_size_       = 2 << 20;   // 2 MB
+    GLintptr     transient_vb_offset_     = 0;
+    bool         transient_vb_initialized_ = false;
+
+    void ensure_transient_vb();
 };
 
 } // namespace tgfx

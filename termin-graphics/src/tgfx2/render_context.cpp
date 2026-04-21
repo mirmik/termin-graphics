@@ -5,6 +5,10 @@
 #include "tgfx2/i_command_list.hpp"
 #include "tgfx2/opengl/opengl_render_device.hpp"
 
+extern "C" {
+#include "tc_profiler.h"
+}
+
 #include <glad/glad.h>
 #include <cstring>
 
@@ -741,51 +745,43 @@ void RenderContext2::draw_arrays(BufferHandle vbo, uint32_t vertex_count) {
     cmd_->draw(vertex_count);
 }
 
-void RenderContext2::draw_immediate_lines(const float* data, uint32_t vertex_count) {
+// Immediate vertex draw scaffold shared by draw_immediate_lines/_triangles.
+// Tries the device's transient vertex ring (persistent VBO with sub-upload)
+// first; falls back to create_buffer + upload_buffer + deferred destroy if
+// the backend doesn't provide a ring. OpenGL pays glGenBuffers+glBufferData+
+// glDeleteBuffers per draw otherwise, which dominates CPU time for small
+// UI-style streams. Vulkan keeps using the fallback — command submission is
+// async so the per-draw alloc cost is hidden.
+void RenderContext2::draw_immediate_generic(const float* data,
+                                            uint32_t vertex_count,
+                                            PrimitiveTopology topo) {
     if (vertex_count == 0) return;
 
-    // 7 floats per vertex: x,y,z, r,g,b,a
-    size_t byte_size = vertex_count * 7 * sizeof(float);
+    const size_t byte_size = vertex_count * 7 * sizeof(float);
+    const bool profile = tc_profiler_enabled();
 
-    BufferDesc desc;
-    desc.size = byte_size;
-    desc.usage = BufferUsage::Vertex;
-    auto buf = device_.create_buffer(desc);
-    device_.upload_buffer(buf, {reinterpret_cast<const uint8_t*>(data), byte_size});
+    BufferHandle buf;
+    uint64_t vb_offset = 0;
+    bool used_ring = false;
 
-    VertexBufferLayout layout;
-    layout.stride = 7 * sizeof(float);
-    layout.attributes = {
-        {0, VertexFormat::Float3, 0},                    // position
-        {1, VertexFormat::Float4, 3 * sizeof(float)},    // color
-    };
-    set_vertex_layout(layout);
-    set_topology(PrimitiveTopology::LineList);
+    if (profile) tc_profiler_begin_section("immediate.upload");
+    const uint64_t ring_offset = device_.transient_vertex_write(
+        data, static_cast<uint32_t>(byte_size));
+    if (ring_offset != UINT64_MAX) {
+        buf = device_.transient_vertex_buffer();
+        vb_offset = ring_offset;
+        used_ring = true;
+    } else {
+        BufferDesc desc;
+        desc.size = byte_size;
+        desc.usage = BufferUsage::Vertex;
+        buf = device_.create_buffer(desc);
+        device_.upload_buffer(buf,
+            {reinterpret_cast<const uint8_t*>(data), byte_size});
+    }
+    if (profile) tc_profiler_end_section();
 
-    flush_pipeline();
-    flush_resource_set();
-    cmd_->bind_vertex_buffer(0, buf);
-    cmd_->draw(vertex_count);
-
-    // Defer destroy — on Vulkan the command buffer runs asynchronously
-    // after vkQueueSubmit, so the VkBuffer must outlive end_frame().
-    // The deferred list is drained in end_frame() after device_.submit
-    // has waited on the frame fence. OpenGL is equally happy either way
-    // (glBufferData copies host memory immediately).
-    deferred_destroy_buffers_.push_back(buf);
-}
-
-void RenderContext2::draw_immediate_triangles(const float* data, uint32_t vertex_count) {
-    if (vertex_count == 0) return;
-
-    size_t byte_size = vertex_count * 7 * sizeof(float);
-
-    BufferDesc desc;
-    desc.size = byte_size;
-    desc.usage = BufferUsage::Vertex;
-    auto buf = device_.create_buffer(desc);
-    device_.upload_buffer(buf, {reinterpret_cast<const uint8_t*>(data), byte_size});
-
+    if (profile) tc_profiler_begin_section("immediate.pipeline");
     VertexBufferLayout layout;
     layout.stride = 7 * sizeof(float);
     layout.attributes = {
@@ -793,15 +789,31 @@ void RenderContext2::draw_immediate_triangles(const float* data, uint32_t vertex
         {1, VertexFormat::Float4, 3 * sizeof(float)},
     };
     set_vertex_layout(layout);
-    set_topology(PrimitiveTopology::TriangleList);
+    set_topology(topo);
 
     flush_pipeline();
     flush_resource_set();
-    cmd_->bind_vertex_buffer(0, buf);
-    cmd_->draw(vertex_count);
+    if (profile) tc_profiler_end_section();
 
-    // Defer destroy — see draw_immediate_lines for the lifetime story.
-    deferred_destroy_buffers_.push_back(buf);
+    if (profile) tc_profiler_begin_section("immediate.draw");
+    cmd_->bind_vertex_buffer(0, buf, vb_offset);
+    cmd_->draw(vertex_count);
+    if (profile) tc_profiler_end_section();
+
+    // Ring buffers are process-lifetime; only the fallback path queues
+    // the buffer for destruction after the current frame's submit
+    // (Vulkan needs the VkBuffer alive until the queue drains).
+    if (!used_ring) {
+        deferred_destroy_buffers_.push_back(buf);
+    }
+}
+
+void RenderContext2::draw_immediate_lines(const float* data, uint32_t vertex_count) {
+    draw_immediate_generic(data, vertex_count, PrimitiveTopology::LineList);
+}
+
+void RenderContext2::draw_immediate_triangles(const float* data, uint32_t vertex_count) {
+    draw_immediate_generic(data, vertex_count, PrimitiveTopology::TriangleList);
 }
 
 void RenderContext2::blit(TextureHandle src, TextureHandle dst) {

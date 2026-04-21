@@ -96,6 +96,28 @@ public:
         throw std::runtime_error("register_external_buffer: not supported on this backend");
     }
 
+    // --- Transient vertex ring (optional) ---
+    // A persistent vertex buffer the backend can sub-upload small draw
+    // streams into (immediate-mode rects, debug lines). Lets
+    // RenderContext2::draw_immediate_* skip per-draw create_buffer /
+    // upload_buffer / destroy, which is ~free on Vulkan but costs
+    // glGenBuffers + glBufferData + glBufferSubData + glDeleteBuffers
+    // on OpenGL (the delete happens later via deferred_destroy_buffers_,
+    // but the GL-driver still pays the per-alloc hit).
+    //
+    // Returns UINT64_MAX → caller falls back to create_buffer +
+    // upload_buffer (Vulkan keeps doing that; it's fast there).
+    // Non-max offset → use `transient_vertex_buffer()` with that
+    // offset.  Ring wraps with an orphaning glBufferData() so there's
+    // no stall on overflow.
+    virtual BufferHandle transient_vertex_buffer() { return {}; }
+
+    virtual uint64_t transient_vertex_write(
+        const void* data, uint32_t size) {
+        (void)data; (void)size;
+        return UINT64_MAX;
+    }
+
     // Return the backend-native object id backing a tgfx2 handle.
     // For OpenGL: GLuint texture id. For Vulkan: VkImage as uintptr_t.
     // Returns 0 on unknown / invalid handle.
