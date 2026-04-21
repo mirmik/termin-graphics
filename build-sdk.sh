@@ -68,8 +68,12 @@ else
     echo "Bundled Python stdlib:        $BUNDLED_PY_DIR"
     echo "Bundled Python site-packages: $BUNDLED_SITE_PACKAGES"
     echo ""
+    # --force bypasses pip's wheel cache: build-sdk.sh can rebuild the
+    # native .so files without changing the package version string, and
+    # pip would then happily reuse a stale wheel. See
+    # install-pip-packages.sh for the full ABI-drift rationale.
     TERMIN_SDK="$SCRIPT_DIR/sdk" \
-        "$SCRIPT_DIR/install-pip-packages.sh" --target "$BUNDLED_SITE_PACKAGES"
+        "$SCRIPT_DIR/install-pip-packages.sh" --force --target "$BUNDLED_SITE_PACKAGES"
 fi
 
 echo ""
