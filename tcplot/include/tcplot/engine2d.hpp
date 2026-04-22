@@ -55,6 +55,11 @@ public:
     // a header rather than another label (ratio ~1.7× to ticks).
     float font_size = 15.0f;
     float title_font_size = 22.0f;
+    // Vertical gap (px) between the title's bottom edge and the top
+    // of the plot area. Matches matplotlib's `axes.titlepad`. Bumping
+    // this gives the title more breathing room; a negative value would
+    // push the title into the plot area (don't).
+    float title_pad = 4.0f;
 
     PlotEngine2D();
     ~PlotEngine2D();

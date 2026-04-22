@@ -256,6 +256,9 @@ void PlotView2DMulti::set_panel_margins(int left, int right, int top, int bottom
         p->margin_bottom = bottom;
     }
 }
+void PlotView2DMulti::set_title_pad(float pad) {
+    for (auto& p : panels_) p->title_pad = pad;
+}
 
 // ---------------------------------------------------------------------------
 // Virtual scrolling

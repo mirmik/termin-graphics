@@ -759,8 +759,17 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         }
 
         if (!data.title.empty()) {
-            // Title: left-anchored at the top of the plot area.
-            // Pick its colour from the first line series if any, so
+            // Title: left-anchored, bottom sitting just above the plot
+            // area with a small gap. Earlier revisions placed it at
+            // `margin_top * 0.5f` (vertical centre of the margin),
+            // which left only `margin_top - title_font_size` px of
+            // clearance — for Segoe UI's ~1.3× line-height ratio and
+            // title_font_size=22 the title bottom landed ~6 px INSIDE
+            // the plot area. Anchoring the bottom to pa.y instead
+            // keeps the gap visually stable regardless of the font's
+            // metric ratio.
+            //
+            // Pick colour from the first line series if any, so
             // stacked panels read at a glance as "sin is blue, cos is
             // orange, ..." instead of drowning every title in the
             // same label_color grey.
@@ -769,9 +778,16 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
                 const auto& s = data.lines.front();
                 tc = s.color.has_value() ? *s.color : styles::cycle_color(0u);
             }
+            const int title_lh = font->line_height_px(title_font_size);
+            // Clamp to viewport top so a title bigger than margin_top
+            // gets cut off at the top instead of drawing at a negative
+            // Y — caller's cue to bump margin_top.
+            const float title_top_y = std::max(
+                static_cast<float>(vy_),
+                pa.y - static_cast<float>(title_lh) - title_pad);
             text2d_->draw(data.title,
                           T_x(pa.x),
-                          T_y(vy_ + margin_top * 0.5f),
+                          T_y(title_top_y),
                           tc.r, tc.g, tc.b, tc.a,
                           title_font_size,
                           tgfx::Text2DRenderer::Anchor::Left);

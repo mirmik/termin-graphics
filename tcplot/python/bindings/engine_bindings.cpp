@@ -80,6 +80,7 @@ void bind_engines(nb::module_& m) {
         .def_rw("plot_bg_color", &tcplot::PlotEngine2D::plot_bg_color)
         .def_rw("font_size",       &tcplot::PlotEngine2D::font_size)
         .def_rw("title_font_size", &tcplot::PlotEngine2D::title_font_size)
+        .def_rw("title_pad",       &tcplot::PlotEngine2D::title_pad)
 
         .def("set_viewport", &tcplot::PlotEngine2D::set_viewport,
              nb::arg("x"), nb::arg("y"), nb::arg("width"), nb::arg("height"))

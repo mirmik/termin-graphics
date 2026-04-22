@@ -129,6 +129,9 @@ public:
     // Per-panel font sizes in pixels. Margins auto-scale to fit.
     void set_font_size       (float label_px, float title_px);
     void set_panel_margins   (int left, int right, int top, int bottom);
+    // Vertical gap (px) between every panel's title bottom edge and
+    // the top of its plot area. See PlotEngine2D::title_pad.
+    void set_title_pad       (float pad);
 
     // --- Virtual scrolling ---
     // Fixed panel height in pixels. When > 0 the view lays panels out
