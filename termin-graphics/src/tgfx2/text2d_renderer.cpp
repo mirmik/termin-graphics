@@ -212,13 +212,14 @@ void Text2DRenderer::draw(std::string_view text_utf8,
 
     const bool profile = tc_profiler_enabled();
 
-    // Rasterise any missing glyphs and re-upload the atlas if needed.
+    // Rasterise any missing glyphs for this display size and re-upload
+    // the atlas if needed. Each unique integer size has its own per-
+    // glyph bake; the atlas handles quantisation internally.
     if (profile) tc_profiler_begin_section("text.ensure_glyphs");
-    font_->ensure_glyphs(text_utf8, ctx_);
+    font_->ensure_glyphs(text_utf8, size, ctx_);
     if (profile) tc_profiler_end_section();
 
     if (profile) tc_profiler_begin_section("text.measure");
-    const float scale = size / static_cast<float>(font_->rasterize_size());
     auto total = font_->measure_text(text_utf8, size);
     const float total_w = total.width;
     if (profile) tc_profiler_end_section();
@@ -295,11 +296,13 @@ void Text2DRenderer::draw(std::string_view text_utf8,
     size_t i = 0;
     while (i < text_utf8.size()) {
         uint32_t cp = internal::utf8_decode(text_utf8, i);
-        const FontAtlas::GlyphInfo* gi = font_->get_glyph(cp);
+        const FontAtlas::GlyphInfo* gi = font_->get_glyph(cp, size);
         if (!gi) continue;
 
-        const float char_w = gi->width_px * scale;
-        const float char_h = gi->height_px * scale;
+        // Metrics are already in display pixels at this size — no
+        // scale multiplication here. Matches the atlas contract.
+        const float char_w = gi->width_px;
+        const float char_h = gi->height_px;
 
         // Snap the quad's left edge to an integer pixel; keep the
         // width as-is so the glyph shape isn't distorted by rounding
@@ -331,8 +334,9 @@ void Text2DRenderer::draw(std::string_view text_utf8,
         // Advance by the glyph's true horizontal advance, not the ink
         // width: the quad is sized by ink (what we rasterise), the
         // cursor moves by advance (metric that includes sidebearings
-        // and gives space characters their width).
-        cursor_x += gi->advance_px * scale;
+        // and gives space characters their width). Advance is already
+        // in display pixels at this size.
+        cursor_x += gi->advance_px;
     }
 
     if (profile) tc_profiler_end_section();  // text.build_quads

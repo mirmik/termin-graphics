@@ -1,16 +1,19 @@
 // font_atlas.cpp - stb_truetype-backed implementation of tgfx::FontAtlas.
 //
-// Layout parity with the prior Python implementation (tgfx/font.py):
-//   - Cell size: (ink_width, line_height) where ink_width = x1 - x0
-//     from stbtt_GetCodepointBitmapBox and line_height = ascent_px +
-//     descent_px (no line_gap).
-//   - Glyph bitmap is placed at (0, ascent_px + y0) within its cell,
-//     where y0 is the stb bitmap top offset (typically negative for
-//     chars with ascenders). Baseline sits at cell y = ascent_px,
-//     identical for every glyph — this is what keeps vertical text
-//     alignment consistent.
-//   - ink_width = x1 - x0 is used as measurement width, not the
-//     typographic advance. Matches what Python did; see header note.
+// Size-aware layout: every glyph is baked per requested display size
+// and cached under key (codepoint, px_size). See header for the
+// architectural rationale (same GlyphInfo shape works for a future
+// SDF backend — caller always asks "glyph at display_px", atlas
+// produces display-px metrics however it wants internally).
+//
+// Per-size bake produces its own cell height (ascent + descent at
+// that size) so baseline alignment is consistent within one size.
+// Mixing sizes in one draw call is fine — each glyph's quad uses its
+// own `height_px` and advance, and the renderer positions them by the
+// caller-provided baseline.
+//
+// Horizontal oversampling (×2) + stb's box prefilter carried over
+// from the previous design; see kOversampleX comment in ensure_glyph.
 
 #include "tgfx2/font_atlas.hpp"
 
@@ -51,7 +54,8 @@ namespace {
 // Same ~140 preload characters as tgfx/font.py. Keeping the set
 // identical means "first-frame glyph misses" of any Python code path
 // translate 1:1 to the C++ port — no surprise rasterisations on the
-// first real frame.
+// first real frame. Preload only runs at `default_preload_size_` —
+// other sizes populate lazily on first use.
 static const char* kPreloadUtf8 =
     // ASCII printable (U+0020..U+007E)
     " !\"#$%&'()*+,-./0123456789:;<=>?@"
@@ -88,18 +92,50 @@ std::vector<uint8_t> read_file_bytes(const std::string& path) {
 struct FontAtlas::Impl {
     std::vector<uint8_t> ttf_bytes;
     stbtt_fontinfo font{};
-    float scale = 1.0f;
+    // Font vmetrics in font-design units. We stash them here so each
+    // per-size metrics resolution is a cheap multiply without touching
+    // stb again.
+    int ascent_u = 0;
+    int descent_u = 0;  // stb convention: negative
 };
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+int FontAtlas::quantise_size_(float display_px) {
+    // Round to nearest integer px, clamp to the minimum. No bucketing
+    // beyond that — start simple, tighten later if atlas pressure
+    // forces it. See header kMinPxSize.
+    int px = static_cast<int>(std::lround(display_px));
+    if (px < kMinPxSize) px = kMinPxSize;
+    return px;
+}
+
+const FontAtlas::SizeMetrics& FontAtlas::metrics_for_(int px_size) const {
+    auto it = size_metrics_.find(px_size);
+    if (it != size_metrics_.end()) return it->second;
+
+    SizeMetrics sm{};
+    sm.scale = stbtt_ScaleForPixelHeight(&impl_->font,
+                                         static_cast<float>(px_size));
+    // Match Python: line_height = ascent + descent (descent is stored
+    // negative in stb's convention; take its magnitude).
+    sm.ascent_px = static_cast<int>(std::round(impl_->ascent_u * sm.scale));
+    sm.descent_px = static_cast<int>(std::round(-impl_->descent_u * sm.scale));
+    sm.line_height = sm.ascent_px + sm.descent_px;
+    return size_metrics_.emplace(px_size, sm).first->second;
+}
 
 // ---------------------------------------------------------------------------
 // Construction / destruction
 // ---------------------------------------------------------------------------
 
 FontAtlas::FontAtlas(const std::string& ttf_path,
-                     int rasterize_size_px,
+                     int default_preload_size_px,
                      int atlas_width,
                      int atlas_height)
-    : rasterize_size_(rasterize_size_px),
+    : default_preload_size_(default_preload_size_px),
       atlas_w_(atlas_width),
       atlas_h_(atlas_height),
       atlas_(static_cast<size_t>(atlas_width) * static_cast<size_t>(atlas_height), 0u) {
@@ -118,24 +154,23 @@ FontAtlas::FontAtlas(const std::string& ttf_path,
         throw std::runtime_error("FontAtlas: stbtt_InitFont failed for " + ttf_path);
     }
 
-    impl_->scale = stbtt_ScaleForPixelHeight(&impl_->font,
-                                             static_cast<float>(rasterize_size_));
+    // Stash vmetrics in font-design units; every per-size resolution
+    // scales from here.
+    int line_gap_u = 0;
+    stbtt_GetFontVMetrics(&impl_->font,
+                          &impl_->ascent_u,
+                          &impl_->descent_u,
+                          &line_gap_u);
 
-    int ascent_u = 0, descent_u = 0, line_gap_u = 0;
-    stbtt_GetFontVMetrics(&impl_->font, &ascent_u, &descent_u, &line_gap_u);
-    // Match Python: line_height = ascent + descent (descent_u is
-    // negative in stb's convention; make its magnitude positive).
-    ascent_px_ = static_cast<int>(std::round(ascent_u * impl_->scale));
-    descent_px_ = static_cast<int>(std::round(-descent_u * impl_->scale));
-    line_height_ = ascent_px_ + descent_px_;
-
-    // Warm up the default glyph set so the first real frame doesn't
-    // stall on rasterising "Hello 123".
+    // Warm up the preload character set at the default size so the
+    // first real frame of "typical" UI text doesn't stall on
+    // rasterisation. Other sizes populate lazily.
+    const float preload_px = static_cast<float>(default_preload_size_);
     size_t i = 0;
     std::string_view preload{kPreloadUtf8};
     while (i < preload.size()) {
         uint32_t cp = internal::utf8_decode(preload, i);
-        ensure_glyph(cp);
+        ensure_glyph(cp, preload_px);
     }
     // Mark dirty so the first ensure_texture() uploads the preload.
     dirty_ = true;
@@ -169,29 +204,25 @@ FontAtlas::PackedCell FontAtlas::pack_(int cell_w, int cell_h) {
     return out;
 }
 
-bool FontAtlas::ensure_glyph(uint32_t codepoint) {
+bool FontAtlas::ensure_glyph(uint32_t codepoint, float display_px) {
     if (!impl_) return false;
-    if (glyphs_.count(codepoint) != 0) return false;
+    const int px_size = quantise_size_(display_px);
+    const uint64_t key = make_key_(codepoint, px_size);
+    if (glyphs_.count(key) != 0) return false;
 
     // Horizontal oversampling: rasterise the glyph at 2× its display
     // horizontal resolution and apply stb's box prefilter. At draw
     // time the bilinear sampler interpolates between these 2× texels,
     // which gives smoother transitions when the quad ends up at a
-    // non-integer display position and better downscale quality when
-    // display_size != rasterize_size. ImGui default. Vertical stays
-    // at 1× — doubling the atlas vertically is rarely worth it.
+    // non-integer display position. ImGui default. Vertical stays at
+    // 1× — doubling the atlas vertically is rarely worth it.
     //
-    // Cost: every glyph cell grows by ~2× horizontally (plus one
-    // skirt column for the prefilter). 2048×2048 atlas still has
-    // plenty of room for the preload set and typical UI usage.
+    // Side-effect: stb's box prefilter phase-shifts the apparent
+    // glyph position by -(K-1)/(2K) = -0.25 display px (for K=2). We
+    // don't compensate — it's a uniform shift across every glyph, so
+    // relative alignment inside a text run is preserved, and 0.25 px
+    // is below perceptual threshold.
     constexpr int kOversampleX = 2;
-
-    // Side-effect: stb's box prefilter phase-shifts the apparent glyph
-    // position by -(K-1)/(2K) = -0.25 display px (for K=2). We do NOT
-    // compensate in the renderer — it's a uniform shift applied to
-    // every glyph, so relative alignment inside a text run stays
-    // correct, and 0.25 px is below perceptual threshold against
-    // neighbouring graphics (axis ticks etc.).
 
     int glyph_idx = stbtt_FindGlyphIndex(&impl_->font, static_cast<int>(codepoint));
     if (glyph_idx == 0) {
@@ -201,24 +232,26 @@ bool FontAtlas::ensure_glyph(uint32_t codepoint) {
         return false;
     }
 
-    // Bitmap box at the oversampled horizontal scale. stb returns the
-    // rendered-pixel bbox; x1 - x0 is therefore in oversampled texels
-    // (roughly 2× the display ink width). Vertical metrics unchanged.
+    const SizeMetrics& sm = metrics_for_(px_size);
+    const int gh_cell = sm.line_height;
+
+    // Bitmap box at (oversampled_x, normal_y) scale. stb returns the
+    // rendered-pixel bbox — x1 - x0 is in oversampled texels, y1 - y0
+    // in display pixels.
     int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
     stbtt_GetGlyphBitmapBox(&impl_->font, glyph_idx,
-                            impl_->scale * kOversampleX,
-                            impl_->scale,
+                            sm.scale * kOversampleX,
+                            sm.scale,
                             &x0, &y0, &x1, &y1);
 
-    const int gw_over = x1 - x0;   // rendered width, oversampled texels
-    const int gh_cell = line_height_;  // cell height — fixed per font
+    const int gw_over = x1 - x0;
 
     // Horizontal advance — correct metric for cursor motion. Differs
     // from the ink-bbox width (that's just how much of the glyph is
     // painted). Space glyphs have ink width == 0 but a real advance.
     int adv_w = 0, lsb = 0;
     stbtt_GetGlyphHMetrics(&impl_->font, glyph_idx, &adv_w, &lsb);
-    const float advance_px = adv_w * impl_->scale;
+    const float advance_px = adv_w * sm.scale;
 
     if (gw_over <= 0) {
         // No ink but still occupies layout space (U+0020 and similar).
@@ -227,7 +260,7 @@ bool FontAtlas::ensure_glyph(uint32_t codepoint) {
         g.width_px = 0.0f;
         g.height_px = static_cast<float>(gh_cell);
         g.advance_px = advance_px;
-        glyphs_[codepoint] = g;
+        glyphs_[key] = g;
         return true;
     }
 
@@ -243,15 +276,16 @@ bool FontAtlas::ensure_glyph(uint32_t codepoint) {
 
     auto cell = pack_(cell_w, cell_h);
     if (cell.x < 0) {
-        tc_log(TC_LOG_WARN, "[FontAtlas] Atlas full — cannot rasterise U+%04X", codepoint);
+        tc_log(TC_LOG_WARN,
+               "[FontAtlas] Atlas full — cannot rasterise U+%04X at %d px",
+               codepoint, px_size);
         return false;
     }
 
-    // Rasterise directly into the atlas. Glyph bitmap covers `gw_over`
-    // columns × `gbh` rows inside the cell; we place it at column 0
-    // (flush left) and row (ascent + y0) so the baseline is at cell
-    // row = ascent_px. The skirt column stays zero until prefilter.
-    const int dst_row0 = cell.y + ascent_px_ + y0;
+    // Place bitmap at column 0 of the cell and row (ascent + y0) so
+    // the baseline sits at cell row = sm.ascent_px. Identical for every
+    // glyph at this size → baseline alignment stays consistent.
+    const int dst_row0 = cell.y + sm.ascent_px + y0;
     // Guard against glyphs whose y0 would push them above the cell
     // (extremely tall ascenders). Clip at the top; stb_truetype does
     // the same clipping internally but being defensive doesn't hurt.
@@ -271,8 +305,8 @@ bool FontAtlas::ensure_glyph(uint32_t codepoint) {
                                           dst,
                                           gw_over, rows_to_write,
                                           atlas_w_,  // dst stride
-                                          impl_->scale * kOversampleX,
-                                          impl_->scale,
+                                          sm.scale * kOversampleX,
+                                          sm.scale,
                                           0.0f, 0.0f,
                                           glyph_idx);
         } else {
@@ -283,8 +317,8 @@ bool FontAtlas::ensure_glyph(uint32_t codepoint) {
             stbtt_MakeGlyphBitmapSubpixel(&impl_->font,
                                           scratch.data(),
                                           gw_over, gbh, gw_over,
-                                          impl_->scale * kOversampleX,
-                                          impl_->scale,
+                                          sm.scale * kOversampleX,
+                                          sm.scale,
                                           0.0f, 0.0f,
                                           glyph_idx);
             for (int r = 0; r < rows_to_write; ++r) {
@@ -318,18 +352,20 @@ bool FontAtlas::ensure_glyph(uint32_t codepoint) {
     g.width_px = static_cast<float>(stored_w) / static_cast<float>(kOversampleX);
     g.height_px = static_cast<float>(gh_cell);
     g.advance_px = advance_px;
-    glyphs_[codepoint] = g;
+    glyphs_[key] = g;
 
     dirty_ = true;
     return true;
 }
 
-void FontAtlas::ensure_glyphs(std::string_view text_utf8, RenderContext2* ctx) {
+void FontAtlas::ensure_glyphs(std::string_view text_utf8,
+                              float display_px,
+                              RenderContext2* ctx) {
     bool added_any = false;
     size_t i = 0;
     while (i < text_utf8.size()) {
         uint32_t cp = internal::utf8_decode(text_utf8, i);
-        if (ensure_glyph(cp)) {
+        if (ensure_glyph(cp, display_px)) {
             added_any = true;
         }
     }
@@ -343,29 +379,49 @@ void FontAtlas::ensure_glyphs(std::string_view text_utf8, RenderContext2* ctx) {
 // ---------------------------------------------------------------------------
 
 FontAtlas::Size2f FontAtlas::measure_text(std::string_view text_utf8,
-                                          float font_size) const {
+                                          float display_px) const {
     Size2f out{};
     if (text_utf8.empty()) return out;
 
-    const float scale = font_size / static_cast<float>(rasterize_size_);
+    const int px_size = quantise_size_(display_px);
     size_t i = 0;
     float width = 0.0f;
     while (i < text_utf8.size()) {
         uint32_t cp = internal::utf8_decode(text_utf8, i);
-        auto it = glyphs_.find(cp);
+        auto it = glyphs_.find(make_key_(cp, px_size));
         if (it != glyphs_.end()) {
-            // Sum advance, not ink width — same reasoning as Text2DRenderer.
-            width += it->second.advance_px * scale;
+            // Advance is already in display pixels at this size.
+            width += it->second.advance_px;
         }
     }
     out.width = width;
-    out.height = font_size;
+    // Return the requested display size — measurement row height is
+    // the caller-side concept (line_height_px is a separate getter).
+    out.height = display_px;
     return out;
 }
 
-const FontAtlas::GlyphInfo* FontAtlas::get_glyph(uint32_t codepoint) const {
-    auto it = glyphs_.find(codepoint);
+const FontAtlas::GlyphInfo* FontAtlas::get_glyph(uint32_t codepoint,
+                                                 float display_px) const {
+    const int px_size = quantise_size_(display_px);
+    auto it = glyphs_.find(make_key_(codepoint, px_size));
     return (it != glyphs_.end()) ? &it->second : nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// Size-aware metrics
+// ---------------------------------------------------------------------------
+
+int FontAtlas::ascent_px(float display_px) const {
+    return metrics_for_(quantise_size_(display_px)).ascent_px;
+}
+
+int FontAtlas::descent_px(float display_px) const {
+    return metrics_for_(quantise_size_(display_px)).descent_px;
+}
+
+int FontAtlas::line_height_px(float display_px) const {
+    return metrics_for_(quantise_size_(display_px)).line_height;
 }
 
 // ---------------------------------------------------------------------------

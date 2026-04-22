@@ -850,20 +850,24 @@ void bind_tgfx2(nb::module_& m) {
     nb::class_<tgfx::FontAtlas>(m, "FontTextureAtlas")
         .def(nb::init<const std::string&, int, int, int>(),
              nb::arg("path"),
-             nb::arg("size") = 32,
+             nb::arg("size") = 14,
              nb::arg("atlas_width") = 2048,
              nb::arg("atlas_height") = 2048)
 
-        // Rasterise every glyph in `text` (UTF-8). If `ctx` is given
-        // and any new glyph was added, triggers a GPU re-upload so
-        // the next draw sees the fresh atlas.
+        // Rasterise every glyph in `text` (UTF-8) at `size` display px.
+        // If `ctx` is given and any new glyph was added, triggers a GPU
+        // re-upload so the next draw sees the fresh atlas. The atlas
+        // quantises `size` to integer pixels internally and caches per
+        // (codepoint, px_size) pair.
         .def("ensure_glyphs",
              [](tgfx::FontAtlas& self,
                 const std::string& text,
+                float size,
                 tgfx::RenderContext2* ctx) {
-                 self.ensure_glyphs(text, ctx);
+                 self.ensure_glyphs(text, size, ctx);
              },
              nb::arg("text"),
+             nb::arg("size"),
              nb::arg("ctx").none() = nb::none())
 
         // Measure pixel (width, height) of `text` at display `size`.
@@ -888,27 +892,50 @@ void bind_tgfx2(nb::module_& m) {
              },
              nb::arg("ctx"))
 
-        // Look up one glyph's atlas entry. Returns a 6-tuple
-        // (u0, v0, u1, v1, width_px, height_px) at the rasterise
-        // size, or None if the glyph has not been rasterised.
+        // Look up one glyph's atlas entry at `size` display px. Returns
+        // a 6-tuple (u0, v0, u1, v1, width_px, height_px) in display
+        // pixels at the requested size, or None if the glyph has not
+        // been rasterised at that size.
         .def("get_glyph",
-             [](const tgfx::FontAtlas& self, uint32_t codepoint) -> nb::object {
-                 const auto* g = self.get_glyph(codepoint);
+             [](const tgfx::FontAtlas& self,
+                uint32_t codepoint,
+                float size) -> nb::object {
+                 const auto* g = self.get_glyph(codepoint, size);
                  if (!g) return nb::none();
                  return nb::make_tuple(g->u0, g->v0, g->u1, g->v1,
                                        g->width_px, g->height_px);
              },
-             nb::arg("codepoint"))
+             nb::arg("codepoint"), nb::arg("size"))
 
         // Drop the GPU texture. Safe when the underlying device has
         // already been torn down — no GL calls are issued.
         .def("release_gpu", &tgfx::FontAtlas::release_gpu)
 
-        // --- Read-only metrics ---
-        .def_prop_ro("size", &tgfx::FontAtlas::rasterize_size)
-        .def_prop_ro("ascent", &tgfx::FontAtlas::ascent_px)
-        .def_prop_ro("descent", &tgfx::FontAtlas::descent_px)
-        .def_prop_ro("line_height", &tgfx::FontAtlas::line_height)
+        // --- Size-aware metrics ---
+        // Each returns the value in display pixels at the requested
+        // size. First call at a new size populates an internal cache.
+        .def("ascent_at",
+             [](const tgfx::FontAtlas& self, float size) {
+                 return self.ascent_px(size);
+             },
+             nb::arg("size"))
+        .def("descent_at",
+             [](const tgfx::FontAtlas& self, float size) {
+                 return self.descent_px(size);
+             },
+             nb::arg("size"))
+        .def("line_height_at",
+             [](const tgfx::FontAtlas& self, float size) {
+                 return self.line_height_px(size);
+             },
+             nb::arg("size"))
+
+        // --- Preload-size introspection ---
+        // `size` property kept for callers that want the warm-up size
+        // (used to preload the glyph set in the ctor). This is NOT a
+        // "rasterisation resolution" any more — every draw gets its
+        // own per-size bake.
+        .def_prop_ro("size", &tgfx::FontAtlas::default_preload_size)
         .def_prop_ro("atlas_width", &tgfx::FontAtlas::atlas_width)
         .def_prop_ro("atlas_height", &tgfx::FontAtlas::atlas_height);
 

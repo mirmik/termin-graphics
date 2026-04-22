@@ -1,19 +1,32 @@
 // font_atlas.hpp - Dynamic TTF font atlas for tgfx2.
 //
-// Single grayscale (R8) atlas, default 2048x2048. Glyphs are rasterised
-// on demand via stb_truetype and packed into shelves. The atlas is
-// backed by one tgfx::TextureHandle; new glyphs set a dirty flag and
-// the next ensure_texture() call re-uploads the full image.
+// Single grayscale (R8) atlas, default 2048x2048. Glyphs are baked on
+// demand per requested display size via stb_truetype and packed into
+// shelves. The atlas is backed by one tgfx::TextureHandle; new glyphs
+// set a dirty flag and the next ensure_texture() call re-uploads the
+// full image.
 //
-// Data model follows the Python tgfx.font implementation it replaces:
-//   - Each glyph cell is (ink_width, line_height) where
-//     ink_width = x1 - x0 from stbtt_GetCodepointBitmapBox and
-//     line_height = ascent + descent (no line_gap).
-//   - The visible bitmap is placed so its top edge sits at y0 + ascent
-//     inside the cell (baseline at y = ascent).
-//   - Measurement uses ink_width, not typographic advance — same as
-//     Python's PIL-based predecessor. Deliberate: lets tcgui / tcplot
-//     layouts keep their pixel-accurate tick alignment.
+// Sizing model (unlike the previous single-rasterise-size design):
+//   - Every lookup takes `display_px` — the pixel height the caller
+//     intends to render at. The atlas quantises this to an integer px
+//     and either hits a cached bake or produces a fresh one.
+//   - GlyphInfo metrics (width_px / height_px / advance_px) are in
+//     DISPLAY pixels at the requested size, ready for the renderer to
+//     use directly (no `* scale` multiplication needed).
+//   - Each size bakes its own cell layout: cell height = ascent +
+//     descent at that size, glyph bitmap placed at (0, ascent + y0).
+//
+// Why this shape survives a future switch to SDF / MSDF:
+//   - Renderer always asks for metrics at `display_px` — the atlas is
+//     responsible for producing them, however it wants to internally.
+//   - Bitmap backend: per-size bake → native metrics per entry.
+//   - SDF backend: single bake at a reference size → metrics computed
+//     on the fly as `font_units * display_px / reference_size`.
+//   - Same GlyphInfo shape, same call pattern; renderer unchanged.
+//
+// Measurement uses typographic advance (stbtt_GetGlyphHMetrics), not
+// ink-bbox width — kept from the previous design. Layouts in tcgui /
+// tcplot that expect space glyphs to occupy real width keep working.
 #pragma once
 
 #include <cstdint>
@@ -38,26 +51,36 @@ public:
         float height = 0.0f;
     };
 
-    // Glyph info, populated lazily by ensure_glyph().
+    // Glyph info, populated lazily by ensure_glyph(cp, display_px).
+    // All metrics are in DISPLAY pixels at the baked size — renderer
+    // should use them directly without further scaling.
     struct GlyphInfo {
-        // Atlas UVs.
+        // Atlas UVs covering the full stored region (includes the
+        // horizontal-oversampling skirt column).
         float u0 = 0.0f, v0 = 0.0f, u1 = 0.0f, v1 = 0.0f;
-        // Ink size in pixels at the atlas rasterise_size. Callers scale
-        // by (display_size / rasterise_size). Matches the rendered quad
-        // dimensions — use these for layout of the glyph rectangle.
+        // Display-pixel size of the drawn quad.
         float width_px = 0.0f;
         float height_px = 0.0f;
-        // Horizontal advance in pixels at the atlas rasterise_size.
-        // This is what the cursor moves between glyphs — differs from
-        // width_px for anything with sidebearings, and is the *only*
-        // sensible value for zero-ink glyphs like space.
+        // Horizontal advance in display pixels — what the cursor moves
+        // between glyphs. Differs from width_px for anything with
+        // sidebearings, and is the *only* sensible value for zero-ink
+        // glyphs like space.
         float advance_px = 0.0f;
     };
 
-    // Load a TTF, default rasterise at 32 px, default atlas 2048x2048.
+    // Minimum quantised size. Requests below this are clamped — stb
+    // can't rasterise meaningfully smaller than this anyway, and it
+    // bounds the per-size cache against pathological inputs.
+    static constexpr int kMinPxSize = 4;
+
+    // Load a TTF. `default_preload_size_px` controls which size gets
+    // the full preload character warm-up (so the first frame of
+    // typical-sized UI text doesn't stall). Other sizes populate
+    // lazily on demand. 2048x2048 R8 atlas by default.
+    //
     // Throws std::runtime_error on file I/O or stbtt_InitFont failure.
     FontAtlas(const std::string& ttf_path,
-              int rasterize_size_px = 32,
+              int default_preload_size_px = 14,
               int atlas_width = 2048,
               int atlas_height = 2048);
     ~FontAtlas();
@@ -65,21 +88,26 @@ public:
     FontAtlas(const FontAtlas&) = delete;
     FontAtlas& operator=(const FontAtlas&) = delete;
 
-    // Rasterise one codepoint into the CPU atlas. Returns true if the
-    // glyph was newly added (caller's signal that a GPU re-upload is
-    // needed). Returns false if already present OR if the font does
-    // not define this codepoint OR if the atlas is full.
-    bool ensure_glyph(uint32_t codepoint);
+    // Rasterise one codepoint at the requested display size. Returns
+    // true if the glyph was newly added (caller's signal that a GPU
+    // re-upload is needed). Returns false if already present OR if
+    // the font does not define this codepoint OR if the atlas is full.
+    // `display_px` is quantised to `max(round(display_px), kMinPxSize)`.
+    bool ensure_glyph(uint32_t codepoint, float display_px);
 
-    // Rasterise every codepoint in a UTF-8 string. If `ctx` is non-null
-    // and any new glyph was added, syncs the GPU texture immediately.
-    void ensure_glyphs(std::string_view text_utf8, RenderContext2* ctx = nullptr);
+    // Rasterise every codepoint in a UTF-8 string at `display_px`. If
+    // `ctx` is non-null and any new glyph was added, syncs the GPU
+    // texture immediately.
+    void ensure_glyphs(std::string_view text_utf8,
+                       float display_px,
+                       RenderContext2* ctx = nullptr);
 
-    // Measure (width, height) of `text_utf8` at the display `font_size`
-    // in pixels. Purely arithmetic over already-rasterised glyphs;
-    // missing glyphs contribute 0. Call `ensure_glyphs(text)` first if
-    // you want an accurate measure for arbitrary text.
-    Size2f measure_text(std::string_view text_utf8, float font_size) const;
+    // Measure (width, height) of `text_utf8` at the display size.
+    // Purely arithmetic over already-rasterised glyphs at the matching
+    // size; missing glyphs contribute 0. Call `ensure_glyphs(text,
+    // display_px)` first if you want an accurate measure for arbitrary
+    // text.
+    Size2f measure_text(std::string_view text_utf8, float display_px) const;
 
     // Create or refresh the GPU texture. Uploads on first call or when
     // new glyphs have been rasterised. Returns the (cached) handle.
@@ -94,14 +122,22 @@ public:
     // to call with no live ctx — no destroy is issued in that case.
     void release_gpu();
 
-    // Look up a glyph's atlas entry. Returns nullptr if not rasterised.
-    const GlyphInfo* get_glyph(uint32_t codepoint) const;
+    // Look up a glyph's atlas entry at the requested display size.
+    // Returns nullptr if not rasterised at this size.
+    const GlyphInfo* get_glyph(uint32_t codepoint, float display_px) const;
 
-    // --- Metrics / introspection ---
-    int rasterize_size() const { return rasterize_size_; }
-    int ascent_px() const { return ascent_px_; }
-    int descent_px() const { return descent_px_; }
-    int line_height() const { return line_height_; }
+    // --- Size-aware metrics ---
+    // All return values are in display pixels at the requested size.
+    // First call at a new size populates a small internal cache; the
+    // bake routines use the same cache.
+    int ascent_px(float display_px) const;
+    int descent_px(float display_px) const;
+    int line_height_px(float display_px) const;
+
+    // --- Introspection ---
+    // The size used for preload warm-up. Used by renderers / bindings
+    // that want a sensible "default" for size-agnostic legacy calls.
+    int default_preload_size() const { return default_preload_size_; }
     int atlas_width() const { return atlas_w_; }
     int atlas_height() const { return atlas_h_; }
 
@@ -110,6 +146,24 @@ public:
     const uint8_t* cpu_atlas_data() const { return atlas_.data(); }
 
 private:
+    // Quantise a request to the integer px size we actually bake at.
+    static int quantise_size_(float display_px);
+
+    // Compose / decompose the 64-bit glyph table key.
+    static uint64_t make_key_(uint32_t codepoint, int px_size) {
+        return (static_cast<uint64_t>(codepoint) << 32) |
+               static_cast<uint32_t>(px_size);
+    }
+
+    // Per-size font vmetrics, resolved lazily on first request.
+    struct SizeMetrics {
+        float scale = 0.0f;    // stbtt_ScaleForPixelHeight at this size
+        int ascent_px = 0;
+        int descent_px = 0;    // positive magnitude (stb returns negative)
+        int line_height = 0;   // ascent + descent
+    };
+    const SizeMetrics& metrics_for_(int px_size) const;
+
     // Shelf-packer: tries to place (cell_w, cell_h) into the atlas.
     // Returns {x, y} in atlas pixels on success, {-1, -1} on failure.
     struct PackedCell { int x; int y; };
@@ -123,12 +177,9 @@ private:
     struct Impl;
     Impl* impl_ = nullptr;
 
-    // Rasterisation size: the single pixel size at which every glyph
-    // is baked. Visual scaling at draw time is `display_size / this`.
-    int rasterize_size_ = 32;
-    int ascent_px_ = 0;
-    int descent_px_ = 0;
-    int line_height_ = 0;
+    // Size used for preload warm-up and as the "default" for Python
+    // property accessors that don't take a size argument.
+    int default_preload_size_ = 14;
 
     // CPU atlas: atlas_w_ * atlas_h_ bytes, R8.
     int atlas_w_ = 2048;
@@ -140,8 +191,12 @@ private:
     int shelf_y_ = 0;
     int shelf_h_ = 0;
 
-    // Glyph table keyed by codepoint.
-    std::unordered_map<uint32_t, GlyphInfo> glyphs_;
+    // Glyph table keyed by (codepoint, px_size) — see make_key_.
+    std::unordered_map<uint64_t, GlyphInfo> glyphs_;
+
+    // Per-size metrics cache (mutable so const accessors can populate
+    // on demand — the cache is a pure function of px_size + loaded TTF).
+    mutable std::unordered_map<int, SizeMetrics> size_metrics_;
 
     // GPU state.
     RenderContext2* gpu_owner_ = nullptr;

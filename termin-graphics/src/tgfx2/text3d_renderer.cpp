@@ -140,11 +140,13 @@ void Text3DRenderer::draw(std::string_view text_utf8,
                            Anchor anchor) {
     if (text_utf8.empty() || font_ == nullptr || ctx_ == nullptr) return;
 
-    // Rasterise any new glyphs and push to the atlas if needed.
-    font_->ensure_glyphs(text_utf8, ctx_);
+    // Rasterise any new glyphs for this size and push to the atlas if
+    // needed. The atlas keys bakes by (codepoint, px_size) so every
+    // unique display size gets its own native-resolution rasterisation.
+    font_->ensure_glyphs(text_utf8, size, ctx_);
 
-    const float scale = size / static_cast<float>(font_->rasterize_size());
-    const float ascent = static_cast<float>(font_->ascent_px()) * scale;
+    // Ascent is already in display pixels at this size.
+    const float ascent = static_cast<float>(font_->ascent_px(size));
 
     auto total = font_->measure_text(text_utf8, size);
     const float total_w = total.width;
@@ -186,11 +188,12 @@ void Text3DRenderer::draw(std::string_view text_utf8,
     size_t i = 0;
     while (i < text_utf8.size()) {
         uint32_t cp = internal::utf8_decode(text_utf8, i);
-        const FontAtlas::GlyphInfo* gi = font_->get_glyph(cp);
+        const FontAtlas::GlyphInfo* gi = font_->get_glyph(cp, size);
         if (!gi) continue;
 
-        const float char_w = gi->width_px * scale;
-        const float char_h = gi->height_px * scale;
+        // Metrics already in display px at this size — no * scale.
+        const float char_w = gi->width_px;
+        const float char_h = gi->height_px;
 
         const float left   = cursor_x;
         const float right  = cursor_x + char_w;
@@ -217,7 +220,8 @@ void Text3DRenderer::draw(std::string_view text_utf8,
 
         // See Text2DRenderer: advance by the glyph's true advance, not
         // ink width — so space glyphs actually move the cursor.
-        cursor_x += gi->advance_px * scale;
+        // Advance is already in display pixels at this size.
+        cursor_x += gi->advance_px;
     }
 
     if (verts.empty()) return;
