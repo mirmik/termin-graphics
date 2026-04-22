@@ -173,6 +173,26 @@ bool FontAtlas::ensure_glyph(uint32_t codepoint) {
     if (!impl_) return false;
     if (glyphs_.count(codepoint) != 0) return false;
 
+    // Horizontal oversampling: rasterise the glyph at 2× its display
+    // horizontal resolution and apply stb's box prefilter. At draw
+    // time the bilinear sampler interpolates between these 2× texels,
+    // which gives smoother transitions when the quad ends up at a
+    // non-integer display position and better downscale quality when
+    // display_size != rasterize_size. ImGui default. Vertical stays
+    // at 1× — doubling the atlas vertically is rarely worth it.
+    //
+    // Cost: every glyph cell grows by ~2× horizontally (plus one
+    // skirt column for the prefilter). 2048×2048 atlas still has
+    // plenty of room for the preload set and typical UI usage.
+    constexpr int kOversampleX = 2;
+
+    // Side-effect: stb's box prefilter phase-shifts the apparent glyph
+    // position by -(K-1)/(2K) = -0.25 display px (for K=2). We do NOT
+    // compensate in the renderer — it's a uniform shift applied to
+    // every glyph, so relative alignment inside a text run stays
+    // correct, and 0.25 px is below perceptual threshold against
+    // neighbouring graphics (axis ticks etc.).
+
     int glyph_idx = stbtt_FindGlyphIndex(&impl_->font, static_cast<int>(codepoint));
     if (glyph_idx == 0) {
         // Font does not define this codepoint. Don't register a
@@ -181,13 +201,17 @@ bool FontAtlas::ensure_glyph(uint32_t codepoint) {
         return false;
     }
 
+    // Bitmap box at the oversampled horizontal scale. stb returns the
+    // rendered-pixel bbox; x1 - x0 is therefore in oversampled texels
+    // (roughly 2× the display ink width). Vertical metrics unchanged.
     int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
     stbtt_GetGlyphBitmapBox(&impl_->font, glyph_idx,
-                            impl_->scale, impl_->scale,
+                            impl_->scale * kOversampleX,
+                            impl_->scale,
                             &x0, &y0, &x1, &y1);
 
-    int gw = x1 - x0;
-    int gh = line_height_;  // Python: constant line_height for every cell.
+    const int gw_over = x1 - x0;   // rendered width, oversampled texels
+    const int gh_cell = line_height_;  // cell height — fixed per font
 
     // Horizontal advance — correct metric for cursor motion. Differs
     // from the ink-bbox width (that's just how much of the glyph is
@@ -196,22 +220,26 @@ bool FontAtlas::ensure_glyph(uint32_t codepoint) {
     stbtt_GetGlyphHMetrics(&impl_->font, glyph_idx, &adv_w, &lsb);
     const float advance_px = adv_w * impl_->scale;
 
-    if (gw <= 0) {
+    if (gw_over <= 0) {
         // No ink but still occupies layout space (U+0020 and similar).
         // Register with real advance so cursor moves; UVs stay zero.
         GlyphInfo g{};
         g.width_px = 0.0f;
-        g.height_px = static_cast<float>(gh);
+        g.height_px = static_cast<float>(gh_cell);
         g.advance_px = advance_px;
         glyphs_[codepoint] = g;
         return true;
     }
 
-    // Pad by 2 px between cells so bilinear filtering of adjacent
-    // glyphs doesn't bleed. Matches Python's _PADDING = 2.
+    // Stored width in atlas texels = rendered width + (K-1) skirt
+    // columns. The box prefilter is a trailing running average of
+    // kernel K; it extends the signal by K-1 zero-initialised columns
+    // on the right, which we leave in the atlas to preserve the
+    // filter's reach under bilinear sampling.
     constexpr int kPadding = 2;
-    int cell_w = gw + kPadding;
-    int cell_h = gh + kPadding;
+    const int stored_w = gw_over + (kOversampleX - 1);
+    const int cell_w = stored_w + kPadding;
+    const int cell_h = gh_cell + kPadding;
 
     auto cell = pack_(cell_w, cell_h);
     if (cell.x < 0) {
@@ -219,10 +247,10 @@ bool FontAtlas::ensure_glyph(uint32_t codepoint) {
         return false;
     }
 
-    // Rasterise directly into the atlas. Glyph bitmap is `gw * gh`
-    // bytes; we place it at column 0 of the cell (Python equivalent of
-    // draw text at (-bbox[0], 0)) and row (ascent + y0) so the
-    // baseline is at cell row = ascent_px.
+    // Rasterise directly into the atlas. Glyph bitmap covers `gw_over`
+    // columns × `gbh` rows inside the cell; we place it at column 0
+    // (flush left) and row (ascent + y0) so the baseline is at cell
+    // row = ascent_px. The skirt column stays zero until prefilter.
     const int dst_row0 = cell.y + ascent_px_ + y0;
     // Guard against glyphs whose y0 would push them above the cell
     // (extremely tall ascenders). Clip at the top; stb_truetype does
@@ -231,48 +259,64 @@ bool FontAtlas::ensure_glyph(uint32_t codepoint) {
     const int clip_top = std::max(0, -(dst_row0 - cell.y));
     const int dst_row0_clamped = dst_row0 + clip_top;
     const int rows_to_write = std::max(0, std::min(gbh - clip_top,
-                                                   (cell.y + gh) - dst_row0_clamped));
+                                                   (cell.y + gh_cell) - dst_row0_clamped));
 
     if (rows_to_write > 0) {
         uint8_t* dst = atlas_.data()
                        + static_cast<size_t>(dst_row0_clamped) * atlas_w_
                        + cell.x;
-        stbtt_MakeGlyphBitmap(&impl_->font,
-                              dst,
-                              gw, rows_to_write,
-                              atlas_w_,  // dst stride
-                              impl_->scale, impl_->scale,
-                              glyph_idx);
-        // stb renders starting from the top of the glyph bitmap, so if
-        // we clipped top rows we need to request the un-clipped render
-        // into a scratch buffer. For the clip_top==0 common case the
-        // above call is correct and cheap.
-        if (clip_top > 0) {
-            // Re-render into scratch and memcpy the surviving rows.
-            std::vector<uint8_t> scratch(static_cast<size_t>(gw) * gbh, 0);
-            stbtt_MakeGlyphBitmap(&impl_->font,
-                                  scratch.data(),
-                                  gw, gbh, gw,
-                                  impl_->scale, impl_->scale,
-                                  glyph_idx);
-            uint8_t* dst2 = atlas_.data()
-                            + static_cast<size_t>(dst_row0_clamped) * atlas_w_
-                            + cell.x;
+        if (clip_top == 0) {
+            // Fast path: render oversampled glyph straight into atlas.
+            stbtt_MakeGlyphBitmapSubpixel(&impl_->font,
+                                          dst,
+                                          gw_over, rows_to_write,
+                                          atlas_w_,  // dst stride
+                                          impl_->scale * kOversampleX,
+                                          impl_->scale,
+                                          0.0f, 0.0f,
+                                          glyph_idx);
+        } else {
+            // Clipped top: render un-clipped into scratch so stb sees
+            // the full bitmap, then memcpy surviving rows. Skirt stays
+            // zero — prefilter below populates it.
+            std::vector<uint8_t> scratch(static_cast<size_t>(gw_over) * gbh, 0);
+            stbtt_MakeGlyphBitmapSubpixel(&impl_->font,
+                                          scratch.data(),
+                                          gw_over, gbh, gw_over,
+                                          impl_->scale * kOversampleX,
+                                          impl_->scale,
+                                          0.0f, 0.0f,
+                                          glyph_idx);
             for (int r = 0; r < rows_to_write; ++r) {
-                std::memcpy(dst2 + static_cast<size_t>(r) * atlas_w_,
-                            scratch.data() + static_cast<size_t>(r + clip_top) * gw,
-                            static_cast<size_t>(gw));
+                std::memcpy(dst + static_cast<size_t>(r) * atlas_w_,
+                            scratch.data() + static_cast<size_t>(r + clip_top) * gw_over,
+                            static_cast<size_t>(gw_over));
             }
+        }
+
+        // Horizontal box prefilter across the full stored width
+        // (including the zero-initialised skirt). Accessible here
+        // because stb_truetype's implementation is compiled into
+        // this TU via STB_TRUETYPE_IMPLEMENTATION; the symbol is
+        // static but visible within the TU.
+        if (kOversampleX > 1) {
+            stbtt__h_prefilter(dst,
+                               stored_w, rows_to_write,
+                               atlas_w_,
+                               kOversampleX);
         }
     }
 
     GlyphInfo g{};
     g.u0 = static_cast<float>(cell.x) / static_cast<float>(atlas_w_);
     g.v0 = static_cast<float>(cell.y) / static_cast<float>(atlas_h_);
-    g.u1 = static_cast<float>(cell.x + gw) / static_cast<float>(atlas_w_);
-    g.v1 = static_cast<float>(cell.y + gh) / static_cast<float>(atlas_h_);
-    g.width_px = static_cast<float>(gw);
-    g.height_px = static_cast<float>(gh);
+    g.u1 = static_cast<float>(cell.x + stored_w) / static_cast<float>(atlas_w_);
+    g.v1 = static_cast<float>(cell.y + gh_cell) / static_cast<float>(atlas_h_);
+    // Display width = stored texels / oversample. Fractional for odd
+    // stored_w, fine — Text2DRenderer snaps the quad's left edge to a
+    // pixel and the right edge floats, which keeps glyph shape intact.
+    g.width_px = static_cast<float>(stored_w) / static_cast<float>(kOversampleX);
+    g.height_px = static_cast<float>(gh_cell);
     g.advance_px = advance_px;
     glyphs_[codepoint] = g;
 

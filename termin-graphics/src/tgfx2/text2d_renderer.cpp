@@ -8,6 +8,7 @@
 
 #include "tgfx2/text2d_renderer.hpp"
 
+#include <cmath>
 #include <cstring>
 #include <vector>
 
@@ -77,7 +78,11 @@ layout(location=0) out vec4 frag_color;
 
 void main() {
     float a = texture(u_font_atlas, v_uv).r * pc.u_color.a;
-    if (a < 0.01) discard;
+    // Threshold at one 8-bit alpha level. Anything we'd discard above
+    // this can't contribute to the blended output anyway; anything
+    // below this (but > 0) is AA tail we want to keep — the old 0.01
+    // cutoff was high enough to nibble visible edge gradients.
+    if (a < (1.0/255.0)) discard;
     frag_color = vec4(pc.u_color.rgb, a);
 }
 )";
@@ -233,6 +238,16 @@ void Text2DRenderer::draw(std::string_view text_utf8,
             break;
     }
 
+    // Snap the text origin to the nearest integer pixel so the first
+    // glyph's left edge lands on a texel boundary. Without this a
+    // fractional start (common after anchor math, DPI scaling, or
+    // caller-side sub-pixel layout) spreads every glyph across two
+    // columns via bilinear filtering — the dominant cause of the
+    // "mыло" / ghosting look on small text. The cursor itself
+    // accumulates in float below so kerning / advance don't drift.
+    start_x = std::floor(start_x + 0.5f);
+    start_y = std::floor(start_y + 0.5f);
+
     // Rebind shader + push-constants + atlas on every draw — a caller
     // (e.g. UIRenderer) may have bound a different shader between
     // our own begin() and this draw. Uses push-constants on both
@@ -286,10 +301,15 @@ void Text2DRenderer::draw(std::string_view text_utf8,
         const float char_w = gi->width_px * scale;
         const float char_h = gi->height_px * scale;
 
-        const float px0 = cursor_x;
-        const float px1 = cursor_x + char_w;
-        const float py0 = start_y;              // top edge in y+down
-        const float py1 = start_y + char_h;     // bottom edge
+        // Snap the quad's left edge to an integer pixel; keep the
+        // width as-is so the glyph shape isn't distorted by rounding
+        // both edges (that produces uneven widths across neighbours).
+        // cursor_x continues to accumulate in float — round-to-draw
+        // doesn't feed back into the advance chain.
+        const float px0 = std::floor(cursor_x + 0.5f);
+        const float px1 = px0 + char_w;
+        const float py0 = start_y;              // top edge in y+down, already snapped
+        const float py1 = py0 + char_h;         // bottom edge
 
         // 6 vertices (2 triangles). CCW in pixel y+down visual →
         // after ortho y-flip → CCW in NDC y+up → front-facing.

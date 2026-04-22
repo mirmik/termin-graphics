@@ -59,7 +59,9 @@ out vec4 frag_color;
 
 void main() {
     float a = texture(u_font_atlas, v_uv).r * u_color.a;
-    if (a < 0.01) discard;
+    // Threshold at one 8-bit alpha level — same rationale as in
+    // Text2DRenderer. 0.01 was high enough to nibble AA tail pixels.
+    if (a < (1.0/255.0)) discard;
     frag_color = vec4(u_color.rgb, a);
 }
 )";
