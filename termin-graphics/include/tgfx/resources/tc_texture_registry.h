@@ -56,6 +56,30 @@ typedef bool (*tc_texture_iter_fn)(tc_texture_handle h, tc_texture* tex, void* u
 TGFX_API void tc_texture_foreach(tc_texture_iter_fn callback, void* user_data);
 
 // ============================================================================
+// Destroy hooks
+// ============================================================================
+//
+// A destroy-hook is fired inside `tc_texture_destroy()` before the texture's
+// CPU data and pool slot are released. The hook receives the tc_texture's
+// `header.pool_index` — GPU-side caches indexed by pool_index (e.g.
+// VulkanRenderDevice::tc_texture_cache_) use this to drop their entries
+// and destroy the underlying GPU objects before the pool slot is recycled.
+//
+// Hooks must be cheap and non-blocking: destroy happens inside the user's
+// thread and must not leave the registry in an inconsistent state. Up to
+// TC_MAX_TEXTURE_DESTROY_HOOKS subscribers are supported; exceeding this
+// logs an error and silently drops the registration.
+
+#define TC_MAX_TEXTURE_DESTROY_HOOKS 16
+
+typedef void (*tc_texture_destroy_hook_fn)(uint32_t pool_index, void* user_data);
+
+TGFX_API void tc_texture_registry_add_destroy_hook(
+    tc_texture_destroy_hook_fn cb, void* user_data);
+TGFX_API void tc_texture_registry_remove_destroy_hook(
+    tc_texture_destroy_hook_fn cb, void* user_data);
+
+// ============================================================================
 // Texture data helpers
 // ============================================================================
 

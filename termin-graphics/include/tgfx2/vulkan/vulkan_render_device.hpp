@@ -11,12 +11,23 @@ VK_DEFINE_HANDLE(VmaAllocation)
 #include <atomic>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 #include <functional>
 
 #include "tgfx2/tgfx2_api.h"
 #include "tgfx2/i_render_device.hpp"
+
+// Forward-declare tc_texture / tc_mesh — per-device resource caches are
+// keyed by tc_resource_header::pool_index, so the public header needs
+// the type to take a tc_texture* / tc_mesh* pointer. Full definitions
+// live in termin-mesh / termin-graphics C headers; we only forward-
+// declare here to keep this header inexpensive.
+extern "C" {
+struct tc_texture;
+struct tc_mesh;
+}
 
 namespace tgfx {
 
@@ -166,6 +177,27 @@ private:
         }
     };
 
+    // Per-device tc_texture cache. `tgfx2_bridge::wrap_tc_texture_as_tgfx2`
+    // on the Vulkan path asks the device to produce a TextureHandle for a
+    // given tc_texture; we keep one handle per tc_resource_header::pool_index
+    // and re-upload only when the tc_texture's `header.version` bumps.
+    // Owned by the device — handles are destroyed in the destructor or
+    // when `invalidate_tc_texture_cache(pool_index)` is called from the
+    // registry destroy-hook.
+    struct CachedTcTextureEntry {
+        TextureHandle handle;
+        uint32_t      version = 0;
+    };
+
+    // Per-device tc_mesh cache. Same shape as the texture cache but with a
+    // VBO + EBO pair per pool_index. Re-uploaded on `header.version` bump,
+    // invalidated on mesh destruction via the registry hook.
+    struct CachedTcMeshEntry {
+        BufferHandle vbo;
+        BufferHandle ebo;
+        uint32_t     version = 0;
+    };
+
     VkInstance instance_ = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT debug_messenger_ = VK_NULL_HANDLE;
     VkSurfaceKHR surface_ = VK_NULL_HANDLE;
@@ -265,6 +297,17 @@ private:
     // removes ~1 function call × hundreds of writes/frame from the hot
     // path. Queried once in create_ring_ubo().
     bool ring_ubo_coherent_ = false;
+
+    // tc_texture / tc_mesh per-device resource caches. Keyed by
+    // tc_resource_header::pool_index. Replace the former file-scope
+    // g_tex_cache / g_mesh_cache singletons in tgfx2_bridge.cpp —
+    // ownership is now device-local, destruction is deterministic (caches
+    // are drained in ~VulkanRenderDevice), and registry destroy-hooks can
+    // invalidate entries without dangling device pointers.
+    std::unordered_map<uint32_t, CachedTcTextureEntry> tc_texture_cache_;
+    std::mutex                                         tc_texture_cache_mtx_;
+    std::unordered_map<uint32_t, CachedTcMeshEntry>    tc_mesh_cache_;
+    std::mutex                                         tc_mesh_cache_mtx_;
 
 public:
     explicit VulkanRenderDevice(const VulkanDeviceCreateInfo& info);
@@ -438,6 +481,32 @@ public:
     // One vkQueueSubmit per frame replaces the previous ~200 tiny
     // submit + vkQueueWaitIdle pairs that dominated Vulkan CPU time.
     VkCommandBuffer ensure_immediate_cb();
+
+    // --- tc_texture / tc_mesh per-device resource cache ------------------
+    //
+    // Called by `tgfx2_bridge::wrap_tc_texture_as_tgfx2` / `wrap_mesh_as_tgfx2`
+    // on the Vulkan path. Each tc_texture / tc_mesh gets one live handle
+    // per device, reused across frames until the source `header.version`
+    // bumps — then the old handle is destroyed and the resource is
+    // re-uploaded.
+    //
+    // Invariants:
+    //   - Returned handles are OWNED by the device. Callers must NOT pass
+    //     them to `destroy()` — doing so leaves the cache entry pointing
+    //     at a dead handle. `release_texture_binding` /
+    //     `release_mesh_binding` already no-op on the Vulkan path.
+    //   - Lookup / update is guarded by the cache's mutex; safe to call
+    //     from any thread.
+    //   - Entries live until (a) the device is destroyed, or (b) the
+    //     tc_texture / tc_mesh is freed and the registry hook invokes
+    //     `invalidate_tc_texture_cache` / `invalidate_tc_mesh_cache`.
+    TextureHandle ensure_tc_texture(tc_texture* tex);
+    void          invalidate_tc_texture_cache(uint32_t pool_index);
+
+    // Returns {vbo, ebo}. Either is zero-id on upload failure, in which
+    // case the cache entry is left empty so the next call retries.
+    std::pair<BufferHandle, BufferHandle> ensure_tc_mesh(tc_mesh* mesh);
+    void          invalidate_tc_mesh_cache(uint32_t pool_index);
 
 private:
     void init_instance(const VulkanDeviceCreateInfo& info);

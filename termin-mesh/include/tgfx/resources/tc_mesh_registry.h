@@ -73,6 +73,28 @@ typedef bool (*tc_mesh_iter_fn)(tc_mesh_handle h, tc_mesh* mesh, void* user_data
 TGFX_API void tc_mesh_foreach(tc_mesh_iter_fn callback, void* user_data);
 
 // ============================================================================
+// Destroy hooks
+// ============================================================================
+//
+// Fired inside `tc_mesh_destroy()` before the mesh's CPU data and pool
+// slot are released. The hook receives the tc_mesh's `header.pool_index`
+// so GPU-side caches (VulkanRenderDevice's per-device tc_mesh cache, etc.)
+// can drop their entries and destroy the underlying VBO / EBO before the
+// index is recycled.
+//
+// Up to TC_MAX_MESH_DESTROY_HOOKS subscribers are supported; exceeding this
+// logs an error and silently drops the registration.
+
+#define TC_MAX_MESH_DESTROY_HOOKS 16
+
+typedef void (*tc_mesh_destroy_hook_fn)(uint32_t pool_index, void* user_data);
+
+TGFX_API void tc_mesh_registry_add_destroy_hook(
+    tc_mesh_destroy_hook_fn cb, void* user_data);
+TGFX_API void tc_mesh_registry_remove_destroy_hook(
+    tc_mesh_destroy_hook_fn cb, void* user_data);
+
+// ============================================================================
 // Mesh data helpers
 // ============================================================================
 

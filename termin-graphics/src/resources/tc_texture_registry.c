@@ -18,6 +18,11 @@ static tc_resource_map* g_uuid_to_index = NULL;
 static uint64_t g_next_uuid = 1;
 static bool g_initialized = false;
 
+// Destroy-hook subscription table. See tc_texture_registry.h.
+static tc_texture_destroy_hook_fn g_destroy_hooks[TC_MAX_TEXTURE_DESTROY_HOOKS];
+static void* g_destroy_hook_user[TC_MAX_TEXTURE_DESTROY_HOOKS];
+static int g_destroy_hook_count = 0;
+
 static void texture_free_data(tc_texture* tex) {
     if (!tex) return;
     if (tex->data) {
@@ -189,10 +194,47 @@ bool tc_texture_destroy(tc_texture_handle h) {
     tc_texture* tex = tc_texture_get(h);
     if (!tex) return false;
 
+    // Fire destroy-hooks before releasing CPU data / pool slot. Hooks get
+    // the pool_index so GPU-side caches (e.g. VulkanRenderDevice's
+    // per-device tc_texture cache) can drop their entries and destroy the
+    // underlying VkImage / GLuint before the index is recycled.
+    const uint32_t pool_index = tex->header.pool_index;
+    for (int i = 0; i < g_destroy_hook_count; i++) {
+        g_destroy_hooks[i](pool_index, g_destroy_hook_user[i]);
+    }
+
     tc_resource_map_remove(g_uuid_to_index, tex->header.uuid);
     texture_free_data(tex);
 
     return tc_pool_free_slot(&g_texture_pool, h);
+}
+
+void tc_texture_registry_add_destroy_hook(
+    tc_texture_destroy_hook_fn cb, void* user_data
+) {
+    if (!cb) return;
+    if (g_destroy_hook_count >= TC_MAX_TEXTURE_DESTROY_HOOKS) {
+        tc_log(TC_LOG_ERROR,
+               "tc_texture_registry: destroy-hook table full (%d)",
+               TC_MAX_TEXTURE_DESTROY_HOOKS);
+        return;
+    }
+    g_destroy_hooks[g_destroy_hook_count] = cb;
+    g_destroy_hook_user[g_destroy_hook_count] = user_data;
+    g_destroy_hook_count++;
+}
+
+void tc_texture_registry_remove_destroy_hook(
+    tc_texture_destroy_hook_fn cb, void* user_data
+) {
+    for (int i = 0; i < g_destroy_hook_count; i++) {
+        if (g_destroy_hooks[i] == cb && g_destroy_hook_user[i] == user_data) {
+            g_destroy_hooks[i] = g_destroy_hooks[g_destroy_hook_count - 1];
+            g_destroy_hook_user[i] = g_destroy_hook_user[g_destroy_hook_count - 1];
+            g_destroy_hook_count--;
+            return;
+        }
+    }
 }
 
 bool tc_texture_contains(const char* uuid) {

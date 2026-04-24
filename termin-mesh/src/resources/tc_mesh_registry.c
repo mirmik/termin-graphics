@@ -18,6 +18,11 @@ static tc_resource_map* g_uuid_to_index = NULL;
 static uint64_t g_next_uuid = 1;
 static bool g_initialized = false;
 
+// Destroy-hook subscription table. See tc_mesh_registry.h.
+static tc_mesh_destroy_hook_fn g_destroy_hooks[TC_MAX_MESH_DESTROY_HOOKS];
+static void* g_destroy_hook_user[TC_MAX_MESH_DESTROY_HOOKS];
+static int g_destroy_hook_count = 0;
+
 // Free mesh internal data (vertices, indices)
 static void mesh_free_data(tc_mesh* mesh) {
     if (!mesh) return;
@@ -308,6 +313,13 @@ bool tc_mesh_destroy(tc_mesh_handle h) {
            mesh->header.uuid, mesh->header.name ? mesh->header.name : "(null)",
            mesh->header.ref_count);
 
+    // Fire destroy-hooks before releasing CPU data / pool slot so GPU-side
+    // caches keyed by pool_index can drop their entries first.
+    const uint32_t pool_index = mesh->header.pool_index;
+    for (int i = 0; i < g_destroy_hook_count; i++) {
+        g_destroy_hooks[i](pool_index, g_destroy_hook_user[i]);
+    }
+
     // Remove from UUID map
     tc_resource_map_remove(g_uuid_to_index, mesh->header.uuid);
 
@@ -316,6 +328,34 @@ bool tc_mesh_destroy(tc_mesh_handle h) {
 
     // Free slot in pool (bumps generation)
     return tc_pool_free_slot(&g_mesh_pool, h);
+}
+
+void tc_mesh_registry_add_destroy_hook(
+    tc_mesh_destroy_hook_fn cb, void* user_data
+) {
+    if (!cb) return;
+    if (g_destroy_hook_count >= TC_MAX_MESH_DESTROY_HOOKS) {
+        tc_log(TC_LOG_ERROR,
+               "tc_mesh_registry: destroy-hook table full (%d)",
+               TC_MAX_MESH_DESTROY_HOOKS);
+        return;
+    }
+    g_destroy_hooks[g_destroy_hook_count] = cb;
+    g_destroy_hook_user[g_destroy_hook_count] = user_data;
+    g_destroy_hook_count++;
+}
+
+void tc_mesh_registry_remove_destroy_hook(
+    tc_mesh_destroy_hook_fn cb, void* user_data
+) {
+    for (int i = 0; i < g_destroy_hook_count; i++) {
+        if (g_destroy_hooks[i] == cb && g_destroy_hook_user[i] == user_data) {
+            g_destroy_hooks[i] = g_destroy_hooks[g_destroy_hook_count - 1];
+            g_destroy_hook_user[i] = g_destroy_hook_user[g_destroy_hook_count - 1];
+            g_destroy_hook_count--;
+            return;
+        }
+    }
 }
 
 bool tc_mesh_contains(const char* uuid) {

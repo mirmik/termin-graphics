@@ -1,10 +1,8 @@
 #include "termin/render/tgfx2_bridge.hpp"
 
-#include <mutex>
 #include <span>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 
 #include <tcbase/tc_log.hpp>
 
@@ -16,6 +14,10 @@
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #include "tgfx2/descriptors.hpp"
+
+#ifdef TGFX2_HAS_VULKAN
+#include "tgfx2/vulkan/vulkan_render_device.hpp"
+#endif
 
 extern "C" {
 // tc_texture_upload_gpu is declared in tgfx_resource_gpu.h; we only
@@ -91,111 +93,22 @@ tgfx::TextureHandle wrap_tc_texture_gl(
     );
 }
 
-// Non-GL backends have no share-group slot to wrap. Upload tc_texture's
-// pixel data into a real tgfx2 texture and cache (tex.pool_index,
-// device) → handle. Cached handle is reused until tex->version bumps.
-struct CachedTextureEntry {
-    tgfx::IRenderDevice* device = nullptr;
-    tgfx::TextureHandle  handle;
-    uint32_t             version = 0;
-};
-
-struct TexCacheKey {
-    uint32_t             pool_index;
-    tgfx::IRenderDevice* device;
-    bool operator==(const TexCacheKey& o) const noexcept {
-        return pool_index == o.pool_index && device == o.device;
-    }
-};
-
-struct TexCacheKeyHash {
-    size_t operator()(const TexCacheKey& k) const noexcept {
-        auto h1 = std::hash<uint32_t>{}(k.pool_index);
-        auto h2 = std::hash<void*>{}(static_cast<void*>(k.device));
-        return h1 ^ (h2 * 0x9e3779b97f4a7c15ull);
-    }
-};
-
-std::mutex g_tex_cache_mtx;
-std::unordered_map<TexCacheKey, CachedTextureEntry, TexCacheKeyHash> g_tex_cache;
-
-// Normalise tc_texture pixel data + format to something tgfx2 can upload
-// on every backend. RGB8 is not always supported on Vulkan, so expand to
-// RGBA8 (alpha = 255) here. Everything else is passed through unchanged.
-std::vector<uint8_t> normalize_pixels(
-    const tc_texture* tex, tgfx::PixelFormat& out_fmt
-) {
-    const auto fmt = static_cast<tc_texture_format>(tex->format);
-    const size_t src_bytes = tc_texture_data_size(tex);
-    const auto* src = static_cast<const uint8_t*>(tex->data);
-
-    std::vector<uint8_t> pixels;
-    if (fmt == TC_TEXTURE_RGB8) {
-        out_fmt = tgfx::PixelFormat::RGBA8_UNorm;
-        pixels.resize(size_t(tex->width) * tex->height * 4);
-        for (size_t i = 0, j = 0; i < src_bytes; i += 3, j += 4) {
-            pixels[j + 0] = src[i + 0];
-            pixels[j + 1] = src[i + 1];
-            pixels[j + 2] = src[i + 2];
-            pixels[j + 3] = 0xFF;
-        }
-        return pixels;
-    }
-
-    out_fmt = tc_format_to_tgfx2(fmt);
-    pixels.assign(src, src + src_bytes);
-    return pixels;
-}
-
+// Non-GL backends have no share-group slot to wrap — delegate to the
+// device's per-tc_texture cache (see VulkanRenderDevice::ensure_tc_texture).
+// Handles are owned by the device; release_texture_binding is a no-op on
+// the Vulkan path and the cache is drained in ~VulkanRenderDevice.
 tgfx::TextureHandle wrap_tc_texture_non_gl(
     tgfx::IRenderDevice& device, tc_texture* tex
 ) {
-    if (!tex->data || tex->width == 0 || tex->height == 0) {
-        tc::Log::error("wrap_tc_texture_as_tgfx2: tc_texture '%s' has no CPU pixels",
-                       tex->header.name ? tex->header.name : tex->header.uuid);
-        return {};
+#ifdef TGFX2_HAS_VULKAN
+    if (device.backend_type() == tgfx::BackendType::Vulkan) {
+        return static_cast<tgfx::VulkanRenderDevice&>(device).ensure_tc_texture(tex);
     }
-
-    std::lock_guard<std::mutex> lock(g_tex_cache_mtx);
-    TexCacheKey key{tex->header.pool_index, &device};
-    auto it = g_tex_cache.find(key);
-    if (it != g_tex_cache.end() && it->second.version == tex->header.version) {
-        return it->second.handle;
-    }
-
-    if (it != g_tex_cache.end()) {
-        if (it->second.handle) device.destroy(it->second.handle);
-        g_tex_cache.erase(it);
-    }
-
-    tgfx::PixelFormat fmt = tgfx::PixelFormat::RGBA8_UNorm;
-    std::vector<uint8_t> pixels = normalize_pixels(tex, fmt);
-    if (pixels.empty()) return {};
-
-    tgfx::TextureDesc desc;
-    desc.width = tex->width;
-    desc.height = tex->height;
-    desc.mip_levels = 1;
-    desc.sample_count = 1;
-    desc.format = fmt;
-    desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
-
-    tgfx::TextureHandle handle = device.create_texture(desc);
-    if (!handle) {
-        tc::Log::error("wrap_tc_texture_as_tgfx2: create_texture failed for '%s'",
-                       tex->header.name ? tex->header.name : tex->header.uuid);
-        return {};
-    }
-    device.upload_texture(
-        handle,
-        std::span<const uint8_t>(pixels.data(), pixels.size()));
-
-    CachedTextureEntry entry;
-    entry.device = &device;
-    entry.handle = handle;
-    entry.version = tex->header.version;
-    g_tex_cache.emplace(key, entry);
-    return handle;
+#endif
+    tc::Log::error("wrap_tc_texture_as_tgfx2: unsupported backend");
+    (void)device;
+    (void)tex;
+    return {};
 }
 
 } // anonymous namespace
@@ -233,104 +146,6 @@ void release_texture_binding(
 }
 
 namespace {
-
-// Cached per-(mesh, device) tgfx2 buffers for non-GL backends. The GL
-// path keeps using register_external_buffer against the share group's
-// VBO/EBO, so it doesn't need this cache.
-struct CachedMeshBuffers {
-    tgfx::IRenderDevice* device = nullptr;
-    tgfx::BufferHandle   vbo;
-    tgfx::BufferHandle   ebo;
-    uint32_t             version = 0;
-};
-
-struct CacheKey {
-    tc_mesh*             mesh;
-    tgfx::IRenderDevice* device;
-    bool operator==(const CacheKey& o) const noexcept {
-        return mesh == o.mesh && device == o.device;
-    }
-};
-
-struct CacheKeyHash {
-    size_t operator()(const CacheKey& k) const noexcept {
-        auto h1 = std::hash<void*>{}(static_cast<void*>(k.mesh));
-        auto h2 = std::hash<void*>{}(static_cast<void*>(k.device));
-        return h1 ^ (h2 * 0x9e3779b97f4a7c15ull);
-    }
-};
-
-std::mutex g_mesh_cache_mtx;
-std::unordered_map<CacheKey, CachedMeshBuffers, CacheKeyHash> g_mesh_cache;
-
-// Create tgfx2 VBO/EBO from a tc_mesh's CPU-side vertex/index blobs.
-// Used on non-GL backends where there is no legacy share-group slot to
-// wrap. Failures log and return an empty CachedMeshBuffers (vbo/ebo
-// stay zero-initialised so the caller can short-circuit).
-CachedMeshBuffers upload_mesh_to_device(
-    tgfx::IRenderDevice& device, tc_mesh* mesh
-) {
-    CachedMeshBuffers out;
-    out.device = &device;
-    out.version = mesh->header.version;
-
-    if (!mesh->vertices || mesh->vertex_count == 0 ||
-        !mesh->indices  || mesh->index_count == 0)
-    {
-        tc::Log::error("wrap_mesh_as_tgfx2/vk: mesh '%s' has no CPU data",
-                       mesh->header.name ? mesh->header.name : mesh->header.uuid);
-        return out;
-    }
-
-    const size_t vb_size = mesh->vertex_count *
-                           static_cast<size_t>(mesh->layout.stride);
-    const size_t ib_size = mesh->index_count * sizeof(uint32_t);
-
-    tgfx::BufferDesc vb_desc;
-    vb_desc.size  = vb_size;
-    vb_desc.usage = tgfx::BufferUsage::Vertex | tgfx::BufferUsage::CopyDst;
-    out.vbo = device.create_buffer(vb_desc);
-    device.upload_buffer(
-        out.vbo,
-        std::span<const uint8_t>(
-            static_cast<const uint8_t*>(mesh->vertices), vb_size));
-
-    tgfx::BufferDesc ib_desc;
-    ib_desc.size  = ib_size;
-    ib_desc.usage = tgfx::BufferUsage::Index | tgfx::BufferUsage::CopyDst;
-    out.ebo = device.create_buffer(ib_desc);
-    device.upload_buffer(
-        out.ebo,
-        std::span<const uint8_t>(
-            reinterpret_cast<const uint8_t*>(mesh->indices), ib_size));
-
-    return out;
-}
-
-// Look up (mesh, device) in the cache. Re-uploads when mesh version
-// bumped or cache miss. Returns pointer to the cache entry (stable —
-// the cache is an unordered_map that only rehashes on insert).
-CachedMeshBuffers* ensure_cached_mesh_buffers(
-    tgfx::IRenderDevice& device, tc_mesh* mesh
-) {
-    std::lock_guard<std::mutex> lock(g_mesh_cache_mtx);
-    CacheKey key{mesh, &device};
-    auto it = g_mesh_cache.find(key);
-    if (it != g_mesh_cache.end()) {
-        CachedMeshBuffers& cached = it->second;
-        if (cached.version == mesh->header.version) {
-            return &cached;
-        }
-        // Version bumped — destroy the old buffers and re-upload.
-        if (cached.vbo) device.destroy(cached.vbo);
-        if (cached.ebo) device.destroy(cached.ebo);
-        cached = upload_mesh_to_device(device, mesh);
-        return &cached;
-    }
-    auto [ins_it, _] = g_mesh_cache.emplace(
-        key, upload_mesh_to_device(device, mesh));
-    return &ins_it->second;
-}
 
 // Build the layout + index_count + topology portion of the binding
 // from the tc_mesh — shared between GL and non-GL paths.
@@ -515,18 +330,24 @@ Tgfx2MeshBinding wrap_mesh_as_tgfx2(
             static_cast<tgfx::OpenGLRenderDevice&>(device), mesh);
     }
 
-    // Non-GL backend (currently Vulkan): there is no share-group slot to
-    // wrap, so we maintain our own (mesh, device) → (VBO, EBO) cache.
-    // Buffers are created once and reused across frames; mesh version
-    // bumps trigger a re-upload.
-    CachedMeshBuffers* cached = ensure_cached_mesh_buffers(device, mesh);
-    if (!cached || !cached->vbo || !cached->ebo) return out;
-
-    out.vertex_buffer = cached->vbo;
-    out.index_buffer  = cached->ebo;
-    if (!fill_binding_from_mesh(out, mesh)) {
-        out = Tgfx2MeshBinding{};
+    // Non-GL backend (currently Vulkan): delegate to the device's own
+    // per-tc_mesh cache (VulkanRenderDevice::ensure_tc_mesh). Buffers are
+    // owned by the device and reused across frames; a mesh header version
+    // bump inside ensure_tc_mesh triggers a re-upload.
+#ifdef TGFX2_HAS_VULKAN
+    if (device.backend_type() == tgfx::BackendType::Vulkan) {
+        auto [vbo, ebo] = static_cast<tgfx::VulkanRenderDevice&>(device)
+                              .ensure_tc_mesh(mesh);
+        if (!vbo || !ebo) return out;
+        out.vertex_buffer = vbo;
+        out.index_buffer  = ebo;
+        if (!fill_binding_from_mesh(out, mesh)) {
+            out = Tgfx2MeshBinding{};
+        }
+        return out;
     }
+#endif
+    tc::Log::error("wrap_mesh_as_tgfx2: unsupported backend");
     return out;
 }
 

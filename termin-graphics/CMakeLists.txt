@@ -173,6 +173,7 @@ target_link_libraries(termin_graphics2 PUBLIC
     glad
     OpenGL::GL
     termin_graphics
+    tmesh::termin_mesh
 )
 
 set_target_properties(termin_graphics2 PROPERTIES

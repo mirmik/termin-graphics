@@ -16,9 +16,25 @@
 #include <atomic>
 #include <chrono>
 #include <set>
+#include <vector>
 
 extern "C" {
 #include <tcbase/tc_log.h>
+#include <tgfx/resources/tc_texture.h>
+#include <tgfx/resources/tc_texture_registry.h>
+#include <tgfx/resources/tc_mesh.h>
+#include <tgfx/resources/tc_mesh_registry.h>
+}
+
+// Trampolines for destroy-hook C callbacks. Defined at file scope (not in
+// an anonymous namespace) so their addresses are stable identifiers that
+// `tc_*_registry_remove_destroy_hook` can match against.
+static void vulkan_invalidate_tc_texture_trampoline(uint32_t pool_index, void* user) {
+    static_cast<tgfx::VulkanRenderDevice*>(user)->invalidate_tc_texture_cache(pool_index);
+}
+
+static void vulkan_invalidate_tc_mesh_trampoline(uint32_t pool_index, void* user) {
+    static_cast<tgfx::VulkanRenderDevice*>(user)->invalidate_tc_mesh_cache(pool_index);
 }
 
 namespace tgfx {
@@ -122,9 +138,25 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     caps_.supports_geometry_shaders = features.geometryShader;
     caps_.supports_timestamp_queries = (props.limits.timestampComputeAndGraphics != 0);
     caps_.supports_multisample_resolve = true;
+
+    // Subscribe to registry destroy-hooks so per-device tc_texture /
+    // tc_mesh caches get invalidated before a slot is recycled. The
+    // matching unregister calls live in the destructor.
+    tc_texture_registry_add_destroy_hook(
+        &vulkan_invalidate_tc_texture_trampoline, this);
+    tc_mesh_registry_add_destroy_hook(
+        &vulkan_invalidate_tc_mesh_trampoline, this);
 }
 
 VulkanRenderDevice::~VulkanRenderDevice() {
+    // Unsubscribe from registry destroy-hooks before tearing anything down
+    // so an incoming tc_texture_destroy / tc_mesh_destroy after this point
+    // can't call into a half-destroyed device.
+    tc_texture_registry_remove_destroy_hook(
+        &vulkan_invalidate_tc_texture_trampoline, this);
+    tc_mesh_registry_remove_destroy_hook(
+        &vulkan_invalidate_tc_mesh_trampoline, this);
+
     // Shutdown is the one place where a full device-wide wait is actually
     // correct: everything queued must finish before we tear down VkImages,
     // VkBuffers, VkShaderModules etc. (freeing while in-flight is UB).
@@ -136,6 +168,14 @@ VulkanRenderDevice::~VulkanRenderDevice() {
     // Tear down the swapchain first — its sync objects and image
     // views are bound to device_ which is still alive at this point.
     swapchain_.reset();
+
+    // Drop per-device tc_texture / tc_mesh caches. The VkImage / VkBuffer
+    // objects those caches point at are owned through the handle pools
+    // (buffers_, textures_) and get released by the blanket per-pool loops
+    // below, so we just need to clear the cache maps here — no explicit
+    // destroy() calls required.
+    tc_texture_cache_.clear();
+    tc_mesh_cache_.clear();
 
     // Both deferred-destroy queues are now safe to release (GPU is idle).
     // The `in_flight` queue represents handles the previous frame freed;
@@ -2164,6 +2204,182 @@ void VulkanRenderDevice::clear_texture(
             dst->current_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         }
     });
+}
+
+// --- tc_texture / tc_mesh per-device caches -----------------------------
+//
+// These replace the former file-scope g_tex_cache / g_mesh_cache singletons
+// in tgfx2_bridge.cpp. Bridge functions on the Vulkan path now delegate
+// directly to these methods; GL continues to go through tc_gpu_slot.
+
+namespace {
+
+PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
+    switch (fmt) {
+        case TC_TEXTURE_RGBA8:   return PixelFormat::RGBA8_UNorm;
+        case TC_TEXTURE_RGB8:    return PixelFormat::RGB8_UNorm;
+        case TC_TEXTURE_RG8:     return PixelFormat::RG8_UNorm;
+        case TC_TEXTURE_R8:      return PixelFormat::R8_UNorm;
+        case TC_TEXTURE_RGBA16F: return PixelFormat::RGBA16F;
+        case TC_TEXTURE_RGB16F:  return PixelFormat::RGBA16F;
+        case TC_TEXTURE_DEPTH24: return PixelFormat::D24_UNorm_S8_UInt;
+    }
+    return PixelFormat::RGBA8_UNorm;
+}
+
+// Normalise tc_texture pixel data so Vulkan can upload it. RGB8 isn't a
+// universal VkFormat, so expand it to RGBA8 (alpha = 255) here. Everything
+// else is passed through.
+std::vector<uint8_t> normalize_pixels(const tc_texture* tex, PixelFormat& out_fmt) {
+    const auto fmt = static_cast<tc_texture_format>(tex->format);
+    const size_t src_bytes = tc_texture_data_size(tex);
+    const auto* src = static_cast<const uint8_t*>(tex->data);
+
+    std::vector<uint8_t> pixels;
+    if (fmt == TC_TEXTURE_RGB8) {
+        out_fmt = PixelFormat::RGBA8_UNorm;
+        pixels.resize(size_t(tex->width) * tex->height * 4);
+        for (size_t i = 0, j = 0; i < src_bytes; i += 3, j += 4) {
+            pixels[j + 0] = src[i + 0];
+            pixels[j + 1] = src[i + 1];
+            pixels[j + 2] = src[i + 2];
+            pixels[j + 3] = 0xFF;
+        }
+        return pixels;
+    }
+
+    out_fmt = tc_format_to_tgfx2(fmt);
+    pixels.assign(src, src + src_bytes);
+    return pixels;
+}
+
+} // anonymous namespace
+
+TextureHandle VulkanRenderDevice::ensure_tc_texture(tc_texture* tex) {
+    if (!tex) return {};
+
+    if (!tex->data || tex->width == 0 || tex->height == 0) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::ensure_tc_texture: tc_texture '%s' has no CPU pixels",
+               tex->header.name ? tex->header.name : tex->header.uuid);
+        return {};
+    }
+
+    const uint32_t pool_index = tex->header.pool_index;
+    const uint32_t version = tex->header.version;
+
+    std::lock_guard<std::mutex> lock(tc_texture_cache_mtx_);
+    auto it = tc_texture_cache_.find(pool_index);
+    if (it != tc_texture_cache_.end() && it->second.version == version) {
+        return it->second.handle;
+    }
+
+    // Stale entry — destroy old handle before replacing it.
+    if (it != tc_texture_cache_.end()) {
+        if (it->second.handle) destroy(it->second.handle);
+        tc_texture_cache_.erase(it);
+    }
+
+    PixelFormat fmt = PixelFormat::RGBA8_UNorm;
+    std::vector<uint8_t> pixels = normalize_pixels(tex, fmt);
+    if (pixels.empty()) return {};
+
+    TextureDesc desc;
+    desc.width = tex->width;
+    desc.height = tex->height;
+    desc.mip_levels = 1;
+    desc.sample_count = 1;
+    desc.format = fmt;
+    desc.usage = TextureUsage::Sampled | TextureUsage::CopyDst;
+
+    TextureHandle handle = create_texture(desc);
+    if (!handle) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::ensure_tc_texture: create_texture failed for '%s'",
+               tex->header.name ? tex->header.name : tex->header.uuid);
+        return {};
+    }
+    upload_texture(handle, std::span<const uint8_t>(pixels.data(), pixels.size()));
+
+    CachedTcTextureEntry entry;
+    entry.handle = handle;
+    entry.version = version;
+    tc_texture_cache_.emplace(pool_index, entry);
+    return handle;
+}
+
+void VulkanRenderDevice::invalidate_tc_texture_cache(uint32_t pool_index) {
+    std::lock_guard<std::mutex> lock(tc_texture_cache_mtx_);
+    auto it = tc_texture_cache_.find(pool_index);
+    if (it == tc_texture_cache_.end()) return;
+    if (it->second.handle) destroy(it->second.handle);
+    tc_texture_cache_.erase(it);
+}
+
+std::pair<BufferHandle, BufferHandle> VulkanRenderDevice::ensure_tc_mesh(tc_mesh* mesh) {
+    if (!mesh) return {};
+
+    if (!mesh->vertices || mesh->vertex_count == 0 ||
+        !mesh->indices  || mesh->index_count == 0)
+    {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::ensure_tc_mesh: tc_mesh '%s' has no CPU data",
+               mesh->header.name ? mesh->header.name : mesh->header.uuid);
+        return {};
+    }
+
+    const uint32_t pool_index = mesh->header.pool_index;
+    const uint32_t version = mesh->header.version;
+
+    std::lock_guard<std::mutex> lock(tc_mesh_cache_mtx_);
+    auto it = tc_mesh_cache_.find(pool_index);
+    if (it != tc_mesh_cache_.end() && it->second.version == version) {
+        return {it->second.vbo, it->second.ebo};
+    }
+
+    if (it != tc_mesh_cache_.end()) {
+        if (it->second.vbo) destroy(it->second.vbo);
+        if (it->second.ebo) destroy(it->second.ebo);
+        tc_mesh_cache_.erase(it);
+    }
+
+    const size_t vb_size = mesh->vertex_count *
+                           static_cast<size_t>(mesh->layout.stride);
+    const size_t ib_size = mesh->index_count * sizeof(uint32_t);
+
+    BufferDesc vb_desc;
+    vb_desc.size  = vb_size;
+    vb_desc.usage = BufferUsage::Vertex | BufferUsage::CopyDst;
+    BufferHandle vbo = create_buffer(vb_desc);
+    upload_buffer(
+        vbo,
+        std::span<const uint8_t>(
+            static_cast<const uint8_t*>(mesh->vertices), vb_size));
+
+    BufferDesc ib_desc;
+    ib_desc.size  = ib_size;
+    ib_desc.usage = BufferUsage::Index | BufferUsage::CopyDst;
+    BufferHandle ebo = create_buffer(ib_desc);
+    upload_buffer(
+        ebo,
+        std::span<const uint8_t>(
+            reinterpret_cast<const uint8_t*>(mesh->indices), ib_size));
+
+    CachedTcMeshEntry entry;
+    entry.vbo = vbo;
+    entry.ebo = ebo;
+    entry.version = version;
+    tc_mesh_cache_.emplace(pool_index, entry);
+    return {vbo, ebo};
+}
+
+void VulkanRenderDevice::invalidate_tc_mesh_cache(uint32_t pool_index) {
+    std::lock_guard<std::mutex> lock(tc_mesh_cache_mtx_);
+    auto it = tc_mesh_cache_.find(pool_index);
+    if (it == tc_mesh_cache_.end()) return;
+    if (it->second.vbo) destroy(it->second.vbo);
+    if (it->second.ebo) destroy(it->second.ebo);
+    tc_mesh_cache_.erase(it);
 }
 
 } // namespace tgfx
