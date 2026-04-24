@@ -38,6 +38,7 @@ tgfx::PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
         case TC_TEXTURE_RGBA16F: return tgfx::PixelFormat::RGBA16F;
         case TC_TEXTURE_RGB16F:  return tgfx::PixelFormat::RGBA16F;  // no RGB16F in tgfx2 enum
         case TC_TEXTURE_DEPTH24: return tgfx::PixelFormat::D24_UNorm_S8_UInt;
+        case TC_TEXTURE_DEPTH32F: return tgfx::PixelFormat::D32F;
     }
     return tgfx::PixelFormat::RGBA8_UNorm;
 }
@@ -79,7 +80,9 @@ tgfx::TextureHandle wrap_tc_texture_gl(
     desc.format = tc_format_to_tgfx2(
         static_cast<tc_texture_format>(tex->format));
     desc.usage = tgfx::TextureUsage::Sampled;
-    if (tex->format == TC_TEXTURE_DEPTH24) {
+    if (tex->format == TC_TEXTURE_DEPTH24 ||
+        tex->format == TC_TEXTURE_DEPTH32F)
+    {
         desc.usage = desc.usage | tgfx::TextureUsage::DepthStencilAttachment;
     }
 

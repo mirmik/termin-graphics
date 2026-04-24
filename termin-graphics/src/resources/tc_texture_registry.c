@@ -109,6 +109,8 @@ tc_texture_handle tc_texture_create(const char* uuid) {
     tex->header.ref_count = 0;
     tex->header.pool_index = h.index;
     tex->flip_y = 1;  // Default for OpenGL
+    tex->storage_kind = TC_TEXTURE_STORAGE_CPU_PIXELS;
+    tex->usage = TC_TEXTURE_USAGE_SAMPLED;
 
     if (!tc_resource_map_add(g_uuid_to_index, tex->header.uuid, tc_pack_index(h.index))) {
         tc_log(TC_LOG_ERROR, "tc_texture_create: failed to add to uuid map");
@@ -274,8 +276,10 @@ size_t tc_texture_format_bpp(tc_texture_format format) {
         case TC_TEXTURE_R8: return 1;
         case TC_TEXTURE_RGBA16F: return 8;
         case TC_TEXTURE_RGB16F: return 6;
-        default: return 4;
+        case TC_TEXTURE_DEPTH24: return 4;
+        case TC_TEXTURE_DEPTH32F: return 4;
     }
+    return 4;
 }
 
 uint8_t tc_texture_format_channels(tc_texture_format format) {
@@ -286,8 +290,10 @@ uint8_t tc_texture_format_channels(tc_texture_format format) {
         case TC_TEXTURE_RGB16F: return 3;
         case TC_TEXTURE_RG8: return 2;
         case TC_TEXTURE_R8: return 1;
-        default: return 4;
+        case TC_TEXTURE_DEPTH24:
+        case TC_TEXTURE_DEPTH32F: return 1;
     }
+    return 4;
 }
 
 // ============================================================================
@@ -363,6 +369,29 @@ void tc_texture_set_transforms(
     tex->flip_x = flip_x ? 1 : 0;
     tex->flip_y = flip_y ? 1 : 0;
     tex->transpose = transpose ? 1 : 0;
+    tex->header.version++;
+}
+
+void tc_texture_set_storage_kind(tc_texture* tex, tc_texture_storage_kind kind) {
+    if (!tex) return;
+    tex->storage_kind = (uint8_t)kind;
+}
+
+void tc_texture_set_usage(tc_texture* tex, uint32_t usage) {
+    if (!tex) return;
+    tex->usage = usage;
+}
+
+void tc_texture_set_size_format(
+    tc_texture* tex,
+    uint32_t width, uint32_t height,
+    tc_texture_format format
+) {
+    if (!tex) return;
+    tex->width = width;
+    tex->height = height;
+    tex->format = (uint8_t)format;
+    tex->channels = tc_texture_format_channels(format);
     tex->header.version++;
 }
 

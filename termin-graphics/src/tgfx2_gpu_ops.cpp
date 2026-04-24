@@ -4,6 +4,7 @@
 #include <tgfx/tgfx2_interop.h>
 #include <tgfx/tgfx_gpu_ops.h>
 #include <tgfx/tgfx_types.h>
+#include <tgfx/resources/tc_texture.h>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/opengl/opengl_render_device.hpp>
 #include <tcbase/tc_log.h>
@@ -46,6 +47,40 @@ static tgfx::PixelFormat channels_to_format(int channels) {
         case 4: return tgfx::PixelFormat::RGBA8_UNorm;
         default: return tgfx::PixelFormat::RGBA8_UNorm;
     }
+}
+
+// Map tc_texture_format → tgfx2 PixelFormat. Used by GPU-only allocation
+// where the format comes through as the raw tc enum value.
+static tgfx::PixelFormat tc_format_to_pixel_format(int format) {
+    switch (format) {
+        case TC_TEXTURE_RGBA8:    return tgfx::PixelFormat::RGBA8_UNorm;
+        case TC_TEXTURE_RGB8:     return tgfx::PixelFormat::RGB8_UNorm;
+        case TC_TEXTURE_RG8:      return tgfx::PixelFormat::RG8_UNorm;
+        case TC_TEXTURE_R8:       return tgfx::PixelFormat::R8_UNorm;
+        case TC_TEXTURE_RGBA16F:  return tgfx::PixelFormat::RGBA16F;
+        case TC_TEXTURE_RGB16F:   return tgfx::PixelFormat::RGBA16F;
+        case TC_TEXTURE_DEPTH24:  return tgfx::PixelFormat::D24_UNorm_S8_UInt;
+        case TC_TEXTURE_DEPTH32F: return tgfx::PixelFormat::D32F;
+    }
+    return tgfx::PixelFormat::RGBA8_UNorm;
+}
+
+// Translate tc_texture_usage_flags bitset → tgfx::TextureUsage flags.
+// Note the bit layouts differ — tc_texture's bitset is the public C
+// API surface, tgfx2's is the backend-internal one.
+static tgfx::TextureUsage tc_usage_to_tgfx(uint32_t usage) {
+    uint32_t out = 0;
+    if (usage & TC_TEXTURE_USAGE_SAMPLED)
+        out |= static_cast<uint32_t>(tgfx::TextureUsage::Sampled);
+    if (usage & TC_TEXTURE_USAGE_COLOR_ATTACHMENT)
+        out |= static_cast<uint32_t>(tgfx::TextureUsage::ColorAttachment);
+    if (usage & TC_TEXTURE_USAGE_DEPTH_ATTACHMENT)
+        out |= static_cast<uint32_t>(tgfx::TextureUsage::DepthStencilAttachment);
+    if (usage & TC_TEXTURE_USAGE_COPY_SRC)
+        out |= static_cast<uint32_t>(tgfx::TextureUsage::CopySrc);
+    if (usage & TC_TEXTURE_USAGE_COPY_DST)
+        out |= static_cast<uint32_t>(tgfx::TextureUsage::CopyDst);
+    return static_cast<tgfx::TextureUsage>(out);
 }
 
 // Track tgfx2 handle for a given GL ID so we can destroy properly
@@ -159,6 +194,46 @@ static uint32_t tgfx2_depth_texture_upload(
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
     }
 
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    g_texture_map[gl_id] = handle.id;
+    return gl_id;
+}
+
+static uint32_t tgfx2_texture_create_gpu_only(
+    int width, int height, int format, uint32_t usage
+) {
+    auto* dev = get_device();
+    auto* gl_dev = get_gl_device();
+    if (!dev || !gl_dev) return 0;
+
+    tgfx::TextureDesc desc;
+    desc.width = (uint32_t)width;
+    desc.height = (uint32_t)height;
+    desc.format = tc_format_to_pixel_format(format);
+    desc.usage = tc_usage_to_tgfx(usage);
+    desc.mip_levels = 1;
+    desc.sample_count = 1;
+
+    auto handle = dev->create_texture(desc);
+    if (!handle) return 0;
+
+    auto* gl_tex = gl_dev->get_texture(handle);
+    if (!gl_tex) {
+        dev->destroy(handle);
+        return 0;
+    }
+
+    uint32_t gl_id = gl_tex->gl_id;
+
+    // Apply default sampler state — render targets are most often
+    // sampled with linear/clamp; users that need otherwise can change
+    // it later through the regular texture state path.
+    glBindTexture(GL_TEXTURE_2D, gl_id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     g_texture_map[gl_id] = handle.id;
@@ -365,6 +440,7 @@ void tgfx2_gpu_ops_register(void) {
 
     ops.texture_upload = tgfx2_texture_upload;
     ops.depth_texture_upload = tgfx2_depth_texture_upload;
+    ops.texture_create_gpu_only = tgfx2_texture_create_gpu_only;
     ops.texture_bind = tgfx2_texture_bind;
     ops.depth_texture_bind = tgfx2_depth_texture_bind;
     ops.texture_delete = tgfx2_texture_delete;

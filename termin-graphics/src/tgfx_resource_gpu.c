@@ -48,7 +48,13 @@ bool tc_texture_needs_upload(const tc_texture* tex) {
 }
 
 bool tc_texture_upload_gpu(tc_texture* tex) {
-    if (!tex || !tex->data) {
+    if (!tex) return false;
+
+    // GPU-only textures (render targets etc.) have no CPU pixel blob —
+    // the bridge / engine just wants an allocated GL texture object of
+    // the requested size + format + usage. CPU textures still need data.
+    const bool gpu_only = (tex->storage_kind == TC_TEXTURE_STORAGE_GPU_ONLY);
+    if (!gpu_only && !tex->data) {
         return false;
     }
 
@@ -82,8 +88,18 @@ bool tc_texture_upload_gpu(tc_texture* tex) {
 
     uint32_t gpu_id = 0;
 
-    // Check if this is a depth texture
-    if (tex->format == TC_TEXTURE_DEPTH24) {
+    if (gpu_only) {
+        if (!ops->texture_create_gpu_only) {
+            tc_log_error("tc_texture_upload_gpu: texture_create_gpu_only not set");
+            return false;
+        }
+        gpu_id = ops->texture_create_gpu_only(
+            (int)tex->width,
+            (int)tex->height,
+            (int)tex->format,
+            tex->usage
+        );
+    } else if (tex->format == TC_TEXTURE_DEPTH24) {
         if (!ops->depth_texture_upload) {
             tc_log_error("tc_texture_upload_gpu: depth_texture_upload not set");
             return false;

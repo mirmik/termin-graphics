@@ -34,6 +34,18 @@ typedef struct tgfx_gpu_ops {
         bool compare_mode
     );
 
+    // Allocate a GPU-only (no CPU pixel data) texture with the given
+    // tc_texture_format / tc_texture_usage_flags bitset. Used by render
+    // targets and similar attachment-owning textures: the GPU image is
+    // created blank and is later written into by render passes. Returns
+    // GPU texture ID (0 on failure).
+    uint32_t (*texture_create_gpu_only)(
+        int width,
+        int height,
+        int format,         // tc_texture_format
+        uint32_t usage      // tc_texture_usage_flags bitset
+    );
+
     // Bind texture to unit
     void (*texture_bind)(uint32_t gpu_id, int unit);
 

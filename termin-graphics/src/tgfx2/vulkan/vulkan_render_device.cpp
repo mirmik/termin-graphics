@@ -2223,6 +2223,7 @@ PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
         case TC_TEXTURE_RGBA16F: return PixelFormat::RGBA16F;
         case TC_TEXTURE_RGB16F:  return PixelFormat::RGBA16F;
         case TC_TEXTURE_DEPTH24: return PixelFormat::D24_UNorm_S8_UInt;
+        case TC_TEXTURE_DEPTH32F: return PixelFormat::D32F;
     }
     return PixelFormat::RGBA8_UNorm;
 }
@@ -2253,12 +2254,38 @@ std::vector<uint8_t> normalize_pixels(const tc_texture* tex, PixelFormat& out_fm
     return pixels;
 }
 
+// Translate tc_texture_usage_flags bitset → tgfx::TextureUsage. Mirrors
+// the helper in tgfx2_gpu_ops.cpp; we duplicate it here because the two
+// translation units don't share a common implementation file.
+TextureUsage tc_usage_to_tgfx(uint32_t usage) {
+    uint32_t out = 0;
+    if (usage & TC_TEXTURE_USAGE_SAMPLED)
+        out |= static_cast<uint32_t>(TextureUsage::Sampled);
+    if (usage & TC_TEXTURE_USAGE_COLOR_ATTACHMENT)
+        out |= static_cast<uint32_t>(TextureUsage::ColorAttachment);
+    if (usage & TC_TEXTURE_USAGE_DEPTH_ATTACHMENT)
+        out |= static_cast<uint32_t>(TextureUsage::DepthStencilAttachment);
+    if (usage & TC_TEXTURE_USAGE_COPY_SRC)
+        out |= static_cast<uint32_t>(TextureUsage::CopySrc);
+    if (usage & TC_TEXTURE_USAGE_COPY_DST)
+        out |= static_cast<uint32_t>(TextureUsage::CopyDst);
+    return static_cast<TextureUsage>(out);
+}
+
 } // anonymous namespace
 
 TextureHandle VulkanRenderDevice::ensure_tc_texture(tc_texture* tex) {
     if (!tex) return {};
 
-    if (!tex->data || tex->width == 0 || tex->height == 0) {
+    const bool gpu_only = (tex->storage_kind == TC_TEXTURE_STORAGE_GPU_ONLY);
+
+    if (tex->width == 0 || tex->height == 0) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::ensure_tc_texture: tc_texture '%s' has zero size",
+               tex->header.name ? tex->header.name : tex->header.uuid);
+        return {};
+    }
+    if (!gpu_only && !tex->data) {
         tc_log(TC_LOG_ERROR,
                "VulkanRenderDevice::ensure_tc_texture: tc_texture '%s' has no CPU pixels",
                tex->header.name ? tex->header.name : tex->header.uuid);
@@ -2280,15 +2307,39 @@ TextureHandle VulkanRenderDevice::ensure_tc_texture(tc_texture* tex) {
         tc_texture_cache_.erase(it);
     }
 
-    PixelFormat fmt = PixelFormat::RGBA8_UNorm;
-    std::vector<uint8_t> pixels = normalize_pixels(tex, fmt);
-    if (pixels.empty()) return {};
-
     TextureDesc desc;
     desc.width = tex->width;
     desc.height = tex->height;
     desc.mip_levels = 1;
     desc.sample_count = 1;
+
+    if (gpu_only) {
+        // Render-target-style: no CPU upload, just allocate a blank
+        // VkImage with whatever attachment bits the caller declared.
+        // CopyDst is always added because the staging upload path uses
+        // it and so do `blit_to_texture` / `clear_texture`.
+        desc.format = tc_format_to_tgfx2(static_cast<tc_texture_format>(tex->format));
+        desc.usage = tc_usage_to_tgfx(tex->usage) | TextureUsage::CopyDst;
+
+        TextureHandle handle = create_texture(desc);
+        if (!handle) {
+            tc_log(TC_LOG_ERROR,
+                   "VulkanRenderDevice::ensure_tc_texture: GPU-only create_texture failed for '%s'",
+                   tex->header.name ? tex->header.name : tex->header.uuid);
+            return {};
+        }
+
+        CachedTcTextureEntry entry;
+        entry.handle = handle;
+        entry.version = version;
+        tc_texture_cache_.emplace(pool_index, entry);
+        return handle;
+    }
+
+    PixelFormat fmt = PixelFormat::RGBA8_UNorm;
+    std::vector<uint8_t> pixels = normalize_pixels(tex, fmt);
+    if (pixels.empty()) return {};
+
     desc.format = fmt;
     desc.usage = TextureUsage::Sampled | TextureUsage::CopyDst;
 
