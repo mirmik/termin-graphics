@@ -126,6 +126,17 @@ public:
     void set_grid_color      (float r, float g, float b, float a);
     void set_axis_color      (float r, float g, float b, float a);
     void set_label_color     (float r, float g, float b, float a);
+    // Explicit title colour applied to every panel. Overrides the
+    // default (which is the panel's label_color). Typical use: pick a
+    // theme-specific title colour once per theme switch.
+    void set_title_color     (float r, float g, float b, float a);
+    // Reset title colour to default (= each panel's label_color).
+    void clear_title_color   ();
+    // Change the colour of an already-added series. For theme
+    // switching — no need to clear + re-add. Silent no-op if indices
+    // are out of range.
+    void set_line_color      (int panel_idx, int series_idx,
+                              float r, float g, float b, float a);
     // Per-panel font sizes in pixels. Margins auto-scale to fit.
     void set_font_size       (float label_px, float title_px);
     void set_panel_margins   (int left, int right, int top, int bottom);
