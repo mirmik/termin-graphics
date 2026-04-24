@@ -4,12 +4,22 @@
 #include <memory>
 #include <span>
 #include <stdexcept>
+#include <utility>
 
 #include "tgfx2/tgfx2_api.h"
 #include "tgfx2/handles.hpp"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/capabilities.hpp"
 #include "tgfx2/i_command_list.hpp"
+
+// Forward-declare tc_texture / tc_mesh — the per-device tc-resource
+// cache hooks below take pointers to them. Full definitions live in C
+// headers under termin-graphics / termin-mesh; we only need the type
+// name in the public IRenderDevice surface.
+extern "C" {
+struct tc_texture;
+struct tc_mesh;
+}
 
 namespace tgfx {
 
@@ -239,6 +249,30 @@ public:
     // submission. On OpenGL: glFlush / glFinish.
     virtual void flush() {}
     virtual void finish() {}
+
+    // --- tc_texture / tc_mesh per-device resource cache ------------------
+    //
+    // Lookup-or-upload entry points consumed by `tgfx2_bridge::wrap_*_as_tgfx2`
+    // on backends that own their tgfx2 handles per-device (Vulkan today;
+    // future Metal / D3D12 will plug in here too). Each call is keyed on
+    // the resource's `header.pool_index` and re-uploads when
+    // `header.version` bumps. Returned handles are OWNED by the device —
+    // the caller must NOT pass them to `destroy()`.
+    //
+    // Default implementations log + return empty handles. The OpenGL
+    // backend explicitly does NOT override these — its tgfx2_bridge path
+    // wraps the legacy tc_gpu_slot share-group cache instead, calling
+    // `register_external_texture` / `register_external_buffer` directly.
+    virtual TextureHandle ensure_tc_texture(tc_texture* /*tex*/) {
+        return {};
+    }
+    virtual std::pair<BufferHandle, BufferHandle> ensure_tc_mesh(tc_mesh* /*mesh*/) {
+        return {};
+    }
+    // Invoked by tc_texture_registry / tc_mesh_registry destroy-hooks to
+    // drop a cached entry before the resource's pool slot is recycled.
+    virtual void invalidate_tc_texture_cache(uint32_t /*pool_index*/) {}
+    virtual void invalidate_tc_mesh_cache(uint32_t /*pool_index*/) {}
 };
 
 } // namespace tgfx

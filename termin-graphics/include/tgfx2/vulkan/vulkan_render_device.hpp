@@ -19,15 +19,8 @@ VK_DEFINE_HANDLE(VmaAllocation)
 #include "tgfx2/tgfx2_api.h"
 #include "tgfx2/i_render_device.hpp"
 
-// Forward-declare tc_texture / tc_mesh — per-device resource caches are
-// keyed by tc_resource_header::pool_index, so the public header needs
-// the type to take a tc_texture* / tc_mesh* pointer. Full definitions
-// live in termin-mesh / termin-graphics C headers; we only forward-
-// declare here to keep this header inexpensive.
-extern "C" {
-struct tc_texture;
-struct tc_mesh;
-}
+// `tc_texture` / `tc_mesh` are forward-declared in i_render_device.hpp.
+// Method signatures here just reuse them.
 
 namespace tgfx {
 
@@ -500,13 +493,13 @@ public:
     //   - Entries live until (a) the device is destroyed, or (b) the
     //     tc_texture / tc_mesh is freed and the registry hook invokes
     //     `invalidate_tc_texture_cache` / `invalidate_tc_mesh_cache`.
-    TextureHandle ensure_tc_texture(tc_texture* tex);
-    void          invalidate_tc_texture_cache(uint32_t pool_index);
+    TextureHandle ensure_tc_texture(tc_texture* tex) override;
+    void          invalidate_tc_texture_cache(uint32_t pool_index) override;
 
     // Returns {vbo, ebo}. Either is zero-id on upload failure, in which
     // case the cache entry is left empty so the next call retries.
-    std::pair<BufferHandle, BufferHandle> ensure_tc_mesh(tc_mesh* mesh);
-    void          invalidate_tc_mesh_cache(uint32_t pool_index);
+    std::pair<BufferHandle, BufferHandle> ensure_tc_mesh(tc_mesh* mesh) override;
+    void          invalidate_tc_mesh_cache(uint32_t pool_index) override;
 
 private:
     void init_instance(const VulkanDeviceCreateInfo& info);

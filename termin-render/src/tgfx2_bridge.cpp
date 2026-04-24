@@ -15,10 +15,6 @@
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #include "tgfx2/descriptors.hpp"
 
-#ifdef TGFX2_HAS_VULKAN
-#include "tgfx2/vulkan/vulkan_render_device.hpp"
-#endif
-
 extern "C" {
 // tc_texture_upload_gpu is declared in tgfx_resource_gpu.h; we only
 // need the forward decl since this translation unit is C++.
@@ -94,21 +90,16 @@ tgfx::TextureHandle wrap_tc_texture_gl(
 }
 
 // Non-GL backends have no share-group slot to wrap — delegate to the
-// device's per-tc_texture cache (see VulkanRenderDevice::ensure_tc_texture).
-// Handles are owned by the device; release_texture_binding is a no-op on
-// the Vulkan path and the cache is drained in ~VulkanRenderDevice.
+// device's per-tc_texture cache through the IRenderDevice virtual hook.
+// Backends that implement it (Vulkan today) own the returned handle and
+// drain it in their destructor / on registry destroy-hook fire.
+// Backends that don't (OpenGL stays on the share-group path above) get
+// an empty default — the GL branch above already returned by then, so we
+// never actually reach this with `device.backend_type() == OpenGL`.
 tgfx::TextureHandle wrap_tc_texture_non_gl(
     tgfx::IRenderDevice& device, tc_texture* tex
 ) {
-#ifdef TGFX2_HAS_VULKAN
-    if (device.backend_type() == tgfx::BackendType::Vulkan) {
-        return static_cast<tgfx::VulkanRenderDevice&>(device).ensure_tc_texture(tex);
-    }
-#endif
-    tc::Log::error("wrap_tc_texture_as_tgfx2: unsupported backend");
-    (void)device;
-    (void)tex;
-    return {};
+    return device.ensure_tc_texture(tex);
 }
 
 } // anonymous namespace
@@ -331,23 +322,16 @@ Tgfx2MeshBinding wrap_mesh_as_tgfx2(
     }
 
     // Non-GL backend (currently Vulkan): delegate to the device's own
-    // per-tc_mesh cache (VulkanRenderDevice::ensure_tc_mesh). Buffers are
-    // owned by the device and reused across frames; a mesh header version
-    // bump inside ensure_tc_mesh triggers a re-upload.
-#ifdef TGFX2_HAS_VULKAN
-    if (device.backend_type() == tgfx::BackendType::Vulkan) {
-        auto [vbo, ebo] = static_cast<tgfx::VulkanRenderDevice&>(device)
-                              .ensure_tc_mesh(mesh);
-        if (!vbo || !ebo) return out;
-        out.vertex_buffer = vbo;
-        out.index_buffer  = ebo;
-        if (!fill_binding_from_mesh(out, mesh)) {
-            out = Tgfx2MeshBinding{};
-        }
-        return out;
+    // per-tc_mesh cache through the IRenderDevice virtual hook. Buffers
+    // are owned by the device and reused across frames; a mesh header
+    // version bump inside ensure_tc_mesh triggers a re-upload.
+    auto [vbo, ebo] = device.ensure_tc_mesh(mesh);
+    if (!vbo || !ebo) return out;
+    out.vertex_buffer = vbo;
+    out.index_buffer  = ebo;
+    if (!fill_binding_from_mesh(out, mesh)) {
+        out = Tgfx2MeshBinding{};
     }
-#endif
-    tc::Log::error("wrap_mesh_as_tgfx2: unsupported backend");
     return out;
 }
 
