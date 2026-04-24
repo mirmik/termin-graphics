@@ -50,6 +50,15 @@ public:
     Color4 label_color = styles::label_color();
     Color4 bg_color = styles::bg_color();
     Color4 plot_bg_color = styles::plot_area_bg();
+    // Explicit title colour. nullopt = use label_color. Earlier
+    // revisions auto-picked the first line series' colour (so stacked
+    // panels read as "sin is blue, cos is orange"), but that coupling
+    // to series state made theming unpredictable — titles flickered
+    // when series were re-added, and the "auto" colour couldn't be
+    // overridden without clearing the whole panel. Now the default is
+    // predictable (label_color); callers who want series-coupled
+    // titles can sample the series colour themselves and pass it in.
+    std::optional<Color4> title_color;
     // Pixel sizes follow common dashboard-typography norms: axis labels
     // ≈ 15 px (tick labels -2 → 13 px), title at 22 px so it reads as
     // a header rather than another label (ratio ~1.7× to ticks).
@@ -105,6 +114,12 @@ public:
     // persistent VBO on the next render(). Silent no-op if idx is out
     // of range.
     void append_to_line(size_t idx, const double* x, const double* y, size_t n);
+
+    // Replace the colour of an existing line / scatter series. Returns
+    // false if idx is out of range. Intended for theme switching —
+    // callers don't need to clear + re-add to recolour a live series.
+    bool set_line_color(size_t idx, Color4 color);
+    bool set_scatter_color(size_t idx, Color4 color);
 
     size_t line_count() const { return data.lines.size(); }
 

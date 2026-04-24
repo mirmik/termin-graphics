@@ -467,6 +467,18 @@ bool PlotEngine2D::last_x_of_line(size_t idx, double& out_x) const {
     return true;
 }
 
+bool PlotEngine2D::set_line_color(size_t idx, Color4 color) {
+    if (idx >= data.lines.size()) return false;
+    data.lines[idx].color = color;
+    return true;
+}
+
+bool PlotEngine2D::set_scatter_color(size_t idx, Color4 color) {
+    if (idx >= data.scatters.size()) return false;
+    data.scatters[idx].color = color;
+    return true;
+}
+
 void PlotEngine2D::get_view(double& x_min, double& x_max,
                               double& y_min, double& y_max) {
     const ViewRange v = view_range_();
@@ -769,15 +781,12 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
             // keeps the gap visually stable regardless of the font's
             // metric ratio.
             //
-            // Pick colour from the first line series if any, so
-            // stacked panels read at a glance as "sin is blue, cos is
-            // orange, ..." instead of drowning every title in the
-            // same label_color grey.
-            Color4 tc = label_color;
-            if (!data.lines.empty()) {
-                const auto& s = data.lines.front();
-                tc = s.color.has_value() ? *s.color : styles::cycle_color(0u);
-            }
+            // Colour: `title_color` if set, else `label_color`. Earlier
+            // revisions auto-picked the first line series' colour —
+            // removed in favour of an explicit override because the
+            // implicit coupling made theme switching and per-panel
+            // recolouring unpredictable.
+            const Color4 tc = title_color.value_or(label_color);
             const int title_lh = font->line_height_px(title_font_size);
             // Clamp to viewport top so a title bigger than margin_top
             // gets cut off at the top instead of drawing at a negative

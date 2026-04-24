@@ -81,6 +81,16 @@ void bind_engines(nb::module_& m) {
         .def_rw("font_size",       &tcplot::PlotEngine2D::font_size)
         .def_rw("title_font_size", &tcplot::PlotEngine2D::title_font_size)
         .def_rw("title_pad",       &tcplot::PlotEngine2D::title_pad)
+        // `title_color` is optional: None = fall back to label_color.
+        // Using a Python property so callers can set None to reset.
+        .def_prop_rw("title_color",
+            [](const tcplot::PlotEngine2D& self) -> nb::object {
+                if (!self.title_color.has_value()) return nb::none();
+                return nb::cast(*self.title_color);
+            },
+            [](tcplot::PlotEngine2D& self, nb::object obj) {
+                self.title_color = optional_color_from_obj(obj);
+            })
 
         .def("set_viewport", &tcplot::PlotEngine2D::set_viewport,
              nb::arg("x"), nb::arg("y"), nb::arg("width"), nb::arg("height"))
@@ -110,6 +120,21 @@ void bind_engines(nb::module_& m) {
              nb::arg("color") = nb::none(),
              nb::arg("size") = 4.0,
              nb::arg("label") = std::string())
+
+        .def("set_line_color",
+             [](tcplot::PlotEngine2D& self, size_t idx, nb::object color) {
+                 auto c = optional_color_from_obj(color);
+                 if (!c.has_value()) return false;
+                 return self.set_line_color(idx, *c);
+             },
+             nb::arg("idx"), nb::arg("color"))
+        .def("set_scatter_color",
+             [](tcplot::PlotEngine2D& self, size_t idx, nb::object color) {
+                 auto c = optional_color_from_obj(color);
+                 if (!c.has_value()) return false;
+                 return self.set_scatter_color(idx, *c);
+             },
+             nb::arg("idx"), nb::arg("color"))
 
         .def("clear",   &tcplot::PlotEngine2D::clear)
         .def("fit",     &tcplot::PlotEngine2D::fit)
