@@ -20,6 +20,10 @@ foreach ($arg in $args) {
         Write-Host "  --debug, -d       Debug build"
         Write-Host "  --clean, -c       Clean build directories first"
         Write-Host "  --no-parallel     Disable parallel compilation"
+        Write-Host "  --no-vulkan       Disable Vulkan support"
+        Write-Host "  --vulkan          Force Vulkan support on"
+        Write-Host "  --no-sdl          Disable SDL2 support"
+        Write-Host "  --sdl             Force SDL2 support on"
         Write-Host "  --help, -h        Show this help"
         exit 0
     }

@@ -11,6 +11,8 @@ $SdkPrefix = if ($env:SDK_PREFIX) { $env:SDK_PREFIX } else { Join-Path $ScriptDi
 $BuildType = "Release"
 $Clean = $false
 $UseParallel = $false
+$VulkanMode = "auto"
+$SdlMode = "auto"
 
 foreach ($arg in $args) {
     switch ($arg) {
@@ -19,10 +21,24 @@ foreach ($arg in $args) {
         "--clean"  { $Clean = $true }
         "-c"       { $Clean = $true }
         "--no-parallel" { $UseParallel = $false }
-        "--help"   { Write-Host "Usage: .\build-sdk-bindings.ps1 [--debug] [--clean] [--no-parallel]"; exit 0 }
-        "-h"       { Write-Host "Usage: .\build-sdk-bindings.ps1 [--debug] [--clean] [--no-parallel]"; exit 0 }
+        "--no-vulkan"   { $VulkanMode = "off" }
+        "--vulkan"      { $VulkanMode = "on" }
+        "--no-sdl"      { $SdlMode = "off" }
+        "--sdl"         { $SdlMode = "on"  }
+        "--help"   { Write-Host "Usage: .\build-sdk-bindings.ps1 [--debug] [--clean] [--no-parallel] [--no-vulkan|--vulkan] [--no-sdl|--sdl]"; exit 0 }
+        "-h"       { Write-Host "Usage: .\build-sdk-bindings.ps1 [--debug] [--clean] [--no-parallel] [--no-vulkan|--vulkan] [--no-sdl|--sdl]"; exit 0 }
         default    { Write-Error "Unknown option: $arg"; exit 1 }
     }
+}
+
+$CommonFeatureArgs = @()
+switch ($VulkanMode) {
+    "off" { $CommonFeatureArgs += "-DTGFX2_ENABLE_VULKAN=OFF" }
+    "on"  { $CommonFeatureArgs += "-DTGFX2_ENABLE_VULKAN=ON" }
+}
+switch ($SdlMode) {
+    "off" { $CommonFeatureArgs += "-DUSE_SYSTEM_SDL2=OFF" }
+    "on"  { $CommonFeatureArgs += "-DUSE_SYSTEM_SDL2=ON" }
 }
 
 $pythonExec = (Get-Command python -ErrorAction SilentlyContinue).Source
@@ -100,7 +116,7 @@ function Build-WithPython {
             "-DCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY=ON",
             "-DTERMIN_BUILD_PYTHON=ON",
             "-DPython_EXECUTABLE=$pythonExec"
-        )
+        ) + $CommonFeatureArgs
         & cmake @cmakeArgs
         if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
         $buildArgs = @("--build", $buildDir, "--config", $BuildType)

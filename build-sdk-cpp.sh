@@ -16,6 +16,8 @@ SDK_PREFIX="${SDK_PREFIX:-$SCRIPT_DIR/sdk}"
 BUILD_TYPE="Release"
 CLEAN=0
 NO_PARALLEL=0
+VULKAN_MODE="auto"
+SDL_MODE="auto"
 BUILD_JOBS="$(nproc)"
 
 for arg in "$@"; do
@@ -23,6 +25,10 @@ for arg in "$@"; do
         --debug|-d)    BUILD_TYPE="Debug" ;;
         --clean|-c)    CLEAN=1 ;;
         --no-parallel) NO_PARALLEL=1 ;;
+        --no-vulkan)   VULKAN_MODE="off" ;;
+        --vulkan)      VULKAN_MODE="on" ;;
+        --no-sdl)      SDL_MODE="off" ;;
+        --sdl)         SDL_MODE="on" ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -30,6 +36,10 @@ for arg in "$@"; do
             echo "  --debug, -d       Debug build"
             echo "  --clean, -c       Clean build directories first"
             echo "  --no-parallel     Disable parallel compilation (equivalent to -j1)"
+            echo "  --no-vulkan       Disable Vulkan support"
+            echo "  --vulkan          Force Vulkan support on"
+            echo "  --no-sdl          Disable SDL2 support"
+            echo "  --sdl             Force SDL2 support on"
             echo "  --help, -h        Show this help"
             exit 0
             ;;
@@ -43,6 +53,16 @@ done
 if [[ $NO_PARALLEL -eq 1 ]]; then
     BUILD_JOBS=1
 fi
+
+COMMON_FEATURE_ARGS=()
+case "$VULKAN_MODE" in
+    off) COMMON_FEATURE_ARGS+=("-DTGFX2_ENABLE_VULKAN=OFF") ;;
+    on)  COMMON_FEATURE_ARGS+=("-DTGFX2_ENABLE_VULKAN=ON") ;;
+esac
+case "$SDL_MODE" in
+    off) COMMON_FEATURE_ARGS+=("-DUSE_SYSTEM_SDL2=OFF") ;;
+    on)  COMMON_FEATURE_ARGS+=("-DUSE_SYSTEM_SDL2=ON") ;;
+esac
 
 build_cmake_lib_cpp() {
     local name="$1"
@@ -74,6 +94,7 @@ build_cmake_lib_cpp() {
         -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
         -DCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY=ON \
         -DTERMIN_BUILD_PYTHON=OFF \
+        "${COMMON_FEATURE_ARGS[@]}" \
         "${extra_args[@]}"
 
     cmake --build "$build_dir" --parallel "$BUILD_JOBS"
@@ -109,7 +130,8 @@ build_termin_cpp_only() {
         -DBUILD_EDITOR_EXE=OFF \
         -DBUILD_LAUNCHER=OFF \
         -DBUNDLE_PYTHON=OFF \
-        -DTERMIN_BUILD_PYTHON=OFF
+        -DTERMIN_BUILD_PYTHON=OFF \
+        "${COMMON_FEATURE_ARGS[@]}"
 
     cmake --build "$build_dir" --parallel "$BUILD_JOBS"
     cmake --install "$build_dir"

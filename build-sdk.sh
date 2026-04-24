@@ -22,6 +22,10 @@ for arg in "$@"; do
             echo "  --debug, -d       Debug build"
             echo "  --clean, -c       Clean build directories first"
             echo "  --no-parallel     Disable parallel compilation (equivalent to -j1)"
+            echo "  --no-vulkan       Disable Vulkan support"
+            echo "  --vulkan          Force Vulkan support on"
+            echo "  --no-sdl          Disable SDL2 support"
+            echo "  --sdl             Force SDL2 support on"
             echo "  --help, -h        Show this help"
             exit 0
             ;;
