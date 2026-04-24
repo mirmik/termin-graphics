@@ -35,6 +35,18 @@ class TGFX2_API Text3DRenderer {
 public:
     enum class Anchor : uint8_t { Left, Center, Right };
 
+private:
+    IRenderDevice* compiled_on_ = nullptr;
+    ShaderHandle vs_{};
+    ShaderHandle fs_{};
+
+    RenderContext2* ctx_ = nullptr;
+    FontAtlas* font_ = nullptr;
+    float mvp_[16]{};
+    float cam_right_[3]{};
+    float cam_up_[3]{};
+
+public:
     explicit Text3DRenderer(FontAtlas* font = nullptr);
     ~Text3DRenderer();
 
@@ -66,16 +78,6 @@ public:
 
 private:
     void ensure_shader_(IRenderDevice& device);
-
-    IRenderDevice* compiled_on_ = nullptr;
-    ShaderHandle vs_{};
-    ShaderHandle fs_{};
-
-    RenderContext2* ctx_ = nullptr;
-    FontAtlas* font_ = nullptr;
-    float mvp_[16]{};
-    float cam_right_[3]{};
-    float cam_up_[3]{};
 };
 
 }  // namespace tgfx

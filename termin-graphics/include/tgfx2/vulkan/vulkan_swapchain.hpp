@@ -27,6 +27,33 @@ public:
     // the cost of input lag.
     static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
+private:
+    VulkanRenderDevice& device_;
+    VkSurfaceKHR surface_ = VK_NULL_HANDLE;
+
+    VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
+    VkFormat format_ = VK_FORMAT_B8G8R8A8_UNORM;
+    VkColorSpaceKHR color_space_ = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+    VkPresentModeKHR present_mode_ = VK_PRESENT_MODE_FIFO_KHR;
+    uint32_t width_ = 0;
+    uint32_t height_ = 0;
+
+    std::vector<VkImage> images_;
+    std::vector<VkImageView> image_views_;
+
+    // Per-in-flight-frame sync. Indexed by `current_frame_` which
+    // wraps on MAX_FRAMES_IN_FLIGHT.
+    std::vector<VkSemaphore> image_available_semaphores_;
+    std::vector<VkSemaphore> render_finished_semaphores_;
+    std::vector<VkFence> in_flight_fences_;
+
+    // Per-in-flight-frame command buffer for compose_and_present.
+    // Allocated once at swapchain construction, reused each cycle.
+    std::vector<VkCommandBuffer> compose_command_buffers_;
+
+    uint32_t current_frame_ = 0;
+
+public:
     VulkanSwapchain(VulkanRenderDevice& dev,
                     VkSurfaceKHR surface,
                     uint32_t width, uint32_t height);
@@ -94,31 +121,6 @@ private:
     void destroy_swapchain();
     void create_sync_objects();
     void destroy_sync_objects();
-
-    VulkanRenderDevice& device_;
-    VkSurfaceKHR surface_ = VK_NULL_HANDLE;
-
-    VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
-    VkFormat format_ = VK_FORMAT_B8G8R8A8_UNORM;
-    VkColorSpaceKHR color_space_ = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-    VkPresentModeKHR present_mode_ = VK_PRESENT_MODE_FIFO_KHR;
-    uint32_t width_ = 0;
-    uint32_t height_ = 0;
-
-    std::vector<VkImage> images_;
-    std::vector<VkImageView> image_views_;
-
-    // Per-in-flight-frame sync. Indexed by `current_frame_` which
-    // wraps on MAX_FRAMES_IN_FLIGHT.
-    std::vector<VkSemaphore> image_available_semaphores_;
-    std::vector<VkSemaphore> render_finished_semaphores_;
-    std::vector<VkFence> in_flight_fences_;
-
-    // Per-in-flight-frame command buffer for compose_and_present.
-    // Allocated once at swapchain construction, reused each cycle.
-    std::vector<VkCommandBuffer> compose_command_buffers_;
-
-    uint32_t current_frame_ = 0;
 };
 
 } // namespace tgfx

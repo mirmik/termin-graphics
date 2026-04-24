@@ -82,6 +82,10 @@ struct GLResourceSet {
 // Handle pool: maps uint32_t id -> T
 template<typename T>
 class HandlePool {
+private:
+    std::unordered_map<uint32_t, T> pool_;
+    uint32_t next_id_ = 1;
+
 public:
     uint32_t add(T&& resource) {
         uint32_t id = next_id_++;
@@ -105,13 +109,41 @@ public:
 
     auto begin() { return pool_.begin(); }
     auto end() { return pool_.end(); }
-
-private:
-    std::unordered_map<uint32_t, T> pool_;
-    uint32_t next_id_ = 1;
 };
 
 class TGFX2_API OpenGLRenderDevice : public IRenderDevice {
+private:
+    // FBO cache key: sorted vector of (GL attachment enum, GL texture id).
+    using FBOKey = std::vector<std::pair<GLenum, GLuint>>;
+
+    HandlePool<GLBuffer> buffers_;
+    HandlePool<GLTexture> textures_;
+    HandlePool<GLSampler> samplers_;
+    HandlePool<GLShaderModule> shaders_;
+    HandlePool<GLPipeline> pipelines_;
+    HandlePool<GLResourceSet> resource_sets_;
+
+    BackendCapabilities caps_;
+
+    std::map<FBOKey, GLuint> fbo_cache_;
+
+    // Push constants ring buffer state (see push_constants_write).
+    GLuint     push_ring_buf_       = 0;
+    GLsizeiptr push_ring_size_      = 1 << 20;   // 1 MB
+    GLintptr   push_ring_offset_    = 0;
+    GLint      push_ring_alignment_ = 256;       // queried from GL at first use
+    bool       push_ring_initialized_ = false;
+
+    std::unordered_map<GLProgramKey, GLSharedProgram, GLProgramKeyHash> program_cache_;
+    std::unordered_map<GLuint, GLProgramKey> program_to_key_;
+
+    // Transient vertex ring state (see transient_vertex_write).
+    BufferHandle transient_vb_handle_;
+    GLuint       transient_vb_gl_         = 0;
+    GLsizeiptr   transient_vb_size_       = 2 << 20;   // 2 MB
+    GLintptr     transient_vb_offset_     = 0;
+    bool         transient_vb_initialized_ = false;
+
 public:
     OpenGLRenderDevice();
     ~OpenGLRenderDevice() override;
@@ -283,40 +315,8 @@ public:
 private:
     GLuint acquire_program(const PipelineDesc& desc);
     void release_program(GLuint program);
-
-    HandlePool<GLBuffer> buffers_;
-    HandlePool<GLTexture> textures_;
-    HandlePool<GLSampler> samplers_;
-    HandlePool<GLShaderModule> shaders_;
-    HandlePool<GLPipeline> pipelines_;
-    HandlePool<GLResourceSet> resource_sets_;
-
-    BackendCapabilities caps_;
     void query_capabilities();
-
-    // FBO cache: key = sorted vector of (GL attachment enum, GL texture id)
-    using FBOKey = std::vector<std::pair<GLenum, GLuint>>;
-    std::map<FBOKey, GLuint> fbo_cache_;
-
-    // Push constants ring buffer state (see push_constants_write).
-    GLuint     push_ring_buf_       = 0;
-    GLsizeiptr push_ring_size_      = 1 << 20;   // 1 MB
-    GLintptr   push_ring_offset_    = 0;
-    GLint      push_ring_alignment_ = 256;       // queried from GL at first use
-    bool       push_ring_initialized_ = false;
-
-    std::unordered_map<GLProgramKey, GLSharedProgram, GLProgramKeyHash> program_cache_;
-    std::unordered_map<GLuint, GLProgramKey> program_to_key_;
-
     void ensure_push_ring();
-
-    // Transient vertex ring state (see transient_vertex_write).
-    BufferHandle transient_vb_handle_;
-    GLuint       transient_vb_gl_         = 0;
-    GLsizeiptr   transient_vb_size_       = 2 << 20;   // 2 MB
-    GLintptr     transient_vb_offset_     = 0;
-    bool         transient_vb_initialized_ = false;
-
     void ensure_transient_vb();
 };
 

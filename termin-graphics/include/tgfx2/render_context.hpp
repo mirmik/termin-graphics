@@ -34,6 +34,78 @@ class ICommandList;
 class PipelineCache;
 
 class TGFX2_API RenderContext2 {
+private:
+    IRenderDevice& device_;
+    PipelineCache& cache_;
+    std::unique_ptr<ICommandList> cmd_;
+
+    // --- Pending state ---
+    RasterState raster_;
+    DepthStencilState depth_stencil_;
+    BlendState blend_;
+    ColorMask color_mask_;
+
+    ShaderHandle bound_vs_, bound_fs_, bound_gs_;
+    VertexBufferLayout vertex_layout_;
+    // Hash of `vertex_layout_`, recomputed only when set_vertex_layout is
+    // called. Fed into PipelineCacheKey so flush_pipeline's lookup skips
+    // re-hashing the attributes vector on every draw.
+    size_t vertex_layout_hash_ = 0;
+    PrimitiveTopology topology_ = PrimitiveTopology::TriangleList;
+
+    // Synced from begin_pass() with the actual attachment formats.
+    // `Undefined` means "no attachment of this kind in the current
+    // pass" — the pipeline cache builds a VkRenderPass with matching
+    // attachment count, so vkCmdDraw's compatibility check passes.
+    PixelFormat color_format_ = PixelFormat::Undefined;
+    PixelFormat depth_format_ = PixelFormat::Undefined;
+    uint32_t sample_count_ = 1;
+
+    bool in_pass_ = false;
+    bool pipeline_dirty_ = true;
+
+    // Pending resource bindings, rebuilt into a ResourceSet on dirty.
+    std::vector<ResourceBinding> pending_bindings_;
+    bool bindings_dirty_ = true;
+    ResourceSetHandle current_resource_set_;
+
+    // Queued push-constant bytes. Re-emitted after every flush_pipeline
+    // so the data lands on the freshly-bound VkPipelineLayout (Vulkan)
+    // or the current ring UBO offset (OpenGL). Cleared when the caller
+    // passes an empty payload.
+    std::vector<uint8_t> pending_push_constants_;
+    // True when pending_push_constants_ hasn't been emitted into the cmd
+    // buffer yet since the last set_push_constants() call. Cleared after
+    // flush_pipeline() pushes them. Kills the double-emit that happened
+    // when set_push_constants() pushed immediately *and* flush_pipeline
+    // re-pushed after a state change — visible as pushC ~1.4 per draw.
+    bool push_constants_dirty_ = false;
+
+    // Per-frame deferred-destruction list for non-owning external
+    // wrappers (register_external_texture / register_external_buffer)
+    // created and used inside a single frame. Drained in end_frame().
+    std::vector<TextureHandle> deferred_destroy_textures_;
+    std::vector<BufferHandle>  deferred_destroy_buffers_;
+    std::vector<ResourceSetHandle> deferred_destroy_resource_sets_;
+
+    // Fullscreen quad resources (created on first use)
+    BufferHandle fsq_vbo_;
+    BufferHandle fsq_ibo_;
+    ShaderHandle fsq_vs_;
+
+    // Last vbo/ibo bound on the command list — lets draw() skip the
+    // redundant vkCmdBindVertexBuffers / vkCmdBindIndexBuffer when the
+    // next draw reuses the same mesh (chronosquad scenes hit the same
+    // VBO for hundreds of instanced draws — thousand-scale reduction in
+    // bind cmd recording). Reset to {} at begin_pass so a new pass
+    // always re-binds.
+    BufferHandle last_bound_vbo_ = {};
+    BufferHandle last_bound_ibo_ = {};
+    // Last pipeline handle passed to cmd_->bind_pipeline(). Used by
+    // flush_pipeline() to skip a redundant vkCmdBindPipeline when the
+    // pipeline cache returned the same handle again (same state combo).
+    PipelineHandle last_bound_pipeline_ = {};
+
 public:
     RenderContext2(IRenderDevice& device, PipelineCache& cache);
     // Virtual so the compiler emits a vtable + typeinfo in a single
@@ -230,77 +302,6 @@ private:
     // Shared body for draw_immediate_lines / draw_immediate_triangles.
     void draw_immediate_generic(const float* data, uint32_t vertex_count,
                                 PrimitiveTopology topo);
-
-    IRenderDevice& device_;
-    PipelineCache& cache_;
-    std::unique_ptr<ICommandList> cmd_;
-
-    // --- Pending state ---
-    RasterState raster_;
-    DepthStencilState depth_stencil_;
-    BlendState blend_;
-    ColorMask color_mask_;
-
-    ShaderHandle bound_vs_, bound_fs_, bound_gs_;
-    VertexBufferLayout vertex_layout_;
-    // Hash of `vertex_layout_`, recomputed only when set_vertex_layout is
-    // called. Fed into PipelineCacheKey so flush_pipeline's lookup skips
-    // re-hashing the attributes vector on every draw.
-    size_t vertex_layout_hash_ = 0;
-    PrimitiveTopology topology_ = PrimitiveTopology::TriangleList;
-
-    // Synced from begin_pass() with the actual attachment formats.
-    // `Undefined` means "no attachment of this kind in the current
-    // pass" — the pipeline cache builds a VkRenderPass with matching
-    // attachment count, so vkCmdDraw's compatibility check passes.
-    PixelFormat color_format_ = PixelFormat::Undefined;
-    PixelFormat depth_format_ = PixelFormat::Undefined;
-    uint32_t sample_count_ = 1;
-
-    bool in_pass_ = false;
-    bool pipeline_dirty_ = true;
-
-    // Pending resource bindings, rebuilt into a ResourceSet on dirty.
-    std::vector<ResourceBinding> pending_bindings_;
-    bool bindings_dirty_ = true;
-    ResourceSetHandle current_resource_set_;
-
-    // Queued push-constant bytes. Re-emitted after every flush_pipeline
-    // so the data lands on the freshly-bound VkPipelineLayout (Vulkan)
-    // or the current ring UBO offset (OpenGL). Cleared when the caller
-    // passes an empty payload.
-    std::vector<uint8_t> pending_push_constants_;
-    // True when pending_push_constants_ hasn't been emitted into the cmd
-    // buffer yet since the last set_push_constants() call. Cleared after
-    // flush_pipeline() pushes them. Kills the double-emit that happened
-    // when set_push_constants() pushed immediately *and* flush_pipeline
-    // re-pushed after a state change — visible as pushC ~1.4 per draw.
-    bool push_constants_dirty_ = false;
-
-    // Per-frame deferred-destruction list for non-owning external
-    // wrappers (register_external_texture / register_external_buffer)
-    // created and used inside a single frame. Drained in end_frame().
-    std::vector<TextureHandle> deferred_destroy_textures_;
-    std::vector<BufferHandle>  deferred_destroy_buffers_;
-    std::vector<ResourceSetHandle> deferred_destroy_resource_sets_;
-
-    // Fullscreen quad resources (created on first use)
-    BufferHandle fsq_vbo_;
-    BufferHandle fsq_ibo_;
-    ShaderHandle fsq_vs_;
-
-    // Last vbo/ibo bound on the command list — lets draw() skip the
-    // redundant vkCmdBindVertexBuffers / vkCmdBindIndexBuffer when the
-    // next draw reuses the same mesh (chronosquad scenes hit the same
-    // VBO for hundreds of instanced draws — thousand-scale reduction in
-    // bind cmd recording). Reset to {} at begin_pass so a new pass
-    // always re-binds.
-    BufferHandle last_bound_vbo_ = {};
-    BufferHandle last_bound_ibo_ = {};
-    // Last pipeline handle passed to cmd_->bind_pipeline(). Used by
-    // flush_pipeline() to skip a redundant vkCmdBindPipeline when the
-    // pipeline cache returned the same handle again (same state combo).
-    PipelineHandle last_bound_pipeline_ = {};
 
     void ensure_fsq_resources();
     void flush_resource_set();

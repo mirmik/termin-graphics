@@ -52,6 +52,10 @@ struct PipelineCacheKeyHash {
 };
 
 class TGFX2_API PipelineCache {
+private:
+    IRenderDevice& device_;
+    std::unordered_map<PipelineCacheKey, PipelineHandle, PipelineCacheKeyHash> cache_;
+
 public:
     explicit PipelineCache(IRenderDevice& device);
     ~PipelineCache();
@@ -64,10 +68,6 @@ public:
 
     // Number of cached pipelines.
     size_t size() const { return cache_.size(); }
-
-private:
-    IRenderDevice& device_;
-    std::unordered_map<PipelineCacheKey, PipelineHandle, PipelineCacheKeyHash> cache_;
 };
 
 } // namespace tgfx

@@ -37,6 +37,21 @@ class TGFX2_API Text2DRenderer {
 public:
     enum class Anchor : uint8_t { Left, Center, Right };
 
+private:
+    // Shader lives on the tc_shader registry — shared across
+    // Text2DRenderer instances so Play/Stop doesn't re-run shaderc.
+    // vs_/fs_ are per-frame cached views into the slot's current ids.
+    IRenderDevice* compiled_on_ = nullptr;
+    tc_shader_handle shader_handle_ = tc_shader_handle_invalid();
+    ShaderHandle vs_{};
+    ShaderHandle fs_{};
+
+    // Active frame state (valid between begin() and end()).
+    RenderContext2* ctx_ = nullptr;
+    FontAtlas* font_ = nullptr;
+    float proj_[16]{};
+
+public:
     explicit Text2DRenderer(FontAtlas* font = nullptr);
     ~Text2DRenderer();
 
@@ -74,19 +89,6 @@ public:
 
 private:
     void ensure_shader_(IRenderDevice& device);
-
-    // Shader lives on the tc_shader registry — shared across
-    // Text2DRenderer instances so Play/Stop doesn't re-run shaderc.
-    // vs_/fs_ are per-frame cached views into the slot's current ids.
-    IRenderDevice* compiled_on_ = nullptr;
-    tc_shader_handle shader_handle_ = tc_shader_handle_invalid();
-    ShaderHandle vs_{};
-    ShaderHandle fs_{};
-
-    // Active frame state (valid between begin() and end()).
-    RenderContext2* ctx_ = nullptr;
-    FontAtlas* font_ = nullptr;
-    float proj_[16]{};
 };
 
 }  // namespace tgfx

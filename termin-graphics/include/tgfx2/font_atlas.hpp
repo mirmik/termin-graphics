@@ -73,6 +73,51 @@ public:
     // bounds the per-size cache against pathological inputs.
     static constexpr int kMinPxSize = 4;
 
+private:
+    // Per-size font vmetrics, resolved lazily on first request.
+    struct SizeMetrics {
+        float scale = 0.0f;    // stbtt_ScaleForPixelHeight at this size
+        int ascent_px = 0;
+        int descent_px = 0;    // positive magnitude (stb returns negative)
+        int line_height = 0;   // ascent + descent
+    };
+
+    // Shelf-packer result: {x, y} in atlas pixels on success, {-1, -1} on failure.
+    struct PackedCell { int x; int y; };
+
+    // TTF / stb_truetype state (opaque here to keep stb_truetype.h
+    // out of the public include surface).
+    struct Impl;
+    Impl* impl_ = nullptr;
+
+    // Size used for preload warm-up and as the "default" for Python
+    // property accessors that don't take a size argument.
+    int default_preload_size_ = 14;
+
+    // CPU atlas: atlas_w_ * atlas_h_ bytes, R8.
+    int atlas_w_ = 2048;
+    int atlas_h_ = 2048;
+    std::vector<uint8_t> atlas_;
+
+    // Shelf packer state.
+    int shelf_x_ = 0;
+    int shelf_y_ = 0;
+    int shelf_h_ = 0;
+
+    // Glyph table keyed by (codepoint, px_size) — see make_key_.
+    std::unordered_map<uint64_t, GlyphInfo> glyphs_;
+
+    // Per-size metrics cache (mutable so const accessors can populate
+    // on demand — the cache is a pure function of px_size + loaded TTF).
+    mutable std::unordered_map<int, SizeMetrics> size_metrics_;
+
+    // GPU state.
+    RenderContext2* gpu_owner_ = nullptr;
+    IRenderDevice* gpu_device_ = nullptr;  // cached for destroy on release
+    TextureHandle gpu_texture_{};
+    bool dirty_ = false;
+
+public:
     // Load a TTF. `default_preload_size_px` controls which size gets
     // the full preload character warm-up (so the first frame of
     // typical-sized UI text doesn't stall). Other sizes populate
@@ -155,54 +200,13 @@ private:
                static_cast<uint32_t>(px_size);
     }
 
-    // Per-size font vmetrics, resolved lazily on first request.
-    struct SizeMetrics {
-        float scale = 0.0f;    // stbtt_ScaleForPixelHeight at this size
-        int ascent_px = 0;
-        int descent_px = 0;    // positive magnitude (stb returns negative)
-        int line_height = 0;   // ascent + descent
-    };
     const SizeMetrics& metrics_for_(int px_size) const;
 
     // Shelf-packer: tries to place (cell_w, cell_h) into the atlas.
-    // Returns {x, y} in atlas pixels on success, {-1, -1} on failure.
-    struct PackedCell { int x; int y; };
     PackedCell pack_(int cell_w, int cell_h);
 
     // Actually upload the CPU atlas to the GPU handle (full re-upload).
     void sync_gpu_(RenderContext2* ctx);
-
-    // TTF / stb_truetype state (opaque here to keep stb_truetype.h
-    // out of the public include surface).
-    struct Impl;
-    Impl* impl_ = nullptr;
-
-    // Size used for preload warm-up and as the "default" for Python
-    // property accessors that don't take a size argument.
-    int default_preload_size_ = 14;
-
-    // CPU atlas: atlas_w_ * atlas_h_ bytes, R8.
-    int atlas_w_ = 2048;
-    int atlas_h_ = 2048;
-    std::vector<uint8_t> atlas_;
-
-    // Shelf packer state.
-    int shelf_x_ = 0;
-    int shelf_y_ = 0;
-    int shelf_h_ = 0;
-
-    // Glyph table keyed by (codepoint, px_size) — see make_key_.
-    std::unordered_map<uint64_t, GlyphInfo> glyphs_;
-
-    // Per-size metrics cache (mutable so const accessors can populate
-    // on demand — the cache is a pure function of px_size + loaded TTF).
-    mutable std::unordered_map<int, SizeMetrics> size_metrics_;
-
-    // GPU state.
-    RenderContext2* gpu_owner_ = nullptr;
-    IRenderDevice* gpu_device_ = nullptr;  // cached for destroy on release
-    TextureHandle gpu_texture_{};
-    bool dirty_ = false;
 };
 
 }  // namespace tgfx
