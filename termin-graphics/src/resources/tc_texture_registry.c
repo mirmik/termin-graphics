@@ -374,12 +374,23 @@ void tc_texture_set_transforms(
 
 void tc_texture_set_storage_kind(tc_texture* tex, tc_texture_storage_kind kind) {
     if (!tex) return;
+    if (tex->storage_kind == (uint8_t)kind) return;
     tex->storage_kind = (uint8_t)kind;
+    // Bump version: backend caches (Vulkan ensure_tc_texture, GL
+    // tc_gpu_slot) key on (pool_index, version), so changing storage
+    // kind after creation must force re-allocation of the backing
+    // GPU image with the new flags.
+    tex->header.version++;
 }
 
 void tc_texture_set_usage(tc_texture* tex, uint32_t usage) {
     if (!tex) return;
+    if (tex->usage == usage) return;
     tex->usage = usage;
+    // Bump version — usage drives VkImageUsageFlags on Vulkan and the
+    // GL_TEXTURE_2D allocation path on GL; cached handles built with
+    // the old flags must be invalidated.
+    tex->header.version++;
 }
 
 void tc_texture_set_size_format(
