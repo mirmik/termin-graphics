@@ -310,6 +310,10 @@ static void rt_resize_owned_texture(
 
 void tc_render_target_set_width(tc_render_target_handle h, int width) {
     if (!handle_alive(h)) return;
+    if (g_pool->widths[h.index] == width) return;  // No-op on same size — skips
+                                                    // a needless version bump that
+                                                    // would force a per-frame
+                                                    // GPU image re-create.
     g_pool->widths[h.index] = width;
     rt_resize_owned_texture(g_pool->color_textures[h.index],
                             (uint32_t)width, (uint32_t)g_pool->heights[h.index]);
@@ -324,6 +328,7 @@ int tc_render_target_get_width(tc_render_target_handle h) {
 
 void tc_render_target_set_height(tc_render_target_handle h, int height) {
     if (!handle_alive(h)) return;
+    if (g_pool->heights[h.index] == height) return;  // No-op on same size.
     g_pool->heights[h.index] = height;
     rt_resize_owned_texture(g_pool->color_textures[h.index],
                             (uint32_t)g_pool->widths[h.index], (uint32_t)height);
