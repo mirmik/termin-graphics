@@ -10,6 +10,7 @@ extern "C" {
 #include "core/tc_scene_pool.h"
 #include "core/tc_scene.h"
 #include "core/tc_component.h"
+#include "tgfx/resources/tc_texture.h"
 }
 
 namespace nb = nanobind;
@@ -121,6 +122,32 @@ void bind_tc_render_target(nb::module_& m) {
         .def_prop_rw("locked",
             [](const tc_render_target_handle& h) { return tc_render_target_get_locked(h); },
             [](tc_render_target_handle& h, bool v) { tc_render_target_set_locked(h, v); })
+
+        // --- Owned tc_textures (Phase 6) -----------------------------------
+        // `ensure_textures()` allocates the color + depth tc_textures on
+        // first call (lazy). `color_texture` / `depth_texture` return
+        // TcTexture instances that can be fed directly into
+        // material.set_texture(...) for render-to-texture chains.
+        .def("ensure_textures", [](tc_render_target_handle& h) {
+            tc_render_target_ensure_textures(h);
+        })
+        .def_prop_ro("color_texture",
+            [](const tc_render_target_handle& h) -> nb::object {
+                tc_texture_handle t = tc_render_target_get_color_texture(h);
+                if (tc_texture_handle_is_invalid(t)) return nb::none();
+                nb::module_ tgfx = nb::module_::import_("tgfx._tgfx_native");
+                return tgfx.attr("TcTexture").attr("from_handle")(
+                    t.index, t.generation);
+            })
+        .def_prop_ro("depth_texture",
+            [](const tc_render_target_handle& h) -> nb::object {
+                tc_texture_handle t = tc_render_target_get_depth_texture(h);
+                if (tc_texture_handle_is_invalid(t)) return nb::none();
+                nb::module_ tgfx = nb::module_::import_("tgfx._tgfx_native");
+                return tgfx.attr("TcTexture").attr("from_handle")(
+                    t.index, t.generation);
+            })
+
         .def("free", [](tc_render_target_handle& h) { tc_render_target_free(h); });
 
     m.def("render_target_new", [](const std::string& name) {

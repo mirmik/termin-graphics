@@ -142,7 +142,19 @@ void bind_texture(nb::module_& m) {
 
         .def_static("from_uuid", &TcTexture::from_uuid, nb::arg("uuid"))
 
-        .def_static("get_or_create", &TcTexture::get_or_create, nb::arg("uuid"));
+        .def_static("get_or_create", &TcTexture::get_or_create, nb::arg("uuid"))
+
+        // Wrap a raw `tc_texture_handle` into a `TcTexture` instance. Used
+        // by callers that already hold a handle from another binding (e.g.
+        // `tc_render_target.color_texture`) and want to feed it into APIs
+        // that expect `TcTexture` (material.set_texture, viewports, …).
+        // Returns an invalid TcTexture if the handle is stale.
+        .def_static("from_handle",
+            [](uint32_t index, uint32_t generation) {
+                tc_texture_handle h{index, generation};
+                return TcTexture(h);
+            },
+            nb::arg("index"), nb::arg("generation"));
 
     // Alias for backwards compatibility
     m.attr("TextureData") = m.attr("TcTexture");
