@@ -503,8 +503,6 @@ void FontAtlas::compute_sdf_(const uint8_t* bitmap, int w, int h,
             if (x < w - 1 && inside != (bitmap[idx + 1] > 127)) edge = true;
             if (y > 0 && inside != (bitmap[idx - w] > 127)) edge = true;
             if (y < h - 1 && inside != (bitmap[idx + w] > 127)) edge = true;
-            // Also consider isolated inside/outside pixels as near-edge.
-            if (x == 0 || x == w - 1 || y == 0 || y == h - 1) edge = true;
             dist[idx] = edge ? 0.0f : kMax;
         }
     }

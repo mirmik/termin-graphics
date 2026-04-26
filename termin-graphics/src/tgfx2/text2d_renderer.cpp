@@ -151,7 +151,7 @@ struct Text2DPushData {
 static_assert(sizeof(Text2DPushData) == 80,
               "Text2DPushData layout drift — shader and C++ disagree");
 
-// SDF push constants: mat4 + vec4 + float. 80B + 4B = 84B.
+// SDF push constants: mat4 + vec4 + float, padded to std140 vec4 alignment.
 struct Text2DSdfPushData {
     float projection[16];
     float color[4];

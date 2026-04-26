@@ -59,6 +59,7 @@ void OpenGLCommandList::begin() {
     // conceptually "start of a new command recording" — we own the
     // ring for the duration of this command list's execution.
     device_.push_constants_reset_frame();
+    device_.transient_vertex_reset_frame();
     pending_push_offset_ = 0;
     pending_push_size_ = 0;
 }

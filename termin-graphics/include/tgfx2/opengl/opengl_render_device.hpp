@@ -309,6 +309,7 @@ public:
     // upload small vertex streams into, so each rect / debug line
     // doesn't pay glGenBuffers+glBufferData+glDeleteBuffers. Wraps
     // with orphaning on overflow (same pattern as push_ring).
+    void transient_vertex_reset_frame();
     BufferHandle transient_vertex_buffer() override;
     uint64_t transient_vertex_write(const void* data, uint32_t size) override;
 

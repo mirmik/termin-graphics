@@ -1140,6 +1140,10 @@ BufferHandle OpenGLRenderDevice::transient_vertex_buffer() {
     return transient_vb_handle_;
 }
 
+void OpenGLRenderDevice::transient_vertex_reset_frame() {
+    transient_vb_offset_ = 0;
+}
+
 uint64_t OpenGLRenderDevice::transient_vertex_write(const void* data,
                                                    uint32_t size) {
     if (!data || size == 0 || size > static_cast<uint32_t>(transient_vb_size_)) {
