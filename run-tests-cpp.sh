@@ -3,7 +3,7 @@
 # Assumes SDK dependencies are already installed, typically via:
 #   ./build-sdk-cpp.sh
 
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDK_PREFIX="${SDK_PREFIX:-$SCRIPT_DIR/sdk}"
@@ -39,7 +39,7 @@ rebuild_with_tests() {
     echo "========================================"
     echo ""
 
-    cd "$dir"
+    cd "$dir" || return 1
 
     cmake -S . -B "build/${BUILD_TYPE}" \
         -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
@@ -48,16 +48,18 @@ rebuild_with_tests() {
         -DCMAKE_BUILD_RPATH="${SDK_PREFIX}/lib" \
         -DTERMIN_BUILD_PYTHON=OFF \
         -D"${test_flag}"=ON \
-        "${extra_args[@]}"
+        "${extra_args[@]}" || return 1
 
-    cmake --build "build/${BUILD_TYPE}" --parallel "${BUILD_JOBS}"
-    ctest --test-dir "build/${BUILD_TYPE}" --output-on-failure
+    cmake --build "build/${BUILD_TYPE}" --parallel "${BUILD_JOBS}" || return 1
+    ctest --test-dir "build/${BUILD_TYPE}" --output-on-failure || return 1
 }
 
 echo ""
 echo "========================================"
 echo "  C/C++ tests"
 echo "========================================"
+
+failures=()
 
 # Build modules with tests from modules.conf
 while IFS= read -r line; do
@@ -79,7 +81,9 @@ while IFS= read -r line; do
         read -ra extra_args <<< "$extra_cmake"
     fi
 
-    rebuild_with_tests "$name" "$SCRIPT_DIR/$dir" "$test_flag" "${extra_args[@]}"
+    if ! rebuild_with_tests "$name" "$SCRIPT_DIR/$dir" "$test_flag" "${extra_args[@]}"; then
+        failures+=("$name")
+    fi
 done < "$SCRIPT_DIR/modules.conf"
 
 # Test termin itself
@@ -89,20 +93,32 @@ echo "  Testing termin ($BUILD_TYPE)"
 echo "========================================"
 echo ""
 
-cd "$SCRIPT_DIR/termin-app"
-cmake -S . -B "build/${BUILD_TYPE}" \
-    -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
-    -DCMAKE_PREFIX_PATH="${SDK_PREFIX}" \
-    -DCMAKE_INSTALL_PREFIX="${SDK_PREFIX}" \
-    -DCMAKE_BUILD_RPATH="${SDK_PREFIX}/lib" \
-    -DBUILD_TESTS=ON \
-    -DBUILD_EDITOR_EXE=OFF \
-    -DBUILD_LAUNCHER=OFF \
-    -DBUNDLE_PYTHON=OFF \
-    -DTERMIN_BUILD_PYTHON=OFF
+if ! (
+    cd "$SCRIPT_DIR/termin-app" &&
+    cmake -S . -B "build/${BUILD_TYPE}" \
+        -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+        -DCMAKE_PREFIX_PATH="${SDK_PREFIX}" \
+        -DCMAKE_INSTALL_PREFIX="${SDK_PREFIX}" \
+        -DCMAKE_BUILD_RPATH="${SDK_PREFIX}/lib" \
+        -DBUILD_TESTS=ON \
+        -DBUILD_EDITOR_EXE=OFF \
+        -DBUILD_LAUNCHER=OFF \
+        -DBUNDLE_PYTHON=OFF \
+        -DTERMIN_BUILD_PYTHON=OFF &&
+    cmake --build "build/${BUILD_TYPE}" --parallel "${BUILD_JOBS}" &&
+    ctest --test-dir "build/${BUILD_TYPE}" --output-on-failure
+); then
+    failures+=("termin")
+fi
 
-cmake --build "build/${BUILD_TYPE}" --parallel "${BUILD_JOBS}"
-ctest --test-dir "build/${BUILD_TYPE}" --output-on-failure
+if (( ${#failures[@]} > 0 )); then
+    echo ""
+    echo "========================================"
+    echo "  C/C++ test failures"
+    echo "========================================"
+    printf '  - %s\n' "${failures[@]}"
+    exit 1
+fi
 
 echo ""
 echo "========================================"

@@ -3,7 +3,7 @@
 # Assumes SDK and Python packages are already installed, typically via:
 #   ./build-sdk-bindings.sh
 
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDK_PREFIX="${SDK_PREFIX:-$SCRIPT_DIR/sdk}"
@@ -24,13 +24,54 @@ echo "========================================"
 
 cd "$SCRIPT_DIR"
 
-"${PYTHON_BIN}" -m pytest termin-base/tests/python/ -v
-"${PYTHON_BIN}" -c "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())"
-"${PYTHON_BIN}" -m pytest termin-graphics/tests/python/ -v
-"${PYTHON_BIN}" -m pytest termin-gui/python/tests/ -v
-"${PYTHON_BIN}" -m pytest termin-nodegraph/tests/ -v
-"${PYTHON_BIN}" -m pytest termin/tests/ -v
-"${PYTHON_BIN}" -m pytest diffusion-editor/tests/ -v
+failures=()
+
+run_suite() {
+    local name="$1"
+    shift
+
+    echo ""
+    echo "----------------------------------------"
+    echo "  $name"
+    echo "----------------------------------------"
+
+    if ! "$@"; then
+        failures+=("$name")
+    fi
+}
+
+run_suite "termin-base python" \
+    "${PYTHON_BIN}" -m pytest termin-base/tests/python/ -v
+
+run_suite "termin-modules import smoke" \
+    "${PYTHON_BIN}" -c "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())"
+
+run_suite "termin-mesh python" \
+    "${PYTHON_BIN}" -m pytest termin-mesh/tests/python/ -v
+
+run_suite "termin-graphics python" \
+    "${PYTHON_BIN}" -m pytest termin-graphics/tests/python/ -v
+
+run_suite "termin-gui python" \
+    "${PYTHON_BIN}" -m pytest termin-gui/python/tests/ -v
+
+run_suite "termin-nodegraph python" \
+    "${PYTHON_BIN}" -m pytest termin-nodegraph/tests/ -v
+
+run_suite "termin-app python" \
+    "${PYTHON_BIN}" -m pytest termin-app/tests/ -v
+
+run_suite "diffusion-editor python" \
+    "${PYTHON_BIN}" -m pytest diffusion-editor/tests/ -v
+
+if (( ${#failures[@]} > 0 )); then
+    echo ""
+    echo "========================================"
+    echo "  Python test failures"
+    echo "========================================"
+    printf '  - %s\n' "${failures[@]}"
+    exit 1
+fi
 
 echo ""
 echo "========================================"

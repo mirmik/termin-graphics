@@ -161,11 +161,14 @@ TEST_CASE("predefined layout pos_normal_uv_tangent") {
 
 TEST_CASE("predefined layout skinned") {
     tgfx_vertex_layout layout = tgfx_vertex_layout_skinned();
-    CHECK_EQ(layout.attrib_count, 5);
-    // (3+3+2+4+4) * 4 = 64
-    CHECK_EQ(layout.stride, 64);
+    CHECK_EQ(layout.attrib_count, 6);
+    // (3+3+2+4+4+4) * 4 = 80
+    CHECK_EQ(layout.stride, 80);
+    CHECK(tgfx_vertex_layout_find(&layout, "tangent") != nullptr);
     CHECK(tgfx_vertex_layout_find(&layout, "joints") != nullptr);
     CHECK(tgfx_vertex_layout_find(&layout, "weights") != nullptr);
+    CHECK_EQ(tgfx_vertex_layout_find(&layout, "joints")->location, 6);
+    CHECK_EQ(tgfx_vertex_layout_find(&layout, "weights")->location, 7);
 }
 
 TEST_CASE("predefined layout locations are sequential") {

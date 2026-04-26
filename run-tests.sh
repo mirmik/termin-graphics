@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run all repo tests: C/C++ first, then Python.
 
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -14,5 +14,26 @@ for arg in "$@"; do
     esac
 done
 
-bash "$SCRIPT_DIR/run-tests-cpp.sh" "$@"
-bash "$SCRIPT_DIR/run-tests-python.sh"
+failures=()
+
+if ! bash "$SCRIPT_DIR/run-tests-cpp.sh" "$@"; then
+    failures+=("C/C++")
+fi
+
+if ! bash "$SCRIPT_DIR/run-tests-python.sh"; then
+    failures+=("Python")
+fi
+
+if (( ${#failures[@]} > 0 )); then
+    echo ""
+    echo "========================================"
+    echo "  Test failures"
+    echo "========================================"
+    printf '  - %s\n' "${failures[@]}"
+    exit 1
+fi
+
+echo ""
+echo "========================================"
+echo "  All tests passed"
+echo "========================================"
