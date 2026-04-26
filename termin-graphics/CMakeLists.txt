@@ -240,6 +240,10 @@ if(BUILD_TGFX2_TESTS)
     target_link_libraries(tgfx2_smoke PRIVATE termin_graphics2 glfw)
     add_test(NAME tgfx2_smoke COMMAND tgfx2_smoke)
 
+    # SDF font rendering test
+    add_executable(tgfx2_sdf_test tests/test_tgfx2_sdf.cpp)
+    target_link_libraries(tgfx2_sdf_test PRIVATE termin_graphics2 glfw)
+
     # tgfx2 interop test (tgfx2-backed gpu_ops)
     add_executable(tgfx2_interop_test tests/test_tgfx2_interop.cpp)
     target_link_libraries(tgfx2_interop_test PRIVATE termin_graphics2 glfw)

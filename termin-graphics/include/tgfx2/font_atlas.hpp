@@ -73,6 +73,20 @@ public:
     // bounds the per-size cache against pathological inputs.
     static constexpr int kMinPxSize = 4;
 
+    // SDF atlas dimensions. Separate from the bitmap atlas to keep
+    // the two coordinate spaces cleanly apart.
+    static constexpr int kSdfAtlasDim = 1024;
+
+    // Default SDF spread in reference texels — how many pixels on
+    // either side of the glyph edge carry usable distance information.
+    static constexpr int kDefaultSdfSpread = 8;
+
+    // Default reference size for SDF baking.
+    static constexpr int kDefaultSdfReferencePx = 64;
+
+    // Default threshold: sizes >= this use the SDF path.
+    static constexpr int kDefaultSdfThresholdPx = 18;
+
 private:
     // Per-size font vmetrics, resolved lazily on first request.
     struct SizeMetrics {
@@ -116,6 +130,26 @@ private:
     IRenderDevice* gpu_device_ = nullptr;  // cached for destroy on release
     TextureHandle gpu_texture_{};
     bool dirty_ = false;
+
+    // SDF config.
+    bool sdf_enabled_ = true;
+    int sdf_threshold_px_ = kDefaultSdfThresholdPx;
+    int sdf_reference_px_ = kDefaultSdfReferencePx;
+    int sdf_spread_ = kDefaultSdfSpread;
+
+    // SDF atlas — separate from the bitmap atlas. Glyphs are baked once
+    // at sdf_reference_px_ and metrics scaled on lookup.
+    std::vector<uint8_t> sdf_atlas_;
+    int sdf_shelf_x_ = 0;
+    int sdf_shelf_y_ = 0;
+    int sdf_shelf_h_ = 0;
+
+    // SDF glyph table keyed by codepoint only (baked once, not per-size).
+    std::unordered_map<uint32_t, GlyphInfo> sdf_glyphs_;
+
+    // SDF GPU state.
+    TextureHandle sdf_gpu_texture_{};
+    bool sdf_dirty_ = false;
 
 public:
     // Load a TTF. `default_preload_size_px` controls which size gets
@@ -190,6 +224,28 @@ public:
     // stride = atlas_width). Primarily for test / debug / dump-to-PNG.
     const uint8_t* cpu_atlas_data() const { return atlas_.data(); }
 
+    // --- SDF configuration ---
+
+    bool sdf_enabled() const { return sdf_enabled_; }
+    void set_sdf_enabled(bool v) { sdf_enabled_ = v; }
+
+    int sdf_threshold_px() const { return sdf_threshold_px_; }
+    void set_sdf_threshold_px(int v) { sdf_threshold_px_ = v; }
+
+    int sdf_reference_px() const { return sdf_reference_px_; }
+    int sdf_spread() const { return sdf_spread_; }
+
+    // True when the requested display size should be rendered via SDF.
+    bool is_sdf_size(float display_px) const {
+        return sdf_enabled_ && display_px >= static_cast<float>(sdf_threshold_px_);
+    }
+
+    // Get or create the SDF atlas GPU texture.
+    TextureHandle sdf_atlas_texture(RenderContext2* ctx);
+
+    // Read-only view of the SDF atlas bitmap for debug.
+    const uint8_t* sdf_atlas_data() const { return sdf_atlas_.data(); }
+
 private:
     // Quantise a request to the integer px size we actually bake at.
     static int quantise_size_(float display_px);
@@ -204,9 +260,26 @@ private:
 
     // Shelf-packer: tries to place (cell_w, cell_h) into the atlas.
     PackedCell pack_(int cell_w, int cell_h);
+    // Same for the SDF atlas.
+    PackedCell pack_sdf_(int cell_w, int cell_h);
 
     // Actually upload the CPU atlas to the GPU handle (full re-upload).
     void sync_gpu_(RenderContext2* ctx);
+    void sync_sdf_gpu_(RenderContext2* ctx);
+
+    // Bitmap glyph rasterisation (existing, renamed for clarity).
+    bool ensure_bitmap_glyph_(uint32_t codepoint, float display_px);
+
+    // SDF glyph baking — rasterise at reference size and compute signed
+    // distance field, pack into SDF atlas.
+    bool ensure_sdf_glyph_(uint32_t codepoint);
+
+    // Compute signed distance field from a rasterised glyph bitmap.
+    // `bitmap` is (w × h) grayscale; result is written to `sdf` (same
+    // dimensions). Pixels within `spread` of an edge carry signed
+    // distance normalised to [-spread, +spread].
+    void compute_sdf_(const uint8_t* bitmap, int w, int h,
+                      uint8_t* sdf, int sdf_stride);
 };
 
 }  // namespace tgfx

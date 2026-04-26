@@ -937,7 +937,23 @@ void bind_tgfx2(nb::module_& m) {
         // own per-size bake.
         .def_prop_ro("size", &tgfx::FontAtlas::default_preload_size)
         .def_prop_ro("atlas_width", &tgfx::FontAtlas::atlas_width)
-        .def_prop_ro("atlas_height", &tgfx::FontAtlas::atlas_height);
+        .def_prop_ro("atlas_height", &tgfx::FontAtlas::atlas_height)
+
+        // --- SDF configuration ---
+        .def_prop_rw("sdf_enabled",
+                     &tgfx::FontAtlas::sdf_enabled,
+                     &tgfx::FontAtlas::set_sdf_enabled,
+                     "Enable SDF rendering for sizes >= sdf_threshold.")
+        .def_prop_rw("sdf_threshold",
+                     &tgfx::FontAtlas::sdf_threshold_px,
+                     &tgfx::FontAtlas::set_sdf_threshold_px,
+                     "Display size threshold (px) above which SDF is used.")
+        .def_prop_ro("sdf_reference_size",
+                     &tgfx::FontAtlas::sdf_reference_px,
+                     "Reference size (px) at which SDF glyphs are baked.")
+        .def_prop_ro("sdf_spread",
+                     &tgfx::FontAtlas::sdf_spread,
+                     "Distance field spread in reference texels.");
 
     // --- Text2DRenderer / Text3DRenderer ---
     //

@@ -69,6 +69,31 @@ void main() {
 )";
 }
 
+static std::string make_text2d_sdf_vert() {
+    return std::string("#version 450 core\n") + R"(
+struct Text2DSdfPushData {
+    mat4 u_projection;
+    vec4 u_color;
+    float u_smoothing;
+};
+#ifdef VULKAN
+layout(push_constant) uniform Text2DSdfPushBlock { Text2DSdfPushData pc; };
+#else
+layout(std140, binding = 14) uniform Text2DSdfPushBlock { Text2DSdfPushData pc; };
+#endif
+
+layout(location=0) in vec3 a_pos;
+layout(location=1) in vec4 a_uv_pad;
+
+layout(location=0) out vec2 v_uv;
+
+void main() {
+    gl_Position = pc.u_projection * vec4(a_pos.xy, 0.0, 1.0);
+    v_uv = a_uv_pad.xy;
+}
+)";
+}
+
 static std::string make_text2d_frag() {
     return std::string("#version 450 core\n") + kText2DCommon + R"(
 layout(binding = 4) uniform sampler2D u_font_atlas;
@@ -88,6 +113,36 @@ void main() {
 )";
 }
 
+// SDF shader — same vertex shader, different fragment shader.
+// Push constant layout is extended with a smoothing parameter.
+static std::string make_text2d_sdf_frag() {
+    return std::string("#version 450 core\n") + R"(
+struct Text2DSdfPushData {
+    mat4 u_projection;
+    vec4 u_color;
+    float u_smoothing;
+};
+#ifdef VULKAN
+layout(push_constant) uniform Text2DSdfPushBlock { Text2DSdfPushData pc; };
+#else
+layout(std140, binding = 14) uniform Text2DSdfPushBlock { Text2DSdfPushData pc; };
+#endif
+
+layout(binding = 4) uniform sampler2D u_font_atlas;
+
+layout(location=0) in vec2 v_uv;
+layout(location=0) out vec4 frag_color;
+
+void main() {
+    float d = texture(u_font_atlas, v_uv).r;
+    float a = smoothstep(0.5 - pc.u_smoothing, 0.5 + pc.u_smoothing, d)
+            * pc.u_color.a;
+    if (a < (1.0/255.0)) discard;
+    frag_color = vec4(pc.u_color.rgb, a);
+}
+)";
+}
+
 // Python-side struct Text2DPushData mirror. mat4 (64B) + vec4 (16B) = 80B.
 struct Text2DPushData {
     float projection[16];
@@ -95,6 +150,16 @@ struct Text2DPushData {
 };
 static_assert(sizeof(Text2DPushData) == 80,
               "Text2DPushData layout drift — shader and C++ disagree");
+
+// SDF push constants: mat4 + vec4 + float. 80B + 4B = 84B.
+struct Text2DSdfPushData {
+    float projection[16];
+    float color[4];
+    float smoothing;
+    float _pad[3];
+};
+static_assert(sizeof(Text2DSdfPushData) == 96,
+              "Text2DSdfPushData layout drift — shader and C++ disagree");
 
 // Build an ortho matrix (column-major) that maps pixel coords y+down
 // → clip-space y+down (Vulkan-native; OpenGL reaches this via
@@ -134,15 +199,11 @@ Text2DRenderer::~Text2DRenderer() {
 }
 
 void Text2DRenderer::ensure_shader_(IRenderDevice& device) {
-    if (compiled_on_ == &device && vs_.id != 0 && fs_.id != 0) return;
+    if (compiled_on_ == &device && vs_.id != 0 && fs_.id != 0
+        && vs_sdf_.id != 0 && fs_sdf_.id != 0) return;
     compiled_on_ = &device;
 
-    // Try the tc_shader registry path first — hash-based dedup keeps
-    // compiled VkShaderModules alive across Text2DRenderer instances
-    // (relevant because each new RenderContext2 on Play/Stop builds a
-    // fresh Text2DRenderer). The registry needs tc_gpu_context, which
-    // the full editor sets up but the bare launcher UI does not; fall
-    // back to direct create_shader for that case.
+    // Bitmap shader pair.
     if (tc_shader_handle_is_invalid(shader_handle_)) {
         std::string vs = make_text2d_vert();
         std::string fs = make_text2d_frag();
@@ -170,6 +231,35 @@ void Text2DRenderer::ensure_shader_(IRenderDevice& device) {
         fs_desc.source = make_text2d_frag();
         fs_ = device.create_shader(fs_desc);
     }
+
+    // SDF shader pair — same vertex shader, SDF fragment shader.
+    if (tc_shader_handle_is_invalid(sdf_shader_handle_)) {
+        std::string vs = make_text2d_sdf_vert();
+        std::string fs = make_text2d_sdf_frag();
+        sdf_shader_handle_ = tc_shader_register_static(
+            vs.c_str(), fs.c_str(), nullptr, "Text2DEngineSdfVSFS");
+    }
+
+    vs_sdf_ = ShaderHandle{};
+    fs_sdf_ = ShaderHandle{};
+    if (!tc_shader_handle_is_invalid(sdf_shader_handle_)) {
+        tc_shader* raw = tc_shader_get(sdf_shader_handle_);
+        if (raw) {
+            termin::tc_shader_ensure_tgfx2(raw, &device, &vs_sdf_, &fs_sdf_);
+        }
+    }
+
+    if (vs_sdf_.id == 0 || fs_sdf_.id == 0) {
+        ShaderDesc vs_desc;
+        vs_desc.stage = ShaderStage::Vertex;
+        vs_desc.source = make_text2d_sdf_vert();
+        vs_sdf_ = device.create_shader(vs_desc);
+
+        ShaderDesc fs_desc;
+        fs_desc.stage = ShaderStage::Fragment;
+        fs_desc.source = make_text2d_sdf_frag();
+        fs_sdf_ = device.create_shader(fs_desc);
+    }
 }
 
 void Text2DRenderer::release_gpu() {
@@ -179,6 +269,8 @@ void Text2DRenderer::release_gpu() {
     // current tgfx2 ids, stale after the device goes away.
     vs_ = ShaderHandle{};
     fs_ = ShaderHandle{};
+    vs_sdf_ = ShaderHandle{};
+    fs_sdf_ = ShaderHandle{};
     compiled_on_ = nullptr;
     ctx_ = nullptr;
 }
@@ -213,8 +305,8 @@ void Text2DRenderer::draw(std::string_view text_utf8,
     const bool profile = tc_profiler_enabled();
 
     // Rasterise any missing glyphs for this display size and re-upload
-    // the atlas if needed. Each unique integer size has its own per-
-    // glyph bake; the atlas handles quantisation internally.
+    // the atlas if needed. Bitmap path bakes per-size; SDF path bakes
+    // once at reference size. The atlas handles branching internally.
     if (profile) tc_profiler_begin_section("text.ensure_glyphs");
     font_->ensure_glyphs(text_utf8, size, ctx_);
     if (profile) tc_profiler_end_section();
@@ -251,39 +343,62 @@ void Text2DRenderer::draw(std::string_view text_utf8,
 
     // Rebind shader + push-constants + atlas on every draw — a caller
     // (e.g. UIRenderer) may have bound a different shader between
-    // our own begin() and this draw. Uses push-constants on both
-    // backends: Vulkan ships them via vkCmdPushConstants, OpenGL
-    // through the ring UBO at TGFX2_PUSH_CONSTANTS_BINDING.
+    // our own begin() and this draw.
     RenderContext2& ctx = *ctx_;
 
+    const bool use_sdf = font_->is_sdf_size(size);
+
     if (profile) tc_profiler_begin_section("text.bind_shader");
-    ctx.bind_shader(vs_, fs_);
+    if (use_sdf) {
+        ctx.bind_shader(vs_sdf_, fs_sdf_);
+    } else {
+        ctx.bind_shader(vs_, fs_);
+    }
     if (profile) tc_profiler_end_section();
 
     if (profile) tc_profiler_begin_section("text.push_constants");
-    Text2DPushData push;
     // Shader expects column-major mat4; `proj_` was stored row-major
     // (see build_ortho_pixel_to_ndc's comment). Transpose here before
     // shipping raw bytes to GPU.
-    for (int row = 0; row < 4; ++row) {
-        for (int col = 0; col < 4; ++col) {
-            push.projection[col * 4 + row] = proj_[row * 4 + col];
+    if (use_sdf) {
+        Text2DSdfPushData push;
+        for (int row = 0; row < 4; ++row) {
+            for (int col = 0; col < 4; ++col) {
+                push.projection[col * 4 + row] = proj_[row * 4 + col];
+            }
         }
+        push.color[0] = r;
+        push.color[1] = g;
+        push.color[2] = b;
+        push.color[3] = a;
+        // smoothing: ±1 reference texel edge width → 1/(2*spread) in
+        // texture space where edge=0.5 and dist=[0,1] maps to
+        // [-spread, +spread] reference texels.
+        push.smoothing = 1.0f / (2.0f * static_cast<float>(font_->sdf_spread()));
+        ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
+    } else {
+        Text2DPushData push;
+        for (int row = 0; row < 4; ++row) {
+            for (int col = 0; col < 4; ++col) {
+                push.projection[col * 4 + row] = proj_[row * 4 + col];
+            }
+        }
+        push.color[0] = r;
+        push.color[1] = g;
+        push.color[2] = b;
+        push.color[3] = a;
+        ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
     }
-    push.color[0] = r;
-    push.color[1] = g;
-    push.color[2] = b;
-    push.color[3] = a;
-    ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
     if (profile) tc_profiler_end_section();
 
     if (profile) tc_profiler_begin_section("text.ensure_texture");
-    TextureHandle atlas = font_->ensure_texture(&ctx);
+    TextureHandle atlas = use_sdf ? font_->sdf_atlas_texture(&ctx)
+                                  : font_->ensure_texture(&ctx);
     if (profile) tc_profiler_end_section();
 
     if (profile) tc_profiler_begin_section("text.bind_texture");
     // Binding 4 matches `layout(binding=4) uniform sampler2D
-    // u_font_atlas` in make_text2d_frag().
+    // u_font_atlas` in both shader variants.
     ctx.bind_sampled_texture(4, atlas);
     if (profile) tc_profiler_end_section();
 
