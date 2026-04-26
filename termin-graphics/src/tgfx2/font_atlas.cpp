@@ -163,9 +163,9 @@ FontAtlas::FontAtlas(const std::string& ttf_path,
                           &impl_->descent_u,
                           &line_gap_u);
 
-    // Warm up the preload character set at the default size so the
-    // first real frame of "typical" UI text doesn't stall on
-    // rasterisation. Other sizes populate lazily.
+    // Warm up the preload character set at the default bitmap size so
+    // the first real frame of "typical" UI text doesn't stall on
+    // rasterisation. Other bitmap sizes populate lazily.
     const float preload_px = static_cast<float>(default_preload_size_);
     size_t i = 0;
     std::string_view preload{kPreloadUtf8};
@@ -173,8 +173,18 @@ FontAtlas::FontAtlas(const std::string& ttf_path,
         uint32_t cp = internal::utf8_decode(preload, i);
         ensure_glyph(cp, preload_px);
     }
+    // SDF glyphs are shared by every SDF display size, so warm the same
+    // common set once at the threshold. Without this, the first large
+    // text draw pays the full SDF bake cost inside the render frame and
+    // can appear a frame before later labels catch up.
+    i = 0;
+    while (i < preload.size()) {
+        uint32_t cp = internal::utf8_decode(preload, i);
+        ensure_glyph(cp, static_cast<float>(sdf_threshold_px_));
+    }
     // Mark dirty so the first ensure_texture() uploads the preload.
     dirty_ = true;
+    sdf_dirty_ = true;
 }
 
 FontAtlas::~FontAtlas() {
