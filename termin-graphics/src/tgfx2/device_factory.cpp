@@ -15,7 +15,7 @@ namespace tgfx {
 
 BackendType default_backend_from_env() {
     const char* env = std::getenv("TERMIN_BACKEND");
-    if (!env || !env[0]) return BackendType::OpenGL;
+    if (!env || !env[0]) return BackendType::Vulkan;
 
     std::string s(env);
     for (auto& c : s) c = static_cast<char>(std::tolower(c));
@@ -26,9 +26,9 @@ BackendType default_backend_from_env() {
     if (s == "d3d12" || s == "dx12") return BackendType::D3D12;
     if (s == "null") return BackendType::Null;
 
-    // Unknown value — fall back to OpenGL. Silent fallback (no log
+    // Unknown value — fall back to Vulkan. Silent fallback (no log
     // dependency) so the factory stays header-light.
-    return BackendType::OpenGL;
+    return BackendType::Vulkan;
 }
 
 std::unique_ptr<IRenderDevice> create_device(BackendType type) {
