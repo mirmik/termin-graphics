@@ -117,6 +117,7 @@ jobs:
 
       - name: Run Python tests
         env:
+          TERMIN_SDK: ${{ github.workspace }}/sdk
           LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
         run: |
           python -c "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())"
@@ -163,6 +164,7 @@ jobs:
 
       - name: Run tests
         env:
+          TERMIN_SDK: ${{ github.workspace }}/sdk
           LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
           PYTHONPATH: ${{ github.workspace }}/sdk/lib/python:${{ github.workspace }}/termin/install/lib/python
         run: |
@@ -248,6 +250,7 @@ jobs:
 
       - name: Run tests
         env:
+          TERMIN_SDK: ${{ github.workspace }}/sdk
           LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
         run: |
           PYTHONPATH=$GITHUB_WORKSPACE/diffusion-editor pytest diffusion-editor/tests/ -v
