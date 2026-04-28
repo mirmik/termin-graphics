@@ -23,12 +23,6 @@ namespace termin {
 
 namespace {
 
-bool is_depth_format(tgfx::PixelFormat fmt) {
-    return fmt == tgfx::PixelFormat::D24_UNorm
-        || fmt == tgfx::PixelFormat::D24_UNorm_S8_UInt
-        || fmt == tgfx::PixelFormat::D32F;
-}
-
 std::string pixel_format_name(tgfx::PixelFormat fmt) {
     switch (fmt) {
         case tgfx::PixelFormat::R8_UNorm:           return "r8";
@@ -45,6 +39,7 @@ std::string pixel_format_name(tgfx::PixelFormat fmt) {
         case tgfx::PixelFormat::D24_UNorm:          return "depth24";
         case tgfx::PixelFormat::D24_UNorm_S8_UInt:  return "depth24_stencil8";
         case tgfx::PixelFormat::D32F:               return "depth32f";
+        case tgfx::PixelFormat::Undefined:          return "undefined";
     }
     return "unknown";
 }
@@ -124,22 +119,13 @@ void FrameGraphCapture::capture_direct_via_ctx2(
         return;
     }
 
-    // The caller-supplied `format` is a hint — e.g. the classic call
-    // paths default it to RGBA8_UNorm. But Vulkan's blit refuses to
-    // mix aspects (depth → color produces a validation error and a
-    // silent no-op), and depth-stencil resources can't be sampled as
-    // plain RGBA anyway. So we look up the actual source format via
-    // the device and override the hint whenever the source is depth.
+    // The caller-supplied `format` is only a legacy hint. Capture must
+    // use the real source format: Vulkan cannot resolve MSAA while also
+    // converting formats, and depth resources cannot be copied into a
+    // color capture texture.
     auto src_desc = ctx2->device().texture_desc(src_tex);
-    tgfx::PixelFormat effective = format;
-    auto is_depth = [](tgfx::PixelFormat f) {
-        return f == tgfx::PixelFormat::D24_UNorm ||
-               f == tgfx::PixelFormat::D24_UNorm_S8_UInt ||
-               f == tgfx::PixelFormat::D32F;
-    };
-    if (is_depth(src_desc.format)) {
-        effective = src_desc.format;
-    }
+    tgfx::PixelFormat effective = src_desc.format;
+    (void)format;
 
     ensure_capture_tex(ctx2->device(), width, height, effective);
     if (!capture_tex_) {

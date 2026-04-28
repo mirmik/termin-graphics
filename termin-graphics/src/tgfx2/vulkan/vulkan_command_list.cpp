@@ -439,6 +439,14 @@ void VulkanCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
                         "dst samples=%u fmt=%d) — skipping\n",
                 s->desc.sample_count, (int)s->desc.format,
                 d->desc.sample_count, (int)d->desc.format);
+        device_.transition_image_layout(cmd_, s->image,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, src_aspect);
+        device_.transition_image_layout(cmd_, d->image,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, dst_aspect);
+        s->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        d->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         return;
     }
 
