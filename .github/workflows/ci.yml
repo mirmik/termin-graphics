@@ -159,16 +159,16 @@ jobs:
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
         run: |
-          cd termin
+          cd termin-app
           SDK_PREFIX=${{ github.workspace }}/sdk CMAKE_PREFIX_PATH=${{ github.workspace }}/sdk ./build.sh
 
       - name: Run tests
         env:
           TERMIN_SDK: ${{ github.workspace }}/sdk
           LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
-          PYTHONPATH: ${{ github.workspace }}/sdk/lib/python:${{ github.workspace }}/termin/install/lib/python
+          PYTHONPATH: ${{ github.workspace }}/sdk/lib/python:${{ github.workspace }}/termin-app/install/lib/python
         run: |
-          pytest termin/tests/ -v
+          pytest termin-app/tests/ -v
 
   # ── 6. Build termin-csharp ──────────────────────────────────────
   test-csharp:
@@ -208,7 +208,7 @@ jobs:
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
         run: |
-          cd termin
+          cd termin-app
           SDK_PREFIX=${{ github.workspace }}/sdk CMAKE_PREFIX_PATH=${{ github.workspace }}/sdk ./build.sh
 
       - name: Build termin-csharp
