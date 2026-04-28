@@ -1831,23 +1831,6 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
         uint64_t bpc      = g_push_constants_count.exchange(0, std::memory_order_relaxed);
         uint64_t rec_us   = g_record_us.exchange(0, std::memory_order_relaxed);
         uint64_t subm_us  = g_submit_us.exchange(0, std::memory_order_relaxed);
-        tc_log(TC_LOG_INFO,
-               "[VkHotPath] %llu submits, %llu draws, %llu rsets, %llu new-pipelines, "
-               "%.1f fence-ms — "
-               "bindPipe=%llu bindRS=%llu bindVBO=%llu bindIBO=%llu pushC=%llu — "
-               "record=%.1fms submit=%.2fms",
-               (unsigned long long)s_submits,
-               (unsigned long long)draws,
-               (unsigned long long)rsets,
-               (unsigned long long)pipes,
-               s_last_fence_wait_us / 1000.0,
-               (unsigned long long)bp,
-               (unsigned long long)brs,
-               (unsigned long long)bvb,
-               (unsigned long long)bib,
-               (unsigned long long)bpc,
-               rec_us / 1000.0,
-               subm_us / 1000.0);
         s_submits = 0;
         s_last_fence_wait_us = 0;
         s_window_start = now;
