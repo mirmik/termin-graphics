@@ -173,6 +173,10 @@ class NodeItem(RectItem):
             self.fill_color = (0.28, 0.19, 0.22, 1.0)
             self.title_bg_color = (0.44, 0.26, 0.33, 1.0)
             self.border_color = (0.60, 0.38, 0.46, 1.0)
+        elif node_kind == "output":
+            self.fill_color = (0.21, 0.17, 0.24, 1.0)
+            self.title_bg_color = (0.36, 0.23, 0.42, 1.0)
+            self.border_color = (0.54, 0.37, 0.62, 1.0)
         else:
             self.fill_color = (0.17, 0.20, 0.27, 1.0)
             self.title_bg_color = (0.24, 0.28, 0.38, 1.0)
