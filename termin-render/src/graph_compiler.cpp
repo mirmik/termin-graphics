@@ -442,7 +442,7 @@ RenderPipeline* compile_graph(GraphData& graph) {
     auto fbo_nodes = collect_fbo_nodes(graph);
 
     // 5. Create pipeline
-    auto* pipeline = new RenderPipeline();
+    auto* pipeline = new RenderPipeline("compiled_graph");
 
     // 6. Add passes
     for (const auto* node : sorted_nodes) {
