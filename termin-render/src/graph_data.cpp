@@ -36,6 +36,7 @@ static const std::unordered_map<std::string, PassSocketInfo> g_pass_socket_info 
     {"ResolvePass", {{{"input_res", "fbo"}}, {{"output_res", "fbo"}}}},
     {"PresentToScreenPass", {{{"input_res", "fbo"}}, {}}},
     {"ColliderGizmoPass", {{{"input_res", "fbo"}}, {{"output_res", "fbo"}}}},
+    {"DebugTrianglePass", {{}, {{"output_res", "fbo"}}}},
 };
 
 PassSocketInfo get_pass_sockets(const std::string& class_name) {
