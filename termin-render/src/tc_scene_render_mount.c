@@ -91,7 +91,12 @@ static tc_value serialize_viewport_config(const tc_viewport_config* vc) {
 
     if (vc->name && vc->name[0]) tc_value_dict_set(&v, "name", tc_value_string(vc->name));
     if (vc->display_name && vc->display_name[0]) tc_value_dict_set(&v, "display_name", tc_value_string(vc->display_name));
-    if (vc->render_target_name && vc->render_target_name[0]) tc_value_dict_set(&v, "render_target_name", tc_value_string(vc->render_target_name));
+
+    tc_value render_target = tc_value_dict_new();
+    if (vc->camera_uuid && vc->camera_uuid[0]) tc_value_dict_set(&render_target, "camera_uuid", tc_value_string(vc->camera_uuid));
+    if (vc->pipeline_uuid && vc->pipeline_uuid[0]) tc_value_dict_set(&render_target, "pipeline_uuid", tc_value_string(vc->pipeline_uuid));
+    if (vc->pipeline_name && vc->pipeline_name[0]) tc_value_dict_set(&render_target, "pipeline_name", tc_value_string(vc->pipeline_name));
+    tc_value_dict_set(&v, "render_target", render_target);
 
     tc_value region = tc_value_list_new();
     tc_value_list_push(&region, tc_value_double((double)vc->region[0]));
@@ -119,8 +124,18 @@ static bool deserialize_viewport_config(const tc_value* data, tc_viewport_config
     tc_value* display_name = tc_value_dict_get((tc_value*)data, "display_name");
     if (display_name && display_name->type == TC_VALUE_STRING) out->display_name = display_name->data.s;
 
-    tc_value* render_target_name = tc_value_dict_get((tc_value*)data, "render_target_name");
-    if (render_target_name && render_target_name->type == TC_VALUE_STRING) out->render_target_name = render_target_name->data.s;
+    tc_value* render_target = tc_value_dict_get((tc_value*)data, "render_target");
+    if (render_target && render_target->type == TC_VALUE_DICT) {
+        tc_value* rt_camera = tc_value_dict_get(render_target, "camera_uuid");
+        if (rt_camera && rt_camera->type == TC_VALUE_STRING) out->camera_uuid = rt_camera->data.s;
+        tc_value* rt_pipeline_uuid = tc_value_dict_get(render_target, "pipeline_uuid");
+        if (rt_pipeline_uuid && rt_pipeline_uuid->type == TC_VALUE_STRING) out->pipeline_uuid = rt_pipeline_uuid->data.s;
+        tc_value* rt_pipeline_name = tc_value_dict_get(render_target, "pipeline_name");
+        if (rt_pipeline_name && rt_pipeline_name->type == TC_VALUE_STRING) out->pipeline_name = rt_pipeline_name->data.s;
+    } else {
+        tc_value* camera_uuid = tc_value_dict_get((tc_value*)data, "camera_uuid");
+        if (camera_uuid && camera_uuid->type == TC_VALUE_STRING) out->camera_uuid = camera_uuid->data.s;
+    }
 
     tc_value* region = tc_value_dict_get((tc_value*)data, "region");
     if (region && region->type == TC_VALUE_LIST && tc_value_list_size(region) >= 4) {
