@@ -243,6 +243,16 @@ void tc_render_target_pool_free(tc_render_target_handle h) {
     if (!handle_alive(h)) return;
     uint32_t idx = h.index;
 
+    if (g_pool->locked[idx]) {
+        tc_log_error(
+            "[tc_render_target] attempt to free locked render target '%s' "
+            "(index=%u, gen=%u) — the owning viewport must unlock it first",
+            g_pool->names[idx] ? g_pool->names[idx] : "(unnamed)",
+            h.index, h.generation
+        );
+        return;
+    }
+
     free(g_pool->names[idx]);
     if (!tc_texture_handle_is_invalid(g_pool->color_textures[idx])) {
         tc_texture_destroy(g_pool->color_textures[idx]);
