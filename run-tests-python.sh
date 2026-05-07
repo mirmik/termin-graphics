@@ -1,30 +1,49 @@
 #!/bin/bash
 # Run Python test suites across projects.
-# Assumes SDK and Python packages are already installed, typically via:
-#   ./build-sdk-bindings.sh
+#
+# By default, auto-activates .venv/ (if present) and auto-detects TERMIN_SDK,
+# so no manual setup is needed after ./setup-test-venv.sh.
+#
+# Flags:
+#   --no-venv    Don't auto-activate .venv; use PYTHON_BIN / system Python as-is
+#   --help, -h   Show this help
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SDK_PREFIX="${SDK_PREFIX:-$SCRIPT_DIR/sdk}"
+NO_VENV=0
 
-# Auto-detect test venv
-if [[ -z "${PYTHON_BIN:-}" && -x "$SCRIPT_DIR/.venv/bin/python3" ]]; then
-    PYTHON_BIN="$SCRIPT_DIR/.venv/bin/python3"
-elif [[ -z "${PYTHON_BIN:-}" && -x "$SCRIPT_DIR/.venv/bin/python" ]]; then
-    PYTHON_BIN="$SCRIPT_DIR/.venv/bin/python"
-else
-    PYTHON_BIN="${PYTHON_BIN:-$(command -v python3 || command -v python)}"
+for arg in "$@"; do
+    case "$arg" in
+        --no-venv) NO_VENV=1 ;;
+        --help|-h)
+            echo "Usage: $0 [--no-venv]"
+            echo ""
+            echo "  (no flags)  Auto-activate .venv/ if present, auto-detect TERMIN_SDK"
+            echo "  --no-venv   Skip auto-activation; use PYTHON_BIN or system Python"
+            exit 0
+            ;;
+        *) echo "Unknown option: $arg" >&2; exit 1 ;;
+    esac
+done
+
+# --- Auto-activate venv ---
+if [[ $NO_VENV -eq 0 && -f "$SCRIPT_DIR/.venv/bin/activate" ]]; then
+    echo "Activating venv: $SCRIPT_DIR/.venv"
+    source "$SCRIPT_DIR/.venv/bin/activate"
 fi
 
-if [[ -z "${PYTHON_BIN}" ]]; then
+# --- Python binary ---
+if [[ -z "${PYTHON_BIN:-}" ]]; then
+    PYTHON_BIN="$(command -v python3 || command -v python || true)"
+fi
+if [[ -z "${PYTHON_BIN:-}" ]]; then
     echo "python3 not found"
     exit 1
 fi
-
 echo "Python: $PYTHON_BIN"
 
-# TERMIN_SDK for preload_sdk_libs at runtime
+# --- TERMIN_SDK ---
 if [[ -z "${TERMIN_SDK:-}" ]]; then
     if [[ -d "$SCRIPT_DIR/sdk/lib/python/termin" ]]; then
         export TERMIN_SDK="$SCRIPT_DIR/sdk"
@@ -32,28 +51,35 @@ if [[ -z "${TERMIN_SDK:-}" ]]; then
         export TERMIN_SDK="/opt/termin"
     fi
 fi
-
-export LD_LIBRARY_PATH="${SDK_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-
-# When using venv, add PyQt6 bundled Qt6 shared libraries so extensions
-# like _native.so that link against Qt6 can resolve their dependencies.
-if [[ "$PYTHON_BIN" == "$SCRIPT_DIR/.venv/bin/"* ]]; then
-    QT6_LIB_DIR="$SCRIPT_DIR/.venv/lib/python3.10/site-packages/PyQt6/Qt6/lib"
-    if [[ -d "$QT6_LIB_DIR" ]]; then
-        export LD_LIBRARY_PATH="$QT6_LIB_DIR:$LD_LIBRARY_PATH"
-    fi
+if [[ -n "${TERMIN_SDK:-}" ]]; then
+    echo "TERMIN_SDK: $TERMIN_SDK"
 fi
 
-# PYTHONPATH: when using venv with editable installs, all termin packages are
-# already importable. Adding sdk/lib/python or termin-app/install/lib/python
-# would override the editable install versions with stale SDK copies that may
-# reference missing binding modules.
-if [[ "$PYTHON_BIN" == "$SCRIPT_DIR/.venv/bin/"* ]]; then
+# --- LD_LIBRARY_PATH ---
+SDK_PREFIX="${SDK_PREFIX:-$SCRIPT_DIR/sdk}"
+export LD_LIBRARY_PATH="${SDK_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# PyQt6 bundled Qt6 shared libraries (for venv with PyQt6 installed)
+if [[ $NO_VENV -eq 0 && -d "$SCRIPT_DIR/.venv" ]]; then
+    # Find PyQt6 Qt6 lib dir regardless of Python minor version
+    for qt6_dir in "$SCRIPT_DIR/.venv"/lib/python3.*/site-packages/PyQt6/Qt6/lib; do
+        if [[ -d "$qt6_dir" ]]; then
+            export LD_LIBRARY_PATH="$qt6_dir:$LD_LIBRARY_PATH"
+            break
+        fi
+    done
+fi
+
+# --- PYTHONPATH ---
+# With venv + editable installs, all termin packages are already importable.
+# Adding sdk/lib/python would override them with stale SDK copies.
+if [[ $NO_VENV -eq 0 && -d "$SCRIPT_DIR/.venv" ]]; then
     export PYTHONPATH="${SCRIPT_DIR}/diffusion-editor${PYTHONPATH:+:$PYTHONPATH}"
 else
     export PYTHONPATH="${SDK_PREFIX}/lib/python:${SCRIPT_DIR}/termin-app/install/lib/python:${SCRIPT_DIR}/diffusion-editor${PYTHONPATH:+:$PYTHONPATH}"
 fi
 
+# --- Run tests ---
 echo ""
 echo "========================================"
 echo "  Python tests"

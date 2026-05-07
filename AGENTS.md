@@ -23,13 +23,13 @@ These instructions apply to everything inside `/home/mirmik/project/termin-env`.
 ### Ежедневный цикл разработки
 
 ```bash
-source .venv/bin/activate                # активировать venv
-bash run-tests-python.sh                 # прогнать Python-тесты
+bash run-tests-python.sh                 # авто-активирует .venv, авто TERMIN_SDK
 # ... правки в Python-коде ...
 bash run-tests-python.sh                 # сразу видит изменения (editable)
 ```
 
-`run-tests-python.sh` автоматически находит `.venv/bin/python3`, если он существует, и выставляет `TERMIN_SDK` — поэтому при использовании venv ничего экспортировать вручную не нужно.
+`run-tests-python.sh` сам активирует `.venv/` (если есть) и выставляет `TERMIN_SDK`.
+Флаг `--no-venv` отключает авто-активацию (использовать системный Python как есть).
 
 ### После пересборки C++ биндингов
 
