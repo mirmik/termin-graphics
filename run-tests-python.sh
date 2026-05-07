@@ -6,24 +6,29 @@
 #
 # Flags:
 #   --no-venv    Don't auto-activate .venv; use PYTHON_BIN / system Python as-is
+#   test paths   Run only selected pytest targets after environment setup
 #   --help, -h   Show this help
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NO_VENV=0
+PYTEST_TARGETS=()
 
 for arg in "$@"; do
     case "$arg" in
         --no-venv) NO_VENV=1 ;;
         --help|-h)
-            echo "Usage: $0 [--no-venv]"
+            echo "Usage: $0 [--no-venv] [pytest-target ...]"
             echo ""
             echo "  (no flags)  Auto-activate .venv/ if present, auto-detect TERMIN_SDK"
             echo "  --no-venv   Skip auto-activation; use PYTHON_BIN or system Python"
+            echo "  pytest-target"
+            echo "              Run only selected pytest target(s), e.g. termin-app/tests/test_game_mode_model.py"
             exit 0
             ;;
-        *) echo "Unknown option: $arg" >&2; exit 1 ;;
+        --*) echo "Unknown option: $arg" >&2; exit 1 ;;
+        *) PYTEST_TARGETS+=("$arg") ;;
     esac
 done
 
@@ -103,6 +108,10 @@ run_suite() {
     fi
 }
 
+if (( ${#PYTEST_TARGETS[@]} > 0 )); then
+    run_suite "selected python" \
+        "${PYTHON_BIN}" -m pytest "${PYTEST_TARGETS[@]}" -v
+else
 run_suite "termin-base python" \
     "${PYTHON_BIN}" -m pytest termin-base/tests/python/ -v
 
@@ -126,6 +135,7 @@ run_suite "termin-app python" \
 
 run_suite "diffusion-editor python" \
     "${PYTHON_BIN}" -m pytest diffusion-editor/tests/ -v
+fi
 
 if (( ${#failures[@]} > 0 )); then
     echo ""
