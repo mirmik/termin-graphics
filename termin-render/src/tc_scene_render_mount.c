@@ -128,11 +128,6 @@ static bool deserialize_viewport_config(const tc_value* data, tc_viewport_config
     if (render_target && render_target->type == TC_VALUE_DICT) {
         tc_value* rt_name = tc_value_dict_get(render_target, "name");
         if (rt_name && rt_name->type == TC_VALUE_STRING) out->render_target_name = rt_name->data.s;
-        tc_value* rt_camera = tc_value_dict_get(render_target, "camera_uuid");
-        if (rt_camera && rt_camera->type == TC_VALUE_STRING) out->camera_uuid = rt_camera->data.s;
-    } else {
-        tc_value* camera_uuid = tc_value_dict_get((tc_value*)data, "camera_uuid");
-        if (camera_uuid && camera_uuid->type == TC_VALUE_STRING) out->camera_uuid = camera_uuid->data.s;
     }
 
     tc_value* region = tc_value_dict_get((tc_value*)data, "region");
