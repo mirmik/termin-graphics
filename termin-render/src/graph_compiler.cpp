@@ -28,8 +28,8 @@ namespace tc {
 // ============================================================================
 
 static bool is_pass_node(const NodeData& node) {
-    // "resource" and "output" are not passes, everything else is
-    return node.node_type != "resource" && node.node_type != "output";
+    // "resource", "external_rt", and "output" are not passes, everything else is
+    return node.node_type != "resource" && node.node_type != "external_rt" && node.node_type != "output";
 }
 
 // ============================================================================
@@ -112,7 +112,7 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
         node_index[graph.nodes[i].id] = static_cast<int>(i);
     }
 
-    // Pass 1: Assign names to FBO resource nodes
+    // Pass 1: Assign names to FBO resource nodes and external RT nodes
     for (const auto& node : graph.nodes) {
         if (node.node_type == "resource") {
             std::string resource_type = "fbo";
@@ -127,6 +127,19 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
                     result.socket_names[node.id][output.name] = name;
                     result.resource_types[name] = output.socket_type;
                 }
+            }
+        }
+        if (node.node_type == "external_rt") {
+            std::string name = node.name;
+            if (name.empty() && node.params.contains("slot") && node.params["slot"].is_string()) {
+                name = node.params["slot"].as_string();
+            }
+            if (name.empty()) {
+                name = "external_" + std::to_string(node_index[node.id]);
+            }
+            for (const auto& output : node.outputs) {
+                result.socket_names[node.id][output.name] = name;
+                result.resource_types[name] = output.socket_type;
             }
         }
     }
