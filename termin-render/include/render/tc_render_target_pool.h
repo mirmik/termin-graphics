@@ -30,15 +30,6 @@ static inline bool tc_render_target_handle_eq(tc_render_target_handle a, tc_rend
     return a.index == b.index && a.generation == b.generation;
 }
 
-#ifdef __cplusplus
-inline bool operator==(tc_render_target_handle a, tc_render_target_handle b) {
-    return a.index == b.index && a.generation == b.generation;
-}
-inline bool operator!=(tc_render_target_handle a, tc_render_target_handle b) {
-    return !(a == b);
-}
-#endif
-
 TC_API void tc_render_target_pool_init(void);
 TC_API void tc_render_target_pool_shutdown(void);
 TC_API tc_render_target_handle tc_render_target_pool_alloc(const char* name);
@@ -51,6 +42,15 @@ typedef bool (*tc_render_target_pool_iter_fn)(tc_render_target_handle h, void* u
 TC_API void tc_render_target_pool_foreach(tc_render_target_pool_iter_fn callback, void* user_data);
 
 #ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+inline bool operator==(tc_render_target_handle a, tc_render_target_handle b) {
+    return a.index == b.index && a.generation == b.generation;
+}
+inline bool operator!=(tc_render_target_handle a, tc_render_target_handle b) {
+    return !(a == b);
 }
 #endif
 
