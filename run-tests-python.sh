@@ -35,6 +35,15 @@ fi
 
 export LD_LIBRARY_PATH="${SDK_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
+# When using venv, add PyQt6 bundled Qt6 shared libraries so extensions
+# like _native.so that link against Qt6 can resolve their dependencies.
+if [[ "$PYTHON_BIN" == "$SCRIPT_DIR/.venv/bin/"* ]]; then
+    QT6_LIB_DIR="$SCRIPT_DIR/.venv/lib/python3.10/site-packages/PyQt6/Qt6/lib"
+    if [[ -d "$QT6_LIB_DIR" ]]; then
+        export LD_LIBRARY_PATH="$QT6_LIB_DIR:$LD_LIBRARY_PATH"
+    fi
+fi
+
 # PYTHONPATH: when using venv with editable installs, all termin packages are
 # already importable. Adding sdk/lib/python or termin-app/install/lib/python
 # would override the editable install versions with stale SDK copies that may
