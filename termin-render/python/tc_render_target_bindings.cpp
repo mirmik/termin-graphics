@@ -46,6 +46,9 @@ void bind_tc_render_target(nb::module_& m) {
         .def_prop_rw("height",
             [](const tc_render_target_handle& h) { return tc_render_target_get_height(h); },
             [](tc_render_target_handle& h, int v) { tc_render_target_set_height(h, v); })
+        .def_prop_rw("dynamic_resolution",
+            [](const tc_render_target_handle& h) { return tc_render_target_get_dynamic_resolution(h); },
+            [](tc_render_target_handle& h, bool v) { tc_render_target_set_dynamic_resolution(h, v); })
         .def_prop_rw("enabled",
             [](const tc_render_target_handle& h) { return tc_render_target_get_enabled(h); },
             [](tc_render_target_handle& h, bool v) { tc_render_target_set_enabled(h, v); })

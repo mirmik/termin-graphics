@@ -18,6 +18,7 @@ void tc_render_target_config_copy(tc_render_target_config* dst, const tc_render_
     dst->camera_uuid = src->camera_uuid ? tgfx_intern_string(src->camera_uuid) : NULL;
     dst->width = src->width;
     dst->height = src->height;
+    dst->dynamic_resolution = src->dynamic_resolution;
     dst->pipeline_uuid = src->pipeline_uuid ? tgfx_intern_string(src->pipeline_uuid) : NULL;
     dst->pipeline_name = src->pipeline_name ? tgfx_intern_string(src->pipeline_name) : NULL;
     dst->layer_mask = src->layer_mask;

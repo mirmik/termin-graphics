@@ -17,6 +17,7 @@ typedef struct {
     char** names;
     int* widths;
     int* heights;
+    bool* dynamic_resolutions;
     tc_scene_handle* scenes;
     tc_component** cameras;
     tc_entity_handle* camera_entities;
@@ -79,6 +80,7 @@ void tc_render_target_pool_init(void) {
     g_pool->names = (char**)calloc(cap, sizeof(char*));
     g_pool->widths = (int*)calloc(cap, sizeof(int));
     g_pool->heights = (int*)calloc(cap, sizeof(int));
+    g_pool->dynamic_resolutions = (bool*)calloc(cap, sizeof(bool));
     g_pool->scenes = (tc_scene_handle*)calloc(cap, sizeof(tc_scene_handle));
     g_pool->cameras = (tc_component**)calloc(cap, sizeof(tc_component*));
     g_pool->camera_entities = (tc_entity_handle*)calloc(cap, sizeof(tc_entity_handle));
@@ -126,6 +128,7 @@ void tc_render_target_pool_shutdown(void) {
     free(g_pool->names);
     free(g_pool->widths);
     free(g_pool->heights);
+    free(g_pool->dynamic_resolutions);
     free(g_pool->scenes);
     free(g_pool->cameras);
     free(g_pool->camera_entities);
@@ -154,6 +157,7 @@ static void pool_grow(void) {
     g_pool->names = realloc(g_pool->names, new_cap * sizeof(char*));
     g_pool->widths = realloc(g_pool->widths, new_cap * sizeof(int));
     g_pool->heights = realloc(g_pool->heights, new_cap * sizeof(int));
+    g_pool->dynamic_resolutions = realloc(g_pool->dynamic_resolutions, new_cap * sizeof(bool));
     g_pool->scenes = realloc(g_pool->scenes, new_cap * sizeof(tc_scene_handle));
     g_pool->cameras = realloc(g_pool->cameras, new_cap * sizeof(tc_component*));
     g_pool->camera_entities = realloc(g_pool->camera_entities, new_cap * sizeof(tc_entity_handle));
@@ -170,6 +174,7 @@ static void pool_grow(void) {
     memset(g_pool->names + old_cap, 0, (new_cap - old_cap) * sizeof(char*));
     memset(g_pool->widths + old_cap, 0, (new_cap - old_cap) * sizeof(int));
     memset(g_pool->heights + old_cap, 0, (new_cap - old_cap) * sizeof(int));
+    memset(g_pool->dynamic_resolutions + old_cap, 0, (new_cap - old_cap) * sizeof(bool));
     memset(g_pool->cameras + old_cap, 0, (new_cap - old_cap) * sizeof(tc_component*));
     memset(g_pool->layer_masks + old_cap, 0, (new_cap - old_cap) * sizeof(uint64_t));
     memset(g_pool->enabled + old_cap, 0, (new_cap - old_cap) * sizeof(bool));
@@ -224,6 +229,7 @@ tc_render_target_handle tc_render_target_pool_alloc(const char* name) {
     g_pool->names[idx] = rt_strdup(name);
     g_pool->widths[idx] = 512;
     g_pool->heights[idx] = 512;
+    g_pool->dynamic_resolutions[idx] = false;
     g_pool->scenes[idx] = TC_SCENE_HANDLE_INVALID;
     g_pool->cameras[idx] = NULL;
     g_pool->camera_entities[idx] = TC_ENTITY_HANDLE_INVALID;
@@ -349,6 +355,16 @@ void tc_render_target_set_height(tc_render_target_handle h, int height) {
 int tc_render_target_get_height(tc_render_target_handle h) {
     if (!handle_alive(h)) return 0;
     return g_pool->heights[h.index];
+}
+
+void tc_render_target_set_dynamic_resolution(tc_render_target_handle h, bool dynamic_resolution) {
+    if (!handle_alive(h)) return;
+    g_pool->dynamic_resolutions[h.index] = dynamic_resolution;
+}
+
+bool tc_render_target_get_dynamic_resolution(tc_render_target_handle h) {
+    if (!handle_alive(h)) return false;
+    return g_pool->dynamic_resolutions[h.index];
 }
 
 // --- Owned textures --------------------------------------------------------

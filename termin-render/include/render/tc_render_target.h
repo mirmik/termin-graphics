@@ -26,6 +26,9 @@ TC_API int tc_render_target_get_width(tc_render_target_handle h);
 TC_API void tc_render_target_set_height(tc_render_target_handle h, int height);
 TC_API int tc_render_target_get_height(tc_render_target_handle h);
 
+TC_API void tc_render_target_set_dynamic_resolution(tc_render_target_handle h, bool dynamic_resolution);
+TC_API bool tc_render_target_get_dynamic_resolution(tc_render_target_handle h);
+
 // --- Owned tc_textures -----------------------------------------------------
 //
 // Render targets own a color + depth tc_texture pair. Both are GPU-only
