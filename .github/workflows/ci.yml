@@ -152,7 +152,7 @@ jobs:
 
       - name: Install pip packages
         run: |
-          pip install nanobind numpy Pillow PyYAML pytest PyOpenGL glfw pysdl2 pysdl2-dll pyassimp scipy
+          pip install nanobind numpy Pillow PyYAML pytest PyOpenGL glfw pysdl2 pysdl2-dll pyassimp scipy PyQt6
           ./install-pip-packages.sh --editable
 
       - name: Build termin bundle
@@ -167,6 +167,7 @@ jobs:
           TERMIN_SDK: ${{ github.workspace }}/sdk
           LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
           PYTHONPATH: ${{ github.workspace }}/sdk/lib/python:${{ github.workspace }}/termin-app/install/lib/python
+          QT_QPA_PLATFORM: offscreen
         run: |
           pytest termin-app/tests/ -v
 
