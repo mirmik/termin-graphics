@@ -248,6 +248,7 @@ jobs:
         run: |
           pip install nanobind numpy Pillow PyYAML pytest
           ./install-pip-packages.sh
+          pip install -r diffusion-editor/requirements.txt
 
       - name: Run tests
         env:
