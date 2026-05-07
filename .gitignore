@@ -129,3 +129,4 @@ tmpclaude*
 # ralphex progress logs
 .ralphex/progress/
 .qwen
+.aider*

@@ -111,6 +111,9 @@ GraphData GraphData::from_trent(const nos::trent& t) {
                 }
             } else if (node.node_type == "resource") {
                 node.outputs.push_back({"fbo", "fbo", false});
+            } else if (node.node_type == "output") {
+                node.inputs.push_back({"color", "fbo", true});
+                node.inputs.push_back({"depth", "fbo", true});
             }
 
             graph.nodes.push_back(std::move(node));

@@ -178,7 +178,32 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
         }
     }
 
-    // Pass 3c: Propagate all other connections (now output names are correct)
+    // Pass 3c: Apply graph output overrides. RenderTarget output nodes are
+    // not executable passes; a connection into RenderTarget.color/depth means
+    // the upstream pass must write directly into the viewport-owned OUTPUT
+    // textures supplied by RenderEngine.
+    for (const auto& conn : graph.connections) {
+        const NodeData* to_node = graph.get_node(conn.to_node_id);
+        if (!to_node || to_node->node_type != "output") {
+            continue;
+        }
+        if (conn.to_socket != "color" && conn.to_socket != "depth") {
+            continue;
+        }
+
+        auto from_it = result.socket_names.find(conn.from_node_id);
+        if (from_it == result.socket_names.end()) {
+            continue;
+        }
+        auto socket_it = from_it->second.find(conn.from_socket);
+        if (socket_it == from_it->second.end()) {
+            continue;
+        }
+        socket_it->second = "OUTPUT";
+        result.resource_types["OUTPUT"] = "fbo";
+    }
+
+    // Pass 3d: Propagate all other connections (now output names are correct)
     for (const auto& conn : graph.connections) {
         // Skip _target connections (already handled)
         if (conn.to_socket.size() > 7 &&
