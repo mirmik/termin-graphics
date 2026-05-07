@@ -5,6 +5,7 @@
 #include "core/tc_component_capability.h"
 #include "core/tc_component.h"
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -17,6 +18,7 @@ typedef struct tc_camera_data {
     double position[3];     // world-space camera position
     double near_clip;
     double far_clip;
+    uint64_t layer_mask;    // camera visibility mask
 } tc_camera_data;
 
 // Vtable for camera capability
