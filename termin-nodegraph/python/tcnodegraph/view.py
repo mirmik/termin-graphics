@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from tcbase import Key, MouseButton
 from tcgui.widgets.input_dialog import show_input_dialog
 from tcgui.widgets.menu import Menu
@@ -586,11 +588,13 @@ class NodeGraphView(SceneView):
                         try:
                             node.params[key] = int(result)
                         except ValueError:
+                            logging.getLogger(__name__).warning("Failed to parse int for param %r: %r", key, result)
                             return
                     elif isinstance(old, float):
                         try:
                             node.params[key] = float(result)
                         except ValueError:
+                            logging.getLogger(__name__).warning("Failed to parse float for param %r: %r", key, result)
                             return
                     else:
                         node.params[key] = result

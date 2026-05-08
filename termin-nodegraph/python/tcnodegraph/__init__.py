@@ -1,5 +1,7 @@
 """termin-nodegraph public API."""
 
+import logging
+
 from tcnodegraph.controller import ConnectResult, GraphController
 from tcnodegraph.io import graph_from_dict, graph_to_dict, load_graph_json, save_graph_json
 from tcnodegraph.model import Edge, Graph, Group, Node, Socket
@@ -13,7 +15,8 @@ from tcnodegraph.schema import (
 
 try:
     from tcnodegraph.view import NodeGraphSceneAdapter, NodeGraphView
-except ModuleNotFoundError:
+except ModuleNotFoundError as e:
+    logging.getLogger(__name__).debug("Optional import tcnodegraph.view failed: %s — GUI features unavailable", e)
     NodeGraphSceneAdapter = None
     NodeGraphView = None
 
