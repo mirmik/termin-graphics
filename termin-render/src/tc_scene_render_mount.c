@@ -79,6 +79,9 @@ static void render_mount_destroy(void* ext, void* type_userdata) {
     (void)type_userdata;
     if (!ext) return;
     tc_scene_render_mount* mount = (tc_scene_render_mount*)ext;
+    for (size_t i = 0; i < mount->render_target_config_count; i++) {
+        tc_render_target_config_free(&mount->render_target_configs[i]);
+    }
     free(mount->pipeline_templates);
     free(mount->viewport_configs);
     free(mount->render_target_configs);
@@ -173,6 +176,9 @@ static tc_value serialize_render_target_config(const tc_render_target_config* rt
     if (rtc->pipeline_name && rtc->pipeline_name[0]) tc_value_dict_set(&v, "pipeline_name", tc_value_string(rtc->pipeline_name));
     tc_value_dict_set(&v, "layer_mask", tc_value_int((int64_t)rtc->layer_mask));
     tc_value_dict_set(&v, "enabled", tc_value_bool(rtc->enabled));
+    if (rtc->pipeline_params.type == TC_VALUE_DICT && tc_value_dict_size(&rtc->pipeline_params) > 0) {
+        tc_value_dict_set(&v, "pipeline_params", tc_value_copy(&rtc->pipeline_params));
+    }
     return v;
 }
 
@@ -208,6 +214,11 @@ static bool deserialize_render_target_config(const tc_value* data, tc_render_tar
 
     tc_value* enabled = tc_value_dict_get((tc_value*)data, "enabled");
     if (enabled && enabled->type == TC_VALUE_BOOL) out->enabled = enabled->data.b;
+
+    tc_value* pipeline_params = tc_value_dict_get((tc_value*)data, "pipeline_params");
+    if (pipeline_params && pipeline_params->type == TC_VALUE_DICT) {
+        out->pipeline_params = tc_value_copy(pipeline_params);
+    }
 
     return true;
 }
@@ -251,6 +262,9 @@ static bool render_mount_deserialize(void* ext, const tc_value* in_data, void* t
     if (in_data->type != TC_VALUE_DICT) return false;
 
     tc_scene_render_mount* mount = (tc_scene_render_mount*)ext;
+    for (size_t i = 0; i < mount->render_target_config_count; i++) {
+        tc_render_target_config_free(&mount->render_target_configs[i]);
+    }
     mount->pipeline_template_count = 0;
     mount->viewport_config_count = 0;
     mount->render_target_config_count = 0;
@@ -294,6 +308,7 @@ static bool render_mount_deserialize(void* ext, const tc_value* in_data, void* t
             tc_render_target_config cfg;
             if (!deserialize_render_target_config(item, &cfg)) continue;
             tc_render_target_config_copy(&mount->render_target_configs[mount->render_target_config_count], &cfg);
+            tc_render_target_config_free(&cfg);
             mount->render_target_config_count++;
         }
     }
@@ -437,8 +452,10 @@ void tc_scene_remove_render_target_config(tc_scene_handle h, size_t index) {
     if (!mount) return;
     if (index >= mount->render_target_config_count) return;
 
+    tc_render_target_config_free(&mount->render_target_configs[index]);
     if (index < mount->render_target_config_count - 1) {
         mount->render_target_configs[index] = mount->render_target_configs[mount->render_target_config_count - 1];
+        mount->render_target_configs[mount->render_target_config_count - 1].pipeline_params = tc_value_nil();
     }
     mount->render_target_config_count--;
 }
@@ -447,6 +464,9 @@ void tc_scene_clear_render_target_configs(tc_scene_handle h) {
     if (!tc_scene_alive(h)) return;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
     if (!mount) return;
+    for (size_t i = 0; i < mount->render_target_config_count; i++) {
+        tc_render_target_config_free(&mount->render_target_configs[i]);
+    }
     mount->render_target_config_count = 0;
 }
 

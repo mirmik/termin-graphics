@@ -10,6 +10,13 @@ void tc_render_target_config_init(tc_render_target_config* config) {
     config->height = 512;
     config->layer_mask = 0xFFFFFFFFFFFFFFFFULL;
     config->enabled = true;
+    config->pipeline_params = tc_value_nil();
+}
+
+void tc_render_target_config_free(tc_render_target_config* config) {
+    if (!config) return;
+    tc_value_free(&config->pipeline_params);
+    config->pipeline_params = tc_value_nil();
 }
 
 void tc_render_target_config_copy(tc_render_target_config* dst, const tc_render_target_config* src) {
@@ -23,4 +30,7 @@ void tc_render_target_config_copy(tc_render_target_config* dst, const tc_render_
     dst->pipeline_name = src->pipeline_name ? tgfx_intern_string(src->pipeline_name) : NULL;
     dst->layer_mask = src->layer_mask;
     dst->enabled = src->enabled;
+    dst->pipeline_params = (src->pipeline_params.type == TC_VALUE_DICT)
+        ? tc_value_copy(&src->pipeline_params)
+        : tc_value_nil();
 }

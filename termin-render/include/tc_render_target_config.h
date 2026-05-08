@@ -3,6 +3,7 @@
 #define TC_RENDER_TARGET_CONFIG_H
 
 #include "tc_types.h"
+#include "tc_value.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -20,7 +21,11 @@ typedef struct tc_render_target_config {
     const char* pipeline_name;  // Special pipeline name (interned, nullable)
     uint64_t layer_mask;        // Layer mask for rendering
     bool enabled;               // Whether render target is enabled
+    tc_value pipeline_params;   // Dict: pipeline external slot -> texture ref string
 } tc_render_target_config;
+
+// Free owned dynamic fields inside the config.
+TC_API void tc_render_target_config_free(tc_render_target_config* config);
 
 // Initialize render target config with defaults
 TC_API void tc_render_target_config_init(tc_render_target_config* config);
