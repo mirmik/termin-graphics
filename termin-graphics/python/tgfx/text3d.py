@@ -51,7 +51,7 @@ class Text3DRenderer(_NativeText3DRenderer):
     ) -> None:
         # Shape-1: native form — (ctx, mvp, cam_right, cam_up).
         if cam_up is not None:
-            ctx = holder.context if hasattr(holder, "context") else holder
+            ctx = holder.context
             mvp = np.ascontiguousarray(camera_or_mvp, dtype=np.float32).reshape(-1)
             cr = np.ascontiguousarray(aspect_or_cam_right, dtype=np.float32).reshape(-1)
             cu = np.ascontiguousarray(cam_up, dtype=np.float32).reshape(-1)
@@ -67,7 +67,7 @@ class Text3DRenderer(_NativeText3DRenderer):
                 "or (holder, camera, aspect)"
             )
 
-        ctx = holder.context if hasattr(holder, "context") else holder
+        ctx = holder.context
 
         mvp = mvp_override if mvp_override is not None else camera.mvp(aspect)
         mvp = np.ascontiguousarray(mvp, dtype=np.float32).reshape(-1)
