@@ -11,6 +11,7 @@ extern "C" {
 #include "core/tc_scene.h"
 #include "core/tc_component.h"
 #include "tgfx/resources/tc_texture.h"
+#include "tc_value.h"
 }
 
 namespace nb = nanobind;
@@ -125,6 +126,37 @@ void bind_tc_render_target(nb::module_& m) {
         .def_prop_rw("locked",
             [](const tc_render_target_handle& h) { return tc_render_target_get_locked(h); },
             [](tc_render_target_handle& h, bool v) { tc_render_target_set_locked(h, v); })
+        .def_prop_rw("pipeline_params",
+            [](const tc_render_target_handle& h) -> nb::object {
+                const tc_value* v = tc_render_target_get_pipeline_params(h);
+                if (!v || v->type != TC_VALUE_DICT) return nb::dict();
+                nb::dict result;
+                for (size_t i = 0; i < v->data.dict.count; i++) {
+                    const char* key = v->data.dict.entries[i].key;
+                    tc_value* val = v->data.dict.entries[i].value;
+                    if (key && val && val->type == TC_VALUE_STRING && val->data.s) {
+                        result[nb::str(key)] = nb::str(val->data.s);
+                    }
+                }
+                return result;
+            },
+            [](tc_render_target_handle& h, nb::object obj) {
+                if (obj.is_none()) {
+                    tc_render_target_set_pipeline_params(h, nullptr);
+                    return;
+                }
+                tc_value dict = tc_value_dict_new();
+                if (nb::isinstance<nb::dict>(obj)) {
+                    for (auto item : nb::cast<nb::dict>(obj)) {
+                        std::string key = nb::cast<std::string>(nb::str(item.first));
+                        std::string val = nb::cast<std::string>(nb::str(item.second));
+                        tc_value v = tc_value_string(val.c_str());
+                        tc_value_dict_set(&dict, key.c_str(), v);
+                    }
+                }
+                tc_render_target_set_pipeline_params(h, &dict);
+                tc_value_free(&dict);
+            })
 
         // --- Owned tc_textures (Phase 6) -----------------------------------
         // `ensure_textures()` allocates the color + depth tc_textures on

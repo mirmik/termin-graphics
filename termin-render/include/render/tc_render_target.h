@@ -3,6 +3,7 @@
 #define TC_RENDER_TARGET_H
 
 #include <tc_types.h>
+#include "tc_value.h"
 #include "render/tc_render_target_pool.h"
 #include "render/tc_pipeline_pool.h"
 #include "core/tc_entity_pool.h"
@@ -67,6 +68,12 @@ TC_API bool tc_render_target_get_enabled(tc_render_target_handle h);
 
 TC_API void tc_render_target_set_locked(tc_render_target_handle h, bool locked);
 TC_API bool tc_render_target_get_locked(tc_render_target_handle h);
+
+// pipeline_params: dict of slot_name → rt_name (tc_value type TC_VALUE_DICT)
+// Returns NULL if no params set. Caller does NOT own the returned pointer.
+TC_API const tc_value* tc_render_target_get_pipeline_params(tc_render_target_handle h);
+// Copies the dict. Pass NULL to clear.
+TC_API void tc_render_target_set_pipeline_params(tc_render_target_handle h, const tc_value* dict);
 
 #ifdef __cplusplus
 }

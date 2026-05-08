@@ -1,6 +1,7 @@
 // tc_render_target.c - Render target pool implementation
 #include "render/tc_render_target.h"
 #include "render/tc_render_target_pool.h"
+#include "tc_value.h"
 #include "core/tc_component.h"
 #include "tgfx/resources/tc_texture.h"
 #include "tgfx/resources/tc_texture_registry.h"
@@ -30,6 +31,8 @@ typedef struct {
     // first ensure call — getters return them as-is.
     tc_texture_handle* color_textures;
     tc_texture_handle* depth_textures;
+    // pipeline_params: dict of slot_name → rt_name (NULL if empty)
+    tc_value** pipeline_params;
     uint32_t* free_stack;
     size_t free_count;
     size_t capacity;
@@ -90,6 +93,7 @@ void tc_render_target_pool_init(void) {
     g_pool->locked = (bool*)calloc(cap, sizeof(bool));
     g_pool->color_textures = (tc_texture_handle*)calloc(cap, sizeof(tc_texture_handle));
     g_pool->depth_textures = (tc_texture_handle*)calloc(cap, sizeof(tc_texture_handle));
+    g_pool->pipeline_params = (tc_value**)calloc(cap, sizeof(tc_value*));
 
     g_pool->free_stack = (uint32_t*)malloc(cap * sizeof(uint32_t));
     for (size_t i = 0; i < cap; i++) {
@@ -114,6 +118,11 @@ void tc_render_target_pool_shutdown(void) {
     for (size_t i = 0; i < g_pool->capacity; i++) {
         if (g_pool->alive[i]) {
             free(g_pool->names[i]);
+            if (g_pool->pipeline_params[i]) {
+                tc_value_free(g_pool->pipeline_params[i]);
+                free(g_pool->pipeline_params[i]);
+                g_pool->pipeline_params[i] = NULL;
+            }
             if (!tc_texture_handle_is_invalid(g_pool->color_textures[i])) {
                 tc_texture_destroy(g_pool->color_textures[i]);
             }
@@ -138,6 +147,7 @@ void tc_render_target_pool_shutdown(void) {
     free(g_pool->locked);
     free(g_pool->color_textures);
     free(g_pool->depth_textures);
+    free(g_pool->pipeline_params);
     free(g_pool->free_stack);
     free(g_pool);
     g_pool = NULL;
@@ -167,6 +177,7 @@ static void pool_grow(void) {
     g_pool->locked = realloc(g_pool->locked, new_cap * sizeof(bool));
     g_pool->color_textures = realloc(g_pool->color_textures, new_cap * sizeof(tc_texture_handle));
     g_pool->depth_textures = realloc(g_pool->depth_textures, new_cap * sizeof(tc_texture_handle));
+    g_pool->pipeline_params = realloc(g_pool->pipeline_params, new_cap * sizeof(tc_value*));
     g_pool->free_stack = realloc(g_pool->free_stack, new_cap * sizeof(uint32_t));
 
     memset(g_pool->generations + old_cap, 0, (new_cap - old_cap) * sizeof(uint32_t));
@@ -179,6 +190,7 @@ static void pool_grow(void) {
     memset(g_pool->layer_masks + old_cap, 0, (new_cap - old_cap) * sizeof(uint64_t));
     memset(g_pool->enabled + old_cap, 0, (new_cap - old_cap) * sizeof(bool));
     memset(g_pool->locked + old_cap, 0, (new_cap - old_cap) * sizeof(bool));
+    memset(g_pool->pipeline_params + old_cap, 0, (new_cap - old_cap) * sizeof(tc_value*));
 
     for (size_t i = old_cap; i < new_cap; i++) {
         g_pool->scenes[i] = TC_SCENE_HANDLE_INVALID;
@@ -260,6 +272,11 @@ void tc_render_target_pool_free(tc_render_target_handle h) {
     }
 
     free(g_pool->names[idx]);
+    if (g_pool->pipeline_params[idx]) {
+        tc_value_free(g_pool->pipeline_params[idx]);
+        free(g_pool->pipeline_params[idx]);
+        g_pool->pipeline_params[idx] = NULL;
+    }
     if (!tc_texture_handle_is_invalid(g_pool->color_textures[idx])) {
         tc_texture_destroy(g_pool->color_textures[idx]);
         g_pool->color_textures[idx] = tc_texture_handle_invalid();
@@ -480,4 +497,23 @@ void tc_render_target_set_locked(tc_render_target_handle h, bool locked) {
 bool tc_render_target_get_locked(tc_render_target_handle h) {
     if (!handle_alive(h)) return false;
     return g_pool->locked[h.index];
+}
+
+const tc_value* tc_render_target_get_pipeline_params(tc_render_target_handle h) {
+    if (!handle_alive(h)) return NULL;
+    return g_pool->pipeline_params[h.index];
+}
+
+void tc_render_target_set_pipeline_params(tc_render_target_handle h, const tc_value* dict) {
+    if (!handle_alive(h)) return;
+    tc_value** slot = &g_pool->pipeline_params[h.index];
+    if (*slot) {
+        tc_value_free(*slot);
+        free(*slot);
+        *slot = NULL;
+    }
+    if (dict && dict->type == TC_VALUE_DICT && dict->data.dict.count > 0) {
+        *slot = (tc_value*)malloc(sizeof(tc_value));
+        **slot = tc_value_copy(dict);
+    }
 }
