@@ -136,6 +136,11 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
             }
             if (name.empty()) {
                 name = "external_" + std::to_string(node_index[node.id]);
+                tc::Log::warn(
+                    "compile_graph: External RT node '%s' has empty slot/name; using '%s'",
+                    node.id.c_str(),
+                    name.c_str()
+                );
             }
             for (const auto& output : node.outputs) {
                 result.socket_names[node.id][output.name] = name;
@@ -633,6 +638,14 @@ RenderPipeline* compile_graph(GraphData& graph) {
     // 7. If a graph writes a non-pass resource directly to RenderTarget.color,
     // synthesize a blit pass so the resource is copied into OUTPUT.
     add_synthetic_output_blits(pipeline, graph, naming);
+
+    if (pipeline->pass_count() == 0 && (!graph.nodes.empty() || !graph.connections.empty())) {
+        tc::Log::error(
+            "compile_graph: graph compiled to 0 passes (nodes=%zu, connections=%zu)",
+            graph.nodes.size(),
+            graph.connections.size()
+        );
+    }
 
     // 8. Add ResourceSpecs (only for FBO resources, not shadow maps)
     std::unordered_set<std::string> seen_resources;
