@@ -204,6 +204,11 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
             continue;
         }
 
+        const NodeData* from_node = graph.get_node(conn.from_node_id);
+        if (!from_node || !is_pass_node(*from_node)) {
+            continue;
+        }
+
         auto from_it = result.socket_names.find(conn.from_node_id);
         if (from_it == result.socket_names.end()) {
             continue;
@@ -247,6 +252,88 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
     }
 
     return result;
+}
+
+// ============================================================================
+// Synthetic output blits
+// ============================================================================
+
+static bool set_pass_property(
+    TcPassRef& pass_ref,
+    const std::string& field_name,
+    const nos::trent& value
+);
+
+static void add_synthetic_output_blits(
+    RenderPipeline* pipeline,
+    const GraphData& graph,
+    const ResourceNaming& naming
+) {
+    if (!pipeline) {
+        return;
+    }
+
+    for (const auto& conn : graph.connections) {
+        const NodeData* to_node = graph.get_node(conn.to_node_id);
+        if (!to_node || to_node->node_type != "output") {
+            continue;
+        }
+        if (conn.to_socket != "color") {
+            if (conn.to_socket == "depth") {
+                tc::Log::warn(
+                    "compile_graph: RenderTarget.depth from non-pass node is not supported"
+                );
+            }
+            continue;
+        }
+
+        const NodeData* from_node = graph.get_node(conn.from_node_id);
+        if (!from_node || is_pass_node(*from_node)) {
+            continue;
+        }
+
+        auto from_it = naming.socket_names.find(conn.from_node_id);
+        if (from_it == naming.socket_names.end()) {
+            tc::Log::error(
+                "compile_graph: cannot synthesize output blit, source node '%s' has no socket map",
+                conn.from_node_id.c_str()
+            );
+            continue;
+        }
+
+        auto socket_it = from_it->second.find(conn.from_socket);
+        if (socket_it == from_it->second.end()) {
+            tc::Log::error(
+                "compile_graph: cannot synthesize output blit, source socket '%s.%s' is unresolved",
+                conn.from_node_id.c_str(),
+                conn.from_socket.c_str()
+            );
+            continue;
+        }
+
+        if (!tc_pass_registry_has("PresentToScreenPass")) {
+            tc::Log::error(
+                "compile_graph: cannot synthesize output blit, PresentToScreenPass is not registered"
+            );
+            continue;
+        }
+
+        tc_pass* pass_ptr = tc_pass_registry_create("PresentToScreenPass");
+        if (!pass_ptr) {
+            tc::Log::error("compile_graph: failed to create synthetic PresentToScreenPass");
+            continue;
+        }
+
+        TcPassRef pass_ref(pass_ptr);
+        pass_ref.set_pass_name("OutputBlit");
+
+        nos::trent input_name(socket_it->second);
+        nos::trent output_name("OUTPUT");
+        set_pass_property(pass_ref, "input_res", input_name);
+        set_pass_property(pass_ref, "output_res", output_name);
+
+        pipeline->add_pass(pass_ptr);
+    }
 }
 
 // ============================================================================
@@ -543,7 +630,11 @@ RenderPipeline* compile_graph(GraphData& graph) {
         pipeline->add_pass(pass_ptr);
     }
 
-    // 7. Add ResourceSpecs (only for FBO resources, not shadow maps)
+    // 7. If a graph writes a non-pass resource directly to RenderTarget.color,
+    // synthesize a blit pass so the resource is copied into OUTPUT.
+    add_synthetic_output_blits(pipeline, graph, naming);
+
+    // 8. Add ResourceSpecs (only for FBO resources, not shadow maps)
     std::unordered_set<std::string> seen_resources;
     for (const auto* node : sorted_nodes) {
         if (!is_pass_node(*node)) continue;

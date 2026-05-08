@@ -79,7 +79,11 @@ GraphData GraphData::from_trent(const nos::trent& t) {
                 node.y = static_cast<float>(node_t["y"].as_numer());
             }
 
-            bool is_pass = (node.node_type != "resource" && node.node_type != "output");
+            bool is_pass = (
+                node.node_type != "resource" &&
+                node.node_type != "external_rt" &&
+                node.node_type != "output"
+            );
             if (is_pass && !node.pass_class.empty()) {
                 auto sockets = get_pass_sockets(node.pass_class);
                 for (const auto& [name, type] : sockets.inputs) {
@@ -110,6 +114,8 @@ GraphData GraphData::from_trent(const nos::trent& t) {
                     }
                 }
             } else if (node.node_type == "resource") {
+                node.outputs.push_back({"fbo", "fbo", false});
+            } else if (node.node_type == "external_rt") {
                 node.outputs.push_back({"fbo", "fbo", false});
             } else if (node.node_type == "output") {
                 node.inputs.push_back({"color", "fbo", true});
