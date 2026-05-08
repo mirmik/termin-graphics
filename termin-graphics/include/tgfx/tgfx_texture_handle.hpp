@@ -250,6 +250,13 @@ public:
         }
     }
 
+    // Sync GPU-first texture data to CPU. No-op for CPU-first textures.
+    // After a successful call, data() returns the pixel content.
+    bool sync_to_cpu() {
+        tc_texture* t = get();
+        return tc_texture_sync_to_cpu(t);
+    }
+
     // Check if texture needs GPU upload (version mismatch)
     bool needs_upload() const {
         tc_texture* t = get();

@@ -5,12 +5,15 @@
 #include <tgfx/tgfx_gpu_ops.h>
 #include <tgfx/tgfx_types.h>
 #include <tgfx/resources/tc_texture.h>
+#include <tgfx/tc_gpu_context.h>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/opengl/opengl_render_device.hpp>
 #include <tcbase/tc_log.h>
 
 #include <cstring>
+#include <cstdlib>
 #include <unordered_map>
+#include <vector>
 
 // ============================================================================
 // Global tgfx2 device pointer
@@ -266,6 +269,104 @@ static void tgfx2_texture_delete(uint32_t gpu_id) {
     }
 }
 
+static bool tgfx2_texture_sync_to_cpu(tc_texture* tex) {
+    if (!tex || tex->width == 0 || tex->height == 0) return false;
+
+    tc_gpu_context* ctx = tc_gpu_get_context();
+    if (!ctx) {
+        tc_log_error("tgfx2_texture_sync_to_cpu: no GPU context");
+        return false;
+    }
+
+    tc_gpu_slot* slot = tc_gpu_context_texture_slot(ctx, tex->header.pool_index);
+    if (!slot || slot->gl_id == 0) {
+        tc_log_error("tgfx2_texture_sync_to_cpu: texture not uploaded to GPU");
+        return false;
+    }
+
+    auto it = g_texture_map.find(slot->gl_id);
+    if (it == g_texture_map.end()) {
+        tc_log_error("tgfx2_texture_sync_to_cpu: gl_id %u not in texture map", slot->gl_id);
+        return false;
+    }
+    tgfx::TextureHandle handle{it->second};
+
+    auto* dev = get_device();
+    if (!dev) return false;
+
+    uint32_t w = tex->width;
+    uint32_t h = tex->height;
+    bool is_depth = (tex->format == TC_TEXTURE_DEPTH24 || tex->format == TC_TEXTURE_DEPTH32F);
+
+    if (is_depth) {
+        size_t float_count = (size_t)w * h;
+        std::vector<float> depth_data(float_count);
+        if (!dev->read_texture_depth_float(handle, depth_data.data())) {
+            tc_log_error("tgfx2_texture_sync_to_cpu: read_texture_depth_float failed");
+            return false;
+        }
+
+        size_t data_size = float_count * sizeof(float);
+        void* new_data = realloc(tex->data, data_size);
+        if (!new_data) {
+            tc_log_error("tgfx2_texture_sync_to_cpu: allocation failed (%zu bytes)", data_size);
+            return false;
+        }
+        tex->data = new_data;
+        memcpy(tex->data, depth_data.data(), data_size);
+    } else {
+        size_t float_count = (size_t)w * h * 4;
+        std::vector<float> color_data(float_count);
+        if (!dev->read_texture_rgba_float(handle, color_data.data())) {
+            tc_log_error("tgfx2_texture_sync_to_cpu: read_texture_rgba_float failed");
+            return false;
+        }
+
+        bool is_float16 = (tex->format == TC_TEXTURE_RGBA16F || tex->format == TC_TEXTURE_RGB16F);
+
+        if (is_float16) {
+            // Store as float32 per channel for simplicity (channels field
+            // already reflects component count). Preview path reads
+            // width*height*channels*sizeof(float) bytes.
+            uint8_t ch = tex->channels;
+            size_t data_size = (size_t)w * h * ch * sizeof(float);
+            void* new_data = realloc(tex->data, data_size);
+            if (!new_data) {
+                tc_log_error("tgfx2_texture_sync_to_cpu: allocation failed (%zu bytes)", data_size);
+                return false;
+            }
+            tex->data = new_data;
+            float* dst = (float*)tex->data;
+            for (size_t i = 0; i < (size_t)w * h; i++) {
+                for (uint8_t c = 0; c < ch; c++) {
+                    dst[i * ch + c] = color_data[i * 4 + c];
+                }
+            }
+        } else {
+            // Uint8 formats: convert float [0,1] to uint8 [0,255]
+            uint8_t ch = tex->channels;
+            size_t data_size = (size_t)w * h * ch;
+            void* new_data = realloc(tex->data, data_size);
+            if (!new_data) {
+                tc_log_error("tgfx2_texture_sync_to_cpu: allocation failed (%zu bytes)", data_size);
+                return false;
+            }
+            tex->data = new_data;
+            uint8_t* dst = (uint8_t*)tex->data;
+            for (size_t i = 0; i < (size_t)w * h; i++) {
+                for (uint8_t c = 0; c < ch; c++) {
+                    float val = color_data[i * 4 + c];
+                    if (val < 0.0f) val = 0.0f;
+                    if (val > 1.0f) val = 1.0f;
+                    dst[i * ch + c] = (uint8_t)(val * 255.0f + 0.5f);
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
 // ============================================================================
 // Mesh operations
 // ============================================================================
@@ -444,7 +545,7 @@ void tgfx2_gpu_ops_register(void) {
     ops.texture_bind = tgfx2_texture_bind;
     ops.depth_texture_bind = tgfx2_depth_texture_bind;
     ops.texture_delete = tgfx2_texture_delete;
-
+    ops.texture_sync_to_cpu = tgfx2_texture_sync_to_cpu;
 
     ops.mesh_upload = tgfx2_mesh_upload;
     ops.mesh_draw = tgfx2_mesh_draw;

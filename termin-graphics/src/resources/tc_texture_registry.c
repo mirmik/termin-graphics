@@ -5,6 +5,7 @@
 #include "tgfx/tc_registry_utils.h"
 #include <tcbase/tc_log.h>
 #include <tcbase/tgfx_intern_string.h>
+#include <tgfx/tgfx_gpu_ops.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -109,7 +110,7 @@ tc_texture_handle tc_texture_create(const char* uuid) {
     tex->header.ref_count = 0;
     tex->header.pool_index = h.index;
     tex->flip_y = 1;  // Default for OpenGL
-    tex->storage_kind = TC_TEXTURE_STORAGE_CPU_PIXELS;
+    tex->storage_kind = TC_TEXTURE_STORAGE_CPU_FIRST;
     tex->usage = TC_TEXTURE_USAGE_SAMPLED;
 
     if (!tc_resource_map_add(g_uuid_to_index, tex->header.uuid, tc_pack_index(h.index))) {
@@ -485,6 +486,26 @@ static bool collect_texture_info(tc_texture_handle h, tc_texture* tex, void* use
     info->memory_bytes = (size_t)tex->width * tex->height * tex->channels;
 
     return true;
+}
+
+// ============================================================================
+// GPU sync
+// ============================================================================
+
+bool tc_texture_sync_to_cpu(tc_texture* tex) {
+    if (!tex) return false;
+
+    // CPU-first textures already have data on CPU
+    if (tex->storage_kind == TC_TEXTURE_STORAGE_CPU_FIRST) return true;
+
+    // GPU-first: need readback via GPU ops
+    const tgfx_gpu_ops* ops = tgfx_gpu_get_ops();
+    if (!ops || !ops->texture_sync_to_cpu) {
+        tc_log(TC_LOG_ERROR, "tc_texture_sync_to_cpu: no texture_sync_to_cpu callback");
+        return false;
+    }
+
+    return ops->texture_sync_to_cpu(tex);
 }
 
 tc_texture_info* tc_texture_get_all_info(size_t* count) {

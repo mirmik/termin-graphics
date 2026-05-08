@@ -400,7 +400,7 @@ void tc_render_target_ensure_textures(tc_render_target_handle h) {
         tc_texture_handle ch = tc_texture_create(NULL);
         tc_texture* tex = tc_texture_get(ch);
         if (tex) {
-            tc_texture_set_storage_kind(tex, TC_TEXTURE_STORAGE_GPU_ONLY);
+            tc_texture_set_storage_kind(tex, TC_TEXTURE_STORAGE_GPU_FIRST);
             tc_texture_set_usage(tex, RT_DEFAULT_COLOR_USAGE);
             tc_texture_set_size_format(tex, w, height_, RT_DEFAULT_COLOR_FORMAT);
             g_pool->color_textures[idx] = ch;
@@ -413,7 +413,7 @@ void tc_render_target_ensure_textures(tc_render_target_handle h) {
         tc_texture_handle dh = tc_texture_create(NULL);
         tc_texture* tex = tc_texture_get(dh);
         if (tex) {
-            tc_texture_set_storage_kind(tex, TC_TEXTURE_STORAGE_GPU_ONLY);
+            tc_texture_set_storage_kind(tex, TC_TEXTURE_STORAGE_GPU_FIRST);
             tc_texture_set_usage(tex, RT_DEFAULT_DEPTH_USAGE);
             tc_texture_set_size_format(tex, w, height_, RT_DEFAULT_DEPTH_FORMAT);
             g_pool->depth_textures[idx] = dh;

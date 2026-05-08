@@ -13,6 +13,8 @@
 extern "C" {
 #endif
 
+struct tc_texture;
+
 typedef struct tgfx_gpu_ops {
     // Texture operations
     // Upload texture to GPU, returns GPU texture ID (0 on failure)
@@ -54,6 +56,11 @@ typedef struct tgfx_gpu_ops {
 
     // Delete GPU texture
     void (*texture_delete)(uint32_t gpu_id);
+
+    // Sync GPU-first texture data to CPU. Allocates tex->data if needed,
+    // fills it with pixel data read back from the GPU image. Returns true
+    // on success. NULL when the backend doesn't support readback.
+    bool (*texture_sync_to_cpu)(struct tc_texture* tex);
 
     // Mesh operations
     // Upload mesh to GPU (creates VBO+EBO+VAO), returns GPU VAO ID (0 on failure)

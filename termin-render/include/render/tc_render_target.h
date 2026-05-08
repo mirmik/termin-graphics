@@ -33,7 +33,7 @@ TC_API bool tc_render_target_get_dynamic_resolution(tc_render_target_handle h);
 // --- Owned tc_textures -----------------------------------------------------
 //
 // Render targets own a color + depth tc_texture pair. Both are GPU-only
-// (tc_texture_storage_kind == GPU_ONLY) — no CPU pixel blob; the GPU
+// (tc_texture_storage_kind == GPU_FIRST) — no CPU pixel blob; the GPU
 // image is allocated when the bridge first wraps the texture, and is
 // rebuilt on size/format change because `set_width / set_height` bump
 // the tc_texture's `header.version`.

@@ -53,8 +53,8 @@ bool tc_texture_upload_gpu(tc_texture* tex) {
     // GPU-only textures (render targets etc.) have no CPU pixel blob —
     // the bridge / engine just wants an allocated GL texture object of
     // the requested size + format + usage. CPU textures still need data.
-    const bool gpu_only = (tex->storage_kind == TC_TEXTURE_STORAGE_GPU_ONLY);
-    if (!gpu_only && !tex->data) {
+    const bool gpu_first = (tex->storage_kind == TC_TEXTURE_STORAGE_GPU_FIRST);
+    if (!gpu_first && !tex->data) {
         return false;
     }
 
@@ -88,7 +88,7 @@ bool tc_texture_upload_gpu(tc_texture* tex) {
 
     uint32_t gpu_id = 0;
 
-    if (gpu_only) {
+    if (gpu_first) {
         if (!ops->texture_create_gpu_only) {
             tc_log_error("tc_texture_upload_gpu: texture_create_gpu_only not set");
             return false;

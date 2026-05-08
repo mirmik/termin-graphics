@@ -36,15 +36,16 @@ typedef enum tc_texture_format {
 // Storage kind & usage flags
 // ============================================================================
 //
-// Most tc_texture instances are CPU-pixels-with-GPU-mirror: the source of
-// truth lives in `tc_texture.data`, and bridge code uploads it on demand.
-// Render targets break that model — they have no CPU origin; the GPU image
-// is born blank and is written into by render passes. Marking such a
-// texture as GPU_ONLY tells the upload path "don't expect a CPU blob, just
-// allocate the image with the requested usage flags".
+// Most tc_texture instances are CPU-first: the source of truth lives in
+// `tc_texture.data`, and bridge code uploads it to GPU on demand.
+// Render targets break that model — the GPU image is the source of truth
+// and is written into by render passes. Marking such a texture as
+// GPU_FIRST tells the upload path to allocate the image with the requested
+// usage flags. A GPU_FIRST texture can still be read back to CPU via
+// tc_texture_sync_to_cpu().
 typedef enum tc_texture_storage_kind {
-    TC_TEXTURE_STORAGE_CPU_PIXELS = 0,  // default — pixels in tex->data
-    TC_TEXTURE_STORAGE_GPU_ONLY   = 1,  // render-target-style; no CPU data
+    TC_TEXTURE_STORAGE_CPU_FIRST = 0,  // source of truth is tex->data
+    TC_TEXTURE_STORAGE_GPU_FIRST = 1,  // source of truth is GPU image
 } tc_texture_storage_kind;
 
 // Usage hint that backends translate to native creation flags
@@ -65,7 +66,7 @@ typedef enum tc_texture_usage_flags {
 
 typedef struct tc_texture {
     tc_resource_header header;  // common resource fields (uuid, name, version, etc.)
-    void* data;                 // raw pixel data blob (NULL for GPU_ONLY)
+    void* data;                 // raw pixel data blob (may be NULL for GPU_FIRST)
     uint32_t width;
     uint32_t height;
     uint8_t channels;           // 1, 2, 3, or 4
@@ -76,7 +77,7 @@ typedef struct tc_texture {
     uint8_t mipmap;             // generate mipmaps on upload
     uint8_t clamp;              // use clamp wrapping (vs repeat)
     uint8_t compare_mode;       // enable depth comparison for sampler2DShadow
-    uint8_t storage_kind;       // tc_texture_storage_kind, default = CPU_PIXELS
+    uint8_t storage_kind;       // tc_texture_storage_kind, default = CPU_FIRST
     uint32_t usage;             // tc_texture_usage_flags bitset, default = SAMPLED
     const char* source_path;    // optional source file path (interned string)
 } tc_texture;
@@ -101,7 +102,7 @@ static inline size_t tc_texture_data_size(const tc_texture* tex) {
 // Storage / usage accessors
 // ============================================================================
 
-// Setter for storage_kind. Marking a texture GPU_ONLY tells subsequent
+// Setter for storage_kind. Marking a texture GPU_FIRST tells subsequent
 // upload paths not to require `tex->data` and to allocate the GPU image
 // with the texture's `usage` flags.
 TGFX_API void tc_texture_set_storage_kind(tc_texture* tex, tc_texture_storage_kind kind);
@@ -118,9 +119,14 @@ TGFX_API void tc_texture_set_size_format(
     tc_texture_format format
 );
 
-static inline bool tc_texture_is_gpu_only(const tc_texture* tex) {
-    return tex && tex->storage_kind == TC_TEXTURE_STORAGE_GPU_ONLY;
+static inline bool tc_texture_is_gpu_first(const tc_texture* tex) {
+    return tex && tex->storage_kind == TC_TEXTURE_STORAGE_GPU_FIRST;
 }
+
+// Sync GPU-first texture data to CPU. No-op for CPU-first textures.
+// On success, tex->data is filled with pixel data in the texture's format.
+// Returns true if data is available (either already CPU-first, or synced).
+TGFX_API bool tc_texture_sync_to_cpu(tc_texture* tex);
 
 // ============================================================================
 // Reference counting

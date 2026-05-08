@@ -60,6 +60,11 @@ void bind_texture(nb::module_& m) {
         // Methods
         .def("bump_version", &TcTexture::bump_version)
 
+        // Sync GPU-first texture to CPU
+        .def("sync_to_cpu", &TcTexture::sync_to_cpu,
+            "Sync GPU-first texture data to CPU. No-op for CPU-first textures. "
+            "After a successful call, .data returns pixel content.")
+
         // GPU methods
         .def("bind_gpu", &TcTexture::bind_gpu, nb::arg("unit") = 0,
             "Bind texture to GPU texture unit")

@@ -2260,7 +2260,7 @@ TextureUsage tc_usage_to_tgfx(uint32_t usage) {
 TextureHandle VulkanRenderDevice::ensure_tc_texture(tc_texture* tex) {
     if (!tex) return {};
 
-    const bool gpu_only = (tex->storage_kind == TC_TEXTURE_STORAGE_GPU_ONLY);
+    const bool gpu_first = (tex->storage_kind == TC_TEXTURE_STORAGE_GPU_FIRST);
 
     if (tex->width == 0 || tex->height == 0) {
         tc_log(TC_LOG_ERROR,
@@ -2268,7 +2268,7 @@ TextureHandle VulkanRenderDevice::ensure_tc_texture(tc_texture* tex) {
                tex->header.name ? tex->header.name : tex->header.uuid);
         return {};
     }
-    if (!gpu_only && !tex->data) {
+    if (!gpu_first && !tex->data) {
         tc_log(TC_LOG_ERROR,
                "VulkanRenderDevice::ensure_tc_texture: tc_texture '%s' has no CPU pixels",
                tex->header.name ? tex->header.name : tex->header.uuid);
@@ -2296,7 +2296,7 @@ TextureHandle VulkanRenderDevice::ensure_tc_texture(tc_texture* tex) {
     desc.mip_levels = 1;
     desc.sample_count = 1;
 
-    if (gpu_only) {
+    if (gpu_first) {
         // Render-target-style: no CPU upload, just allocate a blank
         // VkImage with whatever attachment bits the caller declared.
         // CopyDst is always added because the staging upload path uses
