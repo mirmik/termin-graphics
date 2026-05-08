@@ -4,6 +4,8 @@
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 
+#include <tcbase/tc_log.hpp>
+
 #include "termin/render/render_pipeline.hpp"
 #include "termin/render/scene_pipeline_template.hpp"
 
@@ -95,6 +97,7 @@ static tc_value python_to_tc_value(nb::handle obj) {
         std::string s = nb::cast<std::string>(nb::str(obj));
         return tc_value_string(s.c_str());
     } catch (...) {
+        tc::Log::debug("[scene_pipeline_template] python_to_tc_value: unsupported Python object type, returning nil");
         return tc_value_nil();
     }
 }

@@ -8,6 +8,8 @@
 #include <nanobind/stl/unordered_map.h>
 #include <nanobind/stl/vector.h>
 
+#include <tcbase/tc_log.hpp>
+
 #include <termin/geom/mat44.hpp>
 #include <termin/entity/entity.hpp>
 #include <termin/render/render_camera.hpp>
@@ -51,7 +53,7 @@ void bind_render_framework(nb::module_& m) {
     } catch (const std::exception& e) {
         // If tgfx isn't available (minimal builds), ctx2 property will
         // degrade but everything else still works.
-        (void)e;
+        tc::Log::debug("[render_framework] tgfx._tgfx_native import failed (minimal build?): %s", e.what());
     }
 
     nb::enum_<TextureFilter>(m, "TextureFilter")

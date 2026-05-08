@@ -3,6 +3,8 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 
+#include <tcbase/tc_log.hpp>
+
 extern "C" {
 #include "render/tc_render_target.h"
 #include "render/tc_render_target_pool.h"
@@ -73,7 +75,9 @@ void bind_tc_render_target(nb::module_& m) {
                     tc_scene_handle s = nb::cast<tc_scene_handle>(scene_obj);
                     tc_render_target_set_scene(h, s);
                     return;
-                } catch (...) {}
+                } catch (...) {
+                    tc::Log::debug("[tc_render_target] Direct scene_handle cast failed, trying fallback via scene_handle() method");
+                }
                 // Fallback: extract from scene_handle() method
                 if (nb::hasattr(scene_obj, "scene_handle")) {
                     nb::object handle_obj = scene_obj.attr("scene_handle")();
