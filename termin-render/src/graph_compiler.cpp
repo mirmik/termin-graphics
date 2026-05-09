@@ -447,6 +447,10 @@ static bool set_pass_property(
 
 static std::unordered_map<std::string, const NodeData*> collect_fbo_nodes(const GraphData& graph) {
     std::unordered_map<std::string, const NodeData*> result;
+    std::unordered_map<std::string, int> node_index;
+    for (size_t i = 0; i < graph.nodes.size(); ++i) {
+        node_index[graph.nodes[i].id] = static_cast<int>(i);
+    }
 
     for (const auto& node : graph.nodes) {
         if (node.node_type == "resource") {
@@ -455,7 +459,9 @@ static std::unordered_map<std::string, const NodeData*> collect_fbo_nodes(const 
                 resource_type = node.params["resource_type"].as_string();
             }
             if (resource_type == "fbo") {
-                std::string name = node.name.empty() ? node.id : node.name;
+                std::string name = node.name.empty()
+                    ? "fbo_" + std::to_string(node_index[node.id])
+                    : node.name;
                 result[name] = &node;
             }
         }
