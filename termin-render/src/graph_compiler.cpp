@@ -130,9 +130,12 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
             }
         }
         if (node.node_type == "external_rt") {
-            std::string name = node.name;
-            if (name.empty() && node.params.contains("slot") && node.params["slot"].is_string()) {
+            std::string name;
+            if (node.params.contains("slot") && node.params["slot"].is_string()) {
                 name = node.params["slot"].as_string();
+            }
+            if (name.empty()) {
+                name = node.name;
             }
             if (name.empty()) {
                 name = "unnamed";
