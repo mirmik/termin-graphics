@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Scope
-These instructions apply to everything inside `/home/mirmik/project/termin-env`.
+These instructions apply to everything inside `/home/mirmik/project/termin`.
 
 ## Collaboration style
 Не обязательно спрашивать подтверждение на каждый шаг.
@@ -59,3 +59,5 @@ Nested `AGENTS.md` files override this file for their own subtree.
 ## Логирование и обработка ошибок
 Ошибки должны быть обложены логами. Если что-то упало - это нельзя замалчивать. В логе должно появиться сообщение.
 
+## Основная версия редактора
+В termin-app есть qt и tcgui интерфейсы. tcgui является основным. Поддерживать следует в первую очередь его. qt подтягиваем по возможности, чтобы версии не сильно расходились
