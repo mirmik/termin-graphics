@@ -49,6 +49,40 @@ struct Rect4i {
 using ResourceMap = std::unordered_map<std::string, FrameGraphResource*>;
 using FBOMap = ResourceMap;
 
+inline tc_value make_pass_graph_socket_list(std::initializer_list<std::pair<const char*, const char*>> sockets) {
+    tc_value list = tc_value_list_new();
+    for (const auto& [name, type] : sockets) {
+        tc_value item = tc_value_list_new();
+        tc_value_list_push(&item, tc_value_string(name));
+        tc_value_list_push(&item, tc_value_string(type));
+        tc_value_list_push(&list, item);
+    }
+    return list;
+}
+
+inline tc_value make_pass_graph_pair_list(std::initializer_list<std::pair<const char*, const char*>> pairs) {
+    tc_value list = tc_value_list_new();
+    for (const auto& [first, second] : pairs) {
+        tc_value item = tc_value_list_new();
+        tc_value_list_push(&item, tc_value_string(first));
+        tc_value_list_push(&item, tc_value_string(second));
+        tc_value_list_push(&list, item);
+    }
+    return list;
+}
+
+inline tc_value make_pass_graph_metadata(
+    std::initializer_list<std::pair<const char*, const char*>> inputs,
+    std::initializer_list<std::pair<const char*, const char*>> outputs,
+    std::initializer_list<std::pair<const char*, const char*>> inplace_pairs = {}
+) {
+    tc_value graph = tc_value_dict_new();
+    tc_value_dict_set(&graph, "node_inputs", make_pass_graph_socket_list(inputs));
+    tc_value_dict_set(&graph, "node_outputs", make_pass_graph_socket_list(outputs));
+    tc_value_dict_set(&graph, "node_inplace_pairs", make_pass_graph_pair_list(inplace_pairs));
+    return graph;
+}
+
 class RENDER_API CxxFramePass {
 public:
     tc_pass _c;

@@ -6,9 +6,11 @@
 #include <termin/render/resource_spec.hpp>
 #include <trent/json.h>
 #include <deque>
+#include <optional>
 #include <unordered_set>
 
 extern "C" {
+#include "inspect/tc_inspect_pass_adapter.h"
 #include "render/tc_pass.h"
 #include "tc_value.h"
 }
@@ -23,13 +25,45 @@ using termin::TextureFilter;
 
 namespace tc {
 
+static bool set_pass_property(
+    TcPassRef& pass_ref,
+    const std::string& field_name,
+    const nos::trent& value
+);
+
 // ============================================================================
 // Helper: check if node is a pass (pass, effect, or any non-resource type)
 // ============================================================================
 
 static bool is_pass_node(const NodeData& node) {
-    // "resource", "external_rt", and "output" are not passes, everything else is
-    return node.node_type != "resource" && node.node_type != "external_rt" && node.node_type != "output";
+    // Resource and graph-boundary nodes are not executable passes.
+    return node.node_type != "resource"
+        && node.node_type != "external_rt"
+        && node.node_type != "render_target_input"
+        && node.node_type != "pipeline_output"
+        && node.node_type != "output";
+}
+
+static bool is_external_resource_name(const std::string& name) {
+    return name == "RT_COLOR" || name == "RT_DEPTH" ||
+           name == "OUTPUT" || name == "DISPLAY";
+}
+
+static bool is_target_socket_name(const std::string& name) {
+    return name.size() > 7 && name.substr(name.size() - 7) == "_target";
+}
+
+static std::optional<std::string> pass_field_string(tc_pass* pass, const std::string& field_name) {
+    tc::init_cpp_inspect_vtable();
+
+    tc_value value = tc_pass_inspect_get(pass, field_name.c_str());
+    if (value.type != TC_VALUE_STRING || !value.data.s) {
+        tc_value_free(&value);
+        return std::nullopt;
+    }
+    std::string result = value.data.s;
+    tc_value_free(&value);
+    return result;
 }
 
 // ============================================================================
@@ -112,7 +146,8 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
         node_index[graph.nodes[i].id] = static_cast<int>(i);
     }
 
-    // Pass 1: Assign names to FBO resource nodes and external RT nodes
+    // Pass 1: Assign names to FBO resource nodes, external RT nodes, and
+    // render-target external input nodes.
     for (const auto& node : graph.nodes) {
         if (node.node_type == "resource") {
             std::string resource_type = "fbo";
@@ -148,6 +183,19 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
             for (const auto& output : node.outputs) {
                 result.socket_names[node.id][output.name] = name;
                 result.resource_types[name] = output.socket_type;
+            }
+        }
+        if (node.node_type == "render_target_input") {
+            for (const auto& output : node.outputs) {
+                if (output.name == "color") {
+                    result.socket_names[node.id][output.name] = "RT_COLOR";
+                    result.resource_types["RT_COLOR"] = "external_color";
+                    result.external_resources["RT_COLOR"] = "render_target_color";
+                } else if (output.name == "depth") {
+                    result.socket_names[node.id][output.name] = "RT_DEPTH";
+                    result.resource_types["RT_DEPTH"] = "external_depth";
+                    result.external_resources["RT_DEPTH"] = "render_target_depth";
+                }
             }
         }
     }
@@ -193,7 +241,9 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
                     // Override the output socket name
                     sockets[base_name] = target_res;
                     // Also register the resource type
-                    result.resource_types[target_res] = "fbo";
+                    if (!is_external_resource_name(target_res)) {
+                        result.resource_types[target_res] = "fbo";
+                    }
                 }
             }
         }
@@ -226,14 +276,102 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
             continue;
         }
         socket_it->second = "OUTPUT";
-        result.resource_types["OUTPUT"] = "fbo";
+        result.resource_types["OUTPUT"] = "external_color";
+        result.external_resources["OUTPUT"] = "render_target_color";
     }
 
     // Pass 3d: Propagate all other connections (now output names are correct)
     for (const auto& conn : graph.connections) {
         // Skip _target connections (already handled)
-        if (conn.to_socket.size() > 7 &&
-            conn.to_socket.substr(conn.to_socket.size() - 7) == "_target") {
+        if (is_target_socket_name(conn.to_socket)) {
+            continue;
+        }
+        auto from_it = result.socket_names.find(conn.from_node_id);
+        if (from_it != result.socket_names.end()) {
+            auto socket_it = from_it->second.find(conn.from_socket);
+            if (socket_it != from_it->second.end()) {
+                result.socket_names[conn.to_node_id][conn.to_socket] = socket_it->second;
+            }
+        }
+    }
+
+    // Pass 3e: Apply pass-owned inplace aliases. GraphData does not know pass
+    // classes; the temporary pass instance is the source of alias semantics.
+    for (const auto& node : graph.nodes) {
+        if (!is_pass_node(node)) {
+            continue;
+        }
+        if (!tc_pass_registry_has(node.pass_class.c_str())) {
+            continue;
+        }
+
+        tc_pass* pass_ptr = tc_pass_registry_create(node.pass_class.c_str());
+        if (!pass_ptr) {
+            continue;
+        }
+        TcPassRef pass_ref(pass_ptr);
+
+        std::unordered_map<std::string, std::string> default_output_values;
+        for (const auto& output : node.outputs) {
+            auto value = pass_field_string(pass_ptr, output.name);
+            if (value.has_value()) {
+                default_output_values[output.name] = *value;
+            }
+        }
+
+        auto& sockets = result.socket_names[node.id];
+        std::unordered_set<std::string> connected_input_resources;
+        for (const auto& input : node.inputs) {
+            if (is_target_socket_name(input.name)) {
+                continue;
+            }
+            auto socket_it = sockets.find(input.name);
+            if (socket_it == sockets.end()) {
+                continue;
+            }
+            connected_input_resources.insert(socket_it->second);
+            set_pass_property(pass_ref, input.name, nos::trent(socket_it->second));
+        }
+
+        const char* alias_pairs[64];
+        size_t alias_count = tc_pass_get_inplace_aliases(pass_ptr, alias_pairs, 32);
+        for (size_t i = 0; i < alias_count; i++) {
+            const char* read_res_c = alias_pairs[i * 2];
+            const char* write_res_c = alias_pairs[i * 2 + 1];
+            if (!read_res_c || !write_res_c) {
+                continue;
+            }
+            std::string read_res = read_res_c;
+            std::string write_res = write_res_c;
+            if (connected_input_resources.find(read_res) == connected_input_resources.end()) {
+                continue;
+            }
+
+            for (const auto& [output_socket, default_write_res] : default_output_values) {
+                if (default_write_res != write_res) {
+                    continue;
+                }
+                if (sockets.find(output_socket + "_target") != sockets.end()) {
+                    continue;
+                }
+                auto current_output_it = sockets.find(output_socket);
+                if (current_output_it != sockets.end() && is_external_resource_name(current_output_it->second)) {
+                    continue;
+                }
+                sockets[output_socket] = read_res;
+                if (!is_external_resource_name(read_res)) {
+                    result.resource_types[read_res] = "fbo";
+                }
+            }
+        }
+
+        tc_pass_drop(pass_ptr);
+    }
+
+    // Pass 3f: Re-propagate downstream connections after pass-owned aliases
+    // may have changed output socket names.
+    for (const auto& conn : graph.connections) {
+        if (is_target_socket_name(conn.to_socket)) {
             continue;
         }
         auto from_it = result.socket_names.find(conn.from_node_id);
@@ -251,6 +389,9 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
         for (const auto& inp : node.inputs) {
             auto& sockets = result.socket_names[node.id];
             if (sockets.find(inp.name) == sockets.end()) {
+                if (is_target_socket_name(inp.name)) {
+                    continue;
+                }
                 std::string node_name = node.name.empty() ? node.pass_class : node.name;
                 std::string name = "empty_" + node_name + "_" + std::to_string(idx) + "_" + inp.name;
                 sockets[inp.name] = name;
@@ -436,9 +577,18 @@ static bool set_pass_property(
 ) {
     if (!pass_ref.valid()) return false;
 
+    tc::init_cpp_inspect_vtable();
+
     tc_value tc_val = trent_to_tc_value(value);
     bool result = pass_ref.set_field(field_name, tc_val);
     tc_value_free(&tc_val);
+    if (!result) {
+        tc::Log::warn(
+            "compile_graph: failed to set field '%s.%s'",
+            pass_ref.type_name().c_str(),
+            field_name.c_str()
+        );
+    }
     return result;
 }
 
@@ -673,6 +823,9 @@ RenderPipeline* compile_graph(GraphData& graph) {
             // Skip non-FBO resources (shadow maps are managed by ShadowPass)
             auto type_it = naming.resource_types.find(res_name);
             if (type_it != naming.resource_types.end() && type_it->second != "fbo") {
+                continue;
+            }
+            if (is_external_resource_name(res_name)) {
                 continue;
             }
 

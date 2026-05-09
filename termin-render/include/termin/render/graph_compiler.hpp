@@ -20,6 +20,7 @@ struct ResourceNaming {
     std::unordered_map<std::string, std::unordered_map<std::string, std::string>> socket_names;
     std::unordered_map<std::string, std::string> resource_types;
     std::unordered_map<std::string, std::vector<std::string>> target_aliases;
+    std::unordered_map<std::string, std::string> external_resources;
 };
 
 RENDER_API std::vector<NodeData*> topological_sort(GraphData& graph);

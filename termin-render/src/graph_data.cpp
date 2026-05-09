@@ -1,9 +1,95 @@
 #include "termin/render/graph_data.hpp"
 
 #include <tcbase/tc_log.hpp>
+#include <tc_inspect_cpp.hpp>
 #include <trent/json.h>
 
+extern "C" {
+#include "inspect/tc_inspect.h"
+}
+
 namespace tc {
+
+static bool is_graph_boundary_node_type(const std::string& node_type) {
+    return node_type == "resource" ||
+           node_type == "external_rt" ||
+           node_type == "render_target_input" ||
+           node_type == "pipeline_output" ||
+           node_type == "output";
+}
+
+static bool is_pass_node_type(const std::string& node_type) {
+    return !is_graph_boundary_node_type(node_type);
+}
+
+static bool has_socket(const std::vector<SocketData>& sockets, const std::string& name) {
+    for (const auto& socket : sockets) {
+        if (socket.name == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool is_target_socket_name(const std::string& name) {
+    return name.size() > 7 && name.substr(name.size() - 7) == "_target";
+}
+
+static void add_socket_from_tc_value(std::vector<SocketData>& sockets, const tc_value* value, bool is_input) {
+    if (!value || value->type != TC_VALUE_LIST || value->data.list.count < 2) {
+        return;
+    }
+    const tc_value* name_value = &value->data.list.items[0];
+    const tc_value* type_value = &value->data.list.items[1];
+    if (name_value->type != TC_VALUE_STRING || !name_value->data.s) {
+        return;
+    }
+    std::string name = name_value->data.s;
+    if (name.empty() || has_socket(sockets, name)) {
+        return;
+    }
+
+    std::string socket_type = "fbo";
+    if (type_value->type == TC_VALUE_STRING && type_value->data.s && type_value->data.s[0]) {
+        socket_type = type_value->data.s;
+    }
+    sockets.push_back({name, socket_type, is_input});
+}
+
+static void add_sockets_from_metadata(NodeData& node) {
+    if (node.pass_class.empty()) {
+        return;
+    }
+
+    tc::init_cpp_inspect_vtable();
+    tc_value metadata = tc_inspect_get_type_metadata(node.pass_class.c_str());
+    if (metadata.type != TC_VALUE_DICT) {
+        tc_value_free(&metadata);
+        return;
+    }
+
+    tc_value* graph = tc_value_dict_get(&metadata, "graph");
+    if (!graph || graph->type != TC_VALUE_DICT) {
+        tc_value_free(&metadata);
+        return;
+    }
+
+    tc_value* inputs = tc_value_dict_get(graph, "node_inputs");
+    if (inputs && inputs->type == TC_VALUE_LIST) {
+        for (size_t i = 0; i < inputs->data.list.count; i++) {
+            add_socket_from_tc_value(node.inputs, &inputs->data.list.items[i], true);
+        }
+    }
+
+    tc_value* outputs = tc_value_dict_get(graph, "node_outputs");
+    if (outputs && outputs->type == TC_VALUE_LIST) {
+        for (size_t i = 0; i < outputs->data.list.count; i++) {
+            add_socket_from_tc_value(node.outputs, &outputs->data.list.items[i], false);
+        }
+    }
+
+    tc_value_free(&metadata);
+}
 
 NodeData* GraphData::get_node(const std::string& id) {
     for (auto& node : nodes) {
@@ -21,30 +107,6 @@ const NodeData* GraphData::get_node(const std::string& id) const {
         }
     }
     return nullptr;
-}
-
-static const std::unordered_map<std::string, PassSocketInfo> g_pass_socket_info = {
-    {"ColorPass", {{{"input_res", "fbo"}, {"shadow_res", "shadow"}}, {{"output_res", "fbo"}}}},
-    {"DepthPass", {{{"input_res", "fbo"}}, {{"output_res", "fbo"}}}},
-    {"NormalPass", {{{"input_res", "fbo"}}, {{"output_res", "fbo"}}}},
-    {"IdPass", {{{"input_res", "fbo"}}, {{"output_res", "fbo"}}}},
-    {"ShadowPass", {{}, {{"output_res", "shadow"}}}},
-    {"SkyBoxPass", {{{"input_res", "fbo"}}, {{"output_res", "fbo"}}}},
-    {"BloomPass", {{{"input_res", "fbo"}}, {{"output_res", "fbo"}}}},
-    {"TonemapPass", {{{"input_res", "fbo"}}, {{"output_res", "fbo"}}}},
-    {"MaterialPass", {{}, {{"output_res", "fbo"}}}},
-    {"ResolvePass", {{{"input_res", "fbo"}}, {{"output_res", "fbo"}}}},
-    {"PresentToScreenPass", {{{"input_res", "fbo"}}, {}}},
-    {"ColliderGizmoPass", {{{"input_res", "fbo"}}, {{"output_res", "fbo"}}}},
-    {"DebugTrianglePass", {{}, {{"output_res", "fbo"}}}},
-};
-
-PassSocketInfo get_pass_sockets(const std::string& class_name) {
-    auto it = g_pass_socket_info.find(class_name);
-    if (it != g_pass_socket_info.end()) {
-        return it->second;
-    }
-    return {{{"input_res", "fbo"}}, {{"output_res", "fbo"}}};
 }
 
 GraphData GraphData::from_trent(const nos::trent& t) {
@@ -79,20 +141,21 @@ GraphData GraphData::from_trent(const nos::trent& t) {
                 node.y = static_cast<float>(node_t["y"].as_numer());
             }
 
-            bool is_pass = (
-                node.node_type != "resource" &&
-                node.node_type != "external_rt" &&
-                node.node_type != "output"
-            );
-            if (is_pass && !node.pass_class.empty()) {
-                auto sockets = get_pass_sockets(node.pass_class);
-                for (const auto& [name, type] : sockets.inputs) {
-                    node.inputs.push_back({name, type, true});
-                }
-                for (const auto& [name, type] : sockets.outputs) {
-                    node.outputs.push_back({name, type, false});
-                    node.inputs.push_back({name + "_target", type, true});
-                }
+            if (node.node_type == "resource") {
+                node.outputs.push_back({"fbo", "fbo", false});
+            } else if (node.node_type == "external_rt") {
+                node.outputs.push_back({"fbo", "fbo", false});
+            } else if (node.node_type == "render_target_input") {
+                node.outputs.push_back({"color", "fbo", false});
+                node.outputs.push_back({"depth", "fbo", false});
+            } else if (node.node_type == "pipeline_output") {
+                node.inputs.push_back({"color", "fbo", true});
+                node.inputs.push_back({"depth", "fbo", true});
+            } else if (node.node_type == "output") {
+                node.inputs.push_back({"color", "fbo", true});
+                node.inputs.push_back({"depth", "fbo", true});
+            } else if (is_pass_node_type(node.node_type)) {
+                add_sockets_from_metadata(node);
 
                 if (node_t.contains("dynamic_inputs") && node_t["dynamic_inputs"].is_list()) {
                     for (const auto& dyn : node_t["dynamic_inputs"].as_list()) {
@@ -101,25 +164,11 @@ GraphData GraphData::from_trent(const nos::trent& t) {
                         }
                         std::string dyn_name = dyn[0].as_string();
                         std::string dyn_type = dyn[1].as_string();
-                        bool found = false;
-                        for (const auto& inp : node.inputs) {
-                            if (inp.name == dyn_name) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (!found) {
-                            node.inputs.push_back({dyn_name, dyn_type, true});
+                        if (!dyn_name.empty() && !has_socket(node.inputs, dyn_name)) {
+                            node.inputs.push_back({dyn_name, dyn_type.empty() ? "fbo" : dyn_type, true});
                         }
                     }
                 }
-            } else if (node.node_type == "resource") {
-                node.outputs.push_back({"fbo", "fbo", false});
-            } else if (node.node_type == "external_rt") {
-                node.outputs.push_back({"fbo", "fbo", false});
-            } else if (node.node_type == "output") {
-                node.inputs.push_back({"color", "fbo", true});
-                node.inputs.push_back({"depth", "fbo", true});
             }
 
             graph.nodes.push_back(std::move(node));
@@ -152,6 +201,34 @@ GraphData GraphData::from_trent(const nos::trent& t) {
             }
 
             graph.connections.push_back(std::move(conn));
+        }
+    }
+
+    for (const auto& conn : graph.connections) {
+        NodeData* from_node = graph.get_node(conn.from_node_id);
+        if (from_node && is_pass_node_type(from_node->node_type) && !conn.from_socket.empty()) {
+            if (!has_socket(from_node->outputs, conn.from_socket)) {
+                tc::Log::warn(
+                    "GraphData: pass '%s' has no registered output socket '%s'; keeping socket from connection",
+                    from_node->pass_class.c_str(),
+                    conn.from_socket.c_str()
+                );
+                from_node->outputs.push_back({conn.from_socket, "fbo", false});
+            }
+        }
+
+        NodeData* to_node = graph.get_node(conn.to_node_id);
+        if (to_node && is_pass_node_type(to_node->node_type) && !conn.to_socket.empty()) {
+            if (!has_socket(to_node->inputs, conn.to_socket)) {
+                if (!is_target_socket_name(conn.to_socket)) {
+                    tc::Log::warn(
+                        "GraphData: pass '%s' has no registered input socket '%s'; keeping socket from connection",
+                        to_node->pass_class.c_str(),
+                        conn.to_socket.c_str()
+                    );
+                }
+                to_node->inputs.push_back({conn.to_socket, "fbo", true});
+            }
         }
     }
 

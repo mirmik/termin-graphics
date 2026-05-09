@@ -13,6 +13,7 @@ extern "C" {
 #include "core/tc_scene.h"
 #include "core/tc_component.h"
 #include "tgfx/resources/tc_texture.h"
+#include "tgfx/resources/tc_texture_registry.h"
 #include "tc_value.h"
 }
 
@@ -210,6 +211,48 @@ void bind_tc_render_target(nb::module_& m) {
                 return tgfx.attr("TcTexture").attr("from_handle")(
                     t.index, t.generation);
             })
+        .def("output_resource_info", [](tc_render_target_handle& h, const std::string& resource_name) -> nb::object {
+            const bool color_resource = resource_name == "OUTPUT"
+                || resource_name == "DISPLAY"
+                || resource_name == "RT_COLOR";
+            const bool depth_resource = resource_name == "RT_DEPTH";
+            if (!color_resource && !depth_resource) {
+                return nb::none();
+            }
+
+            tc_render_target_ensure_textures(h);
+
+            tc_texture_handle color_handle = tc_render_target_get_color_texture(h);
+            tc_texture_handle depth_handle = tc_render_target_get_depth_texture(h);
+            tc_texture* color = tc_texture_get(color_handle);
+            tc_texture* depth = tc_texture_get(depth_handle);
+            tc_texture* primary = depth_resource ? depth : color;
+            if (!primary) {
+                return nb::none();
+            }
+
+            nb::dict d;
+            d["key"] = resource_name;
+            d["width"] = static_cast<int>(primary->width);
+            d["height"] = static_cast<int>(primary->height);
+            d["samples"] = 1;
+            if (depth_resource) {
+                d["has_depth"] = false;
+                d["color_format_name"] = tc_render_target_format_to_string(
+                    static_cast<tc_texture_format>(depth->format));
+            } else {
+                d["has_depth"] = depth != nullptr;
+                d["color_format_name"] = tc_render_target_format_to_string(
+                    static_cast<tc_texture_format>(color->format));
+            }
+            if (!depth_resource && depth) {
+                d["depth_format_name"] = tc_render_target_format_to_string(
+                    static_cast<tc_texture_format>(depth->format));
+            }
+            d["color_native_handle"] = 0;
+            d["depth_native_handle"] = 0;
+            return d;
+        }, nb::arg("resource_name"))
 
         .def("free", [](tc_render_target_handle& h) { tc_render_target_free(h); });
 

@@ -52,11 +52,4 @@ struct GraphData {
     static GraphData from_trent(const nos::trent& t);
 };
 
-struct PassSocketInfo {
-    std::vector<std::pair<std::string, std::string>> inputs;
-    std::vector<std::pair<std::string, std::string>> outputs;
-};
-
-PassSocketInfo get_pass_sockets(const std::string& class_name);
-
 } // namespace tc

@@ -27,6 +27,22 @@ namespace termin {
 
 static constexpr const char* RESOURCE_FORMAT_RENDER_TARGET = "render_target";
 
+static bool is_external_color_output(const char* name) {
+    return name && (
+        strcmp(name, "OUTPUT") == 0 ||
+        strcmp(name, "DISPLAY") == 0 ||
+        strcmp(name, "RT_COLOR") == 0
+    );
+}
+
+static bool is_external_depth_output(const char* name) {
+    return name && strcmp(name, "RT_DEPTH") == 0;
+}
+
+static bool is_external_output_resource(const char* name) {
+    return is_external_color_output(name) || is_external_depth_output(name);
+}
+
 static tgfx::PixelFormat resolve_fbo_color_format(
     const std::string& format,
     const ViewportContext& default_ctx,
@@ -364,7 +380,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
     for (size_t i = 0; i < canon_count; i++) {
         const char* canon = canonical_names[i];
 
-        if (strcmp(canon, "OUTPUT") == 0 || strcmp(canon, "DISPLAY") == 0) {
+        if (is_external_output_resource(canon)) {
             // OUTPUT/DISPLAY are viewport-owned native textures
             // (vp_ctx.output_color_tex / output_depth_tex). Skip the
             // FBOMap allocation — passes receive them directly.
@@ -578,10 +594,16 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
         for (size_t j = 0; j < read_count; j++) {
             const char* read_name = reads[j];
-            if (strcmp(read_name, "OUTPUT") == 0 || strcmp(read_name, "DISPLAY") == 0) {
+            if (is_external_color_output(read_name)) {
                 if (vp_ctx.output_color_tex) {
                     pass_tex2_reads[read_name] = vp_ctx.output_color_tex;
                 }
+                if (vp_ctx.output_depth_tex) {
+                    pass_tex2_depth_reads[read_name] = vp_ctx.output_depth_tex;
+                }
+                continue;
+            }
+            if (is_external_depth_output(read_name)) {
                 if (vp_ctx.output_depth_tex) {
                     pass_tex2_depth_reads[read_name] = vp_ctx.output_depth_tex;
                 }
@@ -605,12 +627,16 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
         for (size_t j = 0; j < write_count; j++) {
             const char* write_name = writes[j];
-            if (strcmp(write_name, "OUTPUT") == 0 || strcmp(write_name, "DISPLAY") == 0) {
+            if (is_external_color_output(write_name)) {
                 // OUTPUT/DISPLAY come straight from ViewportContext's
                 // owned native textures — no FBO wrap needed anymore.
                 if (vp_ctx.output_color_tex) {
                     pass_tex2_writes[write_name] = vp_ctx.output_color_tex;
                 }
+                if (vp_ctx.output_depth_tex) {
+                    pass_tex2_depth_writes[write_name] = vp_ctx.output_depth_tex;
+                }
+            } else if (is_external_depth_output(write_name)) {
                 if (vp_ctx.output_depth_tex) {
                     pass_tex2_depth_writes[write_name] = vp_ctx.output_depth_tex;
                 }
