@@ -19,6 +19,8 @@ typedef struct {
     int* widths;
     int* heights;
     bool* dynamic_resolutions;
+    tc_texture_format* color_formats;
+    tc_texture_format* depth_formats;
     tc_scene_handle* scenes;
     tc_component** cameras;
     tc_entity_handle* camera_entities;
@@ -84,6 +86,8 @@ void tc_render_target_pool_init(void) {
     g_pool->widths = (int*)calloc(cap, sizeof(int));
     g_pool->heights = (int*)calloc(cap, sizeof(int));
     g_pool->dynamic_resolutions = (bool*)calloc(cap, sizeof(bool));
+    g_pool->color_formats = (tc_texture_format*)calloc(cap, sizeof(tc_texture_format));
+    g_pool->depth_formats = (tc_texture_format*)calloc(cap, sizeof(tc_texture_format));
     g_pool->scenes = (tc_scene_handle*)calloc(cap, sizeof(tc_scene_handle));
     g_pool->cameras = (tc_component**)calloc(cap, sizeof(tc_component*));
     g_pool->camera_entities = (tc_entity_handle*)calloc(cap, sizeof(tc_entity_handle));
@@ -101,6 +105,8 @@ void tc_render_target_pool_init(void) {
         g_pool->scenes[i] = TC_SCENE_HANDLE_INVALID;
         g_pool->camera_entities[i] = TC_ENTITY_HANDLE_INVALID;
         g_pool->pipelines[i] = TC_PIPELINE_HANDLE_INVALID;
+        g_pool->color_formats[i] = RT_DEFAULT_COLOR_FORMAT;
+        g_pool->depth_formats[i] = RT_DEFAULT_DEPTH_FORMAT;
         g_pool->color_textures[i] = tc_texture_handle_invalid();
         g_pool->depth_textures[i] = tc_texture_handle_invalid();
     }
@@ -138,6 +144,8 @@ void tc_render_target_pool_shutdown(void) {
     free(g_pool->widths);
     free(g_pool->heights);
     free(g_pool->dynamic_resolutions);
+    free(g_pool->color_formats);
+    free(g_pool->depth_formats);
     free(g_pool->scenes);
     free(g_pool->cameras);
     free(g_pool->camera_entities);
@@ -168,6 +176,8 @@ static void pool_grow(void) {
     g_pool->widths = realloc(g_pool->widths, new_cap * sizeof(int));
     g_pool->heights = realloc(g_pool->heights, new_cap * sizeof(int));
     g_pool->dynamic_resolutions = realloc(g_pool->dynamic_resolutions, new_cap * sizeof(bool));
+    g_pool->color_formats = realloc(g_pool->color_formats, new_cap * sizeof(tc_texture_format));
+    g_pool->depth_formats = realloc(g_pool->depth_formats, new_cap * sizeof(tc_texture_format));
     g_pool->scenes = realloc(g_pool->scenes, new_cap * sizeof(tc_scene_handle));
     g_pool->cameras = realloc(g_pool->cameras, new_cap * sizeof(tc_component*));
     g_pool->camera_entities = realloc(g_pool->camera_entities, new_cap * sizeof(tc_entity_handle));
@@ -186,6 +196,8 @@ static void pool_grow(void) {
     memset(g_pool->widths + old_cap, 0, (new_cap - old_cap) * sizeof(int));
     memset(g_pool->heights + old_cap, 0, (new_cap - old_cap) * sizeof(int));
     memset(g_pool->dynamic_resolutions + old_cap, 0, (new_cap - old_cap) * sizeof(bool));
+    memset(g_pool->color_formats + old_cap, 0, (new_cap - old_cap) * sizeof(tc_texture_format));
+    memset(g_pool->depth_formats + old_cap, 0, (new_cap - old_cap) * sizeof(tc_texture_format));
     memset(g_pool->cameras + old_cap, 0, (new_cap - old_cap) * sizeof(tc_component*));
     memset(g_pool->layer_masks + old_cap, 0, (new_cap - old_cap) * sizeof(uint64_t));
     memset(g_pool->enabled + old_cap, 0, (new_cap - old_cap) * sizeof(bool));
@@ -196,6 +208,8 @@ static void pool_grow(void) {
         g_pool->scenes[i] = TC_SCENE_HANDLE_INVALID;
         g_pool->camera_entities[i] = TC_ENTITY_HANDLE_INVALID;
         g_pool->pipelines[i] = TC_PIPELINE_HANDLE_INVALID;
+        g_pool->color_formats[i] = RT_DEFAULT_COLOR_FORMAT;
+        g_pool->depth_formats[i] = RT_DEFAULT_DEPTH_FORMAT;
         g_pool->color_textures[i] = tc_texture_handle_invalid();
         g_pool->depth_textures[i] = tc_texture_handle_invalid();
     }
@@ -211,6 +225,61 @@ static inline bool handle_alive(tc_render_target_handle h) {
     if (!g_pool) return false;
     if (h.index >= g_pool->capacity) return false;
     return g_pool->alive[h.index] && g_pool->generations[h.index] == h.generation;
+}
+
+static bool rt_format_is_depth(tc_texture_format format) {
+    return format == TC_TEXTURE_DEPTH24 || format == TC_TEXTURE_DEPTH32F;
+}
+
+bool tc_render_target_format_from_string(const char* name, tc_texture_format* out_format) {
+    if (!name || !out_format) return false;
+    if (strcmp(name, "rgba8") == 0) {
+        *out_format = TC_TEXTURE_RGBA8;
+        return true;
+    }
+    if (strcmp(name, "rgb8") == 0) {
+        *out_format = TC_TEXTURE_RGB8;
+        return true;
+    }
+    if (strcmp(name, "rg8") == 0) {
+        *out_format = TC_TEXTURE_RG8;
+        return true;
+    }
+    if (strcmp(name, "r8") == 0) {
+        *out_format = TC_TEXTURE_R8;
+        return true;
+    }
+    if (strcmp(name, "rgba16f") == 0) {
+        *out_format = TC_TEXTURE_RGBA16F;
+        return true;
+    }
+    if (strcmp(name, "rgb16f") == 0) {
+        *out_format = TC_TEXTURE_RGB16F;
+        return true;
+    }
+    if (strcmp(name, "depth24") == 0) {
+        *out_format = TC_TEXTURE_DEPTH24;
+        return true;
+    }
+    if (strcmp(name, "depth32f") == 0) {
+        *out_format = TC_TEXTURE_DEPTH32F;
+        return true;
+    }
+    return false;
+}
+
+const char* tc_render_target_format_to_string(tc_texture_format format) {
+    switch (format) {
+        case TC_TEXTURE_RGBA8: return "rgba8";
+        case TC_TEXTURE_RGB8: return "rgb8";
+        case TC_TEXTURE_RG8: return "rg8";
+        case TC_TEXTURE_R8: return "r8";
+        case TC_TEXTURE_RGBA16F: return "rgba16f";
+        case TC_TEXTURE_RGB16F: return "rgb16f";
+        case TC_TEXTURE_DEPTH24: return "depth24";
+        case TC_TEXTURE_DEPTH32F: return "depth32f";
+    }
+    return "unknown";
 }
 
 bool tc_render_target_pool_alive(tc_render_target_handle h) {
@@ -242,6 +311,8 @@ tc_render_target_handle tc_render_target_pool_alloc(const char* name) {
     g_pool->widths[idx] = 512;
     g_pool->heights[idx] = 512;
     g_pool->dynamic_resolutions[idx] = false;
+    g_pool->color_formats[idx] = RT_DEFAULT_COLOR_FORMAT;
+    g_pool->depth_formats[idx] = RT_DEFAULT_DEPTH_FORMAT;
     g_pool->scenes[idx] = TC_SCENE_HANDLE_INVALID;
     g_pool->cameras[idx] = NULL;
     g_pool->camera_entities[idx] = TC_ENTITY_HANDLE_INVALID;
@@ -341,6 +412,15 @@ static void rt_resize_owned_texture(
     );
 }
 
+static void rt_reformat_owned_texture(
+    tc_texture_handle h, uint32_t width, uint32_t height, tc_texture_format format
+) {
+    if (tc_texture_handle_is_invalid(h)) return;
+    tc_texture* tex = tc_texture_get(h);
+    if (!tex) return;
+    tc_texture_set_size_format(tex, width, height, format);
+}
+
 void tc_render_target_set_width(tc_render_target_handle h, int width) {
     if (!handle_alive(h)) return;
     if (g_pool->widths[h.index] == width) return;  // No-op on same size — skips
@@ -384,6 +464,54 @@ bool tc_render_target_get_dynamic_resolution(tc_render_target_handle h) {
     return g_pool->dynamic_resolutions[h.index];
 }
 
+void tc_render_target_set_color_format(tc_render_target_handle h, tc_texture_format format) {
+    if (!handle_alive(h)) return;
+    if (rt_format_is_depth(format)) {
+        tc_log_error(
+            "[tc_render_target] rejected depth format '%s' for color attachment",
+            tc_render_target_format_to_string(format)
+        );
+        return;
+    }
+    if (g_pool->color_formats[h.index] == format) return;
+    g_pool->color_formats[h.index] = format;
+    rt_reformat_owned_texture(
+        g_pool->color_textures[h.index],
+        (uint32_t)g_pool->widths[h.index],
+        (uint32_t)g_pool->heights[h.index],
+        format
+    );
+}
+
+tc_texture_format tc_render_target_get_color_format(tc_render_target_handle h) {
+    if (!handle_alive(h)) return RT_DEFAULT_COLOR_FORMAT;
+    return g_pool->color_formats[h.index];
+}
+
+void tc_render_target_set_depth_format(tc_render_target_handle h, tc_texture_format format) {
+    if (!handle_alive(h)) return;
+    if (!rt_format_is_depth(format)) {
+        tc_log_error(
+            "[tc_render_target] rejected color format '%s' for depth attachment",
+            tc_render_target_format_to_string(format)
+        );
+        return;
+    }
+    if (g_pool->depth_formats[h.index] == format) return;
+    g_pool->depth_formats[h.index] = format;
+    rt_reformat_owned_texture(
+        g_pool->depth_textures[h.index],
+        (uint32_t)g_pool->widths[h.index],
+        (uint32_t)g_pool->heights[h.index],
+        format
+    );
+}
+
+tc_texture_format tc_render_target_get_depth_format(tc_render_target_handle h) {
+    if (!handle_alive(h)) return RT_DEFAULT_DEPTH_FORMAT;
+    return g_pool->depth_formats[h.index];
+}
+
 // --- Owned textures --------------------------------------------------------
 
 void tc_render_target_ensure_textures(tc_render_target_handle h) {
@@ -402,7 +530,7 @@ void tc_render_target_ensure_textures(tc_render_target_handle h) {
         if (tex) {
             tc_texture_set_storage_kind(tex, TC_TEXTURE_STORAGE_GPU_FIRST);
             tc_texture_set_usage(tex, RT_DEFAULT_COLOR_USAGE);
-            tc_texture_set_size_format(tex, w, height_, RT_DEFAULT_COLOR_FORMAT);
+            tc_texture_set_size_format(tex, w, height_, g_pool->color_formats[idx]);
             g_pool->color_textures[idx] = ch;
         } else {
             tc_log_error("[tc_render_target] failed to create color texture");
@@ -415,7 +543,7 @@ void tc_render_target_ensure_textures(tc_render_target_handle h) {
         if (tex) {
             tc_texture_set_storage_kind(tex, TC_TEXTURE_STORAGE_GPU_FIRST);
             tc_texture_set_usage(tex, RT_DEFAULT_DEPTH_USAGE);
-            tc_texture_set_size_format(tex, w, height_, RT_DEFAULT_DEPTH_FORMAT);
+            tc_texture_set_size_format(tex, w, height_, g_pool->depth_formats[idx]);
             g_pool->depth_textures[idx] = dh;
         } else {
             tc_log_error("[tc_render_target] failed to create depth texture");

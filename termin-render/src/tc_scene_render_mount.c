@@ -172,6 +172,8 @@ static tc_value serialize_render_target_config(const tc_render_target_config* rt
         tc_value_dict_set(&v, "width", tc_value_int((int64_t)rtc->width));
         tc_value_dict_set(&v, "height", tc_value_int((int64_t)rtc->height));
     }
+    if (rtc->color_format && rtc->color_format[0]) tc_value_dict_set(&v, "color_format", tc_value_string(rtc->color_format));
+    if (rtc->depth_format && rtc->depth_format[0]) tc_value_dict_set(&v, "depth_format", tc_value_string(rtc->depth_format));
     if (rtc->pipeline_uuid && rtc->pipeline_uuid[0]) tc_value_dict_set(&v, "pipeline_uuid", tc_value_string(rtc->pipeline_uuid));
     if (rtc->pipeline_name && rtc->pipeline_name[0]) tc_value_dict_set(&v, "pipeline_name", tc_value_string(rtc->pipeline_name));
     tc_value_dict_set(&v, "layer_mask", tc_value_int((int64_t)rtc->layer_mask));
@@ -202,6 +204,12 @@ static bool deserialize_render_target_config(const tc_value* data, tc_render_tar
 
     tc_value* dynamic_resolution = tc_value_dict_get((tc_value*)data, "dynamic_resolution");
     if (dynamic_resolution && dynamic_resolution->type == TC_VALUE_BOOL) out->dynamic_resolution = dynamic_resolution->data.b;
+
+    tc_value* color_format = tc_value_dict_get((tc_value*)data, "color_format");
+    if (color_format && color_format->type == TC_VALUE_STRING) out->color_format = color_format->data.s;
+
+    tc_value* depth_format = tc_value_dict_get((tc_value*)data, "depth_format");
+    if (depth_format && depth_format->type == TC_VALUE_STRING) out->depth_format = depth_format->data.s;
 
     tc_value* pipeline_uuid = tc_value_dict_get((tc_value*)data, "pipeline_uuid");
     if (pipeline_uuid && pipeline_uuid->type == TC_VALUE_STRING) out->pipeline_uuid = pipeline_uuid->data.s;

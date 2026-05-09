@@ -30,6 +30,15 @@ TC_API int tc_render_target_get_height(tc_render_target_handle h);
 TC_API void tc_render_target_set_dynamic_resolution(tc_render_target_handle h, bool dynamic_resolution);
 TC_API bool tc_render_target_get_dynamic_resolution(tc_render_target_handle h);
 
+TC_API bool tc_render_target_format_from_string(const char* name, tc_texture_format* out_format);
+TC_API const char* tc_render_target_format_to_string(tc_texture_format format);
+
+TC_API void tc_render_target_set_color_format(tc_render_target_handle h, tc_texture_format format);
+TC_API tc_texture_format tc_render_target_get_color_format(tc_render_target_handle h);
+
+TC_API void tc_render_target_set_depth_format(tc_render_target_handle h, tc_texture_format format);
+TC_API tc_texture_format tc_render_target_get_depth_format(tc_render_target_handle h);
+
 // --- Owned tc_textures -----------------------------------------------------
 //
 // Render targets own a color + depth tc_texture pair. Both are GPU-only

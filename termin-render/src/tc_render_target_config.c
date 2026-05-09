@@ -26,6 +26,8 @@ void tc_render_target_config_copy(tc_render_target_config* dst, const tc_render_
     dst->width = src->width;
     dst->height = src->height;
     dst->dynamic_resolution = src->dynamic_resolution;
+    dst->color_format = src->color_format ? tgfx_intern_string(src->color_format) : NULL;
+    dst->depth_format = src->depth_format ? tgfx_intern_string(src->depth_format) : NULL;
     dst->pipeline_uuid = src->pipeline_uuid ? tgfx_intern_string(src->pipeline_uuid) : NULL;
     dst->pipeline_name = src->pipeline_name ? tgfx_intern_string(src->pipeline_name) : NULL;
     dst->layer_mask = src->layer_mask;

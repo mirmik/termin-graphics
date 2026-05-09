@@ -52,6 +52,30 @@ void bind_tc_render_target(nb::module_& m) {
         .def_prop_rw("dynamic_resolution",
             [](const tc_render_target_handle& h) { return tc_render_target_get_dynamic_resolution(h); },
             [](tc_render_target_handle& h, bool v) { tc_render_target_set_dynamic_resolution(h, v); })
+        .def_prop_rw("color_format",
+            [](const tc_render_target_handle& h) -> std::string {
+                return tc_render_target_format_to_string(tc_render_target_get_color_format(h));
+            },
+            [](tc_render_target_handle& h, const std::string& v) {
+                tc_texture_format fmt;
+                if (!tc_render_target_format_from_string(v.c_str(), &fmt)) {
+                    tc::Log::error("[tc_render_target] unknown color_format: %s", v.c_str());
+                    return;
+                }
+                tc_render_target_set_color_format(h, fmt);
+            })
+        .def_prop_rw("depth_format",
+            [](const tc_render_target_handle& h) -> std::string {
+                return tc_render_target_format_to_string(tc_render_target_get_depth_format(h));
+            },
+            [](tc_render_target_handle& h, const std::string& v) {
+                tc_texture_format fmt;
+                if (!tc_render_target_format_from_string(v.c_str(), &fmt)) {
+                    tc::Log::error("[tc_render_target] unknown depth_format: %s", v.c_str());
+                    return;
+                }
+                tc_render_target_set_depth_format(h, fmt);
+            })
         .def_prop_rw("enabled",
             [](const tc_render_target_handle& h) { return tc_render_target_get_enabled(h); },
             [](tc_render_target_handle& h, bool v) { tc_render_target_set_enabled(h, v); })
