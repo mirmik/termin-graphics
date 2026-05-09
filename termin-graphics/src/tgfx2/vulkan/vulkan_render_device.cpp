@@ -16,6 +16,8 @@
 #include <atomic>
 #include <chrono>
 #include <set>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 extern "C" {
@@ -55,6 +57,101 @@ std::atomic<uint64_t> g_submit_us{0};
 }
 
 namespace tgfx {
+
+namespace {
+
+struct SpirvVertexInputs {
+    bool known = false;
+    std::vector<uint32_t> locations;
+};
+
+static std::string spirv_read_string(const uint32_t* words, uint32_t word_count, uint32_t start_word) {
+    std::string out;
+    for (uint32_t i = start_word; i < word_count; ++i) {
+        uint32_t word = words[i];
+        for (uint32_t b = 0; b < 4; ++b) {
+            char ch = static_cast<char>((word >> (8u * b)) & 0xffu);
+            if (ch == '\0') return out;
+            out.push_back(ch);
+        }
+    }
+    return out;
+}
+
+static uint32_t spirv_string_word_count(const std::string& text) {
+    return static_cast<uint32_t>((text.size() + 4u) / 4u);
+}
+
+static SpirvVertexInputs reflect_spirv_vertex_inputs(
+    const std::vector<uint32_t>& spirv,
+    const std::string& entry_point
+) {
+    SpirvVertexInputs result;
+    if (spirv.size() < 5) return result;
+
+    static constexpr uint32_t OP_ENTRY_POINT = 15;
+    static constexpr uint32_t OP_DECORATE = 71;
+    static constexpr uint32_t OP_VARIABLE = 59;
+    static constexpr uint32_t EXECUTION_MODEL_VERTEX = 0;
+    static constexpr uint32_t STORAGE_CLASS_INPUT = 1;
+    static constexpr uint32_t DECORATION_LOCATION = 30;
+
+    std::unordered_set<uint32_t> vertex_entry_interfaces;
+    std::unordered_map<uint32_t, uint32_t> storage_class_by_id;
+    std::unordered_map<uint32_t, uint32_t> location_by_id;
+
+    for (uint32_t offset = 5; offset < spirv.size();) {
+        uint32_t op_word = spirv[offset];
+        uint32_t word_count = op_word >> 16u;
+        uint32_t opcode = op_word & 0xffffu;
+        if (word_count == 0 || offset + word_count > spirv.size()) return result;
+
+        const uint32_t* words = spirv.data() + offset;
+
+        if (opcode == OP_ENTRY_POINT && word_count >= 3 && words[1] == EXECUTION_MODEL_VERTEX) {
+            std::string name = spirv_read_string(words, word_count, 3);
+            if (name == entry_point) {
+                uint32_t first_interface = 3u + spirv_string_word_count(name);
+                for (uint32_t i = first_interface; i < word_count; ++i) {
+                    vertex_entry_interfaces.insert(words[i]);
+                }
+                result.known = true;
+            }
+        } else if (opcode == OP_DECORATE && word_count >= 4 && words[2] == DECORATION_LOCATION) {
+            location_by_id[words[1]] = words[3];
+        } else if (opcode == OP_VARIABLE && word_count >= 4) {
+            storage_class_by_id[words[2]] = words[3];
+        }
+
+        offset += word_count;
+    }
+
+    if (!result.known) return result;
+
+    std::set<uint32_t> sorted_locations;
+    for (uint32_t id : vertex_entry_interfaces) {
+        auto storage_it = storage_class_by_id.find(id);
+        if (storage_it == storage_class_by_id.end() || storage_it->second != STORAGE_CLASS_INPUT) {
+            continue;
+        }
+        auto location_it = location_by_id.find(id);
+        if (location_it != location_by_id.end()) {
+            sorted_locations.insert(location_it->second);
+        }
+    }
+
+    result.locations.assign(sorted_locations.begin(), sorted_locations.end());
+    return result;
+}
+
+static bool vertex_shader_uses_location(const VkShaderResource* shader, uint32_t location) {
+    if (!shader || !shader->vertex_input_locations_known) return true;
+    return std::find(shader->vertex_input_locations.begin(),
+                     shader->vertex_input_locations.end(),
+                     location) != shader->vertex_input_locations.end();
+}
+
+} // namespace
 
 // --- Debug callback ---
 
@@ -969,6 +1066,11 @@ ShaderHandle VulkanRenderDevice::create_shader(const ShaderDesc& desc) {
     VkShaderResource res;
     res.stage = desc.stage;
     res.entry_point = desc.entry_point;
+    if (desc.stage == ShaderStage::Vertex) {
+        SpirvVertexInputs inputs = reflect_spirv_vertex_inputs(spirv, desc.entry_point);
+        res.vertex_input_locations_known = inputs.known;
+        res.vertex_input_locations = std::move(inputs.locations);
+    }
 
     VkShaderModuleCreateInfo ci{};
     ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1029,6 +1131,7 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
     add_stage(desc.vertex_shader, VK_SHADER_STAGE_VERTEX_BIT);
     add_stage(desc.fragment_shader, VK_SHADER_STAGE_FRAGMENT_BIT);
     if (desc.geometry_shader) add_stage(desc.geometry_shader, VK_SHADER_STAGE_GEOMETRY_BIT);
+    const VkShaderResource* vertex_shader = get_shader(desc.vertex_shader);
 
     // Vertex input
     std::vector<VkVertexInputBindingDescription> bindings;
@@ -1042,6 +1145,9 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
         bindings.push_back(bd);
 
         for (const auto& attr : vl.attributes) {
+            if (!vertex_shader_uses_location(vertex_shader, attr.location)) {
+                continue;
+            }
             VkVertexInputAttributeDescription ad{};
             ad.location = attr.location;
             ad.binding = i;

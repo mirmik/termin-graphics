@@ -54,6 +54,8 @@ struct VkShaderResource {
     VkShaderModule module = VK_NULL_HANDLE;
     ShaderStage stage;
     std::string entry_point = "main";
+    bool vertex_input_locations_known = false;
+    std::vector<uint32_t> vertex_input_locations;
 };
 
 struct VkPipelineResource {
