@@ -25,6 +25,48 @@ extern "C" {
 
 namespace termin {
 
+static constexpr const char* RESOURCE_FORMAT_RENDER_TARGET = "render_target";
+
+static tgfx::PixelFormat resolve_fbo_color_format(
+    const std::string& format,
+    const ViewportContext& default_ctx,
+    const tgfx::IRenderDevice& device
+) {
+    if (format == RESOURCE_FORMAT_RENDER_TARGET) {
+        if (!default_ctx.output_color_tex) {
+            tc::Log::warn(
+                "RenderEngine::render_scene_pipeline_offscreen: FBO format '%s' requested but output_color_tex is invalid; using rgba8",
+                RESOURCE_FORMAT_RENDER_TARGET
+            );
+            return tgfx::PixelFormat::RGBA8_UNorm;
+        }
+        tgfx::TextureDesc output_desc = device.texture_desc(default_ctx.output_color_tex);
+        if (output_desc.format == tgfx::PixelFormat::Undefined) {
+            tc::Log::warn(
+                "RenderEngine::render_scene_pipeline_offscreen: output_color_tex has undefined format; using rgba8"
+            );
+            return tgfx::PixelFormat::RGBA8_UNorm;
+        }
+        return output_desc.format;
+    }
+    if (format.empty() || format == "rgba8") return tgfx::PixelFormat::RGBA8_UNorm;
+    if (format == "r8") return tgfx::PixelFormat::R8_UNorm;
+    if (format == "rg8") return tgfx::PixelFormat::RG8_UNorm;
+    if (format == "rgb8") return tgfx::PixelFormat::RGB8_UNorm;
+    if (format == "r16f") return tgfx::PixelFormat::R16F;
+    if (format == "rg16f") return tgfx::PixelFormat::RG16F;
+    if (format == "r32f") return tgfx::PixelFormat::R32F;
+    if (format == "rg32f") return tgfx::PixelFormat::RG32F;
+    if (format == "rgba16f") return tgfx::PixelFormat::RGBA16F;
+    if (format == "rgba32f") return tgfx::PixelFormat::RGBA32F;
+
+    tc::Log::warn(
+        "RenderEngine::render_scene_pipeline_offscreen: unknown FBO color format '%s'; using rgba8",
+        format.c_str()
+    );
+    return tgfx::PixelFormat::RGBA8_UNorm;
+}
+
 // Ensure the scene extensions that passes depend on are registered before
 // the first pipeline runs. Idempotent: each extension init is a no-op if the
 // type is already present. This lets standalone Python scripts that create
@@ -391,12 +433,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
         FBOPool& fbo_pool = pipeline.fbo_pool();
 
-        tgfx::PixelFormat color_fmt = tgfx::PixelFormat::RGBA8_UNorm;
-        if (format == "r8") color_fmt = tgfx::PixelFormat::R8_UNorm;
-        else if (format == "r16f") color_fmt = tgfx::PixelFormat::R16F;
-        else if (format == "r32f") color_fmt = tgfx::PixelFormat::R32F;
-        else if (format == "rgba16f") color_fmt = tgfx::PixelFormat::RGBA16F;
-        else if (format == "rgba32f") color_fmt = tgfx::PixelFormat::RGBA32F;
+        tgfx::PixelFormat color_fmt = resolve_fbo_color_format(format, default_ctx, *tgfx2_device_);
 
         fbo_pool.ensure_native(
             *tgfx2_device_, canon, fbo_width, fbo_height,

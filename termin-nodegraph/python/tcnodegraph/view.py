@@ -580,20 +580,37 @@ class NodeGraphView(SceneView):
         items = spec.get("items", [])
         if not isinstance(items, list):
             items = []
+        values = []
         for item in items:
-            widget.add_item(str(item))
+            if isinstance(item, dict):
+                item_value = item.get("value")
+                item_label = item.get("label")
+                value_text = str(item_value) if item_value is not None else ""
+                label_text = str(item_label) if item_label is not None else value_text
+                values.append(value_text)
+                widget.add_item(label_text)
+            else:
+                value_text = str(item)
+                values.append(value_text)
+                widget.add_item(value_text)
 
         current = str(value)
         selected_index = -1
-        for i, item in enumerate(widget.items):
-            if item == current:
+        for i, item_value in enumerate(values):
+            if item_value == current:
                 selected_index = i
                 break
         if selected_index < 0 and current:
             widget.add_item(current)
+            values.append(current)
             selected_index = len(widget.items) - 1
         widget.selected_index = selected_index
-        widget.on_changed = lambda _idx, text, n=node, k=name: self._set_param(n, k, text)
+        def on_changed(idx: int, text: str, n=node, k=name) -> None:
+            if 0 <= idx < len(values):
+                self._set_param(n, k, values[idx])
+            else:
+                self._set_param(n, k, text)
+        widget.on_changed = on_changed
         return widget
 
     def _make_int_param_widget(self, node: Node, name: str, value: Any, spec: dict[str, Any]) -> SpinBox:
