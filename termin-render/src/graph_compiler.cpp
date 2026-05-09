@@ -287,7 +287,8 @@ static void add_synthetic_output_blits(
             continue;
         }
         if (conn.to_socket != "color") {
-            if (conn.to_socket == "depth") {
+            const NodeData* from_node = graph.get_node(conn.from_node_id);
+            if (conn.to_socket == "depth" && (!from_node || !is_pass_node(*from_node))) {
                 tc::Log::warn(
                     "compile_graph: RenderTarget.depth from non-pass node is not supported"
                 );
