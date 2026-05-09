@@ -866,6 +866,16 @@ void OpenGLRenderDevice::blit_to_external_target(
     GLTexture* tex = textures_.get(src_color.id);
     if (!tex) return;
 
+    GLboolean was_scissor = glIsEnabled(GL_SCISSOR_TEST);
+    GLboolean color_mask[4];
+    glGetBooleanv(GL_COLOR_WRITEMASK, color_mask);
+    GLboolean depth_mask = GL_TRUE;
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &depth_mask);
+
+    if (was_scissor) glDisable(GL_SCISSOR_TEST);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDepthMask(GL_TRUE);
+
     // Preserve any FBO the caller had bound so we don't clobber their
     // state. After the blit the previous bindings are restored.
     GLint prev_read = 0, prev_draw = 0;
@@ -894,6 +904,10 @@ void OpenGLRenderDevice::blit_to_external_target(
     glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_read));
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(prev_draw));
     glDeleteFramebuffers(1, &read_fbo);
+
+    glColorMask(color_mask[0], color_mask[1], color_mask[2], color_mask[3]);
+    glDepthMask(depth_mask);
+    if (was_scissor) glEnable(GL_SCISSOR_TEST);
 }
 
 void OpenGLRenderDevice::clear_external_target(
