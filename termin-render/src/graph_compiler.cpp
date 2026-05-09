@@ -191,10 +191,6 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
                     result.socket_names[node.id][output.name] = "RT_COLOR";
                     result.resource_types["RT_COLOR"] = "external_color";
                     result.external_resources["RT_COLOR"] = "render_target_color";
-                } else if (output.name == "depth") {
-                    result.socket_names[node.id][output.name] = "RT_DEPTH";
-                    result.resource_types["RT_DEPTH"] = "external_depth";
-                    result.external_resources["RT_DEPTH"] = "render_target_depth";
                 }
             }
         }

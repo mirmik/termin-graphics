@@ -147,10 +147,8 @@ GraphData GraphData::from_trent(const nos::trent& t) {
                 node.outputs.push_back({"fbo", "fbo", false});
             } else if (node.node_type == "render_target_input") {
                 node.outputs.push_back({"color", "fbo", false});
-                node.outputs.push_back({"depth", "fbo", false});
             } else if (node.node_type == "pipeline_output") {
                 node.inputs.push_back({"color", "fbo", true});
-                node.inputs.push_back({"depth", "fbo", true});
             } else if (node.node_type == "output") {
                 node.inputs.push_back({"color", "fbo", true});
                 node.inputs.push_back({"depth", "fbo", true});
