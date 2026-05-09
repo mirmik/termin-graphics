@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from tcbase import Key, MouseButton
 from tcgui.widgets.input_dialog import show_input_dialog
 from tcgui.widgets.menu import Menu
-from tcgui.scene import GraphicsItem, GraphicsScene, RectItem, SceneTransform, SceneView
+from tcgui.widgets.checkbox import Checkbox
+from tcgui.widgets.combo_box import ComboBox
+from tcgui.widgets.spin_box import SpinBox
+from tcgui.widgets.text_input import TextInput
+from tcgui.scene import GraphicsItem, GraphicsScene, GraphicsWidgetItem, RectItem, SceneTransform, SceneView
 
 from tcnodegraph.controller import GraphController
 from tcnodegraph.model import Graph, Node
@@ -331,16 +336,23 @@ class NodeItem(RectItem):
             )
 
         if self.draw_param_names or self.draw_param_values:
+            param_specs = self.node.data.get("param_specs", {})
+            if not isinstance(param_specs, dict):
+                param_specs = {}
             row_start_s = transform.world_to_screen(wx, wy + self._params_start_y())[1]
             row_h_s = self.param_row_height * transform.zoom
             for i, (name, value) in enumerate(self.node.params.items()):
                 row_y_s = row_start_s + i * row_h_s
                 text_y = row_y_s + row_h_s * 0.5 + param_font * 0.34
+                label = name
+                spec = param_specs.get(name)
+                if isinstance(spec, dict):
+                    label = str(spec.get("label", name))
                 if self.draw_param_names:
                     renderer.draw_text(
                         sx + 8.0,
                         text_y,
-                        str(name),
+                        label,
                         self.param_label_color,
                         param_font,
                     )
@@ -520,10 +532,16 @@ class NodeGraphView(SceneView):
         self.menu_items_provider = None
         # Keep inline value edits optional; external inspectors can disable this.
         self.inline_param_editing = True
+        self.use_param_widgets = False
+        self.param_widget_zoom_threshold = 0.72
+        self.param_widget_row_height = 24.0
+        self.param_widget_height = 20.0
+        self.param_widget_min_width = 64.0
 
     def refresh(self) -> None:
         self.adapter.rebuild()
         self.scene = self.adapter.scene
+        self._rebuild_param_widgets()
 
     def set_graph(self, graph: Graph) -> None:
         self.controller = GraphController(graph)
@@ -532,6 +550,128 @@ class NodeGraphView(SceneView):
         self.scene = self.adapter.scene
         self._pending_connection = None
         self._pending_mouse_world = None
+        self._rebuild_param_widgets()
+
+    def _param_spec(self, node: Node, name: str, value: Any) -> dict[str, Any]:
+        specs = node.data.get("param_specs", {})
+        if isinstance(specs, dict):
+            spec = specs.get(name)
+            if isinstance(spec, dict):
+                return dict(spec)
+        if isinstance(value, bool):
+            return {"kind": "bool", "label": name}
+        if isinstance(value, int):
+            return {"kind": "int", "label": name}
+        if isinstance(value, float):
+            return {"kind": "float", "label": name, "decimals": 3}
+        return {"kind": "string", "label": name}
+
+    def _set_param(self, node: Node, name: str, value: Any) -> None:
+        node.params[name] = value
+
+    def _make_bool_param_widget(self, node: Node, name: str, value: Any) -> Checkbox:
+        widget = Checkbox()
+        widget.checked = bool(value)
+        widget.on_changed = lambda checked, n=node, k=name: self._set_param(n, k, checked)
+        return widget
+
+    def _make_enum_param_widget(self, node: Node, name: str, value: Any, spec: dict[str, Any]) -> ComboBox:
+        widget = ComboBox()
+        items = spec.get("items", [])
+        if not isinstance(items, list):
+            items = []
+        for item in items:
+            widget.add_item(str(item))
+
+        current = str(value)
+        selected_index = -1
+        for i, item in enumerate(widget.items):
+            if item == current:
+                selected_index = i
+                break
+        if selected_index < 0 and current:
+            widget.add_item(current)
+            selected_index = len(widget.items) - 1
+        widget.selected_index = selected_index
+        widget.on_changed = lambda _idx, text, n=node, k=name: self._set_param(n, k, text)
+        return widget
+
+    def _make_int_param_widget(self, node: Node, name: str, value: Any, spec: dict[str, Any]) -> SpinBox:
+        widget = SpinBox()
+        widget.decimals = 0
+        widget.step = float(spec.get("step", 1))
+        widget.min_value = float(spec.get("min", -1e9))
+        widget.max_value = float(spec.get("max", 1e9))
+        widget.value = float(value)
+        widget.on_changed = lambda v, n=node, k=name: self._set_param(n, k, int(round(v)))
+        return widget
+
+    def _make_float_param_widget(self, node: Node, name: str, value: Any, spec: dict[str, Any]) -> SpinBox:
+        widget = SpinBox()
+        widget.decimals = int(spec.get("decimals", 2))
+        widget.step = float(spec.get("step", 0.1))
+        widget.min_value = float(spec.get("min", -1e9))
+        widget.max_value = float(spec.get("max", 1e9))
+        widget.value = float(value)
+        widget.on_changed = lambda v, n=node, k=name: self._set_param(n, k, float(v))
+        return widget
+
+    def _make_text_param_widget(self, node: Node, name: str, value: Any) -> TextInput:
+        widget = TextInput()
+        widget.text = str(value)
+        widget.on_changed = lambda text, n=node, k=name: self._set_param(n, k, text)
+        return widget
+
+    def _make_param_widget(self, node: Node, name: str, value: Any, spec: dict[str, Any]):
+        kind = str(spec.get("kind", "string")).lower()
+        if kind == "bool":
+            return self._make_bool_param_widget(node, name, value)
+        if kind == "enum":
+            return self._make_enum_param_widget(node, name, value, spec)
+        if kind == "int":
+            return self._make_int_param_widget(node, name, value, spec)
+        if kind == "float":
+            return self._make_float_param_widget(node, name, value, spec)
+        return self._make_text_param_widget(node, name, value)
+
+    def _rebuild_param_widgets(self) -> None:
+        for node_id, item in self.adapter.node_items.items():
+            node = self.adapter.graph.nodes.get(node_id)
+            if node is None:
+                continue
+            item.children.clear()
+            if not self.use_param_widgets:
+                continue
+
+            item.param_row_height = self.param_widget_row_height
+            item.draw_param_names = True
+            item.draw_param_values = False
+            item.height = max(item.height, item.content_min_height())
+
+            row_y = item._params_start_y()
+            for row_index, (name, value) in enumerate(node.params.items()):
+                spec = self._param_spec(node, name, value)
+                editor = self._make_param_widget(node, name, value, spec)
+                widget_item = GraphicsWidgetItem(editor)
+                widget_item.x = item.width * 0.52
+                widget_item.y = row_y + (item.param_row_height - self.param_widget_height) * 0.5
+                widget_item.width = max(self.param_widget_min_width, item.width * 0.46 - 8.0)
+                widget_item.height = self.param_widget_height
+                widget_item.z_index = 10.0
+                widget_item.data["row_index"] = row_index
+                item.add_child(widget_item)
+                row_y += item.param_row_height
+
+    def _update_param_widget_lod(self) -> None:
+        if not self.use_param_widgets:
+            return
+        show_editors = self.zoom >= self.param_widget_zoom_threshold
+        for item in self.adapter.node_items.values():
+            item.draw_param_values = not show_editors
+            for child_item in item.children:
+                if isinstance(child_item, GraphicsWidgetItem):
+                    child_item.visible = show_editors
+                    child_item.enabled = show_editors
 
     def _draw_pending_connection(self, renderer) -> None:
         if self._pending_connection is None or self._pending_mouse_world is None:
@@ -550,6 +690,7 @@ class NodeGraphView(SceneView):
         _draw_bezier_connection(renderer, sx, sy, ex, ey, color, base_thickness=2.0)
 
     def render(self, renderer) -> None:
+        self._update_param_widget_lod()
         super().render(renderer)
         renderer.begin_clip(self.x, self.y, self.width, self.height)
         self._draw_pending_connection(renderer)
