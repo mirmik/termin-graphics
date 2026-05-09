@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include <tgfx2/enums.hpp>
 #include <tgfx2/handles.hpp>
 #include "termin/render/frame_pass.hpp"
 #include "termin/render/execute_context.hpp"
@@ -46,6 +47,8 @@ public:
     // the OUTPUT/DISPLAY alias.
     tgfx::TextureHandle output_color_tex;
     tgfx::TextureHandle output_depth_tex;
+    tgfx::PixelFormat output_color_format = tgfx::PixelFormat::RGBA8_UNorm;
+    tgfx::PixelFormat output_depth_format = tgfx::PixelFormat::D24_UNorm;
 
     // External graph inputs keyed by External RT slot name. These are
     // supplied by RenderTarget.pipeline_params.

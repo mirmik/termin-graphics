@@ -33,6 +33,9 @@ static tgfx::PixelFormat resolve_fbo_color_format(
     const tgfx::IRenderDevice& device
 ) {
     if (format == RESOURCE_FORMAT_RENDER_TARGET) {
+        if (default_ctx.output_color_format != tgfx::PixelFormat::Undefined) {
+            return default_ctx.output_color_format;
+        }
         if (!default_ctx.output_color_tex) {
             tc::Log::warn(
                 "RenderEngine::render_scene_pipeline_offscreen: FBO format '%s' requested but output_color_tex is invalid; using rgba8",
