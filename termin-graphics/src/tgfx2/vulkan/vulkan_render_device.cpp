@@ -2260,6 +2260,10 @@ TextureUsage tc_usage_to_tgfx(uint32_t usage) {
 TextureHandle VulkanRenderDevice::ensure_tc_texture(tc_texture* tex) {
     if (!tex) return {};
 
+    if (!tex->header.is_loaded && tex->header.load_callback) {
+        tc_texture_ensure_loaded_ptr(tex);
+    }
+
     const bool gpu_first = (tex->storage_kind == TC_TEXTURE_STORAGE_GPU_FIRST);
 
     if (tex->width == 0 || tex->height == 0) {
@@ -2324,7 +2328,11 @@ TextureHandle VulkanRenderDevice::ensure_tc_texture(tc_texture* tex) {
     if (pixels.empty()) return {};
 
     desc.format = fmt;
-    desc.usage = TextureUsage::Sampled | TextureUsage::CopyDst;
+    // CPU-first file textures are normally sampled by materials, but graph
+    // pipelines may also route them through PresentToScreenPass/copy_texture
+    // as a blit source. CopyDst is needed for staging upload; CopySrc is needed
+    // for those texture-to-texture copies.
+    desc.usage = TextureUsage::Sampled | TextureUsage::CopySrc | TextureUsage::CopyDst;
 
     TextureHandle handle = create_texture(desc);
     if (!handle) {

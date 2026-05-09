@@ -46,6 +46,10 @@ public:
     // the OUTPUT/DISPLAY alias.
     tgfx::TextureHandle output_color_tex;
     tgfx::TextureHandle output_depth_tex;
+
+    // External graph inputs keyed by External RT slot name. These are
+    // supplied by RenderTarget.pipeline_params.
+    std::unordered_map<std::string, tgfx::TextureHandle> external_textures;
 };
 
 class RENDER_API RenderEngine {

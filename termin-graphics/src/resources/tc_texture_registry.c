@@ -109,6 +109,7 @@ tc_texture_handle tc_texture_create(const char* uuid) {
     tex->header.version = 1;
     tex->header.ref_count = 0;
     tex->header.pool_index = h.index;
+    tex->header.is_loaded = 1;
     tex->flip_y = 1;  // Default for OpenGL
     tex->storage_kind = TC_TEXTURE_STORAGE_CPU_FIRST;
     tex->usage = TC_TEXTURE_USAGE_SAMPLED;
@@ -179,6 +180,101 @@ tc_texture_handle tc_texture_get_or_create(const char* uuid) {
     }
 
     return tc_texture_create(uuid);
+}
+
+// ============================================================================
+// Lazy loading API
+// ============================================================================
+
+tc_texture_handle tc_texture_declare(const char* uuid, const char* name) {
+    if (!g_initialized) {
+        tc_texture_init();
+    }
+
+    if (!uuid || uuid[0] == '\0') {
+        tc_log(TC_LOG_WARN, "tc_texture_declare: empty uuid");
+        return tc_texture_handle_invalid();
+    }
+
+    tc_texture_handle existing = tc_texture_find(uuid);
+    if (!tc_texture_handle_is_invalid(existing)) {
+        return existing;
+    }
+
+    tc_handle h = tc_pool_alloc(&g_texture_pool);
+    if (tc_handle_is_invalid(h)) {
+        tc_log(TC_LOG_ERROR, "tc_texture_declare: pool alloc failed");
+        return tc_texture_handle_invalid();
+    }
+
+    tc_texture* tex = (tc_texture*)tc_pool_get(&g_texture_pool, h);
+    memset(tex, 0, sizeof(tc_texture));
+    strncpy(tex->header.uuid, uuid, sizeof(tex->header.uuid) - 1);
+    tex->header.uuid[sizeof(tex->header.uuid) - 1] = '\0';
+    tex->header.version = 0;
+    tex->header.ref_count = 0;
+    tex->header.pool_index = h.index;
+    tex->header.is_loaded = 0;
+    tex->header.load_callback = NULL;
+    tex->header.load_user_data = NULL;
+    tex->flip_y = 1;
+    tex->storage_kind = TC_TEXTURE_STORAGE_CPU_FIRST;
+    tex->usage = TC_TEXTURE_USAGE_SAMPLED;
+
+    if (name && name[0] != '\0') {
+        tex->header.name = tgfx_intern_string(name);
+    }
+
+    if (!tc_resource_map_add(g_uuid_to_index, tex->header.uuid, tc_pack_index(h.index))) {
+        tc_log(TC_LOG_ERROR, "tc_texture_declare: failed to add to uuid map");
+        tc_pool_free_slot(&g_texture_pool, h);
+        return tc_texture_handle_invalid();
+    }
+
+    return h;
+}
+
+void tc_texture_set_load_callback(
+    tc_texture_handle h,
+    tc_resource_load_fn callback,
+    void* user_data
+) {
+    tc_texture* tex = tc_texture_get(h);
+    if (!tex) return;
+
+    tex->header.load_callback = callback;
+    tex->header.load_user_data = user_data;
+}
+
+bool tc_texture_is_loaded(tc_texture_handle h) {
+    tc_texture* tex = tc_texture_get(h);
+    if (!tex) return false;
+    return tex->header.is_loaded != 0;
+}
+
+bool tc_texture_ensure_loaded(tc_texture_handle h) {
+    tc_texture* tex = tc_texture_get(h);
+    if (!tex) return false;
+    return tc_texture_ensure_loaded_ptr(tex);
+}
+
+bool tc_texture_ensure_loaded_ptr(tc_texture* tex) {
+    if (!tex) return false;
+    if (tex->header.is_loaded) return true;
+
+    if (!tex->header.load_callback) {
+        tc_log(TC_LOG_WARN, "tc_texture_ensure_loaded_ptr: texture '%s' has no load callback", tex->header.uuid);
+        return false;
+    }
+
+    bool success = tex->header.load_callback(tex, tex->header.load_user_data);
+    if (success) {
+        tex->header.is_loaded = 1;
+    } else {
+        tc_log(TC_LOG_ERROR, "tc_texture_ensure_loaded_ptr: load callback failed for '%s'", tex->header.uuid);
+    }
+
+    return success;
 }
 
 tc_texture* tc_texture_get(tc_texture_handle h) {
@@ -348,6 +444,7 @@ bool tc_texture_set_data(
     tex->height = height;
     tex->channels = channels;
     tex->format = TC_TEXTURE_RGBA8;
+    tex->header.is_loaded = 1;
     tex->header.version++;
 
     if (name) {
@@ -404,6 +501,7 @@ void tc_texture_set_size_format(
     tex->height = height;
     tex->format = (uint8_t)format;
     tex->channels = tc_texture_format_channels(format);
+    tex->header.is_loaded = 1;
     tex->header.version++;
 }
 
@@ -483,6 +581,8 @@ static bool collect_texture_info(tc_texture_handle h, tc_texture* tex, void* use
     info->height = tex->height;
     info->channels = tex->channels;
     info->format = tex->format;
+    info->is_loaded = tex->header.is_loaded;
+    info->has_load_callback = tex->header.load_callback != NULL;
     info->memory_bytes = (size_t)tex->width * tex->height * tex->channels;
 
     return true;

@@ -34,6 +34,20 @@ TcTexture TcTexture::from_data(
     // Check if texture already exists
     tc_texture_handle h = tc_texture_find(final_uuid);
     if (!tc_texture_handle_is_invalid(h)) {
+        tc_texture* tex = tc_texture_get(h);
+        if (tex) {
+            if (!tc_texture_set_data(
+                tex,
+                pixel_data,
+                width, height, channels,
+                name.empty() ? nullptr : name.c_str(),
+                source_path.empty() ? nullptr : source_path.c_str()
+            )) {
+                tc::Log::error("TcTexture::from_data: failed to set data on declared texture");
+                return TcTexture();
+            }
+            tc_texture_set_transforms(tex, flip_x, flip_y, transpose);
+        }
         return TcTexture(h);
     }
 

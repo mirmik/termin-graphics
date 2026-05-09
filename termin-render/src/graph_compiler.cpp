@@ -135,7 +135,7 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
                 name = node.params["slot"].as_string();
             }
             if (name.empty()) {
-                name = "external_" + std::to_string(node_index[node.id]);
+                name = "unnamed";
                 tc::Log::warn(
                     "compile_graph: External RT node '%s' has empty slot/name; using '%s'",
                     node.id.c_str(),

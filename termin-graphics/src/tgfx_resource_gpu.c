@@ -5,6 +5,7 @@
 #include <tgfx/tc_gpu_context.h>
 #include <tgfx/tc_gpu_share_group.h>
 #include <tgfx/resources/tc_mesh_registry.h>
+#include <tgfx/resources/tc_texture_registry.h>
 #include <tcbase/tc_log.h>
 #include <string.h>
 #include <stdlib.h>
@@ -49,6 +50,10 @@ bool tc_texture_needs_upload(const tc_texture* tex) {
 
 bool tc_texture_upload_gpu(tc_texture* tex) {
     if (!tex) return false;
+
+    if (!tex->header.is_loaded && tex->header.load_callback) {
+        tc_texture_ensure_loaded_ptr(tex);
+    }
 
     // GPU-only textures (render targets etc.) have no CPU pixel blob —
     // the bridge / engine just wants an allocated GL texture object of
@@ -389,4 +394,3 @@ void tgfx_mesh_delete_gpu(tc_mesh* mesh) {
         shared->version = -1;
     }
 }
-

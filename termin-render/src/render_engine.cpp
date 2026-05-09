@@ -548,6 +548,11 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 continue;
             }
             collect_shadow_array(read_name);
+            auto ext_it = vp_ctx.external_textures.find(read_name);
+            if (ext_it != vp_ctx.external_textures.end() && ext_it->second) {
+                pass_tex2_reads[read_name] = ext_it->second;
+                continue;
+            }
             auto t_it = tex2_resources.find(read_name);
             if (t_it != tex2_resources.end()) {
                 pass_tex2_reads[read_name] = t_it->second;
