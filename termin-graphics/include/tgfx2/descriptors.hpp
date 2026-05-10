@@ -94,6 +94,7 @@ struct RenderPassDesc {
 struct ResourceBinding {
     uint32_t set = 0;
     uint32_t binding = 0;
+    uint32_t array_element = 0;
     enum class Kind {
         UniformBuffer, StorageBuffer, SampledTexture, Sampler,
     } kind = Kind::UniformBuffer;

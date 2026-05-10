@@ -294,10 +294,16 @@ void RenderContext2::set_topology(PrimitiveTopology topo) {
 // Resource bindings (UBOs, textures, samplers)
 // ============================================================================
 
-static ResourceBinding* find_binding(std::vector<ResourceBinding>& bindings,
-                                     uint32_t binding, ResourceBinding::Kind kind) {
+static ResourceBinding* find_binding(
+    std::vector<ResourceBinding>& bindings,
+    uint32_t binding,
+    ResourceBinding::Kind kind,
+    uint32_t array_element = 0
+) {
     for (auto& b : bindings) {
-        if (b.binding == binding && b.kind == kind) return &b;
+        if (b.binding == binding && b.kind == kind && b.array_element == array_element) {
+            return &b;
+        }
     }
     return nullptr;
 }
@@ -353,8 +359,22 @@ void RenderContext2::bind_uniform_buffer_ring(uint32_t binding,
 
 void RenderContext2::bind_sampled_texture(uint32_t binding, TextureHandle tex,
                                            SamplerHandle sampler) {
+    bind_sampled_texture_array_element(binding, 0, tex, sampler);
+}
+
+void RenderContext2::bind_sampled_texture_array_element(
+    uint32_t binding,
+    uint32_t array_element,
+    TextureHandle tex,
+    SamplerHandle sampler
+) {
     ResourceBinding* existing =
-        find_binding(pending_bindings_, binding, ResourceBinding::Kind::SampledTexture);
+        find_binding(
+            pending_bindings_,
+            binding,
+            ResourceBinding::Kind::SampledTexture,
+            array_element
+        );
     if (existing) {
         if (existing->texture == tex && existing->sampler == sampler) {
             return;
@@ -365,6 +385,7 @@ void RenderContext2::bind_sampled_texture(uint32_t binding, TextureHandle tex,
         ResourceBinding b;
         b.kind = ResourceBinding::Kind::SampledTexture;
         b.binding = binding;
+        b.array_element = array_element;
         b.texture = tex;
         b.sampler = sampler;
         pending_bindings_.push_back(b);

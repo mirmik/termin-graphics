@@ -1270,6 +1270,7 @@ static uint64_t hash_resource_set_desc(const ResourceSetDesc& desc) {
     };
     for (const auto& b : desc.bindings) {
         mix(b.binding);
+        mix(b.array_element);
         mix(static_cast<uint64_t>(b.kind));
         mix(b.buffer.id);
         if (b.kind != ResourceBinding::Kind::UniformBuffer) {
@@ -1316,22 +1317,6 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
     buf_infos.reserve(desc.bindings.size());
     img_infos.reserve(desc.bindings.size());
 
-    // Shadow-map array spans slots 8..8+MAX_SHADOW_MAPS-1 (matches
-    // SHADOW_SLOT_BASE in ColorPass and the `u_shadow_map[N]` array in
-    // shadows.glsl). The shared descriptor set layout folds those slots
-    // into a single binding=8 with descriptorCount=N, so sampler writes
-    // in that range must be re-targeted to binding=8,
-    // dstArrayElement=slot-8.
-    //
-    // IMPORTANT: the re-target only applies to SampledTexture bindings —
-    // UBOs on the same numeric slot live at their own binding in the
-    // layout (e.g. BoneBlock at binding 16, inside the shadow-array
-    // numeric range). Without this check the UBO write gets retargeted
-    // to binding=8 and Vulkan complains about type mismatch
-    // (VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER vs COMBINED_IMAGE_SAMPLER).
-    constexpr uint32_t SHADOW_SLOT_BASE  = 8;
-    constexpr uint32_t MAX_SHADOW_MAPS_W = 16;
-
     // Dynamic-UBO bindings declared by the shared layout, in the exact
     // order vkCmdBindDescriptorSets consumes the dynamic_offsets[] array
     // (sorted ascending by binding, per Vulkan spec).
@@ -1349,15 +1334,8 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
         w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         w.dstSet = res.descriptor_set;
         w.dstBinding = b.binding;
-        w.dstArrayElement = 0;
+        w.dstArrayElement = b.array_element;
         w.descriptorCount = 1;
-        const bool is_sampled = (b.kind == ResourceBinding::Kind::SampledTexture);
-        if (is_sampled &&
-            b.binding >= SHADOW_SLOT_BASE &&
-            b.binding <  SHADOW_SLOT_BASE + MAX_SHADOW_MAPS_W) {
-            w.dstBinding = SHADOW_SLOT_BASE;
-            w.dstArrayElement = b.binding - SHADOW_SLOT_BASE;
-        }
 
         switch (b.kind) {
             case ResourceBinding::Kind::UniformBuffer:

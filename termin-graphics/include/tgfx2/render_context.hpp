@@ -233,6 +233,12 @@ public:
     // parameters (useful for GL 3.3 style shaders without separate samplers).
     void bind_sampled_texture(uint32_t binding, TextureHandle tex,
                               SamplerHandle sampler = {});
+    void bind_sampled_texture_array_element(
+        uint32_t binding,
+        uint32_t array_element,
+        TextureHandle tex,
+        SamplerHandle sampler = {}
+    );
 
     // Drop all pending resource bindings — next draw starts from an empty
     // resource set.
