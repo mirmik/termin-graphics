@@ -141,6 +141,7 @@ void CxxFramePass::_init_tc_pass() {
 }
 
 void CxxFramePass::_cleanup_tc_pass() {
+    tc_pass_unlink_from_registry(&_c);
     if (_c.pass_name) {
         free(_c.pass_name);
         _c.pass_name = nullptr;

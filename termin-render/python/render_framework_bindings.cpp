@@ -577,7 +577,8 @@ void bind_render_framework(nb::module_& m) {
         .def_prop_ro("capture_tex", &FrameGraphCapture::capture_tex)
         .def_prop_ro("width", &FrameGraphCapture::width)
         .def_prop_ro("height", &FrameGraphCapture::height)
-        .def_prop_ro("format", &FrameGraphCapture::format);
+        .def_prop_ro("format", &FrameGraphCapture::format)
+        .def_prop_ro("is_depth", &FrameGraphCapture::is_depth);
 
     nb::class_<FrameGraphPresenter>(m, "FrameGraphPresenter")
         .def(nb::init<>())
@@ -609,8 +610,12 @@ void bind_render_framework(nb::module_& m) {
     nb::class_<FrameGraphDebuggerCore>(m, "FrameGraphDebuggerCore")
         .def(nb::init<>())
         .def_prop_ro("capture_tex", &FrameGraphDebuggerCore::capture_tex)
+        .def_prop_ro("depth_capture_tex", &FrameGraphDebuggerCore::depth_capture_tex)
         .def_prop_ro("capture", [](FrameGraphDebuggerCore& self) -> FrameGraphCapture& {
             return self.capture;
+        }, nb::rv_policy::reference_internal)
+        .def_prop_ro("depth_capture", [](FrameGraphDebuggerCore& self) -> FrameGraphCapture& {
+            return self.depth_capture;
         }, nb::rv_policy::reference_internal)
         .def_prop_ro("presenter", [](FrameGraphDebuggerCore& self) -> FrameGraphPresenter& {
             return self.presenter;

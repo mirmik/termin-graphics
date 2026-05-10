@@ -82,6 +82,12 @@ tgfx::TextureHandle wrap_tc_texture_gl(
     desc.format = tc_format_to_tgfx2(
         static_cast<tc_texture_format>(tex->format));
     desc.usage = tgfx::TextureUsage::Sampled;
+    if (tex->usage & TC_TEXTURE_USAGE_COPY_SRC) {
+        desc.usage = desc.usage | tgfx::TextureUsage::CopySrc;
+    }
+    if (tex->usage & TC_TEXTURE_USAGE_COPY_DST) {
+        desc.usage = desc.usage | tgfx::TextureUsage::CopyDst;
+    }
     if (tex->format == TC_TEXTURE_DEPTH24 ||
         tex->format == TC_TEXTURE_DEPTH32F)
     {

@@ -55,7 +55,9 @@ bool FBOPool::ensure_native(
             ddesc.format = depth_format;
             ddesc.sample_count = static_cast<uint32_t>(samples);
             ddesc.usage = tgfx::TextureUsage::Sampled |
-                          tgfx::TextureUsage::DepthStencilAttachment;
+                          tgfx::TextureUsage::DepthStencilAttachment |
+                          tgfx::TextureUsage::CopySrc |
+                          tgfx::TextureUsage::CopyDst;
             entry.depth_tgfx2 = device.create_texture(ddesc);
         }
     };

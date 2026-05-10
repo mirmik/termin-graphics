@@ -73,6 +73,7 @@ struct RENDER_API PipelineRenderCache {
     std::vector<ResourceSpec> specs;
     std::unordered_map<std::string, ResourceView> resource_views;
     std::unordered_map<std::string, FboComposition> fbo_compositions;
+    std::unordered_map<std::string, std::string> texture_alias_to_canonical;
 };
 
 // Lightweight handle wrapper. Does NOT own the pipeline.

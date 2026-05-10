@@ -257,7 +257,9 @@ void RenderEngine::render_view_to_fbo_id(
         depth_desc.height = static_cast<uint32_t>(height);
         depth_desc.format = tgfx::PixelFormat::D24_UNorm;
         depth_desc.usage = tgfx::TextureUsage::DepthStencilAttachment |
-                           tgfx::TextureUsage::Sampled;
+                           tgfx::TextureUsage::Sampled |
+                           tgfx::TextureUsage::CopySrc |
+                           tgfx::TextureUsage::CopyDst;
         external_target_depth_ = tgfx2_device_->create_texture(depth_desc);
 
         external_target_w_ = width;
@@ -373,6 +375,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
     tc_profiler_begin_section("Allocate Resources");
     FBOMap resources;
     PipelineRenderCache& pipeline_cache = pipeline.cache();
+    pipeline_cache.texture_alias_to_canonical.clear();
     // OUTPUT/DISPLAY no longer travel through the FBOMap — they're
     // native tgfx2 textures owned by the caller (ViewportRenderState)
     // and plumbed straight into tex2_writes below.
@@ -465,6 +468,9 @@ void RenderEngine::render_scene_pipeline_offscreen(
             size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
             for (size_t j = 0; j < alias_count; j++) {
                 resources[aliases[j]] = nullptr;
+                if (std::string(aliases[j]) != canon) {
+                    pipeline_cache.texture_alias_to_canonical[aliases[j]] = canon;
+                }
             }
             continue;
         }
@@ -479,7 +485,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
             tgfx::TextureUsage usage =
                 tgfx::TextureUsage::Sampled |
                 tgfx::TextureUsage::DepthStencilAttachment |
-                tgfx::TextureUsage::CopySrc;
+                tgfx::TextureUsage::CopySrc |
+                tgfx::TextureUsage::CopyDst;
             if (!pipeline_cache.texture_pool.ensure(
                     *tgfx2_device_, canon, tex_width, tex_height,
                     tgfx::PixelFormat::D32F, usage)) {
@@ -492,6 +499,9 @@ void RenderEngine::render_scene_pipeline_offscreen(
             size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
             for (size_t j = 0; j < alias_count; j++) {
                 resources[aliases[j]] = nullptr;
+                if (std::string(aliases[j]) != canon) {
+                    pipeline_cache.texture_alias_to_canonical[aliases[j]] = canon;
+                }
             }
             continue;
         }
@@ -501,6 +511,9 @@ void RenderEngine::render_scene_pipeline_offscreen(
             size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
             for (size_t j = 0; j < alias_count; j++) {
                 resources[aliases[j]] = nullptr;
+                if (std::string(aliases[j]) != canon) {
+                    pipeline_cache.texture_alias_to_canonical[aliases[j]] = canon;
+                }
             }
             continue;
         }

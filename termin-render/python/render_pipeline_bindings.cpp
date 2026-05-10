@@ -22,6 +22,80 @@ namespace nb = nanobind;
 
 namespace termin {
 
+namespace {
+
+std::string pixel_format_name(tgfx::PixelFormat fmt) {
+    switch (fmt) {
+        case tgfx::PixelFormat::R8_UNorm:           return "r8";
+        case tgfx::PixelFormat::RG8_UNorm:          return "rg8";
+        case tgfx::PixelFormat::RGB8_UNorm:         return "rgb8";
+        case tgfx::PixelFormat::RGBA8_UNorm:        return "rgba8";
+        case tgfx::PixelFormat::BGRA8_UNorm:        return "bgra8";
+        case tgfx::PixelFormat::R16F:               return "r16f";
+        case tgfx::PixelFormat::RG16F:              return "rg16f";
+        case tgfx::PixelFormat::RGBA16F:            return "rgba16f";
+        case tgfx::PixelFormat::R32F:               return "r32f";
+        case tgfx::PixelFormat::RG32F:              return "rg32f";
+        case tgfx::PixelFormat::RGBA32F:            return "rgba32f";
+        case tgfx::PixelFormat::D24_UNorm:          return "depth24";
+        case tgfx::PixelFormat::D24_UNorm_S8_UInt:  return "depth24_stencil8";
+        case tgfx::PixelFormat::D32F:               return "depth32f";
+        case tgfx::PixelFormat::Undefined:          return "undefined";
+    }
+    return "unknown";
+}
+
+bool is_depth_format(tgfx::PixelFormat fmt) {
+    return fmt == tgfx::PixelFormat::D24_UNorm ||
+           fmt == tgfx::PixelFormat::D24_UNorm_S8_UInt ||
+           fmt == tgfx::PixelFormat::D32F;
+}
+
+std::string resource_type_for_texture(const RenderPipeline& pipeline, const PipelineTextureEntry& entry) {
+    for (const auto& spec : pipeline.collect_specs()) {
+        if (spec.resource == entry.key && !spec.resource_type.empty()) {
+            return spec.resource_type;
+        }
+    }
+    return is_depth_format(entry.format) ? "depth_texture" : "color_texture";
+}
+
+nb::object fbo_info(RenderPipeline& self, const std::string& key) {
+    const FBOPool& pool = self.fbo_pool();
+    auto it = pool.alias_to_canonical.find(key);
+    const std::string& resolved = (it != pool.alias_to_canonical.end()) ? it->second : key;
+    for (const auto& entry : pool.entries) {
+        if (entry.key != resolved) {
+            continue;
+        }
+        nb::dict d;
+        d["key"] = entry.key;
+        d["width"] = entry.width;
+        d["height"] = entry.height;
+        d["samples"] = entry.samples;
+        d["has_depth"] = entry.has_depth;
+        d["resource_type"] = "fbo";
+        d["color_format"] = static_cast<int>(entry.color_format);
+        d["depth_format"] = static_cast<int>(entry.depth_format);
+        uintptr_t color_native = 0;
+        uintptr_t depth_native = 0;
+        if (entry.native_device) {
+            if (entry.color_tgfx2) {
+                color_native = entry.native_device->native_texture_handle(entry.color_tgfx2);
+            }
+            if (entry.has_depth && entry.depth_tgfx2) {
+                depth_native = entry.native_device->native_texture_handle(entry.depth_tgfx2);
+            }
+        }
+        d["color_native_handle"] = color_native;
+        d["depth_native_handle"] = depth_native;
+        return d;
+    }
+    return nb::none();
+}
+
+} // namespace
+
 void bind_render_pipeline(nb::module_& m) {
     nb::class_<RenderPipeline>(m, "RenderPipeline")
         .def(nb::init<const std::string&>(), nb::arg("name") = "default")
@@ -174,33 +248,41 @@ void bind_render_pipeline(nb::module_& m) {
         // info; format / has_depth / native handles are exposed for
         // future preview hooks.
         .def("get_fbo", [](RenderPipeline& self, const std::string& key) -> nb::object {
-            const FBOPool& pool = self.fbo_pool();
-            auto it = pool.alias_to_canonical.find(key);
-            const std::string& resolved = (it != pool.alias_to_canonical.end()) ? it->second : key;
-            for (const auto& entry : pool.entries) {
-                if (entry.key != resolved) continue;
+            return fbo_info(self, key);
+        })
+
+        .def("get_resource_info", [](RenderPipeline& self, const std::string& key) -> nb::object {
+            nb::object fbo = fbo_info(self, key);
+            if (!fbo.is_none()) {
+                return fbo;
+            }
+
+            PipelineRenderCache& cache = self.cache();
+            auto alias_it = cache.texture_alias_to_canonical.find(key);
+            const std::string& resolved =
+                (alias_it != cache.texture_alias_to_canonical.end()) ? alias_it->second : key;
+            for (const auto& entry : cache.texture_pool.entries) {
+                if (entry.key != resolved) {
+                    continue;
+                }
                 nb::dict d;
-                d["key"] = entry.key;
+                d["key"] = key;
+                d["canonical"] = entry.key;
                 d["width"] = entry.width;
                 d["height"] = entry.height;
-                d["samples"] = entry.samples;
-                d["has_depth"] = entry.has_depth;
-                d["color_format"] = static_cast<int>(entry.color_format);
-                d["depth_format"] = static_cast<int>(entry.depth_format);
-                uintptr_t color_native = 0;
-                uintptr_t depth_native = 0;
-                if (entry.native_device) {
-                    if (entry.color_tgfx2) {
-                        color_native = entry.native_device->native_texture_handle(entry.color_tgfx2);
-                    }
-                    if (entry.has_depth && entry.depth_tgfx2) {
-                        depth_native = entry.native_device->native_texture_handle(entry.depth_tgfx2);
-                    }
+                d["samples"] = 1;
+                d["has_depth"] = false;
+                d["resource_type"] = resource_type_for_texture(self, entry);
+                d["color_format_name"] = pixel_format_name(entry.format);
+                uintptr_t native = 0;
+                if (entry.device && entry.handle) {
+                    native = entry.device->native_texture_handle(entry.handle);
                 }
-                d["color_native_handle"] = color_native;
-                d["depth_native_handle"] = depth_native;
+                d["color_native_handle"] = native;
+                d["depth_native_handle"] = 0;
                 return d;
             }
+
             return nb::none();
         })
 

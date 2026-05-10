@@ -44,6 +44,12 @@ std::string pixel_format_name(tgfx::PixelFormat fmt) {
     return "unknown";
 }
 
+bool is_depth_format(tgfx::PixelFormat fmt) {
+    return fmt == tgfx::PixelFormat::D24_UNorm ||
+           fmt == tgfx::PixelFormat::D24_UNorm_S8_UInt ||
+           fmt == tgfx::PixelFormat::D32F;
+}
+
 } // namespace
 
 FrameGraphCapture::~FrameGraphCapture() {
@@ -79,12 +85,6 @@ void FrameGraphCapture::ensure_capture_tex(
     height_ = h;
     format_ = fmt;
 
-    auto is_depth = [](tgfx::PixelFormat f) {
-        return f == tgfx::PixelFormat::D24_UNorm ||
-               f == tgfx::PixelFormat::D24_UNorm_S8_UInt ||
-               f == tgfx::PixelFormat::D32F;
-    };
-
     tgfx::TextureDesc desc;
     desc.width = static_cast<uint32_t>(w);
     desc.height = static_cast<uint32_t>(h);
@@ -94,7 +94,7 @@ void FrameGraphCapture::ensure_capture_tex(
     // picking the right bit lets blit targets for shadow maps succeed.
     // CopySrc/CopyDst stay on both paths — Frame Debugger eventually
     // reads the capture out and/or re-blits it.
-    if (is_depth(fmt)) {
+    if (is_depth_format(fmt)) {
         desc.usage = tgfx::TextureUsage::Sampled |
                      tgfx::TextureUsage::DepthStencilAttachment |
                      tgfx::TextureUsage::CopySrc |
@@ -106,6 +106,10 @@ void FrameGraphCapture::ensure_capture_tex(
                      tgfx::TextureUsage::CopyDst;
     }
     capture_tex_ = device.create_texture(desc);
+}
+
+bool FrameGraphCapture::is_depth() const {
+    return is_depth_format(format_);
 }
 
 void FrameGraphCapture::capture_direct_via_ctx2(
@@ -146,7 +150,8 @@ out vec4 FragColor;
 void main() {
     vec4 c = texture(u_tex, vUV);
     vec3 result;
-    if (u_channel == 1)      result = vec3(c.r);
+    if (u_channel == 5)      result = vec3(pow(clamp(1.0 - c.r, 0.0, 1.0), 0.25));
+    else if (u_channel == 1) result = vec3(c.r);
     else if (u_channel == 2) result = vec3(c.g);
     else if (u_channel == 3) result = vec3(c.b);
     else if (u_channel == 4) result = vec3(c.a);

@@ -251,11 +251,13 @@ void bind_tc_render_target(nb::module_& m) {
                     t.index, t.generation);
             })
         .def("output_resource_info", [](tc_render_target_handle& h, const std::string& resource_name) -> nb::object {
-            const bool color_resource = resource_name == "OUTPUT"
+            const bool fbo_resource = resource_name == "OUTPUT"
                 || resource_name == "DISPLAY"
                 || resource_name == "RT_COLOR";
-            const bool depth_resource = resource_name == "RT_DEPTH";
-            if (!color_resource && !depth_resource) {
+            const bool color_texture_resource = resource_name == "RT_COLOR.color";
+            const bool depth_texture_resource = resource_name == "RT_DEPTH"
+                || resource_name == "RT_COLOR.depth";
+            if (!fbo_resource && !color_texture_resource && !depth_texture_resource) {
                 return nb::none();
             }
 
@@ -265,7 +267,7 @@ void bind_tc_render_target(nb::module_& m) {
             tc_texture_handle depth_handle = tc_render_target_get_depth_texture(h);
             tc_texture* color = tc_texture_get(color_handle);
             tc_texture* depth = tc_texture_get(depth_handle);
-            tc_texture* primary = depth_resource ? depth : color;
+            tc_texture* primary = depth_texture_resource ? depth : color;
             if (!primary) {
                 return nb::none();
             }
@@ -275,16 +277,23 @@ void bind_tc_render_target(nb::module_& m) {
             d["width"] = static_cast<int>(primary->width);
             d["height"] = static_cast<int>(primary->height);
             d["samples"] = 1;
-            if (depth_resource) {
+            if (depth_texture_resource) {
+                d["resource_type"] = "depth_texture";
                 d["has_depth"] = false;
                 d["color_format_name"] = tc_render_target_format_to_string(
                     static_cast<tc_texture_format>(depth->format));
+            } else if (color_texture_resource) {
+                d["resource_type"] = "color_texture";
+                d["has_depth"] = false;
+                d["color_format_name"] = tc_render_target_format_to_string(
+                    static_cast<tc_texture_format>(color->format));
             } else {
+                d["resource_type"] = "fbo";
                 d["has_depth"] = depth != nullptr;
                 d["color_format_name"] = tc_render_target_format_to_string(
                     static_cast<tc_texture_format>(color->format));
             }
-            if (!depth_resource && depth) {
+            if (fbo_resource && depth) {
                 d["depth_format_name"] = tc_render_target_format_to_string(
                     static_cast<tc_texture_format>(depth->format));
             }

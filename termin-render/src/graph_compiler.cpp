@@ -50,14 +50,6 @@ static bool is_external_resource_name(const std::string& name) {
            name == "OUTPUT" || name == "DISPLAY";
 }
 
-static bool is_pipeline_output_node(const NodeData& node) {
-    return node.node_type == "output" || node.node_type == "pipeline_output";
-}
-
-static bool is_legacy_render_target_output_node(const NodeData& node) {
-    return node.node_type == "output";
-}
-
 static bool is_graph_alias_node(const NodeData& node) {
     return node.node_type == "render_target_input" ||
            node.node_type == "fbo_split" ||
@@ -249,19 +241,6 @@ static void validate_connection_types(const GraphData& graph) {
     }
 }
 
-static std::optional<std::string> pass_field_string(tc_pass* pass, const std::string& field_name) {
-    tc::init_cpp_inspect_vtable();
-
-    tc_value value = tc_pass_inspect_get(pass, field_name.c_str());
-    if (value.type != TC_VALUE_STRING || !value.data.s) {
-        tc_value_free(&value);
-        return std::nullopt;
-    }
-    std::string result = value.data.s;
-    tc_value_free(&value);
-    return result;
-}
-
 // ============================================================================
 // Topological Sort (Kahn's algorithm)
 // ============================================================================
@@ -410,41 +389,10 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
     // If X_target input is connected, X output should use that resource name
     apply_target_overrides(graph, result);
 
-    // Pass 3c: Apply graph output overrides. RenderTarget output nodes are
-    // not executable passes; a connection into RenderTarget.color/depth means
-    // the upstream pass must write directly into the viewport-owned OUTPUT
-    // textures supplied by RenderEngine.
-    for (const auto& conn : graph.connections) {
-        const NodeData* to_node = graph.get_node(conn.to_node_id);
-        if (!to_node || !is_pipeline_output_node(*to_node)) {
-            continue;
-        }
-        if (conn.to_socket != "color" && conn.to_socket != "depth") {
-            continue;
-        }
-
-        const NodeData* from_node = graph.get_node(conn.from_node_id);
-        if (!from_node || !is_pass_node(*from_node)) {
-            continue;
-        }
-
-        auto from_it = result.socket_names.find(conn.from_node_id);
-        if (from_it == result.socket_names.end()) {
-            continue;
-        }
-        auto socket_it = from_it->second.find(conn.from_socket);
-        if (socket_it == from_it->second.end()) {
-            continue;
-        }
-        socket_it->second = "OUTPUT";
-        result.resource_types["OUTPUT"] = "external_color";
-        result.external_resources["OUTPUT"] = "render_target_color";
-    }
-
-    // Pass 3d: Propagate all other connections (now output names are correct)
+    // Pass 3c: Propagate all other connections (now output names are correct)
     propagate_non_target_connections(graph, result);
 
-    // Pass 3e: Apply FboSplit nodes. They create attachment view resources.
+    // Pass 3d: Apply FboSplit nodes. They create attachment view resources.
     for (const auto& node : graph.nodes) {
         auto& sockets = result.socket_names[node.id];
         int idx = node_index[node.id];
@@ -520,81 +468,8 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
     // Pass 3h: Propagate outputs from compile-time utility nodes.
     propagate_non_target_connections(graph, result);
 
-    // Pass 3i: Apply pass-owned inplace aliases. GraphData does not know pass
-    // classes; the temporary pass instance is the source of alias semantics.
-    for (const auto& node : graph.nodes) {
-        if (!is_pass_node(node)) {
-            continue;
-        }
-        if (!tc_pass_registry_has(node.pass_class.c_str())) {
-            continue;
-        }
-
-        tc_pass* pass_ptr = tc_pass_registry_create(node.pass_class.c_str());
-        if (!pass_ptr) {
-            continue;
-        }
-        TcPassRef pass_ref(pass_ptr);
-
-        std::unordered_map<std::string, std::string> default_output_values;
-        for (const auto& output : node.outputs) {
-            auto value = pass_field_string(pass_ptr, output.name);
-            if (value.has_value()) {
-                default_output_values[output.name] = *value;
-            }
-        }
-
-        auto& sockets = result.socket_names[node.id];
-        std::unordered_set<std::string> connected_input_resources;
-        for (const auto& input : node.inputs) {
-            if (is_target_socket_name(input.name)) {
-                continue;
-            }
-            auto socket_it = sockets.find(input.name);
-            if (socket_it == sockets.end()) {
-                continue;
-            }
-            connected_input_resources.insert(socket_it->second);
-            set_pass_property(pass_ref, input.name, nos::trent(socket_it->second));
-        }
-
-        const char* alias_pairs[64];
-        size_t alias_count = tc_pass_get_inplace_aliases(pass_ptr, alias_pairs, 32);
-        for (size_t i = 0; i < alias_count; i++) {
-            const char* read_res_c = alias_pairs[i * 2];
-            const char* write_res_c = alias_pairs[i * 2 + 1];
-            if (!read_res_c || !write_res_c) {
-                continue;
-            }
-            std::string read_res = read_res_c;
-            std::string write_res = write_res_c;
-            if (connected_input_resources.find(read_res) == connected_input_resources.end()) {
-                continue;
-            }
-
-            for (const auto& [output_socket, default_write_res] : default_output_values) {
-                if (default_write_res != write_res) {
-                    continue;
-                }
-                if (sockets.find(output_socket + "_target") != sockets.end()) {
-                    continue;
-                }
-                auto current_output_it = sockets.find(output_socket);
-                if (current_output_it != sockets.end() && is_external_resource_name(current_output_it->second)) {
-                    continue;
-                }
-                sockets[output_socket] = read_res;
-                if (!is_external_resource_name(read_res)) {
-                    result.resource_types[read_res] = "fbo";
-                }
-            }
-        }
-
-        tc_pass_drop(pass_ptr);
-    }
-
-    // Pass 3j: Re-propagate downstream connections after pass-owned aliases
-    // may have changed output socket names.
+    // Pass 3i: Re-propagate downstream connections after compile-time utility
+    // nodes have assigned their final output names.
     propagate_non_target_connections(graph, result);
 
     // Pass 4: Default names for unconnected inputs
@@ -750,89 +625,6 @@ static void add_graph_alias_pass(
         graph_alias_pass_name(node)
     );
     pipeline->add_pass(pass->tc_pass_ptr());
-}
-
-// ============================================================================
-// Synthetic output blits
-// ============================================================================
-
-static bool set_pass_property(
-    TcPassRef& pass_ref,
-    const std::string& field_name,
-    const nos::trent& value
-);
-
-static void add_synthetic_output_blits(
-    RenderPipeline* pipeline,
-    const GraphData& graph,
-    const ResourceNaming& naming
-) {
-    if (!pipeline) {
-        return;
-    }
-
-    for (const auto& conn : graph.connections) {
-        const NodeData* to_node = graph.get_node(conn.to_node_id);
-        if (!to_node || !is_legacy_render_target_output_node(*to_node)) {
-            continue;
-        }
-        if (conn.to_socket != "color") {
-            const NodeData* from_node = graph.get_node(conn.from_node_id);
-            if (conn.to_socket == "depth" && (!from_node || !is_pass_node(*from_node))) {
-                tc::Log::warn(
-                    "compile_graph: RenderTarget.depth from non-pass node is not supported"
-                );
-            }
-            continue;
-        }
-
-        const NodeData* from_node = graph.get_node(conn.from_node_id);
-        if (!from_node || is_pass_node(*from_node)) {
-            continue;
-        }
-
-        auto from_it = naming.socket_names.find(conn.from_node_id);
-        if (from_it == naming.socket_names.end()) {
-            tc::Log::error(
-                "compile_graph: cannot synthesize output blit, source node '%s' has no socket map",
-                conn.from_node_id.c_str()
-            );
-            continue;
-        }
-
-        auto socket_it = from_it->second.find(conn.from_socket);
-        if (socket_it == from_it->second.end()) {
-            tc::Log::error(
-                "compile_graph: cannot synthesize output blit, source socket '%s.%s' is unresolved",
-                conn.from_node_id.c_str(),
-                conn.from_socket.c_str()
-            );
-            continue;
-        }
-
-        if (!tc_pass_registry_has("PresentToScreenPass")) {
-            tc::Log::error(
-                "compile_graph: cannot synthesize output blit, PresentToScreenPass is not registered"
-            );
-            continue;
-        }
-
-        tc_pass* pass_ptr = tc_pass_registry_create("PresentToScreenPass");
-        if (!pass_ptr) {
-            tc::Log::error("compile_graph: failed to create synthetic PresentToScreenPass");
-            continue;
-        }
-
-        TcPassRef pass_ref(pass_ptr);
-        pass_ref.set_pass_name("OutputBlit");
-
-        nos::trent input_name(socket_it->second);
-        nos::trent output_name("OUTPUT");
-        set_pass_property(pass_ref, "input_res", input_name);
-        set_pass_property(pass_ref, "output_res", output_name);
-
-        pipeline->add_pass(pass_ptr);
-    }
 }
 
 // ============================================================================
@@ -1160,10 +952,6 @@ RenderPipeline* compile_graph(GraphData& graph) {
 
         pipeline->add_pass(pass_ptr);
     }
-
-    // 7. If a graph writes a non-pass resource directly to RenderTarget.color,
-    // synthesize a blit pass so the resource is copied into OUTPUT.
-    add_synthetic_output_blits(pipeline, graph, naming);
 
     if (pipeline->pass_count() == 0 && had_pass_nodes) {
         tc::Log::error(

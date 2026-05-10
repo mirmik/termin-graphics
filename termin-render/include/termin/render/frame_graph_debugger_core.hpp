@@ -89,6 +89,7 @@ public:
     int width() const { return width_; }
     int height() const { return height_; }
     tgfx::PixelFormat format() const { return format_; }
+    bool is_depth() const;
     bool has_capture() const { return captured_; }
     void reset_capture() { captured_ = false; }
 
@@ -154,9 +155,11 @@ private:
 class RENDER_API FrameGraphDebuggerCore {
 public:
     FrameGraphCapture capture;
+    FrameGraphCapture depth_capture;
     FrameGraphPresenter presenter;
 
     tgfx::TextureHandle capture_tex() const { return capture.capture_tex(); }
+    tgfx::TextureHandle depth_capture_tex() const { return depth_capture.capture_tex(); }
 };
 
 } // namespace termin

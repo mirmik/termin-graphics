@@ -650,8 +650,8 @@ void bind_tgfx2(nb::module_& m) {
             nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm)
 
         // Create an offscreen depth attachment. Usage is
-        // DepthStencilAttachment|Sampled so passes can both write
-        // depth and sample it (shadow maps, depth-based effects).
+        // DepthStencilAttachment|Sampled|CopySrc|CopyDst so passes can write
+        // depth, sample it, and debug/copy it through the framegraph tools.
         .def("create_depth_attachment",
             [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h,
                tgfx::PixelFormat fmt) -> tgfx::TextureHandle {
@@ -660,7 +660,9 @@ void bind_tgfx2(nb::module_& m) {
                 desc.height = h;
                 desc.format = fmt;
                 desc.usage = tgfx::TextureUsage::DepthStencilAttachment |
-                             tgfx::TextureUsage::Sampled;
+                             tgfx::TextureUsage::Sampled |
+                             tgfx::TextureUsage::CopySrc |
+                             tgfx::TextureUsage::CopyDst;
                 return self.device->create_texture(desc);
             },
             nb::arg("width"), nb::arg("height"),
