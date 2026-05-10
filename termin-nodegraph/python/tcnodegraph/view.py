@@ -548,6 +548,7 @@ class NodeGraphView(SceneView):
         self.param_widget_row_height = 24.0
         self.param_widget_height = 20.0
         self.param_widget_min_width = 64.0
+        self.on_param_changed = None
 
     def refresh(self) -> None:
         self.adapter.rebuild()
@@ -579,6 +580,8 @@ class NodeGraphView(SceneView):
 
     def _set_param(self, node: Node, name: str, value: Any) -> None:
         node.params[name] = value
+        if self.on_param_changed is not None:
+            self.on_param_changed(node, name, value)
 
     def _make_bool_param_widget(self, node: Node, name: str, value: Any) -> Checkbox:
         widget = Checkbox()
@@ -747,7 +750,7 @@ class NodeGraphView(SceneView):
                 current = hit.node.params.get(param_hit)
 
                 if isinstance(current, bool):
-                    hit.node.params[param_hit] = not current
+                    self._set_param(hit.node, param_hit, not current)
                     return True
 
                 def _apply_text(result: str | None, node=hit.node, key=param_hit, old=current) -> None:
@@ -755,18 +758,18 @@ class NodeGraphView(SceneView):
                         return
                     if isinstance(old, int):
                         try:
-                            node.params[key] = int(result)
+                            self._set_param(node, key, int(result))
                         except ValueError:
                             logging.getLogger(__name__).warning("Failed to parse int for param %r: %r", key, result)
                             return
                     elif isinstance(old, float):
                         try:
-                            node.params[key] = float(result)
+                            self._set_param(node, key, float(result))
                         except ValueError:
                             logging.getLogger(__name__).warning("Failed to parse float for param %r: %r", key, result)
                             return
                     else:
-                        node.params[key] = result
+                        self._set_param(node, key, result)
 
                 show_input_dialog(
                     self._ui,

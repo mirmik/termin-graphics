@@ -39,6 +39,7 @@ set(TERMIN_RENDER_SOURCES
     src/drawable.cpp
     src/fbo_pool.cpp
     src/frame_pass.cpp
+    src/frame_uniforms.cpp
     src/frame_graph_debugger_core.cpp
     src/graph_alias_pass.cpp
     src/graph_compiler.cpp
@@ -85,6 +86,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/drawable.hpp
     include/termin/render/tc_pass.hpp
     include/termin/render/frame_pass.hpp
+    include/termin/render/frame_uniforms.hpp
     include/termin/render/frame_graph_debugger_core.hpp
     include/termin/render/graph_alias_pass.hpp
     include/termin/render/graph_compiler.hpp
