@@ -69,6 +69,8 @@ struct Tgfx2MeshBinding {
     uint32_t index_count = 0;
     tgfx::IndexType index_type = tgfx::IndexType::Uint32;
     tgfx::PrimitiveTopology topology = tgfx::PrimitiveTopology::TriangleList;
+    bool destroy_vertex_buffer = false;
+    bool destroy_index_buffer = false;
 };
 
 // Wrap a tc_mesh's GPU shadow as a tgfx2 vertex/index buffer pair plus

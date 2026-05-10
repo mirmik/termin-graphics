@@ -1,8 +1,11 @@
 #include "termin/render/tgfx2_bridge.hpp"
 
+#include <algorithm>
+#include <cstring>
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <tcbase/tc_log.hpp>
 
@@ -270,6 +273,62 @@ bool fill_binding_from_mesh(Tgfx2MeshBinding& out, tc_mesh* mesh) {
     return true;
 }
 
+bool layout_has_location(const tgfx::VertexBufferLayout& layout, uint32_t location) {
+    return std::any_of(layout.attributes.begin(), layout.attributes.end(),
+        [location](const tgfx::VertexAttribute& attr) {
+            return attr.location == location;
+        });
+}
+
+void append_default_standard_attributes(Tgfx2MeshBinding& out, uint32_t old_stride) {
+    uint32_t offset = old_stride;
+    if (!layout_has_location(out.layout, 1)) {
+        out.layout.attributes.push_back({1, tgfx::VertexFormat::Float3, offset});
+        offset += 3u * sizeof(float);
+    }
+    if (!layout_has_location(out.layout, 2)) {
+        out.layout.attributes.push_back({2, tgfx::VertexFormat::Float2, offset});
+        offset += 2u * sizeof(float);
+    }
+    out.layout.stride = offset;
+}
+
+bool needs_default_standard_attributes(const tgfx::VertexBufferLayout& layout) {
+    return !layout_has_location(layout, 1) || !layout_has_location(layout, 2);
+}
+
+tgfx::BufferHandle create_augmented_vertex_buffer(
+    tgfx::IRenderDevice& device,
+    tc_mesh* mesh,
+    uint32_t new_stride
+) {
+    const uint32_t old_stride = mesh->layout.stride;
+    if (old_stride == 0 || new_stride <= old_stride) return {};
+
+    const auto* src = static_cast<const uint8_t*>(mesh->vertices);
+    std::vector<uint8_t> vertices(
+        static_cast<size_t>(mesh->vertex_count) * static_cast<size_t>(new_stride),
+        0);
+    for (uint32_t i = 0; i < mesh->vertex_count; ++i) {
+        std::memcpy(
+            vertices.data() + static_cast<size_t>(i) * new_stride,
+            src + static_cast<size_t>(i) * old_stride,
+            old_stride);
+    }
+
+    tgfx::BufferDesc desc;
+    desc.size = vertices.size();
+    desc.usage = tgfx::BufferUsage::Vertex | tgfx::BufferUsage::CopyDst;
+    tgfx::BufferHandle buffer = device.create_buffer(desc);
+    if (!buffer) {
+        tc::Log::error("wrap_mesh_as_tgfx2: failed to allocate augmented VBO for '%s'",
+                       mesh->header.name ? mesh->header.name : mesh->header.uuid);
+        return {};
+    }
+    device.upload_buffer(buffer, std::span<const uint8_t>(vertices.data(), vertices.size()));
+    return buffer;
+}
+
 // OpenGL-specific branch: materialize via the legacy share-group slot
 // and register_external_buffer. Buffers are non-owning and must be
 // destroy()'d by the caller (done in release_mesh_binding).
@@ -342,6 +401,25 @@ Tgfx2MeshBinding wrap_mesh_as_tgfx2(
     out.index_buffer  = ebo;
     if (!fill_binding_from_mesh(out, mesh)) {
         out = Tgfx2MeshBinding{};
+        return out;
+    }
+
+    // OpenGL supplies default vertex attribute values for attributes that
+    // are not enabled. Vulkan has no such implicit fallback: if a shader
+    // declares location 1/2 (normal/uv), the pipeline layout must describe
+    // them. Preserve GL-era meshes without those channels by appending
+    // zero-filled standard attributes to a transient Vulkan-side VBO.
+    if (needs_default_standard_attributes(out.layout)) {
+        const uint32_t old_stride = out.layout.stride;
+        append_default_standard_attributes(out, old_stride);
+        tgfx::BufferHandle augmented_vbo =
+            create_augmented_vertex_buffer(device, mesh, out.layout.stride);
+        if (!augmented_vbo) {
+            out = Tgfx2MeshBinding{};
+            return out;
+        }
+        out.vertex_buffer = augmented_vbo;
+        out.destroy_vertex_buffer = true;
     }
     return out;
 }
@@ -362,9 +440,14 @@ void release_mesh_binding(
         return;
     }
 
-    // Non-GL path: buffers are owned by the cache, reused across frames.
-    // Nothing to do per-draw.
-    (void)binding;
+    // Non-GL path: normal buffers are owned by the per-device cache, but
+    // augmented compatibility VBOs are transient and must be released.
+    if (binding.destroy_vertex_buffer && binding.vertex_buffer) {
+        device.destroy(binding.vertex_buffer);
+    }
+    if (binding.destroy_index_buffer && binding.index_buffer) {
+        device.destroy(binding.index_buffer);
+    }
 }
 
 tgfx::VertexBufferLayout filter_vertex_layout_to_locations(
