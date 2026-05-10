@@ -140,7 +140,6 @@ void bind_tc_render_target(nb::module_& m) {
                     tc_render_target_set_scene(h, s);
                     return;
                 } catch (...) {
-                    tc::Log::debug("[tc_render_target] Direct scene_handle cast failed, trying fallback via scene_handle() method");
                 }
                 // Fallback: extract from scene_handle() method
                 if (nb::hasattr(scene_obj, "scene_handle")) {
