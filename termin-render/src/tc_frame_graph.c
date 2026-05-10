@@ -150,8 +150,8 @@ static bool build_dependency_graph(tc_frame_graph* fg, tc_pipeline_handle pipeli
                 const char* read_name = aliases[j * 2];
                 const char* write_name = aliases[j * 2 + 1];
 
-                tc_fg_resource* read_res = find_resource(fg, read_name);
-                tc_fg_resource* write_res = find_resource(fg, write_name);
+                tc_fg_resource* read_res = get_or_create_resource(fg, read_name);
+                tc_fg_resource* write_res = get_or_create_resource(fg, write_name);
 
                 if (read_res && write_res) {
                     if (strcmp(write_res->canonical, read_res->canonical) != 0) {

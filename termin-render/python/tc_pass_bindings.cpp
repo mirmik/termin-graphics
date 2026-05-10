@@ -19,6 +19,7 @@ extern "C" {
 }
 
 #include "inspect/tc_inspect_python.hpp"
+#include "tc_inspect_cpp.hpp"
 #include "termin/bindings/tc_value_helpers.hpp"
 #include "termin/render/execute_context.hpp"
 #include "termin/render/frame_graph_debugger_core.hpp"
@@ -419,8 +420,11 @@ void bind_tc_pass_runtime(nb::module_& m) {
             if (p) {
                 const char* pairs[32];
                 size_t count = tc_pass_get_inplace_aliases(p, pairs, 32);
-                for (size_t i = 0; i + 1 < count; i += 2) {
-                    result.emplace_back(pairs[i] ? pairs[i] : "", pairs[i + 1] ? pairs[i + 1] : "");
+                for (size_t i = 0; i < count; i++) {
+                    result.emplace_back(
+                        pairs[i * 2] ? pairs[i * 2] : "",
+                        pairs[i * 2 + 1] ? pairs[i * 2 + 1] : ""
+                    );
                 }
             }
             return result;
@@ -514,6 +518,7 @@ void bind_tc_pass_runtime(nb::module_& m) {
             return p && p->viewport_name ? std::string(p->viewport_name) : std::string();
         })
         .def("serialize_data", [](TcPassRef& self) -> nb::object {
+            tc::init_cpp_inspect_vtable();
             tc_pass* p = self.ptr();
             if (!p) {
                 return nb::none();
@@ -535,6 +540,7 @@ void bind_tc_pass_runtime(nb::module_& m) {
             return result;
         })
         .def("serialize", [](TcPassRef& self) -> nb::object {
+            tc::init_cpp_inspect_vtable();
             tc_pass* p = self.ptr();
             if (!p) {
                 return nb::none();
@@ -574,6 +580,7 @@ void bind_tc_pass_runtime(nb::module_& m) {
             return result;
         })
         .def("deserialize_data", [](TcPassRef& self, nb::object data) {
+            tc::init_cpp_inspect_vtable();
             tc_pass* p = self.ptr();
             if (!p || data.is_none()) {
                 return;
@@ -594,6 +601,7 @@ void bind_tc_pass_runtime(nb::module_& m) {
             tc_value_free(&v);
         }, nb::arg("data"))
         .def("get_field", [](TcPassRef& self, const std::string& field_name) -> nb::object {
+            tc::init_cpp_inspect_vtable();
             tc_pass* p = self.ptr();
             if (!p) {
                 return nb::none();
@@ -620,6 +628,7 @@ void bind_tc_pass_runtime(nb::module_& m) {
             }
         }, nb::arg("field_name"))
         .def("set_field", [](TcPassRef& self, const std::string& field_name, nb::object value) {
+            tc::init_cpp_inspect_vtable();
             tc_pass* p = self.ptr();
             if (!p || value.is_none()) {
                 return;

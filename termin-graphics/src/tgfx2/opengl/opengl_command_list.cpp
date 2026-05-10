@@ -413,6 +413,7 @@ void OpenGLCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
     auto* s = device_.get_texture(src);
     auto* d = device_.get_texture(dst);
     if (!s || !d) return;
+    if (s == d) return;
 
     // Attachment point + blit mask depend on whether this is colour
     // or depth/stencil. Previously we hard-wired COLOR_ATTACHMENT0 +

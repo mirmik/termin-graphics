@@ -1,6 +1,7 @@
 #include "termin/render/graph_compiler.hpp"
 #include <tcbase/tc_log.hpp>
 #include <termin/render/frame_pass.hpp>
+#include <termin/render/graph_alias_pass.hpp>
 #include <termin/render/graph_node_def.hpp>
 #include <termin/render/tc_pass.hpp>
 #include "termin/render/render_pipeline.hpp"
@@ -47,6 +48,21 @@ static bool is_pass_node(const NodeData& node) {
 static bool is_external_resource_name(const std::string& name) {
     return name == "RT_COLOR" || name == "RT_DEPTH" ||
            name == "OUTPUT" || name == "DISPLAY";
+}
+
+static bool is_pipeline_output_node(const NodeData& node) {
+    return node.node_type == "output" || node.node_type == "pipeline_output";
+}
+
+static bool is_legacy_render_target_output_node(const NodeData& node) {
+    return node.node_type == "output";
+}
+
+static bool is_graph_alias_node(const NodeData& node) {
+    return node.node_type == "render_target_input" ||
+           node.node_type == "fbo_split" ||
+           node.node_type == "fbo_join" ||
+           node.node_type == "pipeline_output";
 }
 
 static bool is_target_socket_name(const std::string& name) {
@@ -172,12 +188,37 @@ static void apply_target_overrides(
             }
 
             const std::string& target_res = target_it->second;
-            sockets[base_name] = target_res;
-            if (!is_external_resource_name(target_res)) {
+
+            auto target_view_it = result.resource_views.find(target_res);
+            if (target_view_it != result.resource_views.end()) {
+                auto output_it = sockets.find(base_name);
+                if (output_it == sockets.end() || output_it->second.empty()) {
+                    std::string output_res = node.pass_class.empty()
+                        ? node.id + "_" + base_name
+                        : node.pass_class + "_" + node.id + "_" + base_name;
+                    sockets[base_name] = output_res;
+                    output_it = sockets.find(base_name);
+                }
+
+                const std::string& output_res = output_it->second;
+                if (output_res != target_res) {
+                    result.resource_views[output_res] = target_view_it->second;
+                }
+
                 auto output_type = socket_type_for(node, base_name, false);
-                result.resource_types[target_res] =
+                result.resource_types[output_res] =
                     output_type.has_value() ? *output_type : inp.socket_type;
+                continue;
             }
+
+            if (is_external_resource_name(target_res)) {
+                sockets[base_name] = target_res;
+                continue;
+            }
+
+            sockets[base_name] = target_res;
+            result.resource_types[target_res] =
+                socket_type_for(node, base_name, false).value_or(inp.socket_type);
         }
     }
 }
@@ -342,6 +383,10 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
                 }
             }
         }
+        if (node.node_type == "pipeline_output") {
+            result.resource_types["OUTPUT"] = "external_color";
+            result.external_resources["OUTPUT"] = "render_target_color";
+        }
     }
 
     // Pass 2: Assign names to output sockets of pass nodes
@@ -371,7 +416,7 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
     // textures supplied by RenderEngine.
     for (const auto& conn : graph.connections) {
         const NodeData* to_node = graph.get_node(conn.to_node_id);
-        if (!to_node || to_node->node_type != "output") {
+        if (!to_node || !is_pipeline_output_node(*to_node)) {
             continue;
         }
         if (conn.to_socket != "color" && conn.to_socket != "depth") {
@@ -436,6 +481,7 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
     propagate_non_target_connections(graph, result);
     propagate_target_connections(graph, result);
     apply_target_overrides(graph, result);
+    propagate_non_target_connections(graph, result);
 
     // Pass 3g: Apply FboJoin nodes. They create composed FBO views.
     for (const auto& node : graph.nodes) {
@@ -571,6 +617,142 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
 }
 
 // ============================================================================
+// Graph alias marker passes
+// ============================================================================
+
+static std::string graph_alias_pass_name(const NodeData& node) {
+    if (!node.name.empty()) {
+        return node.name;
+    }
+    if (!node.pass_class.empty()) {
+        return node.pass_class + "#" + node.id;
+    }
+    if (!node.node_type.empty()) {
+        return node.node_type + "#" + node.id;
+    }
+    return "GraphAlias#" + node.id;
+}
+
+static void push_resource_if_present(
+    std::vector<std::string>& resources,
+    const std::unordered_map<std::string, std::string>& sockets,
+    const std::string& socket_name
+) {
+    auto it = sockets.find(socket_name);
+    if (it == sockets.end() || it->second.empty()) {
+        return;
+    }
+    resources.push_back(it->second);
+}
+
+static void push_alias_pair(
+    std::vector<std::string>& aliases,
+    const std::string& source,
+    const std::string& target
+) {
+    if (source.empty() || target.empty() || source == target) {
+        return;
+    }
+    aliases.push_back(source);
+    aliases.push_back(target);
+}
+
+static void add_graph_alias_pass(
+    RenderPipeline* pipeline,
+    const NodeData& node,
+    const ResourceNaming& naming
+) {
+    if (!pipeline) {
+        return;
+    }
+
+    auto socket_map_it = naming.socket_names.find(node.id);
+    if (socket_map_it == naming.socket_names.end()) {
+        tc::Log::error(
+            "compile_graph: alias node '%s' has no resolved sockets",
+            node.id.c_str()
+        );
+        return;
+    }
+
+    const auto& sockets = socket_map_it->second;
+    std::vector<std::string> reads;
+    std::vector<std::string> writes;
+    std::vector<std::string> aliases;
+
+    if (node.node_type == "render_target_input") {
+        push_resource_if_present(writes, sockets, "color");
+    } else if (node.node_type == "fbo_split") {
+        push_resource_if_present(reads, sockets, "fbo");
+        push_resource_if_present(writes, sockets, "color");
+        push_resource_if_present(writes, sockets, "depth");
+        auto fbo_it = sockets.find("fbo");
+        auto color_it = sockets.find("color");
+        auto depth_it = sockets.find("depth");
+        if (fbo_it != sockets.end()) {
+            if (color_it != sockets.end()) {
+                push_alias_pair(aliases, fbo_it->second, color_it->second);
+            }
+            if (depth_it != sockets.end()) {
+                push_alias_pair(aliases, fbo_it->second, depth_it->second);
+            }
+        }
+    } else if (node.node_type == "fbo_join") {
+        push_resource_if_present(reads, sockets, "color");
+        push_resource_if_present(reads, sockets, "depth");
+        push_resource_if_present(writes, sockets, "fbo");
+        auto fbo_it = sockets.find("fbo");
+        if (fbo_it != sockets.end()) {
+            std::optional<std::string> parent;
+            for (const char* input_socket : {"color", "depth"}) {
+                auto input_it = sockets.find(input_socket);
+                if (input_it == sockets.end()) {
+                    continue;
+                }
+                auto view_it = naming.resource_views.find(input_it->second);
+                if (view_it == naming.resource_views.end()) {
+                    continue;
+                }
+                if (!parent.has_value()) {
+                    parent = view_it->second.parent;
+                } else if (*parent != view_it->second.parent) {
+                    parent.reset();
+                    break;
+                }
+            }
+            if (parent.has_value()) {
+                push_alias_pair(aliases, *parent, fbo_it->second);
+            }
+        }
+    } else if (node.node_type == "pipeline_output") {
+        push_resource_if_present(reads, sockets, "color");
+        writes.push_back("OUTPUT");
+        auto color_it = sockets.find("color");
+        if (color_it != sockets.end()) {
+            push_alias_pair(aliases, color_it->second, "OUTPUT");
+        }
+    } else {
+        return;
+    }
+
+    if (reads.empty() && writes.empty()) {
+        tc::Log::warn(
+            "compile_graph: alias node '%s' produced no read/write resources",
+            node.id.c_str()
+        );
+        return;
+    }
+
+    auto* pass = new termin::GraphAliasPass(
+        std::move(reads),
+        std::move(writes),
+        std::move(aliases),
+        graph_alias_pass_name(node)
+    );
+    pipeline->add_pass(pass->tc_pass_ptr());
+}
+
+// ============================================================================
 // Synthetic output blits
 // ============================================================================
 
@@ -591,7 +773,7 @@ static void add_synthetic_output_blits(
 
     for (const auto& conn : graph.connections) {
         const NodeData* to_node = graph.get_node(conn.to_node_id);
-        if (!to_node || to_node->node_type != "output") {
+        if (!to_node || !is_legacy_render_target_output_node(*to_node)) {
             continue;
         }
         if (conn.to_socket != "color") {
@@ -913,7 +1095,12 @@ RenderPipeline* compile_graph(GraphData& graph) {
     // 6. Add passes
     bool had_pass_nodes = false;
     for (const auto* node : sorted_nodes) {
-        if (!is_pass_node(*node)) continue;
+        if (!is_pass_node(*node)) {
+            if (is_graph_alias_node(*node)) {
+                add_graph_alias_pass(pipeline, *node, naming);
+            }
+            continue;
+        }
         had_pass_nodes = true;
 
         // Check if pass type is registered

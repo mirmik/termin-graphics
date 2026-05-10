@@ -14,6 +14,7 @@
 #include <termin/entity/entity.hpp>
 #include <termin/render/render_camera.hpp>
 #include <termin/render/frame_graph_debugger_core.hpp>
+#include <termin/render/graph_alias_pass.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/render_context.hpp>
@@ -29,6 +30,31 @@
 namespace nb = nanobind;
 
 namespace termin {
+
+static void py_cxx_pass_ref_retain(tc_pass* p) {
+    if (p && p->body) {
+        Py_INCREF(reinterpret_cast<PyObject*>(p->body));
+    }
+}
+
+static void py_cxx_pass_ref_release(tc_pass* p) {
+    if (p && p->body) {
+        Py_DECREF(reinterpret_cast<PyObject*>(p->body));
+    }
+}
+
+static const tc_pass_ref_vtable g_py_cxx_pass_ref_vtable = {
+    py_cxx_pass_ref_retain,
+    py_cxx_pass_ref_release,
+    nullptr,
+};
+
+template<typename T>
+void init_render_pass_from_python(T* self, const char* type_name) {
+    self->link_to_type_registry(type_name);
+    nb::object wrapper = nb::cast(self, nb::rv_policy::reference);
+    self->set_python_ref(wrapper.ptr(), &g_py_cxx_pass_ref_vtable);
+}
 
 void bind_tc_pass_runtime(nb::module_& m);
 void bind_scene_pipeline_template(nb::module_& m);
@@ -397,6 +423,39 @@ void bind_render_framework(nb::module_& m) {
             [](CxxFramePass& p) {
                 return TcPassRef(p.tc_pass_ptr());
             });
+
+    nb::class_<GraphAliasPass, CxxFramePass>(m, "GraphAliasPass")
+        .def("__init__", [](GraphAliasPass* self,
+            std::vector<std::string> read_resources,
+            std::vector<std::string> write_resources,
+            std::vector<std::string> alias_resources,
+            const std::string& pass_name
+        ) {
+            new (self) GraphAliasPass(
+                std::move(read_resources),
+                std::move(write_resources),
+                std::move(alias_resources),
+                pass_name
+            );
+            init_render_pass_from_python(self, "GraphAliasPass");
+        },
+            nb::arg("read_resources") = std::vector<std::string>{},
+            nb::arg("write_resources") = std::vector<std::string>{},
+            nb::arg("alias_resources") = std::vector<std::string>{},
+            nb::arg("pass_name") = "GraphAliasPass")
+        .def_rw("read_resources", &GraphAliasPass::read_resources)
+        .def_rw("write_resources", &GraphAliasPass::write_resources)
+        .def_rw("alias_resources", &GraphAliasPass::alias_resources)
+        .def_prop_ro("reads", &GraphAliasPass::compute_reads)
+        .def_prop_ro("writes", &GraphAliasPass::compute_writes)
+        .def("get_inplace_aliases", &GraphAliasPass::get_inplace_aliases);
+
+    {
+        m.attr("GraphAliasPass").attr("category") = "Graph";
+        m.attr("GraphAliasPass").attr("node_inputs") = nb::make_tuple();
+        m.attr("GraphAliasPass").attr("node_outputs") = nb::make_tuple();
+        m.attr("GraphAliasPass").attr("node_inplace_pairs") = nb::make_tuple();
+    }
 
     nb::class_<RenderContext>(m, "RenderContext")
         .def(nb::init<>())
