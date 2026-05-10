@@ -2289,6 +2289,8 @@ PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
         case TC_TEXTURE_R8:      return PixelFormat::R8_UNorm;
         case TC_TEXTURE_RGBA16F: return PixelFormat::RGBA16F;
         case TC_TEXTURE_RGB16F:  return PixelFormat::RGBA16F;
+        case TC_TEXTURE_R16F:    return PixelFormat::R16F;
+        case TC_TEXTURE_R32F:    return PixelFormat::R32F;
         case TC_TEXTURE_DEPTH24: return PixelFormat::D24_UNorm_S8_UInt;
         case TC_TEXTURE_DEPTH32F: return PixelFormat::D32F;
     }

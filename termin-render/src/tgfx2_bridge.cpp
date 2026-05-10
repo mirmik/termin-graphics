@@ -37,6 +37,8 @@ tgfx::PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
         case TC_TEXTURE_R8:      return tgfx::PixelFormat::R8_UNorm;
         case TC_TEXTURE_RGBA16F: return tgfx::PixelFormat::RGBA16F;
         case TC_TEXTURE_RGB16F:  return tgfx::PixelFormat::RGBA16F;  // no RGB16F in tgfx2 enum
+        case TC_TEXTURE_R16F:    return tgfx::PixelFormat::R16F;
+        case TC_TEXTURE_R32F:    return tgfx::PixelFormat::R32F;
         case TC_TEXTURE_DEPTH24: return tgfx::PixelFormat::D24_UNorm_S8_UInt;
         case TC_TEXTURE_DEPTH32F: return tgfx::PixelFormat::D32F;
     }

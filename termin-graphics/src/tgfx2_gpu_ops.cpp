@@ -62,6 +62,8 @@ static tgfx::PixelFormat tc_format_to_pixel_format(int format) {
         case TC_TEXTURE_R8:       return tgfx::PixelFormat::R8_UNorm;
         case TC_TEXTURE_RGBA16F:  return tgfx::PixelFormat::RGBA16F;
         case TC_TEXTURE_RGB16F:   return tgfx::PixelFormat::RGBA16F;
+        case TC_TEXTURE_R16F:     return tgfx::PixelFormat::R16F;
+        case TC_TEXTURE_R32F:     return tgfx::PixelFormat::R32F;
         case TC_TEXTURE_DEPTH24:  return tgfx::PixelFormat::D24_UNorm_S8_UInt;
         case TC_TEXTURE_DEPTH32F: return tgfx::PixelFormat::D32F;
     }
@@ -322,9 +324,13 @@ static bool tgfx2_texture_sync_to_cpu(tc_texture* tex) {
             return false;
         }
 
-        bool is_float16 = (tex->format == TC_TEXTURE_RGBA16F || tex->format == TC_TEXTURE_RGB16F);
+        bool is_float_format =
+            (tex->format == TC_TEXTURE_RGBA16F ||
+             tex->format == TC_TEXTURE_RGB16F ||
+             tex->format == TC_TEXTURE_R16F ||
+             tex->format == TC_TEXTURE_R32F);
 
-        if (is_float16) {
+        if (is_float_format) {
             // Store as float32 per channel for simplicity (channels field
             // already reflects component count). Preview path reads
             // width*height*channels*sizeof(float) bytes.

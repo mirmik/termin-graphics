@@ -30,6 +30,8 @@ typedef enum tc_texture_format {
     TC_TEXTURE_RGB16F = 5,  // 3 channels, 16-bit float
     TC_TEXTURE_DEPTH24 = 6, // depth texture, 24 bits (for shadow maps)
     TC_TEXTURE_DEPTH32F = 7,// depth texture, 32-bit float
+    TC_TEXTURE_R16F = 8,    // 1 channel, 16-bit float
+    TC_TEXTURE_R32F = 9,    // 1 channel, 32-bit float
 } tc_texture_format;
 
 // ============================================================================

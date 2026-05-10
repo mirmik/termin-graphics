@@ -281,6 +281,14 @@ bool tc_render_target_format_from_string(const char* name, tc_texture_format* ou
         *out_format = TC_TEXTURE_RGB16F;
         return true;
     }
+    if (strcmp(name, "r16f") == 0) {
+        *out_format = TC_TEXTURE_R16F;
+        return true;
+    }
+    if (strcmp(name, "r32f") == 0) {
+        *out_format = TC_TEXTURE_R32F;
+        return true;
+    }
     if (strcmp(name, "depth24") == 0) {
         *out_format = TC_TEXTURE_DEPTH24;
         return true;
@@ -300,6 +308,8 @@ const char* tc_render_target_format_to_string(tc_texture_format format) {
         case TC_TEXTURE_R8: return "r8";
         case TC_TEXTURE_RGBA16F: return "rgba16f";
         case TC_TEXTURE_RGB16F: return "rgb16f";
+        case TC_TEXTURE_R16F: return "r16f";
+        case TC_TEXTURE_R32F: return "r32f";
         case TC_TEXTURE_DEPTH24: return "depth24";
         case TC_TEXTURE_DEPTH32F: return "depth32f";
     }
