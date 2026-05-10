@@ -163,6 +163,33 @@ tgfx::BufferHandle ensure_material_phase_ubo_runtime(
     return existing;
 }
 
+void bind_material_phase_textures_runtime(
+    tc_material_phase* phase,
+    uint32_t tex_slot_start,
+    tgfx::IRenderDevice& device,
+    tgfx::RenderContext2& ctx)
+{
+    if (!phase) return;
+
+    bool is_gl = device.backend_type() == tgfx::BackendType::OpenGL;
+    uint32_t slot = tex_slot_start;
+    for (size_t i = 0; i < phase->texture_count; ++i) {
+        const tc_material_texture& mat_tex = phase->textures[i];
+        if (tc_texture_handle_is_invalid(mat_tex.texture)) {
+            ++slot;
+            continue;
+        }
+        tgfx::TextureHandle tex2 = wrap_tc_texture_as_tgfx2(device, mat_tex.texture);
+        if (tex2) {
+            ctx.bind_sampled_texture(slot, tex2);
+            if (is_gl) {
+                ctx.defer_destroy(tex2);
+            }
+        }
+        ++slot;
+    }
+}
+
 } // namespace
 
 bool apply_material_phase_ubo_runtime(
@@ -174,6 +201,8 @@ bool apply_material_phase_ubo_runtime(
     tgfx::RenderContext2& ctx)
 {
     if (!phase || !shader) return false;
+    bind_material_phase_textures_runtime(phase, tex_slot_start, device, ctx);
+
     if (shader->material_ubo_block_size == 0) return false;
 
     tgfx::BufferHandle ubo = ensure_material_phase_ubo_runtime(phase, shader, device);
@@ -192,24 +221,6 @@ bool apply_material_phase_ubo_runtime(
             ubo,
             std::span<const uint8_t>(staging.data(), staging.size()));
         ctx.bind_uniform_buffer(ubo_slot, ubo);
-    }
-
-    bool is_gl = device.backend_type() == tgfx::BackendType::OpenGL;
-    uint32_t slot = tex_slot_start;
-    for (size_t i = 0; i < phase->texture_count; ++i) {
-        const tc_material_texture& mat_tex = phase->textures[i];
-        if (tc_texture_handle_is_invalid(mat_tex.texture)) {
-            ++slot;
-            continue;
-        }
-        tgfx::TextureHandle tex2 = wrap_tc_texture_as_tgfx2(device, mat_tex.texture);
-        if (tex2) {
-            ctx.bind_sampled_texture(slot, tex2);
-            if (is_gl) {
-                ctx.defer_destroy(tex2);
-            }
-        }
-        ++slot;
     }
 
     return true;
