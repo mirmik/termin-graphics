@@ -16,6 +16,7 @@
 #include <atomic>
 #include <chrono>
 #include <set>
+#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -149,6 +150,63 @@ static bool vertex_shader_uses_location(const VkShaderResource* shader, uint32_t
     return std::find(shader->vertex_input_locations.begin(),
                      shader->vertex_input_locations.end(),
                      location) != shader->vertex_input_locations.end();
+}
+
+static bool vertex_attributes_have_location(
+    const std::vector<VkVertexInputAttributeDescription>& attributes,
+    uint32_t location
+) {
+    return std::any_of(attributes.begin(), attributes.end(),
+        [location](const VkVertexInputAttributeDescription& attr) {
+            return attr.location == location;
+        });
+}
+
+static std::string join_u32s(const std::vector<uint32_t>& values) {
+    std::ostringstream out;
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (i) out << ", ";
+        out << values[i];
+    }
+    return out.str();
+}
+
+static std::string describe_vk_vertex_attributes(
+    const std::vector<VkVertexInputAttributeDescription>& attributes
+) {
+    std::ostringstream out;
+    for (size_t i = 0; i < attributes.size(); ++i) {
+        const auto& attr = attributes[i];
+        if (i) out << "; ";
+        out << "loc=" << attr.location
+            << " binding=" << attr.binding
+            << " offset=" << attr.offset
+            << " vkfmt=" << attr.format;
+    }
+    return out.str();
+}
+
+static std::string describe_vertex_layouts(
+    const std::vector<VertexBufferLayout>& layouts
+) {
+    std::ostringstream out;
+    for (size_t i = 0; i < layouts.size(); ++i) {
+        const auto& layout = layouts[i];
+        if (i) out << " | ";
+        out << "binding " << i
+            << " stride=" << layout.stride
+            << " rate=" << (layout.per_instance ? "instance" : "vertex")
+            << " attrs=[";
+        for (size_t j = 0; j < layout.attributes.size(); ++j) {
+            const auto& attr = layout.attributes[j];
+            if (j) out << "; ";
+            out << "loc=" << attr.location
+                << " offset=" << attr.offset
+                << " fmt=" << static_cast<int>(attr.format);
+        }
+        out << "]";
+    }
+    return out.str();
 }
 
 } // namespace
@@ -1044,44 +1102,71 @@ SamplerHandle VulkanRenderDevice::create_sampler(const SamplerDesc& desc) {
 ShaderHandle VulkanRenderDevice::create_shader(const ShaderDesc& desc) {
     std::vector<uint32_t> spirv;
 
-    if (!desc.bytecode.empty()) {
-        // Use provided SPIR-V
-        spirv.resize(desc.bytecode.size() / 4);
-        std::memcpy(spirv.data(), desc.bytecode.data(), desc.bytecode.size());
-    } else if (!desc.source.empty()) {
-        // Resolve #include / @features etc. through the shared
-        // preprocessor hook, then compile the GLSL to SPIR-V via
-        // shaderc. OpenGL runs the same preprocess step — shaders
-        // stay identical across backends.
-        std::string resolved = internal::preprocess_shader_source(desc.source);
-        auto result = vk::compile_glsl_to_spirv(resolved, desc.stage, desc.entry_point);
-        if (!result.success) {
-            throw std::runtime_error("Shader compilation failed: " + result.error_message);
+    try {
+        if (!desc.bytecode.empty()) {
+            // Use provided SPIR-V
+            spirv.resize(desc.bytecode.size() / 4);
+            std::memcpy(spirv.data(), desc.bytecode.data(), desc.bytecode.size());
+        } else if (!desc.source.empty()) {
+            // Resolve #include / @features etc. through the shared
+            // preprocessor hook, then compile the GLSL to SPIR-V via
+            // shaderc. OpenGL runs the same preprocess step — shaders
+            // stay identical across backends.
+            std::string resolved = internal::preprocess_shader_source(desc.source);
+            auto result = vk::compile_glsl_to_spirv(resolved, desc.stage, desc.entry_point);
+            if (!result.success) {
+                throw std::runtime_error("Shader compilation failed: " + result.error_message);
+            }
+            spirv = std::move(result.spirv);
+        } else {
+            return {0};
         }
-        spirv = std::move(result.spirv);
-    } else {
-        return {0};
+
+        VkShaderResource res;
+        res.stage = desc.stage;
+        res.entry_point = desc.entry_point;
+        res.debug_name = desc.debug_name;
+        if (desc.stage == ShaderStage::Vertex) {
+            SpirvVertexInputs inputs = reflect_spirv_vertex_inputs(spirv, desc.entry_point);
+            res.vertex_input_locations_known = inputs.known;
+            res.vertex_input_locations = std::move(inputs.locations);
+        }
+
+        VkShaderModuleCreateInfo ci{};
+        ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        ci.codeSize = spirv.size() * sizeof(uint32_t);
+        ci.pCode = spirv.data();
+
+        if (vkCreateShaderModule(device_, &ci, nullptr, &res.module) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create shader module");
+        }
+
+        return {shaders_.add(std::move(res))};
+    } catch (const std::bad_alloc& e) {
+        tc_log(TC_LOG_ERROR,
+            "[VulkanRenderDevice] create_shader bad_alloc: debug='%s' stage=%d entry='%s' "
+            "source_bytes=%zu bytecode_bytes=%zu spirv_words=%zu: %s",
+            desc.debug_name.c_str(),
+            static_cast<int>(desc.stage),
+            desc.entry_point.c_str(),
+            desc.source.size(),
+            desc.bytecode.size(),
+            spirv.size(),
+            e.what());
+        throw;
+    } catch (const std::exception& e) {
+        tc_log(TC_LOG_ERROR,
+            "[VulkanRenderDevice] create_shader failed: debug='%s' stage=%d entry='%s' "
+            "source_bytes=%zu bytecode_bytes=%zu spirv_words=%zu: %s",
+            desc.debug_name.c_str(),
+            static_cast<int>(desc.stage),
+            desc.entry_point.c_str(),
+            desc.source.size(),
+            desc.bytecode.size(),
+            spirv.size(),
+            e.what());
+        throw;
     }
-
-    VkShaderResource res;
-    res.stage = desc.stage;
-    res.entry_point = desc.entry_point;
-    if (desc.stage == ShaderStage::Vertex) {
-        SpirvVertexInputs inputs = reflect_spirv_vertex_inputs(spirv, desc.entry_point);
-        res.vertex_input_locations_known = inputs.known;
-        res.vertex_input_locations = std::move(inputs.locations);
-    }
-
-    VkShaderModuleCreateInfo ci{};
-    ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    ci.codeSize = spirv.size() * sizeof(uint32_t);
-    ci.pCode = spirv.data();
-
-    if (vkCreateShaderModule(device_, &ci, nullptr, &res.module) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create shader module");
-    }
-
-    return {shaders_.add(std::move(res))};
 }
 
 // --- Pipeline ---
@@ -1155,6 +1240,57 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
             ad.offset = attr.offset;
             attributes.push_back(ad);
         }
+    }
+
+    if (vertex_shader && vertex_shader->vertex_input_locations_known) {
+        std::vector<uint32_t> provided_locations;
+        provided_locations.reserve(attributes.size());
+        for (const auto& attr : attributes) {
+            provided_locations.push_back(attr.location);
+        }
+        std::sort(provided_locations.begin(), provided_locations.end());
+        provided_locations.erase(
+            std::unique(provided_locations.begin(), provided_locations.end()),
+            provided_locations.end());
+
+        std::vector<uint32_t> missing_locations;
+        for (uint32_t location : vertex_shader->vertex_input_locations) {
+            if (!vertex_attributes_have_location(attributes, location)) {
+                missing_locations.push_back(location);
+            }
+        }
+
+        if (!missing_locations.empty()) {
+            const std::string shader_name = vertex_shader->debug_name.empty()
+                ? std::string("<unnamed vertex shader>")
+                : vertex_shader->debug_name;
+            tc_log(TC_LOG_ERROR,
+                "[VulkanRenderDevice] vertex input mismatch before pipeline creation: "
+                "shader='%s' shader_handle=%u entry='%s' requires_locations=[%s] "
+                "provided_locations=[%s] missing_locations=[%s] raw_vertex_layouts={%s} "
+                "effective_vk_attributes={%s}. This usually means the shader declares "
+                "an input the mesh/drawable layout does not provide, or the pass filtered "
+                "the layout more aggressively than the shader interface allows.",
+                shader_name.c_str(),
+                desc.vertex_shader.id,
+                vertex_shader->entry_point.c_str(),
+                join_u32s(vertex_shader->vertex_input_locations).c_str(),
+                join_u32s(provided_locations).c_str(),
+                join_u32s(missing_locations).c_str(),
+                describe_vertex_layouts(desc.vertex_layouts).c_str(),
+                describe_vk_vertex_attributes(attributes).c_str());
+        }
+    } else if (vertex_shader) {
+        const std::string shader_name = vertex_shader->debug_name.empty()
+            ? std::string("<unnamed vertex shader>")
+            : vertex_shader->debug_name;
+        tc_log(TC_LOG_WARN,
+            "[VulkanRenderDevice] vertex shader input reflection unavailable: "
+            "shader='%s' shader_handle=%u entry='%s'; Vulkan validation may be "
+            "the first place to report vertex input mismatches.",
+            shader_name.c_str(),
+            desc.vertex_shader.id,
+            vertex_shader->entry_point.c_str());
     }
 
     VkPipelineVertexInputStateCreateInfo vertex_input{};

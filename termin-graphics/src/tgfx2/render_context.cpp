@@ -719,10 +719,13 @@ void RenderContext2::draw_fullscreen_quad() {
     // PostFX output.
     set_topology(PrimitiveTopology::TriangleList);
 
-    // If no vertex shader bound, use built-in FSQ vertex shader
-    ShaderHandle vs = bound_vs_ ? bound_vs_ : fsq_vs_;
-    if (vs != bound_vs_) {
-        bind_shader(vs, bound_fs_, bound_gs_);
+    // Fullscreen quad drawing owns its vertex stream. Reusing an
+    // arbitrary previously-bound mesh VS is invalid on Vulkan: the FSQ
+    // layout only provides locations 0/1, while a material VS may require
+    // 0/1/2 or more. Fragment-only post effects bind just their FS and rely
+    // on this helper to force the matching FSQ VS every time.
+    if (fsq_vs_ != bound_vs_) {
+        bind_shader(fsq_vs_, bound_fs_, bound_gs_);
     }
 
     flush_pipeline();

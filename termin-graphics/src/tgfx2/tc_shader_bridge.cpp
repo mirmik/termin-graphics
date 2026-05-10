@@ -123,6 +123,7 @@ bool tc_shader_ensure_tgfx2(
         tgfx::ShaderDesc vs_desc;
         vs_desc.stage = tgfx::ShaderStage::Vertex;
         vs_desc.source = shader->vertex_source;
+        vs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":vertex";
         vs = device->create_shader(vs_desc);
         if (!vs) {
             tc_log(TC_LOG_ERROR,
@@ -135,6 +136,7 @@ bool tc_shader_ensure_tgfx2(
     tgfx::ShaderDesc fs_desc;
     fs_desc.stage = tgfx::ShaderStage::Fragment;
     fs_desc.source = shader->fragment_source;
+    fs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":fragment";
     tgfx::ShaderHandle fs = device->create_shader(fs_desc);
     if (!fs) {
         // Roll back VS to avoid leaking on partial failure.

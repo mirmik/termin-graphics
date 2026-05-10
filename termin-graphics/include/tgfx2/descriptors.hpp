@@ -44,6 +44,7 @@ struct ShaderDesc {
     ShaderStage stage = ShaderStage::Vertex;
     std::string source;
     std::string entry_point = "main";
+    std::string debug_name;
     // SPIR-V bytecode (for Vulkan path; empty for GL-only)
     std::vector<uint8_t> bytecode;
 };
