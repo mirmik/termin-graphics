@@ -39,6 +39,16 @@ TC_API tc_texture_format tc_render_target_get_color_format(tc_render_target_hand
 TC_API void tc_render_target_set_depth_format(tc_render_target_handle h, tc_texture_format format);
 TC_API tc_texture_format tc_render_target_get_depth_format(tc_render_target_handle h);
 
+TC_API void tc_render_target_set_clear_color_enabled(tc_render_target_handle h, bool enabled);
+TC_API bool tc_render_target_get_clear_color_enabled(tc_render_target_handle h);
+TC_API void tc_render_target_set_clear_color_value(tc_render_target_handle h, float r, float g, float b, float a);
+TC_API void tc_render_target_get_clear_color_value(tc_render_target_handle h, float out_rgba[4]);
+
+TC_API void tc_render_target_set_clear_depth_enabled(tc_render_target_handle h, bool enabled);
+TC_API bool tc_render_target_get_clear_depth_enabled(tc_render_target_handle h);
+TC_API void tc_render_target_set_clear_depth_value(tc_render_target_handle h, float value);
+TC_API float tc_render_target_get_clear_depth_value(tc_render_target_handle h);
+
 // --- Owned tc_textures -----------------------------------------------------
 //
 // Render targets own a color + depth tc_texture pair. Both are GPU-only

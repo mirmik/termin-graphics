@@ -174,6 +174,16 @@ static tc_value serialize_render_target_config(const tc_render_target_config* rt
     }
     if (rtc->color_format && rtc->color_format[0]) tc_value_dict_set(&v, "color_format", tc_value_string(rtc->color_format));
     if (rtc->depth_format && rtc->depth_format[0]) tc_value_dict_set(&v, "depth_format", tc_value_string(rtc->depth_format));
+    if (rtc->clear_color) {
+        tc_value color = tc_value_list_new();
+        for (size_t i = 0; i < 4; i++) {
+            tc_value_list_push(&color, tc_value_float((double)rtc->clear_color_value[i]));
+        }
+        tc_value_dict_set(&v, "clear_color", color);
+    }
+    if (rtc->clear_depth) {
+        tc_value_dict_set(&v, "clear_depth", tc_value_float((double)rtc->clear_depth_value));
+    }
     if (rtc->pipeline_uuid && rtc->pipeline_uuid[0]) tc_value_dict_set(&v, "pipeline_uuid", tc_value_string(rtc->pipeline_uuid));
     if (rtc->pipeline_name && rtc->pipeline_name[0]) tc_value_dict_set(&v, "pipeline_name", tc_value_string(rtc->pipeline_name));
     tc_value_dict_set(&v, "layer_mask", tc_value_int((int64_t)rtc->layer_mask));
@@ -210,6 +220,26 @@ static bool deserialize_render_target_config(const tc_value* data, tc_render_tar
 
     tc_value* depth_format = tc_value_dict_get((tc_value*)data, "depth_format");
     if (depth_format && depth_format->type == TC_VALUE_STRING) out->depth_format = depth_format->data.s;
+
+    tc_value* clear_color = tc_value_dict_get((tc_value*)data, "clear_color");
+    if (clear_color && clear_color->type == TC_VALUE_LIST && tc_value_list_size(clear_color) >= 4) {
+        out->clear_color = true;
+        for (size_t i = 0; i < 4; i++) {
+            tc_value* item = tc_value_list_get(clear_color, i);
+            float value = (i == 3) ? 1.0f : 0.0f;
+            value_to_float(item, &value);
+            out->clear_color_value[i] = value;
+        }
+    }
+
+    tc_value* clear_depth = tc_value_dict_get((tc_value*)data, "clear_depth");
+    if (clear_depth) {
+        float value = 1.0f;
+        if (value_to_float(clear_depth, &value)) {
+            out->clear_depth = true;
+            out->clear_depth_value = value;
+        }
+    }
 
     tc_value* pipeline_uuid = tc_value_dict_get((tc_value*)data, "pipeline_uuid");
     if (pipeline_uuid && pipeline_uuid->type == TC_VALUE_STRING) out->pipeline_uuid = pipeline_uuid->data.s;

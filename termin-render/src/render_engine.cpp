@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <functional>
+#include <algorithm>
 
 #include <tcbase/tc_log.hpp>
 #include "tc_profiler.h"
@@ -543,6 +544,36 @@ void RenderEngine::render_scene_pipeline_offscreen(
     if (tgfx2_ctx_) {
         tgfx2_ctx_->begin_frame();
     }
+
+    tc_profiler_begin_section("Clear Viewport Targets");
+    if (tgfx2_ctx_) {
+        for (const auto& [viewport_name, vp_ctx] : viewport_contexts) {
+            if (!vp_ctx.clear_color_enabled && !vp_ctx.clear_depth_enabled) {
+                continue;
+            }
+            if (!vp_ctx.output_color_tex && !vp_ctx.output_depth_tex) {
+                tc::Log::error(
+                    "RenderEngine::render_scene_pipeline_offscreen: viewport '%s' requested clear but output textures are missing",
+                    viewport_name.c_str());
+                continue;
+            }
+
+            const float* clear_color_ptr =
+                vp_ctx.clear_color_enabled ? vp_ctx.clear_color : nullptr;
+            tgfx2_ctx_->begin_pass(
+                vp_ctx.output_color_tex,
+                vp_ctx.output_depth_tex,
+                clear_color_ptr,
+                vp_ctx.clear_depth,
+                vp_ctx.clear_depth_enabled);
+            tgfx2_ctx_->set_viewport(
+                0, 0,
+                std::max(1, vp_ctx.rect.width),
+                std::max(1, vp_ctx.rect.height));
+            tgfx2_ctx_->end_pass();
+        }
+    }
+    tc_profiler_end_section();
 
     // Assemble per-resource tgfx2 texture maps from the pool. Native
     // path: handles are owned by IRenderDevice, persistent across

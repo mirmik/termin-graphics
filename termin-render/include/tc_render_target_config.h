@@ -19,6 +19,10 @@ typedef struct tc_render_target_config {
     bool dynamic_resolution;    // Resize from attached viewport without serializing runtime size
     const char* color_format;   // Color attachment format (interned, nullable)
     const char* depth_format;   // Depth attachment format (interned, nullable)
+    bool clear_color;           // Clear color attachment before rendering
+    float clear_color_value[4]; // RGBA clear value
+    bool clear_depth;           // Clear depth attachment before rendering
+    float clear_depth_value;    // Depth clear value
     const char* pipeline_uuid;  // Pipeline asset UUID (interned, nullable)
     const char* pipeline_name;  // Special pipeline name (interned, nullable)
     uint64_t layer_mask;        // Layer mask for rendering

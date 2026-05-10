@@ -21,6 +21,10 @@ typedef struct {
     bool* dynamic_resolutions;
     tc_texture_format* color_formats;
     tc_texture_format* depth_formats;
+    bool* clear_color_enabled;
+    float (*clear_color_values)[4];
+    bool* clear_depth_enabled;
+    float* clear_depth_values;
     tc_scene_handle* scenes;
     tc_component** cameras;
     tc_entity_handle* camera_entities;
@@ -88,6 +92,10 @@ void tc_render_target_pool_init(void) {
     g_pool->dynamic_resolutions = (bool*)calloc(cap, sizeof(bool));
     g_pool->color_formats = (tc_texture_format*)calloc(cap, sizeof(tc_texture_format));
     g_pool->depth_formats = (tc_texture_format*)calloc(cap, sizeof(tc_texture_format));
+    g_pool->clear_color_enabled = (bool*)calloc(cap, sizeof(bool));
+    g_pool->clear_color_values = (float (*)[4])calloc(cap, sizeof(float[4]));
+    g_pool->clear_depth_enabled = (bool*)calloc(cap, sizeof(bool));
+    g_pool->clear_depth_values = (float*)calloc(cap, sizeof(float));
     g_pool->scenes = (tc_scene_handle*)calloc(cap, sizeof(tc_scene_handle));
     g_pool->cameras = (tc_component**)calloc(cap, sizeof(tc_component*));
     g_pool->camera_entities = (tc_entity_handle*)calloc(cap, sizeof(tc_entity_handle));
@@ -107,6 +115,8 @@ void tc_render_target_pool_init(void) {
         g_pool->pipelines[i] = TC_PIPELINE_HANDLE_INVALID;
         g_pool->color_formats[i] = RT_DEFAULT_COLOR_FORMAT;
         g_pool->depth_formats[i] = RT_DEFAULT_DEPTH_FORMAT;
+        g_pool->clear_color_values[i][3] = 1.0f;
+        g_pool->clear_depth_values[i] = 1.0f;
         g_pool->color_textures[i] = tc_texture_handle_invalid();
         g_pool->depth_textures[i] = tc_texture_handle_invalid();
     }
@@ -146,6 +156,10 @@ void tc_render_target_pool_shutdown(void) {
     free(g_pool->dynamic_resolutions);
     free(g_pool->color_formats);
     free(g_pool->depth_formats);
+    free(g_pool->clear_color_enabled);
+    free(g_pool->clear_color_values);
+    free(g_pool->clear_depth_enabled);
+    free(g_pool->clear_depth_values);
     free(g_pool->scenes);
     free(g_pool->cameras);
     free(g_pool->camera_entities);
@@ -178,6 +192,10 @@ static void pool_grow(void) {
     g_pool->dynamic_resolutions = realloc(g_pool->dynamic_resolutions, new_cap * sizeof(bool));
     g_pool->color_formats = realloc(g_pool->color_formats, new_cap * sizeof(tc_texture_format));
     g_pool->depth_formats = realloc(g_pool->depth_formats, new_cap * sizeof(tc_texture_format));
+    g_pool->clear_color_enabled = realloc(g_pool->clear_color_enabled, new_cap * sizeof(bool));
+    g_pool->clear_color_values = realloc(g_pool->clear_color_values, new_cap * sizeof(float[4]));
+    g_pool->clear_depth_enabled = realloc(g_pool->clear_depth_enabled, new_cap * sizeof(bool));
+    g_pool->clear_depth_values = realloc(g_pool->clear_depth_values, new_cap * sizeof(float));
     g_pool->scenes = realloc(g_pool->scenes, new_cap * sizeof(tc_scene_handle));
     g_pool->cameras = realloc(g_pool->cameras, new_cap * sizeof(tc_component*));
     g_pool->camera_entities = realloc(g_pool->camera_entities, new_cap * sizeof(tc_entity_handle));
@@ -198,6 +216,10 @@ static void pool_grow(void) {
     memset(g_pool->dynamic_resolutions + old_cap, 0, (new_cap - old_cap) * sizeof(bool));
     memset(g_pool->color_formats + old_cap, 0, (new_cap - old_cap) * sizeof(tc_texture_format));
     memset(g_pool->depth_formats + old_cap, 0, (new_cap - old_cap) * sizeof(tc_texture_format));
+    memset(g_pool->clear_color_enabled + old_cap, 0, (new_cap - old_cap) * sizeof(bool));
+    memset(g_pool->clear_color_values + old_cap, 0, (new_cap - old_cap) * sizeof(float[4]));
+    memset(g_pool->clear_depth_enabled + old_cap, 0, (new_cap - old_cap) * sizeof(bool));
+    memset(g_pool->clear_depth_values + old_cap, 0, (new_cap - old_cap) * sizeof(float));
     memset(g_pool->cameras + old_cap, 0, (new_cap - old_cap) * sizeof(tc_component*));
     memset(g_pool->layer_masks + old_cap, 0, (new_cap - old_cap) * sizeof(uint64_t));
     memset(g_pool->enabled + old_cap, 0, (new_cap - old_cap) * sizeof(bool));
@@ -210,6 +232,8 @@ static void pool_grow(void) {
         g_pool->pipelines[i] = TC_PIPELINE_HANDLE_INVALID;
         g_pool->color_formats[i] = RT_DEFAULT_COLOR_FORMAT;
         g_pool->depth_formats[i] = RT_DEFAULT_DEPTH_FORMAT;
+        g_pool->clear_color_values[i][3] = 1.0f;
+        g_pool->clear_depth_values[i] = 1.0f;
         g_pool->color_textures[i] = tc_texture_handle_invalid();
         g_pool->depth_textures[i] = tc_texture_handle_invalid();
     }
@@ -313,6 +337,13 @@ tc_render_target_handle tc_render_target_pool_alloc(const char* name) {
     g_pool->dynamic_resolutions[idx] = false;
     g_pool->color_formats[idx] = RT_DEFAULT_COLOR_FORMAT;
     g_pool->depth_formats[idx] = RT_DEFAULT_DEPTH_FORMAT;
+    g_pool->clear_color_enabled[idx] = false;
+    g_pool->clear_color_values[idx][0] = 0.0f;
+    g_pool->clear_color_values[idx][1] = 0.0f;
+    g_pool->clear_color_values[idx][2] = 0.0f;
+    g_pool->clear_color_values[idx][3] = 1.0f;
+    g_pool->clear_depth_enabled[idx] = false;
+    g_pool->clear_depth_values[idx] = 1.0f;
     g_pool->scenes[idx] = TC_SCENE_HANDLE_INVALID;
     g_pool->cameras[idx] = NULL;
     g_pool->camera_entities[idx] = TC_ENTITY_HANDLE_INVALID;
@@ -510,6 +541,54 @@ void tc_render_target_set_depth_format(tc_render_target_handle h, tc_texture_for
 tc_texture_format tc_render_target_get_depth_format(tc_render_target_handle h) {
     if (!handle_alive(h)) return RT_DEFAULT_DEPTH_FORMAT;
     return g_pool->depth_formats[h.index];
+}
+
+void tc_render_target_set_clear_color_enabled(tc_render_target_handle h, bool enabled) {
+    if (!handle_alive(h)) return;
+    g_pool->clear_color_enabled[h.index] = enabled;
+}
+
+bool tc_render_target_get_clear_color_enabled(tc_render_target_handle h) {
+    if (!handle_alive(h)) return false;
+    return g_pool->clear_color_enabled[h.index];
+}
+
+void tc_render_target_set_clear_color_value(tc_render_target_handle h, float r, float g, float b, float a) {
+    if (!handle_alive(h)) return;
+    g_pool->clear_color_values[h.index][0] = r;
+    g_pool->clear_color_values[h.index][1] = g;
+    g_pool->clear_color_values[h.index][2] = b;
+    g_pool->clear_color_values[h.index][3] = a;
+}
+
+void tc_render_target_get_clear_color_value(tc_render_target_handle h, float out_rgba[4]) {
+    if (!out_rgba) return;
+    out_rgba[0] = 0.0f;
+    out_rgba[1] = 0.0f;
+    out_rgba[2] = 0.0f;
+    out_rgba[3] = 1.0f;
+    if (!handle_alive(h)) return;
+    memcpy(out_rgba, g_pool->clear_color_values[h.index], sizeof(float[4]));
+}
+
+void tc_render_target_set_clear_depth_enabled(tc_render_target_handle h, bool enabled) {
+    if (!handle_alive(h)) return;
+    g_pool->clear_depth_enabled[h.index] = enabled;
+}
+
+bool tc_render_target_get_clear_depth_enabled(tc_render_target_handle h) {
+    if (!handle_alive(h)) return false;
+    return g_pool->clear_depth_enabled[h.index];
+}
+
+void tc_render_target_set_clear_depth_value(tc_render_target_handle h, float value) {
+    if (!handle_alive(h)) return;
+    g_pool->clear_depth_values[h.index] = value;
+}
+
+float tc_render_target_get_clear_depth_value(tc_render_target_handle h) {
+    if (!handle_alive(h)) return 1.0f;
+    return g_pool->clear_depth_values[h.index];
 }
 
 // --- Owned textures --------------------------------------------------------

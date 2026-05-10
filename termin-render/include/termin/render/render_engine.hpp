@@ -49,6 +49,10 @@ public:
     tgfx::TextureHandle output_depth_tex;
     tgfx::PixelFormat output_color_format = tgfx::PixelFormat::RGBA8_UNorm;
     tgfx::PixelFormat output_depth_format = tgfx::PixelFormat::D24_UNorm;
+    bool clear_color_enabled = false;
+    float clear_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    bool clear_depth_enabled = false;
+    float clear_depth = 1.0f;
 
     // External graph inputs keyed by External RT slot name. These are
     // supplied by RenderTarget.pipeline_params.
