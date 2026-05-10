@@ -1141,13 +1141,14 @@ RenderPipeline* compile_graph(GraphData& graph) {
 
         // Set socket-based properties (input_res, output_res, shadow_res, etc.)
         for (const auto& [socket_name, resource_name] : socket_map) {
-            // Skip _target sockets
-            if (socket_name.size() > 7 &&
-                socket_name.substr(socket_name.size() - 7) == "_target") {
-                continue;
-            }
             nos::trent res_name_trent(resource_name);
-            set_pass_property(pass_ref, socket_name, res_name_trent);
+            if (is_target_socket_name(socket_name)) {
+                tc_value tc_val = trent_to_tc_value(res_name_trent);
+                pass_ref.set_field(socket_name, tc_val);
+                tc_value_free(&tc_val);
+            } else {
+                set_pass_property(pass_ref, socket_name, res_name_trent);
+            }
         }
 
         // Set additional params from node

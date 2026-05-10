@@ -730,6 +730,14 @@ void RenderEngine::render_scene_pipeline_offscreen(
         std::function<tgfx::TextureHandle(const std::string&)> resolve_color_resource;
 
         resolve_color_resource = [&](const std::string& name) -> tgfx::TextureHandle {
+            const char* canonical_c = tc_frame_graph_canonical_resource(fg, name.c_str());
+            std::string canonical = canonical_c ? canonical_c : name;
+            if (canonical != name) {
+                tgfx::TextureHandle canonical_handle = resolve_color_resource(canonical);
+                if (canonical_handle) {
+                    return canonical_handle;
+                }
+            }
             if (is_external_color_output(name.c_str())) {
                 return vp_ctx.output_color_tex;
             }
@@ -754,6 +762,14 @@ void RenderEngine::render_scene_pipeline_offscreen(
         };
 
         resolve_depth_resource = [&](const std::string& name) -> tgfx::TextureHandle {
+            const char* canonical_c = tc_frame_graph_canonical_resource(fg, name.c_str());
+            std::string canonical = canonical_c ? canonical_c : name;
+            if (canonical != name) {
+                tgfx::TextureHandle canonical_handle = resolve_depth_resource(canonical);
+                if (canonical_handle) {
+                    return canonical_handle;
+                }
+            }
             if (is_external_color_output(name.c_str()) || is_external_depth_output(name.c_str())) {
                 return vp_ctx.output_depth_tex;
             }
