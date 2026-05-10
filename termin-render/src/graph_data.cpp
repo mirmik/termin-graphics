@@ -2,6 +2,7 @@
 
 #include <tcbase/tc_log.hpp>
 #include <tc_inspect_cpp.hpp>
+#include "termin/render/graph_node_def.hpp"
 #include <trent/json.h>
 
 extern "C" {
@@ -11,11 +12,8 @@ extern "C" {
 namespace tc {
 
 static bool is_graph_boundary_node_type(const std::string& node_type) {
-    return node_type == "resource" ||
-           node_type == "external_rt" ||
-           node_type == "render_target_input" ||
-           node_type == "pipeline_output" ||
-           node_type == "output";
+    const termin::GraphNodeDef* def = termin::graph_node_def_find(node_type);
+    return def && !def->executable;
 }
 
 static bool is_pass_node_type(const std::string& node_type) {
@@ -33,6 +31,69 @@ static bool has_socket(const std::vector<SocketData>& sockets, const std::string
 
 static bool is_target_socket_name(const std::string& name) {
     return name.size() > 7 && name.substr(name.size() - 7) == "_target";
+}
+
+static std::string target_socket_type_for(
+    const NodeData& node,
+    const std::string& target_socket_name
+) {
+    if (!is_target_socket_name(target_socket_name)) {
+        return "fbo";
+    }
+    std::string output_name = target_socket_name.substr(0, target_socket_name.size() - 7);
+    for (const auto& output : node.outputs) {
+        if (output.name == output_name) {
+            return output.socket_type;
+        }
+    }
+    return "fbo";
+}
+
+static void add_sockets_from_graph_node_def(NodeData& node, const termin::GraphNodeDef& def) {
+    for (const auto& input : def.inputs) {
+        if (!has_socket(node.inputs, input.name)) {
+            node.inputs.push_back({input.name, input.socket_type, true});
+        }
+    }
+    for (const auto& output : def.outputs) {
+        if (!has_socket(node.outputs, output.name)) {
+            node.outputs.push_back({output.name, output.socket_type, false});
+        }
+    }
+}
+
+static std::string resource_type_for_node(const NodeData& node) {
+    if (node.params.contains("resource_type") && node.params["resource_type"].is_string()) {
+        return node.params["resource_type"].as_string();
+    }
+    if (node.pass_class == "Color Texture") {
+        return "color_texture";
+    }
+    if (node.pass_class == "Depth Texture") {
+        return "depth_texture";
+    }
+    if (node.pass_class == "Shadow Maps") {
+        return "shadow_map_array";
+    }
+    return "fbo";
+}
+
+static void configure_resource_node_sockets(NodeData& node) {
+    if (node.node_type != "resource") {
+        return;
+    }
+
+    node.outputs.clear();
+    std::string resource_type = resource_type_for_node(node);
+    if (resource_type == "shadow_map_array") {
+        node.outputs.push_back({"shadow", "shadow", false});
+    } else if (resource_type == "color_texture") {
+        node.outputs.push_back({"color", "color_texture", false});
+    } else if (resource_type == "depth_texture") {
+        node.outputs.push_back({"depth", "depth_texture", false});
+    } else {
+        node.outputs.push_back({"fbo", "fbo", false});
+    }
 }
 
 static void add_socket_from_tc_value(std::vector<SocketData>& sockets, const tc_value* value, bool is_input) {
@@ -141,17 +202,9 @@ GraphData GraphData::from_trent(const nos::trent& t) {
                 node.y = static_cast<float>(node_t["y"].as_numer());
             }
 
-            if (node.node_type == "resource") {
-                node.outputs.push_back({"fbo", "fbo", false});
-            } else if (node.node_type == "external_rt") {
-                node.outputs.push_back({"fbo", "fbo", false});
-            } else if (node.node_type == "render_target_input") {
-                node.outputs.push_back({"color", "fbo", false});
-            } else if (node.node_type == "pipeline_output") {
-                node.inputs.push_back({"color", "fbo", true});
-            } else if (node.node_type == "output") {
-                node.inputs.push_back({"color", "fbo", true});
-                node.inputs.push_back({"depth", "fbo", true});
+            if (const termin::GraphNodeDef* def = termin::graph_node_def_find(node.node_type)) {
+                add_sockets_from_graph_node_def(node, *def);
+                configure_resource_node_sockets(node);
             } else if (is_pass_node_type(node.node_type)) {
                 add_sockets_from_metadata(node);
 
@@ -225,7 +278,11 @@ GraphData GraphData::from_trent(const nos::trent& t) {
                         conn.to_socket.c_str()
                     );
                 }
-                to_node->inputs.push_back({conn.to_socket, "fbo", true});
+                to_node->inputs.push_back({
+                    conn.to_socket,
+                    target_socket_type_for(*to_node, conn.to_socket),
+                    true
+                });
             }
         }
     }

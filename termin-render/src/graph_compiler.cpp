@@ -1,6 +1,7 @@
 #include "termin/render/graph_compiler.hpp"
 #include <tcbase/tc_log.hpp>
 #include <termin/render/frame_pass.hpp>
+#include <termin/render/graph_node_def.hpp>
 #include <termin/render/tc_pass.hpp>
 #include "termin/render/render_pipeline.hpp"
 #include <termin/render/resource_spec.hpp>
@@ -36,12 +37,11 @@ static bool set_pass_property(
 // ============================================================================
 
 static bool is_pass_node(const NodeData& node) {
-    // Resource and graph-boundary nodes are not executable passes.
-    return node.node_type != "resource"
-        && node.node_type != "external_rt"
-        && node.node_type != "render_target_input"
-        && node.node_type != "pipeline_output"
-        && node.node_type != "output";
+    const termin::GraphNodeDef* def = termin::graph_node_def_find(node.node_type);
+    if (def) {
+        return def->executable;
+    }
+    return true;
 }
 
 static bool is_external_resource_name(const std::string& name) {
@@ -51,6 +51,161 @@ static bool is_external_resource_name(const std::string& name) {
 
 static bool is_target_socket_name(const std::string& name) {
     return name.size() > 7 && name.substr(name.size() - 7) == "_target";
+}
+
+static std::string resource_type_for_node(const NodeData& node) {
+    if (node.params.contains("resource_type") && node.params["resource_type"].is_string()) {
+        return node.params["resource_type"].as_string();
+    }
+    if (node.pass_class == "Color Texture") {
+        return "color_texture";
+    }
+    if (node.pass_class == "Depth Texture") {
+        return "depth_texture";
+    }
+    if (node.pass_class == "Shadow Maps") {
+        return "shadow_map_array";
+    }
+    return "fbo";
+}
+
+static std::string default_resource_name(
+    const NodeData& node,
+    int node_index,
+    const std::string& resource_type
+) {
+    if (!node.name.empty()) {
+        return node.name;
+    }
+    if (resource_type == "color_texture") {
+        return "color_texture_" + std::to_string(node_index);
+    }
+    if (resource_type == "depth_texture") {
+        return "depth_texture_" + std::to_string(node_index);
+    }
+    if (resource_type == "shadow_map_array") {
+        return "shadow_maps_" + std::to_string(node_index);
+    }
+    return "fbo_" + std::to_string(node_index);
+}
+
+static std::string generated_input_name(
+    const NodeData& node,
+    int node_index,
+    const std::string& socket_name
+) {
+    std::string node_name = node.name.empty() ? node.pass_class : node.name;
+    if (node_name.empty()) {
+        node_name = node.node_type;
+    }
+    return "empty_" + node_name + "_" + std::to_string(node_index) + "_" + socket_name;
+}
+
+static void propagate_non_target_connections(
+    const GraphData& graph,
+    ResourceNaming& result
+) {
+    for (const auto& conn : graph.connections) {
+        if (is_target_socket_name(conn.to_socket)) {
+            continue;
+        }
+        auto from_it = result.socket_names.find(conn.from_node_id);
+        if (from_it == result.socket_names.end()) {
+            continue;
+        }
+        auto socket_it = from_it->second.find(conn.from_socket);
+        if (socket_it == from_it->second.end()) {
+            continue;
+        }
+        result.socket_names[conn.to_node_id][conn.to_socket] = socket_it->second;
+    }
+}
+
+static void propagate_target_connections(
+    const GraphData& graph,
+    ResourceNaming& result
+) {
+    for (const auto& conn : graph.connections) {
+        if (!is_target_socket_name(conn.to_socket)) {
+            continue;
+        }
+        auto from_it = result.socket_names.find(conn.from_node_id);
+        if (from_it == result.socket_names.end()) {
+            continue;
+        }
+        auto socket_it = from_it->second.find(conn.from_socket);
+        if (socket_it == from_it->second.end()) {
+            continue;
+        }
+        result.socket_names[conn.to_node_id][conn.to_socket] = socket_it->second;
+    }
+}
+
+static std::optional<std::string> socket_type_for(
+    const NodeData& node,
+    const std::string& socket_name,
+    bool input
+) {
+    const std::vector<SocketData>& sockets = input ? node.inputs : node.outputs;
+    for (const auto& socket : sockets) {
+        if (socket.name == socket_name) {
+            return socket.socket_type;
+        }
+    }
+    return std::nullopt;
+}
+
+static void apply_target_overrides(
+    const GraphData& graph,
+    ResourceNaming& result
+) {
+    for (const auto& node : graph.nodes) {
+        for (const auto& inp : node.inputs) {
+            if (!is_target_socket_name(inp.name)) {
+                continue;
+            }
+            std::string base_name = inp.name.substr(0, inp.name.size() - 7);
+            auto& sockets = result.socket_names[node.id];
+            auto target_it = sockets.find(inp.name);
+            if (target_it == sockets.end()) {
+                continue;
+            }
+
+            const std::string& target_res = target_it->second;
+            sockets[base_name] = target_res;
+            if (!is_external_resource_name(target_res)) {
+                auto output_type = socket_type_for(node, base_name, false);
+                result.resource_types[target_res] =
+                    output_type.has_value() ? *output_type : inp.socket_type;
+            }
+        }
+    }
+}
+
+static void validate_connection_types(const GraphData& graph) {
+    for (const auto& conn : graph.connections) {
+        const NodeData* from_node = graph.get_node(conn.from_node_id);
+        const NodeData* to_node = graph.get_node(conn.to_node_id);
+        if (!from_node || !to_node) {
+            throw GraphCompileError("Connection references missing node");
+        }
+
+        auto from_type = socket_type_for(*from_node, conn.from_socket, false);
+        auto to_type = socket_type_for(*to_node, conn.to_socket, true);
+        if (!from_type || !to_type) {
+            throw GraphCompileError(
+                "Connection references missing socket: " +
+                conn.from_node_id + "." + conn.from_socket + " -> " +
+                conn.to_node_id + "." + conn.to_socket);
+        }
+
+        if (*from_type != *to_type) {
+            throw GraphCompileError(
+                "Invalid resource connection type: " +
+                conn.from_node_id + "." + conn.from_socket + " (" + *from_type + ") -> " +
+                conn.to_node_id + "." + conn.to_socket + " (" + *to_type + ")");
+        }
+    }
 }
 
 static std::optional<std::string> pass_field_string(tc_pass* pass, const std::string& field_name) {
@@ -150,18 +305,11 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
     // render-target external input nodes.
     for (const auto& node : graph.nodes) {
         if (node.node_type == "resource") {
-            std::string resource_type = "fbo";
-            if (node.params.contains("resource_type") && node.params["resource_type"].is_string()) {
-                resource_type = node.params["resource_type"].as_string();
-            }
-            if (resource_type == "fbo") {
-                std::string name = node.name.empty()
-                    ? "fbo_" + std::to_string(node_index[node.id])
-                    : node.name;
-                for (const auto& output : node.outputs) {
-                    result.socket_names[node.id][output.name] = name;
-                    result.resource_types[name] = output.socket_type;
-                }
+            std::string resource_type = resource_type_for_node(node);
+            std::string name = default_resource_name(node, node_index[node.id], resource_type);
+            for (const auto& output : node.outputs) {
+                result.socket_names[node.id][output.name] = name;
+                result.resource_types[name] = output.socket_type;
             }
         }
         if (node.node_type == "external_rt") {
@@ -211,39 +359,11 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
     }
 
     // Pass 3a: Propagate _target connections first (FBO -> pass._target)
-    for (const auto& conn : graph.connections) {
-        if (conn.to_socket.size() > 7 &&
-            conn.to_socket.substr(conn.to_socket.size() - 7) == "_target") {
-            auto from_it = result.socket_names.find(conn.from_node_id);
-            if (from_it != result.socket_names.end()) {
-                auto socket_it = from_it->second.find(conn.from_socket);
-                if (socket_it != from_it->second.end()) {
-                    result.socket_names[conn.to_node_id][conn.to_socket] = socket_it->second;
-                }
-            }
-        }
-    }
+    propagate_target_connections(graph, result);
 
     // Pass 3b: Apply _target overrides to output socket names
     // If X_target input is connected, X output should use that resource name
-    for (const auto& node : graph.nodes) {
-        for (const auto& inp : node.inputs) {
-            if (inp.name.size() > 7 && inp.name.substr(inp.name.size() - 7) == "_target") {
-                std::string base_name = inp.name.substr(0, inp.name.size() - 7);
-                auto& sockets = result.socket_names[node.id];
-                auto target_it = sockets.find(inp.name);
-                if (target_it != sockets.end()) {
-                    const std::string& target_res = target_it->second;
-                    // Override the output socket name
-                    sockets[base_name] = target_res;
-                    // Also register the resource type
-                    if (!is_external_resource_name(target_res)) {
-                        result.resource_types[target_res] = "fbo";
-                    }
-                }
-            }
-        }
-    }
+    apply_target_overrides(graph, result);
 
     // Pass 3c: Apply graph output overrides. RenderTarget output nodes are
     // not executable passes; a connection into RenderTarget.color/depth means
@@ -277,21 +397,84 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
     }
 
     // Pass 3d: Propagate all other connections (now output names are correct)
-    for (const auto& conn : graph.connections) {
-        // Skip _target connections (already handled)
-        if (is_target_socket_name(conn.to_socket)) {
-            continue;
-        }
-        auto from_it = result.socket_names.find(conn.from_node_id);
-        if (from_it != result.socket_names.end()) {
-            auto socket_it = from_it->second.find(conn.from_socket);
-            if (socket_it != from_it->second.end()) {
-                result.socket_names[conn.to_node_id][conn.to_socket] = socket_it->second;
+    propagate_non_target_connections(graph, result);
+
+    // Pass 3e: Apply FboSplit nodes. They create attachment view resources.
+    for (const auto& node : graph.nodes) {
+        auto& sockets = result.socket_names[node.id];
+        int idx = node_index[node.id];
+
+        if (node.node_type == "fbo_split") {
+            auto input_it = sockets.find("fbo");
+            if (input_it == sockets.end()) {
+                std::string name = generated_input_name(node, idx, "fbo");
+                sockets["fbo"] = name;
+                result.resource_types[name] = "fbo";
+                input_it = sockets.find("fbo");
             }
+
+            const std::string& parent = input_it->second;
+            std::string color_name = parent + ".color";
+            std::string depth_name = parent + ".depth";
+
+            sockets["color"] = color_name;
+            sockets["depth"] = depth_name;
+            result.resource_types[color_name] = "color_texture";
+            result.resource_types[depth_name] = "depth_texture";
+            result.resource_views[color_name] = termin::ResourceView{
+                parent,
+                termin::AttachmentKind::Color,
+            };
+            result.resource_views[depth_name] = termin::ResourceView{
+                parent,
+                termin::AttachmentKind::Depth,
+            };
         }
     }
 
-    // Pass 3e: Apply pass-owned inplace aliases. GraphData does not know pass
+    // Pass 3f: Propagate FboSplit outputs before FboJoin consumes them.
+    propagate_non_target_connections(graph, result);
+    propagate_target_connections(graph, result);
+    apply_target_overrides(graph, result);
+
+    // Pass 3g: Apply FboJoin nodes. They create composed FBO views.
+    for (const auto& node : graph.nodes) {
+        auto& sockets = result.socket_names[node.id];
+        int idx = node_index[node.id];
+
+        if (node.node_type == "fbo_join") {
+            auto color_it = sockets.find("color");
+            if (color_it == sockets.end()) {
+                std::string name = generated_input_name(node, idx, "color");
+                sockets["color"] = name;
+                result.resource_types[name] = "color_texture";
+                color_it = sockets.find("color");
+            }
+
+            auto depth_it = sockets.find("depth");
+            if (depth_it == sockets.end()) {
+                std::string name = generated_input_name(node, idx, "depth");
+                sockets["depth"] = name;
+                result.resource_types[name] = "depth_texture";
+                depth_it = sockets.find("depth");
+            }
+
+            std::string output_name = node.name.empty()
+                ? "fbo_join_" + std::to_string(idx)
+                : node.name;
+            sockets["fbo"] = output_name;
+            result.resource_types[output_name] = "fbo";
+            result.fbo_compositions[output_name] = termin::FboComposition{
+                color_it->second,
+                depth_it->second,
+            };
+        }
+    }
+
+    // Pass 3h: Propagate outputs from compile-time utility nodes.
+    propagate_non_target_connections(graph, result);
+
+    // Pass 3i: Apply pass-owned inplace aliases. GraphData does not know pass
     // classes; the temporary pass instance is the source of alias semantics.
     for (const auto& node : graph.nodes) {
         if (!is_pass_node(node)) {
@@ -364,20 +547,9 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
         tc_pass_drop(pass_ptr);
     }
 
-    // Pass 3f: Re-propagate downstream connections after pass-owned aliases
+    // Pass 3j: Re-propagate downstream connections after pass-owned aliases
     // may have changed output socket names.
-    for (const auto& conn : graph.connections) {
-        if (is_target_socket_name(conn.to_socket)) {
-            continue;
-        }
-        auto from_it = result.socket_names.find(conn.from_node_id);
-        if (from_it != result.socket_names.end()) {
-            auto socket_it = from_it->second.find(conn.from_socket);
-            if (socket_it != from_it->second.end()) {
-                result.socket_names[conn.to_node_id][conn.to_socket] = socket_it->second;
-            }
-        }
-    }
+    propagate_non_target_connections(graph, result);
 
     // Pass 4: Default names for unconnected inputs
     for (const auto& node : graph.nodes) {
@@ -388,8 +560,7 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
                 if (is_target_socket_name(inp.name)) {
                     continue;
                 }
-                std::string node_name = node.name.empty() ? node.pass_class : node.name;
-                std::string name = "empty_" + node_name + "_" + std::to_string(idx) + "_" + inp.name;
+                std::string name = generated_input_name(node, idx, inp.name);
                 sockets[inp.name] = name;
                 result.resource_types[name] = inp.socket_type;
             }
@@ -592,7 +763,7 @@ static bool set_pass_property(
 // Collect FBO nodes
 // ============================================================================
 
-static std::unordered_map<std::string, const NodeData*> collect_fbo_nodes(const GraphData& graph) {
+static std::unordered_map<std::string, const NodeData*> collect_resource_nodes(const GraphData& graph) {
     std::unordered_map<std::string, const NodeData*> result;
     std::unordered_map<std::string, int> node_index;
     for (size_t i = 0; i < graph.nodes.size(); ++i) {
@@ -601,16 +772,9 @@ static std::unordered_map<std::string, const NodeData*> collect_fbo_nodes(const 
 
     for (const auto& node : graph.nodes) {
         if (node.node_type == "resource") {
-            std::string resource_type = "fbo";
-            if (node.params.contains("resource_type") && node.params["resource_type"].is_string()) {
-                resource_type = node.params["resource_type"].as_string();
-            }
-            if (resource_type == "fbo") {
-                std::string name = node.name.empty()
-                    ? "fbo_" + std::to_string(node_index[node.id])
-                    : node.name;
-                result[name] = &node;
-            }
+            std::string resource_type = resource_type_for_node(node);
+            std::string name = default_resource_name(node, node_index[node.id], resource_type);
+            result[name] = &node;
         }
     }
 
@@ -623,13 +787,20 @@ static std::unordered_map<std::string, const NodeData*> collect_fbo_nodes(const 
 
 static ResourceSpec infer_resource_spec(
     const std::string& resource_name,
-    const std::unordered_map<std::string, const NodeData*>& fbo_nodes
+    const std::string& resource_type,
+    const std::unordered_map<std::string, const NodeData*>& resource_nodes
 ) {
     ResourceSpec spec;
     spec.resource = resource_name;
+    spec.resource_type = resource_type;
+    if (resource_type == "color_texture") {
+        spec.format = "rgba8";
+    } else if (resource_type == "depth_texture") {
+        spec.format = "depth32f";
+    }
 
-    auto it = fbo_nodes.find(resource_name);
-    if (it != fbo_nodes.end()) {
+    auto it = resource_nodes.find(resource_name);
+    if (it != resource_nodes.end()) {
         const NodeData* node = it->second;
         const auto& params = node->params;
 
@@ -703,10 +874,15 @@ static ResourceSpec infer_resource_spec(
             spec.clear_depth = static_cast<float>(depth_value);
         }
 
+        if (resource_type == "depth_texture" && (!spec.format || spec.format == "rgba8")) {
+            spec.format = "depth32f";
+        }
+
         return spec;
     }
 
-    // No FBO node found - return empty spec (no automatic heuristics)
+    // No explicit resource node found; keep the type/default format inferred
+    // from graph sockets so RenderEngine allocates the right resource kind.
     return spec;
 }
 
@@ -715,6 +891,8 @@ static ResourceSpec infer_resource_spec(
 // ============================================================================
 
 RenderPipeline* compile_graph(GraphData& graph) {
+    validate_connection_types(graph);
+
     // 1. Topological sort
     auto sorted_nodes = topological_sort(graph);
 
@@ -724,15 +902,19 @@ RenderPipeline* compile_graph(GraphData& graph) {
     // 3. Build viewport map
     auto viewport_map = build_node_viewport_map(graph.nodes, graph.viewport_frames);
 
-    // 4. Collect FBO nodes for ResourceSpec inference
-    auto fbo_nodes = collect_fbo_nodes(graph);
+    // 4. Collect explicit resource nodes for ResourceSpec inference
+    auto resource_nodes = collect_resource_nodes(graph);
 
     // 5. Create pipeline
     auto* pipeline = new RenderPipeline("compiled_graph");
+    pipeline->cache().resource_views = naming.resource_views;
+    pipeline->cache().fbo_compositions = naming.fbo_compositions;
 
     // 6. Add passes
+    bool had_pass_nodes = false;
     for (const auto* node : sorted_nodes) {
         if (!is_pass_node(*node)) continue;
+        had_pass_nodes = true;
 
         // Check if pass type is registered
         if (!tc_pass_registry_has(node->pass_class.c_str())) {
@@ -795,41 +977,56 @@ RenderPipeline* compile_graph(GraphData& graph) {
     // synthesize a blit pass so the resource is copied into OUTPUT.
     add_synthetic_output_blits(pipeline, graph, naming);
 
-    if (pipeline->pass_count() == 0 && (!graph.nodes.empty() || !graph.connections.empty())) {
+    if (pipeline->pass_count() == 0 && had_pass_nodes) {
         tc::Log::error(
-            "compile_graph: graph compiled to 0 passes (nodes=%zu, connections=%zu)",
+            "compile_graph: graph compiled to 0 passes from pass nodes (nodes=%zu, connections=%zu)",
             graph.nodes.size(),
             graph.connections.size()
         );
     }
 
-    // 8. Add ResourceSpecs (only for FBO resources, not shadow maps)
+    // 8. Add ResourceSpecs for every concrete resource kind. This also
+    // covers generated resources for unconnected inputs.
+    std::unordered_set<std::string> live_resources;
+    for (const auto& [node_id, sockets] : naming.socket_names) {
+        (void)node_id;
+        for (const auto& [socket_name, resource_name] : sockets) {
+            (void)socket_name;
+            live_resources.insert(resource_name);
+        }
+    }
+
     std::unordered_set<std::string> seen_resources;
-    for (const auto* node : sorted_nodes) {
-        if (!is_pass_node(*node)) continue;
+    for (const auto& res_name : live_resources) {
+        if (seen_resources.count(res_name)) {
+            continue;
+        }
+        seen_resources.insert(res_name);
+        auto type_it = naming.resource_types.find(res_name);
+        if (type_it == naming.resource_types.end()) {
+            tc::Log::warn(
+                "compile_graph: resource '%s' has no inferred type; skipping ResourceSpec",
+                res_name.c_str()
+            );
+            continue;
+        }
+        const std::string& resource_type = type_it->second;
+        if (resource_type == "shadow" || resource_type == "shadow_map_array") {
+            continue;
+        }
+        if (is_external_resource_name(res_name)) {
+            continue;
+        }
+        if (naming.resource_views.find(res_name) != naming.resource_views.end()) {
+            continue;
+        }
+        if (naming.fbo_compositions.find(res_name) != naming.fbo_compositions.end()) {
+            continue;
+        }
 
-        for (const auto& inp : node->inputs) {
-            auto socket_it = naming.socket_names[node->id].find(inp.name);
-            if (socket_it == naming.socket_names[node->id].end()) continue;
-
-            const std::string& res_name = socket_it->second;
-            if (seen_resources.count(res_name)) continue;
-            seen_resources.insert(res_name);
-
-            // Skip non-FBO resources (shadow maps are managed by ShadowPass)
-            auto type_it = naming.resource_types.find(res_name);
-            if (type_it != naming.resource_types.end() && type_it->second != "fbo") {
-                continue;
-            }
-            if (is_external_resource_name(res_name)) {
-                continue;
-            }
-
-            auto spec = infer_resource_spec(res_name, fbo_nodes);
-
-            if (!spec.resource.empty()) {
-                pipeline->add_spec(spec);
-            }
+        auto spec = infer_resource_spec(res_name, resource_type, resource_nodes);
+        if (!spec.resource.empty()) {
+            pipeline->add_spec(spec);
         }
     }
 

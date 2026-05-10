@@ -1,6 +1,7 @@
 #include <termin/render/render_engine.hpp>
 
 #include <cstdlib>
+#include <functional>
 
 #include <tcbase/tc_log.hpp>
 #include "tc_profiler.h"
@@ -370,6 +371,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
     tc_profiler_begin_section("Allocate Resources");
     FBOMap resources;
+    PipelineRenderCache& pipeline_cache = pipeline.cache();
     // OUTPUT/DISPLAY no longer travel through the FBOMap — they're
     // native tgfx2 textures owned by the caller (ViewportRenderState)
     // and plumbed straight into tex2_writes below.
@@ -379,6 +381,10 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
     for (size_t i = 0; i < canon_count; i++) {
         const char* canon = canonical_names[i];
+
+        if (pipeline_cache.fbo_compositions.find(canon) != pipeline_cache.fbo_compositions.end()) {
+            continue;
+        }
 
         if (is_external_output_resource(canon)) {
             // OUTPUT/DISPLAY are viewport-owned native textures
@@ -421,6 +427,70 @@ void RenderEngine::render_scene_pipeline_offscreen(
             size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
             for (size_t j = 0; j < alias_count; j++) {
                 resources[aliases[j]] = shadow_array.get();
+            }
+            continue;
+        }
+
+        if (resource_type == "color_texture") {
+            int tex_width = default_width;
+            int tex_height = default_height;
+            std::string format;
+            if (spec) {
+                if (spec->size) {
+                    tex_width = spec->size->first;
+                    tex_height = spec->size->second;
+                }
+                if (spec->format) {
+                    format = *spec->format;
+                }
+            }
+
+            tgfx::TextureUsage usage =
+                tgfx::TextureUsage::Sampled |
+                tgfx::TextureUsage::ColorAttachment |
+                tgfx::TextureUsage::CopySrc |
+                tgfx::TextureUsage::CopyDst;
+            tgfx::PixelFormat color_format =
+                resolve_fbo_color_format(format, default_ctx, *tgfx2_device_);
+            if (!pipeline_cache.texture_pool.ensure(
+                    *tgfx2_device_, canon, tex_width, tex_height,
+                    color_format, usage)) {
+                tc::Log::error(
+                    "RenderEngine::render_scene_pipeline_offscreen: failed to allocate color_texture '%s'",
+                    canon);
+            }
+
+            const char* aliases[64];
+            size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
+            for (size_t j = 0; j < alias_count; j++) {
+                resources[aliases[j]] = nullptr;
+            }
+            continue;
+        }
+
+        if (resource_type == "depth_texture") {
+            int tex_width = default_width;
+            int tex_height = default_height;
+            if (spec && spec->size) {
+                tex_width = spec->size->first;
+                tex_height = spec->size->second;
+            }
+            tgfx::TextureUsage usage =
+                tgfx::TextureUsage::Sampled |
+                tgfx::TextureUsage::DepthStencilAttachment |
+                tgfx::TextureUsage::CopySrc;
+            if (!pipeline_cache.texture_pool.ensure(
+                    *tgfx2_device_, canon, tex_width, tex_height,
+                    tgfx::PixelFormat::D32F, usage)) {
+                tc::Log::error(
+                    "RenderEngine::render_scene_pipeline_offscreen: failed to allocate depth_texture '%s'",
+                    canon);
+            }
+
+            const char* aliases[64];
+            size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
+            for (size_t j = 0; j < alias_count; j++) {
+                resources[aliases[j]] = nullptr;
             }
             continue;
         }
@@ -486,6 +556,89 @@ void RenderEngine::render_scene_pipeline_offscreen(
             if (color_handle) tex2_resources[name] = color_handle;
             tgfx::TextureHandle depth_handle = fbo_pool.get_depth_tgfx2(name);
             if (depth_handle) tex2_depth_resources[name] = depth_handle;
+        }
+
+        for (size_t i = 0; i < canon_count; i++) {
+            const char* canon = canonical_names[i];
+            tgfx::TextureHandle handle = pipeline_cache.texture_pool.get(canon);
+            if (!handle) {
+                continue;
+            }
+
+            const char* aliases[64];
+            size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
+            for (size_t j = 0; j < alias_count; j++) {
+                tex2_resources[aliases[j]] = handle;
+                tex2_depth_resources[aliases[j]] = handle;
+            }
+        }
+
+        for (const auto& [view_name, view] : pipeline_cache.resource_views) {
+            if (is_external_output_resource(view.parent.c_str())) {
+                continue;
+            }
+            if (view.attachment == AttachmentKind::Color) {
+                auto it = tex2_resources.find(view.parent);
+                if (it != tex2_resources.end() && it->second) {
+                    tex2_resources[view_name] = it->second;
+                } else {
+                    tc::Log::error(
+                        "RenderEngine: color view '%s' parent '%s' is missing",
+                        view_name.c_str(), view.parent.c_str());
+                }
+            } else {
+                auto it = tex2_depth_resources.find(view.parent);
+                if (it != tex2_depth_resources.end() && it->second) {
+                    tex2_resources[view_name] = it->second;
+                    tex2_depth_resources[view_name] = it->second;
+                } else {
+                    tc::Log::error(
+                        "RenderEngine: depth view '%s' parent '%s' is missing",
+                        view_name.c_str(), view.parent.c_str());
+                }
+            }
+        }
+
+        for (const auto& [fbo_name, composition] : pipeline_cache.fbo_compositions) {
+            auto composition_input_is_view_of_external = [&](const std::string& name) {
+                auto view_it = pipeline_cache.resource_views.find(name);
+                return view_it != pipeline_cache.resource_views.end() &&
+                       is_external_output_resource(view_it->second.parent.c_str());
+            };
+            if (composition_input_is_view_of_external(composition.color) ||
+                composition_input_is_view_of_external(composition.depth)) {
+                // Viewport-owned textures are only available once a concrete
+                // viewport context is selected. Per-pass resolvers below handle
+                // those compositions without populating the global maps here.
+                continue;
+            }
+
+            auto color_it = tex2_resources.find(composition.color);
+            if (color_it != tex2_resources.end() && color_it->second) {
+                tex2_resources[fbo_name] = color_it->second;
+            } else {
+                tc::Log::error(
+                    "RenderEngine: composed FBO '%s' color input '%s' is missing",
+                    fbo_name.c_str(), composition.color.c_str());
+            }
+
+            tgfx::TextureHandle depth_handle;
+            auto depth_it = tex2_depth_resources.find(composition.depth);
+            if (depth_it != tex2_depth_resources.end() && depth_it->second) {
+                depth_handle = depth_it->second;
+            } else {
+                auto depth_as_color_it = tex2_resources.find(composition.depth);
+                if (depth_as_color_it != tex2_resources.end() && depth_as_color_it->second) {
+                    depth_handle = depth_as_color_it->second;
+                }
+            }
+            if (depth_handle) {
+                tex2_depth_resources[fbo_name] = depth_handle;
+            } else {
+                tc::Log::error(
+                    "RenderEngine: composed FBO '%s' depth input '%s' is missing",
+                    fbo_name.c_str(), composition.depth.c_str());
+            }
         }
     }
 
@@ -573,6 +726,54 @@ void RenderEngine::render_scene_pipeline_offscreen(
         Tex2Map pass_tex2_depth_writes;
         ShadowArrayMap pass_shadow_arrays;
 
+        std::function<tgfx::TextureHandle(const std::string&)> resolve_depth_resource;
+        std::function<tgfx::TextureHandle(const std::string&)> resolve_color_resource;
+
+        resolve_color_resource = [&](const std::string& name) -> tgfx::TextureHandle {
+            if (is_external_color_output(name.c_str())) {
+                return vp_ctx.output_color_tex;
+            }
+            auto ext_it = vp_ctx.external_textures.find(name);
+            if (ext_it != vp_ctx.external_textures.end()) {
+                return ext_it->second;
+            }
+            auto view_it = pipeline_cache.resource_views.find(name);
+            if (view_it != pipeline_cache.resource_views.end()) {
+                const ResourceView& view = view_it->second;
+                if (view.attachment == AttachmentKind::Color) {
+                    return resolve_color_resource(view.parent);
+                }
+                return resolve_depth_resource(view.parent);
+            }
+            auto comp_it = pipeline_cache.fbo_compositions.find(name);
+            if (comp_it != pipeline_cache.fbo_compositions.end()) {
+                return resolve_color_resource(comp_it->second.color);
+            }
+            auto it = tex2_resources.find(name);
+            return it != tex2_resources.end() ? it->second : tgfx::TextureHandle{};
+        };
+
+        resolve_depth_resource = [&](const std::string& name) -> tgfx::TextureHandle {
+            if (is_external_color_output(name.c_str()) || is_external_depth_output(name.c_str())) {
+                return vp_ctx.output_depth_tex;
+            }
+            auto view_it = pipeline_cache.resource_views.find(name);
+            if (view_it != pipeline_cache.resource_views.end()) {
+                const ResourceView& view = view_it->second;
+                if (view.attachment == AttachmentKind::Depth) {
+                    return resolve_depth_resource(view.parent);
+                }
+                return tgfx::TextureHandle{};
+            }
+            auto comp_it = pipeline_cache.fbo_compositions.find(name);
+            if (comp_it != pipeline_cache.fbo_compositions.end()) {
+                tgfx::TextureHandle depth = resolve_depth_resource(comp_it->second.depth);
+                return depth ? depth : resolve_color_resource(comp_it->second.depth);
+            }
+            auto it = tex2_depth_resources.find(name);
+            return it != tex2_depth_resources.end() ? it->second : tgfx::TextureHandle{};
+        };
+
         auto collect_shadow_array = [&](const char* name) {
             auto it = resources.find(name);
             if (it != resources.end() && it->second) {
@@ -615,13 +816,13 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 pass_tex2_reads[read_name] = ext_it->second;
                 continue;
             }
-            auto t_it = tex2_resources.find(read_name);
-            if (t_it != tex2_resources.end()) {
-                pass_tex2_reads[read_name] = t_it->second;
+            tgfx::TextureHandle color_handle = resolve_color_resource(read_name);
+            if (color_handle) {
+                pass_tex2_reads[read_name] = color_handle;
             }
-            auto d_it = tex2_depth_resources.find(read_name);
-            if (d_it != tex2_depth_resources.end()) {
-                pass_tex2_depth_reads[read_name] = d_it->second;
+            tgfx::TextureHandle depth_handle = resolve_depth_resource(read_name);
+            if (depth_handle) {
+                pass_tex2_depth_reads[read_name] = depth_handle;
             }
         }
 
@@ -642,13 +843,13 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 }
             } else {
                 collect_shadow_array(write_name);
-                auto t_it = tex2_resources.find(write_name);
-                if (t_it != tex2_resources.end()) {
-                    pass_tex2_writes[write_name] = t_it->second;
+                tgfx::TextureHandle color_handle = resolve_color_resource(write_name);
+                if (color_handle) {
+                    pass_tex2_writes[write_name] = color_handle;
                 }
-                auto d_it = tex2_depth_resources.find(write_name);
-                if (d_it != tex2_depth_resources.end()) {
-                    pass_tex2_depth_writes[write_name] = d_it->second;
+                tgfx::TextureHandle depth_handle = resolve_depth_resource(write_name);
+                if (depth_handle) {
+                    pass_tex2_depth_writes[write_name] = depth_handle;
                 }
             }
         }

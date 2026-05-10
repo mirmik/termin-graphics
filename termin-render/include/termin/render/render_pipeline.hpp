@@ -6,8 +6,12 @@
 #include <unordered_map>
 #include <vector>
 
+#include <tgfx2/descriptors.hpp>
+#include <tgfx2/i_render_device.hpp>
+
 #include <termin/render/render_export.hpp>
 #include "termin/render/fbo_pool.hpp"
+#include "termin/render/resource_aliases.hpp"
 #include "termin/render/resource_spec.hpp"
 
 extern "C" {
@@ -19,11 +23,56 @@ extern "C" {
 
 namespace termin {
 
+struct RENDER_API PipelineTextureEntry {
+public:
+    std::string key;
+    int width = 0;
+    int height = 0;
+    tgfx::PixelFormat format = tgfx::PixelFormat::Undefined;
+    tgfx::TextureUsage usage{};
+    tgfx::IRenderDevice* device = nullptr;
+    tgfx::TextureHandle handle;
+
+public:
+    PipelineTextureEntry() = default;
+    PipelineTextureEntry(PipelineTextureEntry&&) = default;
+    PipelineTextureEntry& operator=(PipelineTextureEntry&&) = default;
+    PipelineTextureEntry(const PipelineTextureEntry&) = delete;
+    PipelineTextureEntry& operator=(const PipelineTextureEntry&) = delete;
+};
+
+class RENDER_API PipelineTexturePool {
+public:
+    std::vector<PipelineTextureEntry> entries;
+
+public:
+    PipelineTexturePool() = default;
+    PipelineTexturePool(PipelineTexturePool&&) = default;
+    PipelineTexturePool& operator=(PipelineTexturePool&&) = default;
+    PipelineTexturePool(const PipelineTexturePool&) = delete;
+    PipelineTexturePool& operator=(const PipelineTexturePool&) = delete;
+    ~PipelineTexturePool() { clear(); }
+
+    bool ensure(
+        tgfx::IRenderDevice& device,
+        const std::string& key,
+        int width,
+        int height,
+        tgfx::PixelFormat format,
+        tgfx::TextureUsage usage
+    );
+    tgfx::TextureHandle get(const std::string& key) const;
+    void clear();
+};
+
 // Opaque render cache stored in tc_pipeline.render_cache
 struct RENDER_API PipelineRenderCache {
     FBOPool fbo_pool;
+    PipelineTexturePool texture_pool;
     std::unordered_map<std::string, std::unique_ptr<ShadowMapArrayResource>> shadow_arrays;
     std::vector<ResourceSpec> specs;
+    std::unordered_map<std::string, ResourceView> resource_views;
+    std::unordered_map<std::string, FboComposition> fbo_compositions;
 };
 
 // Lightweight handle wrapper. Does NOT own the pipeline.

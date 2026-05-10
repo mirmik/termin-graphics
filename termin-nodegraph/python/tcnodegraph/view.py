@@ -152,6 +152,8 @@ class NodeItem(RectItem):
         self.draw_param_values = True
         self._socket_colors = {
             "fbo": (0.39, 0.70, 0.39, 1.0),
+            "color_texture": (0.30, 0.62, 0.92, 1.0),
+            "depth_texture": (0.74, 0.56, 0.28, 1.0),
             "texture": (0.78, 0.62, 0.35, 1.0),
             "shadow": (0.45, 0.45, 0.70, 1.0),
             "any": (0.68, 0.68, 0.70, 1.0),
@@ -495,6 +497,15 @@ class NodeGraphSceneAdapter:
             if src is None or dst is None:
                 continue
             edge_item = EdgeItem(src, dst, e.src_socket, e.dst_socket)
+            src_node = self.graph.nodes.get(e.src_node_id)
+            if src_node is not None:
+                for socket in src_node.outputs:
+                    if socket.name == e.src_socket:
+                        edge_item.line_color = src._socket_colors.get(
+                            socket.socket_type,
+                            src._socket_colors["any"],
+                        )
+                        break
             edge_item.data["edge_id"] = e.id
             self.scene.add_item(edge_item)
             self.edge_items[e.id] = edge_item

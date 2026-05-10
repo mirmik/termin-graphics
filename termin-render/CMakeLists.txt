@@ -42,6 +42,7 @@ set(TERMIN_RENDER_SOURCES
     src/frame_graph_debugger_core.cpp
     src/graph_compiler.cpp
     src/graph_data.cpp
+    src/graph_node_def.cpp
     src/render_pipeline.cpp
     src/render_engine.cpp
     src/tgfx2_bridge.cpp
@@ -85,6 +86,8 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/frame_graph_debugger_core.hpp
     include/termin/render/graph_compiler.hpp
     include/termin/render/graph_data.hpp
+    include/termin/render/graph_node_def.hpp
+    include/termin/render/resource_aliases.hpp
     include/termin/render/render_pipeline.hpp
     include/termin/render/render_engine.hpp
     include/termin/render/scene_pipeline_template.hpp

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "termin/render/graph_data.hpp"
+#include "termin/render/resource_aliases.hpp"
 #include "termin/render/render_export.hpp"
 #include "termin/render/render_pipeline.hpp"
 
@@ -21,6 +22,8 @@ struct ResourceNaming {
     std::unordered_map<std::string, std::string> resource_types;
     std::unordered_map<std::string, std::vector<std::string>> target_aliases;
     std::unordered_map<std::string, std::string> external_resources;
+    std::unordered_map<std::string, termin::ResourceView> resource_views;
+    std::unordered_map<std::string, termin::FboComposition> fbo_compositions;
 };
 
 RENDER_API std::vector<NodeData*> topological_sort(GraphData& graph);
