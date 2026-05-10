@@ -787,20 +787,20 @@ static bool set_pass_resource_socket(
     const std::string& socket_name,
     const std::string& resource_name
 ) {
-    nos::trent res_name_trent(resource_name);
-    tc_value tc_val = trent_to_tc_value(res_name_trent);
-    bool field_set = pass_ref.set_field(socket_name, tc_val);
-    tc_value_free(&tc_val);
-    if (field_set) {
-        return true;
-    }
-
     tc_pass* pass = pass_ref.ptr();
     if (pass && pass->kind == TC_NATIVE_PASS) {
         CxxFramePass* cxx_pass = CxxFramePass::from_tc(pass);
         if (cxx_pass && cxx_pass->set_graph_resource_input(socket_name, resource_name)) {
             return true;
         }
+    }
+
+    nos::trent res_name_trent(resource_name);
+    tc_value tc_val = trent_to_tc_value(res_name_trent);
+    bool field_set = pass_ref.set_field(socket_name, tc_val);
+    tc_value_free(&tc_val);
+    if (field_set) {
+        return true;
     }
 
     return false;

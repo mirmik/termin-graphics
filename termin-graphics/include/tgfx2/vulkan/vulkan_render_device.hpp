@@ -231,6 +231,7 @@ private:
 
     // Lazy-created default sampler (see ensure_default_sampler()).
     VkSampler default_sampler_ = VK_NULL_HANDLE;
+    TextureHandle default_sampled_texture_{};
 
     BackendCapabilities caps_;
 
@@ -411,6 +412,7 @@ public:
     // the descriptor write path can drop it into VkDescriptorImageInfo
     // without translating through SamplerHandle.
     VkSampler ensure_default_sampler();
+    TextureHandle ensure_default_sampled_texture();
 
     // --- Ring UBO (for dynamic-offset descriptor path) ------------------
     //

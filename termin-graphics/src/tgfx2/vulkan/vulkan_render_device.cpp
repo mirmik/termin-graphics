@@ -849,6 +849,25 @@ VkSampler VulkanRenderDevice::ensure_default_sampler() {
     return default_sampler_;
 }
 
+TextureHandle VulkanRenderDevice::ensure_default_sampled_texture() {
+    if (default_sampled_texture_) {
+        return default_sampled_texture_;
+    }
+
+    TextureDesc desc;
+    desc.width = 1;
+    desc.height = 1;
+    desc.mip_levels = 1;
+    desc.sample_count = 1;
+    desc.format = PixelFormat::RGBA8_UNorm;
+    desc.usage = TextureUsage::Sampled | TextureUsage::CopyDst;
+
+    default_sampled_texture_ = create_texture(desc);
+    const uint8_t white[] = {255, 255, 255, 255};
+    upload_texture(default_sampled_texture_, std::span<const uint8_t>(white, sizeof(white)));
+    return default_sampled_texture_;
+}
+
 // --- Capabilities ---
 
 BackendCapabilities VulkanRenderDevice::capabilities() const { return caps_; }
@@ -1450,6 +1469,28 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
             b.buffer = ring_ubo_handle_;
             b.offset = 0;
             b.range = 65536;
+            normalized_desc.bindings.push_back(b);
+        }
+    }
+
+    auto has_sampled_binding = [&](uint32_t binding) -> bool {
+        for (const auto& b : normalized_desc.bindings) {
+            if (b.binding == binding &&
+                b.kind == ResourceBinding::Kind::SampledTexture &&
+                b.array_element == 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+    TextureHandle default_tex = ensure_default_sampled_texture();
+    if (default_tex) {
+        for (uint32_t binding = 4; binding < 8; ++binding) {
+            if (has_sampled_binding(binding)) continue;
+            ResourceBinding b;
+            b.kind = ResourceBinding::Kind::SampledTexture;
+            b.binding = binding;
+            b.texture = default_tex;
             normalized_desc.bindings.push_back(b);
         }
     }
