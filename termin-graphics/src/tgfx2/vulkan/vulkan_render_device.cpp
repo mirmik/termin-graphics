@@ -1284,13 +1284,54 @@ static uint64_t hash_resource_set_desc(const ResourceSetDesc& desc) {
 }
 
 ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc& desc) {
+    ResourceSetDesc normalized_desc = desc;
+
+    // The Vulkan backend currently uses one shared descriptor set layout for
+    // all graphics pipelines. If a shader statically uses a binding from that
+    // layout, Vulkan requires the descriptor to have been updated even when a
+    // particular pass did not bind it explicitly. Fill missing dynamic UBO
+    // slots with the ring buffer at offset 0; real pass bindings still win
+    // because they are already present in normalized_desc and provide the
+    // dynamic offset used by bind_resource_set().
+    constexpr uint32_t DYNAMIC_UBO_BINDINGS[VkResourceSetResource::DYNAMIC_UBO_COUNT] =
+        {0, 1, 2, 3, 16};
+    auto has_uniform_binding = [&](uint32_t binding) -> bool {
+        for (const auto& b : normalized_desc.bindings) {
+            if (b.binding == binding &&
+                b.kind == ResourceBinding::Kind::UniformBuffer &&
+                b.array_element == 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (ring_ubo_handle_) {
+        for (uint32_t binding : DYNAMIC_UBO_BINDINGS) {
+            if (has_uniform_binding(binding)) continue;
+            ResourceBinding b;
+            b.kind = ResourceBinding::Kind::UniformBuffer;
+            b.binding = binding;
+            b.buffer = ring_ubo_handle_;
+            b.offset = 0;
+            b.range = 65536;
+            normalized_desc.bindings.push_back(b);
+        }
+    }
+
+    std::sort(normalized_desc.bindings.begin(), normalized_desc.bindings.end(),
+              [](const ResourceBinding& a, const ResourceBinding& b) {
+                  if (a.binding != b.binding) return a.binding < b.binding;
+                  if (a.array_element != b.array_element) return a.array_element < b.array_element;
+                  return static_cast<int>(a.kind) < static_cast<int>(b.kind);
+              });
+
     // Per-frame cache: multiple draws with the same bindings (typical —
     // many meshes share a material + PerFrame UBO + shadow array) reuse
     // one VkDescriptorSet instead of paying for another
     // vkAllocateDescriptorSets + vkUpdateDescriptorSets. Cache is
     // cleared when the pool is reset in submit(), so every entry is
     // always backed by a live set in descriptor_pools_[current_pool_idx_].
-    const uint64_t key = hash_resource_set_desc(desc);
+    const uint64_t key = hash_resource_set_desc(normalized_desc);
     auto& cache = descriptor_cache_[current_pool_idx_];
     if (auto it = cache.find(key); it != cache.end()) {
         return it->second;
@@ -1298,7 +1339,7 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
 
     g_resource_set_count.fetch_add(1, std::memory_order_relaxed);
     VkResourceSetResource res;
-    res.desc = desc;
+    res.desc = normalized_desc;
 
     VkDescriptorSetAllocateInfo ai{};
     ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1314,22 +1355,20 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
     std::vector<VkWriteDescriptorSet> writes;
     std::vector<VkDescriptorBufferInfo> buf_infos;
     std::vector<VkDescriptorImageInfo> img_infos;
-    buf_infos.reserve(desc.bindings.size());
-    img_infos.reserve(desc.bindings.size());
+    buf_infos.reserve(normalized_desc.bindings.size());
+    img_infos.reserve(normalized_desc.bindings.size());
 
     // Dynamic-UBO bindings declared by the shared layout, in the exact
     // order vkCmdBindDescriptorSets consumes the dynamic_offsets[] array
     // (sorted ascending by binding, per Vulkan spec).
     // Keep in sync with create_shared_layouts().
-    constexpr uint32_t DYNAMIC_UBO_BINDINGS[VkResourceSetResource::DYNAMIC_UBO_COUNT] =
-        {0, 1, 2, 3, 16};
     auto dynamic_idx_for_binding = [&](uint32_t binding) -> int {
         for (uint32_t i = 0; i < VkResourceSetResource::DYNAMIC_UBO_COUNT; ++i)
             if (DYNAMIC_UBO_BINDINGS[i] == binding) return static_cast<int>(i);
         return -1;
     };
 
-    for (const auto& b : desc.bindings) {
+    for (const auto& b : normalized_desc.bindings) {
         VkWriteDescriptorSet w{};
         w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         w.dstSet = res.descriptor_set;
