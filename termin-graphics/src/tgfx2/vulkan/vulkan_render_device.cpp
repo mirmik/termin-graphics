@@ -1473,11 +1473,11 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
         }
     }
 
-    auto has_sampled_binding = [&](uint32_t binding) -> bool {
+    auto has_sampled_binding = [&](uint32_t binding, uint32_t array_element = 0) -> bool {
         for (const auto& b : normalized_desc.bindings) {
             if (b.binding == binding &&
                 b.kind == ResourceBinding::Kind::SampledTexture &&
-                b.array_element == 0) {
+                b.array_element == array_element) {
                 return true;
             }
         }
@@ -1485,11 +1485,25 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
     };
     TextureHandle default_tex = ensure_default_sampled_texture();
     if (default_tex) {
-        for (uint32_t binding = 4; binding < 8; ++binding) {
+        // Keep every sampled slot declared by the shared descriptor layout valid.
+        // Shaders may statically use material slots 4..7, shadow-map array 8, or
+        // extra sampled slots 9..15 (for example through shaderc auto-binding).
+        for (uint32_t binding = 4; binding < 16; ++binding) {
+            if (binding == 8) continue;
             if (has_sampled_binding(binding)) continue;
             ResourceBinding b;
             b.kind = ResourceBinding::Kind::SampledTexture;
             b.binding = binding;
+            b.texture = default_tex;
+            normalized_desc.bindings.push_back(b);
+        }
+        constexpr uint32_t SHADOW_MAP_DESCRIPTOR_COUNT = 16;
+        for (uint32_t array_element = 0; array_element < SHADOW_MAP_DESCRIPTOR_COUNT; ++array_element) {
+            if (has_sampled_binding(8, array_element)) continue;
+            ResourceBinding b;
+            b.kind = ResourceBinding::Kind::SampledTexture;
+            b.binding = 8;
+            b.array_element = array_element;
             b.texture = default_tex;
             normalized_desc.bindings.push_back(b);
         }
