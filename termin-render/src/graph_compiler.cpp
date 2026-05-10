@@ -181,36 +181,63 @@ static void apply_target_overrides(
 
             const std::string& target_res = target_it->second;
 
+            auto output_it = sockets.find(base_name);
+            if (output_it == sockets.end() || output_it->second.empty()) {
+                std::string output_res = node.pass_class.empty()
+                    ? node.id + "_" + base_name
+                    : node.pass_class + "_" + node.id + "_" + base_name;
+                sockets[base_name] = output_res;
+                output_it = sockets.find(base_name);
+            }
+
+            const std::string& output_res = output_it->second;
+            auto output_type = socket_type_for(node, base_name, false);
+            result.resource_types[output_res] =
+                output_type.has_value() ? *output_type : inp.socket_type;
+
             auto target_view_it = result.resource_views.find(target_res);
             if (target_view_it != result.resource_views.end()) {
-                auto output_it = sockets.find(base_name);
-                if (output_it == sockets.end() || output_it->second.empty()) {
-                    std::string output_res = node.pass_class.empty()
-                        ? node.id + "_" + base_name
-                        : node.pass_class + "_" + node.id + "_" + base_name;
-                    sockets[base_name] = output_res;
-                    output_it = sockets.find(base_name);
-                }
-
-                const std::string& output_res = output_it->second;
                 if (output_res != target_res) {
                     result.resource_views[output_res] = target_view_it->second;
                 }
-
-                auto output_type = socket_type_for(node, base_name, false);
-                result.resource_types[output_res] =
-                    output_type.has_value() ? *output_type : inp.socket_type;
                 continue;
             }
 
             if (is_external_resource_name(target_res)) {
-                sockets[base_name] = target_res;
+                if (result.resource_types[output_res] == "fbo" ||
+                    result.resource_types[output_res] == "external_color") {
+                    result.fbo_compositions[output_res] =
+                        termin::FboComposition{target_res, target_res};
+                } else if (result.resource_types[output_res] == "depth_texture") {
+                    result.resource_views[output_res] = termin::ResourceView{
+                        target_res,
+                        termin::AttachmentKind::Depth,
+                    };
+                } else {
+                    result.resource_views[output_res] = termin::ResourceView{
+                        target_res,
+                        termin::AttachmentKind::Color,
+                    };
+                }
                 continue;
             }
 
-            sockets[base_name] = target_res;
-            result.resource_types[target_res] =
-                socket_type_for(node, base_name, false).value_or(inp.socket_type);
+            if (output_res != target_res) {
+                if (result.resource_types[output_res] == "depth_texture") {
+                    result.resource_views[output_res] = termin::ResourceView{
+                        target_res,
+                        termin::AttachmentKind::Depth,
+                    };
+                } else if (result.resource_types[output_res] == "color_texture") {
+                    result.resource_views[output_res] = termin::ResourceView{
+                        target_res,
+                        termin::AttachmentKind::Color,
+                    };
+                } else {
+                    result.fbo_compositions[output_res] =
+                        termin::FboComposition{target_res, target_res};
+                }
+            }
         }
     }
 }
