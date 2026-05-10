@@ -9,6 +9,7 @@
 #include <trent/json.h>
 #include <deque>
 #include <optional>
+#include <cstdlib>
 #include <unordered_set>
 
 extern "C" {
@@ -26,6 +27,27 @@ using termin::ResourceSpec;
 using termin::TextureFilter;
 
 namespace tc {
+
+static std::optional<int> trent_int_value(const nos::trent& value) {
+    if (value.is_numer()) {
+        return static_cast<int>(value.as_numer());
+    }
+    if (!value.is_string()) {
+        return std::nullopt;
+    }
+
+    const std::string str = value.as_string();
+    if (str.empty()) {
+        return std::nullopt;
+    }
+
+    char* end = nullptr;
+    long parsed = std::strtol(str.c_str(), &end, 10);
+    if (!end || *end != '\0') {
+        return std::nullopt;
+    }
+    return static_cast<int>(parsed);
+}
 
 static bool set_pass_property(
     TcPassRef& pass_ref,
@@ -760,6 +782,30 @@ static bool set_pass_property(
     return result;
 }
 
+static bool set_pass_resource_socket(
+    TcPassRef& pass_ref,
+    const std::string& socket_name,
+    const std::string& resource_name
+) {
+    nos::trent res_name_trent(resource_name);
+    tc_value tc_val = trent_to_tc_value(res_name_trent);
+    bool field_set = pass_ref.set_field(socket_name, tc_val);
+    tc_value_free(&tc_val);
+    if (field_set) {
+        return true;
+    }
+
+    tc_pass* pass = pass_ref.ptr();
+    if (pass && pass->kind == TC_NATIVE_PASS) {
+        CxxFramePass* cxx_pass = CxxFramePass::from_tc(pass);
+        if (cxx_pass && cxx_pass->set_graph_resource_input(socket_name, resource_name)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // ============================================================================
 // Collect FBO nodes
 // ============================================================================
@@ -811,8 +857,15 @@ static ResourceSpec infer_resource_spec(
         }
 
         // Samples
-        if (params.contains("samples") && params["samples"].is_numer()) {
-            spec.samples = static_cast<int>(params["samples"].as_numer());
+        if (params.contains("samples")) {
+            if (auto samples = trent_int_value(params["samples"])) {
+                spec.samples = *samples;
+            } else {
+                tc::Log::warn(
+                    "compile_graph: resource '%s' has invalid samples value",
+                    resource_name.c_str()
+                );
+            }
         }
 
         // Filter
@@ -966,7 +1019,13 @@ RenderPipeline* compile_graph(GraphData& graph) {
                 pass_ref.set_field(socket_name, tc_val);
                 tc_value_free(&tc_val);
             } else {
-                set_pass_property(pass_ref, socket_name, res_name_trent);
+                if (!set_pass_resource_socket(pass_ref, socket_name, resource_name)) {
+                    tc::Log::warn(
+                        "compile_graph: failed to set resource socket '%s.%s'",
+                        pass_ref.type_name().c_str(),
+                        socket_name.c_str()
+                    );
+                }
             }
         }
 

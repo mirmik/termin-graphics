@@ -223,6 +223,15 @@ public:
         return {};
     }
 
+    virtual bool set_graph_resource_input(
+        const std::string& socket_name,
+        const std::string& resource_name
+    ) {
+        (void)socket_name;
+        (void)resource_name;
+        return false;
+    }
+
     virtual std::vector<std::pair<std::string, std::string>> get_inplace_aliases() const {
         return {};
     }
