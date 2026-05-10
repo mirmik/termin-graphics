@@ -44,6 +44,7 @@ set(TERMIN_RENDER_SOURCES
     src/graph_compiler.cpp
     src/graph_data.cpp
     src/graph_node_def.cpp
+    src/material_ubo_runtime.cpp
     src/render_pipeline.cpp
     src/render_engine.cpp
     src/tgfx2_bridge.cpp
@@ -89,6 +90,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/graph_compiler.hpp
     include/termin/render/graph_data.hpp
     include/termin/render/graph_node_def.hpp
+    include/termin/render/material_ubo_runtime.hpp
     include/termin/render/resource_aliases.hpp
     include/termin/render/render_pipeline.hpp
     include/termin/render/render_engine.hpp
