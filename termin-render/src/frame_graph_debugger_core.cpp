@@ -119,7 +119,7 @@ void FrameGraphCapture::capture_direct_via_ctx2(
     int height,
     tgfx::PixelFormat format
 ) {
-    if (!ctx2 || !src_tex || width <= 0 || height <= 0) {
+    if (!ctx2 || !src_tex) {
         return;
     }
 
@@ -130,6 +130,20 @@ void FrameGraphCapture::capture_direct_via_ctx2(
     auto src_desc = ctx2->device().texture_desc(src_tex);
     tgfx::PixelFormat effective = src_desc.format;
     (void)format;
+    if (width <= 0 || height <= 0) {
+        width = static_cast<int>(src_desc.width);
+        height = static_cast<int>(src_desc.height);
+    }
+    if (width <= 0 || height <= 0) {
+        tc_log(TC_LOG_ERROR,
+            "[FrameGraphCapture] invalid capture size for texture %u: requested=%dx%d source=%ux%u",
+            src_tex.id,
+            width,
+            height,
+            src_desc.width,
+            src_desc.height);
+        return;
+    }
 
     ensure_capture_tex(ctx2->device(), width, height, effective);
     if (!capture_tex_) {

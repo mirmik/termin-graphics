@@ -74,9 +74,10 @@ public:
         return caller && caller == target_pass_;
     }
 
-    // Capture `src_tex` into an internal owned tgfx2 texture sized
-    // `width x height`. Reallocates on size / format mismatch, re-uses
-    // the texture otherwise. `ctx2->blit` performs the copy.
+    // Capture `src_tex` into an internal owned tgfx2 texture. When width
+    // or height is non-positive, the source texture's real dimensions are
+    // used. Reallocates on size / format mismatch, re-uses the texture
+    // otherwise. `ctx2->blit` performs the copy.
     void capture_direct_via_ctx2(
         tgfx::RenderContext2* ctx2,
         tgfx::TextureHandle src_tex,
