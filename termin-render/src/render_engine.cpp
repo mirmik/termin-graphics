@@ -893,18 +893,6 @@ void RenderEngine::render_scene_pipeline_offscreen(
             collect_shadow_array(read_name);
             auto ext_it = rt_ctx.external_textures.find(read_name);
             if (ext_it != rt_ctx.external_textures.end() && ext_it->second) {
-                tgfx::TextureDesc desc = tgfx2_device_->texture_desc(ext_it->second);
-                tc::Log::info(
-                    "[RenderEngine] pass '%s' viewport='%s' binds external read '%s' tex=%u size=%ux%u fmt=%d samples=%u",
-                    pass_name,
-                    rt_ctx.name.c_str(),
-                    read_name,
-                    ext_it->second.id,
-                    desc.width,
-                    desc.height,
-                    static_cast<int>(desc.format),
-                    desc.sample_count
-                );
                 pass_tex2_reads[read_name] = ext_it->second;
                 continue;
             }
