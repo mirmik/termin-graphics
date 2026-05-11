@@ -95,6 +95,11 @@ void bind_tgfx2(nb::module_& m) {
              nb::arg("stage"), nb::arg("source"))
         .def("destroy_shader",
              [](tgfx::IRenderDevice& self, tgfx::ShaderHandle h) { self.destroy(h); })
+        .def("texture_sample_count",
+             [](tgfx::IRenderDevice& self, tgfx::TextureHandle h) {
+                 return self.texture_desc(h).sample_count;
+             },
+             nb::arg("texture"))
         // Thin tcgui-only hosts (diffusion-editor) need to read whole
         // render targets back to the CPU without dragging in the editor
         // runtime. Delegates to IRenderDevice::read_texture_rgba_float

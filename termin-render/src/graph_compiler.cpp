@@ -49,6 +49,27 @@ static std::optional<int> trent_int_value(const nos::trent& value) {
     return static_cast<int>(parsed);
 }
 
+static std::optional<bool> trent_bool_value(const nos::trent& value) {
+    if (value.is_bool()) {
+        return value.as_bool();
+    }
+    if (value.is_numer()) {
+        return value.as_numer() != 0.0;
+    }
+    if (!value.is_string()) {
+        return std::nullopt;
+    }
+
+    const std::string str = value.as_string();
+    if (str == "true" || str == "True" || str == "1") {
+        return true;
+    }
+    if (str == "false" || str == "False" || str == "0" || str.empty()) {
+        return false;
+    }
+    return std::nullopt;
+}
+
 static bool set_pass_property(
     TcPassRef& pass_ref,
     const std::string& field_name,
@@ -900,8 +921,8 @@ static ResourceSpec infer_resource_spec(
         }
 
         // Clear color
-        if (params.contains("clear_color") && params["clear_color"].is_numer() &&
-            params["clear_color"].as_numer() != 0.0) {
+        if (params.contains("clear_color") &&
+            trent_bool_value(params["clear_color"]).value_or(false)) {
             double r = 0, g = 0, b = 0, a = 1;
             if (params.contains("clear_color_r") && params["clear_color_r"].is_numer()) {
                 r = params["clear_color_r"].as_numer();
@@ -919,8 +940,8 @@ static ResourceSpec infer_resource_spec(
         }
 
         // Clear depth
-        if (params.contains("clear_depth") && params["clear_depth"].is_numer() &&
-            params["clear_depth"].as_numer() != 0.0) {
+        if (params.contains("clear_depth") &&
+            trent_bool_value(params["clear_depth"]).value_or(false)) {
             double depth_value = 1.0;
             if (params.contains("clear_depth_value") && params["clear_depth_value"].is_numer()) {
                 depth_value = params["clear_depth_value"].as_numer();
