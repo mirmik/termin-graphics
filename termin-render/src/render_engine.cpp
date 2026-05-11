@@ -45,6 +45,23 @@ static bool is_external_output_resource(const char* name) {
     return is_external_color_output(name) || is_external_depth_output(name);
 }
 
+static bool is_external_graph_input_resource(
+    const char* name,
+    const std::unordered_map<std::string, ViewportContext>& viewport_contexts
+) {
+    if (!name || name[0] == '\0') {
+        return false;
+    }
+    for (const auto& [viewport_name, ctx] : viewport_contexts) {
+        (void)viewport_name;
+        auto it = ctx.external_textures.find(name);
+        if (it != ctx.external_textures.end() && it->second) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static tgfx::PixelFormat resolve_fbo_color_format(
     const std::string& format,
     const ViewportContext& default_ctx,
@@ -390,10 +407,13 @@ void RenderEngine::render_scene_pipeline_offscreen(
             continue;
         }
 
-        if (is_external_output_resource(canon)) {
-            // OUTPUT/DISPLAY are viewport-owned native textures
-            // (vp_ctx.output_color_tex / output_depth_tex). Skip the
-            // FBOMap allocation — passes receive them directly.
+        if (is_external_output_resource(canon) ||
+            is_external_graph_input_resource(canon, viewport_contexts)) {
+            // OUTPUT/DISPLAY/RT_* are viewport-owned native textures, and
+            // External RT resources are supplied through ViewportContext.
+            // Never allocate an internal FBO/texture for these names: doing
+            // so makes debuggers and fallback resolvers see a viewport-sized
+            // dummy resource instead of the actual external texture.
             continue;
         }
 

@@ -420,7 +420,8 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
             }
             for (const auto& output : node.outputs) {
                 result.socket_names[node.id][output.name] = name;
-                result.resource_types[name] = output.socket_type;
+                result.resource_types[name] = "external_color";
+                result.external_resources[name] = "external_texture";
             }
         }
         if (node.node_type == "render_target_input") {
