@@ -610,6 +610,8 @@ void tc_render_target_ensure_textures(tc_render_target_handle h) {
 
     const uint32_t w = (uint32_t)g_pool->widths[idx];
     const uint32_t height_ = (uint32_t)g_pool->heights[idx];
+    const tc_texture_format color_format = g_pool->color_formats[idx];
+    const tc_texture_format depth_format = g_pool->depth_formats[idx];
 
     // Owned through tc_texture_destroy on pool_free — no add_ref dance,
     // the render target is the single owner. External code that wants
@@ -620,10 +622,17 @@ void tc_render_target_ensure_textures(tc_render_target_handle h) {
         if (tex) {
             tc_texture_set_storage_kind(tex, TC_TEXTURE_STORAGE_GPU_FIRST);
             tc_texture_set_usage(tex, RT_DEFAULT_COLOR_USAGE);
-            tc_texture_set_size_format(tex, w, height_, g_pool->color_formats[idx]);
+            tc_texture_set_size_format(tex, w, height_, color_format);
             g_pool->color_textures[idx] = ch;
         } else {
             tc_log_error("[tc_render_target] failed to create color texture");
+        }
+    } else {
+        tc_texture* tex = tc_texture_get(g_pool->color_textures[idx]);
+        if (tex && (tex->width != w || tex->height != height_ || tex->format != color_format)) {
+            tc_texture_set_storage_kind(tex, TC_TEXTURE_STORAGE_GPU_FIRST);
+            tc_texture_set_usage(tex, RT_DEFAULT_COLOR_USAGE);
+            tc_texture_set_size_format(tex, w, height_, color_format);
         }
     }
 
@@ -633,10 +642,17 @@ void tc_render_target_ensure_textures(tc_render_target_handle h) {
         if (tex) {
             tc_texture_set_storage_kind(tex, TC_TEXTURE_STORAGE_GPU_FIRST);
             tc_texture_set_usage(tex, RT_DEFAULT_DEPTH_USAGE);
-            tc_texture_set_size_format(tex, w, height_, g_pool->depth_formats[idx]);
+            tc_texture_set_size_format(tex, w, height_, depth_format);
             g_pool->depth_textures[idx] = dh;
         } else {
             tc_log_error("[tc_render_target] failed to create depth texture");
+        }
+    } else {
+        tc_texture* tex = tc_texture_get(g_pool->depth_textures[idx]);
+        if (tex && (tex->width != w || tex->height != height_ || tex->format != depth_format)) {
+            tc_texture_set_storage_kind(tex, TC_TEXTURE_STORAGE_GPU_FIRST);
+            tc_texture_set_usage(tex, RT_DEFAULT_DEPTH_USAGE);
+            tc_texture_set_size_format(tex, w, height_, depth_format);
         }
     }
 }
