@@ -45,10 +45,11 @@ public:
     // canonical name; same key serves reads and writes since shadow
     // arrays are written by one pass and read by another.
     ShadowArrayMap shadow_arrays;
-    Rect4i rect;
+    // Render extent for the pass. This is not a display viewport rectangle.
+    Rect4i render_rect;
     TcSceneRef scene;
     RenderCamera* camera = nullptr;
-    std::string viewport_name;
+    std::string render_target_name;
     tc_entity_handle internal_entities = TC_ENTITY_HANDLE_INVALID;
     std::vector<Light> lights;
     uint64_t layer_mask = 0xFFFFFFFFFFFFFFFFULL;

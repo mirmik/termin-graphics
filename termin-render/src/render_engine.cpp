@@ -47,13 +47,13 @@ static bool is_external_output_resource(const char* name) {
 
 static bool is_external_graph_input_resource(
     const char* name,
-    const std::unordered_map<std::string, ViewportContext>& viewport_contexts
+    const std::unordered_map<std::string, RenderTargetContext>& render_target_contexts
 ) {
     if (!name || name[0] == '\0') {
         return false;
     }
-    for (const auto& [viewport_name, ctx] : viewport_contexts) {
-        (void)viewport_name;
+    for (const auto& [render_target_name, ctx] : render_target_contexts) {
+        (void)render_target_name;
         auto it = ctx.external_textures.find(name);
         if (it != ctx.external_textures.end() && it->second) {
             return true;
@@ -64,21 +64,21 @@ static bool is_external_graph_input_resource(
 
 static tgfx::PixelFormat resolve_fbo_color_format(
     const std::string& format,
-    const ViewportContext& default_ctx,
+    const RenderTargetContext& default_rt_ctx,
     const tgfx::IRenderDevice& device
 ) {
     if (format == RESOURCE_FORMAT_RENDER_TARGET) {
-        if (default_ctx.output_color_format != tgfx::PixelFormat::Undefined) {
-            return default_ctx.output_color_format;
+        if (default_rt_ctx.output_color_format != tgfx::PixelFormat::Undefined) {
+            return default_rt_ctx.output_color_format;
         }
-        if (!default_ctx.output_color_tex) {
+        if (!default_rt_ctx.output_color_tex) {
             tc::Log::warn(
                 "RenderEngine::render_scene_pipeline_offscreen: FBO format '%s' requested but output_color_tex is invalid; using rgba8",
                 RESOURCE_FORMAT_RENDER_TARGET
             );
             return tgfx::PixelFormat::RGBA8_UNorm;
         }
-        tgfx::TextureDesc output_desc = device.texture_desc(default_ctx.output_color_tex);
+        tgfx::TextureDesc output_desc = device.texture_desc(default_rt_ctx.output_color_tex);
         if (output_desc.format == tgfx::PixelFormat::Undefined) {
             tc::Log::warn(
                 "RenderEngine::render_scene_pipeline_offscreen: output_color_tex has undefined format; using rgba8"
@@ -236,7 +236,7 @@ void RenderEngine::render_view_to_fbo_id(
     int height,
     tc_scene_handle scene,
     const RenderCamera& camera,
-    const std::string& viewport_name,
+    const std::string& render_target_name,
     tc_entity_handle internal_entities,
     const std::vector<Light>& lights,
     uint64_t layer_mask
@@ -284,19 +284,19 @@ void RenderEngine::render_view_to_fbo_id(
     }
 
     // Render pipeline into the internal color+depth textures via the
-    // single-viewport offscreen path.
-    std::unordered_map<std::string, ViewportContext> contexts;
-    ViewportContext ctx;
-    ctx.name = viewport_name;
+    // Single render-target offscreen path.
+    std::unordered_map<std::string, RenderTargetContext> contexts;
+    RenderTargetContext ctx;
+    ctx.name = render_target_name;
     ctx.camera = camera;
-    ctx.rect = {0, 0, width, height};
+    ctx.render_rect = {0, 0, width, height};
     ctx.internal_entities = internal_entities;
     ctx.layer_mask = layer_mask;
     ctx.output_color_tex = external_target_color_;
     ctx.output_depth_tex = external_target_depth_;
-    contexts[viewport_name] = std::move(ctx);
+    contexts[render_target_name] = std::move(ctx);
     render_scene_pipeline_offscreen(
-        pipeline, scene, contexts, lights, viewport_name
+        pipeline, scene, contexts, lights, render_target_name
     );
 
     // Present: blit internal color → external target id (GL FBO for
@@ -311,9 +311,9 @@ void RenderEngine::render_view_to_fbo_id(
 void RenderEngine::render_scene_pipeline_offscreen(
     RenderPipeline& pipeline,
     tc_scene_handle scene,
-    const std::unordered_map<std::string, ViewportContext>& viewport_contexts,
+    const std::unordered_map<std::string, RenderTargetContext>& render_target_contexts,
     const std::vector<Light>& lights,
-    const std::string& default_viewport
+    const std::string& default_render_target
 ) {
     if (!pipeline.is_valid()) {
         tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: pipeline is null");
@@ -324,24 +324,24 @@ void RenderEngine::render_scene_pipeline_offscreen(
         tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: tgfx2 device unavailable");
         return;
     }
-    if (viewport_contexts.empty()) {
-        tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: no viewport contexts");
+    if (render_target_contexts.empty()) {
+        tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: no render target contexts");
         return;
     }
 
-    std::string default_vp = default_viewport;
-    if (default_vp.empty()) {
-        default_vp = viewport_contexts.begin()->first;
+    std::string default_target = default_render_target;
+    if (default_target.empty()) {
+        default_target = render_target_contexts.begin()->first;
     }
 
-    auto default_it = viewport_contexts.find(default_vp);
-    if (default_it == viewport_contexts.end()) {
-        default_it = viewport_contexts.begin();
+    auto default_it = render_target_contexts.find(default_target);
+    if (default_it == render_target_contexts.end()) {
+        default_it = render_target_contexts.begin();
     }
-    const ViewportContext& default_ctx = default_it->second;
+    const RenderTargetContext& default_rt_ctx = default_it->second;
 
-    int default_width = default_ctx.rect.width;
-    int default_height = default_ctx.rect.height;
+    int default_width = default_rt_ctx.render_rect.width;
+    int default_height = default_rt_ctx.render_rect.height;
 
     tc_profiler_begin_section("Get Frame Graph");
     tc_frame_graph* fg = tc_pipeline_get_frame_graph(pipeline.handle());
@@ -408,9 +408,9 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
 
         if (is_external_output_resource(canon) ||
-            is_external_graph_input_resource(canon, viewport_contexts)) {
+            is_external_graph_input_resource(canon, render_target_contexts)) {
             // OUTPUT/DISPLAY/RT_* are viewport-owned native textures, and
-            // External RT resources are supplied through ViewportContext.
+            // External RT resources are supplied through RenderTargetContext.
             // Never allocate an internal FBO/texture for these names: doing
             // so makes debuggers and fallback resolvers see a viewport-sized
             // dummy resource instead of the actual external texture.
@@ -475,7 +475,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 tgfx::TextureUsage::CopySrc |
                 tgfx::TextureUsage::CopyDst;
             tgfx::PixelFormat color_format =
-                resolve_fbo_color_format(format, default_ctx, *tgfx2_device_);
+                resolve_fbo_color_format(format, default_rt_ctx, *tgfx2_device_);
             if (!pipeline_cache.texture_pool.ensure(
                     *tgfx2_device_, canon, tex_width, tex_height,
                     color_format, usage)) {
@@ -556,7 +556,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
         FBOPool& fbo_pool = pipeline.fbo_pool();
 
-        tgfx::PixelFormat color_fmt = resolve_fbo_color_format(format, default_ctx, *tgfx2_device_);
+        tgfx::PixelFormat color_fmt = resolve_fbo_color_format(format, default_rt_ctx, *tgfx2_device_);
 
         fbo_pool.ensure_native(
             *tgfx2_device_, canon, fbo_width, fbo_height,
@@ -578,31 +578,31 @@ void RenderEngine::render_scene_pipeline_offscreen(
         tgfx2_ctx_->begin_frame();
     }
 
-    tc_profiler_begin_section("Clear Viewport Targets");
+    tc_profiler_begin_section("Clear Render Target Contexts");
     if (tgfx2_ctx_) {
-        for (const auto& [viewport_name, vp_ctx] : viewport_contexts) {
-            if (!vp_ctx.clear_color_enabled && !vp_ctx.clear_depth_enabled) {
+        for (const auto& [render_target_name, rt_ctx] : render_target_contexts) {
+            if (!rt_ctx.clear_color_enabled && !rt_ctx.clear_depth_enabled) {
                 continue;
             }
-            if (!vp_ctx.output_color_tex && !vp_ctx.output_depth_tex) {
+            if (!rt_ctx.output_color_tex && !rt_ctx.output_depth_tex) {
                 tc::Log::error(
-                    "RenderEngine::render_scene_pipeline_offscreen: viewport '%s' requested clear but output textures are missing",
-                    viewport_name.c_str());
+                    "RenderEngine::render_scene_pipeline_offscreen: render target context '%s' requested clear but output textures are missing",
+                    render_target_name.c_str());
                 continue;
             }
 
             const float* clear_color_ptr =
-                vp_ctx.clear_color_enabled ? vp_ctx.clear_color : nullptr;
+                rt_ctx.clear_color_enabled ? rt_ctx.clear_color : nullptr;
             tgfx2_ctx_->begin_pass(
-                vp_ctx.output_color_tex,
-                vp_ctx.output_depth_tex,
+                rt_ctx.output_color_tex,
+                rt_ctx.output_depth_tex,
                 clear_color_ptr,
-                vp_ctx.clear_depth,
-                vp_ctx.clear_depth_enabled);
+                rt_ctx.clear_depth,
+                rt_ctx.clear_depth_enabled);
             tgfx2_ctx_->set_viewport(
                 0, 0,
-                std::max(1, vp_ctx.rect.width),
-                std::max(1, vp_ctx.rect.height));
+                std::max(1, rt_ctx.render_rect.width),
+                std::max(1, rt_ctx.render_rect.height));
             tgfx2_ctx_->end_pass();
         }
     }
@@ -672,7 +672,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
             if (composition_input_is_view_of_external(composition.color) ||
                 composition_input_is_view_of_external(composition.depth)) {
                 // Viewport-owned textures are only available once a concrete
-                // viewport context is selected. Per-pass resolvers below handle
+                // render target context is selected. Per-pass resolvers below handle
                 // those compositions without populating the global maps here.
                 continue;
             }
@@ -768,16 +768,16 @@ void RenderEngine::render_scene_pipeline_offscreen(
         // (Vulkan), restores GL baseline on OpenGL.
         tgfx2_device_->reset_state();
 
-        std::string pass_viewport_name = default_vp;
+        std::string pass_render_target_name = default_target;
         if (pass->viewport_name && pass->viewport_name[0] != '\0') {
-            pass_viewport_name = pass->viewport_name;
+            pass_render_target_name = pass->viewport_name;
         }
 
-        auto vp_it = viewport_contexts.find(pass_viewport_name);
-        if (vp_it == viewport_contexts.end()) {
-            vp_it = default_it;
+        auto rt_it = render_target_contexts.find(pass_render_target_name);
+        if (rt_it == render_target_contexts.end()) {
+            rt_it = default_it;
         }
-        const ViewportContext& vp_ctx = vp_it->second;
+        const RenderTargetContext& rt_ctx = rt_it->second;
 
         const char* reads[16];
         const char* writes[8];
@@ -803,10 +803,10 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 }
             }
             if (is_external_color_output(name.c_str())) {
-                return vp_ctx.output_color_tex;
+                return rt_ctx.output_color_tex;
             }
-            auto ext_it = vp_ctx.external_textures.find(name);
-            if (ext_it != vp_ctx.external_textures.end()) {
+            auto ext_it = rt_ctx.external_textures.find(name);
+            if (ext_it != rt_ctx.external_textures.end()) {
                 return ext_it->second;
             }
             auto view_it = pipeline_cache.resource_views.find(name);
@@ -835,7 +835,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 }
             }
             if (is_external_color_output(name.c_str()) || is_external_depth_output(name.c_str())) {
-                return vp_ctx.output_depth_tex;
+                return rt_ctx.output_depth_tex;
             }
             auto view_it = pipeline_cache.resource_views.find(name);
             if (view_it != pipeline_cache.resource_views.end()) {
@@ -876,23 +876,35 @@ void RenderEngine::render_scene_pipeline_offscreen(
         for (size_t j = 0; j < read_count; j++) {
             const char* read_name = reads[j];
             if (is_external_color_output(read_name)) {
-                if (vp_ctx.output_color_tex) {
-                    pass_tex2_reads[read_name] = vp_ctx.output_color_tex;
+                if (rt_ctx.output_color_tex) {
+                    pass_tex2_reads[read_name] = rt_ctx.output_color_tex;
                 }
-                if (vp_ctx.output_depth_tex) {
-                    pass_tex2_depth_reads[read_name] = vp_ctx.output_depth_tex;
+                if (rt_ctx.output_depth_tex) {
+                    pass_tex2_depth_reads[read_name] = rt_ctx.output_depth_tex;
                 }
                 continue;
             }
             if (is_external_depth_output(read_name)) {
-                if (vp_ctx.output_depth_tex) {
-                    pass_tex2_depth_reads[read_name] = vp_ctx.output_depth_tex;
+                if (rt_ctx.output_depth_tex) {
+                    pass_tex2_depth_reads[read_name] = rt_ctx.output_depth_tex;
                 }
                 continue;
             }
             collect_shadow_array(read_name);
-            auto ext_it = vp_ctx.external_textures.find(read_name);
-            if (ext_it != vp_ctx.external_textures.end() && ext_it->second) {
+            auto ext_it = rt_ctx.external_textures.find(read_name);
+            if (ext_it != rt_ctx.external_textures.end() && ext_it->second) {
+                tgfx::TextureDesc desc = tgfx2_device_->texture_desc(ext_it->second);
+                tc::Log::info(
+                    "[RenderEngine] pass '%s' viewport='%s' binds external read '%s' tex=%u size=%ux%u fmt=%d samples=%u",
+                    pass_name,
+                    rt_ctx.name.c_str(),
+                    read_name,
+                    ext_it->second.id,
+                    desc.width,
+                    desc.height,
+                    static_cast<int>(desc.format),
+                    desc.sample_count
+                );
                 pass_tex2_reads[read_name] = ext_it->second;
                 continue;
             }
@@ -909,17 +921,17 @@ void RenderEngine::render_scene_pipeline_offscreen(
         for (size_t j = 0; j < write_count; j++) {
             const char* write_name = writes[j];
             if (is_external_color_output(write_name)) {
-                // OUTPUT/DISPLAY come straight from ViewportContext's
+                // OUTPUT/DISPLAY come straight from RenderTargetContext's
                 // owned native textures — no FBO wrap needed anymore.
-                if (vp_ctx.output_color_tex) {
-                    pass_tex2_writes[write_name] = vp_ctx.output_color_tex;
+                if (rt_ctx.output_color_tex) {
+                    pass_tex2_writes[write_name] = rt_ctx.output_color_tex;
                 }
-                if (vp_ctx.output_depth_tex) {
-                    pass_tex2_depth_writes[write_name] = vp_ctx.output_depth_tex;
+                if (rt_ctx.output_depth_tex) {
+                    pass_tex2_depth_writes[write_name] = rt_ctx.output_depth_tex;
                 }
             } else if (is_external_depth_output(write_name)) {
-                if (vp_ctx.output_depth_tex) {
-                    pass_tex2_depth_writes[write_name] = vp_ctx.output_depth_tex;
+                if (rt_ctx.output_depth_tex) {
+                    pass_tex2_depth_writes[write_name] = rt_ctx.output_depth_tex;
                 }
             } else {
                 collect_shadow_array(write_name);
@@ -941,13 +953,13 @@ void RenderEngine::render_scene_pipeline_offscreen(
         ctx.tex2_depth_reads = std::move(pass_tex2_depth_reads);
         ctx.tex2_depth_writes = std::move(pass_tex2_depth_writes);
         ctx.shadow_arrays = std::move(pass_shadow_arrays);
-        ctx.rect = vp_ctx.rect;
+        ctx.render_rect = rt_ctx.render_rect;
         ctx.scene = TcSceneRef(scene);
-        ctx.viewport_name = vp_ctx.name;
-        ctx.internal_entities = vp_ctx.internal_entities;
-        ctx.camera = const_cast<RenderCamera*>(&vp_ctx.camera);
+        ctx.render_target_name = rt_ctx.name;
+        ctx.internal_entities = rt_ctx.internal_entities;
+        ctx.camera = const_cast<RenderCamera*>(&rt_ctx.camera);
         ctx.lights = lights;
-        ctx.layer_mask = vp_ctx.layer_mask;
+        ctx.layer_mask = rt_ctx.layer_mask;
 
         tc_pass_execute(pass, &ctx);
 

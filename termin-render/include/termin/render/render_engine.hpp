@@ -33,16 +33,18 @@ class RenderContext2;
 
 namespace termin {
 
-struct ViewportContext {
+struct RenderTargetContext {
 public:
     std::string name;
     RenderCamera camera;
-    Rect4i rect{0, 0, 0, 0};
+    // Render extent for this target. This is not the UI viewport's screen
+    // rectangle; display placement is handled later during present/blit.
+    Rect4i render_rect{0, 0, 0, 0};
     tc_entity_handle internal_entities = TC_ENTITY_HANDLE_INVALID;
     uint64_t layer_mask = 0xFFFFFFFFFFFFFFFFULL;
 
     // Final render target — native tgfx2 color + depth textures owned
-    // by the caller (typically ViewportRenderState). Passes in the
+    // by the caller (typically a render target or legacy viewport state). Passes in the
     // pipeline receive these through ExecuteContext::tex2_writes under
     // the OUTPUT/DISPLAY alias.
     tgfx::TextureHandle output_color_tex;
@@ -116,7 +118,7 @@ public:
         int height,
         tc_scene_handle scene,
         const RenderCamera& camera,
-        const std::string& viewport_name,
+        const std::string& render_target_name,
         tc_entity_handle internal_entities,
         const std::vector<Light>& lights,
         uint64_t layer_mask = 0xFFFFFFFFFFFFFFFFULL
@@ -140,9 +142,9 @@ public:
     void render_scene_pipeline_offscreen(
         RenderPipeline& pipeline,
         tc_scene_handle scene,
-        const std::unordered_map<std::string, ViewportContext>& viewport_contexts,
+        const std::unordered_map<std::string, RenderTargetContext>& render_target_contexts,
         const std::vector<Light>& lights,
-        const std::string& default_viewport = ""
+        const std::string& default_render_target = ""
     );
 };
 

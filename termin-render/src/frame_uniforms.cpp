@@ -56,8 +56,8 @@ EnginePerFrameStd140 make_engine_per_frame_uniforms(const ExecuteContext& ctx) {
         view,
         projection,
         camera_position,
-        static_cast<float>(ctx.rect.width),
-        static_cast<float>(ctx.rect.height),
+        static_cast<float>(ctx.render_rect.width),
+        static_cast<float>(ctx.render_rect.height),
         near_clip,
         far_clip);
 }

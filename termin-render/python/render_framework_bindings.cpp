@@ -270,12 +270,12 @@ void bind_render_framework(nb::module_& m) {
         .def(nb::init<>())
         .def("__init__", [](ExecuteContext* self, nb::kwargs kwargs) {
             new (self) ExecuteContext();
-            if (kwargs.contains("rect")) {
-                nb::tuple t = nb::cast<nb::tuple>(kwargs["rect"]);
-                self->rect.x = nb::cast<int>(t[0]);
-                self->rect.y = nb::cast<int>(t[1]);
-                self->rect.width = nb::cast<int>(t[2]);
-                self->rect.height = nb::cast<int>(t[3]);
+            if (kwargs.contains("render_rect")) {
+                nb::tuple t = nb::cast<nb::tuple>(kwargs["render_rect"]);
+                self->render_rect.x = nb::cast<int>(t[0]);
+                self->render_rect.y = nb::cast<int>(t[1]);
+                self->render_rect.width = nb::cast<int>(t[2]);
+                self->render_rect.height = nb::cast<int>(t[3]);
             }
             if (kwargs.contains("scene")) {
                 nb::object s = nb::borrow<nb::object>(kwargs["scene"]);
@@ -287,8 +287,8 @@ void bind_render_framework(nb::module_& m) {
                     }
                 }
             }
-            if (kwargs.contains("viewport_name")) {
-                self->viewport_name = nb::cast<std::string>(kwargs["viewport_name"]);
+            if (kwargs.contains("render_target_name")) {
+                self->render_target_name = nb::cast<std::string>(kwargs["render_target_name"]);
             }
             if (kwargs.contains("internal_entities")) {
                 nb::object ent = nb::borrow<nb::object>(kwargs["internal_entities"]);
@@ -310,7 +310,7 @@ void bind_render_framework(nb::module_& m) {
             [](const ExecuteContext& ctx) -> RenderCamera* { return ctx.camera; },
             [](ExecuteContext& ctx, RenderCamera* camera) { ctx.camera = camera; },
             nb::rv_policy::reference)
-        .def_rw("viewport_name", &ExecuteContext::viewport_name)
+        .def_rw("render_target_name", &ExecuteContext::render_target_name)
         .def_prop_rw("internal_entities",
             [](const ExecuteContext& ctx) -> nb::object {
                 if (!tc_entity_handle_valid(ctx.internal_entities)) {
@@ -325,7 +325,7 @@ void bind_render_framework(nb::module_& m) {
                 }
                 ctx.internal_entities = nb::cast<Entity>(entity_obj).handle();
             })
-        .def_rw("rect", &ExecuteContext::rect)
+        .def_rw("render_rect", &ExecuteContext::render_rect)
         .def_rw("scene", &ExecuteContext::scene)
         .def_rw("lights", &ExecuteContext::lights)
         .def_rw("layer_mask", &ExecuteContext::layer_mask)
