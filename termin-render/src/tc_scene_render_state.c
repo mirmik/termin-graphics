@@ -15,7 +15,7 @@ void tc_scene_lighting_init(tc_scene_lighting* lighting) {
     lighting->ambient_intensity = 0.1f;
     lighting->shadow_method = TC_SHADOW_METHOD_PCF;
     lighting->shadow_softness = 1.0f;
-    lighting->shadow_bias = 0.005f;
+    lighting->shadow_bias = 0.0f;
 }
 
 static bool value_to_float(const tc_value* v, float* out) {

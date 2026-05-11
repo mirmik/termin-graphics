@@ -24,7 +24,7 @@ typedef struct tc_scene_lighting {
     // Shadow settings
     int shadow_method;        // tc_shadow_method, default PCF
     float shadow_softness;    // Sampling radius multiplier, default 1.0
-    float shadow_bias;        // Depth bias, default 0.005
+    float shadow_bias;        // World-space light-depth bias.
 } tc_scene_lighting;
 
 // Initialize with defaults
