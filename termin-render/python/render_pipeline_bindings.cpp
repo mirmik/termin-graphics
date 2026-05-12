@@ -300,8 +300,8 @@ void bind_render_pipeline(nb::module_& m) {
         })
 
         .def_static("deserialize", [](nb::dict data, nb::object resource_manager) -> RenderPipeline* {
-            nb::module_ core_module = nb::module_::import_("termin.visualization.render.framegraph.core");
-            nb::object deserialize_pass = core_module.attr("deserialize_pass");
+            nb::module_ pass_module = nb::module_::import_("termin.render_framework.python_pass");
+            nb::object deserialize_pass = pass_module.attr("deserialize_pass");
             std::string name = "default";
             if (data.contains("name")) name = nb::cast<std::string>(data["name"]);
             RenderPipeline* pipeline = new RenderPipeline(name);
