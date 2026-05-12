@@ -11,6 +11,7 @@ from termin.render_framework._render_framework_native import (
     render_target_pool_list,
     compile_graph_from_json,
     ExecuteContext,
+    FrameDebugCapturePass,
     FrameGraphCapture,
     FrameGraphDebuggerCore,
     FrameGraphPresenter,
@@ -61,6 +62,7 @@ from termin.render_framework._render_framework_native import (
     tc_pipeline_remove_passes_by_name,
     tc_resources_allocate_dict,
 )
+from termin.render_framework.frame_graph_view import PipelineFrameGraphView
 
 __all__ = [
     "RenderPipeline",
@@ -71,6 +73,7 @@ __all__ = [
     "render_target_pool_list",
     "compile_graph_from_json",
     "ExecuteContext",
+    "FrameDebugCapturePass",
     "FrameGraphCapture",
     "FrameGraphDebuggerCore",
     "FrameGraphPresenter",
@@ -120,4 +123,5 @@ __all__ = [
     "tc_pipeline_remove_pass",
     "tc_pipeline_remove_passes_by_name",
     "tc_resources_allocate_dict",
+    "PipelineFrameGraphView",
 ]

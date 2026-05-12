@@ -13,6 +13,7 @@
 #include <termin/geom/mat44.hpp>
 #include <termin/entity/entity.hpp>
 #include <termin/render/render_camera.hpp>
+#include <termin/render/frame_debug_capture_pass.hpp>
 #include <termin/render/frame_graph_debugger_core.hpp>
 #include <termin/render/graph_alias_pass.hpp>
 #include <tgfx2/i_render_device.hpp>
@@ -449,6 +450,40 @@ void bind_render_framework(nb::module_& m) {
         .def_prop_ro("reads", &GraphAliasPass::compute_reads)
         .def_prop_ro("writes", &GraphAliasPass::compute_writes)
         .def("get_inplace_aliases", &GraphAliasPass::get_inplace_aliases);
+
+    nb::class_<FrameDebugCapturePass, CxxFramePass>(m, "FrameDebugCapturePass")
+        .def("__init__", [](FrameDebugCapturePass* self, const std::string& pass_name) {
+            new (self) FrameDebugCapturePass(pass_name);
+            init_render_pass_from_python(self, "FrameDebugCapturePass");
+        }, nb::arg("pass_name") = "FrameDebugger")
+        .def_rw("source_resource", &FrameDebugCapturePass::source_resource)
+        .def_rw("source_type", &FrameDebugCapturePass::source_type)
+        .def_rw("paused", &FrameDebugCapturePass::paused)
+        .def("set_source_resource", &FrameDebugCapturePass::set_source_resource)
+        .def("set_source_type", &FrameDebugCapturePass::set_source_type)
+        .def("set_paused", &FrameDebugCapturePass::set_paused)
+        .def("set_capture", &FrameDebugCapturePass::set_capture, nb::arg("capture"))
+        .def("set_depth_capture", &FrameDebugCapturePass::set_depth_capture, nb::arg("capture"))
+        .def_prop_ro("reads", [](FrameDebugCapturePass& p) {
+            auto reads = p.compute_reads();
+            std::set<std::string> result;
+            for (const char* r : reads) {
+                if (r) {
+                    result.insert(r);
+                }
+            }
+            return result;
+        })
+        .def_prop_ro("writes", [](FrameDebugCapturePass& p) {
+            auto writes = p.compute_writes();
+            std::set<std::string> result;
+            for (const char* w : writes) {
+                if (w) {
+                    result.insert(w);
+                }
+            }
+            return result;
+        });
 
     {
         m.attr("GraphAliasPass").attr("category") = "Graph";
