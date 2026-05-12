@@ -137,6 +137,8 @@ RenderEngine::~RenderEngine() {
 }
 
 void RenderEngine::ensure_tgfx2() {
+    // TODO: tgfx context initialization should happen at the application
+    // top level, not inside RenderEngine.
     // Diagnostic escape hatch: setting TERMIN_DISABLE_TGFX2=1 keeps the tgfx2
     // stack un-initialised, so ctx.ctx2 stays nullptr and every migrated pass
     // takes its legacy fallback path. Used to isolate whether a rendering
