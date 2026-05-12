@@ -11,11 +11,12 @@
 #include <tgfx2/enums.hpp>
 #include <tgfx2/font_atlas.hpp>
 #include <tgfx2/handles.hpp>
-#include <tgfx2/opengl/opengl_render_device.hpp>
+#include <tgfx2/i_render_device.hpp>
 #include <tgfx2/pipeline_cache.hpp>
 #include <tgfx2/render_context.hpp>
 
 #include "tcplot/engine2d.hpp"
+#include "tcplot/gpu_host.hpp"
 
 namespace tcplot {
 
@@ -35,14 +36,18 @@ std::vector<double> copy_array(const double* src, size_t n) {
 
 }  // namespace
 
-PlotView2D::PlotView2D(const std::string& ttf_path)
-    : ttf_path_(ttf_path) {
-    device_ = std::make_unique<tgfx::OpenGLRenderDevice>();
-    cache_  = std::make_unique<tgfx::PipelineCache>(*device_);
-    ctx_    = std::make_unique<tgfx::RenderContext2>(*device_, *cache_);
-    font_   = std::make_unique<tgfx::FontAtlas>(ttf_path);
-    engine_ = std::make_unique<PlotEngine2D>();
-}
+PlotView2D::PlotView2D(tgfx::IRenderDevice& device,
+                       tgfx::PipelineCache& cache,
+                       tgfx::RenderContext2& ctx,
+                       tgfx::FontAtlas& font)
+    : device_(&device),
+      cache_(&cache),
+      ctx_(&ctx),
+      font_(&font),
+      engine_(std::make_unique<PlotEngine2D>()) {}
+
+PlotView2D::PlotView2D(GpuHost& host)
+    : PlotView2D(host.device(), host.cache(), host.ctx(), host.font()) {}
 
 PlotView2D::~PlotView2D() {
     release_gpu();
@@ -144,7 +149,7 @@ void PlotView2D::render(int width, int height, uint32_t dst_gl_fbo) {
     ctx_->begin_pass(offscreen_color_, tgfx::TextureHandle{},
                      clear_col, 1.0f, false);
 
-    engine_->render(ctx_.get(), font_.get());
+    engine_->render(ctx_, font_);
 
     ctx_->end_pass();
     ctx_->end_frame();
@@ -157,7 +162,6 @@ void PlotView2D::render(int width, int height, uint32_t dst_gl_fbo) {
 
 void PlotView2D::release_gpu() {
     if (engine_) engine_->release_gpu_resources();
-    if (font_)   font_->release_gpu();
 
     if (device_ && offscreen_color_.id != 0) {
         device_->destroy(offscreen_color_);
