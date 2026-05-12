@@ -13,13 +13,13 @@
 #include <cstring>
 #include <vector>
 
+#include <tgfx2/canvas2d_renderer.hpp>
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/enums.hpp>
 #include <tgfx2/font_atlas.hpp>
 #include <tgfx2/handles.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/render_context.hpp>
-#include <tgfx2/text2d_renderer.hpp>
 
 #include "tcplot/axes.hpp"
 
@@ -49,30 +49,6 @@ layout(std140, binding = 14) uniform PCBlock { Plot2DPC pc; };
 #endif
 )";
 
-// Pos + color shader used by rects, grid and series lines.
-// Pixel→clip ortho projection matching the rest of termin-env:
-// y+ down in pixel coords → y+ down in clip space (Vulkan-native).
-// OpenGL reaches the same convention via glClipControl(UPPER_LEFT).
-static std::string make_vert() {
-    return std::string("#version 450 core\n") + kPC + R"(
-layout(location=0) in vec3 a_pos;
-layout(location=1) in vec4 a_color;
-layout(location=0) out vec4 v_color;
-void main() {
-    gl_Position = pc.u_matrix * vec4(a_pos.xy, 0.0, 1.0);
-    v_color = a_color;
-}
-)";
-}
-
-static std::string make_frag() {
-    return std::string("#version 450 core\n") + R"(
-layout(location=0) in vec4 v_color;
-layout(location=0) out vec4 frag_color;
-void main() { frag_color = v_color; }
-)";
-}
-
 // --- Persistent-VBO line series shader ---
 //
 // Vertex input is a raw data-space vec2. pc.u_matrix converts directly
@@ -94,29 +70,8 @@ void main() { frag_color = pc.u_color; }
 )";
 }
 
-// Ortho pixel→clip (y+down everywhere). Pixel (0,0) → clip (-1,-1).
-void build_ortho(float w, float h, float out[16]) {
-    if (w <= 0.0f || h <= 0.0f) {
-        std::memset(out, 0, 16 * sizeof(float));
-        out[0] = out[5] = out[10] = out[15] = 1.0f;
-        return;
-    }
-    // Row-major here (transposed into column-major when we copy into
-    // the push-constant struct below).
-    const float m[16] = {
-        2.0f / w,  0.0f,      0.0f, -1.0f,
-        0.0f,      2.0f / h,  0.0f, -1.0f,
-        0.0f,      0.0f,      1.0f,  0.0f,
-        0.0f,      0.0f,      0.0f,  1.0f,
-    };
-    std::memcpy(out, m, sizeof(m));
-}
-
-// Copy row-major m[16] → column-major dst[16] (what shaders receive).
-inline void transpose4x4(const float src[16], float dst[16]) {
-    for (int r = 0; r < 4; ++r)
-        for (int c = 0; c < 4; ++c)
-            dst[c * 4 + r] = src[r * 4 + c];
+tgfx::CanvasColor canvas_color(const Color4& c) {
+    return tgfx::CanvasColor{c.r, c.g, c.b, c.a};
 }
 
 }  // namespace
@@ -126,7 +81,7 @@ inline void transpose4x4(const float src[16], float dst[16]) {
 // ---------------------------------------------------------------------------
 
 PlotEngine2D::PlotEngine2D()
-    : text2d_(std::make_unique<tgfx::Text2DRenderer>()) {}
+    : canvas_(std::make_unique<tgfx::Canvas2DRenderer>()) {}
 
 PlotEngine2D::~PlotEngine2D() {
     release_gpu_resources();
@@ -241,52 +196,7 @@ void PlotEngine2D::pixel_to_data_(float wx, float wy,
     out_y = v.y_min + sy * (v.y_max - v.y_min);
 }
 
-// ---------------------------------------------------------------------------
-// Shader lifecycle
-// ---------------------------------------------------------------------------
-
-void PlotEngine2D::ensure_shader_(tgfx::IRenderDevice& device) {
-    if (shader_device_ == &device && shader_vs_id_ != 0) return;
-
-    if (shader_device_) {
-        if (shader_vs_id_ != 0) {
-            tgfx::ShaderHandle h; h.id = shader_vs_id_;
-            shader_device_->destroy(h);
-        }
-        if (shader_fs_id_ != 0) {
-            tgfx::ShaderHandle h; h.id = shader_fs_id_;
-            shader_device_->destroy(h);
-        }
-    }
-
-    tgfx::ShaderDesc vd;
-    vd.stage = tgfx::ShaderStage::Vertex;
-    vd.source = make_vert();
-    shader_vs_id_ = device.create_shader(vd).id;
-
-    tgfx::ShaderDesc fd;
-    fd.stage = tgfx::ShaderStage::Fragment;
-    fd.source = make_frag();
-    shader_fs_id_ = device.create_shader(fd).id;
-
-    shader_device_ = &device;
-}
-
 void PlotEngine2D::release_gpu_resources() {
-    if (shader_device_) {
-        if (shader_vs_id_ != 0) {
-            tgfx::ShaderHandle h; h.id = shader_vs_id_;
-            shader_device_->destroy(h);
-        }
-        if (shader_fs_id_ != 0) {
-            tgfx::ShaderHandle h; h.id = shader_fs_id_;
-            shader_device_->destroy(h);
-        }
-    }
-    shader_vs_id_ = 0;
-    shader_fs_id_ = 0;
-    shader_device_ = nullptr;
-
     if (line_shader_device_) {
         if (line_shader_vs_id_ != 0) {
             tgfx::ShaderHandle h; h.id = line_shader_vs_id_;
@@ -305,7 +215,7 @@ void PlotEngine2D::release_gpu_resources() {
     line_shader_device_ = nullptr;
     line_gpu_.clear();
 
-    if (text2d_) text2d_->release_gpu();
+    if (canvas_) canvas_->release_gpu();
 }
 
 // ---------------------------------------------------------------------------
@@ -498,150 +408,45 @@ void PlotEngine2D::set_view_y(double y_min, double y_max) {
 }
 
 // ---------------------------------------------------------------------------
-// Vertex emitters (scratch-buffer style)
-// ---------------------------------------------------------------------------
-
-void PlotEngine2D::emit_rect_tris_(std::vector<float>& v,
-                                    float x, float y, float w, float h,
-                                    const Color4& c) const {
-    // 2 triangles. CCW in pixel y+down visual → after ortho y-flip →
-    // CCW in NDC y+up (survives default CullMode::Back).
-    // Triangle 1: TL, BL, BR   Triangle 2: TL, BR, TR
-    auto push = [&](float px, float py) {
-        v.push_back(px);  v.push_back(py);  v.push_back(0.0f);
-        v.push_back(c.r); v.push_back(c.g); v.push_back(c.b); v.push_back(c.a);
-    };
-    const float x0 = x, x1 = x + w;
-    const float y0 = y, y1 = y + h;
-    push(x0, y0); push(x0, y1); push(x1, y1);
-    push(x0, y0); push(x1, y1); push(x1, y0);
-}
-
-void PlotEngine2D::emit_rect_outline_lines_(std::vector<float>& v,
-                                              float x, float y, float w, float h,
-                                              const Color4& c) const {
-    // 4 edges. thickness is 1px — no quad expansion.
-    const float x0 = x, x1 = x + w;
-    const float y0 = y, y1 = y + h;
-    emit_line_(v, x0, y0, x1, y0, c);  // top
-    emit_line_(v, x1, y0, x1, y1, c);  // right
-    emit_line_(v, x1, y1, x0, y1, c);  // bottom
-    emit_line_(v, x0, y1, x0, y0, c);  // left
-}
-
-void PlotEngine2D::emit_line_(std::vector<float>& v,
-                                float x1, float y1, float x2, float y2,
-                                const Color4& c) const {
-    auto push = [&](float px, float py) {
-        v.push_back(px);  v.push_back(py);  v.push_back(0.0f);
-        v.push_back(c.r); v.push_back(c.g); v.push_back(c.b); v.push_back(c.a);
-    };
-    push(x1, y1);
-    push(x2, y2);
-}
-
-void PlotEngine2D::flush_triangles_(tgfx::RenderContext2& ctx,
-                                      std::vector<float>& v) {
-    if (v.empty()) return;
-    ctx.draw_immediate_triangles(v.data(), (uint32_t)(v.size() / 7));
-    v.clear();
-}
-
-void PlotEngine2D::flush_lines_(tgfx::RenderContext2& ctx,
-                                  std::vector<float>& v) {
-    if (v.empty()) return;
-    ctx.draw_immediate_lines(v.data(), (uint32_t)(v.size() / 7));
-    v.clear();
-}
-
-// ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
 
 void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     if (!ctx || vw_ <= 0 || vh_ <= 0) return;
 
-    ensure_shader_(ctx->device());
+    const int canvas_w = static_cast<int>(std::ceil(std::max(vw_, vx_ + vw_)));
+    const float target_h = fbo_height_ > 0.0f ? fbo_height_ : (vy_ + vh_);
+    const int canvas_h = static_cast<int>(std::ceil(std::max(vh_, target_h)));
 
-    // Restrict the render target to our strip. Input y is top-left
-    // origin (tcgui convention) and tgfx2's set_viewport / set_scissor
-    // agree — no Y-flip, no fbo_height_ fallback needed anymore.
-    ctx->set_viewport((int)vx_, (int)vy_, (int)vw_, (int)vh_);
-
-    // Render state.
-    ctx->set_depth_test(false);
-    ctx->set_blend(true);
-    ctx->set_cull(tgfx::CullMode::None);
-
-    // Build an ortho that maps GLOBAL pixel coords (pa.x = vx_ +
-    // margin_left, etc.) into the LOCAL viewport we just set. set_viewport
-    // makes clip space cover pixels (0..vw_, 0..vh_) of the strip; the
-    // ortho pre-subtracts (vx_, vy_) so callers can keep passing global
-    // coords everywhere.
-    Plot2DPushData pc_ui{};
-    pc_ui.color[0] = pc_ui.color[1] = pc_ui.color[2] = pc_ui.color[3] = 0.0f;
-    {
-        float proj_rm[16];
-        build_ortho((float)vw_, (float)vh_, proj_rm);
-        const float tx = -vx_;
-        const float ty = -vy_;
-        // y-down ortho: proj_rm[3]=-1, proj_rm[7]=-1. Shifting the
-        // input origin by (tx, ty) adds 2*tx/vw to column 3 of row 0
-        // and -2*ty/vh to column 3 of row 1 (same sign on both axes
-        // because the diagonal is positive in both).
-        proj_rm[3]  += 2.0f * tx / std::max(vw_, 1.0f);
-        proj_rm[7]  += 2.0f * ty / std::max(vh_, 1.0f);
-        transpose4x4(proj_rm, pc_ui.matrix);
-    }
-
-    auto bind_ui = [&](tgfx::RenderContext2& c) {
-        tgfx::ShaderHandle vs; vs.id = shader_vs_id_;
-        tgfx::ShaderHandle fs; fs.id = shader_fs_id_;
-        c.bind_shader(vs, fs);
-        c.set_push_constants(&pc_ui, static_cast<uint32_t>(sizeof(pc_ui)));
-    };
-    bind_ui(*ctx);
-
-    // Batch #1 — background + plot-area fill (two rects).
-    {
-        std::vector<float> verts;
-        emit_rect_tris_(verts, vx_, vy_, vw_, vh_, bg_color);
-        const Rect pa = plot_area_();
-        emit_rect_tris_(verts, pa.x, pa.y, pa.w, pa.h, plot_bg_color);
-        flush_triangles_(*ctx, verts);
-    }
+    canvas_->set_default_font(font);
+    canvas_->begin(*ctx, canvas_w, canvas_h);
 
     const Rect pa = plot_area_();
     const ViewRange v = view_range_();
+    canvas_->draw_rect(vx_, vy_, vw_, vh_, canvas_color(bg_color));
+    canvas_->draw_rect(pa.x, pa.y, pa.w, pa.h, canvas_color(plot_bg_color));
 
-    // Batch #2 — grid inside clip. Scissor takes top-left origin
-    // coords (Vulkan-native; OpenGL coerced into the same convention
-    // by glClipControl(GL_UPPER_LEFT)).
+    const int max_x_ticks = std::max(int(pa.w / 80.0f), 3);
+    const int max_y_ticks = std::max(int(pa.h / 50.0f), 3);
+    const std::vector<double> x_ticks = axes::nice_ticks(v.x_min, v.x_max, max_x_ticks);
+    const std::vector<double> y_ticks = axes::nice_ticks(v.y_min, v.y_max, max_y_ticks);
+
+    canvas_->begin_clip(pa.x, pa.y, pa.w, pa.h);
     if (show_grid) {
-        ctx->set_scissor((int)pa.x, (int)pa.y, (int)pa.w, (int)pa.h);
-        bind_ui(*ctx);  // scissor sometimes drops bound state on some drivers
-
-        const int max_x_ticks = std::max(int(pa.w / 80.0f), 3);
-        const int max_y_ticks = std::max(int(pa.h / 50.0f), 3);
-        const std::vector<double> x_ticks = axes::nice_ticks(v.x_min, v.x_max, max_x_ticks);
-        const std::vector<double> y_ticks = axes::nice_ticks(v.y_min, v.y_max, max_y_ticks);
-
-        std::vector<float> line_verts;
         for (double tx : x_ticks) {
             float sx, _sy;
             data_to_pixel_(tx, 0.0, sx, _sy);
-            emit_line_(line_verts, sx, pa.y, sx, pa.y + pa.h, grid_color);
+            canvas_->draw_line(sx, pa.y, sx, pa.y + pa.h,
+                               canvas_color(grid_color));
         }
         for (double ty : y_ticks) {
             float _sx, sy;
             data_to_pixel_(0.0, ty, _sx, sy);
-            emit_line_(line_verts, pa.x, sy, pa.x + pa.w, sy, grid_color);
+            canvas_->draw_line(pa.x, sy, pa.x + pa.w, sy,
+                               canvas_color(grid_color));
         }
-        flush_lines_(*ctx, line_verts);
-    } else {
-        ctx->set_scissor((int)pa.x, (int)pa.y, (int)pa.w, (int)pa.h);
-        bind_ui(*ctx);
     }
+    canvas_->end();
 
     // Batch #3 — line series via persistent VBOs + VS-side data→clip.
     // Each series' points live in its own GPU buffer; append_to_line
@@ -649,6 +454,14 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     // vertex re-upload. Scaling to time-series with 100k+ points is
     // trivial here — data never returns to the CPU per-frame.
     {
+        ctx->set_viewport(static_cast<int>(vx_), static_cast<int>(vy_),
+                          static_cast<int>(vw_), static_cast<int>(vh_));
+        ctx->set_scissor(static_cast<int>(pa.x), static_cast<int>(pa.y),
+                         static_cast<int>(pa.w), static_cast<int>(pa.h));
+        ctx->set_depth_test(false);
+        ctx->set_blend(true);
+        ctx->set_cull(tgfx::CullMode::None);
+
         ensure_line_shader_(ctx->device());
         line_gpu_.resize(data.lines.size());
 
@@ -690,15 +503,15 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
 
             ctx->draw_arrays(gs.vbo, gs.gpu_count);
         }
-
-        // Restore the ui shader for subsequent scatter/outline batches.
-        bind_ui(*ctx);
     }
 
-    // Batch #4 — scatter (squares via triangle pairs).
+    canvas_->begin(*ctx, canvas_w, canvas_h);
+    canvas_->begin_clip(pa.x, pa.y, pa.w, pa.h);
+
+    // Scatter uses Canvas2DRenderer; line series stay on the
+    // persistent-VBO path above.
     {
         uint32_t palette_i = (uint32_t)data.lines.size();
-        std::vector<float> verts;
         for (const auto& s : data.scatters) {
             const Color4 c = s.color.has_value()
                 ? *s.color : styles::cycle_color(palette_i);
@@ -706,55 +519,32 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
             for (size_t i = 0; i < s.x.size(); i++) {
                 float sx, sy;
                 data_to_pixel_(s.x[i], s.y[i], sx, sy);
-                emit_rect_tris_(verts, sx - half, sy - half,
-                                (float)s.size, (float)s.size, c);
+                canvas_->draw_rect(sx - half, sy - half,
+                                   static_cast<float>(s.size),
+                                   static_cast<float>(s.size),
+                                   canvas_color(c));
             }
             palette_i++;
         }
-        flush_triangles_(*ctx, verts);
     }
 
-    // End inner-area clip.
-    ctx->clear_scissor();
-    bind_ui(*ctx);
-
-    // Batch #5 — axes border (outside the inner scissor).
-    {
-        std::vector<float> verts;
-        emit_rect_outline_lines_(verts, pa.x, pa.y, pa.w, pa.h, axis_color);
-        flush_lines_(*ctx, verts);
-    }
+    canvas_->end_clip();
+    canvas_->draw_rect_outline(pa.x, pa.y, pa.w, pa.h,
+                               canvas_color(axis_color));
 
     // --- Text: tick labels, title, axis labels ---
     if (font) {
-        text2d_->begin(ctx, (int)vw_, (int)vh_, font);
-
-        // Tick labels outside the clip.
-        const int max_x_ticks = std::max(int(pa.w / 80.0f), 3);
-        const int max_y_ticks = std::max(int(pa.h / 50.0f), 3);
-        const std::vector<double> x_ticks = axes::nice_ticks(v.x_min, v.x_max, max_x_ticks);
-        const std::vector<double> y_ticks = axes::nice_ticks(v.y_min, v.y_max, max_y_ticks);
         // Ticks a notch smaller than axis labels — keeps the axis-label
         // / tick-label hierarchy visible even at similar sizes.
         const float tick_sz = font_size - 2.0f;
 
-        // Our Text2DRenderer expects viewport-pixel coords starting at
-        // (0, 0) top-left of the viewport. Our engine2d may be offset
-        // by (vx_, vy_), but the render-pass' color attachment was
-        // already (vw_ x vh_) sized, so (vx_, vy_) is effectively (0,0)
-        // within the FBO. Translate accordingly by subtracting.
-        auto T_x = [&](float x) { return x - vx_; };
-        auto T_y = [&](float y) { return y - vy_; };
-
         for (double tx : x_ticks) {
             float sx, _sy;
             data_to_pixel_(tx, 0.0, sx, _sy);
-            text2d_->draw(axes::format_tick(tx),
-                          T_x(sx), T_y(pa.y + pa.h + 14.0f),
-                          label_color.r, label_color.g,
-                          label_color.b, label_color.a,
-                          tick_sz,
-                          tgfx::Text2DRenderer::Anchor::Center);
+            canvas_->draw_text(axes::format_tick(tx),
+                               sx, pa.y + pa.h + 14.0f,
+                               tick_sz, canvas_color(label_color),
+                               font, tgfx::Text2DRenderer::Anchor::Center);
         }
         for (double ty : y_ticks) {
             float _sx, sy;
@@ -762,12 +552,10 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
             const std::string lab = axes::format_tick(ty);
             const auto m = font->measure_text(lab, tick_sz);
             const float tw = m.width;
-            text2d_->draw(lab,
-                          T_x(pa.x - tw - 6.0f), T_y(sy + 4.0f),
-                          label_color.r, label_color.g,
-                          label_color.b, label_color.a,
-                          tick_sz,
-                          tgfx::Text2DRenderer::Anchor::Left);
+            canvas_->draw_text(lab,
+                               pa.x - tw - 6.0f, sy + 4.0f,
+                               tick_sz, canvas_color(label_color),
+                               font, tgfx::Text2DRenderer::Anchor::Left);
         }
 
         if (!data.title.empty()) {
@@ -794,34 +582,28 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
             const float title_top_y = std::max(
                 static_cast<float>(vy_),
                 pa.y - static_cast<float>(title_lh) - title_pad);
-            text2d_->draw(data.title,
-                          T_x(pa.x),
-                          T_y(title_top_y),
-                          tc.r, tc.g, tc.b, tc.a,
-                          title_font_size,
-                          tgfx::Text2DRenderer::Anchor::Left);
+            canvas_->draw_text(data.title,
+                               pa.x, title_top_y,
+                               title_font_size, canvas_color(tc),
+                               font, tgfx::Text2DRenderer::Anchor::Left);
         }
         if (!data.x_label.empty()) {
-            text2d_->draw(data.x_label,
-                          T_x(pa.x + pa.w * 0.5f),
-                          T_y(pa.y + pa.h + margin_bottom - 4.0f),
-                          label_color.r, label_color.g,
-                          label_color.b, label_color.a,
-                          font_size,
-                          tgfx::Text2DRenderer::Anchor::Center);
+            canvas_->draw_text(data.x_label,
+                               pa.x + pa.w * 0.5f,
+                               pa.y + pa.h + margin_bottom - 4.0f,
+                               font_size, canvas_color(label_color),
+                               font, tgfx::Text2DRenderer::Anchor::Center);
         }
         if (!data.y_label.empty()) {
-            text2d_->draw(data.y_label,
-                          T_x(vx_ + margin_left * 0.5f),
-                          T_y(pa.y + pa.h * 0.5f),
-                          label_color.r, label_color.g,
-                          label_color.b, label_color.a,
-                          font_size,
-                          tgfx::Text2DRenderer::Anchor::Center);
+            canvas_->draw_text(data.y_label,
+                               vx_ + margin_left * 0.5f,
+                               pa.y + pa.h * 0.5f,
+                               font_size, canvas_color(label_color),
+                               font, tgfx::Text2DRenderer::Anchor::Center);
         }
-
-        text2d_->end();
     }
+
+    canvas_->end();
 }
 
 // ---------------------------------------------------------------------------

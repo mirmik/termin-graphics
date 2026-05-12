@@ -1,10 +1,11 @@
 // engine2d.hpp - Host-agnostic 2D plot engine for tcplot.
 //
 // Port of tcplot/tcplot/engine2d.py. Renders straight through a
-// tgfx::RenderContext2 without any tcgui dependency — a small
-// private UI shader handles rects/lines, Text2DRenderer handles
-// labels. One key behavioural improvement over the Python version:
-// every line series emits a single draw_immediate_lines call, so
+// tgfx::RenderContext2 without any tcgui dependency. Shared
+// tgfx::Canvas2DRenderer handles plot chrome and labels; large line
+// series use a dedicated persistent-VBO path. One key behavioural
+// improvement over the Python version: every line series emits a
+// single draw call, so
 // the N-point-curve-with-N-draws perf bug is gone from the start.
 #pragma once
 
@@ -25,7 +26,7 @@ namespace tgfx {
 class RenderContext2;
 class IRenderDevice;
 class FontAtlas;
-class Text2DRenderer;
+class Canvas2DRenderer;
 }  // namespace tgfx
 
 namespace tcplot {
@@ -166,9 +167,6 @@ private:
     void data_to_pixel_(double dx, double dy, float& out_x, float& out_y);
     void pixel_to_data_(float wx, float wy, double& out_x, double& out_y);
 
-    // Build a pos+color ortho shader on the given device. Cached.
-    void ensure_shader_(tgfx::IRenderDevice& device);
-
     // Build a data-space-only VS + uniform-color FS shader used for
     // persistent-VBO line series. Cached per device.
     void ensure_line_shader_(tgfx::IRenderDevice& device);
@@ -182,23 +180,6 @@ private:
     // current plot area, view range, and viewport. Used as a uniform
     // by the line shader — panning / zooming only changes this matrix.
     void compute_data_to_clip_(float out16[16]);
-
-    // Draw helpers — each collects verts into a scratch buffer the
-    // caller owns, lets the caller issue one ctx.draw_immediate_*()
-    // call. This is the antidote to the "399 segments = 399 draws"
-    // problem in the Python version.
-    void emit_rect_tris_(std::vector<float>& verts,
-                         float x, float y, float w, float h,
-                         const Color4& c) const;
-    void emit_rect_outline_lines_(std::vector<float>& verts,
-                                   float x, float y, float w, float h,
-                                   const Color4& c) const;
-    void emit_line_(std::vector<float>& verts,
-                    float x1, float y1, float x2, float y2,
-                    const Color4& c) const;
-
-    void flush_triangles_(tgfx::RenderContext2& ctx, std::vector<float>& verts);
-    void flush_lines_(tgfx::RenderContext2& ctx, std::vector<float>& verts);
 
     // --- Viewport rect ---
     float vx_ = 0.0f, vy_ = 0.0f, vw_ = 0.0f, vh_ = 0.0f;
@@ -218,11 +199,6 @@ private:
     float pan_start_my_ = 0.0f;
     double pan_start_view_[4] = {0, 1, 0, 1};
 
-    // --- Cached shader (rects/grid/scatter — pos+color, ortho pixel). ---
-    tgfx::IRenderDevice* shader_device_ = nullptr;
-    uint32_t shader_vs_id_ = 0;
-    uint32_t shader_fs_id_ = 0;
-
     // --- Cached shader (line series — data-space pos + uniform color). ---
     tgfx::IRenderDevice* line_shader_device_ = nullptr;
     uint32_t line_shader_vs_id_ = 0;
@@ -239,8 +215,8 @@ private:
     };
     std::vector<LineGpuState> line_gpu_;
 
-    // --- Text renderer (unique_ptr to keep header free of Text2D include) ---
-    std::unique_ptr<tgfx::Text2DRenderer> text2d_;
+    // --- Shared 2D primitive/text renderer ---
+    std::unique_ptr<tgfx::Canvas2DRenderer> canvas_;
 };
 
 }  // namespace tcplot
