@@ -12,6 +12,7 @@
 
 #include "tgfx2/text3d_renderer.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -31,6 +32,8 @@ extern "C" {
 namespace tgfx {
 
 namespace {
+
+constexpr float kText3DRasterPx = 16.0f;
 
 struct Text3DPushData {
     float mvp[16];
@@ -163,16 +166,22 @@ void Text3DRenderer::draw(std::string_view text_utf8,
                            Anchor anchor) {
     if (text_utf8.empty() || font_ == nullptr || ctx_ == nullptr) return;
 
-    // Rasterise any new glyphs for this size and push to the atlas if
-    // needed. The atlas keys bakes by (codepoint, px_size) so every
-    // unique display size gets its own native-resolution rasterisation.
-    font_->ensure_glyphs(text_utf8, size, ctx_);
+    // `size` is a world-space text height. FontAtlas sizes are
+    // display-pixel raster sizes, so keep a stable bitmap atlas size
+    // and scale metrics into world units below. Passing world sizes
+    // such as 0.5 directly to FontAtlas quantises to its minimum pixel
+    // size and then uses 4-16 as world units, producing huge blurred
+    // quads in 3D plots.
+    font_->ensure_glyphs(text_utf8, kText3DRasterPx, ctx_);
 
-    // Ascent is already in display pixels at this size.
-    const float ascent = static_cast<float>(font_->ascent_px(size));
+    const float raster_line_h =
+        std::max(1.0f, static_cast<float>(font_->line_height_px(kText3DRasterPx)));
+    const float world_scale = size / raster_line_h;
+    const float ascent = static_cast<float>(font_->ascent_px(kText3DRasterPx))
+                       * world_scale;
 
-    auto total = font_->measure_text(text_utf8, size);
-    const float total_w = total.width;
+    auto total = font_->measure_text(text_utf8, kText3DRasterPx);
+    const float total_w = total.width * world_scale;
 
     float start_x = 0.0f;
     switch (anchor) {
@@ -218,12 +227,11 @@ void Text3DRenderer::draw(std::string_view text_utf8,
     size_t i = 0;
     while (i < text_utf8.size()) {
         uint32_t cp = internal::utf8_decode(text_utf8, i);
-        const FontAtlas::GlyphInfo* gi = font_->get_glyph(cp, size);
+        const FontAtlas::GlyphInfo* gi = font_->get_glyph(cp, kText3DRasterPx);
         if (!gi) continue;
 
-        // Metrics already in display px at this size — no * scale.
-        const float char_w = gi->width_px;
-        const float char_h = gi->height_px;
+        const float char_w = gi->width_px * world_scale;
+        const float char_h = gi->height_px * world_scale;
 
         const float left   = cursor_x;
         const float right  = cursor_x + char_w;
@@ -251,7 +259,7 @@ void Text3DRenderer::draw(std::string_view text_utf8,
         // See Text2DRenderer: advance by the glyph's true advance, not
         // ink width — so space glyphs actually move the cursor.
         // Advance is already in display pixels at this size.
-        cursor_x += gi->advance_px;
+        cursor_x += gi->advance_px * world_scale;
     }
 
     if (verts.empty()) return;
