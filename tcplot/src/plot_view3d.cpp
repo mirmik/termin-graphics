@@ -19,11 +19,12 @@
 #include <tgfx2/enums.hpp>
 #include <tgfx2/font_atlas.hpp>
 #include <tgfx2/handles.hpp>
-#include <tgfx2/opengl/opengl_render_device.hpp>
+#include <tgfx2/i_render_device.hpp>
 #include <tgfx2/pipeline_cache.hpp>
 #include <tgfx2/render_context.hpp>
 
 #include "tcplot/engine3d.hpp"
+#include "tcplot/gpu_host.hpp"
 
 namespace tcplot {
 
@@ -47,14 +48,18 @@ std::vector<double> copy_array(const double* src, size_t n) {
 // Construction
 // ---------------------------------------------------------------------------
 
-PlotView3D::PlotView3D(const std::string& ttf_path)
-    : ttf_path_(ttf_path) {
-    device_  = std::make_unique<tgfx::OpenGLRenderDevice>();
-    cache_   = std::make_unique<tgfx::PipelineCache>(*device_);
-    ctx_     = std::make_unique<tgfx::RenderContext2>(*device_, *cache_);
-    font_    = std::make_unique<tgfx::FontAtlas>(ttf_path);
-    engine_  = std::make_unique<PlotEngine3D>();
-}
+PlotView3D::PlotView3D(tgfx::IRenderDevice& device,
+                       tgfx::PipelineCache& cache,
+                       tgfx::RenderContext2& ctx,
+                       tgfx::FontAtlas& font)
+    : device_(&device),
+      cache_(&cache),
+      ctx_(&ctx),
+      font_(&font),
+      engine_(std::make_unique<PlotEngine3D>()) {}
+
+PlotView3D::PlotView3D(GpuHost& host)
+    : PlotView3D(host.device(), host.cache(), host.ctx(), host.font()) {}
 
 PlotView3D::~PlotView3D() {
     release_gpu();
@@ -228,7 +233,7 @@ void PlotView3D::render(int width, int height, uint32_t dst_gl_fbo) {
     const float clear_col[4] = {bg.r, bg.g, bg.b, bg.a};
     ctx_->begin_pass(offscreen_color_, offscreen_depth_,
                      clear_col, 1.0f, true);
-    engine_->render(ctx_.get(), font_.get());
+    engine_->render(ctx_, font_);
     ctx_->end_pass();
     ctx_->end_frame();
 
@@ -244,7 +249,6 @@ void PlotView3D::render(int width, int height, uint32_t dst_gl_fbo) {
 
 void PlotView3D::release_gpu() {
     if (engine_) engine_->release_gpu_resources();
-    if (font_)   font_->release_gpu();
 
     if (device_) {
         if (offscreen_color_.id != 0) device_->destroy(offscreen_color_);

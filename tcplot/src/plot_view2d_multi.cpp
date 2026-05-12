@@ -366,6 +366,12 @@ void PlotView2DMulti::layout_panels_(int w, int h) {
             panel_rects_[i] = r;
             // Skip panels fully outside the viewport.
             if (r.y + r.h <= 0.0f || r.y >= fh) continue;
+
+            const float clipped_y0 = std::max(0.0f, r.y);
+            const float clipped_y1 = std::min(fh, r.y + r.h);
+            r.y = clipped_y0;
+            r.h = clipped_y1 - clipped_y0;
+            panel_rects_[i] = r;
             visible_panels_.push_back(static_cast<int>(i));
         }
     } else {

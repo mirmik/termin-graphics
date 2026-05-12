@@ -2,7 +2,7 @@
 //
 // Layout of this file, top to bottom:
 //   - Shared shader source (vert/frag with jet colormap).
-//   - Internal helpers (vertex layout builder, draw_tc_mesh).
+//   - Internal helpers (vertex layout builder, tgfx2 mesh upload/draw).
 //   - Constructors / destructor.
 //   - Public add-series API.
 //   - Mesh building (lines / scatter / grid / surface / wireframe).
@@ -17,20 +17,14 @@
 #include <cstring>
 #include <iostream>
 #include <limits>
+#include <span>
 #include <utility>
-
-#include <tgfx/tgfx_types.h>
-#include <tgfx/resources/tc_mesh.h>
-#include <tgfx/tc_gpu.h>
-#include <tgfx/tc_gpu_context.h>
-#include <tgfx/tc_gpu_share_group.h>
 
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/enums.hpp>
 #include <tgfx2/font_atlas.hpp>
 #include <tgfx2/handles.hpp>
 #include <tgfx2/i_render_device.hpp>
-#include <tgfx2/opengl/opengl_render_device.hpp>
 #include <tgfx2/render_context.hpp>
 #include <tgfx2/text3d_renderer.hpp>
 #include <tgfx2/vertex_layout.hpp>
@@ -94,79 +88,62 @@ void main() {
 }
 )";
 
-// Build the canonical "pos+color" vertex layout (3 floats + 4 floats,
-// stride 28). Reused across all meshes built by this engine.
-tc_vertex_layout pos_color_layout() {
-    tc_vertex_layout layout;
-    tgfx_vertex_layout_init(&layout);
-    tgfx_vertex_layout_add(&layout, "position", 3, TC_ATTRIB_FLOAT32, 0);
-    tgfx_vertex_layout_add(&layout, "color",    4, TC_ATTRIB_FLOAT32, 1);
+constexpr uint32_t kFloatsPerVertex = 7;
+constexpr uint32_t kVertexStride = kFloatsPerVertex * sizeof(float);
+
+tgfx::VertexBufferLayout pos_color_layout() {
+    tgfx::VertexBufferLayout layout;
+    layout.stride = kVertexStride;
+    layout.attributes.push_back({0, tgfx::VertexFormat::Float3, 0});
+    layout.attributes.push_back({1, tgfx::VertexFormat::Float4, 3 * sizeof(float)});
     return layout;
 }
 
-// Draw a TcMesh through a tgfx2 RenderContext. Uploads VBO/EBO on
-// first call (via legacy tc_mesh_upload_gpu), wraps them as external
-// tgfx2 buffer handles, pushes the vertex layout, and emits one
-// indexed draw. Matches the logic in tgfx2_bindings.cpp::draw_tc_mesh.
-void draw_tc_mesh(tgfx::RenderContext2& ctx, termin::TcMesh& mesh_wrapper) {
-    tc_mesh* mesh = tc_mesh_get(mesh_wrapper.handle);
-    if (!mesh) return;
+}  // namespace
 
-    auto* gl_dev = dynamic_cast<tgfx::OpenGLRenderDevice*>(&ctx.device());
-    if (!gl_dev) return;
-
-    if (tc_mesh_upload_gpu(mesh) == 0) return;
-
-    tc_gpu_context* gctx = tc_gpu_get_context();
-    if (!gctx || !gctx->share_group) return;
-    tc_gpu_mesh_data_slot* slot = tc_gpu_share_group_mesh_data_slot(
-        gctx->share_group, mesh->header.pool_index);
-    if (!slot || slot->vbo == 0 || slot->ebo == 0) return;
-
+std::optional<PlotEngine3D::MeshGpu> PlotEngine3D::make_mesh_(
+    tgfx::IRenderDevice& device,
+    const std::vector<float>& verts,
+    const std::vector<uint32_t>& indices,
+    tgfx::PrimitiveTopology topology
+) {
+    if (verts.empty() || indices.empty()) return std::nullopt;
     tgfx::BufferDesc vb_desc;
-    vb_desc.size = static_cast<uint64_t>(mesh->vertex_count) *
-                   static_cast<uint64_t>(mesh->layout.stride);
-    vb_desc.usage = tgfx::BufferUsage::Vertex;
-    tgfx::BufferHandle vbo = gl_dev->register_external_buffer(slot->vbo, vb_desc);
+    vb_desc.size = static_cast<uint64_t>(verts.size()) * sizeof(float);
+    vb_desc.usage = tgfx::BufferUsage::Vertex | tgfx::BufferUsage::CopyDst;
+    tgfx::BufferHandle vbo = device.create_buffer(vb_desc);
+    device.upload_buffer(
+        vbo,
+        std::span<const uint8_t>(
+            reinterpret_cast<const uint8_t*>(verts.data()),
+            verts.size() * sizeof(float)));
 
     tgfx::BufferDesc ib_desc;
-    ib_desc.size = static_cast<uint64_t>(mesh->index_count) * sizeof(uint32_t);
-    ib_desc.usage = tgfx::BufferUsage::Index;
-    tgfx::BufferHandle ibo = gl_dev->register_external_buffer(slot->ebo, ib_desc);
+    ib_desc.size = static_cast<uint64_t>(indices.size()) * sizeof(uint32_t);
+    ib_desc.usage = tgfx::BufferUsage::Index | tgfx::BufferUsage::CopyDst;
+    tgfx::BufferHandle ibo = device.create_buffer(ib_desc);
+    device.upload_buffer(
+        ibo,
+        std::span<const uint8_t>(
+            reinterpret_cast<const uint8_t*>(indices.data()),
+            indices.size() * sizeof(uint32_t)));
 
-    tgfx::VertexBufferLayout layout;
-    layout.stride = mesh->layout.stride;
-    layout.attributes.reserve(mesh->layout.attrib_count);
-    for (uint8_t i = 0; i < mesh->layout.attrib_count; i++) {
-        const tgfx_vertex_attrib& a = mesh->layout.attribs[i];
-        tgfx::VertexAttribute va;
-        va.location = a.location;
-        va.offset = a.offset;
-        // For engine3d we only ever emit float attributes; keep a
-        // minimal switch to cover the sizes we actually use. Anything
-        // else would indicate a mesh created outside our rebuild_meshes_.
-        switch (a.size) {
-            case 1: va.format = tgfx::VertexFormat::Float; break;
-            case 2: va.format = tgfx::VertexFormat::Float2; break;
-            case 3: va.format = tgfx::VertexFormat::Float3; break;
-            case 4: va.format = tgfx::VertexFormat::Float4; break;
-            default: va.format = tgfx::VertexFormat::Float3; break;
-        }
-        layout.attributes.push_back(va);
-    }
-
-    tgfx::PrimitiveTopology topo = (mesh->draw_mode == TC_DRAW_LINES)
-        ? tgfx::PrimitiveTopology::LineList
-        : tgfx::PrimitiveTopology::TriangleList;
-
-    ctx.set_vertex_layout(layout);
-    ctx.set_topology(topo);
-    ctx.draw(vbo, ibo, static_cast<uint32_t>(mesh->index_count),
-             tgfx::IndexType::Uint32);
-
-    gl_dev->destroy(vbo);
-    gl_dev->destroy(ibo);
+    return PlotEngine3D::MeshGpu{
+        vbo,
+        ibo,
+        static_cast<uint32_t>(indices.size()),
+        topology,
+    };
 }
+
+void PlotEngine3D::draw_mesh_(tgfx::RenderContext2& ctx, const MeshGpu& mesh) {
+    if (mesh.vbo.id == 0 || mesh.ibo.id == 0 || mesh.index_count == 0) return;
+    ctx.set_vertex_layout(pos_color_layout());
+    ctx.set_topology(mesh.topology);
+    ctx.draw(mesh.vbo, mesh.ibo, mesh.index_count, tgfx::IndexType::Uint32);
+}
+
+namespace {
 
 // Push the 7-float (pos+color) vertex for a single point.
 inline void push_vertex(std::vector<float>& verts,
@@ -294,19 +271,31 @@ void PlotEngine3D::toggle_marker_mode() {
 // ---------------------------------------------------------------------------
 
 void PlotEngine3D::release_meshes_() {
-    auto drop = [](std::optional<termin::TcMesh>& m) {
+    auto drop = [this](std::optional<MeshGpu>& m) {
         if (m.has_value()) {
-            m->delete_gpu();
+            if (mesh_device_) {
+                if (m->vbo.id != 0) mesh_device_->destroy(m->vbo);
+                if (m->ibo.id != 0) mesh_device_->destroy(m->ibo);
+            }
             m.reset();
         }
     };
     drop(lines_mesh_);
     drop(scatter_mesh_);
     drop(grid_mesh_);
-    for (auto& m : surface_meshes_) m.delete_gpu();
+    if (mesh_device_) {
+        for (auto& m : surface_meshes_) {
+            if (m.vbo.id != 0) mesh_device_->destroy(m.vbo);
+            if (m.ibo.id != 0) mesh_device_->destroy(m.ibo);
+        }
+        for (auto& m : wireframe_meshes_) {
+            if (m.vbo.id != 0) mesh_device_->destroy(m.vbo);
+            if (m.ibo.id != 0) mesh_device_->destroy(m.ibo);
+        }
+    }
     surface_meshes_.clear();
-    for (auto& m : wireframe_meshes_) m.delete_gpu();
     wireframe_meshes_.clear();
+    mesh_device_ = nullptr;
 }
 
 void PlotEngine3D::release_gpu_resources() {
@@ -360,10 +349,9 @@ void PlotEngine3D::ensure_shader_(tgfx::IRenderDevice& device) {
 // Mesh building
 // ---------------------------------------------------------------------------
 
-void PlotEngine3D::rebuild_meshes_() {
+void PlotEngine3D::rebuild_meshes_(tgfx::IRenderDevice& device) {
     release_meshes_();
-
-    const tc_vertex_layout layout = pos_color_layout();
+    mesh_device_ = &device;
 
     // --- Lines ---
     {
@@ -388,12 +376,8 @@ void PlotEngine3D::rebuild_meshes_() {
             palette_i++;
         }
         if (!verts.empty()) {
-            termin::TcMesh m = termin::TcMesh::from_interleaved(
-                verts.data(), verts.size() / 7,
-                indices.data(), indices.size(),
-                layout, "", "", TC_DRAW_LINES);
-            m.upload_gpu();
-            lines_mesh_ = std::move(m);
+            lines_mesh_ = make_mesh_(device, verts, indices,
+                                     tgfx::PrimitiveTopology::LineList);
         }
     }
 
@@ -436,29 +420,26 @@ void PlotEngine3D::rebuild_meshes_() {
             palette_i++;
         }
         if (!verts.empty()) {
-            termin::TcMesh m = termin::TcMesh::from_interleaved(
-                verts.data(), verts.size() / 7,
-                indices.data(), indices.size(),
-                layout, "", "", TC_DRAW_LINES);
-            m.upload_gpu();
-            scatter_mesh_ = std::move(m);
+            scatter_mesh_ = make_mesh_(device, verts, indices,
+                                       tgfx::PrimitiveTopology::LineList);
         }
     }
 
     // --- Surfaces ---
     for (const auto& surf : data.surfaces) {
-        build_surface_mesh_(surf);
+        build_surface_mesh_(device, surf);
     }
 
     // --- Grid + axes ---
     if (show_grid) {
-        build_grid_mesh_(lo, hi);
+        build_grid_mesh_(device, lo, hi);
     }
 
     dirty_ = false;
 }
 
-void PlotEngine3D::build_grid_mesh_(const double bounds_min[3],
+void PlotEngine3D::build_grid_mesh_(tgfx::IRenderDevice& device,
+                                     const double bounds_min[3],
                                      const double bounds_max[3]) {
     std::vector<float> verts;
     std::vector<uint32_t> indices;
@@ -517,17 +498,13 @@ void PlotEngine3D::build_grid_mesh_(const double bounds_min[3],
     }
 
     if (!verts.empty()) {
-        const tc_vertex_layout layout = pos_color_layout();
-        termin::TcMesh m = termin::TcMesh::from_interleaved(
-            verts.data(), verts.size() / 7,
-            indices.data(), indices.size(),
-            layout, "", "", TC_DRAW_LINES);
-        m.upload_gpu();
-        grid_mesh_ = std::move(m);
+        grid_mesh_ = make_mesh_(device, verts, indices,
+                                tgfx::PrimitiveTopology::LineList);
     }
 }
 
-void PlotEngine3D::build_surface_mesh_(const SurfaceSeries& surf) {
+void PlotEngine3D::build_surface_mesh_(tgfx::IRenderDevice& device,
+                                       const SurfaceSeries& surf) {
     const uint32_t rows = surf.rows;
     const uint32_t cols = surf.cols;
     if (rows < 2 || cols < 2) return;
@@ -581,8 +558,6 @@ void PlotEngine3D::build_surface_mesh_(const SurfaceSeries& surf) {
         }
     }
 
-    const tc_vertex_layout layout = pos_color_layout();
-
     if (surf.wireframe) {
         std::vector<uint32_t> wire_indices;
         wire_indices.reserve(tri_indices.size() * 2);
@@ -594,19 +569,13 @@ void PlotEngine3D::build_surface_mesh_(const SurfaceSeries& surf) {
             wire_indices.push_back(b); wire_indices.push_back(c);
             wire_indices.push_back(c); wire_indices.push_back(a);
         }
-        termin::TcMesh m = termin::TcMesh::from_interleaved(
-            verts.data(), verts.size() / 7,
-            wire_indices.data(), wire_indices.size(),
-            layout, "", "", TC_DRAW_LINES);
-        m.upload_gpu();
-        wireframe_meshes_.push_back(std::move(m));
+        auto mesh = make_mesh_(device, verts, wire_indices,
+                               tgfx::PrimitiveTopology::LineList);
+        if (mesh.has_value()) wireframe_meshes_.push_back(std::move(*mesh));
     } else {
-        termin::TcMesh m = termin::TcMesh::from_interleaved(
-            verts.data(), verts.size() / 7,
-            tri_indices.data(), tri_indices.size(),
-            layout, "", "", TC_DRAW_TRIANGLES);
-        m.upload_gpu();
-        surface_meshes_.push_back(std::move(m));
+        auto mesh = make_mesh_(device, verts, tri_indices,
+                               tgfx::PrimitiveTopology::TriangleList);
+        if (mesh.has_value()) surface_meshes_.push_back(std::move(*mesh));
     }
 }
 
@@ -635,7 +604,11 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     if (!ctx || vw_ <= 0 || vh_ <= 0) return;
 
     ensure_shader_(ctx->device());
-    if (dirty_) rebuild_meshes_();
+    if (mesh_device_ != nullptr && mesh_device_ != &ctx->device()) {
+        release_meshes_();
+        dirty_ = true;
+    }
+    if (dirty_) rebuild_meshes_(ctx->device());
 
     ctx->set_depth_test(true);
     ctx->set_blend(true);
@@ -657,13 +630,13 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
 
     // Grid (no jet).
     ctx->set_uniform_int("u_use_jet", 0);
-    if (grid_mesh_) draw_tc_mesh(*ctx, *grid_mesh_);
+    if (grid_mesh_) draw_mesh_(*ctx, *grid_mesh_);
 
     // Opaque surfaces (jet).
     ctx->set_uniform_int("u_use_jet", 1);
     ctx->set_blend(false);
     for (auto& m : surface_meshes_) {
-        draw_tc_mesh(*ctx, m);
+        draw_mesh_(*ctx, m);
     }
 
     // Wireframes on top (no depth, no jet).
@@ -672,14 +645,14 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         ctx->set_depth_test(false);
         ctx->set_blend(true);
         for (auto& m : wireframe_meshes_) {
-            draw_tc_mesh(*ctx, m);
+            draw_mesh_(*ctx, m);
         }
         ctx->set_depth_test(true);
     }
 
     // Lines and scatter.
-    if (lines_mesh_) draw_tc_mesh(*ctx, *lines_mesh_);
-    if (scatter_mesh_) draw_tc_mesh(*ctx, *scatter_mesh_);
+    if (lines_mesh_) draw_mesh_(*ctx, *lines_mesh_);
+    if (scatter_mesh_) draw_mesh_(*ctx, *scatter_mesh_);
 
     // Marker (immediate mode cross at marker pos).
     if (has_marker_ && marker_mode) {

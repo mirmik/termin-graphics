@@ -15,7 +15,8 @@
 #include <vector>
 
 #include <tcbase/input_enums.hpp>
-#include <tgfx/tgfx_mesh_handle.hpp>
+#include <tgfx2/enums.hpp>
+#include <tgfx2/handles.hpp>
 
 #include "tcplot/orbit_camera.hpp"
 #include "tcplot/plot_data.hpp"
@@ -109,14 +110,31 @@ public:
     bool on_mouse_wheel(float x, float y, float dy);
 
 private:
+    struct MeshGpu {
+        tgfx::BufferHandle vbo{};
+        tgfx::BufferHandle ibo{};
+        uint32_t index_count = 0;
+        tgfx::PrimitiveTopology topology = tgfx::PrimitiveTopology::TriangleList;
+    };
+
     // Build a (4x4) MVP from camera state + z_scale into `out16`.
     void compute_mvp_(float aspect, float out16[16]) const;
 
+    static std::optional<MeshGpu> make_mesh_(
+        tgfx::IRenderDevice& device,
+        const std::vector<float>& verts,
+        const std::vector<uint32_t>& indices,
+        tgfx::PrimitiveTopology topology);
+    static void draw_mesh_(tgfx::RenderContext2& ctx, const MeshGpu& mesh);
+
     // Build the GPU-side line / scatter / grid / surface / wireframe
     // meshes from PlotData. Called when `dirty_` is set.
-    void rebuild_meshes_();
-    void build_grid_mesh_(const double bounds_min[3], const double bounds_max[3]);
-    void build_surface_mesh_(const SurfaceSeries& surf);
+    void rebuild_meshes_(tgfx::IRenderDevice& device);
+    void build_grid_mesh_(tgfx::IRenderDevice& device,
+                          const double bounds_min[3],
+                          const double bounds_max[3]);
+    void build_surface_mesh_(tgfx::IRenderDevice& device,
+                             const SurfaceSeries& surf);
     void release_meshes_();
 
     // Ensure the 3D plot shader is compiled for the current device.
@@ -133,12 +151,12 @@ private:
     uint32_t shader_vs_id_ = 0;
     uint32_t shader_fs_id_ = 0;
 
-    // Meshes. TcMesh owns its own GPU lifecycle via tc_mesh_upload_gpu.
-    std::optional<termin::TcMesh> lines_mesh_;
-    std::optional<termin::TcMesh> scatter_mesh_;
-    std::optional<termin::TcMesh> grid_mesh_;
-    std::vector<termin::TcMesh> surface_meshes_;
-    std::vector<termin::TcMesh> wireframe_meshes_;
+    tgfx::IRenderDevice* mesh_device_ = nullptr;
+    std::optional<MeshGpu> lines_mesh_;
+    std::optional<MeshGpu> scatter_mesh_;
+    std::optional<MeshGpu> grid_mesh_;
+    std::vector<MeshGpu> surface_meshes_;
+    std::vector<MeshGpu> wireframe_meshes_;
 
     // Text renderer for billboard tick/marker labels. Owned here; the
     // pimpl-style unique_ptr keeps the engine header free of Text3D

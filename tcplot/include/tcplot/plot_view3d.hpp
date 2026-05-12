@@ -1,12 +1,13 @@
-// plot_view3d.hpp - Self-contained 3D plot view for embedding in
+// plot_view3d.hpp - 3D plot view for embedding in
 // external GUI frameworks (WPF, Qt, SDL, ...).
 //
-// Wraps a PlotEngine3D together with its own tgfx2 render context,
-// font atlas and offscreen FBO. Exposes a minimal C-style API so
-// callers (SWIG-bound C#, raw C) don't need to know about tgfx2.
+// Wraps a PlotEngine3D together with borrowed tgfx2 runtime objects
+// and an owned offscreen FBO. Exposes a minimal C-style API so callers
+// (SWIG-bound C#, raw C) don't need to know about tgfx2 internals.
 //
 // Usage:
-//   PlotView3D view(ttf_path);
+//   GpuHost host(ttf_path, tgfx::BackendType::OpenGL);
+//   PlotView3D view(host);
 //   // ... data setup via plot/scatter/surface ...
 //   // Each frame, with a GL context current:
 //   view.render(w, h, gl_dst_fbo);
@@ -18,9 +19,8 @@
 //   4. blit the offscreen color buffer to `gl_dst_fbo` via
 //      glBlitFramebuffer (raw GL, backend-agnostic).
 //
-// The caller is responsible for:
-//   - Initialising GL (e.g. via tc_opengl_init) before first render().
-//   - Making the GL context current on the thread that calls render().
+// The caller is responsible for making the GL context current on the
+// thread that calls render().
 #pragma once
 
 #include <cstdint>
@@ -37,7 +37,7 @@
 #include "tcplot/tcplot_api.h"
 
 namespace tgfx {
-class OpenGLRenderDevice;
+class IRenderDevice;
 class PipelineCache;
 class RenderContext2;
 class FontAtlas;
@@ -46,13 +46,15 @@ class FontAtlas;
 namespace tcplot {
 
 class PlotEngine3D;
+class GpuHost;
 
 class TCPLOT_API PlotView3D {
 public:
-    // `ttf_path` - path to a TrueType font file used for axis tick
-    // labels and picker readouts. Required (a font-less 3D plot would
-    // have no axis labels).
-    explicit PlotView3D(const std::string& ttf_path);
+    PlotView3D(tgfx::IRenderDevice& device,
+               tgfx::PipelineCache& cache,
+               tgfx::RenderContext2& ctx,
+               tgfx::FontAtlas& font);
+    explicit PlotView3D(GpuHost& host);
     ~PlotView3D();
 
     PlotView3D(const PlotView3D&) = delete;
@@ -139,12 +141,10 @@ private:
 
     // Font path captured so we can re-create the atlas on release_gpu
     // → reuse cycle if the host re-enters render after a context drop.
-    std::string ttf_path_;
-
-    std::unique_ptr<tgfx::OpenGLRenderDevice> device_;
-    std::unique_ptr<tgfx::PipelineCache> cache_;
-    std::unique_ptr<tgfx::RenderContext2> ctx_;
-    std::unique_ptr<tgfx::FontAtlas> font_;
+    tgfx::IRenderDevice*  device_ = nullptr;
+    tgfx::PipelineCache*  cache_  = nullptr;
+    tgfx::RenderContext2* ctx_    = nullptr;
+    tgfx::FontAtlas*      font_   = nullptr;
     std::unique_ptr<PlotEngine3D> engine_;
 
     // Offscreen color + depth are plain tgfx2 textures; begin_pass

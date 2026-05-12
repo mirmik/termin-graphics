@@ -78,6 +78,7 @@ coverage.xml
 *.vcxproj.filters
 *.sln
 !csharp/Termin.sln
+!termin-csharp/Termin.CSharp.sln
 *.tlog
 *.ilk
 *.recipe
