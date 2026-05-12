@@ -352,7 +352,14 @@ VulkanRenderDevice::~VulkanRenderDevice() {
     // are still live in the handle pools. Keeps shutdown leak-free for
     // callers that forgot to clean up.
     for (auto& [id, r] : buffers_) {
-        if (r.buffer) vmaDestroyBuffer(allocator_, r.buffer, r.allocation);
+        // Some pool entries alias device-owned buffers. The ring UBO
+        // handle is the common case: descriptor binding needs a stable
+        // BufferHandle, but the real VkBuffer/VMA allocation lifetime is
+        // managed by ring_ubo_buffer_/ring_ubo_allocation_ below. VMA
+        // must only destroy entries that actually own an allocation.
+        if (r.buffer && r.allocation) {
+            vmaDestroyBuffer(allocator_, r.buffer, r.allocation);
+        }
     }
     for (auto& [id, r] : textures_) {
         if (r.view) vkDestroyImageView(device_, r.view, nullptr);
