@@ -280,6 +280,43 @@ void bind_graphics_backend(nb::module_& m) {
     m.def("tc_gpu_share_group_unref", [](uintptr_t group_ptr) {
         tc_gpu_share_group_unref((tc_gpu_share_group*)group_ptr);
     }, nb::arg("group_ptr"));
+
+    m.def("tc_gpu_context_count", []() -> int {
+        return tc_gpu_context_count();
+    });
+
+    m.def("tc_gpu_context_key_at", [](int index) -> uintptr_t {
+        return tc_gpu_context_key_at(index);
+    }, nb::arg("index"));
+
+    m.def("tc_gpu_get_mesh_info", [](uint32_t pool_index) -> nb::object {
+        tc_mesh_gpu_info info{};
+        if (!tc_gpu_get_mesh_info(pool_index, &info)) {
+            return nb::none();
+        }
+
+        nb::dict result;
+        result["pool_index"] = info.pool_index;
+        result["vbo"] = info.vbo;
+        result["ebo"] = info.ebo;
+        result["shared_version"] = info.shared_version;
+
+        nb::list contexts;
+        for (int i = 0; i < info.context_count; ++i) {
+            const tc_mesh_context_vao_info& ctx = info.contexts[i];
+            nb::dict ctx_info;
+            ctx_info["context_key"] = ctx.context_key;
+            ctx_info["context_name"] = ctx.context_name ? nb::str(ctx.context_name) : nb::str("");
+            ctx_info["vao"] = ctx.vao;
+            ctx_info["bound_vbo"] = ctx.bound_vbo;
+            ctx_info["bound_ebo"] = ctx.bound_ebo;
+            ctx_info["vao_stale"] = ctx.vao_stale != 0;
+            contexts.append(ctx_info);
+        }
+        result["contexts"] = contexts;
+
+        return nb::object(result);
+    }, nb::arg("pool_index"));
 }
 
 } // namespace tgfx_bindings
