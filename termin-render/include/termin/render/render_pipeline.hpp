@@ -8,6 +8,7 @@
 
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/i_render_device.hpp>
+#include <tgfx2/texture_pool.hpp>
 
 #include <termin/render/render_export.hpp>
 #include "termin/render/fbo_pool.hpp"
@@ -23,46 +24,16 @@ extern "C" {
 
 namespace termin {
 
-struct RENDER_API PipelineTextureEntry {
-public:
-    std::string key;
-    int width = 0;
-    int height = 0;
-    tgfx::PixelFormat format = tgfx::PixelFormat::Undefined;
-    tgfx::TextureUsage usage{};
-    tgfx::IRenderDevice* device = nullptr;
-    tgfx::TextureHandle handle;
+using PipelineTextureEntry = tgfx::TexturePoolEntry;
 
-public:
-    PipelineTextureEntry() = default;
-    PipelineTextureEntry(PipelineTextureEntry&&) = default;
-    PipelineTextureEntry& operator=(PipelineTextureEntry&&) = default;
-    PipelineTextureEntry(const PipelineTextureEntry&) = delete;
-    PipelineTextureEntry& operator=(const PipelineTextureEntry&) = delete;
-};
-
-class RENDER_API PipelineTexturePool {
-public:
-    std::vector<PipelineTextureEntry> entries;
-
+class RENDER_API PipelineTexturePool : public tgfx::TexturePool {
 public:
     PipelineTexturePool() = default;
     PipelineTexturePool(PipelineTexturePool&&) = default;
     PipelineTexturePool& operator=(PipelineTexturePool&&) = default;
     PipelineTexturePool(const PipelineTexturePool&) = delete;
     PipelineTexturePool& operator=(const PipelineTexturePool&) = delete;
-    ~PipelineTexturePool() { clear(); }
-
-    bool ensure(
-        tgfx::IRenderDevice& device,
-        const std::string& key,
-        int width,
-        int height,
-        tgfx::PixelFormat format,
-        tgfx::TextureUsage usage
-    );
-    tgfx::TextureHandle get(const std::string& key) const;
-    void clear();
+    ~PipelineTexturePool() = default;
 };
 
 // Opaque render cache stored in tc_pipeline.render_cache

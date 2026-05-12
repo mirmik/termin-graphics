@@ -8,6 +8,7 @@
 
 #include "tgfx2/enums.hpp"
 #include "tgfx2/handles.hpp"
+#include "tgfx2/texture_pool.hpp"
 #include "termin/render/render_export.hpp"
 
 namespace tgfx {
@@ -16,33 +17,10 @@ class IRenderDevice;
 
 namespace termin {
 
-// FBO pool entry — owns a pair of tgfx2 textures (color + optional
-// depth) that `RenderContext2::begin_pass` can attach into a cached
-// GL FBO.
-struct FBOPoolEntry {
-public:
-    std::string key;
-    int width = 0;
-    int height = 0;
-    int samples = 1;
-    tgfx::IRenderDevice* native_device = nullptr;
-    tgfx::PixelFormat color_format = tgfx::PixelFormat::RGBA8_UNorm;
-    tgfx::PixelFormat depth_format = tgfx::PixelFormat::D24_UNorm;
-    bool has_depth = false;
-    tgfx::TextureHandle color_tgfx2;
-    tgfx::TextureHandle depth_tgfx2;
+using FBOPoolEntry = tgfx::RenderTargetEntry;
 
+class RENDER_API FBOPool : public tgfx::RenderTargetPool {
 public:
-    FBOPoolEntry() = default;
-    FBOPoolEntry(FBOPoolEntry&&) = default;
-    FBOPoolEntry& operator=(FBOPoolEntry&&) = default;
-    FBOPoolEntry(const FBOPoolEntry&) = delete;
-    FBOPoolEntry& operator=(const FBOPoolEntry&) = delete;
-};
-
-class RENDER_API FBOPool {
-public:
-    std::vector<FBOPoolEntry> entries;
     std::unordered_map<std::string, std::string> alias_to_canonical;
 
 public:
@@ -51,7 +29,7 @@ public:
     FBOPool& operator=(FBOPool&&) = default;
     FBOPool(const FBOPool&) = delete;
     FBOPool& operator=(const FBOPool&) = delete;
-    ~FBOPool() { clear(); }
+    ~FBOPool() = default;
 
     // Allocate a pair of owned `tgfx::TextureHandle`s (color + optional
     // depth) via the render device. Callers use the returned handles

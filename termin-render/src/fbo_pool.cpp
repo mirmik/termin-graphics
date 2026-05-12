@@ -1,31 +1,7 @@
-// fbo_pool.cpp - FBO pool implementation
+// fbo_pool.cpp - Framegraph alias wrapper over tgfx::RenderTargetPool.
 #include "termin/render/fbo_pool.hpp"
 
-#include "tgfx2/descriptors.hpp"
-#include "tgfx2/i_render_device.hpp"
-
-#include <tcbase/tc_log.hpp>
-
 namespace termin {
-
-namespace {
-
-// Destroy the owned tgfx2 textures attached to an entry.
-void release_tgfx2_wrappers(FBOPoolEntry& entry) {
-    if (entry.native_device) {
-        if (entry.color_tgfx2) {
-            entry.native_device->destroy(entry.color_tgfx2);
-        }
-        if (entry.depth_tgfx2) {
-            entry.native_device->destroy(entry.depth_tgfx2);
-        }
-    }
-    entry.color_tgfx2 = {};
-    entry.depth_tgfx2 = {};
-    entry.native_device = nullptr;
-}
-
-} // anonymous namespace
 
 bool FBOPool::ensure_native(
     tgfx::IRenderDevice& device,
@@ -37,100 +13,30 @@ bool FBOPool::ensure_native(
     tgfx::PixelFormat depth_format,
     int samples
 ) {
-    auto alloc_textures = [&](FBOPoolEntry& entry) {
-        tgfx::TextureDesc cdesc;
-        cdesc.width = static_cast<uint32_t>(width);
-        cdesc.height = static_cast<uint32_t>(height);
-        cdesc.format = color_format;
-        cdesc.sample_count = static_cast<uint32_t>(samples);
-        cdesc.usage = tgfx::TextureUsage::Sampled |
-                      tgfx::TextureUsage::ColorAttachment |
-                      tgfx::TextureUsage::CopySrc |
-                      tgfx::TextureUsage::CopyDst;
-        entry.color_tgfx2 = device.create_texture(cdesc);
-        if (has_depth) {
-            tgfx::TextureDesc ddesc;
-            ddesc.width = static_cast<uint32_t>(width);
-            ddesc.height = static_cast<uint32_t>(height);
-            ddesc.format = depth_format;
-            ddesc.sample_count = static_cast<uint32_t>(samples);
-            ddesc.usage = tgfx::TextureUsage::Sampled |
-                          tgfx::TextureUsage::DepthStencilAttachment |
-                          tgfx::TextureUsage::CopySrc |
-                          tgfx::TextureUsage::CopyDst;
-            entry.depth_tgfx2 = device.create_texture(ddesc);
-        }
-    };
-
-    for (auto& entry : entries) {
-        if (entry.key != key) continue;
-
-        bool needs_recreate = entry.native_device != &device ||
-                              entry.width != width ||
-                              entry.height != height ||
-                              entry.samples != samples ||
-                              entry.color_format != color_format ||
-                              entry.has_depth != has_depth ||
-                              (has_depth && entry.depth_format != depth_format);
-        if (!needs_recreate) {
-            return true;
-        }
-        release_tgfx2_wrappers(entry);
-        // The textures we just destroyed may have their native ids
-        // immediately reused by create_texture below. Any framebuffer
-        // the device cached keyed on the old id would then point at
-        // fresh attachments whose size/format may differ — silent
-        // black-screen territory. Dump the cache here so begin_pass
-        // rebuilds the framebuffer against the new textures. No-op
-        // on backends that don't cache render targets.
-        device.invalidate_render_target_cache();
-        entry.native_device = &device;
-        entry.width = width;
-        entry.height = height;
-        entry.samples = samples;
-        entry.color_format = color_format;
-        entry.depth_format = depth_format;
-        entry.has_depth = has_depth;
-        alloc_textures(entry);
-        return true;
-    }
-
-    FBOPoolEntry entry;
-    entry.key = key;
-    entry.native_device = &device;
-    entry.width = width;
-    entry.height = height;
-    entry.samples = samples;
-    entry.color_format = color_format;
-    entry.depth_format = depth_format;
-    entry.has_depth = has_depth;
-    alloc_textures(entry);
-    entries.push_back(std::move(entry));
-    return true;
+    return ensure(device, key, width, height, color_format,
+                  has_depth, depth_format, samples);
 }
 
 tgfx::TextureHandle FBOPool::get_color_tgfx2(const std::string& key) const {
-    for (const auto& entry : entries) {
-        if (entry.key == key) return entry.color_tgfx2;
+    tgfx::TextureHandle direct = color(key);
+    if (direct) {
+        return direct;
     }
     auto alias_it = alias_to_canonical.find(key);
     if (alias_it != alias_to_canonical.end()) {
-        for (const auto& entry : entries) {
-            if (entry.key == alias_it->second) return entry.color_tgfx2;
-        }
+        return color(alias_it->second);
     }
     return {};
 }
 
 tgfx::TextureHandle FBOPool::get_depth_tgfx2(const std::string& key) const {
-    for (const auto& entry : entries) {
-        if (entry.key == key) return entry.depth_tgfx2;
+    tgfx::TextureHandle direct = depth(key);
+    if (direct) {
+        return direct;
     }
     auto alias_it = alias_to_canonical.find(key);
     if (alias_it != alias_to_canonical.end()) {
-        for (const auto& entry : entries) {
-            if (entry.key == alias_it->second) return entry.depth_tgfx2;
-        }
+        return depth(alias_it->second);
     }
     return {};
 }
@@ -143,10 +49,7 @@ void FBOPool::add_alias(const std::string& alias, const std::string& canonical) 
 }
 
 void FBOPool::clear() {
-    for (auto& entry : entries) {
-        release_tgfx2_wrappers(entry);
-    }
-    entries.clear();
+    tgfx::RenderTargetPool::clear();
     alias_to_canonical.clear();
 }
 

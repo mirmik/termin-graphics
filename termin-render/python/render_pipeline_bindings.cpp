@@ -17,6 +17,7 @@ extern "C" {
 #include "termin/render/graph_compiler.hpp"
 #include "termin/render/fbo_pool.hpp"
 #include "tgfx2/i_render_device.hpp"
+#include "tgfx2/pixel_format_utils.hpp"
 
 namespace nb = nanobind;
 
@@ -24,40 +25,13 @@ namespace termin {
 
 namespace {
 
-std::string pixel_format_name(tgfx::PixelFormat fmt) {
-    switch (fmt) {
-        case tgfx::PixelFormat::R8_UNorm:           return "r8";
-        case tgfx::PixelFormat::RG8_UNorm:          return "rg8";
-        case tgfx::PixelFormat::RGB8_UNorm:         return "rgb8";
-        case tgfx::PixelFormat::RGBA8_UNorm:        return "rgba8";
-        case tgfx::PixelFormat::BGRA8_UNorm:        return "bgra8";
-        case tgfx::PixelFormat::R16F:               return "r16f";
-        case tgfx::PixelFormat::RG16F:              return "rg16f";
-        case tgfx::PixelFormat::RGBA16F:            return "rgba16f";
-        case tgfx::PixelFormat::R32F:               return "r32f";
-        case tgfx::PixelFormat::RG32F:              return "rg32f";
-        case tgfx::PixelFormat::RGBA32F:            return "rgba32f";
-        case tgfx::PixelFormat::D24_UNorm:          return "depth24";
-        case tgfx::PixelFormat::D24_UNorm_S8_UInt:  return "depth24_stencil8";
-        case tgfx::PixelFormat::D32F:               return "depth32f";
-        case tgfx::PixelFormat::Undefined:          return "undefined";
-    }
-    return "unknown";
-}
-
-bool is_depth_format(tgfx::PixelFormat fmt) {
-    return fmt == tgfx::PixelFormat::D24_UNorm ||
-           fmt == tgfx::PixelFormat::D24_UNorm_S8_UInt ||
-           fmt == tgfx::PixelFormat::D32F;
-}
-
 std::string resource_type_for_texture(const RenderPipeline& pipeline, const PipelineTextureEntry& entry) {
     for (const auto& spec : pipeline.collect_specs()) {
         if (spec.resource == entry.key && !spec.resource_type.empty()) {
             return spec.resource_type;
         }
     }
-    return is_depth_format(entry.format) ? "depth_texture" : "color_texture";
+    return tgfx::is_depth_format(entry.format) ? "depth_texture" : "color_texture";
 }
 
 nb::object fbo_info(RenderPipeline& self, const std::string& key) {
@@ -273,7 +247,7 @@ void bind_render_pipeline(nb::module_& m) {
                 d["samples"] = 1;
                 d["has_depth"] = false;
                 d["resource_type"] = resource_type_for_texture(self, entry);
-                d["color_format_name"] = pixel_format_name(entry.format);
+                d["color_format_name"] = std::string(tgfx::pixel_format_name(entry.format));
                 uintptr_t native = 0;
                 if (entry.device && entry.handle) {
                     native = entry.device->native_texture_handle(entry.handle);

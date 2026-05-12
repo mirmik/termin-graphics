@@ -6,6 +6,7 @@
 #include <tgfx2/enums.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/opengl/opengl_render_device.hpp>
+#include <tgfx2/pixel_format_utils.hpp>
 #include <tgfx2/tc_shader_bridge.hpp>
 
 extern "C" {
@@ -22,33 +23,6 @@ extern "C" {
 namespace termin {
 
 namespace {
-
-std::string pixel_format_name(tgfx::PixelFormat fmt) {
-    switch (fmt) {
-        case tgfx::PixelFormat::R8_UNorm:           return "r8";
-        case tgfx::PixelFormat::RG8_UNorm:          return "rg8";
-        case tgfx::PixelFormat::RGB8_UNorm:         return "rgb8";
-        case tgfx::PixelFormat::RGBA8_UNorm:        return "rgba8";
-        case tgfx::PixelFormat::BGRA8_UNorm:        return "bgra8";
-        case tgfx::PixelFormat::R16F:               return "r16f";
-        case tgfx::PixelFormat::RG16F:              return "rg16f";
-        case tgfx::PixelFormat::RGBA16F:            return "rgba16f";
-        case tgfx::PixelFormat::R32F:               return "r32f";
-        case tgfx::PixelFormat::RG32F:              return "rg32f";
-        case tgfx::PixelFormat::RGBA32F:            return "rgba32f";
-        case tgfx::PixelFormat::D24_UNorm:          return "depth24";
-        case tgfx::PixelFormat::D24_UNorm_S8_UInt:  return "depth24_stencil8";
-        case tgfx::PixelFormat::D32F:               return "depth32f";
-        case tgfx::PixelFormat::Undefined:          return "undefined";
-    }
-    return "unknown";
-}
-
-bool is_depth_format(tgfx::PixelFormat fmt) {
-    return fmt == tgfx::PixelFormat::D24_UNorm ||
-           fmt == tgfx::PixelFormat::D24_UNorm_S8_UInt ||
-           fmt == tgfx::PixelFormat::D32F;
-}
 
 } // namespace
 
@@ -94,7 +68,7 @@ void FrameGraphCapture::ensure_capture_tex(
     // picking the right bit lets blit targets for shadow maps succeed.
     // CopySrc/CopyDst stay on both paths — Frame Debugger eventually
     // reads the capture out and/or re-blits it.
-    if (is_depth_format(fmt)) {
+    if (tgfx::is_depth_format(fmt)) {
         desc.usage = tgfx::TextureUsage::Sampled |
                      tgfx::TextureUsage::DepthStencilAttachment |
                      tgfx::TextureUsage::CopySrc |
@@ -109,7 +83,7 @@ void FrameGraphCapture::ensure_capture_tex(
 }
 
 bool FrameGraphCapture::is_depth() const {
-    return is_depth_format(format_);
+    return tgfx::is_depth_format(format_);
 }
 
 void FrameGraphCapture::capture_direct_via_ctx2(
@@ -377,7 +351,7 @@ TextureInfo FrameGraphPresenter::get_texture_info(
     info.samples = static_cast<int>(desc.sample_count);
     info.is_msaa = desc.sample_count > 1;
     info.format = desc.format;
-    info.format_name = pixel_format_name(desc.format);
+    info.format_name = std::string(tgfx::pixel_format_name(desc.format));
     return info;
 }
 

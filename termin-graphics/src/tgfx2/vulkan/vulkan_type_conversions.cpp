@@ -2,6 +2,8 @@
 
 #include "tgfx2/vulkan/vulkan_type_conversions.hpp"
 
+#include "tgfx2/pixel_format_utils.hpp"
+
 namespace tgfx::vk {
 
 VkFormat to_vk_format(PixelFormat fmt) {
@@ -192,14 +194,8 @@ VkImageUsageFlags to_vk_image_usage(TextureUsage usage) {
 }
 
 VkImageAspectFlags format_aspect_flags(PixelFormat fmt) {
-    if (is_depth_format(fmt)) return VK_IMAGE_ASPECT_DEPTH_BIT;
+    if (tgfx::is_depth_format(fmt)) return VK_IMAGE_ASPECT_DEPTH_BIT;
     return VK_IMAGE_ASPECT_COLOR_BIT;
-}
-
-bool is_depth_format(PixelFormat fmt) {
-    return fmt == PixelFormat::D24_UNorm_S8_UInt
-        || fmt == PixelFormat::D24_UNorm
-        || fmt == PixelFormat::D32F;
 }
 
 } // namespace tgfx::vk

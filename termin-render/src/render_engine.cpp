@@ -10,6 +10,7 @@
 
 #include "tgfx2/device_factory.hpp"
 #include "tgfx2/enums.hpp"
+#include "tgfx2/pixel_format_utils.hpp"
 #include "tgfx2/render_context.hpp"
 #include "tgfx2/render_runtime.hpp"
 #include "tgfx/tgfx2_interop.h"
@@ -87,16 +88,11 @@ static tgfx::PixelFormat resolve_fbo_color_format(
         }
         return output_desc.format;
     }
-    if (format.empty() || format == "rgba8") return tgfx::PixelFormat::RGBA8_UNorm;
-    if (format == "r8") return tgfx::PixelFormat::R8_UNorm;
-    if (format == "rg8") return tgfx::PixelFormat::RG8_UNorm;
-    if (format == "rgb8") return tgfx::PixelFormat::RGB8_UNorm;
-    if (format == "r16f") return tgfx::PixelFormat::R16F;
-    if (format == "rg16f") return tgfx::PixelFormat::RG16F;
-    if (format == "r32f") return tgfx::PixelFormat::R32F;
-    if (format == "rg32f") return tgfx::PixelFormat::RG32F;
-    if (format == "rgba16f") return tgfx::PixelFormat::RGBA16F;
-    if (format == "rgba32f") return tgfx::PixelFormat::RGBA32F;
+    const tgfx::PixelFormat parsed = tgfx::pixel_format_from_name(
+        format, tgfx::PixelFormat::Undefined);
+    if (parsed != tgfx::PixelFormat::Undefined) {
+        return parsed;
+    }
 
     tc::Log::warn(
         "RenderEngine::render_scene_pipeline_offscreen: unknown FBO color format '%s'; using rgba8",

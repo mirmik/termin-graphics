@@ -28,7 +28,6 @@ VkBufferUsageFlags to_vk_buffer_usage(BufferUsage usage);
 VkImageUsageFlags to_vk_image_usage(TextureUsage usage);
 
 VkImageAspectFlags format_aspect_flags(PixelFormat fmt);
-bool is_depth_format(PixelFormat fmt);
 
 } // namespace tgfx::vk
 
