@@ -487,6 +487,14 @@ void VulkanCommandList::set_scissor(int x, int y, int width, int height) {
     // that trips `offset + extent > INT32_MAX` in validation. Clamp here
     // so caller bugs (e.g. a widget with negative size after layout)
     // produce an empty-clip no-op rather than a Vulkan error.
+    if (x < 0) {
+        width += x;
+        x = 0;
+    }
+    if (y < 0) {
+        height += y;
+        y = 0;
+    }
     if (width < 0) width = 0;
     if (height < 0) height = 0;
     VkRect2D scissor{};

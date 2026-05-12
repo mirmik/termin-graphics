@@ -498,6 +498,17 @@ void OpenGLCommandList::set_viewport(int x, int y, int width, int height) {
 }
 
 void OpenGLCommandList::set_scissor(int x, int y, int width, int height) {
+    if (x < 0) {
+        width += x;
+        x = 0;
+    }
+    if (y < 0) {
+        height += y;
+        y = 0;
+    }
+    if (width < 0) width = 0;
+    if (height < 0) height = 0;
+
     if (width == 0 && height == 0) {
         glDisable(GL_SCISSOR_TEST);
     } else {

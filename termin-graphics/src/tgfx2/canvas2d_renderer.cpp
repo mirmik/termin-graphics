@@ -199,6 +199,17 @@ void Canvas2DRenderer::begin_clip(float x, float y, float w, float h) {
         r.h = std::max(0, y1 - y0);
     }
 
+    const int vx0 = std::max(0, r.x);
+    const int vy0 = std::max(0, r.y);
+    const int vx1 = std::min(viewport_w_, r.x + r.w);
+    const int vy1 = std::min(viewport_h_, r.y + r.h);
+    r.x = vx0;
+    r.y = vy0;
+    r.w = std::max(0, vx1 - vx0);
+    r.h = std::max(0, vy1 - vy0);
+    if (r.w == 0) r.x = std::min(std::max(0, r.x), viewport_w_);
+    if (r.h == 0) r.y = std::min(std::max(0, r.y), viewport_h_);
+
     clip_stack_.push_back(r);
     ctx_->set_scissor(r.x, r.y, r.w, r.h);
 }
