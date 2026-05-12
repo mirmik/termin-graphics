@@ -10,8 +10,8 @@
 
 #include "tgfx2/device_factory.hpp"
 #include "tgfx2/enums.hpp"
-#include "tgfx2/pipeline_cache.hpp"
 #include "tgfx2/render_context.hpp"
+#include "tgfx2/render_runtime.hpp"
 #include "tgfx/tgfx2_interop.h"
 #include "termin/render/tgfx2_bridge.hpp"
 
@@ -122,18 +122,18 @@ RenderEngine::RenderEngine() {
 // Out-of-line destructor so unique_ptr<tgfx::*> members can use forward
 // declarations in the header; the full tgfx2 types are visible here.
 RenderEngine::~RenderEngine() {
-    if (tgfx2_device_) {
-        if (external_target_color_) tgfx2_device_->destroy(external_target_color_);
-        if (external_target_depth_) tgfx2_device_->destroy(external_target_depth_);
+    if (auto* device = tgfx2_device()) {
+        if (external_target_color_) device->destroy(external_target_color_);
+        if (external_target_depth_) device->destroy(external_target_depth_);
     }
-    // Don't let unique_ptr delete a device we only borrowed from the
-    // host — releasing the pointer skips the deleter. The ctx/cache we
-    // created ourselves on top of that device DO get destroyed first
-    // (declared after the device in the header), which is the right
-    // order regardless of device ownership.
-    if (!tgfx2_device_owned_) {
-        (void)tgfx2_device_.release();
-    }
+}
+
+tgfx::RenderContext2* RenderEngine::tgfx2_ctx() {
+    return tgfx2_runtime_ ? &tgfx2_runtime_->context() : nullptr;
+}
+
+tgfx::IRenderDevice* RenderEngine::tgfx2_device() {
+    return tgfx2_runtime_ ? &tgfx2_runtime_->device() : nullptr;
 }
 
 void RenderEngine::ensure_tgfx2() {
@@ -151,7 +151,7 @@ void RenderEngine::ensure_tgfx2() {
         return;
     }
 
-    if (tgfx2_ctx_) {
+    if (tgfx2_runtime_) {
         return;
     }
 
@@ -163,22 +163,14 @@ void RenderEngine::ensure_tgfx2() {
     // cross-pool calls. Symptom was an entirely grey viewport with
     // no Vulkan/GL errors.
     if (auto* host_dev = static_cast<tgfx::IRenderDevice*>(tgfx2_interop_get_device())) {
-        tgfx2_device_ = std::unique_ptr<tgfx::IRenderDevice>(host_dev);
-        tgfx2_device_owned_ = false;
+        tgfx2_runtime_ = std::make_unique<tgfx::RenderRuntime>(*host_dev);
     } else {
         // No host — standalone render test / headless case. Create our
         // own device and register it as the interop target so any
         // later Python helper that checks interop lands on it.
         // Backend selected by TERMIN_BACKEND env-var (default OpenGL).
-        tgfx2_device_ = tgfx::create_device(tgfx::default_backend_from_env());
-        tgfx2_device_owned_ = true;
-        if (tgfx2_device_->backend_type() == tgfx::BackendType::OpenGL) {
-            tgfx2_interop_set_device(tgfx2_device_.get());
-            tgfx2_gpu_ops_register();
-        }
+        tgfx2_runtime_ = tgfx::RenderRuntime::create_from_env();
     }
-    tgfx2_cache_ = std::make_unique<tgfx::PipelineCache>(*tgfx2_device_);
-    tgfx2_ctx_ = std::make_unique<tgfx::RenderContext2>(*tgfx2_device_, *tgfx2_cache_);
 }
 
 void RenderEngine::render_to_screen(
@@ -245,7 +237,8 @@ void RenderEngine::render_view_to_fbo_id(
 ) {
     if (width <= 0 || height <= 0) return;
     ensure_tgfx2();
-    if (!tgfx2_device_) {
+    tgfx::IRenderDevice* device = tgfx2_device();
+    if (!device) {
         tc::Log::error("RenderEngine::render_view_to_fbo_id: tgfx2 device unavailable");
         return;
     }
@@ -254,11 +247,11 @@ void RenderEngine::render_view_to_fbo_id(
     if (!external_target_color_ ||
         external_target_w_ != width || external_target_h_ != height) {
         if (external_target_color_) {
-            tgfx2_device_->destroy(external_target_color_);
+            device->destroy(external_target_color_);
             external_target_color_ = {};
         }
         if (external_target_depth_) {
-            tgfx2_device_->destroy(external_target_depth_);
+            device->destroy(external_target_depth_);
             external_target_depth_ = {};
         }
         tgfx::TextureDesc color_desc;
@@ -269,7 +262,7 @@ void RenderEngine::render_view_to_fbo_id(
                            tgfx::TextureUsage::ColorAttachment |
                            tgfx::TextureUsage::CopySrc |
                            tgfx::TextureUsage::CopyDst;
-        external_target_color_ = tgfx2_device_->create_texture(color_desc);
+        external_target_color_ = device->create_texture(color_desc);
 
         tgfx::TextureDesc depth_desc;
         depth_desc.width = static_cast<uint32_t>(width);
@@ -279,7 +272,7 @@ void RenderEngine::render_view_to_fbo_id(
                            tgfx::TextureUsage::Sampled |
                            tgfx::TextureUsage::CopySrc |
                            tgfx::TextureUsage::CopyDst;
-        external_target_depth_ = tgfx2_device_->create_texture(depth_desc);
+        external_target_depth_ = device->create_texture(depth_desc);
 
         external_target_w_ = width;
         external_target_h_ = height;
@@ -303,7 +296,7 @@ void RenderEngine::render_view_to_fbo_id(
 
     // Present: blit internal color → external target id (GL FBO for
     // OpenGL, swapchain image index for Vulkan once wired up).
-    tgfx2_device_->blit_to_external_target(
+    device->blit_to_external_target(
         static_cast<uintptr_t>(target_fbo_id), external_target_color_,
         0, 0, width, height,
         0, 0, width, height
@@ -322,7 +315,9 @@ void RenderEngine::render_scene_pipeline_offscreen(
         return;
     }
     ensure_tgfx2();
-    if (!tgfx2_device_) {
+    tgfx::IRenderDevice* device = tgfx2_device();
+    tgfx::RenderContext2* ctx2 = tgfx2_ctx();
+    if (!device) {
         tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: tgfx2 device unavailable");
         return;
     }
@@ -477,9 +472,9 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 tgfx::TextureUsage::CopySrc |
                 tgfx::TextureUsage::CopyDst;
             tgfx::PixelFormat color_format =
-                resolve_fbo_color_format(format, default_rt_ctx, *tgfx2_device_);
+                resolve_fbo_color_format(format, default_rt_ctx, *device);
             if (!pipeline_cache.texture_pool.ensure(
-                    *tgfx2_device_, canon, tex_width, tex_height,
+                    *device, canon, tex_width, tex_height,
                     color_format, usage)) {
                 tc::Log::error(
                     "RenderEngine::render_scene_pipeline_offscreen: failed to allocate color_texture '%s'",
@@ -510,7 +505,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 tgfx::TextureUsage::CopySrc |
                 tgfx::TextureUsage::CopyDst;
             if (!pipeline_cache.texture_pool.ensure(
-                    *tgfx2_device_, canon, tex_width, tex_height,
+                    *device, canon, tex_width, tex_height,
                     tgfx::PixelFormat::D32F, usage)) {
                 tc::Log::error(
                     "RenderEngine::render_scene_pipeline_offscreen: failed to allocate depth_texture '%s'",
@@ -558,10 +553,10 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
         FBOPool& fbo_pool = pipeline.fbo_pool();
 
-        tgfx::PixelFormat color_fmt = resolve_fbo_color_format(format, default_rt_ctx, *tgfx2_device_);
+        tgfx::PixelFormat color_fmt = resolve_fbo_color_format(format, default_rt_ctx, *device);
 
         fbo_pool.ensure_native(
-            *tgfx2_device_, canon, fbo_width, fbo_height,
+            *device, canon, fbo_width, fbo_height,
             color_fmt, /*has_depth=*/true, tgfx::PixelFormat::D32F, samples);
         (void)filter;
 
@@ -576,12 +571,12 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
     size_t schedule_count = tc_frame_graph_schedule_count(fg);
 
-    if (tgfx2_ctx_) {
-        tgfx2_ctx_->begin_frame();
+    if (ctx2) {
+        ctx2->begin_frame();
     }
 
     tc_profiler_begin_section("Clear Render Target Contexts");
-    if (tgfx2_ctx_) {
+    if (ctx2) {
         for (const auto& [render_target_name, rt_ctx] : render_target_contexts) {
             if (!rt_ctx.clear_color_enabled && !rt_ctx.clear_depth_enabled) {
                 continue;
@@ -595,17 +590,17 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
             const float* clear_color_ptr =
                 rt_ctx.clear_color_enabled ? rt_ctx.clear_color : nullptr;
-            tgfx2_ctx_->begin_pass(
+            ctx2->begin_pass(
                 rt_ctx.output_color_tex,
                 rt_ctx.output_depth_tex,
                 clear_color_ptr,
                 rt_ctx.clear_depth,
                 rt_ctx.clear_depth_enabled);
-            tgfx2_ctx_->set_viewport(
+            ctx2->set_viewport(
                 0, 0,
                 std::max(1, rt_ctx.render_rect.width),
                 std::max(1, rt_ctx.render_rect.height));
-            tgfx2_ctx_->end_pass();
+            ctx2->end_pass();
         }
     }
     tc_profiler_end_section();
@@ -615,7 +610,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
     // frames without any wrap/destroy churn.
     std::unordered_map<std::string, tgfx::TextureHandle> tex2_resources;
     std::unordered_map<std::string, tgfx::TextureHandle> tex2_depth_resources;
-    if (tgfx2_ctx_ && tgfx2_device_) {
+    if (ctx2 && device) {
         FBOPool& fbo_pool = pipeline.fbo_pool();
         for (const auto& [name, res] : resources) {
             tgfx::TextureHandle color_handle = fbo_pool.get_color_tgfx2(name);
@@ -712,7 +707,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
     // graphics->bind_framebuffer + clear_color_depth loop — see
     // render_view_to_fbo for the rationale.
     tc_profiler_begin_section("Clear Resources");
-    if (tgfx2_ctx_) {
+    if (ctx2) {
         for (const auto& spec : specs) {
             if (spec.resource_type != "fbo" && !spec.resource_type.empty()) {
                 continue;
@@ -746,12 +741,12 @@ void RenderEngine::render_scene_pipeline_offscreen(
             int fb_w = spec.size ? spec.size->first : default_width;
             int fb_h = spec.size ? spec.size->second : default_height;
 
-            tgfx2_ctx_->begin_pass(
+            ctx2->begin_pass(
                 color_tex, depth_tex,
                 clear_color_ptr, clear_depth_val, clear_depth_enabled
             );
-            tgfx2_ctx_->set_viewport(0, 0, fb_w, fb_h);
-            tgfx2_ctx_->end_pass();
+            ctx2->set_viewport(0, 0, fb_w, fb_h);
+            ctx2->end_pass();
         }
     }
     tc_profiler_end_section();
@@ -768,7 +763,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
         // Per-pass state reset — no-op on backends with explicit state
         // (Vulkan), restores GL baseline on OpenGL.
-        tgfx2_device_->reset_state();
+        device->reset_state();
 
         std::string pass_render_target_name = default_target;
         if (pass->viewport_name && pass->viewport_name[0] != '\0') {
@@ -937,7 +932,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
 
         ExecuteContext ctx;
-        ctx.ctx2 = tgfx2_ctx_.get();
+        ctx.ctx2 = ctx2;
         ctx.tex2_reads = std::move(pass_tex2_reads);
         ctx.tex2_writes = std::move(pass_tex2_writes);
         ctx.tex2_depth_reads = std::move(pass_tex2_depth_reads);
@@ -956,17 +951,17 @@ void RenderEngine::render_scene_pipeline_offscreen(
         // Per-pass sync — no-op on explicit-submission backends.
         tc_render_sync_mode sync_mode = tc_project_settings_get_render_sync_mode();
         if (sync_mode == TC_RENDER_SYNC_FLUSH) {
-            tgfx2_device_->flush();
+            device->flush();
         } else if (sync_mode == TC_RENDER_SYNC_FINISH) {
-            tgfx2_device_->finish();
+            device->finish();
         }
 
         tc_profiler_end_section();
     }
     tc_profiler_end_section();
 
-    if (tgfx2_ctx_) {
-        tgfx2_ctx_->end_frame();
+    if (ctx2) {
+        ctx2->end_frame();
     }
 }
 

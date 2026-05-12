@@ -27,8 +27,8 @@ extern "C" {
 // ExecuteContext::ctx2 (see Phase 2 of tgfx2 migration).
 namespace tgfx {
 class IRenderDevice;
-class PipelineCache;
 class RenderContext2;
+class RenderRuntime;
 }
 
 namespace termin {
@@ -63,21 +63,9 @@ public:
 
 class RENDER_API RenderEngine {
 private:
-    // tgfx2 stack — lazily constructed on first render call. All
-    // rendering now goes through this stack; the legacy graphics
-    // backend is no longer involved.
-    //
-    // `tgfx2_device_` may be either engine-owned (we called
-    // create_device) or borrowed from the application host
-    // (Tgfx2Context.from_window already installed an interop device
-    // before we ever ran). `tgfx2_device_owned_` tells the destructor
-    // which one it is — must not delete a host-owned device. This is
-    // the process-wide-single-device invariant: host owns the one
-    // IRenderDevice and every renderer points at it.
-    std::unique_ptr<tgfx::IRenderDevice> tgfx2_device_;
-    bool tgfx2_device_owned_ = true;
-    std::unique_ptr<tgfx::PipelineCache> tgfx2_cache_;
-    std::unique_ptr<tgfx::RenderContext2> tgfx2_ctx_;
+    // Lazily constructed tgfx2 runtime. It either owns a standalone
+    // device or borrows the host-owned process-wide interop device.
+    std::unique_ptr<tgfx::RenderRuntime> tgfx2_runtime_;
 
     // Reusable offscreen color+depth textures backing
     // render_view_to_fbo_id(). Resized on demand, destroyed with the
@@ -93,11 +81,11 @@ public:
     // Access the engine's tgfx2 render context. May return nullptr if
     // ensure_tgfx2() has not yet been called or TERMIN_DISABLE_TGFX2 is
     // set. The returned pointer remains owned by the RenderEngine.
-    tgfx::RenderContext2* tgfx2_ctx() { return tgfx2_ctx_.get(); }
+    tgfx::RenderContext2* tgfx2_ctx();
 
     // Access the tgfx2 render device that owns all texture/buffer
     // handles used by the engine. Lifetime-tied to the RenderEngine.
-    tgfx::IRenderDevice* tgfx2_device() { return tgfx2_device_.get(); }
+    tgfx::IRenderDevice* tgfx2_device();
 
 public:
     RenderEngine();

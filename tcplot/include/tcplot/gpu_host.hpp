@@ -20,6 +20,7 @@ namespace tgfx {
 class IRenderDevice;
 class PipelineCache;
 class RenderContext2;
+class RenderRuntime;
 class FontAtlas;
 }
 
@@ -39,15 +40,13 @@ public:
     GpuHost(const GpuHost&) = delete;
     GpuHost& operator=(const GpuHost&) = delete;
 
-    tgfx::IRenderDevice&  device() { return *device_; }
-    tgfx::PipelineCache&  cache()  { return *cache_;  }
-    tgfx::RenderContext2& ctx()    { return *ctx_;    }
+    tgfx::IRenderDevice&  device();
+    tgfx::PipelineCache&  cache();
+    tgfx::RenderContext2& ctx();
     tgfx::FontAtlas&      font()   { return *font_;   }
 
 private:
-    std::unique_ptr<tgfx::IRenderDevice>  device_;
-    std::unique_ptr<tgfx::PipelineCache>  cache_;
-    std::unique_ptr<tgfx::RenderContext2> ctx_;
+    std::unique_ptr<tgfx::RenderRuntime> runtime_;
     std::unique_ptr<tgfx::FontAtlas>      font_;
 };
 
