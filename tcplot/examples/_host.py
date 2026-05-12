@@ -1,9 +1,9 @@
 """Shared host loop for tcplot examples.
 
-Spins up a BackendWindow + tcgui UI and runs a wait-for-event main
+Spins up an SDLBackendWindow + tcgui UI and runs a wait-for-event main
 loop until the user closes the window. Picks OpenGL or Vulkan based
-on the ``TERMIN_BACKEND`` env-var, same as every other BackendWindow
-host in the project.
+on the ``TERMIN_BACKEND`` env-var, same as other backend-neutral SDL
+hosts in the project.
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ import sdl2
 
 from tcbase import MouseButton
 from tcgui.widgets.ui import UI
-from termin.display import BackendWindow
-from tgfx._tgfx_native import Tgfx2Context
+from termin.display import SDLBackendWindow
+from tgfx import Tgfx2Context
 
 
 _SDL_BUTTON_MAP = {1: MouseButton.LEFT, 2: MouseButton.MIDDLE, 3: MouseButton.RIGHT}
@@ -26,8 +26,8 @@ def run_demo(title: str, make_widget: Callable[[], object],
              size: tuple[int, int] = (900, 600),
              bg: tuple[float, float, float, float] = (0.10, 0.10, 0.12, 1.0)
              ) -> None:
-    """Host a tcplot widget inside a BackendWindow until the user closes it."""
-    window = BackendWindow(title, size[0], size[1])
+    """Host a tcplot widget inside an SDLBackendWindow until it closes."""
+    window = SDLBackendWindow(title, size[0], size[1])
     ctx = Tgfx2Context.from_window(window.device_ptr(), window.context_ptr())
 
     ui = UI(graphics=ctx)
@@ -42,6 +42,9 @@ def run_demo(title: str, make_widget: Callable[[], object],
             and ev.key.keysym.scancode == sdl2.SDL_SCANCODE_ESCAPE
         ):
             window.set_should_close(True)
+        elif t == sdl2.SDL_WINDOWEVENT:
+            if ev.window.event == sdl2.SDL_WINDOWEVENT_CLOSE:
+                window.set_should_close(True)
         elif t == sdl2.SDL_MOUSEMOTION:
             ui.mouse_move(float(ev.motion.x), float(ev.motion.y))
         elif t == sdl2.SDL_MOUSEBUTTONDOWN:
@@ -69,3 +72,6 @@ def run_demo(title: str, make_widget: Callable[[], object],
         ui.process_deferred()
         if tex is not None:
             window.present(tex)
+
+    window.close()
+    sdl2.SDL_Quit()
