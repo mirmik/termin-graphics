@@ -5,6 +5,7 @@
 Связанные документы:
 
 - [Module Map](../../docs/modules.md#termin-graphics--tgfx)
+- [Architecture notes](architecture/index.md)
 - [tgfx2 migration](migration-tgfx2.md)
 - [tgfx2 Python migration](migration-tgfx2-python.md)
 - [tcplot C++ migration](migration-tcplot-cpp.md)
