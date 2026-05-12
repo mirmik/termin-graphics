@@ -18,6 +18,7 @@
 #include <iostream>
 #include <limits>
 #include <span>
+#include <string>
 #include <utility>
 
 #include <tgfx2/descriptors.hpp>
@@ -35,32 +36,49 @@ namespace tcplot {
 
 namespace {
 
+struct Plot3DPushData {
+    float mvp[16];
+    float params[4];  // z_min, z_max, use_jet, unused
+};
+static_assert(sizeof(Plot3DPushData) == 80,
+              "Plot3DPushData layout drift — shader + C++ disagree");
+
+constexpr const char* kPC = R"(
+struct Plot3DPC {
+    mat4 u_mvp;
+    vec4 u_params;
+};
+#ifdef VULKAN
+layout(push_constant) uniform PCBlock { Plot3DPC pc; };
+#else
+layout(std140, binding = 14) uniform PCBlock { Plot3DPC pc; };
+#endif
+)";
+
 // Same 3D plot shader as engine3d.py. Position in vec3, per-vertex
 // RGBA color in vec4 (loc 1). If u_use_jet != 0, the fragment stage
 // replaces the per-vertex RGB with a jet colormap indexed by the
 // normalised Z coordinate.
-constexpr const char* kVertSrc = R"(#version 330 core
+static std::string make_vert_src() {
+    return std::string("#version 450 core\n") + kPC + R"(
 layout(location=0) in vec3 a_position;
 layout(location=1) in vec4 a_color;
-uniform mat4 u_mvp;
-uniform float u_z_min;
-uniform float u_z_max;
-uniform int u_use_jet;
-out vec4 v_color;
-out float v_z_norm;
+layout(location=0) out vec4 v_color;
+layout(location=1) out float v_z_norm;
 void main() {
-    gl_Position = u_mvp * vec4(a_position, 1.0);
+    gl_Position = pc.u_mvp * vec4(a_position, 1.0);
     v_color = a_color;
-    float z_range = u_z_max - u_z_min;
-    v_z_norm = (z_range > 0.0) ? (a_position.z - u_z_min) / z_range : 0.5;
+    float z_range = pc.u_params.y - pc.u_params.x;
+    v_z_norm = (z_range > 0.0) ? (a_position.z - pc.u_params.x) / z_range : 0.5;
 }
 )";
+}
 
-constexpr const char* kFragSrc = R"(#version 330 core
-in vec4 v_color;
-in float v_z_norm;
-uniform int u_use_jet;
-out vec4 frag_color;
+static std::string make_frag_src() {
+    return std::string("#version 450 core\n") + kPC + R"(
+layout(location=0) in vec4 v_color;
+layout(location=1) in float v_z_norm;
+layout(location=0) out vec4 frag_color;
 
 vec3 jet(float t) {
     t = clamp(t, 0.0, 1.0);
@@ -80,13 +98,14 @@ vec3 jet(float t) {
 }
 
 void main() {
-    if (u_use_jet != 0) {
+    if (pc.u_params.z != 0.0) {
         frag_color = vec4(jet(v_z_norm), v_color.a);
     } else {
         frag_color = v_color;
     }
 }
 )";
+}
 
 constexpr uint32_t kFloatsPerVertex = 7;
 constexpr uint32_t kVertexStride = kFloatsPerVertex * sizeof(float);
@@ -97,6 +116,19 @@ tgfx::VertexBufferLayout pos_color_layout() {
     layout.attributes.push_back({0, tgfx::VertexFormat::Float3, 0});
     layout.attributes.push_back({1, tgfx::VertexFormat::Float4, 3 * sizeof(float)});
     return layout;
+}
+
+void set_plot3d_push_constants(tgfx::RenderContext2& ctx,
+                               const float mvp[16],
+                               float z_min,
+                               float z_max,
+                               bool use_jet) {
+    Plot3DPushData pc{};
+    std::memcpy(pc.mvp, mvp, sizeof(pc.mvp));
+    pc.params[0] = z_min;
+    pc.params[1] = z_max;
+    pc.params[2] = use_jet ? 1.0f : 0.0f;
+    ctx.set_push_constants(&pc, static_cast<uint32_t>(sizeof(pc)));
 }
 
 }  // namespace
@@ -334,12 +366,12 @@ void PlotEngine3D::ensure_shader_(tgfx::IRenderDevice& device) {
 
     tgfx::ShaderDesc vd;
     vd.stage = tgfx::ShaderStage::Vertex;
-    vd.source = kVertSrc;
+    vd.source = make_vert_src();
     shader_vs_id_ = device.create_shader(vd).id;
 
     tgfx::ShaderDesc fd;
     fd.stage = tgfx::ShaderStage::Fragment;
-    fd.source = kFragSrc;
+    fd.source = make_frag_src();
     shader_fs_id_ = device.create_shader(fd).id;
 
     shader_device_ = &device;
@@ -621,26 +653,25 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     tgfx::ShaderHandle vs; vs.id = shader_vs_id_;
     tgfx::ShaderHandle fs; fs.id = shader_fs_id_;
     ctx->bind_shader(vs, fs);
-    ctx->set_uniform_mat4("u_mvp", mvp, /*transpose=*/false);
 
     double lo[3], hi[3];
     data.data_bounds_3d(lo, hi);
-    ctx->set_uniform_float("u_z_min", (float)lo[2]);
-    ctx->set_uniform_float("u_z_max", (float)hi[2]);
+    const float z_min = static_cast<float>(lo[2]);
+    const float z_max = static_cast<float>(hi[2]);
 
     // Grid (no jet).
-    ctx->set_uniform_int("u_use_jet", 0);
+    set_plot3d_push_constants(*ctx, mvp, z_min, z_max, false);
     if (grid_mesh_) draw_mesh_(*ctx, *grid_mesh_);
 
     // Opaque surfaces (jet).
-    ctx->set_uniform_int("u_use_jet", 1);
+    set_plot3d_push_constants(*ctx, mvp, z_min, z_max, true);
     ctx->set_blend(false);
     for (auto& m : surface_meshes_) {
         draw_mesh_(*ctx, m);
     }
 
     // Wireframes on top (no depth, no jet).
-    ctx->set_uniform_int("u_use_jet", 0);
+    set_plot3d_push_constants(*ctx, mvp, z_min, z_max, false);
     if (show_wireframe) {
         ctx->set_depth_test(false);
         ctx->set_blend(true);
@@ -657,8 +688,7 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     // Marker (immediate mode cross at marker pos).
     if (has_marker_ && marker_mode) {
         ctx->bind_shader(vs, fs);
-        ctx->set_uniform_mat4("u_mvp", mvp, /*transpose=*/false);
-        ctx->set_uniform_int("u_use_jet", 0);
+        set_plot3d_push_constants(*ctx, mvp, z_min, z_max, false);
         ctx->set_depth_test(false);
 
         const double data_size = std::sqrt(

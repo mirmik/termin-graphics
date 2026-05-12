@@ -13,6 +13,7 @@
 #include "tgfx2/text3d_renderer.hpp"
 
 #include <cstring>
+#include <string>
 #include <vector>
 
 #include "tgfx2/descriptors.hpp"
@@ -31,40 +32,62 @@ namespace tgfx {
 
 namespace {
 
-constexpr const char* kText3DVert = R"(#version 330 core
+struct Text3DPushData {
+    float mvp[16];
+    float color[4];
+    float cam_right[4];
+    float cam_up[4];
+};
+static_assert(sizeof(Text3DPushData) == 112,
+              "Text3DPushData layout drift — shader and C++ disagree");
+
+constexpr const char* kText3DCommon = R"(
+struct Text3DPush {
+    mat4 u_mvp;
+    vec4 u_color;
+    vec4 u_cam_right;
+    vec4 u_cam_up;
+};
+#ifdef VULKAN
+layout(push_constant) uniform Text3DPushBlock { Text3DPush pc; };
+#else
+layout(std140, binding = 14) uniform Text3DPushBlock { Text3DPush pc; };
+#endif
+)";
+
+static std::string make_text3d_vert() {
+    return std::string("#version 450 core\n") + kText3DCommon + R"(
 layout(location=0) in vec3 a_world_pos;
 layout(location=1) in vec4 a_offset_uv;  // (offset.x, offset.y, u, v)
 
-uniform mat4 u_mvp;
-uniform vec3 u_cam_right;
-uniform vec3 u_cam_up;
-
-out vec2 v_uv;
+layout(location=0) out vec2 v_uv;
 
 void main() {
     vec3 pos = a_world_pos
-             + u_cam_right * a_offset_uv.x
-             + u_cam_up    * a_offset_uv.y;
-    gl_Position = u_mvp * vec4(pos, 1.0);
+             + pc.u_cam_right.xyz * a_offset_uv.x
+             + pc.u_cam_up.xyz    * a_offset_uv.y;
+    gl_Position = pc.u_mvp * vec4(pos, 1.0);
     v_uv = a_offset_uv.zw;
 }
 )";
+}
 
-constexpr const char* kText3DFrag = R"(#version 330 core
-uniform sampler2D u_font_atlas;
-uniform vec4 u_color;
+static std::string make_text3d_frag() {
+    return std::string("#version 450 core\n") + kText3DCommon + R"(
+layout(binding=4) uniform sampler2D u_font_atlas;
 
-in vec2 v_uv;
-out vec4 frag_color;
+layout(location=0) in vec2 v_uv;
+layout(location=0) out vec4 frag_color;
 
 void main() {
-    float a = texture(u_font_atlas, v_uv).r * u_color.a;
+    float a = texture(u_font_atlas, v_uv).r * pc.u_color.a;
     // Threshold at one 8-bit alpha level — same rationale as in
     // Text2DRenderer. 0.01 was high enough to nibble AA tail pixels.
     if (a < (1.0/255.0)) discard;
-    frag_color = vec4(u_color.rgb, a);
+    frag_color = vec4(pc.u_color.rgb, a);
 }
 )";
+}
 
 }  // namespace
 
@@ -89,12 +112,12 @@ void Text3DRenderer::ensure_shader_(IRenderDevice& device) {
 
     ShaderDesc vs_desc;
     vs_desc.stage = ShaderStage::Vertex;
-    vs_desc.source = kText3DVert;
+    vs_desc.source = make_text3d_vert();
     vs_ = device.create_shader(vs_desc);
 
     ShaderDesc fs_desc;
     fs_desc.stage = ShaderStage::Fragment;
-    fs_desc.source = kText3DFrag;
+    fs_desc.source = make_text3d_frag();
     fs_ = device.create_shader(fs_desc);
 
     compiled_on_ = &device;
@@ -159,22 +182,29 @@ void Text3DRenderer::draw(std::string_view text_utf8,
         default: break;
     }
 
-    // Rebind shader + atlas + per-frame uniforms on every draw so we
+    // Rebind shader + atlas + per-draw state on every draw so we
     // survive state changes made by interleaved callers.
     RenderContext2& ctx = *ctx_;
     ctx.bind_shader(vs_, fs_);
+
+    Text3DPushData push{};
     // mvp_ arrived column-major from the caller (PlotEngine3D /
-    // orbit_camera). GL expects column-major too; no transpose.
-    // Text2DRenderer's projection is built row-major in a local
-    // helper, so THERE transpose=true is correct — don't mirror that
-    // flag here.
-    ctx.set_uniform_mat4("u_mvp", mvp_, /*transpose=*/false);
-    ctx.set_uniform_vec3("u_cam_right", cam_right_[0], cam_right_[1], cam_right_[2]);
-    ctx.set_uniform_vec3("u_cam_up",    cam_up_[0],    cam_up_[1],    cam_up_[2]);
-    ctx.set_uniform_int("u_font_atlas", 0);
+    // orbit_camera). The shader consumes the same column-major layout.
+    std::memcpy(push.mvp, mvp_, sizeof(push.mvp));
+    push.color[0] = r;
+    push.color[1] = g;
+    push.color[2] = b;
+    push.color[3] = a;
+    push.cam_right[0] = cam_right_[0];
+    push.cam_right[1] = cam_right_[1];
+    push.cam_right[2] = cam_right_[2];
+    push.cam_up[0] = cam_up_[0];
+    push.cam_up[1] = cam_up_[1];
+    push.cam_up[2] = cam_up_[2];
+    ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
+
     TextureHandle atlas = font_->ensure_texture(&ctx);
-    ctx.bind_sampled_texture(0, atlas);
-    ctx.set_uniform_vec4("u_color", r, g, b, a);
+    ctx.bind_sampled_texture(4, atlas);
 
     // Build one flat vertex array for the whole string.
     std::vector<float> verts;
