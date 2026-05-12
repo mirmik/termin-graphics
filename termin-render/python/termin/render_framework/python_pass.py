@@ -53,9 +53,9 @@ class PythonFramePass:
     def __init__(self, pass_name: str = "PythonFramePass", viewport_name: str | None = None):
         self._pass_name = pass_name
         self._tc_pass_handle: TcPass | None = None
-        self.enabled = True
-        self.passthrough = False
-        self.viewport_name = viewport_name
+        self._enabled = True
+        self._passthrough = False
+        self._viewport_name = viewport_name
 
         self.debug_internal_symbol: str | None = None
         self._debugger_window: Any = None
@@ -64,6 +64,9 @@ class PythonFramePass:
 
         self._tc_pass_handle: TcPass = TcPass(self, self.__class__.__name__)
         self.pass_name = pass_name
+        self.enabled = True
+        self.passthrough = False
+        self.viewport_name = viewport_name
 
     @property
     def pass_name(self) -> str:
@@ -74,6 +77,36 @@ class PythonFramePass:
         self._pass_name = value
         if self._tc_pass_handle is not None:
             self._tc_pass_handle.pass_name = value
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    @enabled.setter
+    def enabled(self, value: bool) -> None:
+        self._enabled = value
+        if self._tc_pass_handle is not None:
+            self._tc_pass_handle.enabled = value
+
+    @property
+    def passthrough(self) -> bool:
+        return self._passthrough
+
+    @passthrough.setter
+    def passthrough(self, value: bool) -> None:
+        self._passthrough = value
+        if self._tc_pass_handle is not None:
+            self._tc_pass_handle.passthrough = value
+
+    @property
+    def viewport_name(self) -> str | None:
+        return self._viewport_name
+
+    @viewport_name.setter
+    def viewport_name(self, value: str | None) -> None:
+        self._viewport_name = value
+        if self._tc_pass_handle is not None:
+            self._tc_pass_handle.ref().set_viewport_name(value or "")
 
     @property
     def _tc_pass(self) -> TcPassRef:
@@ -226,6 +259,9 @@ def deserialize_pass(data: dict, resource_manager=None):
 
 FramePass = PythonFramePass
 RenderFramePass = PythonFramePass
+
+if not tc_pass_registry_has("PythonFramePass"):
+    tc_pass_registry_register_python("PythonFramePass", PythonFramePass)
 
 __all__ = [
     "PythonFramePass",
