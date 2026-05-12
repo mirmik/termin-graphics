@@ -347,6 +347,12 @@ void Text2DRenderer::draw(std::string_view text_utf8,
     RenderContext2& ctx = *ctx_;
 
     const bool use_sdf = font_->is_sdf_size(size);
+    const float sdf_scale = use_sdf
+        ? size / static_cast<float>(font_->sdf_reference_px())
+        : 1.0f;
+    const float sdf_spread_px = use_sdf
+        ? static_cast<float>(font_->sdf_spread()) * sdf_scale
+        : 0.0f;
 
     if (profile) tc_profiler_begin_section("text.bind_shader");
     if (use_sdf) {
@@ -426,7 +432,10 @@ void Text2DRenderer::draw(std::string_view text_utf8,
         // doesn't feed back into the advance chain.
         const float px0 = std::floor(cursor_x + 0.5f);
         const float px1 = px0 + char_w;
-        const float py0 = start_y;              // top edge in y+down, already snapped
+        // SDF glyph cells include `spread` pixels above and below the
+        // line-height cell. Shift the quad up by that spread so the
+        // actual ink keeps the same baseline as bitmap glyphs.
+        const float py0 = start_y - sdf_spread_px;
         const float py1 = py0 + char_h;         // bottom edge
 
         // 6 vertices (2 triangles). CCW in pixel y+down visual →

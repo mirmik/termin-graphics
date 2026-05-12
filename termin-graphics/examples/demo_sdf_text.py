@@ -15,8 +15,8 @@ from tcgui.widgets.ui import UI
 from tcgui.widgets.label import Label
 from tcgui.widgets.vstack import VStack
 from tcgui.widgets.theme import current_theme as _t
-from termin.display import BackendWindow
-from tgfx._tgfx_native import Tgfx2Context
+from termin.display import SDLBackendWindow
+from tgfx import Tgfx2Context
 
 
 _SDL_BUTTON_MAP = {1: MouseButton.LEFT, 2: MouseButton.MIDDLE, 3: MouseButton.RIGHT}
@@ -38,7 +38,7 @@ def make_ui():
 
 
 def main():
-    window = BackendWindow("SDF Text Demo", 1000, 700)
+    window = SDLBackendWindow("SDF Text Demo", 1000, 700)
     ctx = Tgfx2Context.from_window(window.device_ptr(), window.context_ptr())
     ui = UI(graphics=ctx)
     ui.root = make_ui()
@@ -52,6 +52,9 @@ def main():
             and ev.key.keysym.scancode == sdl2.SDL_SCANCODE_ESCAPE
         ):
             window.set_should_close(True)
+        elif t == sdl2.SDL_WINDOWEVENT:
+            if ev.window.event == sdl2.SDL_WINDOWEVENT_CLOSE:
+                window.set_should_close(True)
         elif t == sdl2.SDL_MOUSEMOTION:
             ui.mouse_move(float(ev.motion.x), float(ev.motion.y))
         elif t == sdl2.SDL_MOUSEBUTTONDOWN:
@@ -79,6 +82,9 @@ def main():
         ui.process_deferred()
         if tex is not None:
             window.present(tex)
+
+    window.close()
+    sdl2.SDL_Quit()
 
 
 if __name__ == "__main__":
