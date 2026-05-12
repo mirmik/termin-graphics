@@ -45,13 +45,4 @@ TC_API void tc_render_target_pool_foreach(tc_render_target_pool_iter_fn callback
 }
 #endif
 
-#ifdef __cplusplus
-inline bool operator==(tc_render_target_handle a, tc_render_target_handle b) {
-    return a.index == b.index && a.generation == b.generation;
-}
-inline bool operator!=(tc_render_target_handle a, tc_render_target_handle b) {
-    return !(a == b);
-}
-#endif
-
 #endif
