@@ -56,6 +56,9 @@ wheels/
 *.swo
 *~
 
+# Obsidian vault local UI state
+.obsidian/workspace*.json
+
 # ── Virtual environments ───────────────────────────────────────
 .venv/
 venv/
