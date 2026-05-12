@@ -12,11 +12,13 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
+#include <nanobind/stl/vector.h>
 #include <nanobind/ndarray.h>
 
 #include <memory>
 
 #include <tgfx2/render_context.hpp>
+#include <tgfx2/canvas2d_renderer.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/device_factory.hpp>
 #include <tgfx2/opengl/opengl_render_device.hpp>
@@ -1003,6 +1005,123 @@ void bind_tgfx2(nb::module_& m) {
         }
         return nb::cast<tgfx::Text3DRenderer::Anchor>(obj);
     };
+
+    nb::class_<tgfx::CanvasColor>(m, "CanvasColor")
+        .def(nb::init<>())
+        .def(nb::init<float, float, float, float>(),
+             nb::arg("r"), nb::arg("g"), nb::arg("b"), nb::arg("a") = 1.0f)
+        .def("__init__", [](tgfx::CanvasColor* self, nb::tuple t) {
+            if (t.size() < 3) {
+                throw std::runtime_error("CanvasColor tuple must have at least 3 elements");
+            }
+            const float a = t.size() >= 4 ? nb::cast<float>(t[3]) : 1.0f;
+            new (self) tgfx::CanvasColor{
+                nb::cast<float>(t[0]),
+                nb::cast<float>(t[1]),
+                nb::cast<float>(t[2]),
+                a,
+            };
+        })
+        .def_rw("r", &tgfx::CanvasColor::r)
+        .def_rw("g", &tgfx::CanvasColor::g)
+        .def_rw("b", &tgfx::CanvasColor::b)
+        .def_rw("a", &tgfx::CanvasColor::a)
+        .def_static("white", &tgfx::CanvasColor::white)
+        .def_static("transparent", &tgfx::CanvasColor::transparent)
+        .def("__iter__", [](const tgfx::CanvasColor& c) {
+            return nb::iter(nb::make_tuple(c.r, c.g, c.b, c.a));
+        });
+
+    nb::class_<tgfx::CanvasVec2>(m, "CanvasVec2")
+        .def(nb::init<>())
+        .def(nb::init<float, float>(), nb::arg("x"), nb::arg("y"))
+        .def_rw("x", &tgfx::CanvasVec2::x)
+        .def_rw("y", &tgfx::CanvasVec2::y);
+
+    nb::implicitly_convertible<nb::tuple, tgfx::CanvasColor>();
+
+    nb::class_<tgfx::Canvas2DRenderer>(m, "Canvas2DRenderer")
+        .def(nb::init<tgfx::FontAtlas*>(),
+             nb::arg("font").none() = nb::none(),
+             nb::keep_alive<1, 2>())
+        .def("begin",
+             [](tgfx::Canvas2DRenderer& self,
+                tgfx::RenderContext2& ctx,
+                int width, int height) {
+                 self.begin(ctx, width, height);
+             },
+             nb::arg("ctx"), nb::arg("width"), nb::arg("height"))
+        .def("begin",
+             [](tgfx::Canvas2DRenderer& self,
+                tgfx::RenderContext2& ctx,
+                int x, int y, int width, int height) {
+                 self.begin(ctx, x, y, width, height);
+             },
+             nb::arg("ctx"), nb::arg("x"), nb::arg("y"),
+             nb::arg("width"), nb::arg("height"))
+        .def("end", &tgfx::Canvas2DRenderer::end)
+        .def("begin_clip", &tgfx::Canvas2DRenderer::begin_clip,
+             nb::arg("x"), nb::arg("y"), nb::arg("w"), nb::arg("h"))
+        .def("end_clip", &tgfx::Canvas2DRenderer::end_clip)
+        .def("draw_rect", &tgfx::Canvas2DRenderer::draw_rect,
+             nb::arg("x"), nb::arg("y"), nb::arg("w"), nb::arg("h"),
+             nb::arg("color"), nb::arg("radius") = 0.0f)
+        .def("draw_rect_outline", &tgfx::Canvas2DRenderer::draw_rect_outline,
+             nb::arg("x"), nb::arg("y"), nb::arg("w"), nb::arg("h"),
+             nb::arg("color"), nb::arg("thickness") = 1.0f)
+        .def("draw_line", &tgfx::Canvas2DRenderer::draw_line,
+             nb::arg("x0"), nb::arg("y0"), nb::arg("x1"), nb::arg("y1"),
+             nb::arg("color"), nb::arg("thickness") = 1.0f)
+        .def("draw_polyline",
+             [](tgfx::Canvas2DRenderer& self,
+                const std::vector<tgfx::CanvasVec2>& points,
+                tgfx::CanvasColor color,
+                float thickness) {
+                 self.draw_polyline(std::span<const tgfx::CanvasVec2>(
+                                        points.data(), points.size()),
+                                    color, thickness);
+             },
+             nb::arg("points"), nb::arg("color"), nb::arg("thickness") = 1.0f)
+        .def("draw_texture", &tgfx::Canvas2DRenderer::draw_texture,
+             nb::arg("texture"),
+             nb::arg("x"), nb::arg("y"), nb::arg("w"), nb::arg("h"),
+             nb::arg("tint") = tgfx::CanvasColor::white(),
+             nb::arg("flip_v") = false)
+        .def("draw_text",
+             [resolve_text2d_anchor](tgfx::Canvas2DRenderer& self,
+                const std::string& text,
+                float x, float y,
+                float size_px,
+                tgfx::CanvasColor color,
+                tgfx::FontAtlas* font,
+                nb::object anchor) {
+                 self.draw_text(text, x, y, size_px, color, font,
+                                resolve_text2d_anchor(anchor));
+             },
+             nb::arg("text"),
+             nb::arg("x"), nb::arg("y"),
+             nb::arg("size_px"),
+             nb::arg("color") = tgfx::CanvasColor::white(),
+             nb::arg("font").none() = nb::none(),
+             nb::arg("anchor") = "left",
+             nb::keep_alive<1, 7>())
+        .def("measure_text",
+             [](tgfx::Canvas2DRenderer& self,
+                const std::string& text,
+                float size_px,
+                tgfx::FontAtlas* font) {
+                 auto m = self.measure_text(text, size_px, font);
+                 return std::make_tuple(m.width, m.height);
+             },
+             nb::arg("text"),
+             nb::arg("size_px") = 14.0f,
+             nb::arg("font").none() = nb::none())
+        .def("set_default_font", &tgfx::Canvas2DRenderer::set_default_font,
+             nb::arg("font").none() = nb::none(),
+             nb::keep_alive<1, 2>())
+        .def_prop_ro("default_font", &tgfx::Canvas2DRenderer::default_font,
+                     nb::rv_policy::reference_internal)
+        .def("release_gpu", &tgfx::Canvas2DRenderer::release_gpu);
 
     nb::class_<tgfx::Text2DRenderer>(m, "Text2DRenderer")
         .def(nb::init<tgfx::FontAtlas*>(),

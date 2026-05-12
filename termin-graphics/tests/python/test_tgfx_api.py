@@ -18,3 +18,16 @@ def test_render_state_transparent():
     assert rs.depth_test is True
     assert rs.depth_write is False
     assert rs.blend is True
+
+
+def test_canvas2d_binding_smoke():
+    color = tgfx.CanvasColor(1.0, 0.5, 0.25, 1.0)
+    assert tuple(color) == (1.0, 0.5, 0.25, 1.0)
+
+    point = tgfx.CanvasVec2(3.0, 4.0)
+    assert point.x == 3.0
+    assert point.y == 4.0
+
+    renderer = tgfx.Canvas2DRenderer()
+    assert renderer.default_font is None
+    assert renderer.measure_text("no font", 14.0) == (0.0, 0.0)
