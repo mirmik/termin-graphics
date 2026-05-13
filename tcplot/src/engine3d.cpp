@@ -68,13 +68,22 @@ static std::string make_vert_src() {
     return std::string("#version 450 core\n") + kPC + R"(
 layout(location=0) in vec3 a_position;
 layout(location=1) in vec4 a_color;
+layout(location=2) in vec4 a_surface_grid;
+layout(location=3) in vec4 a_surface_grid_color;
+layout(location=4) in vec4 a_surface_grid_opts;
 layout(location=0) out vec4 v_color;
 layout(location=1) out float v_z_norm;
 layout(location=2) out vec3 v_scaled_pos;
+layout(location=3) out vec4 v_surface_grid;
+layout(location=4) out vec4 v_surface_grid_color;
+layout(location=5) out vec4 v_surface_grid_opts;
 void main() {
     gl_Position = pc.u_mvp * vec4(a_position, 1.0);
     v_color = a_color;
     v_scaled_pos = a_position * pc.u_axis_shading.xyz;
+    v_surface_grid = a_surface_grid;
+    v_surface_grid_color = a_surface_grid_color;
+    v_surface_grid_opts = a_surface_grid_opts;
     float z_range = pc.u_params.y - pc.u_params.x;
     v_z_norm = (z_range > 0.0) ? (a_position.z - pc.u_params.x) / z_range : 0.5;
 }
@@ -86,6 +95,9 @@ static std::string make_frag_src() {
 layout(location=0) in vec4 v_color;
 layout(location=1) in float v_z_norm;
 layout(location=2) in vec3 v_scaled_pos;
+layout(location=3) in vec4 v_surface_grid;
+layout(location=4) in vec4 v_surface_grid_color;
+layout(location=5) in vec4 v_surface_grid_opts;
 layout(location=0) out vec4 frag_color;
 
 vec3 jet(float t) {
@@ -171,6 +183,16 @@ vec3 map_surface_color(float t, float map_id) {
     return jet(t);
 }
 
+float grid_line_mask(float coord, float step, float max_coord, float width_px) {
+    step = max(step, 1.0);
+    float d_step = abs(coord - round(coord / step) * step);
+    float d_edge = min(abs(coord), abs(coord - max_coord));
+    float d = min(d_step, d_edge);
+    float fw = max(fwidth(coord), 1e-6);
+    float half_width = max(width_px, 0.1) * fw * 0.5;
+    return 1.0 - smoothstep(half_width, half_width + fw, d);
+}
+
 void main() {
     if (pc.u_params.z != 0.0) {
         vec3 rgb = map_surface_color(v_z_norm, pc.u_params.w);
@@ -185,6 +207,21 @@ void main() {
             shade = clamp(shade, 0.72, 1.08);
             rgb *= shade;
         }
+        if (v_surface_grid_opts.x != 0.0) {
+            float col_mask = grid_line_mask(
+                v_surface_grid.x,
+                v_surface_grid.z,
+                v_surface_grid_opts.z,
+                v_surface_grid_opts.y);
+            float row_mask = grid_line_mask(
+                v_surface_grid.y,
+                v_surface_grid.w,
+                v_surface_grid_opts.w,
+                v_surface_grid_opts.y);
+            float grid_mask = max(col_mask, row_mask);
+            rgb = mix(rgb, v_surface_grid_color.rgb,
+                      clamp(v_surface_grid_color.a * grid_mask, 0.0, 1.0));
+        }
         frag_color = vec4(rgb, pc.u_surface_color.a);
     } else {
         frag_color = v_color;
@@ -193,7 +230,7 @@ void main() {
 )";
 }
 
-constexpr uint32_t kFloatsPerVertex = 7;
+constexpr uint32_t kFloatsPerVertex = 19;
 constexpr uint32_t kVertexStride = kFloatsPerVertex * sizeof(float);
 
 tgfx::VertexBufferLayout pos_color_layout() {
@@ -201,6 +238,9 @@ tgfx::VertexBufferLayout pos_color_layout() {
     layout.stride = kVertexStride;
     layout.attributes.push_back({0, tgfx::VertexFormat::Float3, 0});
     layout.attributes.push_back({1, tgfx::VertexFormat::Float4, 3 * sizeof(float)});
+    layout.attributes.push_back({2, tgfx::VertexFormat::Float4, 7 * sizeof(float)});
+    layout.attributes.push_back({3, tgfx::VertexFormat::Float4, 11 * sizeof(float)});
+    layout.attributes.push_back({4, tgfx::VertexFormat::Float4, 15 * sizeof(float)});
     return layout;
 }
 
@@ -289,6 +329,38 @@ inline void push_vertex(std::vector<float>& verts,
     verts.push_back(c.g);
     verts.push_back(c.b);
     verts.push_back(c.a);
+    for (int i = 0; i < 12; ++i) verts.push_back(0.0f);
+}
+
+inline void push_surface_vertex(std::vector<float>& verts,
+                                float x, float y, float z,
+                                const Color4& c,
+                                float col, float row,
+                                float row_step, float col_step,
+                                const Color4& grid_color,
+                                bool grid_visible,
+                                float grid_width_px,
+                                float max_col,
+                                float max_row) {
+    verts.push_back(x);
+    verts.push_back(y);
+    verts.push_back(z);
+    verts.push_back(c.r);
+    verts.push_back(c.g);
+    verts.push_back(c.b);
+    verts.push_back(c.a);
+    verts.push_back(col);
+    verts.push_back(row);
+    verts.push_back(col_step);
+    verts.push_back(row_step);
+    verts.push_back(grid_color.r);
+    verts.push_back(grid_color.g);
+    verts.push_back(grid_color.b);
+    verts.push_back(grid_color.a);
+    verts.push_back(grid_visible ? 1.0f : 0.0f);
+    verts.push_back(grid_width_px);
+    verts.push_back(max_col);
+    verts.push_back(max_row);
 }
 
 // Resolve a possibly-missing Color4 against a series index. Matches
@@ -411,12 +483,14 @@ bool PlotEngine3D::set_surface_color(size_t idx, Color4 color) {
 
 bool PlotEngine3D::set_surface_grid(size_t idx, bool visible,
                                     uint32_t row_step, uint32_t col_step,
-                                    Color4 color) {
+                                    Color4 color,
+                                    float width_px) {
     if (idx >= data.surfaces.size()) return false;
     SurfaceSeries& surf = data.surfaces[idx];
     surf.grid_visible = visible;
     surf.grid_row_step = std::max<uint32_t>(1, row_step);
     surf.grid_col_step = std::max<uint32_t>(1, col_step);
+    surf.grid_width_px = std::max(width_px, 0.1f);
     surf.grid_color = color;
     dirty_ = true;
     return true;
@@ -471,7 +545,6 @@ void PlotEngine3D::release_meshes_() {
     }
     surface_meshes_.clear();
     surface_mesh_styles_.clear();
-    surface_grid_meshes_.clear();
     wireframe_meshes_.clear();
     mesh_device_ = nullptr;
 }
@@ -606,7 +679,6 @@ void PlotEngine3D::rebuild_meshes_(tgfx::IRenderDevice& device) {
     // --- Surfaces ---
     for (const auto& surf : data.surfaces) {
         build_surface_mesh_(device, surf);
-        build_surface_grid_mesh_(device, surf);
     }
 
     // --- Grid + axes ---
@@ -691,16 +763,29 @@ void PlotEngine3D::build_surface_mesh_(tgfx::IRenderDevice& device,
     const Color4 surface_color = surf.color.value_or(Color4{1.0f, 1.0f, 1.0f, 1.0f});
     const float alpha = surface_color.a;
 
+    const Color4 grid_color =
+        surf.grid_color.value_or(Color4{0.05f, 0.05f, 0.05f, 1.0f});
+    const float row_step = static_cast<float>(std::max<uint32_t>(1, surf.grid_row_step));
+    const float col_step = static_cast<float>(std::max<uint32_t>(1, surf.grid_col_step));
+    const float grid_width_px = std::max(surf.grid_width_px, 0.1f);
+
     std::vector<float> verts;
-    verts.reserve((size_t)rows * cols * 7);
+    verts.reserve((size_t)rows * cols * kFloatsPerVertex);
     for (uint32_t j = 0; j < rows; ++j) {
         for (uint32_t i = 0; i < cols; ++i) {
             const size_t idx = (size_t)j * cols + i;
             const double x = surf.X[idx];
             const double y = surf.Y[idx];
             const double z = surf.Z[idx];
-            push_vertex(verts, (float)x, (float)y, (float)z,
-                        {surface_color.r, surface_color.g, surface_color.b, alpha});
+            push_surface_vertex(verts, (float)x, (float)y, (float)z,
+                                {surface_color.r, surface_color.g, surface_color.b, alpha},
+                                static_cast<float>(i), static_cast<float>(j),
+                                row_step, col_step,
+                                grid_color,
+                                surf.grid_visible,
+                                grid_width_px,
+                                static_cast<float>(cols - 1),
+                                static_cast<float>(rows - 1));
         }
     }
 
@@ -742,64 +827,6 @@ void PlotEngine3D::build_surface_mesh_(tgfx::IRenderDevice& device,
             surface_meshes_.push_back(std::move(*mesh));
             surface_mesh_styles_.push_back(surf);
         }
-    }
-}
-
-void PlotEngine3D::build_surface_grid_mesh_(tgfx::IRenderDevice& device,
-                                            const SurfaceSeries& surf) {
-    const uint32_t rows = surf.rows;
-    const uint32_t cols = surf.cols;
-    if (!surf.grid_visible || rows < 2 || cols < 2) return;
-
-    const uint32_t row_step = std::max<uint32_t>(1, surf.grid_row_step);
-    const uint32_t col_step = std::max<uint32_t>(1, surf.grid_col_step);
-    const Color4 grid_color =
-        surf.grid_color.value_or(Color4{0.05f, 0.05f, 0.05f, 1.0f});
-
-    std::vector<float> verts;
-    std::vector<uint32_t> indices;
-    uint32_t idx = 0;
-
-    auto push_line_vertex = [&](uint32_t j, uint32_t i) {
-        const size_t flat = static_cast<size_t>(j) * cols + i;
-        push_vertex(verts,
-                    static_cast<float>(surf.X[flat]),
-                    static_cast<float>(surf.Y[flat]),
-                    static_cast<float>(surf.Z[flat]),
-                    grid_color);
-    };
-
-    auto add_segment = [&](uint32_t j0, uint32_t i0,
-                           uint32_t j1, uint32_t i1) {
-        push_line_vertex(j0, i0);
-        push_line_vertex(j1, i1);
-        indices.push_back(idx);
-        indices.push_back(idx + 1);
-        idx += 2;
-    };
-
-    auto selected_index = [](uint32_t v, uint32_t last, uint32_t step) {
-        return v == 0 || v == last || (v % step) == 0;
-    };
-
-    for (uint32_t j = 0; j < rows; ++j) {
-        if (!selected_index(j, rows - 1, row_step)) continue;
-        for (uint32_t i = 0; i + 1 < cols; ++i) {
-            add_segment(j, i, j, i + 1);
-        }
-    }
-
-    for (uint32_t i = 0; i < cols; ++i) {
-        if (!selected_index(i, cols - 1, col_step)) continue;
-        for (uint32_t j = 0; j + 1 < rows; ++j) {
-            add_segment(j, i, j + 1, i);
-        }
-    }
-
-    if (!verts.empty()) {
-        auto mesh = make_mesh_(device, verts, indices,
-                               tgfx::PrimitiveTopology::LineList);
-        if (mesh.has_value()) surface_grid_meshes_.push_back(std::move(*mesh));
     }
 }
 
@@ -871,19 +898,6 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         draw_mesh_(*ctx, surface_meshes_[i]);
     }
 
-    // Sparse surface data grids: selected rows/columns, full resolution
-    // along each selected line. Drawn as an overlay; sparse enough not to
-    // blacken dense surfaces like the old triangle-edge wireframe.
-    set_plot3d_push_constants(*ctx, mvp, z_min, z_max, false, *this);
-    if (!surface_grid_meshes_.empty()) {
-        ctx->set_depth_test(false);
-        ctx->set_blend(true);
-        for (auto& m : surface_grid_meshes_) {
-            draw_mesh_(*ctx, m);
-        }
-        ctx->set_depth_test(true);
-    }
-
     // Wireframes on top (no depth, no jet).
     set_plot3d_push_constants(*ctx, mvp, z_min, z_max, false, *this);
     if (show_wireframe) {
@@ -917,9 +931,18 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         const float pz = (float)marker_z_;
         struct Axis { float dx, dy, dz; };
         const Axis axes_[] = {{cs, 0, 0}, {0, cs, 0}, {0, 0, cs}};
+        auto push_immediate_vertex = [&](float x, float y, float z) {
+            verts.push_back(x);
+            verts.push_back(y);
+            verts.push_back(z);
+            verts.push_back(c.r);
+            verts.push_back(c.g);
+            verts.push_back(c.b);
+            verts.push_back(c.a);
+        };
         for (const auto& a : axes_) {
-            push_vertex(verts, px - a.dx, py - a.dy, pz - a.dz, c);
-            push_vertex(verts, px + a.dx, py + a.dy, pz + a.dz, c);
+            push_immediate_vertex(px - a.dx, py - a.dy, pz - a.dz);
+            push_immediate_vertex(px + a.dx, py + a.dy, pz + a.dz);
         }
         ctx->draw_immediate_lines(verts.data(),
                                   (uint32_t)(verts.size() / 7));

@@ -91,7 +91,8 @@ public:
     bool set_surface_color(size_t idx, Color4 color);
     bool set_surface_grid(size_t idx, bool visible,
                           uint32_t row_step, uint32_t col_step,
-                          Color4 color);
+                          Color4 color,
+                          float width_px = 1.5f);
 
     void toggle_wireframe() { show_wireframe = !show_wireframe; }
     void toggle_marker_mode();
@@ -149,8 +150,6 @@ private:
                           const double bounds_max[3]);
     void build_surface_mesh_(tgfx::IRenderDevice& device,
                              const SurfaceSeries& surf);
-    void build_surface_grid_mesh_(tgfx::IRenderDevice& device,
-                                  const SurfaceSeries& surf);
     void release_meshes_();
 
     // Ensure the 3D plot shader is compiled for the current device.
@@ -173,7 +172,6 @@ private:
     std::optional<MeshGpu> grid_mesh_;
     std::vector<MeshGpu> surface_meshes_;
     std::vector<SurfaceSeries> surface_mesh_styles_;
-    std::vector<MeshGpu> surface_grid_meshes_;
     std::vector<MeshGpu> wireframe_meshes_;
 
     // Text renderer for billboard tick/marker labels. Owned here; the

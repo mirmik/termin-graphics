@@ -101,7 +101,8 @@ public:
     bool set_surface_color(int surface_idx, float r, float g, float b, float a);
     bool set_surface_grid(int surface_idx, bool visible,
                           uint32_t row_step, uint32_t col_step,
-                          float r, float g, float b, float a);
+                          float r, float g, float b, float a,
+                          float width_px = 1.5f);
     void toggle_wireframe();
     void toggle_marker_mode();
     void set_z_scale(float s);

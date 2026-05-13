@@ -116,13 +116,15 @@ class Plot3D(Widget):
         self.engine.clear()
 
     def set_surface_grid(self, idx, visible=True, row_step=8, col_step=8,
-                         color=(0.05, 0.05, 0.05, 1.0)):
+                         color=(0.05, 0.05, 0.05, 1.0),
+                         width_px=1.5):
         return self.engine.set_surface_grid(
             idx,
             visible,
             row_step,
             col_step,
             color,
+            width_px,
         )
 
     def pick(self, mx: float, my: float):

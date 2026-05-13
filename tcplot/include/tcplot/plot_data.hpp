@@ -48,6 +48,7 @@ struct TCPLOT_API SurfaceSeries {
     bool grid_visible = false;
     uint32_t grid_row_step = 8;
     uint32_t grid_col_step = 8;
+    float grid_width_px = 1.5f;
     std::optional<Color4> grid_color;
     std::string label;
 };

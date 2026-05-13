@@ -270,14 +270,16 @@ void bind_engines(nb::module_& m) {
              nb::arg("idx"), nb::arg("color"))
         .def("set_surface_grid",
              [](tcplot::PlotEngine3D& self, size_t idx, bool visible,
-                uint32_t row_step, uint32_t col_step, nb::object color) {
+                uint32_t row_step, uint32_t col_step, nb::object color,
+                float width_px) {
                  auto c = optional_color_from_obj(color);
                  if (!c.has_value()) return false;
-                 return self.set_surface_grid(idx, visible, row_step, col_step, *c);
+                 return self.set_surface_grid(idx, visible, row_step, col_step, *c, width_px);
              },
              nb::arg("idx"), nb::arg("visible"),
              nb::arg("row_step"), nb::arg("col_step"),
-             nb::arg("color"))
+             nb::arg("color"),
+             nb::arg("width_px") = 1.5f)
 
         .def("clear",              &tcplot::PlotEngine3D::clear)
         .def("toggle_wireframe",   &tcplot::PlotEngine3D::toggle_wireframe)

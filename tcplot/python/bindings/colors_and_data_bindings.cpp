@@ -125,6 +125,11 @@ void bind_colors_and_data(nb::module_& m) {
         .def_rw("cols", &tcplot::SurfaceSeries::cols)
         .def_rw("color", &tcplot::SurfaceSeries::color)
         .def_rw("wireframe", &tcplot::SurfaceSeries::wireframe)
+        .def_rw("grid_visible", &tcplot::SurfaceSeries::grid_visible)
+        .def_rw("grid_row_step", &tcplot::SurfaceSeries::grid_row_step)
+        .def_rw("grid_col_step", &tcplot::SurfaceSeries::grid_col_step)
+        .def_rw("grid_width_px", &tcplot::SurfaceSeries::grid_width_px)
+        .def_rw("grid_color", &tcplot::SurfaceSeries::grid_color)
         .def_rw("label", &tcplot::SurfaceSeries::label);
 
     // ---- PlotData ----

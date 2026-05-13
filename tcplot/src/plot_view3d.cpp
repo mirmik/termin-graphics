@@ -189,13 +189,15 @@ bool PlotView3D::set_surface_color(int surface_idx, float r, float g, float b, f
 }
 bool PlotView3D::set_surface_grid(int surface_idx, bool visible,
                                   uint32_t row_step, uint32_t col_step,
-                                  float r, float g, float b, float a) {
+                                  float r, float g, float b, float a,
+                                  float width_px) {
     if (surface_idx < 0) return false;
     return engine_->set_surface_grid(static_cast<size_t>(surface_idx),
                                      visible,
                                      row_step,
                                      col_step,
-                                     Color4{r, g, b, a});
+                                     Color4{r, g, b, a},
+                                     width_px);
 }
 void PlotView3D::toggle_wireframe()    { engine_->toggle_wireframe(); }
 void PlotView3D::toggle_marker_mode()  { engine_->toggle_marker_mode(); }
