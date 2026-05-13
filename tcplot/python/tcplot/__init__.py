@@ -26,6 +26,7 @@ from tcplot._tcplot_native import (
     PickResult3D,
     PlotEngine2D,
     PlotEngine3D,
+    SurfaceColorMap,
     MouseButton,
 )
 
@@ -50,6 +51,7 @@ __all__ = [
     "OrbitCamera",
     "PickResult3D",
     "Color4",
+    "SurfaceColorMap",
     "MouseButton",
     "DEFAULT_COLORS",
     "cycle_color",

@@ -82,12 +82,35 @@ public:
                  float cr, float cg, float cb, float ca,
                  bool wireframe = false,
                  const char* label = "");
+    void surface_colormap(const double* X, const double* Y, const double* Z,
+                          uint32_t rows, uint32_t cols,
+                          SurfaceColorMap colormap,
+                          float cr, float cg, float cb, float ca,
+                          bool wireframe = false,
+                          const char* label = "");
 
     void clear();
+    void set_title(const char* title);
+    void set_x_label(const char* label);
+    void set_y_label(const char* label);
+    void set_z_label(const char* label);
+    void set_axis_labels(const char* x_label,
+                         const char* y_label,
+                         const char* z_label);
+    bool set_surface_colormap(int surface_idx, SurfaceColorMap colormap);
+    bool set_surface_color(int surface_idx, float r, float g, float b, float a);
+    bool set_surface_grid(int surface_idx, bool visible,
+                          uint32_t row_step, uint32_t col_step,
+                          float r, float g, float b, float a);
     void toggle_wireframe();
     void toggle_marker_mode();
     void set_z_scale(float s);
     float get_z_scale() const;
+    void set_axis_scale(float x, float y, float z);
+    float get_x_scale() const;
+    float get_y_scale() const;
+    void set_surface_shading(bool enabled, float strength = 0.35f);
+    void set_surface_light_dir(float x, float y, float z);
 
     // --- Camera access ---
     // Returned reference lives as long as this view. C# callers can

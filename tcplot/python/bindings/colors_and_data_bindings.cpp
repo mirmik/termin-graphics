@@ -136,6 +136,7 @@ void bind_colors_and_data(nb::module_& m) {
         .def_rw("title", &tcplot::PlotData::title)
         .def_rw("x_label", &tcplot::PlotData::x_label)
         .def_rw("y_label", &tcplot::PlotData::y_label)
+        .def_rw("z_label", &tcplot::PlotData::z_label)
 
         // add_line: accept numpy arrays for x/y/z and a tuple-or-None color.
         .def("add_line",

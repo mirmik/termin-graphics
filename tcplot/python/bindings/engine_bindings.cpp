@@ -171,6 +171,14 @@ void bind_engines(nb::module_& m) {
              nb::arg("x"), nb::arg("y"), nb::arg("dy"));
 
     // ---- PlotEngine3D ----
+    nb::enum_<tcplot::SurfaceColorMap>(m, "SurfaceColorMap")
+        .value("Jet", tcplot::SurfaceColorMap::Jet)
+        .value("Viridis", tcplot::SurfaceColorMap::Viridis)
+        .value("Plasma", tcplot::SurfaceColorMap::Plasma)
+        .value("Grayscale", tcplot::SurfaceColorMap::Grayscale)
+        .value("CoolWarm", tcplot::SurfaceColorMap::CoolWarm)
+        .value("Solid", tcplot::SurfaceColorMap::Solid);
+
     nb::class_<tcplot::PlotEngine3D>(m, "PlotEngine3D")
         .def(nb::init<>())
 
@@ -178,7 +186,16 @@ void bind_engines(nb::module_& m) {
         .def_rw("camera", &tcplot::PlotEngine3D::camera)
         .def_rw("show_grid",      &tcplot::PlotEngine3D::show_grid)
         .def_rw("show_wireframe", &tcplot::PlotEngine3D::show_wireframe)
+        .def_rw("x_scale",        &tcplot::PlotEngine3D::x_scale)
+        .def_rw("y_scale",        &tcplot::PlotEngine3D::y_scale)
         .def_rw("z_scale",        &tcplot::PlotEngine3D::z_scale)
+        .def_rw("surface_shading", &tcplot::PlotEngine3D::surface_shading)
+        .def_rw("surface_shading_strength",
+                 &tcplot::PlotEngine3D::surface_shading_strength)
+        .def("set_surface_shading", &tcplot::PlotEngine3D::set_surface_shading,
+             nb::arg("enabled"), nb::arg("strength") = 0.35f)
+        .def("set_surface_light_dir", &tcplot::PlotEngine3D::set_surface_light_dir,
+             nb::arg("x"), nb::arg("y"), nb::arg("z"))
         .def_rw("marker_mode",    &tcplot::PlotEngine3D::marker_mode)
 
         .def("set_viewport", &tcplot::PlotEngine3D::set_viewport,
@@ -226,18 +243,41 @@ void bind_engines(nb::module_& m) {
                 nb::ndarray<double, nb::c_contig, nb::device::cpu> Y,
                 nb::ndarray<double, nb::c_contig, nb::device::cpu> Z,
                 uint32_t rows, uint32_t cols,
-                nb::object color, bool wireframe, const std::string& label) {
+                nb::object color, tcplot::SurfaceColorMap colormap,
+                bool wireframe, const std::string& label) {
                  self.surface(vec_from_array(X), vec_from_array(Y),
                               vec_from_array(Z),
                               rows, cols,
                               optional_color_from_obj(color),
+                              colormap,
                               wireframe, label);
              },
              nb::arg("X"), nb::arg("Y"), nb::arg("Z"),
              nb::arg("rows"), nb::arg("cols"),
              nb::arg("color") = nb::none(),
+             nb::arg("colormap") = tcplot::SurfaceColorMap::Jet,
              nb::arg("wireframe") = false,
              nb::arg("label") = std::string())
+
+        .def("set_surface_colormap", &tcplot::PlotEngine3D::set_surface_colormap,
+             nb::arg("idx"), nb::arg("colormap"))
+        .def("set_surface_color",
+             [](tcplot::PlotEngine3D& self, size_t idx, nb::object color) {
+                 auto c = optional_color_from_obj(color);
+                 if (!c.has_value()) return false;
+                 return self.set_surface_color(idx, *c);
+             },
+             nb::arg("idx"), nb::arg("color"))
+        .def("set_surface_grid",
+             [](tcplot::PlotEngine3D& self, size_t idx, bool visible,
+                uint32_t row_step, uint32_t col_step, nb::object color) {
+                 auto c = optional_color_from_obj(color);
+                 if (!c.has_value()) return false;
+                 return self.set_surface_grid(idx, visible, row_step, col_step, *c);
+             },
+             nb::arg("idx"), nb::arg("visible"),
+             nb::arg("row_step"), nb::arg("col_step"),
+             nb::arg("color"))
 
         .def("clear",              &tcplot::PlotEngine3D::clear)
         .def("toggle_wireframe",   &tcplot::PlotEngine3D::toggle_wireframe)

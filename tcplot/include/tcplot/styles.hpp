@@ -19,6 +19,15 @@ struct Color4 {
         : r(r_), g(g_), b(b_), a(a_) {}
 };
 
+enum class SurfaceColorMap {
+    Jet,
+    Viridis,
+    Plasma,
+    Grayscale,
+    CoolWarm,
+    Solid,
+};
+
 namespace styles {
 
 // Default color cycle (tab10-like palette). 10 entries.

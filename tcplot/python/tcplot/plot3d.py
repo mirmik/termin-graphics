@@ -5,7 +5,7 @@ from __future__ import annotations
 from tcgui.widgets.widget import Widget
 from tcgui.widgets.events import MouseEvent, MouseWheelEvent
 
-from tcplot._tcplot_native import PlotEngine3D
+from tcplot._tcplot_native import PlotEngine3D, SurfaceColorMap
 
 
 class Plot3D(Widget):
@@ -65,6 +65,22 @@ class Plot3D(Widget):
     def z_scale(self, value: float) -> None:
         self.engine.z_scale = value
 
+    def set_axis_scale(self, x: float, y: float, z: float) -> None:
+        self.engine.x_scale = x
+        self.engine.y_scale = y
+        self.engine.z_scale = z
+
+    def set_axis_labels(self, x: str, y: str, z: str) -> None:
+        self.data.x_label = x
+        self.data.y_label = y
+        self.data.z_label = z
+
+    def set_surface_shading(self, enabled: bool, strength: float = 0.35) -> None:
+        self.engine.set_surface_shading(enabled, strength)
+
+    def set_surface_light_dir(self, x: float, y: float, z: float) -> None:
+        self.engine.set_surface_light_dir(x, y, z)
+
     @property
     def marker_mode(self) -> bool:
         return self.engine.marker_mode
@@ -79,7 +95,7 @@ class Plot3D(Widget):
     def scatter(self, x, y, z, *, color=None, size=4.0, label=""):
         self.engine.scatter(x, y, z, color=color, size=size, label=label)
 
-    def surface(self, X, Y, Z, *, color=None, wireframe=False, label=""):
+    def surface(self, X, Y, Z, *, color=None, colormap=None, wireframe=False, label=""):
         # Accept 2D numpy arrays; flatten + pass rows/cols to the
         # native engine which speaks flat buffers only.
         import numpy as np
@@ -90,11 +106,24 @@ class Plot3D(Widget):
         self.engine.surface(
             Xa.ravel(), Ya.ravel(), Za.ravel(),
             rows, cols,
-            color=color, wireframe=wireframe, label=label,
+            color=color,
+            colormap=colormap if colormap is not None else SurfaceColorMap.Jet,
+            wireframe=wireframe,
+            label=label,
         )
 
     def clear(self):
         self.engine.clear()
+
+    def set_surface_grid(self, idx, visible=True, row_step=8, col_step=8,
+                         color=(0.05, 0.05, 0.05, 1.0)):
+        return self.engine.set_surface_grid(
+            idx,
+            visible,
+            row_step,
+            col_step,
+            color,
+        )
 
     def pick(self, mx: float, my: float):
         self.engine.set_viewport(self.x, self.y, self.width, self.height)

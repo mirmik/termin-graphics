@@ -11,6 +11,7 @@
 
 #include "tcplot/plot_view3d.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <utility>
 
@@ -139,19 +140,80 @@ void PlotView3D::surface(const double* X, const double* Y, const double* Z,
                           float cr, float cg, float cb, float ca,
                           bool wireframe,
                           const char* label) {
+    surface_colormap(X, Y, Z, rows, cols, SurfaceColorMap::Jet,
+                     cr, cg, cb, ca, wireframe, label);
+}
+
+void PlotView3D::surface_colormap(const double* X, const double* Y, const double* Z,
+                                  uint32_t rows, uint32_t cols,
+                                  SurfaceColorMap colormap,
+                                  float cr, float cg, float cb, float ca,
+                                  bool wireframe,
+                                  const char* label) {
     const size_t n = static_cast<size_t>(rows) * cols;
     engine_->surface(copy_array(X, n), copy_array(Y, n), copy_array(Z, n),
                      rows, cols,
                      opt_color(cr, cg, cb, ca),
+                     colormap,
                      wireframe,
                      label ? std::string(label) : std::string());
 }
 
 void PlotView3D::clear()               { engine_->clear(); }
+void PlotView3D::set_title(const char* title) {
+    engine_->data.title = title ? title : "";
+}
+void PlotView3D::set_x_label(const char* label) {
+    engine_->data.x_label = label ? label : "";
+}
+void PlotView3D::set_y_label(const char* label) {
+    engine_->data.y_label = label ? label : "";
+}
+void PlotView3D::set_z_label(const char* label) {
+    engine_->data.z_label = label ? label : "";
+}
+void PlotView3D::set_axis_labels(const char* x_label,
+                                 const char* y_label,
+                                 const char* z_label) {
+    set_x_label(x_label);
+    set_y_label(y_label);
+    set_z_label(z_label);
+}
+bool PlotView3D::set_surface_colormap(int surface_idx, SurfaceColorMap colormap) {
+    if (surface_idx < 0) return false;
+    return engine_->set_surface_colormap(static_cast<size_t>(surface_idx), colormap);
+}
+bool PlotView3D::set_surface_color(int surface_idx, float r, float g, float b, float a) {
+    if (surface_idx < 0) return false;
+    return engine_->set_surface_color(static_cast<size_t>(surface_idx), Color4{r, g, b, a});
+}
+bool PlotView3D::set_surface_grid(int surface_idx, bool visible,
+                                  uint32_t row_step, uint32_t col_step,
+                                  float r, float g, float b, float a) {
+    if (surface_idx < 0) return false;
+    return engine_->set_surface_grid(static_cast<size_t>(surface_idx),
+                                     visible,
+                                     row_step,
+                                     col_step,
+                                     Color4{r, g, b, a});
+}
 void PlotView3D::toggle_wireframe()    { engine_->toggle_wireframe(); }
 void PlotView3D::toggle_marker_mode()  { engine_->toggle_marker_mode(); }
 void PlotView3D::set_z_scale(float s)  { engine_->z_scale = s; }
 float PlotView3D::get_z_scale() const  { return engine_->z_scale; }
+void PlotView3D::set_axis_scale(float x, float y, float z) {
+    engine_->x_scale = x;
+    engine_->y_scale = y;
+    engine_->z_scale = z;
+}
+float PlotView3D::get_x_scale() const  { return engine_->x_scale; }
+float PlotView3D::get_y_scale() const  { return engine_->y_scale; }
+void PlotView3D::set_surface_shading(bool enabled, float strength) {
+    engine_->set_surface_shading(enabled, strength);
+}
+void PlotView3D::set_surface_light_dir(float x, float y, float z) {
+    engine_->set_surface_light_dir(x, y, z);
+}
 
 void PlotView3D::set_msaa_samples(int samples) {
     if (samples < 1) samples = 1;
@@ -174,9 +236,28 @@ OrbitCamera& PlotView3D::camera() { return engine_->camera; }
 void PlotView3D::fit_camera() {
     double lo[3], hi[3];
     engine_->data.data_bounds_3d(lo, hi);
-    const float lo_f[3] = {(float)lo[0], (float)lo[1], (float)lo[2]};
-    const float hi_f[3] = {(float)hi[0], (float)hi[1], (float)hi[2]};
-    engine_->camera.fit_bounds(lo_f, hi_f);
+
+    const float scaled_lo[3] = {
+        static_cast<float>(lo[0] * engine_->x_scale),
+        static_cast<float>(lo[1] * engine_->y_scale),
+        static_cast<float>(lo[2] * engine_->z_scale),
+    };
+    const float scaled_hi[3] = {
+        static_cast<float>(hi[0] * engine_->x_scale),
+        static_cast<float>(hi[1] * engine_->y_scale),
+        static_cast<float>(hi[2] * engine_->z_scale),
+    };
+    const float bounds_min[3] = {
+        std::min(scaled_lo[0], scaled_hi[0]),
+        std::min(scaled_lo[1], scaled_hi[1]),
+        std::min(scaled_lo[2], scaled_hi[2]),
+    };
+    const float bounds_max[3] = {
+        std::max(scaled_lo[0], scaled_hi[0]),
+        std::max(scaled_lo[1], scaled_hi[1]),
+        std::max(scaled_lo[2], scaled_hi[2]),
+    };
+    engine_->camera.fit_bounds(bounds_min, bounds_max);
 }
 
 // ---------------------------------------------------------------------------

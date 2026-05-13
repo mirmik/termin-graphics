@@ -43,7 +43,12 @@ struct TCPLOT_API SurfaceSeries {
     uint32_t rows = 0;
     uint32_t cols = 0;
     std::optional<Color4> color;
+    SurfaceColorMap colormap = SurfaceColorMap::Jet;
     bool wireframe = false;
+    bool grid_visible = false;
+    uint32_t grid_row_step = 8;
+    uint32_t grid_col_step = 8;
+    std::optional<Color4> grid_color;
     std::string label;
 };
 
@@ -56,6 +61,7 @@ public:
     std::string title;
     std::string x_label;
     std::string y_label;
+    std::string z_label;
 
     // Add-line helper: copies x/y/z vectors into a new LineSeries and
     // returns a reference to it (valid until the next modification).

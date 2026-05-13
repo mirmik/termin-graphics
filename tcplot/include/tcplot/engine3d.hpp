@@ -50,7 +50,12 @@ public:
     // --- Style / mode flags (public; toggle_* methods also exist) ---
     bool show_grid = true;
     bool show_wireframe = true;
+    float x_scale = 1.0f;
+    float y_scale = 1.0f;
     float z_scale = 1.0f;
+    bool surface_shading = false;
+    float surface_shading_strength = 0.35f;
+    float surface_light_dir[3] = {-0.4f, -0.6f, 0.7f};
     bool marker_mode = false;
 
     PlotEngine3D();
@@ -76,13 +81,22 @@ public:
     void surface(std::vector<double> X, std::vector<double> Y, std::vector<double> Z,
                  uint32_t rows, uint32_t cols,
                  std::optional<Color4> color = std::nullopt,
+                 SurfaceColorMap colormap = SurfaceColorMap::Jet,
                  bool wireframe = false,
                  std::string label = "");
 
     void clear();
 
+    bool set_surface_colormap(size_t idx, SurfaceColorMap colormap);
+    bool set_surface_color(size_t idx, Color4 color);
+    bool set_surface_grid(size_t idx, bool visible,
+                          uint32_t row_step, uint32_t col_step,
+                          Color4 color);
+
     void toggle_wireframe() { show_wireframe = !show_wireframe; }
     void toggle_marker_mode();
+    void set_surface_shading(bool enabled, float strength);
+    void set_surface_light_dir(float x, float y, float z);
 
     // --- Rendering ---
     //
@@ -117,7 +131,7 @@ private:
         tgfx::PrimitiveTopology topology = tgfx::PrimitiveTopology::TriangleList;
     };
 
-    // Build a (4x4) MVP from camera state + z_scale into `out16`.
+    // Build a (4x4) MVP from camera state + nonuniform axis scale into `out16`.
     void compute_mvp_(float aspect, float out16[16]) const;
 
     static std::optional<MeshGpu> make_mesh_(
@@ -135,6 +149,8 @@ private:
                           const double bounds_max[3]);
     void build_surface_mesh_(tgfx::IRenderDevice& device,
                              const SurfaceSeries& surf);
+    void build_surface_grid_mesh_(tgfx::IRenderDevice& device,
+                                  const SurfaceSeries& surf);
     void release_meshes_();
 
     // Ensure the 3D plot shader is compiled for the current device.
@@ -156,6 +172,8 @@ private:
     std::optional<MeshGpu> scatter_mesh_;
     std::optional<MeshGpu> grid_mesh_;
     std::vector<MeshGpu> surface_meshes_;
+    std::vector<SurfaceSeries> surface_mesh_styles_;
+    std::vector<MeshGpu> surface_grid_meshes_;
     std::vector<MeshGpu> wireframe_meshes_;
 
     // Text renderer for billboard tick/marker labels. Owned here; the
