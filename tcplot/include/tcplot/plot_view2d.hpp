@@ -49,7 +49,8 @@ public:
                        double scalar_min = 0.0,
                        double scalar_max = 1.0,
                        double thickness = 1.5,
-                       const char* label = "");
+                       const char* label = "",
+                       bool colormap_reversed = false);
 
     void scatter(const double* x, const double* y, size_t n,
                  float cr, float cg, float cb, float ca,
@@ -68,6 +69,7 @@ public:
     bool set_line_style(int idx, LineStyle style,
                         float dash_px = 8.0f,
                         float gap_px = 5.0f);
+    bool set_line_colormap_reversed(int idx, bool reversed);
 
     bool on_mouse_down(float x, float y, int button);
     void on_mouse_move(float x, float y);

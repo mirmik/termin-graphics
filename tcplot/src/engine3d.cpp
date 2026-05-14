@@ -175,6 +175,10 @@ vec3 cool_warm(float t) {
 
 vec3 map_surface_color(float t, float map_id) {
     int id = int(map_id + 0.5);
+    if (id >= 100) {
+        id -= 100;
+        t = 1.0 - t;
+    }
     if (id == 1) return viridis(t);
     if (id == 2) return plasma(t);
     if (id == 3) return vec3(clamp(t, 0.0, 1.0));
@@ -251,13 +255,15 @@ void set_plot3d_push_constants(tgfx::RenderContext2& ctx,
                                bool surface_mode,
                                const PlotEngine3D& engine,
                                SurfaceColorMap colormap = SurfaceColorMap::Jet,
+                               bool colormap_reversed = false,
                                Color4 surface_color = {1.0f, 1.0f, 1.0f, 1.0f}) {
     Plot3DPushData pc{};
     std::memcpy(pc.mvp, mvp, sizeof(pc.mvp));
     pc.params[0] = z_min;
     pc.params[1] = z_max;
     pc.params[2] = surface_mode ? 1.0f : 0.0f;
-    pc.params[3] = static_cast<float>(colormap);
+    pc.params[3] = static_cast<float>(colormap)
+                 + (colormap_reversed ? 100.0f : 0.0f);
     pc.surface_color[0] = surface_color.r;
     pc.surface_color[1] = surface_color.g;
     pc.surface_color[2] = surface_color.b;
@@ -434,7 +440,8 @@ void PlotEngine3D::surface(std::vector<double> X, std::vector<double> Y,
                             std::optional<Color4> color,
                             SurfaceColorMap colormap,
                             bool wireframe,
-                            std::string label) {
+                            std::string label,
+                            bool colormap_reversed) {
     SurfaceSeries s;
     s.X = std::move(X);
     s.Y = std::move(Y);
@@ -449,6 +456,7 @@ void PlotEngine3D::surface(std::vector<double> X, std::vector<double> Y,
         s.color = styles::cycle_color(idx);
     }
     s.colormap = colormap;
+    s.colormap_reversed = colormap_reversed;
     s.wireframe = wireframe;
     s.label = std::move(label);
     data.surfaces.push_back(std::move(s));
@@ -470,6 +478,13 @@ void PlotEngine3D::clear() {
 bool PlotEngine3D::set_surface_colormap(size_t idx, SurfaceColorMap colormap) {
     if (idx >= data.surfaces.size()) return false;
     data.surfaces[idx].colormap = colormap;
+    dirty_ = true;
+    return true;
+}
+
+bool PlotEngine3D::set_surface_colormap_reversed(size_t idx, bool reversed) {
+    if (idx >= data.surfaces.size()) return false;
+    data.surfaces[idx].colormap_reversed = reversed;
     dirty_ = true;
     return true;
 }
@@ -894,7 +909,8 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         const Color4 surface_color =
             style.color.value_or(Color4{1.0f, 1.0f, 1.0f, 1.0f});
         set_plot3d_push_constants(*ctx, mvp, z_min, z_max, true, *this,
-                                  style.colormap, surface_color);
+                                  style.colormap, style.colormap_reversed,
+                                  surface_color);
         draw_mesh_(*ctx, surface_meshes_[i]);
     }
 

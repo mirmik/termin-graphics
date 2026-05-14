@@ -23,6 +23,7 @@ struct TCPLOT_API LineSeries {
     std::vector<double> scalar;  // optional per-point values for 2D colormap lines
     std::optional<Color4> color;
     SurfaceColorMap colormap = SurfaceColorMap::Jet;
+    bool colormap_reversed = false;
     double scalar_min = 0.0;
     double scalar_max = 1.0;
     double thickness = 1.5;
@@ -51,6 +52,7 @@ struct TCPLOT_API SurfaceSeries {
     uint32_t cols = 0;
     std::optional<Color4> color;
     SurfaceColorMap colormap = SurfaceColorMap::Jet;
+    bool colormap_reversed = false;
     bool wireframe = false;
     bool grid_visible = false;
     uint32_t grid_row_step = 8;

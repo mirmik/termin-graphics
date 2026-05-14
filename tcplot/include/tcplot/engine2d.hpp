@@ -100,7 +100,8 @@ public:
                        double scalar_min = 0.0,
                        double scalar_max = 1.0,
                        double thickness = 1.5,
-                       std::string label = "");
+                       std::string label = "",
+                       bool colormap_reversed = false);
 
     void scatter(std::vector<double> x, std::vector<double> y,
                  std::optional<Color4> color = std::nullopt,
@@ -132,6 +133,7 @@ public:
     bool set_line_style(size_t idx, LineStyle style,
                         float dash_px = 8.0f,
                         float gap_px = 5.0f);
+    bool set_line_colormap_reversed(size_t idx, bool reversed);
 
     size_t line_count() const { return data.lines.size(); }
 

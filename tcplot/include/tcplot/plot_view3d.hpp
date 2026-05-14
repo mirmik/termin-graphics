@@ -87,7 +87,8 @@ public:
                           SurfaceColorMap colormap,
                           float cr, float cg, float cb, float ca,
                           bool wireframe = false,
-                          const char* label = "");
+                          const char* label = "",
+                          bool colormap_reversed = false);
 
     void clear();
     void set_title(const char* title);
@@ -98,6 +99,7 @@ public:
                          const char* y_label,
                          const char* z_label);
     bool set_surface_colormap(int surface_idx, SurfaceColorMap colormap);
+    bool set_surface_colormap_reversed(int surface_idx, bool reversed);
     bool set_surface_color(int surface_idx, float r, float g, float b, float a);
     bool set_surface_grid(int surface_idx, bool visible,
                           uint32_t row_step, uint32_t col_step,

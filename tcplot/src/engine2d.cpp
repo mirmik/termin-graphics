@@ -73,7 +73,7 @@ void main() { frag_color = pc.u_color; }
 struct StyledLinePushData {
     float matrix[16];
     float color[4];
-    float params[4];    // thickness_px, style_id, colormap_id, scalar_alpha
+    float params[4];    // thickness_px, style_id, colormap_id, colormap_reversed
     float range[4];     // scalar_min, scalar_max, length_scale, unused
     float viewport[4];  // width, height, dash_px, gap_px
 };
@@ -198,6 +198,7 @@ void main() {
     if (pc.u_params.z < 5.5) {
         float denom = max(pc.u_range.y - pc.u_range.x, 1e-12);
         float t = clamp((v_color.r - pc.u_range.x) / denom, 0.0, 1.0);
+        if (pc.u_params.w != 0.0) t = 1.0 - t;
         c.rgb = colormap(pc.u_params.z, t);
     }
     frag_color = c;
@@ -253,11 +254,13 @@ void PlotEngine2D::plot_colormap(std::vector<double> x,
                                   double scalar_min,
                                   double scalar_max,
                                   double thickness,
-                                  std::string label) {
+                                  std::string label,
+                                  bool colormap_reversed) {
     LineSeries& s = data.add_line(std::move(x), std::move(y), {}, std::nullopt,
                                   thickness, std::move(label));
     s.scalar = std::move(scalar);
     s.colormap = colormap;
+    s.colormap_reversed = colormap_reversed;
     s.scalar_min = scalar_min;
     s.scalar_max = scalar_max;
     if (s.scalar_max <= s.scalar_min) {
@@ -680,6 +683,13 @@ bool PlotEngine2D::set_line_style(size_t idx, LineStyle style,
     return true;
 }
 
+bool PlotEngine2D::set_line_colormap_reversed(size_t idx, bool reversed) {
+    if (idx >= data.lines.size()) return false;
+    data.lines[idx].colormap_reversed = reversed;
+    ++data_version_;
+    return true;
+}
+
 void PlotEngine2D::get_view(double& x_min, double& x_max,
                               double& y_min, double& y_max) {
     const ViewRange v = view_range_();
@@ -852,7 +862,7 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
             pc.params[0] = static_cast<float>(std::max(1.0, s.thickness));
             pc.params[1] = static_cast<float>(s.line_style);
             pc.params[2] = s.scalar.empty() ? 6.0f : static_cast<float>(s.colormap);
-            pc.params[3] = 1.0f;
+            pc.params[3] = s.colormap_reversed ? 1.0f : 0.0f;
             pc.range[0] = static_cast<float>(s.scalar_min);
             pc.range[1] = static_cast<float>(s.scalar_max);
             pc.range[2] = length_scale;

@@ -89,7 +89,8 @@ public:
                           double scalar_min = 0.0,
                           double scalar_max = 1.0,
                           double thickness = 1.5,
-                          const char* label = "");
+                          const char* label = "",
+                          bool colormap_reversed = false);
 
     int add_scatter(int panel_idx,
                     const double* x, const double* y, size_t n,
@@ -158,6 +159,8 @@ public:
                               LineStyle style,
                               float dash_px = 8.0f,
                               float gap_px = 5.0f);
+    void set_line_colormap_reversed(int panel_idx, int series_idx,
+                                    bool reversed);
     // Per-panel font sizes in pixels. Margins auto-scale to fit.
     void set_font_size       (float label_px, float title_px);
     void set_panel_margins   (int left, int right, int top, int bottom);

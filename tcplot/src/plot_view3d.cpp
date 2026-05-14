@@ -149,14 +149,16 @@ void PlotView3D::surface_colormap(const double* X, const double* Y, const double
                                   SurfaceColorMap colormap,
                                   float cr, float cg, float cb, float ca,
                                   bool wireframe,
-                                  const char* label) {
+                                  const char* label,
+                                  bool colormap_reversed) {
     const size_t n = static_cast<size_t>(rows) * cols;
     engine_->surface(copy_array(X, n), copy_array(Y, n), copy_array(Z, n),
                      rows, cols,
                      opt_color(cr, cg, cb, ca),
                      colormap,
                      wireframe,
-                     label ? std::string(label) : std::string());
+                     label ? std::string(label) : std::string(),
+                     colormap_reversed);
 }
 
 void PlotView3D::clear()               { engine_->clear(); }
@@ -182,6 +184,12 @@ void PlotView3D::set_axis_labels(const char* x_label,
 bool PlotView3D::set_surface_colormap(int surface_idx, SurfaceColorMap colormap) {
     if (surface_idx < 0) return false;
     return engine_->set_surface_colormap(static_cast<size_t>(surface_idx), colormap);
+}
+
+bool PlotView3D::set_surface_colormap_reversed(int surface_idx, bool reversed) {
+    if (surface_idx < 0) return false;
+    return engine_->set_surface_colormap_reversed(
+        static_cast<size_t>(surface_idx), reversed);
 }
 bool PlotView3D::set_surface_color(int surface_idx, float r, float g, float b, float a) {
     if (surface_idx < 0) return false;

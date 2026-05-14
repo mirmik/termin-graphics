@@ -89,11 +89,13 @@ void PlotView2D::plot_colormap(const double* x, const double* y,
                                 double scalar_min,
                                 double scalar_max,
                                 double thickness,
-                                const char* label) {
+                                const char* label,
+                                bool colormap_reversed) {
     engine_->plot_colormap(copy_array(x, n), copy_array(y, n),
                            copy_array(scalar, n), colormap,
                            scalar_min, scalar_max, thickness,
-                           label ? std::string(label) : std::string());
+                           label ? std::string(label) : std::string(),
+                           colormap_reversed);
 }
 
 void PlotView2D::scatter(const double* x, const double* y, size_t n,
@@ -150,6 +152,11 @@ bool PlotView2D::set_line_style(int idx, LineStyle style,
     if (idx < 0) return false;
     return engine_->set_line_style(static_cast<size_t>(idx), style,
                                    dash_px, gap_px);
+}
+
+bool PlotView2D::set_line_colormap_reversed(int idx, bool reversed) {
+    if (idx < 0) return false;
+    return engine_->set_line_colormap_reversed(static_cast<size_t>(idx), reversed);
 }
 
 bool PlotView2D::on_mouse_down(float x, float y, int button) {

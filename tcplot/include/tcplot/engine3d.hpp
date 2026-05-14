@@ -83,11 +83,13 @@ public:
                  std::optional<Color4> color = std::nullopt,
                  SurfaceColorMap colormap = SurfaceColorMap::Jet,
                  bool wireframe = false,
-                 std::string label = "");
+                 std::string label = "",
+                 bool colormap_reversed = false);
 
     void clear();
 
     bool set_surface_colormap(size_t idx, SurfaceColorMap colormap);
+    bool set_surface_colormap_reversed(size_t idx, bool reversed);
     bool set_surface_color(size_t idx, Color4 color);
     bool set_surface_grid(size_t idx, bool visible,
                           uint32_t row_step, uint32_t col_step,

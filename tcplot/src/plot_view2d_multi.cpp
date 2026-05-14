@@ -129,14 +129,16 @@ int PlotView2DMulti::add_line_colormap(int panel_idx,
                                        double scalar_min,
                                        double scalar_max,
                                        double thickness,
-                                       const char* label) {
+                                       const char* label,
+                                       bool colormap_reversed) {
     if (panel_idx < 0 || panel_idx >= (int)panels_.size()) return -1;
     PlotEngine2D& eng = *panels_[panel_idx];
     const int new_idx = static_cast<int>(eng.line_count());
 
     eng.plot_colormap(to_vec(x, n), to_vec(y, n), to_vec(scalar, n),
                       colormap, scalar_min, scalar_max, thickness,
-                      label ? std::string(label) : std::string());
+                      label ? std::string(label) : std::string(),
+                      colormap_reversed);
 
     if (n > 0 && !have_shared_x_) {
         have_shared_x_ = true;
@@ -329,6 +331,13 @@ void PlotView2DMulti::set_line_style(int panel_idx, int series_idx,
     if (series_idx < 0) return;
     panels_[panel_idx]->set_line_style(static_cast<size_t>(series_idx),
                                        style, dash_px, gap_px);
+}
+void PlotView2DMulti::set_line_colormap_reversed(int panel_idx, int series_idx,
+                                                 bool reversed) {
+    if (panel_idx < 0 || panel_idx >= (int)panels_.size()) return;
+    if (series_idx < 0) return;
+    panels_[panel_idx]->set_line_colormap_reversed(
+        static_cast<size_t>(series_idx), reversed);
 }
 
 // ---------------------------------------------------------------------------
