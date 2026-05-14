@@ -880,9 +880,16 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     }
     if (dirty_) rebuild_meshes_(ctx->device());
 
+    // RenderContext2 is shared by hosts that may draw 2D tcplot panels
+    // immediately before this 3D view. Canvas2DRenderer intentionally
+    // leaves depth writes disabled, so 3D must establish the full depth
+    // state, not just depth-test, before drawing surfaces.
     ctx->set_depth_test(true);
+    ctx->set_depth_write(true);
+    ctx->set_depth_func(tgfx::CompareOp::Less);
     ctx->set_blend(true);
     ctx->set_cull(tgfx::CullMode::None);
+    ctx->clear_scissor();
 
     const float aspect = vw_ / std::max(vh_, 1.0f);
     float mvp[16];
@@ -1083,6 +1090,7 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
 
     // Restore 2D state for subsequent UI rendering.
     ctx->set_depth_test(false);
+    ctx->set_depth_write(false);
 }
 
 // ---------------------------------------------------------------------------
