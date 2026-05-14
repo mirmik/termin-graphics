@@ -150,6 +150,7 @@ void OrbitCamera::orbit(float d_azimuth, float d_elevation) {
 
 void OrbitCamera::zoom(float factor) {
     distance = std::clamp(distance * factor, min_distance, max_distance);
+    update_clip_planes();
 }
 
 void OrbitCamera::pan(float dx, float dy) {
@@ -184,7 +185,18 @@ void OrbitCamera::fit_bounds(const float bounds_min[3], const float bounds_max[3
     const float dz = bounds_max[2] - bounds_min[2];
     const float size = std::sqrt(dx * dx + dy * dy + dz * dz);
 
+    fitted_radius = std::max(size * 0.5f, 1.0f);
     distance = std::max(size * 1.2f, min_distance);
+    min_distance = std::max(fitted_radius * 0.001f, 0.01f);
+    max_distance = std::max(max_distance, distance + fitted_radius * 20.0f);
+    update_clip_planes();
+}
+
+void OrbitCamera::update_clip_planes() {
+    const float radius = std::max(fitted_radius, 1.0f);
+    const float margin = radius * 2.5f;
+    near = std::max(0.01f, distance - margin);
+    far = std::max(near + 1.0f, distance + margin);
 }
 
 }  // namespace tcplot

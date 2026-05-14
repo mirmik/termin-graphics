@@ -6,8 +6,8 @@
 //
 // Matrix output:
 //   view_matrix()    — right-handed look-at, +Z up.
-//   projection_matrix(aspect) — OpenGL-standard perspective (symmetric
-//                               clip, depth in [-1, 1]).
+//   projection_matrix(aspect) — Vulkan-native perspective (Y-down clip,
+//                               depth in [0, 1]).
 //
 // We deliberately do NOT reuse termin::Mat44::perspective / look_at —
 // the engine convention there (Y = forward, projection swap) differs
@@ -35,6 +35,11 @@ public:
     float fov_y;      // = 45 deg
     float near = 0.01f;
     float far = 1000.0f;
+    // Radius of the last fitted bounds, used to keep near/far sane as
+    // the user zooms after fit_bounds(). Large trajectory/surface plots
+    // otherwise blow past the fixed 1000 far plane and destroy depth
+    // precision.
+    float fitted_radius = 1.0f;
 
     // Clamping limits.
     float min_distance = 0.01f;
@@ -64,6 +69,9 @@ public:
     // Re-centre on a bounding box; adjusts target and distance so the
     // full box fits in view at the current FOV.
     void fit_bounds(const float bounds_min[3], const float bounds_max[3]);
+
+private:
+    void update_clip_planes();
 };
 
 }  // namespace tcplot
