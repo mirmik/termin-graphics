@@ -70,6 +70,141 @@ void main() { frag_color = pc.u_color; }
 )";
 }
 
+struct StyledLinePushData {
+    float matrix[16];
+    float color[4];
+    float params[4];    // thickness_px, style_id, colormap_id, scalar_alpha
+    float range[4];     // scalar_min, scalar_max, length_scale, unused
+    float viewport[4];  // width, height, dash_px, gap_px
+};
+static_assert(sizeof(StyledLinePushData) == 128,
+              "StyledLinePushData must fit tgfx2 push constants");
+
+static std::string make_styled_line_vert() {
+    return std::string("#version 450 core\n") + R"(
+struct StyledLinePC {
+    mat4 u_matrix;
+    vec4 u_color;
+    vec4 u_params;
+    vec4 u_range;
+    vec4 u_viewport;
+};
+#ifdef VULKAN
+layout(push_constant) uniform PCBlock { StyledLinePC pc; };
+#else
+layout(std140, binding = 14) uniform PCBlock { StyledLinePC pc; };
+#endif
+
+layout(location=0) in vec2 a_prev;
+layout(location=1) in vec2 a_curr;
+layout(location=2) in vec2 a_next;
+layout(location=3) in vec4 a_meta; // side, scalar, cumulative_length, unused
+
+layout(location=0) out vec4 v_color;
+layout(location=1) out vec4 v_meta; // cumulative_length, style_id, dash_px, gap_px
+
+vec2 clip_to_px(vec4 c) {
+    vec2 ndc = c.xy / c.w;
+    return (ndc * 0.5 + 0.5) * pc.u_viewport.xy;
+}
+
+void main() {
+    vec4 cp = pc.u_matrix * vec4(a_prev, 0.0, 1.0);
+    vec4 cc = pc.u_matrix * vec4(a_curr, 0.0, 1.0);
+    vec4 cn = pc.u_matrix * vec4(a_next, 0.0, 1.0);
+
+    vec2 pp = clip_to_px(cp);
+    vec2 pcurr = clip_to_px(cc);
+    vec2 pn = clip_to_px(cn);
+    vec2 dir = pn - pp;
+    float len = length(dir);
+    if (len < 0.001) dir = vec2(1.0, 0.0);
+    else dir /= len;
+    vec2 normal = vec2(-dir.y, dir.x);
+
+    vec2 px = pcurr + normal * a_meta.x * pc.u_params.x * 0.5;
+    vec2 ndc = px / pc.u_viewport.xy * 2.0 - 1.0;
+    gl_Position = vec4(ndc * cc.w, cc.z, cc.w);
+
+    v_color = pc.u_color;
+    v_meta = vec4(a_meta.z * pc.u_range.z, pc.u_params.y,
+                  pc.u_viewport.z, pc.u_viewport.w);
+    v_meta.x = max(v_meta.x, 0.0);
+    v_color.a *= pc.u_params.w;
+    v_color.r = a_meta.y;
+}
+)";
+}
+
+static std::string make_styled_line_frag() {
+    return std::string("#version 450 core\n") + R"(
+struct StyledLinePC {
+    mat4 u_matrix;
+    vec4 u_color;
+    vec4 u_params;
+    vec4 u_range;
+    vec4 u_viewport;
+};
+#ifdef VULKAN
+layout(push_constant) uniform PCBlock { StyledLinePC pc; };
+#else
+layout(std140, binding = 14) uniform PCBlock { StyledLinePC pc; };
+#endif
+
+layout(location=0) in vec4 v_color;
+layout(location=1) in vec4 v_meta;
+layout(location=0) out vec4 frag_color;
+
+vec3 jet(float t) {
+    t = clamp(t, 0.0, 1.0);
+    float r = clamp(1.5 - abs(4.0 * t - 3.0), 0.0, 1.0);
+    float g = clamp(1.5 - abs(4.0 * t - 2.0), 0.0, 1.0);
+    float b = clamp(1.5 - abs(4.0 * t - 1.0), 0.0, 1.0);
+    return vec3(r, g, b);
+}
+vec3 viridis(float t) {
+    vec3 c0 = vec3(0.277, 0.005, 0.334);
+    vec3 c1 = vec3(0.128, 0.567, 0.551);
+    vec3 c2 = vec3(0.741, 0.873, 0.150);
+    return t < 0.5 ? mix(c0, c1, t * 2.0) : mix(c1, c2, (t - 0.5) * 2.0);
+}
+vec3 plasma(float t) {
+    vec3 c0 = vec3(0.050, 0.030, 0.528);
+    vec3 c1 = vec3(0.798, 0.280, 0.470);
+    vec3 c2 = vec3(0.940, 0.975, 0.131);
+    return t < 0.5 ? mix(c0, c1, t * 2.0) : mix(c1, c2, (t - 0.5) * 2.0);
+}
+vec3 colormap(float id, float t) {
+    if (id < 0.5) return jet(t);
+    if (id < 1.5) return viridis(t);
+    if (id < 2.5) return plasma(t);
+    if (id < 3.5) return vec3(t);
+    if (id < 4.5) return vec3(t, 0.25 + 0.5 * (1.0 - abs(2.0 * t - 1.0)), 1.0 - t);
+    return v_color.rgb;
+}
+
+void main() {
+    float style_id = v_meta.y;
+    if (style_id > 0.5) {
+        float dash_px = max(v_meta.z, 1.0);
+        float gap_px = max(v_meta.w, 1.0);
+        float period = dash_px + gap_px;
+        float p = mod(v_meta.x, period);
+        if (p > dash_px) discard;
+        if (style_id > 1.5 && p > min(dash_px, pc.u_params.x)) discard;
+    }
+
+    vec4 c = pc.u_color;
+    if (pc.u_params.z < 5.5) {
+        float denom = max(pc.u_range.y - pc.u_range.x, 1e-12);
+        float t = clamp((v_color.r - pc.u_range.x) / denom, 0.0, 1.0);
+        c.rgb = colormap(pc.u_params.z, t);
+    }
+    frag_color = c;
+}
+)";
+}
+
 tgfx::CanvasColor canvas_color(const Color4& c) {
     return tgfx::CanvasColor{c.r, c.g, c.b, c.a};
 }
@@ -107,6 +242,28 @@ void PlotEngine2D::plot(std::vector<double> x, std::vector<double> y,
                          double thickness,
                          std::string label) {
     data.add_line(std::move(x), std::move(y), {}, color, thickness, std::move(label));
+    ++data_version_;
+    if (!view_x_min_.has_value()) fit();
+}
+
+void PlotEngine2D::plot_colormap(std::vector<double> x,
+                                  std::vector<double> y,
+                                  std::vector<double> scalar,
+                                  SurfaceColorMap colormap,
+                                  double scalar_min,
+                                  double scalar_max,
+                                  double thickness,
+                                  std::string label) {
+    LineSeries& s = data.add_line(std::move(x), std::move(y), {}, std::nullopt,
+                                  thickness, std::move(label));
+    s.scalar = std::move(scalar);
+    s.colormap = colormap;
+    s.scalar_min = scalar_min;
+    s.scalar_max = scalar_max;
+    if (s.scalar_max <= s.scalar_min) {
+        s.scalar_max = s.scalar_min + 1.0;
+    }
+    ++data_version_;
     if (!view_x_min_.has_value()) fit();
 }
 
@@ -115,6 +272,7 @@ void PlotEngine2D::scatter(std::vector<double> x, std::vector<double> y,
                             double size,
                             std::string label) {
     data.add_scatter(std::move(x), std::move(y), {}, color, size, std::move(label));
+    ++data_version_;
     if (!view_x_min_.has_value()) fit();
 }
 
@@ -134,6 +292,13 @@ void PlotEngine2D::clear() {
         }
     }
     line_gpu_.clear();
+    if (styled_line_shader_device_) {
+        for (auto& gs : styled_line_gpu_) {
+            if (gs.vbo.id != 0) styled_line_shader_device_->destroy(gs.vbo);
+        }
+    }
+    styled_line_gpu_.clear();
+    ++data_version_;
 }
 
 void PlotEngine2D::fit() {
@@ -210,10 +375,27 @@ void PlotEngine2D::release_gpu_resources() {
             if (gs.vbo.id != 0) line_shader_device_->destroy(gs.vbo);
         }
     }
+    if (styled_line_shader_device_) {
+        if (styled_line_shader_vs_id_ != 0) {
+            tgfx::ShaderHandle h; h.id = styled_line_shader_vs_id_;
+            styled_line_shader_device_->destroy(h);
+        }
+        if (styled_line_shader_fs_id_ != 0) {
+            tgfx::ShaderHandle h; h.id = styled_line_shader_fs_id_;
+            styled_line_shader_device_->destroy(h);
+        }
+        for (auto& gs : styled_line_gpu_) {
+            if (gs.vbo.id != 0) styled_line_shader_device_->destroy(gs.vbo);
+        }
+    }
     line_shader_vs_id_ = 0;
     line_shader_fs_id_ = 0;
     line_shader_device_ = nullptr;
     line_gpu_.clear();
+    styled_line_shader_vs_id_ = 0;
+    styled_line_shader_fs_id_ = 0;
+    styled_line_shader_device_ = nullptr;
+    styled_line_gpu_.clear();
 
     if (canvas_) canvas_->release_gpu();
 }
@@ -254,6 +436,39 @@ void PlotEngine2D::ensure_line_shader_(tgfx::IRenderDevice& device) {
     line_shader_fs_id_ = device.create_shader(fd).id;
 
     line_shader_device_ = &device;
+}
+
+void PlotEngine2D::ensure_styled_line_shader_(tgfx::IRenderDevice& device) {
+    if (styled_line_shader_device_ == &device
+        && styled_line_shader_vs_id_ != 0 && styled_line_shader_fs_id_ != 0) {
+        return;
+    }
+    if (styled_line_shader_device_) {
+        if (styled_line_shader_vs_id_ != 0) {
+            tgfx::ShaderHandle h; h.id = styled_line_shader_vs_id_;
+            styled_line_shader_device_->destroy(h);
+        }
+        if (styled_line_shader_fs_id_ != 0) {
+            tgfx::ShaderHandle h; h.id = styled_line_shader_fs_id_;
+            styled_line_shader_device_->destroy(h);
+        }
+        for (auto& gs : styled_line_gpu_) {
+            if (gs.vbo.id != 0) styled_line_shader_device_->destroy(gs.vbo);
+            gs = StyledLineGpuState{};
+        }
+    }
+
+    tgfx::ShaderDesc vd;
+    vd.stage = tgfx::ShaderStage::Vertex;
+    vd.source = make_styled_line_vert();
+    styled_line_shader_vs_id_ = device.create_shader(vd).id;
+
+    tgfx::ShaderDesc fd;
+    fd.stage = tgfx::ShaderStage::Fragment;
+    fd.source = make_styled_line_frag();
+    styled_line_shader_fs_id_ = device.create_shader(fd).id;
+
+    styled_line_shader_device_ = &device;
 }
 
 void PlotEngine2D::ensure_line_gpu_(tgfx::IRenderDevice& device, size_t idx) {
@@ -298,6 +513,68 @@ void PlotEngine2D::ensure_line_gpu_(tgfx::IRenderDevice& device, size_t idx) {
         tail.size() * sizeof(float));
     device.upload_buffer(gs.vbo, bytes, byte_offset);
     gs.gpu_count = want;
+}
+
+void PlotEngine2D::ensure_styled_line_gpu_(tgfx::IRenderDevice& device, size_t idx) {
+    if (idx >= data.lines.size()) return;
+    styled_line_gpu_.resize(data.lines.size());
+    StyledLineGpuState& gs = styled_line_gpu_[idx];
+    const LineSeries& s = data.lines[idx];
+    const uint32_t point_count = static_cast<uint32_t>(s.x.size());
+    const uint32_t want = point_count * 2u;
+    if (point_count < 2) return;
+    if (gs.data_version == data_version_ && gs.gpu_count == want && gs.vbo.id != 0) {
+        return;
+    }
+
+    if (want > gs.capacity) {
+        uint32_t new_cap = gs.capacity ? gs.capacity * 2 : 512u;
+        while (new_cap < want) new_cap *= 2;
+        if (gs.vbo.id != 0) device.destroy(gs.vbo);
+
+        tgfx::BufferDesc desc;
+        desc.size = static_cast<uint64_t>(new_cap) * 10 * sizeof(float);
+        desc.usage = tgfx::BufferUsage::Vertex | tgfx::BufferUsage::CopyDst;
+        gs.vbo = device.create_buffer(desc);
+        gs.capacity = new_cap;
+    }
+
+    std::vector<float> verts;
+    verts.reserve(static_cast<size_t>(want) * 10);
+    double cumulative = 0.0;
+    for (uint32_t i = 0; i < point_count; ++i) {
+        if (i > 0) {
+            const double dx = s.x[i] - s.x[i - 1];
+            const double dy = s.y[i] - s.y[i - 1];
+            cumulative += std::sqrt(dx * dx + dy * dy);
+        }
+
+        const uint32_t ip = (i == 0) ? 0 : i - 1;
+        const uint32_t in = (i + 1 < point_count) ? i + 1 : i;
+        const float scalar = (!s.scalar.empty() && i < s.scalar.size())
+            ? static_cast<float>(s.scalar[i])
+            : 0.0f;
+        const float sides[2] = {-1.0f, 1.0f};
+        for (float side : sides) {
+            verts.push_back(static_cast<float>(s.x[ip]));
+            verts.push_back(static_cast<float>(s.y[ip]));
+            verts.push_back(static_cast<float>(s.x[i]));
+            verts.push_back(static_cast<float>(s.y[i]));
+            verts.push_back(static_cast<float>(s.x[in]));
+            verts.push_back(static_cast<float>(s.y[in]));
+            verts.push_back(side);
+            verts.push_back(scalar);
+            verts.push_back(static_cast<float>(cumulative));
+            verts.push_back(0.0f);
+        }
+    }
+
+    std::span<const uint8_t> bytes(
+        reinterpret_cast<const uint8_t*>(verts.data()),
+        verts.size() * sizeof(float));
+    device.upload_buffer(gs.vbo, bytes, 0);
+    gs.gpu_count = want;
+    gs.data_version = data_version_;
 }
 
 void PlotEngine2D::compute_data_to_clip_(float out16[16]) {
@@ -365,6 +642,7 @@ void PlotEngine2D::append_to_line(size_t idx,
         s.x.push_back(x[i]);
         s.y.push_back(y[i]);
     }
+    ++data_version_;
     // The VBO is topped up with the tail on the next render() via
     // ensure_line_gpu_ — no GPU work happens here.
 }
@@ -380,12 +658,25 @@ bool PlotEngine2D::last_x_of_line(size_t idx, double& out_x) const {
 bool PlotEngine2D::set_line_color(size_t idx, Color4 color) {
     if (idx >= data.lines.size()) return false;
     data.lines[idx].color = color;
+    ++data_version_;
     return true;
 }
 
 bool PlotEngine2D::set_scatter_color(size_t idx, Color4 color) {
     if (idx >= data.scatters.size()) return false;
     data.scatters[idx].color = color;
+    ++data_version_;
+    return true;
+}
+
+bool PlotEngine2D::set_line_style(size_t idx, LineStyle style,
+                                  float dash_px, float gap_px) {
+    if (idx >= data.lines.size()) return false;
+    LineSeries& s = data.lines[idx];
+    s.line_style = style;
+    s.dash_px = std::max(1.0f, dash_px);
+    s.gap_px = std::max(1.0f, gap_px);
+    ++data_version_;
     return true;
 }
 
@@ -487,6 +778,7 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         for (size_t i = 0; i < data.lines.size(); ++i) {
             const LineSeries& s = data.lines[i];
             if (s.x.size() < 2) continue;
+            if (!s.scalar.empty() || s.line_style != LineStyle::Solid) continue;
 
             ensure_line_gpu_(ctx->device(), i);
             const LineGpuState& gs = line_gpu_[i];
@@ -505,6 +797,76 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         }
     }
 
+    // Styled/colormapped lines use a persistent ribbon VBO. The vertex shader
+    // expands the centerline to pixel-width quads; the fragment shader handles
+    // dash and colormap. This keeps large routes to one draw call per series.
+    {
+        ctx->set_viewport(static_cast<int>(vx_), static_cast<int>(vy_),
+                          static_cast<int>(vw_), static_cast<int>(vh_));
+        ctx->set_scissor(static_cast<int>(pa.x), static_cast<int>(pa.y),
+                         static_cast<int>(pa.w), static_cast<int>(pa.h));
+        ctx->set_depth_test(false);
+        ctx->set_blend(true);
+        ctx->set_blend_func(tgfx::BlendFactor::SrcAlpha,
+                            tgfx::BlendFactor::OneMinusSrcAlpha);
+        ctx->set_cull(tgfx::CullMode::None);
+
+        ensure_styled_line_shader_(ctx->device());
+
+        tgfx::ShaderHandle slvs; slvs.id = styled_line_shader_vs_id_;
+        tgfx::ShaderHandle slfs; slfs.id = styled_line_shader_fs_id_;
+        ctx->bind_shader(slvs, slfs);
+
+        tgfx::VertexBufferLayout layout;
+        layout.stride = 10 * sizeof(float);
+        layout.attributes.push_back({0, tgfx::VertexFormat::Float2, 0});
+        layout.attributes.push_back({1, tgfx::VertexFormat::Float2, 2 * sizeof(float)});
+        layout.attributes.push_back({2, tgfx::VertexFormat::Float2, 4 * sizeof(float)});
+        layout.attributes.push_back({3, tgfx::VertexFormat::Float4, 6 * sizeof(float)});
+        ctx->set_vertex_layout(layout);
+        ctx->set_topology(tgfx::PrimitiveTopology::TriangleStrip);
+
+        StyledLinePushData pc{};
+        compute_data_to_clip_(pc.matrix);
+        const double span_x = std::max(v.x_max - v.x_min, 1e-12);
+        const double span_y = std::max(v.y_max - v.y_min, 1e-12);
+        const float sx_px = static_cast<float>(pa.w / span_x);
+        const float sy_px = static_cast<float>(pa.h / span_y);
+        const float length_scale = std::sqrt((sx_px * sx_px + sy_px * sy_px) * 0.5f);
+
+        for (size_t i = 0; i < data.lines.size(); ++i) {
+            const LineSeries& s = data.lines[i];
+            if (s.x.size() < 2) continue;
+            if (s.scalar.empty() && s.line_style == LineStyle::Solid) continue;
+
+            ensure_styled_line_gpu_(ctx->device(), i);
+            const StyledLineGpuState& gs = styled_line_gpu_[i];
+            if (gs.gpu_count < 4 || gs.vbo.id == 0) continue;
+
+            const Color4 c = s.color.has_value()
+                ? *s.color : styles::cycle_color(static_cast<uint32_t>(i));
+            pc.color[0] = c.r;
+            pc.color[1] = c.g;
+            pc.color[2] = c.b;
+            pc.color[3] = c.a;
+            pc.params[0] = static_cast<float>(std::max(1.0, s.thickness));
+            pc.params[1] = static_cast<float>(s.line_style);
+            pc.params[2] = s.scalar.empty() ? 6.0f : static_cast<float>(s.colormap);
+            pc.params[3] = 1.0f;
+            pc.range[0] = static_cast<float>(s.scalar_min);
+            pc.range[1] = static_cast<float>(s.scalar_max);
+            pc.range[2] = length_scale;
+            pc.viewport[0] = std::max(vw_, 1.0f);
+            pc.viewport[1] = std::max(vh_, 1.0f);
+            pc.viewport[2] = s.line_style == LineStyle::Dot
+                ? pc.params[0]
+                : std::max(1.0f, s.dash_px);
+            pc.viewport[3] = std::max(1.0f, s.gap_px);
+            ctx->set_push_constants(&pc, static_cast<uint32_t>(sizeof(pc)));
+            ctx->draw_arrays(gs.vbo, gs.gpu_count);
+        }
+    }
+
     canvas_->begin(*ctx, canvas_w, canvas_h);
     canvas_->begin_clip(pa.x, pa.y, pa.w, pa.h);
 
@@ -519,10 +881,7 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
             for (size_t i = 0; i < s.x.size(); i++) {
                 float sx, sy;
                 data_to_pixel_(s.x[i], s.y[i], sx, sy);
-                canvas_->draw_rect(sx - half, sy - half,
-                                   static_cast<float>(s.size),
-                                   static_cast<float>(s.size),
-                                   canvas_color(c));
+                canvas_->draw_circle(sx, sy, half, canvas_color(c));
             }
             palette_i++;
         }

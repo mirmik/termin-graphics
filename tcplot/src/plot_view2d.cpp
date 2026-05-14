@@ -83,6 +83,19 @@ void PlotView2D::plot(const double* x, const double* y, size_t n,
                   label ? std::string(label) : std::string());
 }
 
+void PlotView2D::plot_colormap(const double* x, const double* y,
+                                const double* scalar, size_t n,
+                                SurfaceColorMap colormap,
+                                double scalar_min,
+                                double scalar_max,
+                                double thickness,
+                                const char* label) {
+    engine_->plot_colormap(copy_array(x, n), copy_array(y, n),
+                           copy_array(scalar, n), colormap,
+                           scalar_min, scalar_max, thickness,
+                           label ? std::string(label) : std::string());
+}
+
 void PlotView2D::scatter(const double* x, const double* y, size_t n,
                           float cr, float cg, float cb, float ca,
                           double size,
@@ -120,6 +133,23 @@ void PlotView2D::set_x_label(const char* label) {
 }
 void PlotView2D::set_y_label(const char* label) {
     engine_->data.y_label = label ? label : "";
+}
+
+bool PlotView2D::set_line_color(int idx, float r, float g, float b, float a) {
+    if (idx < 0) return false;
+    return engine_->set_line_color(static_cast<size_t>(idx), Color4{r, g, b, a});
+}
+
+bool PlotView2D::set_scatter_color(int idx, float r, float g, float b, float a) {
+    if (idx < 0) return false;
+    return engine_->set_scatter_color(static_cast<size_t>(idx), Color4{r, g, b, a});
+}
+
+bool PlotView2D::set_line_style(int idx, LineStyle style,
+                                float dash_px, float gap_px) {
+    if (idx < 0) return false;
+    return engine_->set_line_style(static_cast<size_t>(idx), style,
+                                   dash_px, gap_px);
 }
 
 bool PlotView2D::on_mouse_down(float x, float y, int button) {

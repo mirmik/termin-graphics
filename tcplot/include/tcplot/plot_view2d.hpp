@@ -43,6 +43,14 @@ public:
               double thickness = 1.5,
               const char* label = "");
 
+    void plot_colormap(const double* x, const double* y, const double* scalar,
+                       size_t n,
+                       SurfaceColorMap colormap = SurfaceColorMap::Jet,
+                       double scalar_min = 0.0,
+                       double scalar_max = 1.0,
+                       double thickness = 1.5,
+                       const char* label = "");
+
     void scatter(const double* x, const double* y, size_t n,
                  float cr, float cg, float cb, float ca,
                  double size = 4.0,
@@ -55,6 +63,11 @@ public:
     void set_title(const char* title);
     void set_x_label(const char* label);
     void set_y_label(const char* label);
+    bool set_line_color(int idx, float r, float g, float b, float a);
+    bool set_scatter_color(int idx, float r, float g, float b, float a);
+    bool set_line_style(int idx, LineStyle style,
+                        float dash_px = 8.0f,
+                        float gap_px = 5.0f);
 
     bool on_mouse_down(float x, float y, int button);
     void on_mouse_move(float x, float y);

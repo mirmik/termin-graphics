@@ -20,8 +20,15 @@ struct TCPLOT_API LineSeries {
     std::vector<double> x;
     std::vector<double> y;
     std::vector<double> z;  // empty for 2D series
+    std::vector<double> scalar;  // optional per-point values for 2D colormap lines
     std::optional<Color4> color;
+    SurfaceColorMap colormap = SurfaceColorMap::Jet;
+    double scalar_min = 0.0;
+    double scalar_max = 1.0;
     double thickness = 1.5;
+    LineStyle line_style = LineStyle::Solid;
+    float dash_px = 8.0f;
+    float gap_px = 5.0f;
     std::string label;
 };
 

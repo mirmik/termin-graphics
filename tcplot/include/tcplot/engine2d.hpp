@@ -94,6 +94,14 @@ public:
               double thickness = 1.5,
               std::string label = "");
 
+    void plot_colormap(std::vector<double> x, std::vector<double> y,
+                       std::vector<double> scalar,
+                       SurfaceColorMap colormap = SurfaceColorMap::Jet,
+                       double scalar_min = 0.0,
+                       double scalar_max = 1.0,
+                       double thickness = 1.5,
+                       std::string label = "");
+
     void scatter(std::vector<double> x, std::vector<double> y,
                  std::optional<Color4> color = std::nullopt,
                  double size = 4.0,
@@ -121,6 +129,9 @@ public:
     // callers don't need to clear + re-add to recolour a live series.
     bool set_line_color(size_t idx, Color4 color);
     bool set_scatter_color(size_t idx, Color4 color);
+    bool set_line_style(size_t idx, LineStyle style,
+                        float dash_px = 8.0f,
+                        float gap_px = 5.0f);
 
     size_t line_count() const { return data.lines.size(); }
 
@@ -170,11 +181,13 @@ private:
     // Build a data-space-only VS + uniform-color FS shader used for
     // persistent-VBO line series. Cached per device.
     void ensure_line_shader_(tgfx::IRenderDevice& device);
+    void ensure_styled_line_shader_(tgfx::IRenderDevice& device);
 
     // Ensure series `idx` has a GPU buffer big enough for its current
     // point count and that the tail (gpu_count..x.size()) has been
     // uploaded. Grows the VBO (doubling) when capacity is exceeded.
     void ensure_line_gpu_(tgfx::IRenderDevice& device, size_t idx);
+    void ensure_styled_line_gpu_(tgfx::IRenderDevice& device, size_t idx);
 
     // Compose the data-space → NDC matrix (4x4 column-major) for the
     // current plot area, view range, and viewport. Used as a uniform
@@ -203,6 +216,9 @@ private:
     tgfx::IRenderDevice* line_shader_device_ = nullptr;
     uint32_t line_shader_vs_id_ = 0;
     uint32_t line_shader_fs_id_ = 0;
+    tgfx::IRenderDevice* styled_line_shader_device_ = nullptr;
+    uint32_t styled_line_shader_vs_id_ = 0;
+    uint32_t styled_line_shader_fs_id_ = 0;
 
     // Per-line-series persistent GPU state, parallel to `data.lines`.
     // capacity is measured in vertices; each vertex is a vec2 float
@@ -214,6 +230,15 @@ private:
         uint32_t gpu_count = 0;
     };
     std::vector<LineGpuState> line_gpu_;
+
+    struct StyledLineGpuState {
+        tgfx::BufferHandle vbo{};
+        uint32_t capacity = 0;
+        uint32_t gpu_count = 0;
+        uint64_t data_version = 0;
+    };
+    std::vector<StyledLineGpuState> styled_line_gpu_;
+    uint64_t data_version_ = 1;
 
     // --- Shared 2D primitive/text renderer ---
     std::unique_ptr<tgfx::Canvas2DRenderer> canvas_;

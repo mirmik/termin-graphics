@@ -28,6 +28,12 @@ enum class SurfaceColorMap {
     Solid,
 };
 
+enum class LineStyle {
+    Solid,
+    Dash,
+    Dot,
+};
+
 namespace styles {
 
 // Default color cycle (tab10-like palette). 10 entries.
@@ -47,6 +53,7 @@ TCPLOT_API Color4 cycle_color(uint32_t index);
 // Jet colormap: t in [0,1] → RGB. Alpha left to the caller.
 // Returns a Color4 with a=1; caller may override.
 TCPLOT_API Color4 jet(float t);
+TCPLOT_API Color4 colormap(SurfaceColorMap map, float t);
 
 }  // namespace styles
 }  // namespace tcplot

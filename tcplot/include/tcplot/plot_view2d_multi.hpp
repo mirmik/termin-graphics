@@ -82,6 +82,21 @@ public:
                  double thickness = 1.5,
                  const char* label = "");
 
+    int add_line_colormap(int panel_idx,
+                          const double* x, const double* y,
+                          const double* scalar, size_t n,
+                          SurfaceColorMap colormap = SurfaceColorMap::Jet,
+                          double scalar_min = 0.0,
+                          double scalar_max = 1.0,
+                          double thickness = 1.5,
+                          const char* label = "");
+
+    int add_scatter(int panel_idx,
+                    const double* x, const double* y, size_t n,
+                    float cr, float cg, float cb, float ca,
+                    double size = 4.0,
+                    const char* label = "");
+
     // Append points to an existing line series. Autoscroll + per-panel
     // Y-autoscale both react to the new data — see set_autoscroll.
     void append_to_line(int panel_idx, int series_idx,
@@ -137,6 +152,12 @@ public:
     // are out of range.
     void set_line_color      (int panel_idx, int series_idx,
                               float r, float g, float b, float a);
+    void set_scatter_color   (int panel_idx, int series_idx,
+                              float r, float g, float b, float a);
+    void set_line_style      (int panel_idx, int series_idx,
+                              LineStyle style,
+                              float dash_px = 8.0f,
+                              float gap_px = 5.0f);
     // Per-panel font sizes in pixels. Margins auto-scale to fit.
     void set_font_size       (float label_px, float title_px);
     void set_panel_margins   (int left, int right, int top, int bottom);

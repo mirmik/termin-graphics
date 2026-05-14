@@ -236,6 +236,35 @@ void Canvas2DRenderer::draw_rect(float x, float y, float w, float h,
     append_solid_quad_(x, y, x + w, y + h, color);
 }
 
+void Canvas2DRenderer::draw_circle(float cx, float cy, float radius,
+                                   CanvasColor color, int segments) {
+    if (ctx_ == nullptr || radius <= 0.0f) return;
+    segments = std::clamp(segments, 8, 96);
+
+    if (batch_mode_ != BatchMode::Solid || !same_color(batch_color_, color)) {
+        flush_();
+        batch_mode_ = BatchMode::Solid;
+        batch_color_ = color;
+        batch_texture_ = TextureHandle{};
+    }
+
+    constexpr float kTau = 6.2831853071795864769f;
+    for (int i = 0; i < segments; ++i) {
+        const float a0 = kTau * static_cast<float>(i) / static_cast<float>(segments);
+        const float a1 = kTau * static_cast<float>(i + 1) / static_cast<float>(segments);
+        const float x0 = cx + std::cos(a0) * radius;
+        const float y0 = cy + std::sin(a0) * radius;
+        const float x1 = cx + std::cos(a1) * radius;
+        const float y1 = cy + std::sin(a1) * radius;
+        const float tri[] = {
+            cx, cy, 0.0f, 0.5f, 0.5f, 0.0f, 0.0f,
+            x0, y0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+            x1, y1, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        };
+        batch_vertices_.insert(batch_vertices_.end(), std::begin(tri), std::end(tri));
+    }
+}
+
 void Canvas2DRenderer::draw_rect_outline(float x, float y, float w, float h,
                                          CanvasColor color, float thickness) {
     if (w <= 0.0f || h <= 0.0f || thickness <= 0.0f) return;

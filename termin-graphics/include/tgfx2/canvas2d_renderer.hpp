@@ -50,6 +50,8 @@ public:
 
     void draw_rect(float x, float y, float w, float h,
                    CanvasColor color, float radius = 0.0f);
+    void draw_circle(float cx, float cy, float radius,
+                     CanvasColor color, int segments = 24);
     void draw_rect_outline(float x, float y, float w, float h,
                            CanvasColor color, float thickness = 1.0f);
     void draw_line(float x0, float y0, float x1, float y1,

@@ -122,6 +122,49 @@ int PlotView2DMulti::add_line(int panel_idx,
     return new_idx;
 }
 
+int PlotView2DMulti::add_line_colormap(int panel_idx,
+                                       const double* x, const double* y,
+                                       const double* scalar, size_t n,
+                                       SurfaceColorMap colormap,
+                                       double scalar_min,
+                                       double scalar_max,
+                                       double thickness,
+                                       const char* label) {
+    if (panel_idx < 0 || panel_idx >= (int)panels_.size()) return -1;
+    PlotEngine2D& eng = *panels_[panel_idx];
+    const int new_idx = static_cast<int>(eng.line_count());
+
+    eng.plot_colormap(to_vec(x, n), to_vec(y, n), to_vec(scalar, n),
+                      colormap, scalar_min, scalar_max, thickness,
+                      label ? std::string(label) : std::string());
+
+    if (n > 0 && !have_shared_x_) {
+        have_shared_x_ = true;
+        shared_x_min_ = x[0];
+        shared_x_max_ = x[n - 1];
+        if (shared_x_max_ <= shared_x_min_) {
+            shared_x_max_ = shared_x_min_ + 1.0;
+        }
+    }
+    return new_idx;
+}
+
+int PlotView2DMulti::add_scatter(int panel_idx,
+                                 const double* x, const double* y, size_t n,
+                                 float cr, float cg, float cb, float ca,
+                                 double size,
+                                 const char* label) {
+    if (panel_idx < 0 || panel_idx >= (int)panels_.size()) return -1;
+    PlotEngine2D& eng = *panels_[panel_idx];
+    const int new_idx = static_cast<int>(eng.data.scatters.size());
+
+    Color4 c{cr, cg, cb, ca};
+    eng.scatter(to_vec(x, n), to_vec(y, n),
+                std::optional<Color4>{c}, size,
+                label ? std::string(label) : std::string());
+    return new_idx;
+}
+
 void PlotView2DMulti::append_to_line(int panel_idx, int series_idx,
                                        const double* x, const double* y,
                                        size_t n) {
@@ -271,6 +314,21 @@ void PlotView2DMulti::set_line_color(int panel_idx, int series_idx,
     if (series_idx < 0) return;
     panels_[panel_idx]->set_line_color(
         static_cast<size_t>(series_idx), Color4{r, g, b, a});
+}
+void PlotView2DMulti::set_scatter_color(int panel_idx, int series_idx,
+                                        float r, float g, float b, float a) {
+    if (panel_idx < 0 || panel_idx >= (int)panels_.size()) return;
+    if (series_idx < 0) return;
+    panels_[panel_idx]->set_scatter_color(
+        static_cast<size_t>(series_idx), Color4{r, g, b, a});
+}
+void PlotView2DMulti::set_line_style(int panel_idx, int series_idx,
+                                     LineStyle style,
+                                     float dash_px, float gap_px) {
+    if (panel_idx < 0 || panel_idx >= (int)panels_.size()) return;
+    if (series_idx < 0) return;
+    panels_[panel_idx]->set_line_style(static_cast<size_t>(series_idx),
+                                       style, dash_px, gap_px);
 }
 
 // ---------------------------------------------------------------------------

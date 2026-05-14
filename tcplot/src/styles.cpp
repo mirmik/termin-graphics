@@ -71,5 +71,36 @@ Color4 jet(float t) {
     return {r, g, b, 1.0f};
 }
 
+Color4 colormap(SurfaceColorMap map, float t) {
+    t = std::clamp(t, 0.0f, 1.0f);
+    switch (map) {
+    case SurfaceColorMap::Viridis:
+        // Compact CPU-side approximation matching the shader palette closely
+        // enough for legends and 2D colored tracks.
+        return {
+            0.277f + t * (0.741f - 0.277f),
+            0.005f + t * (0.873f - 0.005f),
+            0.334f + t * (0.150f - 0.334f),
+            1.0f,
+        };
+    case SurfaceColorMap::Plasma:
+        return {
+            0.050f + t * (0.940f - 0.050f),
+            0.030f + t * (0.975f - 0.030f),
+            0.528f + t * (0.131f - 0.528f),
+            1.0f,
+        };
+    case SurfaceColorMap::Grayscale:
+        return {t, t, t, 1.0f};
+    case SurfaceColorMap::CoolWarm:
+        return {t, 0.25f + 0.5f * (1.0f - std::abs(2.0f * t - 1.0f)), 1.0f - t, 1.0f};
+    case SurfaceColorMap::Solid:
+        return {1.0f, 1.0f, 1.0f, 1.0f};
+    case SurfaceColorMap::Jet:
+    default:
+        return jet(t);
+    }
+}
+
 }  // namespace styles
 }  // namespace tcplot
