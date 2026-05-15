@@ -63,6 +63,26 @@ typedef struct tc_mesh {
     uint8_t _pad2[3];
 } tc_mesh;
 
+// ============================================================================
+// Mesh query types
+// ============================================================================
+
+typedef struct tc_mesh_ray {
+    float origin[3];
+    float direction[3];
+    float t_min;
+    float t_max;
+} tc_mesh_ray;
+
+typedef struct tc_mesh_hit {
+    float t;
+    float position[3];
+    float normal[3];
+    float barycentric[3];
+    uint32_t triangle_index;
+    uint32_t indices[3];
+} tc_mesh_hit;
+
 
 // ============================================================================
 // Mesh helper functions
@@ -141,6 +161,30 @@ TGFX_API void tc_mesh_compute_uuid(
     const void* vertices, size_t vertex_size,
     const uint32_t* indices, size_t index_count,
     char* uuid_out
+);
+
+// ============================================================================
+// Mesh queries
+// ============================================================================
+
+TGFX_API bool tc_mesh_get_position3f(
+    const tc_mesh* mesh,
+    uint32_t vertex_index,
+    float out_position[3]
+);
+
+TGFX_API bool tc_mesh_get_triangle3f(
+    const tc_mesh* mesh,
+    uint32_t triangle_index,
+    float out_a[3],
+    float out_b[3],
+    float out_c[3]
+);
+
+TGFX_API bool tc_mesh_raycast(
+    const tc_mesh* mesh,
+    const tc_mesh_ray* ray,
+    tc_mesh_hit* out_hit
 );
 
 #ifdef __cplusplus

@@ -368,6 +368,42 @@ void bind_mesh(nb::module_& m) {
         .def("set_from_mesh3", [](TcMesh& h, const Mesh3& mesh) {
             return h.set_from_mesh3(mesh);
         }, nb::arg("mesh"))
+        .def("raycast", [](const TcMesh& h, nb::tuple origin, nb::tuple direction, float t_min, float t_max) -> nb::object {
+            if (origin.size() < 3 || direction.size() < 3) {
+                return nb::none();
+            }
+            tc_mesh* m = h.get();
+            if (!m) {
+                return nb::none();
+            }
+
+            tc_mesh_ray ray;
+            ray.origin[0] = nb::cast<float>(origin[0]);
+            ray.origin[1] = nb::cast<float>(origin[1]);
+            ray.origin[2] = nb::cast<float>(origin[2]);
+            ray.direction[0] = nb::cast<float>(direction[0]);
+            ray.direction[1] = nb::cast<float>(direction[1]);
+            ray.direction[2] = nb::cast<float>(direction[2]);
+            ray.t_min = t_min;
+            ray.t_max = t_max;
+
+            tc_mesh_hit hit;
+            if (!tc_mesh_raycast(m, &ray, &hit)) {
+                return nb::none();
+            }
+
+            nb::dict d;
+            d["t"] = hit.t;
+            d["position"] = nb::make_tuple(hit.position[0], hit.position[1], hit.position[2]);
+            d["normal"] = nb::make_tuple(hit.normal[0], hit.normal[1], hit.normal[2]);
+            d["barycentric"] = nb::make_tuple(
+                hit.barycentric[0],
+                hit.barycentric[1],
+                hit.barycentric[2]);
+            d["triangle_index"] = hit.triangle_index;
+            d["indices"] = nb::make_tuple(hit.indices[0], hit.indices[1], hit.indices[2]);
+            return d;
+        }, nb::arg("origin"), nb::arg("direction"), nb::arg("t_min") = 0.0f, nb::arg("t_max") = 1000000.0f)
         .def("get_vertices_buffer", [](const TcMesh& h) -> nb::object {
             tc_mesh* m = h.get();
             if (!m || !m->vertices || m->vertex_count == 0) return nb::none();
