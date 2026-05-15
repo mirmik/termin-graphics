@@ -224,6 +224,7 @@ public:
     // Documentation lives on the base class — these are the OpenGL
     // implementations of the backend-neutral virtual interface.
     bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]) override;
+    bool read_pixel_depth_float(TextureHandle tex, int x, int y, float* out_depth) override;
     bool read_texture_rgba_float(TextureHandle tex, float* out) override;
     bool read_texture_depth_float(TextureHandle tex, float* out) override;
 

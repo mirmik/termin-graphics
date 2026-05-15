@@ -2035,6 +2035,92 @@ bool VulkanRenderDevice::read_pixel_rgba8(
     return true;
 }
 
+bool VulkanRenderDevice::read_pixel_depth_float(
+    TextureHandle tex, int x, int y, float* out_depth
+) {
+    auto* res = textures_.get(tex.id);
+    if (!res || !out_depth) return false;
+    if (res->desc.format != PixelFormat::D32F) return false;
+
+    const int w = static_cast<int>(res->desc.width);
+    const int h = static_cast<int>(res->desc.height);
+    if (x < 0 || y < 0 || x >= w || y >= h) return false;
+
+    VkBufferCreateInfo stage_ci{};
+    stage_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    stage_ci.size = sizeof(float);
+    stage_ci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+    VmaAllocationCreateInfo stage_alloc{};
+    stage_alloc.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
+
+    VkBuffer staging = VK_NULL_HANDLE;
+    VmaAllocation staging_alloc_h = VK_NULL_HANDLE;
+    if (vmaCreateBuffer(allocator_, &stage_ci, &stage_alloc,
+                        &staging, &staging_alloc_h, nullptr) != VK_SUCCESS) {
+        return false;
+    }
+
+    VkCommandBufferAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    ai.commandPool = command_pool_;
+    ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    ai.commandBufferCount = 1;
+    VkCommandBuffer cb = VK_NULL_HANDLE;
+    vkAllocateCommandBuffers(device_, &ai, &cb);
+
+    VkCommandBufferBeginInfo bi{};
+    bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cb, &bi);
+
+    VkImageLayout prev_layout = res->current_layout;
+    transition_image_layout(cb, res->image, prev_layout,
+                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                            VK_IMAGE_ASPECT_DEPTH_BIT);
+
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+    region.imageOffset = {x, y, 0};
+    region.imageExtent = {1, 1, 1};
+    vkCmdCopyImageToBuffer(cb, res->image,
+                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           staging, 1, &region);
+
+    transition_image_layout(cb, res->image,
+                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                            prev_layout, VK_IMAGE_ASPECT_DEPTH_BIT);
+    res->current_layout = prev_layout;
+
+    vkEndCommandBuffer(cb);
+
+    VkSubmitInfo si{};
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &cb;
+    vkQueueSubmit(graphics_queue_, 1, &si, VK_NULL_HANDLE);
+    vkQueueWaitIdle(graphics_queue_);
+
+    float depth = 1.0f;
+    void* mapped = nullptr;
+    if (vmaMapMemory(allocator_, staging_alloc_h, &mapped) == VK_SUCCESS && mapped) {
+        std::memcpy(&depth, mapped, sizeof(float));
+        vmaUnmapMemory(allocator_, staging_alloc_h);
+    }
+
+    vmaDestroyBuffer(allocator_, staging, staging_alloc_h);
+    vkFreeCommandBuffers(device_, command_pool_, 1, &cb);
+
+    *out_depth = depth;
+    return true;
+}
+
 // --- Command list ---
 
 std::unique_ptr<ICommandList> VulkanRenderDevice::create_command_list(QueueType /*queue*/) {

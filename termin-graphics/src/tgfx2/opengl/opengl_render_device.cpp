@@ -856,6 +856,34 @@ bool OpenGLRenderDevice::read_pixel_rgba8(
     return ok;
 }
 
+bool OpenGLRenderDevice::read_pixel_depth_float(
+    TextureHandle tex, int x, int y, float* out_depth
+) {
+    auto* t = get_texture(tex);
+    if (!t || !out_depth) return false;
+
+    GLint prev_read_fbo = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prev_read_fbo);
+
+    GLuint fbo = 0;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                           t->target, t->gl_id, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+
+    bool ok = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    if (ok) {
+        const int gl_y = static_cast<int>(t->desc.height) - y - 1;
+        glReadPixels(x, gl_y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, out_depth);
+    }
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_read_fbo));
+    glDeleteFramebuffers(1, &fbo);
+    return ok;
+}
+
 void OpenGLRenderDevice::blit_to_external_target(
     uintptr_t dst,
     TextureHandle src_color,

@@ -342,6 +342,7 @@ public:
     // texture. Synchronous — waits on a one-shot transfer submit. Rare
     // call (once per mouse-move for hover), so the wait is acceptable.
     bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]) override;
+    bool read_pixel_depth_float(TextureHandle tex, int x, int y, float* out_depth) override;
 
     std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) override;
     void submit(ICommandList& cmd) override;

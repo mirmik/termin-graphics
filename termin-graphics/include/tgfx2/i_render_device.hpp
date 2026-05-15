@@ -206,6 +206,13 @@ public:
         (void)tex; (void)x; (void)y; (void)out_rgba;
         return false;
     }
+    // Read a single depth pixel as a normalized hardware depth value
+    // in [0,1]. Coordinates use the same top-down convention as
+    // read_pixel_rgba8.
+    virtual bool read_pixel_depth_float(TextureHandle tex, int x, int y, float* out_depth) {
+        (void)tex; (void)x; (void)y; (void)out_depth;
+        return false;
+    }
     // Read a full color texture as tightly-packed RGBA float32 into
     // `out` (>= width*height*4 floats). Used by the framegraph
     // debugger's HDR stats.
