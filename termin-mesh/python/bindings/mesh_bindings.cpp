@@ -404,6 +404,172 @@ void bind_mesh(nb::module_& m) {
             d["indices"] = nb::make_tuple(hit.indices[0], hit.indices[1], hit.indices[2]);
             return d;
         }, nb::arg("origin"), nb::arg("direction"), nb::arg("t_min") = 0.0f, nb::arg("t_max") = 1000000.0f)
+        .def("find_surface_edge", [](const TcMesh& h,
+                                      uint32_t start_triangle,
+                                      nb::tuple point,
+                                      nb::tuple normal,
+                                      nb::tuple up,
+                                      nb::tuple metric) -> nb::object {
+            if (point.size() < 3 || normal.size() < 3 || up.size() < 3 || metric.size() < 3) {
+                return nb::none();
+            }
+            tc_mesh* m = h.get();
+            if (!m) {
+                return nb::none();
+            }
+
+            float p[3] = {
+                nb::cast<float>(point[0]),
+                nb::cast<float>(point[1]),
+                nb::cast<float>(point[2])
+            };
+            float n[3] = {
+                nb::cast<float>(normal[0]),
+                nb::cast<float>(normal[1]),
+                nb::cast<float>(normal[2])
+            };
+            float u[3] = {
+                nb::cast<float>(up[0]),
+                nb::cast<float>(up[1]),
+                nb::cast<float>(up[2])
+            };
+            float s[3] = {
+                nb::cast<float>(metric[0]),
+                nb::cast<float>(metric[1]),
+                nb::cast<float>(metric[2])
+            };
+
+            tc_mesh_surface_edge_hit hit;
+            if (!tc_mesh_find_surface_edge_metric(m, start_triangle, p, n, u, s, &hit)) {
+                return nb::none();
+            }
+
+            nb::dict d;
+            d["point"] = nb::make_tuple(hit.point[0], hit.point[1], hit.point[2]);
+            d["indices"] = nb::make_tuple(hit.indices[0], hit.indices[1]);
+            d["distance"] = hit.distance;
+            d["side"] = hit.side;
+            return d;
+        }, nb::arg("start_triangle"),
+           nb::arg("point"),
+           nb::arg("normal"),
+           nb::arg("up") = nb::make_tuple(0.0f, 0.0f, 1.0f),
+           nb::arg("metric") = nb::make_tuple(1.0f, 1.0f, 1.0f),
+           "Find the nearest boundary edge of the connected surface containing "
+           "start_triangle. point/normal/up are mesh-local. metric is a "
+           "per-axis measurement metric used for distance tests; returned point "
+           "and indices remain in original mesh-local coordinates.")
+        .def("find_surface_edge_aligned", [](const TcMesh& h,
+                                              uint32_t start_triangle,
+                                              nb::tuple point,
+                                              nb::tuple normal,
+                                              nb::tuple edge_direction,
+                                              float max_angle_degrees,
+                                              nb::tuple up,
+                                              nb::tuple metric) -> nb::object {
+            if (point.size() < 3 || normal.size() < 3 || edge_direction.size() < 3 ||
+                up.size() < 3 || metric.size() < 3) {
+                return nb::none();
+            }
+            tc_mesh* m = h.get();
+            if (!m) {
+                return nb::none();
+            }
+
+            float p[3] = {
+                nb::cast<float>(point[0]),
+                nb::cast<float>(point[1]),
+                nb::cast<float>(point[2])
+            };
+            float n[3] = {
+                nb::cast<float>(normal[0]),
+                nb::cast<float>(normal[1]),
+                nb::cast<float>(normal[2])
+            };
+            float d[3] = {
+                nb::cast<float>(edge_direction[0]),
+                nb::cast<float>(edge_direction[1]),
+                nb::cast<float>(edge_direction[2])
+            };
+            float u[3] = {
+                nb::cast<float>(up[0]),
+                nb::cast<float>(up[1]),
+                nb::cast<float>(up[2])
+            };
+            float s[3] = {
+                nb::cast<float>(metric[0]),
+                nb::cast<float>(metric[1]),
+                nb::cast<float>(metric[2])
+            };
+
+            tc_mesh_surface_edge_hit hit;
+            if (!tc_mesh_find_surface_edge_aligned_metric(m, start_triangle, p, n, u, d, max_angle_degrees, s, &hit)) {
+                return nb::none();
+            }
+
+            nb::dict result;
+            result["point"] = nb::make_tuple(hit.point[0], hit.point[1], hit.point[2]);
+            result["indices"] = nb::make_tuple(hit.indices[0], hit.indices[1]);
+            result["distance"] = hit.distance;
+            result["side"] = hit.side;
+            return result;
+        }, nb::arg("start_triangle"),
+           nb::arg("point"),
+           nb::arg("normal"),
+           nb::arg("edge_direction"),
+           nb::arg("max_angle_degrees"),
+           nb::arg("up") = nb::make_tuple(0.0f, 0.0f, 1.0f),
+           nb::arg("metric") = nb::make_tuple(1.0f, 1.0f, 1.0f),
+           "Find a boundary edge of the connected surface, filtering candidates "
+           "by edge direction. The sign of edge_direction is ignored. metric is "
+           "applied to both distance measurement and direction comparison; "
+           "returned point and indices remain in original mesh-local coordinates.")
+        .def("find_nearest_surface_edge", [](const TcMesh& h,
+                                              nb::tuple point,
+                                              nb::tuple up,
+                                              nb::tuple metric) -> nb::object {
+            if (point.size() < 3 || up.size() < 3 || metric.size() < 3) {
+                return nb::none();
+            }
+            tc_mesh* m = h.get();
+            if (!m) {
+                return nb::none();
+            }
+
+            float p[3] = {
+                nb::cast<float>(point[0]),
+                nb::cast<float>(point[1]),
+                nb::cast<float>(point[2])
+            };
+            float u[3] = {
+                nb::cast<float>(up[0]),
+                nb::cast<float>(up[1]),
+                nb::cast<float>(up[2])
+            };
+            float s[3] = {
+                nb::cast<float>(metric[0]),
+                nb::cast<float>(metric[1]),
+                nb::cast<float>(metric[2])
+            };
+
+            tc_mesh_surface_edge_hit hit;
+            if (!tc_mesh_find_nearest_surface_edge_metric(m, p, u, s, &hit)) {
+                return nb::none();
+            }
+
+            nb::dict d;
+            d["point"] = nb::make_tuple(hit.point[0], hit.point[1], hit.point[2]);
+            d["indices"] = nb::make_tuple(hit.indices[0], hit.indices[1]);
+            d["distance"] = hit.distance;
+            d["side"] = hit.side;
+            return d;
+        }, nb::arg("point"),
+           nb::arg("up") = nb::make_tuple(0.0f, 0.0f, 1.0f),
+           nb::arg("metric") = nb::make_tuple(1.0f, 1.0f, 1.0f),
+           "Convenience query that first finds the nearest triangle to point "
+           "using metric-space distance, then finds the nearest boundary edge "
+           "of that surface. Returned point and indices remain in original "
+           "mesh-local coordinates.")
         .def("get_vertices_buffer", [](const TcMesh& h) -> nb::object {
             tc_mesh* m = h.get();
             if (!m || !m->vertices || m->vertex_count == 0) return nb::none();

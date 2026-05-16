@@ -83,6 +83,13 @@ typedef struct tc_mesh_hit {
     uint32_t indices[3];
 } tc_mesh_hit;
 
+typedef struct tc_mesh_surface_edge_hit {
+    float point[3];
+    uint32_t indices[2];
+    float distance;
+    int32_t side;
+} tc_mesh_surface_edge_hit;
+
 
 // ============================================================================
 // Mesh helper functions
@@ -185,6 +192,105 @@ TGFX_API bool tc_mesh_raycast(
     const tc_mesh* mesh,
     const tc_mesh_ray* ray,
     tc_mesh_hit* out_hit
+);
+
+// Finds the nearest boundary edge of the connected surface that contains
+// start_triangle.
+//
+// Parameters are expressed in mesh-local coordinates:
+// - point: query point on/near the target surface.
+// - normal: surface normal at point; used to flood-fill adjacent triangles with
+//   a compatible normal and plane.
+// - up: application up direction; used only to compute the diagnostic side.
+//
+// Distance is measured in the default unit metric (1,1,1). The returned point
+// and edge vertex indices are in the original, unmodified mesh-local space.
+TGFX_API bool tc_mesh_find_surface_edge(
+    const tc_mesh* mesh,
+    uint32_t start_triangle,
+    const float point[3],
+    const float normal[3],
+    const float up[3],
+    tc_mesh_surface_edge_hit* out_hit
+);
+
+// Same query as tc_mesh_find_surface_edge, but distances and angle comparisons
+// are evaluated in a caller-provided diagonal metric.
+//
+// metric is not written back to the mesh and does not change returned
+// coordinates. It is interpreted as per-axis length multipliers for measurement
+// only. For example, metric=(0.5, 2, 1) means X distances count half as much and
+// Y distances count twice as much while choosing the nearest edge.
+//
+// The returned point remains in the original unscaled mesh-local space so it can
+// be transformed by the entity pose as usual.
+TGFX_API bool tc_mesh_find_surface_edge_metric(
+    const tc_mesh* mesh,
+    uint32_t start_triangle,
+    const float point[3],
+    const float normal[3],
+    const float up[3],
+    const float metric[3],
+    tc_mesh_surface_edge_hit* out_hit
+);
+
+// Finds the nearest boundary edge of the connected surface, but only among
+// edges whose direction is aligned with edge_direction within max_angle_degrees.
+//
+// The sign of the edge direction is ignored: an edge parallel to
+// edge_direction or to -edge_direction is accepted. All input vectors are in
+// mesh-local coordinates. Without the metric variant below, direction filtering
+// and distances use the default unit metric.
+TGFX_API bool tc_mesh_find_surface_edge_aligned(
+    const tc_mesh* mesh,
+    uint32_t start_triangle,
+    const float point[3],
+    const float normal[3],
+    const float up[3],
+    const float edge_direction[3],
+    float max_angle_degrees,
+    tc_mesh_surface_edge_hit* out_hit
+);
+
+// Metric-aware aligned edge query.
+//
+// metric is applied both to measured distances and to the direction comparison:
+// edge_direction and each candidate edge vector are first multiplied by metric
+// and normalized, then compared by abs(dot). This makes the direction test
+// describe alignment in the same measured geometry that is used for nearest-edge
+// selection. Returned coordinates are still original mesh-local coordinates.
+TGFX_API bool tc_mesh_find_surface_edge_aligned_metric(
+    const tc_mesh* mesh,
+    uint32_t start_triangle,
+    const float point[3],
+    const float normal[3],
+    const float up[3],
+    const float edge_direction[3],
+    float max_angle_degrees,
+    const float metric[3],
+    tc_mesh_surface_edge_hit* out_hit
+);
+
+// Convenience query for callers that only have a point. It first finds the
+// nearest triangle to point, derives its normal, and then runs
+// tc_mesh_find_surface_edge. This is slower than passing start_triangle from a
+// raycast/picking result.
+TGFX_API bool tc_mesh_find_nearest_surface_edge(
+    const tc_mesh* mesh,
+    const float point[3],
+    const float up[3],
+    tc_mesh_surface_edge_hit* out_hit
+);
+
+// Metric-aware version of tc_mesh_find_nearest_surface_edge. The nearest
+// triangle and nearest boundary edge are selected using metric-space distances,
+// but the returned point remains in original mesh-local coordinates.
+TGFX_API bool tc_mesh_find_nearest_surface_edge_metric(
+    const tc_mesh* mesh,
+    const float point[3],
+    const float up[3],
+    const float metric[3],
+    tc_mesh_surface_edge_hit* out_hit
 );
 
 #ifdef __cplusplus
