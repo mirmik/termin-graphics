@@ -1,10 +1,11 @@
-// tgfx2_bridge.hpp - Interop helpers between legacy tc_mesh / tc_texture and tgfx2
+// tgfx2_bridge.hpp - Interop helpers between core_c tc_mesh / tc_texture and tgfx2
 #pragma once
 
 #include <cstdint>
 
 #include "tgfx2/handles.hpp"
 #include "tgfx2/enums.hpp"
+#include "tgfx2/tc_mesh_bridge.hpp"
 #include "tgfx2/vertex_layout.hpp"
 
 #include "termin/render/render_export.hpp"
@@ -18,11 +19,12 @@ struct tc_mesh;
 namespace tgfx {
 class OpenGLRenderDevice;
 class IRenderDevice;
+class RenderContext2;
 }
 
 namespace termin {
 
-// Wrap a legacy tc_texture as a tgfx2 TextureHandle for the duration of a
+// Wrap a core_c tc_texture as a tgfx2 TextureHandle for the duration of a
 // draw. Backend-agnostic:
 //
 //  - OpenGL: triggers tc_texture_upload_gpu, pulls the GL id out of the
@@ -54,53 +56,18 @@ RENDER_API void release_texture_binding(
     tgfx::TextureHandle binding
 );
 
-// Result of wrapping a tc_mesh as tgfx2 buffers + layout for one draw.
-//
-// vertex_buffer / index_buffer are non-owning external handles around the
-// legacy VBO/EBO that the mesh's share group already created. The caller
-// MUST destroy(handle) both handles after the draw completes; the
-// underlying GL buffer objects survive because register_external_buffer
-// marked them external. index_count == 0 means the wrap failed and the
-// binding should not be used.
-struct Tgfx2MeshBinding {
-    tgfx::BufferHandle vertex_buffer;
-    tgfx::BufferHandle index_buffer;
-    tgfx::VertexBufferLayout layout;
-    uint32_t index_count = 0;
-    tgfx::IndexType index_type = tgfx::IndexType::Uint32;
-    tgfx::PrimitiveTopology topology = tgfx::PrimitiveTopology::TriangleList;
-    bool destroy_vertex_buffer = false;
-    bool destroy_index_buffer = false;
-};
+using Tgfx2MeshBinding = tgfx::Tgfx2MeshBinding;
 
-// Wrap a tc_mesh's GPU shadow as a tgfx2 vertex/index buffer pair plus
-// its translated vertex layout. Used by Phase 2 passes (ShadowPass,
-// IdPass, ColorPass, ...) that draw through tgfx2 while tc_mesh still
-// owns the source CPU data.
-//
-// OpenGL path: triggers the legacy upload (tc_mesh_upload_gpu) so the
-// share group's VBO/EBO exist, then wraps them as non-owning tgfx2
-// buffers via register_external_buffer. The caller MUST destroy(handle)
-// both buffers after the draw — underlying GL objects survive.
-//
-// Non-GL path (Vulkan / future): uploads tc_mesh->vertices / ->indices
-// into freshly-created tgfx2 BufferHandles and caches them keyed on
-// (mesh, device). Returned handles stay owned by the cache; the caller
-// must NOT destroy them — they are reused across frames and released
-// when the cache entry is evicted (mesh version change / device
-// teardown).
-//
-// Call-site rule: always pair every non-empty wrap_mesh_as_tgfx2 result
-// with `release_mesh_binding(device, binding)` after the draw. That
-// function is a no-op on the cached (Vulkan) path and does the legacy
-// destroy() on the OpenGL path — one call site, both backends happy.
+// Compatibility wrappers. The implementation lives in termin-graphics
+// (tgfx2/tc_mesh_bridge.hpp); render passes keep including this header while
+// the call sites are migrated.
 RENDER_API Tgfx2MeshBinding wrap_mesh_as_tgfx2(
     tgfx::IRenderDevice& device,
     tc_mesh* mesh
 );
 
-// Complement to wrap_mesh_as_tgfx2 — frees the buffers on the legacy
-// OpenGL path (where register_external_buffer'd handles leak otherwise),
+// Complement to wrap_mesh_as_tgfx2. The OpenGL share-group path creates
+// per-call external buffer wrappers that must be released here,
 // and is a no-op on the cached non-GL path. Safe on a default-
 // constructed Tgfx2MeshBinding (index_count == 0).
 RENDER_API void release_mesh_binding(
@@ -120,6 +87,18 @@ RENDER_API void release_mesh_binding(
 // `filter_vertex_layout_to_locations(layout, {0})`.
 RENDER_API tgfx::VertexBufferLayout filter_vertex_layout_to_locations(
     const tgfx::VertexBufferLayout& layout,
+    std::initializer_list<uint32_t> used_locations
+);
+
+RENDER_API bool draw_tc_mesh(
+    tgfx::RenderContext2& ctx,
+    tc_mesh* mesh,
+    const tgfx::VertexBufferLayout* layout_override = nullptr
+);
+
+RENDER_API bool draw_tc_mesh(
+    tgfx::RenderContext2& ctx,
+    tc_mesh* mesh,
     std::initializer_list<uint32_t> used_locations
 );
 

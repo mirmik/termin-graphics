@@ -28,7 +28,7 @@ public:
     virtual ~IRenderDevice() = default;
 
     // Backend identity — lets callers branch on GL-only vs Vulkan-only
-    // host integration (FBO invalidation, legacy gpu_ops interop, …)
+    // host integration (FBO invalidation, tc_gpu_ops interop, ...)
     // without a dynamic_cast to the concrete device class.
     virtual BackendType backend_type() const = 0;
 
@@ -247,7 +247,7 @@ public:
     }
     virtual uint32_t ubo_alignment() const { return 1; }
 
-    // --- Legacy state / sync helpers ---
+    // --- Backend state / sync helpers ---
     // Restore the canonical render-state baseline between frame-graph
     // passes. On OpenGL: glEnable(DEPTH_TEST)/glDisable(BLEND)/etc.
     // On backends with explicit state (Vulkan), a no-op.
@@ -268,7 +268,7 @@ public:
     //
     // Default implementations log + return empty handles. The OpenGL
     // backend explicitly does NOT override these — its tgfx2_bridge path
-    // wraps the legacy tc_gpu_slot share-group cache instead, calling
+    // wraps the core_c tc_gpu_slot share-group cache instead, calling
     // `register_external_texture` / `register_external_buffer` directly.
     virtual TextureHandle ensure_tc_texture(tc_texture* /*tex*/) {
         return {};

@@ -113,7 +113,7 @@ static inline void tc_texture_bump_version(tc_texture* tex) {
 }
 
 // ============================================================================
-// Legacy API (deprecated)
+// Name-based API (deprecated)
 // ============================================================================
 
 TGFX_API tc_texture* tc_texture_add(const char* uuid);

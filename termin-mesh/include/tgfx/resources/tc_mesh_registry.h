@@ -120,7 +120,7 @@ TGFX_API tc_vertex_layout tc_mesh_get_layout(tc_mesh_handle h);
 TGFX_API uint8_t tc_mesh_get_draw_mode(tc_mesh_handle h);
 
 // ============================================================================
-// Legacy API (deprecated - use handle-based API)
+// Name-based API (deprecated - use handle-based API)
 // ============================================================================
 
 TGFX_API tc_mesh* tc_mesh_add(const char* uuid);

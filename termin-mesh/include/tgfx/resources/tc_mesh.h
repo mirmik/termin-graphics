@@ -42,7 +42,7 @@ typedef tgfx_vertex_layout tc_vertex_layout;
 #define TC_VERTEX_ATTRIBS_MAX TGFX_VERTEX_ATTRIBS_MAX
 
 // ============================================================================
-// Load callback type (legacy alias)
+// Load callback type
 // ============================================================================
 
 struct tc_mesh;

@@ -190,7 +190,7 @@ public:
     void set_push_constants(const void* data, uint32_t size);
 
     // Queue a handle for destruction at the end of the current frame.
-    // Used by pass code that wraps legacy GL resources as non-owning
+    // Used by pass code that wraps externally owned GL resources as non-owning
     // tgfx2 handles (register_external_texture / register_external_buffer)
     // and needs them alive only for the draws in this frame. The
     // underlying GL object is preserved; only the tgfx2 HandlePool entry

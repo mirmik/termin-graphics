@@ -51,7 +51,7 @@ typedef enum tc_texture_storage_kind {
 } tc_texture_storage_kind;
 
 // Usage hint that backends translate to native creation flags
-// (VkImageUsageFlags on Vulkan; ignored on GL since the legacy upload
+// (VkImageUsageFlags on Vulkan; ignored on GL since the OpenGL upload
 // path picks attachment / sampled state from the bind site). Bitfield —
 // values OR together.
 typedef enum tc_texture_usage_flags {

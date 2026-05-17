@@ -16,11 +16,11 @@ struct GLBuffer {
     GLuint gl_id = 0;
     BufferDesc desc;
     GLenum target = GL_ARRAY_BUFFER;
-    // When true the GL buffer object is owned externally (e.g. by legacy
-    // tgfx mesh code) and must NOT be glDeleteBuffers'd when this handle
-    // is destroyed. Set by register_external_buffer() during the Phase 2
-    // migration so that tgfx2 passes can draw against legacy-owned VBOs
-    // and EBOs without taking ownership of them.
+    // When true the GL buffer object is owned externally (for example by
+    // the core_c tc_mesh share-group cache) and must NOT be glDeleteBuffers'd
+    // when this handle is destroyed. Set by register_external_buffer()
+    // so tgfx2 passes can draw against externally owned VBOs/EBOs without
+    // taking ownership of them.
     bool external = false;
 };
 
@@ -28,8 +28,8 @@ struct GLTexture {
     GLuint gl_id = 0;
     TextureDesc desc;
     GLenum target = GL_TEXTURE_2D;
-    // When true the GL texture object is owned externally (e.g. by legacy
-    // tgfx code) and must NOT be glDeleteTextures'd when this handle is
+    // When true the GL texture object is owned externally (for example by
+    // the core_c tc_texture share-group cache) and must NOT be glDeleteTextures'd when this handle is
     // destroyed. Used by register_external_texture() to wrap existing GL
     // textures as tgfx2 handles for interop during the Phase 2 migration.
     bool external = false;
@@ -267,7 +267,7 @@ public:
     // GL-typed convenience overloads. Equivalent to the uintptr_t
     // versions above but spare the `static_cast<uintptr_t>(glid)` at
     // callsites that speak raw GL. Kept for GL-only code (picking,
-    // tcplot, legacy tc_mesh bridge).
+    // tcplot, core_c resource bridges).
     GLuint gl_texture_id(TextureHandle handle) {
         return static_cast<GLuint>(native_texture_handle(handle));
     }

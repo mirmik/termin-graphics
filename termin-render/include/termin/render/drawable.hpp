@@ -57,9 +57,9 @@ public:
     // Expose the underlying tc_mesh for a given phase + geometry id so
     // tgfx2-migrated passes (ShadowPass, IdPass, ColorPass) can wrap it
     // via wrap_mesh_as_tgfx2() and draw through RenderContext2 instead
-    // of going through the legacy draw_geometry()/tc_mesh_draw_gpu path.
+    // of going through the old draw_geometry()/tc_mesh_draw_gpu path.
     //
-    // Default returns nullptr; drawables that are still on the legacy
+    // Default returns nullptr; drawables that are still on the old
     // path fall back to draw_geometry(). MeshRenderer overrides to
     // return its TcMesh. Returning non-null opts a drawable in to the
     // tgfx2 shadow/id/color rendering paths one type at a time.

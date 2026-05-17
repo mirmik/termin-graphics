@@ -1,15 +1,10 @@
 #include "termin/render/tgfx2_bridge.hpp"
 
-#include <algorithm>
-#include <cstring>
-#include <span>
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include <tcbase/tc_log.hpp>
 
-#include "tgfx/resources/tc_mesh.h"
 #include "tgfx/resources/tc_texture.h"
 #include "tgfx/resources/tc_texture_registry.h"
 #include "tgfx/tc_gpu_context.h"
@@ -29,9 +24,9 @@ namespace termin {
 namespace {
 
 // Translate tc_texture_format into the closest tgfx::PixelFormat. The
-// tgfx2 format is only used as a pipeline cache tag here — the actual
-// GL texture object is already configured by the legacy upload path, so
-// a cache-key mismatch at worst causes an extra pipeline compile.
+// tgfx2 format is only used as a pipeline cache tag here. On OpenGL the
+// actual texture object is configured by the core_c upload path, so a
+// cache-key mismatch at worst causes an extra pipeline compile.
 tgfx::PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
     switch (fmt) {
         case TC_TEXTURE_RGBA8:   return tgfx::PixelFormat::RGBA8_UNorm;
@@ -56,9 +51,9 @@ tgfx::TextureHandle wrap_tc_texture_gl(
     tgfx::OpenGLRenderDevice& device,
     tc_texture* tex
 ) {
-    // Materialize the legacy GL texture object. Per-context upload
-    // goes through tc_gpu_ops and stores the GL id on the share
-    // group's texture slot at tex->header.pool_index.
+    // Materialize the core_c GL texture object. Per-context upload goes
+    // through tc_gpu_ops and stores the GL id on the share group's
+    // texture slot at tex->header.pool_index.
     if (!tc_texture_upload_gpu(tex)) {
         tc::Log::error("wrap_tc_texture_as_tgfx2: upload failed for '%s'",
                        tex->header.name ? tex->header.name : tex->header.uuid);
@@ -150,322 +145,41 @@ void release_texture_binding(
     // Non-GL path: cache owns the handle, don't destroy.
 }
 
-namespace {
-
-// Build the layout + index_count + topology portion of the binding
-// from the tc_mesh — shared between GL and non-GL paths.
-bool fill_binding_from_mesh(Tgfx2MeshBinding& out, tc_mesh* mesh) {
-    out.layout.stride = mesh->layout.stride;
-    out.layout.attributes.reserve(mesh->layout.attrib_count);
-    for (uint8_t i = 0; i < mesh->layout.attrib_count; i++) {
-        const tgfx_vertex_attrib& a = mesh->layout.attribs[i];
-        tgfx::VertexAttribute va;
-        va.location = a.location;
-        va.offset = a.offset;
-
-        // Map (tgfx_attrib_type, size) → tgfx::VertexFormat. Covers
-        // the full 1..4 component range for FLOAT32, INT32, UINT32,
-        // INT16, UINT16 and the 4-component packed int8/uint8 forms.
-        // Integer attribute types read via glVertexAttribIPointer in
-        // the OpenGL backend — see vertex_format_is_integer() in
-        // opengl_type_conversions.cpp and the branch in
-        // OpenGLCommandList::bind_vertex_buffer.
-        bool ok = true;
-        switch (static_cast<tgfx_attrib_type>(a.type)) {
-            case TGFX_ATTRIB_FLOAT32:
-                switch (a.size) {
-                    case 1: va.format = tgfx::VertexFormat::Float;  break;
-                    case 2: va.format = tgfx::VertexFormat::Float2; break;
-                    case 3: va.format = tgfx::VertexFormat::Float3; break;
-                    case 4: va.format = tgfx::VertexFormat::Float4; break;
-                    default: ok = false; break;
-                }
-                break;
-            case TGFX_ATTRIB_INT32:
-                switch (a.size) {
-                    case 1: va.format = tgfx::VertexFormat::Int;  break;
-                    case 2: va.format = tgfx::VertexFormat::Int2; break;
-                    case 3: va.format = tgfx::VertexFormat::Int3; break;
-                    case 4: va.format = tgfx::VertexFormat::Int4; break;
-                    default: ok = false; break;
-                }
-                break;
-            case TGFX_ATTRIB_UINT32:
-                switch (a.size) {
-                    case 1: va.format = tgfx::VertexFormat::UInt;  break;
-                    case 2: va.format = tgfx::VertexFormat::UInt2; break;
-                    case 3: va.format = tgfx::VertexFormat::UInt3; break;
-                    case 4: va.format = tgfx::VertexFormat::UInt4; break;
-                    default: ok = false; break;
-                }
-                break;
-            case TGFX_ATTRIB_INT16:
-                switch (a.size) {
-                    case 1: va.format = tgfx::VertexFormat::Short;  break;
-                    case 2: va.format = tgfx::VertexFormat::Short2; break;
-                    case 3: va.format = tgfx::VertexFormat::Short3; break;
-                    case 4: va.format = tgfx::VertexFormat::Short4; break;
-                    default: ok = false; break;
-                }
-                break;
-            case TGFX_ATTRIB_UINT16:
-                switch (a.size) {
-                    case 1: va.format = tgfx::VertexFormat::UShort;  break;
-                    case 2: va.format = tgfx::VertexFormat::UShort2; break;
-                    case 3: va.format = tgfx::VertexFormat::UShort3; break;
-                    case 4: va.format = tgfx::VertexFormat::UShort4; break;
-                    default: ok = false; break;
-                }
-                break;
-            case TGFX_ATTRIB_INT8:
-                // 1..3-component int8 attrs are exotic; we only cover
-                // the common 4-component skinning-like case.
-                if (a.size == 4) {
-                    va.format = tgfx::VertexFormat::Byte4;
-                } else {
-                    ok = false;
-                }
-                break;
-            case TGFX_ATTRIB_UINT8:
-                // UByte4 = raw integer (glVertexAttribIPointer). Legacy
-                // vertex colors were historically passed as UInt8 with
-                // normalization — that corresponds to UByte4N, which the
-                // current tgfx1 layout helpers don't request. If a mesh
-                // really needs normalized uint8, extend tgfx_attrib_type
-                // with a normalized flag; for now map to the raw variant.
-                if (a.size == 4) {
-                    va.format = tgfx::VertexFormat::UByte4;
-                } else {
-                    ok = false;
-                }
-                break;
-            default:
-                ok = false;
-                break;
-        }
-
-        if (!ok) {
-            tc::Log::error(
-                "wrap_mesh_as_tgfx2: unsupported attrib (type=%u, size=%u) "
-                "for '%s' — substituting Float%u",
-                unsigned(a.type), unsigned(a.size),
-                mesh->header.name ? mesh->header.name : mesh->header.uuid,
-                unsigned(a.size >= 1 && a.size <= 4 ? a.size : 3));
-            // Fall back to a float variant so the draw at least doesn't
-            // crash. Shader will read garbage but the pipeline stays alive.
-            switch (a.size) {
-                case 1: va.format = tgfx::VertexFormat::Float;  break;
-                case 2: va.format = tgfx::VertexFormat::Float2; break;
-                case 4: va.format = tgfx::VertexFormat::Float4; break;
-                default: va.format = tgfx::VertexFormat::Float3; break;
-            }
-        }
-
-        out.layout.attributes.push_back(va);
-    }
-
-    out.index_count = static_cast<uint32_t>(mesh->index_count);
-    out.index_type = tgfx::IndexType::Uint32;
-    out.topology = (mesh->draw_mode == TC_DRAW_LINES)
-        ? tgfx::PrimitiveTopology::LineList
-        : tgfx::PrimitiveTopology::TriangleList;
-
-    return true;
-}
-
-bool layout_has_location(const tgfx::VertexBufferLayout& layout, uint32_t location) {
-    return std::any_of(layout.attributes.begin(), layout.attributes.end(),
-        [location](const tgfx::VertexAttribute& attr) {
-            return attr.location == location;
-        });
-}
-
-void append_default_standard_attributes(Tgfx2MeshBinding& out, uint32_t old_stride) {
-    uint32_t offset = old_stride;
-    if (!layout_has_location(out.layout, 1)) {
-        out.layout.attributes.push_back({1, tgfx::VertexFormat::Float3, offset});
-        offset += 3u * sizeof(float);
-    }
-    if (!layout_has_location(out.layout, 2)) {
-        out.layout.attributes.push_back({2, tgfx::VertexFormat::Float2, offset});
-        offset += 2u * sizeof(float);
-    }
-    out.layout.stride = offset;
-}
-
-bool needs_default_standard_attributes(const tgfx::VertexBufferLayout& layout) {
-    return !layout_has_location(layout, 1) || !layout_has_location(layout, 2);
-}
-
-tgfx::BufferHandle create_augmented_vertex_buffer(
-    tgfx::IRenderDevice& device,
-    tc_mesh* mesh,
-    uint32_t new_stride
-) {
-    const uint32_t old_stride = mesh->layout.stride;
-    if (old_stride == 0 || new_stride <= old_stride) return {};
-
-    const auto* src = static_cast<const uint8_t*>(mesh->vertices);
-    std::vector<uint8_t> vertices(
-        static_cast<size_t>(mesh->vertex_count) * static_cast<size_t>(new_stride),
-        0);
-    for (uint32_t i = 0; i < mesh->vertex_count; ++i) {
-        std::memcpy(
-            vertices.data() + static_cast<size_t>(i) * new_stride,
-            src + static_cast<size_t>(i) * old_stride,
-            old_stride);
-    }
-
-    tgfx::BufferDesc desc;
-    desc.size = vertices.size();
-    desc.usage = tgfx::BufferUsage::Vertex | tgfx::BufferUsage::CopyDst;
-    tgfx::BufferHandle buffer = device.create_buffer(desc);
-    if (!buffer) {
-        tc::Log::error("wrap_mesh_as_tgfx2: failed to allocate augmented VBO for '%s'",
-                       mesh->header.name ? mesh->header.name : mesh->header.uuid);
-        return {};
-    }
-    device.upload_buffer(buffer, std::span<const uint8_t>(vertices.data(), vertices.size()));
-    return buffer;
-}
-
-// OpenGL-specific branch: materialize via the legacy share-group slot
-// and register_external_buffer. Buffers are non-owning and must be
-// destroy()'d by the caller (done in release_mesh_binding).
-Tgfx2MeshBinding wrap_mesh_gl(
-    tgfx::OpenGLRenderDevice& device, tc_mesh* mesh
-) {
-    Tgfx2MeshBinding out;
-
-    if (tc_mesh_upload_gpu(mesh) == 0) {
-        tc::Log::error("wrap_mesh_as_tgfx2: tc_mesh_upload_gpu failed for '%s'",
-                       mesh->header.name ? mesh->header.name : mesh->header.uuid);
-        return out;
-    }
-
-    tc_gpu_context* ctx = tc_gpu_get_context();
-    if (!ctx || !ctx->share_group) {
-        tc::Log::error("wrap_mesh_as_tgfx2: no active GPU context");
-        return out;
-    }
-    tc_gpu_mesh_data_slot* slot = tc_gpu_share_group_mesh_data_slot(
-        ctx->share_group, mesh->header.pool_index);
-    if (!slot || slot->vbo == 0 || slot->ebo == 0) {
-        tc::Log::error("wrap_mesh_as_tgfx2: mesh data slot has no VBO/EBO");
-        return out;
-    }
-
-    tgfx::BufferDesc vb_desc;
-    vb_desc.size = static_cast<uint64_t>(mesh->vertex_count) *
-                   static_cast<uint64_t>(mesh->layout.stride);
-    vb_desc.usage = tgfx::BufferUsage::Vertex;
-    out.vertex_buffer = device.register_external_buffer(slot->vbo, vb_desc);
-
-    tgfx::BufferDesc ib_desc;
-    ib_desc.size = static_cast<uint64_t>(mesh->index_count) * sizeof(uint32_t);
-    ib_desc.usage = tgfx::BufferUsage::Index;
-    out.index_buffer = device.register_external_buffer(slot->ebo, ib_desc);
-
-    if (!fill_binding_from_mesh(out, mesh)) {
-        out = Tgfx2MeshBinding{};
-    }
-    return out;
-}
-
-} // anonymous namespace
-
 Tgfx2MeshBinding wrap_mesh_as_tgfx2(
     tgfx::IRenderDevice& device,
     tc_mesh* mesh
 ) {
-    Tgfx2MeshBinding out;
-    if (!mesh) {
-        tc::Log::error("wrap_mesh_as_tgfx2: null mesh");
-        return out;
-    }
-
-    // OpenGL keeps the legacy share-group path so existing callers that
-    // also use tc_mesh_draw_gpu / raw GL side-by-side stay consistent.
-    if (device.backend_type() == tgfx::BackendType::OpenGL) {
-        return wrap_mesh_gl(
-            static_cast<tgfx::OpenGLRenderDevice&>(device), mesh);
-    }
-
-    // Non-GL backend (currently Vulkan): delegate to the device's own
-    // per-tc_mesh cache through the IRenderDevice virtual hook. Buffers
-    // are owned by the device and reused across frames; a mesh header
-    // version bump inside ensure_tc_mesh triggers a re-upload.
-    auto [vbo, ebo] = device.ensure_tc_mesh(mesh);
-    if (!vbo || !ebo) return out;
-    out.vertex_buffer = vbo;
-    out.index_buffer  = ebo;
-    if (!fill_binding_from_mesh(out, mesh)) {
-        out = Tgfx2MeshBinding{};
-        return out;
-    }
-
-    // OpenGL supplies default vertex attribute values for attributes that
-    // are not enabled. Vulkan has no such implicit fallback: if a shader
-    // declares location 1/2 (normal/uv), the pipeline layout must describe
-    // them. Preserve GL-era meshes without those channels by appending
-    // zero-filled standard attributes to a transient Vulkan-side VBO.
-    if (needs_default_standard_attributes(out.layout)) {
-        const uint32_t old_stride = out.layout.stride;
-        append_default_standard_attributes(out, old_stride);
-        tgfx::BufferHandle augmented_vbo =
-            create_augmented_vertex_buffer(device, mesh, out.layout.stride);
-        if (!augmented_vbo) {
-            out = Tgfx2MeshBinding{};
-            return out;
-        }
-        out.vertex_buffer = augmented_vbo;
-        out.destroy_vertex_buffer = true;
-    }
-    return out;
+    return tgfx::wrap_mesh_as_tgfx2(device, mesh);
 }
 
 void release_mesh_binding(
     tgfx::IRenderDevice& device,
     const Tgfx2MeshBinding& binding
 ) {
-    if (binding.index_count == 0) return;
-
-    if (device.backend_type() == tgfx::BackendType::OpenGL) {
-        // Handles returned by register_external_buffer are per-call
-        // non-owning wrappers around the share-group VBO/EBO. Destroy
-        // them to keep the handle pool bounded; underlying GL objects
-        // survive because they're marked external.
-        if (binding.vertex_buffer) device.destroy(binding.vertex_buffer);
-        if (binding.index_buffer)  device.destroy(binding.index_buffer);
-        return;
-    }
-
-    // Non-GL path: normal buffers are owned by the per-device cache, but
-    // augmented compatibility VBOs are transient and must be released.
-    if (binding.destroy_vertex_buffer && binding.vertex_buffer) {
-        device.destroy(binding.vertex_buffer);
-    }
-    if (binding.destroy_index_buffer && binding.index_buffer) {
-        device.destroy(binding.index_buffer);
-    }
+    tgfx::release_mesh_binding(device, binding);
 }
 
 tgfx::VertexBufferLayout filter_vertex_layout_to_locations(
     const tgfx::VertexBufferLayout& layout,
     std::initializer_list<uint32_t> used_locations
 ) {
-    tgfx::VertexBufferLayout out;
-    out.stride = layout.stride;
-    out.per_instance = layout.per_instance;
-    for (const auto& attr : layout.attributes) {
-        for (uint32_t loc : used_locations) {
-            if (attr.location == loc) {
-                out.attributes.push_back(attr);
-                break;
-            }
-        }
-    }
-    return out;
+    return tgfx::filter_vertex_layout_to_locations(layout, used_locations);
+}
+
+bool draw_tc_mesh(
+    tgfx::RenderContext2& ctx,
+    tc_mesh* mesh,
+    const tgfx::VertexBufferLayout* layout_override
+) {
+    return tgfx::draw_tc_mesh(ctx, mesh, layout_override);
+}
+
+bool draw_tc_mesh(
+    tgfx::RenderContext2& ctx,
+    tc_mesh* mesh,
+    std::initializer_list<uint32_t> used_locations
+) {
+    return tgfx::draw_tc_mesh(ctx, mesh, used_locations);
 }
 
 } // namespace termin
