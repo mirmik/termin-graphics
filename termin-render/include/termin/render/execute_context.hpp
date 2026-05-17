@@ -7,7 +7,7 @@
 
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/render_camera.hpp>
-#include <termin/render/light.hpp>
+#include <termin/lighting/light.hpp>
 #include <termin/tc_scene.hpp>
 #include <core/tc_entity_pool.h>
 

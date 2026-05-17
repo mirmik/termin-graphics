@@ -5,7 +5,7 @@
 #include <termin/geom/mat44.hpp>
 #include <termin/render/render_export.hpp>
 
-#include "termin/lighting/shadow_settings.hpp"
+#include <termin/lighting/shadow_settings.hpp>
 #include "tgfx/frame_graph_resource.hpp"
 #include "tgfx2/handles.hpp"
 

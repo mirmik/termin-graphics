@@ -13,6 +13,7 @@ option(TERMIN_BUILD_PYTHON "Build Python bindings for termin-render" OFF)
 find_package(termin_base REQUIRED)
 find_package(termin_graphics REQUIRED)
 find_package(termin_inspect REQUIRED)
+find_package(termin_lighting REQUIRED)
 find_package(termin_scene REQUIRED)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
@@ -100,7 +101,6 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/render_engine.hpp
     include/termin/render/scene_pipeline_template.hpp
     include/termin/lighting/shadow.hpp
-    include/termin/lighting/shadow_settings.hpp
     include/tc_project_settings.h
     include/tc_viewport_config.h
     include/tc_render_target_config.h
@@ -138,6 +138,7 @@ target_link_libraries(termin_render PUBLIC
     tgfx::termin_graphics2
     termin_scene::termin_scene
     termin_inspect::termin_inspect
+    termin_lighting::termin_lighting
 )
 
 if(UNIX AND NOT APPLE)

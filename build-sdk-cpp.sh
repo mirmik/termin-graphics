@@ -2,7 +2,7 @@
 # Build and install C/C++ parts only (no Python bindings / nanobind modules)
 # Dependency order:
 #   termin-base -> termin-modules -> termin-mesh -> termin-graphics -> termin-inspect -> termin-scene
-#   -> termin-render -> termin-input -> termin-display -> termin-collision -> termin-physics
+#   -> termin-lighting -> termin-render -> termin-input -> termin-display -> termin-collision -> termin-physics
 #   -> termin-components-mesh -> termin-components-collision -> termin-components-render
 #   -> termin-engine -> termin-components-kinematic -> termin-components-physics
 #   -> termin-skeleton -> termin-animation -> termin-components-skeleton

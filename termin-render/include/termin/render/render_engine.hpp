@@ -13,7 +13,7 @@
 #include "termin/render/render_camera.hpp"
 #include "termin/render/render_pipeline.hpp"
 #include "termin/render/render_export.hpp"
-#include <termin/render/light.hpp>
+#include <termin/lighting/light.hpp>
 #include "termin/lighting/shadow.hpp"
 #include <termin/tc_scene.hpp>
 
