@@ -1,7 +1,7 @@
 find_package(Python 3.8 COMPONENTS Interpreter Development REQUIRED)
 find_package(nanobind CONFIG REQUIRED)
 
-nanobind_add_module(_tmesh_native
+nanobind_add_module(_tmesh_native NB_SHARED
     bindings/tmesh_module.cpp
     bindings/mesh_bindings.cpp
 )

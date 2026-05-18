@@ -1,7 +1,7 @@
 find_package(Python 3.8 COMPONENTS Interpreter Development REQUIRED)
 find_package(nanobind CONFIG REQUIRED)
 
-nanobind_add_module(_tgfx_native
+nanobind_add_module(_tgfx_native NB_SHARED
     bindings/tgfx_module.cpp
     bindings/graphics_bindings.cpp
     bindings/shader_bindings.cpp

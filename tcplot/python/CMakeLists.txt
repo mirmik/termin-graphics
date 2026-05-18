@@ -2,7 +2,7 @@ find_package(Python 3.8 COMPONENTS Interpreter Development REQUIRED)
 find_package(nanobind CONFIG REQUIRED)
 find_package(OpenGL REQUIRED)
 
-nanobind_add_module(_tcplot_native
+nanobind_add_module(_tcplot_native NB_SHARED
     bindings/tcplot_module.cpp
     bindings/colors_and_data_bindings.cpp
     bindings/camera_bindings.cpp
