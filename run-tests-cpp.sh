@@ -1,6 +1,6 @@
 #!/bin/bash
-# Run C/C++ test suites across projects that define them.
-# Assumes SDK dependencies are already installed, typically via:
+# Run C/C++ test suites through the top-level CMake graph.
+# Assumes SDK dependencies are available, typically via:
 #   ./build-sdk-cpp.sh
 
 set -uo pipefail
@@ -9,12 +9,32 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDK_PREFIX="${SDK_PREFIX:-$SCRIPT_DIR/sdk}"
 BUILD_TYPE="Release"
 BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
+BUILD_DIR=""
+VULKAN_MODE="off"
+SDL_MODE="on"
 
 for arg in "$@"; do
     case "$arg" in
-        --debug|-d) BUILD_TYPE="Debug" ;;
+        --debug|-d)  BUILD_TYPE="Debug" ;;
+        --no-vulkan) VULKAN_MODE="off" ;;
+        --vulkan)    VULKAN_MODE="on" ;;
+        --no-sdl)    SDL_MODE="off" ;;
+        --sdl)       SDL_MODE="on" ;;
         --help|-h)
-            echo "Usage: $0 [--debug]"
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --debug, -d       Debug build"
+            echo "  --no-vulkan       Disable Vulkan support (default)"
+            echo "  --vulkan          Enable Vulkan support"
+            echo "  --no-sdl          Disable SDL2 support"
+            echo "  --sdl             Enable SDL2 support (default)"
+            echo "  --help, -h        Show this help"
+            echo ""
+            echo "Environment:"
+            echo "  SDK_PREFIX        SDK prefix for installed dependencies (default: ./sdk)"
+            echo "  BUILD_DIR         CMake build directory (default: ./build/<BUILD_TYPE>-tests)"
+            echo "  BUILD_JOBS        Parallel build jobs (default: nproc)"
             exit 0
             ;;
         *)
@@ -24,99 +44,60 @@ for arg in "$@"; do
     esac
 done
 
-export LD_LIBRARY_PATH="${SDK_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-
-rebuild_with_tests() {
-    local name="$1"
-    local dir="$2"
-    local test_flag="$3"
-    shift 3
-    local extra_args=("$@")
-
-    echo ""
-    echo "========================================"
-    echo "  Testing $name ($BUILD_TYPE)"
-    echo "========================================"
-    echo ""
-
-    cd "$dir" || return 1
-
-    cmake -S . -B "build/${BUILD_TYPE}" \
-        -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
-        -DCMAKE_PREFIX_PATH="${SDK_PREFIX}" \
-        -DCMAKE_INSTALL_PREFIX="${SDK_PREFIX}" \
-        -DCMAKE_BUILD_RPATH="${SDK_PREFIX}/lib" \
-        -DTERMIN_BUILD_PYTHON=OFF \
-        -D"${test_flag}"=ON \
-        "${extra_args[@]}" || return 1
-
-    cmake --build "build/${BUILD_TYPE}" --parallel "${BUILD_JOBS}" || return 1
-    ctest --test-dir "build/${BUILD_TYPE}" --output-on-failure || return 1
-}
-
-echo ""
-echo "========================================"
-echo "  C/C++ tests"
-echo "========================================"
-
-failures=()
-
-# Build modules with tests from modules.conf
-while IFS= read -r line; do
-    line="${line%%#*}"
-    line="$(echo "$line" | xargs)"
-    [[ -z "$line" ]] && continue
-    [[ "$line" == @* ]] && continue
-
-    IFS='|' read -r name dir has_python test_flag extra_cmake <<< "$line"
-    name="$(echo "$name" | xargs)"
-    dir="$(echo "$dir" | xargs)"
-    test_flag="$(echo "$test_flag" | xargs)"
-    extra_cmake="$(echo "$extra_cmake" | xargs)"
-
-    [[ "$test_flag" == "-" || -z "$test_flag" ]] && continue
-
-    extra_args=()
-    if [[ "$extra_cmake" != "-" && -n "$extra_cmake" ]]; then
-        read -ra extra_args <<< "$extra_cmake"
-    fi
-
-    if ! rebuild_with_tests "$name" "$SCRIPT_DIR/$dir" "$test_flag" "${extra_args[@]}"; then
-        failures+=("$name")
-    fi
-done < "$SCRIPT_DIR/modules.conf"
-
-# Test termin itself
-echo ""
-echo "========================================"
-echo "  Testing termin ($BUILD_TYPE)"
-echo "========================================"
-echo ""
-
-if ! (
-    cd "$SCRIPT_DIR/termin-app" &&
-    cmake -S . -B "build/${BUILD_TYPE}" \
-        -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
-        -DCMAKE_PREFIX_PATH="${SDK_PREFIX}" \
-        -DCMAKE_INSTALL_PREFIX="${SDK_PREFIX}" \
-        -DCMAKE_BUILD_RPATH="${SDK_PREFIX}/lib" \
-        -DBUILD_TESTS=ON \
-        -DBUILD_EDITOR_EXE=OFF \
-        -DBUILD_LAUNCHER=OFF \
-        -DBUNDLE_PYTHON=OFF \
-        -DTERMIN_BUILD_PYTHON=OFF &&
-    cmake --build "build/${BUILD_TYPE}" --parallel "${BUILD_JOBS}" &&
-    ctest --test-dir "build/${BUILD_TYPE}" --output-on-failure
-); then
-    failures+=("termin")
+if [[ -z "$BUILD_DIR" ]]; then
+    BUILD_DIR="$SCRIPT_DIR/build/${BUILD_TYPE}-tests"
 fi
 
-if (( ${#failures[@]} > 0 )); then
-    echo ""
-    echo "========================================"
-    echo "  C/C++ test failures"
-    echo "========================================"
-    printf '  - %s\n' "${failures[@]}"
+case "$VULKAN_MODE" in
+    off) TERMIN_ENABLE_VULKAN=OFF ;;
+    on)  TERMIN_ENABLE_VULKAN=ON ;;
+esac
+
+case "$SDL_MODE" in
+    off) TERMIN_ENABLE_SDL=OFF ;;
+    on)  TERMIN_ENABLE_SDL=ON ;;
+esac
+
+export LD_LIBRARY_PATH="${SDK_PREFIX}/lib:${BUILD_DIR}/bin${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+echo ""
+echo "========================================"
+echo "  C/C++ tests ($BUILD_TYPE)"
+echo "  mode: top-level CMake graph"
+echo "========================================"
+echo ""
+echo "Source dir:  $SCRIPT_DIR"
+echo "Build dir:   $BUILD_DIR"
+echo "SDK prefix:  $SDK_PREFIX"
+echo "Vulkan:      $TERMIN_ENABLE_VULKAN"
+echo "SDL2:        $TERMIN_ENABLE_SDL"
+echo "Jobs:        $BUILD_JOBS"
+echo ""
+
+if ! cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" \
+    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+    -DCMAKE_PREFIX_PATH="$SDK_PREFIX" \
+    -DCMAKE_INSTALL_PREFIX="$SDK_PREFIX" \
+    -DCMAKE_BUILD_RPATH="${SDK_PREFIX}/lib;${BUILD_DIR}/bin" \
+    -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
+    -DTERMIN_BUILD_PYTHON=OFF \
+    -DTERMIN_BUILD_TESTS=ON \
+    -DTERMIN_ENABLE_VULKAN="$TERMIN_ENABLE_VULKAN" \
+    -DTERMIN_ENABLE_SDL="$TERMIN_ENABLE_SDL" \
+    -DTERMIN_BUILD_EDITOR_MINIMAL=OFF \
+    -DTERMIN_BUILD_EDITOR_EXE=OFF \
+    -DTERMIN_BUILD_LAUNCHER=OFF; then
+    echo "ERROR: CMake configure failed" >&2
+    exit 1
+fi
+
+if ! cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"; then
+    echo "ERROR: C++ test build failed" >&2
+    exit 1
+fi
+
+if ! ctest --test-dir "$BUILD_DIR" --output-on-failure; then
+    echo "ERROR: C++ tests failed" >&2
     exit 1
 fi
 

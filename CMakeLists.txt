@@ -10,6 +10,10 @@ option(TERMIN_BUILD_EDITOR_MINIMAL "Build minimal editor executable" OFF)
 option(TERMIN_BUILD_EDITOR_EXE "Build Qt editor executable" OFF)
 option(TERMIN_BUILD_LAUNCHER "Build launcher executable" OFF)
 
+if(TERMIN_BUILD_TESTS)
+    enable_testing()
+endif()
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)

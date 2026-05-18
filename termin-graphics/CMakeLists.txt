@@ -233,7 +233,7 @@ if(BUILD_TESTS)
     target_link_libraries(tgfx_mesh_test PRIVATE termin_graphics)
     add_test(NAME tgfx_mesh_test COMMAND tgfx_mesh_test)
 
-    add_custom_target(run_tests
+    add_custom_target(termin_graphics_run_tests
         COMMAND tgfx_tests
         COMMAND tgfx_mesh_test
         DEPENDS tgfx_tests tgfx_mesh_test
