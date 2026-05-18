@@ -7,7 +7,7 @@ nanobind_add_module(_tmesh_native
 )
 
 target_link_libraries(_tmesh_native PRIVATE termin_mesh)
-target_include_directories(_tmesh_native PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(_tmesh_native PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
 
 if(NOT WIN32)
     set_target_properties(_tmesh_native PROPERTIES

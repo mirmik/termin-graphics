@@ -1,5 +1,6 @@
 find_package(Python 3.8 COMPONENTS Interpreter Development REQUIRED)
 find_package(nanobind CONFIG REQUIRED)
+find_package(OpenGL REQUIRED)
 
 nanobind_add_module(_tcplot_native
     bindings/tcplot_module.cpp
@@ -15,7 +16,7 @@ target_link_libraries(_tcplot_native PRIVATE
     tcbase::termin_base
     OpenGL::GL
 )
-target_include_directories(_tcplot_native PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(_tcplot_native PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
 
 if(NOT WIN32)
     set_target_properties(_tcplot_native PROPERTIES

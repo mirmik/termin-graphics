@@ -14,7 +14,7 @@ CLEAN=0
 NO_PARALLEL=0
 VULKAN_MODE="off"
 SDL_MODE="on"
-BUILD_JOBS="$(nproc)"
+BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 
 for arg in "$@"; do
     case "$arg" in

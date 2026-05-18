@@ -29,6 +29,23 @@ endif()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(TerminDependencies)
 
+if(TERMIN_BUILD_PYTHON)
+    find_package(Python 3.10 COMPONENTS Interpreter Development REQUIRED)
+    set(Python_EXECUTABLE "${Python_EXECUTABLE}" CACHE FILEPATH "Python interpreter used for Termin bindings" FORCE)
+
+    execute_process(
+        COMMAND "${Python_EXECUTABLE}" -c "import nanobind, pathlib; print(pathlib.Path(nanobind.__file__).resolve().parent / 'cmake')"
+        OUTPUT_VARIABLE TERMIN_NANOBIND_CMAKE_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE TERMIN_NANOBIND_CMAKE_RESULT
+    )
+    if(NOT TERMIN_NANOBIND_CMAKE_RESULT EQUAL 0 OR NOT EXISTS "${TERMIN_NANOBIND_CMAKE_DIR}/nanobind-config.cmake")
+        message(FATAL_ERROR "nanobind Python package was not found for ${Python_EXECUTABLE}. Install nanobind before configuring with TERMIN_BUILD_PYTHON=ON.")
+    endif()
+    file(TO_CMAKE_PATH "${TERMIN_NANOBIND_CMAKE_DIR}" TERMIN_NANOBIND_CMAKE_DIR)
+    set(nanobind_DIR "${TERMIN_NANOBIND_CMAKE_DIR}" CACHE PATH "nanobind CMake package directory" FORCE)
+endif()
+
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
@@ -64,6 +81,10 @@ set(BUNDLE_PYTHON OFF CACHE BOOL "" FORCE)
 
 set(TGFX2_ENABLE_VULKAN ${TERMIN_ENABLE_VULKAN} CACHE BOOL "" FORCE)
 set(USE_SYSTEM_SDL2 ${TERMIN_ENABLE_SDL} CACHE BOOL "" FORCE)
+
+if(TERMIN_BUILD_PYTHON)
+    add_subdirectory(termin-nanobind-sdk)
+endif()
 
 add_subdirectory(termin-base)
 add_subdirectory(termin-modules)
