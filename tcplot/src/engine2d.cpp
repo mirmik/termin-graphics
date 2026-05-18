@@ -40,7 +40,7 @@ static_assert(sizeof(Plot2DPushData) == 80,
 // Shared push-constant block. On Vulkan the shader compiler defines
 // `VULKAN=1`; on OpenGL we fall back to a std140 UBO at binding 14,
 // which is the slot tgfx2 uses for its push-constants ring buffer.
-constexpr const char* kPC = R"(
+constexpr const char* kPlot2DPushConstants = R"(
 struct Plot2DPC { mat4 u_matrix; vec4 u_color; };
 #ifdef VULKAN
 layout(push_constant) uniform PCBlock { Plot2DPC pc; };
@@ -55,7 +55,7 @@ layout(std140, binding = 14) uniform PCBlock { Plot2DPC pc; };
 // to clip space; panning/zooming only changes this push-constant, the
 // VBO never needs re-upload. Colour is per-series via pc.u_color.
 static std::string make_line_vert() {
-    return std::string("#version 450 core\n") + kPC + R"(
+    return std::string("#version 450 core\n") + kPlot2DPushConstants + R"(
 layout(location=0) in vec2 a_data_pos;
 void main() {
     gl_Position = pc.u_matrix * vec4(a_data_pos, 0.0, 1.0);
@@ -64,7 +64,7 @@ void main() {
 }
 
 static std::string make_line_frag() {
-    return std::string("#version 450 core\n") + kPC + R"(
+    return std::string("#version 450 core\n") + kPlot2DPushConstants + R"(
 layout(location=0) out vec4 frag_color;
 void main() { frag_color = pc.u_color; }
 )";

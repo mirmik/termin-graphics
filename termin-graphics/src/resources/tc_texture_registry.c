@@ -15,9 +15,9 @@
 // ============================================================================
 
 static tc_pool g_texture_pool;
-static tc_resource_map* g_uuid_to_index = NULL;
-static uint64_t g_next_uuid = 1;
-static bool g_initialized = false;
+static tc_resource_map* g_texture_uuid_to_index = NULL;
+static uint64_t g_texture_next_uuid = 1;
+static bool g_texture_initialized = false;
 
 // Destroy-hook subscription table. See tc_texture_registry.h.
 static tc_texture_destroy_hook_fn g_destroy_hooks[TC_MAX_TEXTURE_DESTROY_HOOKS];
@@ -37,26 +37,26 @@ static void texture_free_data(tc_texture* tex) {
 // ============================================================================
 
 void tc_texture_init(void) {
-    TC_REGISTRY_INIT_GUARD(g_initialized, "tc_texture");
+    TC_REGISTRY_INIT_GUARD(g_texture_initialized, "tc_texture");
 
     if (!tc_pool_init(&g_texture_pool, sizeof(tc_texture), 64)) {
         tc_log(TC_LOG_ERROR, "tc_texture_init: failed to init pool");
         return;
     }
 
-    g_uuid_to_index = tc_resource_map_new(NULL);
-    if (!g_uuid_to_index) {
+    g_texture_uuid_to_index = tc_resource_map_new(NULL);
+    if (!g_texture_uuid_to_index) {
         tc_log(TC_LOG_ERROR, "tc_texture_init: failed to create uuid map");
         tc_pool_free(&g_texture_pool);
         return;
     }
 
-    g_next_uuid = 1;
-    g_initialized = true;
+    g_texture_next_uuid = 1;
+    g_texture_initialized = true;
 }
 
 void tc_texture_shutdown(void) {
-    TC_REGISTRY_SHUTDOWN_GUARD(g_initialized, "tc_texture");
+    TC_REGISTRY_SHUTDOWN_GUARD(g_texture_initialized, "tc_texture");
 
     // Free texture data for all occupied slots
     for (uint32_t i = 0; i < g_texture_pool.capacity; i++) {
@@ -67,10 +67,10 @@ void tc_texture_shutdown(void) {
     }
 
     tc_pool_free(&g_texture_pool);
-    tc_resource_map_free(g_uuid_to_index);
-    g_uuid_to_index = NULL;
-    g_next_uuid = 1;
-    g_initialized = false;
+    tc_resource_map_free(g_texture_uuid_to_index);
+    g_texture_uuid_to_index = NULL;
+    g_texture_next_uuid = 1;
+    g_texture_initialized = false;
 }
 
 // ============================================================================
@@ -78,7 +78,7 @@ void tc_texture_shutdown(void) {
 // ============================================================================
 
 tc_texture_handle tc_texture_create(const char* uuid) {
-    if (!g_initialized) {
+    if (!g_texture_initialized) {
         tc_texture_init();
     }
 
@@ -92,7 +92,7 @@ tc_texture_handle tc_texture_create(const char* uuid) {
         }
         final_uuid = uuid;
     } else {
-        tc_generate_prefixed_uuid(uuid_buf, sizeof(uuid_buf), "tex", &g_next_uuid);
+        tc_generate_prefixed_uuid(uuid_buf, sizeof(uuid_buf), "tex", &g_texture_next_uuid);
         final_uuid = uuid_buf;
     }
 
@@ -114,7 +114,7 @@ tc_texture_handle tc_texture_create(const char* uuid) {
     tex->storage_kind = TC_TEXTURE_STORAGE_CPU_FIRST;
     tex->usage = TC_TEXTURE_USAGE_SAMPLED;
 
-    if (!tc_resource_map_add(g_uuid_to_index, tex->header.uuid, tc_pack_index(h.index))) {
+    if (!tc_resource_map_add(g_texture_uuid_to_index, tex->header.uuid, tc_pack_index(h.index))) {
         tc_log(TC_LOG_ERROR, "tc_texture_create: failed to add to uuid map");
         tc_pool_free_slot(&g_texture_pool, h);
         return tc_texture_handle_invalid();
@@ -124,11 +124,11 @@ tc_texture_handle tc_texture_create(const char* uuid) {
 }
 
 tc_texture_handle tc_texture_find(const char* uuid) {
-    if (!g_initialized || !uuid) {
+    if (!g_texture_initialized || !uuid) {
         return tc_texture_handle_invalid();
     }
 
-    void* ptr = tc_resource_map_get(g_uuid_to_index, uuid);
+    void* ptr = tc_resource_map_get(g_texture_uuid_to_index, uuid);
     if (!tc_has_index(ptr)) {
         return tc_texture_handle_invalid();
     }
@@ -149,7 +149,7 @@ tc_texture_handle tc_texture_find(const char* uuid) {
 }
 
 tc_texture_handle tc_texture_find_by_name(const char* name) {
-    if (!g_initialized || !name) {
+    if (!g_texture_initialized || !name) {
         return tc_texture_handle_invalid();
     }
 
@@ -187,7 +187,7 @@ tc_texture_handle tc_texture_get_or_create(const char* uuid) {
 // ============================================================================
 
 tc_texture_handle tc_texture_declare(const char* uuid, const char* name) {
-    if (!g_initialized) {
+    if (!g_texture_initialized) {
         tc_texture_init();
     }
 
@@ -225,7 +225,7 @@ tc_texture_handle tc_texture_declare(const char* uuid, const char* name) {
         tex->header.name = tgfx_intern_string(name);
     }
 
-    if (!tc_resource_map_add(g_uuid_to_index, tex->header.uuid, tc_pack_index(h.index))) {
+    if (!tc_resource_map_add(g_texture_uuid_to_index, tex->header.uuid, tc_pack_index(h.index))) {
         tc_log(TC_LOG_ERROR, "tc_texture_declare: failed to add to uuid map");
         tc_pool_free_slot(&g_texture_pool, h);
         return tc_texture_handle_invalid();
@@ -278,17 +278,17 @@ bool tc_texture_ensure_loaded_ptr(tc_texture* tex) {
 }
 
 tc_texture* tc_texture_get(tc_texture_handle h) {
-    if (!g_initialized) return NULL;
+    if (!g_texture_initialized) return NULL;
     return (tc_texture*)tc_pool_get(&g_texture_pool, h);
 }
 
 bool tc_texture_is_valid(tc_texture_handle h) {
-    if (!g_initialized) return false;
+    if (!g_texture_initialized) return false;
     return tc_pool_is_valid(&g_texture_pool, h);
 }
 
 bool tc_texture_destroy(tc_texture_handle h) {
-    if (!g_initialized) return false;
+    if (!g_texture_initialized) return false;
 
     tc_texture* tex = tc_texture_get(h);
     if (!tex) return false;
@@ -302,7 +302,7 @@ bool tc_texture_destroy(tc_texture_handle h) {
         g_destroy_hooks[i](pool_index, g_destroy_hook_user[i]);
     }
 
-    tc_resource_map_remove(g_uuid_to_index, tex->header.uuid);
+    tc_resource_map_remove(g_texture_uuid_to_index, tex->header.uuid);
     texture_free_data(tex);
 
     return tc_pool_free_slot(&g_texture_pool, h);
@@ -337,12 +337,12 @@ void tc_texture_registry_remove_destroy_hook(
 }
 
 bool tc_texture_contains(const char* uuid) {
-    if (!g_initialized || !uuid) return false;
-    return tc_resource_map_contains(g_uuid_to_index, uuid);
+    if (!g_texture_initialized || !uuid) return false;
+    return tc_resource_map_contains(g_texture_uuid_to_index, uuid);
 }
 
 size_t tc_texture_count(void) {
-    if (!g_initialized) return 0;
+    if (!g_texture_initialized) return 0;
     return tc_pool_count(&g_texture_pool);
 }
 
@@ -556,7 +556,7 @@ static bool texture_iter_adapter(uint32_t index, void* item, void* ctx_ptr) {
 }
 
 void tc_texture_foreach(tc_texture_iter_fn callback, void* user_data) {
-    if (!g_initialized || !callback) return;
+    if (!g_texture_initialized || !callback) return;
     texture_iter_ctx ctx = { callback, user_data };
     tc_pool_foreach(&g_texture_pool, texture_iter_adapter, &ctx);
 }
@@ -616,7 +616,7 @@ tc_texture_info* tc_texture_get_all_info(size_t* count) {
     if (!count) return NULL;
     *count = 0;
 
-    if (!g_initialized) return NULL;
+    if (!g_texture_initialized) return NULL;
 
     size_t tex_count = tc_pool_count(&g_texture_pool);
     if (tex_count == 0) return NULL;

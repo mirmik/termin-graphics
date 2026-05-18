@@ -14,9 +14,9 @@
 // ============================================================================
 
 static tc_pool g_material_pool;
-static tc_resource_map* g_uuid_to_index = NULL;
-static uint64_t g_next_uuid = 1;
-static bool g_initialized = false;
+static tc_resource_map* g_material_uuid_to_index = NULL;
+static uint64_t g_material_next_uuid = 1;
+static bool g_material_initialized = false;
 
 // Callback set by tgfx2 C++ glue to release per-phase UBOs (tc_material.h).
 static tc_material_phase_release_ubo_fn g_phase_release_ubo_cb = NULL;
@@ -66,26 +66,26 @@ void tc_material_phase_release_ubo(tc_material_phase* phase) {
 // ============================================================================
 
 void tc_material_init(void) {
-    TC_REGISTRY_INIT_GUARD(g_initialized, "tc_material");
+    TC_REGISTRY_INIT_GUARD(g_material_initialized, "tc_material");
 
     if (!tc_pool_init(&g_material_pool, sizeof(tc_material), 64)) {
         tc_log(TC_LOG_ERROR, "tc_material_init: failed to init pool");
         return;
     }
 
-    g_uuid_to_index = tc_resource_map_new(NULL);
-    if (!g_uuid_to_index) {
+    g_material_uuid_to_index = tc_resource_map_new(NULL);
+    if (!g_material_uuid_to_index) {
         tc_log(TC_LOG_ERROR, "tc_material_init: failed to create uuid map");
         tc_pool_free(&g_material_pool);
         return;
     }
 
-    g_next_uuid = 1;
-    g_initialized = true;
+    g_material_next_uuid = 1;
+    g_material_initialized = true;
 }
 
 void tc_material_shutdown(void) {
-    TC_REGISTRY_SHUTDOWN_GUARD(g_initialized, "tc_material");
+    TC_REGISTRY_SHUTDOWN_GUARD(g_material_initialized, "tc_material");
 
     // Release shader references and per-phase UBOs for all materials
     // before freeing the pool.
@@ -103,10 +103,10 @@ void tc_material_shutdown(void) {
     }
 
     tc_pool_free(&g_material_pool);
-    tc_resource_map_free(g_uuid_to_index);
-    g_uuid_to_index = NULL;
-    g_next_uuid = 1;
-    g_initialized = false;
+    tc_resource_map_free(g_material_uuid_to_index);
+    g_material_uuid_to_index = NULL;
+    g_material_next_uuid = 1;
+    g_material_initialized = false;
 }
 
 // ============================================================================
@@ -114,7 +114,7 @@ void tc_material_shutdown(void) {
 // ============================================================================
 
 tc_material_handle tc_material_create(const char* uuid, const char* name) {
-    if (!g_initialized) {
+    if (!g_material_initialized) {
         tc_material_init();
     }
 
@@ -133,7 +133,7 @@ tc_material_handle tc_material_create(const char* uuid, const char* name) {
         }
         final_uuid = uuid;
     } else {
-        tc_generate_prefixed_uuid(uuid_buf, sizeof(uuid_buf), "mat", &g_next_uuid);
+        tc_generate_prefixed_uuid(uuid_buf, sizeof(uuid_buf), "mat", &g_material_next_uuid);
         final_uuid = uuid_buf;
     }
 
@@ -152,7 +152,7 @@ tc_material_handle tc_material_create(const char* uuid, const char* name) {
     mat->header.ref_count = 0;
     mat->header.is_loaded = 1;
 
-    if (!tc_resource_map_add(g_uuid_to_index, mat->header.uuid, tc_pack_index(h.index))) {
+    if (!tc_resource_map_add(g_material_uuid_to_index, mat->header.uuid, tc_pack_index(h.index))) {
         tc_log(TC_LOG_ERROR, "tc_material_create: failed to add to uuid map");
         tc_pool_free_slot(&g_material_pool, h);
         return tc_material_handle_invalid();
@@ -162,11 +162,11 @@ tc_material_handle tc_material_create(const char* uuid, const char* name) {
 }
 
 tc_material_handle tc_material_find(const char* uuid) {
-    if (!g_initialized || !uuid) {
+    if (!g_material_initialized || !uuid) {
         return tc_material_handle_invalid();
     }
 
-    void* ptr = tc_resource_map_get(g_uuid_to_index, uuid);
+    void* ptr = tc_resource_map_get(g_material_uuid_to_index, uuid);
     if (!tc_has_index(ptr)) {
         return tc_material_handle_invalid();
     }
@@ -187,7 +187,7 @@ tc_material_handle tc_material_find(const char* uuid) {
 }
 
 tc_material_handle tc_material_find_by_name(const char* name) {
-    if (!g_initialized || !name) {
+    if (!g_material_initialized || !name) {
         return tc_material_handle_invalid();
     }
 
@@ -221,7 +221,7 @@ tc_material_handle tc_material_get_or_create(const char* uuid, const char* name)
 }
 
 tc_material* tc_material_get(tc_material_handle h) {
-    if (!g_initialized || tc_material_handle_is_invalid(h)) {
+    if (!g_material_initialized || tc_material_handle_is_invalid(h)) {
         return NULL;
     }
 
@@ -233,7 +233,7 @@ tc_material* tc_material_get(tc_material_handle h) {
 }
 
 bool tc_material_is_valid(tc_material_handle h) {
-    if (!g_initialized || tc_material_handle_is_invalid(h)) {
+    if (!g_material_initialized || tc_material_handle_is_invalid(h)) {
         return false;
     }
     return tc_pool_is_valid(&g_material_pool, h);
@@ -259,7 +259,7 @@ static void material_release_phase_ubos(tc_material* mat) {
 }
 
 bool tc_material_destroy(tc_material_handle h) {
-    if (!g_initialized) return false;
+    if (!g_material_initialized) return false;
 
     tc_material* mat = tc_material_get(h);
     if (!mat) return false;
@@ -271,7 +271,7 @@ bool tc_material_destroy(tc_material_handle h) {
     // Release all shader references before destroying
     material_release_shaders(mat);
 
-    tc_resource_map_remove(g_uuid_to_index, mat->header.uuid);
+    tc_resource_map_remove(g_material_uuid_to_index, mat->header.uuid);
     tc_pool_free_slot(&g_material_pool, h);
 
     return true;
@@ -282,7 +282,7 @@ bool tc_material_contains(const char* uuid) {
 }
 
 size_t tc_material_count(void) {
-    if (!g_initialized) return 0;
+    if (!g_material_initialized) return 0;
     return tc_pool_count(&g_material_pool);
 }
 
@@ -592,7 +592,7 @@ void tc_material_set_color(
 // ============================================================================
 
 tc_material_info* tc_material_get_all_info(size_t* count) {
-    if (!g_initialized || !count) {
+    if (!g_material_initialized || !count) {
         if (count) *count = 0;
         return NULL;
     }
@@ -636,7 +636,7 @@ tc_material_info* tc_material_get_all_info(size_t* count) {
 // ============================================================================
 
 void tc_material_foreach(tc_material_iter_fn callback, void* user_data) {
-    if (!g_initialized || !callback) return;
+    if (!g_material_initialized || !callback) return;
 
     for (uint32_t i = 0; i < g_material_pool.capacity; i++) {
         if (g_material_pool.states[i] != TC_SLOT_OCCUPIED) continue;

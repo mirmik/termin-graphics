@@ -100,11 +100,11 @@ static bool is_graph_alias_node(const NodeData& node) {
            node.node_type == "pipeline_output";
 }
 
-static bool is_target_socket_name(const std::string& name) {
+static bool graph_compiler_is_target_socket_name(const std::string& name) {
     return name.size() > 7 && name.substr(name.size() - 7) == "_target";
 }
 
-static std::string resource_type_for_node(const NodeData& node) {
+static std::string graph_compiler_resource_type_for_node(const NodeData& node) {
     if (node.params.contains("resource_type") && node.params["resource_type"].is_string()) {
         return node.params["resource_type"].as_string();
     }
@@ -157,7 +157,7 @@ static void propagate_non_target_connections(
     ResourceNaming& result
 ) {
     for (const auto& conn : graph.connections) {
-        if (is_target_socket_name(conn.to_socket)) {
+        if (graph_compiler_is_target_socket_name(conn.to_socket)) {
             continue;
         }
         auto from_it = result.socket_names.find(conn.from_node_id);
@@ -177,7 +177,7 @@ static void propagate_target_connections(
     ResourceNaming& result
 ) {
     for (const auto& conn : graph.connections) {
-        if (!is_target_socket_name(conn.to_socket)) {
+        if (!graph_compiler_is_target_socket_name(conn.to_socket)) {
             continue;
         }
         auto from_it = result.socket_names.find(conn.from_node_id);
@@ -212,7 +212,7 @@ static void apply_target_overrides(
 ) {
     for (const auto& node : graph.nodes) {
         for (const auto& inp : node.inputs) {
-            if (!is_target_socket_name(inp.name)) {
+            if (!graph_compiler_is_target_socket_name(inp.name)) {
                 continue;
             }
             std::string base_name = inp.name.substr(0, inp.name.size() - 7);
@@ -395,7 +395,7 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
     // render-target external input nodes.
     for (const auto& node : graph.nodes) {
         if (node.node_type == "resource") {
-            std::string resource_type = resource_type_for_node(node);
+            std::string resource_type = graph_compiler_resource_type_for_node(node);
             std::string name = default_resource_name(node, node_index[node.id], resource_type);
             for (const auto& output : node.outputs) {
                 result.socket_names[node.id][output.name] = name;
@@ -549,7 +549,7 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
         for (const auto& inp : node.inputs) {
             auto& sockets = result.socket_names[node.id];
             if (sockets.find(inp.name) == sockets.end()) {
-                if (is_target_socket_name(inp.name)) {
+                if (graph_compiler_is_target_socket_name(inp.name)) {
                     continue;
                 }
                 std::string name = generated_input_name(node, idx, inp.name);
@@ -841,7 +841,7 @@ static std::unordered_map<std::string, const NodeData*> collect_resource_nodes(c
 
     for (const auto& node : graph.nodes) {
         if (node.node_type == "resource") {
-            std::string resource_type = resource_type_for_node(node);
+            std::string resource_type = graph_compiler_resource_type_for_node(node);
             std::string name = default_resource_name(node, node_index[node.id], resource_type);
             result[name] = &node;
         }
@@ -1036,7 +1036,7 @@ RenderPipeline* compile_graph(GraphData& graph) {
         // Set socket-based properties (input_res, output_res, shadow_res, etc.)
         for (const auto& [socket_name, resource_name] : socket_map) {
             nos::trent res_name_trent(resource_name);
-            if (is_target_socket_name(socket_name)) {
+            if (graph_compiler_is_target_socket_name(socket_name)) {
                 tc_value tc_val = trent_to_tc_value(res_name_trent);
                 pass_ref.set_field(socket_name, tc_val);
                 tc_value_free(&tc_val);

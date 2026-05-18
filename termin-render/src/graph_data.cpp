@@ -29,7 +29,7 @@ static bool has_socket(const std::vector<SocketData>& sockets, const std::string
     return false;
 }
 
-static bool is_target_socket_name(const std::string& name) {
+static bool graph_data_is_target_socket_name(const std::string& name) {
     return name.size() > 7 && name.substr(name.size() - 7) == "_target";
 }
 
@@ -37,7 +37,7 @@ static std::string target_socket_type_for(
     const NodeData& node,
     const std::string& target_socket_name
 ) {
-    if (!is_target_socket_name(target_socket_name)) {
+    if (!graph_data_is_target_socket_name(target_socket_name)) {
         return "fbo";
     }
     std::string output_name = target_socket_name.substr(0, target_socket_name.size() - 7);
@@ -62,7 +62,7 @@ static void add_sockets_from_graph_node_def(NodeData& node, const termin::GraphN
     }
 }
 
-static std::string resource_type_for_node(const NodeData& node) {
+static std::string graph_data_resource_type_for_node(const NodeData& node) {
     if (node.params.contains("resource_type") && node.params["resource_type"].is_string()) {
         return node.params["resource_type"].as_string();
     }
@@ -84,7 +84,7 @@ static void configure_resource_node_sockets(NodeData& node) {
     }
 
     node.outputs.clear();
-    std::string resource_type = resource_type_for_node(node);
+    std::string resource_type = graph_data_resource_type_for_node(node);
     if (resource_type == "shadow_map_array") {
         node.outputs.push_back({"shadow", "shadow", false});
     } else if (resource_type == "color_texture") {
@@ -271,7 +271,7 @@ GraphData GraphData::from_trent(const nos::trent& t) {
         NodeData* to_node = graph.get_node(conn.to_node_id);
         if (to_node && is_pass_node_type(to_node->node_type) && !conn.to_socket.empty()) {
             if (!has_socket(to_node->inputs, conn.to_socket)) {
-                if (!is_target_socket_name(conn.to_socket)) {
+                if (!graph_data_is_target_socket_name(conn.to_socket)) {
                     tc::Log::warn(
                         "GraphData: pass '%s' has no registered input socket '%s'; keeping socket from connection",
                         to_node->pass_class.c_str(),

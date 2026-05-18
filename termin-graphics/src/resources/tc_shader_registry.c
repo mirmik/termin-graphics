@@ -14,10 +14,10 @@
 // ============================================================================
 
 static tc_pool g_shader_pool;
-static tc_resource_map* g_uuid_to_index = NULL;   // UUID -> uint32_t index
-static tc_resource_map* g_hash_to_index = NULL;   // source_hash -> uint32_t index
-static uint64_t g_next_uuid = 1;
-static bool g_initialized = false;
+static tc_resource_map* g_shader_uuid_to_index = NULL;   // UUID -> uint32_t index
+static tc_resource_map* g_shader_hash_to_index = NULL;   // source_hash -> uint32_t index
+static uint64_t g_shader_next_uuid = 1;
+static bool g_shader_initialized = false;
 
 // Duplicate a string (NULL-safe)
 static char* dup_string(const char* s) {
@@ -96,35 +96,35 @@ void tc_shader_update_hash(tc_shader* shader) {
 // ============================================================================
 
 void tc_shader_init(void) {
-    TC_REGISTRY_INIT_GUARD(g_initialized, "tc_shader");
+    TC_REGISTRY_INIT_GUARD(g_shader_initialized, "tc_shader");
 
     if (!tc_pool_init(&g_shader_pool, sizeof(tc_shader), 64)) {
         tc_log(TC_LOG_ERROR, "tc_shader_init: failed to init pool");
         return;
     }
 
-    g_uuid_to_index = tc_resource_map_new(NULL);
-    if (!g_uuid_to_index) {
+    g_shader_uuid_to_index = tc_resource_map_new(NULL);
+    if (!g_shader_uuid_to_index) {
         tc_log(TC_LOG_ERROR, "tc_shader_init: failed to create uuid map");
         tc_pool_free(&g_shader_pool);
         return;
     }
 
-    g_hash_to_index = tc_resource_map_new(NULL);
-    if (!g_hash_to_index) {
+    g_shader_hash_to_index = tc_resource_map_new(NULL);
+    if (!g_shader_hash_to_index) {
         tc_log(TC_LOG_ERROR, "tc_shader_init: failed to create hash map");
-        tc_resource_map_free(g_uuid_to_index);
-        g_uuid_to_index = NULL;
+        tc_resource_map_free(g_shader_uuid_to_index);
+        g_shader_uuid_to_index = NULL;
         tc_pool_free(&g_shader_pool);
         return;
     }
 
-    g_next_uuid = 1;
-    g_initialized = true;
+    g_shader_next_uuid = 1;
+    g_shader_initialized = true;
 }
 
 void tc_shader_shutdown(void) {
-    TC_REGISTRY_SHUTDOWN_GUARD(g_initialized, "tc_shader");
+    TC_REGISTRY_SHUTDOWN_GUARD(g_shader_initialized, "tc_shader");
 
     // Free shader data for all occupied slots
     for (uint32_t i = 0; i < g_shader_pool.capacity; i++) {
@@ -135,12 +135,12 @@ void tc_shader_shutdown(void) {
     }
 
     tc_pool_free(&g_shader_pool);
-    tc_resource_map_free(g_uuid_to_index);
-    tc_resource_map_free(g_hash_to_index);
-    g_uuid_to_index = NULL;
-    g_hash_to_index = NULL;
-    g_next_uuid = 1;
-    g_initialized = false;
+    tc_resource_map_free(g_shader_uuid_to_index);
+    tc_resource_map_free(g_shader_hash_to_index);
+    g_shader_uuid_to_index = NULL;
+    g_shader_hash_to_index = NULL;
+    g_shader_next_uuid = 1;
+    g_shader_initialized = false;
 }
 
 // ============================================================================
@@ -148,7 +148,7 @@ void tc_shader_shutdown(void) {
 // ============================================================================
 
 tc_shader_handle tc_shader_create(const char* uuid) {
-    if (!g_initialized) {
+    if (!g_shader_initialized) {
         tc_shader_init();
     }
 
@@ -162,7 +162,7 @@ tc_shader_handle tc_shader_create(const char* uuid) {
         }
         final_uuid = uuid;
     } else {
-        tc_generate_prefixed_uuid(uuid_buf, sizeof(uuid_buf), "shader", &g_next_uuid);
+        tc_generate_prefixed_uuid(uuid_buf, sizeof(uuid_buf), "shader", &g_shader_next_uuid);
         final_uuid = uuid_buf;
     }
 
@@ -184,7 +184,7 @@ tc_shader_handle tc_shader_create(const char* uuid) {
     shader->original_handle = tc_shader_handle_invalid();
 
     // Add to UUID map
-    if (!tc_resource_map_add(g_uuid_to_index, shader->uuid, tc_pack_index(h.index))) {
+    if (!tc_resource_map_add(g_shader_uuid_to_index, shader->uuid, tc_pack_index(h.index))) {
         tc_log(TC_LOG_ERROR, "tc_shader_create: failed to add to uuid map");
         tc_pool_free_slot(&g_shader_pool, h);
         return tc_shader_handle_invalid();
@@ -194,11 +194,11 @@ tc_shader_handle tc_shader_create(const char* uuid) {
 }
 
 tc_shader_handle tc_shader_find(const char* uuid) {
-    if (!g_initialized || !uuid) {
+    if (!g_shader_initialized || !uuid) {
         return tc_shader_handle_invalid();
     }
 
-    void* ptr = tc_resource_map_get(g_uuid_to_index, uuid);
+    void* ptr = tc_resource_map_get(g_shader_uuid_to_index, uuid);
     if (!tc_has_index(ptr)) {
         return tc_shader_handle_invalid();
     }
@@ -219,11 +219,11 @@ tc_shader_handle tc_shader_find(const char* uuid) {
 }
 
 tc_shader_handle tc_shader_find_by_hash(const char* source_hash) {
-    if (!g_initialized || !source_hash) {
+    if (!g_shader_initialized || !source_hash) {
         return tc_shader_handle_invalid();
     }
 
-    void* ptr = tc_resource_map_get(g_hash_to_index, source_hash);
+    void* ptr = tc_resource_map_get(g_shader_hash_to_index, source_hash);
     if (!tc_has_index(ptr)) {
         return tc_shader_handle_invalid();
     }
@@ -244,7 +244,7 @@ tc_shader_handle tc_shader_find_by_hash(const char* source_hash) {
 }
 
 tc_shader_handle tc_shader_find_by_name(const char* name) {
-    if (!g_initialized || !name) {
+    if (!g_shader_initialized || !name) {
         return tc_shader_handle_invalid();
     }
 
@@ -278,27 +278,27 @@ tc_shader_handle tc_shader_get_or_create(const char* uuid) {
 }
 
 tc_shader* tc_shader_get(tc_shader_handle h) {
-    if (!g_initialized) return NULL;
+    if (!g_shader_initialized) return NULL;
     return (tc_shader*)tc_pool_get(&g_shader_pool, h);
 }
 
 bool tc_shader_is_valid(tc_shader_handle h) {
-    if (!g_initialized) return false;
+    if (!g_shader_initialized) return false;
     return tc_pool_is_valid(&g_shader_pool, h);
 }
 
 bool tc_shader_destroy(tc_shader_handle h) {
-    if (!g_initialized) return false;
+    if (!g_shader_initialized) return false;
 
     tc_shader* shader = tc_shader_get(h);
     if (!shader) return false;
 
     // Remove from UUID map
-    tc_resource_map_remove(g_uuid_to_index, shader->uuid);
+    tc_resource_map_remove(g_shader_uuid_to_index, shader->uuid);
 
     // Remove from hash map
     if (shader->source_hash[0] != '\0') {
-        tc_resource_map_remove(g_hash_to_index, shader->source_hash);
+        tc_resource_map_remove(g_shader_hash_to_index, shader->source_hash);
     }
 
     // Free shader data
@@ -309,12 +309,12 @@ bool tc_shader_destroy(tc_shader_handle h) {
 }
 
 bool tc_shader_contains(const char* uuid) {
-    if (!g_initialized || !uuid) return false;
-    return tc_resource_map_contains(g_uuid_to_index, uuid);
+    if (!g_shader_initialized || !uuid) return false;
+    return tc_resource_map_contains(g_shader_uuid_to_index, uuid);
 }
 
 size_t tc_shader_count(void) {
-    if (!g_initialized) return 0;
+    if (!g_shader_initialized) return 0;
     return tc_pool_count(&g_shader_pool);
 }
 
@@ -343,7 +343,7 @@ bool tc_shader_set_sources(
 
     // Remove from old hash mapping
     if (shader->source_hash[0] != '\0') {
-        tc_resource_map_remove(g_hash_to_index, shader->source_hash);
+        tc_resource_map_remove(g_shader_hash_to_index, shader->source_hash);
     }
 
     // Free old sources
@@ -364,7 +364,7 @@ bool tc_shader_set_sources(
             if (g_shader_pool.states[i] == TC_SLOT_OCCUPIED) {
                 tc_shader* s = (tc_shader*)tc_pool_get_unchecked(&g_shader_pool, i);
                 if (s == shader) {
-                    tc_resource_map_add(g_hash_to_index, shader->source_hash, tc_pack_index(i));
+                    tc_resource_map_add(g_shader_hash_to_index, shader->source_hash, tc_pack_index(i));
                     break;
                 }
             }
@@ -562,7 +562,7 @@ static bool shader_iter_adapter(uint32_t index, void* item, void* ctx_ptr) {
 }
 
 void tc_shader_foreach(tc_shader_iter_fn callback, void* user_data) {
-    if (!g_initialized || !callback) return;
+    if (!g_shader_initialized || !callback) return;
     shader_iter_ctx ctx = { callback, user_data };
     tc_pool_foreach(&g_shader_pool, shader_iter_adapter, &ctx);
 }
@@ -602,7 +602,7 @@ tc_shader_info* tc_shader_get_all_info(size_t* count) {
     if (!count) return NULL;
     *count = 0;
 
-    if (!g_initialized) return NULL;
+    if (!g_shader_initialized) return NULL;
 
     size_t shader_count = tc_pool_count(&g_shader_pool);
     if (shader_count == 0) return NULL;

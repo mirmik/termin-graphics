@@ -11,37 +11,13 @@
 #include <tgfx2/font_atlas.hpp>
 #include <tgfx2/render_context.hpp>
 
+#include "conversion_helpers.hpp"
 #include "tcplot/engine2d.hpp"
 #include "tcplot/engine3d.hpp"
 
 namespace nb = nanobind;
 
 namespace tcplot_bindings {
-
-namespace {
-
-std::optional<tcplot::Color4> optional_color_from_obj(nb::object obj) {
-    if (obj.is_none()) return std::nullopt;
-    if (nb::isinstance<tcplot::Color4>(obj)) {
-        return nb::cast<tcplot::Color4>(obj);
-    }
-    // Assume iterable of 3 or 4 floats.
-    auto seq = nb::cast<nb::sequence>(obj);
-    float c[4] = {0, 0, 0, 1};
-    int i = 0;
-    for (auto v : seq) {
-        if (i >= 4) break;
-        c[i++] = nb::cast<float>(v);
-    }
-    return tcplot::Color4{c[0], c[1], c[2], c[3]};
-}
-
-std::vector<double> vec_from_array(
-    nb::ndarray<double, nb::c_contig, nb::device::cpu> arr) {
-    return std::vector<double>(arr.data(), arr.data() + arr.size());
-}
-
-}  // namespace
 
 void bind_engines(nb::module_& m) {
     // tcbase::MouseButton comes from tcbase._tcbase_native — don't

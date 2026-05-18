@@ -7,52 +7,15 @@
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 
-#include <optional>
 #include <tuple>
 
+#include "conversion_helpers.hpp"
 #include "tcplot/plot_data.hpp"
 #include "tcplot/styles.hpp"
 
 namespace nb = nanobind;
 
 namespace tcplot_bindings {
-
-namespace {
-
-// Color: accept any Python sequence of length 3 or 4 and turn it into
-// a tcplot::Color4. Length-3 uses alpha = 1. Used by every series
-// constructor and widget API call that takes an optional color.
-tcplot::Color4 color_from_seq(nb::handle src) {
-    if (src.is_none()) {
-        return {};  // sentinel — caller checks via std::optional
-    }
-    if (nb::isinstance<tcplot::Color4>(src)) {
-        return nb::cast<tcplot::Color4>(src);
-    }
-    // Accept iterable of 3 or 4 floats.
-    auto seq = nb::cast<nb::sequence>(src);
-    float c[4] = {0, 0, 0, 1};
-    int i = 0;
-    for (auto v : seq) {
-        if (i >= 4) break;
-        c[i++] = nb::cast<float>(v);
-    }
-    return {c[0], c[1], c[2], c[3]};
-}
-
-std::optional<tcplot::Color4> optional_color_from_obj(nb::object obj) {
-    if (obj.is_none()) return std::nullopt;
-    return color_from_seq(obj);
-}
-
-// Copy a numpy double array (or any iterable of floats) into a
-// std::vector<double>. Used by add_line / add_scatter / surface.
-std::vector<double> vec_from_array(
-    nb::ndarray<double, nb::c_contig, nb::device::cpu> arr) {
-    return std::vector<double>(arr.data(), arr.data() + arr.size());
-}
-
-}  // namespace
 
 void bind_colors_and_data(nb::module_& m) {
     // ---- Color4 ----

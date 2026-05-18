@@ -31,14 +31,14 @@ namespace tcplot {
 
 namespace {
 
-std::optional<Color4> opt_color(float r, float g, float b, float a) {
+std::optional<Color4> plot3d_opt_color(float r, float g, float b, float a) {
     if (std::isnan(r) || std::isnan(g) || std::isnan(b) || std::isnan(a)) {
         return std::nullopt;
     }
     return Color4{r, g, b, a};
 }
 
-std::vector<double> copy_array(const double* src, size_t n) {
+std::vector<double> plot3d_copy_array(const double* src, size_t n) {
     if (!src || n == 0) return {};
     return std::vector<double>(src, src + n);
 }
@@ -118,8 +118,8 @@ void PlotView3D::plot(const double* x, const double* y, const double* z,
                        float cr, float cg, float cb, float ca,
                        double thickness,
                        const char* label) {
-    engine_->plot(copy_array(x, n), copy_array(y, n), copy_array(z, n),
-                  opt_color(cr, cg, cb, ca),
+    engine_->plot(plot3d_copy_array(x, n), plot3d_copy_array(y, n), plot3d_copy_array(z, n),
+                  plot3d_opt_color(cr, cg, cb, ca),
                   thickness,
                   label ? std::string(label) : std::string());
 }
@@ -129,8 +129,8 @@ void PlotView3D::scatter(const double* x, const double* y, const double* z,
                           float cr, float cg, float cb, float ca,
                           double size,
                           const char* label) {
-    engine_->scatter(copy_array(x, n), copy_array(y, n), copy_array(z, n),
-                     opt_color(cr, cg, cb, ca),
+    engine_->scatter(plot3d_copy_array(x, n), plot3d_copy_array(y, n), plot3d_copy_array(z, n),
+                     plot3d_opt_color(cr, cg, cb, ca),
                      size,
                      label ? std::string(label) : std::string());
 }
@@ -152,9 +152,9 @@ void PlotView3D::surface_colormap(const double* X, const double* Y, const double
                                   const char* label,
                                   bool colormap_reversed) {
     const size_t n = static_cast<size_t>(rows) * cols;
-    engine_->surface(copy_array(X, n), copy_array(Y, n), copy_array(Z, n),
+    engine_->surface(plot3d_copy_array(X, n), plot3d_copy_array(Y, n), plot3d_copy_array(Z, n),
                      rows, cols,
-                     opt_color(cr, cg, cb, ca),
+                     plot3d_opt_color(cr, cg, cb, ca),
                      colormap,
                      wireframe,
                      label ? std::string(label) : std::string(),

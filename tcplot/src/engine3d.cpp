@@ -46,7 +46,7 @@ struct Plot3DPushData {
 static_assert(sizeof(Plot3DPushData) == 128,
               "Plot3DPushData layout drift — shader + C++ disagree");
 
-constexpr const char* kPC = R"(
+constexpr const char* kPlot3DPushConstants = R"(
 struct Plot3DPC {
     mat4 u_mvp;
     vec4 u_params;
@@ -65,7 +65,7 @@ layout(std140, binding = 14) uniform PCBlock { Plot3DPC pc; };
 // RGBA color in vec4 (loc 1). For filled surfaces, the fragment stage
 // derives color from normalized Z using the selected colormap.
 static std::string make_vert_src() {
-    return std::string("#version 450 core\n") + kPC + R"(
+    return std::string("#version 450 core\n") + kPlot3DPushConstants + R"(
 layout(location=0) in vec3 a_position;
 layout(location=1) in vec4 a_color;
 layout(location=2) in vec4 a_surface_grid;
@@ -91,7 +91,7 @@ void main() {
 }
 
 static std::string make_frag_src() {
-    return std::string("#version 450 core\n") + kPC + R"(
+    return std::string("#version 450 core\n") + kPlot3DPushConstants + R"(
 layout(location=0) in vec4 v_color;
 layout(location=1) in float v_z_norm;
 layout(location=2) in vec3 v_scaled_pos;

@@ -22,14 +22,14 @@ namespace tcplot {
 
 namespace {
 
-std::optional<Color4> opt_color(float r, float g, float b, float a) {
+std::optional<Color4> plot2d_opt_color(float r, float g, float b, float a) {
     if (std::isnan(r) || std::isnan(g) || std::isnan(b) || std::isnan(a)) {
         return std::nullopt;
     }
     return Color4{r, g, b, a};
 }
 
-std::vector<double> copy_array(const double* src, size_t n) {
+std::vector<double> plot2d_copy_array(const double* src, size_t n) {
     if (!src || n == 0) return {};
     return std::vector<double>(src, src + n);
 }
@@ -78,8 +78,8 @@ void PlotView2D::plot(const double* x, const double* y, size_t n,
                        float cr, float cg, float cb, float ca,
                        double thickness,
                        const char* label) {
-    engine_->plot(copy_array(x, n), copy_array(y, n),
-                  opt_color(cr, cg, cb, ca), thickness,
+    engine_->plot(plot2d_copy_array(x, n), plot2d_copy_array(y, n),
+                  plot2d_opt_color(cr, cg, cb, ca), thickness,
                   label ? std::string(label) : std::string());
 }
 
@@ -91,8 +91,8 @@ void PlotView2D::plot_colormap(const double* x, const double* y,
                                 double thickness,
                                 const char* label,
                                 bool colormap_reversed) {
-    engine_->plot_colormap(copy_array(x, n), copy_array(y, n),
-                           copy_array(scalar, n), colormap,
+    engine_->plot_colormap(plot2d_copy_array(x, n), plot2d_copy_array(y, n),
+                           plot2d_copy_array(scalar, n), colormap,
                            scalar_min, scalar_max, thickness,
                            label ? std::string(label) : std::string(),
                            colormap_reversed);
@@ -102,8 +102,8 @@ void PlotView2D::scatter(const double* x, const double* y, size_t n,
                           float cr, float cg, float cb, float ca,
                           double size,
                           const char* label) {
-    engine_->scatter(copy_array(x, n), copy_array(y, n),
-                     opt_color(cr, cg, cb, ca), size,
+    engine_->scatter(plot2d_copy_array(x, n), plot2d_copy_array(y, n),
+                     plot2d_opt_color(cr, cg, cb, ca), size,
                      label ? std::string(label) : std::string());
 }
 
