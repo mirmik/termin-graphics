@@ -11,7 +11,7 @@ $BuildDirEnv = if ($env:BUILD_DIR) { $env:BUILD_DIR } else { $null }
 $BuildType = "Release"
 $Clean = $false
 $NoParallel = $false
-$VulkanMode = "off"
+$VulkanMode = "on"
 $SdlMode = "on"
 $CcacheMode = "on"
 $UnityMode = "off"
@@ -32,8 +32,8 @@ function Show-Help {
     Write-Host "  --no-unity        Disable CMake unity build (default)"
     Write-Host "  --pch             Enable precompiled headers for selected C++ targets (experimental)"
     Write-Host "  --no-pch          Disable precompiled headers (default)"
-    Write-Host "  --no-vulkan       Disable Vulkan support (default)"
-    Write-Host "  --vulkan          Enable Vulkan support"
+    Write-Host "  --no-vulkan       Disable Vulkan support"
+    Write-Host "  --vulkan          Enable Vulkan support (default)"
     Write-Host "  --no-sdl          Disable SDL2 support"
     Write-Host "  --sdl             Enable SDL2 support (default)"
     Write-Host "  --help, -h        Show this help"

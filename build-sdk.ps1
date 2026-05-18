@@ -27,7 +27,7 @@ foreach ($arg in $args) {
         Write-Host "  --pch             Enable precompiled headers for C/C++ stages (experimental)"
         Write-Host "  --no-pch          Disable precompiled headers (default)"
         Write-Host "  --no-vulkan       Disable Vulkan support"
-        Write-Host "  --vulkan          Force Vulkan support on"
+        Write-Host "  --vulkan          Enable Vulkan support (default)"
         Write-Host "  --no-sdl          Disable SDL2 support"
         Write-Host "  --sdl             Force SDL2 support on"
         Write-Host "  --help, -h        Show this help"
