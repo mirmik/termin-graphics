@@ -20,6 +20,12 @@ foreach ($arg in $args) {
         Write-Host "  --debug, -d       Debug build"
         Write-Host "  --clean, -c       Clean build directories first"
         Write-Host "  --no-parallel     Disable parallel compilation"
+        Write-Host "  --ccache          Use ccache if available (default; ignored by MSVC root graph)"
+        Write-Host "  --no-ccache       Disable ccache compiler launcher"
+        Write-Host "  --unity           Enable CMake unity build for C/C++ stages (experimental)"
+        Write-Host "  --no-unity        Disable CMake unity build (default)"
+        Write-Host "  --pch             Enable precompiled headers for C/C++ stages (experimental)"
+        Write-Host "  --no-pch          Disable precompiled headers (default)"
         Write-Host "  --no-vulkan       Disable Vulkan support"
         Write-Host "  --vulkan          Force Vulkan support on"
         Write-Host "  --no-sdl          Disable SDL2 support"
@@ -59,19 +65,25 @@ Write-Host "  Stage 4/4: Populate bundled Python site-packages"
 Write-Host "========================================"
 Write-Host ""
 
-# Resolve the Python version used by the bundled interpreter. Stage 1
-# installs the stdlib under sdk/lib/python<MAJOR>.<MINOR>/ (only when
-# BUNDLE_PYTHON=ON during the termin CMake build), so we probe for that
-# directory and target its site-packages.
+# Resolve the Python version used by the bundled interpreter. Linux installs
+# the stdlib under sdk/lib/python<MAJOR>.<MINOR>/; Windows uses sdk/Lib/.
 $SdkPrefix = if ($env:SDK_PREFIX) { $env:SDK_PREFIX } else { Join-Path $ScriptDir "sdk" }
-$BundledPyDir = Get-ChildItem -Path (Join-Path $SdkPrefix "lib") -Directory -Filter "python3.*" -ErrorAction SilentlyContinue | Select-Object -First 1
+$WindowsBundledLib = Join-Path $SdkPrefix "Lib"
+$LinuxBundledPyDir = Get-ChildItem -Path (Join-Path $SdkPrefix "lib") -Directory -Filter "python3.*" -ErrorAction SilentlyContinue | Select-Object -First 1
 
-if (-not $BundledPyDir) {
-    Write-Host "WARNING: bundled Python stdlib not found under $SdkPrefix\lib\python3.*" -ForegroundColor Yellow
+if (Test-Path $WindowsBundledLib) {
+    $BundledPyDir = Get-Item $WindowsBundledLib
+    $BundledSitePackages = Join-Path $BundledPyDir.FullName "site-packages"
+} elseif ($LinuxBundledPyDir) {
+    $BundledPyDir = $LinuxBundledPyDir
+    $BundledSitePackages = Join-Path $BundledPyDir.FullName "site-packages"
+} else {
+    Write-Host "WARNING: bundled Python stdlib not found under $SdkPrefix\Lib or $SdkPrefix\lib\python3.*" -ForegroundColor Yellow
     Write-Host "  Skipping pip install into bundled site-packages."
     Write-Host "  Was BUNDLE_PYTHON=ON during the termin CMake build?"
-} else {
-    $BundledSitePackages = Join-Path $BundledPyDir.FullName "site-packages"
+}
+
+if ($BundledSitePackages) {
     Write-Host "Bundled Python stdlib:        $($BundledPyDir.FullName)"
     Write-Host "Bundled Python site-packages: $BundledSitePackages"
     Write-Host ""

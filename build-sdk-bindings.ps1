@@ -1,225 +1,164 @@
 #!/usr/bin/env pwsh
-# Build Python bindings (nanobind SDK + C++ libs with Python) into SDK.
-# Assumes C++ libraries are already built via build-sdk-cpp.ps1.
-# Reads module list from modules.conf.
+# Build and install Python/nanobind bindings through the top-level CMake graph.
+# This mirrors build-sdk-bindings.sh for Windows/PowerShell.
 
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SdkPrefix = if ($env:SDK_PREFIX) { $env:SDK_PREFIX } else { Join-Path $ScriptDir "sdk" }
+$BuildDirEnv = if ($env:BUILD_DIR) { $env:BUILD_DIR } else { $null }
 
 $BuildType = "Release"
 $Clean = $false
-$UseParallel = $false
-$VulkanMode = "auto"
-$SdlMode = "auto"
+$NoParallel = $false
+$VulkanMode = "off"
+$SdlMode = "on"
+$CcacheMode = "on"
+$UnityMode = "off"
+$PchMode = "off"
+$BuildJobs = if ($env:BUILD_JOBS) { [int]$env:BUILD_JOBS } else { [Environment]::ProcessorCount }
+$CmakeGeneratorName = if ($env:CMAKE_GENERATOR_NAME) { $env:CMAKE_GENERATOR_NAME } elseif ($env:TERMIN_CMAKE_GENERATOR) { $env:TERMIN_CMAKE_GENERATOR } else { $null }
+
+function Show-Help {
+    Write-Host "Usage: .\build-sdk-bindings.ps1 [OPTIONS]"
+    Write-Host ""
+    Write-Host "Options:"
+    Write-Host "  --debug, -d       Debug build"
+    Write-Host "  --clean, -c       Clean build directory first"
+    Write-Host "  --no-parallel     Disable parallel compilation (equivalent to -j1)"
+    Write-Host "  --ccache          Use ccache if available (default; ignored by MSVC root graph)"
+    Write-Host "  --no-ccache       Disable ccache compiler launcher"
+    Write-Host "  --unity           Enable CMake unity build (experimental)"
+    Write-Host "  --no-unity        Disable CMake unity build (default)"
+    Write-Host "  --pch             Enable precompiled headers for selected C++ targets (experimental)"
+    Write-Host "  --no-pch          Disable precompiled headers (default)"
+    Write-Host "  --no-vulkan       Disable Vulkan support (default)"
+    Write-Host "  --vulkan          Enable Vulkan support"
+    Write-Host "  --no-sdl          Disable SDL2 support"
+    Write-Host "  --sdl             Enable SDL2 support (default)"
+    Write-Host "  --help, -h        Show this help"
+    Write-Host ""
+    Write-Host "Environment:"
+    Write-Host "  SDK_PREFIX        Install prefix (default: .\sdk)"
+    Write-Host "  BUILD_DIR         CMake build directory (default: .\build\<BUILD_TYPE>)"
+    Write-Host "  BUILD_JOBS        Parallel build jobs (default: logical processor count)"
+    Write-Host "  TERMIN_CMAKE_GENERATOR or CMAKE_GENERATOR_NAME"
+    Write-Host "                    CMake generator for a new build dir (default: Ninja if available)"
+}
 
 foreach ($arg in $args) {
     switch ($arg) {
-        "--debug"  { $BuildType = "Debug" }
-        "-d"       { $BuildType = "Debug" }
-        "--clean"  { $Clean = $true }
-        "-c"       { $Clean = $true }
-        "--no-parallel" { $UseParallel = $false }
+        "--debug"       { $BuildType = "Debug" }
+        "-d"            { $BuildType = "Debug" }
+        "--clean"       { $Clean = $true }
+        "-c"            { $Clean = $true }
+        "--no-parallel" { $NoParallel = $true }
+        "--ccache"      { $CcacheMode = "on" }
+        "--no-ccache"   { $CcacheMode = "off" }
+        "--unity"       { $UnityMode = "on" }
+        "--no-unity"    { $UnityMode = "off" }
+        "--pch"         { $PchMode = "on" }
+        "--no-pch"      { $PchMode = "off" }
         "--no-vulkan"   { $VulkanMode = "off" }
         "--vulkan"      { $VulkanMode = "on" }
         "--no-sdl"      { $SdlMode = "off" }
-        "--sdl"         { $SdlMode = "on"  }
-        "--help"   { Write-Host "Usage: .\build-sdk-bindings.ps1 [--debug] [--clean] [--no-parallel] [--no-vulkan|--vulkan] [--no-sdl|--sdl]"; exit 0 }
-        "-h"       { Write-Host "Usage: .\build-sdk-bindings.ps1 [--debug] [--clean] [--no-parallel] [--no-vulkan|--vulkan] [--no-sdl|--sdl]"; exit 0 }
-        default    { Write-Error "Unknown option: $arg"; exit 1 }
+        "--sdl"         { $SdlMode = "on" }
+        "--help"        { Show-Help; exit 0 }
+        "-h"            { Show-Help; exit 0 }
+        default          { Write-Error "Unknown option: $arg"; exit 1 }
     }
 }
 
-$CommonFeatureArgs = @()
-switch ($VulkanMode) {
-    "off" { $CommonFeatureArgs += "-DTGFX2_ENABLE_VULKAN=OFF" }
-    "on"  { $CommonFeatureArgs += "-DTGFX2_ENABLE_VULKAN=ON" }
-}
-switch ($SdlMode) {
-    "off" { $CommonFeatureArgs += "-DUSE_SYSTEM_SDL2=OFF" }
-    "on"  { $CommonFeatureArgs += "-DUSE_SYSTEM_SDL2=ON" }
+if ($NoParallel) {
+    $BuildJobs = 1
 }
 
-$pythonExec = (Get-Command python -ErrorAction SilentlyContinue).Source
-if (-not $pythonExec) {
-    $pythonExec = (Get-Command python3 -ErrorAction SilentlyContinue).Source
+$BuildDir = if ($BuildDirEnv) { $BuildDirEnv } else { Join-Path (Join-Path $ScriptDir "build") $BuildType }
+
+if (-not $CmakeGeneratorName -and -not (Test-Path (Join-Path $BuildDir "CMakeCache.txt")) -and (Get-Command ninja -ErrorAction SilentlyContinue)) {
+    $CmakeGeneratorName = "Ninja"
 }
-if (-not $pythonExec) {
+
+$TerminEnableVulkan = if ($VulkanMode -eq "on") { "ON" } else { "OFF" }
+$TerminEnableSdl = if ($SdlMode -eq "on") { "ON" } else { "OFF" }
+$TerminUseCcache = if ($CcacheMode -eq "on") { "ON" } else { "OFF" }
+$TerminEnableUnityBuild = if ($UnityMode -eq "on") { "ON" } else { "OFF" }
+$TerminEnablePch = if ($PchMode -eq "on") { "ON" } else { "OFF" }
+
+$pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+if (-not $pythonCommand) {
+    $pythonCommand = Get-Command python3 -ErrorAction SilentlyContinue
+}
+if (-not $pythonCommand) {
     throw "Python executable not found in PATH"
 }
-
-# ── 1. nanobind SDK ──
-Write-Host ""
-Write-Host "========================================"
-Write-Host "  Building termin-nanobind-sdk ($BuildType)"
-Write-Host "========================================"
-Write-Host ""
+$pythonExec = $pythonCommand.Source
 
 & $pythonExec -c "import nanobind" 2>$null
 if ($LASTEXITCODE -ne 0) {
-    throw "nanobind not installed. Run: pip install nanobind"
-}
-
-Push-Location (Join-Path $ScriptDir "termin-nanobind-sdk")
-try {
-    $buildDir = Join-Path "build" $BuildType
-    if ($Clean -and (Test-Path $buildDir)) { Remove-Item -Recurse -Force $buildDir }
-    if (-not (Test-Path $buildDir)) { New-Item -ItemType Directory -Path $buildDir | Out-Null }
-
-    $cmakeArgs = @(
-        "-S", ".",
-        "-B", $buildDir,
-        "-DCMAKE_BUILD_TYPE=$BuildType",
-        "-DCMAKE_INSTALL_PREFIX=$SdkPrefix",
-        "-DPython_EXECUTABLE=$pythonExec"
-    )
-    & cmake @cmakeArgs
-    if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
-    $buildArgs = @("--build", $buildDir, "--config", $BuildType)
-    if ($UseParallel) {
-        $buildArgs += "--parallel"
-    }
-    & cmake @buildArgs
-    if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
-    & cmake --install $buildDir --config $BuildType
-    if ($LASTEXITCODE -ne 0) { throw "cmake install failed" }
-}
-finally { Pop-Location }
-
-# ── 2. Python bindings from modules.conf ──
-function Build-WithPython {
-    param(
-        [string]$Name,
-        [string]$Dir
-    )
-
-    Write-Host ""
-    Write-Host "========================================"
-    Write-Host "  Building $Name Python bindings ($BuildType)"
-    Write-Host "========================================"
-    Write-Host ""
-
-    Push-Location $Dir
-    try {
-        $buildDir = Join-Path "build" $BuildType
-        if ($Clean -and (Test-Path $buildDir)) { Remove-Item -Recurse -Force $buildDir }
-        if (-not (Test-Path $buildDir)) { New-Item -ItemType Directory -Path $buildDir | Out-Null }
-
-        $cmakeArgs = @(
-            "-S", ".",
-            "-B", $buildDir,
-            "-DCMAKE_BUILD_TYPE=$BuildType",
-            "-DCMAKE_INSTALL_PREFIX=$SdkPrefix",
-            "-DCMAKE_PREFIX_PATH=$SdkPrefix",
-            "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
-            "-DCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY=ON",
-            "-DTERMIN_BUILD_PYTHON=ON",
-            "-DPython_EXECUTABLE=$pythonExec"
-        ) + $CommonFeatureArgs
-        & cmake @cmakeArgs
-        if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
-        $buildArgs = @("--build", $buildDir, "--config", $BuildType)
-        if ($UseParallel) {
-            $buildArgs += "--parallel"
-        }
-        & cmake @buildArgs
-        if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
-        & cmake --install $buildDir --config $BuildType
-        if ($LASTEXITCODE -ne 0) { throw "cmake install failed" }
-
-        Write-Host "$Name Python bindings installed to $SdkPrefix"
-    }
-    finally { Pop-Location }
-}
-
-# Pre-termin modules
-$modulesConf = Join-Path $ScriptDir "modules.conf"
-$beforeTermin = $true
-foreach ($line in Get-Content $modulesConf) {
-    $line = ($line -replace '#.*$', '').Trim()
-    if (-not $line) { continue }
-
-    if ($line -eq "@termin-cpp") {
-        $beforeTermin = $false
-        continue
-    }
-    if ($line.StartsWith("@")) { continue }
-    if (-not $beforeTermin) { continue }
-
-    $parts = $line -split '\|'
-    $name = $parts[0].Trim()
-    $dir = $parts[1].Trim()
-    $hasPython = $parts[2].Trim()
-
-    if ($hasPython -ne "yes") { continue }
-
-    Build-WithPython -Name $name -Dir (Join-Path $ScriptDir $dir)
-}
-
-# ── 3. termin bundle ──
-Write-Host ""
-Write-Host "========================================"
-Write-Host "  Building termin ($BuildType)"
-Write-Host "========================================"
-Write-Host ""
-
-Push-Location (Join-Path $ScriptDir "termin-app")
-try {
-    $buildArgs = @()
-    if ($BuildType -eq "Debug") { $buildArgs += "-Debug" }
-    if ($Clean) { $buildArgs += "-Clean" }
-
-    $oldPrefix = $env:CMAKE_PREFIX_PATH
-    try {
-        $env:CMAKE_PREFIX_PATH = if ($oldPrefix) { "$SdkPrefix;$oldPrefix" } else { $SdkPrefix }
-        $env:SDK_PREFIX = $SdkPrefix
-        if (-not $UseParallel) {
-            $buildArgs += "-NoParallel"
-        }
-        & .\build.ps1 @buildArgs
-        if ($LASTEXITCODE -ne 0) { throw "termin build failed" }
-    }
-    finally {
-        if ($null -eq $oldPrefix) {
-            Remove-Item Env:CMAKE_PREFIX_PATH -ErrorAction SilentlyContinue
-        } else {
-            $env:CMAKE_PREFIX_PATH = $oldPrefix
-        }
-    }
-}
-finally { Pop-Location }
-
-$terminInstall = Join-Path (Join-Path $ScriptDir "termin-app") "install_win"
-if (Test-Path $terminInstall) {
-    Write-Host "Installing termin to $SdkPrefix..."
-    Copy-Item -Recurse -Force "$terminInstall\*" $SdkPrefix
-}
-
-# Post-termin modules
-$afterTermin = $false
-foreach ($line in Get-Content $modulesConf) {
-    $line = ($line -replace '#.*$', '').Trim()
-    if (-not $line) { continue }
-
-    if ($line -eq "@termin-cpp") {
-        $afterTermin = $true
-        continue
-    }
-    if ($line.StartsWith("@")) { continue }
-    if (-not $afterTermin) { continue }
-
-    $parts = $line -split '\|'
-    $name = $parts[0].Trim()
-    $dir = $parts[1].Trim()
-    $hasPython = $parts[2].Trim()
-
-    if ($hasPython -ne "yes") { continue }
-
-    Build-WithPython -Name $name -Dir (Join-Path $ScriptDir $dir)
+    throw "nanobind not installed for $pythonExec. Run: pip install nanobind"
 }
 
 Write-Host ""
 Write-Host "========================================"
-Write-Host "  All bindings done!"
+Write-Host "  Building Termin Python bindings ($BuildType)"
+Write-Host "  mode: top-level CMake graph"
+Write-Host "========================================"
+Write-Host ""
+Write-Host "Source dir:  $ScriptDir"
+Write-Host "Build dir:   $BuildDir"
+Write-Host "SDK prefix:  $SdkPrefix"
+Write-Host "Python:      $pythonExec"
+Write-Host "Vulkan:      $TerminEnableVulkan"
+Write-Host "SDL2:        $TerminEnableSdl"
+Write-Host "ccache:      $TerminUseCcache"
+Write-Host "Unity build: $TerminEnableUnityBuild"
+Write-Host "PCH:         $TerminEnablePch"
+Write-Host "Generator:   $(if ($CmakeGeneratorName) { $CmakeGeneratorName } else { 'existing/default' })"
+Write-Host "Jobs:        $BuildJobs"
+Write-Host ""
+
+if ($Clean -and (Test-Path $BuildDir)) {
+    Write-Host "Cleaning $BuildDir..."
+    Remove-Item -Recurse -Force $BuildDir
+}
+
+$cmakeArgs = @()
+if ($CmakeGeneratorName -and -not (Test-Path (Join-Path $BuildDir "CMakeCache.txt"))) {
+    $cmakeArgs += @("-G", $CmakeGeneratorName)
+}
+
+$cmakeArgs += @(
+    "-S", $ScriptDir,
+    "-B", $BuildDir,
+    "-DCMAKE_BUILD_TYPE=$BuildType",
+    "-DCMAKE_INSTALL_PREFIX=$SdkPrefix",
+    "-DCMAKE_PREFIX_PATH=$SdkPrefix",
+    "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
+    "-DCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY=ON",
+    "-DTERMIN_USE_CCACHE=$TerminUseCcache",
+    "-DTERMIN_ENABLE_UNITY_BUILD=$TerminEnableUnityBuild",
+    "-DTERMIN_ENABLE_PCH=$TerminEnablePch",
+    "-DTERMIN_BUILD_PYTHON=ON",
+    "-DTERMIN_BUILD_TESTS=OFF",
+    "-DTERMIN_ENABLE_VULKAN=$TerminEnableVulkan",
+    "-DTERMIN_ENABLE_SDL=$TerminEnableSdl",
+    "-DTERMIN_BUILD_EDITOR_MINIMAL=OFF",
+    "-DTERMIN_BUILD_EDITOR_EXE=OFF",
+    "-DTERMIN_BUILD_LAUNCHER=OFF",
+    "-DPython_EXECUTABLE=$pythonExec"
+)
+
+& cmake @cmakeArgs
+if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
+
+& cmake --build $BuildDir --config $BuildType --parallel $BuildJobs
+if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
+
+& cmake --install $BuildDir --config $BuildType
+if ($LASTEXITCODE -ne 0) { throw "cmake install failed" }
+
+Write-Host ""
+Write-Host "========================================"
+Write-Host "  Python bindings installed to $SdkPrefix"
 Write-Host "========================================"
