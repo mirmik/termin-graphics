@@ -64,7 +64,8 @@ typedef struct tc_render_state {
 
 // Default render states
 static inline tc_render_state tc_render_state_opaque(void) {
-    tc_render_state s = {0};
+    tc_render_state s;
+    memset(&s, 0, sizeof(s));
     s.polygon_mode = TC_POLYGON_FILL;
     s.cull = 1;
     s.depth_test = 1;

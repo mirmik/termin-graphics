@@ -51,6 +51,8 @@ public:
         int geometry_id,
         TcShader original_shader
     ) {
+        (void)phase_mark;
+        (void)geometry_id;
         return original_shader;
     }
 
