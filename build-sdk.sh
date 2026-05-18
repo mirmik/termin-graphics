@@ -24,6 +24,7 @@ for arg in "$@"; do
             echo "  --no-parallel     Disable parallel compilation (equivalent to -j1)"
             echo "  --ccache          Use ccache if available (default)"
             echo "  --no-ccache       Disable ccache compiler launcher"
+            echo "  --ninja           Use Ninja generator for a new build dir"
             echo "  --unity           Enable CMake unity build for C/C++ stages (experimental)"
             echo "  --no-unity        Disable CMake unity build (default)"
             echo "  --pch             Enable precompiled headers for C/C++ stages (experimental)"
@@ -39,7 +40,7 @@ for arg in "$@"; do
             echo "  BUILD_DIR         C/C++ CMake build directory (default: ./build/<BUILD_TYPE>)"
             echo "  BUILD_JOBS        Parallel build jobs (default: nproc)"
             echo "  TERMIN_CMAKE_GENERATOR or CMAKE_GENERATOR_NAME"
-            echo "                    CMake generator for a new build dir (default: Ninja if available)"
+            echo "                    CMake generator for a new build dir (default: CMake default)"
             exit 0
             ;;
     esac

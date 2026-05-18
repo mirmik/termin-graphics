@@ -27,6 +27,7 @@ for arg in "$@"; do
         --sdl)       SDL_MODE="on" ;;
         --ccache)    CCACHE_MODE="on" ;;
         --no-ccache) CCACHE_MODE="off" ;;
+        --ninja)     CMAKE_GENERATOR_NAME="Ninja" ;;
         --unity)     UNITY_MODE="on" ;;
         --no-unity)  UNITY_MODE="off" ;;
         --pch)       PCH_MODE="on" ;;
@@ -44,6 +45,7 @@ for arg in "$@"; do
             echo "  --sdl             Enable SDL2 support (default)"
             echo "  --ccache          Use ccache if available (default)"
             echo "  --no-ccache       Disable ccache compiler launcher"
+            echo "  --ninja           Use Ninja generator for a new build dir"
             echo "  --unity           Enable CMake unity build (experimental)"
             echo "  --no-unity        Disable CMake unity build (default)"
             echo "  --pch             Enable precompiled headers for selected C++ targets (experimental)"
@@ -57,7 +59,7 @@ for arg in "$@"; do
             echo "  BUILD_DIR         CMake build directory (default: ./build/<BUILD_TYPE>-tests)"
             echo "  BUILD_JOBS        Parallel build jobs (default: nproc)"
             echo "  TERMIN_CMAKE_GENERATOR or CMAKE_GENERATOR_NAME"
-            echo "                    CMake generator for a new build dir (default: Ninja if available)"
+            echo "                    CMake generator for a new build dir (default: CMake default)"
             exit 0
             ;;
         *)
@@ -69,10 +71,6 @@ done
 
 if [[ -z "$BUILD_DIR" ]]; then
     BUILD_DIR="$SCRIPT_DIR/build/${BUILD_TYPE}-tests"
-fi
-
-if [[ -z "$CMAKE_GENERATOR_NAME" && ! -f "$BUILD_DIR/CMakeCache.txt" ]] && command -v ninja >/dev/null 2>&1; then
-    CMAKE_GENERATOR_NAME="Ninja"
 fi
 
 case "$VULKAN_MODE" in
