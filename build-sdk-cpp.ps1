@@ -43,7 +43,7 @@ function Show-Help {
     Write-Host "  BUILD_DIR         CMake build directory (default: .\build\<BUILD_TYPE>)"
     Write-Host "  BUILD_JOBS        Parallel build jobs (default: logical processor count)"
     Write-Host "  TERMIN_CMAKE_GENERATOR or CMAKE_GENERATOR_NAME"
-    Write-Host "                    CMake generator for a new build dir (default: Ninja if available)"
+    Write-Host "                    CMake generator for a new build dir (default: CMake default)"
 }
 
 foreach ($arg in $args) {
@@ -74,10 +74,6 @@ if ($NoParallel) {
 }
 
 $BuildDir = if ($BuildDirEnv) { $BuildDirEnv } else { Join-Path (Join-Path $ScriptDir "build") $BuildType }
-
-if (-not $CmakeGeneratorName -and -not (Test-Path (Join-Path $BuildDir "CMakeCache.txt")) -and (Get-Command ninja -ErrorAction SilentlyContinue)) {
-    $CmakeGeneratorName = "Ninja"
-}
 
 $TerminEnableVulkan = if ($VulkanMode -eq "on") { "ON" } else { "OFF" }
 $TerminEnableSdl = if ($SdlMode -eq "on") { "ON" } else { "OFF" }
