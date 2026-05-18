@@ -129,9 +129,17 @@ if(TGFX2_ENABLE_VULKAN)
         set(_SHADERC_NAMES shaderc shaderc_combined)
     endif()
     find_library(SHADERC_LIB NAMES ${_SHADERC_NAMES}
-        PATHS "$ENV{VULKAN_SDK}/Lib" "${Vulkan_INCLUDE_DIR}/../Lib"
-              "C:/VulkanSDK/1.4.341.1/Lib"
+        HINTS "$ENV{VULKAN_SDK}" "${Vulkan_INCLUDE_DIR}/.."
+              "C:/VulkanSDK/1.4.341.1"
+        PATH_SUFFIXES Lib lib lib64 x86_64/lib
     )
+    if(NOT SHADERC_LIB)
+        message(FATAL_ERROR
+            "TGFX2_ENABLE_VULKAN is ON, but shaderc was not found. "
+            "Install shaderc for the active Vulkan SDK, set VULKAN_SDK, "
+            "or configure with -DTGFX2_ENABLE_VULKAN=OFF / pass --no-vulkan."
+        )
+    endif()
 
     list(APPEND TGFX2_SOURCES
         src/tgfx2/vulkan/vulkan_render_device.cpp

@@ -77,7 +77,10 @@ if (-not $BundledPyDir) {
     Write-Host ""
 
     $env:TERMIN_SDK = $SdkPrefix
-    & (Join-Path $ScriptDir "install-pip-packages.ps1") --target $BundledSitePackages
+    # --force bypasses pip's wheel cache: build-sdk.ps1 can rebuild the
+    # native .pyd files without changing the package version string, and
+    # pip would then happily reuse a stale wheel.
+    & (Join-Path $ScriptDir "install-pip-packages.ps1") --force --target $BundledSitePackages
     if ($LASTEXITCODE -ne 0) { throw "pip install into bundled site-packages failed" }
 }
 
