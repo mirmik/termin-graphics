@@ -19,6 +19,11 @@ if(COMMAND termin_require_package)
 else()
     find_package(termin_scene REQUIRED)
 endif()
+if(COMMAND termin_require_package)
+    termin_require_package(termin_graphics tgfx::termin_graphics)
+else()
+    find_package(termin_graphics REQUIRED)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
@@ -46,6 +51,7 @@ target_include_directories(termin_skeleton PUBLIC
 target_link_libraries(termin_skeleton PUBLIC
     tcbase::termin_base
     termin_scene::termin_scene
+    tgfx::termin_graphics
 )
 
 set_target_properties(termin_skeleton PROPERTIES
