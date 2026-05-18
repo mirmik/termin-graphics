@@ -14,7 +14,7 @@ option(TERMIN_BUILD_LAUNCHER "Build launcher executable" OFF)
 option(TERMIN_BUNDLE_PYTHON "Bundle Python runtime for standalone SDK/editor install" OFF)
 option(TERMIN_USE_CCACHE "Use ccache as C/C++ compiler launcher when available" ON)
 option(TERMIN_ENABLE_UNITY_BUILD "Enable CMake unity build for faster clean builds" OFF)
-option(TERMIN_ENABLE_PCH "Enable precompiled headers for selected C++ targets" OFF)
+option(TERMIN_ENABLE_PCH "Enable precompiled headers for selected C++ targets" ON)
 
 if(TERMIN_USE_CCACHE AND NOT MSVC)
     find_program(TERMIN_CCACHE_PROGRAM ccache)

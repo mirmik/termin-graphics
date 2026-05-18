@@ -15,7 +15,7 @@ $VulkanMode = "on"
 $SdlMode = "on"
 $CcacheMode = "on"
 $UnityMode = "off"
-$PchMode = "off"
+$PchMode = "on"
 $BuildJobs = if ($env:BUILD_JOBS) { [int]$env:BUILD_JOBS } else { [Environment]::ProcessorCount }
 $CmakeGeneratorName = if ($env:CMAKE_GENERATOR_NAME) { $env:CMAKE_GENERATOR_NAME } elseif ($env:TERMIN_CMAKE_GENERATOR) { $env:TERMIN_CMAKE_GENERATOR } else { $null }
 
@@ -30,8 +30,8 @@ function Show-Help {
     Write-Host "  --no-ccache       Disable ccache compiler launcher"
     Write-Host "  --unity           Enable CMake unity build (experimental)"
     Write-Host "  --no-unity        Disable CMake unity build (default)"
-    Write-Host "  --pch             Enable precompiled headers for selected C++ targets (experimental)"
-    Write-Host "  --no-pch          Disable precompiled headers (default)"
+    Write-Host "  --pch             Enable precompiled headers for selected C++ targets (default)"
+    Write-Host "  --no-pch          Disable precompiled headers"
     Write-Host "  --no-vulkan       Disable Vulkan support"
     Write-Host "  --vulkan          Enable Vulkan support (default)"
     Write-Host "  --no-sdl          Disable SDL2 support"
