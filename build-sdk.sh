@@ -1,9 +1,9 @@
 #!/bin/bash
 # Build the SDK into ./sdk/ using the dedicated stage scripts:
-#   1. build-sdk-cpp.sh      — C/C++ libraries via top-level CMake graph
-#   2. build-sdk-bindings.sh — Python bindings (nanobind)
-#   3. build-sdk-csharp.sh   — C# bindings
-#   4. install-pip-packages.sh --target sdk/lib/python3.*/site-packages
+#   1. build-sdk-bindings.sh — C/C++ libraries and Python bindings through one
+#      top-level CMake configuration
+#   2. build-sdk-csharp.sh   — C# bindings
+#   3. install-pip-packages.sh --target sdk/lib/python3.*/site-packages
 #      — populate bundled Python's site-packages from the thin pip packages
 #
 # To install pip packages into your own user Python environment, run separately:
@@ -48,28 +48,21 @@ done
 
 echo ""
 echo "========================================"
-echo "  Stage 1/4: C/C++ libraries (top-level CMake graph)"
-echo "========================================"
-echo ""
-"$SCRIPT_DIR/build-sdk-cpp.sh" "$@"
-
-echo ""
-echo "========================================"
-echo "  Stage 2/4: Python bindings (nanobind)"
+echo "  Stage 1/3: C/C++ libraries + Python bindings"
 echo "========================================"
 echo ""
 "$SCRIPT_DIR/build-sdk-bindings.sh" "$@"
 
 echo ""
 echo "========================================"
-echo "  Stage 3/4: C# bindings"
+echo "  Stage 2/3: C# bindings"
 echo "========================================"
 echo ""
 bash "$SCRIPT_DIR/build-sdk-csharp.sh" "$@"
 
 echo ""
 echo "========================================"
-echo "  Stage 4/4: Populate bundled Python site-packages"
+echo "  Stage 3/3: Populate bundled Python site-packages"
 echo "========================================"
 echo ""
 # Resolve the Python version used by the bundled interpreter. Stage 1
