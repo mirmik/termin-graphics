@@ -13,6 +13,9 @@ BUILD_DIR=""
 VULKAN_MODE="off"
 SDL_MODE="on"
 WINDOW_TESTS_MODE="auto"
+CCACHE_MODE="on"
+UNITY_MODE="off"
+CMAKE_GENERATOR_NAME="${CMAKE_GENERATOR_NAME:-${TERMIN_CMAKE_GENERATOR:-}}"
 
 for arg in "$@"; do
     case "$arg" in
@@ -21,6 +24,10 @@ for arg in "$@"; do
         --vulkan)    VULKAN_MODE="on" ;;
         --no-sdl)    SDL_MODE="off" ;;
         --sdl)       SDL_MODE="on" ;;
+        --ccache)    CCACHE_MODE="on" ;;
+        --no-ccache) CCACHE_MODE="off" ;;
+        --unity)     UNITY_MODE="on" ;;
+        --no-unity)  UNITY_MODE="off" ;;
         --window-tests)    WINDOW_TESTS_MODE="on" ;;
         --no-window-tests) WINDOW_TESTS_MODE="off" ;;
         --help|-h)
@@ -32,6 +39,10 @@ for arg in "$@"; do
             echo "  --vulkan          Enable Vulkan support"
             echo "  --no-sdl          Disable SDL2 support"
             echo "  --sdl             Enable SDL2 support (default)"
+            echo "  --ccache          Use ccache if available (default)"
+            echo "  --no-ccache       Disable ccache compiler launcher"
+            echo "  --unity           Enable CMake unity build (experimental)"
+            echo "  --no-unity        Disable CMake unity build (default)"
             echo "  --window-tests    Build and run tests that create windows/GL contexts"
             echo "  --no-window-tests Disable tests that require a windowing system"
             echo "  --help, -h        Show this help"
@@ -40,6 +51,8 @@ for arg in "$@"; do
             echo "  SDK_PREFIX        SDK prefix for installed dependencies (default: ./sdk)"
             echo "  BUILD_DIR         CMake build directory (default: ./build/<BUILD_TYPE>-tests)"
             echo "  BUILD_JOBS        Parallel build jobs (default: nproc)"
+            echo "  TERMIN_CMAKE_GENERATOR or CMAKE_GENERATOR_NAME"
+            echo "                    CMake generator for a new build dir (default: Ninja if available)"
             exit 0
             ;;
         *)
@@ -53,6 +66,10 @@ if [[ -z "$BUILD_DIR" ]]; then
     BUILD_DIR="$SCRIPT_DIR/build/${BUILD_TYPE}-tests"
 fi
 
+if [[ -z "$CMAKE_GENERATOR_NAME" && ! -f "$BUILD_DIR/CMakeCache.txt" ]] && command -v ninja >/dev/null 2>&1; then
+    CMAKE_GENERATOR_NAME="Ninja"
+fi
+
 case "$VULKAN_MODE" in
     off) TERMIN_ENABLE_VULKAN=OFF ;;
     on)  TERMIN_ENABLE_VULKAN=ON ;;
@@ -61,6 +78,16 @@ esac
 case "$SDL_MODE" in
     off) TERMIN_ENABLE_SDL=OFF ;;
     on)  TERMIN_ENABLE_SDL=ON ;;
+esac
+
+case "$CCACHE_MODE" in
+    off) TERMIN_USE_CCACHE=OFF ;;
+    on)  TERMIN_USE_CCACHE=ON ;;
+esac
+
+case "$UNITY_MODE" in
+    off) TERMIN_ENABLE_UNITY_BUILD=OFF ;;
+    on)  TERMIN_ENABLE_UNITY_BUILD=ON ;;
 esac
 
 case "$WINDOW_TESTS_MODE" in
@@ -93,15 +120,25 @@ echo "SDK prefix:  $SDK_PREFIX"
 echo "Vulkan:      $TERMIN_ENABLE_VULKAN"
 echo "SDL2:        $TERMIN_ENABLE_SDL"
 echo "Window tests:$TERMIN_BUILD_WINDOW_TESTS ($WINDOW_TESTS_MODE)"
+echo "ccache:      $TERMIN_USE_CCACHE"
+echo "Unity build: $TERMIN_ENABLE_UNITY_BUILD"
+echo "Generator:   ${CMAKE_GENERATOR_NAME:-existing/default}"
 echo "Jobs:        $BUILD_JOBS"
 echo ""
 
-if ! cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" \
+cmake_args=()
+if [[ -n "$CMAKE_GENERATOR_NAME" && ! -f "$BUILD_DIR/CMakeCache.txt" ]]; then
+    cmake_args+=(-G "$CMAKE_GENERATOR_NAME")
+fi
+
+if ! cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DCMAKE_PREFIX_PATH="$SDK_PREFIX" \
     -DCMAKE_INSTALL_PREFIX="$SDK_PREFIX" \
     -DCMAKE_BUILD_RPATH="${SDK_PREFIX}/lib;${BUILD_DIR}/bin" \
     -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
+    -DTERMIN_USE_CCACHE="$TERMIN_USE_CCACHE" \
+    -DTERMIN_ENABLE_UNITY_BUILD="$TERMIN_ENABLE_UNITY_BUILD" \
     -DTERMIN_BUILD_PYTHON=OFF \
     -DTERMIN_BUILD_TESTS=ON \
     -DTERMIN_BUILD_TGFX2_TESTS=ON \

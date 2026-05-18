@@ -134,6 +134,20 @@ else()
     add_library(termin_render STATIC ${TERMIN_RENDER_SOURCES} ${TERMIN_RENDER_HEADERS})
 endif()
 
+foreach(_termin_render_source IN LISTS TERMIN_RENDER_SOURCES)
+    if(_termin_render_source MATCHES "\\.c$")
+        set_source_files_properties("${_termin_render_source}" PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+    endif()
+endforeach()
+set_source_files_properties(
+    src/graph_compiler.cpp
+    src/graph_data.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+if(COMMAND termin_enable_unity_build_for)
+    termin_enable_unity_build_for(termin_render)
+endif()
+
 add_library(termin_render::termin_render ALIAS termin_render)
 
 set_target_properties(termin_render PROPERTIES

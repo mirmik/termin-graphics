@@ -48,6 +48,12 @@ set(TGFX_C_SOURCES
     src/resources/tc_material_registry.c
     src/tgfx_resource_gpu.c
 )
+set_source_files_properties(
+    src/resources/tc_shader_registry.c
+    src/resources/tc_texture_registry.c
+    src/resources/tc_material_registry.c
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
 
 set(TGFX_CXX_SOURCES
     src/tgfx_texture_handle.cpp
@@ -202,6 +208,9 @@ set_target_properties(termin_graphics2 PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION 0
 )
+if(COMMAND termin_enable_unity_build_for)
+    termin_enable_unity_build_for(termin_graphics2)
+endif()
 termin_set_rpath_lib(termin_graphics2)
 
 # --- Python bindings ---

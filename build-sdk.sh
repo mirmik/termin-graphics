@@ -22,6 +22,10 @@ for arg in "$@"; do
             echo "  --debug, -d       Debug build"
             echo "  --clean, -c       Clean build directories first"
             echo "  --no-parallel     Disable parallel compilation (equivalent to -j1)"
+            echo "  --ccache          Use ccache if available (default)"
+            echo "  --no-ccache       Disable ccache compiler launcher"
+            echo "  --unity           Enable CMake unity build for C/C++ stages (experimental)"
+            echo "  --no-unity        Disable CMake unity build (default)"
             echo "  --no-vulkan       Disable Vulkan support (default for C/C++ stage)"
             echo "  --vulkan          Enable Vulkan support"
             echo "  --no-sdl          Disable SDL2 support"
@@ -31,6 +35,9 @@ for arg in "$@"; do
             echo "Environment:"
             echo "  SDK_PREFIX        Install prefix (default: ./sdk)"
             echo "  BUILD_DIR         C/C++ CMake build directory (default: ./build/<BUILD_TYPE>)"
+            echo "  BUILD_JOBS        Parallel build jobs (default: nproc)"
+            echo "  TERMIN_CMAKE_GENERATOR or CMAKE_GENERATOR_NAME"
+            echo "                    CMake generator for a new build dir (default: Ninja if available)"
             exit 0
             ;;
     esac

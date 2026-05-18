@@ -11,6 +11,36 @@ option(TERMIN_ENABLE_SDL "Enable SDL support" ON)
 option(TERMIN_BUILD_EDITOR_MINIMAL "Build minimal editor executable" OFF)
 option(TERMIN_BUILD_EDITOR_EXE "Build Qt editor executable" OFF)
 option(TERMIN_BUILD_LAUNCHER "Build launcher executable" OFF)
+option(TERMIN_USE_CCACHE "Use ccache as C/C++ compiler launcher when available" ON)
+option(TERMIN_ENABLE_UNITY_BUILD "Enable CMake unity build for faster clean builds" OFF)
+
+if(TERMIN_USE_CCACHE AND NOT MSVC)
+    find_program(TERMIN_CCACHE_PROGRAM ccache)
+    if(TERMIN_CCACHE_PROGRAM)
+        if(NOT CMAKE_C_COMPILER_LAUNCHER)
+            set(CMAKE_C_COMPILER_LAUNCHER "${TERMIN_CCACHE_PROGRAM}" CACHE STRING "C compiler launcher" FORCE)
+        endif()
+        if(NOT CMAKE_CXX_COMPILER_LAUNCHER)
+            set(CMAKE_CXX_COMPILER_LAUNCHER "${TERMIN_CCACHE_PROGRAM}" CACHE STRING "CXX compiler launcher" FORCE)
+        endif()
+        message(STATUS "Termin: using ccache compiler launcher: ${TERMIN_CCACHE_PROGRAM}")
+    else()
+        message(STATUS "Termin: ccache requested but not found")
+    endif()
+endif()
+
+function(termin_enable_unity_build_for target)
+    if(TERMIN_ENABLE_UNITY_BUILD AND TARGET "${target}")
+        set_target_properties("${target}" PROPERTIES
+            UNITY_BUILD ON
+            UNITY_BUILD_BATCH_SIZE 8
+        )
+    endif()
+endfunction()
+
+if(TERMIN_ENABLE_UNITY_BUILD)
+    message(STATUS "Termin: unity build enabled for selected targets")
+endif()
 
 if(TERMIN_BUILD_TESTS)
     enable_testing()
