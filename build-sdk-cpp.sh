@@ -7,7 +7,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDK_PREFIX="${SDK_PREFIX:-$SCRIPT_DIR/sdk}"
-BUILD_DIR="${BUILD_DIR:-$SCRIPT_DIR/build-superbuild}"
+BUILD_DIR="${BUILD_DIR:-}"
 
 BUILD_TYPE="Release"
 CLEAN=0
@@ -40,7 +40,7 @@ for arg in "$@"; do
             echo ""
             echo "Environment:"
             echo "  SDK_PREFIX        Install prefix (default: ./sdk)"
-            echo "  BUILD_DIR         CMake build directory (default: ./build-superbuild)"
+            echo "  BUILD_DIR         CMake build directory (default: ./build/<BUILD_TYPE>)"
             exit 0
             ;;
         *)
@@ -52,6 +52,10 @@ done
 
 if [[ $NO_PARALLEL -eq 1 ]]; then
     BUILD_JOBS=1
+fi
+
+if [[ -z "$BUILD_DIR" ]]; then
+    BUILD_DIR="$SCRIPT_DIR/build/$BUILD_TYPE"
 fi
 
 case "$VULKAN_MODE" in

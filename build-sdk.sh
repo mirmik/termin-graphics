@@ -30,7 +30,7 @@ for arg in "$@"; do
             echo ""
             echo "Environment:"
             echo "  SDK_PREFIX        Install prefix (default: ./sdk)"
-            echo "  BUILD_DIR         C/C++ CMake build directory (default: ./build-superbuild)"
+            echo "  BUILD_DIR         C/C++ CMake build directory (default: ./build/<BUILD_TYPE>)"
             exit 0
             ;;
     esac
