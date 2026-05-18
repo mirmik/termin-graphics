@@ -15,6 +15,7 @@ SDL_MODE="on"
 WINDOW_TESTS_MODE="auto"
 CCACHE_MODE="on"
 UNITY_MODE="off"
+PCH_MODE="off"
 CMAKE_GENERATOR_NAME="${CMAKE_GENERATOR_NAME:-${TERMIN_CMAKE_GENERATOR:-}}"
 
 for arg in "$@"; do
@@ -28,6 +29,8 @@ for arg in "$@"; do
         --no-ccache) CCACHE_MODE="off" ;;
         --unity)     UNITY_MODE="on" ;;
         --no-unity)  UNITY_MODE="off" ;;
+        --pch)       PCH_MODE="on" ;;
+        --no-pch)    PCH_MODE="off" ;;
         --window-tests)    WINDOW_TESTS_MODE="on" ;;
         --no-window-tests) WINDOW_TESTS_MODE="off" ;;
         --help|-h)
@@ -43,6 +46,8 @@ for arg in "$@"; do
             echo "  --no-ccache       Disable ccache compiler launcher"
             echo "  --unity           Enable CMake unity build (experimental)"
             echo "  --no-unity        Disable CMake unity build (default)"
+            echo "  --pch             Enable precompiled headers for selected C++ targets (experimental)"
+            echo "  --no-pch          Disable precompiled headers (default)"
             echo "  --window-tests    Build and run tests that create windows/GL contexts"
             echo "  --no-window-tests Disable tests that require a windowing system"
             echo "  --help, -h        Show this help"
@@ -90,6 +95,11 @@ case "$UNITY_MODE" in
     on)  TERMIN_ENABLE_UNITY_BUILD=ON ;;
 esac
 
+case "$PCH_MODE" in
+    off) TERMIN_ENABLE_PCH=OFF ;;
+    on)  TERMIN_ENABLE_PCH=ON ;;
+esac
+
 case "$WINDOW_TESTS_MODE" in
     off)
         TERMIN_BUILD_WINDOW_TESTS=OFF
@@ -122,6 +132,7 @@ echo "SDL2:        $TERMIN_ENABLE_SDL"
 echo "Window tests:$TERMIN_BUILD_WINDOW_TESTS ($WINDOW_TESTS_MODE)"
 echo "ccache:      $TERMIN_USE_CCACHE"
 echo "Unity build: $TERMIN_ENABLE_UNITY_BUILD"
+echo "PCH:         $TERMIN_ENABLE_PCH"
 echo "Generator:   ${CMAKE_GENERATOR_NAME:-existing/default}"
 echo "Jobs:        $BUILD_JOBS"
 echo ""
@@ -139,6 +150,7 @@ if ! cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
     -DTERMIN_USE_CCACHE="$TERMIN_USE_CCACHE" \
     -DTERMIN_ENABLE_UNITY_BUILD="$TERMIN_ENABLE_UNITY_BUILD" \
+    -DTERMIN_ENABLE_PCH="$TERMIN_ENABLE_PCH" \
     -DTERMIN_BUILD_PYTHON=OFF \
     -DTERMIN_BUILD_TESTS=ON \
     -DTERMIN_BUILD_TGFX2_TESTS=ON \

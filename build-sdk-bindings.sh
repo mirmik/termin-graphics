@@ -17,6 +17,7 @@ SDL_MODE="on"
 BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 CCACHE_MODE="on"
 UNITY_MODE="off"
+PCH_MODE="off"
 CMAKE_GENERATOR_NAME="${CMAKE_GENERATOR_NAME:-${TERMIN_CMAKE_GENERATOR:-}}"
 
 for arg in "$@"; do
@@ -28,6 +29,8 @@ for arg in "$@"; do
         --no-ccache)   CCACHE_MODE="off" ;;
         --unity)       UNITY_MODE="on" ;;
         --no-unity)    UNITY_MODE="off" ;;
+        --pch)         PCH_MODE="on" ;;
+        --no-pch)      PCH_MODE="off" ;;
         --no-vulkan)   VULKAN_MODE="off" ;;
         --vulkan)      VULKAN_MODE="on" ;;
         --no-sdl)      SDL_MODE="off" ;;
@@ -43,6 +46,8 @@ for arg in "$@"; do
             echo "  --no-ccache       Disable ccache compiler launcher"
             echo "  --unity           Enable CMake unity build (experimental)"
             echo "  --no-unity        Disable CMake unity build (default)"
+            echo "  --pch             Enable precompiled headers for selected C++ targets (experimental)"
+            echo "  --no-pch          Disable precompiled headers (default)"
             echo "  --no-vulkan       Disable Vulkan support (default)"
             echo "  --vulkan          Enable Vulkan support"
             echo "  --no-sdl          Disable SDL2 support"
@@ -96,6 +101,11 @@ case "$UNITY_MODE" in
     on)  TERMIN_ENABLE_UNITY_BUILD=ON ;;
 esac
 
+case "$PCH_MODE" in
+    off) TERMIN_ENABLE_PCH=OFF ;;
+    on)  TERMIN_ENABLE_PCH=ON ;;
+esac
+
 PY_EXEC="$(command -v python3 || command -v python || true)"
 if [[ -z "$PY_EXEC" ]]; then
     echo "ERROR: python3 not found"
@@ -121,6 +131,7 @@ echo "Vulkan:      $TERMIN_ENABLE_VULKAN"
 echo "SDL2:        $TERMIN_ENABLE_SDL"
 echo "ccache:      $TERMIN_USE_CCACHE"
 echo "Unity build: $TERMIN_ENABLE_UNITY_BUILD"
+echo "PCH:         $TERMIN_ENABLE_PCH"
 echo "Generator:   ${CMAKE_GENERATOR_NAME:-existing/default}"
 echo "Jobs:        $BUILD_JOBS"
 echo ""
@@ -143,6 +154,7 @@ cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     -DCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY=ON \
     -DTERMIN_USE_CCACHE="$TERMIN_USE_CCACHE" \
     -DTERMIN_ENABLE_UNITY_BUILD="$TERMIN_ENABLE_UNITY_BUILD" \
+    -DTERMIN_ENABLE_PCH="$TERMIN_ENABLE_PCH" \
     -DTERMIN_BUILD_PYTHON=ON \
     -DTERMIN_BUILD_TESTS=OFF \
     -DTERMIN_ENABLE_VULKAN="$TERMIN_ENABLE_VULKAN" \

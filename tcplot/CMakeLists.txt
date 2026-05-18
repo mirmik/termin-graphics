@@ -54,6 +54,10 @@ set(TCPLOT_SOURCES
 add_library(tcplot SHARED ${TCPLOT_SOURCES})
 add_library(tcplot::tcplot ALIAS tcplot)
 
+if(COMMAND termin_enable_pch_for)
+    termin_enable_pch_for(tcplot)
+endif()
+
 target_compile_definitions(tcplot PRIVATE TCPLOT_EXPORTS)
 
 if(MSVC)

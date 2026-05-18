@@ -26,6 +26,8 @@ for arg in "$@"; do
             echo "  --no-ccache       Disable ccache compiler launcher"
             echo "  --unity           Enable CMake unity build for C/C++ stages (experimental)"
             echo "  --no-unity        Disable CMake unity build (default)"
+            echo "  --pch             Enable precompiled headers for C/C++ stages (experimental)"
+            echo "  --no-pch          Disable precompiled headers (default)"
             echo "  --no-vulkan       Disable Vulkan support (default for C/C++ stage)"
             echo "  --vulkan          Enable Vulkan support"
             echo "  --no-sdl          Disable SDL2 support"

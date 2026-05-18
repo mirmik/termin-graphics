@@ -13,6 +13,7 @@ option(TERMIN_BUILD_EDITOR_EXE "Build Qt editor executable" OFF)
 option(TERMIN_BUILD_LAUNCHER "Build launcher executable" OFF)
 option(TERMIN_USE_CCACHE "Use ccache as C/C++ compiler launcher when available" ON)
 option(TERMIN_ENABLE_UNITY_BUILD "Enable CMake unity build for faster clean builds" OFF)
+option(TERMIN_ENABLE_PCH "Enable precompiled headers for selected C++ targets" OFF)
 
 if(TERMIN_USE_CCACHE AND NOT MSVC)
     find_program(TERMIN_CCACHE_PROGRAM ccache)
@@ -38,8 +39,20 @@ function(termin_enable_unity_build_for target)
     endif()
 endfunction()
 
+function(termin_enable_pch_for target)
+    if(TERMIN_ENABLE_PCH AND TARGET "${target}")
+        target_precompile_headers("${target}" PRIVATE
+            "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_FUNCTION_LIST_DIR}/cmake/termin_cpp_pch.hpp>"
+        )
+    endif()
+endfunction()
+
 if(TERMIN_ENABLE_UNITY_BUILD)
     message(STATUS "Termin: unity build enabled for selected targets")
+endif()
+
+if(TERMIN_ENABLE_PCH)
+    message(STATUS "Termin: precompiled headers enabled for selected targets")
 endif()
 
 if(TERMIN_BUILD_TESTS)

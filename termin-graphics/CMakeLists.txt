@@ -204,6 +204,9 @@ set_target_properties(termin_graphics2 PROPERTIES
 if(COMMAND termin_enable_unity_build_for)
     termin_enable_unity_build_for(termin_graphics2)
 endif()
+if(COMMAND termin_enable_pch_for)
+    termin_enable_pch_for(termin_graphics2)
+endif()
 termin_set_rpath_lib(termin_graphics2)
 
 # --- Python bindings ---

@@ -137,6 +137,9 @@ endif()
 if(COMMAND termin_enable_unity_build_for)
     termin_enable_unity_build_for(termin_render)
 endif()
+if(COMMAND termin_enable_pch_for)
+    termin_enable_pch_for(termin_render)
+endif()
 
 add_library(termin_render::termin_render ALIAS termin_render)
 
