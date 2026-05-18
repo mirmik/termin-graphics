@@ -10,8 +10,16 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 find_package(OpenGL REQUIRED)
 
 # termin-base (provides tc_log shared logging)
-find_package(termin_base REQUIRED)
-find_package(termin_mesh REQUIRED)
+if(COMMAND termin_require_package)
+    termin_require_package(termin_base tcbase::termin_base)
+else()
+    find_package(termin_base REQUIRED)
+endif()
+if(COMMAND termin_require_package)
+    termin_require_package(termin_mesh tmesh::termin_mesh)
+else()
+    find_package(termin_mesh REQUIRED)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
@@ -20,6 +28,9 @@ include(TerminRpath)
 add_library(glad STATIC
     third/glad/src/glad.c
 )
+if(COMMAND termin_add_alias_if_missing)
+    termin_add_alias_if_missing(tgfx::glad glad)
+endif()
 target_include_directories(glad PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third/glad/include>
     $<INSTALL_INTERFACE:include>
@@ -43,6 +54,9 @@ set(TGFX_CXX_SOURCES
 )
 
 add_library(termin_graphics SHARED ${TGFX_C_SOURCES} ${TGFX_CXX_SOURCES})
+if(COMMAND termin_add_alias_if_missing)
+    termin_add_alias_if_missing(tgfx::termin_graphics termin_graphics)
+endif()
 target_compile_definitions(termin_graphics PRIVATE TGFX_EXPORTS TC_EXPORTS)
 
 if(MSVC)
@@ -143,6 +157,9 @@ if(TGFX2_ENABLE_VULKAN)
 endif()
 
 add_library(termin_graphics2 SHARED ${TGFX2_SOURCES})
+if(COMMAND termin_add_alias_if_missing)
+    termin_add_alias_if_missing(tgfx::termin_graphics2 termin_graphics2)
+endif()
 target_compile_definitions(termin_graphics2 PRIVATE TGFX2_EXPORTS)
 
 if(TGFX2_ENABLE_VULKAN)

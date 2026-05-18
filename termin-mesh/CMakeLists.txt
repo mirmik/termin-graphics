@@ -7,7 +7,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 option(TERMIN_BUILD_PYTHON "Build Python bindings" OFF)
 
-find_package(termin_base REQUIRED)
+if(COMMAND termin_require_package)
+    termin_require_package(termin_base tcbase::termin_base)
+else()
+    find_package(termin_base REQUIRED)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
