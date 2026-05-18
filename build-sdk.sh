@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build the SDK into ./sdk/ using the dedicated stage scripts:
-#   1. build-sdk-cpp.sh      — C/C++ libraries
+#   1. build-sdk-cpp.sh      — C/C++ libraries via top-level CMake graph
 #   2. build-sdk-bindings.sh — Python bindings (nanobind)
 #   3. build-sdk-csharp.sh   — C# bindings
 #   4. install-pip-packages.sh --target sdk/lib/python3.*/site-packages
@@ -22,11 +22,15 @@ for arg in "$@"; do
             echo "  --debug, -d       Debug build"
             echo "  --clean, -c       Clean build directories first"
             echo "  --no-parallel     Disable parallel compilation (equivalent to -j1)"
-            echo "  --no-vulkan       Disable Vulkan support"
-            echo "  --vulkan          Force Vulkan support on"
+            echo "  --no-vulkan       Disable Vulkan support (default for C/C++ stage)"
+            echo "  --vulkan          Enable Vulkan support"
             echo "  --no-sdl          Disable SDL2 support"
-            echo "  --sdl             Force SDL2 support on"
+            echo "  --sdl             Enable SDL2 support (default for C/C++ stage)"
             echo "  --help, -h        Show this help"
+            echo ""
+            echo "Environment:"
+            echo "  SDK_PREFIX        Install prefix (default: ./sdk)"
+            echo "  BUILD_DIR         C/C++ CMake build directory (default: ./build-superbuild)"
             exit 0
             ;;
     esac
@@ -34,7 +38,7 @@ done
 
 echo ""
 echo "========================================"
-echo "  Stage 1/4: C/C++ libraries"
+echo "  Stage 1/4: C/C++ libraries (top-level CMake graph)"
 echo "========================================"
 echo ""
 "$SCRIPT_DIR/build-sdk-cpp.sh" "$@"
