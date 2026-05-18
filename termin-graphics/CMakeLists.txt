@@ -241,47 +241,67 @@ if(BUILD_TESTS)
     )
 endif()
 
-# --- tgfx2 smoke test (uses GLFW via FetchContent) ---
+# --- tgfx2 tests ---
 option(BUILD_TGFX2_TESTS "Build tgfx2 smoke tests" OFF)
+option(BUILD_TGFX2_WINDOW_TESTS "Build tgfx2 tests that create windows/GL contexts" ON)
 
 if(BUILD_TGFX2_TESTS)
-    include(FetchContent)
-    set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(glfw
-        GIT_REPOSITORY https://github.com/glfw/glfw.git
-        GIT_TAG 3.4
-    )
-    FetchContent_MakeAvailable(glfw)
-
     enable_testing()
+    set(TGFX2_WINDOW_SKIP_RE
+        "GLFW init failed|Failed to init GLFW|Window creation failed|Failed to create GLFW window|No available video device")
 
-    add_executable(tgfx2_smoke tests/test_tgfx2_smoke.cpp)
-    target_link_libraries(tgfx2_smoke PRIVATE termin_graphics2 glfw)
-    add_test(NAME tgfx2_smoke COMMAND tgfx2_smoke)
+    if(BUILD_TGFX2_WINDOW_TESTS)
+        find_package(glfw3 QUIET)
+        if(NOT TARGET glfw)
+            include(FetchContent)
+            set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+            set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+            set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+            set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+            FetchContent_Declare(glfw
+                GIT_REPOSITORY https://github.com/glfw/glfw.git
+                GIT_TAG 3.4
+            )
+            FetchContent_MakeAvailable(glfw)
+        endif()
 
-    # SDF font rendering test
-    add_executable(tgfx2_sdf_test tests/test_tgfx2_sdf.cpp)
-    target_link_libraries(tgfx2_sdf_test PRIVATE termin_graphics2 glfw)
+        add_executable(tgfx2_smoke tests/test_tgfx2_smoke.cpp)
+        target_link_libraries(tgfx2_smoke PRIVATE termin_graphics2 glfw)
+        add_test(NAME tgfx2_smoke COMMAND tgfx2_smoke)
+        set_tests_properties(tgfx2_smoke PROPERTIES
+            TIMEOUT 10
+            SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
 
-    # tgfx2 interop test (tgfx2-backed gpu_ops)
-    add_executable(tgfx2_interop_test tests/test_tgfx2_interop.cpp)
-    target_link_libraries(tgfx2_interop_test PRIVATE termin_graphics2 glfw)
-    add_test(NAME tgfx2_interop_test COMMAND tgfx2_interop_test)
+        add_executable(tgfx2_sdf_test tests/test_tgfx2_sdf.cpp)
+        target_link_libraries(tgfx2_sdf_test PRIVATE termin_graphics2 glfw)
+        add_test(NAME tgfx2_sdf_test COMMAND tgfx2_sdf_test)
+        set_tests_properties(tgfx2_sdf_test PROPERTIES
+            TIMEOUT 10
+            SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
 
-    # RenderContext2 + PipelineCache test
-    add_executable(tgfx2_render_context_test tests/test_render_context2.cpp)
-    target_link_libraries(tgfx2_render_context_test PRIVATE termin_graphics2 glfw)
-    add_test(NAME tgfx2_render_context_test COMMAND tgfx2_render_context_test)
+        add_executable(tgfx2_interop_test tests/test_tgfx2_interop.cpp)
+        target_link_libraries(tgfx2_interop_test PRIVATE termin_graphics2 glfw)
+        add_test(NAME tgfx2_interop_test COMMAND tgfx2_interop_test)
+        set_tests_properties(tgfx2_interop_test PROPERTIES
+            TIMEOUT 10
+            SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
+
+        add_executable(tgfx2_render_context_test tests/test_render_context2.cpp)
+        target_link_libraries(tgfx2_render_context_test PRIVATE termin_graphics2 glfw)
+        add_test(NAME tgfx2_render_context_test COMMAND tgfx2_render_context_test)
+        set_tests_properties(tgfx2_render_context_test PROPERTIES
+            TIMEOUT 10
+            SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
+    endif()
 
     # Vulkan smoke test (no GLFW needed — offscreen)
     if(TGFX2_ENABLE_VULKAN)
         add_executable(tgfx2_vulkan_smoke tests/test_tgfx2_vulkan_smoke.cpp)
         target_link_libraries(tgfx2_vulkan_smoke PRIVATE termin_graphics2 Vulkan::Vulkan)
         add_test(NAME tgfx2_vulkan_smoke COMMAND tgfx2_vulkan_smoke)
+    endif()
 
+    if(TGFX2_ENABLE_VULKAN AND BUILD_TGFX2_WINDOW_TESTS)
         # On-screen Vulkan smoke test. SDL2 lookup: Ubuntu's SDL2
         # ships `sdl2-config.cmake` (lowercase, non-standard) so we
         # skip find_package and go straight to find_path/find_library.
@@ -303,7 +323,10 @@ if(BUILD_TGFX2_TESTS)
             target_compile_definitions(tgfx2_vulkan_window PRIVATE TGFX2_HAS_VULKAN)
             target_link_libraries(tgfx2_vulkan_window
                 PRIVATE termin_graphics2 Vulkan::Vulkan ${SDL2_SMOKE_LIBRARY})
-            # Interactive; don't wire into ctest automatically.
+            add_test(NAME tgfx2_vulkan_window COMMAND tgfx2_vulkan_window)
+            set_tests_properties(tgfx2_vulkan_window PROPERTIES
+                TIMEOUT 10
+                SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
         endif()
     endif()
 endif()

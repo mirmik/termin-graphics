@@ -12,6 +12,7 @@ BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 BUILD_DIR=""
 VULKAN_MODE="off"
 SDL_MODE="on"
+WINDOW_TESTS_MODE="auto"
 
 for arg in "$@"; do
     case "$arg" in
@@ -20,6 +21,8 @@ for arg in "$@"; do
         --vulkan)    VULKAN_MODE="on" ;;
         --no-sdl)    SDL_MODE="off" ;;
         --sdl)       SDL_MODE="on" ;;
+        --window-tests)    WINDOW_TESTS_MODE="on" ;;
+        --no-window-tests) WINDOW_TESTS_MODE="off" ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -29,6 +32,8 @@ for arg in "$@"; do
             echo "  --vulkan          Enable Vulkan support"
             echo "  --no-sdl          Disable SDL2 support"
             echo "  --sdl             Enable SDL2 support (default)"
+            echo "  --window-tests    Build and run tests that create windows/GL contexts"
+            echo "  --no-window-tests Disable tests that require a windowing system"
             echo "  --help, -h        Show this help"
             echo ""
             echo "Environment:"
@@ -58,6 +63,22 @@ case "$SDL_MODE" in
     on)  TERMIN_ENABLE_SDL=ON ;;
 esac
 
+case "$WINDOW_TESTS_MODE" in
+    off)
+        TERMIN_BUILD_WINDOW_TESTS=OFF
+        ;;
+    on)
+        TERMIN_BUILD_WINDOW_TESTS=ON
+        ;;
+    auto)
+        if [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then
+            TERMIN_BUILD_WINDOW_TESTS=ON
+        else
+            TERMIN_BUILD_WINDOW_TESTS=OFF
+        fi
+        ;;
+esac
+
 export LD_LIBRARY_PATH="${SDK_PREFIX}/lib:${BUILD_DIR}/bin${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 echo ""
@@ -71,6 +92,7 @@ echo "Build dir:   $BUILD_DIR"
 echo "SDK prefix:  $SDK_PREFIX"
 echo "Vulkan:      $TERMIN_ENABLE_VULKAN"
 echo "SDL2:        $TERMIN_ENABLE_SDL"
+echo "Window tests:$TERMIN_BUILD_WINDOW_TESTS ($WINDOW_TESTS_MODE)"
 echo "Jobs:        $BUILD_JOBS"
 echo ""
 
@@ -82,6 +104,8 @@ if ! cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" \
     -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
     -DTERMIN_BUILD_PYTHON=OFF \
     -DTERMIN_BUILD_TESTS=ON \
+    -DTERMIN_BUILD_TGFX2_TESTS=ON \
+    -DTERMIN_BUILD_WINDOW_TESTS="$TERMIN_BUILD_WINDOW_TESTS" \
     -DTERMIN_ENABLE_VULKAN="$TERMIN_ENABLE_VULKAN" \
     -DTERMIN_ENABLE_SDL="$TERMIN_ENABLE_SDL" \
     -DTERMIN_BUILD_EDITOR_MINIMAL=OFF \

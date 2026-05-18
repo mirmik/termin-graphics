@@ -8,10 +8,12 @@
 #include <GLFW/glfw3.h>
 
 #include "tgfx2/descriptors.hpp"
+#include "tgfx2/device_factory.hpp"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/font_atlas.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/opengl/opengl_render_device.hpp"
+#include "tgfx2/pipeline_cache.hpp"
 #include "tgfx2/render_context.hpp"
 
 int main() {
@@ -32,7 +34,7 @@ int main() {
     }
     glfwMakeContextCurrent(window);
 
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+    if (!gladLoaderLoadGL()) {
         fprintf(stderr, "GLAD init failed\n");
         glfwDestroyWindow(window);
         glfwTerminate();
@@ -47,7 +49,8 @@ int main() {
         glfwTerminate();
         return 1;
     }
-    tgfx::RenderContext2 ctx(*device, 800, 200);
+    tgfx::PipelineCache cache(*device);
+    tgfx::RenderContext2 ctx(*device, cache);
 
     // Load font.
     const char* font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
