@@ -126,7 +126,7 @@ void bind_tc_render_target(nb::module_& m) {
             [](const tc_render_target_handle& h) -> nb::object {
                 tc_scene_handle s = tc_render_target_get_scene(h);
                 if (!tc_scene_handle_valid(s) || !tc_scene_alive(s)) return nb::none();
-                nb::module_ m = nb::module_::import_("termin.entity._entity_native");
+                nb::module_ m = nb::module_::import_("termin.scene._scene_native");
                 return m.attr("TcScene").attr("from_handle")(s.index, s.generation);
             },
             [](tc_render_target_handle& h, nb::object scene_obj) {

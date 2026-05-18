@@ -668,7 +668,6 @@ NB_MODULE(_render_framework_native, m) {
     nb::module_::import_("tgfx._tgfx_native");
     nb::module_::import_("tcbase._geom_native");
     nb::module_::import_("termin.scene._scene_native");
-    nb::module_::import_("termin.entity._entity_native");
     nb::module_::import_("termin.lighting._lighting_native");
 
     termin::bind_render_framework(m);
