@@ -176,6 +176,10 @@ add_subdirectory(termin-display)
 add_subdirectory(termin-components/termin-components-render)
 add_subdirectory(termin-engine)
 
+if(TERMIN_PLATFORM_ANDROID)
+    add_subdirectory(termin-android)
+endif()
+
 if(NOT TERMIN_PLATFORM_ANDROID)
     add_subdirectory(termin-skeleton)
     add_subdirectory(termin-animation)
