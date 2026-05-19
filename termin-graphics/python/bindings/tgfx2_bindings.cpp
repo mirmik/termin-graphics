@@ -21,7 +21,9 @@
 #include <tgfx2/canvas2d_renderer.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/device_factory.hpp>
+#ifdef TGFX2_HAS_OPENGL
 #include <tgfx2/opengl/opengl_render_device.hpp>
+#endif
 #include <tgfx2/pipeline_cache.hpp>
 #include <tgfx2/handles.hpp>
 #include <tgfx2/enums.hpp>
@@ -485,7 +487,7 @@ void bind_tgfx2(nb::module_& m) {
                 // (tc_shader_compile_gpu, tc_mesh_upload_gpu,
                 // tc_texture_upload_gpu route through OpenGL). Do the
                 // GL-side bootstrap only when the host is GL.
-                if (dynamic_cast<tgfx::OpenGLRenderDevice*>(dev)) {
+                if (dev->backend_type() == tgfx::BackendType::OpenGL) {
                     tc_ensure_default_gpu_context();
                     tgfx2_gpu_ops_register();
                 }
