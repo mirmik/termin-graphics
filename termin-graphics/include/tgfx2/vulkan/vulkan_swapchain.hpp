@@ -107,6 +107,11 @@ public:
     // should call recreate(w, h) before the next frame.
     bool compose_and_present(tgfx::TextureHandle color_tex);
 
+    // One-shot smoke helper: clear the acquired swapchain image directly
+    // and present it. This bypasses tgfx2 textures/blits and is intended
+    // for platform bring-up diagnostics.
+    bool clear_and_present(float r, float g, float b, float a);
+
     // Introspection
     VkSwapchainKHR handle() const { return swapchain_; }
     VkFormat format() const { return format_; }

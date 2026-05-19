@@ -513,6 +513,9 @@ void VulkanRenderDevice::pick_physical_device() {
     }
 
     if (!found_graphics) throw std::runtime_error("No graphics queue family found");
+    if (surface_ && !found_present) {
+        throw std::runtime_error("No present queue family found for Vulkan surface");
+    }
 }
 
 // --- Logical device ---
@@ -532,15 +535,28 @@ void VulkanRenderDevice::create_logical_device() {
         queue_cis.push_back(qci);
     }
 
+    VkPhysicalDeviceFeatures supported_features{};
+    vkGetPhysicalDeviceFeatures(physical_device_, &supported_features);
+
     VkPhysicalDeviceFeatures features{};
-    features.fillModeNonSolid = VK_TRUE; // for wireframe
+    if (supported_features.fillModeNonSolid) {
+        features.fillModeNonSolid = VK_TRUE; // for wireframe
+    } else {
+        tc_log_info("VulkanRenderDevice: fillModeNonSolid unsupported; wireframe pipelines disabled");
+    }
     // Shadow shaders index `sampler2DShadow u_shadow_map[N]` with a
     // runtime loop variable. In Vulkan that requires the
     // `shaderSampledImageArrayDynamicIndexing` feature — without it
     // access is undefined and shadow lookups silently return 1.0 (no
     // shadow) on most drivers. Matches GL's always-available dynamic
     // indexing of sampler arrays.
-    features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
+    if (supported_features.shaderSampledImageArrayDynamicIndexing) {
+        features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
+    } else {
+        tc_log_info(
+            "VulkanRenderDevice: shaderSampledImageArrayDynamicIndexing unsupported; "
+            "shadow sampler-array dynamic indexing disabled");
+    }
 
     std::vector<const char*> extensions;
     if (surface_) {
@@ -561,8 +577,11 @@ void VulkanRenderDevice::create_logical_device() {
     ci.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     ci.ppEnabledExtensionNames = extensions.data();
 
-    if (vkCreateDevice(physical_device_, &ci, nullptr, &device_) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create Vulkan logical device");
+    VkResult result = vkCreateDevice(physical_device_, &ci, nullptr, &device_);
+    if (result != VK_SUCCESS) {
+        throw std::runtime_error(
+            "Failed to create Vulkan logical device: vkCreateDevice result=" +
+            std::to_string(static_cast<int>(result)));
     }
 
     vkGetDeviceQueue(device_, graphics_family_, 0, &graphics_queue_);
