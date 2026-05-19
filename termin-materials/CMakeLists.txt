@@ -82,6 +82,7 @@ if(TERMIN_BUILD_PYTHON)
     find_package(nanobind CONFIG REQUIRED)
 
     nanobind_add_module(_materials_native NB_SHARED
+        python/bindings/material_bindings.cpp
         python/bindings/materials_bindings.cpp
     )
     target_link_libraries(_materials_native PRIVATE termin_materials)

@@ -38,6 +38,8 @@ namespace termin {
 
 namespace nb = nanobind;
 
+void bind_tc_material(nb::module_& m);
+
 void bind_shader_parser(nb::module_& m) {
     // --- GLSL preprocessor ---
     nb::class_<GlslPreprocessor>(m, "GlslPreprocessor")
@@ -308,4 +310,5 @@ void bind_shader_parser(nb::module_& m) {
 
 NB_MODULE(_materials_native, m) {
     termin::bind_shader_parser(m);
+    termin::bind_tc_material(m);
 }

@@ -12,11 +12,16 @@ from ._materials_native import (
     ShaderMultyPhaseProgramm,
     ShaderPhase,
     ShaderStage,
+    TcMaterial,
+    TcMaterialPhase,
+    TcRenderState,
     UniformProperty,
     glsl_preprocessor,
     parse_property_directive,
     parse_shader_text,
     register_glsl_preprocessor,
+    tc_material_count,
+    tc_material_get_all_info,
 )
 
 __all__ = [
@@ -29,9 +34,14 @@ __all__ = [
     "ShaderMultyPhaseProgramm",
     "ShaderPhase",
     "ShaderStage",
+    "TcMaterial",
+    "TcMaterialPhase",
+    "TcRenderState",
     "UniformProperty",
     "glsl_preprocessor",
     "parse_property_directive",
     "parse_shader_text",
     "register_glsl_preprocessor",
+    "tc_material_count",
+    "tc_material_get_all_info",
 ]
