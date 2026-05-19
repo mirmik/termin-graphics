@@ -12,7 +12,9 @@
 #include "tgfx/tc_gpu_share_group.h"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/i_render_device.hpp"
+#ifdef TGFX2_HAS_OPENGL
 #include "tgfx2/opengl/opengl_render_device.hpp"
+#endif
 #include "tgfx2/render_context.hpp"
 
 namespace tgfx {
@@ -169,6 +171,7 @@ BufferHandle create_augmented_vertex_buffer(
     return buffer;
 }
 
+#ifdef TGFX2_HAS_OPENGL
 Tgfx2MeshBinding wrap_mesh_gl(OpenGLRenderDevice& device, tc_mesh* mesh) {
     Tgfx2MeshBinding out;
 
@@ -206,6 +209,7 @@ Tgfx2MeshBinding wrap_mesh_gl(OpenGLRenderDevice& device, tc_mesh* mesh) {
     }
     return out;
 }
+#endif
 
 } // namespace
 
@@ -217,7 +221,12 @@ Tgfx2MeshBinding wrap_mesh_as_tgfx2(IRenderDevice& device, tc_mesh* mesh) {
     }
 
     if (device.backend_type() == BackendType::OpenGL) {
+#ifdef TGFX2_HAS_OPENGL
         return wrap_mesh_gl(static_cast<OpenGLRenderDevice&>(device), mesh);
+#else
+        tc::Log::error("wrap_mesh_as_tgfx2: OpenGL backend not compiled");
+        return out;
+#endif
     }
 
     auto [vbo, ebo] = device.ensure_tc_mesh(mesh);

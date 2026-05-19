@@ -16,29 +16,15 @@
 #include <vector>
 
 // ============================================================================
-// Global tgfx2 device pointer
-// ============================================================================
-
-static void* g_tgfx2_device = nullptr;
-
-void tgfx2_interop_set_device(void* device) {
-    g_tgfx2_device = device;
-}
-
-void* tgfx2_interop_get_device(void) {
-    return g_tgfx2_device;
-}
-
-// ============================================================================
 // Helpers
 // ============================================================================
 
 static tgfx::IRenderDevice* get_device() {
-    return static_cast<tgfx::IRenderDevice*>(g_tgfx2_device);
+    return static_cast<tgfx::IRenderDevice*>(tgfx2_interop_get_device());
 }
 
 static tgfx::OpenGLRenderDevice* get_gl_device() {
-    return static_cast<tgfx::OpenGLRenderDevice*>(g_tgfx2_device);
+    return static_cast<tgfx::OpenGLRenderDevice*>(tgfx2_interop_get_device());
 }
 
 // Map channels to tgfx2 pixel format

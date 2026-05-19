@@ -33,6 +33,8 @@ for arg in "$@"; do
             echo "  --vulkan          Enable Vulkan support (default for C/C++ stage)"
             echo "  --no-sdl          Disable SDL2 support"
             echo "  --sdl             Enable SDL2 support (default for C/C++ stage)"
+            echo "  --no-opengl       Disable OpenGL backend; keep Vulkan render/editor targets"
+            echo "  --opengl          Enable desktop OpenGL targets (default)"
             echo "  --help, -h        Show this help"
             echo ""
             echo "Environment:"

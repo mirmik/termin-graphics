@@ -6,8 +6,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Find OpenGL
-find_package(OpenGL REQUIRED)
+option(TGFX2_ENABLE_OPENGL "Enable OpenGL backend for tgfx2" ON)
+
+if(TGFX2_ENABLE_OPENGL)
+    find_package(OpenGL REQUIRED)
+endif()
 
 # termin-base (provides tc_log shared logging)
 if(COMMAND termin_require_package)
@@ -25,6 +28,8 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
 
 # --- GLAD (static library) ---
+# Kept even when TGFX2_ENABLE_OPENGL=OFF: some legacy headers/bindings still
+# mention GL-only APIs, and glad does not require linking system OpenGL.
 add_library(glad STATIC
     third/glad/src/glad.c
 )
@@ -68,11 +73,14 @@ target_include_directories(termin_graphics PUBLIC
 )
 
 target_link_libraries(termin_graphics PUBLIC
-    glad
-    OpenGL::GL
     tcbase::termin_base
     tmesh::termin_mesh
 )
+if(TGFX2_ENABLE_OPENGL)
+    target_link_libraries(termin_graphics PUBLIC glad OpenGL::GL)
+else()
+    target_link_libraries(termin_graphics PUBLIC glad)
+endif()
 
 # Set library version
 set_target_properties(termin_graphics PROPERTIES
@@ -88,18 +96,24 @@ set(TGFX2_SOURCES
     src/tgfx2/font_atlas.cpp
     src/tgfx2/text2d_renderer.cpp
     src/tgfx2/text3d_renderer.cpp
-    src/tgfx2/opengl/opengl_render_device.cpp
-    src/tgfx2/opengl/opengl_command_list.cpp
-    src/tgfx2/opengl/opengl_type_conversions.cpp
     src/tgfx2/pixel_format_utils.cpp
     src/tgfx2/pipeline_cache.cpp
     src/tgfx2/render_context.cpp
     src/tgfx2/render_runtime.cpp
+    src/tgfx2_interop.cpp
     src/tgfx2/tc_mesh_bridge.cpp
     src/tgfx2/tc_shader_bridge.cpp
     src/tgfx2/texture_pool.cpp
-    src/tgfx2_gpu_ops.cpp
 )
+
+if(TGFX2_ENABLE_OPENGL)
+    list(APPEND TGFX2_SOURCES
+        src/tgfx2/opengl/opengl_render_device.cpp
+        src/tgfx2/opengl/opengl_command_list.cpp
+        src/tgfx2/opengl/opengl_type_conversions.cpp
+        src/tgfx2_gpu_ops.cpp
+    )
+endif()
 
 # --- Optional Vulkan backend ---
 # Auto-enabled when the Vulkan SDK is available on the host. Downstream
@@ -169,6 +183,10 @@ if(COMMAND termin_add_alias_if_missing)
 endif()
 target_compile_definitions(termin_graphics2 PRIVATE TGFX2_EXPORTS)
 
+if(TGFX2_ENABLE_OPENGL)
+    target_compile_definitions(termin_graphics2 PUBLIC TGFX2_HAS_OPENGL)
+endif()
+
 if(TGFX2_ENABLE_VULKAN)
     # PRIVATE on purpose: downstream consumers (termin-render,
     # termin-engine, termin-app) only touch tgfx2 through IRenderDevice
@@ -199,11 +217,14 @@ target_include_directories(termin_graphics2 PRIVATE
 )
 
 target_link_libraries(termin_graphics2 PUBLIC
-    glad
-    OpenGL::GL
     termin_graphics
     tmesh::termin_mesh
 )
+if(TGFX2_ENABLE_OPENGL)
+    target_link_libraries(termin_graphics2 PUBLIC glad OpenGL::GL)
+else()
+    target_link_libraries(termin_graphics2 PUBLIC glad)
+endif()
 
 set_target_properties(termin_graphics2 PROPERTIES
     VERSION ${PROJECT_VERSION}
@@ -347,7 +368,9 @@ endif()
 # --- Install ---
 include(GNUInstallDirs)
 
-install(TARGETS termin_graphics termin_graphics2 glad
+set(TERMIN_GRAPHICS_INSTALL_TARGETS termin_graphics termin_graphics2 glad)
+
+install(TARGETS ${TERMIN_GRAPHICS_INSTALL_TARGETS}
     EXPORT termin_graphicsTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}

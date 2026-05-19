@@ -3,6 +3,7 @@ project(termin_monorepo VERSION 0.1.0 LANGUAGES C CXX)
 
 option(TERMIN_BUILD_MONOREPO "Build Termin as one CMake target graph" ON)
 option(TERMIN_PLATFORM_ANDROID "Build Termin native runtime for Android" OFF)
+option(TERMIN_ENABLE_OPENGL "Enable desktop OpenGL-dependent graphics/render targets" ON)
 option(TERMIN_BUILD_PYTHON "Build Python/nanobind bindings" OFF)
 option(TERMIN_BUILD_TESTS "Build C/C++ tests" OFF)
 option(TERMIN_BUILD_TGFX2_TESTS "Build tgfx2 C/C++ tests" ON)
@@ -18,6 +19,7 @@ option(TERMIN_ENABLE_UNITY_BUILD "Enable CMake unity build for faster clean buil
 option(TERMIN_ENABLE_PCH "Enable precompiled headers for selected C++ targets" ON)
 
 if(TERMIN_PLATFORM_ANDROID)
+    set(TERMIN_ENABLE_OPENGL OFF CACHE BOOL "Enable desktop OpenGL-dependent graphics/render targets" FORCE)
     set(TERMIN_BUILD_PYTHON OFF CACHE BOOL "Build Python/nanobind bindings" FORCE)
     set(TERMIN_BUILD_TESTS OFF CACHE BOOL "Build C/C++ tests" FORCE)
     set(TERMIN_BUILD_TGFX2_TESTS OFF CACHE BOOL "Build tgfx2 C/C++ tests" FORCE)
@@ -30,6 +32,10 @@ if(TERMIN_PLATFORM_ANDROID)
     set(TERMIN_BUNDLE_PYTHON OFF CACHE BOOL "Bundle Python runtime for standalone SDK/editor install" FORCE)
     set(TERMIN_ENABLE_PCH OFF CACHE BOOL "Enable precompiled headers for selected C++ targets" FORCE)
     message(STATUS "Termin: Android native smoke profile enabled")
+endif()
+
+if(NOT TERMIN_ENABLE_OPENGL)
+    message(STATUS "Termin: OpenGL backend disabled")
 endif()
 
 if(TERMIN_USE_CCACHE AND NOT MSVC)
@@ -140,6 +146,7 @@ set(BUILD_LAUNCHER ${TERMIN_BUILD_LAUNCHER} CACHE BOOL "" FORCE)
 set(BUNDLE_PYTHON ${TERMIN_BUNDLE_PYTHON} CACHE BOOL "" FORCE)
 
 set(TGFX2_ENABLE_VULKAN ${TERMIN_ENABLE_VULKAN} CACHE BOOL "" FORCE)
+set(TGFX2_ENABLE_OPENGL ${TERMIN_ENABLE_OPENGL} CACHE BOOL "" FORCE)
 set(USE_SYSTEM_SDL2 ${TERMIN_ENABLE_SDL} CACHE BOOL "" FORCE)
 
 if(TERMIN_BUILD_PYTHON)
