@@ -19,7 +19,7 @@ namespace tgfx {
 
 class VulkanRenderDevice;
 
-class TGFX2_API VulkanSwapchain {
+class TGFX2_TYPE_API VulkanSwapchain {
 public:
     // Number of CPU/GPU frames in flight. Must be >=1. 2 is a sensible
     // default — one GPU frame is queued while the next is being recorded

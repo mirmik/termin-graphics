@@ -7,7 +7,7 @@
 
 namespace tgfx {
 
-class TGFX2_API OpenGLCommandList : public ICommandList {
+class TGFX2_TYPE_API OpenGLCommandList : public ICommandList {
 private:
     OpenGLRenderDevice& device_;
     GLuint current_vao_ = 0;

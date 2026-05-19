@@ -7,6 +7,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(TGFX2_ENABLE_OPENGL "Enable OpenGL backend for tgfx2" ON)
+if(ANDROID)
+    set(_TGFX2_SHADERC_DEFAULT OFF)
+else()
+    set(_TGFX2_SHADERC_DEFAULT ON)
+endif()
+option(TGFX2_ENABLE_SHADERC "Enable runtime GLSL to SPIR-V compilation through shaderc" ${_TGFX2_SHADERC_DEFAULT})
 
 if(TGFX2_ENABLE_OPENGL)
     find_package(OpenGL REQUIRED)
@@ -143,29 +149,33 @@ if(TGFX2_ENABLE_VULKAN)
     set(VMA_DYNAMIC_VULKAN_FUNCTIONS ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(vma)
 
-    # shaderc lookup. Windows VulkanSDK ships three flavours and the
-    # bare `shaderc.lib` is a trap — it's the static lib that needs
-    # glslang/SPIRV-Tools/shaderc_util alongside, none of which we
-    # link. Prefer `shaderc_combined` (single static blob, no DLL to
-    # copy at runtime) and `shaderc_shared` (DLL stub) ahead of it.
-    # Linux keeps the historical order: distro packages typically
-    # install only `libshaderc_shared.so` under the name `shaderc`.
-    if(WIN32)
-        set(_SHADERC_NAMES shaderc_combined shaderc_shared shaderc)
-    else()
-        set(_SHADERC_NAMES shaderc shaderc_combined)
-    endif()
-    find_library(SHADERC_LIB NAMES ${_SHADERC_NAMES}
-        HINTS "$ENV{VULKAN_SDK}" "${Vulkan_INCLUDE_DIR}/.."
-              "C:/VulkanSDK/1.4.341.1"
-        PATH_SUFFIXES Lib lib lib64 x86_64/lib
-    )
-    if(NOT SHADERC_LIB)
-        message(FATAL_ERROR
-            "TGFX2_ENABLE_VULKAN is ON, but shaderc was not found. "
-            "Install shaderc for the active Vulkan SDK, set VULKAN_SDK, "
-            "or configure with -DTGFX2_ENABLE_VULKAN=OFF / pass --no-vulkan."
+    if(TGFX2_ENABLE_SHADERC)
+        # shaderc lookup. Windows VulkanSDK ships three flavours and the
+        # bare `shaderc.lib` is a trap — it's the static lib that needs
+        # glslang/SPIRV-Tools/shaderc_util alongside, none of which we
+        # link. Prefer `shaderc_combined` (single static blob, no DLL to
+        # copy at runtime) and `shaderc_shared` (DLL stub) ahead of it.
+        # Linux keeps the historical order: distro packages typically
+        # install only `libshaderc_shared.so` under the name `shaderc`.
+        if(WIN32)
+            set(_SHADERC_NAMES shaderc_combined shaderc_shared shaderc)
+        else()
+            set(_SHADERC_NAMES shaderc shaderc_combined)
+        endif()
+        find_library(SHADERC_LIB NAMES ${_SHADERC_NAMES}
+            HINTS "$ENV{VULKAN_SDK}" "${Vulkan_INCLUDE_DIR}/.."
+                  "C:/VulkanSDK/1.4.341.1"
+            PATH_SUFFIXES Lib lib lib64 x86_64/lib
         )
+        if(NOT SHADERC_LIB)
+            message(FATAL_ERROR
+                "TGFX2_ENABLE_VULKAN and TGFX2_ENABLE_SHADERC are ON, but shaderc was not found. "
+                "Install shaderc for the active Vulkan SDK, set VULKAN_SDK, "
+                "or configure with -DTGFX2_ENABLE_SHADERC=OFF for SPIR-V-only Vulkan runtime."
+            )
+        endif()
+    else()
+        message(STATUS "tgfx2: runtime shaderc disabled; Vulkan accepts precompiled SPIR-V shaders")
     endif()
 
     list(APPEND TGFX2_SOURCES
@@ -195,7 +205,13 @@ if(TGFX2_ENABLE_VULKAN)
     # requiring every consumer to `find_package(Vulkan)` themselves.
     target_compile_definitions(termin_graphics2 PRIVATE TGFX2_HAS_VULKAN)
     target_link_libraries(termin_graphics2 PRIVATE Vulkan::Vulkan)
-    target_link_libraries(termin_graphics2 PRIVATE ${SHADERC_LIB})
+    if(TGFX2_ENABLE_SHADERC)
+        target_compile_definitions(termin_graphics2 PRIVATE TGFX2_HAS_SHADERC)
+        target_link_libraries(termin_graphics2 PRIVATE ${SHADERC_LIB})
+    endif()
+    if(ANDROID)
+        target_compile_definitions(termin_graphics2 PRIVATE VMA_VULKAN_VERSION=1000000)
+    endif()
     # VMA is header-only; link PRIVATE to avoid export issues
     target_include_directories(termin_graphics2 PRIVATE ${vma_SOURCE_DIR}/include)
 endif()

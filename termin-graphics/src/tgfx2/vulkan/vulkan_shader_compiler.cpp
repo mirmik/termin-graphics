@@ -1,9 +1,18 @@
 #ifdef TGFX2_HAS_VULKAN
 
 #include "tgfx2/vulkan/vulkan_shader_compiler.hpp"
+
+#ifdef TGFX2_HAS_SHADERC
 #include <shaderc/shaderc.hpp>
+#else
+extern "C" {
+#include <tcbase/tc_log.h>
+}
+#endif
 
 namespace tgfx::vk {
+
+#ifdef TGFX2_HAS_SHADERC
 
 static shaderc_shader_kind to_shaderc_kind(ShaderStage stage) {
     switch (stage) {
@@ -88,6 +97,27 @@ SpirvCompileResult compile_glsl_to_spirv(
     result.success = true;
     return result;
 }
+
+#else
+
+SpirvCompileResult compile_glsl_to_spirv(
+    const std::string& source,
+    ShaderStage stage,
+    const std::string& entry_point
+) {
+    (void)source;
+    (void)stage;
+    (void)entry_point;
+
+    SpirvCompileResult result;
+    result.success = false;
+    result.error_message =
+        "runtime GLSL compilation is disabled in this build; provide SPIR-V bytecode";
+    tc_log(TC_LOG_ERROR, "tgfx2 Vulkan: %s", result.error_message.c_str());
+    return result;
+}
+
+#endif
 
 } // namespace tgfx::vk
 

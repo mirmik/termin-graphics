@@ -127,7 +127,7 @@ struct VulkanDeviceCreateInfo {
     uint32_t swapchain_height = 0;
 };
 
-class TGFX2_API VulkanRenderDevice : public IRenderDevice {
+class TGFX2_TYPE_API VulkanRenderDevice : public IRenderDevice {
 private:
     // --- Frame sync / deferred destroy -----------------------------------
     //

@@ -43,7 +43,7 @@ namespace tgfx {
 class RenderContext2;
 class IRenderDevice;
 
-class TGFX2_API FontAtlas {
+class TGFX2_TYPE_API FontAtlas {
 public:
     // Pixel (width, height) returned by measure_text.
     struct Size2f {

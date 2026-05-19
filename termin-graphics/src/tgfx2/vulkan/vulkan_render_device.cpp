@@ -29,6 +29,12 @@ extern "C" {
 #include <tgfx/resources/tc_mesh_registry.h>
 }
 
+#ifdef __ANDROID__
+static constexpr uint32_t TGFX2_VULKAN_RUNTIME_API_VERSION = VK_API_VERSION_1_0;
+#else
+static constexpr uint32_t TGFX2_VULKAN_RUNTIME_API_VERSION = VK_API_VERSION_1_3;
+#endif
+
 // Trampolines for destroy-hook C callbacks. Defined at file scope (not in
 // an anonymous namespace) so their addresses are stable identifiers that
 // `tc_*_registry_remove_destroy_hook` can match against.
@@ -422,7 +428,7 @@ void VulkanRenderDevice::init_instance(const VulkanDeviceCreateInfo& info) {
     app_info.applicationVersion = VK_MAKE_VERSION(0, 1, 0);
     app_info.pEngineName = "tgfx2";
     app_info.engineVersion = VK_MAKE_VERSION(0, 1, 0);
-    app_info.apiVersion = VK_API_VERSION_1_3;
+    app_info.apiVersion = TGFX2_VULKAN_RUNTIME_API_VERSION;
 
     std::vector<const char*> extensions = info.instance_extensions;
     std::vector<const char*> layers;
@@ -572,7 +578,7 @@ void VulkanRenderDevice::create_allocator() {
     ci.physicalDevice = physical_device_;
     ci.device = device_;
     ci.instance = instance_;
-    ci.vulkanApiVersion = VK_API_VERSION_1_3;
+    ci.vulkanApiVersion = TGFX2_VULKAN_RUNTIME_API_VERSION;
 
     if (vmaCreateAllocator(&ci, &allocator_) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create VMA allocator");

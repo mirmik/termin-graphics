@@ -13,7 +13,7 @@ namespace tgfx {
 
 class IRenderDevice;
 
-struct TGFX2_API TexturePoolEntry {
+struct TGFX2_TYPE_API TexturePoolEntry {
     std::string key;
     int width = 0;
     int height = 0;
@@ -30,7 +30,7 @@ struct TGFX2_API TexturePoolEntry {
     TexturePoolEntry& operator=(const TexturePoolEntry&) = delete;
 };
 
-class TGFX2_API TexturePool {
+class TGFX2_TYPE_API TexturePool {
 public:
     std::vector<TexturePoolEntry> entries;
 
@@ -52,7 +52,7 @@ public:
     void clear();
 };
 
-struct TGFX2_API RenderTargetEntry {
+struct TGFX2_TYPE_API RenderTargetEntry {
     std::string key;
     int width = 0;
     int height = 0;
@@ -71,7 +71,7 @@ struct TGFX2_API RenderTargetEntry {
     RenderTargetEntry& operator=(const RenderTargetEntry&) = delete;
 };
 
-class TGFX2_API RenderTargetPool {
+class TGFX2_TYPE_API RenderTargetPool {
 public:
     std::vector<RenderTargetEntry> entries;
 

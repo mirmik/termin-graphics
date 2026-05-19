@@ -51,7 +51,7 @@ struct PipelineCacheKeyHash {
     size_t operator()(const PipelineCacheKey& k) const;
 };
 
-class TGFX2_API PipelineCache {
+class TGFX2_TYPE_API PipelineCache {
 private:
     IRenderDevice& device_;
     std::unordered_map<PipelineCacheKey, PipelineHandle, PipelineCacheKeyHash> cache_;

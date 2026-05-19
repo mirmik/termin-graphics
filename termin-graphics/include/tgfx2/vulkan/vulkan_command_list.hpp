@@ -11,7 +11,7 @@
 
 namespace tgfx {
 
-class TGFX2_API VulkanCommandList : public ICommandList {
+class TGFX2_TYPE_API VulkanCommandList : public ICommandList {
 public:
     explicit VulkanCommandList(VulkanRenderDevice& device);
     ~VulkanCommandList() override;

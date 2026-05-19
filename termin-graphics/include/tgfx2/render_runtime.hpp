@@ -12,7 +12,7 @@ class IRenderDevice;
 class PipelineCache;
 class RenderContext2;
 
-class TGFX2_API RenderRuntime {
+class TGFX2_TYPE_API RenderRuntime {
 public:
     explicit RenderRuntime(std::unique_ptr<IRenderDevice> device);
     explicit RenderRuntime(IRenderDevice& borrowed_device);

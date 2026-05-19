@@ -10,7 +10,7 @@
 // each module has its own hidden typeinfo symbol, the lookup fails
 // with "Unable to convert function return value to a Python type".
 //
-// Fix: give every TGFX2_API class default visibility AND default
+// Fix: give every TGFX2_TYPE_API class default visibility AND default
 // type_visibility so the typeinfo and vtable (when present) are
 // exported from libtermin_graphics2.so and shared across all
 // consumers. No runtime cost — this is purely a symbol visibility
@@ -18,18 +18,23 @@
 #ifdef _WIN32
     #ifdef TGFX2_EXPORTS
         #define TGFX2_API __declspec(dllexport)
+        #define TGFX2_TYPE_API __declspec(dllexport)
     #else
         #define TGFX2_API __declspec(dllimport)
+        #define TGFX2_TYPE_API __declspec(dllimport)
     #endif
 #else
     // type_visibility is clang-only; gcc doesn't need it — its
     // visibility attribute on the class already covers typeinfo.
     #if defined(__clang__)
-        #define TGFX2_API __attribute__((visibility("default"), type_visibility("default")))
+        #define TGFX2_API __attribute__((visibility("default")))
+        #define TGFX2_TYPE_API __attribute__((visibility("default"), type_visibility("default")))
     #elif defined(__GNUC__)
         #define TGFX2_API __attribute__((visibility("default")))
+        #define TGFX2_TYPE_API __attribute__((visibility("default")))
     #else
         #define TGFX2_API
+        #define TGFX2_TYPE_API
     #endif
 #endif
 
