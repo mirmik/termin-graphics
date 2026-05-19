@@ -417,6 +417,12 @@ install(EXPORT termin_graphicsTargets
 
 include(CMakePackageConfigHelpers)
 
+if(TGFX2_ENABLE_OPENGL)
+    set(PACKAGE_TGFX2_ENABLE_OPENGL TRUE)
+else()
+    set(PACKAGE_TGFX2_ENABLE_OPENGL FALSE)
+endif()
+
 configure_package_config_file(
     cmake/termin_graphicsConfig.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/termin_graphicsConfig.cmake

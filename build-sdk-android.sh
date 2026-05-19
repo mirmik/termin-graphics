@@ -7,8 +7,8 @@
 #   - Vulkan enabled
 #   - termin-android included
 #
-# It does not build APK/AAB packages. Gradle packaging will live under
-# termin-android/ once the Android app wrapper is added.
+# It does not build APK/AAB packages. Use ./build-android-apk.sh after
+# this script to package the Android app wrapper.
 
 set -e
 
