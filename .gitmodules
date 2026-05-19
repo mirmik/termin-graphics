@@ -7,3 +7,6 @@
 [submodule "termin-thirdparty/clipper2"]
 	path = termin-thirdparty/clipper2
 	url = https://github.com/AngusJohnson/Clipper2.git
+[submodule "termin-thirdparty/openxr-sdk"]
+	path = termin-thirdparty/openxr-sdk
+	url = https://github.com/KhronosGroup/OpenXR-SDK.git

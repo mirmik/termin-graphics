@@ -177,6 +177,7 @@ add_subdirectory(termin-components/termin-components-render)
 add_subdirectory(termin-engine)
 
 if(TERMIN_PLATFORM_ANDROID)
+    add_subdirectory(termin-openxr)
     add_subdirectory(termin-android)
 endif()
 
