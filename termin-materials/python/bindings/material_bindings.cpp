@@ -36,6 +36,245 @@ TcTexture optional_tc_texture(nb::object value, const std::string& context) {
 
 } // namespace
 
+
+TcMaterial create_material_from_parsed(
+    const ShaderMultyPhaseProgramm& program,
+    nb::object color,
+    nb::object textures,
+    nb::object uniforms,
+    nb::object name,
+    nb::object source_path,
+    const std::string& shader_uuid,
+    nb::object default_white_texture,
+    nb::object default_normal_texture
+) {
+    if (program.phases.empty()) {
+        throw std::runtime_error("Program has no phases");
+    }
+
+    // Create material with uuid hint if provided
+    TcMaterial mat = TcMaterial::create(
+        name.is_none() ? program.program : nb::cast<std::string>(name),
+        shader_uuid
+    );
+    if (!mat.is_valid()) {
+        throw std::runtime_error("Failed to create TcMaterial");
+    }
+
+    mat.set_shader_name(program.program.c_str());
+    if (!source_path.is_none()) {
+        mat.set_source_path(nb::cast<std::string>(source_path).c_str());
+    }
+
+    TcTexture white_tex = optional_tc_texture(default_white_texture, "create_material_from_parsed(default_white_texture)");
+    TcTexture normal_tex = optional_tc_texture(default_normal_texture, "create_material_from_parsed(default_normal_texture)");
+
+    for (const auto& shader_phase : program.phases) {
+        // Get shader sources from stages
+        auto it_vert = shader_phase.stages.find("vertex");
+        auto it_frag = shader_phase.stages.find("fragment");
+        auto it_geom = shader_phase.stages.find("geometry");
+
+        if (it_vert == shader_phase.stages.end()) {
+            throw std::runtime_error("Phase has no vertex stage");
+        }
+        if (it_frag == shader_phase.stages.end()) {
+            throw std::runtime_error("Phase has no fragment stage");
+        }
+
+        std::string vs = it_vert->second.source;
+        std::string fs = it_frag->second.source;
+        std::string gs = (it_geom != shader_phase.stages.end()) ? it_geom->second.source : "";
+
+        // Build render state
+        tc_render_state rs = tc_render_state_opaque();
+        rs.depth_write = shader_phase.gl_depth_mask.value_or(true);
+        rs.depth_test = shader_phase.gl_depth_test.value_or(true);
+        rs.blend = shader_phase.gl_blend.value_or(false);
+        rs.cull = shader_phase.gl_cull.value_or(true);
+
+        // Build shader name
+        std::string shader_name;
+        if (!program.program.empty()) {
+            shader_name = program.program;
+            if (!shader_phase.phase_mark.empty()) {
+                shader_name += "/" + shader_phase.phase_mark;
+            }
+        } else if (!shader_phase.phase_mark.empty()) {
+            shader_name = shader_phase.phase_mark;
+        }
+
+        // Add phase
+        tc_material_phase* phase = mat.add_phase_from_sources(
+            vs.c_str(), fs.c_str(), gs.empty() ? nullptr : gs.c_str(),
+            shader_name.c_str(),
+            shader_phase.phase_mark.c_str(),
+            shader_phase.priority,
+            rs
+        );
+
+        if (!phase) {
+            tc::Log::error("Failed to add phase '%s' to material", shader_phase.phase_mark.c_str());
+            continue;
+        }
+
+        // Set available marks
+        phase->available_mark_count = std::min(shader_phase.available_marks.size(), (size_t)TC_MATERIAL_MAX_MARKS);
+        for (size_t i = 0; i < phase->available_mark_count; i++) {
+            strncpy(phase->available_marks[i], shader_phase.available_marks[i].c_str(), TC_PHASE_MARK_MAX - 1);
+            phase->available_marks[i][TC_PHASE_MARK_MAX - 1] = '\0';
+        }
+
+        // Apply shader features
+        TcShader shader(phase->shader);
+        for (const auto& feature : program.features) {
+            if (feature == "lighting_ubo") {
+                shader.set_feature(TC_SHADER_FEATURE_LIGHTING_UBO);
+            }
+        }
+
+        const MaterialUboLayout& layout = shader_phase.material_ubo_layout;
+        if (!layout.empty()) {
+            std::vector<tc_material_ubo_entry> entries;
+            entries.reserve(layout.entries.size());
+            for (const auto& src : layout.entries) {
+                tc_material_ubo_entry entry{};
+                std::strncpy(entry.name, src.name.c_str(), TC_MATERIAL_UBO_NAME_MAX - 1);
+                entry.name[TC_MATERIAL_UBO_NAME_MAX - 1] = '\0';
+                std::strncpy(
+                    entry.property_type,
+                    src.property_type.c_str(),
+                    TC_MATERIAL_UBO_TYPE_MAX - 1);
+                entry.property_type[TC_MATERIAL_UBO_TYPE_MAX - 1] = '\0';
+                entry.offset = src.offset;
+                entry.size = src.size;
+                entries.push_back(entry);
+            }
+            tc_shader_set_material_ubo_layout(
+                tc_shader_get(phase->shader),
+                entries.data(),
+                static_cast<uint32_t>(entries.size()),
+                layout.block_size);
+        } else {
+            tc_shader_set_material_ubo_layout(tc_shader_get(phase->shader), nullptr, 0, 0);
+        }
+
+        std::vector<MaterialProperty> shader_uniforms = shader_phase.uniforms;
+        shader_uniforms.insert(
+            shader_uniforms.end(),
+            shader_phase.material_uniforms.begin(),
+            shader_phase.material_uniforms.end());
+
+        // Apply uniforms from defaults
+        for (const auto& prop : shader_uniforms) {
+            if (std::holds_alternative<std::monostate>(prop.default_value)) continue;
+
+            if (std::holds_alternative<bool>(prop.default_value)) {
+                int val = std::get<bool>(prop.default_value) ? 1 : 0;
+                tc_material_phase_set_uniform(phase, prop.name.c_str(), TC_UNIFORM_INT, &val);
+            } else if (std::holds_alternative<int>(prop.default_value)) {
+                int val = std::get<int>(prop.default_value);
+                tc_material_phase_set_uniform(phase, prop.name.c_str(), TC_UNIFORM_INT, &val);
+            } else if (std::holds_alternative<double>(prop.default_value)) {
+                float val = static_cast<float>(std::get<double>(prop.default_value));
+                tc_material_phase_set_uniform(phase, prop.name.c_str(), TC_UNIFORM_FLOAT, &val);
+            } else if (std::holds_alternative<std::vector<double>>(prop.default_value)) {
+                const auto& vec = std::get<std::vector<double>>(prop.default_value);
+                if (vec.size() == 3) {
+                    float arr[3] = {(float)vec[0], (float)vec[1], (float)vec[2]};
+                    tc_material_phase_set_uniform(phase, prop.name.c_str(), TC_UNIFORM_VEC3, arr);
+                } else if (vec.size() == 4) {
+                    float arr[4] = {(float)vec[0], (float)vec[1], (float)vec[2], (float)vec[3]};
+                    tc_material_phase_set_uniform(phase, prop.name.c_str(), TC_UNIFORM_VEC4, arr);
+                }
+            }
+        }
+
+        // Apply extra uniforms
+        if (!uniforms.is_none()) {
+            nb::dict extras = nb::cast<nb::dict>(uniforms);
+            for (auto item : extras) {
+                std::string key = nb::cast<std::string>(item.first);
+                nb::object val = nb::borrow<nb::object>(item.second);
+                if (nb::isinstance<nb::bool_>(val)) {
+                    int v = nb::cast<bool>(val) ? 1 : 0;
+                    tc_material_phase_set_uniform(phase, key.c_str(), TC_UNIFORM_INT, &v);
+                } else if (nb::isinstance<nb::int_>(val)) {
+                    int v = nb::cast<int>(val);
+                    tc_material_phase_set_uniform(phase, key.c_str(), TC_UNIFORM_INT, &v);
+                } else if (nb::isinstance<nb::float_>(val)) {
+                    float v = nb::cast<float>(val);
+                    tc_material_phase_set_uniform(phase, key.c_str(), TC_UNIFORM_FLOAT, &v);
+                } else if (nb::isinstance<Vec3>(val)) {
+                    Vec3 v = nb::cast<Vec3>(val);
+                    float arr[3] = {(float)v.x, (float)v.y, (float)v.z};
+                    tc_material_phase_set_uniform(phase, key.c_str(), TC_UNIFORM_VEC3, arr);
+                } else if (nb::isinstance<Vec4>(val)) {
+                    Vec4 v = nb::cast<Vec4>(val);
+                    float arr[4] = {(float)v.x, (float)v.y, (float)v.z, (float)v.w};
+                    tc_material_phase_set_uniform(phase, key.c_str(), TC_UNIFORM_VEC4, arr);
+                }
+            }
+        }
+
+        // Set default textures
+        for (const auto& prop : shader_uniforms) {
+            if (prop.property_type == "Texture") {
+                if (std::holds_alternative<std::string>(prop.default_value)) {
+                    const std::string& default_tex_name = std::get<std::string>(prop.default_value);
+                    if (default_tex_name == "normal") {
+                        if (normal_tex.is_valid()) {
+                            tc_material_phase_set_texture(phase, prop.name.c_str(), normal_tex.handle);
+                        }
+                    } else {
+                        if (white_tex.is_valid()) {
+                            tc_material_phase_set_texture(phase, prop.name.c_str(), white_tex.handle);
+                        }
+                    }
+                } else {
+                    if (white_tex.is_valid()) {
+                        tc_material_phase_set_texture(phase, prop.name.c_str(), white_tex.handle);
+                    }
+                }
+            }
+        }
+
+        // Override with provided textures
+        if (!textures.is_none()) {
+            nb::dict tex_dict = nb::cast<nb::dict>(textures);
+            for (auto item : tex_dict) {
+                std::string key = nb::cast<std::string>(item.first);
+                nb::object val = nb::borrow<nb::object>(item.second);
+                if (nb::isinstance<TcTexture>(val)) {
+                    TcTexture tex = nb::cast<TcTexture>(val);
+                    tc_material_phase_set_texture(phase, key.c_str(), tex.handle);
+                } else {
+                    TcTexture tex = require_tc_texture(val, "create_material_from_parsed(textures)");
+                    tc_material_phase_set_texture(phase, key.c_str(), tex.handle);
+                }
+            }
+        }
+
+        // Set color
+        if (!color.is_none()) {
+            if (nb::isinstance<Vec4>(color)) {
+                Vec4 c = nb::cast<Vec4>(color);
+                tc_material_phase_set_color(phase, c.x, c.y, c.z, c.w);
+            } else if (nb::isinstance<nb::tuple>(color) || nb::isinstance<nb::list>(color)) {
+                nb::sequence seq = nb::cast<nb::sequence>(color);
+                tc_material_phase_set_color(phase,
+                    nb::cast<float>(seq[0]),
+                    nb::cast<float>(seq[1]),
+                    nb::cast<float>(seq[2]),
+                    nb::cast<float>(seq[3])
+                );
+            }
+        }
+    }
+
+    return mat;
+}
+
 void bind_material(nb::module_& m) {
     // Old MaterialPhase and Material classes removed - use TcMaterialPhase and TcMaterial
 }
@@ -496,252 +735,29 @@ void bind_tc_material(nb::module_& m) {
             d["type"] = "uuid";
             return d;
         })
-        // from_parsed - create TcMaterial from ShaderMultyPhaseProgramm
-        .def_static("from_parsed", [](
-            const ShaderMultyPhaseProgramm& program,
-            nb::object color,
-            nb::object textures,
-            nb::object uniforms,
-            nb::object name,
-            nb::object source_path,
-            const std::string& shader_uuid,
-            nb::object default_white_texture,
-            nb::object default_normal_texture
-        ) -> TcMaterial {
-            if (program.phases.empty()) {
-                throw std::runtime_error("Program has no phases");
-            }
+        // Legacy class entry point. Prefer module-level create_material_from_parsed().
+        .def_static("from_parsed", &create_material_from_parsed,
+            nb::arg("program"),
+            nb::arg("color") = nb::none(),
+            nb::arg("textures") = nb::none(),
+            nb::arg("uniforms") = nb::none(),
+            nb::arg("name") = nb::none(),
+            nb::arg("source_path") = nb::none(),
+            nb::arg("shader_uuid") = "",
+            nb::arg("default_white_texture") = nb::none(),
+            nb::arg("default_normal_texture") = nb::none());
 
-            // Create material with uuid hint if provided
-            TcMaterial mat = TcMaterial::create(
-                name.is_none() ? program.program : nb::cast<std::string>(name),
-                shader_uuid
-            );
-            if (!mat.is_valid()) {
-                throw std::runtime_error("Failed to create TcMaterial");
-            }
-
-            mat.set_shader_name(program.program.c_str());
-            if (!source_path.is_none()) {
-                mat.set_source_path(nb::cast<std::string>(source_path).c_str());
-            }
-
-            TcTexture white_tex = optional_tc_texture(default_white_texture, "TcMaterial.from_parsed(default_white_texture)");
-            TcTexture normal_tex = optional_tc_texture(default_normal_texture, "TcMaterial.from_parsed(default_normal_texture)");
-
-            for (const auto& shader_phase : program.phases) {
-                // Get shader sources from stages
-                auto it_vert = shader_phase.stages.find("vertex");
-                auto it_frag = shader_phase.stages.find("fragment");
-                auto it_geom = shader_phase.stages.find("geometry");
-
-                if (it_vert == shader_phase.stages.end()) {
-                    throw std::runtime_error("Phase has no vertex stage");
-                }
-                if (it_frag == shader_phase.stages.end()) {
-                    throw std::runtime_error("Phase has no fragment stage");
-                }
-
-                std::string vs = it_vert->second.source;
-                std::string fs = it_frag->second.source;
-                std::string gs = (it_geom != shader_phase.stages.end()) ? it_geom->second.source : "";
-
-                // Build render state
-                tc_render_state rs = tc_render_state_opaque();
-                rs.depth_write = shader_phase.gl_depth_mask.value_or(true);
-                rs.depth_test = shader_phase.gl_depth_test.value_or(true);
-                rs.blend = shader_phase.gl_blend.value_or(false);
-                rs.cull = shader_phase.gl_cull.value_or(true);
-
-                // Build shader name
-                std::string shader_name;
-                if (!program.program.empty()) {
-                    shader_name = program.program;
-                    if (!shader_phase.phase_mark.empty()) {
-                        shader_name += "/" + shader_phase.phase_mark;
-                    }
-                } else if (!shader_phase.phase_mark.empty()) {
-                    shader_name = shader_phase.phase_mark;
-                }
-
-                // Add phase
-                tc_material_phase* phase = mat.add_phase_from_sources(
-                    vs.c_str(), fs.c_str(), gs.empty() ? nullptr : gs.c_str(),
-                    shader_name.c_str(),
-                    shader_phase.phase_mark.c_str(),
-                    shader_phase.priority,
-                    rs
-                );
-
-                if (!phase) {
-                    tc::Log::error("Failed to add phase '%s' to material", shader_phase.phase_mark.c_str());
-                    continue;
-                }
-
-                // Set available marks
-                phase->available_mark_count = std::min(shader_phase.available_marks.size(), (size_t)TC_MATERIAL_MAX_MARKS);
-                for (size_t i = 0; i < phase->available_mark_count; i++) {
-                    strncpy(phase->available_marks[i], shader_phase.available_marks[i].c_str(), TC_PHASE_MARK_MAX - 1);
-                    phase->available_marks[i][TC_PHASE_MARK_MAX - 1] = '\0';
-                }
-
-                // Apply shader features
-                TcShader shader(phase->shader);
-                for (const auto& feature : program.features) {
-                    if (feature == "lighting_ubo") {
-                        shader.set_feature(TC_SHADER_FEATURE_LIGHTING_UBO);
-                    }
-                }
-
-                const MaterialUboLayout& layout = shader_phase.material_ubo_layout;
-                if (!layout.empty()) {
-                    std::vector<tc_material_ubo_entry> entries;
-                    entries.reserve(layout.entries.size());
-                    for (const auto& src : layout.entries) {
-                        tc_material_ubo_entry entry{};
-                        std::strncpy(entry.name, src.name.c_str(), TC_MATERIAL_UBO_NAME_MAX - 1);
-                        entry.name[TC_MATERIAL_UBO_NAME_MAX - 1] = '\0';
-                        std::strncpy(
-                            entry.property_type,
-                            src.property_type.c_str(),
-                            TC_MATERIAL_UBO_TYPE_MAX - 1);
-                        entry.property_type[TC_MATERIAL_UBO_TYPE_MAX - 1] = '\0';
-                        entry.offset = src.offset;
-                        entry.size = src.size;
-                        entries.push_back(entry);
-                    }
-                    tc_shader_set_material_ubo_layout(
-                        tc_shader_get(phase->shader),
-                        entries.data(),
-                        static_cast<uint32_t>(entries.size()),
-                        layout.block_size);
-                } else {
-                    tc_shader_set_material_ubo_layout(tc_shader_get(phase->shader), nullptr, 0, 0);
-                }
-
-                std::vector<MaterialProperty> shader_uniforms = shader_phase.uniforms;
-                shader_uniforms.insert(
-                    shader_uniforms.end(),
-                    shader_phase.material_uniforms.begin(),
-                    shader_phase.material_uniforms.end());
-
-                // Apply uniforms from defaults
-                for (const auto& prop : shader_uniforms) {
-                    if (std::holds_alternative<std::monostate>(prop.default_value)) continue;
-
-                    if (std::holds_alternative<bool>(prop.default_value)) {
-                        int val = std::get<bool>(prop.default_value) ? 1 : 0;
-                        tc_material_phase_set_uniform(phase, prop.name.c_str(), TC_UNIFORM_INT, &val);
-                    } else if (std::holds_alternative<int>(prop.default_value)) {
-                        int val = std::get<int>(prop.default_value);
-                        tc_material_phase_set_uniform(phase, prop.name.c_str(), TC_UNIFORM_INT, &val);
-                    } else if (std::holds_alternative<double>(prop.default_value)) {
-                        float val = static_cast<float>(std::get<double>(prop.default_value));
-                        tc_material_phase_set_uniform(phase, prop.name.c_str(), TC_UNIFORM_FLOAT, &val);
-                    } else if (std::holds_alternative<std::vector<double>>(prop.default_value)) {
-                        const auto& vec = std::get<std::vector<double>>(prop.default_value);
-                        if (vec.size() == 3) {
-                            float arr[3] = {(float)vec[0], (float)vec[1], (float)vec[2]};
-                            tc_material_phase_set_uniform(phase, prop.name.c_str(), TC_UNIFORM_VEC3, arr);
-                        } else if (vec.size() == 4) {
-                            float arr[4] = {(float)vec[0], (float)vec[1], (float)vec[2], (float)vec[3]};
-                            tc_material_phase_set_uniform(phase, prop.name.c_str(), TC_UNIFORM_VEC4, arr);
-                        }
-                    }
-                }
-
-                // Apply extra uniforms
-                if (!uniforms.is_none()) {
-                    nb::dict extras = nb::cast<nb::dict>(uniforms);
-                    for (auto item : extras) {
-                        std::string key = nb::cast<std::string>(item.first);
-                        nb::object val = nb::borrow<nb::object>(item.second);
-                        if (nb::isinstance<nb::bool_>(val)) {
-                            int v = nb::cast<bool>(val) ? 1 : 0;
-                            tc_material_phase_set_uniform(phase, key.c_str(), TC_UNIFORM_INT, &v);
-                        } else if (nb::isinstance<nb::int_>(val)) {
-                            int v = nb::cast<int>(val);
-                            tc_material_phase_set_uniform(phase, key.c_str(), TC_UNIFORM_INT, &v);
-                        } else if (nb::isinstance<nb::float_>(val)) {
-                            float v = nb::cast<float>(val);
-                            tc_material_phase_set_uniform(phase, key.c_str(), TC_UNIFORM_FLOAT, &v);
-                        } else if (nb::isinstance<Vec3>(val)) {
-                            Vec3 v = nb::cast<Vec3>(val);
-                            float arr[3] = {(float)v.x, (float)v.y, (float)v.z};
-                            tc_material_phase_set_uniform(phase, key.c_str(), TC_UNIFORM_VEC3, arr);
-                        } else if (nb::isinstance<Vec4>(val)) {
-                            Vec4 v = nb::cast<Vec4>(val);
-                            float arr[4] = {(float)v.x, (float)v.y, (float)v.z, (float)v.w};
-                            tc_material_phase_set_uniform(phase, key.c_str(), TC_UNIFORM_VEC4, arr);
-                        }
-                    }
-                }
-
-                // Set default textures
-                for (const auto& prop : shader_uniforms) {
-                    if (prop.property_type == "Texture") {
-                        if (std::holds_alternative<std::string>(prop.default_value)) {
-                            const std::string& default_tex_name = std::get<std::string>(prop.default_value);
-                            if (default_tex_name == "normal") {
-                                if (normal_tex.is_valid()) {
-                                    tc_material_phase_set_texture(phase, prop.name.c_str(), normal_tex.handle);
-                                }
-                            } else {
-                                if (white_tex.is_valid()) {
-                                    tc_material_phase_set_texture(phase, prop.name.c_str(), white_tex.handle);
-                                }
-                            }
-                        } else {
-                            if (white_tex.is_valid()) {
-                                tc_material_phase_set_texture(phase, prop.name.c_str(), white_tex.handle);
-                            }
-                        }
-                    }
-                }
-
-                // Override with provided textures
-                if (!textures.is_none()) {
-                    nb::dict tex_dict = nb::cast<nb::dict>(textures);
-                    for (auto item : tex_dict) {
-                        std::string key = nb::cast<std::string>(item.first);
-                        nb::object val = nb::borrow<nb::object>(item.second);
-                        if (nb::isinstance<TcTexture>(val)) {
-                            TcTexture tex = nb::cast<TcTexture>(val);
-                            tc_material_phase_set_texture(phase, key.c_str(), tex.handle);
-                        } else {
-                            TcTexture tex = require_tc_texture(val, "TcMaterial.from_parsed(textures)");
-                            tc_material_phase_set_texture(phase, key.c_str(), tex.handle);
-                        }
-                    }
-                }
-
-                // Set color
-                if (!color.is_none()) {
-                    if (nb::isinstance<Vec4>(color)) {
-                        Vec4 c = nb::cast<Vec4>(color);
-                        tc_material_phase_set_color(phase, c.x, c.y, c.z, c.w);
-                    } else if (nb::isinstance<nb::tuple>(color) || nb::isinstance<nb::list>(color)) {
-                        nb::sequence seq = nb::cast<nb::sequence>(color);
-                        tc_material_phase_set_color(phase,
-                            nb::cast<float>(seq[0]),
-                            nb::cast<float>(seq[1]),
-                            nb::cast<float>(seq[2]),
-                            nb::cast<float>(seq[3])
-                        );
-                    }
-                }
-            }
-
-            return mat;
-        }, nb::arg("program"),
-           nb::arg("color") = nb::none(),
-           nb::arg("textures") = nb::none(),
-           nb::arg("uniforms") = nb::none(),
-           nb::arg("name") = nb::none(),
-           nb::arg("source_path") = nb::none(),
-           nb::arg("shader_uuid") = "",
-           nb::arg("default_white_texture") = nb::none(),
-           nb::arg("default_normal_texture") = nb::none());
+    m.def("create_material_from_parsed", &create_material_from_parsed,
+        nb::arg("program"),
+        nb::arg("color") = nb::none(),
+        nb::arg("textures") = nb::none(),
+        nb::arg("uniforms") = nb::none(),
+        nb::arg("name") = nb::none(),
+        nb::arg("source_path") = nb::none(),
+        nb::arg("shader_uuid") = "",
+        nb::arg("default_white_texture") = nb::none(),
+        nb::arg("default_normal_texture") = nb::none(),
+        "Create a TcMaterial from a parsed ShaderMultyPhaseProgramm");
 
     // Material registry info functions
     m.def("tc_material_get_all_info", []() -> nb::list {
