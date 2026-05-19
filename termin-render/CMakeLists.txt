@@ -70,6 +70,7 @@ set(TERMIN_RENDER_SOURCES
     src/material_ubo_runtime.cpp
     src/render_pipeline.cpp
     src/render_engine.cpp
+    src/shader_usage_collector.cpp
     src/tgfx2_bridge.cpp
     src/scene_pipeline_template.cpp
     src/shadow.cpp
@@ -120,6 +121,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/render_pipeline.hpp
     include/termin/render/render_engine.hpp
     include/termin/render/scene_pipeline_template.hpp
+    include/termin/render/shader_usage_collector.hpp
     include/termin/lighting/shadow.hpp
     include/tc_project_settings.h
     include/tc_viewport_config.h

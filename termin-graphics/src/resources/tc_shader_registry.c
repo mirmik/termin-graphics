@@ -541,6 +541,27 @@ bool tc_shader_variant_is_stale(tc_shader_handle variant) {
     return orig->version != v->original_version;
 }
 
+void tc_shader_make_variant_uuid(
+    char* out_uuid,
+    size_t out_size,
+    const char* base_uuid,
+    tc_shader_variant_op op
+) {
+    if (!out_uuid || out_size == 0) {
+        return;
+    }
+
+    uint64_t hash = 0xcbf29ce484222325ULL;
+    hash = fnv1a_string(base_uuid ? base_uuid : "", hash);
+    hash = fnv1a_string("::variant::", hash);
+
+    char op_buf[16];
+    snprintf(op_buf, sizeof(op_buf), "%u", (unsigned)op);
+    hash = fnv1a_string(op_buf, hash);
+
+    snprintf(out_uuid, out_size, "shv_%016llx", (unsigned long long)hash);
+}
+
 // ============================================================================
 // Iteration
 // ============================================================================

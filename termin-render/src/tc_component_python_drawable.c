@@ -29,6 +29,7 @@ static const tc_drawable_vtable g_python_drawable_vtable = {
     .draw_geometry = py_drawable_draw_geometry,
     .get_geometry_draws = py_drawable_get_geometry_draws,
     .override_shader = NULL,
+    .collect_shader_usages = NULL,
 };
 
 void tc_component_set_python_drawable_callbacks(const tc_python_drawable_callbacks* callbacks) {

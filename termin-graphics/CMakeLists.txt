@@ -254,6 +254,13 @@ if(COMMAND termin_enable_pch_for)
 endif()
 termin_set_rpath_lib(termin_graphics2)
 
+if(TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC AND NOT ANDROID)
+    add_executable(termin_shaderc tools/termin_shaderc.cpp)
+    target_compile_features(termin_shaderc PRIVATE cxx_std_20)
+    target_link_libraries(termin_shaderc PRIVATE ${SHADERC_LIB})
+    install(TARGETS termin_shaderc RUNTIME DESTINATION bin)
+endif()
+
 # --- Python bindings ---
 option(TERMIN_BUILD_PYTHON "Build Python bindings" OFF)
 

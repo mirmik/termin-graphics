@@ -8,11 +8,14 @@
 extern "C" {
 #endif
 
+typedef void (*tc_shader_usage_emit_fn)(tc_component* self, tc_shader_handle shader, void* user_data);
+
 struct tc_drawable_vtable {
     bool (*has_phase)(tc_component* self, const char* phase_mark);
     void (*draw_geometry)(tc_component* self, void* render_context, int geometry_id);
     void* (*get_geometry_draws)(tc_component* self, const char* phase_mark);
     tc_shader_handle (*override_shader)(tc_component* self, const char* phase_mark, int geometry_id, tc_shader_handle original_shader);
+    void (*collect_shader_usages)(tc_component* self, const char* phase_mark, int geometry_id, tc_shader_handle original_shader, tc_shader_usage_emit_fn emit, void* user_data);
 };
 
 static inline bool tc_component_is_drawable(const tc_component* c) {
@@ -60,6 +63,18 @@ static inline tc_shader_handle tc_component_override_shader(tc_component* c, con
         return vt->override_shader(c, phase_mark, geometry_id, original_shader);
     }
     return original_shader;
+}
+
+static inline void tc_component_collect_shader_usages(tc_component* c, const char* phase_mark, int geometry_id, tc_shader_handle original_shader, tc_shader_usage_emit_fn emit, void* user_data) {
+    if (!emit) {
+        return;
+    }
+    const tc_drawable_vtable* vt = tc_component_get_drawable_vtable(c);
+    if (c && vt && vt->collect_shader_usages) {
+        vt->collect_shader_usages(c, phase_mark, geometry_id, original_shader, emit, user_data);
+        return;
+    }
+    emit(c, original_shader, user_data);
 }
 
 #ifdef __cplusplus

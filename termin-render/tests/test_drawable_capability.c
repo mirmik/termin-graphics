@@ -48,6 +48,7 @@ static const tc_drawable_vtable g_test_drawable_vtable = {
     .draw_geometry = test_drawable_draw_geometry,
     .get_geometry_draws = test_drawable_get_geometry_draws,
     .override_shader = test_drawable_override_shader,
+    .collect_shader_usages = NULL,
 };
 
 static bool count_components(tc_component* c, void* user_data) {
