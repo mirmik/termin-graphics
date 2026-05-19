@@ -201,6 +201,7 @@ if(TERMIN_BUILD_PYTHON)
         python/scene_pipeline_template_bindings.cpp
         python/tc_pass_bindings.cpp
         python/tc_render_target_bindings.cpp
+        python/render_engine_bindings.cpp
         python/render_pipeline_bindings.cpp
     )
     target_link_libraries(_render_framework_native PRIVATE termin_render termin_inspect::termin_inspect_python)
@@ -213,6 +214,7 @@ if(TERMIN_BUILD_PYTHON)
         DESTINATION lib/python/termin/render_framework
         PATTERN "__pycache__" EXCLUDE
         PATTERN "*.pyc" EXCLUDE
+        PATTERN "*.so" EXCLUDE
         PATTERN "lib" EXCLUDE
     )
 
@@ -227,6 +229,7 @@ if(TERMIN_BUILD_PYTHON)
         DESTINATION lib/python/termin/render
         PATTERN "__pycache__" EXCLUDE
         PATTERN "*.pyc" EXCLUDE
+        PATTERN "*.so" EXCLUDE
         PATTERN "lib" EXCLUDE
     )
 endif()
