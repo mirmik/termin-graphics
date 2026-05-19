@@ -350,7 +350,7 @@ void bind_render_pipeline(nb::module_& m) {
 
         .def("copy", [](RenderPipeline& self, nb::object resource_manager) -> nb::object {
             nb::dict data = nb::cast<nb::dict>(nb::cast(&self).attr("serialize")());
-            nb::module_ render_module = nb::module_::import_("termin._native.render");
+            nb::module_ render_module = nb::module_::import_("termin.render_framework");
             nb::object RenderPipelineClass = render_module.attr("RenderPipeline");
             return RenderPipelineClass.attr("deserialize")(data, resource_manager);
         }, nb::arg("resource_manager"));

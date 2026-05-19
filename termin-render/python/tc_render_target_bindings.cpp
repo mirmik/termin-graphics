@@ -177,7 +177,7 @@ void bind_tc_render_target(nb::module_& m) {
             [](const tc_render_target_handle& h) -> nb::object {
                 tc_pipeline_handle ph = tc_render_target_get_pipeline(h);
                 if (!tc_pipeline_handle_valid(ph)) return nb::none();
-                nb::module_ m = nb::module_::import_("termin._native.render");
+                nb::module_ m = nb::module_::import_("termin.render_framework");
                 return m.attr("RenderPipeline").attr("from_handle")(ph.index, ph.generation);
             },
             [](tc_render_target_handle& h, nb::object pip_obj) {
