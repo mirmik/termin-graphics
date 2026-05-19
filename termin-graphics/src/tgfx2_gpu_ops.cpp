@@ -524,7 +524,8 @@ static void tgfx2_buffer_delete(uint32_t buffer_id) {
 // ============================================================================
 
 void tgfx2_gpu_ops_register(void) {
-    if (!g_tgfx2_device) {
+    auto* dev = get_device();
+    if (!dev) {
         tc_log_error("tgfx2_gpu_ops_register: device not set, call tgfx2_interop_set_device first");
         return;
     }
@@ -545,7 +546,7 @@ void tgfx2_gpu_ops_register(void) {
     ops.mesh_create_vao = tgfx2_mesh_create_vao;
     ops.buffer_delete = tgfx2_buffer_delete;
 
-    ops.user_data = g_tgfx2_device;
+    ops.user_data = dev;
 
     tgfx_gpu_set_ops(&ops);
 }
