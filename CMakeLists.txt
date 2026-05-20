@@ -180,6 +180,7 @@ add_subdirectory(termin-render)
 add_subdirectory(termin-display)
 add_subdirectory(termin-components/termin-components-render)
 add_subdirectory(termin-engine)
+add_subdirectory(termin-runtime)
 
 if(TERMIN_PLATFORM_ANDROID)
     add_subdirectory(termin-openxr)
