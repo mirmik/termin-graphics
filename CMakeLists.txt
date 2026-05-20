@@ -84,6 +84,12 @@ if(TERMIN_ENABLE_PCH)
 endif()
 
 if(TERMIN_BUILD_TESTS)
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/termin-thirdparty/guard/guard_c.h"
+       OR NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/termin-thirdparty/guard/guard_main.h")
+        message(FATAL_ERROR
+            "TERMIN_BUILD_TESTS=ON requires the guard test framework submodule. "
+            "Run: git submodule update --init termin-thirdparty/guard")
+    endif()
     enable_testing()
 endif()
 
