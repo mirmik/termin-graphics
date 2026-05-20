@@ -2,7 +2,7 @@
 #pragma once
 
 #include "tgfx/tgfx_api.h"
-#include "tgfx/resources/tc_resource.h"
+#include <tcbase/tc_resource.h>
 #include <tcbase/tc_binding_types.h>
 #include <tgfx/tgfx_types.h>
 #include <stdint.h>

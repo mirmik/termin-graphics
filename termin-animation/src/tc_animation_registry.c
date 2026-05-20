@@ -8,7 +8,7 @@
 #include <tcbase/tc_pool.h>
 #include <tcbase/tc_resource_map.h>
 #include <tcbase/tgfx_intern_string.h>
-#include <tgfx/tc_registry_utils.h>
+#include <tcbase/tc_registry_utils.h>
 
 static tc_pool g_animation_pool;
 static tc_resource_map* g_uuid_to_index = NULL;

@@ -3,7 +3,7 @@
 
 #include "tgfx/tgfx_api.h"
 #include "tgfx/tc_handle.h"
-#include "tgfx/resources/tc_resource.h"
+#include <tcbase/tc_resource.h>
 #include "tgfx/resources/tc_shader.h"
 #include "tgfx/resources/tc_texture.h"
 #include <stdint.h>

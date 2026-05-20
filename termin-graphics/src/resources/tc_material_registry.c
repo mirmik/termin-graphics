@@ -3,7 +3,7 @@
 #include "tgfx/resources/tc_shader_registry.h"
 #include <tcbase/tc_pool.h>
 #include <tcbase/tc_resource_map.h>
-#include "tgfx/tc_registry_utils.h"
+#include <tcbase/tc_registry_utils.h>
 #include <tcbase/tc_log.h>
 #include <tcbase/tgfx_intern_string.h>
 #include <stdlib.h>
