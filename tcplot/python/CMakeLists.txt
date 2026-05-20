@@ -1,6 +1,8 @@
 find_package(Python 3.8 COMPONENTS Interpreter Development REQUIRED)
 find_package(nanobind CONFIG REQUIRED)
-find_package(OpenGL REQUIRED)
+if(TGFX2_ENABLE_OPENGL)
+    find_package(OpenGL REQUIRED)
+endif()
 
 nanobind_add_module(_tcplot_native NB_SHARED
     bindings/tcplot_module.cpp
@@ -14,8 +16,10 @@ target_link_libraries(_tcplot_native PRIVATE
     tgfx::termin_graphics2
     tmesh::termin_mesh
     tcbase::termin_base
-    OpenGL::GL
 )
+if(TGFX2_ENABLE_OPENGL)
+    target_link_libraries(_tcplot_native PRIVATE OpenGL::GL)
+endif()
 target_include_directories(_tcplot_native PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
 
 if(NOT WIN32)

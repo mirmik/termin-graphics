@@ -5,7 +5,6 @@
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/enums.hpp>
 #include <tgfx2/i_render_device.hpp>
-#include <tgfx2/opengl/opengl_render_device.hpp>
 #include <tgfx2/pixel_format_utils.hpp>
 #include <tgfx2/tc_shader_bridge.hpp>
 

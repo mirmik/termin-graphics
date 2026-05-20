@@ -3,13 +3,17 @@
 #include "tgfx2/pipeline_cache.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/i_command_list.hpp"
+#ifdef TGFX2_HAS_OPENGL
 #include "tgfx2/opengl/opengl_render_device.hpp"
+#endif
 
 extern "C" {
 #include "tc_profiler.h"
 }
 
+#ifdef TGFX2_HAS_OPENGL
 #include <glad/glad.h>
+#endif
 #include <cstring>
 
 namespace tgfx {
@@ -446,11 +450,16 @@ namespace {
 // semantic they already have on a Vulkan shader (no legacy plain
 // uniforms to bind).
 inline bool gl_loader_ready() {
+#ifdef TGFX2_HAS_OPENGL
     return glad_glGetIntegerv != nullptr;
+#else
+    return false;
+#endif
 }
 } // namespace
 
 void RenderContext2::set_uniform_int(const char* name, int value) {
+#ifdef TGFX2_HAS_OPENGL
     if (!name || !gl_loader_ready()) return;
     flush_pipeline();
     GLint prog = 0;
@@ -458,9 +467,13 @@ void RenderContext2::set_uniform_int(const char* name, int value) {
     if (prog == 0) return;
     GLint loc = glGetUniformLocation(static_cast<GLuint>(prog), name);
     if (loc >= 0) glUniform1i(loc, value);
+#else
+    (void)name; (void)value;
+#endif
 }
 
 void RenderContext2::set_uniform_float(const char* name, float value) {
+#ifdef TGFX2_HAS_OPENGL
     if (!name || !gl_loader_ready()) return;
     flush_pipeline();
     GLint prog = 0;
@@ -468,10 +481,14 @@ void RenderContext2::set_uniform_float(const char* name, float value) {
     if (prog == 0) return;
     GLint loc = glGetUniformLocation(static_cast<GLuint>(prog), name);
     if (loc >= 0) glUniform1f(loc, value);
+#else
+    (void)name; (void)value;
+#endif
 }
 
 void RenderContext2::set_uniform_mat4(const char* name, const float* data,
                                       bool transpose) {
+#ifdef TGFX2_HAS_OPENGL
     if (!name || !data || !gl_loader_ready()) return;
     flush_pipeline();
     GLint prog = 0;
@@ -483,9 +500,13 @@ void RenderContext2::set_uniform_mat4(const char* name, const float* data,
                            transpose ? GL_TRUE : GL_FALSE,
                            data);
     }
+#else
+    (void)name; (void)data; (void)transpose;
+#endif
 }
 
 void RenderContext2::set_uniform_vec2(const char* name, float x, float y) {
+#ifdef TGFX2_HAS_OPENGL
     if (!name || !gl_loader_ready()) return;
     flush_pipeline();
     GLint prog = 0;
@@ -493,9 +514,13 @@ void RenderContext2::set_uniform_vec2(const char* name, float x, float y) {
     if (prog == 0) return;
     GLint loc = glGetUniformLocation(static_cast<GLuint>(prog), name);
     if (loc >= 0) glUniform2f(loc, x, y);
+#else
+    (void)name; (void)x; (void)y;
+#endif
 }
 
 void RenderContext2::set_uniform_vec3(const char* name, float x, float y, float z) {
+#ifdef TGFX2_HAS_OPENGL
     if (!name || !gl_loader_ready()) return;
     flush_pipeline();
     GLint prog = 0;
@@ -503,9 +528,13 @@ void RenderContext2::set_uniform_vec3(const char* name, float x, float y, float 
     if (prog == 0) return;
     GLint loc = glGetUniformLocation(static_cast<GLuint>(prog), name);
     if (loc >= 0) glUniform3f(loc, x, y, z);
+#else
+    (void)name; (void)x; (void)y; (void)z;
+#endif
 }
 
 void RenderContext2::set_uniform_vec4(const char* name, float x, float y, float z, float w) {
+#ifdef TGFX2_HAS_OPENGL
     if (!name || !gl_loader_ready()) return;
     flush_pipeline();
     GLint prog = 0;
@@ -513,10 +542,14 @@ void RenderContext2::set_uniform_vec4(const char* name, float x, float y, float 
     if (prog == 0) return;
     GLint loc = glGetUniformLocation(static_cast<GLuint>(prog), name);
     if (loc >= 0) glUniform4f(loc, x, y, z, w);
+#else
+    (void)name; (void)x; (void)y; (void)z; (void)w;
+#endif
 }
 
 void RenderContext2::set_uniform_mat4_array(const char* name, const float* data,
                                              int count, bool transpose) {
+#ifdef TGFX2_HAS_OPENGL
     if (!name || !data || count <= 0 || !gl_loader_ready()) return;
     flush_pipeline();
     GLint prog = 0;
@@ -528,9 +561,13 @@ void RenderContext2::set_uniform_mat4_array(const char* name, const float* data,
                            transpose ? GL_TRUE : GL_FALSE,
                            data);
     }
+#else
+    (void)name; (void)data; (void)count; (void)transpose;
+#endif
 }
 
 void RenderContext2::set_block_binding(const char* block_name, uint32_t binding_slot) {
+#ifdef TGFX2_HAS_OPENGL
     if (!block_name || !gl_loader_ready()) return;
     flush_pipeline();
     GLint prog = 0;
@@ -539,6 +576,9 @@ void RenderContext2::set_block_binding(const char* block_name, uint32_t binding_
     GLuint idx = glGetUniformBlockIndex(static_cast<GLuint>(prog), block_name);
     if (idx == GL_INVALID_INDEX) return;
     glUniformBlockBinding(static_cast<GLuint>(prog), idx, binding_slot);
+#else
+    (void)block_name; (void)binding_slot;
+#endif
 }
 
 // ============================================================================
@@ -845,10 +885,14 @@ void RenderContext2::blit(TextureHandle src, TextureHandle dst) {
 }
 
 uint32_t RenderContext2::last_gl_error() {
+#ifdef TGFX2_HAS_OPENGL
     // glad lives in this translation unit's module, so glGetError
     // is always a valid function pointer here even when the caller
     // is in another DLL (e.g. the Python binding module).
     return static_cast<uint32_t>(glGetError());
+#else
+    return 0;
+#endif
 }
 
 } // namespace tgfx

@@ -9,7 +9,10 @@ nanobind_add_module(_tgfx_native NB_SHARED
     bindings/tgfx2_bindings.cpp
 )
 
-target_link_libraries(_tgfx_native PRIVATE termin_graphics termin_graphics2 tmesh::termin_mesh OpenGL::GL)
+target_link_libraries(_tgfx_native PRIVATE termin_graphics termin_graphics2 tmesh::termin_mesh)
+if(TGFX2_ENABLE_OPENGL)
+    target_link_libraries(_tgfx_native PRIVATE OpenGL::GL)
+endif()
 target_include_directories(_tgfx_native PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
 
 if(NOT WIN32)

@@ -6,7 +6,7 @@ extern "C" {
 #include "tgfx/resources/tc_shader_registry.h"
 #include "tgfx/resources/tc_texture_registry.h"
 #include "tgfx/tgfx_resource_gpu.h"
-#include "inspect/tc_inspect.h"
+#include "tcbase/tc_value.h"
 }
 
 #include <algorithm>

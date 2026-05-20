@@ -16,6 +16,7 @@
 #include <termin/render/frame_debug_capture_pass.hpp>
 #include <termin/render/frame_graph_debugger_core.hpp>
 #include <termin/render/graph_alias_pass.hpp>
+#include <termin/render/shader_usage_collector.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/render_context.hpp>
@@ -100,6 +101,10 @@ void bind_render_framework(nb::module_& m) {
         .def("view_matrix", &RenderCamera::view_matrix)
         .def("projection_matrix", &RenderCamera::projection_matrix)
         .def("get_position", &RenderCamera::get_position);
+
+    m.def("collect_scene_shader_usages", &collect_scene_shader_usages,
+          nb::arg("scene"),
+          "Collect tc_shader usages declared by drawable components in a scene.");
 
     nb::class_<ResourceSpec>(m, "ResourceSpec")
         .def(nb::init<>())

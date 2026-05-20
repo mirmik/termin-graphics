@@ -5,6 +5,12 @@
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/enums.hpp"
 
+#include <cstdlib>
+#include <fstream>
+#include <iterator>
+#include <string>
+#include <vector>
+
 extern "C" {
 #include "tgfx/resources/tc_shader.h"
 #include "tgfx/tc_gpu_context.h"
@@ -14,6 +20,56 @@ extern "C" {
 }
 
 namespace termin {
+
+static std::string g_shader_artifact_root;
+
+void tgfx2_set_shader_artifact_root(const char* root) {
+    g_shader_artifact_root = root ? root : "";
+}
+
+const char* tgfx2_get_shader_artifact_root(void) {
+    if (!g_shader_artifact_root.empty()) {
+        return g_shader_artifact_root.c_str();
+    }
+    const char* env = std::getenv("TERMIN_SHADER_ARTIFACT_ROOT");
+    return env ? env : "";
+}
+
+static const char* stage_extension(tgfx::ShaderStage stage) {
+    switch (stage) {
+        case tgfx::ShaderStage::Vertex: return "vert";
+        case tgfx::ShaderStage::Fragment: return "frag";
+        case tgfx::ShaderStage::Geometry: return "geom";
+        case tgfx::ShaderStage::Compute: return "comp";
+    }
+    return "spv";
+}
+
+static bool load_shader_artifact(
+    const tc_shader* shader,
+    tgfx::ShaderStage stage,
+    std::vector<uint8_t>& out
+) {
+    const char* root = tgfx2_get_shader_artifact_root();
+    if (!root || root[0] == '\0' || !shader || shader->uuid[0] == '\0') {
+        return false;
+    }
+
+    std::string path = std::string(root) + "/shaders/vulkan/"
+        + shader->uuid + "." + stage_extension(stage) + ".spv";
+
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        return false;
+    }
+
+    out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    if (out.empty()) {
+        tc_log(TC_LOG_ERROR, "tc_shader_ensure_tgfx2: empty shader artifact '%s'", path.c_str());
+        return false;
+    }
+    return true;
+}
 
 // Reinterpret the slot's opaque `tgfx2_shader_device` as an IRenderDevice
 // pointer. The slot stores whatever device instance first populated it.
@@ -122,8 +178,12 @@ bool tc_shader_ensure_tgfx2(
     if (has_vs) {
         tgfx::ShaderDesc vs_desc;
         vs_desc.stage = tgfx::ShaderStage::Vertex;
-        vs_desc.source = shader->vertex_source;
         vs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":vertex";
+        if (device->backend_type() == tgfx::BackendType::Vulkan
+            && load_shader_artifact(shader, vs_desc.stage, vs_desc.bytecode)) {
+        } else {
+            vs_desc.source = shader->vertex_source;
+        }
         vs = device->create_shader(vs_desc);
         if (!vs) {
             tc_log(TC_LOG_ERROR,
@@ -135,8 +195,12 @@ bool tc_shader_ensure_tgfx2(
 
     tgfx::ShaderDesc fs_desc;
     fs_desc.stage = tgfx::ShaderStage::Fragment;
-    fs_desc.source = shader->fragment_source;
     fs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":fragment";
+    if (device->backend_type() == tgfx::BackendType::Vulkan
+        && load_shader_artifact(shader, fs_desc.stage, fs_desc.bytecode)) {
+    } else {
+        fs_desc.source = shader->fragment_source;
+    }
     tgfx::ShaderHandle fs = device->create_shader(fs_desc);
     if (!fs) {
         // Roll back VS to avoid leaking on partial failure.

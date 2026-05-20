@@ -14,6 +14,7 @@ CLEAN=0
 NO_PARALLEL=0
 VULKAN_MODE="on"
 SDL_MODE="on"
+OPENGL_MODE="on"
 BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 CCACHE_MODE="on"
 UNITY_MODE="off"
@@ -36,6 +37,8 @@ for arg in "$@"; do
         --vulkan)      VULKAN_MODE="on" ;;
         --no-sdl)      SDL_MODE="off" ;;
         --sdl)         SDL_MODE="on" ;;
+        --no-opengl)   OPENGL_MODE="off" ;;
+        --opengl)      OPENGL_MODE="on" ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -54,6 +57,8 @@ for arg in "$@"; do
             echo "  --vulkan          Enable Vulkan support (default)"
             echo "  --no-sdl          Disable SDL2 support"
             echo "  --sdl             Enable SDL2 support (default)"
+            echo "  --no-opengl       Disable OpenGL backend; keep Vulkan render/editor targets"
+            echo "  --opengl          Enable desktop OpenGL targets (default)"
             echo "  --help, -h        Show this help"
             echo ""
             echo "Environment:"
@@ -89,6 +94,11 @@ case "$SDL_MODE" in
     on)  TERMIN_ENABLE_SDL=ON ;;
 esac
 
+case "$OPENGL_MODE" in
+    off) TERMIN_ENABLE_OPENGL=OFF ;;
+    on)  TERMIN_ENABLE_OPENGL=ON ;;
+esac
+
 case "$CCACHE_MODE" in
     off) TERMIN_USE_CCACHE=OFF ;;
     on)  TERMIN_USE_CCACHE=ON ;;
@@ -115,6 +125,7 @@ echo "Build dir:   $BUILD_DIR"
 echo "SDK prefix:  $SDK_PREFIX"
 echo "Vulkan:      $TERMIN_ENABLE_VULKAN"
 echo "SDL2:        $TERMIN_ENABLE_SDL"
+echo "OpenGL:      $TERMIN_ENABLE_OPENGL"
 echo "ccache:      $TERMIN_USE_CCACHE"
 echo "Unity build: $TERMIN_ENABLE_UNITY_BUILD"
 echo "PCH:         $TERMIN_ENABLE_PCH"
@@ -144,6 +155,7 @@ cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     -DTERMIN_BUILD_TESTS=OFF \
     -DTERMIN_ENABLE_VULKAN="$TERMIN_ENABLE_VULKAN" \
     -DTERMIN_ENABLE_SDL="$TERMIN_ENABLE_SDL" \
+    -DTERMIN_ENABLE_OPENGL="$TERMIN_ENABLE_OPENGL" \
     -DTERMIN_BUILD_EDITOR_MINIMAL=ON \
     -DTERMIN_BUILD_EDITOR_EXE=OFF \
     -DTERMIN_BUILD_LAUNCHER=ON \

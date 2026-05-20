@@ -31,7 +31,7 @@ class RenderContext2;
 class IRenderDevice;
 class FontAtlas;
 
-class TGFX2_API Text3DRenderer {
+class TGFX2_TYPE_API Text3DRenderer {
 public:
     enum class Anchor : uint8_t { Left, Center, Right };
 

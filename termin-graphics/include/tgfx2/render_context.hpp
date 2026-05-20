@@ -33,7 +33,7 @@ class IRenderDevice;
 class ICommandList;
 class PipelineCache;
 
-class TGFX2_API RenderContext2 {
+class TGFX2_TYPE_API RenderContext2 {
 private:
     IRenderDevice& device_;
     PipelineCache& cache_;

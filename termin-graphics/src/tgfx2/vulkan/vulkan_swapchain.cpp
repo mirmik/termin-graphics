@@ -435,6 +435,96 @@ bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
     return should_recreate;
 }
 
+bool VulkanSwapchain::clear_and_present(float r, float g, float b, float a) {
+    wait_for_current_frame();
+
+    uint32_t image_idx = 0;
+    VkSemaphore image_available = VK_NULL_HANDLE;
+    VkResult ar = acquire(&image_idx, &image_available);
+    if (ar == VK_ERROR_OUT_OF_DATE_KHR) {
+        VkSubmitInfo empty{};
+        empty.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        vkQueueSubmit(device_.graphics_queue(), 1, &empty,
+                      in_flight_fences_[current_frame_]);
+        return true;
+    }
+    if (ar != VK_SUCCESS && ar != VK_SUBOPTIMAL_KHR) {
+        return true;
+    }
+    bool suboptimal = (ar == VK_SUBOPTIMAL_KHR);
+
+    VkCommandBuffer cb = compose_command_buffers_[current_frame_];
+    vkResetCommandBuffer(cb, 0);
+
+    VkCommandBufferBeginInfo begin{};
+    begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cb, &begin);
+
+    VkImageSubresourceRange range{};
+    range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    range.levelCount = 1;
+    range.layerCount = 1;
+
+    VkImage image = images_[image_idx];
+    VkImageMemoryBarrier to_dst{};
+    to_dst.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    to_dst.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    to_dst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    to_dst.image = image;
+    to_dst.subresourceRange = range;
+    to_dst.srcAccessMask = 0;
+    to_dst.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    vkCmdPipelineBarrier(cb,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &to_dst);
+
+    VkClearColorValue clear{};
+    clear.float32[0] = r;
+    clear.float32[1] = g;
+    clear.float32[2] = b;
+    clear.float32[3] = a;
+    vkCmdClearColorImage(cb, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         &clear, 1, &range);
+
+    VkImageMemoryBarrier to_present{};
+    to_present.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    to_present.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    to_present.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    to_present.image = image;
+    to_present.subresourceRange = range;
+    to_present.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    to_present.dstAccessMask = 0;
+    vkCmdPipelineBarrier(cb,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &to_present);
+
+    vkEndCommandBuffer(cb);
+
+    VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    VkSemaphore render_done = render_finished_semaphores_[current_frame_];
+    VkSubmitInfo si{};
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    si.waitSemaphoreCount = 1;
+    si.pWaitSemaphores = &image_available;
+    si.pWaitDstStageMask = &wait_stage;
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &cb;
+    si.signalSemaphoreCount = 1;
+    si.pSignalSemaphores = &render_done;
+    vkQueueSubmit(device_.graphics_queue(), 1, &si,
+                  in_flight_fences_[current_frame_]);
+
+    VkResult pr = present(image_idx, render_done);
+    bool should_recreate = suboptimal ||
+                           pr == VK_ERROR_OUT_OF_DATE_KHR ||
+                           pr == VK_SUBOPTIMAL_KHR;
+    advance_frame();
+    return should_recreate;
+}
+
 } // namespace tgfx
 
 #endif // TGFX2_HAS_VULKAN

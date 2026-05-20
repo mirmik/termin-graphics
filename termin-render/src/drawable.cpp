@@ -55,6 +55,32 @@ tc_shader_handle Drawable::_cb_override_shader(
     return result.handle;
 }
 
+void Drawable::_cb_collect_shader_usages(
+    tc_component* c,
+    const char* phase_mark,
+    int geometry_id,
+    tc_shader_handle original_shader,
+    tc_shader_usage_emit_fn emit,
+    void* user_data
+) {
+    if (!c || !emit) return;
+
+    Drawable* drawable = static_cast<Drawable*>(tc_component_get_drawable_userdata(c));
+    if (!drawable) {
+        emit(c, original_shader, user_data);
+        return;
+    }
+
+    drawable->collect_shader_usages(
+        phase_mark ? phase_mark : "",
+        geometry_id,
+        TcShader(original_shader),
+        [c, emit, user_data](TcShader shader) {
+            emit(c, shader.handle, user_data);
+        }
+    );
+}
+
 Mat44f Drawable::get_model_matrix(const Entity& entity) const {
     double m[16];
     entity.transform().world_matrix(m);
@@ -72,7 +98,8 @@ const tc_drawable_vtable& Drawable::cxx_drawable_vtable() {
         &Drawable::_cb_has_phase,
         &Drawable::_cb_draw_geometry,
         &Drawable::_cb_get_geometry_draws,
-        &Drawable::_cb_override_shader
+        &Drawable::_cb_override_shader,
+        &Drawable::_cb_collect_shader_usages
     };
     return vtable;
 }

@@ -83,6 +83,13 @@ TGFX_API void tc_shader_set_variant_info(
 
 TGFX_API bool tc_shader_variant_is_stale(tc_shader_handle variant);
 
+TGFX_API void tc_shader_make_variant_uuid(
+    char* out_uuid,
+    size_t out_size,
+    const char* base_uuid,
+    tc_shader_variant_op op
+);
+
 // ============================================================================
 // Shader info for debugging/inspection
 // ============================================================================

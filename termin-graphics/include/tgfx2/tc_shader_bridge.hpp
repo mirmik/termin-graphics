@@ -42,4 +42,7 @@ TGFX2_API bool tc_shader_ensure_tgfx2(
     tgfx::ShaderHandle* out_vs,
     tgfx::ShaderHandle* out_fs);
 
+TGFX2_API void tgfx2_set_shader_artifact_root(const char* root);
+TGFX2_API const char* tgfx2_get_shader_artifact_root(void);
+
 } // namespace termin

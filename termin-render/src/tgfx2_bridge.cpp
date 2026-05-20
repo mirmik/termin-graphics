@@ -10,7 +10,9 @@
 #include "tgfx/tc_gpu_context.h"
 #include "tgfx/tc_gpu_share_group.h"
 #include "tgfx2/i_render_device.hpp"
+#ifdef TGFX2_HAS_OPENGL
 #include "tgfx2/opengl/opengl_render_device.hpp"
+#endif
 #include "tgfx2/descriptors.hpp"
 
 extern "C" {
@@ -47,6 +49,7 @@ tgfx::PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
 
 namespace {
 
+#ifdef TGFX2_HAS_OPENGL
 tgfx::TextureHandle wrap_tc_texture_gl(
     tgfx::OpenGLRenderDevice& device,
     tc_texture* tex
@@ -97,6 +100,7 @@ tgfx::TextureHandle wrap_tc_texture_gl(
         desc
     );
 }
+#endif
 
 // Non-GL backends have no share-group slot to wrap — delegate to the
 // device's per-tc_texture cache through the IRenderDevice virtual hook.
@@ -128,8 +132,13 @@ tgfx::TextureHandle wrap_tc_texture_as_tgfx2(
     }
 
     if (device.backend_type() == tgfx::BackendType::OpenGL) {
+#ifdef TGFX2_HAS_OPENGL
         return wrap_tc_texture_gl(
             static_cast<tgfx::OpenGLRenderDevice&>(device), tex);
+#else
+        tc::Log::error("wrap_tc_texture_as_tgfx2: OpenGL backend not compiled");
+        return {};
+#endif
     }
     return wrap_tc_texture_non_gl(device, tex);
 }

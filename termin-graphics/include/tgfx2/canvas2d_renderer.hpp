@@ -33,7 +33,7 @@ struct CanvasVec2 {
     float y = 0.0f;
 };
 
-class TGFX2_API Canvas2DRenderer {
+class TGFX2_TYPE_API Canvas2DRenderer {
 public:
     explicit Canvas2DRenderer(FontAtlas* default_font = nullptr);
     ~Canvas2DRenderer();

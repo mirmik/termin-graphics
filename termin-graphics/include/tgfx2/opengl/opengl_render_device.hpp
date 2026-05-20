@@ -111,7 +111,7 @@ public:
     auto end() { return pool_.end(); }
 };
 
-class TGFX2_API OpenGLRenderDevice : public IRenderDevice {
+class TGFX2_TYPE_API OpenGLRenderDevice : public IRenderDevice {
 private:
     // FBO cache key: sorted vector of (GL attachment enum, GL texture id).
     using FBOKey = std::vector<std::pair<GLenum, GLuint>>;

@@ -10,3 +10,6 @@
 [submodule "termin-thirdparty/guard"]
 	path = termin-thirdparty/guard
 	url = git@github.com:mirmik/guard.git
+[submodule "termin-thirdparty/openxr-sdk"]
+	path = termin-thirdparty/openxr-sdk
+	url = https://github.com/KhronosGroup/OpenXR-SDK.git

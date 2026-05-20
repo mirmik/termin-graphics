@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <functional>
 #include <set>
 #include <string>
 #include <vector>
@@ -56,6 +57,17 @@ public:
         return original_shader;
     }
 
+    virtual void collect_shader_usages(
+        const std::string& phase_mark,
+        int geometry_id,
+        TcShader original_shader,
+        const std::function<void(TcShader)>& emit
+    ) {
+        (void)phase_mark;
+        (void)geometry_id;
+        emit(original_shader);
+    }
+
     // Expose the underlying tc_mesh for a given phase + geometry id so
     // tgfx2-migrated passes (ShadowPass, IdPass, ColorPass) can wrap it
     // via wrap_mesh_as_tgfx2() and draw through RenderContext2 instead
@@ -109,6 +121,7 @@ private:
     static void _cb_draw_geometry(tc_component* c, void* render_context, int geometry_id);
     static void* _cb_get_geometry_draws(tc_component* c, const char* phase_mark);
     static tc_shader_handle _cb_override_shader(tc_component* c, const char* phase_mark, int geometry_id, tc_shader_handle original_shader);
+    static void _cb_collect_shader_usages(tc_component* c, const char* phase_mark, int geometry_id, tc_shader_handle original_shader, tc_shader_usage_emit_fn emit, void* user_data);
 };
 
 struct PhaseDrawCall {

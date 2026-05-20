@@ -1,5 +1,7 @@
 #include "tgfx2/device_factory.hpp"
+#ifdef TGFX2_HAS_OPENGL
 #include "tgfx2/opengl/opengl_render_device.hpp"
+#endif
 
 #ifdef TGFX2_HAS_VULKAN
 #include "tgfx2/vulkan/vulkan_render_device.hpp"
@@ -34,7 +36,11 @@ BackendType default_backend_from_env() {
 std::unique_ptr<IRenderDevice> create_device(BackendType type) {
     switch (type) {
         case BackendType::OpenGL:
+#ifdef TGFX2_HAS_OPENGL
             return std::make_unique<OpenGLRenderDevice>();
+#else
+            throw std::runtime_error("OpenGL backend not compiled (set TGFX2_ENABLE_OPENGL=ON)");
+#endif
 
         case BackendType::Vulkan:
 #ifdef TGFX2_HAS_VULKAN

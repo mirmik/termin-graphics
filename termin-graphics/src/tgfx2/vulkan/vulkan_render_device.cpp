@@ -29,6 +29,12 @@ extern "C" {
 #include <tgfx/resources/tc_mesh_registry.h>
 }
 
+#ifdef __ANDROID__
+static constexpr uint32_t TGFX2_VULKAN_RUNTIME_API_VERSION = VK_API_VERSION_1_0;
+#else
+static constexpr uint32_t TGFX2_VULKAN_RUNTIME_API_VERSION = VK_API_VERSION_1_3;
+#endif
+
 // Trampolines for destroy-hook C callbacks. Defined at file scope (not in
 // an anonymous namespace) so their addresses are stable identifiers that
 // `tc_*_registry_remove_destroy_hook` can match against.
@@ -422,7 +428,7 @@ void VulkanRenderDevice::init_instance(const VulkanDeviceCreateInfo& info) {
     app_info.applicationVersion = VK_MAKE_VERSION(0, 1, 0);
     app_info.pEngineName = "tgfx2";
     app_info.engineVersion = VK_MAKE_VERSION(0, 1, 0);
-    app_info.apiVersion = VK_API_VERSION_1_3;
+    app_info.apiVersion = TGFX2_VULKAN_RUNTIME_API_VERSION;
 
     std::vector<const char*> extensions = info.instance_extensions;
     std::vector<const char*> layers;
@@ -507,6 +513,9 @@ void VulkanRenderDevice::pick_physical_device() {
     }
 
     if (!found_graphics) throw std::runtime_error("No graphics queue family found");
+    if (surface_ && !found_present) {
+        throw std::runtime_error("No present queue family found for Vulkan surface");
+    }
 }
 
 // --- Logical device ---
@@ -526,15 +535,28 @@ void VulkanRenderDevice::create_logical_device() {
         queue_cis.push_back(qci);
     }
 
+    VkPhysicalDeviceFeatures supported_features{};
+    vkGetPhysicalDeviceFeatures(physical_device_, &supported_features);
+
     VkPhysicalDeviceFeatures features{};
-    features.fillModeNonSolid = VK_TRUE; // for wireframe
+    if (supported_features.fillModeNonSolid) {
+        features.fillModeNonSolid = VK_TRUE; // for wireframe
+    } else {
+        tc_log_info("VulkanRenderDevice: fillModeNonSolid unsupported; wireframe pipelines disabled");
+    }
     // Shadow shaders index `sampler2DShadow u_shadow_map[N]` with a
     // runtime loop variable. In Vulkan that requires the
     // `shaderSampledImageArrayDynamicIndexing` feature — without it
     // access is undefined and shadow lookups silently return 1.0 (no
     // shadow) on most drivers. Matches GL's always-available dynamic
     // indexing of sampler arrays.
-    features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
+    if (supported_features.shaderSampledImageArrayDynamicIndexing) {
+        features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
+    } else {
+        tc_log_info(
+            "VulkanRenderDevice: shaderSampledImageArrayDynamicIndexing unsupported; "
+            "shadow sampler-array dynamic indexing disabled");
+    }
 
     std::vector<const char*> extensions;
     if (surface_) {
@@ -555,8 +577,11 @@ void VulkanRenderDevice::create_logical_device() {
     ci.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     ci.ppEnabledExtensionNames = extensions.data();
 
-    if (vkCreateDevice(physical_device_, &ci, nullptr, &device_) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create Vulkan logical device");
+    VkResult result = vkCreateDevice(physical_device_, &ci, nullptr, &device_);
+    if (result != VK_SUCCESS) {
+        throw std::runtime_error(
+            "Failed to create Vulkan logical device: vkCreateDevice result=" +
+            std::to_string(static_cast<int>(result)));
     }
 
     vkGetDeviceQueue(device_, graphics_family_, 0, &graphics_queue_);
@@ -572,7 +597,7 @@ void VulkanRenderDevice::create_allocator() {
     ci.physicalDevice = physical_device_;
     ci.device = device_;
     ci.instance = instance_;
-    ci.vulkanApiVersion = VK_API_VERSION_1_3;
+    ci.vulkanApiVersion = TGFX2_VULKAN_RUNTIME_API_VERSION;
 
     if (vmaCreateAllocator(&ci, &allocator_) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create VMA allocator");

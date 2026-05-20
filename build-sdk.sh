@@ -33,6 +33,8 @@ for arg in "$@"; do
             echo "  --vulkan          Enable Vulkan support (default for C/C++ stage)"
             echo "  --no-sdl          Disable SDL2 support"
             echo "  --sdl             Enable SDL2 support (default for C/C++ stage)"
+            echo "  --no-opengl       Disable OpenGL backend; keep Vulkan render/editor targets"
+            echo "  --opengl          Enable desktop OpenGL targets (default)"
             echo "  --help, -h        Show this help"
             echo ""
             echo "Environment:"
@@ -96,12 +98,16 @@ echo ""
 SDK_DIR="$SCRIPT_DIR/sdk"
 DUPES=0
 
-# Check that no .so files are duplicated within sdk/,
-# excluding csharp/runtimes/ (NuGet requires its own copies).
+# Check that no .so files are duplicated within the host sdk/,
+# excluding layouts that intentionally carry their own platform-specific
+# copies.
 declare -A LIB_SEEN
 while IFS= read -r so_path; do
     lib_name=$(basename "$so_path")
     [[ -L "$so_path" ]] && continue
+    # Skip Android SDK slices — these are cross-compiled libraries for
+    # another ABI, intentionally colocated under sdk/android/<abi>/.
+    [[ "$so_path" == "$SDK_DIR"/android/* ]] && continue
     # Skip csharp runtime copies — NuGet layout requires them
     [[ "$so_path" == */csharp/runtimes/* ]] && continue
     # Skip third-party Python packages (scipy, numpy, etc.)
