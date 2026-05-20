@@ -6,6 +6,8 @@
 extern "C" {
 #include <tgfx/resources/tc_mesh.h>
 #include <tgfx/resources/tc_mesh_registry.h>
+#include <tcbase/tc_value.h>
+#include <tcbase/tc_log.h>
 }
 
 #include <tgfx/tgfx_api.h>
@@ -164,6 +166,73 @@ public:
 
     void delete_gpu() {
         if (tc_mesh* m = get()) tc_mesh_delete_gpu(m);
+    }
+
+    tc_value serialize_to_value() const {
+        tc_value d = tc_value_dict_new();
+        if (!is_valid()) {
+            tc_value_dict_set(&d, "type", tc_value_string("none"));
+            return d;
+        }
+        tc_value_dict_set(&d, "uuid", tc_value_string(uuid()));
+        tc_value_dict_set(&d, "name", tc_value_string(name()));
+        tc_value_dict_set(&d, "type", tc_value_string("uuid"));
+        return d;
+    }
+
+    void deserialize_from(const tc_value* data, void* = nullptr) {
+        if (tc_mesh* m = tc_mesh_get(handle)) {
+            tc_mesh_release(m);
+        }
+        handle = tc_mesh_handle_invalid();
+
+        if (!data) return;
+
+        if (data->type == TC_VALUE_STRING && data->data.s && data->data.s[0]) {
+            const char* mesh_name = data->data.s;
+            if (strcmp(mesh_name, "(None)") == 0) return;
+
+            tc_mesh_handle h = tc_mesh_find_by_name(mesh_name);
+            if (!tc_mesh_handle_is_invalid(h)) {
+                handle = h;
+                if (tc_mesh* m = tc_mesh_get(handle)) {
+                    tc_mesh_add_ref(m);
+                }
+            } else {
+                tc_log_error("[TcMesh] Mesh '%s' not found", mesh_name);
+            }
+            return;
+        }
+
+        if (data->type != TC_VALUE_DICT) return;
+
+        tc_value* uuid_val = tc_value_dict_get(const_cast<tc_value*>(data), "uuid");
+        if (uuid_val && uuid_val->type == TC_VALUE_STRING && uuid_val->data.s) {
+            tc_mesh_handle h = tc_mesh_find(uuid_val->data.s);
+            if (!tc_mesh_handle_is_invalid(h)) {
+                handle = h;
+                if (tc_mesh* m = tc_mesh_get(handle)) {
+                    tc_mesh_add_ref(m);
+                }
+                ensure_loaded();
+                return;
+            }
+        }
+
+        tc_value* name_val = tc_value_dict_get(const_cast<tc_value*>(data), "name");
+        if (name_val && name_val->type == TC_VALUE_STRING && name_val->data.s) {
+            const char* mesh_name = name_val->data.s;
+            tc_mesh_handle h = tc_mesh_find_by_name(mesh_name);
+            if (!tc_mesh_handle_is_invalid(h)) {
+                handle = h;
+                if (tc_mesh* m = tc_mesh_get(handle)) {
+                    tc_mesh_add_ref(m);
+                }
+                ensure_loaded();
+            } else {
+                tc_log_error("[TcMesh] Mesh '%s' not found", mesh_name);
+            }
+        }
     }
 
     // Populate existing TcMesh with data from Mesh3
