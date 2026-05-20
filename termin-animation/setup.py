@@ -22,7 +22,10 @@ setup(
     python_requires=">=3.8",
     packages=["termin.animation"],
     package_dir={"termin.animation": "python/termin/animation"},
-    install_requires=["termin-nanobind"],
+    install_requires=[
+        "termin-nanobind",
+        "tcbase",
+    ],
     ext_modules=[
         Extension("termin.animation._animation_native", sources=[]),
         Extension("termin.animation._components_animation_native", sources=[]),

@@ -25,7 +25,12 @@ setup(
         "termin.render": "python/termin/render",
         "termin.render_framework": "python/termin/render_framework",
     },
-    install_requires=["termin-nanobind"],
+    install_requires=[
+        "termin-nanobind",
+        "tcbase",
+        "termin-scene",
+        "termin-inspect",
+    ],
     ext_modules=[
         Extension("termin.render_framework._render_framework_native", sources=[]),
         Extension("termin.render._render_native", sources=[]),
