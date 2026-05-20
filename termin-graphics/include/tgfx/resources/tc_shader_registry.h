@@ -71,6 +71,18 @@ TGFX_API tc_shader_handle tc_shader_register_static(
     const char* name
 );
 
+// Same ownership semantics as tc_shader_register_static(), but uses a stable
+// caller-provided UUID instead of an auto-generated shader-N UUID. Engine
+// shaders that need offline SPIR-V artifacts should use this API so build
+// tools can write artifacts under deterministic filenames.
+TGFX_API tc_shader_handle tc_shader_register_static_uuid(
+    const char* vertex_source,
+    const char* fragment_source,
+    const char* geometry_source,
+    const char* name,
+    const char* uuid
+);
+
 // ============================================================================
 // Variant support
 // ============================================================================

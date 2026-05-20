@@ -45,22 +45,24 @@ static const char* stage_extension(tgfx::ShaderStage stage) {
     return "spv";
 }
 
-static bool load_shader_artifact(
-    const tc_shader* shader,
+bool tgfx2_load_shader_artifact(
+    const char* shader_uuid,
     tgfx::ShaderStage stage,
     std::vector<uint8_t>& out
 ) {
     const char* root = tgfx2_get_shader_artifact_root();
-    if (!root || root[0] == '\0' || !shader || shader->uuid[0] == '\0') {
+    if (!shader_uuid || shader_uuid[0] == '\0') {
         tc_log(TC_LOG_ERROR,
-               "tc_shader_ensure_tgfx2: cannot load SPIR-V artifact, root='%s', shader_uuid='%s'",
-               root ? root : "",
-               shader ? shader->uuid : "<null>");
+               "tc_shader_ensure_tgfx2: cannot load SPIR-V artifact, shader_uuid='%s'",
+               shader_uuid ? shader_uuid : "<null>");
+        return false;
+    }
+    if (!root || root[0] == '\0') {
         return false;
     }
 
     std::string path = std::string(root) + "/shaders/vulkan/"
-        + shader->uuid + "." + stage_extension(stage) + ".spv";
+        + shader_uuid + "." + stage_extension(stage) + ".spv";
 
     std::ifstream in(path, std::ios::binary);
     if (!in) {
@@ -74,6 +76,14 @@ static bool load_shader_artifact(
         return false;
     }
     return true;
+}
+
+static bool load_shader_artifact(
+    const tc_shader* shader,
+    tgfx::ShaderStage stage,
+    std::vector<uint8_t>& out
+) {
+    return tgfx2_load_shader_artifact(shader ? shader->uuid : nullptr, stage, out);
 }
 
 // Reinterpret the slot's opaque `tgfx2_shader_device` as an IRenderDevice

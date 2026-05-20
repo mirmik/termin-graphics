@@ -16,7 +16,11 @@
 #pragma once
 
 #include "tgfx2/tgfx2_api.h"
+#include "tgfx2/enums.hpp"
 #include "tgfx2/handles.hpp"
+
+#include <cstdint>
+#include <vector>
 
 extern "C" {
 struct tc_shader;
@@ -44,5 +48,9 @@ TGFX2_API bool tc_shader_ensure_tgfx2(
 
 TGFX2_API void tgfx2_set_shader_artifact_root(const char* root);
 TGFX2_API const char* tgfx2_get_shader_artifact_root(void);
+TGFX2_API bool tgfx2_load_shader_artifact(
+    const char* shader_uuid,
+    tgfx::ShaderStage stage,
+    std::vector<uint8_t>& out);
 
 } // namespace termin
