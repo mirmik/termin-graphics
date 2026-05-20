@@ -71,13 +71,18 @@ void RenderContext2::begin_frame() {
 }
 
 void RenderContext2::end_frame() {
+    const bool profile = tc_profiler_enabled();
     if (in_pass_) {
         end_pass();
     }
+    if (profile) tc_profiler_begin_section("RenderContext2::end_frame");
+    if (profile) tc_profiler_begin_section("RenderContext2::submit");
     cmd_->end();
     device_.submit(*cmd_);
     cmd_.reset();
+    if (profile) tc_profiler_end_section();
 
+    if (profile) tc_profiler_begin_section("RenderContext2::destroy_transients");
     if (current_resource_set_) {
         device_.destroy(current_resource_set_);
         current_resource_set_ = {};
@@ -96,6 +101,8 @@ void RenderContext2::end_frame() {
     deferred_destroy_textures_.clear();
     deferred_destroy_buffers_.clear();
     deferred_destroy_resource_sets_.clear();
+    if (profile) tc_profiler_end_section();
+    if (profile) tc_profiler_end_section();
 }
 
 // ============================================================================
@@ -679,31 +686,33 @@ void RenderContext2::flush_resource_set() {
         current_resource_set_ = {};
     }
 
-    ResourceSetDesc desc;
-    desc.bindings = pending_bindings_;
-    current_resource_set_ = device_.create_resource_set(desc);
+    if (!pending_bindings_.empty()) {
+        ResourceSetDesc desc;
+        desc.bindings = pending_bindings_;
+        current_resource_set_ = device_.create_resource_set(desc);
 
-    // Dynamic UBO offsets: Vulkan's shared layout declares five
-    // UNIFORM_BUFFER_DYNAMIC slots — bindings 0, 1, 2, 3, 16 (lighting,
-    // material, per-frame, shadow, bone block) — and expects their
-    // offsets in that ascending order at bind time. Pick them out of
-    // pending_bindings_ by matching binding numbers; slots left unset
-    // default to 0 (the descriptor write already points them at the
-    // ring buffer with range=WHOLE, so offset=0 is always in bounds).
-    // OpenGL ignores the offsets array and reads offset straight from
-    // the ResourceBinding — same source of truth, no duplication.
-    static constexpr uint32_t DYN_BINDINGS[5] = {0, 1, 2, 3, 16};
-    uint32_t offsets[5] = {0, 0, 0, 0, 0};
-    for (const auto& b : pending_bindings_) {
-        if (b.kind != ResourceBinding::Kind::UniformBuffer) continue;
-        for (uint32_t i = 0; i < 5; ++i) {
-            if (DYN_BINDINGS[i] == b.binding) {
-                offsets[i] = static_cast<uint32_t>(b.offset);
-                break;
+        // Dynamic UBO offsets: Vulkan's shared layout declares five
+        // UNIFORM_BUFFER_DYNAMIC slots — bindings 0, 1, 2, 3, 16 (lighting,
+        // material, per-frame, shadow, bone block) — and expects their
+        // offsets in that ascending order at bind time. Pick them out of
+        // pending_bindings_ by matching binding numbers; slots left unset
+        // default to 0 (the descriptor write already points them at the
+        // ring buffer with range=WHOLE, so offset=0 is always in bounds).
+        // OpenGL ignores the offsets array and reads offset straight from
+        // the ResourceBinding — same source of truth, no duplication.
+        static constexpr uint32_t DYN_BINDINGS[5] = {0, 1, 2, 3, 16};
+        uint32_t offsets[5] = {0, 0, 0, 0, 0};
+        for (const auto& b : pending_bindings_) {
+            if (b.kind != ResourceBinding::Kind::UniformBuffer) continue;
+            for (uint32_t i = 0; i < 5; ++i) {
+                if (DYN_BINDINGS[i] == b.binding) {
+                    offsets[i] = static_cast<uint32_t>(b.offset);
+                    break;
+                }
             }
         }
+        cmd_->bind_resource_set(current_resource_set_, offsets, 5);
     }
-    cmd_->bind_resource_set(current_resource_set_, offsets, 5);
 
     bindings_dirty_ = false;
 }
