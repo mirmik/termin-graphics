@@ -1,4 +1,4 @@
-#include "guard/guard.h"
+#include "guard_main.h"
 
 extern "C" {
 #include "tgfx/tgfx_types.h"

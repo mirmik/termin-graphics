@@ -1,3 +1,3 @@
-#include "guard/guard.h"
+#include "guard_main.h"
 
 GUARD_TEST_MAIN();

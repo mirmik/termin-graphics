@@ -237,6 +237,7 @@ if(BUILD_TESTS)
     )
     target_include_directories(tgfx_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
     )
     target_link_libraries(tgfx_tests PRIVATE termin_graphics)
 

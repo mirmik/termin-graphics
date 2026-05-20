@@ -7,3 +7,6 @@
 [submodule "termin-thirdparty/clipper2"]
 	path = termin-thirdparty/clipper2
 	url = https://github.com/AngusJohnson/Clipper2.git
+[submodule "termin-thirdparty/guard"]
+	path = termin-thirdparty/guard
+	url = git@github.com:mirmik/guard.git
