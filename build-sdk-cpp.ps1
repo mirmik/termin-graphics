@@ -46,6 +46,22 @@ function Show-Help {
     Write-Host "                    CMake generator for a new build dir (default: CMake default)"
 }
 
+function Get-CMakeGeneratorFromCache {
+    param([string]$BuildDir)
+
+    $cachePath = Join-Path $BuildDir "CMakeCache.txt"
+    if (-not (Test-Path $cachePath)) {
+        return ""
+    }
+
+    $generatorLine = Get-Content $cachePath | Where-Object { $_ -like "CMAKE_GENERATOR:INTERNAL=*" } | Select-Object -First 1
+    if (-not $generatorLine) {
+        return ""
+    }
+
+    return ($generatorLine -split "=", 2)[1]
+}
+
 foreach ($arg in $args) {
     switch ($arg) {
         "--debug"       { $BuildType = "Debug" }
@@ -132,7 +148,13 @@ $cmakeArgs += @(
 & cmake @cmakeArgs
 if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
 
-& cmake --build $BuildDir --config $BuildType --parallel $BuildJobs
+$ActualGenerator = Get-CMakeGeneratorFromCache $BuildDir
+if ($ActualGenerator -like "Visual Studio*") {
+    Write-Host "Visual Studio generator detected; using MSBuild /m:1 to avoid parallel solution race"
+    & cmake --build $BuildDir --config $BuildType -- /m:1
+} else {
+    & cmake --build $BuildDir --config $BuildType --parallel $BuildJobs
+}
 if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
 
 & cmake --install $BuildDir --config $BuildType

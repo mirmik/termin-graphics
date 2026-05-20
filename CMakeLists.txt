@@ -64,6 +64,11 @@ endfunction()
 
 function(termin_enable_pch_for target)
     if(TERMIN_ENABLE_PCH AND TARGET "${target}")
+        get_target_property(_termin_target_type "${target}" TYPE)
+        if(MSVC AND _termin_target_type STREQUAL "SHARED_LIBRARY")
+            message(STATUS "Termin: PCH skipped for MSVC shared library target ${target}")
+            return()
+        endif()
         target_precompile_headers("${target}" PRIVATE
             "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_FUNCTION_LIST_DIR}/cmake/termin_cpp_pch.hpp>"
         )
