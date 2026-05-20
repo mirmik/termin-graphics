@@ -185,6 +185,9 @@ if(TERMIN_RENDER_BUILD_TESTS)
     enable_testing()
 
     add_executable(termin_render_drawable_test tests/test_drawable_capability.c)
+    target_include_directories(termin_render_drawable_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
     target_link_libraries(termin_render_drawable_test PRIVATE termin_render)
     add_test(NAME termin_render_drawable_test COMMAND termin_render_drawable_test)
 
