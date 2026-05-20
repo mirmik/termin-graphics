@@ -6,8 +6,6 @@
 
 - [Module Map](../../docs/modules.md#termin-render)
 - [termin-graphics](../../termin-graphics/docs/index.md)
-- [render graph resource types plan](../../docs/plans/2026-05-10-render-graph-resource-types.md)
-- [render target tc_texture migration](../../docs/plans/2026-04-22-render-target-tc-texture-migration.md)
 
 ## Основные области
 
@@ -22,7 +20,21 @@ Python package: `termin.render` / `termin.render_framework` через паке�
 
 C++ API публикуется через headers из `include/` и CMake package `termin_render`.
 
+## Render Graph Resources
+
+Render graph sockets/resources distinguish complete framebuffers from sampled
+attachments:
+
+- `fbo` — tuple resource with color and optional depth attachments.
+- `color_texture` — sampled/view reference to an FBO color attachment.
+- `depth_texture` — sampled/view reference to an FBO depth attachment.
+- `shadow` — shadow-map resource.
+
+`FboSplit` and `FboJoin` are compile-time graph utility nodes. They do not
+create runtime passes or `tc_pass` instances. Direct conversion between `fbo`,
+`color_texture`, and `depth_texture` must go through these nodes so the compiler
+can record `ResourceView` and `FboComposition` metadata in `PipelineRenderCache`.
+
 ## Связь с termin-graphics
 
 `termin-render` использует backend-neutral primitives из `termin-graphics`. Generic GPU utilities без знания frame graph обычно должны жить в `termin-graphics`; frame graph, render pipeline и debugger logic остаются здесь.
-

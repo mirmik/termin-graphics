@@ -6,9 +6,6 @@
 
 - [Module Map](../../docs/modules.md#termin-graphics--tgfx)
 - [Architecture notes](architecture/index.md)
-- [tgfx2 migration](migration-tgfx2.md)
-- [tgfx2 Python migration](migration-tgfx2-python.md)
-- [tcplot C++ migration](migration-tcplot-cpp.md)
 - [Renderer facades plan](../../docs/plans/2026-05-12-tgfx-renderer-facades.md)
 
 ## Границы
@@ -16,3 +13,16 @@
 В этот модуль должны попадать GPU abstractions и utilities, которые не знают о frame graph, editor UI или конкретной application domain.
 
 Если код знает про frame graph/debugger/render pipeline, он обычно относится к [termin-render](../../docs/modules.md#termin-render). Если код знает про widget tree, layout или events, он относится к [termin-gui](../../termin-gui/docs/index.md).
+
+## Texture CPU Sync
+
+`tc_texture_storage_kind` describes the source of truth:
+
+- `TC_TEXTURE_STORAGE_CPU_FIRST` — pixels in `tc_texture::data` are authoritative.
+- `TC_TEXTURE_STORAGE_GPU_FIRST` — GPU image is authoritative; CPU data can be
+  populated on demand.
+
+`tc_texture_sync_to_cpu(tc_texture*)` is a no-op for CPU-first textures. For
+GPU-first textures it asks the active `tgfx_gpu_ops` backend to read back the
+image into `tc_texture::data`. Python `Texture.sync_to_cpu()` exposes the same
+operation, and preview helpers use it transparently when CPU pixels are absent.

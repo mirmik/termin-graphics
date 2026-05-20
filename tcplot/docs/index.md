@@ -7,7 +7,6 @@
 - [Module Map](../../docs/modules.md#tcplot)
 - [termin-graphics](../../termin-graphics/docs/index.md)
 - [termin-gui](../../termin-gui/docs/index.md)
-- [tcplot C++ migration](../../termin-graphics/docs/migration-tcplot-cpp.md)
 
 ## Основные области
 
@@ -26,4 +25,3 @@ import tcplot
 ```
 
 Examples are the current practical entrypoint for expected usage.
-
