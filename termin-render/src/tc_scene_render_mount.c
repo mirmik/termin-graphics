@@ -177,12 +177,12 @@ static tc_value serialize_render_target_config(const tc_render_target_config* rt
     if (rtc->clear_color) {
         tc_value color = tc_value_list_new();
         for (size_t i = 0; i < 4; i++) {
-            tc_value_list_push(&color, tc_value_float((double)rtc->clear_color_value[i]));
+            tc_value_list_push(&color, tc_value_float(rtc->clear_color_value[i]));
         }
         tc_value_dict_set(&v, "clear_color", color);
     }
     if (rtc->clear_depth) {
-        tc_value_dict_set(&v, "clear_depth", tc_value_float((double)rtc->clear_depth_value));
+        tc_value_dict_set(&v, "clear_depth", tc_value_float(rtc->clear_depth_value));
     }
     if (rtc->pipeline_uuid && rtc->pipeline_uuid[0]) tc_value_dict_set(&v, "pipeline_uuid", tc_value_string(rtc->pipeline_uuid));
     if (rtc->pipeline_name && rtc->pipeline_name[0]) tc_value_dict_set(&v, "pipeline_name", tc_value_string(rtc->pipeline_name));

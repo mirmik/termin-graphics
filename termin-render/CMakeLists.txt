@@ -276,6 +276,8 @@ install(FILES
 if(MSVC AND TERMIN_RENDER_BUILD_SHARED)
     # Keep the local SDK import library in sync when Windows install leaves stale files locked.
     add_custom_command(TARGET termin_render POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/lib"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/bin"
         COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command
             "try { Copy-Item -Force '$<TARGET_LINKER_FILE:termin_render>' '${CMAKE_CURRENT_SOURCE_DIR}/../sdk/lib/termin_render.lib' -ErrorAction Stop } catch { Write-Host $_.Exception.Message }"
         COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command

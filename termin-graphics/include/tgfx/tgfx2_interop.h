@@ -3,7 +3,7 @@
 // through tgfx2 while maintaining backward compatibility with GL IDs.
 #pragma once
 
-#include "tgfx/tgfx_api.h"
+#include "tgfx2/tgfx2_api.h"
 
 #ifdef __cplusplus
 #include <cstdint>
@@ -16,16 +16,16 @@ extern "C" {
 
 // Set the tgfx2 render device used by the tgfx2-backed gpu_ops implementation.
 // Must be called before tgfx2_gpu_ops_register().
-TGFX_API void tgfx2_interop_set_device(void* device);
+TGFX2_API void tgfx2_interop_set_device(void* device);
 
 // Get the tgfx2 render device (returns NULL if not set).
-TGFX_API void* tgfx2_interop_get_device(void);
+TGFX2_API void* tgfx2_interop_get_device(void);
 
 // Register tgfx2-backed gpu_ops vtable.
 // Requires tgfx2_interop_set_device() to have been called first.
 // The vtable routes resource creation through tgfx::IRenderDevice
 // and extracts GL IDs for backward compatibility with existing code.
-TGFX_API void tgfx2_gpu_ops_register(void);
+TGFX2_API void tgfx2_gpu_ops_register(void);
 
 // ---------------------------------------------------------------------------
 // External GL texture registration — plain-C bridge to
@@ -52,7 +52,7 @@ TGFX_API void tgfx2_gpu_ops_register(void);
 // away (WPF framebuffer resize, control disposal, etc.). Destroying
 // the handle does NOT free the underlying GL texture; the host keeps
 // owning it.
-TGFX_API uint32_t tgfx2_interop_register_external_gl_texture(
+TGFX2_API uint32_t tgfx2_interop_register_external_gl_texture(
     uint32_t gl_tex_id,
     uint32_t width, uint32_t height,
     int format,
@@ -60,7 +60,7 @@ TGFX_API uint32_t tgfx2_interop_register_external_gl_texture(
 
 // Release a handle previously returned by
 // tgfx2_interop_register_external_gl_texture. Safe to call with id == 0.
-TGFX_API void tgfx2_interop_destroy_texture_handle(uint32_t handle_id);
+TGFX2_API void tgfx2_interop_destroy_texture_handle(uint32_t handle_id);
 
 #ifdef __cplusplus
 }
