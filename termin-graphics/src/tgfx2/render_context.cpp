@@ -3,6 +3,7 @@
 #include "tgfx2/pipeline_cache.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/i_command_list.hpp"
+#include "tgfx2/tc_shader_bridge.hpp"
 #ifdef TGFX2_HAS_OPENGL
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #endif
@@ -177,6 +178,13 @@ void RenderContext2::begin_pass(
 
     cmd_->begin_render_pass(pass);
     in_pass_ = true;
+    // Descriptor/resource bindings are render-pass local in practice:
+    // a later pass may use the same binding numbers for completely
+    // different textures or buffers. Keep stale sampler slots from
+    // leaking into shaders that intentionally leave a slot unbound and
+    // rely on backend defaults.
+    pending_bindings_.clear();
+    bindings_dirty_ = true;
     // Vulkan's cmd-buffer-level binds don't survive a render pass
     // boundary — reset cached state so draw() re-binds on first use.
     last_bound_vbo_ = {};
@@ -671,33 +679,31 @@ void RenderContext2::flush_resource_set() {
         current_resource_set_ = {};
     }
 
-    if (!pending_bindings_.empty()) {
-        ResourceSetDesc desc;
-        desc.bindings = pending_bindings_;
-        current_resource_set_ = device_.create_resource_set(desc);
+    ResourceSetDesc desc;
+    desc.bindings = pending_bindings_;
+    current_resource_set_ = device_.create_resource_set(desc);
 
-        // Dynamic UBO offsets: Vulkan's shared layout declares five
-        // UNIFORM_BUFFER_DYNAMIC slots — bindings 0, 1, 2, 3, 16 (lighting,
-        // material, per-frame, shadow, bone block) — and expects their
-        // offsets in that ascending order at bind time. Pick them out of
-        // pending_bindings_ by matching binding numbers; slots left unset
-        // default to 0 (the descriptor write already points them at the
-        // ring buffer with range=WHOLE, so offset=0 is always in bounds).
-        // OpenGL ignores the offsets array and reads offset straight from
-        // the ResourceBinding — same source of truth, no duplication.
-        static constexpr uint32_t DYN_BINDINGS[5] = {0, 1, 2, 3, 16};
-        uint32_t offsets[5] = {0, 0, 0, 0, 0};
-        for (const auto& b : pending_bindings_) {
-            if (b.kind != ResourceBinding::Kind::UniformBuffer) continue;
-            for (uint32_t i = 0; i < 5; ++i) {
-                if (DYN_BINDINGS[i] == b.binding) {
-                    offsets[i] = static_cast<uint32_t>(b.offset);
-                    break;
-                }
+    // Dynamic UBO offsets: Vulkan's shared layout declares five
+    // UNIFORM_BUFFER_DYNAMIC slots — bindings 0, 1, 2, 3, 16 (lighting,
+    // material, per-frame, shadow, bone block) — and expects their
+    // offsets in that ascending order at bind time. Pick them out of
+    // pending_bindings_ by matching binding numbers; slots left unset
+    // default to 0 (the descriptor write already points them at the
+    // ring buffer with range=WHOLE, so offset=0 is always in bounds).
+    // OpenGL ignores the offsets array and reads offset straight from
+    // the ResourceBinding — same source of truth, no duplication.
+    static constexpr uint32_t DYN_BINDINGS[5] = {0, 1, 2, 3, 16};
+    uint32_t offsets[5] = {0, 0, 0, 0, 0};
+    for (const auto& b : pending_bindings_) {
+        if (b.kind != ResourceBinding::Kind::UniformBuffer) continue;
+        for (uint32_t i = 0; i < 5; ++i) {
+            if (DYN_BINDINGS[i] == b.binding) {
+                offsets[i] = static_cast<uint32_t>(b.offset);
+                break;
             }
         }
-        cmd_->bind_resource_set(current_resource_set_, offsets, 5);
     }
+    cmd_->bind_resource_set(current_resource_set_, offsets, 5);
 
     bindings_dirty_ = false;
 }
@@ -732,7 +738,12 @@ void RenderContext2::ensure_fsq_resources() {
     // Create built-in vertex shader
     ShaderDesc vs_desc;
     vs_desc.stage = ShaderStage::Vertex;
-    vs_desc.source = FSQ_VERT_SRC;
+    vs_desc.debug_name = "termin-engine-fsq:vertex";
+    if (device_.backend_type() == BackendType::Vulkan
+        && termin::tgfx2_load_shader_artifact("termin-engine-fsq", vs_desc.stage, vs_desc.bytecode)) {
+    } else {
+        vs_desc.source = FSQ_VERT_SRC;
+    }
     fsq_vs_ = device_.create_shader(vs_desc);
 }
 

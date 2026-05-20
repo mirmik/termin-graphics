@@ -78,6 +78,21 @@ struct VkResourceSetResource {
     uint32_t dynamic_offsets[DYNAMIC_UBO_COUNT] = {0, 0, 0, 0, 0};
 };
 
+struct VkFramebufferCacheKey {
+    VkRenderPass render_pass = VK_NULL_HANDLE;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    std::vector<VkImageView> attachments;
+
+    bool operator<(const VkFramebufferCacheKey& other) const {
+        if (std::less<VkRenderPass>{}(render_pass, other.render_pass)) return true;
+        if (std::less<VkRenderPass>{}(other.render_pass, render_pass)) return false;
+        if (width != other.width) return width < other.width;
+        if (height != other.height) return height < other.height;
+        return attachments < other.attachments;
+    }
+};
+
 // Reuse HandlePool from OpenGL backend concept
 template<typename T>
 class VkHandlePool {
@@ -157,6 +172,7 @@ private:
         std::vector<ShaderHandle> shaders;
         std::vector<PipelineHandle> pipelines;
         std::vector<ResourceSetHandle> resource_sets;
+        std::vector<VkFramebuffer> framebuffers;
         // Raw VkCommandBuffers freed via `defer_cmd_buffer_free()` — used
         // by VulkanCommandList's destructor to avoid freeing while the
         // buffer is still in-flight on the queue.
@@ -168,7 +184,7 @@ private:
         bool empty() const {
             return buffers.empty() && textures.empty() && samplers.empty()
                 && shaders.empty() && pipelines.empty()
-                && resource_sets.empty() && cmd_buffers.empty()
+                && resource_sets.empty() && framebuffers.empty() && cmd_buffers.empty()
                 && vma_buffers.empty();
         }
     };
@@ -246,8 +262,9 @@ private:
 
     // RenderPass cache (key: format config hash)
     std::map<std::vector<VkFormat>, VkRenderPass> render_pass_cache_;
-    // Framebuffer cache
-    std::map<std::vector<VkImageView>, VkFramebuffer> framebuffer_cache_;
+    // Framebuffer cache. VkFramebuffer compatibility includes render pass
+    // and dimensions, not only attachment image views.
+    std::map<VkFramebufferCacheKey, VkFramebuffer> framebuffer_cache_;
 
     bool validation_enabled_ = false;
 
@@ -313,6 +330,7 @@ public:
     BackendType backend_type() const override { return BackendType::Vulkan; }
     BackendCapabilities capabilities() const override;
     void wait_idle() override;
+    void invalidate_render_target_cache() override;
 
     BufferHandle create_buffer(const BufferDesc& desc) override;
     TextureHandle create_texture(const TextureDesc& desc) override;
@@ -508,6 +526,7 @@ public:
     void          invalidate_tc_mesh_cache(uint32_t pool_index) override;
 
 private:
+    void invalidate_descriptor_cache();
     void init_instance(const VulkanDeviceCreateInfo& info);
     void pick_physical_device();
     void create_logical_device();

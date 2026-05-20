@@ -633,7 +633,8 @@ void VulkanRenderDevice::create_descriptor_pool() {
     // heavier future scenes without re-sizing. Each set may touch up to
     // ~5 UBOs and ~6 samplers, hence the pool-size multipliers below.
     VkDescriptorPoolSize pool_sizes[] = {
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,          8 * 2048},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,  8 * 2048},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,          2 * 2048},
         {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,          512},
         {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,           2 * 2048},
         {VK_DESCRIPTOR_TYPE_SAMPLER,                 2 * 2048},
@@ -644,7 +645,7 @@ void VulkanRenderDevice::create_descriptor_pool() {
     ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     ci.flags = 0;  // No per-set free — pool reset frees everything at once.
     ci.maxSets = 2048;
-    ci.poolSizeCount = 5;
+    ci.poolSizeCount = 6;
     ci.pPoolSizes = pool_sizes;
 
     for (int i = 0; i < 2; ++i) {
@@ -904,6 +905,25 @@ TextureHandle VulkanRenderDevice::ensure_default_sampled_texture() {
 
 BackendCapabilities VulkanRenderDevice::capabilities() const { return caps_; }
 void VulkanRenderDevice::wait_idle() { vkDeviceWaitIdle(device_); }
+
+void VulkanRenderDevice::invalidate_descriptor_cache() {
+    for (auto& cache : descriptor_cache_) {
+        for (const auto& [_, handle] : cache) {
+            resource_sets_.remove(handle.id);
+        }
+        cache.clear();
+    }
+}
+
+void VulkanRenderDevice::invalidate_render_target_cache() {
+    for (auto& [_, fb] : framebuffer_cache_) {
+        if (fb != VK_NULL_HANDLE) {
+            pending_destroy_current_.framebuffers.push_back(fb);
+        }
+    }
+    framebuffer_cache_.clear();
+    invalidate_descriptor_cache();
+}
 
 // --- Immediate command execution ---
 
@@ -1570,7 +1590,14 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
     ai.descriptorSetCount = 1;
     ai.pSetLayouts = &descriptor_set_layout_;
 
-    if (vkAllocateDescriptorSets(device_, &ai, &res.descriptor_set) != VK_SUCCESS) {
+    VkResult alloc_result = vkAllocateDescriptorSets(device_, &ai, &res.descriptor_set);
+    if (alloc_result != VK_SUCCESS) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice: vkAllocateDescriptorSets failed result=%d pool=%u cache_size=%zu bindings=%zu",
+               static_cast<int>(alloc_result),
+               current_pool_idx_,
+               cache.size(),
+               normalized_desc.bindings.size());
         throw std::runtime_error("Failed to allocate descriptor set");
     }
 
@@ -1714,15 +1741,22 @@ void VulkanRenderDevice::destroy(BufferHandle h) {
     // is tied to the device, and destroying it mid-frame would wipe the
     // UBO store for every pending dynamic-offset binding.
     if (ring_ubo_handle_.id != 0 && h.id == ring_ubo_handle_.id) return;
+    invalidate_descriptor_cache();
     pending_destroy_current_.buffers.push_back(h);
 }
 
 void VulkanRenderDevice::destroy(TextureHandle h) {
-    if (h.id != 0) pending_destroy_current_.textures.push_back(h);
+    if (h.id != 0) {
+        invalidate_descriptor_cache();
+        pending_destroy_current_.textures.push_back(h);
+    }
 }
 
 void VulkanRenderDevice::destroy(SamplerHandle h) {
-    if (h.id != 0) pending_destroy_current_.samplers.push_back(h);
+    if (h.id != 0) {
+        invalidate_descriptor_cache();
+        pending_destroy_current_.samplers.push_back(h);
+    }
 }
 
 void VulkanRenderDevice::destroy(ShaderHandle h) {
@@ -1776,6 +1810,11 @@ void VulkanRenderDevice::drain_pending_destroy(PendingDestroyQueue& q) {
     // be live in the cache for its slot, and a subsequent cache-hit
     // would otherwise return a dangling entry.
     (void)q.resource_sets;
+    for (auto fb : q.framebuffers) {
+        if (fb != VK_NULL_HANDLE) {
+            vkDestroyFramebuffer(device_, fb, nullptr);
+        }
+    }
     for (auto cb : q.cmd_buffers) {
         vkFreeCommandBuffers(device_, command_pool_, 1, &cb);
     }
@@ -2409,7 +2448,13 @@ VkFramebuffer VulkanRenderDevice::get_or_create_framebuffer(
     const std::vector<VkImageView>& attachments,
     uint32_t width, uint32_t height)
 {
-    auto it = framebuffer_cache_.find(attachments);
+    VkFramebufferCacheKey key;
+    key.render_pass = render_pass;
+    key.width = width;
+    key.height = height;
+    key.attachments = attachments;
+
+    auto it = framebuffer_cache_.find(key);
     if (it != framebuffer_cache_.end()) return it->second;
 
     VkFramebufferCreateInfo ci{};
@@ -2426,7 +2471,7 @@ VkFramebuffer VulkanRenderDevice::get_or_create_framebuffer(
         throw std::runtime_error("Failed to create framebuffer");
     }
 
-    framebuffer_cache_[attachments] = fb;
+    framebuffer_cache_[std::move(key)] = fb;
     return fb;
 }
 
