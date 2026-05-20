@@ -52,6 +52,10 @@ static bool load_shader_artifact(
 ) {
     const char* root = tgfx2_get_shader_artifact_root();
     if (!root || root[0] == '\0' || !shader || shader->uuid[0] == '\0') {
+        tc_log(TC_LOG_ERROR,
+               "tc_shader_ensure_tgfx2: cannot load SPIR-V artifact, root='%s', shader_uuid='%s'",
+               root ? root : "",
+               shader ? shader->uuid : "<null>");
         return false;
     }
 
@@ -60,6 +64,7 @@ static bool load_shader_artifact(
 
     std::ifstream in(path, std::ios::binary);
     if (!in) {
+        tc_log(TC_LOG_ERROR, "tc_shader_ensure_tgfx2: missing shader artifact '%s'", path.c_str());
         return false;
     }
 
