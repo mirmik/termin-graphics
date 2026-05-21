@@ -185,6 +185,7 @@ add_subdirectory(termin-materials)
 add_subdirectory(termin-render)
 add_subdirectory(termin-display)
 add_subdirectory(termin-components/termin-components-render)
+add_subdirectory(termin-render-passes)
 add_subdirectory(termin-engine)
 add_subdirectory(termin-runtime)
 
