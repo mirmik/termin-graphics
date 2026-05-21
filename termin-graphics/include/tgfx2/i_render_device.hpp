@@ -213,6 +213,27 @@ public:
         (void)tex; (void)x; (void)y; (void)out_depth;
         return false;
     }
+    // Asynchronous one-pixel readback. Returns a non-zero request id
+    // when a backend accepted the request; poll_* returns true once the
+    // result is ready and writes the output value. Backends without
+    // async readback keep returning 0/false and callers can fall back to
+    // the synchronous helpers above.
+    virtual uint64_t request_pixel_rgba8(TextureHandle tex, int x, int y) {
+        (void)tex; (void)x; (void)y;
+        return 0;
+    }
+    virtual bool poll_pixel_rgba8(uint64_t request_id, float out_rgba[4]) {
+        (void)request_id; (void)out_rgba;
+        return false;
+    }
+    virtual uint64_t request_pixel_depth_float(TextureHandle tex, int x, int y) {
+        (void)tex; (void)x; (void)y;
+        return 0;
+    }
+    virtual bool poll_pixel_depth_float(uint64_t request_id, float* out_depth) {
+        (void)request_id; (void)out_depth;
+        return false;
+    }
     // Read a full color texture as tightly-packed RGBA float32 into
     // `out` (>= width*height*4 floats). Used by the framegraph
     // debugger's HDR stats.

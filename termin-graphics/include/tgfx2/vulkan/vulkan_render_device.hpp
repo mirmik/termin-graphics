@@ -9,6 +9,7 @@ VK_DEFINE_HANDLE(VmaAllocator)
 VK_DEFINE_HANDLE(VmaAllocation)
 
 #include <atomic>
+#include <array>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -356,11 +357,16 @@ public:
                                uint32_t mip = 0) override;
     void read_buffer(BufferHandle src, std::span<uint8_t> data, uint64_t offset = 0) override;
 
-    // Editor picking readback path: sample one RGBA8 pixel from a color
-    // texture. Synchronous — waits on a one-shot transfer submit. Rare
-    // call (once per mouse-move for hover), so the wait is acceptable.
+    // Legacy synchronous one-pixel readback helpers. Editor hover/click
+    // uses request_pixel_*/poll_pixel_* on Vulkan to avoid queue-idle
+    // stalls; these remain for direct/debug callers that require an
+    // immediate answer.
     bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]) override;
     bool read_pixel_depth_float(TextureHandle tex, int x, int y, float* out_depth) override;
+    uint64_t request_pixel_rgba8(TextureHandle tex, int x, int y) override;
+    bool poll_pixel_rgba8(uint64_t request_id, float out_rgba[4]) override;
+    uint64_t request_pixel_depth_float(TextureHandle tex, int x, int y) override;
+    bool poll_pixel_depth_float(uint64_t request_id, float* out_depth) override;
 
     std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) override;
     void submit(ICommandList& cmd) override;
@@ -526,6 +532,23 @@ public:
     void          invalidate_tc_mesh_cache(uint32_t pool_index) override;
 
 private:
+    enum class PixelReadbackKind : uint8_t {
+        Rgba8,
+        DepthF32,
+    };
+
+    struct PendingPixelReadback {
+        uint64_t request_id = 0;
+        PixelReadbackKind kind = PixelReadbackKind::Rgba8;
+        VkBuffer staging = VK_NULL_HANDLE;
+        VmaAllocation allocation = VK_NULL_HANDLE;
+    };
+
+    struct CompletedPixelReadback {
+        PixelReadbackKind kind = PixelReadbackKind::Rgba8;
+        std::array<uint8_t, 4> bytes = {0, 0, 0, 0};
+    };
+
     void invalidate_descriptor_cache();
     void init_instance(const VulkanDeviceCreateInfo& info);
     void pick_physical_device();
@@ -539,6 +562,14 @@ private:
     // Drain `q` now — actually free the underlying Vk objects. Caller is
     // responsible for ensuring GPU has finished using these resources.
     void drain_pending_destroy(PendingDestroyQueue& q);
+    uint64_t request_pixel_readback(TextureHandle tex, int x, int y, PixelReadbackKind kind);
+    void complete_pixel_readbacks(std::vector<PendingPixelReadback>& pending);
+    void destroy_pixel_readbacks(std::vector<PendingPixelReadback>& pending);
+
+    uint64_t next_pixel_readback_id_ = 1;
+    std::vector<PendingPixelReadback> pixel_readbacks_current_;
+    std::vector<PendingPixelReadback> pixel_readbacks_in_flight_;
+    std::unordered_map<uint64_t, CompletedPixelReadback> completed_pixel_readbacks_;
 };
 
 } // namespace tgfx

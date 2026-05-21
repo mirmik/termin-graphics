@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <iterator>
 #include <set>
 #include <sstream>
 #include <unordered_map>
@@ -343,6 +344,8 @@ VulkanRenderDevice::~VulkanRenderDevice() {
     // `current` holds handles freed during the current frame that were
     // never submitted. Handle-pool lookups are still valid at this point,
     // so drain them through the normal per-type helper.
+    complete_pixel_readbacks(pixel_readbacks_in_flight_);
+    destroy_pixel_readbacks(pixel_readbacks_current_);
     drain_pending_destroy(pending_destroy_in_flight_);
     drain_pending_destroy(pending_destroy_current_);
 
@@ -2185,6 +2188,129 @@ bool VulkanRenderDevice::read_pixel_depth_float(
     return true;
 }
 
+uint64_t VulkanRenderDevice::request_pixel_rgba8(TextureHandle tex, int x, int y) {
+    return request_pixel_readback(tex, x, y, PixelReadbackKind::Rgba8);
+}
+
+bool VulkanRenderDevice::poll_pixel_rgba8(uint64_t request_id, float out_rgba[4]) {
+    if (request_id == 0 || !out_rgba) return false;
+    auto it = completed_pixel_readbacks_.find(request_id);
+    if (it == completed_pixel_readbacks_.end()) return false;
+    if (it->second.kind != PixelReadbackKind::Rgba8) {
+        completed_pixel_readbacks_.erase(it);
+        return false;
+    }
+    const auto bytes = it->second.bytes;
+    completed_pixel_readbacks_.erase(it);
+    out_rgba[0] = bytes[0] / 255.0f;
+    out_rgba[1] = bytes[1] / 255.0f;
+    out_rgba[2] = bytes[2] / 255.0f;
+    out_rgba[3] = bytes[3] / 255.0f;
+    return true;
+}
+
+uint64_t VulkanRenderDevice::request_pixel_depth_float(TextureHandle tex, int x, int y) {
+    return request_pixel_readback(tex, x, y, PixelReadbackKind::DepthF32);
+}
+
+bool VulkanRenderDevice::poll_pixel_depth_float(uint64_t request_id, float* out_depth) {
+    if (request_id == 0 || !out_depth) return false;
+    auto it = completed_pixel_readbacks_.find(request_id);
+    if (it == completed_pixel_readbacks_.end()) return false;
+    if (it->second.kind != PixelReadbackKind::DepthF32) {
+        completed_pixel_readbacks_.erase(it);
+        return false;
+    }
+    std::memcpy(out_depth, it->second.bytes.data(), sizeof(float));
+    completed_pixel_readbacks_.erase(it);
+    return true;
+}
+
+uint64_t VulkanRenderDevice::request_pixel_readback(
+    TextureHandle tex, int x, int y, PixelReadbackKind kind
+) {
+    auto* res = textures_.get(tex.id);
+    if (!res) return 0;
+
+    const int w = static_cast<int>(res->desc.width);
+    const int h = static_cast<int>(res->desc.height);
+    if (x < 0 || y < 0 || x >= w || y >= h) return 0;
+    if (kind == PixelReadbackKind::DepthF32 && res->desc.format != PixelFormat::D32F) {
+        return 0;
+    }
+
+    VkBufferCreateInfo stage_ci{};
+    stage_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    stage_ci.size = 4;
+    stage_ci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+    VmaAllocationCreateInfo stage_alloc{};
+    stage_alloc.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
+
+    VkBuffer staging = VK_NULL_HANDLE;
+    VmaAllocation staging_alloc_h = VK_NULL_HANDLE;
+    if (vmaCreateBuffer(allocator_, &stage_ci, &stage_alloc,
+                        &staging, &staging_alloc_h, nullptr) != VK_SUCCESS) {
+        tc_log(TC_LOG_ERROR, "[VulkanRenderDevice] failed to allocate async pixel readback staging buffer");
+        return 0;
+    }
+
+    const VkImageAspectFlags aspect =
+        kind == PixelReadbackKind::DepthF32 ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+    VkCommandBuffer cb = ensure_immediate_cb();
+    VkImageLayout prev_layout = res->current_layout;
+    transition_image_layout(cb, res->image, prev_layout,
+                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, aspect);
+
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource.aspectMask = aspect;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+    region.imageOffset = {x, y, 0};
+    region.imageExtent = {1, 1, 1};
+    vkCmdCopyImageToBuffer(cb, res->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           staging, 1, &region);
+
+    transition_image_layout(cb, res->image,
+                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, prev_layout, aspect);
+    res->current_layout = prev_layout;
+
+    const uint64_t request_id = next_pixel_readback_id_++;
+    pixel_readbacks_current_.push_back(
+        PendingPixelReadback{request_id, kind, staging, staging_alloc_h});
+    return request_id;
+}
+
+void VulkanRenderDevice::complete_pixel_readbacks(std::vector<PendingPixelReadback>& pending) {
+    for (const PendingPixelReadback& rb : pending) {
+        CompletedPixelReadback completed{};
+        completed.kind = rb.kind;
+        void* mapped = nullptr;
+        if (vmaMapMemory(allocator_, rb.allocation, &mapped) == VK_SUCCESS && mapped) {
+            std::memcpy(completed.bytes.data(), mapped, completed.bytes.size());
+            vmaUnmapMemory(allocator_, rb.allocation);
+            completed_pixel_readbacks_[rb.request_id] = completed;
+        } else {
+            tc_log(TC_LOG_ERROR,
+                   "[VulkanRenderDevice] failed to map async pixel readback request=%llu",
+                   static_cast<unsigned long long>(rb.request_id));
+        }
+        vmaDestroyBuffer(allocator_, rb.staging, rb.allocation);
+    }
+    pending.clear();
+}
+
+void VulkanRenderDevice::destroy_pixel_readbacks(std::vector<PendingPixelReadback>& pending) {
+    for (const PendingPixelReadback& rb : pending) {
+        vmaDestroyBuffer(allocator_, rb.staging, rb.allocation);
+    }
+    pending.clear();
+}
+
 // --- Command list ---
 
 std::unique_ptr<ICommandList> VulkanRenderDevice::create_command_list(QueueType /*queue*/) {
@@ -2214,6 +2340,7 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     if (frame_fence_in_flight_) {
         vkWaitForFences(device_, 1, &frame_fence_, VK_TRUE, UINT64_MAX);
         vkResetFences(device_, 1, &frame_fence_);
+        complete_pixel_readbacks(pixel_readbacks_in_flight_);
         drain_pending_destroy(pending_destroy_in_flight_);
         frame_fence_in_flight_ = false;
     }
@@ -2286,6 +2413,15 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     // picks this up.
     if (submitted_immediate_cb != VK_NULL_HANDLE) {
         pending_destroy_current_.cmd_buffers.push_back(submitted_immediate_cb);
+        pixel_readbacks_in_flight_.insert(
+            pixel_readbacks_in_flight_.end(),
+            std::make_move_iterator(pixel_readbacks_current_.begin()),
+            std::make_move_iterator(pixel_readbacks_current_.end()));
+        pixel_readbacks_current_.clear();
+    } else if (!pixel_readbacks_current_.empty()) {
+        tc_log(TC_LOG_ERROR,
+               "[VulkanRenderDevice] async pixel readbacks queued without an immediate command buffer");
+        destroy_pixel_readbacks(pixel_readbacks_current_);
     }
 
     ++s_submits;
