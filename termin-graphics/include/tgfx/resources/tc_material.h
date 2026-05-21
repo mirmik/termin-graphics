@@ -215,7 +215,7 @@ TGFX_API void tc_material_phase_release_ubo(tc_material_phase* phase);
 // Dispatcher entry point for binding a per-phase std140 material UBO via
 // raw GL — used by legacy state-machine passes (ColorPass, MaterialPass)
 // that cannot open a tgfx2 render pass. Implementation lives in
-// termin-app/cpp/termin/render/material_ubo_apply.cpp and is registered
+// termin-render-passes/src/material_ubo_apply.cpp and is registered
 // at startup via tc_material_phase_set_apply_ubo_gl_callback.
 //
 // Returns true if the UBO path ran (caller should then call
