@@ -340,53 +340,6 @@ void bind_tgfx2(nb::module_& m) {
                  self.bind_sampled_texture(slot, tex, {});
              })
 
-        // Transitional plain-uniform setters
-        .def("set_uniform_int",
-             [](tgfx::RenderContext2& self, const std::string& name, int value) {
-                 self.set_uniform_int(name.c_str(), value);
-             })
-        .def("set_uniform_float",
-             [](tgfx::RenderContext2& self, const std::string& name, float value) {
-                 self.set_uniform_float(name.c_str(), value);
-             })
-        .def("set_uniform_vec2",
-             [](tgfx::RenderContext2& self, const std::string& name,
-                float x, float y) {
-                 self.set_uniform_vec2(name.c_str(), x, y);
-             })
-        .def("set_uniform_vec3",
-             [](tgfx::RenderContext2& self, const std::string& name,
-                float x, float y, float z) {
-                 self.set_uniform_vec3(name.c_str(), x, y, z);
-             })
-        .def("set_uniform_vec4",
-             [](tgfx::RenderContext2& self, const std::string& name,
-                float x, float y, float z, float w) {
-                 self.set_uniform_vec4(name.c_str(), x, y, z, w);
-             })
-        .def("set_uniform_mat4",
-             [](tgfx::RenderContext2& self, const std::string& name,
-                nb::handle data, bool transpose) {
-                 // Accept any buffer-like object (Mat44.data, list of 16 floats,
-                 // numpy array). nanobind's nb::ndarray would be cleanest but
-                 // requires extra includes — simpler: iterate and cast.
-                 float m[16];
-                 auto seq = nb::cast<nb::sequence>(data);
-                 int i = 0;
-                 for (auto v : seq) {
-                     if (i >= 16) break;
-                     m[i++] = nb::cast<float>(v);
-                 }
-                 if (i == 16) {
-                     self.set_uniform_mat4(name.c_str(), m, transpose);
-                 }
-             },
-             nb::arg("name"), nb::arg("data"), nb::arg("transpose") = false)
-        .def("set_block_binding",
-             [](tgfx::RenderContext2& self, const std::string& name, uint32_t slot) {
-                 self.set_block_binding(name.c_str(), slot);
-             })
-
         // Draw
         .def("draw_fullscreen_quad", &tgfx::RenderContext2::draw_fullscreen_quad)
 
@@ -416,10 +369,10 @@ void bind_tgfx2(nb::module_& m) {
 
         // Set push-constant block. Data layout must match the shader's
         // `layout(push_constant) uniform ...` declaration (std140 rules
-        // with push-constant tightening). Intended for Vulkan — on
-        // OpenGL it is a no-op in the current backend (GL callers keep
-        // using set_uniform_* for now). 128 bytes max (pipeline layout
-        // reserves exactly that — see VulkanRenderDevice::create_shared_layouts).
+        // with push-constant tightening). OpenGL receives the same payload
+        // through tgfx2's push-constant emulation UBO. 128 bytes max
+        // (pipeline layout reserves exactly that — see
+        // VulkanRenderDevice::create_shared_layouts).
         .def("set_push_constants",
              [](tgfx::RenderContext2& self,
                 nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {

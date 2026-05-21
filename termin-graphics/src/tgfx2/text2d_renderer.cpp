@@ -167,9 +167,8 @@ static_assert(sizeof(Text2DSdfPushData) == 96,
 // of every render pass in OpenGLCommandList::begin_render_pass).
 // Pixel (0,0) maps to clip (-1,-1), i.e. the top-left corner.
 //
-// The matrix is written in math (row-major) notation but stored
-// column-major so we pass `transpose=true` to set_uniform_mat4. That
-// mirrors what the Python version does with np.array + flatten.
+// The matrix is written in math (row-major) notation but stored in the
+// push-constant layout expected by the shader.
 void build_ortho_pixel_to_ndc(float w, float h, float out[16]) {
     if (w <= 0.0f || h <= 0.0f) {
         std::memset(out, 0, 16 * sizeof(float));

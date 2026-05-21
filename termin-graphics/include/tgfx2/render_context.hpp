@@ -198,36 +198,6 @@ public:
     void defer_destroy(TextureHandle handle);
     void defer_destroy(BufferHandle handle);
 
-    // --- Transitional legacy-uniform setters ---
-    //
-    // These exist to bridge pre-existing .shader files that still declare
-    // plain `uniform mat4 u_view` / `uniform sampler2D u_shadow_map_0`
-    // etc. onto the tgfx2 draw path. They flush the pending pipeline
-    // (so the shader program is actually bound in GL) and then route
-    // through glUniform*/glUniformMatrix*/glUniform1i on the currently-
-    // bound program.
-    //
-    // Vulkan has no equivalent — Vulkan shaders must use UBOs or push
-    // constants. On a Vulkan backend these methods would be no-ops or
-    // assertions. Treat them as *temporary*: every caller is a candidate
-    // for migration to bind_uniform_buffer / set_push_constants.
-    void set_uniform_int(const char* name, int value);
-    void set_uniform_float(const char* name, float value);
-    void set_uniform_vec2(const char* name, float x, float y);
-    void set_uniform_vec3(const char* name, float x, float y, float z);
-    void set_uniform_vec4(const char* name, float x, float y, float z, float w);
-    void set_uniform_mat4(const char* name, const float* data,
-                          bool transpose = false);
-    void set_uniform_mat4_array(const char* name, const float* data,
-                                int count, bool transpose = false);
-
-    // Link a `layout(std140) uniform NAME { ... }` block declared in
-    // the currently bound program to a binding slot. On Vulkan the
-    // binding is compiled into the shader via SPIR-V; this call is
-    // GL-only transitional, wrapping glUniformBlockBinding on the
-    // current program.
-    void set_block_binding(const char* block_name, uint32_t binding_slot);
-
     // Register a sampled texture at the given binding slot. The sampler is
     // optional; if omitted, the backend uses the texture's default sampling
     // parameters (useful for GL 3.3 style shaders without separate samplers).
@@ -285,12 +255,9 @@ public:
     ICommandList* cmd() { return cmd_.get(); }
 
     // Force pending render state to be resolved into an active pipeline.
-    // Normally called internally from draw*() methods; exposed publicly as
-    // an escape hatch for Phase 2 pass migration where a pass needs to set
-    // uniforms or bind textures on the underlying GL program BEFORE issuing
-    // a draw call — via glGetIntegerv(GL_CURRENT_PROGRAM) + glUniform*.
-    // After this method returns, the backend-specific pipeline (e.g. GL
-    // program) is bound and ready for state setting.
+    // Normally called internally from draw*() methods; exposed for diagnostics
+    // and low-level integration points that need the backend pipeline bound
+    // before a draw call.
     void flush_pipeline();
 
     // Return the built-in fullscreen-quad vertex shader, lazily creating it
