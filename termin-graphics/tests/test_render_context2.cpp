@@ -43,7 +43,7 @@ void main() {
 // Full-screen red fragment shader for FSQ test
 static const char* RED_FRAG_SRC = R"(
 #version 330 core
-in vec2 vUV;
+in vec2 v_uv;
 out vec4 FragColor;
 void main() {
     FragColor = vec4(1.0, 0.0, 0.0, 1.0);

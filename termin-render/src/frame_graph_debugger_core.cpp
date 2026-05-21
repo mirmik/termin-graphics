@@ -138,7 +138,7 @@ void FrameGraphCapture::capture_direct_via_ctx2(
 
 static const char* PRESENTER_FRAG_SRC = R"(
 #version 450 core
-layout(location = 0) in vec2 vUV;
+layout(location = 0) in vec2 v_uv;
 layout(binding = 0) uniform sampler2D u_tex;
 struct PresenterPushData {
     int channel_mode;
@@ -153,7 +153,7 @@ layout(std140, binding = 14) uniform PresenterPushBlock { PresenterPushData pc; 
 #endif
 layout(location = 0) out vec4 FragColor;
 void main() {
-    vec4 c = texture(u_tex, vUV);
+    vec4 c = texture(u_tex, v_uv);
     vec3 result;
     if (pc.channel_mode == 5)      result = vec3(pow(clamp(1.0 - c.r, 0.0, 1.0), 0.25));
     else if (pc.channel_mode == 1) result = vec3(c.r);
