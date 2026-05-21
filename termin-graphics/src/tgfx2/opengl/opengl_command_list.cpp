@@ -433,7 +433,7 @@ void OpenGLCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
 
     // glBlitFramebuffer honours GL_SCISSOR_TEST and the color write mask.
     // Previous UI/clipping passes may leave scissor enabled with a tiny
-    // rect — then blit copies only that rect and PostFX's color_pp shows
+    // rect — then blit copies only that rect and fullscreen-pass output shows
     // up as a diagonal sliver (or whatever leaked through). Save and
     // disable both, restore afterwards. glCopyImageSubData (GL 4.3)
     // would sidestep this entirely but glad in this project is loaded

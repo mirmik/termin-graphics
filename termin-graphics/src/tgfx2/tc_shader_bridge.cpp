@@ -160,7 +160,7 @@ bool tc_shader_ensure_tgfx2(
         return false;
     }
 
-    // FS-only shaders (vertex_source == NULL) are used by postprocess
+    // FS-only shaders (vertex_source == NULL) are used by fullscreen passes
     // passes that share the built-in FSQ vertex shader from RenderContext2.
     // The slot caches just the FS module; VS id stays 0 and callers pass
     // nullptr for out_vs.

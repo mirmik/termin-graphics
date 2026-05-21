@@ -1,5 +1,5 @@
 // tgfx2_bindings.cpp - Python bindings for tgfx2 types used by
-// migrated Python render passes (PostProcessPass, posteffects/*, etc.)
+// migrated Python render passes
 //
 // Scope: the minimum surface a Python pass needs to drive a draw through
 // RenderContext2 — open a pass, bind a shader compiled from TcShader,
@@ -195,7 +195,7 @@ void bind_tgfx2(nb::module_& m) {
         .def("end_pass", &tgfx::RenderContext2::end_pass)
 
         // Underlying render device — lets Python-side renderers (UIRenderer,
-        // PostEffect subclasses, …) call create_shader / create_buffer
+        // Python render helpers call create_shader / create_buffer
         // without stashing the owning Tgfx2Context separately.
         .def_prop_ro("device",
             [](tgfx::RenderContext2& self) -> tgfx::IRenderDevice& {
@@ -498,7 +498,7 @@ void bind_tgfx2(nb::module_& m) {
             "Build a Tgfx2Context over an existing device+RenderContext2 "
             "owned by the application host (BackendWindow).")
 
-        // Factory for in-scene helpers (UIComponent, posteffects, ...) that
+        // Factory for in-scene helpers (UIComponent, etc.) that
         // only see a live RenderContext2 at draw time — the framegraph's
         // `ExecuteContext.ctx2`. The device is inferred from the ctx;
         // interop setup is NOT re-run here (it was done by the host at

@@ -776,7 +776,7 @@ void RenderContext2::draw_fullscreen_quad() {
     // batches) may leave topology_ pointing at LineList, which makes
     // the FSQ index list `{0,1,2, 0,2,3}` render as three line segments
     // instead of two triangles. Was showing up as a diagonal sliver in
-    // PostFX output.
+    // fullscreen-pass output.
     set_topology(PrimitiveTopology::TriangleList);
 
     // Fullscreen quad drawing owns its vertex stream. Reusing an
