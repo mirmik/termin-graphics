@@ -132,11 +132,17 @@ void append_default_standard_attributes(Tgfx2MeshBinding& out, uint32_t old_stri
         out.layout.attributes.push_back({2, VertexFormat::Float2, offset});
         offset += 2u * sizeof(float);
     }
+    if (!layout_has_location(out.layout, 3)) {
+        out.layout.attributes.push_back({3, VertexFormat::Float4, offset});
+        offset += 4u * sizeof(float);
+    }
     out.layout.stride = offset;
 }
 
 bool needs_default_standard_attributes(const VertexBufferLayout& layout) {
-    return !layout_has_location(layout, 1) || !layout_has_location(layout, 2);
+    return !layout_has_location(layout, 1) ||
+           !layout_has_location(layout, 2) ||
+           !layout_has_location(layout, 3);
 }
 
 BufferHandle create_augmented_vertex_buffer(

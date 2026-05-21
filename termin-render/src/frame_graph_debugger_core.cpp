@@ -23,6 +23,15 @@ namespace termin {
 
 namespace {
 
+struct PresenterPushData {
+    int channel_mode;
+    int highlight_hdr;
+    int _pad0;
+    int _pad1;
+};
+static_assert(sizeof(PresenterPushData) == 16,
+              "PresenterPushData must match the shader push block");
+
 } // namespace
 
 FrameGraphCapture::~FrameGraphCapture() {
@@ -128,22 +137,31 @@ void FrameGraphCapture::capture_direct_via_ctx2(
 }
 
 static const char* PRESENTER_FRAG_SRC = R"(
-#version 330 core
-in vec2 vUV;
-uniform sampler2D u_tex;
-uniform int u_channel;
-uniform int u_highlight_hdr;
-out vec4 FragColor;
+#version 450 core
+layout(location = 0) in vec2 vUV;
+layout(binding = 0) uniform sampler2D u_tex;
+struct PresenterPushData {
+    int channel_mode;
+    int highlight_hdr;
+    int _pad0;
+    int _pad1;
+};
+#ifdef VULKAN
+layout(push_constant) uniform PresenterPushBlock { PresenterPushData pc; };
+#else
+layout(std140, binding = 14) uniform PresenterPushBlock { PresenterPushData pc; };
+#endif
+layout(location = 0) out vec4 FragColor;
 void main() {
     vec4 c = texture(u_tex, vUV);
     vec3 result;
-    if (u_channel == 5)      result = vec3(pow(clamp(1.0 - c.r, 0.0, 1.0), 0.25));
-    else if (u_channel == 1) result = vec3(c.r);
-    else if (u_channel == 2) result = vec3(c.g);
-    else if (u_channel == 3) result = vec3(c.b);
-    else if (u_channel == 4) result = vec3(c.a);
-    else                     result = c.rgb;
-    if (u_highlight_hdr == 1) {
+    if (pc.channel_mode == 5)      result = vec3(pow(clamp(1.0 - c.r, 0.0, 1.0), 0.25));
+    else if (pc.channel_mode == 1) result = vec3(c.r);
+    else if (pc.channel_mode == 2) result = vec3(c.g);
+    else if (pc.channel_mode == 3) result = vec3(c.b);
+    else if (pc.channel_mode == 4) result = vec3(c.a);
+    else                           result = c.rgb;
+    if (pc.highlight_hdr == 1) {
         float max_val = max(max(c.r, c.g), c.b);
         if (max_val > 1.0) {
             float intensity = clamp((max_val - 1.0) / 2.0, 0.0, 1.0);
@@ -208,9 +226,10 @@ void FrameGraphPresenter::render(
     ctx2->bind_shader(ctx2->fsq_vertex_shader(), fs);
 
     ctx2->bind_sampled_texture(0, capture_tex);
-    ctx2->set_uniform_int("u_tex", 0);
-    ctx2->set_uniform_int("u_channel", channel_mode);
-    ctx2->set_uniform_int("u_highlight_hdr", highlight_hdr ? 1 : 0);
+    PresenterPushData push{};
+    push.channel_mode = channel_mode;
+    push.highlight_hdr = highlight_hdr ? 1 : 0;
+    ctx2->set_push_constants(&push, sizeof(push));
 
     ctx2->draw_fullscreen_quad();
     ctx2->end_pass();

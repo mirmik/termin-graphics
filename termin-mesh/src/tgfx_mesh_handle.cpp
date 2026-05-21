@@ -13,14 +13,13 @@ bool TcMesh::set_from_mesh3(const Mesh3& mesh, const tc_vertex_layout* custom_la
         return false;
     }
 
-    // Choose layout based on mesh data (tangents require larger layout)
+    // Keep the default mesh layout compatible with PBR shaders. Missing tangents
+    // stay zero-filled in the interleaved buffer below.
     tc_vertex_layout layout;
     if (custom_layout) {
         layout = *custom_layout;
-    } else if (mesh.has_tangents()) {
-        layout = tc_vertex_layout_pos_normal_uv_tangent();
     } else {
-        layout = tc_vertex_layout_pos_normal_uv();
+        layout = tc_vertex_layout_pos_normal_uv_tangent();
     }
 
     // Build interleaved vertex buffer
@@ -90,14 +89,13 @@ TcMesh TcMesh::from_mesh3(const Mesh3& mesh,
         }
     }
 
-    // Choose layout based on mesh data (tangents require larger layout)
+    // Keep the default mesh layout compatible with PBR shaders. Missing tangents
+    // stay zero-filled in the interleaved buffer below.
     tc_vertex_layout layout;
     if (custom_layout) {
         layout = *custom_layout;
-    } else if (mesh.has_tangents()) {
-        layout = tc_vertex_layout_pos_normal_uv_tangent();
     } else {
-        layout = tc_vertex_layout_pos_normal_uv();
+        layout = tc_vertex_layout_pos_normal_uv_tangent();
     }
 
     // Build interleaved vertex buffer
