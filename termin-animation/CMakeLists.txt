@@ -42,9 +42,7 @@ endif()
 
 target_include_directories(termin_animation PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../termin-app/core_c/include>
     $<INSTALL_INTERFACE:include>
-    $<INSTALL_INTERFACE:include/core_c>
 )
 
 target_link_libraries(termin_animation PUBLIC
@@ -113,8 +111,8 @@ install(DIRECTORY include/termin
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-install(DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/../termin-app/core_c/include/
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/core_c
+install(DIRECTORY include/resources
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
 install(EXPORT termin_animationTargets
