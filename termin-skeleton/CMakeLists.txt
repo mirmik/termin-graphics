@@ -77,6 +77,7 @@ endif()
     )
     target_link_libraries(_skeleton_native PRIVATE
         termin_skeleton
+        termin_inspect::termin_inspect
         termin_inspect::termin_inspect_python
     )
     termin_set_rpath_python(_skeleton_native)
