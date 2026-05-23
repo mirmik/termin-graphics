@@ -36,8 +36,6 @@
 #include <tgfx/tgfx_mesh_handle.hpp>
 #include <tgfx/tgfx2_interop.h>
 #include <tgfx/resources/tc_shader_registry.h>
-#include <tgfx/tc_gpu_context.h>
-#include <tgfx/tc_gpu_share_group.h>
 #include <tgfx/tgfx_types.h>
 
 namespace nb = nanobind;
@@ -365,14 +363,7 @@ void bind_tgfx2(nb::module_& m) {
                 // FBOSurface (device A) and scene RTs (device B) then
                 // resolve to unrelated textures (single→MSAA warnings).
                 tgfx2_interop_set_device(dev);
-                // The OpenGL tc_gpu_ops upload bridge is GL-only
-                // (tc_shader_compile_gpu, tc_mesh_upload_gpu,
-                // tc_texture_upload_gpu route through OpenGL). Do the
-                // GL-side bootstrap only when the host is GL.
-                if (dev->backend_type() == tgfx::BackendType::OpenGL) {
-                    tc_ensure_default_gpu_context();
-                    tgfx2_gpu_ops_register();
-                }
+                tgfx2_gpu_ops_register();
                 return new Tgfx2ContextHolder(dev, rctx);
             },
             nb::arg("device_ptr"), nb::arg("ctx_ptr"),

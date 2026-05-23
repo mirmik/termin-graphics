@@ -117,7 +117,7 @@ if(TGFX2_ENABLE_OPENGL)
         src/tgfx2/opengl/opengl_render_device.cpp
         src/tgfx2/opengl/opengl_command_list.cpp
         src/tgfx2/opengl/opengl_type_conversions.cpp
-        src/tgfx2_gpu_ops.cpp
+        src/tgfx2/opengl/opengl_legacy_gpu_ops.cpp
     )
 endif()
 

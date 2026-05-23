@@ -297,6 +297,8 @@ public:
     BufferHandle transient_vertex_buffer() override;
     uint64_t transient_vertex_write(const void* data, uint32_t size) override;
 
+    bool register_legacy_gpu_ops() override;
+
 private:
     GLuint acquire_program(const PipelineDesc& desc);
     void release_program(GLuint program);

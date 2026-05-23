@@ -1,4 +1,4 @@
-// tgfx2_gpu_ops.cpp - tgfx_gpu_ops vtable implementation backed by tgfx::IRenderDevice
+// opengl_legacy_gpu_ops.cpp - tgfx_gpu_ops vtable backed by OpenGLRenderDevice
 // Routes resource creation through tgfx2 and extracts GL IDs for backward compatibility.
 
 #include <tgfx/tgfx2_interop.h>
@@ -6,7 +6,6 @@
 #include <tgfx/tgfx_types.h>
 #include <tgfx/resources/tc_texture.h>
 #include <tgfx/tc_gpu_context.h>
-#include <tgfx2/i_render_device.hpp>
 #include <tgfx2/opengl/opengl_render_device.hpp>
 #include <tcbase/tc_log.h>
 
@@ -79,7 +78,6 @@ static tgfx::TextureUsage tc_usage_to_tgfx(uint32_t usage) {
 // Key: gl_id, Value: tgfx2 handle id
 // We maintain separate maps per resource type.
 static std::unordered_map<uint32_t, uint32_t> g_texture_map;   // gl_id -> TextureHandle.id
-static std::unordered_map<uint32_t, uint32_t> g_sampler_map;   // gl_id -> SamplerHandle.id
 static std::unordered_map<uint32_t, uint32_t> g_buffer_map;    // gl_id -> BufferHandle.id
 
 // ============================================================================
@@ -232,20 +230,20 @@ static uint32_t tgfx2_texture_create_gpu_only(
     return gl_id;
 }
 
-static void tgfx2_texture_bind(uint32_t gpu_id, int unit) {
+static void tgfx2_texture_bind(uint32_t gl_id, int unit) {
     // Direct GL — same as legacy, since legacy code expects this
     glActiveTexture(GL_TEXTURE0 + unit);
-    glBindTexture(GL_TEXTURE_2D, gpu_id);
+    glBindTexture(GL_TEXTURE_2D, gl_id);
 }
 
-static void tgfx2_depth_texture_bind(uint32_t gpu_id, int unit) {
+static void tgfx2_depth_texture_bind(uint32_t gl_id, int unit) {
     glActiveTexture(GL_TEXTURE0 + unit);
-    glBindTexture(GL_TEXTURE_2D, gpu_id);
+    glBindTexture(GL_TEXTURE_2D, gl_id);
 }
 
-static void tgfx2_texture_delete(uint32_t gpu_id) {
+static void tgfx2_texture_delete(uint32_t gl_id) {
     auto* dev = get_device();
-    auto it = g_texture_map.find(gpu_id);
+    auto it = g_texture_map.find(gl_id);
     if (it != g_texture_map.end() && dev) {
         dev->destroy(tgfx::TextureHandle{it->second});
         g_texture_map.erase(it);
@@ -253,7 +251,7 @@ static void tgfx2_texture_delete(uint32_t gpu_id) {
         // Stage 6 transition: textures created via the legacy gpu_ops
         // (before RenderEngine::ensure_tgfx2 swapped the vtable) are
         // not tracked by tgfx2. Delete directly so they don't leak.
-        GLuint id = gpu_id;
+        GLuint id = gl_id;
         glDeleteTextures(1, &id);
     }
 }
@@ -524,12 +522,8 @@ static void tgfx2_buffer_delete(uint32_t buffer_id) {
 // Registration
 // ============================================================================
 
-void tgfx2_gpu_ops_register(void) {
-    auto* dev = get_device();
-    if (!dev) {
-        tc_log_error("tgfx2_gpu_ops_register: device not set, call tgfx2_interop_set_device first");
-        return;
-    }
+bool tgfx::OpenGLRenderDevice::register_legacy_gpu_ops() {
+    tc_ensure_default_gpu_context();
 
     static tgfx_gpu_ops ops = {};
 
@@ -547,9 +541,10 @@ void tgfx2_gpu_ops_register(void) {
     ops.mesh_create_vao = tgfx2_mesh_create_vao;
     ops.buffer_delete = tgfx2_buffer_delete;
 
-    ops.user_data = dev;
+    ops.user_data = this;
 
     tgfx_gpu_set_ops(&ops);
+    return true;
 }
 
 // ============================================================================

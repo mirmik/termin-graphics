@@ -1,4 +1,7 @@
 #include <tgfx/tgfx2_interop.h>
+#include <tgfx/tgfx_gpu_ops.h>
+#include <tgfx2/i_render_device.hpp>
+#include <tcbase/tc_log.h>
 
 #include <cstdint>
 
@@ -12,10 +15,19 @@ void* tgfx2_interop_get_device(void) {
     return g_tgfx2_device;
 }
 
-#ifndef TGFX2_HAS_OPENGL
 void tgfx2_gpu_ops_register(void) {
+    auto* device = static_cast<tgfx::IRenderDevice*>(g_tgfx2_device);
+    if (!device) {
+        tgfx_gpu_set_ops(nullptr);
+        tc_log_error("tgfx2_gpu_ops_register: device not set, call tgfx2_interop_set_device first");
+        return;
+    }
+    if (!device->register_legacy_gpu_ops()) {
+        tgfx_gpu_set_ops(nullptr);
+    }
 }
 
+#ifndef TGFX2_HAS_OPENGL
 uint32_t tgfx2_interop_register_external_gl_texture(
     uint32_t gl_tex_id,
     uint32_t width,

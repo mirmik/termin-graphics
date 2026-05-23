@@ -3448,7 +3448,7 @@ std::vector<uint8_t> normalize_pixels(const tc_texture* tex, PixelFormat& out_fm
 }
 
 // Translate tc_texture_usage_flags bitset → tgfx::TextureUsage. Mirrors
-// the helper in tgfx2_gpu_ops.cpp; we duplicate it here because the two
+// the OpenGL legacy gpu_ops helper; we duplicate it here because the two
 // translation units don't share a common implementation file.
 TextureUsage tc_usage_to_tgfx(uint32_t usage) {
     uint32_t out = 0;

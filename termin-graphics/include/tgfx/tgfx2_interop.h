@@ -21,10 +21,9 @@ TGFX2_API void tgfx2_interop_set_device(void* device);
 // Get the tgfx2 render device (returns NULL if not set).
 TGFX2_API void* tgfx2_interop_get_device(void);
 
-// Register tgfx2-backed gpu_ops vtable.
+// Register the active tgfx2 device's legacy gpu_ops vtable, when the
+// backend provides one.
 // Requires tgfx2_interop_set_device() to have been called first.
-// The vtable routes resource creation through tgfx::IRenderDevice
-// and extracts GL IDs for backward compatibility with existing code.
 TGFX2_API void tgfx2_gpu_ops_register(void);
 
 // ---------------------------------------------------------------------------

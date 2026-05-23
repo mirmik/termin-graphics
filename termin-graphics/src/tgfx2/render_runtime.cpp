@@ -8,7 +8,6 @@
 #include "tgfx2/render_context.hpp"
 
 extern "C" {
-#include "tgfx/tc_gpu_context.h"
 #include "tgfx/tgfx2_interop.h"
 }
 
@@ -80,10 +79,7 @@ void RenderRuntime::publish_interop() {
     }
     tgfx2_interop_set_device(device_);
     interop_published_by_us_ = true;
-    if (device_->backend_type() == BackendType::OpenGL) {
-        tc_ensure_default_gpu_context();
-        tgfx2_gpu_ops_register();
-    }
+    tgfx2_gpu_ops_register();
 }
 
 void RenderRuntime::clear_interop_if_current() {
