@@ -302,8 +302,11 @@ void OpenGLCommandList::bind_resource_set(ResourceSetHandle set,
             case ResourceBinding::Kind::SampledTexture: {
                 auto* tex = device_.get_texture(b.texture);
                 if (tex) {
-                    glActiveTexture(GL_TEXTURE0 + b.binding + b.array_element);
+                    const GLuint unit = b.binding + b.array_element;
+                    glActiveTexture(GL_TEXTURE0 + unit);
                     glBindTexture(tex->target, tex->gl_id);
+                    auto* samp = device_.get_sampler(b.sampler);
+                    glBindSampler(unit, samp ? samp->gl_id : 0);
                 }
                 break;
             }
