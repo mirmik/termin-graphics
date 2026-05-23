@@ -1370,33 +1370,19 @@ void OpenGLRenderDevice::present_to_default_framebuffer(
     int dst_w,
     int dst_h
 ) {
-    static uint64_t s_present_calls = 0;
-    ++s_present_calls;
-    const bool trace = s_present_calls <= 40 || (s_present_calls % 120) == 0;
-    if (trace) {
-        tc::Log::info(
-            "OpenGLRenderDevice::present_to_default_framebuffer#%llu: begin tex=%u dst=%dx%d",
-            static_cast<unsigned long long>(s_present_calls),
-            src_color.id, dst_w, dst_h);
-    }
     GLTexture* src = textures_.get(src_color.id);
     if (!src || dst_w <= 0 || dst_h <= 0) {
-        if (trace) {
-            tc::Log::error(
-                "OpenGLRenderDevice::present_to_default_framebuffer#%llu: invalid src/size",
-                static_cast<unsigned long long>(s_present_calls));
-        }
+        tc::Log::error(
+            "OpenGLRenderDevice::present_to_default_framebuffer: invalid src/size");
         return;
     }
 
     const int src_w = static_cast<int>(src->desc.width);
     const int src_h = static_cast<int>(src->desc.height);
     if (src_w <= 0 || src_h <= 0) {
-        if (trace) {
-            tc::Log::error(
-                "OpenGLRenderDevice::present_to_default_framebuffer#%llu: invalid src size %dx%d",
-                static_cast<unsigned long long>(s_present_calls), src_w, src_h);
-        }
+        tc::Log::error(
+            "OpenGLRenderDevice::present_to_default_framebuffer: invalid src size %dx%d",
+            src_w, src_h);
         return;
     }
 
@@ -1426,12 +1412,6 @@ void OpenGLRenderDevice::present_to_default_framebuffer(
     glDrawBuffer(GL_BACK);
 
     if (glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE) {
-        if (trace) {
-            tc::Log::info(
-                "OpenGLRenderDevice::present_to_default_framebuffer#%llu: blit %dx%d -> %dx%d",
-                static_cast<unsigned long long>(s_present_calls),
-                src_w, src_h, dst_w, dst_h);
-        }
         glBlitFramebuffer(
             0, 0, src_w, src_h,
             0, 0, dst_w, dst_h,
@@ -1449,11 +1429,6 @@ void OpenGLRenderDevice::present_to_default_framebuffer(
     glColorMask(color_mask[0], color_mask[1], color_mask[2], color_mask[3]);
     glDepthMask(depth_mask);
     if (was_scissor) glEnable(GL_SCISSOR_TEST);
-    if (trace) {
-        tc::Log::info(
-            "OpenGLRenderDevice::present_to_default_framebuffer#%llu: end",
-            static_cast<unsigned long long>(s_present_calls));
-    }
 }
 
 void OpenGLRenderDevice::reset_state() {
