@@ -26,3 +26,15 @@
 GPU-first textures it asks the active `tgfx_gpu_ops` backend to read back the
 image into `tc_texture::data`. Python `Texture.sync_to_cpu()` exposes the same
 operation, and preview helpers use it transparently when CPU pixels are absent.
+
+## tgfx2 Backend Contract
+
+Внешний tgfx2 API не должен требовать от вызывающего кода знания OpenGL/Vulkan
+деталей. Например, CPU row 0 и shader `v=0` считаются верхом изображения для
+всех backend-ов; если нативный backend живет в другой системе координат, он
+переворачивает upload/sampling/readback внутри себя.
+
+Для кода, которому всё-таки нужно узнать контракт устройства, используйте
+`IRenderDevice::capabilities()` или Python `Tgfx2Context.texture_origin_top_left`,
+а не ветвление по строке `Tgfx2Context.backend`. Строковый backend оставлен как
+диагностика, не как точка принятия rendering-решений.

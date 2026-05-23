@@ -21,9 +21,6 @@
 #include <tgfx2/canvas2d_renderer.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/device_factory.hpp>
-#ifdef TGFX2_HAS_OPENGL
-#include <tgfx2/opengl/opengl_render_device.hpp>
-#endif
 #include <tgfx2/pipeline_cache.hpp>
 #include <tgfx2/handles.hpp>
 #include <tgfx2/enums.hpp>
@@ -317,11 +314,9 @@ void bind_tgfx2(nb::module_& m) {
 
     // --- Tgfx2Context holder ---
     //
-    // Owns a tgfx::OpenGLRenderDevice + PipelineCache + RenderContext2
-    // triple. Mirrors what RenderEngine::ensure_tgfx2 does in C++:
-    // device is created over the current GL context (no explicit GL
-    // handle — it just assumes the context is current when the first
-    // resource is created), cache wraps the device, ctx wraps both.
+    // Holds the active IRenderDevice + RenderContext2 pair. Mirrors what
+    // RenderEngine::ensure_tgfx2 does in C++ without exposing the concrete
+    // backend class.
     //
     // Non-owning bundle of the process-wide GPU runtime: `IRenderDevice`
     // (resource factory), `RenderContext2` (command recorder). Created
@@ -419,10 +414,17 @@ void bind_tgfx2(nb::module_& m) {
             },
             nb::rv_policy::reference_internal)
 
-        // Backend identifier as a lowercase string: "opengl", "vulkan",
-        // "metal", "d3d12", "null". Drives per-backend branches in
-        // compositing code (e.g. Viewport3D's flip_v, which depends on
-        // the scene render target's texel origin convention).
+        // Backend-neutral texture coordinate contract. Prefer this over
+        // branching on the concrete backend name when deciding whether a
+        // sampled texture needs Y flipping in UI/compositor code.
+        .def_prop_ro("texture_origin_top_left",
+            [](Tgfx2ContextHolder& self) -> bool {
+                return self.device->capabilities().texture_origin_top_left;
+            })
+
+        // Diagnostic backend identifier as a lowercase string:
+        // "opengl", "vulkan", "metal", "d3d12", "null". Rendering code
+        // should prefer capability properties above.
         .def_prop_ro("backend",
             [](Tgfx2ContextHolder& self) -> std::string {
                 switch (self.device->backend_type()) {

@@ -353,6 +353,17 @@ if(BUILD_TGFX2_TESTS)
             SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
     endif()
 
+    add_executable(tgfx2_device_factory_test
+        tests/main.cpp
+        tests/test_tgfx2_device_factory.cpp
+    )
+    target_include_directories(tgfx2_device_factory_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(tgfx2_device_factory_test PRIVATE termin_graphics2)
+    add_test(NAME tgfx2_device_factory_test COMMAND tgfx2_device_factory_test)
+
     # Vulkan smoke test (no GLFW needed — offscreen)
     if(TGFX2_ENABLE_VULKAN)
         add_executable(tgfx2_vulkan_smoke tests/test_tgfx2_vulkan_smoke.cpp)

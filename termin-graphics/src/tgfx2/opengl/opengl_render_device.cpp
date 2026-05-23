@@ -127,6 +127,7 @@ OpenGLRenderDevice::~OpenGLRenderDevice() {
 
 void OpenGLRenderDevice::query_capabilities() {
     caps_.backend = BackendType::OpenGL;
+    caps_.texture_origin_top_left = true;
 
     GLint val;
     glGetIntegerv(GL_MAX_COLOR_ATTACHMENTS, &val);

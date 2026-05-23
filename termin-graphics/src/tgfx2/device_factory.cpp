@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <cstdio>
 #include <stdexcept>
 #include <string>
 
@@ -28,8 +29,9 @@ BackendType default_backend_from_env() {
     if (s == "d3d12" || s == "dx12") return BackendType::D3D12;
     if (s == "null") return BackendType::Null;
 
-    // Unknown value — fall back to Vulkan. Silent fallback (no log
-    // dependency) so the factory stays header-light.
+    std::fprintf(stderr,
+                 "[tgfx2] Unknown TERMIN_BACKEND='%s'; falling back to vulkan\n",
+                 env);
     return BackendType::Vulkan;
 }
 

@@ -7,6 +7,11 @@ namespace tgfx {
 
 struct BackendCapabilities {
     BackendType backend = BackendType::Null;
+    // Public texture coordinates use a top-left image origin:
+    // row 0 in CPU uploads and v=0 in shader sampling both refer to
+    // the visual top of the image. Backends with a different native
+    // convention must hide it internally.
+    bool texture_origin_top_left = true;
     bool supports_compute = false;
     bool supports_geometry_shaders = false;
     bool supports_timestamp_queries = false;

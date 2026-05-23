@@ -368,6 +368,7 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     vkGetPhysicalDeviceFeatures(physical_device_, &features);
 
     caps_.backend = BackendType::Vulkan;
+    caps_.texture_origin_top_left = true;
     caps_.max_texture_dimension_2d = props.limits.maxImageDimension2D;
     caps_.max_color_attachments = props.limits.maxColorAttachments;
     caps_.max_texture_units = props.limits.maxBoundDescriptorSets;
