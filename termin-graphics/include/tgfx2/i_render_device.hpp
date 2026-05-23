@@ -110,16 +110,14 @@ public:
     // A persistent vertex buffer the backend can sub-upload small draw
     // streams into (immediate-mode rects, debug lines). Lets
     // RenderContext2::draw_immediate_* skip per-draw create_buffer /
-    // upload_buffer / destroy, which is ~free on Vulkan but costs
-    // glGenBuffers + glBufferData + glBufferSubData + glDeleteBuffers
-    // on OpenGL (the delete happens later via deferred_destroy_buffers_,
-    // but the GL-driver still pays the per-alloc hit).
+    // upload_buffer / destroy. Backends usually implement this as a
+    // mapped/double-buffered ring (Vulkan) or a stream VBO with orphaning
+    // on wrap (OpenGL).
     //
     // Returns UINT64_MAX → caller falls back to create_buffer +
-    // upload_buffer (Vulkan keeps doing that; it's fast there).
+    // upload_buffer.
     // Non-max offset → use `transient_vertex_buffer()` with that
-    // offset.  Ring wraps with an orphaning glBufferData() so there's
-    // no stall on overflow.
+    // offset.
     virtual BufferHandle transient_vertex_buffer() { return {}; }
 
     virtual uint64_t transient_vertex_write(

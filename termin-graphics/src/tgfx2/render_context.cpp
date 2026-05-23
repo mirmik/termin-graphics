@@ -682,10 +682,8 @@ void RenderContext2::draw_arrays(BufferHandle vbo, uint32_t vertex_count) {
 // Immediate vertex draw scaffold shared by draw_immediate_lines/_triangles.
 // Tries the device's transient vertex ring (persistent VBO with sub-upload)
 // first; falls back to create_buffer + upload_buffer + deferred destroy if
-// the backend doesn't provide a ring. OpenGL pays glGenBuffers+glBufferData+
-// glDeleteBuffers per draw otherwise, which dominates CPU time for small
-// UI-style streams. Vulkan keeps using the fallback — command submission is
-// async so the per-draw alloc cost is hidden.
+// the backend doesn't provide a ring. This keeps small UI/debug streams off
+// the per-draw allocation path on both OpenGL and Vulkan.
 void RenderContext2::draw_immediate_generic(const float* data,
                                             uint32_t vertex_count,
                                             PrimitiveTopology topo) {

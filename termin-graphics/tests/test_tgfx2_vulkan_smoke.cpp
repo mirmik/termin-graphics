@@ -98,15 +98,69 @@ int main() {
         untouched_pixel[0] < 0.1f && untouched_pixel[1] < 0.1f &&
         untouched_pixel[2] < 0.1f && untouched_pixel[3] < 0.1f;
 
-    printf("Texture region upload: %s\n", region_upload_ok ? "ok" : "failed");
-    if (!region_upload_ok) {
+    std::vector<float> upload_pixels(4 * 4 * 4, 0.0f);
+    bool full_color_read_ok = device->read_texture_rgba_float(upload_tex, upload_pixels.data());
+    const size_t full_red = (2 * 4 + 1) * 4;
+    const size_t full_untouched = 0;
+    bool full_color_matches =
+        full_color_read_ok &&
+        upload_pixels[full_red + 0] > 0.9f &&
+        upload_pixels[full_red + 1] < 0.1f &&
+        upload_pixels[full_red + 2] < 0.1f &&
+        upload_pixels[full_red + 3] > 0.9f &&
+        upload_pixels[full_untouched + 0] < 0.1f &&
+        upload_pixels[full_untouched + 1] < 0.1f &&
+        upload_pixels[full_untouched + 2] < 0.1f &&
+        upload_pixels[full_untouched + 3] < 0.1f;
+
+    printf("Texture region upload: %s, full color readback: %s\n",
+           region_upload_ok ? "ok" : "failed",
+           full_color_matches ? "ok" : "failed");
+    if (!region_upload_ok || !full_color_matches) {
         fprintf(stderr,
-                "Texture region upload mismatch: red=(%.3f %.3f %.3f %.3f), untouched=(%.3f %.3f %.3f %.3f)\n",
+                "Texture readback mismatch: red=(%.3f %.3f %.3f %.3f), untouched=(%.3f %.3f %.3f %.3f), full_red=(%.3f %.3f %.3f %.3f)\n",
                 red_pixel[0], red_pixel[1], red_pixel[2], red_pixel[3],
-                untouched_pixel[0], untouched_pixel[1], untouched_pixel[2], untouched_pixel[3]);
+                untouched_pixel[0], untouched_pixel[1], untouched_pixel[2], untouched_pixel[3],
+                upload_pixels[full_red + 0], upload_pixels[full_red + 1],
+                upload_pixels[full_red + 2], upload_pixels[full_red + 3]);
         return 1;
     }
     device->destroy(upload_tex);
+
+    tgfx::TextureDesc depth_desc;
+    depth_desc.width = 2;
+    depth_desc.height = 2;
+    depth_desc.format = tgfx::PixelFormat::D32F;
+    depth_desc.usage = tgfx::TextureUsage::DepthStencilAttachment |
+                       tgfx::TextureUsage::CopySrc |
+                       tgfx::TextureUsage::CopyDst;
+    auto depth_tex = device->create_texture(depth_desc);
+    const float depth_upload[] = {0.25f, 0.5f, 0.75f, 1.0f};
+    device->upload_texture(depth_tex, std::span<const uint8_t>(
+        reinterpret_cast<const uint8_t*>(depth_upload), sizeof(depth_upload)));
+
+    auto depth_cmd = device->create_command_list();
+    depth_cmd->begin();
+    depth_cmd->end();
+    device->submit(*depth_cmd);
+    depth_cmd.reset();
+
+    float depth_pixels[4] = {};
+    bool depth_read_ok = device->read_texture_depth_float(depth_tex, depth_pixels);
+    bool depth_matches =
+        depth_read_ok &&
+        depth_pixels[0] > 0.24f && depth_pixels[0] < 0.26f &&
+        depth_pixels[1] > 0.49f && depth_pixels[1] < 0.51f &&
+        depth_pixels[2] > 0.74f && depth_pixels[2] < 0.76f &&
+        depth_pixels[3] > 0.99f && depth_pixels[3] < 1.01f;
+    printf("Full depth readback: %s\n", depth_matches ? "ok" : "failed");
+    if (!depth_matches) {
+        fprintf(stderr,
+                "Depth readback mismatch: (%.3f %.3f %.3f %.3f)\n",
+                depth_pixels[0], depth_pixels[1], depth_pixels[2], depth_pixels[3]);
+        return 1;
+    }
+    device->destroy(depth_tex);
 
     // --- Create shaders (GLSL source — compiled to SPIR-V by shaderc) ---
     tgfx::ShaderHandle vs, fs;
@@ -158,19 +212,23 @@ int main() {
     auto pipeline = device->create_pipeline(pipe_desc);
     printf("Pipeline: id=%u\n", pipeline.id);
 
-    // --- Create vertex buffer (CPU-visible for simplicity) ---
+    // --- Create vertex data through the transient vertex ring ---
     float vertices[] = {
          0.0f,  0.5f,  1.f, 0.f, 0.f,
         -0.5f, -0.5f,  0.f, 1.f, 0.f,
          0.5f, -0.5f,  0.f, 0.f, 1.f,
     };
-
-    tgfx::BufferDesc vb_desc;
-    vb_desc.size = sizeof(vertices);
-    vb_desc.usage = tgfx::BufferUsage::Vertex;
-    vb_desc.cpu_visible = true;
-    auto vb = device->create_buffer(vb_desc);
-    device->upload_buffer(vb, {reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)});
+    uint64_t vertex_offset = device->transient_vertex_write(
+        vertices, static_cast<uint32_t>(sizeof(vertices)));
+    if (vertex_offset == UINT64_MAX) {
+        fprintf(stderr, "Transient vertex ring write failed\n");
+        return 1;
+    }
+    auto vb = device->transient_vertex_buffer();
+    if (!vb) {
+        fprintf(stderr, "Transient vertex ring returned empty buffer\n");
+        return 1;
+    }
 
     uint32_t indices[] = {0, 1, 2};
     tgfx::BufferDesc ib_desc;
@@ -198,7 +256,7 @@ int main() {
 
     cmd->begin_render_pass(pass);
     cmd->bind_pipeline(pipeline);
-    cmd->bind_vertex_buffer(0, vb);
+    cmd->bind_vertex_buffer(0, vb, vertex_offset);
     cmd->bind_index_buffer(ib, tgfx::IndexType::Uint32);
     cmd->draw_indexed(3);
     cmd->end_render_pass();
@@ -266,7 +324,6 @@ int main() {
     cmd.reset();
     device->destroy(readback_buf);
     device->destroy(rt_tex);
-    device->destroy(vb);
     device->destroy(ib);
     device->destroy(pipeline);
     device->destroy(vs);

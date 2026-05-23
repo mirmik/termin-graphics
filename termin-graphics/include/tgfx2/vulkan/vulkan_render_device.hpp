@@ -313,6 +313,19 @@ private:
     // path. Queried once in create_ring_ubo().
     bool ring_ubo_coherent_ = false;
 
+    // Transient vertex ring for immediate draws. Same two-slot lifetime
+    // model as ring_ubo_: frame N records into one half while the other
+    // half may still be read by the GPU from frame N-1.
+    VkBuffer      transient_vb_buffer_     = VK_NULL_HANDLE;
+    VmaAllocation transient_vb_allocation_ = VK_NULL_HANDLE;
+    void*         transient_vb_mapped_     = nullptr;
+    uint64_t      transient_vb_size_       = 0;
+    uint64_t      transient_vb_slot_size_  = 0;
+    std::atomic<uint64_t> transient_vb_heads_[2] = {};
+    uint32_t transient_vb_slot_idx_ = 0;
+    BufferHandle transient_vb_handle_ = {};
+    bool transient_vb_coherent_ = false;
+
     // tc_texture / tc_mesh per-device resource caches. Keyed by
     // tc_resource_header::pool_index. Replace the former file-scope
     // g_tex_cache / g_mesh_cache singletons in tgfx2_bridge.cpp —
@@ -367,6 +380,8 @@ public:
     bool poll_pixel_rgba8(uint64_t request_id, float out_rgba[4]) override;
     uint64_t request_pixel_depth_float(TextureHandle tex, int x, int y) override;
     bool poll_pixel_depth_float(uint64_t request_id, float* out_depth) override;
+    bool read_texture_rgba_float(TextureHandle tex, float* out) override;
+    bool read_texture_depth_float(TextureHandle tex, float* out) override;
 
     std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) override;
     void submit(ICommandList& cmd) override;
@@ -471,6 +486,9 @@ public:
     // UBO block size (cannot exceed buffer range at bind time).
     uint32_t ubo_alignment() const override { return ubo_alignment_; }
 
+    BufferHandle transient_vertex_buffer() override { return transient_vb_handle_; }
+    uint64_t transient_vertex_write(const void* data, uint32_t size) override;
+
     // Non-null when the device was created with a surface (via
     // `info.surface` or `info.surface_factory`). Hosts drive on-screen
     // frames through this — acquire() at start of frame, present() at
@@ -558,6 +576,7 @@ private:
     void create_descriptor_pool();
     void create_shared_layouts();
     void create_ring_ubo();
+    void create_transient_vertex_ring();
 
     // Drain `q` now — actually free the underlying Vk objects. Caller is
     // responsible for ensuring GPU has finished using these resources.

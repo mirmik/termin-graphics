@@ -9,6 +9,7 @@
 #include "tgfx2/vulkan/vulkan_type_conversions.hpp"
 #include "tgfx2/vulkan/vulkan_shader_compiler.hpp"
 #include "tgfx2/internal/shader_preprocess.hpp"
+#include "tgfx2/pixel_format_utils.hpp"
 
 #include <stdexcept>
 #include <cstring>
@@ -243,6 +244,35 @@ static VkImageLayout texture_post_upload_layout(const TextureDesc& desc) {
         : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 }
 
+static float half_to_float(uint16_t h) {
+    const uint32_t sign = static_cast<uint32_t>(h & 0x8000u) << 16u;
+    uint32_t exp = (h >> 10u) & 0x1fu;
+    uint32_t mant = h & 0x03ffu;
+
+    uint32_t bits = 0;
+    if (exp == 0) {
+        if (mant == 0) {
+            bits = sign;
+        } else {
+            exp = 1;
+            while ((mant & 0x0400u) == 0) {
+                mant <<= 1u;
+                --exp;
+            }
+            mant &= 0x03ffu;
+            bits = sign | ((exp + 112u) << 23u) | (mant << 13u);
+        }
+    } else if (exp == 31) {
+        bits = sign | 0x7f800000u | (mant << 13u);
+    } else {
+        bits = sign | ((exp + 112u) << 23u) | (mant << 13u);
+    }
+
+    float out = 0.0f;
+    std::memcpy(&out, &bits, sizeof(out));
+    return out;
+}
+
 } // namespace
 
 // --- Debug callback ---
@@ -290,6 +320,7 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     create_descriptor_pool();
     create_shared_layouts();
     create_ring_ubo();
+    create_transient_vertex_ring();
 
     // Frame fence: tracks in-flight submits. Created unsignaled — the
     // first `submit()` sees `frame_fence_in_flight_ == false` and skips
@@ -421,6 +452,12 @@ VulkanRenderDevice::~VulkanRenderDevice() {
         ring_ubo_buffer_ = VK_NULL_HANDLE;
         ring_ubo_allocation_ = VK_NULL_HANDLE;
         ring_ubo_mapped_ = nullptr;
+    }
+    if (transient_vb_buffer_ != VK_NULL_HANDLE) {
+        vmaDestroyBuffer(allocator_, transient_vb_buffer_, transient_vb_allocation_);
+        transient_vb_buffer_ = VK_NULL_HANDLE;
+        transient_vb_allocation_ = VK_NULL_HANDLE;
+        transient_vb_mapped_ = nullptr;
     }
     if (frame_fence_) vkDestroyFence(device_, frame_fence_, nullptr);
     if (default_sampler_) vkDestroySampler(device_, default_sampler_, nullptr);
@@ -894,6 +931,81 @@ uint32_t VulkanRenderDevice::ring_ubo_write(const void* data, uint32_t size) {
         vmaFlushAllocation(allocator_, ring_ubo_allocation_, offset, size);
     }
     return static_cast<uint32_t>(offset);
+}
+
+// --- Transient vertex ring ---
+
+void VulkanRenderDevice::create_transient_vertex_ring() {
+    transient_vb_size_ = 4 * 1024 * 1024;
+    transient_vb_slot_size_ = transient_vb_size_ / 2;
+
+    VkBufferCreateInfo bi{};
+    bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bi.size = transient_vb_size_;
+    bi.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VmaAllocationCreateInfo ai{};
+    ai.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+    ai.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+    VmaAllocationInfo alloc_info{};
+    if (vmaCreateBuffer(allocator_, &bi, &ai, &transient_vb_buffer_,
+                        &transient_vb_allocation_, &alloc_info) != VK_SUCCESS) {
+        throw std::runtime_error("VulkanRenderDevice: failed to allocate transient vertex ring");
+    }
+    transient_vb_mapped_ = alloc_info.pMappedData;
+
+    VkPhysicalDeviceMemoryProperties mem_props;
+    vkGetPhysicalDeviceMemoryProperties(physical_device_, &mem_props);
+    transient_vb_coherent_ =
+        (mem_props.memoryTypes[alloc_info.memoryType].propertyFlags
+         & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
+    transient_vb_heads_[0].store(0, std::memory_order_relaxed);
+    transient_vb_heads_[1].store(0, std::memory_order_relaxed);
+    transient_vb_slot_idx_ = 0;
+
+    VkBufferResource res{};
+    res.buffer = transient_vb_buffer_;
+    res.allocation = VK_NULL_HANDLE;
+    res.desc.size = transient_vb_size_;
+    res.desc.usage = BufferUsage::Vertex;
+    res.desc.cpu_visible = true;
+    res.mapped_ptr = transient_vb_mapped_;
+    transient_vb_handle_.id = buffers_.add(std::move(res));
+}
+
+uint64_t VulkanRenderDevice::transient_vertex_write(const void* data, uint32_t size) {
+    if (!data || size == 0 || size > transient_vb_slot_size_ ||
+        transient_vb_mapped_ == nullptr || transient_vb_handle_.id == 0) {
+        return UINT64_MAX;
+    }
+
+    constexpr uint64_t align = 16;
+    const uint64_t padded = (static_cast<uint64_t>(size) + align - 1) & ~(align - 1);
+    const uint32_t slot = transient_vb_slot_idx_;
+    const uint64_t base = static_cast<uint64_t>(slot) * transient_vb_slot_size_;
+    uint64_t offset_in_slot =
+        transient_vb_heads_[slot].fetch_add(padded, std::memory_order_relaxed);
+
+    if (offset_in_slot + padded > transient_vb_slot_size_) {
+        static thread_local bool s_warned = false;
+        if (!s_warned) {
+            tc_log(TC_LOG_ERROR,
+                   "[TransientVB] slot %u overflow: head=%llu size=%u slot_cap=%llu",
+                   slot, (unsigned long long)offset_in_slot, size,
+                   (unsigned long long)transient_vb_slot_size_);
+            s_warned = true;
+        }
+        return UINT64_MAX;
+    }
+
+    const uint64_t offset = base + offset_in_slot;
+    std::memcpy(static_cast<uint8_t*>(transient_vb_mapped_) + offset, data, size);
+    if (!transient_vb_coherent_) {
+        vmaFlushAllocation(allocator_, transient_vb_allocation_, offset, size);
+    }
+    return offset;
 }
 
 VkSampler VulkanRenderDevice::ensure_default_sampler() {
@@ -1771,6 +1883,7 @@ void VulkanRenderDevice::destroy(BufferHandle h) {
     // is tied to the device, and destroying it mid-frame would wipe the
     // UBO store for every pending dynamic-offset binding.
     if (ring_ubo_handle_.id != 0 && h.id == ring_ubo_handle_.id) return;
+    if (transient_vb_handle_.id != 0 && h.id == transient_vb_handle_.id) return;
     invalidate_descriptor_cache();
     pending_destroy_current_.buffers.push_back(h);
 }
@@ -2317,6 +2430,276 @@ bool VulkanRenderDevice::read_pixel_depth_float(
     return true;
 }
 
+bool VulkanRenderDevice::read_texture_rgba_float(TextureHandle tex, float* out) {
+    auto* res = textures_.get(tex.id);
+    if (!res || !out) return false;
+    if (is_depth_format(res->desc.format)) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::read_texture_rgba_float: texture %u is a depth format",
+               tex.id);
+        return false;
+    }
+    if (!has_flag(res->desc.usage, TextureUsage::CopySrc)) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::read_texture_rgba_float: texture %u missing CopySrc usage",
+               tex.id);
+        return false;
+    }
+
+    const uint32_t bytes_per_pixel = pixel_format_byte_size(res->desc.format);
+    if (bytes_per_pixel == 0) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::read_texture_rgba_float: unsupported texture format for texture %u",
+               tex.id);
+        return false;
+    }
+
+    const uint32_t width = res->desc.width;
+    const uint32_t height = res->desc.height;
+    const size_t byte_size = static_cast<size_t>(width) * height * bytes_per_pixel;
+
+    VkBufferCreateInfo stage_ci{};
+    stage_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    stage_ci.size = byte_size;
+    stage_ci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+    VmaAllocationCreateInfo stage_alloc{};
+    stage_alloc.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
+
+    VkBuffer staging = VK_NULL_HANDLE;
+    VmaAllocation staging_alloc_h = VK_NULL_HANDLE;
+    if (vmaCreateBuffer(allocator_, &stage_ci, &stage_alloc,
+                        &staging, &staging_alloc_h, nullptr) != VK_SUCCESS) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::read_texture_rgba_float: failed to allocate staging buffer for texture %u",
+               tex.id);
+        return false;
+    }
+
+    VkCommandBufferAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    ai.commandPool = command_pool_;
+    ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    ai.commandBufferCount = 1;
+    VkCommandBuffer cb = VK_NULL_HANDLE;
+    vkAllocateCommandBuffers(device_, &ai, &cb);
+
+    VkCommandBufferBeginInfo bi{};
+    bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cb, &bi);
+
+    VkImageLayout prev_layout = res->current_layout;
+    transition_image_layout(cb, res->image, prev_layout,
+                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                            VK_IMAGE_ASPECT_COLOR_BIT);
+
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+    region.imageExtent = {width, height, 1};
+    vkCmdCopyImageToBuffer(cb, res->image,
+                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           staging, 1, &region);
+
+    transition_image_layout(cb, res->image,
+                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                            prev_layout, VK_IMAGE_ASPECT_COLOR_BIT);
+    res->current_layout = prev_layout;
+
+    vkEndCommandBuffer(cb);
+
+    VkSubmitInfo si{};
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &cb;
+    vkQueueSubmit(graphics_queue_, 1, &si, VK_NULL_HANDLE);
+    vkQueueWaitIdle(graphics_queue_);
+
+    std::vector<uint8_t> bytes(byte_size);
+    void* mapped = nullptr;
+    bool ok = false;
+    if (vmaMapMemory(allocator_, staging_alloc_h, &mapped) == VK_SUCCESS && mapped) {
+        std::memcpy(bytes.data(), mapped, byte_size);
+        vmaUnmapMemory(allocator_, staging_alloc_h);
+        ok = true;
+    }
+
+    vmaDestroyBuffer(allocator_, staging, staging_alloc_h);
+    vkFreeCommandBuffers(device_, command_pool_, 1, &cb);
+    if (!ok) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::read_texture_rgba_float: failed to map staging buffer for texture %u",
+               tex.id);
+        return false;
+    }
+
+    const uint32_t pixel_count = width * height;
+    for (uint32_t i = 0; i < pixel_count; ++i) {
+        const uint8_t* src = bytes.data() + static_cast<size_t>(i) * bytes_per_pixel;
+        float* dst = out + static_cast<size_t>(i) * 4;
+        switch (res->desc.format) {
+            case PixelFormat::R8_UNorm:
+                dst[0] = src[0] / 255.0f; dst[1] = 0.0f; dst[2] = 0.0f; dst[3] = 1.0f;
+                break;
+            case PixelFormat::RG8_UNorm:
+                dst[0] = src[0] / 255.0f; dst[1] = src[1] / 255.0f; dst[2] = 0.0f; dst[3] = 1.0f;
+                break;
+            case PixelFormat::RGB8_UNorm:
+                dst[0] = src[0] / 255.0f; dst[1] = src[1] / 255.0f; dst[2] = src[2] / 255.0f; dst[3] = 1.0f;
+                break;
+            case PixelFormat::RGBA8_UNorm:
+                dst[0] = src[0] / 255.0f; dst[1] = src[1] / 255.0f; dst[2] = src[2] / 255.0f; dst[3] = src[3] / 255.0f;
+                break;
+            case PixelFormat::BGRA8_UNorm:
+                dst[0] = src[2] / 255.0f; dst[1] = src[1] / 255.0f; dst[2] = src[0] / 255.0f; dst[3] = src[3] / 255.0f;
+                break;
+            case PixelFormat::R16F: {
+                uint16_t r = 0;
+                std::memcpy(&r, src, sizeof(r));
+                dst[0] = half_to_float(r); dst[1] = 0.0f; dst[2] = 0.0f; dst[3] = 1.0f;
+                break;
+            }
+            case PixelFormat::RG16F: {
+                uint16_t rg[2] = {};
+                std::memcpy(rg, src, sizeof(rg));
+                dst[0] = half_to_float(rg[0]); dst[1] = half_to_float(rg[1]); dst[2] = 0.0f; dst[3] = 1.0f;
+                break;
+            }
+            case PixelFormat::RGBA16F: {
+                uint16_t rgba[4] = {};
+                std::memcpy(rgba, src, sizeof(rgba));
+                dst[0] = half_to_float(rgba[0]); dst[1] = half_to_float(rgba[1]);
+                dst[2] = half_to_float(rgba[2]); dst[3] = half_to_float(rgba[3]);
+                break;
+            }
+            case PixelFormat::R32F:
+                std::memcpy(&dst[0], src, sizeof(float));
+                dst[1] = 0.0f; dst[2] = 0.0f; dst[3] = 1.0f;
+                break;
+            case PixelFormat::RG32F:
+                std::memcpy(&dst[0], src, sizeof(float) * 2);
+                dst[2] = 0.0f; dst[3] = 1.0f;
+                break;
+            case PixelFormat::RGBA32F:
+                std::memcpy(dst, src, sizeof(float) * 4);
+                break;
+            default:
+                tc_log(TC_LOG_ERROR,
+                       "VulkanRenderDevice::read_texture_rgba_float: unsupported texture format for texture %u",
+                       tex.id);
+                return false;
+        }
+    }
+    return true;
+}
+
+bool VulkanRenderDevice::read_texture_depth_float(TextureHandle tex, float* out) {
+    auto* res = textures_.get(tex.id);
+    if (!res || !out) return false;
+    if (res->desc.format != PixelFormat::D32F) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::read_texture_depth_float: texture %u format is not D32F",
+               tex.id);
+        return false;
+    }
+    if (!has_flag(res->desc.usage, TextureUsage::CopySrc)) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::read_texture_depth_float: texture %u missing CopySrc usage",
+               tex.id);
+        return false;
+    }
+
+    const uint32_t width = res->desc.width;
+    const uint32_t height = res->desc.height;
+    const size_t byte_size = static_cast<size_t>(width) * height * sizeof(float);
+
+    VkBufferCreateInfo stage_ci{};
+    stage_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    stage_ci.size = byte_size;
+    stage_ci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+    VmaAllocationCreateInfo stage_alloc{};
+    stage_alloc.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
+
+    VkBuffer staging = VK_NULL_HANDLE;
+    VmaAllocation staging_alloc_h = VK_NULL_HANDLE;
+    if (vmaCreateBuffer(allocator_, &stage_ci, &stage_alloc,
+                        &staging, &staging_alloc_h, nullptr) != VK_SUCCESS) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::read_texture_depth_float: failed to allocate staging buffer for texture %u",
+               tex.id);
+        return false;
+    }
+
+    VkCommandBufferAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    ai.commandPool = command_pool_;
+    ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    ai.commandBufferCount = 1;
+    VkCommandBuffer cb = VK_NULL_HANDLE;
+    vkAllocateCommandBuffers(device_, &ai, &cb);
+
+    VkCommandBufferBeginInfo bi{};
+    bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cb, &bi);
+
+    VkImageLayout prev_layout = res->current_layout;
+    transition_image_layout(cb, res->image, prev_layout,
+                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                            VK_IMAGE_ASPECT_DEPTH_BIT);
+
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+    region.imageExtent = {width, height, 1};
+    vkCmdCopyImageToBuffer(cb, res->image,
+                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           staging, 1, &region);
+
+    transition_image_layout(cb, res->image,
+                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                            prev_layout, VK_IMAGE_ASPECT_DEPTH_BIT);
+    res->current_layout = prev_layout;
+
+    vkEndCommandBuffer(cb);
+
+    VkSubmitInfo si{};
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &cb;
+    vkQueueSubmit(graphics_queue_, 1, &si, VK_NULL_HANDLE);
+    vkQueueWaitIdle(graphics_queue_);
+
+    void* mapped = nullptr;
+    bool ok = false;
+    if (vmaMapMemory(allocator_, staging_alloc_h, &mapped) == VK_SUCCESS && mapped) {
+        std::memcpy(out, mapped, byte_size);
+        vmaUnmapMemory(allocator_, staging_alloc_h);
+        ok = true;
+    }
+
+    vmaDestroyBuffer(allocator_, staging, staging_alloc_h);
+    vkFreeCommandBuffers(device_, command_pool_, 1, &cb);
+    if (!ok) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::read_texture_depth_float: failed to map staging buffer for texture %u",
+               tex.id);
+    }
+    return ok;
+}
+
 uint64_t VulkanRenderDevice::request_pixel_rgba8(TextureHandle tex, int x, int y) {
     return request_pixel_readback(tex, x, y, PixelReadbackKind::Rgba8);
 }
@@ -2505,6 +2888,8 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     // frame's GPU work keeps reading from the other slot.
     ring_ubo_slot_idx_ = 1 - ring_ubo_slot_idx_;
     ring_ubo_heads_[ring_ubo_slot_idx_].store(0, std::memory_order_relaxed);
+    transient_vb_slot_idx_ = 1 - transient_vb_slot_idx_;
+    transient_vb_heads_[transient_vb_slot_idx_].store(0, std::memory_order_relaxed);
 
     // Close the immediate cb (copies / transitions / clears accumulated
     // since last submit) and submit it together with the main draw cb in
