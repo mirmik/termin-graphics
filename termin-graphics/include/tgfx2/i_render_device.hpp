@@ -237,17 +237,13 @@ public:
 
     // --- tc_texture / tc_mesh per-device resource cache ------------------
     //
-    // Lookup-or-upload entry points consumed by `tgfx2_bridge::wrap_*_as_tgfx2`
-    // on backends that own their tgfx2 handles per-device (Vulkan today;
-    // future Metal / D3D12 will plug in here too). Each call is keyed on
-    // the resource's `header.pool_index` and re-uploads when
-    // `header.version` bumps. Returned handles are OWNED by the device —
+    // Lookup-or-upload entry points consumed by `tgfx2_bridge::wrap_*_as_tgfx2`.
+    // Each call is keyed on the resource's `header.pool_index` and re-uploads
+    // when `header.version` bumps. Returned handles are OWNED by the device —
     // the caller must NOT pass them to `destroy()`.
     //
-    // Default implementations log + return empty handles. The OpenGL
-    // backend explicitly does NOT override these — its tgfx2_bridge path
-    // wraps the core_c tc_gpu_slot share-group cache instead, calling
-    // `register_external_texture` / `register_external_buffer` directly.
+    // Backends that cannot import legacy tc_* resources leave the default
+    // empty implementation in place.
     virtual TextureHandle ensure_tc_texture(tc_texture* /*tex*/) {
         return {};
     }

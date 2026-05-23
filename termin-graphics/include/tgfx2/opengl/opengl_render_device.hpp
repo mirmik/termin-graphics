@@ -16,11 +16,10 @@ struct GLBuffer {
     GLuint gl_id = 0;
     BufferDesc desc;
     GLenum target = GL_ARRAY_BUFFER;
-    // When true the GL buffer object is owned externally (for example by
-    // the core_c tc_mesh share-group cache) and must NOT be glDeleteBuffers'd
-    // when this handle is destroyed. Set by register_external_buffer()
-    // so tgfx2 passes can draw against externally owned VBOs/EBOs without
-    // taking ownership of them.
+    // When true the GL buffer object is owned externally and must NOT be
+    // glDeleteBuffers'd when this handle is destroyed. Set by
+    // register_external_buffer() so tgfx2 passes can draw against
+    // externally owned VBOs/EBOs without taking ownership of them.
     bool external = false;
 };
 
@@ -142,6 +141,13 @@ private:
         uint32_t version = 0;
     };
     std::unordered_map<uint32_t, CachedTcTextureEntry> tc_texture_cache_;
+
+    struct CachedTcMeshEntry {
+        BufferHandle vbo;
+        BufferHandle ebo;
+        uint32_t version = 0;
+    };
+    std::unordered_map<uint32_t, CachedTcMeshEntry> tc_mesh_cache_;
 
     // Transient vertex ring state (see transient_vertex_write).
     BufferHandle transient_vb_handle_;
@@ -305,6 +311,8 @@ public:
 
     TextureHandle ensure_tc_texture(tc_texture* tex) override;
     void invalidate_tc_texture_cache(uint32_t pool_index) override;
+    std::pair<BufferHandle, BufferHandle> ensure_tc_mesh(tc_mesh* mesh) override;
+    void invalidate_tc_mesh_cache(uint32_t pool_index) override;
 
     bool register_legacy_gpu_ops() override;
 

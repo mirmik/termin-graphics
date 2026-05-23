@@ -58,12 +58,18 @@ extern "C" void glClipControl(GLenum origin, GLenum depth);
 extern "C" {
 #include "tgfx/tc_gpu_context.h"
 #include "tgfx/tgfx_resource_gpu.h"
+#include "tgfx/resources/tc_mesh.h"
+#include "tgfx/resources/tc_mesh_registry.h"
 #include "tgfx/resources/tc_texture.h"
 #include "tgfx/resources/tc_texture_registry.h"
 }
 
 static void opengl_invalidate_tc_texture_trampoline(uint32_t pool_index, void* user) {
     static_cast<tgfx::OpenGLRenderDevice*>(user)->invalidate_tc_texture_cache(pool_index);
+}
+
+static void opengl_invalidate_tc_mesh_trampoline(uint32_t pool_index, void* user) {
+    static_cast<tgfx::OpenGLRenderDevice*>(user)->invalidate_tc_mesh_cache(pool_index);
 }
 
 namespace tgfx {
@@ -89,11 +95,28 @@ OpenGLRenderDevice::OpenGLRenderDevice() {
 
     tc_texture_registry_add_destroy_hook(
         &opengl_invalidate_tc_texture_trampoline, this);
+    tc_mesh_registry_add_destroy_hook(
+        &opengl_invalidate_tc_mesh_trampoline, this);
 }
 
 OpenGLRenderDevice::~OpenGLRenderDevice() {
+    tc_mesh_registry_remove_destroy_hook(
+        &opengl_invalidate_tc_mesh_trampoline, this);
     tc_texture_registry_remove_destroy_hook(
         &opengl_invalidate_tc_texture_trampoline, this);
+
+    for (auto& pair : tc_mesh_cache_) {
+        auto& entry = pair.second;
+        if (entry.vbo) destroy(entry.vbo);
+        if (entry.ebo) destroy(entry.ebo);
+    }
+    tc_mesh_cache_.clear();
+
+    for (auto& pair : tc_texture_cache_) {
+        auto& entry = pair.second;
+        if (entry.handle) destroy(entry.handle);
+    }
+    tc_texture_cache_.clear();
 
     // Clean up cached FBOs
     for (auto& [key, fbo] : fbo_cache_) {
@@ -369,6 +392,79 @@ void OpenGLRenderDevice::invalidate_tc_texture_cache(uint32_t pool_index) {
     if (it == tc_texture_cache_.end()) return;
     if (it->second.handle) destroy(it->second.handle);
     tc_texture_cache_.erase(it);
+}
+
+std::pair<BufferHandle, BufferHandle> OpenGLRenderDevice::ensure_tc_mesh(tc_mesh* mesh) {
+    if (!mesh) return {};
+
+    if (!mesh->vertices || mesh->vertex_count == 0 ||
+        !mesh->indices || mesh->index_count == 0 ||
+        mesh->layout.stride == 0)
+    {
+        tc_log_error("OpenGLRenderDevice::ensure_tc_mesh: tc_mesh '%s' has no CPU mesh data",
+                     mesh->header.name ? mesh->header.name : mesh->header.uuid);
+        return {};
+    }
+
+    const uint32_t pool_index = mesh->header.pool_index;
+    const uint32_t version = mesh->header.version;
+    auto it = tc_mesh_cache_.find(pool_index);
+    if (it != tc_mesh_cache_.end() && it->second.version == version) {
+        return {it->second.vbo, it->second.ebo};
+    }
+    if (it != tc_mesh_cache_.end()) {
+        if (it->second.vbo) destroy(it->second.vbo);
+        if (it->second.ebo) destroy(it->second.ebo);
+        tc_mesh_cache_.erase(it);
+    }
+
+    const size_t vb_size = static_cast<size_t>(mesh->vertex_count) *
+                           static_cast<size_t>(mesh->layout.stride);
+    const size_t ib_size = static_cast<size_t>(mesh->index_count) * sizeof(uint32_t);
+
+    BufferDesc vb_desc;
+    vb_desc.size = vb_size;
+    vb_desc.usage = BufferUsage::Vertex | BufferUsage::CopyDst;
+    BufferHandle vbo = create_buffer(vb_desc);
+    if (!vbo) {
+        tc_log_error("OpenGLRenderDevice::ensure_tc_mesh: failed to allocate VBO for '%s'",
+                     mesh->header.name ? mesh->header.name : mesh->header.uuid);
+        return {};
+    }
+    upload_buffer(
+        vbo,
+        std::span<const uint8_t>(
+            static_cast<const uint8_t*>(mesh->vertices), vb_size));
+
+    BufferDesc ib_desc;
+    ib_desc.size = ib_size;
+    ib_desc.usage = BufferUsage::Index | BufferUsage::CopyDst;
+    BufferHandle ebo = create_buffer(ib_desc);
+    if (!ebo) {
+        tc_log_error("OpenGLRenderDevice::ensure_tc_mesh: failed to allocate EBO for '%s'",
+                     mesh->header.name ? mesh->header.name : mesh->header.uuid);
+        destroy(vbo);
+        return {};
+    }
+    upload_buffer(
+        ebo,
+        std::span<const uint8_t>(
+            reinterpret_cast<const uint8_t*>(mesh->indices), ib_size));
+
+    CachedTcMeshEntry entry;
+    entry.vbo = vbo;
+    entry.ebo = ebo;
+    entry.version = version;
+    tc_mesh_cache_.emplace(pool_index, entry);
+    return {vbo, ebo};
+}
+
+void OpenGLRenderDevice::invalidate_tc_mesh_cache(uint32_t pool_index) {
+    auto it = tc_mesh_cache_.find(pool_index);
+    if (it == tc_mesh_cache_.end()) return;
+    if (it->second.vbo) destroy(it->second.vbo);
+    if (it->second.ebo) destroy(it->second.ebo);
+    tc_mesh_cache_.erase(it);
 }
 
 // --- Buffer ---

@@ -54,10 +54,9 @@ RENDER_API Tgfx2MeshBinding wrap_mesh_as_tgfx2(
     tc_mesh* mesh
 );
 
-// Complement to wrap_mesh_as_tgfx2. The OpenGL share-group path creates
-// per-call external buffer wrappers that must be released here,
-// and is a no-op on the cached non-GL path. Safe on a default-
-// constructed Tgfx2MeshBinding (index_count == 0).
+// Complement to wrap_mesh_as_tgfx2. Device-owned mesh-cache handles must
+// not be destroyed here; only per-call augmented buffers are released.
+// Safe on a default-constructed Tgfx2MeshBinding (index_count == 0).
 RENDER_API void release_mesh_binding(
     tgfx::IRenderDevice& device,
     const Tgfx2MeshBinding& binding

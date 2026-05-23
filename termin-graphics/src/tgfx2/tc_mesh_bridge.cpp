@@ -8,13 +8,8 @@
 #include <tcbase/tc_log.hpp>
 
 #include "tgfx/resources/tc_mesh.h"
-#include "tgfx/tc_gpu_context.h"
-#include "tgfx/tc_gpu_share_group.h"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/i_render_device.hpp"
-#ifdef TGFX2_HAS_OPENGL
-#include "tgfx2/opengl/opengl_render_device.hpp"
-#endif
 #include "tgfx2/render_context.hpp"
 
 namespace tgfx {
@@ -177,46 +172,6 @@ BufferHandle create_augmented_vertex_buffer(
     return buffer;
 }
 
-#ifdef TGFX2_HAS_OPENGL
-Tgfx2MeshBinding wrap_mesh_gl(OpenGLRenderDevice& device, tc_mesh* mesh) {
-    Tgfx2MeshBinding out;
-
-    if (tc_mesh_upload_gpu(mesh) == 0) {
-        tc::Log::error("wrap_mesh_as_tgfx2: tc_mesh_upload_gpu failed for '%s'",
-                       mesh->header.name ? mesh->header.name : mesh->header.uuid);
-        return out;
-    }
-
-    tc_gpu_context* ctx = tc_gpu_get_context();
-    if (!ctx || !ctx->share_group) {
-        tc::Log::error("wrap_mesh_as_tgfx2: no active GPU context");
-        return out;
-    }
-    tc_gpu_mesh_data_slot* slot = tc_gpu_share_group_mesh_data_slot(
-        ctx->share_group, mesh->header.pool_index);
-    if (!slot || slot->vbo == 0 || slot->ebo == 0) {
-        tc::Log::error("wrap_mesh_as_tgfx2: mesh data slot has no VBO/EBO");
-        return out;
-    }
-
-    BufferDesc vb_desc;
-    vb_desc.size = static_cast<uint64_t>(mesh->vertex_count) *
-                   static_cast<uint64_t>(mesh->layout.stride);
-    vb_desc.usage = BufferUsage::Vertex;
-    out.vertex_buffer = device.register_external_buffer(slot->vbo, vb_desc);
-
-    BufferDesc ib_desc;
-    ib_desc.size = static_cast<uint64_t>(mesh->index_count) * sizeof(uint32_t);
-    ib_desc.usage = BufferUsage::Index;
-    out.index_buffer = device.register_external_buffer(slot->ebo, ib_desc);
-
-    if (!fill_binding_from_mesh(out, mesh)) {
-        out = Tgfx2MeshBinding{};
-    }
-    return out;
-}
-#endif
-
 } // namespace
 
 Tgfx2MeshBinding wrap_mesh_as_tgfx2(IRenderDevice& device, tc_mesh* mesh) {
@@ -224,15 +179,6 @@ Tgfx2MeshBinding wrap_mesh_as_tgfx2(IRenderDevice& device, tc_mesh* mesh) {
     if (!mesh) {
         tc::Log::error("wrap_mesh_as_tgfx2: null mesh");
         return out;
-    }
-
-    if (device.backend_type() == BackendType::OpenGL) {
-#ifdef TGFX2_HAS_OPENGL
-        return wrap_mesh_gl(static_cast<OpenGLRenderDevice&>(device), mesh);
-#else
-        tc::Log::error("wrap_mesh_as_tgfx2: OpenGL backend not compiled");
-        return out;
-#endif
     }
 
     auto [vbo, ebo] = device.ensure_tc_mesh(mesh);
@@ -259,12 +205,6 @@ Tgfx2MeshBinding wrap_mesh_as_tgfx2(IRenderDevice& device, tc_mesh* mesh) {
 
 void release_mesh_binding(IRenderDevice& device, const Tgfx2MeshBinding& binding) {
     if (binding.index_count == 0) return;
-
-    if (device.backend_type() == BackendType::OpenGL) {
-        if (binding.vertex_buffer) device.destroy(binding.vertex_buffer);
-        if (binding.index_buffer) device.destroy(binding.index_buffer);
-        return;
-    }
 
     if (binding.destroy_vertex_buffer && binding.vertex_buffer) {
         device.destroy(binding.vertex_buffer);
