@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <tcbase/tc_log.h>
 #include <tcbase/tc_log.hpp>
 
 // glClipControl is GL 4.5 / ARB_clip_control. Our glad generator targets
@@ -55,7 +56,14 @@ extern "C" void glClipControl(GLenum origin, GLenum depth);
 #endif
 
 extern "C" {
+#include "tgfx/tc_gpu_context.h"
 #include "tgfx/tgfx_resource_gpu.h"
+#include "tgfx/resources/tc_texture.h"
+#include "tgfx/resources/tc_texture_registry.h"
+}
+
+static void opengl_invalidate_tc_texture_trampoline(uint32_t pool_index, void* user) {
+    static_cast<tgfx::OpenGLRenderDevice*>(user)->invalidate_tc_texture_cache(pool_index);
 }
 
 namespace tgfx {
@@ -78,9 +86,15 @@ OpenGLRenderDevice::OpenGLRenderDevice() {
     glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE);
 
     query_capabilities();
+
+    tc_texture_registry_add_destroy_hook(
+        &opengl_invalidate_tc_texture_trampoline, this);
 }
 
 OpenGLRenderDevice::~OpenGLRenderDevice() {
+    tc_texture_registry_remove_destroy_hook(
+        &opengl_invalidate_tc_texture_trampoline, this);
+
     // Clean up cached FBOs
     for (auto& [key, fbo] : fbo_cache_) {
         if (fbo) glDeleteFramebuffers(1, &fbo);
@@ -151,6 +165,210 @@ BackendCapabilities OpenGLRenderDevice::capabilities() const {
 
 void OpenGLRenderDevice::wait_idle() {
     glFinish();
+}
+
+namespace {
+
+PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
+    switch (fmt) {
+        case TC_TEXTURE_RGBA8:    return PixelFormat::RGBA8_UNorm;
+        case TC_TEXTURE_RGB8:     return PixelFormat::RGB8_UNorm;
+        case TC_TEXTURE_RG8:      return PixelFormat::RG8_UNorm;
+        case TC_TEXTURE_R8:       return PixelFormat::R8_UNorm;
+        case TC_TEXTURE_RGBA16F:  return PixelFormat::RGBA16F;
+        case TC_TEXTURE_RGB16F:   return PixelFormat::RGBA16F;
+        case TC_TEXTURE_DEPTH24:  return PixelFormat::D24_UNorm_S8_UInt;
+        case TC_TEXTURE_DEPTH32F: return PixelFormat::D32F;
+        case TC_TEXTURE_R16F:     return PixelFormat::R16F;
+        case TC_TEXTURE_R32F:     return PixelFormat::R32F;
+    }
+    return PixelFormat::RGBA8_UNorm;
+}
+
+TextureUsage tc_usage_to_tgfx(uint32_t usage) {
+    uint32_t out = 0;
+    if (usage & TC_TEXTURE_USAGE_SAMPLED)
+        out |= static_cast<uint32_t>(TextureUsage::Sampled);
+    if (usage & TC_TEXTURE_USAGE_COLOR_ATTACHMENT)
+        out |= static_cast<uint32_t>(TextureUsage::ColorAttachment);
+    if (usage & TC_TEXTURE_USAGE_DEPTH_ATTACHMENT)
+        out |= static_cast<uint32_t>(TextureUsage::DepthStencilAttachment);
+    if (usage & TC_TEXTURE_USAGE_COPY_SRC)
+        out |= static_cast<uint32_t>(TextureUsage::CopySrc);
+    if (usage & TC_TEXTURE_USAGE_COPY_DST)
+        out |= static_cast<uint32_t>(TextureUsage::CopyDst);
+    return static_cast<TextureUsage>(out);
+}
+
+uint32_t mip_count_for(uint32_t width, uint32_t height) {
+    uint32_t levels = 1;
+    uint32_t side = std::max(width, height);
+    while (side > 1) {
+        side >>= 1;
+        ++levels;
+    }
+    return levels;
+}
+
+std::vector<uint8_t> normalize_tc_texture_pixels(const tc_texture* tex, PixelFormat& out_fmt) {
+    const auto fmt = static_cast<tc_texture_format>(tex->format);
+    const auto* src = static_cast<const uint8_t*>(tex->data);
+    const size_t src_bytes = static_cast<size_t>(tex->width) * tex->height *
+                             tc_texture_format_bpp(fmt);
+
+    std::vector<uint8_t> pixels;
+    if (!src || src_bytes == 0) {
+        return pixels;
+    }
+
+    if (fmt == TC_TEXTURE_RGB16F) {
+        out_fmt = PixelFormat::RGBA16F;
+        const size_t pixel_count = static_cast<size_t>(tex->width) * tex->height;
+        pixels.resize(pixel_count * 8);
+        for (size_t i = 0; i < pixel_count; ++i) {
+            const uint8_t* s = src + i * 6;
+            uint8_t* d = pixels.data() + i * 8;
+            std::memcpy(d, s, 6);
+            d[6] = 0x00;
+            d[7] = 0x3c; // half-float 1.0 alpha, little-endian
+        }
+        return pixels;
+    }
+
+    out_fmt = tc_format_to_tgfx2(fmt);
+    pixels.assign(src, src + src_bytes);
+    return pixels;
+}
+
+} // anonymous namespace
+
+TextureHandle OpenGLRenderDevice::ensure_tc_texture(tc_texture* tex) {
+    if (!tex) return {};
+
+    if (!tex->header.is_loaded && tex->header.load_callback) {
+        tc_texture_ensure_loaded_ptr(tex);
+    }
+
+    const bool gpu_first = (tex->storage_kind == TC_TEXTURE_STORAGE_GPU_FIRST);
+    if (tex->width == 0 || tex->height == 0) {
+        tc_log_error("OpenGLRenderDevice::ensure_tc_texture: tc_texture '%s' has zero size",
+                     tex->header.name ? tex->header.name : tex->header.uuid);
+        return {};
+    }
+    if (!gpu_first && !tex->data) {
+        tc_log_error("OpenGLRenderDevice::ensure_tc_texture: tc_texture '%s' has no CPU pixels",
+                     tex->header.name ? tex->header.name : tex->header.uuid);
+        return {};
+    }
+
+    const uint32_t pool_index = tex->header.pool_index;
+    const uint32_t version = tex->header.version;
+    auto it = tc_texture_cache_.find(pool_index);
+    if (it != tc_texture_cache_.end() && it->second.version == version) {
+        return it->second.handle;
+    }
+    if (it != tc_texture_cache_.end()) {
+        if (it->second.handle) destroy(it->second.handle);
+        tc_texture_cache_.erase(it);
+    }
+
+    TextureDesc desc;
+    desc.width = tex->width;
+    desc.height = tex->height;
+    desc.sample_count = 1;
+    desc.format = tc_format_to_tgfx2(static_cast<tc_texture_format>(tex->format));
+    desc.mip_levels = tex->mipmap ? mip_count_for(tex->width, tex->height) : 1;
+
+    if (gpu_first) {
+        // GPU-first tc_textures are still owned by the legacy OpenGL
+        // render-target path. Do not allocate a second blank tgfx2
+        // texture here: wrap the GL object that render passes write into.
+        if (!tc_texture_upload_gpu(tex)) {
+            tc_log_error("OpenGLRenderDevice::ensure_tc_texture: legacy GPU-first upload failed for '%s'",
+                         tex->header.name ? tex->header.name : tex->header.uuid);
+            return {};
+        }
+        tc_gpu_context* ctx = tc_gpu_get_context();
+        if (!ctx) {
+            tc_log_error("OpenGLRenderDevice::ensure_tc_texture: no legacy GPU context for '%s'",
+                         tex->header.name ? tex->header.name : tex->header.uuid);
+            return {};
+        }
+        tc_gpu_slot* slot = tc_gpu_context_texture_slot(ctx, pool_index);
+        if (!slot || slot->gl_id == 0) {
+            tc_log_error("OpenGLRenderDevice::ensure_tc_texture: legacy slot has no GL id for '%s'",
+                         tex->header.name ? tex->header.name : tex->header.uuid);
+            return {};
+        }
+
+        desc.mip_levels = 1;
+        desc.usage = tc_usage_to_tgfx(tex->usage) | TextureUsage::CopyDst;
+        TextureHandle handle = register_external_texture(
+            static_cast<uintptr_t>(slot->gl_id), desc);
+        CachedTcTextureEntry entry;
+        entry.handle = handle;
+        entry.version = version;
+        tc_texture_cache_.emplace(pool_index, entry);
+        return handle;
+    }
+
+    desc.usage = TextureUsage::Sampled | TextureUsage::CopySrc | TextureUsage::CopyDst;
+
+    TextureHandle handle = create_texture(desc);
+    if (!handle) {
+        tc_log_error("OpenGLRenderDevice::ensure_tc_texture: create_texture failed for '%s'",
+                     tex->header.name ? tex->header.name : tex->header.uuid);
+        return {};
+    }
+
+    PixelFormat upload_format = desc.format;
+    std::vector<uint8_t> pixels = normalize_tc_texture_pixels(tex, upload_format);
+    if (pixels.empty()) {
+        destroy(handle);
+        return {};
+    }
+    if (upload_format != desc.format) {
+        tc_log_error("OpenGLRenderDevice::ensure_tc_texture: upload format mismatch for '%s'",
+                     tex->header.name ? tex->header.name : tex->header.uuid);
+        destroy(handle);
+        return {};
+    }
+    upload_texture(handle, std::span<const uint8_t>(pixels.data(), pixels.size()));
+
+    if (tex->mipmap) {
+        if (auto* gl_tex = get_texture(handle)) {
+            glBindTexture(gl_tex->target, gl_tex->gl_id);
+            glGenerateMipmap(gl_tex->target);
+            glTexParameteri(gl_tex->target, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glBindTexture(gl_tex->target, 0);
+        }
+    }
+
+    if (auto* gl_tex = get_texture(handle)) {
+        glBindTexture(gl_tex->target, gl_tex->gl_id);
+        glTexParameteri(gl_tex->target, GL_TEXTURE_WRAP_S,
+                        tex->clamp ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+        glTexParameteri(gl_tex->target, GL_TEXTURE_WRAP_T,
+                        tex->clamp ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+        if (tex->compare_mode) {
+            glTexParameteri(gl_tex->target, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+            glTexParameteri(gl_tex->target, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+        }
+        glBindTexture(gl_tex->target, 0);
+    }
+
+    CachedTcTextureEntry entry;
+    entry.handle = handle;
+    entry.version = version;
+    tc_texture_cache_.emplace(pool_index, entry);
+    return handle;
+}
+
+void OpenGLRenderDevice::invalidate_tc_texture_cache(uint32_t pool_index) {
+    auto it = tc_texture_cache_.find(pool_index);
+    if (it == tc_texture_cache_.end()) return;
+    if (it->second.handle) destroy(it->second.handle);
+    tc_texture_cache_.erase(it);
 }
 
 // --- Buffer ---

@@ -17,29 +17,17 @@ extern "C" {
 struct tc_mesh;
 
 namespace tgfx {
-class OpenGLRenderDevice;
 class IRenderDevice;
 class RenderContext2;
 }
 
 namespace termin {
 
-// Wrap a core_c tc_texture as a tgfx2 TextureHandle for the duration of a
-// draw. Backend-agnostic:
-//
-//  - OpenGL: triggers tc_texture_upload_gpu, pulls the GL id out of the
-//    share group's texture slot, and registers it as an external
-//    non-owning tgfx2 texture. Call release_texture_binding (or
-//    device.destroy directly) to free the handle; the GL object
-//    survives because register_external_texture marked it external.
-//
-//  - Non-GL (Vulkan, ...): there is no share group slot to wrap. The
-//    first call creates a real tgfx2 texture and uploads tc_texture->data
-//    into it, caches the handle keyed on (texture, device) (by pool_index
-//    + version). Subsequent calls reuse the cache entry until the
-//    tc_texture's version bumps. Handles stay owned by the cache — the
-//    caller must NOT destroy them. release_texture_binding is a no-op
-//    here.
+// Wrap a core_c tc_texture as a tgfx2 TextureHandle. The active
+// IRenderDevice owns the bridge cache keyed by pool_index + version.
+// OpenGL and Vulkan both create real tgfx2 texture handles through
+// IRenderDevice::ensure_tc_texture(); the legacy OpenGL tc_gpu_context /
+// share-group cache is not used on this tgfx2 path.
 //
 // Returns an invalid handle (id == 0) if the tc_texture handle is
 // invalid, the tc_texture has no pixel data, or the upload fails.
@@ -48,9 +36,9 @@ RENDER_API tgfx::TextureHandle wrap_tc_texture_as_tgfx2(
     tc_texture_handle handle
 );
 
-// Complement to wrap_tc_texture_as_tgfx2. OpenGL path destroys the
-// non-owning external wrapper; non-GL path is a no-op (cache owns the
-// handle). Safe on an empty handle.
+// Complement to wrap_tc_texture_as_tgfx2. Currently a no-op: the
+// IRenderDevice cache owns the handle and releases it on cache
+// invalidation, device teardown, or tc_texture destroy-hook.
 RENDER_API void release_texture_binding(
     tgfx::IRenderDevice& device,
     tgfx::TextureHandle binding

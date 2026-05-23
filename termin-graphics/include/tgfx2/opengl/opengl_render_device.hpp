@@ -137,6 +137,12 @@ private:
     std::unordered_map<GLProgramKey, GLSharedProgram, GLProgramKeyHash> program_cache_;
     std::unordered_map<GLuint, GLProgramKey> program_to_key_;
 
+    struct CachedTcTextureEntry {
+        TextureHandle handle;
+        uint32_t version = 0;
+    };
+    std::unordered_map<uint32_t, CachedTcTextureEntry> tc_texture_cache_;
+
     // Transient vertex ring state (see transient_vertex_write).
     BufferHandle transient_vb_handle_;
     GLuint       transient_vb_gl_         = 0;
@@ -296,6 +302,9 @@ public:
     void transient_vertex_reset_frame();
     BufferHandle transient_vertex_buffer() override;
     uint64_t transient_vertex_write(const void* data, uint32_t size) override;
+
+    TextureHandle ensure_tc_texture(tc_texture* tex) override;
+    void invalidate_tc_texture_cache(uint32_t pool_index) override;
 
     bool register_legacy_gpu_ops() override;
 
