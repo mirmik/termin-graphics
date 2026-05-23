@@ -126,50 +126,10 @@ public:
         return UINT64_MAX;
     }
 
-    // Return the backend-native object id backing a tgfx2 handle.
-    // For OpenGL: GLuint texture id. For Vulkan: VkImage as uintptr_t.
-    // Returns 0 on unknown / invalid handle.
-    virtual uintptr_t native_texture_handle(TextureHandle handle) const {
-        (void)handle;
-        return 0;
-    }
-
-    // --- External target presentation ---
-    // Copy a tgfx2 color texture onto a host-owned target (default
-    // framebuffer / swapchain image). `dst` is backend-specific
-    // (OpenGL: GL FBO id, 0 = default; Vulkan: swapchain image
-    // index). Throws on backends without external-target support.
-    virtual void blit_to_external_target(
-        uintptr_t dst,
-        TextureHandle src_color,
-        int src_x, int src_y, int src_w, int src_h,
-        int dst_x, int dst_y, int dst_w, int dst_h) {
-        (void)dst; (void)src_color;
-        (void)src_x; (void)src_y; (void)src_w; (void)src_h;
-        (void)dst_x; (void)dst_y; (void)dst_w; (void)dst_h;
-        throw std::runtime_error("blit_to_external_target: not supported on this backend");
-    }
-
-    // Bind a host-owned target and clear it to the given color /
-    // depth, setting the viewport in the process.
-    virtual void clear_external_target(
-        uintptr_t dst,
-        float r, float g, float b, float a,
-        float depth,
-        int viewport_x, int viewport_y,
-        int viewport_w, int viewport_h) {
-        (void)dst; (void)r; (void)g; (void)b; (void)a;
-        (void)depth;
-        (void)viewport_x; (void)viewport_y;
-        (void)viewport_w; (void)viewport_h;
-        throw std::runtime_error("clear_external_target: not supported on this backend");
-    }
-
     // Copy a source tgfx2 color texture into a rect of a destination
-    // tgfx2 color texture (both owned by this device). Backend-neutral
-    // counterpart of `blit_to_external_target` — used by render
-    // surfaces that store their composite target as a TextureHandle
-    // instead of a raw FBO id (so both OpenGL and Vulkan can drive them).
+    // tgfx2 color texture (both owned by this device). Presentation
+    // surfaces must expose their composite target as a TextureHandle;
+    // raw backend-native targets are intentionally outside tgfx2.
     // Filtering: linear.
     virtual void blit_to_texture(
         TextureHandle dst,
@@ -183,8 +143,7 @@ public:
     }
 
     // Clear a tgfx2 color texture to `(r,g,b,a)` inside the given
-    // viewport rect (scissor). Backend-neutral counterpart of
-    // `clear_external_target`; the destination is a TextureHandle.
+    // viewport rect (scissor).
     virtual void clear_texture(
         TextureHandle dst,
         float r, float g, float b, float a,

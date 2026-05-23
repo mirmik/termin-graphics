@@ -228,28 +228,6 @@ void bind_tgfx2(nb::module_& m) {
         // Blit (src → dst texture).
         .def("blit", &tgfx::RenderContext2::blit)
 
-        // Wrap a raw GL texture id as a non-owning tgfx2 TextureHandle
-        // using this context's device. Used by Python debugger code
-        // that needs to turn a host-owned GL texture (e.g. tcgui
-        // FBOSurface's color attachment) into a texture handle the
-        // presenter can render into.
-        .def("wrap_gl_texture",
-             [](tgfx::RenderContext2& self, uint32_t gl_id,
-                uint32_t w, uint32_t h, int format_int) -> tgfx::TextureHandle {
-                 tgfx::TextureDesc desc;
-                 desc.width = w;
-                 desc.height = h;
-                 desc.format = static_cast<tgfx::PixelFormat>(format_int);
-                 desc.usage = tgfx::TextureUsage::Sampled |
-                              tgfx::TextureUsage::ColorAttachment;
-                 // Throws on non-GL backends; the `wrap_gl_texture` name
-                 // advertises the GL-specific semantics.
-                 return self.device().register_external_texture(
-                     static_cast<uintptr_t>(gl_id), desc);
-             },
-             nb::arg("gl_id"), nb::arg("width"), nb::arg("height"),
-             nb::arg("format"))
-
         // Destroy a texture handle on this context's device. For
         // external wraps this just frees the HandlePool entry; the
         // GL texture stays owned by the caller.
@@ -282,50 +260,6 @@ void bind_tgfx2(nb::module_& m) {
              },
              nb::arg("width"), nb::arg("height"),
              nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm)
-
-        // Present a texture to an externally-owned GL FBO (0 = host
-        // window default framebuffer). Used by legacy Qt debugger
-        // window to composite the debugger capture onto its SDL
-        // debug window.
-        .def("blit_to_external_fbo",
-             [](tgfx::RenderContext2& self, uint32_t dst_fbo_id,
-                tgfx::TextureHandle src,
-                int src_x, int src_y, int src_w, int src_h,
-                int dst_x, int dst_y, int dst_w, int dst_h) {
-                 self.device().blit_to_external_target(
-                     static_cast<uintptr_t>(dst_fbo_id), src,
-                     src_x, src_y, src_w, src_h,
-                     dst_x, dst_y, dst_w, dst_h);
-             },
-             nb::arg("dst_fbo_id"), nb::arg("src"),
-             nb::arg("src_x"), nb::arg("src_y"),
-             nb::arg("src_w"), nb::arg("src_h"),
-             nb::arg("dst_x"), nb::arg("dst_y"),
-             nb::arg("dst_w"), nb::arg("dst_h"))
-
-        // Bind an externally-owned GL FBO (0 = default window FBO)
-        // and clear it to the given colour / depth. Host window code
-        // uses this to paint the background before compositing UI.
-        .def("clear_external_fbo",
-             [](tgfx::RenderContext2& self, uint32_t dst_fbo_id,
-                float r, float g, float b, float a, float depth,
-                int viewport_x, int viewport_y,
-                int viewport_w, int viewport_h) {
-                 self.device().clear_external_target(
-                     static_cast<uintptr_t>(dst_fbo_id), r, g, b, a, depth,
-                     viewport_x, viewport_y, viewport_w, viewport_h);
-             },
-             nb::arg("dst_fbo_id"),
-             nb::arg("r"), nb::arg("g"), nb::arg("b"), nb::arg("a"),
-             nb::arg("depth"),
-             nb::arg("viewport_x"), nb::arg("viewport_y"),
-             nb::arg("viewport_w"), nb::arg("viewport_h"))
-
-        // Diagnostic: glGetError() wrapper. glad lives inside
-        // termin_graphics2.dll and is initialised by the host, so
-        // this call is always safe from the binding side where a
-        // direct glGetError would crash on a null function pointer.
-        .def("last_gl_error", &tgfx::RenderContext2::last_gl_error)
 
         // Shader
         .def("bind_shader",
@@ -579,18 +513,6 @@ void bind_tgfx2(nb::module_& m) {
             },
             nb::arg("handle"))
 
-        // Return the raw GL texture id for a handle in this device.
-        // Used when a caller needs to hand the texture off to a
-        // different Tgfx2Context (e.g. GPUCompositor → UIRenderer) —
-        // the receiving holder can wrap the GL id as a non-owning
-        // external handle in its own device.
-        .def("get_gl_id",
-            [](Tgfx2ContextHolder& self, tgfx::TextureHandle handle) -> uint32_t {
-                // Returns 0 on non-GL backends or on unknown handle.
-                return static_cast<uint32_t>(self.device->native_texture_handle(handle));
-            },
-            nb::arg("handle"))
-
         // Create an offscreen color attachment. Usage is
         // Sampled|ColorAttachment|CopySrc|CopyDst — safe for passes that
         // read the texture back and for blits in both directions (CopySrc
@@ -630,48 +552,6 @@ void bind_tgfx2(nb::module_& m) {
             },
             nb::arg("width"), nb::arg("height"),
             nb::arg("format") = tgfx::PixelFormat::D24_UNorm);
-
-    // Wrap an existing GL texture id as a non-owning tgfx2 handle.
-    // Useful during the tgfx1→tgfx2 transition: a tgfx1 FontTextureAtlas
-    // or similar can keep its GL texture and hand its id to a tgfx2
-    // pass. The wrapper is non-owning; destroying it (or letting the
-    // holder die) does NOT delete the GL texture.
-    // Blit a tgfx2 color texture into an externally-owned GL FBO
-    // (id=0 means the default window framebuffer). Thin wrapper
-    // around OpenGLRenderDevice::blit_to_external_fbo for Python
-    // callers that need to present a debug capture onto a host
-    // window (Qt framegraph debugger, SDL debug window).
-    m.def("ctx2_blit_to_external_fbo",
-        [](Tgfx2ContextHolder& holder, uint32_t dst_fbo_id,
-           tgfx::TextureHandle src,
-           int src_x, int src_y, int src_w, int src_h,
-           int dst_x, int dst_y, int dst_w, int dst_h) {
-            holder.device->blit_to_external_target(
-                static_cast<uintptr_t>(dst_fbo_id), src,
-                src_x, src_y, src_w, src_h,
-                dst_x, dst_y, dst_w, dst_h);
-        },
-        nb::arg("ctx"), nb::arg("dst_fbo_id"), nb::arg("src"),
-        nb::arg("src_x"), nb::arg("src_y"),
-        nb::arg("src_w"), nb::arg("src_h"),
-        nb::arg("dst_x"), nb::arg("dst_y"),
-        nb::arg("dst_w"), nb::arg("dst_h"));
-
-    m.def("wrap_gl_texture_as_tgfx2",
-        [](Tgfx2ContextHolder& holder, uint32_t gl_id,
-           uint32_t w, uint32_t h, int format_int) -> tgfx::TextureHandle {
-            tgfx::TextureDesc desc;
-            desc.width = w;
-            desc.height = h;
-            desc.format = static_cast<tgfx::PixelFormat>(format_int);
-            desc.usage = tgfx::TextureUsage::Sampled;
-            // register_external_texture throws on backends without
-            // external-handle support.
-            return holder.device->register_external_texture(
-                static_cast<uintptr_t>(gl_id), desc);
-        },
-        nb::arg("ctx"), nb::arg("gl_id"),
-        nb::arg("width"), nb::arg("height"), nb::arg("format"));
 
     // --- Helpers: bridge core_c resources to tgfx2 handles ---
     // Compile a TcShader's GLSL sources into a tgfx2 VS/FS pair.

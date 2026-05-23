@@ -10,6 +10,7 @@
 #include <tgfx2/opengl/opengl_render_device.hpp>
 #include <tcbase/tc_log.h>
 
+#include <algorithm>
 #include <cstring>
 #include <cstdlib>
 #include <unordered_map>
@@ -603,4 +604,44 @@ extern "C" void tgfx2_interop_destroy_texture_handle(uint32_t handle_id) {
     tgfx::TextureHandle h;
     h.id = handle_id;
     dev->destroy(h);
+}
+
+extern "C" void tgfx2_interop_blit_texture(
+    uint32_t src_handle_id,
+    uint32_t dst_handle_id,
+    int width,
+    int height
+) {
+    auto* dev = get_device();
+    if (!dev) {
+        tc_log_error("tgfx2_interop_blit_texture: device not set");
+        return;
+    }
+    if (src_handle_id == 0 || dst_handle_id == 0) {
+        tc_log_error("tgfx2_interop_blit_texture: invalid texture handle");
+        return;
+    }
+
+    tgfx::TextureHandle src{src_handle_id};
+    tgfx::TextureHandle dst{dst_handle_id};
+    tgfx::TextureDesc src_desc = dev->texture_desc(src);
+    tgfx::TextureDesc dst_desc = dev->texture_desc(dst);
+
+    int w = width;
+    int h = height;
+    if (w <= 0) {
+        w = static_cast<int>(std::min(src_desc.width, dst_desc.width));
+    }
+    if (h <= 0) {
+        h = static_cast<int>(std::min(src_desc.height, dst_desc.height));
+    }
+    if (w <= 0 || h <= 0) {
+        tc_log_error("tgfx2_interop_blit_texture: invalid blit size");
+        return;
+    }
+
+    dev->blit_to_texture(
+        dst, src,
+        0, 0, w, h,
+        0, 0, w, h);
 }

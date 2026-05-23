@@ -884,95 +884,6 @@ bool OpenGLRenderDevice::read_pixel_depth_float(
     return ok;
 }
 
-void OpenGLRenderDevice::blit_to_external_target(
-    uintptr_t dst,
-    TextureHandle src_color,
-    int src_x, int src_y, int src_w, int src_h,
-    int dst_x, int dst_y, int dst_w, int dst_h
-) {
-    const GLuint dst_fbo_id = static_cast<GLuint>(dst);
-    GLTexture* tex = textures_.get(src_color.id);
-    if (!tex) return;
-
-    GLboolean was_scissor = glIsEnabled(GL_SCISSOR_TEST);
-    GLboolean color_mask[4];
-    glGetBooleanv(GL_COLOR_WRITEMASK, color_mask);
-    GLboolean depth_mask = GL_TRUE;
-    glGetBooleanv(GL_DEPTH_WRITEMASK, &depth_mask);
-
-    if (was_scissor) glDisable(GL_SCISSOR_TEST);
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glDepthMask(GL_TRUE);
-
-    // Preserve any FBO the caller had bound so we don't clobber their
-    // state. After the blit the previous bindings are restored.
-    GLint prev_read = 0, prev_draw = 0;
-    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prev_read);
-    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prev_draw);
-
-    // Temporary read FBO anchored at the source texture. A throwaway
-    // is cheaper than a cache lookup here because the caller's
-    // textures change size on viewport resize; cache hit rate would
-    // be low.
-    GLuint read_fbo = 0;
-    glGenFramebuffers(1, &read_fbo);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, read_fbo);
-    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                           tex->target, tex->gl_id, 0);
-    glReadBuffer(GL_COLOR_ATTACHMENT0);
-
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dst_fbo_id);
-
-    glBlitFramebuffer(
-        src_x, src_y, src_x + src_w, src_y + src_h,
-        dst_x, dst_y, dst_x + dst_w, dst_y + dst_h,
-        GL_COLOR_BUFFER_BIT, GL_NEAREST
-    );
-
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_read));
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(prev_draw));
-    glDeleteFramebuffers(1, &read_fbo);
-
-    glColorMask(color_mask[0], color_mask[1], color_mask[2], color_mask[3]);
-    glDepthMask(depth_mask);
-    if (was_scissor) glEnable(GL_SCISSOR_TEST);
-}
-
-void OpenGLRenderDevice::clear_external_target(
-    uintptr_t dst,
-    float r, float g, float b, float a,
-    float depth,
-    int viewport_x, int viewport_y,
-    int viewport_w, int viewport_h
-) {
-    const GLuint dst_fbo_id = static_cast<GLuint>(dst);
-    GLint prev_draw = 0;
-    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prev_draw);
-    GLint prev_vp[4] = {0, 0, 0, 0};
-    glGetIntegerv(GL_VIEWPORT, prev_vp);
-
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dst_fbo_id);
-    glViewport(viewport_x, viewport_y, viewport_w, viewport_h);
-    glClearColor(r, g, b, a);
-    glClearDepth(depth);
-    // Ensure writes aren't masked by prior shader state; save/restore
-    // the mask bits so we don't override caller intent.
-    GLboolean prev_depth_mask = GL_TRUE;
-    glGetBooleanv(GL_DEPTH_WRITEMASK, &prev_depth_mask);
-    glDepthMask(GL_TRUE);
-    GLboolean prev_color_mask[4] = {GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE};
-    glGetBooleanv(GL_COLOR_WRITEMASK, prev_color_mask);
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    glColorMask(prev_color_mask[0], prev_color_mask[1],
-                prev_color_mask[2], prev_color_mask[3]);
-    glDepthMask(prev_depth_mask);
-    glViewport(prev_vp[0], prev_vp[1], prev_vp[2], prev_vp[3]);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(prev_draw));
-}
-
 void OpenGLRenderDevice::blit_to_texture(
     TextureHandle dst_color,
     TextureHandle src_color,
@@ -1044,10 +955,61 @@ void OpenGLRenderDevice::clear_texture(
     glDeleteFramebuffers(1, &fbo);
 }
 
-uintptr_t OpenGLRenderDevice::native_texture_handle(TextureHandle handle) const {
-    // HandlePool::get is non-const; safe to const_cast for read-only lookup.
-    auto* tex = const_cast<OpenGLRenderDevice*>(this)->textures_.get(handle.id);
-    return tex ? static_cast<uintptr_t>(tex->gl_id) : 0;
+void OpenGLRenderDevice::present_to_default_framebuffer(
+    TextureHandle src_color,
+    int dst_w,
+    int dst_h
+) {
+    GLTexture* src = textures_.get(src_color.id);
+    if (!src || dst_w <= 0 || dst_h <= 0) return;
+
+    const int src_w = static_cast<int>(src->desc.width);
+    const int src_h = static_cast<int>(src->desc.height);
+    if (src_w <= 0 || src_h <= 0) return;
+
+    GLboolean was_scissor = glIsEnabled(GL_SCISSOR_TEST);
+    GLboolean color_mask[4] = {GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE};
+    glGetBooleanv(GL_COLOR_WRITEMASK, color_mask);
+    GLboolean depth_mask = GL_TRUE;
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &depth_mask);
+
+    GLint prev_read = 0;
+    GLint prev_draw = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prev_read);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prev_draw);
+
+    if (was_scissor) glDisable(GL_SCISSOR_TEST);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDepthMask(GL_TRUE);
+
+    GLuint read_fbo = 0;
+    glGenFramebuffers(1, &read_fbo);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, read_fbo);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           src->target, src->gl_id, 0);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glDrawBuffer(GL_BACK);
+
+    if (glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE) {
+        glBlitFramebuffer(
+            0, 0, src_w, src_h,
+            0, 0, dst_w, dst_h,
+            GL_COLOR_BUFFER_BIT, GL_NEAREST
+        );
+    } else {
+        tc::Log::error(
+            "OpenGLRenderDevice::present_to_default_framebuffer: source framebuffer incomplete");
+    }
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_read));
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(prev_draw));
+    glDeleteFramebuffers(1, &read_fbo);
+
+    glColorMask(color_mask[0], color_mask[1], color_mask[2], color_mask[3]);
+    glDepthMask(depth_mask);
+    if (was_scissor) glEnable(GL_SCISSOR_TEST);
 }
 
 void OpenGLRenderDevice::reset_state() {

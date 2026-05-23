@@ -1,13 +1,8 @@
 // plot_view3d.cpp - tcplot PlotView3D implementation.
 //
-// All GL-state is confined to tgfx2. Offscreen color + depth are
-// tgfx::TextureHandle owned by the device; begin_pass internally
-// manages the FBO via OpenGLRenderDevice::get_or_create_fbo. The
-// single OpenGL-backend-specific call is blit_to_external_fbo at
-// end-of-frame, which composites our offscreen color into the host's
-// GL FBO. When Vulkan arrives, that last call dispatches to
-// VulkanRenderDevice::present_to_swapchain_image; no code above that
-// line is backend-aware.
+// All backend state is confined to tgfx2. Plot views render into
+// tgfx::TextureHandle targets; hosts are expected to present or compose
+// those textures through the backend-neutral texture pipeline.
 
 #include "tcplot/plot_view3d.hpp"
 
@@ -312,8 +307,8 @@ bool PlotView3D::pick(float mx, float my,
 // Render
 // ---------------------------------------------------------------------------
 
-void PlotView3D::render(int width, int height, uint32_t dst_gl_fbo) {
-    if (width <= 0 || height <= 0) return;
+tgfx::TextureHandle PlotView3D::render_to_texture(int width, int height) {
+    if (width <= 0 || height <= 0) return tgfx::TextureHandle{};
 
     ensure_offscreen_(width, height);
     engine_->set_viewport(0, 0, (float)width, (float)height);
@@ -328,14 +323,11 @@ void PlotView3D::render(int width, int height, uint32_t dst_gl_fbo) {
     ctx_->end_pass();
     ctx_->end_frame();
 
-    // Present through the backend-neutral interface. On OpenGL this
-    // is a glBlitFramebuffer; Vulkan will implement the analogous
-    // swapchain-image blit. Host still passes a GL FBO id via
-    // dst_gl_fbo for now — uintptr_t cast is a no-op identity.
-    device_->blit_to_external_target(
-        static_cast<uintptr_t>(dst_gl_fbo), offscreen_color_,
-        0, 0, width, height,
-        0, 0, width, height);
+    return offscreen_color_;
+}
+
+uint32_t PlotView3D::render_to_texture_id(int width, int height) {
+    return render_to_texture(width, height).id;
 }
 
 void PlotView3D::release_gpu() {

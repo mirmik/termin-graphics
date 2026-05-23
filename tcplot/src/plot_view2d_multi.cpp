@@ -397,13 +397,6 @@ void PlotView2DMulti::ensure_offscreen_(int w, int h) {
     offscreen_h_ = h;
 }
 
-void PlotView2DMulti::blit_to_dst_(int w, int h, uint32_t dst_gl_fbo) {
-    device_->blit_to_external_target(static_cast<uintptr_t>(dst_gl_fbo),
-                                     offscreen_color_,
-                                     0, 0, w, h,
-                                     0, 0, w, h);
-}
-
 // ---------------------------------------------------------------------------
 // Layout
 // ---------------------------------------------------------------------------
@@ -474,8 +467,8 @@ int PlotView2DMulti::panel_at_(float y) const {
 // Render
 // ---------------------------------------------------------------------------
 
-void PlotView2DMulti::render(int width, int height, uint32_t dst_gl_fbo) {
-    if (width <= 0 || height <= 0 || panels_.empty()) return;
+tgfx::TextureHandle PlotView2DMulti::render_to_texture(int width, int height) {
+    if (width <= 0 || height <= 0 || panels_.empty()) return tgfx::TextureHandle{};
 
     ensure_offscreen_(width, height);
     layout_panels_(width, height);
@@ -520,7 +513,11 @@ void PlotView2DMulti::render(int width, int height, uint32_t dst_gl_fbo) {
     // — cue black screen. PlotView2D/3D follow the same convention;
     // release happens in release_gpu() when the view itself dies or
     // the viewport resizes (ensure_offscreen_ handles both).
-    blit_to_dst_(width, height, dst_gl_fbo);
+    return offscreen_color_;
+}
+
+uint32_t PlotView2DMulti::render_to_texture_id(int width, int height) {
+    return render_to_texture(width, height).id;
 }
 
 void PlotView2DMulti::release_gpu() {

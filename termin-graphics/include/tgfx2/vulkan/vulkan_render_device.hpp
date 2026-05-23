@@ -387,10 +387,9 @@ public:
     void submit(ICommandList& cmd) override;
     void present() override;
 
-    // Backend-neutral replacements for blit_to_external_target /
-    // clear_external_target. The destination is a tgfx2 TextureHandle,
-    // letting render surfaces own their composite target as a texture
-    // instead of a raw GL FBO id (which has no Vulkan analogue).
+    // Texture-to-texture presentation path. Render surfaces must expose
+    // their composite target as a tgfx2 TextureHandle instead of a raw
+    // backend-native framebuffer.
     void blit_to_texture(
         TextureHandle dst,
         TextureHandle src,

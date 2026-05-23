@@ -228,19 +228,6 @@ public:
     bool read_texture_rgba_float(TextureHandle tex, float* out) override;
     bool read_texture_depth_float(TextureHandle tex, float* out) override;
 
-    void blit_to_external_target(
-        uintptr_t dst,
-        TextureHandle src_color,
-        int src_x, int src_y, int src_w, int src_h,
-        int dst_x, int dst_y, int dst_w, int dst_h) override;
-
-    void clear_external_target(
-        uintptr_t dst,
-        float r, float g, float b, float a,
-        float depth,
-        int viewport_x, int viewport_y,
-        int viewport_w, int viewport_h) override;
-
     void blit_to_texture(
         TextureHandle dst,
         TextureHandle src,
@@ -253,24 +240,20 @@ public:
         int viewport_x, int viewport_y,
         int viewport_w, int viewport_h) override;
 
+    // Backend-local window presentation. Kept off IRenderDevice so raw
+    // OpenGL framebuffer semantics do not leak into the tgfx2 public API.
+    void present_to_default_framebuffer(TextureHandle src_color,
+                                        int dst_w,
+                                        int dst_h);
+
     void reset_state() override;
     void flush() override;
     void finish() override;
-
-    uintptr_t native_texture_handle(TextureHandle handle) const override;
 
     TextureHandle register_external_texture(
         uintptr_t native_handle, const TextureDesc& desc) override;
     BufferHandle register_external_buffer(
         uintptr_t native_handle, const BufferDesc& desc) override;
-
-    // GL-typed convenience overloads. Equivalent to the uintptr_t
-    // versions above but spare the `static_cast<uintptr_t>(glid)` at
-    // callsites that speak raw GL. Kept for GL-only code (picking,
-    // tcplot, core_c resource bridges).
-    GLuint gl_texture_id(TextureHandle handle) {
-        return static_cast<GLuint>(native_texture_handle(handle));
-    }
     TextureHandle register_external_texture(GLuint gl_id, const TextureDesc& desc) {
         return register_external_texture(static_cast<uintptr_t>(gl_id), desc);
     }

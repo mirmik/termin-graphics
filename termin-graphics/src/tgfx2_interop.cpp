@@ -34,4 +34,16 @@ uint32_t tgfx2_interop_register_external_gl_texture(
 void tgfx2_interop_destroy_texture_handle(uint32_t handle_id) {
     (void)handle_id;
 }
+
+void tgfx2_interop_blit_texture(
+    uint32_t src_handle_id,
+    uint32_t dst_handle_id,
+    int width,
+    int height)
+{
+    (void)src_handle_id;
+    (void)dst_handle_id;
+    (void)width;
+    (void)height;
+}
 #endif

@@ -296,8 +296,6 @@ void bind_tc_render_target(nb::module_& m) {
                 d["depth_format_name"] = tc_render_target_format_to_string(
                     static_cast<tc_texture_format>(depth->format));
             }
-            d["color_native_handle"] = 0;
-            d["depth_native_handle"] = 0;
             return d;
         }, nb::arg("resource_name"))
 

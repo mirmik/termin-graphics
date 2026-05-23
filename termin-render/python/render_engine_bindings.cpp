@@ -20,39 +20,6 @@ void bind_render_engine(nb::module_& m) {
                      nb::rv_policy::reference_internal)
         .def_prop_ro("tgfx2_device", &RenderEngine::tgfx2_device,
                      nb::rv_policy::reference_internal)
-        .def("render_view_to_fbo_id", [](
-            RenderEngine& self,
-            RenderPipeline& pipeline,
-            uint32_t target_fbo_id,
-            int width,
-            int height,
-            TcSceneRef scene_ref,
-            const RenderCamera& camera,
-            const std::string& render_target_name,
-            uint64_t layer_mask
-        ) {
-            std::vector<Light> lights;
-            self.render_view_to_fbo_id(
-                pipeline,
-                target_fbo_id,
-                width,
-                height,
-                scene_ref.handle(),
-                camera,
-                render_target_name,
-                TC_ENTITY_HANDLE_INVALID,
-                lights,
-                layer_mask
-            );
-        },
-             nb::arg("pipeline"),
-             nb::arg("target_fbo_id"),
-             nb::arg("width"),
-             nb::arg("height"),
-             nb::arg("scene"),
-             nb::arg("camera"),
-             nb::arg("render_target_name") = "",
-             nb::arg("layer_mask") = 0xFFFFFFFFFFFFFFFFULL)
         .def("render_scene_pipeline_offscreen", [](
             RenderEngine& self,
             RenderPipeline& pipeline,

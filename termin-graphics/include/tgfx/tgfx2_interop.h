@@ -62,6 +62,15 @@ TGFX2_API uint32_t tgfx2_interop_register_external_gl_texture(
 // tgfx2_interop_register_external_gl_texture. Safe to call with id == 0.
 TGFX2_API void tgfx2_interop_destroy_texture_handle(uint32_t handle_id);
 
+// Copy/resolve one tgfx2 texture into another. Both arguments are
+// TextureHandle ids owned by the current interop device. The copy is
+// backend-neutral; GL/Vulkan details stay inside the active IRenderDevice.
+TGFX2_API void tgfx2_interop_blit_texture(
+    uint32_t src_handle_id,
+    uint32_t dst_handle_id,
+    int width,
+    int height);
+
 #ifdef __cplusplus
 }
 

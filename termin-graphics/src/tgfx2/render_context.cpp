@@ -4,17 +4,10 @@
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/i_command_list.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
-#ifdef TGFX2_HAS_OPENGL
-#include "tgfx2/opengl/opengl_render_device.hpp"
-#endif
-
 extern "C" {
 #include "tc_profiler.h"
 }
 
-#ifdef TGFX2_HAS_OPENGL
-#include <glad/glad.h>
-#endif
 #include <cstring>
 
 namespace tgfx {
@@ -750,17 +743,6 @@ void RenderContext2::draw_immediate_triangles(const float* data, uint32_t vertex
 
 void RenderContext2::blit(TextureHandle src, TextureHandle dst) {
     cmd_->copy_texture(src, dst);
-}
-
-uint32_t RenderContext2::last_gl_error() {
-#ifdef TGFX2_HAS_OPENGL
-    // glad lives in this translation unit's module, so glGetError
-    // is always a valid function pointer here even when the caller
-    // is in another DLL (e.g. the Python binding module).
-    return static_cast<uint32_t>(glGetError());
-#else
-    return 0;
-#endif
 }
 
 } // namespace tgfx

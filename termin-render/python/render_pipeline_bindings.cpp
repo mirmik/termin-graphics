@@ -51,18 +51,8 @@ nb::object fbo_info(RenderPipeline& self, const std::string& key) {
         d["resource_type"] = "fbo";
         d["color_format"] = static_cast<int>(entry.color_format);
         d["depth_format"] = static_cast<int>(entry.depth_format);
-        uintptr_t color_native = 0;
-        uintptr_t depth_native = 0;
-        if (entry.native_device) {
-            if (entry.color_tgfx2) {
-                color_native = entry.native_device->native_texture_handle(entry.color_tgfx2);
-            }
-            if (entry.has_depth && entry.depth_tgfx2) {
-                depth_native = entry.native_device->native_texture_handle(entry.depth_tgfx2);
-            }
-        }
-        d["color_native_handle"] = color_native;
-        d["depth_native_handle"] = depth_native;
+        d["color_texture_handle"] = entry.color_tgfx2.id;
+        d["depth_texture_handle"] = entry.depth_tgfx2.id;
         return d;
     }
     return nb::none();
@@ -248,12 +238,8 @@ void bind_render_pipeline(nb::module_& m) {
                 d["has_depth"] = false;
                 d["resource_type"] = resource_type_for_texture(self, entry);
                 d["color_format_name"] = std::string(tgfx::pixel_format_name(entry.format));
-                uintptr_t native = 0;
-                if (entry.device && entry.handle) {
-                    native = entry.device->native_texture_handle(entry.handle);
-                }
-                d["color_native_handle"] = native;
-                d["depth_native_handle"] = 0;
+                d["color_texture_handle"] = entry.handle.id;
+                d["depth_texture_handle"] = 0;
                 return d;
             }
 

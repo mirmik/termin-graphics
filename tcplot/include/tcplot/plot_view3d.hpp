@@ -2,25 +2,22 @@
 // external GUI frameworks (WPF, Qt, SDL, ...).
 //
 // Wraps a PlotEngine3D together with borrowed tgfx2 runtime objects
-// and an owned offscreen FBO. Exposes a minimal C-style API so callers
-// (SWIG-bound C#, raw C) don't need to know about tgfx2 internals.
+// and owned offscreen textures. Exposes a minimal C-style API so callers
+// (SWIG-bound C#, raw C) can pass texture handles through platform
+// presentation code without raw backend framebuffers.
 //
 // Usage:
-//   GpuHost host(ttf_path, tgfx::BackendType::OpenGL);
+//   GpuHost host(ttf_path, tgfx::BackendType::Vulkan);
 //   PlotView3D view(host);
 //   // ... data setup via plot/scatter/surface ...
-//   // Each frame, with a GL context current:
-//   view.render(w, h, gl_dst_fbo);
+//   // Each frame:
+//   tgfx::TextureHandle color = view.render_to_texture(w, h);
 //
 // render() pipeline:
-//   1. ensure an RGBA8 + D32F offscreen FBO of size (w, h).
+//   1. ensure RGBA8 + depth offscreen textures of size (w, h).
 //   2. open a tgfx2 render pass on those attachments.
 //   3. engine.render() draws meshes + billboard labels.
-//   4. blit the offscreen color buffer to `gl_dst_fbo` via
-//      glBlitFramebuffer (raw GL, backend-agnostic).
-//
-// The caller is responsible for making the GL context current on the
-// thread that calls render().
+//   4. return the color TextureHandle for a platform presenter.
 #pragma once
 
 #include <cstdint>
@@ -143,17 +140,15 @@ public:
     //
     // Multisample sample count for the offscreen color + depth
     // attachments. Legal values: 1 (no AA), 2, 4, 8 depending on GL
-    // driver. The FBO resolves down to the host's single-sample FBO
-    // inside blit_to_external_fbo. Default 4.
+    // driver. Default 4.
     void set_msaa_samples(int samples);
     int  msaa_samples() const { return msaa_samples_; }
 
     // --- Render one frame ---
-    //
-    // `dst_gl_fbo` - target framebuffer object id (0 = default FB).
-    // After return, both the offscreen FBO and the destination FBO
-    // are unbound.
-    void render(int width, int height, uint32_t dst_gl_fbo);
+    tgfx::TextureHandle render_to_texture(int width, int height);
+    uint32_t render_to_texture_id(int width, int height);
+    tgfx::TextureHandle color_texture() const { return offscreen_color_; }
+    tgfx::TextureHandle depth_texture() const { return offscreen_depth_; }
 
     // Release ALL GPU resources (offscreen FBO, meshes, shaders,
     // font atlas texture). Safe to call after the GL context has
@@ -163,7 +158,6 @@ public:
 
 private:
     void ensure_offscreen_(int w, int h);
-    void blit_to_dst_(int w, int h, uint32_t dst_gl_fbo);
 
     // Font path captured so we can re-create the atlas on release_gpu
     // → reuse cycle if the host re-enters render after a context drop.
@@ -173,10 +167,8 @@ private:
     tgfx::FontAtlas*      font_   = nullptr;
     std::unique_ptr<PlotEngine3D> engine_;
 
-    // Offscreen color + depth are plain tgfx2 textures; begin_pass
-    // owns the FBO they compose into. When msaa_samples_ > 1 both
-    // attachments are multisample, and glBlitFramebuffer inside
-    // blit_to_external_fbo resolves down to the single-sample host FBO.
+    // Offscreen color + depth are plain tgfx2 textures; begin_pass owns
+    // the backend render target they compose into.
     tgfx::TextureHandle offscreen_color_{};
     tgfx::TextureHandle offscreen_depth_{};
     int offscreen_w_ = 0;

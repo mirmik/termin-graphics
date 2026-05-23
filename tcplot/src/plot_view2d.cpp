@@ -172,8 +172,8 @@ bool PlotView2D::on_mouse_wheel(float x, float y, float dy) {
     return engine_->on_mouse_wheel(x, y, dy);
 }
 
-void PlotView2D::render(int width, int height, uint32_t dst_gl_fbo) {
-    if (width <= 0 || height <= 0) return;
+tgfx::TextureHandle PlotView2D::render_to_texture(int width, int height) {
+    if (width <= 0 || height <= 0) return tgfx::TextureHandle{};
 
     ensure_offscreen_(width, height);
     engine_->set_viewport(0, 0, (float)width, (float)height);
@@ -191,10 +191,11 @@ void PlotView2D::render(int width, int height, uint32_t dst_gl_fbo) {
     ctx_->end_pass();
     ctx_->end_frame();
 
-    device_->blit_to_external_target(
-        static_cast<uintptr_t>(dst_gl_fbo), offscreen_color_,
-        0, 0, width, height,
-        0, 0, width, height);
+    return offscreen_color_;
+}
+
+uint32_t PlotView2D::render_to_texture_id(int width, int height) {
+    return render_to_texture(width, height).id;
 }
 
 void PlotView2D::release_gpu() {

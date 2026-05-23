@@ -67,14 +67,6 @@ private:
     // device or borrows the host-owned process-wide interop device.
     std::unique_ptr<tgfx::RenderRuntime> tgfx2_runtime_;
 
-    // Reusable offscreen color+depth textures backing
-    // render_view_to_fbo_id(). Resized on demand, destroyed with the
-    // engine.
-    tgfx::TextureHandle external_target_color_;
-    tgfx::TextureHandle external_target_depth_;
-    int external_target_w_ = 0;
-    int external_target_h_ = 0;
-
 public:
     void ensure_tgfx2();
 
@@ -90,42 +82,6 @@ public:
 public:
     RenderEngine();
     ~RenderEngine();
-
-    // Native tgfx2 renderer — renders `pipeline`
-    // for `scene` with `camera` into an internal offscreen color+depth
-    // texture pair (created lazily / resized on demand), then blits the
-    // color texture into the given external GL framebuffer id. Clients
-    // that only own a raw GL fbo id (SDL window backbuffer = 0, Qt
-    // QOpenGLWidget fbo id, streaming server's offscreen) use this to
-    // drive a full render without touching the legacy GraphicsBackend /
-    // FramebufferHandle plumbing.
-    void render_view_to_fbo_id(
-        RenderPipeline& pipeline,
-        uint32_t target_fbo_id,
-        int width,
-        int height,
-        tc_scene_handle scene,
-        const RenderCamera& camera,
-        const std::string& render_target_name,
-        tc_entity_handle internal_entities,
-        const std::vector<Light>& lights,
-        uint64_t layer_mask = 0xFFFFFFFFFFFFFFFFULL
-    );
-
-    void render_to_screen(
-        RenderPipeline& pipeline,
-        int width,
-        int height,
-        tc_scene_handle scene,
-        const RenderCamera& camera
-    );
-
-    void present_to_screen(
-        RenderPipeline& pipeline,
-        int width,
-        int height,
-        const std::string& resource_name = "color"
-    );
 
     void render_scene_pipeline_offscreen(
         RenderPipeline& pipeline,

@@ -81,12 +81,14 @@ public:
     void set_msaa_samples(int samples);
     int  msaa_samples() const { return msaa_samples_; }
 
-    void render(int width, int height, uint32_t dst_gl_fbo);
+    tgfx::TextureHandle render_to_texture(int width, int height);
+    uint32_t render_to_texture_id(int width, int height);
+    tgfx::TextureHandle color_texture() const { return offscreen_color_; }
+
     void release_gpu();
 
 private:
     void ensure_offscreen_(int w, int h);
-    void blit_to_dst_(int w, int h, uint32_t dst_gl_fbo);
 
     tgfx::IRenderDevice*  device_ = nullptr;
     tgfx::PipelineCache*  cache_  = nullptr;
