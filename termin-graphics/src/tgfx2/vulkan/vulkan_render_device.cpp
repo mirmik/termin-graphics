@@ -216,6 +216,33 @@ static std::string describe_vertex_layouts(
     return out.str();
 }
 
+static uint32_t pixel_format_byte_size(PixelFormat fmt) {
+    switch (fmt) {
+        case PixelFormat::R8_UNorm:          return 1;
+        case PixelFormat::RG8_UNorm:         return 2;
+        case PixelFormat::RGB8_UNorm:        return 3;
+        case PixelFormat::RGBA8_UNorm:       return 4;
+        case PixelFormat::BGRA8_UNorm:       return 4;
+        case PixelFormat::R16F:              return 2;
+        case PixelFormat::RG16F:             return 4;
+        case PixelFormat::RGBA16F:           return 8;
+        case PixelFormat::R32F:              return 4;
+        case PixelFormat::RG32F:             return 8;
+        case PixelFormat::RGBA32F:           return 16;
+        case PixelFormat::D24_UNorm:         return 4;
+        case PixelFormat::D24_UNorm_S8_UInt: return 4;
+        case PixelFormat::D32F:              return 4;
+        case PixelFormat::Undefined:         return 0;
+    }
+    return 0;
+}
+
+static VkImageLayout texture_post_upload_layout(const TextureDesc& desc) {
+    return has_flag(desc.usage, TextureUsage::Sampled)
+        ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+}
+
 } // namespace
 
 // --- Debug callback ---
@@ -1921,25 +1948,127 @@ void VulkanRenderDevice::upload_texture(TextureHandle dst, std::span<const uint8
         vkCmdCopyBufferToImage(cmd, staging, res->image,
                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-        transition_image_layout(cmd, res->image,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            vk::format_aspect_flags(res->desc.format));
+        VkImageLayout final_layout = texture_post_upload_layout(res->desc);
+        if (final_layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+            transition_image_layout(cmd, res->image,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, final_layout,
+                vk::format_aspect_flags(res->desc.format));
+        }
     });
 
-    res->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    res->current_layout = texture_post_upload_layout(res->desc);
     defer_vma_buffer_destroy(staging, staging_alloc);
 }
 
-void VulkanRenderDevice::upload_texture_region(TextureHandle /*dst*/,
-                                               uint32_t /*x*/, uint32_t /*y*/,
-                                               uint32_t /*w*/, uint32_t /*h*/,
-                                               std::span<const uint8_t> /*data*/,
-                                               uint32_t /*mip*/) {
-    // TODO: implement proper region upload via staging buffer +
-    // vkCmdCopyBufferToImage with VkBufferImageCopy.imageOffset /
-    // imageExtent. The OpenGL path (glTexSubImage2D) is the primary
-    // consumer right now; Vulkan gets a stub so the interface stays
-    // abstract-class compatible.
+void VulkanRenderDevice::upload_texture_region(TextureHandle dst,
+                                               uint32_t x, uint32_t y,
+                                               uint32_t w, uint32_t h,
+                                               std::span<const uint8_t> data,
+                                               uint32_t mip) {
+    auto* res = textures_.get(dst.id);
+    if (!res) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::upload_texture_region: invalid texture handle %u",
+               dst.id);
+        return;
+    }
+    if (w == 0 || h == 0) {
+        return;
+    }
+    if (mip >= res->desc.mip_levels) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::upload_texture_region: mip %u out of range for texture %u (mips=%u)",
+               mip, dst.id, res->desc.mip_levels);
+        return;
+    }
+
+    const uint32_t mip_w = std::max(1u, res->desc.width >> mip);
+    const uint32_t mip_h = std::max(1u, res->desc.height >> mip);
+    if (x >= mip_w || y >= mip_h || w > mip_w - x || h > mip_h - y) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::upload_texture_region: region (%u,%u %ux%u) outside texture %u mip %u (%ux%u)",
+               x, y, w, h, dst.id, mip, mip_w, mip_h);
+        return;
+    }
+
+    const uint32_t bytes_per_pixel = pixel_format_byte_size(res->desc.format);
+    if (bytes_per_pixel == 0) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::upload_texture_region: unsupported texture format for texture %u",
+               dst.id);
+        return;
+    }
+
+    const size_t expected_size = static_cast<size_t>(w) * h * bytes_per_pixel;
+    if (data.size() < expected_size) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::upload_texture_region: data too small for texture %u region (%u bytes, expected %zu)",
+               dst.id, static_cast<unsigned>(data.size()), expected_size);
+        return;
+    }
+
+    VkBufferCreateInfo stage_ci{};
+    stage_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    stage_ci.size = expected_size;
+    stage_ci.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+    VmaAllocationCreateInfo stage_alloc_ci{};
+    stage_alloc_ci.usage = VMA_MEMORY_USAGE_CPU_ONLY;
+
+    VkBuffer staging = VK_NULL_HANDLE;
+    VmaAllocation staging_alloc = VK_NULL_HANDLE;
+    if (vmaCreateBuffer(allocator_, &stage_ci, &stage_alloc_ci,
+                        &staging, &staging_alloc, nullptr) != VK_SUCCESS) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::upload_texture_region: failed to allocate staging buffer for texture %u",
+               dst.id);
+        return;
+    }
+
+    void* mapped = nullptr;
+    if (vmaMapMemory(allocator_, staging_alloc, &mapped) != VK_SUCCESS || !mapped) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::upload_texture_region: failed to map staging buffer for texture %u",
+               dst.id);
+        vmaDestroyBuffer(allocator_, staging, staging_alloc);
+        return;
+    }
+    std::memcpy(mapped, data.data(), expected_size);
+    vmaUnmapMemory(allocator_, staging_alloc);
+
+    const VkImageAspectFlags aspect = vk::format_aspect_flags(res->desc.format);
+    execute_immediate([&](VkCommandBuffer cmd) {
+        transition_image_layout(cmd, res->image,
+            res->current_layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, aspect);
+
+        VkBufferImageCopy region{};
+        region.bufferOffset = 0;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource.aspectMask = aspect;
+        region.imageSubresource.mipLevel = mip;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageOffset = {
+            static_cast<int32_t>(x),
+            static_cast<int32_t>(y),
+            0,
+        };
+        region.imageExtent = {w, h, 1};
+
+        vkCmdCopyBufferToImage(cmd, staging, res->image,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               1, &region);
+
+        VkImageLayout final_layout = texture_post_upload_layout(res->desc);
+        if (final_layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+            transition_image_layout(cmd, res->image,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, final_layout, aspect);
+        }
+    });
+
+    res->current_layout = texture_post_upload_layout(res->desc);
+    defer_vma_buffer_destroy(staging, staging_alloc);
 }
 
 // --- Readback ---

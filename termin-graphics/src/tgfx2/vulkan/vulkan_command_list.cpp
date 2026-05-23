@@ -210,6 +210,7 @@ void VulkanCommandList::end_render_pass() {
     for (auto h : current_pass_color_attachments_) {
         auto* tex = device_.get_texture(h);
         if (!tex || tex->image == VK_NULL_HANDLE) continue;
+        if (!has_flag(tex->desc.usage, TextureUsage::Sampled)) continue;
         if (tex->current_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) continue;
         device_.transition_image_layout(cmd_, tex->image,
             tex->current_layout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -224,6 +225,7 @@ void VulkanCommandList::end_render_pass() {
     if (current_pass_depth_attachment_) {
         auto* tex = device_.get_texture(current_pass_depth_attachment_);
         if (tex && tex->image != VK_NULL_HANDLE &&
+            has_flag(tex->desc.usage, TextureUsage::Sampled) &&
             tex->current_layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
             device_.transition_image_layout(cmd_, tex->image,
                 tex->current_layout,

@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <span>
 #include <vector>
 
 #include "tgfx2/enums.hpp"
@@ -59,6 +60,54 @@ int main() {
            caps.supports_compute ? "yes" : "no",
            caps.supports_geometry_shaders ? "yes" : "no");
 
+    // --- Texture region upload parity check ---
+    tgfx::TextureDesc upload_desc;
+    upload_desc.width = 4;
+    upload_desc.height = 4;
+    upload_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    upload_desc.usage = tgfx::TextureUsage::Sampled |
+                        tgfx::TextureUsage::CopySrc |
+                        tgfx::TextureUsage::CopyDst;
+    auto upload_tex = device->create_texture(upload_desc);
+
+    std::vector<uint8_t> zeros(4 * 4 * 4, 0);
+    device->upload_texture(upload_tex, zeros);
+
+    const uint8_t region_pixels[] = {
+        255, 0, 0, 255,  255, 0, 0, 255,
+        255, 0, 0, 255,  255, 0, 0, 255,
+    };
+    device->upload_texture_region(
+        upload_tex, 1, 2, 2, 2,
+        std::span<const uint8_t>(region_pixels, sizeof(region_pixels)));
+
+    auto upload_cmd = device->create_command_list();
+    upload_cmd->begin();
+    upload_cmd->end();
+    device->submit(*upload_cmd);
+    upload_cmd.reset();
+
+    float red_pixel[4] = {};
+    float untouched_pixel[4] = {};
+    bool region_read_ok = device->read_pixel_rgba8(upload_tex, 1, 2, red_pixel) &&
+                          device->read_pixel_rgba8(upload_tex, 0, 0, untouched_pixel);
+    bool region_upload_ok =
+        region_read_ok &&
+        red_pixel[0] > 0.9f && red_pixel[1] < 0.1f &&
+        red_pixel[2] < 0.1f && red_pixel[3] > 0.9f &&
+        untouched_pixel[0] < 0.1f && untouched_pixel[1] < 0.1f &&
+        untouched_pixel[2] < 0.1f && untouched_pixel[3] < 0.1f;
+
+    printf("Texture region upload: %s\n", region_upload_ok ? "ok" : "failed");
+    if (!region_upload_ok) {
+        fprintf(stderr,
+                "Texture region upload mismatch: red=(%.3f %.3f %.3f %.3f), untouched=(%.3f %.3f %.3f %.3f)\n",
+                red_pixel[0], red_pixel[1], red_pixel[2], red_pixel[3],
+                untouched_pixel[0], untouched_pixel[1], untouched_pixel[2], untouched_pixel[3]);
+        return 1;
+    }
+    device->destroy(upload_tex);
+
     // --- Create shaders (GLSL source — compiled to SPIR-V by shaderc) ---
     tgfx::ShaderHandle vs, fs;
     try {
@@ -94,6 +143,7 @@ int main() {
     pipe_desc.topology = tgfx::PrimitiveTopology::TriangleList;
     pipe_desc.depth_stencil.depth_test = false;
     pipe_desc.depth_stencil.depth_write = false;
+    pipe_desc.depth_format = tgfx::PixelFormat::Undefined;
     pipe_desc.raster.cull = tgfx::CullMode::None;
     pipe_desc.color_formats = {tgfx::PixelFormat::RGBA8_UNorm};
 
@@ -188,6 +238,13 @@ int main() {
                                 rb->buffer, 1, &region);
     });
     rt->current_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+    auto readback_cmd = device->create_command_list();
+    readback_cmd->begin();
+    readback_cmd->end();
+    device->submit(*readback_cmd);
+    device->wait_idle();
+    readback_cmd.reset();
 
     // Read pixels
     std::vector<uint8_t> pixels(byte_size);
