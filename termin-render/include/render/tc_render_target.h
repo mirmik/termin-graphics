@@ -14,9 +14,19 @@
 extern "C" {
 #endif
 
+typedef enum tc_render_target_kind {
+    TC_RENDER_TARGET_TEXTURE_2D = 0,
+    TC_RENDER_TARGET_XR_STEREO = 1,
+} tc_render_target_kind;
+
 TC_API tc_render_target_handle tc_render_target_new(const char* name);
 TC_API void tc_render_target_free(tc_render_target_handle h);
 TC_API bool tc_render_target_alive(tc_render_target_handle h);
+
+TC_API bool tc_render_target_kind_from_string(const char* name, tc_render_target_kind* out_kind);
+TC_API const char* tc_render_target_kind_to_string(tc_render_target_kind kind);
+TC_API void tc_render_target_set_kind(tc_render_target_handle h, tc_render_target_kind kind);
+TC_API tc_render_target_kind tc_render_target_get_kind(tc_render_target_handle h);
 
 TC_API void tc_render_target_set_name(tc_render_target_handle h, const char* name);
 TC_API const char* tc_render_target_get_name(tc_render_target_handle h);

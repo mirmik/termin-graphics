@@ -13,6 +13,7 @@ extern "C" {
 
 typedef struct tc_render_target_config {
     const char* name;           // Render target name (interned)
+    const char* kind;           // Render target kind: texture_2d or xr_stereo (interned)
     const char* camera_uuid;    // Camera entity UUID (interned)
     int width;                  // Render width in pixels
     int height;                 // Render height in pixels

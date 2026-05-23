@@ -165,6 +165,9 @@ static tc_value serialize_render_target_config(const tc_render_target_config* rt
     if (!rtc) return v;
 
     if (rtc->name && rtc->name[0]) tc_value_dict_set(&v, "name", tc_value_string(rtc->name));
+    if (rtc->kind && rtc->kind[0] && strcmp(rtc->kind, "texture_2d") != 0) {
+        tc_value_dict_set(&v, "kind", tc_value_string(rtc->kind));
+    }
     if (rtc->camera_uuid && rtc->camera_uuid[0]) tc_value_dict_set(&v, "camera_uuid", tc_value_string(rtc->camera_uuid));
     if (rtc->dynamic_resolution) {
         tc_value_dict_set(&v, "dynamic_resolution", tc_value_bool(true));
@@ -202,6 +205,9 @@ static bool deserialize_render_target_config(const tc_value* data, tc_render_tar
 
     tc_value* name = tc_value_dict_get((tc_value*)data, "name");
     if (name && name->type == TC_VALUE_STRING) out->name = name->data.s;
+
+    tc_value* kind = tc_value_dict_get((tc_value*)data, "kind");
+    if (kind && kind->type == TC_VALUE_STRING) out->kind = kind->data.s;
 
     tc_value* camera_uuid = tc_value_dict_get((tc_value*)data, "camera_uuid");
     if (camera_uuid && camera_uuid->type == TC_VALUE_STRING) out->camera_uuid = camera_uuid->data.s;

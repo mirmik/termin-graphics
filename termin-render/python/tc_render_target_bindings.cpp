@@ -45,6 +45,18 @@ void bind_tc_render_target(nb::module_& m) {
             [](tc_render_target_handle& h, const std::string& name) {
                 tc_render_target_set_name(h, name.c_str());
             })
+        .def_prop_rw("kind",
+            [](const tc_render_target_handle& h) -> std::string {
+                return tc_render_target_kind_to_string(tc_render_target_get_kind(h));
+            },
+            [](tc_render_target_handle& h, const std::string& kind) {
+                tc_render_target_kind parsed;
+                if (!tc_render_target_kind_from_string(kind.c_str(), &parsed)) {
+                    tc::Log::error("[tc_render_target] unknown kind: %s", kind.c_str());
+                    return;
+                }
+                tc_render_target_set_kind(h, parsed);
+            })
         .def_prop_rw("width",
             [](const tc_render_target_handle& h) { return tc_render_target_get_width(h); },
             [](tc_render_target_handle& h, int w) { tc_render_target_set_width(h, w); })

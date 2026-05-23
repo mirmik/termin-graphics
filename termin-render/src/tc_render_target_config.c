@@ -6,6 +6,7 @@
 void tc_render_target_config_init(tc_render_target_config* config) {
     if (!config) return;
     memset(config, 0, sizeof(tc_render_target_config));
+    config->kind = tgfx_intern_string("texture_2d");
     config->width = 512;
     config->height = 512;
     config->clear_color_value[3] = 1.0f;
@@ -24,6 +25,7 @@ void tc_render_target_config_free(tc_render_target_config* config) {
 void tc_render_target_config_copy(tc_render_target_config* dst, const tc_render_target_config* src) {
     if (!dst || !src) return;
     dst->name = src->name ? tgfx_intern_string(src->name) : NULL;
+    dst->kind = src->kind ? tgfx_intern_string(src->kind) : tgfx_intern_string("texture_2d");
     dst->camera_uuid = src->camera_uuid ? tgfx_intern_string(src->camera_uuid) : NULL;
     dst->width = src->width;
     dst->height = src->height;

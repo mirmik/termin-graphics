@@ -15,6 +15,7 @@
 typedef struct {
     uint32_t* generations;
     bool* alive;
+    tc_render_target_kind* kinds;
     char** names;
     int* widths;
     int* heights;
@@ -87,6 +88,7 @@ void tc_render_target_pool_init(void) {
 
     g_render_target_pool->generations = (uint32_t*)calloc(cap, sizeof(uint32_t));
     g_render_target_pool->alive = (bool*)calloc(cap, sizeof(bool));
+    g_render_target_pool->kinds = (tc_render_target_kind*)calloc(cap, sizeof(tc_render_target_kind));
     g_render_target_pool->names = (char**)calloc(cap, sizeof(char*));
     g_render_target_pool->widths = (int*)calloc(cap, sizeof(int));
     g_render_target_pool->heights = (int*)calloc(cap, sizeof(int));
@@ -112,6 +114,7 @@ void tc_render_target_pool_init(void) {
     for (size_t i = 0; i < cap; i++) {
         g_render_target_pool->free_stack[i] = (uint32_t)(cap - 1 - i);
         g_render_target_pool->scenes[i] = TC_SCENE_HANDLE_INVALID;
+        g_render_target_pool->kinds[i] = TC_RENDER_TARGET_TEXTURE_2D;
         g_render_target_pool->camera_entities[i] = TC_ENTITY_HANDLE_INVALID;
         g_render_target_pool->pipelines[i] = TC_PIPELINE_HANDLE_INVALID;
         g_render_target_pool->color_formats[i] = RT_DEFAULT_COLOR_FORMAT;
@@ -151,6 +154,7 @@ void tc_render_target_pool_shutdown(void) {
 
     free(g_render_target_pool->generations);
     free(g_render_target_pool->alive);
+    free(g_render_target_pool->kinds);
     free(g_render_target_pool->names);
     free(g_render_target_pool->widths);
     free(g_render_target_pool->heights);
@@ -187,6 +191,7 @@ static void render_target_pool_grow(void) {
 
     g_render_target_pool->generations = realloc(g_render_target_pool->generations, new_cap * sizeof(uint32_t));
     g_render_target_pool->alive = realloc(g_render_target_pool->alive, new_cap * sizeof(bool));
+    g_render_target_pool->kinds = realloc(g_render_target_pool->kinds, new_cap * sizeof(tc_render_target_kind));
     g_render_target_pool->names = realloc(g_render_target_pool->names, new_cap * sizeof(char*));
     g_render_target_pool->widths = realloc(g_render_target_pool->widths, new_cap * sizeof(int));
     g_render_target_pool->heights = realloc(g_render_target_pool->heights, new_cap * sizeof(int));
@@ -211,6 +216,7 @@ static void render_target_pool_grow(void) {
 
     memset(g_render_target_pool->generations + old_cap, 0, (new_cap - old_cap) * sizeof(uint32_t));
     memset(g_render_target_pool->alive + old_cap, 0, (new_cap - old_cap) * sizeof(bool));
+    memset(g_render_target_pool->kinds + old_cap, 0, (new_cap - old_cap) * sizeof(tc_render_target_kind));
     memset(g_render_target_pool->names + old_cap, 0, (new_cap - old_cap) * sizeof(char*));
     memset(g_render_target_pool->widths + old_cap, 0, (new_cap - old_cap) * sizeof(int));
     memset(g_render_target_pool->heights + old_cap, 0, (new_cap - old_cap) * sizeof(int));
@@ -229,6 +235,7 @@ static void render_target_pool_grow(void) {
 
     for (size_t i = old_cap; i < new_cap; i++) {
         g_render_target_pool->scenes[i] = TC_SCENE_HANDLE_INVALID;
+        g_render_target_pool->kinds[i] = TC_RENDER_TARGET_TEXTURE_2D;
         g_render_target_pool->camera_entities[i] = TC_ENTITY_HANDLE_INVALID;
         g_render_target_pool->pipelines[i] = TC_PIPELINE_HANDLE_INVALID;
         g_render_target_pool->color_formats[i] = RT_DEFAULT_COLOR_FORMAT;
@@ -325,6 +332,27 @@ bool tc_render_target_alive(tc_render_target_handle h) {
     return render_target_handle_alive(h);
 }
 
+bool tc_render_target_kind_from_string(const char* name, tc_render_target_kind* out_kind) {
+    if (!name || !out_kind) return false;
+    if (strcmp(name, "texture_2d") == 0) {
+        *out_kind = TC_RENDER_TARGET_TEXTURE_2D;
+        return true;
+    }
+    if (strcmp(name, "xr_stereo") == 0) {
+        *out_kind = TC_RENDER_TARGET_XR_STEREO;
+        return true;
+    }
+    return false;
+}
+
+const char* tc_render_target_kind_to_string(tc_render_target_kind kind) {
+    switch (kind) {
+        case TC_RENDER_TARGET_TEXTURE_2D: return "texture_2d";
+        case TC_RENDER_TARGET_XR_STEREO: return "xr_stereo";
+    }
+    return "texture_2d";
+}
+
 tc_render_target_handle tc_render_target_pool_alloc(const char* name) {
     if (!g_render_target_pool) {
         tc_render_target_pool_init();
@@ -342,6 +370,7 @@ tc_render_target_handle tc_render_target_pool_alloc(const char* name) {
     uint32_t gen = g_render_target_pool->generations[idx];
 
     g_render_target_pool->alive[idx] = true;
+    g_render_target_pool->kinds[idx] = TC_RENDER_TARGET_TEXTURE_2D;
     g_render_target_pool->names[idx] = rt_strdup(name);
     g_render_target_pool->widths[idx] = 512;
     g_render_target_pool->heights[idx] = 512;
@@ -427,6 +456,31 @@ tc_render_target_handle tc_render_target_new(const char* name) {
 
 void tc_render_target_free(tc_render_target_handle h) {
     tc_render_target_pool_free(h);
+}
+
+void tc_render_target_set_kind(tc_render_target_handle h, tc_render_target_kind kind) {
+    if (!render_target_handle_alive(h)) return;
+    if (kind != TC_RENDER_TARGET_TEXTURE_2D && kind != TC_RENDER_TARGET_XR_STEREO) {
+        tc_log_error("[tc_render_target] rejected unknown render target kind: %d", (int)kind);
+        return;
+    }
+    if (g_render_target_pool->kinds[h.index] == kind) return;
+    g_render_target_pool->kinds[h.index] = kind;
+    if (kind == TC_RENDER_TARGET_XR_STEREO) {
+        if (!tc_texture_handle_is_invalid(g_render_target_pool->color_textures[h.index])) {
+            tc_texture_destroy(g_render_target_pool->color_textures[h.index]);
+            g_render_target_pool->color_textures[h.index] = tc_texture_handle_invalid();
+        }
+        if (!tc_texture_handle_is_invalid(g_render_target_pool->depth_textures[h.index])) {
+            tc_texture_destroy(g_render_target_pool->depth_textures[h.index]);
+            g_render_target_pool->depth_textures[h.index] = tc_texture_handle_invalid();
+        }
+    }
+}
+
+tc_render_target_kind tc_render_target_get_kind(tc_render_target_handle h) {
+    if (!render_target_handle_alive(h)) return TC_RENDER_TARGET_TEXTURE_2D;
+    return g_render_target_pool->kinds[h.index];
 }
 
 void tc_render_target_set_name(tc_render_target_handle h, const char* name) {
@@ -607,6 +661,11 @@ float tc_render_target_get_clear_depth_value(tc_render_target_handle h) {
 void tc_render_target_ensure_textures(tc_render_target_handle h) {
     if (!render_target_handle_alive(h)) return;
     uint32_t idx = h.index;
+    if (g_render_target_pool->kinds[idx] != TC_RENDER_TARGET_TEXTURE_2D) {
+        tc_log_warn("[tc_render_target] ensure_textures skipped for non-texture render target '%s'",
+                    g_render_target_pool->names[idx] ? g_render_target_pool->names[idx] : "(unnamed)");
+        return;
+    }
 
     const uint32_t w = (uint32_t)g_render_target_pool->widths[idx];
     const uint32_t height_ = (uint32_t)g_render_target_pool->heights[idx];
