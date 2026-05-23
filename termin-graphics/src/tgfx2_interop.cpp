@@ -1,7 +1,5 @@
 #include <tgfx/tgfx2_interop.h>
-#include <tgfx/tgfx_gpu_ops.h>
 #include <tgfx2/i_render_device.hpp>
-#include <tcbase/tc_log.h>
 
 #include <cstdint>
 
@@ -13,11 +11,6 @@ void tgfx2_interop_set_device(void* device) {
 
 void* tgfx2_interop_get_device(void) {
     return g_tgfx2_device;
-}
-
-void tgfx2_gpu_ops_register(void) {
-    tgfx_gpu_set_ops(nullptr);
-    tc_log_error("tgfx2_gpu_ops_register: legacy tgfx_gpu_ops bridge has been removed");
 }
 
 #ifndef TGFX2_HAS_OPENGL

@@ -2,10 +2,9 @@
 //
 // Lazily compiles a tc_shader into a pair of tgfx2 ShaderHandles
 // (vertex + fragment) through IRenderDevice::ensure_tc_shader().
-// Coexists with the legacy glUniform-based path (tc_shader_compile_gpu):
-// both produce independent artifacts from the same source strings, and both
-// respect the shader->version counter for hot reload. The tgfx2 handles are
-// owned by the render device cache, not by tc_gpu_context / tc_gpu_slot.
+// Produces independent backend artifacts from the same source strings and
+// respects the shader->version counter for hot reload. The tgfx2 handles are
+// owned by the render device cache.
 //
 // Usage from a migrated pass:
 //

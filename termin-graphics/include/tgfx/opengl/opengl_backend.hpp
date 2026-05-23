@@ -10,11 +10,6 @@
 #include <unordered_map>
 #include <vector>
 
-extern "C" {
-#include "tgfx/tgfx_gpu_ops.h"
-#include "tgfx/tc_gpu_context.h"
-}
-
 #include <tcbase/tc_log.hpp>
 
 namespace termin {

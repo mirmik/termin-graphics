@@ -26,8 +26,7 @@ namespace termin {
 // Wrap a core_c tc_texture as a tgfx2 TextureHandle. The active
 // IRenderDevice owns the bridge cache keyed by pool_index + version.
 // OpenGL and Vulkan both create real tgfx2 texture handles through
-// IRenderDevice::ensure_tc_texture(); the legacy OpenGL tc_gpu_context /
-// share-group cache is not used on this tgfx2 path.
+// IRenderDevice::ensure_tc_texture().
 //
 // Returns an invalid handle (id == 0) if the tc_texture handle is
 // invalid, the CPU-first tc_texture has no pixel data, or allocation/upload

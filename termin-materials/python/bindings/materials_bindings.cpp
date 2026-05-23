@@ -9,7 +9,7 @@
 #include <tcbase/tc_log.hpp>
 
 extern "C" {
-#include <tgfx/tc_gpu.h>
+#include <tgfx/tgfx_shader_preprocess.h>
 }
 
 namespace {
@@ -81,7 +81,7 @@ void bind_shader_parser(nb::module_& m) {
     m.def("glsl_preprocessor", &glsl_preprocessor, nb::rv_policy::reference,
         "Get the global GLSL preprocessor instance");
 
-    // Register the GLSL preprocess callback with tc_gpu
+    // Register the process-wide GLSL preprocess callback.
     // This should be called after set_fallback_loader to ensure includes can be resolved
     m.def("register_glsl_preprocessor", []() {
         tgfx_gpu_set_shader_preprocess(glsl_preprocess_callback);

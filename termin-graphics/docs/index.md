@@ -23,9 +23,10 @@
   populated on demand.
 
 `tc_texture_sync_to_cpu(tc_texture*)` is a no-op for CPU-first textures. For
-GPU-first textures it asks the active `tgfx_gpu_ops` backend to read back the
-image into `tc_texture::data`. Python `Texture.sync_to_cpu()` exposes the same
-operation, and preview helpers use it transparently when CPU pixels are absent.
+GPU-first textures the old `tgfx_gpu_ops` readback path has been removed; the
+function logs an error and returns `false`. GPU-first readback should be restored
+through a tgfx2 render-device path instead of the removed legacy OpenGL context
+cache. Python `Texture.sync_to_cpu()` exposes the same operation.
 
 ## tgfx2 Backend Contract
 

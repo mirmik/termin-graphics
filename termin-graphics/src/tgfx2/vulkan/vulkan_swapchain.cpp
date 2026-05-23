@@ -303,6 +303,15 @@ void VulkanSwapchain::recreate(uint32_t width, uint32_t height) {
 // ---------------------------------------------------------------------------
 
 bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
+    static thread_local uint64_t s_compose_calls = 0;
+    ++s_compose_calls;
+    const bool trace = s_compose_calls <= 40 || (s_compose_calls % 120) == 0;
+    if (trace) {
+        tc_log(TC_LOG_INFO,
+               "[VulkanSwapchain] compose#%llu begin tex=%u frame_slot=%u size=%ux%u",
+               (unsigned long long)s_compose_calls, color_tex.id,
+               current_frame_, width_, height_);
+    }
     static thread_local auto s_window_start = std::chrono::steady_clock::now();
     static thread_local uint64_t s_frames = 0;
     static thread_local double s_wait_us = 0.0;
@@ -317,15 +326,24 @@ bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
     // 1. Wait until the command buffer + sync objects for this slot
     //    are free.
     const auto wait0 = std::chrono::steady_clock::now();
+    if (trace) tc_log(TC_LOG_INFO, "[VulkanSwapchain] compose#%llu wait begin",
+                      (unsigned long long)s_compose_calls);
     wait_for_current_frame();
     const auto wait1 = std::chrono::steady_clock::now();
+    if (trace) tc_log(TC_LOG_INFO, "[VulkanSwapchain] compose#%llu wait end",
+                      (unsigned long long)s_compose_calls);
 
     // 2. Acquire an image from the swapchain.
     uint32_t image_idx = 0;
     VkSemaphore image_available = VK_NULL_HANDLE;
     const auto acquire0 = std::chrono::steady_clock::now();
+    if (trace) tc_log(TC_LOG_INFO, "[VulkanSwapchain] compose#%llu acquire begin",
+                      (unsigned long long)s_compose_calls);
     VkResult ar = acquire(&image_idx, &image_available);
     const auto acquire1 = std::chrono::steady_clock::now();
+    if (trace) tc_log(TC_LOG_INFO,
+                      "[VulkanSwapchain] compose#%llu acquire end result=%d image=%u",
+                      (unsigned long long)s_compose_calls, (int)ar, image_idx);
     if (ar == VK_ERROR_OUT_OF_DATE_KHR) {
         // Nothing submitted this frame — fence stays signalled after
         // we reset it above, so re-signal it to keep things balanced.
@@ -343,6 +361,9 @@ bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
     // 3. Look up the color texture on the device.
     VkTextureResource* rt = device_.get_texture(color_tex);
     if (!rt || !rt->image) {
+        if (trace) tc_log(TC_LOG_ERROR,
+                          "[VulkanSwapchain] compose#%llu missing source texture id=%u",
+                          (unsigned long long)s_compose_calls, color_tex.id);
         // Can't compose — just submit an empty batch to signal the
         // fence and move on. The screen stays on the previous frame
         // which is fine for a dropped render.
@@ -362,6 +383,8 @@ bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
     // 4. Record the compose command buffer: transitions + blit +
     //    present-src transition.
     const auto record0 = std::chrono::steady_clock::now();
+    if (trace) tc_log(TC_LOG_INFO, "[VulkanSwapchain] compose#%llu record begin",
+                      (unsigned long long)s_compose_calls);
     VkCommandBuffer cb = compose_command_buffers_[current_frame_];
     vkResetCommandBuffer(cb, 0);
 
@@ -442,6 +465,8 @@ bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
 
     vkEndCommandBuffer(cb);
     const auto record1 = std::chrono::steady_clock::now();
+    if (trace) tc_log(TC_LOG_INFO, "[VulkanSwapchain] compose#%llu record end",
+                      (unsigned long long)s_compose_calls);
 
     // 5. Submit waiting on image_available, signalling render_finished
     //    for this slot and tripping the in-flight fence.
@@ -458,21 +483,34 @@ bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
     si.signalSemaphoreCount = 1;
     si.pSignalSemaphores = &render_done;
     const auto submit0 = std::chrono::steady_clock::now();
+    if (trace) tc_log(TC_LOG_INFO, "[VulkanSwapchain] compose#%llu submit begin",
+                      (unsigned long long)s_compose_calls);
     vkQueueSubmit(device_.graphics_queue(), 1, &si,
                   in_flight_fences_[current_frame_]);
     const auto submit1 = std::chrono::steady_clock::now();
+    if (trace) tc_log(TC_LOG_INFO, "[VulkanSwapchain] compose#%llu submit end",
+                      (unsigned long long)s_compose_calls);
 
     // 6. Present — returns OUT_OF_DATE / SUBOPTIMAL if the surface
     //    lost sync with the window (typical after resize).
     const auto present0 = std::chrono::steady_clock::now();
+    if (trace) tc_log(TC_LOG_INFO, "[VulkanSwapchain] compose#%llu present begin",
+                      (unsigned long long)s_compose_calls);
     VkResult pr = present(image_idx, render_done);
     const auto present1 = std::chrono::steady_clock::now();
+    if (trace) tc_log(TC_LOG_INFO,
+                      "[VulkanSwapchain] compose#%llu present end result=%d",
+                      (unsigned long long)s_compose_calls, (int)pr);
     bool should_recreate = suboptimal ||
                            pr == VK_ERROR_OUT_OF_DATE_KHR ||
                            pr == VK_SUBOPTIMAL_KHR;
 
     advance_frame();
     const auto total1 = std::chrono::steady_clock::now();
+    if (trace) tc_log(TC_LOG_INFO,
+                      "[VulkanSwapchain] compose#%llu end recreate=%d",
+                      (unsigned long long)s_compose_calls,
+                      should_recreate ? 1 : 0);
 
     ++s_frames;
     s_wait_us += us_between(wait0, wait1);

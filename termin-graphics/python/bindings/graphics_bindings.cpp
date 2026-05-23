@@ -13,8 +13,6 @@
 #include <tcbase/tc_log.hpp>
 
 extern "C" {
-#include <tgfx/tc_gpu_context.h>
-#include <tgfx/tgfx_resource_gpu.h>
 #include <tgfx/resources/tc_mesh.h>
 }
 
@@ -173,14 +171,6 @@ void bind_render_state(nb::module_& m) {
 }
 
 void bind_gpu_handles(nb::module_& m) {
-    // Register OpenGL GPU ops for tc_mesh (draw/upload/delete)
-    static const tc_mesh_gpu_ops gl_mesh_ops = {
-        tgfx_mesh_draw_gpu,
-        tgfx_mesh_upload_gpu,
-        tgfx_mesh_delete_gpu,
-    };
-    tc_mesh_set_gpu_ops(&gl_mesh_ops);
-
     // ShaderHandle
     nb::class_<ShaderHandle>(m, "ShaderHandle")
         .def("use", &ShaderHandle::use)
@@ -250,73 +240,6 @@ void bind_graphics_backend(nb::module_& m) {
     // init_opengl function
     m.def("init_opengl", &init_opengl, "Initialize OpenGL via glad. Call after context creation.");
 
-    // GPU context management (opaque handles as uintptr_t)
-    m.def("tc_gpu_context_new", [](uintptr_t key, uintptr_t share_group_ptr) -> uintptr_t {
-        tc_gpu_share_group* group = (tc_gpu_share_group*)share_group_ptr;
-        tc_gpu_context* ctx = tc_gpu_context_new(key, group);
-        return (uintptr_t)ctx;
-    }, nb::arg("key"), nb::arg("share_group_ptr"));
-
-    m.def("tc_gpu_set_context", [](uintptr_t ctx_ptr) {
-        tc_gpu_set_context((tc_gpu_context*)ctx_ptr);
-    }, nb::arg("ctx_ptr"));
-
-    m.def("tc_gpu_get_context", []() -> uintptr_t {
-        return (uintptr_t)tc_gpu_get_context();
-    });
-
-    m.def("tc_gpu_context_set_name", [](uintptr_t ctx_ptr, const char* name) {
-        tc_gpu_context_set_name((tc_gpu_context*)ctx_ptr, name);
-    }, nb::arg("ctx_ptr"), nb::arg("name"));
-
-    m.def("tc_gpu_context_free", [](uintptr_t ctx_ptr) {
-        tc_gpu_context_free((tc_gpu_context*)ctx_ptr);
-    }, nb::arg("ctx_ptr"));
-
-    m.def("tc_gpu_share_group_get_or_create", [](uintptr_t key) -> uintptr_t {
-        return (uintptr_t)tc_gpu_share_group_get_or_create(key);
-    }, nb::arg("key"));
-
-    m.def("tc_gpu_share_group_unref", [](uintptr_t group_ptr) {
-        tc_gpu_share_group_unref((tc_gpu_share_group*)group_ptr);
-    }, nb::arg("group_ptr"));
-
-    m.def("tc_gpu_context_count", []() -> int {
-        return tc_gpu_context_count();
-    });
-
-    m.def("tc_gpu_context_key_at", [](int index) -> uintptr_t {
-        return tc_gpu_context_key_at(index);
-    }, nb::arg("index"));
-
-    m.def("tc_gpu_get_mesh_info", [](uint32_t pool_index) -> nb::object {
-        tc_mesh_gpu_info info{};
-        if (!tc_gpu_get_mesh_info(pool_index, &info)) {
-            return nb::none();
-        }
-
-        nb::dict result;
-        result["pool_index"] = info.pool_index;
-        result["vbo"] = info.vbo;
-        result["ebo"] = info.ebo;
-        result["shared_version"] = info.shared_version;
-
-        nb::list contexts;
-        for (int i = 0; i < info.context_count; ++i) {
-            const tc_mesh_context_vao_info& ctx = info.contexts[i];
-            nb::dict ctx_info;
-            ctx_info["context_key"] = ctx.context_key;
-            ctx_info["context_name"] = ctx.context_name ? nb::str(ctx.context_name) : nb::str("");
-            ctx_info["vao"] = ctx.vao;
-            ctx_info["bound_vbo"] = ctx.bound_vbo;
-            ctx_info["bound_ebo"] = ctx.bound_ebo;
-            ctx_info["vao_stale"] = ctx.vao_stale != 0;
-            contexts.append(ctx_info);
-        }
-        result["contexts"] = contexts;
-
-        return nb::object(result);
-    }, nb::arg("pool_index"));
 }
 
 } // namespace tgfx_bindings

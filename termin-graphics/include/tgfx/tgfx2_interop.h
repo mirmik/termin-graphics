@@ -18,10 +18,6 @@ TGFX2_API void tgfx2_interop_set_device(void* device);
 // Get the tgfx2 render device (returns NULL if not set).
 TGFX2_API void* tgfx2_interop_get_device(void);
 
-// Deprecated compatibility stub. The tgfx2-backed legacy gpu_ops bridge
-// has been removed; this clears the old vtable and logs an error.
-TGFX2_API void tgfx2_gpu_ops_register(void);
-
 // ---------------------------------------------------------------------------
 // External GL texture registration — plain-C bridge to
 // IRenderDevice::register_external_texture (OpenGL backend only).

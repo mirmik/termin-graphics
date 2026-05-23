@@ -6,8 +6,6 @@
 extern "C" {
 #include <tgfx/resources/tc_texture.h>
 #include <tgfx/resources/tc_texture_registry.h>
-#include <tgfx/tc_gpu_context.h>
-#include <tgfx/tgfx_resource_gpu.h>
 }
 
 #include <tgfx/tgfx_api.h>
@@ -228,59 +226,11 @@ public:
     // Returns new buffer with transforms applied, plus final width and height
     std::tuple<std::vector<uint8_t>, uint32_t, uint32_t> get_upload_data() const;
 
-    // ========== GPU operations ==========
-
-    // Bind texture to unit, uploading if needed
-    // Returns true if bind succeeded
-    bool bind_gpu(int unit = 0) {
-        tc_texture* t = get();
-        return t ? tc_texture_bind_gpu(t, unit) : false;
-    }
-
-    // Force re-upload texture to GPU
-    bool upload_gpu() {
-        tc_texture* t = get();
-        return t ? tc_texture_upload_gpu(t) : false;
-    }
-
-    // Delete texture from GPU (keeps CPU data)
-    void delete_gpu() {
-        if (tc_texture* t = get()) {
-            tc_texture_delete_gpu(t);
-        }
-    }
-
     // Sync GPU-first texture data to CPU. No-op for CPU-first textures.
     // After a successful call, data() returns the pixel content.
     bool sync_to_cpu() {
         tc_texture* t = get();
         return tc_texture_sync_to_cpu(t);
-    }
-
-    // Check if texture needs GPU upload (version mismatch)
-    bool needs_upload() const {
-        tc_texture* t = get();
-        return t ? tc_texture_needs_upload(t) : false;
-    }
-
-    // Get GPU texture ID for current context (0 = not uploaded)
-    uint32_t gpu_id() const {
-        tc_texture* t = get();
-        if (!t) return 0;
-        tc_gpu_context* ctx = tc_gpu_get_context();
-        if (!ctx) return 0;
-        tc_gpu_slot* slot = tc_gpu_context_texture_slot(ctx, t->header.pool_index);
-        return slot ? slot->gl_id : 0;
-    }
-
-    // Get GPU version for current context (-1 = never uploaded)
-    int32_t gpu_version() const {
-        tc_texture* t = get();
-        if (!t) return -1;
-        tc_gpu_context* ctx = tc_gpu_get_context();
-        if (!ctx) return -1;
-        tc_gpu_slot* slot = tc_gpu_context_texture_slot(ctx, t->header.pool_index);
-        return slot ? slot->version : -1;
     }
 
     // Set mipmap flag (affects next upload)

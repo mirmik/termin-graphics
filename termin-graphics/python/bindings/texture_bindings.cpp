@@ -112,17 +112,6 @@ void bind_texture(nb::module_& m) {
             "Sync GPU-first texture data to CPU. No-op for CPU-first textures. "
             "After a successful call, .data returns pixel content.")
 
-        // GPU methods
-        .def("bind_gpu", &TcTexture::bind_gpu, nb::arg("unit") = 0,
-            "Bind texture to GPU texture unit")
-        .def("upload_gpu", &TcTexture::upload_gpu,
-            "Upload texture to GPU if needed")
-        .def("delete_gpu", &TcTexture::delete_gpu,
-            "Delete GPU resources")
-        .def("needs_upload", &TcTexture::needs_upload,
-            "Check if texture needs GPU upload")
-        .def_prop_ro("gpu_id", &TcTexture::gpu_id,
-            "OpenGL texture ID (0 if not uploaded)")
         .def("set_mipmap", &TcTexture::set_mipmap, nb::arg("enable"),
             "Enable/disable mipmap generation on upload")
         .def("set_clamp", &TcTexture::set_clamp, nb::arg("enable"),

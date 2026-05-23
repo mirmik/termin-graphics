@@ -50,14 +50,10 @@ target_link_libraries(glad PUBLIC ${CMAKE_DL_LIBS})
 
 # --- termin_graphics ---
 set(TGFX_C_SOURCES
-    src/tc_gpu.c
-    src/tgfx_gpu_ops.c
-    src/tc_gpu_context.c
-    src/tc_gpu_share_group.c
+    src/tgfx_shader_preprocess.c
     src/resources/tc_shader_registry.c
     src/resources/tc_texture_registry.c
     src/resources/tc_material_registry.c
-    src/tgfx_resource_gpu.c
 )
 set(TGFX_CXX_SOURCES
     src/tgfx_texture_handle.cpp

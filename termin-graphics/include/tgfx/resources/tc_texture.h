@@ -42,9 +42,9 @@ typedef enum tc_texture_format {
 // `tc_texture.data`, and bridge code uploads it to GPU on demand.
 // Render targets break that model — the GPU image is the source of truth
 // and is written into by render passes. Marking such a texture as
-// GPU_FIRST tells the upload path to allocate the image with the requested
-// usage flags. A GPU_FIRST texture can still be read back to CPU via
-// tc_texture_sync_to_cpu().
+// GPU_FIRST tells the tgfx2 device path to allocate the image with the
+// requested usage flags. CPU readback is not currently available through
+// tc_texture_sync_to_cpu(); restore it through an IRenderDevice path.
 typedef enum tc_texture_storage_kind {
     TC_TEXTURE_STORAGE_CPU_FIRST = 0,  // source of truth is tex->data
     TC_TEXTURE_STORAGE_GPU_FIRST = 1,  // source of truth is GPU image

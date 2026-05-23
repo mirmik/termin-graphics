@@ -5,7 +5,6 @@
 #include <tcbase/tc_registry_utils.h>
 #include <tcbase/tc_log.h>
 #include <tcbase/tgfx_intern_string.h>
-#include <tgfx/tgfx_gpu_ops.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -478,10 +477,9 @@ void tc_texture_set_storage_kind(tc_texture* tex, tc_texture_storage_kind kind) 
     if (!tex) return;
     if (tex->storage_kind == (uint8_t)kind) return;
     tex->storage_kind = (uint8_t)kind;
-    // Bump version: backend caches (Vulkan ensure_tc_texture, GL
-    // tc_gpu_slot) key on (pool_index, version), so changing storage
-    // kind after creation must force re-allocation of the backing
-    // GPU image with the new flags.
+    // Bump version: tgfx2 device caches key on (pool_index, version),
+    // so changing storage kind after creation must force re-allocation
+    // of the backing GPU image with the new flags.
     tex->header.version++;
 }
 
@@ -602,14 +600,13 @@ bool tc_texture_sync_to_cpu(tc_texture* tex) {
     // CPU-first textures already have data on CPU
     if (tex->storage_kind == TC_TEXTURE_STORAGE_CPU_FIRST) return true;
 
-    // GPU-first: need readback via GPU ops
-    const tgfx_gpu_ops* ops = tgfx_gpu_get_ops();
-    if (!ops || !ops->texture_sync_to_cpu) {
-        tc_log(TC_LOG_ERROR, "tc_texture_sync_to_cpu: no texture_sync_to_cpu callback");
-        return false;
+    static bool warned_gpu_first_readback_removed = false;
+    if (!warned_gpu_first_readback_removed) {
+        tc_log(TC_LOG_ERROR,
+               "tc_texture_sync_to_cpu: GPU-first readback requires a tgfx2 device path");
+        warned_gpu_first_readback_removed = true;
     }
-
-    return ops->texture_sync_to_cpu(tex);
+    return false;
 }
 
 tc_texture_info* tc_texture_get_all_info(size_t* count) {

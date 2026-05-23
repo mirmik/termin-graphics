@@ -12,9 +12,15 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SDK_PREFIX="${SDK_PREFIX:-$SCRIPT_DIR/sdk}"
+BUILD_DIR="${BUILD_DIR:-}"
+BUILD_TYPE="Release"
 
 for arg in "$@"; do
     case "$arg" in
+        --debug|-d)
+            BUILD_TYPE="Debug"
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -47,6 +53,10 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+if [[ -z "$BUILD_DIR" ]]; then
+    BUILD_DIR="$SCRIPT_DIR/build/$BUILD_TYPE"
+fi
 
 echo ""
 echo "========================================"
@@ -95,7 +105,7 @@ echo "  Verifying: no duplicate libraries"
 echo "========================================"
 echo ""
 
-SDK_DIR="$SCRIPT_DIR/sdk"
+SDK_DIR="$SDK_PREFIX"
 DUPES=0
 
 # Check that no .so files are duplicated within the host sdk/,
@@ -129,6 +139,61 @@ if [[ $DUPES -gt 0 ]]; then
     exit 1
 else
     echo "  OK: no duplicate libraries"
+fi
+
+echo ""
+echo "========================================"
+echo "  Verifying: SDK artifacts are up to date"
+echo "========================================"
+echo ""
+
+STALE=0
+OLDER_SAME=0
+
+if [[ ! -d "$BUILD_DIR/bin" ]]; then
+    echo "  WARNING: build bin directory not found: $BUILD_DIR/bin"
+else
+    while IFS= read -r build_so; do
+        so_name=$(basename "$build_so")
+        build_hash=""
+        while IFS= read -r sdk_so; do
+            if [[ "$sdk_so" -ot "$build_so" ]]; then
+                if [[ -z "$build_hash" ]]; then
+                    build_hash="$(sha256sum "$build_so" | awk '{print $1}')"
+                fi
+                sdk_hash="$(sha256sum "$sdk_so" | awk '{print $1}')"
+                if [[ "$sdk_hash" != "$build_hash" ]]; then
+                    echo "  STALE: $sdk_so"
+                    echo "    older than: $build_so"
+                    echo "    sdk:   $(stat -c '%y' "$sdk_so")"
+                    echo "    build: $(stat -c '%y' "$build_so")"
+                    echo "    sdk sha256:   $sdk_hash"
+                    echo "    build sha256: $build_hash"
+                    STALE=$((STALE + 1))
+                else
+                    OLDER_SAME=$((OLDER_SAME + 1))
+                fi
+            fi
+        done < <(
+            find "$SDK_PREFIX" -type f -name "$so_name" \
+                ! -path "$SDK_PREFIX/android/*" \
+                ! -path "*/csharp/runtimes/*" \
+                ! -path "*/site-packages/*" \
+                2>/dev/null
+        )
+    done < <(find "$BUILD_DIR/bin" -maxdepth 1 -type f -name "*.so" 2>/dev/null)
+fi
+
+if [[ $STALE -gt 0 ]]; then
+    echo ""
+    echo "  FAILED: $STALE stale SDK artifact(s) found"
+    echo "  Re-run the relevant install stage or remove stale files from $SDK_PREFIX."
+    exit 1
+else
+    echo "  OK: SDK artifacts are not older than matching build artifacts"
+    if [[ $OLDER_SAME -gt 0 ]]; then
+        echo "  NOTE: $OLDER_SAME matching artifact(s) had older timestamps but identical content"
+    fi
 fi
 
 echo ""

@@ -29,7 +29,7 @@ public:
     virtual ~IRenderDevice() = default;
 
     // Backend identity — lets callers branch on GL-only vs Vulkan-only
-    // host integration (FBO invalidation, tc_gpu_ops interop, ...)
+    // host integration (FBO invalidation, external texture handles, ...)
     // without a dynamic_cast to the concrete device class.
     virtual BackendType backend_type() const = 0;
 

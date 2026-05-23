@@ -1,6 +1,6 @@
 // shader_preprocess.hpp - Shared GLSL preprocessor hook for all backends.
 //
-// The legacy tgfx path exposes a global `tgfx_gpu_set_shader_preprocess(fn)`
+// The C API exposes a process-wide `tgfx_gpu_set_shader_preprocess(fn)`
 // callback (registered by termin-app's GlslPreprocessor on startup) that
 // resolves `#include "foo.glsl"` / removes `@features` directives / etc.
 // OpenGL and Vulkan backends both call through the same hook so a shader
@@ -10,12 +10,7 @@
 #include <cstdlib>
 #include <string>
 
-extern "C" {
-#include "tgfx/tgfx_api.h"
-
-typedef char* (*tgfx_shader_preprocess_fn)(const char* source, const char* source_name);
-TGFX_API tgfx_shader_preprocess_fn tgfx_gpu_get_shader_preprocess(void);
-}
+#include "tgfx/tgfx_shader_preprocess.h"
 
 namespace tgfx::internal {
 
