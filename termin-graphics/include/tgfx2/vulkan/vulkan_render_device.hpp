@@ -145,21 +145,23 @@ struct VulkanDeviceCreateInfo {
 
 class TGFX2_TYPE_API VulkanRenderDevice : public IRenderDevice {
 private:
+    static constexpr uint32_t kFrameSlotCount = 3;
+
     // --- Frame sync / deferred destroy -----------------------------------
     //
-    // One fence tracks the most-recent `submit()`. Every `destroy(XxxHandle)`
-    // queues the handle into `pending_destroy_current_`; at the next submit
-    // we wait on the in-flight fence (usually no real wait — GPU has caught
-    // up), then drain `pending_destroy_in_flight_` (resources from the
-    // previous frame, now GPU-safe to release). The current-frame queue
-    // becomes the next in-flight queue.
+    // Frame-local Vulkan resources are split across slots. Every submitted
+    // frame owns one slot: descriptor pool/cache, ring-buffer segment, fence,
+    // deferred destroys, and pending readbacks. Reusing a slot waits only for
+    // that slot's old fence, so the CPU is not forced to serialize on the
+    // immediately previous submit.
     //
     // This replaces the previous `vkDeviceWaitIdle`-per-destroy + `vkQueue-
     // WaitIdle`-per-submit pattern, which stalled the CPU on every frame
     // end and every deferred-destroyed resource set. On a typical editor
     // frame that's 50-200 device-wide waits serialised into the hot path.
     // With fence-based sync, rendering can overlap with CPU work and
-    // destroys only block if the GPU really hasn't finished yet.
+    // destroys only block if the GPU really hasn't finished the slot being
+    // reused.
     //
     // Callers must keep handles untouched after `destroy()` returns — the
     // actual Vk objects are freed later, but `HandlePool` entries stay
@@ -224,14 +226,13 @@ private:
     VmaAllocator allocator_ = VK_NULL_HANDLE;
     VkCommandPool command_pool_ = VK_NULL_HANDLE;
 
-    // Double-buffered descriptor pools. Each frame allocates descriptor
+    // Per-frame-slot descriptor pools. Each frame allocates descriptor
     // sets out of `descriptor_pools_[current_pool_idx_]`; at `submit()`
-    // (after the fence of the *other* pool signals → its sets are no
-    // longer referenced by the GPU), we swap and `vkResetDescriptorPool`
-    // the freshly-retired pool in one call — cheaper than freeing each
+    // we advance to the next slot and, after that slot's fence signals,
+    // `vkResetDescriptorPool` returns all sets in one call — cheaper than freeing each
     // set with `vkFreeDescriptorSets`, and completely removes the "pool
     // fills up across the frame" failure mode.
-    VkDescriptorPool descriptor_pools_[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    std::array<VkDescriptorPool, kFrameSlotCount> descriptor_pools_ = {};
     uint32_t current_pool_idx_ = 0;
 
     // Per-pool descriptor-set cache keyed on the hash of
@@ -240,7 +241,7 @@ private:
     // allocated VkDescriptorSet instead of paying for another
     // vkAllocateDescriptorSets + vkUpdateDescriptorSets. Cleared when
     // the corresponding pool is reset in `submit()`.
-    std::unordered_map<uint64_t, ResourceSetHandle> descriptor_cache_[2];
+    std::array<std::unordered_map<uint64_t, ResourceSetHandle>, kFrameSlotCount> descriptor_cache_;
 
     // Shared layouts (MVP: one universal layout)
     VkDescriptorSetLayout descriptor_set_layout_ = VK_NULL_HANDLE;
@@ -269,10 +270,10 @@ private:
 
     bool validation_enabled_ = false;
 
-    VkFence frame_fence_ = VK_NULL_HANDLE;
-    bool frame_fence_in_flight_ = false;
+    std::array<VkFence, kFrameSlotCount> frame_fences_ = {};
+    std::array<bool, kFrameSlotCount> frame_fence_in_flight_ = {};
     PendingDestroyQueue pending_destroy_current_;
-    PendingDestroyQueue pending_destroy_in_flight_;
+    std::array<PendingDestroyQueue, kFrameSlotCount> pending_destroy_slots_;
 
     VkCommandBuffer immediate_cb_ = VK_NULL_HANDLE;
     bool immediate_cb_open_ = false;
@@ -280,23 +281,22 @@ private:
     // Ring UBO — backing storage for UNIFORM_BUFFER_DYNAMIC bindings.
     // Created once in create_ring_ubo(), freed in ~VulkanRenderDevice.
     //
-    // Split into two halves (slots). Frame N records into slot X; while
-    // its GPU work is in-flight, frame N+1 records into slot 1-X. After
-    // the fence for frame N signals (next submit's wait), slot X becomes
-    // reusable. The flip / reset pattern is identical to descriptor_pools_
-    // above and piggybacks on the same frame_fence_ guarantee. Writing
+    // Split into frame slots. Frame N records into slot X while later frames
+    // can record into other slots. After the fence for slot X signals, that
+    // slot becomes reusable. The flip / reset pattern is identical to descriptor_pools_
+    // above and piggybacks on the same per-slot fence guarantee. Writing
     // into a single head would race: the just-submitted frame's GPU read
     // overlaps the next frame's host write into the same offset range.
     VkBuffer      ring_ubo_buffer_     = VK_NULL_HANDLE;
     VmaAllocation ring_ubo_allocation_ = VK_NULL_HANDLE;
     void*         ring_ubo_mapped_     = nullptr;
-    uint64_t      ring_ubo_size_       = 0;  // total (both slots)
-    uint64_t      ring_ubo_slot_size_  = 0;  // = ring_ubo_size_ / 2
+    uint64_t      ring_ubo_size_       = 0;  // total (all frame slots)
+    uint64_t      ring_ubo_slot_size_  = 0;  // = ring_ubo_size_ / kFrameSlotCount
     // Per-slot head — advances with every write into that slot, reset to
     // 0 when we flip INTO the slot in submit(). Atomic for forward-compat
     // with multi-threaded recording; only the render thread writes today,
     // so relaxed ordering is sufficient.
-    std::atomic<uint64_t> ring_ubo_heads_[2] = {};
+    std::array<std::atomic<uint64_t>, kFrameSlotCount> ring_ubo_heads_ = {};
     uint32_t ring_ubo_slot_idx_ = 0;
     // BufferHandle that aliases ring_ubo_buffer_ in buffers_. Used by the
     // RenderContext2::bind_uniform_buffer_ring() path and recognised by
@@ -313,7 +313,7 @@ private:
     // path. Queried once in create_ring_ubo().
     bool ring_ubo_coherent_ = false;
 
-    // Transient vertex ring for immediate draws. Same two-slot lifetime
+    // Transient vertex ring for immediate draws. Same frame-slot lifetime
     // model as ring_ubo_: frame N records into one half while the other
     // half may still be read by the GPU from frame N-1.
     VkBuffer      transient_vb_buffer_     = VK_NULL_HANDLE;
@@ -321,7 +321,7 @@ private:
     void*         transient_vb_mapped_     = nullptr;
     uint64_t      transient_vb_size_       = 0;
     uint64_t      transient_vb_slot_size_  = 0;
-    std::atomic<uint64_t> transient_vb_heads_[2] = {};
+    std::array<std::atomic<uint64_t>, kFrameSlotCount> transient_vb_heads_ = {};
     uint32_t transient_vb_slot_idx_ = 0;
     BufferHandle transient_vb_handle_ = {};
     bool transient_vb_coherent_ = false;
@@ -583,10 +583,11 @@ private:
     uint64_t request_pixel_readback(TextureHandle tex, int x, int y, PixelReadbackKind kind);
     void complete_pixel_readbacks(std::vector<PendingPixelReadback>& pending);
     void destroy_pixel_readbacks(std::vector<PendingPixelReadback>& pending);
+    void prepare_frame_slot(uint32_t slot);
 
     uint64_t next_pixel_readback_id_ = 1;
     std::vector<PendingPixelReadback> pixel_readbacks_current_;
-    std::vector<PendingPixelReadback> pixel_readbacks_in_flight_;
+    std::array<std::vector<PendingPixelReadback>, kFrameSlotCount> pixel_readbacks_slots_;
     std::unordered_map<uint64_t, CompletedPixelReadback> completed_pixel_readbacks_;
 };
 

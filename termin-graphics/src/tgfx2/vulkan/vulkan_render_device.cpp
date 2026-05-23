@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <iterator>
 #include <set>
 #include <sstream>
@@ -68,6 +69,14 @@ std::atomic<uint64_t> g_submit_us{0};
 namespace tgfx {
 
 namespace {
+
+bool vulkan_stats_enabled() {
+    static const bool enabled = [] {
+        const char* env = std::getenv("TGFX2_VULKAN_STATS");
+        return env && env[0] == '1';
+    }();
+    return enabled;
+}
 
 struct SpirvVertexInputs {
     bool known = false;
@@ -322,14 +331,15 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     create_ring_ubo();
     create_transient_vertex_ring();
 
-    // Frame fence: tracks in-flight submits. Created unsignaled — the
-    // first `submit()` sees `frame_fence_in_flight_ == false` and skips
-    // the wait; subsequent submits wait on it before reusing it.
+    // Frame fences track in-flight frame slots. Created unsignaled; a slot
+    // waits only after it has been submitted at least once.
     {
         VkFenceCreateInfo fci{};
         fci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        if (vkCreateFence(device_, &fci, nullptr, &frame_fence_) != VK_SUCCESS) {
-            throw std::runtime_error("VulkanRenderDevice: vkCreateFence failed");
+        for (uint32_t i = 0; i < kFrameSlotCount; ++i) {
+            if (vkCreateFence(device_, &fci, nullptr, &frame_fences_[i]) != VK_SUCCESS) {
+                throw std::runtime_error("VulkanRenderDevice: vkCreateFence failed");
+            }
         }
     }
 
@@ -397,14 +407,16 @@ VulkanRenderDevice::~VulkanRenderDevice() {
     tc_texture_cache_.clear();
     tc_mesh_cache_.clear();
 
-    // Both deferred-destroy queues are now safe to release (GPU is idle).
-    // The `in_flight` queue represents handles the previous frame freed;
-    // `current` holds handles freed during the current frame that were
-    // never submitted. Handle-pool lookups are still valid at this point,
-    // so drain them through the normal per-type helper.
-    complete_pixel_readbacks(pixel_readbacks_in_flight_);
+    // Deferred-destroy queues are now safe to release (GPU is idle).
+    // Slot queues represent handles freed by submitted frames; `current`
+    // holds handles freed during work that was never submitted. Handle-pool
+    // lookups are still valid at this point, so drain them through the
+    // normal per-type helper.
+    for (uint32_t i = 0; i < kFrameSlotCount; ++i) {
+        complete_pixel_readbacks(pixel_readbacks_slots_[i]);
+        drain_pending_destroy(pending_destroy_slots_[i]);
+    }
     destroy_pixel_readbacks(pixel_readbacks_current_);
-    drain_pending_destroy(pending_destroy_in_flight_);
     drain_pending_destroy(pending_destroy_current_);
 
     // Destroy cached framebuffers
@@ -459,14 +471,14 @@ VulkanRenderDevice::~VulkanRenderDevice() {
         transient_vb_allocation_ = VK_NULL_HANDLE;
         transient_vb_mapped_ = nullptr;
     }
-    if (frame_fence_) vkDestroyFence(device_, frame_fence_, nullptr);
+    for (VkFence fence : frame_fences_) {
+        if (fence) vkDestroyFence(device_, fence, nullptr);
+    }
     if (default_sampler_) vkDestroySampler(device_, default_sampler_, nullptr);
     if (shared_pipeline_layout_) vkDestroyPipelineLayout(device_, shared_pipeline_layout_, nullptr);
     if (descriptor_set_layout_) vkDestroyDescriptorSetLayout(device_, descriptor_set_layout_, nullptr);
-    for (int i = 0; i < 2; ++i) {
-        if (descriptor_pools_[i]) {
-            vkDestroyDescriptorPool(device_, descriptor_pools_[i], nullptr);
-        }
+    for (VkDescriptorPool pool : descriptor_pools_) {
+        if (pool) vkDestroyDescriptorPool(device_, pool, nullptr);
     }
     if (command_pool_) vkDestroyCommandPool(device_, command_pool_, nullptr);
     if (allocator_) vmaDestroyAllocator(allocator_);
@@ -687,10 +699,10 @@ void VulkanRenderDevice::create_command_pool() {
 // --- Descriptor pool ---
 
 void VulkanRenderDevice::create_descriptor_pool() {
-    // Two pools, double-buffered with the frame fence. Each frame's draws
+    // One pool per frame slot. Each frame's draws
     // allocate from `descriptor_pools_[current_pool_idx_]`; at submit(),
-    // after the previous submit's fence signals, we flip to the other
-    // pool and `vkResetDescriptorPool` it in one call — no individual
+    // after the next slot's fence signals, we flip and
+    // `vkResetDescriptorPool` it in one call — no individual
     // `vkFreeDescriptorSets`, no FREE_DESCRIPTOR_SET_BIT flag (the driver
     // can use a faster bump allocator internally).
     //
@@ -715,7 +727,7 @@ void VulkanRenderDevice::create_descriptor_pool() {
     ci.poolSizeCount = 6;
     ci.pPoolSizes = pool_sizes;
 
-    for (int i = 0; i < 2; ++i) {
+    for (uint32_t i = 0; i < kFrameSlotCount; ++i) {
         if (vkCreateDescriptorPool(device_, &ci, nullptr, &descriptor_pools_[i])
                 != VK_SUCCESS) {
             throw std::runtime_error("Failed to create descriptor pool");
@@ -839,12 +851,12 @@ void VulkanRenderDevice::create_ring_ubo() {
     ubo_alignment_ = static_cast<uint32_t>(
         std::max<VkDeviceSize>(props.limits.minUniformBufferOffsetAlignment, 1));
 
-    // 16 MB total — 8 MB per slot. Budget ~10 KB UBO data per draw × 1600
-    // worst-case draws/frame = 16 MB needed, so per-slot headroom is tight
-    // on adversarial scenes; logged (rare) overflow falls back to offset 0.
+    // 24 MB total — 8 MB per frame slot. Budget ~10 KB UBO data per draw ×
+    // 1600 worst-case draws/frame = 16 MB needed, so per-slot headroom is
+    // tight on adversarial scenes; logged (rare) overflow falls back to offset 0.
     // If that ever fires in practice, grow the ring or shrink per-pass UBOs.
-    ring_ubo_size_ = 16 * 1024 * 1024;
-    ring_ubo_slot_size_ = ring_ubo_size_ / 2;
+    ring_ubo_size_ = 24 * 1024 * 1024;
+    ring_ubo_slot_size_ = ring_ubo_size_ / kFrameSlotCount;
 
     VkBufferCreateInfo bi{};
     bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -873,8 +885,9 @@ void VulkanRenderDevice::create_ring_ubo() {
     ring_ubo_coherent_ =
         (mem_props.memoryTypes[alloc_info.memoryType].propertyFlags
          & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
-    ring_ubo_heads_[0].store(0, std::memory_order_relaxed);
-    ring_ubo_heads_[1].store(0, std::memory_order_relaxed);
+    for (auto& head : ring_ubo_heads_) {
+        head.store(0, std::memory_order_relaxed);
+    }
     ring_ubo_slot_idx_ = 0;
 
     // Expose the ring as a BufferHandle so callers can route per-draw UBO
@@ -936,8 +949,8 @@ uint32_t VulkanRenderDevice::ring_ubo_write(const void* data, uint32_t size) {
 // --- Transient vertex ring ---
 
 void VulkanRenderDevice::create_transient_vertex_ring() {
-    transient_vb_size_ = 4 * 1024 * 1024;
-    transient_vb_slot_size_ = transient_vb_size_ / 2;
+    transient_vb_size_ = 6 * 1024 * 1024;
+    transient_vb_slot_size_ = transient_vb_size_ / kFrameSlotCount;
 
     VkBufferCreateInfo bi{};
     bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -961,8 +974,9 @@ void VulkanRenderDevice::create_transient_vertex_ring() {
     transient_vb_coherent_ =
         (mem_props.memoryTypes[alloc_info.memoryType].propertyFlags
          & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
-    transient_vb_heads_[0].store(0, std::memory_order_relaxed);
-    transient_vb_heads_[1].store(0, std::memory_order_relaxed);
+    for (auto& head : transient_vb_heads_) {
+        head.store(0, std::memory_order_relaxed);
+    }
     transient_vb_slot_idx_ = 0;
 
     VkBufferResource res{};
@@ -2829,6 +2843,26 @@ std::unique_ptr<ICommandList> VulkanRenderDevice::create_command_list(QueueType 
     return std::make_unique<VulkanCommandList>(*this);
 }
 
+void VulkanRenderDevice::prepare_frame_slot(uint32_t slot) {
+    if (frame_fence_in_flight_[slot]) {
+        vkWaitForFences(device_, 1, &frame_fences_[slot], VK_TRUE, UINT64_MAX);
+        vkResetFences(device_, 1, &frame_fences_[slot]);
+        frame_fence_in_flight_[slot] = false;
+    }
+
+    complete_pixel_readbacks(pixel_readbacks_slots_[slot]);
+    drain_pending_destroy(pending_destroy_slots_[slot]);
+
+    vkResetDescriptorPool(device_, descriptor_pools_[slot], 0);
+    for (const auto& [_, h] : descriptor_cache_[slot]) {
+        resource_sets_.remove(h.id);
+    }
+    descriptor_cache_[slot].clear();
+
+    ring_ubo_heads_[slot].store(0, std::memory_order_relaxed);
+    transient_vb_heads_[slot].store(0, std::memory_order_relaxed);
+}
+
 void VulkanRenderDevice::submit(ICommandList& cmd) {
     auto& vcmd = static_cast<VulkanCommandList&>(cmd);
     VkCommandBuffer main_cb = vcmd.command_buffer();
@@ -2842,54 +2876,9 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     static thread_local auto     s_window_start = std::chrono::steady_clock::now();
     static thread_local uint64_t s_last_fence_wait_us = 0;
 
-    auto t_wait0 = std::chrono::steady_clock::now();
-
-    // Before kicking off a new submit, retire the previous one. If the
-    // fence is in-flight we wait (usually signaled already by the time we
-    // get here — GPU rendering a shadow cascade takes a few ms at most),
-    // then drain the destroy queue that was waiting on it. These
-    // resources are now GPU-safe to free.
-    if (frame_fence_in_flight_) {
-        vkWaitForFences(device_, 1, &frame_fence_, VK_TRUE, UINT64_MAX);
-        vkResetFences(device_, 1, &frame_fence_);
-        complete_pixel_readbacks(pixel_readbacks_in_flight_);
-        drain_pending_destroy(pending_destroy_in_flight_);
-        frame_fence_in_flight_ = false;
-    }
-    auto t_wait1 = std::chrono::steady_clock::now();
-    s_last_fence_wait_us +=
-        std::chrono::duration<double, std::micro>(t_wait1 - t_wait0).count();
-
-    // Destroys queued during *this* submit's recording graduate to
-    // in-flight status and will be freed after the fence signals.
-    pending_destroy_in_flight_ = std::move(pending_destroy_current_);
+    const uint32_t submitted_slot = current_pool_idx_;
+    PendingDestroyQueue submitted_destroy = std::move(pending_destroy_current_);
     pending_destroy_current_ = {};
-
-    // Flip descriptor pools. The pool we're about to switch *into* has
-    // just been retired (its fence — the one we waited on above — was
-    // from the frame that used it), so it is GPU-safe to reset. Reset
-    // as a single call returns every descriptor set in that pool to the
-    // free list; much cheaper than per-set vkFreeDescriptorSets and
-    // completely removes the "pool fills during a long frame" failure.
-    current_pool_idx_ = 1 - current_pool_idx_;
-    vkResetDescriptorPool(device_, descriptor_pools_[current_pool_idx_], 0);
-    // Cache entries point into the pool we just reset — their VkDescriptorSets
-    // are gone. Also retire the HandlePool entries they aliased so freed
-    // ids can be reused in the new frame.
-    for (const auto& [_, h] : descriptor_cache_[current_pool_idx_]) {
-        resource_sets_.remove(h.id);
-    }
-    descriptor_cache_[current_pool_idx_].clear();
-
-    // Flip the ring-UBO slot. Same double-buffered logic as the descriptor
-    // pool above: the slot we switch INTO was last written two frames ago
-    // (its fence long since signaled). Resetting its head lets the upcoming
-    // frame start writing at offset 0 of that slot while the just-submitted
-    // frame's GPU work keeps reading from the other slot.
-    ring_ubo_slot_idx_ = 1 - ring_ubo_slot_idx_;
-    ring_ubo_heads_[ring_ubo_slot_idx_].store(0, std::memory_order_relaxed);
-    transient_vb_slot_idx_ = 1 - transient_vb_slot_idx_;
-    transient_vb_heads_[transient_vb_slot_idx_].store(0, std::memory_order_relaxed);
 
     // Close the immediate cb (copies / transitions / clears accumulated
     // since last submit) and submit it together with the main draw cb in
@@ -2914,21 +2903,22 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     si.pCommandBuffers = cbs;
 
     auto t_submit0 = std::chrono::steady_clock::now();
-    vkQueueSubmit(graphics_queue_, 1, &si, frame_fence_);
+    vkQueueSubmit(graphics_queue_, 1, &si, frame_fences_[submitted_slot]);
     auto t_submit1 = std::chrono::steady_clock::now();
     g_submit_us.fetch_add(
         std::chrono::duration_cast<std::chrono::microseconds>(t_submit1 - t_submit0).count(),
         std::memory_order_relaxed);
-    frame_fence_in_flight_ = true;
+    frame_fence_in_flight_[submitted_slot] = true;
 
     // Defer-free the immediate cb we just submitted — it's in-flight on
     // the graphics queue, so vkFreeCommandBuffers can only run after the
     // frame fence signals. The drain at the top of the NEXT submit()
     // picks this up.
     if (submitted_immediate_cb != VK_NULL_HANDLE) {
-        pending_destroy_current_.cmd_buffers.push_back(submitted_immediate_cb);
-        pixel_readbacks_in_flight_.insert(
-            pixel_readbacks_in_flight_.end(),
+        submitted_destroy.cmd_buffers.push_back(submitted_immediate_cb);
+        auto& slot_readbacks = pixel_readbacks_slots_[submitted_slot];
+        slot_readbacks.insert(
+            slot_readbacks.end(),
             std::make_move_iterator(pixel_readbacks_current_.begin()),
             std::make_move_iterator(pixel_readbacks_current_.end()));
         pixel_readbacks_current_.clear();
@@ -2937,6 +2927,18 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
                "[VulkanRenderDevice] async pixel readbacks queued without an immediate command buffer");
         destroy_pixel_readbacks(pixel_readbacks_current_);
     }
+    pending_destroy_slots_[submitted_slot] = std::move(submitted_destroy);
+
+    const uint32_t next_slot = (submitted_slot + 1) % kFrameSlotCount;
+    auto t_wait0 = std::chrono::steady_clock::now();
+    prepare_frame_slot(next_slot);
+    auto t_wait1 = std::chrono::steady_clock::now();
+    s_last_fence_wait_us +=
+        std::chrono::duration<double, std::micro>(t_wait1 - t_wait0).count();
+
+    current_pool_idx_ = next_slot;
+    ring_ubo_slot_idx_ = next_slot;
+    transient_vb_slot_idx_ = next_slot;
 
     ++s_submits;
 
@@ -2952,6 +2954,25 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
         uint64_t bpc      = g_push_constants_count.exchange(0, std::memory_order_relaxed);
         uint64_t rec_us   = g_record_us.exchange(0, std::memory_order_relaxed);
         uint64_t subm_us  = g_submit_us.exchange(0, std::memory_order_relaxed);
+        if (vulkan_stats_enabled()) {
+            tc_log(TC_LOG_INFO,
+                   "[tgfx2-vulkan] submit stats: submits=%llu draws=%llu "
+                   "pipelines=%llu resource_sets=%llu bind_pipeline=%llu "
+                   "bind_rset=%llu bind_vbo=%llu bind_ibo=%llu push_constants=%llu "
+                   "record_ms=%.3f submit_ms=%.3f fence_wait_ms=%.3f",
+                   static_cast<unsigned long long>(s_submits),
+                   static_cast<unsigned long long>(draws),
+                   static_cast<unsigned long long>(pipes),
+                   static_cast<unsigned long long>(rsets),
+                   static_cast<unsigned long long>(bp),
+                   static_cast<unsigned long long>(brs),
+                   static_cast<unsigned long long>(bvb),
+                   static_cast<unsigned long long>(bib),
+                   static_cast<unsigned long long>(bpc),
+                   static_cast<double>(rec_us) / 1000.0,
+                   static_cast<double>(subm_us) / 1000.0,
+                   s_last_fence_wait_us / 1000.0);
+        }
         s_submits = 0;
         s_last_fence_wait_us = 0;
         s_window_start = now;
