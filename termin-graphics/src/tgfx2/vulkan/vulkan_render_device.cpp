@@ -316,6 +316,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
 
 VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     validation_enabled_ = info.enable_validation;
+    device_extensions_ = info.device_extensions;
     init_instance(info);
 
     // Resolve the surface. Two supply paths:
@@ -336,6 +337,12 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
         }
     }
 
+    if (info.physical_device_selector) {
+        physical_device_ = info.physical_device_selector(instance_);
+        if (physical_device_ == VK_NULL_HANDLE) {
+            throw std::runtime_error("VulkanRenderDevice: physical_device_selector returned VK_NULL_HANDLE");
+        }
+    }
     pick_physical_device();
     create_logical_device();
     create_allocator();
@@ -462,7 +469,7 @@ VulkanRenderDevice::~VulkanRenderDevice() {
     }
     for (auto& [id, r] : textures_) {
         if (r.view) vkDestroyImageView(device_, r.view, nullptr);
-        if (r.image) vmaDestroyImage(allocator_, r.image, r.allocation);
+        if (r.image && !r.external) vmaDestroyImage(allocator_, r.image, r.allocation);
     }
     for (auto& [id, r] : samplers_) {
         if (r.sampler) vkDestroySampler(device_, r.sampler, nullptr);
@@ -568,21 +575,23 @@ void VulkanRenderDevice::init_instance(const VulkanDeviceCreateInfo& info) {
 // --- Physical device ---
 
 void VulkanRenderDevice::pick_physical_device() {
-    uint32_t count = 0;
-    vkEnumeratePhysicalDevices(instance_, &count, nullptr);
-    if (count == 0) throw std::runtime_error("No Vulkan-capable GPU found");
+    if (physical_device_ == VK_NULL_HANDLE) {
+        uint32_t count = 0;
+        vkEnumeratePhysicalDevices(instance_, &count, nullptr);
+        if (count == 0) throw std::runtime_error("No Vulkan-capable GPU found");
 
-    std::vector<VkPhysicalDevice> devices(count);
-    vkEnumeratePhysicalDevices(instance_, &count, devices.data());
+        std::vector<VkPhysicalDevice> devices(count);
+        vkEnumeratePhysicalDevices(instance_, &count, devices.data());
 
-    // Pick first discrete GPU, or first device
-    physical_device_ = devices[0];
-    for (auto& dev : devices) {
-        VkPhysicalDeviceProperties props;
-        vkGetPhysicalDeviceProperties(dev, &props);
-        if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
-            physical_device_ = dev;
-            break;
+        // Pick first discrete GPU, or first device
+        physical_device_ = devices[0];
+        for (auto& dev : devices) {
+            VkPhysicalDeviceProperties props;
+            vkGetPhysicalDeviceProperties(dev, &props);
+            if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+                physical_device_ = dev;
+                break;
+            }
         }
     }
 
@@ -657,7 +666,7 @@ void VulkanRenderDevice::create_logical_device() {
             "shadow sampler-array dynamic indexing disabled");
     }
 
-    std::vector<const char*> extensions;
+    std::vector<const char*> extensions = device_extensions_;
     if (surface_) {
         extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     }
@@ -1313,6 +1322,39 @@ TextureHandle VulkanRenderDevice::create_texture(const TextureDesc& desc) {
                 aspect);
         });
         res.current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
+
+    return {textures_.add(std::move(res))};
+}
+
+TextureHandle VulkanRenderDevice::register_external_texture(
+    uintptr_t native_handle,
+    const TextureDesc& desc
+) {
+    VkImage image = reinterpret_cast<VkImage>(native_handle);
+    if (image == VK_NULL_HANDLE) {
+        throw std::runtime_error("VulkanRenderDevice::register_external_texture: null VkImage");
+    }
+
+    VkTextureResource res;
+    res.image = image;
+    res.desc = desc;
+    res.external = true;
+    res.current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    VkImageViewCreateInfo view_ci{};
+    view_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    view_ci.image = res.image;
+    view_ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view_ci.format = vk::to_vk_format(desc.format);
+    view_ci.subresourceRange.aspectMask = vk::format_aspect_flags(desc.format);
+    view_ci.subresourceRange.baseMipLevel = 0;
+    view_ci.subresourceRange.levelCount = desc.mip_levels;
+    view_ci.subresourceRange.baseArrayLayer = 0;
+    view_ci.subresourceRange.layerCount = 1;
+
+    if (vkCreateImageView(device_, &view_ci, nullptr, &res.view) != VK_SUCCESS) {
+        throw std::runtime_error("VulkanRenderDevice::register_external_texture: vkCreateImageView failed");
     }
 
     return {textures_.add(std::move(res))};
@@ -1990,7 +2032,7 @@ void VulkanRenderDevice::drain_pending_destroy(PendingDestroyQueue& q) {
     for (auto h : q.textures) {
         if (auto* r = textures_.get(h.id)) {
             if (r->view) vkDestroyImageView(device_, r->view, nullptr);
-            if (r->image) vmaDestroyImage(allocator_, r->image, r->allocation);
+            if (r->image && !r->external) vmaDestroyImage(allocator_, r->image, r->allocation);
             textures_.remove(h.id);
         }
     }

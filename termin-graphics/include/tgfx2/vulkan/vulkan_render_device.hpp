@@ -45,6 +45,7 @@ struct VkTextureResource {
     VkImageView view = VK_NULL_HANDLE;
     TextureDesc desc;
     VkImageLayout current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    bool external = false;
 };
 
 struct VkSamplerResource {
@@ -123,6 +124,16 @@ struct VulkanDeviceCreateInfo {
     // Required instance extensions. The typical SDL / GLFW flow fills
     // this from SDL_Vulkan_GetInstanceExtensions / glfwGetRequiredInstanceExtensions.
     std::vector<const char*> instance_extensions;
+
+    // Required logical-device extensions. OpenXR hosts fill this from
+    // xrGetVulkanDeviceExtensionsKHR before creating the tgfx2 device.
+    std::vector<const char*> device_extensions;
+
+    // Optional hook for hosts that must choose a specific physical device
+    // after tgfx2 has created the VkInstance. OpenXR uses this to call
+    // xrGetVulkanGraphicsDeviceKHR and keep the session binding compatible
+    // with the runtime-selected GPU.
+    std::function<VkPhysicalDevice(VkInstance)> physical_device_selector;
 
     // Pre-existing VkSurfaceKHR (rare — mostly for embedded hosts that
     // create their own VkInstance). Usually left null; use `surface_factory`
@@ -229,6 +240,7 @@ private:
     VkQueue present_queue_ = VK_NULL_HANDLE;
     uint32_t graphics_family_ = 0;
     uint32_t present_family_ = 0;
+    std::vector<const char*> device_extensions_;
 
     VmaAllocator allocator_ = VK_NULL_HANDLE;
     VkCommandPool command_pool_ = VK_NULL_HANDLE;
@@ -357,6 +369,8 @@ public:
 
     BufferHandle create_buffer(const BufferDesc& desc) override;
     TextureHandle create_texture(const TextureDesc& desc) override;
+    TextureHandle register_external_texture(
+        uintptr_t native_handle, const TextureDesc& desc) override;
     TextureDesc texture_desc(TextureHandle handle) const override;
     SamplerHandle create_sampler(const SamplerDesc& desc) override;
     ShaderHandle create_shader(const ShaderDesc& desc) override;
