@@ -30,7 +30,8 @@ namespace termin {
 // share-group cache is not used on this tgfx2 path.
 //
 // Returns an invalid handle (id == 0) if the tc_texture handle is
-// invalid, the tc_texture has no pixel data, or the upload fails.
+// invalid, the CPU-first tc_texture has no pixel data, or allocation/upload
+// fails.
 RENDER_API tgfx::TextureHandle wrap_tc_texture_as_tgfx2(
     tgfx::IRenderDevice& device,
     tc_texture_handle handle

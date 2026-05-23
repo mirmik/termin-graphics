@@ -19,6 +19,7 @@
 extern "C" {
 struct tc_texture;
 struct tc_mesh;
+struct tc_shader;
 }
 
 namespace tgfx {
@@ -250,15 +251,19 @@ public:
     virtual std::pair<BufferHandle, BufferHandle> ensure_tc_mesh(tc_mesh* /*mesh*/) {
         return {};
     }
+    virtual bool ensure_tc_shader(
+        tc_shader* /*shader*/,
+        ShaderHandle* /*out_vs*/,
+        ShaderHandle* /*out_fs*/)
+    {
+        return false;
+    }
     // Invoked by tc_texture_registry / tc_mesh_registry destroy-hooks to
     // drop a cached entry before the resource's pool slot is recycled.
     virtual void invalidate_tc_texture_cache(uint32_t /*pool_index*/) {}
     virtual void invalidate_tc_mesh_cache(uint32_t /*pool_index*/) {}
+    virtual void invalidate_tc_shader_cache(uint32_t /*pool_index*/) {}
 
-    // Legacy tgfx_gpu_ops bridge. Backends that can expose the old C
-    // resource vtable register it here; backends without that legacy
-    // compatibility surface leave this as a no-op.
-    virtual bool register_legacy_gpu_ops() { return false; }
 };
 
 } // namespace tgfx

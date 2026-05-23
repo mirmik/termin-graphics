@@ -363,7 +363,6 @@ void bind_tgfx2(nb::module_& m) {
                 // FBOSurface (device A) and scene RTs (device B) then
                 // resolve to unrelated textures (single→MSAA warnings).
                 tgfx2_interop_set_device(dev);
-                tgfx2_gpu_ops_register();
                 return new Tgfx2ContextHolder(dev, rctx);
             },
             nb::arg("device_ptr"), nb::arg("ctx_ptr"),
@@ -549,7 +548,7 @@ void bind_tgfx2(nb::module_& m) {
     // --- Helpers: bridge core_c resources to tgfx2 handles ---
     // Compile a TcShader's GLSL sources into a tgfx2 VS/FS pair.
     // Uses the same tc_shader_ensure_tgfx2 bridge that C++ passes use,
-    // so the result is cached on the tc_gpu_slot and shared across
+    // so the result is cached on the render device and shared across
     // Python/C++ callers. Returns (vs, fs) as a Tgfx2ShaderPair;
     // both handles are zero on compile failure.
     m.def("tc_shader_ensure_tgfx2",

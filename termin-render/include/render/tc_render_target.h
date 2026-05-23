@@ -53,9 +53,9 @@ TC_API float tc_render_target_get_clear_depth_value(tc_render_target_handle h);
 //
 // Render targets own a color + depth tc_texture pair. Both are GPU-only
 // (tc_texture_storage_kind == GPU_FIRST) — no CPU pixel blob; the GPU
-// image is allocated when the bridge first wraps the texture, and is
-// rebuilt on size/format change because `set_width / set_height` bump
-// the tc_texture's `header.version`.
+// image is allocated by IRenderDevice::ensure_tc_texture when the bridge
+// first wraps the texture, and is rebuilt on size/format change because
+// `set_width / set_height` bump the tc_texture's `header.version`.
 //
 // Defaults:
 //   color: RGBA16F, usage = SAMPLED | COLOR_ATTACHMENT | COPY_SRC | COPY_DST

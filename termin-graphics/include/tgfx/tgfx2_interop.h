@@ -1,6 +1,4 @@
-// tgfx2_interop.h - Bridge between legacy tgfx gpu_ops and tgfx2 IRenderDevice
-// Allows the resource system (registries, tc_gpu_context) to route GPU operations
-// through tgfx2 while maintaining backward compatibility with GL IDs.
+// tgfx2_interop.h - C bridge to the active tgfx2 IRenderDevice.
 #pragma once
 
 #include "tgfx2/tgfx2_api.h"
@@ -14,16 +12,14 @@ extern "C" {
 #include <stdint.h>
 #endif
 
-// Set the tgfx2 render device used by the tgfx2-backed gpu_ops implementation.
-// Must be called before tgfx2_gpu_ops_register().
+// Set the active tgfx2 render device used by C/Python interop helpers.
 TGFX2_API void tgfx2_interop_set_device(void* device);
 
 // Get the tgfx2 render device (returns NULL if not set).
 TGFX2_API void* tgfx2_interop_get_device(void);
 
-// Register the active tgfx2 device's legacy gpu_ops vtable, when the
-// backend provides one.
-// Requires tgfx2_interop_set_device() to have been called first.
+// Deprecated compatibility stub. The tgfx2-backed legacy gpu_ops bridge
+// has been removed; this clears the old vtable and logs an error.
 TGFX2_API void tgfx2_gpu_ops_register(void);
 
 // ---------------------------------------------------------------------------

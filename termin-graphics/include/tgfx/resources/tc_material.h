@@ -178,8 +178,7 @@ typedef struct tc_material_phase {
     // ubo_id is an opaque uint32 (a tgfx::BufferHandle id). 0 = none.
     // ubo_size/version track the allocation so we can detect resize/
     // recompile events. ubo_device is a void* IRenderDevice back-pointer
-    // used by release code to call destroy(). Same pattern as
-    // tc_gpu_slot.tgfx2_shader_device during Phase 2 migration.
+    // used by release code to call destroy().
     uint32_t ubo_id;
     uint32_t ubo_size;
     int32_t  ubo_version;

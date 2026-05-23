@@ -18,6 +18,9 @@ static tc_resource_map* g_shader_uuid_to_index = NULL;   // UUID -> uint32_t ind
 static tc_resource_map* g_shader_hash_to_index = NULL;   // source_hash -> uint32_t index
 static uint64_t g_shader_next_uuid = 1;
 static bool g_shader_initialized = false;
+static tc_shader_destroy_hook_fn g_destroy_hooks[TC_MAX_SHADER_DESTROY_HOOKS];
+static void* g_destroy_hook_user[TC_MAX_SHADER_DESTROY_HOOKS];
+static int g_destroy_hook_count = 0;
 
 // Duplicate a string (NULL-safe)
 static char* dup_string(const char* s) {
@@ -293,6 +296,11 @@ bool tc_shader_destroy(tc_shader_handle h) {
     tc_shader* shader = tc_shader_get(h);
     if (!shader) return false;
 
+    const uint32_t pool_index = shader->pool_index;
+    for (int i = 0; i < g_destroy_hook_count; i++) {
+        g_destroy_hooks[i](pool_index, g_destroy_hook_user[i]);
+    }
+
     // Remove from UUID map
     tc_resource_map_remove(g_shader_uuid_to_index, shader->uuid);
 
@@ -306,6 +314,34 @@ bool tc_shader_destroy(tc_shader_handle h) {
 
     // Free slot in pool (bumps generation)
     return tc_pool_free_slot(&g_shader_pool, h);
+}
+
+void tc_shader_registry_add_destroy_hook(
+    tc_shader_destroy_hook_fn cb, void* user_data
+) {
+    if (!cb) return;
+    if (g_destroy_hook_count >= TC_MAX_SHADER_DESTROY_HOOKS) {
+        tc_log(TC_LOG_ERROR,
+               "tc_shader_registry: destroy-hook table full (%d)",
+               TC_MAX_SHADER_DESTROY_HOOKS);
+        return;
+    }
+    g_destroy_hooks[g_destroy_hook_count] = cb;
+    g_destroy_hook_user[g_destroy_hook_count] = user_data;
+    g_destroy_hook_count++;
+}
+
+void tc_shader_registry_remove_destroy_hook(
+    tc_shader_destroy_hook_fn cb, void* user_data
+) {
+    for (int i = 0; i < g_destroy_hook_count; i++) {
+        if (g_destroy_hooks[i] == cb && g_destroy_hook_user[i] == user_data) {
+            g_destroy_hooks[i] = g_destroy_hooks[g_destroy_hook_count - 1];
+            g_destroy_hook_user[i] = g_destroy_hook_user[g_destroy_hook_count - 1];
+            g_destroy_hook_count--;
+            return;
+        }
+    }
 }
 
 bool tc_shader_contains(const char* uuid) {

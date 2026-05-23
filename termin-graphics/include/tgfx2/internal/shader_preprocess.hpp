@@ -11,7 +11,10 @@
 #include <string>
 
 extern "C" {
-#include "tgfx/tgfx_resource_gpu.h"
+#include "tgfx/tgfx_api.h"
+
+typedef char* (*tgfx_shader_preprocess_fn)(const char* source, const char* source_name);
+TGFX_API tgfx_shader_preprocess_fn tgfx_gpu_get_shader_preprocess(void);
 }
 
 namespace tgfx::internal {

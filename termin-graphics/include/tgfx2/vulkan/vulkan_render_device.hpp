@@ -213,6 +213,13 @@ private:
         uint32_t     version = 0;
     };
 
+    struct CachedTcShaderEntry {
+        ShaderHandle vs;
+        ShaderHandle fs;
+        uint32_t     version = 0;
+        bool         has_vs = false;
+    };
+
     VkInstance instance_ = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT debug_messenger_ = VK_NULL_HANDLE;
     VkSurfaceKHR surface_ = VK_NULL_HANDLE;
@@ -336,6 +343,8 @@ private:
     std::mutex                                         tc_texture_cache_mtx_;
     std::unordered_map<uint32_t, CachedTcMeshEntry>    tc_mesh_cache_;
     std::mutex                                         tc_mesh_cache_mtx_;
+    std::unordered_map<uint32_t, CachedTcShaderEntry>  tc_shader_cache_;
+    std::mutex                                         tc_shader_cache_mtx_;
 
 public:
     explicit VulkanRenderDevice(const VulkanDeviceCreateInfo& info);
@@ -547,6 +556,8 @@ public:
     // case the cache entry is left empty so the next call retries.
     std::pair<BufferHandle, BufferHandle> ensure_tc_mesh(tc_mesh* mesh) override;
     void          invalidate_tc_mesh_cache(uint32_t pool_index) override;
+    bool ensure_tc_shader(tc_shader* shader, ShaderHandle* out_vs, ShaderHandle* out_fs) override;
+    void          invalidate_tc_shader_cache(uint32_t pool_index) override;
 
 private:
     enum class PixelReadbackKind : uint8_t {

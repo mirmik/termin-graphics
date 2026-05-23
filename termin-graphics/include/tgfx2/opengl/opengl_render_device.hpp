@@ -149,6 +149,14 @@ private:
     };
     std::unordered_map<uint32_t, CachedTcMeshEntry> tc_mesh_cache_;
 
+    struct CachedTcShaderEntry {
+        ShaderHandle vs;
+        ShaderHandle fs;
+        uint32_t version = 0;
+        bool has_vs = false;
+    };
+    std::unordered_map<uint32_t, CachedTcShaderEntry> tc_shader_cache_;
+
     // Transient vertex ring state (see transient_vertex_write).
     BufferHandle transient_vb_handle_;
     GLuint       transient_vb_gl_         = 0;
@@ -313,8 +321,8 @@ public:
     void invalidate_tc_texture_cache(uint32_t pool_index) override;
     std::pair<BufferHandle, BufferHandle> ensure_tc_mesh(tc_mesh* mesh) override;
     void invalidate_tc_mesh_cache(uint32_t pool_index) override;
-
-    bool register_legacy_gpu_ops() override;
+    bool ensure_tc_shader(tc_shader* shader, ShaderHandle* out_vs, ShaderHandle* out_fs) override;
+    void invalidate_tc_shader_cache(uint32_t pool_index) override;
 
 private:
     GLuint acquire_program(const PipelineDesc& desc);

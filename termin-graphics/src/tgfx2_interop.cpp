@@ -16,15 +16,8 @@ void* tgfx2_interop_get_device(void) {
 }
 
 void tgfx2_gpu_ops_register(void) {
-    auto* device = static_cast<tgfx::IRenderDevice*>(g_tgfx2_device);
-    if (!device) {
-        tgfx_gpu_set_ops(nullptr);
-        tc_log_error("tgfx2_gpu_ops_register: device not set, call tgfx2_interop_set_device first");
-        return;
-    }
-    if (!device->register_legacy_gpu_ops()) {
-        tgfx_gpu_set_ops(nullptr);
-    }
+    tgfx_gpu_set_ops(nullptr);
+    tc_log_error("tgfx2_gpu_ops_register: legacy tgfx_gpu_ops bridge has been removed");
 }
 
 #ifndef TGFX2_HAS_OPENGL

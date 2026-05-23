@@ -79,7 +79,6 @@ void RenderRuntime::publish_interop() {
     }
     tgfx2_interop_set_device(device_);
     interop_published_by_us_ = true;
-    tgfx2_gpu_ops_register();
 }
 
 void RenderRuntime::clear_interop_if_current() {

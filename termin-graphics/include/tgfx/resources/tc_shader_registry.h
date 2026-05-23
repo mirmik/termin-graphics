@@ -132,6 +132,23 @@ typedef bool (*tc_shader_iter_fn)(tc_shader_handle h, tc_shader* shader, void* u
 TGFX_API void tc_shader_foreach(tc_shader_iter_fn callback, void* user_data);
 
 // ============================================================================
+// Destroy hooks
+// ============================================================================
+//
+// Fired inside `tc_shader_destroy()` before the shader data and pool slot are
+// released. Device-local tgfx2 shader caches use the pool_index to drop cached
+// modules before that index can be reused by a future shader.
+
+#define TC_MAX_SHADER_DESTROY_HOOKS 16
+
+typedef void (*tc_shader_destroy_hook_fn)(uint32_t pool_index, void* user_data);
+
+TGFX_API void tc_shader_registry_add_destroy_hook(
+    tc_shader_destroy_hook_fn cb, void* user_data);
+TGFX_API void tc_shader_registry_remove_destroy_hook(
+    tc_shader_destroy_hook_fn cb, void* user_data);
+
+// ============================================================================
 // Utility
 // ============================================================================
 

@@ -56,10 +56,10 @@ extern "C" void glClipControl(GLenum origin, GLenum depth);
 #endif
 
 extern "C" {
-#include "tgfx/tc_gpu_context.h"
-#include "tgfx/tgfx_resource_gpu.h"
 #include "tgfx/resources/tc_mesh.h"
 #include "tgfx/resources/tc_mesh_registry.h"
+#include "tgfx/resources/tc_shader.h"
+#include "tgfx/resources/tc_shader_registry.h"
 #include "tgfx/resources/tc_texture.h"
 #include "tgfx/resources/tc_texture_registry.h"
 }
@@ -70,6 +70,10 @@ static void opengl_invalidate_tc_texture_trampoline(uint32_t pool_index, void* u
 
 static void opengl_invalidate_tc_mesh_trampoline(uint32_t pool_index, void* user) {
     static_cast<tgfx::OpenGLRenderDevice*>(user)->invalidate_tc_mesh_cache(pool_index);
+}
+
+static void opengl_invalidate_tc_shader_trampoline(uint32_t pool_index, void* user) {
+    static_cast<tgfx::OpenGLRenderDevice*>(user)->invalidate_tc_shader_cache(pool_index);
 }
 
 namespace tgfx {
@@ -97,13 +101,24 @@ OpenGLRenderDevice::OpenGLRenderDevice() {
         &opengl_invalidate_tc_texture_trampoline, this);
     tc_mesh_registry_add_destroy_hook(
         &opengl_invalidate_tc_mesh_trampoline, this);
+    tc_shader_registry_add_destroy_hook(
+        &opengl_invalidate_tc_shader_trampoline, this);
 }
 
 OpenGLRenderDevice::~OpenGLRenderDevice() {
+    tc_shader_registry_remove_destroy_hook(
+        &opengl_invalidate_tc_shader_trampoline, this);
     tc_mesh_registry_remove_destroy_hook(
         &opengl_invalidate_tc_mesh_trampoline, this);
     tc_texture_registry_remove_destroy_hook(
         &opengl_invalidate_tc_texture_trampoline, this);
+
+    for (auto& pair : tc_shader_cache_) {
+        auto& entry = pair.second;
+        if (entry.vs) destroy(entry.vs);
+        if (entry.fs) destroy(entry.fs);
+    }
+    tc_shader_cache_.clear();
 
     for (auto& pair : tc_mesh_cache_) {
         auto& entry = pair.second;
@@ -303,31 +318,25 @@ TextureHandle OpenGLRenderDevice::ensure_tc_texture(tc_texture* tex) {
     desc.mip_levels = tex->mipmap ? mip_count_for(tex->width, tex->height) : 1;
 
     if (gpu_first) {
-        // GPU-first tc_textures are still owned by the legacy OpenGL
-        // render-target path. Do not allocate a second blank tgfx2
-        // texture here: wrap the GL object that render passes write into.
-        if (!tc_texture_upload_gpu(tex)) {
-            tc_log_error("OpenGLRenderDevice::ensure_tc_texture: legacy GPU-first upload failed for '%s'",
-                         tex->header.name ? tex->header.name : tex->header.uuid);
-            return {};
-        }
-        tc_gpu_context* ctx = tc_gpu_get_context();
-        if (!ctx) {
-            tc_log_error("OpenGLRenderDevice::ensure_tc_texture: no legacy GPU context for '%s'",
-                         tex->header.name ? tex->header.name : tex->header.uuid);
-            return {};
-        }
-        tc_gpu_slot* slot = tc_gpu_context_texture_slot(ctx, pool_index);
-        if (!slot || slot->gl_id == 0) {
-            tc_log_error("OpenGLRenderDevice::ensure_tc_texture: legacy slot has no GL id for '%s'",
-                         tex->header.name ? tex->header.name : tex->header.uuid);
-            return {};
-        }
-
         desc.mip_levels = 1;
         desc.usage = tc_usage_to_tgfx(tex->usage) | TextureUsage::CopyDst;
-        TextureHandle handle = register_external_texture(
-            static_cast<uintptr_t>(slot->gl_id), desc);
+        if (static_cast<uint32_t>(desc.usage) == static_cast<uint32_t>(TextureUsage::CopyDst)) {
+            desc.usage = desc.usage | TextureUsage::Sampled;
+        }
+        TextureHandle handle = create_texture(desc);
+        if (!handle) {
+            tc_log_error("OpenGLRenderDevice::ensure_tc_texture: create GPU-first texture failed for '%s'",
+                         tex->header.name ? tex->header.name : tex->header.uuid);
+            return {};
+        }
+        if (tex->compare_mode) {
+            if (auto* gl_tex = get_texture(handle)) {
+                glBindTexture(gl_tex->target, gl_tex->gl_id);
+                glTexParameteri(gl_tex->target, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+                glTexParameteri(gl_tex->target, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+                glBindTexture(gl_tex->target, 0);
+            }
+        }
         CachedTcTextureEntry entry;
         entry.handle = handle;
         entry.version = version;
@@ -465,6 +474,92 @@ void OpenGLRenderDevice::invalidate_tc_mesh_cache(uint32_t pool_index) {
     if (it->second.vbo) destroy(it->second.vbo);
     if (it->second.ebo) destroy(it->second.ebo);
     tc_mesh_cache_.erase(it);
+}
+
+bool OpenGLRenderDevice::ensure_tc_shader(
+    tc_shader* shader,
+    ShaderHandle* out_vs,
+    ShaderHandle* out_fs)
+{
+    if (!shader) {
+        tc_log_error("OpenGLRenderDevice::ensure_tc_shader: shader is NULL");
+        return false;
+    }
+    if (!out_fs) {
+        tc_log_error("OpenGLRenderDevice::ensure_tc_shader: out_fs is NULL");
+        return false;
+    }
+    if (!shader->fragment_source) {
+        tc_log_error("OpenGLRenderDevice::ensure_tc_shader: missing fragment_source for '%s'",
+                     shader->name ? shader->name : shader->uuid);
+        return false;
+    }
+
+    const bool has_vs = shader->vertex_source && shader->vertex_source[0] != '\0';
+    const uint32_t pool_index = shader->pool_index;
+    const uint32_t version = shader->version;
+    auto it = tc_shader_cache_.find(pool_index);
+    if (it != tc_shader_cache_.end() &&
+        it->second.version == version &&
+        it->second.has_vs == has_vs &&
+        it->second.fs &&
+        (!has_vs || it->second.vs))
+    {
+        if (out_vs) *out_vs = it->second.vs;
+        *out_fs = it->second.fs;
+        return true;
+    }
+
+    if (it != tc_shader_cache_.end()) {
+        if (it->second.vs) destroy(it->second.vs);
+        if (it->second.fs) destroy(it->second.fs);
+        tc_shader_cache_.erase(it);
+    }
+
+    ShaderHandle vs;
+    if (has_vs) {
+        ShaderDesc vs_desc;
+        vs_desc.stage = ShaderStage::Vertex;
+        vs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":vertex";
+        vs_desc.source = shader->vertex_source;
+        vs = create_shader(vs_desc);
+        if (!vs) {
+            tc_log_error("OpenGLRenderDevice::ensure_tc_shader: VS compile failed for '%s'",
+                         shader->name ? shader->name : shader->uuid);
+            return false;
+        }
+    }
+
+    ShaderDesc fs_desc;
+    fs_desc.stage = ShaderStage::Fragment;
+    fs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":fragment";
+    fs_desc.source = shader->fragment_source;
+    ShaderHandle fs = create_shader(fs_desc);
+    if (!fs) {
+        if (vs) destroy(vs);
+        tc_log_error("OpenGLRenderDevice::ensure_tc_shader: FS compile failed for '%s'",
+                     shader->name ? shader->name : shader->uuid);
+        return false;
+    }
+
+    CachedTcShaderEntry entry;
+    entry.vs = vs;
+    entry.fs = fs;
+    entry.version = version;
+    entry.has_vs = has_vs;
+    tc_shader_cache_.emplace(pool_index, entry);
+
+    if (out_vs) *out_vs = vs;
+    *out_fs = fs;
+    return true;
+}
+
+void OpenGLRenderDevice::invalidate_tc_shader_cache(uint32_t pool_index) {
+    auto it = tc_shader_cache_.find(pool_index);
+    if (it == tc_shader_cache_.end()) return;
+    if (it->second.vs) destroy(it->second.vs);
+    if (it->second.fs) destroy(it->second.fs);
+    tc_shader_cache_.erase(it);
 }
 
 // --- Buffer ---

@@ -10,6 +10,7 @@
 #include "tgfx2/vulkan/vulkan_shader_compiler.hpp"
 #include "tgfx2/internal/shader_preprocess.hpp"
 #include "tgfx2/pixel_format_utils.hpp"
+#include "tgfx2/tc_shader_bridge.hpp"
 
 #include <stdexcept>
 #include <cstring>
@@ -30,6 +31,8 @@ extern "C" {
 #include <tgfx/resources/tc_texture_registry.h>
 #include <tgfx/resources/tc_mesh.h>
 #include <tgfx/resources/tc_mesh_registry.h>
+#include <tgfx/resources/tc_shader.h>
+#include <tgfx/resources/tc_shader_registry.h>
 }
 
 #ifdef __ANDROID__
@@ -47,6 +50,10 @@ static void vulkan_invalidate_tc_texture_trampoline(uint32_t pool_index, void* u
 
 static void vulkan_invalidate_tc_mesh_trampoline(uint32_t pool_index, void* user) {
     static_cast<tgfx::VulkanRenderDevice*>(user)->invalidate_tc_mesh_cache(pool_index);
+}
+
+static void vulkan_invalidate_tc_shader_trampoline(uint32_t pool_index, void* user) {
+    static_cast<tgfx::VulkanRenderDevice*>(user)->invalidate_tc_shader_cache(pool_index);
 }
 
 namespace tgfx {
@@ -378,18 +385,22 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     caps_.supports_multisample_resolve = true;
 
     // Subscribe to registry destroy-hooks so per-device tc_texture /
-    // tc_mesh caches get invalidated before a slot is recycled. The
+    // tc_mesh / tc_shader caches get invalidated before a slot is recycled. The
     // matching unregister calls live in the destructor.
     tc_texture_registry_add_destroy_hook(
         &vulkan_invalidate_tc_texture_trampoline, this);
     tc_mesh_registry_add_destroy_hook(
         &vulkan_invalidate_tc_mesh_trampoline, this);
+    tc_shader_registry_add_destroy_hook(
+        &vulkan_invalidate_tc_shader_trampoline, this);
 }
 
 VulkanRenderDevice::~VulkanRenderDevice() {
     // Unsubscribe from registry destroy-hooks before tearing anything down
-    // so an incoming tc_texture_destroy / tc_mesh_destroy after this point
-    // can't call into a half-destroyed device.
+    // so incoming tc_*_destroy calls after this point can't call into a
+    // half-destroyed device.
+    tc_shader_registry_remove_destroy_hook(
+        &vulkan_invalidate_tc_shader_trampoline, this);
     tc_texture_registry_remove_destroy_hook(
         &vulkan_invalidate_tc_texture_trampoline, this);
     tc_mesh_registry_remove_destroy_hook(
@@ -407,13 +418,14 @@ VulkanRenderDevice::~VulkanRenderDevice() {
     // views are bound to device_ which is still alive at this point.
     swapchain_.reset();
 
-    // Drop per-device tc_texture / tc_mesh caches. The VkImage / VkBuffer
+    // Drop per-device tc_texture / tc_mesh / tc_shader caches. The Vulkan
     // objects those caches point at are owned through the handle pools
     // (buffers_, textures_) and get released by the blanket per-pool loops
     // below, so we just need to clear the cache maps here — no explicit
     // destroy() calls required.
     tc_texture_cache_.clear();
     tc_mesh_cache_.clear();
+    tc_shader_cache_.clear();
 
     // Deferred-destroy queues are now safe to release (GPU is idle).
     // Slot queues represent handles freed by submitted frames; `current`
@@ -3400,8 +3412,8 @@ void VulkanRenderDevice::clear_texture(
 // --- tc_texture / tc_mesh per-device caches -----------------------------
 //
 // These replace the former file-scope g_tex_cache / g_mesh_cache singletons
-// in tgfx2_bridge.cpp. Bridge functions on the Vulkan path now delegate
-// directly to these methods; GL continues to go through tc_gpu_slot.
+// in tgfx2_bridge.cpp. Bridge functions now delegate directly to
+// IRenderDevice on every backend.
 
 namespace {
 
@@ -3447,9 +3459,7 @@ std::vector<uint8_t> normalize_pixels(const tc_texture* tex, PixelFormat& out_fm
     return pixels;
 }
 
-// Translate tc_texture_usage_flags bitset → tgfx::TextureUsage. Mirrors
-// the OpenGL legacy gpu_ops helper; we duplicate it here because the two
-// translation units don't share a common implementation file.
+// Translate tc_texture_usage_flags bitset → tgfx::TextureUsage.
 TextureUsage tc_usage_to_tgfx(uint32_t usage) {
     uint32_t out = 0;
     if (usage & TC_TEXTURE_USAGE_SAMPLED)
@@ -3632,6 +3642,109 @@ void VulkanRenderDevice::invalidate_tc_mesh_cache(uint32_t pool_index) {
     if (it->second.vbo) destroy(it->second.vbo);
     if (it->second.ebo) destroy(it->second.ebo);
     tc_mesh_cache_.erase(it);
+}
+
+bool VulkanRenderDevice::ensure_tc_shader(
+    tc_shader* shader,
+    ShaderHandle* out_vs,
+    ShaderHandle* out_fs)
+{
+    if (!shader) {
+        tc_log(TC_LOG_ERROR, "VulkanRenderDevice::ensure_tc_shader: shader is NULL");
+        return false;
+    }
+    if (!out_fs) {
+        tc_log(TC_LOG_ERROR, "VulkanRenderDevice::ensure_tc_shader: out_fs is NULL");
+        return false;
+    }
+    if (!shader->fragment_source) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::ensure_tc_shader: missing fragment_source for '%s'",
+               shader->name ? shader->name : shader->uuid);
+        return false;
+    }
+
+    const bool has_vs = shader->vertex_source && shader->vertex_source[0] != '\0';
+    const uint32_t pool_index = shader->pool_index;
+    const uint32_t version = shader->version;
+    {
+        std::lock_guard<std::mutex> lock(tc_shader_cache_mtx_);
+        auto it = tc_shader_cache_.find(pool_index);
+        if (it != tc_shader_cache_.end() &&
+            it->second.version == version &&
+            it->second.has_vs == has_vs &&
+            it->second.fs &&
+            (!has_vs || it->second.vs))
+        {
+            if (out_vs) *out_vs = it->second.vs;
+            *out_fs = it->second.fs;
+            return true;
+        }
+        if (it != tc_shader_cache_.end()) {
+            if (it->second.vs) destroy(it->second.vs);
+            if (it->second.fs) destroy(it->second.fs);
+            tc_shader_cache_.erase(it);
+        }
+    }
+
+    ShaderHandle vs;
+    if (has_vs) {
+        ShaderDesc vs_desc;
+        vs_desc.stage = ShaderStage::Vertex;
+        vs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":vertex";
+        if (!termin::tgfx2_load_shader_artifact(shader->uuid, vs_desc.stage, vs_desc.bytecode)) {
+            vs_desc.source = shader->vertex_source;
+        }
+        vs = create_shader(vs_desc);
+        if (!vs) {
+            tc_log(TC_LOG_ERROR,
+                   "VulkanRenderDevice::ensure_tc_shader: VS compile failed for '%s'",
+                   shader->name ? shader->name : shader->uuid);
+            return false;
+        }
+    }
+
+    ShaderDesc fs_desc;
+    fs_desc.stage = ShaderStage::Fragment;
+    fs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":fragment";
+    if (!termin::tgfx2_load_shader_artifact(shader->uuid, fs_desc.stage, fs_desc.bytecode)) {
+        fs_desc.source = shader->fragment_source;
+    }
+    ShaderHandle fs = create_shader(fs_desc);
+    if (!fs) {
+        if (vs) destroy(vs);
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::ensure_tc_shader: FS compile failed for '%s'",
+               shader->name ? shader->name : shader->uuid);
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(tc_shader_cache_mtx_);
+    auto it = tc_shader_cache_.find(pool_index);
+    if (it != tc_shader_cache_.end()) {
+        if (it->second.vs) destroy(it->second.vs);
+        if (it->second.fs) destroy(it->second.fs);
+        tc_shader_cache_.erase(it);
+    }
+    CachedTcShaderEntry entry;
+    entry.vs = vs;
+    entry.fs = fs;
+    entry.version = version;
+    entry.has_vs = has_vs;
+    tc_shader_cache_.emplace(pool_index, entry);
+
+    if (out_vs) *out_vs = vs;
+    *out_fs = fs;
+    return true;
+}
+
+void VulkanRenderDevice::invalidate_tc_shader_cache(uint32_t pool_index) {
+    std::lock_guard<std::mutex> lock(tc_shader_cache_mtx_);
+    auto it = tc_shader_cache_.find(pool_index);
+    if (it == tc_shader_cache_.end()) return;
+    if (it->second.vs) destroy(it->second.vs);
+    if (it->second.fs) destroy(it->second.fs);
+    tc_shader_cache_.erase(it);
 }
 
 } // namespace tgfx

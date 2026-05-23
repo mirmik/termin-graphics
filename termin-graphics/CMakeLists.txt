@@ -117,7 +117,6 @@ if(TGFX2_ENABLE_OPENGL)
         src/tgfx2/opengl/opengl_render_device.cpp
         src/tgfx2/opengl/opengl_command_list.cpp
         src/tgfx2/opengl/opengl_type_conversions.cpp
-        src/tgfx2/opengl/opengl_legacy_gpu_ops.cpp
     )
 endif()
 
@@ -335,13 +334,6 @@ if(BUILD_TGFX2_TESTS)
         target_link_libraries(tgfx2_sdf_test PRIVATE termin_graphics2 glfw)
         add_test(NAME tgfx2_sdf_test COMMAND tgfx2_sdf_test)
         set_tests_properties(tgfx2_sdf_test PROPERTIES
-            TIMEOUT 10
-            SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
-
-        add_executable(tgfx2_interop_test tests/test_tgfx2_interop.cpp)
-        target_link_libraries(tgfx2_interop_test PRIVATE termin_graphics2 glfw)
-        add_test(NAME tgfx2_interop_test COMMAND tgfx2_interop_test)
-        set_tests_properties(tgfx2_interop_test PROPERTIES
             TIMEOUT 10
             SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
 
