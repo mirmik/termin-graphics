@@ -7,10 +7,8 @@
 
 #include <tcbase/tc_log.hpp>
 
-#include <atomic>
 #include <cstdint>
 #include <cstring>
-#include <span>
 #include <vector>
 
 namespace termin {
@@ -104,65 +102,6 @@ void pack_material_ubo(
     }
 }
 
-extern "C" void material_phase_runtime_release_ubo_cb(tc_material_phase* phase) {
-    if (!phase || phase->ubo_id == 0 || !phase->ubo_device) return;
-    auto* device = static_cast<tgfx::IRenderDevice*>(phase->ubo_device);
-    tgfx::BufferHandle handle{};
-    handle.id = phase->ubo_id;
-    device->destroy(handle);
-}
-
-std::atomic<bool> g_release_cb_installed{false};
-
-void ensure_release_cb_installed() {
-    bool expected = false;
-    if (g_release_cb_installed.compare_exchange_strong(expected, true)) {
-        tc_material_phase_set_release_ubo_callback(material_phase_runtime_release_ubo_cb);
-    }
-}
-
-tgfx::BufferHandle ensure_material_phase_ubo_runtime(
-    tc_material_phase* phase,
-    const tc_shader* shader,
-    tgfx::IRenderDevice& device)
-{
-    if (!phase || !shader || shader->material_ubo_block_size == 0) return {};
-
-    ensure_release_cb_installed();
-
-    int32_t shader_version = static_cast<int32_t>(shader->version);
-    bool stale =
-        phase->ubo_id == 0 ||
-        phase->ubo_size != shader->material_ubo_block_size ||
-        phase->ubo_device != &device ||
-        phase->ubo_version != shader_version;
-
-    if (stale) {
-        if (phase->ubo_id != 0 && phase->ubo_device == &device) {
-            tgfx::BufferHandle old{};
-            old.id = phase->ubo_id;
-            device.destroy(old);
-        } else if (phase->ubo_id != 0) {
-            tc::Log::error("ensure_material_phase_ubo_runtime: phase UBO leak; device changed");
-        }
-
-        tgfx::BufferDesc desc;
-        desc.size = shader->material_ubo_block_size;
-        desc.usage = tgfx::BufferUsage::Uniform | tgfx::BufferUsage::CopyDst;
-        tgfx::BufferHandle fresh = device.create_buffer(desc);
-
-        phase->ubo_id = fresh.id;
-        phase->ubo_size = shader->material_ubo_block_size;
-        phase->ubo_version = shader_version;
-        phase->ubo_device = &device;
-        return fresh;
-    }
-
-    tgfx::BufferHandle existing{};
-    existing.id = phase->ubo_id;
-    return existing;
-}
-
 void bind_material_phase_textures_runtime(
     tc_material_phase* phase,
     uint32_t tex_slot_start,
@@ -201,23 +140,13 @@ bool apply_material_phase_ubo_runtime(
 
     if (shader->material_ubo_block_size == 0) return false;
 
-    tgfx::BufferHandle ubo = ensure_material_phase_ubo_runtime(phase, shader, device);
-    if (!ubo) return false;
-
     std::vector<uint8_t> staging(shader->material_ubo_block_size, 0);
     pack_material_ubo(phase, shader, staging);
 
-    if (device.ring_ubo_handle().id != 0) {
-        ctx.bind_uniform_buffer_ring(
-            ubo_slot,
-            staging.data(),
-            static_cast<uint32_t>(staging.size()));
-    } else {
-        device.upload_buffer(
-            ubo,
-            std::span<const uint8_t>(staging.data(), staging.size()));
-        ctx.bind_uniform_buffer(ubo_slot, ubo);
-    }
+    ctx.bind_uniform_buffer_ring(
+        ubo_slot,
+        staging.data(),
+        static_cast<uint32_t>(staging.size()));
 
     return true;
 }

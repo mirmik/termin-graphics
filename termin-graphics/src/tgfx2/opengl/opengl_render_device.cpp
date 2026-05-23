@@ -96,6 +96,7 @@ OpenGLRenderDevice::OpenGLRenderDevice() {
     glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE);
 
     query_capabilities();
+    ensure_ring_ubo();
 
     tc_texture_registry_add_destroy_hook(
         &opengl_invalidate_tc_texture_trampoline, this);
@@ -156,6 +157,16 @@ OpenGLRenderDevice::~OpenGLRenderDevice() {
             // slot.
             buffers_.remove(transient_vb_handle_.id);
             transient_vb_handle_ = {};
+        }
+    }
+
+    // Clean up dynamic UBO ring
+    if (ring_ubo_gl_) {
+        glDeleteBuffers(1, &ring_ubo_gl_);
+        ring_ubo_gl_ = 0;
+        if (ring_ubo_handle_) {
+            buffers_.remove(ring_ubo_handle_.id);
+            ring_ubo_handle_ = {};
         }
     }
 
@@ -1590,6 +1601,76 @@ uint64_t OpenGLRenderDevice::transient_vertex_write(const void* data,
 
     transient_vb_offset_ = offset + static_cast<GLintptr>(size);
     return static_cast<uint64_t>(offset);
+}
+
+// --- Dynamic UBO ring ---
+//
+// Same ownership pattern as transient_vertex_buffer(): one GL buffer is
+// registered in the BufferHandle pool for command-list binding, while
+// writes sub-upload aligned ranges and rewind/orphan on overflow.
+
+void OpenGLRenderDevice::ensure_ring_ubo() {
+    if (ring_ubo_initialized_) return;
+
+    glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &ring_ubo_alignment_);
+    if (ring_ubo_alignment_ <= 0) {
+        ring_ubo_alignment_ = 256;
+    }
+
+    glGenBuffers(1, &ring_ubo_gl_);
+    glBindBuffer(GL_UNIFORM_BUFFER, ring_ubo_gl_);
+    glBufferData(GL_UNIFORM_BUFFER, ring_ubo_size_, nullptr, GL_STREAM_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    GLBuffer b;
+    b.gl_id = ring_ubo_gl_;
+    b.desc.size = static_cast<uint64_t>(ring_ubo_size_);
+    b.desc.usage = BufferUsage::Uniform;
+    b.target = GL_UNIFORM_BUFFER;
+    b.external = false;
+    ring_ubo_handle_ = BufferHandle{buffers_.add(std::move(b))};
+
+    ring_ubo_offset_ = 0;
+    ring_ubo_initialized_ = true;
+}
+
+void OpenGLRenderDevice::ring_ubo_reset_frame() {
+    ring_ubo_offset_ = 0;
+}
+
+uint32_t OpenGLRenderDevice::ring_ubo_write(const void* data, uint32_t size) {
+    if (!data || size == 0) {
+        return 0;
+    }
+
+    ensure_ring_ubo();
+
+    if (size > static_cast<uint32_t>(ring_ubo_size_)) {
+        tc::Log::error("OpenGLRenderDevice::ring_ubo_write: payload %u exceeds ring capacity %lld",
+                       size,
+                       static_cast<long long>(ring_ubo_size_));
+        return 0;
+    }
+
+    const GLintptr align = static_cast<GLintptr>(ring_ubo_alignment_);
+    const GLintptr padded =
+        (static_cast<GLintptr>(size) + align - 1) / align * align;
+
+    GLintptr offset = (ring_ubo_offset_ + align - 1) / align * align;
+
+    if (offset + padded > ring_ubo_size_) {
+        glBindBuffer(GL_UNIFORM_BUFFER, ring_ubo_gl_);
+        glBufferData(GL_UNIFORM_BUFFER, ring_ubo_size_, nullptr, GL_STREAM_DRAW);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+        offset = 0;
+    }
+
+    glBindBuffer(GL_UNIFORM_BUFFER, ring_ubo_gl_);
+    glBufferSubData(GL_UNIFORM_BUFFER, offset, static_cast<GLsizeiptr>(size), data);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    ring_ubo_offset_ = offset + padded;
+    return static_cast<uint32_t>(offset);
 }
 
 } // namespace tgfx

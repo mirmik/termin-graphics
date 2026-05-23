@@ -18,49 +18,6 @@ static tc_resource_map* g_material_uuid_to_index = NULL;
 static uint64_t g_material_next_uuid = 1;
 static bool g_material_initialized = false;
 
-// Callback set by tgfx2 C++ glue to release per-phase UBOs (tc_material.h).
-static tc_material_phase_release_ubo_fn g_phase_release_ubo_cb = NULL;
-
-// Callback set by tgfx2 C++ glue for the raw-GL UBO dispatcher.
-static tc_material_phase_apply_ubo_gl_fn g_phase_apply_ubo_gl_cb = NULL;
-
-void tc_material_phase_set_release_ubo_callback(
-    tc_material_phase_release_ubo_fn cb
-) {
-    g_phase_release_ubo_cb = cb;
-}
-
-void tc_material_phase_set_apply_ubo_gl_callback(
-    tc_material_phase_apply_ubo_gl_fn cb
-) {
-    g_phase_apply_ubo_gl_cb = cb;
-}
-
-bool tc_material_phase_apply_ubo_gl(
-    tc_material_phase* phase,
-    const tc_shader* shader,
-    uint32_t binding_slot,
-    void* tgfx2_device
-) {
-    if (!phase || !shader || !tgfx2_device) return false;
-    if (shader->material_ubo_block_size == 0) return false;
-    if (!g_phase_apply_ubo_gl_cb) return false;
-    return g_phase_apply_ubo_gl_cb(phase, shader, binding_slot, tgfx2_device);
-}
-
-void tc_material_phase_release_ubo(tc_material_phase* phase) {
-    if (!phase) return;
-    if (phase->ubo_id != 0 && g_phase_release_ubo_cb) {
-        g_phase_release_ubo_cb(phase);
-    }
-    // Always clear the fields — the callback is responsible for the
-    // GPU-side destroy, we're responsible for the bookkeeping.
-    phase->ubo_id = 0;
-    phase->ubo_size = 0;
-    phase->ubo_version = -1;
-    phase->ubo_device = NULL;
-}
-
 // ============================================================================
 // Lifecycle
 // ============================================================================
@@ -87,13 +44,11 @@ void tc_material_init(void) {
 void tc_material_shutdown(void) {
     TC_REGISTRY_SHUTDOWN_GUARD(g_material_initialized, "tc_material");
 
-    // Release shader references and per-phase UBOs for all materials
-    // before freeing the pool.
+    // Release shader references for all materials before freeing the pool.
     for (uint32_t i = 0; i < g_material_pool.capacity; i++) {
         if (g_material_pool.states[i] == TC_SLOT_OCCUPIED) {
             tc_material* mat = (tc_material*)tc_pool_get_unchecked(&g_material_pool, i);
             for (size_t j = 0; j < mat->phase_count; j++) {
-                tc_material_phase_release_ubo(&mat->phases[j]);
                 tc_shader* s = tc_shader_get(mat->phases[j].shader);
                 if (s) {
                     tc_shader_release(s);
@@ -250,23 +205,11 @@ static void material_release_shaders(tc_material* mat) {
     }
 }
 
-// Helper to release per-phase tgfx2 material UBOs (if any).
-static void material_release_phase_ubos(tc_material* mat) {
-    if (!mat) return;
-    for (size_t i = 0; i < mat->phase_count; i++) {
-        tc_material_phase_release_ubo(&mat->phases[i]);
-    }
-}
-
 bool tc_material_destroy(tc_material_handle h) {
     if (!g_material_initialized) return false;
 
     tc_material* mat = tc_material_get(h);
     if (!mat) return false;
-
-    // Release per-phase tgfx2 UBOs before the shader refs — the UBO
-    // lifetime is tied to this material, not the shader.
-    material_release_phase_ubos(mat);
 
     // Release all shader references before destroying
     material_release_shaders(mat);
@@ -354,9 +297,8 @@ bool tc_material_remove_phase(tc_material* mat, size_t index) {
         return false;
     }
 
-    // Release tgfx2 UBO + shader reference for removed phase before
-    // the slot gets overwritten by the shift.
-    tc_material_phase_release_ubo(&mat->phases[index]);
+    // Release shader reference for removed phase before the slot gets
+    // overwritten by the shift.
     tc_shader* s = tc_shader_get(mat->phases[index].shader);
     if (s) {
         tc_shader_release(s);
@@ -684,18 +626,6 @@ tc_material_handle tc_material_copy(tc_material_handle src, const char* new_uuid
     dst_mat->phase_count = src_mat->phase_count;
     for (size_t i = 0; i < src_mat->phase_count; i++) {
         dst_mat->phases[i] = src_mat->phases[i];
-        // The tgfx2 material UBO is per-phase GPU-side state: carrying its
-        // handle id over to the copy would give two materials the same
-        // ubo_id while only one buffer exists on the GPU — a dangling-
-        // handle bug that appears after a play->stop cycle in the editor
-        // (both the editor and game scene end up sharing the original
-        // buffer, then release on scene destroy frees it for the other).
-        // Zero the UBO bookkeeping so the copy lazily allocates its own
-        // buffer on the next ensure_material_phase_ubo call.
-        dst_mat->phases[i].ubo_id = 0;
-        dst_mat->phases[i].ubo_size = 0;
-        dst_mat->phases[i].ubo_version = -1;
-        dst_mat->phases[i].ubo_device = NULL;
         // Add reference to shader for the copied phase
         tc_shader* s = tc_shader_get(dst_mat->phases[i].shader);
         if (s) {

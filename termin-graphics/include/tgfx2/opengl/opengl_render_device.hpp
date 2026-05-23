@@ -164,6 +164,14 @@ private:
     GLintptr     transient_vb_offset_     = 0;
     bool         transient_vb_initialized_ = false;
 
+    // Dynamic uniform ring state used by RenderContext2::bind_uniform_buffer_ring.
+    BufferHandle ring_ubo_handle_;
+    GLuint       ring_ubo_gl_          = 0;
+    GLsizeiptr   ring_ubo_size_        = 4 << 20;   // 4 MB
+    GLintptr     ring_ubo_offset_      = 0;
+    GLint        ring_ubo_alignment_   = 256;
+    bool         ring_ubo_initialized_ = false;
+
 public:
     OpenGLRenderDevice();
     ~OpenGLRenderDevice() override;
@@ -317,6 +325,13 @@ public:
     BufferHandle transient_vertex_buffer() override;
     uint64_t transient_vertex_write(const void* data, uint32_t size) override;
 
+    BufferHandle ring_ubo_handle() const override { return ring_ubo_handle_; }
+    uint32_t ring_ubo_write(const void* data, uint32_t size) override;
+    uint32_t ubo_alignment() const override {
+        return static_cast<uint32_t>(ring_ubo_alignment_ > 0 ? ring_ubo_alignment_ : 1);
+    }
+    void ring_ubo_reset_frame();
+
     TextureHandle ensure_tc_texture(tc_texture* tex) override;
     void invalidate_tc_texture_cache(uint32_t pool_index) override;
     std::pair<BufferHandle, BufferHandle> ensure_tc_mesh(tc_mesh* mesh) override;
@@ -330,6 +345,7 @@ private:
     void query_capabilities();
     void ensure_push_ring();
     void ensure_transient_vb();
+    void ensure_ring_ubo();
 };
 
 } // namespace tgfx
