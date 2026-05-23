@@ -53,6 +53,13 @@ namespace tgfx {
 // Vulkan hot-path counters — swept once per second from submit().
 static std::atomic<uint64_t> g_resource_set_count{0};
 static std::atomic<uint64_t> g_pipeline_count{0};
+static std::atomic<uint64_t> g_shader_count{0};
+static std::atomic<uint64_t> g_shader_preprocess_us{0};
+static std::atomic<uint64_t> g_shader_compile_us{0};
+static std::atomic<uint64_t> g_shader_reflect_us{0};
+static std::atomic<uint64_t> g_shader_module_us{0};
+static std::atomic<uint64_t> g_pipeline_renderpass_us{0};
+static std::atomic<uint64_t> g_pipeline_create_us{0};
 // Defined here (non-static), incremented from vulkan_command_list.cpp's
 // per-command methods. The extern decls in that file live inside
 // `namespace tgfx`, so the fully-qualified symbols are `tgfx::g_*`.
@@ -1339,8 +1346,19 @@ ShaderHandle VulkanRenderDevice::create_shader(const ShaderDesc& desc) {
             // preprocessor hook, then compile the GLSL to SPIR-V via
             // shaderc. OpenGL runs the same preprocess step — shaders
             // stay identical across backends.
+            auto t_pre0 = std::chrono::steady_clock::now();
             std::string resolved = internal::preprocess_shader_source(desc.source);
+            auto t_pre1 = std::chrono::steady_clock::now();
+            g_shader_preprocess_us.fetch_add(
+                std::chrono::duration_cast<std::chrono::microseconds>(t_pre1 - t_pre0).count(),
+                std::memory_order_relaxed);
+
+            auto t_compile0 = std::chrono::steady_clock::now();
             auto result = vk::compile_glsl_to_spirv(resolved, desc.stage, desc.entry_point);
+            auto t_compile1 = std::chrono::steady_clock::now();
+            g_shader_compile_us.fetch_add(
+                std::chrono::duration_cast<std::chrono::microseconds>(t_compile1 - t_compile0).count(),
+                std::memory_order_relaxed);
             if (!result.success) {
                 throw std::runtime_error("Shader compilation failed: " + result.error_message);
             }
@@ -1354,7 +1372,12 @@ ShaderHandle VulkanRenderDevice::create_shader(const ShaderDesc& desc) {
         res.entry_point = desc.entry_point;
         res.debug_name = desc.debug_name;
         if (desc.stage == ShaderStage::Vertex) {
+            auto t_reflect0 = std::chrono::steady_clock::now();
             SpirvVertexInputs inputs = reflect_spirv_vertex_inputs(spirv, desc.entry_point);
+            auto t_reflect1 = std::chrono::steady_clock::now();
+            g_shader_reflect_us.fetch_add(
+                std::chrono::duration_cast<std::chrono::microseconds>(t_reflect1 - t_reflect0).count(),
+                std::memory_order_relaxed);
             res.vertex_input_locations_known = inputs.known;
             res.vertex_input_locations = std::move(inputs.locations);
         }
@@ -1364,9 +1387,15 @@ ShaderHandle VulkanRenderDevice::create_shader(const ShaderDesc& desc) {
         ci.codeSize = spirv.size() * sizeof(uint32_t);
         ci.pCode = spirv.data();
 
+        auto t_module0 = std::chrono::steady_clock::now();
         if (vkCreateShaderModule(device_, &ci, nullptr, &res.module) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create shader module");
         }
+        auto t_module1 = std::chrono::steady_clock::now();
+        g_shader_module_us.fetch_add(
+            std::chrono::duration_cast<std::chrono::microseconds>(t_module1 - t_module0).count(),
+            std::memory_order_relaxed);
+        g_shader_count.fetch_add(1, std::memory_order_relaxed);
 
         return {shaders_.add(std::move(res))};
     } catch (const std::bad_alloc& e) {
@@ -1424,9 +1453,14 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
                     PixelFormat::Undefined),
         color_fmts.end());
     bool needs_depth = desc.depth_format != PixelFormat::Undefined;
+    auto t_renderpass0 = std::chrono::steady_clock::now();
     res.render_pass = get_or_create_render_pass(
         color_fmts, desc.depth_format, needs_depth, desc.sample_count,
         LoadOp::Clear, LoadOp::Clear);
+    auto t_renderpass1 = std::chrono::steady_clock::now();
+    g_pipeline_renderpass_us.fetch_add(
+        std::chrono::duration_cast<std::chrono::microseconds>(t_renderpass1 - t_renderpass0).count(),
+        std::memory_order_relaxed);
 
     // Shader stages
     std::vector<VkPipelineShaderStageCreateInfo> stages;
@@ -1605,9 +1639,14 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
     pi.renderPass = res.render_pass;
     pi.subpass = 0;
 
+    auto t_pipeline0 = std::chrono::steady_clock::now();
     if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pi, nullptr, &res.pipeline) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create graphics pipeline");
     }
+    auto t_pipeline1 = std::chrono::steady_clock::now();
+    g_pipeline_create_us.fetch_add(
+        std::chrono::duration_cast<std::chrono::microseconds>(t_pipeline1 - t_pipeline0).count(),
+        std::memory_order_relaxed);
     g_pipeline_count.fetch_add(1, std::memory_order_relaxed);
 
     return {pipelines_.add(std::move(res))};
@@ -2947,6 +2986,7 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
         uint64_t draws    = g_draw_count.exchange(0, std::memory_order_relaxed);
         uint64_t rsets    = g_resource_set_count.exchange(0, std::memory_order_relaxed);
         uint64_t pipes    = g_pipeline_count.exchange(0, std::memory_order_relaxed);
+        uint64_t shaders  = g_shader_count.exchange(0, std::memory_order_relaxed);
         uint64_t bp       = g_bind_pipeline_count.exchange(0, std::memory_order_relaxed);
         uint64_t brs      = g_bind_rset_count.exchange(0, std::memory_order_relaxed);
         uint64_t bvb      = g_bind_vbo_count.exchange(0, std::memory_order_relaxed);
@@ -2954,6 +2994,12 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
         uint64_t bpc      = g_push_constants_count.exchange(0, std::memory_order_relaxed);
         uint64_t rec_us   = g_record_us.exchange(0, std::memory_order_relaxed);
         uint64_t subm_us  = g_submit_us.exchange(0, std::memory_order_relaxed);
+        uint64_t sh_pre_us = g_shader_preprocess_us.exchange(0, std::memory_order_relaxed);
+        uint64_t sh_comp_us = g_shader_compile_us.exchange(0, std::memory_order_relaxed);
+        uint64_t sh_reflect_us = g_shader_reflect_us.exchange(0, std::memory_order_relaxed);
+        uint64_t sh_module_us = g_shader_module_us.exchange(0, std::memory_order_relaxed);
+        uint64_t pipe_rp_us = g_pipeline_renderpass_us.exchange(0, std::memory_order_relaxed);
+        uint64_t pipe_create_us = g_pipeline_create_us.exchange(0, std::memory_order_relaxed);
         if (vulkan_stats_enabled()) {
             tc_log(TC_LOG_INFO,
                    "[tgfx2-vulkan] submit stats: submits=%llu draws=%llu "
@@ -2972,6 +3018,19 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
                    static_cast<double>(rec_us) / 1000.0,
                    static_cast<double>(subm_us) / 1000.0,
                    s_last_fence_wait_us / 1000.0);
+            if (shaders != 0 || pipes != 0) {
+                tc_log(TC_LOG_INFO,
+                       "[tgfx2-vulkan] cold stats: shaders=%llu shader_preprocess_ms=%.3f "
+                       "shader_compile_ms=%.3f shader_reflect_ms=%.3f shader_module_ms=%.3f "
+                       "pipeline_renderpass_ms=%.3f pipeline_create_ms=%.3f",
+                       static_cast<unsigned long long>(shaders),
+                       static_cast<double>(sh_pre_us) / 1000.0,
+                       static_cast<double>(sh_comp_us) / 1000.0,
+                       static_cast<double>(sh_reflect_us) / 1000.0,
+                       static_cast<double>(sh_module_us) / 1000.0,
+                       static_cast<double>(pipe_rp_us) / 1000.0,
+                       static_cast<double>(pipe_create_us) / 1000.0);
+            }
         }
         s_submits = 0;
         s_last_fence_wait_us = 0;

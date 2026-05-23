@@ -4,6 +4,11 @@
 
 #ifdef TGFX2_HAS_SHADERC
 #include <shaderc/shaderc.hpp>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <mutex>
+#include <sstream>
 #else
 extern "C" {
 #include <tcbase/tc_log.h>
@@ -13,6 +18,11 @@ extern "C" {
 namespace tgfx::vk {
 
 #ifdef TGFX2_HAS_SHADERC
+
+namespace {
+
+constexpr uint32_t SPIRV_CACHE_MAGIC = 0x54535631u; // "TSV1"
+constexpr uint32_t SPIRV_CACHE_VERSION = 2;
 
 static shaderc_shader_kind to_shaderc_kind(ShaderStage stage) {
     switch (stage) {
@@ -24,6 +34,133 @@ static shaderc_shader_kind to_shaderc_kind(ShaderStage stage) {
     return shaderc_vertex_shader;
 }
 
+static const char* stage_name(ShaderStage stage) {
+    switch (stage) {
+        case ShaderStage::Vertex: return "vert";
+        case ShaderStage::Fragment: return "frag";
+        case ShaderStage::Geometry: return "geom";
+        case ShaderStage::Compute: return "comp";
+    }
+    return "unknown";
+}
+
+static bool performance_optimization_enabled() {
+    static const bool enabled = [] {
+        const char* env = std::getenv("TGFX2_VULKAN_SHADER_OPT");
+        if (!env || env[0] == '\0') return true;
+        std::string value(env);
+        return value != "zero" && value != "0" && value != "none";
+    }();
+    return enabled;
+}
+
+static uint64_t fnv1a_append(uint64_t h, const void* data, size_t size) {
+    const auto* bytes = static_cast<const unsigned char*>(data);
+    for (size_t i = 0; i < size; ++i) {
+        h ^= static_cast<uint64_t>(bytes[i]);
+        h *= 1099511628211ull;
+    }
+    return h;
+}
+
+static std::string hex64(uint64_t value) {
+    constexpr char digits[] = "0123456789abcdef";
+    std::string out(16, '0');
+    for (int i = 15; i >= 0; --i) {
+        out[static_cast<size_t>(i)] = digits[value & 0xfu];
+        value >>= 4u;
+    }
+    return out;
+}
+
+static std::filesystem::path shader_cache_dir() {
+    const char* explicit_dir = std::getenv("TGFX2_VULKAN_SHADER_CACHE_DIR");
+    if (explicit_dir && explicit_dir[0] != '\0') {
+        return std::filesystem::path(explicit_dir);
+    }
+
+    const char* xdg = std::getenv("XDG_CACHE_HOME");
+    if (xdg && xdg[0] != '\0') {
+        return std::filesystem::path(xdg) / "termin" / "tgfx2" / "spirv";
+    }
+
+    const char* home = std::getenv("HOME");
+    if (home && home[0] != '\0') {
+        return std::filesystem::path(home) / ".cache" / "termin" / "tgfx2" / "spirv";
+    }
+
+    return {};
+}
+
+static std::filesystem::path shader_cache_path(
+    const std::string& source,
+    ShaderStage stage,
+    const std::string& entry_point
+) {
+    std::filesystem::path dir = shader_cache_dir();
+    if (dir.empty()) return {};
+
+    uint64_t h = 1469598103934665603ull;
+    const uint32_t version = SPIRV_CACHE_VERSION;
+    const uint32_t stage_u32 = static_cast<uint32_t>(stage);
+    const uint32_t opt_u32 = performance_optimization_enabled() ? 1u : 0u;
+    h = fnv1a_append(h, &version, sizeof(version));
+    h = fnv1a_append(h, &stage_u32, sizeof(stage_u32));
+    h = fnv1a_append(h, &opt_u32, sizeof(opt_u32));
+    h = fnv1a_append(h, entry_point.data(), entry_point.size());
+    h = fnv1a_append(h, "\0", 1);
+    h = fnv1a_append(h, source.data(), source.size());
+
+    std::ostringstream name;
+    name << "glsl-" << stage_name(stage) << "-" << hex64(h) << ".spvbin";
+    return dir / name.str();
+}
+
+static bool load_spirv_cache(const std::filesystem::path& path, std::vector<uint32_t>& out) {
+    if (path.empty()) return false;
+
+    std::ifstream in(path, std::ios::binary);
+    if (!in) return false;
+
+    uint32_t magic = 0;
+    uint32_t version = 0;
+    uint32_t word_count = 0;
+    in.read(reinterpret_cast<char*>(&magic), sizeof(magic));
+    in.read(reinterpret_cast<char*>(&version), sizeof(version));
+    in.read(reinterpret_cast<char*>(&word_count), sizeof(word_count));
+    if (!in || magic != SPIRV_CACHE_MAGIC || version != SPIRV_CACHE_VERSION || word_count == 0) {
+        return false;
+    }
+
+    std::vector<uint32_t> words(word_count);
+    in.read(reinterpret_cast<char*>(words.data()), word_count * sizeof(uint32_t));
+    if (!in) return false;
+
+    out = std::move(words);
+    return true;
+}
+
+static void store_spirv_cache(const std::filesystem::path& path, const std::vector<uint32_t>& words) {
+    if (path.empty() || words.empty()) return;
+
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+    if (ec) return;
+
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out) return;
+
+    const uint32_t magic = SPIRV_CACHE_MAGIC;
+    const uint32_t version = SPIRV_CACHE_VERSION;
+    const uint32_t word_count = static_cast<uint32_t>(words.size());
+    out.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+    out.write(reinterpret_cast<const char*>(&version), sizeof(version));
+    out.write(reinterpret_cast<const char*>(&word_count), sizeof(word_count));
+    out.write(reinterpret_cast<const char*>(words.data()), words.size() * sizeof(uint32_t));
+}
+
+} // namespace
+
 SpirvCompileResult compile_glsl_to_spirv(
     const std::string& source,
     ShaderStage stage,
@@ -31,13 +168,22 @@ SpirvCompileResult compile_glsl_to_spirv(
 ) {
     SpirvCompileResult result;
 
-    shaderc::Compiler compiler;
+    std::filesystem::path cache_path = shader_cache_path(source, stage, entry_point);
+    if (load_spirv_cache(cache_path, result.spirv)) {
+        result.success = true;
+        return result;
+    }
+
+    static std::mutex compiler_mutex;
+    static shaderc::Compiler compiler;
     shaderc::CompileOptions options;
 
     // Target Vulkan 1.2 / SPIR-V 1.5 (compatible with validation layers)
     options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_2);
     options.SetTargetSpirv(shaderc_spirv_version_1_5);
-    options.SetOptimizationLevel(shaderc_optimization_level_performance);
+    options.SetOptimizationLevel(performance_optimization_enabled()
+        ? shaderc_optimization_level_performance
+        : shaderc_optimization_level_zero);
 
     // Force GLSL 450 profile to handle #version 330 sources
     options.SetForcedVersionProfile(450, shaderc_profile_core);
@@ -69,7 +215,11 @@ SpirvCompileResult compile_glsl_to_spirv(
     options.AddMacroDefinition("VULKAN", "100");
 
     auto kind = to_shaderc_kind(stage);
-    auto module = compiler.CompileGlslToSpv(source, kind, "shader", entry_point.c_str(), options);
+    shaderc::SpvCompilationResult module;
+    {
+        std::lock_guard<std::mutex> lock(compiler_mutex);
+        module = compiler.CompileGlslToSpv(source, kind, "shader", entry_point.c_str(), options);
+    }
 
     if (module.GetCompilationStatus() != shaderc_compilation_status_success) {
         result.success = false;
@@ -94,6 +244,7 @@ SpirvCompileResult compile_glsl_to_spirv(
     }
 
     result.spirv.assign(module.cbegin(), module.cend());
+    store_spirv_cache(cache_path, result.spirv);
     result.success = true;
     return result;
 }
