@@ -408,7 +408,6 @@ public:
 
     std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) override;
     void submit(ICommandList& cmd) override;
-    void wait_for_submitted_work() override;
     void present() override;
 
     // Texture-to-texture presentation path. Render surfaces must expose

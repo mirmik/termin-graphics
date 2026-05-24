@@ -2951,7 +2951,6 @@ void VulkanRenderDevice::prepare_frame_slot(uint32_t slot) {
         vkResetFences(device_, 1, &frame_fences_[slot]);
         frame_fence_in_flight_[slot] = false;
     }
-
     complete_pixel_readbacks(pixel_readbacks_slots_[slot]);
     drain_pending_destroy(pending_destroy_slots_[slot]);
 
@@ -3098,12 +3097,6 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
         s_submits = 0;
         s_last_fence_wait_us = 0;
         s_window_start = now;
-    }
-}
-
-void VulkanRenderDevice::wait_for_submitted_work() {
-    for (uint32_t slot = 0; slot < kFrameSlotCount; ++slot) {
-        prepare_frame_slot(slot);
     }
 }
 
