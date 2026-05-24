@@ -8,6 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDK_PREFIX="${SDK_PREFIX:-$SCRIPT_DIR/sdk}"
 BUILD_DIR="${BUILD_DIR:-}"
+INSTALL_STAGING_DIR="${TERMIN_SDK_INSTALL_STAGING_DIR:-}"
 
 BUILD_TYPE="Release"
 CLEAN=0
@@ -176,7 +177,15 @@ cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     -DPython_EXECUTABLE="$PY_EXEC"
 
 cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"
-cmake --install "$BUILD_DIR"
+
+if [[ -z "$INSTALL_STAGING_DIR" ]]; then
+    INSTALL_STAGING_DIR="$BUILD_DIR/sdk-install-staging"
+fi
+echo "Install staging: $INSTALL_STAGING_DIR"
+rm -rf "$INSTALL_STAGING_DIR"
+mkdir -p "$INSTALL_STAGING_DIR" "$SDK_PREFIX"
+cmake --install "$BUILD_DIR" --prefix "$INSTALL_STAGING_DIR"
+rsync -a --exclude '/lib/python/' "$INSTALL_STAGING_DIR"/ "$SDK_PREFIX"/
 
 echo ""
 echo "========================================"

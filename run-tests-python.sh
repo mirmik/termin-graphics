@@ -50,7 +50,7 @@ echo "Python: $PYTHON_BIN"
 
 # --- TERMIN_SDK ---
 if [[ -z "${TERMIN_SDK:-}" ]]; then
-    if [[ -d "$SCRIPT_DIR/sdk/lib/python/termin" ]]; then
+    if [[ -d "$SCRIPT_DIR/sdk/lib" ]]; then
         export TERMIN_SDK="$SCRIPT_DIR/sdk"
     elif [[ -d "/opt/termin/lib" ]]; then
         export TERMIN_SDK="/opt/termin"
@@ -77,11 +77,22 @@ fi
 
 # --- PYTHONPATH ---
 # With venv + editable installs, all termin packages are already importable.
-# Adding sdk/lib/python would override them with stale SDK copies.
+# Adding SDK package paths would override them with bundled SDK copies.
 if [[ $NO_VENV -eq 0 && -d "$SCRIPT_DIR/.venv" ]]; then
     export PYTHONPATH="${SCRIPT_DIR}/diffusion-editor${PYTHONPATH:+:$PYTHONPATH}"
 else
-    export PYTHONPATH="${SDK_PREFIX}/lib/python:${SCRIPT_DIR}/termin-app/install/lib/python:${SCRIPT_DIR}/diffusion-editor${PYTHONPATH:+:$PYTHONPATH}"
+    BUNDLED_SITE_PACKAGES=""
+    for site_dir in "$SDK_PREFIX"/lib/python3.*/site-packages; do
+        if [[ -d "$site_dir" ]]; then
+            BUNDLED_SITE_PACKAGES="$site_dir"
+            break
+        fi
+    done
+    if [[ -n "$BUNDLED_SITE_PACKAGES" ]]; then
+        export PYTHONPATH="${BUNDLED_SITE_PACKAGES}:${SCRIPT_DIR}/termin-app/install/lib/python:${SCRIPT_DIR}/diffusion-editor${PYTHONPATH:+:$PYTHONPATH}"
+    else
+        export PYTHONPATH="${SCRIPT_DIR}/termin-app/install/lib/python:${SCRIPT_DIR}/diffusion-editor${PYTHONPATH:+:$PYTHONPATH}"
+    fi
 fi
 
 # --- Run tests ---
