@@ -557,8 +557,9 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
     size_t schedule_count = tc_frame_graph_schedule_count(fg);
 
+    const bool owns_tgfx2_frame = ctx2 && !ctx2->in_frame();
     const auto begin_frame_begin = RenderTimingClock::now();
-    if (ctx2) {
+    if (owns_tgfx2_frame) {
         ctx2->begin_frame();
     }
     begin_frame_ms = timing_ms(begin_frame_begin, RenderTimingClock::now());
@@ -964,7 +965,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
     tc_profiler_end_section();
 
     const auto end_frame_begin = RenderTimingClock::now();
-    if (ctx2) {
+    if (owns_tgfx2_frame) {
         ctx2->end_frame();
     }
     end_frame_ms = timing_ms(end_frame_begin, RenderTimingClock::now());
