@@ -49,6 +49,9 @@ jobs:
           name: sdk-cpp
           path: sdk/
 
+      - name: Restore SDK executable permissions
+        run: chmod +x sdk/bin/*
+
       - name: Run C++ tests
         run: ./run-tests-cpp.sh
 
@@ -75,6 +78,9 @@ jobs:
         with:
           name: sdk-cpp
           path: sdk/
+
+      - name: Restore SDK executable permissions
+        run: chmod +x sdk/bin/*
 
       - name: Install nanobind
         run: pip install nanobind
@@ -115,6 +121,9 @@ jobs:
         with:
           name: sdk-full
           path: sdk/
+
+      - name: Restore SDK executable permissions
+        run: chmod +x sdk/bin/*
 
       - uses: actions/download-artifact@v5
         with:
@@ -162,6 +171,9 @@ jobs:
         with:
           name: sdk-full
           path: sdk/
+
+      - name: Restore SDK executable permissions
+        run: chmod +x sdk/bin/*
 
       - uses: actions/download-artifact@v5
         with:
@@ -220,6 +232,9 @@ jobs:
           name: sdk-full
           path: sdk/
 
+      - name: Restore SDK executable permissions
+        run: chmod +x sdk/bin/*
+
       - uses: actions/download-artifact@v5
         with:
           name: sdk-python-staging
@@ -270,6 +285,9 @@ jobs:
         with:
           name: sdk-full
           path: sdk/
+
+      - name: Restore SDK executable permissions
+        run: chmod +x sdk/bin/*
 
       - uses: actions/download-artifact@v5
         with:
