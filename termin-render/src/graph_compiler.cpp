@@ -93,6 +93,14 @@ static bool is_external_resource_name(const std::string& name) {
            name == "OUTPUT" || name == "DISPLAY";
 }
 
+static bool is_attachment_texture_type(const std::string& type) {
+    return type == "color_texture" || type == "depth_texture";
+}
+
+static bool is_direct_target_resource_type(const std::string& type) {
+    return type == "shadow" || type == "shadow_map_array";
+}
+
 static bool is_graph_alias_node(const NodeData& node) {
     return node.node_type == "render_target_input" ||
            node.node_type == "fbo_split" ||
@@ -235,8 +243,18 @@ static void apply_target_overrides(
 
             const std::string& output_res = output_it->second;
             auto output_type = socket_type_for(node, base_name, false);
-            result.resource_types[output_res] =
-                output_type.has_value() ? *output_type : inp.socket_type;
+            std::string resolved_output_type = output_type.has_value() ? *output_type : inp.socket_type;
+            if (resolved_output_type == "fbo" && inp.socket_type != "fbo") {
+                resolved_output_type = inp.socket_type;
+            }
+            result.resource_types[output_res] = resolved_output_type;
+
+            if (output_res != target_res && is_direct_target_resource_type(resolved_output_type)) {
+                sockets[base_name] = target_res;
+                result.resource_types[target_res] = resolved_output_type;
+                result.resource_types.erase(output_res);
+                continue;
+            }
 
             auto target_view_it = result.resource_views.find(target_res);
             if (target_view_it != result.resource_views.end()) {
@@ -276,7 +294,7 @@ static void apply_target_overrides(
                         target_res,
                         termin::AttachmentKind::Color,
                     };
-                } else {
+                } else if (!is_attachment_texture_type(result.resource_types[output_res])) {
                     result.fbo_compositions[output_res] =
                         termin::FboComposition{target_res, target_res};
                 }

@@ -278,9 +278,21 @@ GraphData GraphData::from_trent(const nos::trent& t) {
                         conn.to_socket.c_str()
                     );
                 }
+                std::string socket_type = target_socket_type_for(*to_node, conn.to_socket);
+                if (graph_data_is_target_socket_name(conn.to_socket)) {
+                    NodeData* from_node = graph.get_node(conn.from_node_id);
+                    if (from_node) {
+                        for (const auto& output : from_node->outputs) {
+                            if (output.name == conn.from_socket) {
+                                socket_type = output.socket_type;
+                                break;
+                            }
+                        }
+                    }
+                }
                 to_node->inputs.push_back({
                     conn.to_socket,
-                    target_socket_type_for(*to_node, conn.to_socket),
+                    socket_type,
                     true
                 });
             }

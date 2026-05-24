@@ -652,13 +652,16 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
 
         for (const auto& [fbo_name, composition] : pipeline_cache.fbo_compositions) {
-            auto composition_input_is_view_of_external = [&](const std::string& name) {
+            auto composition_input_is_external = [&](const std::string& name) {
+                if (is_external_output_resource(name.c_str())) {
+                    return true;
+                }
                 auto view_it = pipeline_cache.resource_views.find(name);
                 return view_it != pipeline_cache.resource_views.end() &&
                        is_external_output_resource(view_it->second.parent.c_str());
             };
-            if (composition_input_is_view_of_external(composition.color) ||
-                composition_input_is_view_of_external(composition.depth)) {
+            if (composition_input_is_external(composition.color) ||
+                composition_input_is_external(composition.depth)) {
                 // Viewport-owned textures are only available once a concrete
                 // render target context is selected. Per-pass resolvers below handle
                 // those compositions without populating the global maps here.
