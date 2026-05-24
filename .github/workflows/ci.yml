@@ -88,6 +88,12 @@ jobs:
           path: sdk/
           retention-days: 1
 
+      - uses: actions/upload-artifact@v5
+        with:
+          name: sdk-python-staging
+          path: build/${{ env.BUILD_TYPE }}/sdk-install-staging/lib/python/
+          retention-days: 1
+
   # ── 4. Test pip packages ───────────────────────────────────────
   test-pip-packages:
     needs: build-bindings
@@ -110,7 +116,14 @@ jobs:
           name: sdk-full
           path: sdk/
 
+      - uses: actions/download-artifact@v5
+        with:
+          name: sdk-python-staging
+          path: sdk-python-staging/
+
       - name: Install pip packages
+        env:
+          TERMIN_BINDINGS_DIR: ${{ github.workspace }}/sdk-python-staging
         run: |
           pip install nanobind numpy Pillow PyYAML pytest
           ./install-pip-packages.sh
@@ -150,7 +163,14 @@ jobs:
           name: sdk-full
           path: sdk/
 
+      - uses: actions/download-artifact@v5
+        with:
+          name: sdk-python-staging
+          path: sdk-python-staging/
+
       - name: Install pip packages
+        env:
+          TERMIN_BINDINGS_DIR: ${{ github.workspace }}/sdk-python-staging
         run: |
           pip install nanobind numpy Pillow PyYAML pytest PyOpenGL glfw pysdl2 pysdl2-dll pyassimp scipy PyQt6
           ./install-pip-packages.sh --editable
@@ -200,7 +220,14 @@ jobs:
           name: sdk-full
           path: sdk/
 
+      - uses: actions/download-artifact@v5
+        with:
+          name: sdk-python-staging
+          path: sdk-python-staging/
+
       - name: Install pip packages
+        env:
+          TERMIN_BINDINGS_DIR: ${{ github.workspace }}/sdk-python-staging
         run: |
           pip install nanobind numpy Pillow PyYAML
           ./install-pip-packages.sh
@@ -244,7 +271,14 @@ jobs:
           name: sdk-full
           path: sdk/
 
+      - uses: actions/download-artifact@v5
+        with:
+          name: sdk-python-staging
+          path: sdk-python-staging/
+
       - name: Install dependencies
+        env:
+          TERMIN_BINDINGS_DIR: ${{ github.workspace }}/sdk-python-staging
         run: |
           pip install nanobind numpy Pillow PyYAML pytest
           ./install-pip-packages.sh
