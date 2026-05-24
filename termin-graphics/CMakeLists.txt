@@ -134,15 +134,15 @@ option(TGFX2_ENABLE_VULKAN "Enable Vulkan backend for tgfx2" ${_TGFX2_VULKAN_DEF
 if(TGFX2_ENABLE_VULKAN)
     find_package(Vulkan REQUIRED)
 
-    # VMA (Vulkan Memory Allocator) via FetchContent
-    include(FetchContent)
-    FetchContent_Declare(vma
-        GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
-        GIT_TAG v3.1.0
-    )
-    set(VMA_STATIC_VULKAN_FUNCTIONS OFF CACHE BOOL "" FORCE)
-    set(VMA_DYNAMIC_VULKAN_FUNCTIONS ON CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(vma)
+    set(TERMIN_VMA_DIR
+        "${CMAKE_CURRENT_LIST_DIR}/../termin-thirdparty/vulkan-memory-allocator"
+        CACHE PATH "Vulkan Memory Allocator source directory")
+    if(NOT EXISTS "${TERMIN_VMA_DIR}/include/vk_mem_alloc.h")
+        message(FATAL_ERROR
+            "Vulkan Memory Allocator not found at ${TERMIN_VMA_DIR}. "
+            "Run: git submodule update --init termin-thirdparty/vulkan-memory-allocator "
+            "or set TERMIN_VMA_DIR.")
+    endif()
 
     if(TGFX2_ENABLE_SHADERC)
         # shaderc lookup. Windows VulkanSDK ships three flavours and the
@@ -207,8 +207,7 @@ if(TGFX2_ENABLE_VULKAN)
     if(ANDROID)
         target_compile_definitions(termin_graphics2 PRIVATE VMA_VULKAN_VERSION=1000000)
     endif()
-    # VMA is header-only; link PRIVATE to avoid export issues
-    target_include_directories(termin_graphics2 PRIVATE ${vma_SOURCE_DIR}/include)
+    target_include_directories(termin_graphics2 PRIVATE "${TERMIN_VMA_DIR}/include")
 endif()
 
 if(MSVC)
