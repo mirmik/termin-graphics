@@ -15,6 +15,7 @@ typedef struct tc_render_target_config {
     const char* name;           // Render target name (interned)
     const char* kind;           // Render target kind: texture_2d or xr_stereo (interned)
     const char* camera_uuid;    // Camera entity UUID (interned)
+    const char* xr_origin_uuid; // XR origin entity UUID for xr_stereo targets (interned)
     int width;                  // Render width in pixels
     int height;                 // Render height in pixels
     bool dynamic_resolution;    // Resize from attached viewport without serializing runtime size

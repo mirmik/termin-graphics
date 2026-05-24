@@ -185,6 +185,28 @@ void bind_tc_render_target(nb::module_& m) {
                 tc_render_target_set_camera(h, reinterpret_cast<tc_component*>(ptr));
             },
             nb::arg().none())
+        .def_prop_rw("xr_origin",
+            [](const tc_render_target_handle& h) -> nb::object {
+                tc_component* c = tc_render_target_get_xr_origin(h);
+                if (!c) return nb::none();
+                if (c->native_language == TC_LANGUAGE_PYTHON && c->body) {
+                    return nb::borrow<nb::object>(reinterpret_cast<PyObject*>(c->body));
+                }
+                if (c->kind == TC_CXX_COMPONENT) {
+                    nb::module_ m = nb::module_::import_("termin.render_components._components_render_native");
+                    return m.attr("XrOriginComponent").attr("_from_c_component_ptr")(reinterpret_cast<uintptr_t>(c));
+                }
+                return nb::none();
+            },
+            [](tc_render_target_handle& h, nb::object origin_obj) {
+                if (origin_obj.is_none()) {
+                    tc_render_target_set_xr_origin(h, nullptr);
+                    return;
+                }
+                uintptr_t ptr = nb::cast<uintptr_t>(origin_obj.attr("c_component_ptr")());
+                tc_render_target_set_xr_origin(h, reinterpret_cast<tc_component*>(ptr));
+            },
+            nb::arg().none())
         .def_prop_rw("pipeline",
             [](const tc_render_target_handle& h) -> nb::object {
                 tc_pipeline_handle ph = tc_render_target_get_pipeline(h);

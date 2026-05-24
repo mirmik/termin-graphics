@@ -169,6 +169,9 @@ static tc_value serialize_render_target_config(const tc_render_target_config* rt
         tc_value_dict_set(&v, "kind", tc_value_string(rtc->kind));
     }
     if (rtc->camera_uuid && rtc->camera_uuid[0]) tc_value_dict_set(&v, "camera_uuid", tc_value_string(rtc->camera_uuid));
+    if (rtc->xr_origin_uuid && rtc->xr_origin_uuid[0]) {
+        tc_value_dict_set(&v, "xr_origin_uuid", tc_value_string(rtc->xr_origin_uuid));
+    }
     if (rtc->dynamic_resolution) {
         tc_value_dict_set(&v, "dynamic_resolution", tc_value_bool(true));
     } else {
@@ -211,6 +214,9 @@ static bool deserialize_render_target_config(const tc_value* data, tc_render_tar
 
     tc_value* camera_uuid = tc_value_dict_get((tc_value*)data, "camera_uuid");
     if (camera_uuid && camera_uuid->type == TC_VALUE_STRING) out->camera_uuid = camera_uuid->data.s;
+
+    tc_value* xr_origin_uuid = tc_value_dict_get((tc_value*)data, "xr_origin_uuid");
+    if (xr_origin_uuid && xr_origin_uuid->type == TC_VALUE_STRING) out->xr_origin_uuid = xr_origin_uuid->data.s;
 
     tc_value* width = tc_value_dict_get((tc_value*)data, "width");
     if (width) value_to_int(width, &out->width);

@@ -86,6 +86,10 @@ TC_API void tc_render_target_set_camera(tc_render_target_handle h, tc_component*
 TC_API tc_component* tc_render_target_get_camera(tc_render_target_handle h);
 TC_API tc_entity_handle tc_render_target_get_camera_entity(tc_render_target_handle h);
 
+TC_API void tc_render_target_set_xr_origin(tc_render_target_handle h, tc_component* xr_origin);
+TC_API tc_component* tc_render_target_get_xr_origin(tc_render_target_handle h);
+TC_API tc_entity_handle tc_render_target_get_xr_origin_entity(tc_render_target_handle h);
+
 TC_API void tc_render_target_set_pipeline(tc_render_target_handle h, tc_pipeline_handle pipeline);
 TC_API tc_pipeline_handle tc_render_target_get_pipeline(tc_render_target_handle h);
 

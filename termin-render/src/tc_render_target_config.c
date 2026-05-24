@@ -27,6 +27,7 @@ void tc_render_target_config_copy(tc_render_target_config* dst, const tc_render_
     dst->name = src->name ? tgfx_intern_string(src->name) : NULL;
     dst->kind = src->kind ? tgfx_intern_string(src->kind) : tgfx_intern_string("texture_2d");
     dst->camera_uuid = src->camera_uuid ? tgfx_intern_string(src->camera_uuid) : NULL;
+    dst->xr_origin_uuid = src->xr_origin_uuid ? tgfx_intern_string(src->xr_origin_uuid) : NULL;
     dst->width = src->width;
     dst->height = src->height;
     dst->dynamic_resolution = src->dynamic_resolution;
