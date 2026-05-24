@@ -156,7 +156,6 @@ $cmakeArgs += @(
     "-DTERMIN_ENABLE_VULKAN=$TerminEnableVulkan",
     "-DTERMIN_ENABLE_SDL=$TerminEnableSdl",
     "-DTERMIN_BUILD_EDITOR_MINIMAL=ON",
-    "-DTERMIN_BUILD_EDITOR_EXE=OFF",
     "-DTERMIN_BUILD_LAUNCHER=ON",
     "-DTERMIN_BUNDLE_PYTHON=ON",
     "-DPython_EXECUTABLE=$pythonExec"

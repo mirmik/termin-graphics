@@ -156,7 +156,6 @@ if ! cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     -DTERMIN_ENABLE_VULKAN="$TERMIN_ENABLE_VULKAN" \
     -DTERMIN_ENABLE_SDL="$TERMIN_ENABLE_SDL" \
     -DTERMIN_BUILD_EDITOR_MINIMAL=OFF \
-    -DTERMIN_BUILD_EDITOR_EXE=OFF \
     -DTERMIN_BUILD_LAUNCHER=OFF; then
     echo "ERROR: CMake configure failed" >&2
     exit 1

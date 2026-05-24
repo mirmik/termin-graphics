@@ -64,17 +64,6 @@ fi
 SDK_PREFIX="${SDK_PREFIX:-$SCRIPT_DIR/sdk}"
 export LD_LIBRARY_PATH="${SDK_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
-# PyQt6 bundled Qt6 shared libraries (for venv with PyQt6 installed)
-if [[ $NO_VENV -eq 0 && -d "$SCRIPT_DIR/.venv" ]]; then
-    # Find PyQt6 Qt6 lib dir regardless of Python minor version
-    for qt6_dir in "$SCRIPT_DIR/.venv"/lib/python3.*/site-packages/PyQt6/Qt6/lib; do
-        if [[ -d "$qt6_dir" ]]; then
-            export LD_LIBRARY_PATH="$qt6_dir:$LD_LIBRARY_PATH"
-            break
-        fi
-    done
-fi
-
 # --- PYTHONPATH ---
 # With venv + editable installs, all termin packages are already importable.
 # Adding SDK package paths would override them with bundled SDK copies.

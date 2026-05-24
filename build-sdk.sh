@@ -114,7 +114,6 @@ if usersite:
 
     local external_packages=(
         numpy
-        PyQt6
         sip
         sipbuild
         PIL
