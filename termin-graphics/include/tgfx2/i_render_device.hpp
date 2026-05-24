@@ -84,6 +84,7 @@ public:
     // --- Command submission ---
     virtual std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) = 0;
     virtual void submit(ICommandList& cmd) = 0;
+    virtual void wait_for_submitted_work() { wait_idle(); }
 
     // --- Present / sync ---
     virtual void present() = 0;

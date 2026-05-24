@@ -3,6 +3,9 @@
 #include <cstdlib>
 #include <functional>
 #include <algorithm>
+#include <chrono>
+#include <unordered_map>
+#include <vector>
 
 #include <tcbase/tc_log.hpp>
 #include "tc_profiler.h"
@@ -29,6 +32,109 @@ extern "C" {
 namespace termin {
 
 static constexpr const char* RESOURCE_FORMAT_RENDER_TARGET = "render_target";
+
+using RenderTimingClock = std::chrono::steady_clock;
+
+struct RenderPassTimingStats {
+    uint64_t count = 0;
+    double total_ms = 0.0;
+};
+
+struct RenderEngineTimingStats {
+    RenderTimingClock::time_point window_start = RenderTimingClock::now();
+    uint64_t calls = 0;
+    double total_ms = 0.0;
+    double frame_graph_ms = 0.0;
+    double specs_ms = 0.0;
+    double allocate_ms = 0.0;
+    double begin_frame_ms = 0.0;
+    double clear_targets_ms = 0.0;
+    double assemble_resources_ms = 0.0;
+    double clear_resources_ms = 0.0;
+    double pass_total_ms = 0.0;
+    double end_frame_ms = 0.0;
+    std::unordered_map<std::string, RenderPassTimingStats> pass_stats;
+};
+
+static bool render_engine_timing_enabled() {
+#ifdef __ANDROID__
+    return true;
+#else
+    const char* env = std::getenv("TERMIN_RENDER_ENGINE_TIMING");
+    return env && env[0] && env[0] != '0';
+#endif
+}
+
+static double timing_ms(RenderTimingClock::time_point begin, RenderTimingClock::time_point end) {
+    return std::chrono::duration<double, std::milli>(end - begin).count();
+}
+
+static RenderEngineTimingStats& render_engine_timing_stats() {
+    static RenderEngineTimingStats stats;
+    return stats;
+}
+
+static void maybe_report_render_engine_timing() {
+    if (!render_engine_timing_enabled()) {
+        return;
+    }
+
+    RenderEngineTimingStats& stats = render_engine_timing_stats();
+    const auto now = RenderTimingClock::now();
+    const double window_seconds = std::chrono::duration<double>(now - stats.window_start).count();
+    if (window_seconds < 2.0 || stats.calls == 0) {
+        return;
+    }
+
+    const double inv_calls = 1.0 / static_cast<double>(stats.calls);
+    tc::Log::info(
+        "[RenderEngine timing] calls=%llu callsPerSec=%.1f avgMs{total=%.2f frameGraph=%.2f specs=%.2f allocate=%.2f beginFrame=%.2f clearTargets=%.2f assemble=%.2f clearResources=%.2f passes=%.2f endFrame=%.2f}",
+        static_cast<unsigned long long>(stats.calls),
+        static_cast<double>(stats.calls) / window_seconds,
+        stats.total_ms * inv_calls,
+        stats.frame_graph_ms * inv_calls,
+        stats.specs_ms * inv_calls,
+        stats.allocate_ms * inv_calls,
+        stats.begin_frame_ms * inv_calls,
+        stats.clear_targets_ms * inv_calls,
+        stats.assemble_resources_ms * inv_calls,
+        stats.clear_resources_ms * inv_calls,
+        stats.pass_total_ms * inv_calls,
+        stats.end_frame_ms * inv_calls
+    );
+
+    std::vector<std::pair<std::string, RenderPassTimingStats>> passes;
+    passes.reserve(stats.pass_stats.size());
+    for (const auto& entry : stats.pass_stats) {
+        passes.push_back(entry);
+    }
+    std::sort(
+        passes.begin(),
+        passes.end(),
+        [](const auto& a, const auto& b) {
+            return a.second.total_ms > b.second.total_ms;
+        }
+    );
+
+    const size_t max_passes = std::min<size_t>(passes.size(), 10);
+    for (size_t i = 0; i < max_passes; ++i) {
+        const auto& [name, pass] = passes[i];
+        const double avg_ms = pass.count > 0
+            ? pass.total_ms / static_cast<double>(pass.count)
+            : 0.0;
+        tc::Log::info(
+            "[RenderEngine timing] pass[%zu] name='%s' calls=%llu avgMs=%.2f totalMs=%.2f",
+            i,
+            name.c_str(),
+            static_cast<unsigned long long>(pass.count),
+            avg_ms,
+            pass.total_ms
+        );
+    }
+
+    stats = RenderEngineTimingStats{};
+    stats.window_start = now;
+}
 
 static bool is_external_color_output(const char* name) {
     return name && (
@@ -187,6 +293,19 @@ void RenderEngine::render_scene_pipeline_offscreen(
         return;
     }
 
+    const bool collect_render_timing = render_engine_timing_enabled();
+    const auto total_begin = RenderTimingClock::now();
+    double frame_graph_ms = 0.0;
+    double specs_ms = 0.0;
+    double allocate_ms = 0.0;
+    double begin_frame_ms = 0.0;
+    double clear_targets_ms = 0.0;
+    double assemble_resources_ms = 0.0;
+    double clear_resources_ms = 0.0;
+    double pass_total_ms = 0.0;
+    double end_frame_ms = 0.0;
+    std::unordered_map<std::string, RenderPassTimingStats> local_pass_stats;
+
     std::string default_target = default_render_target;
     if (default_target.empty()) {
         default_target = render_target_contexts.begin()->first;
@@ -202,6 +321,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
     int default_height = default_rt_ctx.render_rect.height;
 
     tc_profiler_begin_section("Get Frame Graph");
+    const auto frame_graph_begin = RenderTimingClock::now();
     tc_frame_graph* fg = tc_pipeline_get_frame_graph(pipeline.handle());
     if (!fg) {
         tc_profiler_end_section();
@@ -216,12 +336,14 @@ void RenderEngine::render_scene_pipeline_offscreen(
         return;
     }
     tc_profiler_end_section();
+    frame_graph_ms = timing_ms(frame_graph_begin, RenderTimingClock::now());
 
     // Bring up tgfx2 stack BEFORE FBO allocation so FBOPool::ensure can
     // attach persistent tgfx2 wrappers on the very first frame.
     ensure_tgfx2();
 
     tc_profiler_begin_section("Collect Specs");
+    const auto specs_begin = RenderTimingClock::now();
     auto specs = pipeline.collect_specs();
 
     std::unordered_map<std::string, ResourceSpec> spec_map;
@@ -246,8 +368,10 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
     }
     tc_profiler_end_section();
+    specs_ms = timing_ms(specs_begin, RenderTimingClock::now());
 
     tc_profiler_begin_section("Allocate Resources");
+    const auto allocate_begin = RenderTimingClock::now();
     FBOMap resources;
     PipelineRenderCache& pipeline_cache = pipeline.cache();
     pipeline_cache.texture_alias_to_canonical.clear();
@@ -429,14 +553,18 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
     }
     tc_profiler_end_section();
+    allocate_ms = timing_ms(allocate_begin, RenderTimingClock::now());
 
     size_t schedule_count = tc_frame_graph_schedule_count(fg);
 
+    const auto begin_frame_begin = RenderTimingClock::now();
     if (ctx2) {
         ctx2->begin_frame();
     }
+    begin_frame_ms = timing_ms(begin_frame_begin, RenderTimingClock::now());
 
     tc_profiler_begin_section("Clear Render Target Contexts");
+    const auto clear_targets_begin = RenderTimingClock::now();
     if (ctx2) {
         for (const auto& [render_target_name, rt_ctx] : render_target_contexts) {
             if (!rt_ctx.clear_color_enabled && !rt_ctx.clear_depth_enabled) {
@@ -465,10 +593,12 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
     }
     tc_profiler_end_section();
+    clear_targets_ms = timing_ms(clear_targets_begin, RenderTimingClock::now());
 
     // Assemble per-resource tgfx2 texture maps from the pool. Native
     // path: handles are owned by IRenderDevice, persistent across
     // frames without any wrap/destroy churn.
+    const auto assemble_resources_begin = RenderTimingClock::now();
     std::unordered_map<std::string, tgfx::TextureHandle> tex2_resources;
     std::unordered_map<std::string, tgfx::TextureHandle> tex2_depth_resources;
     if (ctx2 && device) {
@@ -563,11 +693,13 @@ void RenderEngine::render_scene_pipeline_offscreen(
             }
         }
     }
+    assemble_resources_ms = timing_ms(assemble_resources_begin, RenderTimingClock::now());
 
     // Pre-frame clear phase via transient ctx2 passes. Replaces legacy
     // graphics->bind_framebuffer + clear_color_depth loop — see
     // render_view_to_fbo for the rationale.
     tc_profiler_begin_section("Clear Resources");
+    const auto clear_resources_begin = RenderTimingClock::now();
     if (ctx2) {
         for (const auto& spec : specs) {
             if (spec.resource_type != "fbo" && !spec.resource_type.empty()) {
@@ -611,6 +743,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
     }
     tc_profiler_end_section();
+    clear_resources_ms = timing_ms(clear_resources_begin, RenderTimingClock::now());
 
     tc_profiler_begin_section("Execute Passes");
     for (size_t i = 0; i < schedule_count; i++) {
@@ -621,6 +754,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
         const char* pass_name = pass->pass_name ? pass->pass_name : "UnnamedPass";
         tc_profiler_begin_section(pass_name);
+        const auto pass_begin = RenderTimingClock::now();
 
         // Per-pass state reset — no-op on backends with explicit state
         // (Vulkan), restores GL baseline on OpenGL.
@@ -818,11 +952,39 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
 
         tc_profiler_end_section();
+        const double pass_ms = timing_ms(pass_begin, RenderTimingClock::now());
+        pass_total_ms += pass_ms;
+        RenderPassTimingStats& pass_stats = local_pass_stats[pass_name];
+        pass_stats.count += 1;
+        pass_stats.total_ms += pass_ms;
     }
     tc_profiler_end_section();
 
+    const auto end_frame_begin = RenderTimingClock::now();
     if (ctx2) {
         ctx2->end_frame();
+    }
+    end_frame_ms = timing_ms(end_frame_begin, RenderTimingClock::now());
+
+    if (collect_render_timing) {
+        RenderEngineTimingStats& stats = render_engine_timing_stats();
+        stats.calls += 1;
+        stats.total_ms += timing_ms(total_begin, RenderTimingClock::now());
+        stats.frame_graph_ms += frame_graph_ms;
+        stats.specs_ms += specs_ms;
+        stats.allocate_ms += allocate_ms;
+        stats.begin_frame_ms += begin_frame_ms;
+        stats.clear_targets_ms += clear_targets_ms;
+        stats.assemble_resources_ms += assemble_resources_ms;
+        stats.clear_resources_ms += clear_resources_ms;
+        stats.pass_total_ms += pass_total_ms;
+        stats.end_frame_ms += end_frame_ms;
+        for (const auto& [name, local_stats] : local_pass_stats) {
+            RenderPassTimingStats& pass_stats = stats.pass_stats[name];
+            pass_stats.count += local_stats.count;
+            pass_stats.total_ms += local_stats.total_ms;
+        }
+        maybe_report_render_engine_timing();
     }
 }
 

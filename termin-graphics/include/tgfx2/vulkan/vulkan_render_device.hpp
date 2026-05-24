@@ -156,7 +156,7 @@ struct VulkanDeviceCreateInfo {
 
 class TGFX2_TYPE_API VulkanRenderDevice : public IRenderDevice {
 private:
-    static constexpr uint32_t kFrameSlotCount = 3;
+    static constexpr uint32_t kFrameSlotCount = 6;
 
     // --- Frame sync / deferred destroy -----------------------------------
     //
@@ -408,6 +408,7 @@ public:
 
     std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) override;
     void submit(ICommandList& cmd) override;
+    void wait_for_submitted_work() override;
     void present() override;
 
     // Texture-to-texture presentation path. Render surfaces must expose

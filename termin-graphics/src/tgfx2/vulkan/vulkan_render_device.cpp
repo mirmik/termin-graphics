@@ -85,11 +85,15 @@ namespace tgfx {
 namespace {
 
 bool vulkan_stats_enabled() {
+#ifdef __ANDROID__
+    return true;
+#else
     static const bool enabled = [] {
         const char* env = std::getenv("TGFX2_VULKAN_STATS");
         return env && env[0] == '1';
     }();
     return enabled;
+#endif
 }
 
 struct SpirvVertexInputs {
@@ -880,11 +884,11 @@ void VulkanRenderDevice::create_ring_ubo() {
     ubo_alignment_ = static_cast<uint32_t>(
         std::max<VkDeviceSize>(props.limits.minUniformBufferOffsetAlignment, 1));
 
-    // 24 MB total — 8 MB per frame slot. Budget ~10 KB UBO data per draw ×
+    // 8 MB per submit slot. Budget ~10 KB UBO data per draw ×
     // 1600 worst-case draws/frame = 16 MB needed, so per-slot headroom is
     // tight on adversarial scenes; logged (rare) overflow falls back to offset 0.
     // If that ever fires in practice, grow the ring or shrink per-pass UBOs.
-    ring_ubo_size_ = 24 * 1024 * 1024;
+    ring_ubo_size_ = static_cast<uint64_t>(kFrameSlotCount) * 8 * 1024 * 1024;
     ring_ubo_slot_size_ = ring_ubo_size_ / kFrameSlotCount;
 
     VkBufferCreateInfo bi{};
@@ -978,7 +982,7 @@ uint32_t VulkanRenderDevice::ring_ubo_write(const void* data, uint32_t size) {
 // --- Transient vertex ring ---
 
 void VulkanRenderDevice::create_transient_vertex_ring() {
-    transient_vb_size_ = 6 * 1024 * 1024;
+    transient_vb_size_ = static_cast<uint64_t>(kFrameSlotCount) * 2 * 1024 * 1024;
     transient_vb_slot_size_ = transient_vb_size_ / kFrameSlotCount;
 
     VkBufferCreateInfo bi{};
@@ -3094,6 +3098,12 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
         s_submits = 0;
         s_last_fence_wait_us = 0;
         s_window_start = now;
+    }
+}
+
+void VulkanRenderDevice::wait_for_submitted_work() {
+    for (uint32_t slot = 0; slot < kFrameSlotCount; ++slot) {
+        prepare_frame_slot(slot);
     }
 }
 
