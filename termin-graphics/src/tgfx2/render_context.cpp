@@ -255,6 +255,19 @@ void RenderContext2::set_polygon_mode(PolygonMode mode) {
     }
 }
 
+void RenderContext2::set_depth_bias(bool enabled, float constant, float slope, float clamp) {
+    if (raster_.depth_bias_enabled != enabled ||
+            raster_.depth_bias_constant != constant ||
+            raster_.depth_bias_slope != slope ||
+            raster_.depth_bias_clamp != clamp) {
+        raster_.depth_bias_enabled = enabled;
+        raster_.depth_bias_constant = constant;
+        raster_.depth_bias_slope = slope;
+        raster_.depth_bias_clamp = clamp;
+        pipeline_dirty_ = true;
+    }
+}
+
 void RenderContext2::set_color_mask(bool r, bool g, bool b, bool a) {
     if (color_mask_.r != r || color_mask_.g != g ||
         color_mask_.b != b || color_mask_.a != a) {

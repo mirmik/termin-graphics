@@ -208,6 +208,9 @@ void bind_tgfx2(nb::module_& m) {
         // State
         .def("set_depth_test", &tgfx::RenderContext2::set_depth_test)
         .def("set_depth_write", &tgfx::RenderContext2::set_depth_write)
+        .def("set_depth_bias", &tgfx::RenderContext2::set_depth_bias,
+             nb::arg("enabled"), nb::arg("constant") = 0.0f,
+             nb::arg("slope") = 0.0f, nb::arg("clamp") = 0.0f)
         .def("set_blend", &tgfx::RenderContext2::set_blend)
         .def("set_blend_func", &tgfx::RenderContext2::set_blend_func,
              nb::arg("src"), nb::arg("dst"))

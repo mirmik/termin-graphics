@@ -150,6 +150,7 @@ public:
     void set_blend_func(BlendFactor src, BlendFactor dst);
     void set_cull(CullMode mode);
     void set_polygon_mode(PolygonMode mode);
+    void set_depth_bias(bool enabled, float constant = 0.0f, float slope = 0.0f, float clamp = 0.0f);
     void set_color_mask(bool r, bool g, bool b, bool a);
 
     // --- Shader binding ---

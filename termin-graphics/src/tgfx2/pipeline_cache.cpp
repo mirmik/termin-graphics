@@ -33,6 +33,10 @@ bool PipelineCacheKey::operator==(const PipelineCacheKey& o) const {
         && raster.cull == o.raster.cull
         && raster.front_face == o.raster.front_face
         && raster.polygon_mode == o.raster.polygon_mode
+        && raster.depth_bias_enabled == o.raster.depth_bias_enabled
+        && raster.depth_bias_constant == o.raster.depth_bias_constant
+        && raster.depth_bias_slope == o.raster.depth_bias_slope
+        && raster.depth_bias_clamp == o.raster.depth_bias_clamp
         && depth_stencil.depth_test == o.depth_stencil.depth_test
         && depth_stencil.depth_write == o.depth_stencil.depth_write
         && depth_stencil.depth_compare == o.depth_stencil.depth_compare
@@ -73,7 +77,12 @@ size_t PipelineCacheKeyHash::operator()(const PipelineCacheKey& k) const {
 
     hash_combine(h, std::hash<int>{}(static_cast<int>(k.topology)));
     hash_combine(h, std::hash<int>{}(static_cast<int>(k.raster.cull)));
+    hash_combine(h, std::hash<int>{}(static_cast<int>(k.raster.front_face)));
     hash_combine(h, std::hash<int>{}(static_cast<int>(k.raster.polygon_mode)));
+    hash_combine(h, std::hash<bool>{}(k.raster.depth_bias_enabled));
+    hash_combine(h, std::hash<float>{}(k.raster.depth_bias_constant));
+    hash_combine(h, std::hash<float>{}(k.raster.depth_bias_slope));
+    hash_combine(h, std::hash<float>{}(k.raster.depth_bias_clamp));
     hash_combine(h, std::hash<bool>{}(k.depth_stencil.depth_test));
     hash_combine(h, std::hash<bool>{}(k.depth_stencil.depth_write));
     hash_combine(h, std::hash<int>{}(static_cast<int>(k.depth_stencil.depth_compare)));

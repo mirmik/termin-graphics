@@ -1641,6 +1641,10 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
     raster.cullMode = vk::to_vk_cull_mode(desc.raster.cull);
     raster.frontFace = vk::to_vk_front_face(desc.raster.front_face);
     raster.lineWidth = 1.0f;
+    raster.depthBiasEnable = desc.raster.depth_bias_enabled ? VK_TRUE : VK_FALSE;
+    raster.depthBiasConstantFactor = desc.raster.depth_bias_constant;
+    raster.depthBiasSlopeFactor = desc.raster.depth_bias_slope;
+    raster.depthBiasClamp = desc.raster.depth_bias_clamp;
 
     // Multisample
     VkPipelineMultisampleStateCreateInfo multisample{};

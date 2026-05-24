@@ -14,6 +14,10 @@ struct RasterState {
     // inside-out. Default here is CW so meshes look right out of the box.
     FrontFace front_face = FrontFace::CW;
     PolygonMode polygon_mode = PolygonMode::Fill;
+    bool depth_bias_enabled = false;
+    float depth_bias_constant = 0.0f;
+    float depth_bias_slope = 0.0f;
+    float depth_bias_clamp = 0.0f;
 };
 
 struct DepthStencilState {

@@ -173,6 +173,12 @@ void OpenGLCommandList::bind_pipeline(PipelineHandle pipeline) {
     }
     glFrontFace(gl::to_gl_front_face(raster.front_face));
     glPolygonMode(GL_FRONT_AND_BACK, gl::to_gl_polygon_mode(raster.polygon_mode));
+    if (raster.depth_bias_enabled) {
+        glEnable(GL_POLYGON_OFFSET_FILL);
+        glPolygonOffset(raster.depth_bias_slope, raster.depth_bias_constant);
+    } else {
+        glDisable(GL_POLYGON_OFFSET_FILL);
+    }
 
     // Depth state
     const auto& ds = pipe->desc.depth_stencil;
