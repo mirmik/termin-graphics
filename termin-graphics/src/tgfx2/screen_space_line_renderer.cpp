@@ -246,6 +246,33 @@ void main() {
 )";
 }
 
+std::string make_screen_line_round_join_vert() {
+    return std::string("#version 450 core\n") + kScreenLineCommon + R"(
+layout(location=0) in vec2 a_local;
+layout(location=1) in vec3 a_center;
+layout(location=2) in float a_width_px;
+layout(location=3) in vec3 a_neighbor;
+layout(location=4) in float a_flags;
+layout(location=5) in vec4 a_color;
+
+layout(location=0) out vec4 v_color;
+
+void main() {
+    vec4 cc = pc.u_view_projection * vec4(a_center, 1.0);
+
+    vec2 viewport = max(pc.u_viewport.xy, vec2(1.0));
+    vec2 px_center = ((cc.xy / cc.w) * 0.5 + 0.5) * viewport;
+    vec2 expanded_px = px_center + a_local * (a_width_px * 0.5);
+    vec2 expanded_ndc = expanded_px / viewport * 2.0 - 1.0;
+
+    vec4 clip = cc;
+    clip.xy = expanded_ndc * clip.w;
+    gl_Position = clip;
+    v_color = a_color;
+}
+)";
+}
+
 std::string make_screen_line_frag() {
     return std::string("#version 450 core\n") + R"(
 layout(location=0) in vec4 v_color;
@@ -272,6 +299,28 @@ std::vector<CapCornerVertex> build_round_cap_template(int round_segments) {
     auto rim = [round_segments](int i) {
         const float t = -kPi * 0.5f
             + kPi * static_cast<float>(i) / static_cast<float>(round_segments);
+        return CapCornerVertex{std::cos(t), std::sin(t)};
+    };
+
+    CapCornerVertex prev = rim(0);
+    for (int i = 1; i <= round_segments; ++i) {
+        CapCornerVertex next = rim(i);
+        vertices.push_back({0.0f, 0.0f});
+        vertices.push_back(prev);
+        vertices.push_back(next);
+        prev = next;
+    }
+    return vertices;
+}
+
+std::vector<CapCornerVertex> build_round_join_template(int round_segments) {
+    round_segments = std::clamp(round_segments, 4, 64);
+    std::vector<CapCornerVertex> vertices;
+    vertices.reserve(static_cast<size_t>(round_segments) * 3);
+
+    auto rim = [round_segments](int i) {
+        const float t = kPi * 2.0f
+            * static_cast<float>(i) / static_cast<float>(round_segments);
         return CapCornerVertex{std::cos(t), std::sin(t)};
     };
 
@@ -393,6 +442,22 @@ void ScreenSpaceLineRenderer::ensure_resources(RenderContext2& ctx) {
         desc.debug_name = "tgfx2_screen_space_line_join_fs";
         join_fragment_shader_ = device.create_shader(desc);
     }
+
+    if (!round_join_vertex_shader_) {
+        ShaderDesc desc;
+        desc.stage = ShaderStage::Vertex;
+        desc.source = make_screen_line_round_join_vert();
+        desc.debug_name = "tgfx2_screen_space_line_round_join_vs";
+        round_join_vertex_shader_ = device.create_shader(desc);
+    }
+
+    if (!round_join_fragment_shader_) {
+        ShaderDesc desc;
+        desc.stage = ShaderStage::Fragment;
+        desc.source = make_screen_line_frag();
+        desc.debug_name = "tgfx2_screen_space_line_round_join_fs";
+        round_join_fragment_shader_ = device.create_shader(desc);
+    }
 }
 
 void ScreenSpaceLineRenderer::ensure_cap_template(RenderContext2& ctx,
@@ -421,6 +486,32 @@ void ScreenSpaceLineRenderer::ensure_cap_template(RenderContext2& ctx,
         {reinterpret_cast<const uint8_t*>(corners.data()), desc.size});
 }
 
+void ScreenSpaceLineRenderer::ensure_round_join_template(RenderContext2& ctx,
+                                                         int round_segments) {
+    round_segments = std::clamp(round_segments, 4, 64);
+    if (round_join_corner_vbo_ && round_join_segments_ == round_segments) {
+        return;
+    }
+
+    IRenderDevice& device = ctx.device();
+    if (round_join_corner_vbo_) {
+        device.destroy(round_join_corner_vbo_);
+        round_join_corner_vbo_ = {};
+    }
+
+    std::vector<CapCornerVertex> corners = build_round_join_template(round_segments);
+    round_join_corner_count_ = static_cast<uint32_t>(corners.size());
+    round_join_segments_ = round_segments;
+
+    BufferDesc desc;
+    desc.size = sizeof(CapCornerVertex) * corners.size();
+    desc.usage = BufferUsage::Vertex;
+    round_join_corner_vbo_ = device.create_buffer(desc);
+    device.upload_buffer(
+        round_join_corner_vbo_,
+        {reinterpret_cast<const uint8_t*>(corners.data()), desc.size});
+}
+
 void ScreenSpaceLineRenderer::draw_polyline(
         RenderContext2& ctx,
         std::span<const LinePoint3> points,
@@ -444,6 +535,7 @@ void ScreenSpaceLineRenderer::draw_polyline(
 
     std::vector<SegmentInstance> instances;
     std::vector<CapInstance> cap_instances;
+    std::vector<CapInstance> round_join_instances;
     std::vector<JoinInstance> join_instances;
     instances.reserve(clean_points.size() - 1);
     for (size_t i = 1; i < clean_points.size(); ++i) {
@@ -507,7 +599,24 @@ void ScreenSpaceLineRenderer::draw_polyline(
         }
     }
 
-    if (style.join == LineJoinStyle::Bevel) {
+    if (style.join == LineJoinStyle::Round) {
+        round_join_instances.reserve(
+            clean_points.size() > 2 ? clean_points.size() - 2 : 0);
+        for (size_t i = 1; i + 1 < clean_points.size(); ++i) {
+            const LinePoint3 center = clean_points[i];
+            const LinePoint3 next = clean_points[i + 1];
+            CapInstance join{};
+            join.center[0] = center.x;
+            join.center[1] = center.y;
+            join.center[2] = center.z;
+            join.width_px = style.width_px;
+            join.neighbor[0] = next.x;
+            join.neighbor[1] = next.y;
+            join.neighbor[2] = next.z;
+            std::memcpy(join.color, style.color.data(), sizeof(join.color));
+            round_join_instances.push_back(join);
+        }
+    } else if (style.join == LineJoinStyle::Bevel) {
         join_instances.reserve(clean_points.size() > 2 ? clean_points.size() - 2 : 0);
         for (size_t i = 1; i + 1 < clean_points.size(); ++i) {
             const LinePoint3 prev = clean_points[i - 1];
@@ -617,6 +726,47 @@ void ScreenSpaceLineRenderer::draw_polyline(
             static_cast<uint32_t>(cap_instances.size()));
     }
 
+    if (!round_join_instances.empty()) {
+        ensure_round_join_template(ctx, style.round_segments);
+        const UploadedInstanceStream round_join_stream = upload_instance_stream(
+            ctx,
+            round_join_instances.data(),
+            round_join_instances.size() * sizeof(CapInstance));
+        if (!round_join_stream.buffer) {
+            return;
+        }
+
+        VertexBufferLayout round_join_corners;
+        round_join_corners.stride = sizeof(CapCornerVertex);
+        round_join_corners.per_instance = false;
+        round_join_corners.attributes = {
+            {0, VertexFormat::Float2, 0},
+        };
+
+        VertexBufferLayout round_join_layout;
+        round_join_layout.stride = sizeof(CapInstance);
+        round_join_layout.per_instance = true;
+        round_join_layout.attributes = {
+            {1, VertexFormat::Float3, offsetof(CapInstance, center)},
+            {2, VertexFormat::Float,  offsetof(CapInstance, width_px)},
+            {3, VertexFormat::Float3, offsetof(CapInstance, neighbor)},
+            {4, VertexFormat::Float,  offsetof(CapInstance, flags)},
+            {5, VertexFormat::Float4, offsetof(CapInstance, color)},
+        };
+
+        ctx.bind_shader(round_join_vertex_shader_, round_join_fragment_shader_);
+        ctx.set_vertex_layouts({round_join_corners, round_join_layout});
+        ctx.set_topology(PrimitiveTopology::TriangleList);
+        ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
+        ctx.draw_arrays_instanced(
+            round_join_corner_vbo_,
+            0,
+            round_join_stream.buffer,
+            round_join_stream.offset,
+            round_join_corner_count_,
+            static_cast<uint32_t>(round_join_instances.size()));
+    }
+
     if (!join_instances.empty()) {
         const UploadedInstanceStream join_stream = upload_instance_stream(
             ctx,
@@ -675,6 +825,12 @@ void ScreenSpaceLineRenderer::release(RenderContext2& ctx) {
         device.destroy(join_corner_vbo_);
         join_corner_vbo_ = {};
     }
+    if (round_join_corner_vbo_) {
+        device.destroy(round_join_corner_vbo_);
+        round_join_corner_vbo_ = {};
+        round_join_corner_count_ = 0;
+        round_join_segments_ = 0;
+    }
     if (vertex_shader_) {
         device.destroy(vertex_shader_);
         vertex_shader_ = {};
@@ -698,6 +854,14 @@ void ScreenSpaceLineRenderer::release(RenderContext2& ctx) {
     if (join_fragment_shader_) {
         device.destroy(join_fragment_shader_);
         join_fragment_shader_ = {};
+    }
+    if (round_join_vertex_shader_) {
+        device.destroy(round_join_vertex_shader_);
+        round_join_vertex_shader_ = {};
+    }
+    if (round_join_fragment_shader_) {
+        device.destroy(round_join_fragment_shader_);
+        round_join_fragment_shader_ = {};
     }
 }
 

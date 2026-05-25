@@ -15,7 +15,7 @@ struct ScreenSpaceLineStyle {
     float width_px = 2.0f;
     std::array<float, 4> color{1.0f, 1.0f, 1.0f, 1.0f};
     LineCapStyle cap = LineCapStyle::Butt;
-    LineJoinStyle join = LineJoinStyle::Bevel;
+    LineJoinStyle join = LineJoinStyle::Round;
     int round_segments = 12;
 };
 
@@ -45,17 +45,23 @@ private:
     BufferHandle corner_vbo_;
     BufferHandle cap_corner_vbo_;
     BufferHandle join_corner_vbo_;
+    BufferHandle round_join_corner_vbo_;
     ShaderHandle vertex_shader_;
     ShaderHandle fragment_shader_;
     ShaderHandle cap_vertex_shader_;
     ShaderHandle cap_fragment_shader_;
     ShaderHandle join_vertex_shader_;
     ShaderHandle join_fragment_shader_;
+    ShaderHandle round_join_vertex_shader_;
+    ShaderHandle round_join_fragment_shader_;
     uint32_t cap_corner_count_ = 0;
+    uint32_t round_join_corner_count_ = 0;
     int cap_round_segments_ = 0;
+    int round_join_segments_ = 0;
 
     void ensure_resources(RenderContext2& ctx);
     void ensure_cap_template(RenderContext2& ctx, int round_segments);
+    void ensure_round_join_template(RenderContext2& ctx, int round_segments);
 };
 
 } // namespace tgfx
