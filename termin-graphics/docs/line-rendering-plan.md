@@ -77,6 +77,16 @@ Vertex shader на каждый instance генерирует 6 вершин qua
 - смещает вершины на `width_px / viewport`
 - получает camera-facing quad со стабильной экранной толщиной
 
+Текущий GPU path разделен на два явных renderer-а:
+
+- `ScreenSpaceLineRenderer` - `width_px`, стабильная экранная толщина.
+- `WorldSpaceLineRenderer` - `width` в world units, billboard-лента,
+  разворачиваемая к камере через `camera_position`.
+
+Оба renderer-а используют instanced segment/cap/join streams и transient
+vertex ring для per-draw instance payload, чтобы Vulkan draw-ы не читали
+перезаписанный reusable VBO.
+
 ## 5. Caps и joins
 
 Не делать один сверхсложный shader. Разделить renderer на несколько stream-ов:
@@ -94,8 +104,11 @@ Vertex shader на каждый instance генерирует 6 вершин qua
 Затем:
 
 - `Round cap`
+- `Round join` как full disk в точке стыка
 - `Miter join` с limit
-- `Round join`
+
+Следующий refinement для round join: заменить full disk на сектор внешней
+стороны угла, чтобы снизить overdraw без появления щелей.
 
 ## 6. Near-plane и clipping
 
@@ -117,6 +130,7 @@ Production path должен прийти к `ClipToNearPlane`, иначе orbit
 
 - CPU world-space mesh path
 - GPU screen-space instanced path
+- GPU billboard world-width instanced path
 - raw backend line path для сравнения
 - оси, helix, closed loop, острые углы, разные widths
 - caps/joins modes

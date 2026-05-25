@@ -32,6 +32,7 @@
 #include <tgfx2/font_atlas.hpp>
 #include <tgfx2/line_mesh_builder.hpp>
 #include <tgfx2/screen_space_line_renderer.hpp>
+#include <tgfx2/world_space_line_renderer.hpp>
 #include <tgfx2/text2d_renderer.hpp>
 #include <tgfx2/text3d_renderer.hpp>
 
@@ -168,6 +169,36 @@ void bind_tgfx2(nb::module_& m) {
              nb::arg("style"),
              nb::arg("params"))
         .def("release", &tgfx::ScreenSpaceLineRenderer::release,
+             nb::arg("ctx"));
+
+    nb::class_<tgfx::WorldSpaceLineStyle>(m, "WorldSpaceLineStyle")
+        .def(nb::init<>())
+        .def_rw("width", &tgfx::WorldSpaceLineStyle::width)
+        .def_rw("color", &tgfx::WorldSpaceLineStyle::color)
+        .def_rw("cap", &tgfx::WorldSpaceLineStyle::cap)
+        .def_rw("join", &tgfx::WorldSpaceLineStyle::join)
+        .def_rw("round_segments", &tgfx::WorldSpaceLineStyle::round_segments);
+
+    nb::class_<tgfx::WorldSpaceLineParams>(m, "WorldSpaceLineParams")
+        .def(nb::init<>())
+        .def_rw("view_projection", &tgfx::WorldSpaceLineParams::view_projection)
+        .def_rw("camera_position", &tgfx::WorldSpaceLineParams::camera_position);
+
+    nb::class_<tgfx::WorldSpaceLineRenderer>(m, "WorldSpaceLineRenderer")
+        .def(nb::init<>())
+        .def("draw_polyline",
+             [](tgfx::WorldSpaceLineRenderer& self,
+                tgfx::RenderContext2& ctx,
+                const std::vector<tgfx::LinePoint3>& points,
+                const tgfx::WorldSpaceLineStyle& style,
+                const tgfx::WorldSpaceLineParams& params) {
+                 self.draw_polyline(ctx, points, style, params);
+             },
+             nb::arg("ctx"),
+             nb::arg("points"),
+             nb::arg("style"),
+             nb::arg("params"))
+        .def("release", &tgfx::WorldSpaceLineRenderer::release,
              nb::arg("ctx"));
 
     // IRenderDevice — opaque handle exposed so other native modules

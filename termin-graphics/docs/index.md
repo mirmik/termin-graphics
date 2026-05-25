@@ -15,6 +15,8 @@
   с общей `termin.geombase.OrbitCamera`.
 - `examples/demo_lines_gpu.py` - visual стенд для GPU-expanded
   screen-space линий через `ScreenSpaceLineRenderer`.
+- `examples/demo_lines_billboard.py` - visual стенд для GPU-expanded
+  billboard линий с шириной в world units через `WorldSpaceLineRenderer`.
 - `examples/demo_sdf_text.py` - SDF text rendering через tcgui widgets.
 
 ## Границы

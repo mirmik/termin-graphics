@@ -59,3 +59,29 @@ def test_screen_space_line_binding_smoke():
     assert params.viewport_width == 640.0
     assert params.viewport_height == 480.0
     assert tgfx.ScreenSpaceLineRenderer() is not None
+
+
+def test_world_space_line_binding_smoke():
+    style = tgfx.WorldSpaceLineStyle()
+    style.width = 0.125
+    style.color = (0.25, 0.75, 1.0, 1.0)
+    style.cap = tgfx.LineCapStyle.Round
+    style.join = tgfx.LineJoinStyle.Round
+    style.round_segments = 12
+
+    assert style.width == 0.125
+    assert style.color == [0.25, 0.75, 1.0, 1.0]
+    assert style.cap == tgfx.LineCapStyle.Round
+    assert style.join == tgfx.LineJoinStyle.Round
+    assert style.round_segments == 12
+
+    params = tgfx.WorldSpaceLineParams()
+    params.view_projection = tuple(
+        1.0 if i in (0, 5, 10, 15) else 0.0
+        for i in range(16)
+    )
+    params.camera_position = (1.0, 2.0, 3.0)
+
+    assert len(params.view_projection) == 16
+    assert params.camera_position == [1.0, 2.0, 3.0]
+    assert tgfx.WorldSpaceLineRenderer() is not None
