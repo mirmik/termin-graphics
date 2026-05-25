@@ -2,6 +2,11 @@
 #include <tgfx2/i_render_device.hpp>
 
 #include <cstdint>
+#include <exception>
+
+extern "C" {
+#include <tcbase/tc_log.h>
+}
 
 static void* g_tgfx2_device = nullptr;
 
@@ -13,7 +18,6 @@ void* tgfx2_interop_get_device(void) {
     return g_tgfx2_device;
 }
 
-#ifndef TGFX2_HAS_OPENGL
 uint32_t tgfx2_interop_register_external_gl_texture(
     uint32_t gl_tex_id,
     uint32_t width,
@@ -21,16 +25,64 @@ uint32_t tgfx2_interop_register_external_gl_texture(
     int format,
     uint32_t usage)
 {
-    (void)gl_tex_id;
-    (void)width;
-    (void)height;
-    (void)format;
-    (void)usage;
+    if (gl_tex_id == 0 || width == 0 || height == 0) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] invalid external GL texture: id=%u size=%ux%u",
+               gl_tex_id, width, height);
+        return 0;
+    }
+
+    auto* device = static_cast<tgfx::IRenderDevice*>(g_tgfx2_device);
+    if (!device) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] cannot register external GL texture: no active tgfx2 device");
+        return 0;
+    }
+
+    tgfx::TextureDesc desc{};
+    desc.width = width;
+    desc.height = height;
+    desc.format = static_cast<tgfx::PixelFormat>(format);
+    desc.usage = static_cast<tgfx::TextureUsage>(usage);
+
+    try {
+        tgfx::TextureHandle handle =
+            device->register_external_texture(static_cast<uintptr_t>(gl_tex_id), desc);
+        return handle.id;
+    } catch (const std::exception& e) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] failed to register external GL texture: %s",
+               e.what());
+    } catch (...) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] failed to register external GL texture: unknown error");
+    }
     return 0;
 }
 
 void tgfx2_interop_destroy_texture_handle(uint32_t handle_id) {
-    (void)handle_id;
+    if (handle_id == 0) {
+        return;
+    }
+    auto* device = static_cast<tgfx::IRenderDevice*>(g_tgfx2_device);
+    if (!device) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] cannot destroy texture handle %u: no active tgfx2 device",
+               handle_id);
+        return;
+    }
+
+    try {
+        device->destroy(tgfx::TextureHandle{handle_id});
+    } catch (const std::exception& e) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] failed to destroy texture handle %u: %s",
+               handle_id, e.what());
+    } catch (...) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] failed to destroy texture handle %u: unknown error",
+               handle_id);
+    }
 }
 
 void tgfx2_interop_blit_texture(
@@ -39,9 +91,32 @@ void tgfx2_interop_blit_texture(
     int width,
     int height)
 {
-    (void)src_handle_id;
-    (void)dst_handle_id;
-    (void)width;
-    (void)height;
+    if (src_handle_id == 0 || dst_handle_id == 0 || width <= 0 || height <= 0) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] invalid blit: src=%u dst=%u size=%dx%d",
+               src_handle_id, dst_handle_id, width, height);
+        return;
+    }
+
+    auto* device = static_cast<tgfx::IRenderDevice*>(g_tgfx2_device);
+    if (!device) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] cannot blit texture: no active tgfx2 device");
+        return;
+    }
+
+    try {
+        device->blit_to_texture(
+            tgfx::TextureHandle{dst_handle_id},
+            tgfx::TextureHandle{src_handle_id},
+            0, 0, width, height,
+            0, 0, width, height);
+    } catch (const std::exception& e) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] failed to blit texture: %s",
+               e.what());
+    } catch (...) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] failed to blit texture: unknown error");
+    }
 }
-#endif

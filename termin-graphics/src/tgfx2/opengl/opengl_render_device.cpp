@@ -1313,7 +1313,13 @@ void OpenGLRenderDevice::blit_to_texture(
 ) {
     GLTexture* src = textures_.get(src_color.id);
     GLTexture* dst = textures_.get(dst_color.id);
-    if (!src || !dst) return;
+    if (!src || !dst) {
+        tc_log_error(
+            "OpenGLRenderDevice::blit_to_texture: invalid texture handle "
+            "src=%u dst=%u",
+            src_color.id, dst_color.id);
+        return;
+    }
 
     GLint prev_read = 0, prev_draw = 0;
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prev_read);
@@ -1326,16 +1332,42 @@ void OpenGLRenderDevice::blit_to_texture(
     glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                            src->target, src->gl_id, 0);
     glReadBuffer(GL_COLOR_ATTACHMENT0);
+    GLenum read_status = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER);
 
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbos[1]);
     glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                            dst->target, dst->gl_id, 0);
+    GLenum draw_status = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
 
-    glBlitFramebuffer(
-        src_x, src_y, src_x + src_w, src_y + src_h,
-        dst_x, dst_y, dst_x + dst_w, dst_y + dst_h,
-        GL_COLOR_BUFFER_BIT, GL_LINEAR
-    );
+    if (read_status != GL_FRAMEBUFFER_COMPLETE ||
+        draw_status != GL_FRAMEBUFFER_COMPLETE) {
+        tc_log_error(
+            "OpenGLRenderDevice::blit_to_texture: incomplete framebuffer "
+            "read=0x%04x draw=0x%04x src_handle=%u dst_handle=%u "
+            "src_gl=%u dst_gl=%u src_target=0x%04x dst_target=0x%04x",
+            static_cast<unsigned>(read_status),
+            static_cast<unsigned>(draw_status),
+            src_color.id, dst_color.id,
+            src->gl_id, dst->gl_id,
+            static_cast<unsigned>(src->target),
+            static_cast<unsigned>(dst->target));
+    } else {
+        glBlitFramebuffer(
+            src_x, src_y, src_x + src_w, src_y + src_h,
+            dst_x, dst_y, dst_x + dst_w, dst_y + dst_h,
+            GL_COLOR_BUFFER_BIT, GL_LINEAR
+        );
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR) {
+            tc_log_error(
+                "OpenGLRenderDevice::blit_to_texture: glBlitFramebuffer "
+                "failed err=0x%04x src_handle=%u dst_handle=%u "
+                "src=%dx%d dst=%dx%d",
+                static_cast<unsigned>(err),
+                src_color.id, dst_color.id,
+                src_w, src_h, dst_w, dst_h);
+        }
+    }
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_read));
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(prev_draw));
