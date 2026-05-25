@@ -31,3 +31,31 @@ def test_canvas2d_binding_smoke():
     renderer = tgfx.Canvas2DRenderer()
     assert renderer.default_font is None
     assert renderer.measure_text("no font", 14.0) == (0.0, 0.0)
+
+
+def test_screen_space_line_binding_smoke():
+    style = tgfx.ScreenSpaceLineStyle()
+    style.width_px = 5.0
+    style.color = (1.0, 0.25, 0.5, 1.0)
+    style.cap = tgfx.LineCapStyle.Round
+    style.join = tgfx.LineJoinStyle.Bevel
+    style.round_segments = 10
+
+    assert style.width_px == 5.0
+    assert style.color == [1.0, 0.25, 0.5, 1.0]
+    assert style.cap == tgfx.LineCapStyle.Round
+    assert style.join == tgfx.LineJoinStyle.Bevel
+    assert style.round_segments == 10
+
+    params = tgfx.ScreenSpaceLineParams()
+    params.view_projection = tuple(
+        1.0 if i in (0, 5, 10, 15) else 0.0
+        for i in range(16)
+    )
+    params.viewport_width = 640.0
+    params.viewport_height = 480.0
+
+    assert len(params.view_projection) == 16
+    assert params.viewport_width == 640.0
+    assert params.viewport_height == 480.0
+    assert tgfx.ScreenSpaceLineRenderer() is not None

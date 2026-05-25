@@ -13,6 +13,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
+#include <nanobind/stl/array.h>
 #include <nanobind/ndarray.h>
 
 #include <memory>
@@ -30,6 +31,7 @@
 #include <tgfx2/tc_shader_bridge.hpp>
 #include <tgfx2/font_atlas.hpp>
 #include <tgfx2/line_mesh_builder.hpp>
+#include <tgfx2/screen_space_line_renderer.hpp>
 #include <tgfx2/text2d_renderer.hpp>
 #include <tgfx2/text3d_renderer.hpp>
 
@@ -136,6 +138,37 @@ void bind_tgfx2(nb::module_& m) {
                   style);
           },
           nb::arg("points"), nb::arg("style"));
+
+    nb::class_<tgfx::ScreenSpaceLineStyle>(m, "ScreenSpaceLineStyle")
+        .def(nb::init<>())
+        .def_rw("width_px", &tgfx::ScreenSpaceLineStyle::width_px)
+        .def_rw("color", &tgfx::ScreenSpaceLineStyle::color)
+        .def_rw("cap", &tgfx::ScreenSpaceLineStyle::cap)
+        .def_rw("join", &tgfx::ScreenSpaceLineStyle::join)
+        .def_rw("round_segments", &tgfx::ScreenSpaceLineStyle::round_segments);
+
+    nb::class_<tgfx::ScreenSpaceLineParams>(m, "ScreenSpaceLineParams")
+        .def(nb::init<>())
+        .def_rw("view_projection", &tgfx::ScreenSpaceLineParams::view_projection)
+        .def_rw("viewport_width", &tgfx::ScreenSpaceLineParams::viewport_width)
+        .def_rw("viewport_height", &tgfx::ScreenSpaceLineParams::viewport_height);
+
+    nb::class_<tgfx::ScreenSpaceLineRenderer>(m, "ScreenSpaceLineRenderer")
+        .def(nb::init<>())
+        .def("draw_polyline",
+             [](tgfx::ScreenSpaceLineRenderer& self,
+                tgfx::RenderContext2& ctx,
+                const std::vector<tgfx::LinePoint3>& points,
+                const tgfx::ScreenSpaceLineStyle& style,
+                const tgfx::ScreenSpaceLineParams& params) {
+                 self.draw_polyline(ctx, points, style, params);
+             },
+             nb::arg("ctx"),
+             nb::arg("points"),
+             nb::arg("style"),
+             nb::arg("params"))
+        .def("release", &tgfx::ScreenSpaceLineRenderer::release,
+             nb::arg("ctx"));
 
     // IRenderDevice — opaque handle exposed so other native modules
     // (render_framework) can accept a pointer to it from Python.
@@ -354,6 +387,29 @@ void bind_tgfx2(nb::module_& m) {
 
         // Draw
         .def("draw_fullscreen_quad", &tgfx::RenderContext2::draw_fullscreen_quad)
+        .def("draw_arrays_instanced",
+             [](tgfx::RenderContext2& self,
+                tgfx::BufferHandle vbo,
+                uint32_t vertex_count,
+                uint32_t instance_count) {
+                 self.draw_arrays_instanced(vbo, vertex_count, instance_count);
+             },
+             nb::arg("vbo"),
+             nb::arg("vertex_count"),
+             nb::arg("instance_count"))
+        .def("draw_arrays_instanced",
+             [](tgfx::RenderContext2& self,
+                tgfx::BufferHandle vertex_vbo,
+                tgfx::BufferHandle instance_vbo,
+                uint32_t vertex_count,
+                uint32_t instance_count) {
+                 self.draw_arrays_instanced(
+                     vertex_vbo, instance_vbo, vertex_count, instance_count);
+             },
+             nb::arg("vertex_vbo"),
+             nb::arg("instance_vbo"),
+             nb::arg("vertex_count"),
+             nb::arg("instance_count"))
 
         // Immediate drawing — creates a throwaway VBO, draws, destroys.
         // Vertex format is fixed to 7 floats per vertex:

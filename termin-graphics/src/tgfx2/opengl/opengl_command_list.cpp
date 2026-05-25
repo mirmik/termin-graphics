@@ -4,6 +4,8 @@
 
 #include <algorithm>
 
+#include <tcbase/tc_log.hpp>
+
 // GL 4.5 enums missing from our glad-3.3 header.
 #ifndef GL_UPPER_LEFT
 #define GL_UPPER_LEFT 0x8CA2
@@ -234,6 +236,8 @@ void OpenGLCommandList::setup_vao_for_pipeline(GLPipeline* pipeline) {
             glEnableVertexAttribArray(attr.location);
             if (layout.per_instance) {
                 glVertexAttribDivisor(attr.location, 1);
+            } else {
+                glVertexAttribDivisor(attr.location, 0);
             }
         }
     }
@@ -330,7 +334,7 @@ void OpenGLCommandList::bind_resource_set(ResourceSetHandle set,
 
 // --- Vertex / index buffers ---
 
-void OpenGLCommandList::bind_vertex_buffer(uint32_t /*slot*/, BufferHandle buffer, uint64_t offset) {
+void OpenGLCommandList::bind_vertex_buffer(uint32_t slot, BufferHandle buffer, uint64_t offset) {
     auto* buf = device_.get_buffer(buffer);
     if (!buf || !current_vao_) return;
 
@@ -339,8 +343,8 @@ void OpenGLCommandList::bind_vertex_buffer(uint32_t /*slot*/, BufferHandle buffe
 
     // Re-setup attribute pointers with the new buffer + offset
     auto* pipe = device_.get_pipeline(current_pipeline_);
-    if (pipe && !pipe->desc.vertex_layouts.empty()) {
-        const auto& layout = pipe->desc.vertex_layouts[0];
+    if (pipe && slot < pipe->desc.vertex_layouts.size()) {
+        const auto& layout = pipe->desc.vertex_layouts[slot];
         for (const auto& attr : layout.attributes) {
             auto gl_type = gl::vertex_format_gl_type(attr.format);
             auto count = gl::vertex_format_component_count(attr.format);
@@ -379,6 +383,26 @@ void OpenGLCommandList::draw(uint32_t vertex_count, uint32_t first_vertex) {
     if (current_vao_) glBindVertexArray(current_vao_);
     apply_pending_push_constants();
     glDrawArrays(current_topology_, first_vertex, vertex_count);
+}
+
+void OpenGLCommandList::draw_instanced(uint32_t vertex_count,
+                                       uint32_t instance_count,
+                                       uint32_t first_vertex,
+                                       uint32_t first_instance) {
+    if (current_vao_) glBindVertexArray(current_vao_);
+    apply_pending_push_constants();
+    if (first_instance != 0) {
+        static bool warned = false;
+        if (!warned) {
+            tc::Log::error(
+                "OpenGLCommandList::draw_instanced: first_instance is not supported by the OpenGL path yet");
+            warned = true;
+        }
+    }
+    glDrawArraysInstanced(current_topology_,
+                          first_vertex,
+                          vertex_count,
+                          instance_count);
 }
 
 void OpenGLCommandList::draw_indexed(uint32_t index_count, uint32_t first_index, int32_t vertex_offset) {

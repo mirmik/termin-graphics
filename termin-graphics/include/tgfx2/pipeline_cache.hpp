@@ -24,14 +24,14 @@ struct PipelineCacheKey {
     ShaderHandle fragment_shader;
     ShaderHandle geometry_shader;
 
-    VertexBufferLayout vertex_layout;
-    // Precomputed hash of `vertex_layout` filled by the caller
-    // (RenderContext2 caches it on set_vertex_layout and writes it here
+    std::vector<VertexBufferLayout> vertex_layouts;
+    // Precomputed hash of `vertex_layouts` filled by the caller
+    // (RenderContext2 caches it on set_vertex_layout* and writes it here
     // on every flush_pipeline). Lets PipelineCacheKeyHash skip iterating
     // the attributes vector on every lookup — that loop was ~20 hash
     // calls per flush × 200 flushes/frame = a visible slice of
     // cmd-record overhead.
-    size_t vertex_layout_hash = 0;
+    size_t vertex_layouts_hash = 0;
 
     PrimitiveTopology topology = PrimitiveTopology::TriangleList;
 

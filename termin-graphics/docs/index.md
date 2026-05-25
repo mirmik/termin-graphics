@@ -6,12 +6,15 @@
 
 - [Module Map](../../docs/modules.md#termin-graphics--tgfx)
 - [Architecture notes](architecture/index.md)
+- [Line rendering plan](line-rendering-plan.md)
 - [Renderer facades plan](../../docs/plans/2026-05-12-tgfx-renderer-facades.md)
 
 ## Examples
 
 - `examples/demo_lines.py` - 3D visual стенд для `tgfx::build_line_mesh`
   с общей `termin.geombase.OrbitCamera`.
+- `examples/demo_lines_gpu.py` - visual стенд для GPU-expanded
+  screen-space линий через `ScreenSpaceLineRenderer`.
 - `examples/demo_sdf_text.py` - SDF text rendering через tcgui widgets.
 
 ## Границы

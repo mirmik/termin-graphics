@@ -32,6 +32,10 @@ public:
     void bind_index_buffer(BufferHandle buffer, IndexType type, uint64_t offset = 0) override;
 
     void draw(uint32_t vertex_count, uint32_t first_vertex = 0) override;
+    void draw_instanced(uint32_t vertex_count,
+                        uint32_t instance_count,
+                        uint32_t first_vertex = 0,
+                        uint32_t first_instance = 0) override;
     void draw_indexed(uint32_t index_count, uint32_t first_index = 0, int32_t vertex_offset = 0) override;
     void dispatch(uint32_t group_x, uint32_t group_y, uint32_t group_z) override;
 

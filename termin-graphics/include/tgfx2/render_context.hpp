@@ -46,11 +46,11 @@ private:
     ColorMask color_mask_;
 
     ShaderHandle bound_vs_, bound_fs_, bound_gs_;
-    VertexBufferLayout vertex_layout_;
-    // Hash of `vertex_layout_`, recomputed only when set_vertex_layout is
+    std::vector<VertexBufferLayout> vertex_layouts_;
+    // Hash of `vertex_layouts_`, recomputed only when set_vertex_layout* is
     // called. Fed into PipelineCacheKey so flush_pipeline's lookup skips
     // re-hashing the attributes vector on every draw.
-    size_t vertex_layout_hash_ = 0;
+    size_t vertex_layouts_hash_ = 0;
     PrimitiveTopology topology_ = PrimitiveTopology::TriangleList;
 
     // Synced from begin_pass() with the actual attachment formats.
@@ -99,7 +99,8 @@ private:
     // VBO for hundreds of instanced draws — thousand-scale reduction in
     // bind cmd recording). Reset to {} at begin_pass so a new pass
     // always re-binds.
-    BufferHandle last_bound_vbo_ = {};
+    std::vector<BufferHandle> last_bound_vbos_;
+    std::vector<uint64_t> last_bound_vbo_offsets_;
     BufferHandle last_bound_ibo_ = {};
     // Last pipeline handle passed to cmd_->bind_pipeline(). Used by
     // flush_pipeline() to skip a redundant vkCmdBindPipeline when the
@@ -159,6 +160,7 @@ public:
 
     // --- Vertex layout ---
     void set_vertex_layout(const VertexBufferLayout& layout);
+    void set_vertex_layouts(const std::vector<VertexBufferLayout>& layouts);
     void set_topology(PrimitiveTopology topo);
 
     // --- Resource bindings (UBOs, textures, samplers) ---
@@ -230,6 +232,19 @@ public:
 
     // Draw non-indexed.
     void draw_arrays(BufferHandle vbo, uint32_t vertex_count);
+    void draw_arrays_instanced(BufferHandle vbo,
+                               uint32_t vertex_count,
+                               uint32_t instance_count);
+    void draw_arrays_instanced(BufferHandle vertex_vbo,
+                               BufferHandle instance_vbo,
+                               uint32_t vertex_count,
+                               uint32_t instance_count);
+    void draw_arrays_instanced(BufferHandle vertex_vbo,
+                               uint64_t vertex_offset,
+                               BufferHandle instance_vbo,
+                               uint64_t instance_offset,
+                               uint32_t vertex_count,
+                               uint32_t instance_count);
 
     // --- Immediate drawing ---
     // Fast-path for transient UI/debug streams: hands vertices to the

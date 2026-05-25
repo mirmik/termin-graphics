@@ -187,7 +187,8 @@ void RenderContext2::begin_pass(
     bindings_dirty_ = true;
     // Vulkan's cmd-buffer-level binds don't survive a render pass
     // boundary — reset cached state so draw() re-binds on first use.
-    last_bound_vbo_ = {};
+    last_bound_vbos_.clear();
+    last_bound_vbo_offsets_.clear();
     last_bound_ibo_ = {};
     last_bound_pipeline_ = {};
     pipeline_dirty_ = true;
@@ -290,21 +291,29 @@ void RenderContext2::bind_shader(ShaderHandle vs, ShaderHandle fs, ShaderHandle 
 }
 
 void RenderContext2::set_vertex_layout(const VertexBufferLayout& layout) {
-    vertex_layout_ = layout;
+    set_vertex_layouts({layout});
+}
+
+void RenderContext2::set_vertex_layouts(const std::vector<VertexBufferLayout>& layouts) {
+    vertex_layouts_ = layouts;
     // Cache the layout's hash once here so flush_pipeline's cache lookup
     // doesn't have to iterate the attributes vector on every draw.
     size_t h = 0;
     auto mix = [&h](size_t v) {
         h ^= v + 0x9e3779b9 + (h << 6) + (h >> 2);
     };
-    mix(std::hash<uint32_t>{}(layout.stride));
-    mix(std::hash<size_t>{}(layout.attributes.size()));
-    for (const auto& a : layout.attributes) {
-        mix(std::hash<uint32_t>{}(a.location));
-        mix(std::hash<int>{}(static_cast<int>(a.format)));
-        mix(std::hash<uint32_t>{}(a.offset));
+    mix(std::hash<size_t>{}(layouts.size()));
+    for (const auto& layout : layouts) {
+        mix(std::hash<uint32_t>{}(layout.stride));
+        mix(std::hash<bool>{}(layout.per_instance));
+        mix(std::hash<size_t>{}(layout.attributes.size()));
+        for (const auto& a : layout.attributes) {
+            mix(std::hash<uint32_t>{}(a.location));
+            mix(std::hash<int>{}(static_cast<int>(a.format)));
+            mix(std::hash<uint32_t>{}(a.offset));
+        }
     }
-    vertex_layout_hash_ = h;
+    vertex_layouts_hash_ = h;
     pipeline_dirty_ = true;
 }
 
@@ -492,8 +501,8 @@ void RenderContext2::flush_pipeline() {
     key.vertex_shader = bound_vs_;
     key.fragment_shader = bound_fs_;
     key.geometry_shader = bound_gs_;
-    key.vertex_layout = vertex_layout_;
-    key.vertex_layout_hash = vertex_layout_hash_;
+    key.vertex_layouts = vertex_layouts_;
+    key.vertex_layouts_hash = vertex_layouts_hash_;
     key.topology = topology_;
     key.raster = raster_;
     key.depth_stencil = depth_stencil_;
@@ -515,6 +524,11 @@ void RenderContext2::flush_pipeline() {
     if (pipeline_changed) {
         cmd_->bind_pipeline(pipeline);
         last_bound_pipeline_ = pipeline;
+        // Vertex attribute interpretation is pipeline-local (and OpenGL
+        // recreates the VAO on bind_pipeline), so force vertex buffers to
+        // be rebound even if the handle ids are unchanged.
+        last_bound_vbos_.clear();
+        last_bound_vbo_offsets_.clear();
         // A new VkPipeline brings a (possibly new) VkPipelineLayout — the
         // previous push-constant bytes are no longer guaranteed to be
         // visible to the next draw. Force a re-emit.
@@ -664,9 +678,14 @@ void RenderContext2::draw(
     // vkCmdBindVertexBuffers / vkCmdBindIndexBuffer each cost a cmd-buffer
     // word + driver trampoline — redundant ones add up to a measurable
     // slice of cmd-recording time.
-    if (vbo != last_bound_vbo_) {
+    if (last_bound_vbos_.size() <= 0) {
+        last_bound_vbos_.resize(1);
+        last_bound_vbo_offsets_.resize(1);
+    }
+    if (vbo != last_bound_vbos_[0] || last_bound_vbo_offsets_[0] != 0) {
         cmd_->bind_vertex_buffer(0, vbo);
-        last_bound_vbo_ = vbo;
+        last_bound_vbos_[0] = vbo;
+        last_bound_vbo_offsets_[0] = 0;
     }
     if (ibo != last_bound_ibo_) {
         cmd_->bind_index_buffer(ibo, idx_type);
@@ -678,11 +697,83 @@ void RenderContext2::draw(
 void RenderContext2::draw_arrays(BufferHandle vbo, uint32_t vertex_count) {
     flush_pipeline();
     flush_resource_set();
-    if (vbo != last_bound_vbo_) {
+    if (last_bound_vbos_.size() <= 0) {
+        last_bound_vbos_.resize(1);
+        last_bound_vbo_offsets_.resize(1);
+    }
+    if (vbo != last_bound_vbos_[0] || last_bound_vbo_offsets_[0] != 0) {
         cmd_->bind_vertex_buffer(0, vbo);
-        last_bound_vbo_ = vbo;
+        last_bound_vbos_[0] = vbo;
+        last_bound_vbo_offsets_[0] = 0;
     }
     cmd_->draw(vertex_count);
+}
+
+void RenderContext2::draw_arrays_instanced(BufferHandle vbo,
+                                           uint32_t vertex_count,
+                                           uint32_t instance_count) {
+    flush_pipeline();
+    flush_resource_set();
+    if (last_bound_vbos_.size() <= 0) {
+        last_bound_vbos_.resize(1);
+        last_bound_vbo_offsets_.resize(1);
+    }
+    if (vbo != last_bound_vbos_[0] || last_bound_vbo_offsets_[0] != 0) {
+        cmd_->bind_vertex_buffer(0, vbo);
+        last_bound_vbos_[0] = vbo;
+        last_bound_vbo_offsets_[0] = 0;
+    }
+    cmd_->draw_instanced(vertex_count, instance_count);
+}
+
+void RenderContext2::draw_arrays_instanced(BufferHandle vertex_vbo,
+                                           BufferHandle instance_vbo,
+                                           uint32_t vertex_count,
+                                           uint32_t instance_count) {
+    flush_pipeline();
+    flush_resource_set();
+    if (last_bound_vbos_.size() < 2) {
+        last_bound_vbos_.resize(2);
+        last_bound_vbo_offsets_.resize(2);
+    }
+    if (vertex_vbo != last_bound_vbos_[0] || last_bound_vbo_offsets_[0] != 0) {
+        cmd_->bind_vertex_buffer(0, vertex_vbo);
+        last_bound_vbos_[0] = vertex_vbo;
+        last_bound_vbo_offsets_[0] = 0;
+    }
+    if (instance_vbo != last_bound_vbos_[1] || last_bound_vbo_offsets_[1] != 0) {
+        cmd_->bind_vertex_buffer(1, instance_vbo);
+        last_bound_vbos_[1] = instance_vbo;
+        last_bound_vbo_offsets_[1] = 0;
+    }
+    cmd_->draw_instanced(vertex_count, instance_count);
+}
+
+void RenderContext2::draw_arrays_instanced(BufferHandle vertex_vbo,
+                                           uint64_t vertex_offset,
+                                           BufferHandle instance_vbo,
+                                           uint64_t instance_offset,
+                                           uint32_t vertex_count,
+                                           uint32_t instance_count) {
+    flush_pipeline();
+    flush_resource_set();
+    if (last_bound_vbos_.size() < 2) {
+        last_bound_vbos_.resize(2);
+        last_bound_vbo_offsets_.resize(2);
+    }
+    if (vertex_vbo != last_bound_vbos_[0]
+        || vertex_offset != last_bound_vbo_offsets_[0]) {
+        cmd_->bind_vertex_buffer(0, vertex_vbo, vertex_offset);
+        last_bound_vbos_[0] = vertex_vbo;
+        last_bound_vbo_offsets_[0] = vertex_offset;
+    }
+    if (instance_vbo != last_bound_vbos_[1]
+        || instance_offset != last_bound_vbo_offsets_[1]) {
+        cmd_->bind_vertex_buffer(1, instance_vbo, instance_offset);
+        last_bound_vbos_[1] = instance_vbo;
+        last_bound_vbo_offsets_[1] = instance_offset;
+    }
+    cmd_->draw_instanced(vertex_count, instance_count);
 }
 
 // Immediate vertex draw scaffold shared by draw_immediate_lines/_triangles.

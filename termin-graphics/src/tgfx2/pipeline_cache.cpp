@@ -24,11 +24,24 @@ static bool layouts_equal(const VertexBufferLayout& a, const VertexBufferLayout&
     return true;
 }
 
+static bool layout_vectors_equal(const std::vector<VertexBufferLayout>& a,
+                                 const std::vector<VertexBufferLayout>& b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (!layouts_equal(a[i], b[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool PipelineCacheKey::operator==(const PipelineCacheKey& o) const {
     return vertex_shader == o.vertex_shader
         && fragment_shader == o.fragment_shader
         && geometry_shader == o.geometry_shader
-        && layouts_equal(vertex_layout, o.vertex_layout)
+        && layout_vectors_equal(vertex_layouts, o.vertex_layouts)
         && topology == o.topology
         && raster.cull == o.raster.cull
         && raster.front_face == o.raster.front_face
@@ -71,9 +84,9 @@ size_t PipelineCacheKeyHash::operator()(const PipelineCacheKey& k) const {
     hash_combine(h, std::hash<uint32_t>{}(k.geometry_shader.id));
 
     // Use the precomputed layout hash — the caller is responsible for
-    // keeping it in sync with `vertex_layout`. Skips an O(attributes)
-    // loop on every cache lookup (see PipelineCacheKey::vertex_layout_hash).
-    hash_combine(h, k.vertex_layout_hash);
+    // keeping it in sync with `vertex_layouts`. Skips an O(attributes)
+    // loop on every cache lookup (see PipelineCacheKey::vertex_layouts_hash).
+    hash_combine(h, k.vertex_layouts_hash);
 
     hash_combine(h, std::hash<int>{}(static_cast<int>(k.topology)));
     hash_combine(h, std::hash<int>{}(static_cast<int>(k.raster.cull)));
@@ -118,8 +131,10 @@ PipelineHandle PipelineCache::get(const PipelineCacheKey& key) {
     desc.fragment_shader = key.fragment_shader;
     desc.geometry_shader = key.geometry_shader;
 
-    if (key.vertex_layout.stride > 0) {
-        desc.vertex_layouts.push_back(key.vertex_layout);
+    for (const VertexBufferLayout& layout : key.vertex_layouts) {
+        if (layout.stride > 0) {
+            desc.vertex_layouts.push_back(layout);
+        }
     }
 
     desc.topology = key.topology;
