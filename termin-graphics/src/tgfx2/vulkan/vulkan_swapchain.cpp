@@ -17,7 +17,7 @@ namespace tgfx {
 
 namespace {
 
-bool vulkan_stats_enabled() {
+bool vulkan_swapchain_stats_enabled() {
     static const bool enabled = [] {
         const char* env = std::getenv("TGFX2_VULKAN_STATS");
         return env && env[0] == '1';
@@ -487,7 +487,7 @@ bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
 
     auto now = std::chrono::steady_clock::now();
     if (std::chrono::duration<double>(now - s_window_start).count() >= 1.0) {
-        if (vulkan_stats_enabled()) {
+        if (vulkan_swapchain_stats_enabled()) {
             const double denom = s_frames > 0 ? static_cast<double>(s_frames) : 1.0;
             tc_log(TC_LOG_INFO,
                    "[tgfx2-vulkan] swapchain stats: frames=%llu "
