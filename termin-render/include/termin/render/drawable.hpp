@@ -100,6 +100,24 @@ public:
         (void)geometry_id;
     }
 
+    // Direct tgfx2 draw hook for drawables that are not backed by a
+    // tc_mesh in a given render mode. ColorPass calls this when
+    // get_mesh_for_phase() returns nullptr.
+    virtual bool draw_tgfx2(
+        tgfx::RenderContext2& ctx2,
+        const RenderContext& context,
+        const std::string& phase_mark,
+        tc_material_phase* phase,
+        int geometry_id
+    ) {
+        (void)ctx2;
+        (void)context;
+        (void)phase_mark;
+        (void)phase;
+        (void)geometry_id;
+        return false;
+    }
+
     virtual Mat44f get_model_matrix(const Entity& entity) const;
 
     bool has_phase(const std::string& phase_mark) const {

@@ -3,6 +3,7 @@
 #include <string>
 
 #include <termin/geom/mat44.hpp>
+#include <termin/geom/vec3.hpp>
 #include <termin/render/render_camera.hpp>
 #include <termin/tc_scene.hpp>
 #include <tgfx/tgfx_shader_handle.hpp>
@@ -16,6 +17,9 @@ struct RenderContext {
     Mat44f model = Mat44f::identity();
     TcShader current_tc_shader;
     uint64_t layer_mask = 0xFFFFFFFFFFFFFFFF;
+    Vec3 camera_position{0.0, 0.0, 0.0};
+    int viewport_width = 0;
+    int viewport_height = 0;
     TcSceneRef scene;
     RenderCamera* camera = nullptr;
 
