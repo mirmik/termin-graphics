@@ -36,20 +36,18 @@ void bind_camera(nb::module_& m) {
         // Public state fields.
         .def_prop_rw("target",
             [](const tcplot::OrbitCamera& c) {
-                return std::make_tuple(c.target[0], c.target[1], c.target[2]);
+                return std::make_tuple(c.target.x, c.target.y, c.target.z);
             },
             [](tcplot::OrbitCamera& c, std::tuple<float, float, float> t) {
                 auto [x, y, z] = t;
-                c.target[0] = x;
-                c.target[1] = y;
-                c.target[2] = z;
+                c.target = {x, y, z};
             })
         .def_rw("distance",  &tcplot::OrbitCamera::distance)
         .def_rw("azimuth",   &tcplot::OrbitCamera::azimuth)
         .def_rw("elevation", &tcplot::OrbitCamera::elevation)
         .def_rw("fov_y",     &tcplot::OrbitCamera::fov_y)
-        .def_rw("near",      &tcplot::OrbitCamera::near)
-        .def_rw("far",       &tcplot::OrbitCamera::far)
+        .def_rw("near",      &tcplot::OrbitCamera::near_clip)
+        .def_rw("far",       &tcplot::OrbitCamera::far_clip)
         .def_rw("min_distance",  &tcplot::OrbitCamera::min_distance)
         .def_rw("max_distance",  &tcplot::OrbitCamera::max_distance)
         .def_rw("min_elevation", &tcplot::OrbitCamera::min_elevation)

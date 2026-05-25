@@ -8,6 +8,12 @@
 - [Architecture notes](architecture/index.md)
 - [Renderer facades plan](../../docs/plans/2026-05-12-tgfx-renderer-facades.md)
 
+## Examples
+
+- `examples/demo_lines.py` - 3D visual стенд для `tgfx::build_line_mesh`
+  с общей `termin.geombase.OrbitCamera`.
+- `examples/demo_sdf_text.py` - SDF text rendering через tcgui widgets.
+
 ## Границы
 
 В этот модуль должны попадать GPU abstractions и utilities, которые не знают о frame graph, editor UI или конкретной application domain.

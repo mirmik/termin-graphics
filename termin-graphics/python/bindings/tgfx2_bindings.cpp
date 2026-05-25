@@ -29,6 +29,7 @@
 #include <tgfx2/vertex_layout.hpp>
 #include <tgfx2/tc_shader_bridge.hpp>
 #include <tgfx2/font_atlas.hpp>
+#include <tgfx2/line_mesh_builder.hpp>
 #include <tgfx2/text2d_renderer.hpp>
 #include <tgfx2/text3d_renderer.hpp>
 
@@ -74,6 +75,67 @@ void bind_tgfx2(nb::module_& m) {
     nb::class_<ShaderPair>(m, "Tgfx2ShaderPair")
         .def_ro("vs", &ShaderPair::vs)
         .def_ro("fs", &ShaderPair::fs);
+
+    nb::class_<tgfx::LinePoint3>(m, "LinePoint3")
+        .def(nb::init<>())
+        .def(nb::init<float, float, float>(),
+             nb::arg("x"), nb::arg("y"), nb::arg("z"))
+        .def_rw("x", &tgfx::LinePoint3::x)
+        .def_rw("y", &tgfx::LinePoint3::y)
+        .def_rw("z", &tgfx::LinePoint3::z);
+
+    nb::enum_<tgfx::LineCapStyle>(m, "LineCapStyle")
+        .value("Butt", tgfx::LineCapStyle::Butt)
+        .value("Square", tgfx::LineCapStyle::Square)
+        .value("Round", tgfx::LineCapStyle::Round);
+
+    nb::enum_<tgfx::LineJoinStyle>(m, "LineJoinStyle")
+        .value("Bevel", tgfx::LineJoinStyle::Bevel)
+        .value("Round", tgfx::LineJoinStyle::Round);
+
+    nb::class_<tgfx::LineStyle>(m, "LineStyle")
+        .def(nb::init<>())
+        .def_rw("width", &tgfx::LineStyle::width)
+        .def_rw("up_hint", &tgfx::LineStyle::up_hint)
+        .def_rw("cap", &tgfx::LineStyle::cap)
+        .def_rw("join", &tgfx::LineStyle::join)
+        .def_rw("round_segments", &tgfx::LineStyle::round_segments)
+        .def_rw("closed", &tgfx::LineStyle::closed);
+
+    nb::class_<tgfx::LineMesh>(m, "LineMesh")
+        .def_prop_ro("vertices", [](const tgfx::LineMesh& mesh) {
+            nb::list out;
+            for (const tgfx::LineVertex& vertex : mesh.vertices) {
+                const tgfx::LinePoint3& p = vertex.position;
+                out.append(nb::make_tuple(p.x, p.y, p.z));
+            }
+            return out;
+        })
+        .def_prop_ro("indices", [](const tgfx::LineMesh& mesh) {
+            nb::list out;
+            for (uint32_t index : mesh.indices) {
+                out.append(index);
+            }
+            return out;
+        })
+        .def_prop_ro("triangle_vertices", [](const tgfx::LineMesh& mesh) {
+            nb::list out;
+            for (uint32_t index : mesh.indices) {
+                const tgfx::LinePoint3& p = mesh.vertices[index].position;
+                out.append(nb::make_tuple(p.x, p.y, p.z));
+            }
+            return out;
+        })
+        .def_prop_ro("empty", &tgfx::LineMesh::empty);
+
+    m.def("build_line_mesh",
+          [](const std::vector<tgfx::LinePoint3>& points,
+             const tgfx::LineStyle& style) {
+              return tgfx::build_line_mesh(
+                  std::span<const tgfx::LinePoint3>(points.data(), points.size()),
+                  style);
+          },
+          nb::arg("points"), nb::arg("style"));
 
     // IRenderDevice — opaque handle exposed so other native modules
     // (render_framework) can accept a pointer to it from Python.
@@ -258,6 +320,24 @@ void bind_tgfx2(nb::module_& m) {
              },
              nb::arg("width"), nb::arg("height"),
              nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm)
+
+        // Same convenience for depth targets. Resource creation belongs to
+        // IRenderDevice, but Python passes often only receive RenderContext2.
+        .def("create_depth_attachment",
+             [](tgfx::RenderContext2& self, uint32_t w, uint32_t h,
+                tgfx::PixelFormat fmt) -> tgfx::TextureHandle {
+                 tgfx::TextureDesc desc;
+                 desc.width = w;
+                 desc.height = h;
+                 desc.format = fmt;
+                 desc.usage = tgfx::TextureUsage::DepthStencilAttachment |
+                              tgfx::TextureUsage::Sampled |
+                              tgfx::TextureUsage::CopySrc |
+                              tgfx::TextureUsage::CopyDst;
+                 return self.device().create_texture(desc);
+             },
+             nb::arg("width"), nb::arg("height"),
+             nb::arg("format") = tgfx::PixelFormat::D32F)
 
         // Shader
         .def("bind_shader",

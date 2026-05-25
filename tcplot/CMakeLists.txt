@@ -34,7 +34,7 @@ include(TerminRpath)
 #
 # The library is split into orthogonal translation units:
 #   - styles / axes     : color palette, tick/label helpers (no deps).
-#   - orbit_camera      : 3D camera math on termin::Mat44 / Vec3.
+#   - orbit_camera      : compatibility wrapper over termin::OrbitCamera.
 #   - plot_data         : series + PlotData container.
 #   - engine3d          : 3D plot state + rendering through tgfx2.
 #   - engine2d          : 2D plot state + rendering through tgfx2.

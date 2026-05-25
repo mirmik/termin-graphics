@@ -96,6 +96,7 @@ set(TGFX2_SOURCES
     src/tgfx2/device_factory.cpp
     src/tgfx2/canvas2d_renderer.cpp
     src/tgfx2/font_atlas.cpp
+    src/tgfx2/line_mesh_builder.cpp
     src/tgfx2/text2d_renderer.cpp
     src/tgfx2/text3d_renderer.cpp
     src/tgfx2/pixel_format_utils.cpp
@@ -343,6 +344,7 @@ if(BUILD_TGFX2_TESTS)
     add_executable(tgfx2_device_factory_test
         tests/main.cpp
         tests/test_tgfx2_device_factory.cpp
+        tests/test_tgfx2_line_mesh_builder.cpp
     )
     target_include_directories(tgfx2_device_factory_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/tests
