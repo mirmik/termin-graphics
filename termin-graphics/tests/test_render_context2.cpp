@@ -10,6 +10,7 @@
 #include <tgfx2/opengl/opengl_render_device.hpp>
 #include <tgfx2/pipeline_cache.hpp>
 #include <tgfx2/render_context.hpp>
+#include <tgfx2/world_space_line_renderer.hpp>
 
 static int test_count = 0;
 static int pass_count = 0;
@@ -294,6 +295,97 @@ static void test_pipeline_cache_reuse(tgfx::IRenderDevice& device, tgfx::Pipelin
     device.destroy(fs);
 }
 
+static void test_world_space_lines_depth(tgfx::IRenderDevice& device, tgfx::PipelineCache& cache) {
+    printf("\n--- WorldSpaceLineRenderer depth test/write ---\n");
+
+    GLint major = 0;
+    GLint minor = 0;
+    glGetIntegerv(GL_MAJOR_VERSION, &major);
+    glGetIntegerv(GL_MINOR_VERSION, &minor);
+    if (major < 4 || (major == 4 && minor < 5)) {
+        printf("  SKIP: WorldSpaceLineRenderer shaders require OpenGL 4.5\n");
+        return;
+    }
+
+    const uint32_t W = 64, H = 64;
+
+    tgfx::TextureDesc color_desc;
+    color_desc.width = W;
+    color_desc.height = H;
+    color_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    color_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
+    auto color = device.create_texture(color_desc);
+    CHECK(bool(color), "line color target created");
+
+    tgfx::TextureDesc depth_desc;
+    depth_desc.width = W;
+    depth_desc.height = H;
+    depth_desc.format = tgfx::PixelFormat::D32F;
+    depth_desc.usage = tgfx::TextureUsage::DepthStencilAttachment | tgfx::TextureUsage::CopySrc;
+    auto depth = device.create_texture(depth_desc);
+    CHECK(bool(depth), "line depth target created");
+
+    tgfx::RenderContext2 ctx(device, cache);
+    tgfx::WorldSpaceLineRenderer renderer;
+
+    tgfx::WorldSpaceLineParams params;
+    params.view_projection = {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f,
+    };
+    params.camera_position = {0.0f, 0.0f, -5.0f};
+
+    tgfx::WorldSpaceLineStyle near_style;
+    near_style.width = 0.18f;
+    near_style.color = {1.0f, 0.0f, 0.0f, 1.0f};
+    near_style.cap = tgfx::LineCapStyle::Square;
+    near_style.round_segments = 8;
+
+    tgfx::WorldSpaceLineStyle far_style = near_style;
+    far_style.color = {0.0f, 1.0f, 0.0f, 1.0f};
+
+    const tgfx::LinePoint3 near_points[] = {
+        {-0.85f, 0.0f, 0.25f},
+        { 0.85f, 0.0f, 0.25f},
+    };
+    const tgfx::LinePoint3 far_points[] = {
+        {-0.85f, 0.0f, 0.75f},
+        { 0.85f, 0.0f, 0.75f},
+    };
+
+    ctx.begin_frame();
+    float clear[] = {0.0f, 0.0f, 0.0f, 1.0f};
+    ctx.begin_pass(color, depth, clear, 1.0f, true);
+    ctx.set_viewport(0, 0, W, H);
+    ctx.set_depth_test(true);
+    ctx.set_depth_write(true);
+    ctx.set_cull(tgfx::CullMode::None);
+
+    renderer.draw_polyline(ctx, std::span<const tgfx::LinePoint3>(near_points, 2),
+                           near_style, params);
+    renderer.draw_polyline(ctx, std::span<const tgfx::LinePoint3>(far_points, 2),
+                           far_style, params);
+
+    ctx.end_pass();
+    ctx.end_frame();
+
+    float center[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    CHECK(device.read_pixel_rgba8(color, W / 2, H / 2, center),
+          "line center pixel readback works");
+    printf("  Line center pixel: (%.2f, %.2f, %.2f, %.2f)\n",
+           center[0], center[1], center[2], center[3]);
+
+    const bool center_is_near_red =
+        center[0] > 0.75f && center[1] < 0.20f && center[2] < 0.20f;
+    CHECK(center_is_near_red, "far billboard line is rejected by depth test");
+
+    renderer.release(ctx);
+    device.destroy(color);
+    device.destroy(depth);
+}
+
 int main() {
     if (!glfwInit()) {
         fprintf(stderr, "Failed to init GLFW\n");
@@ -338,6 +430,11 @@ int main() {
         tgfx::OpenGLRenderDevice device;
         tgfx::PipelineCache cache(device);
         test_pipeline_cache_reuse(device, cache);
+    }
+    {
+        tgfx::OpenGLRenderDevice device;
+        tgfx::PipelineCache cache(device);
+        test_world_space_lines_depth(device, cache);
     }
 
     printf("\n=== Results: %d/%d passed ===\n", pass_count, test_count);

@@ -215,7 +215,7 @@ def main() -> None:
             )
             ctx.context.set_viewport(0, 0, width, height)
             ctx.context.set_depth_test(True)
-            ctx.context.set_depth_write(False)
+            ctx.context.set_depth_write(True)
             ctx.context.set_cull(CULL_NONE)
 
             for item in scene:
