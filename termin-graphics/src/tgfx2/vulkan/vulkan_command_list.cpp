@@ -338,6 +338,17 @@ void VulkanCommandList::draw_indexed(uint32_t index_count, uint32_t first_index,
     g_draw_count.fetch_add(1, std::memory_order_relaxed);
 }
 
+void VulkanCommandList::draw_indexed_instanced(
+    uint32_t index_count,
+    uint32_t instance_count,
+    uint32_t first_index,
+    int32_t vertex_offset,
+    uint32_t first_instance
+) {
+    vkCmdDrawIndexed(cmd_, index_count, instance_count, first_index, vertex_offset, first_instance);
+    g_draw_count.fetch_add(1, std::memory_order_relaxed);
+}
+
 void VulkanCommandList::dispatch(uint32_t group_x, uint32_t group_y, uint32_t group_z) {
     vkCmdDispatch(cmd_, group_x, group_y, group_z);
 }

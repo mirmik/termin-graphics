@@ -102,6 +102,8 @@ private:
     std::vector<BufferHandle> last_bound_vbos_;
     std::vector<uint64_t> last_bound_vbo_offsets_;
     BufferHandle last_bound_ibo_ = {};
+    uint64_t last_bound_ibo_offset_ = 0;
+    IndexType last_bound_index_type_ = IndexType::Uint32;
     // Last pipeline handle passed to cmd_->bind_pipeline(). Used by
     // flush_pipeline() to skip a redundant vkCmdBindPipeline when the
     // pipeline cache returned the same handle again (same state combo).
@@ -229,6 +231,21 @@ public:
     // Draw with bound vertex/index buffers.
     void draw(BufferHandle vbo, BufferHandle ibo,
               uint32_t index_count, IndexType idx_type = IndexType::Uint32);
+    void draw_indexed_instanced(BufferHandle vertex_vbo,
+                                BufferHandle index_buffer,
+                                BufferHandle instance_vbo,
+                                uint32_t index_count,
+                                uint32_t instance_count,
+                                IndexType idx_type = IndexType::Uint32);
+    void draw_indexed_instanced(BufferHandle vertex_vbo,
+                                uint64_t vertex_offset,
+                                BufferHandle index_buffer,
+                                uint64_t index_offset,
+                                BufferHandle instance_vbo,
+                                uint64_t instance_offset,
+                                uint32_t index_count,
+                                uint32_t instance_count,
+                                IndexType idx_type = IndexType::Uint32);
 
     // Draw non-indexed.
     void draw_arrays(BufferHandle vbo, uint32_t vertex_count);

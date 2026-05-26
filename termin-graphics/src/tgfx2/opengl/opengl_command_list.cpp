@@ -421,6 +421,49 @@ void OpenGLCommandList::draw_indexed(uint32_t index_count, uint32_t first_index,
     }
 }
 
+void OpenGLCommandList::draw_indexed_instanced(
+    uint32_t index_count,
+    uint32_t instance_count,
+    uint32_t first_index,
+    int32_t vertex_offset,
+    uint32_t first_instance
+) {
+    if (current_vao_) glBindVertexArray(current_vao_);
+    apply_pending_push_constants();
+
+    if (first_instance != 0) {
+        static bool warned = false;
+        if (!warned) {
+            tc::Log::error(
+                "OpenGLCommandList::draw_indexed_instanced: first_instance is not supported by the OpenGL path yet");
+            warned = true;
+        }
+    }
+
+    auto index_size = (current_index_type_ == GL_UNSIGNED_SHORT) ? 2u : 4u;
+    auto byte_offset = current_index_offset_ + first_index * index_size;
+    auto* offset_ptr = reinterpret_cast<const void*>(static_cast<uintptr_t>(byte_offset));
+
+    if (vertex_offset != 0) {
+        glDrawElementsInstancedBaseVertex(
+            current_topology_,
+            index_count,
+            current_index_type_,
+            offset_ptr,
+            instance_count,
+            vertex_offset
+        );
+    } else {
+        glDrawElementsInstanced(
+            current_topology_,
+            index_count,
+            current_index_type_,
+            offset_ptr,
+            instance_count
+        );
+    }
+}
+
 void OpenGLCommandList::dispatch(uint32_t /*group_x*/, uint32_t /*group_y*/, uint32_t /*group_z*/) {
     // Compute shaders require GL 4.3; not available with GL 3.3 glad
 }
