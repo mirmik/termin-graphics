@@ -47,10 +47,7 @@ def main():
 
     def dispatch(ev):
         t = ev.type
-        if t == sdl2.SDL_QUIT or (
-            t == sdl2.SDL_KEYDOWN
-            and ev.key.keysym.scancode == sdl2.SDL_SCANCODE_ESCAPE
-        ):
+        if t == sdl2.SDL_QUIT:
             window.set_should_close(True)
         elif t == sdl2.SDL_WINDOWEVENT:
             if ev.window.event == sdl2.SDL_WINDOWEVENT_CLOSE:

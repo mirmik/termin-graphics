@@ -204,10 +204,6 @@ void main() {
     while (running) {
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT) running = false;
-            else if (ev.type == SDL_KEYDOWN &&
-                     ev.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                running = false;
-            }
         }
         auto now = std::chrono::steady_clock::now();
         float t = std::chrono::duration<float>(now - start).count();

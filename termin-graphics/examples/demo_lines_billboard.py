@@ -143,9 +143,6 @@ def _dispatch(event: sdl2.SDL_Event, window: SDLBackendWindow,
     etype = event.type
     if etype == sdl2.SDL_QUIT:
         window.set_should_close(True)
-    elif etype == sdl2.SDL_KEYDOWN:
-        if event.key.keysym.scancode == sdl2.SDL_SCANCODE_ESCAPE:
-            window.set_should_close(True)
     elif etype == sdl2.SDL_WINDOWEVENT:
         if event.window.event == sdl2.SDL_WINDOWEVENT_CLOSE:
             window.set_should_close(True)
