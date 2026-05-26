@@ -281,12 +281,22 @@ void bind_shader_parser(nb::module_& m) {
     // --- ShaderMultyPhaseProgramm ---
     nb::class_<ShaderMultyPhaseProgramm>(m, "ShaderMultyPhaseProgramm")
         .def(nb::init<>())
-        .def(nb::init<std::string, std::vector<ShaderPhase>, std::string>(),
-             nb::arg("program"), nb::arg("phases"), nb::arg("source_path") = "")
+        .def(nb::init<
+                std::string,
+                std::vector<ShaderPhase>,
+                std::string,
+                std::vector<std::string>,
+                std::vector<MaterialProperty>>(),
+             nb::arg("program"),
+             nb::arg("phases"),
+             nb::arg("source_path") = "",
+             nb::arg("features") = std::vector<std::string>{},
+             nb::arg("material_properties") = std::vector<MaterialProperty>{})
         .def_rw("program", &ShaderMultyPhaseProgramm::program)
         .def_rw("phases", &ShaderMultyPhaseProgramm::phases)
         .def_rw("source_path", &ShaderMultyPhaseProgramm::source_path)
         .def_rw("features", &ShaderMultyPhaseProgramm::features)
+        .def_rw("material_properties", &ShaderMultyPhaseProgramm::material_properties)
         .def("has_feature", &ShaderMultyPhaseProgramm::has_feature,
              nb::arg("feature"), "Check if shader has a specific feature")
         .def("get_phase", &ShaderMultyPhaseProgramm::get_phase,

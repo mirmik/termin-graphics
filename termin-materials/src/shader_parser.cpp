@@ -342,11 +342,15 @@ std::optional<std::string> material_type_from_glsl_uniform_type(
 }
 
 std::vector<MaterialProperty> discover_material_uniforms_from_stages(
-    const ShaderPhase& phase)
+    const ShaderPhase& phase,
+    const std::vector<MaterialProperty>& material_properties)
 {
     std::vector<MaterialProperty> discovered;
     std::vector<std::string> known_names;
 
+    for (const auto& prop : material_properties) {
+        known_names.push_back(prop.name);
+    }
     for (const auto& prop : phase.uniforms) {
         known_names.push_back(prop.name);
     }
@@ -387,6 +391,22 @@ std::vector<MaterialProperty> discover_material_uniforms_from_stages(
     }
 
     return discovered;
+}
+
+std::vector<MaterialProperty> collect_used_material_properties(
+    const std::vector<MaterialProperty>& material_properties,
+    const ShaderPhase& phase)
+{
+    std::vector<MaterialProperty> used;
+    for (const auto& prop : material_properties) {
+        for (const auto& kv : phase.stages) {
+            if (source_uses_identifier(kv.second.source, prop.name)) {
+                used.push_back(prop);
+                break;
+            }
+        }
+    }
+    return used;
 }
 
 // ============================================================================
@@ -835,7 +855,7 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
     // For @phases mode (shared stages)
     std::vector<std::string> declared_phases;  // From @phases directive
     std::unordered_map<std::string, ShaderStage> shared_stages;
-    std::vector<MaterialProperty> shared_uniforms;
+    std::vector<MaterialProperty> material_properties;
     std::unordered_map<std::string, ShaderPhase> phase_settings;  // Per-phase overrides
 
     ShaderPhase* current_phase = nullptr;
@@ -843,6 +863,23 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
     std::string current_stage_name;
     std::vector<std::string> current_stage_lines;
     bool in_shared_stage = false;  // Stage outside @phase (for @phases mode)
+
+    auto add_material_property = [&](MaterialProperty prop) {
+        auto existing = std::find_if(
+            material_properties.begin(),
+            material_properties.end(),
+            [&](const MaterialProperty& other) {
+                return other.name == prop.name;
+            });
+        if (existing != material_properties.end()) {
+            if (existing->property_type != prop.property_type) {
+                throw std::runtime_error(
+                    "Duplicate @property with conflicting type: " + prop.name);
+            }
+            return;
+        }
+        material_properties.push_back(std::move(prop));
+    };
 
     auto close_current_stage = [&]() {
         if (current_stage_name.empty()) return;
@@ -1084,13 +1121,7 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
             close_current_stage();
         }
         else if (directive == "@property") {
-            auto prop = parse_property_directive(line);
-            if (current_phase) {
-                current_phase->uniforms.push_back(std::move(prop));
-            } else {
-                // Shared property (for @phases mode)
-                shared_uniforms.push_back(std::move(prop));
-            }
+            add_material_property(parse_property_directive(line));
         }
         else {
             throw std::runtime_error("Unknown directive: " + directive);
@@ -1109,9 +1140,6 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
 
         // Copy shared stages
         phase.stages = shared_stages;
-
-        // Copy shared uniforms
-        phase.uniforms = shared_uniforms;
 
         // Apply default opaque settings
         phase.gl_depth_test = true;
@@ -1168,7 +1196,12 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
         phases.push_back(std::move(phase));
     }
 
-    ShaderMultyPhaseProgramm result(program_name, std::move(phases), "", std::move(features));
+    ShaderMultyPhaseProgramm result(
+        program_name,
+        std::move(phases),
+        "",
+        std::move(features),
+        std::move(material_properties));
 
     // Material UBO synthesis is unconditional: any phase that declares
     // scalar/vector @property or @uniform entries gets a std140
@@ -1185,7 +1218,18 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
     // for the migration; see shadow/depth/normal/id pass pattern for the
     // same "two code paths converge into one" cleanup.
     for (auto& phase : result.phases) {
-        phase.material_uniforms = discover_material_uniforms_from_stages(phase);
+        for (auto& kv : phase.stages) {
+            kv.second.source = tgfx::internal::preprocess_shader_source(
+                kv.second.source,
+                kv.first.c_str());
+        }
+
+        phase.uniforms = collect_used_material_properties(
+            result.material_properties,
+            phase);
+        phase.material_uniforms = discover_material_uniforms_from_stages(
+            phase,
+            result.material_properties);
 
         std::vector<MaterialProperty> shader_uniforms = phase.uniforms;
         shader_uniforms.insert(
@@ -1207,16 +1251,6 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
 
         for (auto& kv : phase.stages) {
             std::string& src = kv.second.source;
-
-            // Expand #include directives first so the strip passes
-            // below see the full merged source — including plain
-            // `uniform ...;` decls hiding inside shadows.glsl /
-            // lighting.glsl. Without this the strip only covers the
-            // stage's own text and uniforms from includes leak into
-            // the output, violating Vulkan's "non-opaque uniforms
-            // outside a block" rule.
-            src = tgfx::internal::preprocess_shader_source(
-                src, kv.first.c_str());
 
             std::string sampler_glsl =
                 synthesize_material_sampler_glsl(texture_names, src);

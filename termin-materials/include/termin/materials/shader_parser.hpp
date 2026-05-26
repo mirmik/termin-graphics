@@ -122,7 +122,7 @@ struct PhaseRenderSettings {
 };
 
 /**
- * Shader phase: stages + render state flags + uniform properties.
+ * Shader phase: stages + render state flags + compiled material interface.
  */
 struct ShaderPhase {
     std::string phase_mark;  // Primary/default mark
@@ -141,7 +141,8 @@ struct ShaderPhase {
     // Stages by name (vertex, fragment, geometry)
     std::unordered_map<std::string, ShaderStage> stages;
 
-    // Editable uniform properties for material inspector.
+    // Material properties used by this phase after preprocessing. The
+    // canonical inspector schema lives on ShaderMultyPhaseProgramm.
     std::vector<MaterialProperty> uniforms;
 
     // Plain GLSL material-block uniforms that are controlled by
@@ -172,17 +173,20 @@ public:
     std::vector<ShaderPhase> phases;
     std::string source_path;
     std::vector<std::string> features;  // Feature flags (e.g., "lighting_ubo")
+    std::vector<MaterialProperty> material_properties;  // Canonical material inspector schema.
 
     ShaderMultyPhaseProgramm() = default;
     ShaderMultyPhaseProgramm(
         std::string program_,
         std::vector<ShaderPhase> phases_,
         std::string source_path_ = "",
-        std::vector<std::string> features_ = {}
+        std::vector<std::string> features_ = {},
+        std::vector<MaterialProperty> material_properties_ = {}
     ) : program(std::move(program_)),
         phases(std::move(phases_)),
         source_path(std::move(source_path_)),
-        features(std::move(features_)) {}
+        features(std::move(features_)),
+        material_properties(std::move(material_properties_)) {}
 
     /**
      * Check if shader has a specific feature.
@@ -221,6 +225,8 @@ public:
  *   @glBlend <bool>
  *   @glCull <bool>
  *   @property <Type> <name> [= DefaultValue] [range(min, max)]
+ *      Material-level property. Inside @phase is accepted for legacy syntax,
+ *      but per-phase properties are not supported.
  *   @stage <stage_name>
  *   @endstage
  *   @endphase
@@ -229,7 +235,7 @@ public:
  *   @phases <mark1>, <mark2>, ...     // Declares phases with shared code
  *   @settings <mark>                  // Per-phase render state overrides
  *   @endsettings                      // Optional end of settings block
- *   @property ...                     // Shared properties (outside @phase)
+ *   @property ...                     // Material-level properties
  *   @stage vertex / @stage fragment   // Shared stages (outside @phase)
  */
 ShaderMultyPhaseProgramm parse_shader_text(const std::string& text);

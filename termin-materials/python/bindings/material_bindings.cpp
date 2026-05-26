@@ -34,6 +34,29 @@ TcTexture optional_tc_texture(nb::object value, const std::string& context) {
     return require_tc_texture(value, context);
 }
 
+void put_uniform_value(nb::dict& result, const std::string& name, tc_uniform_value& u) {
+    switch (u.type) {
+        case TC_UNIFORM_BOOL:
+        case TC_UNIFORM_INT:
+            result[nb::cast(name)] = u.data.i;
+            break;
+        case TC_UNIFORM_FLOAT:
+            result[nb::cast(name)] = u.data.f;
+            break;
+        case TC_UNIFORM_VEC2:
+            result[nb::cast(name)] = nb::make_tuple(u.data.v2[0], u.data.v2[1]);
+            break;
+        case TC_UNIFORM_VEC3:
+            result[nb::cast(name)] = Vec3{u.data.v3[0], u.data.v3[1], u.data.v3[2]};
+            break;
+        case TC_UNIFORM_VEC4:
+            result[nb::cast(name)] = Vec4{u.data.v4[0], u.data.v4[1], u.data.v4[2], u.data.v4[3]};
+            break;
+        default:
+            break;
+    }
+}
+
 } // namespace
 
 
@@ -669,50 +692,51 @@ void bind_tc_material(nb::module_& m) {
         .def("set_uniform_mat4", [](TcMaterial& self, const char* name, const Mat44& mat) {
             self.set_uniform_mat4(name, mat.to_float());
         })
+        .def("set_texture", [](TcMaterial& self, const char* name, TcTexture& tex) -> size_t {
+            size_t applied = 0;
+            for (size_t i = 0; i < self.phase_count(); i++) {
+                tc_material_phase* phase = self.get_phase(i);
+                if (!phase || !tc_material_phase_find_texture(phase, name)) {
+                    continue;
+                }
+                if (tc_material_phase_set_texture(phase, name, tex.handle)) {
+                    applied++;
+                }
+            }
+            if (applied > 0) {
+                self.bump_version();
+            }
+            return applied;
+        }, nb::arg("name"), nb::arg("texture"),
+           "Set a material texture on phases that already expose the texture slot.")
         // Phase access
         .def_prop_rw("active_phase_mark",
             &TcMaterial::active_phase_mark,
             &TcMaterial::set_active_phase_mark)
-        // uniforms property for Material API compatibility (from default phase)
+        // uniforms property for Material API compatibility (aggregated from all phases)
         .def_prop_ro("uniforms", [](TcMaterial& self) -> nb::dict {
             nb::dict result;
-            tc_material_phase* phase = self.default_phase();
-            if (!phase) return result;
-            for (size_t i = 0; i < phase->uniform_count; i++) {
-                std::string name = phase->uniforms[i].name;
-                tc_uniform_value& u = phase->uniforms[i];
-                switch (u.type) {
-                    case TC_UNIFORM_BOOL:
-                    case TC_UNIFORM_INT:
-                        result[nb::cast(name)] = u.data.i;
-                        break;
-                    case TC_UNIFORM_FLOAT:
-                        result[nb::cast(name)] = u.data.f;
-                        break;
-                    case TC_UNIFORM_VEC2:
-                        result[nb::cast(name)] = nb::make_tuple(u.data.v2[0], u.data.v2[1]);
-                        break;
-                    case TC_UNIFORM_VEC3:
-                        result[nb::cast(name)] = Vec3{u.data.v3[0], u.data.v3[1], u.data.v3[2]};
-                        break;
-                    case TC_UNIFORM_VEC4:
-                        result[nb::cast(name)] = Vec4{u.data.v4[0], u.data.v4[1], u.data.v4[2], u.data.v4[3]};
-                        break;
-                    default:
-                        break;
+            for (size_t phase_index = 0; phase_index < self.phase_count(); phase_index++) {
+                tc_material_phase* phase = self.get_phase(phase_index);
+                if (!phase) continue;
+                for (size_t i = 0; i < phase->uniform_count; i++) {
+                    std::string name = phase->uniforms[i].name;
+                    put_uniform_value(result, name, phase->uniforms[i]);
                 }
             }
             return result;
         })
-        // textures property for Material API compatibility (from default phase)
+        // textures property for Material API compatibility (aggregated from all phases)
         .def_prop_ro("textures", [](TcMaterial& self) -> nb::dict {
             nb::dict result;
-            tc_material_phase* phase = self.default_phase();
-            if (!phase) return result;
-            for (size_t i = 0; i < phase->texture_count; i++) {
-                std::string name = phase->textures[i].name;
-                if (!tc_texture_handle_is_invalid(phase->textures[i].texture)) {
-                    result[nb::cast(name)] = TcTexture(phase->textures[i].texture);
+            for (size_t phase_index = 0; phase_index < self.phase_count(); phase_index++) {
+                tc_material_phase* phase = self.get_phase(phase_index);
+                if (!phase) continue;
+                for (size_t i = 0; i < phase->texture_count; i++) {
+                    std::string name = phase->textures[i].name;
+                    if (!tc_texture_handle_is_invalid(phase->textures[i].texture)) {
+                        result[nb::cast(name)] = TcTexture(phase->textures[i].texture);
+                    }
                 }
             }
             return result;
