@@ -133,6 +133,9 @@ run_suite "termin-nodegraph python" \
 run_suite "termin-qopt python" \
     "${PYTHON_BIN}" -m pytest termin-qopt/tests/ -v
 
+run_suite "termin-pga python" \
+    "${PYTHON_BIN}" -m pytest termin-pga/tests/ -v
+
 run_suite "termin-app python" \
     "${PYTHON_BIN}" -m pytest termin-app/tests/ -v
 
