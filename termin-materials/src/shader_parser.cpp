@@ -19,8 +19,6 @@ namespace termin {
 
 namespace {
 
-constexpr uint32_t MATERIAL_TEXTURE_BINDING_BASE = 4;
-
 // Trim whitespace from both ends
 std::string trim(const std::string& s) {
     size_t start = s.find_first_not_of(" \t\r\n");
@@ -321,7 +319,7 @@ std::string synthesize_material_sampler_glsl(
         if (!source_uses_identifier(stage_source, name)) {
             continue;
         }
-        out << "layout(binding = " << (MATERIAL_TEXTURE_BINDING_BASE + i)
+        out << "layout(binding = " << material_texture_binding_for_index(static_cast<uint32_t>(i))
             << ") uniform sampler2D " << name << ";\n";
     }
     return out.str();

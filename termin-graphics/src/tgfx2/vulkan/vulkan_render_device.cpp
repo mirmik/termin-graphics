@@ -743,14 +743,15 @@ void VulkanRenderDevice::create_descriptor_pool() {
     // scenes: ~30 skinned meshes × 4 shadow cascades + color/depth/id/
     // normal + UI draws ≈ 500-800 sets. Headroom to 2048 accommodates
     // heavier future scenes without re-sizing. Each set may touch up to
-    // ~5 UBOs and ~6 samplers, hence the pool-size multipliers below.
+    // ~5 UBOs and up to the shared layout's sampled descriptors, hence
+    // the pool-size multipliers below.
     VkDescriptorPoolSize pool_sizes[] = {
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,  8 * 2048},
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,          2 * 2048},
         {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,          512},
         {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,           2 * 2048},
         {VK_DESCRIPTOR_TYPE_SAMPLER,                 2 * 2048},
-        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 20 * 2048},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 40 * 2048},
     };
 
     VkDescriptorPoolCreateInfo ci{};
@@ -778,9 +779,10 @@ void VulkanRenderDevice::create_shared_layouts() {
     //                    `layout(binding = 8) sampler2DShadow u_shadow_map[N]`
     //                    compiles to a single array descriptor, so Vulkan
     //                    needs descriptorCount = N on binding 8)
-    //   binding 9..15 = COMBINED_IMAGE_SAMPLER, 1 each (extra slots)
+    //   binding 9..15 = COMBINED_IMAGE_SAMPLER, 1 each (more material textures)
     //   binding 16    = UBO  (BoneBlock — SkinnedMeshRenderer bone matrices,
     //                          used by VS only, see shader_skinning.cpp)
+    //   binding 17..23 = COMBINED_IMAGE_SAMPLER, 1 each (extra slots)
     //
     // MAX_SHADOW_MAPS must match the GLSL macro in shadows.glsl (currently 16).
     constexpr uint32_t MAX_SHADOW_MAPS = 16;
@@ -815,7 +817,7 @@ void VulkanRenderDevice::create_shared_layouts() {
         b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         bindings.push_back(b);
     }
-    // Extras 9..15 (individual — debug overlays etc.).
+    // More material samplers 9..15 (individual).
     for (uint32_t i = 9; i < 16; ++i) {
         VkDescriptorSetLayoutBinding b{};
         b.binding = i;
@@ -836,6 +838,15 @@ void VulkanRenderDevice::create_shared_layouts() {
         b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         b.descriptorCount = 1;
         b.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        bindings.push_back(b);
+    }
+    // Extras 17..23 (individual — debug overlays etc.).
+    for (uint32_t i = 17; i < 24; ++i) {
+        VkDescriptorSetLayoutBinding b{};
+        b.binding = i;
+        b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        b.descriptorCount = 1;
+        b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         bindings.push_back(b);
     }
 
@@ -1796,10 +1807,10 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
     TextureHandle default_tex = ensure_default_sampled_texture();
     if (default_tex) {
         // Keep every sampled slot declared by the shared descriptor layout valid.
-        // Shaders may statically use material slots 4..7, shadow-map array 8, or
-        // extra sampled slots 9..15 (for example through shaderc auto-binding).
-        for (uint32_t binding = 4; binding < 16; ++binding) {
-            if (binding == 8) continue;
+        // Shaders may statically use material slots 4..7 and 9..15,
+        // shadow-map array 8, or extra sampled slots 17..23.
+        for (uint32_t binding = 4; binding < 24; ++binding) {
+            if (binding == 8 || binding == 16) continue;
             if (has_sampled_binding(binding)) continue;
             ResourceBinding b;
             b.kind = ResourceBinding::Kind::SampledTexture;

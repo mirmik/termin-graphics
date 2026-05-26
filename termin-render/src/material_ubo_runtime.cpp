@@ -14,6 +14,17 @@
 namespace termin {
 namespace {
 
+constexpr uint32_t MATERIAL_TEXTURE_BINDING_BASE = 4;
+constexpr uint32_t MATERIAL_TEXTURE_BINDING_SHADOW_SLOT = 8;
+
+uint32_t material_texture_binding_for_index(uint32_t index) {
+    uint32_t binding = MATERIAL_TEXTURE_BINDING_BASE + index;
+    if (binding >= MATERIAL_TEXTURE_BINDING_SHADOW_SLOT) {
+        binding += 1;
+    }
+    return binding;
+}
+
 void write_bytes(uint8_t* dst, const void* src, size_t bytes) {
     std::memcpy(dst, src, bytes);
 }
@@ -109,19 +120,17 @@ void bind_material_phase_textures_runtime(
     tgfx::RenderContext2& ctx)
 {
     if (!phase) return;
+    (void)tex_slot_start;
 
-    uint32_t slot = tex_slot_start;
     for (size_t i = 0; i < phase->texture_count; ++i) {
         const tc_material_texture& mat_tex = phase->textures[i];
         if (tc_texture_handle_is_invalid(mat_tex.texture)) {
-            ++slot;
             continue;
         }
         tgfx::TextureHandle tex2 = wrap_tc_texture_as_tgfx2(device, mat_tex.texture);
         if (tex2) {
-            ctx.bind_sampled_texture(slot, tex2);
+            ctx.bind_sampled_texture(material_texture_binding_for_index(static_cast<uint32_t>(i)), tex2);
         }
-        ++slot;
     }
 }
 
