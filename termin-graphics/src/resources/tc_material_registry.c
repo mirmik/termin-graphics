@@ -617,6 +617,16 @@ tc_material_handle tc_material_copy(tc_material_handle src, const char* new_uuid
     snprintf(name_buf, sizeof(name_buf), "%s_copy", src_mat->header.name);
 
     tc_material_handle dst = tc_material_create(new_uuid, name_buf);
+    // tc_material_create can grow the pool and move existing materials.
+    // Re-fetch the source by handle before reading it again.
+    src_mat = tc_material_get(src);
+    if (!src_mat) {
+        if (!tc_material_handle_is_invalid(dst)) {
+            tc_material_destroy(dst);
+        }
+        return tc_material_handle_invalid();
+    }
+
     tc_material* dst_mat = tc_material_get(dst);
     if (!dst_mat) {
         return tc_material_handle_invalid();
