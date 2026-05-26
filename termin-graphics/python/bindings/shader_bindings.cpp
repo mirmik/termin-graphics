@@ -37,7 +37,8 @@ void bind_shader(nb::module_& m) {
         .value("SKINNING", TC_SHADER_VARIANT_SKINNING)
         .value("INSTANCING", TC_SHADER_VARIANT_INSTANCING)
         .value("MORPHING", TC_SHADER_VARIANT_MORPHING)
-        .value("FOLIAGE", TC_SHADER_VARIANT_FOLIAGE);
+        .value("FOLIAGE", TC_SHADER_VARIANT_FOLIAGE)
+        .value("FOLIAGE_SHADOW", TC_SHADER_VARIANT_FOLIAGE_SHADOW);
 
     // Shader feature flags enum
     nb::enum_<tc_shader_feature>(m, "ShaderFeature")

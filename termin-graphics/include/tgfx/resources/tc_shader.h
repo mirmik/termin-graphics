@@ -31,6 +31,7 @@ typedef enum tc_shader_variant_op {
     TC_SHADER_VARIANT_INSTANCING = 2,
     TC_SHADER_VARIANT_MORPHING = 3,
     TC_SHADER_VARIANT_FOLIAGE = 4,
+    TC_SHADER_VARIANT_FOLIAGE_SHADOW = 5,
 } tc_shader_variant_op;
 
 // ============================================================================
