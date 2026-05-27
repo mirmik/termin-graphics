@@ -4,8 +4,25 @@
 #include "core/tc_scene_extension.h"
 #include "tc_value.h"
 #include <tgfx/resources/tc_mesh.h>
+#include <tgfx/resources/tc_mesh_registry.h>
 #include <tgfx/resources/tc_material.h>
+#include <tgfx/resources/tc_material_registry.h>
 #include <stdlib.h>
+
+static bool skybox_material_is_builtin_alias(const tc_scene_skybox* skybox) {
+    if (!skybox || tc_material_handle_is_invalid(skybox->material)) return false;
+    return tc_material_handle_eq(skybox->material, skybox->gradient_material) ||
+           tc_material_handle_eq(skybox->material, skybox->solid_material);
+}
+
+static void release_skybox_external_material_alias(tc_scene_skybox* skybox) {
+    if (!skybox || skybox_material_is_builtin_alias(skybox)) return;
+    tc_material* material = tc_material_get(skybox->material);
+    if (material) {
+        tc_material_release(material);
+    }
+    skybox->material = tc_material_handle_invalid();
+}
 
 void tc_scene_lighting_init(tc_scene_lighting* lighting) {
     if (!lighting) return;
@@ -353,11 +370,28 @@ void tc_scene_set_skybox_mesh(tc_scene_handle h, tc_mesh* mesh) {
     tc_scene_render_state* state = tc_scene_render_state_get(h);
     if (!state) return;
     tc_scene_skybox* skybox = &state->skybox;
-    if (skybox->mesh) {
-        tc_mesh_release(skybox->mesh);
-    }
-    skybox->mesh = mesh;
+    tc_mesh_handle mesh_handle = tc_mesh_handle_invalid();
     if (mesh) {
+        mesh_handle = tc_mesh_find(mesh->header.uuid);
+        if (tc_mesh_handle_is_invalid(mesh_handle)) {
+            mesh_handle = tc_mesh_find_by_name(mesh->header.name);
+        }
+        if (tc_mesh_handle_is_invalid(mesh_handle)) {
+            return;
+        }
+        if (tc_mesh_handle_eq(skybox->mesh, mesh_handle)) {
+            return;
+        }
+    }
+    if (!tc_mesh_handle_is_invalid(skybox->mesh)) {
+        tc_mesh* old_mesh = tc_mesh_get(skybox->mesh);
+        if (old_mesh) {
+            tc_mesh_release(old_mesh);
+        }
+    }
+    skybox->mesh = tc_mesh_handle_invalid();
+    if (mesh) {
+        skybox->mesh = mesh_handle;
         tc_mesh_add_ref(mesh);
     }
 }
@@ -375,19 +409,33 @@ void tc_scene_set_skybox_material(tc_scene_handle h, tc_material* material) {
     tc_scene_render_state* state = tc_scene_render_state_get(h);
     if (!state) return;
     tc_scene_skybox* skybox = &state->skybox;
-    if (skybox->material) {
-        tc_material_release(skybox->material);
-    }
-    skybox->material = material;
+    tc_material_handle material_handle = tc_material_handle_invalid();
     if (material) {
-        tc_material_add_ref(material);
+        material_handle = tc_material_find(material->header.uuid);
+        if (tc_material_handle_is_invalid(material_handle)) {
+            material_handle = tc_material_find_by_name(material->header.name);
+        }
+        if (tc_material_handle_is_invalid(material_handle)) {
+            return;
+        }
+        if (tc_material_handle_eq(skybox->material, material_handle)) {
+            return;
+        }
+    }
+    release_skybox_external_material_alias(skybox);
+    skybox->material = tc_material_handle_invalid();
+    if (material) {
+        skybox->material = material_handle;
+        if (!skybox_material_is_builtin_alias(skybox)) {
+            tc_material_add_ref(material);
+        }
     }
 }
 
 tc_material* tc_scene_get_skybox_material(tc_scene_handle h) {
     if (!tc_scene_alive(h)) return NULL;
     tc_scene_render_state* state = tc_scene_render_state_get(h);
-    return state ? state->skybox.material : NULL;
+    return state ? tc_material_get(state->skybox.material) : NULL;
 }
 
 tc_scene_lighting* tc_scene_get_lighting(tc_scene_handle h) {

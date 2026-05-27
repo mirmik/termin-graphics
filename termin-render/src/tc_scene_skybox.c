@@ -77,27 +77,56 @@ static const uint32_t SKYBOX_INDICES[12 * 3] = {
     0, 3, 7,  0, 7, 4,  // left
 };
 
+static void release_mesh_handle(tc_mesh_handle* handle) {
+    if (!handle || tc_mesh_handle_is_invalid(*handle)) return;
+    tc_mesh* mesh = tc_mesh_get(*handle);
+    if (mesh) {
+        tc_mesh_release(mesh);
+    }
+    *handle = tc_mesh_handle_invalid();
+}
+
+static void release_material_handle(tc_material_handle* handle) {
+    if (!handle || tc_material_handle_is_invalid(*handle)) return;
+    tc_material* material = tc_material_get(*handle);
+    if (material) {
+        tc_material_release(material);
+    }
+    *handle = tc_material_handle_invalid();
+}
+
+static bool skybox_material_is_builtin_alias(const tc_scene_skybox* skybox) {
+    if (!skybox || tc_material_handle_is_invalid(skybox->material)) return false;
+    return tc_material_handle_eq(skybox->material, skybox->gradient_material) ||
+           tc_material_handle_eq(skybox->material, skybox->solid_material);
+}
+
+static void release_external_material_alias(tc_scene_skybox* skybox) {
+    if (!skybox || skybox_material_is_builtin_alias(skybox)) return;
+    release_material_handle(&skybox->material);
+}
+
 // Create skybox cube mesh
-static tc_mesh* create_skybox_cube_mesh(void) {
+static tc_mesh_handle create_skybox_cube_mesh(void) {
     // Try to find existing skybox mesh
     tc_mesh_handle h = tc_mesh_find("__builtin_skybox_cube");
     if (tc_mesh_is_valid(h)) {
         tc_mesh* mesh = tc_mesh_get(h);
         if (mesh) {
             tc_mesh_add_ref(mesh);
-            return mesh;
+            return h;
         }
     }
 
     // Create new mesh
     h = tc_mesh_create("__builtin_skybox_cube");
     if (!tc_mesh_is_valid(h)) {
-        return NULL;
+        return tc_mesh_handle_invalid();
     }
 
     tc_mesh* mesh = tc_mesh_get(h);
     if (!mesh) {
-        return NULL;
+        return tc_mesh_handle_invalid();
     }
 
     // Setup position-only layout
@@ -108,7 +137,7 @@ static tc_mesh* create_skybox_cube_mesh(void) {
     mesh->vertices = malloc(vertex_size);
     if (!mesh->vertices) {
         tc_mesh_destroy(h);
-        return NULL;
+        return tc_mesh_handle_invalid();
     }
     memcpy(mesh->vertices, SKYBOX_VERTICES, vertex_size);
     mesh->vertex_count = 8;
@@ -120,7 +149,7 @@ static tc_mesh* create_skybox_cube_mesh(void) {
         free(mesh->vertices);
         mesh->vertices = NULL;
         tc_mesh_destroy(h);
-        return NULL;
+        return tc_mesh_handle_invalid();
     }
     memcpy(mesh->indices, SKYBOX_INDICES, index_size);
     mesh->index_count = 36;
@@ -133,7 +162,7 @@ static tc_mesh* create_skybox_cube_mesh(void) {
     // Add ref for the caller
     tc_mesh_add_ref(mesh);
 
-    return mesh;
+    return h;
 }
 
 void tc_scene_skybox_init(tc_scene_skybox* skybox) {
@@ -151,48 +180,42 @@ void tc_scene_skybox_init(tc_scene_skybox* skybox) {
     skybox->bottom_color[0] = 0.6f;
     skybox->bottom_color[1] = 0.5f;
     skybox->bottom_color[2] = 0.4f;
-    skybox->mesh = NULL;
-    skybox->material = NULL;
-    skybox->gradient_material = NULL;
-    skybox->solid_material = NULL;
+    skybox->mesh = tc_mesh_handle_invalid();
+    skybox->material = tc_material_handle_invalid();
+    skybox->gradient_material = tc_material_handle_invalid();
+    skybox->solid_material = tc_material_handle_invalid();
 }
 
 void tc_scene_skybox_free(tc_scene_skybox* skybox) {
     if (!skybox) return;
-    if (skybox->mesh) {
-        tc_mesh_release(skybox->mesh);
-        skybox->mesh = NULL;
-    }
-    // material is an alias, don't release separately
-    skybox->material = NULL;
-    if (skybox->gradient_material) {
-        tc_material_release(skybox->gradient_material);
-        skybox->gradient_material = NULL;
-    }
-    if (skybox->solid_material) {
-        tc_material_release(skybox->solid_material);
-        skybox->solid_material = NULL;
-    }
+    release_mesh_handle(&skybox->mesh);
+    release_external_material_alias(skybox);
+    // Builtin material is an alias, don't release separately
+    skybox->material = tc_material_handle_invalid();
+    release_material_handle(&skybox->gradient_material);
+    release_material_handle(&skybox->solid_material);
 }
 
 tc_mesh* tc_scene_skybox_ensure_mesh(tc_scene_skybox* skybox) {
     if (!skybox) return NULL;
-    if (skybox->mesh) return skybox->mesh;
+    if (!tc_mesh_handle_is_invalid(skybox->mesh)) {
+        return tc_mesh_get(skybox->mesh);
+    }
 
     // Create skybox mesh lazily
     skybox->mesh = create_skybox_cube_mesh();
-    return skybox->mesh;
+    return tc_mesh_get(skybox->mesh);
 }
 
 // Create skybox material with given shader
-static tc_material* create_skybox_material(const char* name, const char* frag_source) {
+static tc_material_handle create_skybox_material(const char* name, const char* frag_source) {
     // Try to find existing material
-    tc_material_handle mh = tc_material_find(name);
+    tc_material_handle mh = tc_material_find_by_name(name);
     if (tc_material_is_valid(mh)) {
         tc_material* mat = tc_material_get(mh);
         if (mat) {
             tc_material_add_ref(mat);
-            return mat;
+            return mh;
         }
     }
 
@@ -206,7 +229,7 @@ static tc_material* create_skybox_material(const char* name, const char* frag_so
         NULL   // auto-generate uuid
     );
     if (!tc_shader_is_valid(sh)) {
-        return NULL;
+        return tc_material_handle_invalid();
     }
 
     // Add ref for material's usage + extra ref to keep builtin shader alive forever
@@ -219,12 +242,12 @@ static tc_material* create_skybox_material(const char* name, const char* frag_so
     // Create material
     mh = tc_material_create(NULL, name);
     if (!tc_material_is_valid(mh)) {
-        return NULL;
+        return tc_material_handle_invalid();
     }
 
     tc_material* mat = tc_material_get(mh);
     if (!mat) {
-        return NULL;
+        return tc_material_handle_invalid();
     }
 
     // Setup default phase with shader
@@ -236,35 +259,38 @@ static tc_material* create_skybox_material(const char* name, const char* frag_so
     strncpy(mat->phases[0].phase_mark, "skybox", TC_PHASE_MARK_MAX - 1);
 
     tc_material_add_ref(mat);
-    return mat;
+    return mh;
 }
 
 tc_material* tc_scene_skybox_ensure_material(tc_scene_skybox* skybox, int type) {
     if (!skybox) return NULL;
 
     if (type == TC_SKYBOX_NONE) {
-        skybox->material = NULL;
+        release_external_material_alias(skybox);
+        skybox->material = tc_material_handle_invalid();
         return NULL;
     }
 
     if (type == TC_SKYBOX_SOLID) {
-        if (!skybox->solid_material) {
+        if (tc_material_handle_is_invalid(skybox->solid_material)) {
             skybox->solid_material = create_skybox_material(
                 "__builtin_skybox_solid",
                 SKYBOX_SOLID_FRAGMENT_SHADER
             );
         }
+        release_external_material_alias(skybox);
         skybox->material = skybox->solid_material;
-        return skybox->solid_material;
+        return tc_material_get(skybox->solid_material);
     }
 
     // Default: gradient
-    if (!skybox->gradient_material) {
+    if (tc_material_handle_is_invalid(skybox->gradient_material)) {
         skybox->gradient_material = create_skybox_material(
             "__builtin_skybox_gradient",
             SKYBOX_GRADIENT_FRAGMENT_SHADER
         );
     }
+    release_external_material_alias(skybox);
     skybox->material = skybox->gradient_material;
-    return skybox->gradient_material;
+    return tc_material_get(skybox->gradient_material);
 }

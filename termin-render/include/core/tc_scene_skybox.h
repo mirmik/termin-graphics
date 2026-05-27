@@ -3,13 +3,12 @@
 #define TC_SCENE_SKYBOX_H
 
 #include "tc_types.h"
+#include <tgfx/resources/tc_material.h>
+#include <tgfx/resources/tc_mesh.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-struct tc_mesh;
-struct tc_material;
 
 // Skybox type
 typedef enum tc_skybox_type {
@@ -24,10 +23,10 @@ typedef struct tc_scene_skybox {
     float color[3];              // Solid color RGB
     float top_color[3];          // Gradient top RGB
     float bottom_color[3];       // Gradient bottom RGB
-    struct tc_mesh* mesh;        // Skybox cube mesh (refcounted)
-    struct tc_material* material; // Current skybox material (refcounted, alias to one of below)
-    struct tc_material* gradient_material;  // Gradient skybox material (refcounted)
-    struct tc_material* solid_material;     // Solid skybox material (refcounted)
+    tc_mesh_handle mesh;             // Skybox cube mesh (refcounted via handle)
+    tc_material_handle material;     // Current skybox material handle, alias to one of below
+    tc_material_handle gradient_material;  // Gradient skybox material (refcounted via handle)
+    tc_material_handle solid_material;     // Solid skybox material (refcounted via handle)
 } tc_scene_skybox;
 
 // Initialize with defaults

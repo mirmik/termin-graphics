@@ -2,6 +2,8 @@
 
 #include <memory>
 #include <functional>
+#include <cstddef>
+#include <cstdint>
 #include <set>
 #include <string>
 #include <vector>
@@ -18,6 +20,7 @@ struct tc_mesh;
 #include <termin/entity/entity.hpp>
 #include <termin/geom/mat44.hpp>
 #include <tgfx/resources/tc_material.h>
+#include <tgfx/resources/tc_material_registry.h>
 #include <tgfx/tgfx_shader_handle.hpp>
 
 #include <termin/render/render_context.hpp>
@@ -29,12 +32,37 @@ namespace termin {
 
 struct GeometryDrawCall {
     tc_material_phase* phase = nullptr;
+    tc_material_handle material = tc_material_handle_invalid();
+    size_t phase_index = SIZE_MAX;
     int geometry_id = 0;
 
     GeometryDrawCall() = default;
 
     GeometryDrawCall(tc_material_phase* p, int gid = 0)
-        : phase(p), geometry_id(gid) {}
+        : phase(p), geometry_id(gid) {
+        bind_phase_ref(p);
+    }
+
+    void bind_phase_ref(tc_material_phase* p) {
+        phase = p;
+        material = tc_material_handle_invalid();
+        phase_index = SIZE_MAX;
+        tc_material_find_phase_ref(p, &material, &phase_index);
+    }
+
+    bool has_stable_phase_ref() const {
+        return !tc_material_handle_is_invalid(material) && phase_index != SIZE_MAX;
+    }
+
+    tc_material_phase* resolve_phase() const {
+        if (has_stable_phase_ref()) {
+            tc_material* mat = tc_material_get(material);
+            if (mat && phase_index < mat->phase_count) {
+                return &mat->phases[phase_index];
+            }
+        }
+        return phase;
+    }
 };
 
 class RENDER_API Drawable {
@@ -149,6 +177,18 @@ struct PhaseDrawCall {
     tc_shader_handle final_shader;
     int priority = 0;
     int geometry_id = 0;
+    tc_material_handle material = tc_material_handle_invalid();
+    size_t phase_index = SIZE_MAX;
+
+    tc_material_phase* resolve_phase() const {
+        if (!tc_material_handle_is_invalid(material) && phase_index != SIZE_MAX) {
+            tc_material* mat = tc_material_get(material);
+            if (mat && phase_index < mat->phase_count) {
+                return &mat->phases[phase_index];
+            }
+        }
+        return phase;
+    }
 };
 
 } // namespace termin

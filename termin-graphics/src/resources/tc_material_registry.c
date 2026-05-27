@@ -345,6 +345,57 @@ size_t tc_material_get_phases_for_mark(
     return count;
 }
 
+bool tc_material_find_phase_ref(
+    const tc_material_phase* phase,
+    tc_material_handle* out_material,
+    size_t* out_phase_index
+) {
+    if (out_material) {
+        *out_material = tc_material_handle_invalid();
+    }
+    if (out_phase_index) {
+        *out_phase_index = 0;
+    }
+    if (!g_material_initialized || !phase) {
+        return false;
+    }
+
+    for (uint32_t i = 0; i < g_material_pool.capacity; i++) {
+        if (g_material_pool.states[i] != TC_SLOT_OCCUPIED) {
+            continue;
+        }
+
+        tc_material* mat = (tc_material*)tc_pool_get_unchecked(&g_material_pool, i);
+        if (!mat) {
+            continue;
+        }
+
+        const tc_material_phase* begin = &mat->phases[0];
+        uintptr_t phase_addr = (uintptr_t)phase;
+        uintptr_t begin_addr = (uintptr_t)begin;
+        uintptr_t end_addr = begin_addr + mat->phase_count * sizeof(tc_material_phase);
+        if (phase_addr < begin_addr || phase_addr >= end_addr) {
+            continue;
+        }
+        if ((phase_addr - begin_addr) % sizeof(tc_material_phase) != 0) {
+            continue;
+        }
+
+        if (out_material) {
+            tc_material_handle h;
+            h.index = i;
+            h.generation = g_material_pool.generations[i];
+            *out_material = h;
+        }
+        if (out_phase_index) {
+            *out_phase_index = (size_t)((phase_addr - begin_addr) / sizeof(tc_material_phase));
+        }
+        return true;
+    }
+
+    return false;
+}
+
 // ============================================================================
 // Phase uniform/texture operations
 // ============================================================================

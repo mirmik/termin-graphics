@@ -64,15 +64,16 @@ static bool collect_drawable_shader_usages(tc_component* component, void* user_d
 
     auto* geometry_draws = static_cast<std::vector<GeometryDrawCall>*>(draws_ptr);
     for (const auto& draw : *geometry_draws) {
-        if (!draw.phase) {
+        tc_material_phase* phase = draw.resolve_phase();
+        if (!phase) {
             continue;
         }
 
         tc_component_collect_shader_usages(
             component,
-            draw.phase->phase_mark,
+            phase->phase_mark,
             draw.geometry_id,
-            draw.phase->shader,
+            phase->shader,
             emit_shader_usage,
             ctx
         );

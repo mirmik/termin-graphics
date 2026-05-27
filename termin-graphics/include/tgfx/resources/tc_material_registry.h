@@ -59,6 +59,12 @@ TGFX_API size_t tc_material_get_phases_for_mark(
     size_t max_count
 );
 
+TGFX_API bool tc_material_find_phase_ref(
+    const tc_material_phase* phase,
+    tc_material_handle* out_material,
+    size_t* out_phase_index
+);
+
 // ============================================================================
 // Material info for debugging/inspection
 // ============================================================================
