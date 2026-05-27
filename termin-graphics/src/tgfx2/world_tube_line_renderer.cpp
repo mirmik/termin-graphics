@@ -151,11 +151,11 @@ std::vector<TubeCornerVertex> build_body_template(int sides) {
         const auto a = ring(i);
         const auto b = ring((i + 1) % sides);
         vertices.push_back({0.0f, a[0], a[1]});
+        vertices.push_back({1.0f, b[0], b[1]});
         vertices.push_back({1.0f, a[0], a[1]});
-        vertices.push_back({1.0f, b[0], b[1]});
         vertices.push_back({0.0f, a[0], a[1]});
-        vertices.push_back({1.0f, b[0], b[1]});
         vertices.push_back({0.0f, b[0], b[1]});
+        vertices.push_back({1.0f, b[0], b[1]});
     }
     return vertices;
 }
@@ -175,8 +175,8 @@ std::vector<TubeCapCornerVertex> build_cap_template(int sides) {
         const auto a = ring(i);
         const auto b = ring((i + 1) % sides);
         vertices.push_back({1.0f, 0.0f, 0.0f});
-        vertices.push_back({0.0f, a[0], a[1]});
         vertices.push_back({0.0f, b[0], b[1]});
+        vertices.push_back({0.0f, a[0], a[1]});
     }
     return vertices;
 }
