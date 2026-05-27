@@ -16,3 +16,6 @@
 [submodule "termin-thirdparty/vulkan-memory-allocator"]
 	path = termin-thirdparty/vulkan-memory-allocator
 	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+[submodule "termin-thirdparty/eigen"]
+	path = termin-thirdparty/eigen
+	url = https://gitlab.com/libeigen/eigen.git
