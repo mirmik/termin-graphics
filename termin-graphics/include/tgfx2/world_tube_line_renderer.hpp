@@ -22,6 +22,7 @@ struct WorldTubeLineParams {
     // Column-major view-projection matrix.
     std::array<float, 16> view_projection{};
     bool lighting_enabled = false;
+    ShaderHandle fragment_shader{};
 };
 
 class TGFX2_TYPE_API WorldTubeLineRenderer {

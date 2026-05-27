@@ -238,18 +238,20 @@ layout(location=2) in float a_width;
 layout(location=3) in vec3 a_p1;
 layout(location=4) in vec4 a_color;
 
-layout(location=0) out vec4 v_color;
-layout(location=1) out vec3 v_world_pos;
-layout(location=2) out vec3 v_normal;
+layout(location=0) out vec3 v_world_pos;
+layout(location=1) out vec3 v_normal;
+layout(location=2) out vec2 v_uv;
+layout(location=3) out vec4 v_color;
 
 void main() {
     vec3 dir = safe_normalize(a_p1 - a_p0, vec3(1.0, 0.0, 0.0));
     vec3 base = mix(a_p0, a_p1, a_corner.x);
     vec3 expanded = base + tube_offset(dir, a_corner.y, a_corner.z, a_width * 0.5);
     gl_Position = pc.u_view_projection * vec4(expanded, 1.0);
-    v_color = a_color;
     v_world_pos = expanded;
     v_normal = tube_normal(dir, a_corner.y, a_corner.z);
+    v_uv = vec2(a_corner.x, atan(a_corner.z, a_corner.y) / 6.28318530718 + 0.5);
+    v_color = a_color;
 }
 )";
 }
@@ -262,9 +264,10 @@ layout(location=2) in float a_width;
 layout(location=3) in vec3 a_neighbor;
 layout(location=4) in vec4 a_color;
 
-layout(location=0) out vec4 v_color;
-layout(location=1) out vec3 v_world_pos;
-layout(location=2) out vec3 v_normal;
+layout(location=0) out vec3 v_world_pos;
+layout(location=1) out vec3 v_normal;
+layout(location=2) out vec2 v_uv;
+layout(location=3) out vec4 v_color;
 
 void main() {
     vec3 dir = safe_normalize(a_neighbor - a_center, vec3(1.0, 0.0, 0.0));
@@ -273,16 +276,19 @@ void main() {
         expanded += tube_offset(dir, a_corner.y, a_corner.z, a_width * 0.5);
     }
     gl_Position = pc.u_view_projection * vec4(expanded, 1.0);
-    v_color = a_color;
     v_world_pos = expanded;
     v_normal = a_corner.x < 0.5 ? tube_normal(dir, a_corner.y, a_corner.z) : -dir;
+    v_uv = a_corner.x < 0.5
+        ? vec2(a_corner.y * 0.5 + 0.5, a_corner.z * 0.5 + 0.5)
+        : vec2(0.5, 0.5);
+    v_color = a_color;
 }
 )";
 }
 
 std::string make_tube_frag() {
     return std::string("#version 450 core\n") + R"(
-layout(location=0) in vec4 v_color;
+layout(location=3) in vec4 v_color;
 layout(location=0) out vec4 frag_color;
 
 void main() {
@@ -293,9 +299,9 @@ void main() {
 
 std::string make_tube_lit_frag() {
     return std::string("#version 450 core\n") + kTubeLightingCommon + R"(
-layout(location=0) in vec4 v_color;
-layout(location=1) in vec3 v_world_pos;
-layout(location=2) in vec3 v_normal;
+layout(location=0) in vec3 v_world_pos;
+layout(location=1) in vec3 v_normal;
+layout(location=3) in vec4 v_color;
 layout(location=0) out vec4 frag_color;
 
 void main() {
@@ -537,7 +543,9 @@ void WorldTubeLineRenderer::draw_polyline(
         {4, VertexFormat::Float4, offsetof(TubeSegmentInstance, color)},
     };
 
-    ctx.bind_shader(body_vertex_shader_, params.lighting_enabled ? lit_fragment_shader_ : body_fragment_shader_);
+    ctx.bind_shader(body_vertex_shader_, params.fragment_shader
+        ? params.fragment_shader
+        : (params.lighting_enabled ? lit_fragment_shader_ : body_fragment_shader_));
     ctx.set_vertex_layouts({corners, segment_layout});
     ctx.set_topology(PrimitiveTopology::TriangleList);
     ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
@@ -578,7 +586,9 @@ void WorldTubeLineRenderer::draw_polyline(
         {4, VertexFormat::Float4, offsetof(TubeCapInstance, color)},
     };
 
-    ctx.bind_shader(cap_vertex_shader_, params.lighting_enabled ? lit_fragment_shader_ : cap_fragment_shader_);
+    ctx.bind_shader(cap_vertex_shader_, params.fragment_shader
+        ? params.fragment_shader
+        : (params.lighting_enabled ? lit_fragment_shader_ : cap_fragment_shader_));
     ctx.set_vertex_layouts({cap_corners, cap_layout});
     ctx.set_topology(PrimitiveTopology::TriangleList);
     ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));

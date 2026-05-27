@@ -11,6 +11,7 @@ def test_basic_types_and_render_state():
     rs = tgfx.RenderState.opaque()
     assert rs.depth_test is True
     assert rs.depth_write is True
+    assert tgfx.ShaderVariantOp.LINE_MATERIAL_FRAGMENT is not tgfx.ShaderVariantOp.NONE
 
 
 def test_render_state_transparent():

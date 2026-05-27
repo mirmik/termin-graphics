@@ -204,9 +204,10 @@ layout(location=3) in vec3 a_p1;
 layout(location=4) in float a_flags;
 layout(location=5) in vec4 a_color;
 
-layout(location=0) out vec4 v_color;
-layout(location=1) out vec3 v_world_pos;
-layout(location=2) out vec3 v_normal;
+layout(location=0) out vec3 v_world_pos;
+layout(location=1) out vec3 v_normal;
+layout(location=2) out vec2 v_uv;
+layout(location=3) out vec4 v_color;
 
 void main() {
     float endpoint = a_corner.x;
@@ -227,9 +228,10 @@ void main() {
     vec3 expanded = base + side * side_sign * (a_width * 0.5);
 
     gl_Position = pc.u_view_projection * vec4(expanded, 1.0);
-    v_color = a_color;
     v_world_pos = expanded;
     v_normal = safe_normalize(pc.u_camera_position.xyz - mid, vec3(0.0, 0.0, 1.0));
+    v_uv = vec2(endpoint, side_sign * 0.5 + 0.5);
+    v_color = a_color;
 }
 )";
 }
@@ -243,9 +245,10 @@ layout(location=3) in vec3 a_neighbor;
 layout(location=4) in float a_flags;
 layout(location=5) in vec4 a_color;
 
-layout(location=0) out vec4 v_color;
-layout(location=1) out vec3 v_world_pos;
-layout(location=2) out vec3 v_normal;
+layout(location=0) out vec3 v_world_pos;
+layout(location=1) out vec3 v_normal;
+layout(location=2) out vec2 v_uv;
+layout(location=3) out vec4 v_color;
 
 void main() {
     vec3 dir = safe_normalize(a_center - a_neighbor, vec3(1.0, 0.0, 0.0));
@@ -255,9 +258,10 @@ void main() {
         + side * a_local.y * (a_width * 0.5);
 
     gl_Position = pc.u_view_projection * vec4(expanded, 1.0);
-    v_color = a_color;
     v_world_pos = expanded;
     v_normal = safe_normalize(pc.u_camera_position.xyz - a_center, vec3(0.0, 0.0, 1.0));
+    v_uv = a_local * 0.5 + 0.5;
+    v_color = a_color;
 }
 )";
 }
@@ -272,9 +276,10 @@ layout(location=4) in float a_flags;
 layout(location=5) in vec3 a_next;
 layout(location=6) in vec4 a_color;
 
-layout(location=0) out vec4 v_color;
-layout(location=1) out vec3 v_world_pos;
-layout(location=2) out vec3 v_normal;
+layout(location=0) out vec3 v_world_pos;
+layout(location=1) out vec3 v_normal;
+layout(location=2) out vec2 v_uv;
+layout(location=3) out vec4 v_color;
 
 void main() {
     vec3 d0 = safe_normalize(a_center - a_prev, vec3(1.0, 0.0, 0.0));
@@ -295,9 +300,10 @@ void main() {
     }
 
     gl_Position = pc.u_view_projection * vec4(p, 1.0);
-    v_color = a_color;
     v_world_pos = p;
     v_normal = to_eye;
+    v_uv = vec2(a_corner * 0.5, side_sign * 0.5 + 0.5);
+    v_color = a_color;
 }
 )";
 }
@@ -311,9 +317,10 @@ layout(location=3) in vec3 a_neighbor;
 layout(location=4) in float a_flags;
 layout(location=5) in vec4 a_color;
 
-layout(location=0) out vec4 v_color;
-layout(location=1) out vec3 v_world_pos;
-layout(location=2) out vec3 v_normal;
+layout(location=0) out vec3 v_world_pos;
+layout(location=1) out vec3 v_normal;
+layout(location=2) out vec2 v_uv;
+layout(location=3) out vec4 v_color;
 
 void main() {
     vec3 dir = safe_normalize(a_neighbor - a_center, vec3(1.0, 0.0, 0.0));
@@ -325,16 +332,17 @@ void main() {
         + axis1 * a_local.y * (a_width * 0.5);
 
     gl_Position = pc.u_view_projection * vec4(expanded, 1.0);
-    v_color = a_color;
     v_world_pos = expanded;
     v_normal = to_eye;
+    v_uv = a_local * 0.5 + 0.5;
+    v_color = a_color;
 }
 )";
 }
 
 std::string make_world_line_frag() {
     return std::string("#version 450 core\n") + R"(
-layout(location=0) in vec4 v_color;
+layout(location=3) in vec4 v_color;
 layout(location=0) out vec4 frag_color;
 
 void main() {
@@ -345,9 +353,9 @@ void main() {
 
 std::string make_world_line_lit_frag() {
     return std::string("#version 450 core\n") + kLineLightingCommon + R"(
-layout(location=0) in vec4 v_color;
-layout(location=1) in vec3 v_world_pos;
-layout(location=2) in vec3 v_normal;
+layout(location=0) in vec3 v_world_pos;
+layout(location=1) in vec3 v_normal;
+layout(location=3) in vec4 v_color;
 layout(location=0) out vec4 frag_color;
 
 void main() {
@@ -755,7 +763,9 @@ void WorldSpaceLineRenderer::draw_polyline(
         {5, VertexFormat::Float4, offsetof(SegmentInstance, color)},
     };
 
-    ShaderHandle fragment_shader = params.lighting_enabled ? lit_fragment_shader_ : fragment_shader_;
+    ShaderHandle fragment_shader = params.fragment_shader
+        ? params.fragment_shader
+        : (params.lighting_enabled ? lit_fragment_shader_ : fragment_shader_);
 
     ctx.bind_shader(vertex_shader_, fragment_shader);
     ctx.set_vertex_layouts({corners, segment});
@@ -797,7 +807,9 @@ void WorldSpaceLineRenderer::draw_polyline(
             {5, VertexFormat::Float4, offsetof(CapInstance, color)},
         };
 
-        ctx.bind_shader(cap_vertex_shader_, params.lighting_enabled ? lit_fragment_shader_ : cap_fragment_shader_);
+        ctx.bind_shader(cap_vertex_shader_, params.fragment_shader
+            ? params.fragment_shader
+            : (params.lighting_enabled ? lit_fragment_shader_ : cap_fragment_shader_));
         ctx.set_vertex_layouts({cap_corners, cap_layout});
         ctx.set_topology(PrimitiveTopology::TriangleList);
         ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
@@ -838,7 +850,9 @@ void WorldSpaceLineRenderer::draw_polyline(
             {5, VertexFormat::Float4, offsetof(CapInstance, color)},
         };
 
-        ctx.bind_shader(round_join_vertex_shader_, params.lighting_enabled ? lit_fragment_shader_ : round_join_fragment_shader_);
+        ctx.bind_shader(round_join_vertex_shader_, params.fragment_shader
+            ? params.fragment_shader
+            : (params.lighting_enabled ? lit_fragment_shader_ : round_join_fragment_shader_));
         ctx.set_vertex_layouts({round_join_corners, round_join_layout});
         ctx.set_topology(PrimitiveTopology::TriangleList);
         ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
@@ -879,7 +893,9 @@ void WorldSpaceLineRenderer::draw_polyline(
             {6, VertexFormat::Float4, offsetof(JoinInstance, color)},
         };
 
-        ctx.bind_shader(join_vertex_shader_, params.lighting_enabled ? lit_fragment_shader_ : join_fragment_shader_);
+        ctx.bind_shader(join_vertex_shader_, params.fragment_shader
+            ? params.fragment_shader
+            : (params.lighting_enabled ? lit_fragment_shader_ : join_fragment_shader_));
         ctx.set_vertex_layouts({join_corners, join_layout});
         ctx.set_topology(PrimitiveTopology::TriangleList);
         ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
