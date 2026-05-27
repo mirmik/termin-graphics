@@ -23,6 +23,7 @@ struct WorldSpaceLineParams {
     // Column-major view-projection matrix.
     std::array<float, 16> view_projection{};
     std::array<float, 3> camera_position{0.0f, 0.0f, 5.0f};
+    bool lighting_enabled = false;
 };
 
 class TGFX2_TYPE_API WorldSpaceLineRenderer {
@@ -53,6 +54,7 @@ private:
     ShaderHandle join_fragment_shader_;
     ShaderHandle round_join_vertex_shader_;
     ShaderHandle round_join_fragment_shader_;
+    ShaderHandle lit_fragment_shader_;
     uint32_t cap_corner_count_ = 0;
     uint32_t round_join_corner_count_ = 0;
     int cap_round_segments_ = 0;

@@ -182,7 +182,8 @@ void bind_tgfx2(nb::module_& m) {
     nb::class_<tgfx::WorldSpaceLineParams>(m, "WorldSpaceLineParams")
         .def(nb::init<>())
         .def_rw("view_projection", &tgfx::WorldSpaceLineParams::view_projection)
-        .def_rw("camera_position", &tgfx::WorldSpaceLineParams::camera_position);
+        .def_rw("camera_position", &tgfx::WorldSpaceLineParams::camera_position)
+        .def_rw("lighting_enabled", &tgfx::WorldSpaceLineParams::lighting_enabled);
 
     nb::class_<tgfx::WorldSpaceLineRenderer>(m, "WorldSpaceLineRenderer")
         .def(nb::init<>())

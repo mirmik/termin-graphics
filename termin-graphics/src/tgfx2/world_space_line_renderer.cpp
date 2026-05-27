@@ -118,6 +118,83 @@ vec3 billboard_side(vec3 segment_dir, vec3 point) {
 }
 )";
 
+constexpr const char* kLineLightingCommon = R"(
+const int LIGHT_TYPE_DIRECTIONAL = 0;
+const int LIGHT_TYPE_POINT = 1;
+const int LIGHT_TYPE_SPOT = 2;
+const int MAX_LIGHTS = 8;
+
+struct LightData {
+    vec4 color_intensity;
+    vec4 direction_range;
+    vec4 position_type;
+    vec4 attenuation_inner;
+    vec4 outer_cascade;
+};
+
+layout(std140, binding = 0) uniform LightingBlock {
+    LightData u_lights[MAX_LIGHTS];
+    vec4 u_ambient_data;
+    vec4 u_camera_light_count;
+    vec4 u_shadow_settings;
+};
+
+float distance_attenuation(vec3 attenuation, float range, float dist) {
+    float denom = attenuation.x + attenuation.y * dist + attenuation.z * dist * dist;
+    float value = denom > 0.0 ? 1.0 / denom : 1.0;
+    if (range > 0.0 && dist > range) {
+        value = 0.0;
+    }
+    return value;
+}
+
+float spot_weight(vec3 light_dir, vec3 L, float inner_angle, float outer_angle) {
+    float cos_theta = dot(light_dir, -L);
+    float cos_outer = cos(outer_angle);
+    float cos_inner = cos(inner_angle);
+    if (cos_theta <= cos_outer) {
+        return 0.0;
+    }
+    if (cos_theta >= cos_inner) {
+        return 1.0;
+    }
+    float t = (cos_theta - cos_outer) / max(cos_inner - cos_outer, 1.0e-4);
+    return t * t * (3.0 - 2.0 * t);
+}
+
+vec3 apply_line_lighting(vec3 base_color, vec3 normal, vec3 world_pos) {
+    vec3 N = normalize(normal);
+    vec3 result = base_color * u_ambient_data.rgb * u_ambient_data.w;
+    int count = min(int(u_camera_light_count.w), MAX_LIGHTS);
+    for (int i = 0; i < count; ++i) {
+        int type = int(u_lights[i].position_type.w);
+        vec3 L;
+        float weight = 1.0;
+        if (type == LIGHT_TYPE_DIRECTIONAL) {
+            L = normalize(-u_lights[i].direction_range.xyz);
+        } else {
+            vec3 to_light = u_lights[i].position_type.xyz - world_pos;
+            float dist = length(to_light);
+            L = dist > 1.0e-4 ? to_light / dist : vec3(0.0, 1.0, 0.0);
+            weight *= distance_attenuation(
+                u_lights[i].attenuation_inner.xyz,
+                u_lights[i].direction_range.w,
+                dist);
+            if (type == LIGHT_TYPE_SPOT) {
+                weight *= spot_weight(
+                    u_lights[i].direction_range.xyz,
+                    L,
+                    u_lights[i].attenuation_inner.w,
+                    u_lights[i].outer_cascade.x);
+            }
+        }
+        float ndotl = abs(dot(N, L));
+        result += base_color * u_lights[i].color_intensity.rgb * u_lights[i].color_intensity.w * ndotl * weight;
+    }
+    return result;
+}
+)";
+
 std::string make_world_line_vert() {
     return std::string("#version 450 core\n") + kWorldLineCommon + R"(
 layout(location=0) in vec2 a_corner;
@@ -128,6 +205,8 @@ layout(location=4) in float a_flags;
 layout(location=5) in vec4 a_color;
 
 layout(location=0) out vec4 v_color;
+layout(location=1) out vec3 v_world_pos;
+layout(location=2) out vec3 v_normal;
 
 void main() {
     float endpoint = a_corner.x;
@@ -149,6 +228,8 @@ void main() {
 
     gl_Position = pc.u_view_projection * vec4(expanded, 1.0);
     v_color = a_color;
+    v_world_pos = expanded;
+    v_normal = safe_normalize(pc.u_camera_position.xyz - mid, vec3(0.0, 0.0, 1.0));
 }
 )";
 }
@@ -163,6 +244,8 @@ layout(location=4) in float a_flags;
 layout(location=5) in vec4 a_color;
 
 layout(location=0) out vec4 v_color;
+layout(location=1) out vec3 v_world_pos;
+layout(location=2) out vec3 v_normal;
 
 void main() {
     vec3 dir = safe_normalize(a_center - a_neighbor, vec3(1.0, 0.0, 0.0));
@@ -173,6 +256,8 @@ void main() {
 
     gl_Position = pc.u_view_projection * vec4(expanded, 1.0);
     v_color = a_color;
+    v_world_pos = expanded;
+    v_normal = safe_normalize(pc.u_camera_position.xyz - a_center, vec3(0.0, 0.0, 1.0));
 }
 )";
 }
@@ -188,6 +273,8 @@ layout(location=5) in vec3 a_next;
 layout(location=6) in vec4 a_color;
 
 layout(location=0) out vec4 v_color;
+layout(location=1) out vec3 v_world_pos;
+layout(location=2) out vec3 v_normal;
 
 void main() {
     vec3 d0 = safe_normalize(a_center - a_prev, vec3(1.0, 0.0, 0.0));
@@ -209,6 +296,8 @@ void main() {
 
     gl_Position = pc.u_view_projection * vec4(p, 1.0);
     v_color = a_color;
+    v_world_pos = p;
+    v_normal = to_eye;
 }
 )";
 }
@@ -223,6 +312,8 @@ layout(location=4) in float a_flags;
 layout(location=5) in vec4 a_color;
 
 layout(location=0) out vec4 v_color;
+layout(location=1) out vec3 v_world_pos;
+layout(location=2) out vec3 v_normal;
 
 void main() {
     vec3 dir = safe_normalize(a_neighbor - a_center, vec3(1.0, 0.0, 0.0));
@@ -235,6 +326,8 @@ void main() {
 
     gl_Position = pc.u_view_projection * vec4(expanded, 1.0);
     v_color = a_color;
+    v_world_pos = expanded;
+    v_normal = to_eye;
 }
 )";
 }
@@ -246,6 +339,19 @@ layout(location=0) out vec4 frag_color;
 
 void main() {
     frag_color = v_color;
+}
+)";
+}
+
+std::string make_world_line_lit_frag() {
+    return std::string("#version 450 core\n") + kLineLightingCommon + R"(
+layout(location=0) in vec4 v_color;
+layout(location=1) in vec3 v_world_pos;
+layout(location=2) in vec3 v_normal;
+layout(location=0) out vec4 frag_color;
+
+void main() {
+    frag_color = vec4(apply_line_lighting(v_color.rgb, v_normal, v_world_pos), v_color.a);
 }
 )";
 }
@@ -423,6 +529,14 @@ void WorldSpaceLineRenderer::ensure_resources(RenderContext2& ctx) {
         desc.source = make_world_line_frag();
         desc.debug_name = "tgfx2_world_space_line_round_join_fs";
         round_join_fragment_shader_ = device.create_shader(desc);
+    }
+
+    if (!lit_fragment_shader_) {
+        ShaderDesc desc;
+        desc.stage = ShaderStage::Fragment;
+        desc.source = make_world_line_lit_frag();
+        desc.debug_name = "tgfx2_world_space_line_lit_fs";
+        lit_fragment_shader_ = device.create_shader(desc);
     }
 }
 
@@ -641,7 +755,9 @@ void WorldSpaceLineRenderer::draw_polyline(
         {5, VertexFormat::Float4, offsetof(SegmentInstance, color)},
     };
 
-    ctx.bind_shader(vertex_shader_, fragment_shader_);
+    ShaderHandle fragment_shader = params.lighting_enabled ? lit_fragment_shader_ : fragment_shader_;
+
+    ctx.bind_shader(vertex_shader_, fragment_shader);
     ctx.set_vertex_layouts({corners, segment});
     ctx.set_topology(PrimitiveTopology::TriangleList);
     ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
@@ -681,7 +797,7 @@ void WorldSpaceLineRenderer::draw_polyline(
             {5, VertexFormat::Float4, offsetof(CapInstance, color)},
         };
 
-        ctx.bind_shader(cap_vertex_shader_, cap_fragment_shader_);
+        ctx.bind_shader(cap_vertex_shader_, params.lighting_enabled ? lit_fragment_shader_ : cap_fragment_shader_);
         ctx.set_vertex_layouts({cap_corners, cap_layout});
         ctx.set_topology(PrimitiveTopology::TriangleList);
         ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
@@ -722,7 +838,7 @@ void WorldSpaceLineRenderer::draw_polyline(
             {5, VertexFormat::Float4, offsetof(CapInstance, color)},
         };
 
-        ctx.bind_shader(round_join_vertex_shader_, round_join_fragment_shader_);
+        ctx.bind_shader(round_join_vertex_shader_, params.lighting_enabled ? lit_fragment_shader_ : round_join_fragment_shader_);
         ctx.set_vertex_layouts({round_join_corners, round_join_layout});
         ctx.set_topology(PrimitiveTopology::TriangleList);
         ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
@@ -763,7 +879,7 @@ void WorldSpaceLineRenderer::draw_polyline(
             {6, VertexFormat::Float4, offsetof(JoinInstance, color)},
         };
 
-        ctx.bind_shader(join_vertex_shader_, join_fragment_shader_);
+        ctx.bind_shader(join_vertex_shader_, params.lighting_enabled ? lit_fragment_shader_ : join_fragment_shader_);
         ctx.set_vertex_layouts({join_corners, join_layout});
         ctx.set_topology(PrimitiveTopology::TriangleList);
         ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
@@ -830,6 +946,10 @@ void WorldSpaceLineRenderer::release(RenderContext2& ctx) {
     if (round_join_fragment_shader_) {
         device.destroy(round_join_fragment_shader_);
         round_join_fragment_shader_ = {};
+    }
+    if (lit_fragment_shader_) {
+        device.destroy(lit_fragment_shader_);
+        lit_fragment_shader_ = {};
     }
 }
 

@@ -1,0 +1,57 @@
+#pragma once
+
+#include <array>
+#include <span>
+
+#include "tgfx2/handles.hpp"
+#include "tgfx2/line_mesh_builder.hpp"
+#include "tgfx2/tgfx2_api.h"
+
+namespace tgfx {
+
+class RenderContext2;
+
+struct WorldTubeLineStyle {
+    float width = 0.05f;
+    std::array<float, 4> color{1.0f, 1.0f, 1.0f, 1.0f};
+    LinePoint3 up_hint{0.0f, 1.0f, 0.0f};
+    int sides = 6;
+};
+
+struct WorldTubeLineParams {
+    // Column-major view-projection matrix.
+    std::array<float, 16> view_projection{};
+    bool lighting_enabled = false;
+};
+
+class TGFX2_TYPE_API WorldTubeLineRenderer {
+public:
+    WorldTubeLineRenderer() = default;
+    ~WorldTubeLineRenderer() = default;
+
+    WorldTubeLineRenderer(const WorldTubeLineRenderer&) = delete;
+    WorldTubeLineRenderer& operator=(const WorldTubeLineRenderer&) = delete;
+
+    void draw_polyline(RenderContext2& ctx,
+                       std::span<const LinePoint3> points,
+                       const WorldTubeLineStyle& style,
+                       const WorldTubeLineParams& params);
+
+    void release(RenderContext2& ctx);
+
+private:
+    BufferHandle body_corner_vbo_;
+    BufferHandle cap_corner_vbo_;
+    ShaderHandle body_vertex_shader_;
+    ShaderHandle body_fragment_shader_;
+    ShaderHandle cap_vertex_shader_;
+    ShaderHandle cap_fragment_shader_;
+    ShaderHandle lit_fragment_shader_;
+    uint32_t body_corner_count_ = 0;
+    uint32_t cap_corner_count_ = 0;
+    int template_sides_ = 0;
+
+    void ensure_resources(RenderContext2& ctx, int sides);
+};
+
+} // namespace tgfx

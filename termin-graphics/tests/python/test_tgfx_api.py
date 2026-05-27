@@ -81,7 +81,9 @@ def test_world_space_line_binding_smoke():
         for i in range(16)
     )
     params.camera_position = (1.0, 2.0, 3.0)
+    params.lighting_enabled = True
 
     assert len(params.view_projection) == 16
     assert params.camera_position == [1.0, 2.0, 3.0]
+    assert params.lighting_enabled is True
     assert tgfx.WorldSpaceLineRenderer() is not None

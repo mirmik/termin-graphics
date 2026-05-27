@@ -128,6 +128,18 @@ public:
         (void)geometry_id;
     }
 
+    // Direct tgfx2 drawables can bind their own shaders instead of the
+    // material shader pair. Passes still need to know whether to prepare and
+    // bind the engine lighting block for those shaders.
+    virtual bool needs_lighting_ubo_tgfx2(
+        const std::string& phase_mark,
+        int geometry_id
+    ) const {
+        (void)phase_mark;
+        (void)geometry_id;
+        return false;
+    }
+
     // Direct tgfx2 draw hook for drawables that are not backed by a
     // tc_mesh in a given render mode. ColorPass calls this when
     // get_mesh_for_phase() returns nullptr.
