@@ -121,6 +121,9 @@ run_suite "termin-modules import smoke" \
 run_suite "termin-mesh python" \
     "${PYTHON_BIN}" -m pytest termin-mesh/tests/python/ -v
 
+run_suite "termin-csg python" \
+    "${PYTHON_BIN}" -m pytest termin-csg/tests/ -v
+
 run_suite "termin-graphics python" \
     "${PYTHON_BIN}" -m pytest termin-graphics/tests/python/ -v
 
