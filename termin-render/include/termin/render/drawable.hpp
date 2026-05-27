@@ -65,6 +65,11 @@ struct GeometryDrawCall {
     }
 };
 
+enum class DirectTgfx2DrawKind {
+    MaterialPhase,
+    OverrideColor,
+};
+
 class RENDER_API Drawable {
 public:
     mutable std::vector<GeometryDrawCall> _cached_geometry_draws;
@@ -140,9 +145,25 @@ public:
         return false;
     }
 
+    // Direct tgfx2 drawing is intentionally opt-in per pass contract.
+    // MaterialPhase means the caller provides a live material phase and
+    // expects material/lighting/shadow bindings to be honored. OverrideColor
+    // means the pass owns the shader/color contract (for example IdPass).
+    virtual bool supports_direct_tgfx2_draw(
+        const std::string& phase_mark,
+        int geometry_id,
+        DirectTgfx2DrawKind kind
+    ) const {
+        (void)phase_mark;
+        (void)geometry_id;
+        (void)kind;
+        return false;
+    }
+
     // Direct tgfx2 draw hook for drawables that are not backed by a
-    // tc_mesh in a given render mode. ColorPass calls this when
-    // get_mesh_for_phase() returns nullptr.
+    // tc_mesh in a given render mode. Passes call this only after
+    // supports_direct_tgfx2_draw() confirms the drawable understands that
+    // pass contract.
     virtual bool draw_tgfx2(
         tgfx::RenderContext2& ctx2,
         const RenderContext& context,
