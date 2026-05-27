@@ -7,6 +7,7 @@ nanobind_add_module(_tgfx_native NB_SHARED
     bindings/shader_bindings.cpp
     bindings/texture_bindings.cpp
     bindings/tgfx2_bindings.cpp
+    bindings/immediate_bindings.cpp
 )
 
 target_link_libraries(_tgfx_native PRIVATE termin_graphics termin_graphics2 tmesh::termin_mesh)

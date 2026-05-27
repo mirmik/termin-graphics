@@ -96,6 +96,7 @@ set(TGFX2_SOURCES
     src/tgfx2/device_factory.cpp
     src/tgfx2/canvas2d_renderer.cpp
     src/tgfx2/font_atlas.cpp
+    src/tgfx2/immediate_renderer.cpp
     src/tgfx2/line_mesh_builder.cpp
     src/tgfx2/screen_space_line_renderer.cpp
     src/tgfx2/world_space_line_renderer.cpp

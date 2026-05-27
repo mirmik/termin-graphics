@@ -1,4 +1,5 @@
 import tgfx
+from tcbase._geom_native import Vec3
 
 
 def test_basic_types_and_render_state():
@@ -32,6 +33,15 @@ def test_canvas2d_binding_smoke():
     renderer = tgfx.Canvas2DRenderer()
     assert renderer.default_font is None
     assert renderer.measure_text("no font", 14.0) == (0.0, 0.0)
+
+
+def test_immediate_renderer_binding_smoke():
+    renderer = tgfx.ImmediateRenderer()
+    renderer.begin()
+    renderer.line(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0), tgfx.Color4.red())
+
+    assert renderer.line_count == 1
+    assert renderer.triangle_count == 0
 
 
 def test_screen_space_line_binding_smoke():
