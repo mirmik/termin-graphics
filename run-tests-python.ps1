@@ -102,9 +102,7 @@ if ($env:LD_LIBRARY_PATH) {
 }
 
 $pythonPathEntries = New-Object System.Collections.Generic.List[string]
-if (-not $NoVenv -and (Test-Path (Join-Path $ScriptDir ".venv"))) {
-    $pythonPathEntries.Add((Join-Path $ScriptDir "diffusion-editor"))
-} else {
+if ($NoVenv -or -not (Test-Path (Join-Path $ScriptDir ".venv"))) {
     $bundledSitePackages = $null
     $windowsSitePackages = Join-Path $SdkPrefix "Lib\site-packages"
     if (Test-Path $windowsSitePackages) {
@@ -124,7 +122,6 @@ if (-not $NoVenv -and (Test-Path (Join-Path $ScriptDir ".venv"))) {
         $pythonPathEntries.Add($bundledSitePackages)
     }
     $pythonPathEntries.Add((Join-Path $ScriptDir "termin-app\install\lib\python"))
-    $pythonPathEntries.Add((Join-Path $ScriptDir "diffusion-editor"))
 }
 if ($env:PYTHONPATH) {
     $pythonPathEntries.Add($env:PYTHONPATH)
@@ -168,7 +165,6 @@ if ($PytestTargets.Count -gt 0) {
     Invoke-TestSuite "termin-qopt python" @("-m", "pytest", "termin-qopt/tests/", "-v")
     Invoke-TestSuite "termin-pga python" @("-m", "pytest", "termin-pga/tests/", "-v")
     Invoke-TestSuite "termin-app python" @("-m", "pytest", "termin-app/tests/", "-v")
-    Invoke-TestSuite "diffusion-editor python" @("-m", "pytest", "diffusion-editor/tests/", "-v")
 }
 
 if ($Failures.Count -gt 0) {

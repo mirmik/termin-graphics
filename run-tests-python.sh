@@ -68,7 +68,7 @@ export LD_LIBRARY_PATH="${SDK_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 # With venv + editable installs, all termin packages are already importable.
 # Adding SDK package paths would override them with bundled SDK copies.
 if [[ $NO_VENV -eq 0 && -d "$SCRIPT_DIR/.venv" ]]; then
-    export PYTHONPATH="${SCRIPT_DIR}/diffusion-editor${PYTHONPATH:+:$PYTHONPATH}"
+    export PYTHONPATH="${PYTHONPATH:-}"
 else
     BUNDLED_SITE_PACKAGES=""
     for site_dir in "$SDK_PREFIX"/lib/python3.*/site-packages; do
@@ -78,9 +78,9 @@ else
         fi
     done
     if [[ -n "$BUNDLED_SITE_PACKAGES" ]]; then
-        export PYTHONPATH="${BUNDLED_SITE_PACKAGES}:${SCRIPT_DIR}/termin-app/install/lib/python:${SCRIPT_DIR}/diffusion-editor${PYTHONPATH:+:$PYTHONPATH}"
+        export PYTHONPATH="${BUNDLED_SITE_PACKAGES}:${SCRIPT_DIR}/termin-app/install/lib/python${PYTHONPATH:+:$PYTHONPATH}"
     else
-        export PYTHONPATH="${SCRIPT_DIR}/termin-app/install/lib/python:${SCRIPT_DIR}/diffusion-editor${PYTHONPATH:+:$PYTHONPATH}"
+        export PYTHONPATH="${SCRIPT_DIR}/termin-app/install/lib/python${PYTHONPATH:+:$PYTHONPATH}"
     fi
 fi
 
@@ -141,9 +141,6 @@ run_suite "termin-pga python" \
 
 run_suite "termin-app python" \
     "${PYTHON_BIN}" -m pytest termin-app/tests/ -v
-
-run_suite "diffusion-editor python" \
-    "${PYTHON_BIN}" -m pytest diffusion-editor/tests/ -v
 fi
 
 if (( ${#failures[@]} > 0 )); then

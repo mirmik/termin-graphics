@@ -227,7 +227,7 @@ void bind_tgfx2(nb::module_& m) {
                  return self.texture_desc(h).sample_count;
              },
              nb::arg("texture"))
-        // Thin tcgui-only hosts (diffusion-editor) need to read whole
+        // Thin tcgui-only hosts need to read whole
         // render targets back to the CPU without dragging in the editor
         // runtime. Delegates to IRenderDevice::read_texture_rgba_float
         // (GL: one glReadPixels into a framebuffer bound to `tex`;
