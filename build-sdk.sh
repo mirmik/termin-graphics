@@ -5,6 +5,7 @@
 #   2. build-sdk-csharp.sh   — C# bindings
 #   3. install-pip-packages.sh --target sdk/lib/python3.*/site-packages
 #      — populate bundled Python's site-packages from the pip packages
+#   4. build-sdk-wheels.sh   — export SDK-backed Python wheels into sdk/wheels
 #
 # To install pip packages into your own user Python environment, run separately:
 #   ./install-pip-packages.sh
@@ -159,21 +160,21 @@ if usersite:
 
 echo ""
 echo "========================================"
-echo "  Stage 1/3: C/C++ libraries + Python bindings"
+echo "  Stage 1/4: C/C++ libraries + Python bindings"
 echo "========================================"
 echo ""
 "$SCRIPT_DIR/build-sdk-bindings.sh" "$@"
 
 echo ""
 echo "========================================"
-echo "  Stage 2/3: C# bindings"
+echo "  Stage 2/4: C# bindings"
 echo "========================================"
 echo ""
 bash "$SCRIPT_DIR/build-sdk-csharp.sh" "$@"
 
 echo ""
 echo "========================================"
-echo "  Stage 3/3: Populate bundled Python site-packages"
+echo "  Stage 3/4: Populate bundled Python site-packages"
 echo "========================================"
 echo ""
 # Resolve the Python version used by the bundled interpreter. Stage 1
@@ -211,6 +212,15 @@ if [[ -d "$LEGACY_SDK_PYTHON" ]]; then
     echo "Removing legacy SDK Python staging tree: $LEGACY_SDK_PYTHON"
     rm -rf "$LEGACY_SDK_PYTHON"
 fi
+
+echo ""
+echo "========================================"
+echo "  Stage 4/4: Build SDK Python wheelhouse"
+echo "========================================"
+echo ""
+TERMIN_SDK="$SDK_PREFIX" \
+TERMIN_BINDINGS_DIR="$BUILD_DIR/bin" \
+    "$SCRIPT_DIR/build-sdk-wheels.sh" --force "$@"
 
 echo ""
 echo "========================================"
