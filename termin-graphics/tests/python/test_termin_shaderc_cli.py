@@ -101,6 +101,7 @@ def test_termin_shaderc_invokes_fake_slangc_for_vulkan(tmp_path: Path) -> None:
         "vertex",
         "-target",
         "spirv",
+        "-matrix-layout-row-major",
         "-profile",
         "spirv_1_5",
         "-o",
@@ -133,6 +134,69 @@ def test_termin_shaderc_invokes_fake_slangc_for_opengl(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert output.read_bytes() == b"FAKE-glsl"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_can_override_slang_matrix_layout(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text("[shader(\"vertex\")] void main() {}\n", encoding="utf-8")
+    output = tmp_path / "out.spv"
+    args_path = tmp_path / "slang_args.json"
+    fake_slangc = _write_fake_slangc(tmp_path / "fake_slangc.py")
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "vertex",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--matrix-layout",
+            "row",
+            "--slangc",
+            str(fake_slangc),
+        ],
+        env={"FAKE_SLANGC_ARGS": str(args_path)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    slang_args = json.loads(args_path.read_text(encoding="utf-8"))
+    assert "-matrix-layout-column-major" in slang_args
+    assert "-matrix-layout-row-major" not in slang_args
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_rejects_unknown_slang_matrix_layout(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text("[shader(\"vertex\")] void main() {}\n", encoding="utf-8")
+    fake_slangc = _write_fake_slangc(tmp_path / "fake_slangc.py")
+
+    result = _run_shaderc([
+        "compile",
+        "--language",
+        "slang",
+        "--target",
+        "vulkan",
+        "--stage",
+        "vertex",
+        "--input",
+        str(shader),
+        "--output",
+        str(tmp_path / "out.spv"),
+        "--matrix-layout",
+        "diagonal",
+        "--slangc",
+        str(fake_slangc),
+    ])
+
+    assert result.returncode == 1
+    assert "unsupported matrix layout" in result.stderr
 
 
 def test_termin_shaderc_reports_missing_slangc(tmp_path: Path) -> None:

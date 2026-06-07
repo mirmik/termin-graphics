@@ -25,6 +25,7 @@ struct CompileOptions {
     std::string entry = "main";
     std::string debug_name = "shader";
     std::string slangc;
+    std::string matrix_layout = "column";
 };
 
 static void usage() {
@@ -32,7 +33,8 @@ static void usage() {
         << "Usage: termin_shaderc compile --language glsl|slang "
         << "--target opengl|vulkan|d3d11 --stage vertex|fragment|geometry "
         << "--input <source> --output <artifact> [--entry main] "
-        << "[--debug-name name] [--slangc <path>]\n";
+        << "[--debug-name name] [--slangc <path>] "
+        << "[--matrix-layout column|row]\n";
 }
 
 static shaderc_shader_kind shader_kind_for_stage(const std::string& stage) {
@@ -47,6 +49,18 @@ static std::string slang_stage_for_stage(const std::string& stage) {
     if (stage == "fragment") return "fragment";
     if (stage == "geometry") return "geometry";
     return "";
+}
+
+static std::optional<std::string> slang_matrix_layout_arg(const std::string& layout) {
+    if (layout == "column" || layout == "col" || layout == "column-major" || layout == "col-major") {
+        // Termin's option names target the emitted artifact layout. Slang 2026.5.2
+        // emits GLSL column_major / SPIR-V ColMajor when invoked with this flag.
+        return "-matrix-layout-row-major";
+    }
+    if (layout == "row" || layout == "row-major") {
+        return "-matrix-layout-column-major";
+    }
+    return std::nullopt;
 }
 
 static bool read_file(const std::string& path, std::string& out) {
@@ -308,6 +322,13 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
     if (!slangc) {
         return false;
     }
+    auto matrix_layout_arg = slang_matrix_layout_arg(options.matrix_layout);
+    if (!matrix_layout_arg) {
+        std::cerr
+            << "termin_shaderc: unsupported matrix layout: " << options.matrix_layout
+            << " (expected column or row)\n";
+        return false;
+    }
 
     std::vector<std::string> args = {
         *slangc,
@@ -315,6 +336,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         "-entry", options.entry,
         "-stage", slang_stage,
         "-target", slang_target,
+        *matrix_layout_arg,
     };
     args.insert(args.end(), extra_args.begin(), extra_args.end());
     args.insert(args.end(), {"-o", options.output});
@@ -370,6 +392,8 @@ int main(int argc, char** argv) {
             if (!take_value(options.debug_name)) return 2;
         } else if (arg == "--slangc") {
             if (!take_value(options.slangc)) return 2;
+        } else if (arg == "--matrix-layout") {
+            if (!take_value(options.matrix_layout)) return 2;
         } else {
             std::cerr << "termin_shaderc: unknown argument: " << arg << "\n";
             usage();

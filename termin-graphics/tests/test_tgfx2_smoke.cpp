@@ -1,6 +1,10 @@
 // Smoke test for tgfx2 API: creates GL context via GLFW, draws a triangle.
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <string>
 
 #include <glad/glad.h>
 #define GLFW_INCLUDE_NONE
@@ -12,6 +16,11 @@
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/opengl/opengl_render_device.hpp"
+#include "tgfx2/tc_shader_bridge.hpp"
+
+extern "C" {
+#include "tgfx/resources/tc_shader_registry.h"
+}
 
 static const char* vertex_src = R"(
 #version 330 core
@@ -32,6 +41,46 @@ void main() {
     FragColor = vec4(vColor, 1.0);
 }
 )";
+
+static const char* artifact_vertex_src = R"(
+#version 330 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec3 aColor;
+out vec3 vColor;
+void main() {
+    gl_Position = vec4(aPos, 0.0, 1.0);
+    vColor = aColor;
+}
+)";
+
+static const char* artifact_fragment_src = R"(
+#version 330 core
+in vec3 vColor;
+out vec4 FragColor;
+void main() {
+    FragColor = vec4(0.85, 0.10, 0.75, 1.0);
+}
+)";
+
+static const char* invalid_fallback_src = R"(
+#version 330 core
+#error artifact-required smoke must not compile fallback source
+void main() {}
+)";
+
+static bool write_text_file(const std::filesystem::path& path, const char* text) {
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        fprintf(stderr, "Failed to open artifact for writing: %s\n", path.string().c_str());
+        return false;
+    }
+    out << text;
+    if (!out) {
+        fprintf(stderr, "Failed to write artifact: %s\n", path.string().c_str());
+        return false;
+    }
+    return true;
+}
 
 int main() {
     // --- Init GLFW + GL context ---
@@ -229,6 +278,119 @@ int main() {
 
     printf("RT test: center_drawn=%d, corner_is_blue=%d\n", rt_center_drawn, rt_corner_is_blue);
 
+    // =====================================================
+    // Test 3: tc_shader required artifacts through OpenGL
+    // =====================================================
+    printf("\n--- tc_shader artifact test ---\n");
+
+    bool artifact_test_ok = false;
+    const char* artifact_uuid = "termin-artifact-smoke";
+    const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+    std::filesystem::path artifact_root =
+        std::filesystem::temp_directory_path() /
+        ("termin-tgfx2-artifact-smoke-" + std::to_string(now));
+    std::filesystem::path artifact_dir = artifact_root / "shaders" / "opengl";
+
+    tgfx::TextureHandle artifact_rt_tex;
+    tgfx::PipelineHandle artifact_pipeline;
+    tc_shader_handle artifact_shader_handle = tc_shader_handle_invalid();
+
+    std::error_code fs_ec;
+    if (!std::filesystem::create_directories(artifact_dir, fs_ec) && fs_ec) {
+        fprintf(stderr, "Failed to create artifact directory: %s (%s)\n",
+                artifact_dir.string().c_str(), fs_ec.message().c_str());
+    } else if (
+        !write_text_file(artifact_dir / (std::string(artifact_uuid) + ".vert.glsl"), artifact_vertex_src) ||
+        !write_text_file(artifact_dir / (std::string(artifact_uuid) + ".frag.glsl"), artifact_fragment_src)) {
+        fprintf(stderr, "Failed to write shader artifacts\n");
+    } else {
+        termin::tgfx2_set_shader_artifact_root(artifact_root.string().c_str());
+        artifact_shader_handle = tc_shader_from_sources_ex(
+            invalid_fallback_src,
+            invalid_fallback_src,
+            nullptr,
+            "tgfx2 artifact smoke",
+            nullptr,
+            artifact_uuid,
+            TC_SHADER_LANGUAGE_SLANG,
+            TC_SHADER_ARTIFACT_REQUIRED
+        );
+
+        tc_shader* artifact_shader = tc_shader_get(artifact_shader_handle);
+        tgfx::ShaderHandle artifact_vs;
+        tgfx::ShaderHandle artifact_fs;
+        if (!artifact_shader) {
+            fprintf(stderr, "Failed to create artifact smoke tc_shader\n");
+        } else if (!gl_device->ensure_tc_shader(artifact_shader, &artifact_vs, &artifact_fs)) {
+            fprintf(stderr, "Failed to load required OpenGL shader artifacts\n");
+        } else {
+            tgfx::PipelineDesc artifact_pipe_desc;
+            artifact_pipe_desc.vertex_shader = artifact_vs;
+            artifact_pipe_desc.fragment_shader = artifact_fs;
+            artifact_pipe_desc.topology = tgfx::PrimitiveTopology::TriangleList;
+            artifact_pipe_desc.depth_stencil.depth_test = false;
+            artifact_pipe_desc.raster.cull = tgfx::CullMode::None;
+            artifact_pipe_desc.vertex_layouts.push_back(layout);
+
+            artifact_pipeline = device->create_pipeline(artifact_pipe_desc);
+            printf("Artifact pipeline created: id=%u\n", artifact_pipeline.id);
+
+            tgfx::TextureDesc artifact_rt_desc;
+            artifact_rt_desc.width = 64;
+            artifact_rt_desc.height = 64;
+            artifact_rt_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+            artifact_rt_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::Sampled;
+            artifact_rt_tex = device->create_texture(artifact_rt_desc);
+            printf("Artifact render target texture: id=%u\n", artifact_rt_tex.id);
+
+            if (!artifact_pipeline || !artifact_rt_tex) {
+                fprintf(stderr, "Failed to create artifact pipeline resources\n");
+            } else {
+                auto cmd3 = device->create_command_list();
+                cmd3->begin();
+
+                tgfx::RenderPassDesc artifact_pass;
+                tgfx::ColorAttachmentDesc artifact_color;
+                artifact_color.texture = artifact_rt_tex;
+                artifact_color.load = tgfx::LoadOp::Clear;
+                artifact_color.clear_color[0] = 0.0f;
+                artifact_color.clear_color[1] = 0.0f;
+                artifact_color.clear_color[2] = 0.0f;
+                artifact_color.clear_color[3] = 1.0f;
+                artifact_pass.colors.push_back(artifact_color);
+
+                cmd3->begin_render_pass(artifact_pass);
+                cmd3->bind_pipeline(artifact_pipeline);
+                cmd3->bind_vertex_buffer(0, vb);
+                cmd3->bind_index_buffer(ib, tgfx::IndexType::Uint32);
+                cmd3->draw_indexed(3);
+                cmd3->end_render_pass();
+
+                cmd3->end();
+                device->submit(*cmd3);
+
+                float artifact_center[4] = {0};
+                bool artifact_read_ok = device->read_pixel_rgba8(artifact_rt_tex, 32, 32, artifact_center);
+                printf("Artifact center pixel: (%.2f, %.2f, %.2f, %.2f), read_ok=%d\n",
+                       artifact_center[0], artifact_center[1], artifact_center[2], artifact_center[3],
+                       artifact_read_ok ? 1 : 0);
+
+                artifact_test_ok = artifact_read_ok &&
+                    artifact_center[0] > 0.70f &&
+                    artifact_center[1] < 0.25f &&
+                    artifact_center[2] > 0.55f;
+            }
+        }
+    }
+
+    termin::tgfx2_set_shader_artifact_root("");
+    std::filesystem::remove_all(artifact_root, fs_ec);
+    if (fs_ec) {
+        fprintf(stderr, "Failed to remove artifact temp root: %s (%s)\n",
+                artifact_root.string().c_str(), fs_ec.message().c_str());
+    }
+    printf("Artifact test: artifact_loaded_and_drawn=%d\n", artifact_test_ok);
+
     // Show the screen-rendered frame for 3 seconds
     glfwSwapBuffers(window);
     printf("Showing window for 3 seconds...\n");
@@ -239,6 +401,11 @@ int main() {
 
     // --- Cleanup ---
     device->destroy(rt_tex);
+    if (artifact_rt_tex) device->destroy(artifact_rt_tex);
+    if (artifact_pipeline) device->destroy(artifact_pipeline);
+    if (!tc_shader_handle_is_invalid(artifact_shader_handle)) {
+        tc_shader_destroy(artifact_shader_handle);
+    }
     device->destroy(vb);
     device->destroy(ib);
     device->destroy(pipeline);
@@ -255,8 +422,9 @@ int main() {
 
     printf("\nTest 1 (draw to screen): %s\n", test1_ok ? "PASSED" : "FAILED");
     printf("Test 2 (render to texture): %s\n", test2_ok ? "PASSED" : "FAILED");
+    printf("Test 3 (tc_shader artifacts): %s\n", artifact_test_ok ? "PASSED" : "FAILED");
 
-    if (test1_ok && test2_ok) {
+    if (test1_ok && test2_ok && artifact_test_ok) {
         printf("\nALL TESTS PASSED\n");
         return 0;
     } else {
