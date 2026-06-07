@@ -34,6 +34,20 @@ TcTexture optional_tc_texture(nb::object value, const std::string& context) {
     return require_tc_texture(value, context);
 }
 
+tc_shader_language shader_language_from_string(const std::string& language) {
+    if (language == "glsl") {
+        return TC_SHADER_LANGUAGE_GLSL;
+    }
+    if (language == "slang") {
+        return TC_SHADER_LANGUAGE_SLANG;
+    }
+    if (language == "hlsl") {
+        return TC_SHADER_LANGUAGE_HLSL;
+    }
+    tc::Log::error("Unsupported shader language '%s'", language.c_str());
+    throw std::runtime_error("Unsupported shader language: " + language);
+}
+
 void put_uniform_value(nb::dict& result, const std::string& name, tc_uniform_value& u) {
     switch (u.type) {
         case TC_UNIFORM_BOOL:
@@ -74,6 +88,7 @@ TcMaterial create_material_from_parsed(
     if (program.phases.empty()) {
         throw std::runtime_error("Program has no phases");
     }
+    tc_shader_language language = shader_language_from_string(program.language);
 
     // Create material with uuid hint if provided
     TcMaterial mat = TcMaterial::create(
@@ -133,7 +148,9 @@ TcMaterial create_material_from_parsed(
             shader_name.c_str(),
             shader_phase.phase_mark.c_str(),
             shader_phase.priority,
-            rs
+            rs,
+            nullptr,
+            language
         );
 
         if (!phase) {
@@ -624,17 +641,22 @@ void bind_tc_material(nb::module_& m) {
             const std::string& phase_mark,
             int priority,
             const tc_render_state& state,
-            const std::string& shader_uuid
+            const std::string& shader_uuid,
+            int language
         ) -> tc_material_phase* {
-            std::string vs = rewrite_engine_uniforms_for_stage_source(
-                vertex_source, "vertex");
-            std::string fs = rewrite_engine_uniforms_for_stage_source(
-                fragment_source, "fragment");
+            tc_shader_language shader_language = static_cast<tc_shader_language>(language);
+            std::string vs = shader_language == TC_SHADER_LANGUAGE_GLSL
+                ? rewrite_engine_uniforms_for_stage_source(vertex_source, "vertex")
+                : vertex_source;
+            std::string fs = shader_language == TC_SHADER_LANGUAGE_GLSL
+                ? rewrite_engine_uniforms_for_stage_source(fragment_source, "fragment")
+                : fragment_source;
             std::string gs;
             const char* gs_ptr = nullptr;
             if (!geometry_source.empty()) {
-                gs = rewrite_engine_uniforms_for_stage_source(
-                    geometry_source, "geometry");
+                gs = shader_language == TC_SHADER_LANGUAGE_GLSL
+                    ? rewrite_engine_uniforms_for_stage_source(geometry_source, "geometry")
+                    : geometry_source;
                 gs_ptr = gs.c_str();
             }
             return self.add_phase_from_sources(
@@ -645,13 +667,15 @@ void bind_tc_material(nb::module_& m) {
                 phase_mark.c_str(),
                 priority,
                 state,
-                shader_uuid.empty() ? nullptr : shader_uuid.c_str()
+                shader_uuid.empty() ? nullptr : shader_uuid.c_str(),
+                shader_language
             );
         }, nb::arg("vertex_source"), nb::arg("fragment_source"),
            nb::arg("geometry_source") = "", nb::arg("shader_name") = "",
            nb::arg("phase_mark") = "opaque", nb::arg("priority") = 0,
            nb::arg("state") = tc_render_state_opaque(),
            nb::arg("shader_uuid") = "",
+           nb::arg("language") = static_cast<int>(TC_SHADER_LANGUAGE_GLSL),
            nb::rv_policy::reference)
         .def("bump_version", &TcMaterial::bump_version)
         // Color

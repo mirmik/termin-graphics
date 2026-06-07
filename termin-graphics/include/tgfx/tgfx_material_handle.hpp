@@ -191,13 +191,22 @@ public:
         const char* phase_mark,
         int priority,
         const tc_render_state& state,
-        const char* shader_uuid = nullptr
+        const char* shader_uuid = nullptr,
+        tc_shader_language language = TC_SHADER_LANGUAGE_GLSL,
+        tc_shader_artifact_policy artifact_policy = TC_SHADER_ARTIFACT_OPTIONAL
     ) {
         tc_material* m = get();
         if (!m) return nullptr;
 
-        tc_shader_handle sh = tc_shader_from_sources(
-            vertex_source, fragment_source, geometry_source, shader_name, nullptr, shader_uuid
+        tc_shader_handle sh = tc_shader_from_sources_ex(
+            vertex_source,
+            fragment_source,
+            geometry_source,
+            shader_name,
+            nullptr,
+            shader_uuid,
+            language,
+            artifact_policy
         );
         if (tc_shader_handle_is_invalid(sh)) return nullptr;
 

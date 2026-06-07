@@ -918,6 +918,7 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
     std::string raw_line;
 
     std::string program_name;
+    std::string language = "glsl";
     std::vector<ShaderPhase> phases;
     std::vector<std::string> features;  // From @features directive
 
@@ -1032,6 +1033,15 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
             program_name = parts[1];
             for (size_t i = 2; i < parts.size(); ++i) {
                 program_name += " " + parts[i];
+            }
+        }
+        else if (directive == "@language") {
+            if (parts.size() != 2) {
+                throw std::runtime_error("@language expects exactly one value");
+            }
+            language = to_lower(parts[1]);
+            if (language != "glsl" && language != "slang") {
+                throw std::runtime_error("Unsupported shader language: " + parts[1]);
             }
         }
         else if (directive == "@features") {
@@ -1271,6 +1281,16 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
         "",
         std::move(features),
         std::move(material_properties));
+    result.language = language;
+
+    if (result.language != "glsl") {
+        if (!result.material_properties.empty()) {
+            throw std::runtime_error(
+                "Slang .shader material properties are not wired yet; "
+                "declare Slang resource bindings explicitly for now");
+        }
+        return result;
+    }
 
     // Material UBO synthesis is unconditional: any phase that declares
     // scalar/vector @property or @uniform entries gets a std140

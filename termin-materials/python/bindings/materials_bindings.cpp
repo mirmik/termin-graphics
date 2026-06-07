@@ -293,6 +293,7 @@ void bind_shader_parser(nb::module_& m) {
              nb::arg("features") = std::vector<std::string>{},
              nb::arg("material_properties") = std::vector<MaterialProperty>{})
         .def_rw("program", &ShaderMultyPhaseProgramm::program)
+        .def_rw("language", &ShaderMultyPhaseProgramm::language)
         .def_rw("phases", &ShaderMultyPhaseProgramm::phases)
         .def_rw("source_path", &ShaderMultyPhaseProgramm::source_path)
         .def_rw("features", &ShaderMultyPhaseProgramm::features)

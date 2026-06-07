@@ -170,6 +170,7 @@ struct ShaderPhase {
 class ShaderMultyPhaseProgramm {
 public:
     std::string program;  // Program name
+    std::string language = "glsl";  // Source language: glsl or slang.
     std::vector<ShaderPhase> phases;
     std::string source_path;
     std::vector<std::string> features;  // Feature flags (e.g., "lighting_ubo")
@@ -216,6 +217,7 @@ public:
  *
  * Supported directives:
  *   @program <name>
+ *   @language glsl|slang
  *
  *   // Traditional multi-phase (explicit):
  *   @phase <mark>
