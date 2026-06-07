@@ -23,7 +23,13 @@ static void set_backend_env(const char* value) {
 
 TEST_CASE("tgfx2 device factory parses TERMIN_BACKEND aliases") {
     set_backend_env(nullptr);
+#ifdef TGFX2_HAS_VULKAN
     CHECK(tgfx::default_backend_from_env() == tgfx::BackendType::Vulkan);
+#elif defined(TGFX2_HAS_OPENGL)
+    CHECK(tgfx::default_backend_from_env() == tgfx::BackendType::OpenGL);
+#else
+    CHECK(tgfx::default_backend_from_env() == tgfx::BackendType::Null);
+#endif
 
     set_backend_env("opengl");
     CHECK(tgfx::default_backend_from_env() == tgfx::BackendType::OpenGL);
@@ -41,7 +47,13 @@ TEST_CASE("tgfx2 device factory parses TERMIN_BACKEND aliases") {
     CHECK(tgfx::default_backend_from_env() == tgfx::BackendType::D3D11);
 
     set_backend_env("definitely-not-a-backend");
+#ifdef TGFX2_HAS_VULKAN
     CHECK(tgfx::default_backend_from_env() == tgfx::BackendType::Vulkan);
+#elif defined(TGFX2_HAS_OPENGL)
+    CHECK(tgfx::default_backend_from_env() == tgfx::BackendType::OpenGL);
+#else
+    CHECK(tgfx::default_backend_from_env() == tgfx::BackendType::Null);
+#endif
 
     set_backend_env(nullptr);
 }

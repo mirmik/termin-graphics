@@ -16,9 +16,23 @@
 
 namespace tgfx {
 
+namespace {
+
+BackendType default_compiled_backend() {
+#ifdef TGFX2_HAS_VULKAN
+    return BackendType::Vulkan;
+#elif defined(TGFX2_HAS_OPENGL)
+    return BackendType::OpenGL;
+#else
+    return BackendType::Null;
+#endif
+}
+
+} // namespace
+
 BackendType default_backend_from_env() {
     const char* env = std::getenv("TERMIN_BACKEND");
-    if (!env || !env[0]) return BackendType::Vulkan;
+    if (!env || !env[0]) return default_compiled_backend();
 
     std::string s(env);
     for (auto& c : s) c = static_cast<char>(std::tolower(c));
@@ -30,9 +44,9 @@ BackendType default_backend_from_env() {
     if (s == "null") return BackendType::Null;
 
     std::fprintf(stderr,
-                 "[tgfx2] Unknown TERMIN_BACKEND='%s'; falling back to vulkan\n",
+                 "[tgfx2] Unknown TERMIN_BACKEND='%s'; using compiled default backend\n",
                  env);
-    return BackendType::Vulkan;
+    return default_compiled_backend();
 }
 
 std::unique_ptr<IRenderDevice> create_device(BackendType type) {
