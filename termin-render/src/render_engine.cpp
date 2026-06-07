@@ -265,7 +265,7 @@ void RenderEngine::ensure_tgfx2() {
         // No host — standalone render test / headless case. Create our
         // own device and register it as the interop target so any
         // later Python helper that checks interop lands on it.
-        // Backend selected by TERMIN_BACKEND env-var (default OpenGL).
+        // Backend selected by TERMIN_BACKEND env-var (default Vulkan when compiled).
         tgfx2_runtime_ = tgfx::RenderRuntime::create_from_env();
     }
 }

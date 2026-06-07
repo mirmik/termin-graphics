@@ -7,7 +7,10 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 foreach ($arg in $args) {
     if ($arg -eq "--help" -or $arg -eq "-h") {
-        Write-Host "Usage: .\run-tests.ps1 [--debug]"
+        Write-Host "Usage: .\run-tests.ps1 [run-tests-cpp options]"
+        Write-Host ""
+        Write-Host "Vulkan is enabled by default for C/C++ tests."
+        Write-Host "Use --no-vulkan only for OpenGL/legacy compatibility checks."
         exit 0
     }
 }

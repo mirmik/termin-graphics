@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <stdexcept>
 #include <vector>
 
@@ -59,8 +60,12 @@ int main(int argc, char** argv) {
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         kWidth, kHeight, SDL_WINDOW_VULKAN | SDL_WINDOW_SHOWN);
     if (!window) {
-        fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
+        const char* error = SDL_GetError();
+        fprintf(stderr, "SDL_CreateWindow failed: %s\n", error);
         SDL_Quit();
+        if (std::strstr(error, "Vulkan support is either not configured in SDL")) {
+            return 77;
+        }
         return 1;
     }
 

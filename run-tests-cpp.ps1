@@ -10,7 +10,7 @@ $SdkPrefix = if ($env:SDK_PREFIX) { $env:SDK_PREFIX } else { Join-Path $ScriptDi
 $BuildType = "Release"
 $BuildJobs = if ($env:BUILD_JOBS) { [int]$env:BUILD_JOBS } else { [Environment]::ProcessorCount }
 $BuildDir = if ($env:BUILD_DIR) { $env:BUILD_DIR } else { "" }
-$VulkanMode = "off"
+$VulkanMode = "on"
 $SdlMode = "on"
 $WindowTestsMode = "auto"
 $CcacheMode = "on"
@@ -39,8 +39,8 @@ function Show-Help {
     Write-Host ""
     Write-Host "Options:"
     Write-Host "  --debug, -d       Debug build"
-    Write-Host "  --no-vulkan       Disable Vulkan support (default)"
-    Write-Host "  --vulkan          Enable Vulkan support"
+    Write-Host "  --no-vulkan       Disable Vulkan support"
+    Write-Host "  --vulkan          Enable Vulkan support (default)"
     Write-Host "  --no-sdl          Disable SDL2 support"
     Write-Host "  --sdl             Enable SDL2 support (default)"
     Write-Host "  --ccache          Use ccache if available (default)"

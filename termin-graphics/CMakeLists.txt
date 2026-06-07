@@ -308,7 +308,7 @@ option(BUILD_TGFX2_WINDOW_TESTS "Build tgfx2 tests that create windows/GL contex
 if(BUILD_TGFX2_TESTS)
     enable_testing()
     set(TGFX2_WINDOW_SKIP_RE
-        "GLFW init failed|Failed to init GLFW|Window creation failed|Failed to create GLFW window|No available video device")
+        "GLFW init failed|Failed to init GLFW|Window creation failed|Failed to create GLFW window|No available video device|Vulkan support is either not configured in SDL")
 
     if(BUILD_TGFX2_WINDOW_TESTS)
         find_package(glfw3 QUIET)

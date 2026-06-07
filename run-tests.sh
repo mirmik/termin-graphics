@@ -8,7 +8,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 for arg in "$@"; do
     case "$arg" in
         --help|-h)
-            echo "Usage: $0 [--debug]"
+            echo "Usage: $0 [run-tests-cpp options]"
+            echo ""
+            echo "Vulkan is enabled by default for C/C++ tests."
+            echo "Use --no-vulkan only for OpenGL/legacy compatibility checks."
             exit 0
             ;;
     esac
