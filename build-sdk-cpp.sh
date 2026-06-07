@@ -138,6 +138,16 @@ if [[ $CLEAN -eq 1 ]]; then
     rm -rf "$BUILD_DIR"
 fi
 
+required_submodules=(
+    "termin-thirdparty/manifold"
+    "termin-thirdparty/clipper2"
+    "termin-thirdparty/recastnavigation"
+)
+if [[ "$TERMIN_ENABLE_VULKAN" == "ON" ]]; then
+    required_submodules+=("termin-thirdparty/vulkan-memory-allocator")
+fi
+"$SCRIPT_DIR/scripts/ensure-thirdparty-submodules.sh" "${required_submodules[@]}"
+
 cmake_args=()
 if [[ -n "$CMAKE_GENERATOR_NAME" && ! -f "$BUILD_DIR/CMakeCache.txt" ]]; then
     cmake_args+=(-G "$CMAKE_GENERATOR_NAME")
