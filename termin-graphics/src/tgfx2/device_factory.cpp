@@ -26,7 +26,7 @@ BackendType default_backend_from_env() {
     if (s == "opengl" || s == "gl") return BackendType::OpenGL;
     if (s == "vulkan" || s == "vk") return BackendType::Vulkan;
     if (s == "metal") return BackendType::Metal;
-    if (s == "d3d12" || s == "dx12") return BackendType::D3D12;
+    if (s == "d3d11" || s == "dx11") return BackendType::D3D11;
     if (s == "null") return BackendType::Null;
 
     std::fprintf(stderr,
@@ -62,7 +62,7 @@ std::unique_ptr<IRenderDevice> create_device(BackendType type) {
 #endif
 
         case BackendType::Metal:
-        case BackendType::D3D12:
+        case BackendType::D3D11:
             throw std::runtime_error("Backend not yet implemented");
 
         case BackendType::Null:

@@ -18,6 +18,22 @@ $UnityMode = "off"
 $PchMode = "on"
 $CmakeGeneratorName = if ($env:CMAKE_GENERATOR_NAME) { $env:CMAKE_GENERATOR_NAME } elseif ($env:TERMIN_CMAKE_GENERATOR) { $env:TERMIN_CMAKE_GENERATOR } else { $null }
 
+function Get-CMakeGeneratorFromCache {
+    param([string]$BuildDir)
+
+    $cachePath = Join-Path $BuildDir "CMakeCache.txt"
+    if (-not (Test-Path $cachePath)) {
+        return ""
+    }
+
+    $generatorLine = Get-Content $cachePath | Where-Object { $_ -like "CMAKE_GENERATOR:INTERNAL=*" } | Select-Object -First 1
+    if (-not $generatorLine) {
+        return ""
+    }
+
+    return ($generatorLine -split "=", 2)[1]
+}
+
 function Show-Help {
     Write-Host "Usage: .\run-tests-cpp.ps1 [OPTIONS]"
     Write-Host ""
@@ -125,6 +141,17 @@ Write-Host "Generator:   $(if ($CmakeGeneratorName) { $CmakeGeneratorName } else
 Write-Host "Jobs:        $BuildJobs"
 Write-Host ""
 
+$requiredSubmodules = @(
+    "termin-thirdparty/manifold",
+    "termin-thirdparty/clipper2",
+    "termin-thirdparty/guard",
+    "termin-thirdparty/recastnavigation"
+)
+if ($TerminEnableVulkan -eq "ON") {
+    $requiredSubmodules += "termin-thirdparty/vulkan-memory-allocator"
+}
+& (Join-Path $ScriptDir "scripts\Ensure-ThirdpartySubmodules.ps1") -RepoRoot $ScriptDir -RequiredPaths $requiredSubmodules
+
 $cmakeArgs = @("-S", $ScriptDir, "-B", $BuildDir)
 if ($CmakeGeneratorName -and -not (Test-Path (Join-Path $BuildDir "CMakeCache.txt"))) {
     $cmakeArgs += @("-G", $CmakeGeneratorName)
@@ -154,13 +181,19 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-& cmake --build $BuildDir --parallel $BuildJobs
+$ActualGenerator = Get-CMakeGeneratorFromCache $BuildDir
+if ($ActualGenerator -like "Visual Studio*") {
+    Write-Host "Visual Studio generator detected; using MSBuild /m:1 to avoid parallel solution race"
+    & cmake --build $BuildDir --config $BuildType -- /m:1
+} else {
+    & cmake --build $BuildDir --config $BuildType --parallel $BuildJobs
+}
 if ($LASTEXITCODE -ne 0) {
     Write-Error "C++ test build failed"
     exit 1
 }
 
-& ctest --test-dir $BuildDir --output-on-failure
+& ctest --test-dir $BuildDir -C $BuildType --output-on-failure
 if ($LASTEXITCODE -ne 0) {
     Write-Error "C++ tests failed"
     exit 1

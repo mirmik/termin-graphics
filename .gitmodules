@@ -1,5 +1,5 @@
-[submodule "termin/third/recastnavigation"]
-	path = termin-app/third/recastnavigation
+[submodule "termin-thirdparty/recastnavigation"]
+	path = termin-thirdparty/recastnavigation
 	url = git@github.com:mirmik/recastnavigation.git
 [submodule "termin-thirdparty/manifold"]
 	path = termin-thirdparty/manifold

@@ -136,6 +136,26 @@ Write-Host "========================================"
 Set-Location $ScriptDir
 $Failures = New-Object System.Collections.Generic.List[string]
 
+$PytestTempRoot = Join-Path (Join-Path $ScriptDir "build") "pytest-temp"
+$PytestCacheRoot = Join-Path (Join-Path $ScriptDir "build") "pytest-cache"
+$PytestRunTempDir = Join-Path $PytestTempRoot ([System.Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $PytestRunTempDir -Force | Out-Null
+New-Item -ItemType Directory -Path $PytestCacheRoot -Force | Out-Null
+$env:TEMP = $PytestRunTempDir
+$env:TMP = $PytestRunTempDir
+Write-Host "Pytest temp root: $PytestRunTempDir"
+
+function New-PytestSuiteArgs {
+    param([string]$Name)
+
+    $safeName = $Name -replace "[^A-Za-z0-9_.-]", "-"
+    $suiteTempDir = Join-Path $PytestRunTempDir $safeName
+    $suiteCacheDir = Join-Path $PytestCacheRoot $safeName
+    New-Item -ItemType Directory -Path $suiteTempDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $suiteCacheDir -Force | Out-Null
+    return @("--basetemp", $suiteTempDir, "-o", "cache_dir=$suiteCacheDir")
+}
+
 function Invoke-TestSuite {
     param(
         [string]$Name,
@@ -154,17 +174,18 @@ function Invoke-TestSuite {
 }
 
 if ($PytestTargets.Count -gt 0) {
-    Invoke-TestSuite "selected python" (@("-m", "pytest") + $PytestTargets.ToArray() + @("-v"))
+    Invoke-TestSuite "selected python" (@("-m", "pytest") + $PytestTargets.ToArray() + (New-PytestSuiteArgs "selected-python") + @("-v"))
 } else {
-    Invoke-TestSuite "termin-base python" @("-m", "pytest", "termin-base/tests/python/", "-v")
+    Invoke-TestSuite "termin-base python" (@("-m", "pytest", "termin-base/tests/python/") + (New-PytestSuiteArgs "termin-base-python") + @("-v"))
     Invoke-TestSuite "termin-modules import smoke" @("-c", "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())")
-    Invoke-TestSuite "termin-mesh python" @("-m", "pytest", "termin-mesh/tests/python/", "-v")
-    Invoke-TestSuite "termin-graphics python" @("-m", "pytest", "termin-graphics/tests/python/", "-v")
-    Invoke-TestSuite "termin-gui python" @("-m", "pytest", "termin-gui/python/tests/", "-v")
-    Invoke-TestSuite "termin-nodegraph python" @("-m", "pytest", "termin-nodegraph/tests/", "-v")
-    Invoke-TestSuite "termin-qopt python" @("-m", "pytest", "termin-qopt/tests/", "-v")
-    Invoke-TestSuite "termin-pga python" @("-m", "pytest", "termin-pga/tests/", "-v")
-    Invoke-TestSuite "termin-app python" @("-m", "pytest", "termin-app/tests/", "-v")
+    Invoke-TestSuite "termin-mesh python" (@("-m", "pytest", "termin-mesh/tests/python/") + (New-PytestSuiteArgs "termin-mesh-python") + @("-v"))
+    Invoke-TestSuite "termin-csg python" (@("-m", "pytest", "termin-csg/tests/") + (New-PytestSuiteArgs "termin-csg-python") + @("-v"))
+    Invoke-TestSuite "termin-graphics python" (@("-m", "pytest", "termin-graphics/tests/python/") + (New-PytestSuiteArgs "termin-graphics-python") + @("-v"))
+    Invoke-TestSuite "termin-gui python" (@("-m", "pytest", "termin-gui/python/tests/") + (New-PytestSuiteArgs "termin-gui-python") + @("-v"))
+    Invoke-TestSuite "termin-nodegraph python" (@("-m", "pytest", "termin-nodegraph/tests/") + (New-PytestSuiteArgs "termin-nodegraph-python") + @("-v"))
+    Invoke-TestSuite "termin-qopt python" (@("-m", "pytest", "termin-qopt/tests/") + (New-PytestSuiteArgs "termin-qopt-python") + @("-v"))
+    Invoke-TestSuite "termin-pga python" (@("-m", "pytest", "termin-pga/tests/") + (New-PytestSuiteArgs "termin-pga-python") + @("-v"))
+    Invoke-TestSuite "termin-app python" (@("-m", "pytest", "termin-app/tests/") + (New-PytestSuiteArgs "termin-app-python") + @("-v"))
 }
 
 if ($Failures.Count -gt 0) {

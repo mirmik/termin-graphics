@@ -22,14 +22,17 @@ foreach ($arg in $args) {
         Write-Host "  --no-parallel     Disable parallel compilation"
         Write-Host "  --ccache          Use ccache if available (default; ignored by MSVC root graph)"
         Write-Host "  --no-ccache       Disable ccache compiler launcher"
+        Write-Host "  --ninja           Use Ninja generator for a new build dir"
         Write-Host "  --unity           Enable CMake unity build for C/C++ stages (experimental)"
         Write-Host "  --no-unity        Disable CMake unity build (default)"
         Write-Host "  --pch             Enable precompiled headers for C/C++ stages (default)"
         Write-Host "  --no-pch          Disable precompiled headers"
         Write-Host "  --no-vulkan       Disable Vulkan support"
-        Write-Host "  --vulkan          Enable Vulkan support (default)"
+        Write-Host "  --vulkan          Require Vulkan support"
         Write-Host "  --no-sdl          Disable SDL2 support"
         Write-Host "  --sdl             Force SDL2 support on"
+        Write-Host "  --no-opengl       Disable OpenGL backend; keep Vulkan render/editor targets"
+        Write-Host "  --opengl          Enable desktop OpenGL targets (default)"
         Write-Host "  --help, -h        Show this help"
         exit 0
     }

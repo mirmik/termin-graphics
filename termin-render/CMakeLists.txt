@@ -150,6 +150,7 @@ set_target_properties(termin_render PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    WINDOWS_EXPORT_ALL_SYMBOLS ON
 )
 termin_set_rpath_lib(termin_render)
 

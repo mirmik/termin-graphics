@@ -4,7 +4,7 @@
 
 namespace tgfx {
 
-enum class BackendType { OpenGL, Vulkan, Metal, D3D12, Null };
+enum class BackendType { OpenGL, Vulkan, Metal, D3D11, Null };
 enum class QueueType { Graphics, Compute, Transfer };
 
 // --- Buffer / Texture usage flags ---
