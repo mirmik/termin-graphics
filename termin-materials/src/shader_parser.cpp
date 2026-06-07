@@ -483,10 +483,11 @@ std::string strip_engine_uniform_decls(const std::string& source) {
     return result;
 }
 
-// Engine-supplied per-frame + per-draw block. `u_model` is aliased via
-// `#define` so existing stage bodies keep using the plain identifier
-// and don't need to know about the push_constant indirection.
-const char* ENGINE_UNIFORMS_BLOCK = R"(
+// Engine-supplied per-frame block. Inject this only when a stage declares
+// legacy plain per-frame uniforms. Do not use identifier-only scans here:
+// fields such as `struct IdPushData { mat4 u_model; }` are not engine
+// uniforms and must not trigger macro injection.
+const char* ENGINE_PER_FRAME_BLOCK = R"(
 layout(std140, binding = 2) uniform PerFrame {
     mat4 u_view;
     mat4 u_projection;
@@ -498,6 +499,14 @@ layout(std140, binding = 2) uniform PerFrame {
     float u_near;
     float u_far;
 };
+)";
+
+// Engine-supplied per-draw block. `u_model` is aliased via `#define` so
+// existing stage bodies keep using the plain identifier and don't need to know
+// about the push_constant indirection. This block is intentionally separate
+// from PerFrame: the macro is only safe when the source actually declared a
+// top-level legacy `uniform mat4 u_model;`.
+const char* ENGINE_MODEL_PUSH_BLOCK = R"(
 
 struct ColorPushData {
     mat4 _u_model;
@@ -510,19 +519,80 @@ layout(std140, binding = 14) uniform ColorPushBlock { ColorPushData pc; };
 #define u_model pc._u_model
 )";
 
-// True if the stage contains at least one engine-plain-uniform reference
-// (read-side) — used to avoid injecting the engine UBO/push into stages
-// that don't need it, which would waste a descriptor slot and break
-// unrelated UBO bindings some stages rely on (e.g. TextureAtlas-only
-// fragments that never touch view/proj/model).
-bool stage_uses_engine_uniform(const std::string& source) {
+struct EngineUniformDeclUsage {
+    bool per_frame = false;
+    bool model = false;
+
+    bool any() const { return per_frame || model; }
+};
+
+bool is_per_frame_engine_uniform_name(const std::string& name) {
+    return name == "u_view" ||
+           name == "u_projection" ||
+           name == "u_view_projection" ||
+           name == "u_inv_view" ||
+           name == "u_inv_proj" ||
+           name == "u_camera_position" ||
+           name == "u_resolution" ||
+           name == "u_near" ||
+           name == "u_far";
+}
+
+bool stage_uses_per_frame_engine_uniform(const std::string& source) {
     for (const char* name : ENGINE_PLAIN_UNIFORM_NAMES) {
-        // Word-boundary regex — don't match `u_modelview` when looking
-        // for `u_model`, etc.
+        if (!is_per_frame_engine_uniform_name(name)) {
+            continue;
+        }
         std::regex re(std::string("\\b") + name + "\\b");
-        if (std::regex_search(source, re)) return true;
+        if (std::regex_search(source, re)) {
+            return true;
+        }
     }
     return false;
+}
+
+EngineUniformDeclUsage collect_engine_uniform_usage(const std::string& source) {
+    EngineUniformDeclUsage usage;
+    std::regex uniform_re(
+        R"(^[ \t]*(?:layout[ \t]*\([^)]*\)[ \t]*)?uniform[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+([A-Za-z_][A-Za-z0-9_]*)(?:[ \t]*\[[^\]]+\])?[ \t]*;[ \t]*(?://.*)?$)");
+
+    std::istringstream lines(source);
+    std::string line;
+    while (std::getline(lines, line)) {
+        std::smatch match;
+        if (!std::regex_match(line, match, uniform_re)) {
+            continue;
+        }
+
+        std::string name = match[1].str();
+        if (name == "u_model") {
+            usage.model = true;
+        } else if (is_per_frame_engine_uniform_name(name)) {
+            usage.per_frame = true;
+        }
+    }
+
+    // Stdlib helper code such as shadows.glsl uses `u_view` but intentionally
+    // does not redeclare it. PerFrame has no macro side effects, so usage-based
+    // injection is safe for these names. Keep `u_model` declaration-based only:
+    // injecting its macro on identifier use corrupts user push-constant structs
+    // with fields named `u_model`.
+    if (!usage.per_frame && stage_uses_per_frame_engine_uniform(source)) {
+        usage.per_frame = true;
+    }
+
+    return usage;
+}
+
+std::string synthesize_engine_uniform_glsl(const EngineUniformDeclUsage& usage) {
+    std::string block;
+    if (usage.per_frame) {
+        block += ENGINE_PER_FRAME_BLOCK;
+    }
+    if (usage.model) {
+        block += ENGINE_MODEL_PUSH_BLOCK;
+    }
+    return block;
 }
 
 std::string strip_uniform_decls(const std::string& source,
@@ -606,9 +676,8 @@ std::string rewrite_engine_uniforms_for_stage_source(
 
     // Parsed .shader sources may already have gone through the engine
     // rewrite before they are passed to TcMaterial.add_phase_from_sources
-    // (e.g. builtin resources created from ShaderMultyPhaseProgramm). In
-    // that case `stage_uses_engine_uniform()` still sees `u_model` in the
-    // generated `#define`, so the helper must be idempotent.
+    // (e.g. builtin resources created from ShaderMultyPhaseProgramm). Keep
+    // the helper idempotent.
     bool already_rewritten =
         src.find("uniform PerFrame") != std::string::npos ||
         src.find("uniform ColorPushBlock") != std::string::npos ||
@@ -617,14 +686,14 @@ std::string rewrite_engine_uniforms_for_stage_source(
         return inject_after_version(src, "");
     }
 
-    bool needs_engine_block = stage_uses_engine_uniform(src);
-    if (needs_engine_block) {
+    EngineUniformDeclUsage usage = collect_engine_uniform_usage(src);
+    if (usage.any()) {
         src = strip_engine_uniform_decls(src);
     }
 
     return inject_after_version(
         src,
-        needs_engine_block ? std::string(ENGINE_UNIFORMS_BLOCK) : std::string()
+        synthesize_engine_uniform_glsl(usage)
     );
 }
 
@@ -1267,9 +1336,8 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
             }
 
             // Engine uniforms: strip plain decls of u_view / u_projection /
-            // u_model / u_view_projection / u_camera_position, inject the
-            // PerFrame UBO + push_constant block if the stage actually
-            // references any of them.
+            // u_model / u_view_projection / u_camera_position, then inject the
+            // matching PerFrame UBO and/or push_constant block.
             //
             // Skip the engine injection entirely when any of the engine
             // names collide with a MaterialParams @property entry — this
@@ -1290,9 +1358,11 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
                 }
                 if (collision_with_material) break;
             }
-            bool needs_engine_block =
-                !collision_with_material && stage_uses_engine_uniform(src);
-            if (needs_engine_block) {
+            EngineUniformDeclUsage engine_usage;
+            if (!collision_with_material) {
+                engine_usage = collect_engine_uniform_usage(src);
+            }
+            if (engine_usage.any()) {
                 src = strip_engine_uniform_decls(src);
             }
 
@@ -1302,9 +1372,7 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
             // Always called so the stage's #version line is upgraded to
             // 450 regardless of whether there's anything to inject.
             std::string inject = block_glsl + sampler_glsl;
-            if (needs_engine_block) {
-                inject += ENGINE_UNIFORMS_BLOCK;
-            }
+            inject += synthesize_engine_uniform_glsl(engine_usage);
             src = inject_after_version(src, inject);
         }
 
