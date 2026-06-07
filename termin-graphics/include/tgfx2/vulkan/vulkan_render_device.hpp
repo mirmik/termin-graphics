@@ -72,12 +72,12 @@ struct VkResourceSetResource {
     VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
     ResourceSetDesc desc;
     // Dynamic offsets emitted at bind time, in the order the layout
-    // declares DYNAMIC bindings (currently 0, 1, 2, 3, 16 → 5 offsets).
+    // declares DYNAMIC bindings (currently 0, 1, 2, 3, 16, 24 → 6 offsets).
     // Populated by create_resource_set() from ResourceBinding::offset on
     // the matching slots; unset slots stay at 0 so the descriptor is
     // always valid (ring buffer is range-checked against WHOLE_SIZE).
-    static constexpr uint32_t DYNAMIC_UBO_COUNT = 5;
-    uint32_t dynamic_offsets[DYNAMIC_UBO_COUNT] = {0, 0, 0, 0, 0};
+    static constexpr uint32_t DYNAMIC_UBO_COUNT = 6;
+    uint32_t dynamic_offsets[DYNAMIC_UBO_COUNT] = {0, 0, 0, 0, 0, 0};
 };
 
 struct VkFramebufferCacheKey {

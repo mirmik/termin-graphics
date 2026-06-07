@@ -783,6 +783,8 @@ void VulkanRenderDevice::create_shared_layouts() {
     //   binding 16    = UBO  (BoneBlock — SkinnedMeshRenderer bone matrices,
     //                          used by VS only, see shader_skinning.cpp)
     //   binding 17..23 = COMBINED_IMAGE_SAMPLER, 1 each (extra slots)
+    //   binding 24    = UBO  (SlangDrawBlock — per-draw model data for
+    //                          Slang/HLSL material shaders)
     //
     // MAX_SHADOW_MAPS must match the GLSL macro in shadows.glsl (currently 16).
     constexpr uint32_t MAX_SHADOW_MAPS = 16;
@@ -847,6 +849,17 @@ void VulkanRenderDevice::create_shared_layouts() {
         b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         b.descriptorCount = 1;
         b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        bindings.push_back(b);
+    }
+    // Slang/HLSL per-draw data at binding 24. DYNAMIC so ColorPass can
+    // update model matrices via the ring UBO without per-draw descriptor
+    // allocation. Kept outside sampler slots 4..23 to avoid layout clashes.
+    {
+        VkDescriptorSetLayoutBinding b{};
+        b.binding = 24;
+        b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        b.descriptorCount = 1;
+        b.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
         bindings.push_back(b);
     }
 
@@ -1770,7 +1783,7 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
     // because they are already present in normalized_desc and provide the
     // dynamic offset used by bind_resource_set().
     constexpr uint32_t DYNAMIC_UBO_BINDINGS[VkResourceSetResource::DYNAMIC_UBO_COUNT] =
-        {0, 1, 2, 3, 16};
+        {0, 1, 2, 3, 16, 24};
     auto has_uniform_binding = [&](uint32_t binding) -> bool {
         for (const auto& b : normalized_desc.bindings) {
             if (b.binding == binding &&
@@ -1900,7 +1913,7 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
             case ResourceBinding::Kind::StorageBuffer: {
                 auto* buf = get_buffer(b.buffer);
                 if (!buf) continue;
-                // UBOs on the five DYNAMIC slots route their offset through
+                // UBOs on shared-layout DYNAMIC slots route their offset through
                 // the dynamic_offsets[] argument at bind time — the write
                 // itself uses offset=0 with an explicit range. Two hard
                 // Vulkan rules apply to this binding type:

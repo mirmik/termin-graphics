@@ -272,7 +272,7 @@ void VulkanCommandList::bind_resource_set(ResourceSetHandle set,
     // offsets stashed at create_resource_set() time when the caller
     // doesn't supply any.
     constexpr uint32_t EXPECTED = VkResourceSetResource::DYNAMIC_UBO_COUNT;
-    uint32_t offsets_tmp[EXPECTED] = {0, 0, 0, 0, 0};
+    uint32_t offsets_tmp[EXPECTED] = {};
     const uint32_t* offsets_ptr = offsets_tmp;
     if (dynamic_offsets && dynamic_offset_count == EXPECTED) {
         offsets_ptr = dynamic_offsets;

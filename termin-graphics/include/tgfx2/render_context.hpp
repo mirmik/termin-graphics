@@ -182,7 +182,7 @@ public:
     // UBO block size declared by the shader.
     //
     // `binding` must be one of the layout's UNIFORM_BUFFER_DYNAMIC slots
-    // (0..3, 16). Other slots fall back to the classic bind_uniform_buffer
+    // (0..3, 16, 24). Other slots fall back to the classic bind_uniform_buffer
     // path and pay the old per-draw churn.
     void bind_uniform_buffer_ring(uint32_t binding, const void* data, uint32_t size);
 
