@@ -135,17 +135,17 @@ echo "Generator:   ${CMAKE_GENERATOR_NAME:-existing/default}"
 echo "Jobs:        $BUILD_JOBS"
 echo ""
 
-required_submodules=(
-    "termin-thirdparty/manifold"
-    "termin-thirdparty/clipper2"
-    "termin-thirdparty/guard"
-    "termin-thirdparty/recastnavigation"
-)
-if [[ "$TERMIN_ENABLE_VULKAN" == "ON" ]]; then
-    required_submodules+=("termin-thirdparty/vulkan-memory-allocator")
+PY_EXEC="$(command -v python3 || command -v python || true)"
+if [[ -z "$PY_EXEC" ]]; then
+    echo "ERROR: python3 not found; cannot run build doctor" >&2
+    exit 1
 fi
-if ! "$SCRIPT_DIR/scripts/ensure-thirdparty-submodules.sh" "${required_submodules[@]}"; then
-    echo "ERROR: failed to initialize required third-party submodules" >&2
+if ! PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
+    "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" doctor \
+    --profile cpp-tests \
+    --vulkan "$TERMIN_ENABLE_VULKAN" \
+    --init-submodules; then
+    echo "ERROR: Termin build doctor failed" >&2
     exit 1
 fi
 

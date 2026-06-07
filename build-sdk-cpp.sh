@@ -138,15 +138,16 @@ if [[ $CLEAN -eq 1 ]]; then
     rm -rf "$BUILD_DIR"
 fi
 
-required_submodules=(
-    "termin-thirdparty/manifold"
-    "termin-thirdparty/clipper2"
-    "termin-thirdparty/recastnavigation"
-)
-if [[ "$TERMIN_ENABLE_VULKAN" == "ON" ]]; then
-    required_submodules+=("termin-thirdparty/vulkan-memory-allocator")
+PY_EXEC="$(command -v python3 || command -v python || true)"
+if [[ -z "$PY_EXEC" ]]; then
+    echo "ERROR: python3 not found; cannot run build doctor" >&2
+    exit 1
 fi
-"$SCRIPT_DIR/scripts/ensure-thirdparty-submodules.sh" "${required_submodules[@]}"
+PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
+    "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" doctor \
+    --profile sdk-cpp \
+    --vulkan "$TERMIN_ENABLE_VULKAN" \
+    --init-submodules
 
 cmake_args=()
 if [[ -n "$CMAKE_GENERATOR_NAME" && ! -f "$BUILD_DIR/CMakeCache.txt" ]]; then

@@ -151,15 +151,11 @@ if [[ $CLEAN -eq 1 ]]; then
     rm -rf "$BUILD_DIR"
 fi
 
-required_submodules=(
-    "termin-thirdparty/manifold"
-    "termin-thirdparty/clipper2"
-    "termin-thirdparty/recastnavigation"
-)
-if [[ "$TERMIN_ENABLE_VULKAN" == "ON" ]]; then
-    required_submodules+=("termin-thirdparty/vulkan-memory-allocator")
-fi
-"$SCRIPT_DIR/scripts/ensure-thirdparty-submodules.sh" "${required_submodules[@]}"
+PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
+    "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" doctor \
+    --profile sdk-bindings \
+    --vulkan "$TERMIN_ENABLE_VULKAN" \
+    --init-submodules
 
 cmake_args=()
 if [[ -n "$CMAKE_GENERATOR_NAME" && ! -f "$BUILD_DIR/CMakeCache.txt" ]]; then
@@ -195,6 +191,11 @@ rm -rf "$INSTALL_STAGING_DIR"
 mkdir -p "$INSTALL_STAGING_DIR" "$SDK_PREFIX"
 cmake --install "$BUILD_DIR" --prefix "$INSTALL_STAGING_DIR"
 rsync -a --exclude '/lib/python/' "$INSTALL_STAGING_DIR"/ "$SDK_PREFIX"/
+
+PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
+    "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" write-artifacts \
+    --build-dir "$BUILD_DIR" \
+    --sdk-prefix "$SDK_PREFIX"
 
 echo ""
 echo "========================================"
