@@ -75,7 +75,8 @@ int main(int argc, char** argv) {
     SDL_Vulkan_GetInstanceExtensions(window, &ext_count, extensions.data());
 
     tgfx::VulkanDeviceCreateInfo info;
-    info.enable_validation = true;
+    const char* validation_env = std::getenv("TGFX2_VULKAN_VALIDATION");
+    info.enable_validation = validation_env && validation_env[0] == '1';
     info.instance_extensions = extensions;
     info.swapchain_width = kWidth;
     info.swapchain_height = kHeight;

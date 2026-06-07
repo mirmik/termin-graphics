@@ -309,6 +309,8 @@ if(BUILD_TGFX2_TESTS)
     enable_testing()
     set(TGFX2_WINDOW_SKIP_RE
         "GLFW init failed|Failed to init GLFW|Window creation failed|Failed to create GLFW window|No available video device|Vulkan support is either not configured in SDL")
+    set(TGFX2_VULKAN_RUNTIME_SKIP_RE
+        "Failed to create Vulkan device: Failed to create Vulkan instance|Failed to create Vulkan device: No Vulkan-capable GPU found")
 
     if(BUILD_TGFX2_WINDOW_TESTS)
         find_package(glfw3 QUIET)
@@ -373,6 +375,9 @@ if(BUILD_TGFX2_TESTS)
         target_link_libraries(tgfx2_vulkan_smoke PRIVATE termin_graphics2 Vulkan::Vulkan)
         termin_set_rpath_test(tgfx2_vulkan_smoke)
         add_test(NAME tgfx2_vulkan_smoke COMMAND tgfx2_vulkan_smoke)
+        set_tests_properties(tgfx2_vulkan_smoke PROPERTIES
+            TIMEOUT 20
+            SKIP_REGULAR_EXPRESSION "${TGFX2_VULKAN_RUNTIME_SKIP_RE}")
     endif()
 
     if(TGFX2_ENABLE_VULKAN AND BUILD_TGFX2_WINDOW_TESTS)

@@ -68,7 +68,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev libvulkan-dev libshaderc-dev
+          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev libvulkan-dev mesa-vulkan-drivers libshaderc-dev
 
       - name: Build
         run: ./build-sdk-cpp.sh
@@ -91,7 +91,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev libvulkan-dev libshaderc-dev
+          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev libvulkan-dev mesa-vulkan-drivers libshaderc-dev
 
       - uses: actions/download-artifact@v5
         with:

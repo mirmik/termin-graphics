@@ -317,9 +317,12 @@ int main(int argc, char** argv) {
 #else
     printf("--- tgfx2 Vulkan smoke test (offscreen) ---\n");
 
-    // Create Vulkan device (no surface — offscreen only)
+    // Create Vulkan device (no surface — offscreen only). Validation is
+    // opt-in so CI runners without VK_LAYER_KHRONOS_validation still exercise
+    // the runtime path when a Vulkan ICD is available.
     tgfx::VulkanDeviceCreateInfo info;
-    info.enable_validation = true;
+    const char* validation_env = std::getenv("TGFX2_VULKAN_VALIDATION");
+    info.enable_validation = validation_env && validation_env[0] == '1';
 
     std::unique_ptr<tgfx::IRenderDevice> device;
     try {
