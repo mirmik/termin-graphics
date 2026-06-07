@@ -6,6 +6,7 @@
 #   3. install-pip-packages.sh --target sdk/lib/python3.*/site-packages
 #      — populate bundled Python's site-packages from the pip packages
 #   4. build-sdk-wheels.sh   — export SDK-backed Python wheels into sdk/wheels
+#      (unless --no-wheels is passed)
 #
 # To install pip packages into your own user Python environment, run separately:
 #   ./install-pip-packages.sh
@@ -16,11 +17,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDK_PREFIX="${SDK_PREFIX:-$SCRIPT_DIR/sdk}"
 BUILD_DIR="${BUILD_DIR:-}"
 BUILD_TYPE="Release"
+BUILD_WHEELS=1
+STAGE_ARGS=()
 
 for arg in "$@"; do
     case "$arg" in
         --debug|-d)
             BUILD_TYPE="Debug"
+            STAGE_ARGS+=("$arg")
+            ;;
+        --no-wheels)
+            BUILD_WHEELS=0
             ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
@@ -42,6 +49,7 @@ for arg in "$@"; do
             echo "  --sdl             Enable SDL2 support (default for C/C++ stage)"
             echo "  --no-opengl       Disable OpenGL backend; keep Vulkan render/editor targets"
             echo "  --opengl          Enable desktop OpenGL targets (default)"
+            echo "  --no-wheels       Skip building SDK Python wheelhouse"
             echo "  --help, -h        Show this help"
             echo ""
             echo "Environment:"
@@ -51,6 +59,9 @@ for arg in "$@"; do
             echo "  TERMIN_CMAKE_GENERATOR or CMAKE_GENERATOR_NAME"
             echo "                    CMake generator for a new build dir (default: CMake default)"
             exit 0
+            ;;
+        *)
+            STAGE_ARGS+=("$arg")
             ;;
     esac
 done
@@ -163,14 +174,14 @@ echo "========================================"
 echo "  Stage 1/4: C/C++ libraries + Python bindings"
 echo "========================================"
 echo ""
-"$SCRIPT_DIR/build-sdk-bindings.sh" "$@"
+"$SCRIPT_DIR/build-sdk-bindings.sh" "${STAGE_ARGS[@]}"
 
 echo ""
 echo "========================================"
 echo "  Stage 2/4: C# bindings"
 echo "========================================"
 echo ""
-bash "$SCRIPT_DIR/build-sdk-csharp.sh" "$@"
+bash "$SCRIPT_DIR/build-sdk-csharp.sh" "${STAGE_ARGS[@]}"
 
 echo ""
 echo "========================================"
@@ -213,14 +224,23 @@ if [[ -d "$LEGACY_SDK_PYTHON" ]]; then
     rm -rf "$LEGACY_SDK_PYTHON"
 fi
 
-echo ""
-echo "========================================"
-echo "  Stage 4/4: Build SDK Python wheelhouse"
-echo "========================================"
-echo ""
-TERMIN_SDK="$SDK_PREFIX" \
-TERMIN_BINDINGS_DIR="$BUILD_DIR/bin" \
-    "$SCRIPT_DIR/build-sdk-wheels.sh" --force "$@"
+if [[ "$BUILD_WHEELS" -eq 1 ]]; then
+    echo ""
+    echo "========================================"
+    echo "  Stage 4/4: Build SDK Python wheelhouse"
+    echo "========================================"
+    echo ""
+    TERMIN_SDK="$SDK_PREFIX" \
+    TERMIN_BINDINGS_DIR="$BUILD_DIR/bin" \
+        "$SCRIPT_DIR/build-sdk-wheels.sh" --force "${STAGE_ARGS[@]}"
+else
+    echo ""
+    echo "========================================"
+    echo "  Stage 4/4: Build SDK Python wheelhouse"
+    echo "========================================"
+    echo ""
+    echo "Skipping SDK Python wheelhouse build (--no-wheels)."
+fi
 
 echo ""
 echo "========================================"
