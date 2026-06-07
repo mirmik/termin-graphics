@@ -16,6 +16,8 @@
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/i_command_list.hpp"
+#include "tgfx2/pipeline_cache.hpp"
+#include "tgfx2/render_context.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
 
 extern "C" {
@@ -88,6 +90,41 @@ FragmentOutput main()
     FragmentOutput output;
     output.color = float4(0.90, 0.05, 0.75, 1.0);
     return output;
+}
+)";
+
+static const char* slang_fsq_vertex_src = R"(
+struct VertexInput
+{
+    [[vk::location(0)]]
+    float2 position : POSITION;
+    [[vk::location(1)]]
+    float2 uv : TEXCOORD0;
+};
+
+struct VertexOutput
+{
+    float4 position : SV_Position;
+    [[vk::location(0)]]
+    float2 uv : TEXCOORD0;
+};
+
+[shader("vertex")]
+VertexOutput main(VertexInput input)
+{
+    VertexOutput output;
+    output.position = float4(input.position, 0.0, 1.0);
+    output.uv = float2(0.20, 0.80);
+    return output;
+}
+)";
+
+static const char* fsq_uv_fragment_src = R"(
+#version 450 core
+layout(location = 0) in vec2 v_uv;
+layout(location = 0) out vec4 FragColor;
+void main() {
+    FragColor = vec4(v_uv, 0.0, 1.0);
 }
 )";
 
@@ -209,6 +246,68 @@ static bool run_shaderc(
         return false;
     }
     return true;
+}
+
+static bool render_fsq_artifact_smoke(tgfx::IRenderDevice& device) {
+    constexpr uint32_t kWidth = 64;
+    constexpr uint32_t kHeight = 64;
+
+    tgfx::TextureDesc rt_desc;
+    rt_desc.width = kWidth;
+    rt_desc.height = kHeight;
+    rt_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    rt_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
+    tgfx::TextureHandle rt = device.create_texture(rt_desc);
+    if (!rt) {
+        fprintf(stderr, "Failed to create FSQ Slang artifact render target\n");
+        return false;
+    }
+
+    tgfx::ShaderDesc fs_desc;
+    fs_desc.stage = tgfx::ShaderStage::Fragment;
+    fs_desc.source = fsq_uv_fragment_src;
+    fs_desc.debug_name = "termin-engine-fsq-artifact-smoke:fragment";
+    tgfx::ShaderHandle fs = device.create_shader(fs_desc);
+    if (!fs) {
+        fprintf(stderr, "Failed to create FSQ Slang artifact fragment shader\n");
+        device.destroy(rt);
+        return false;
+    }
+
+    {
+        tgfx::PipelineCache cache(device);
+        tgfx::RenderContext2 ctx(device, cache);
+        ctx.begin_frame();
+
+        float clear[] = {0.0f, 0.0f, 0.0f, 1.0f};
+        ctx.begin_pass(rt, {}, clear);
+        ctx.set_viewport(0, 0, kWidth, kHeight);
+        ctx.set_depth_test(false);
+        ctx.set_depth_write(false);
+        ctx.set_blend(false);
+        ctx.set_cull(tgfx::CullMode::None);
+        ctx.bind_shader({}, fs);
+        ctx.draw_fullscreen_quad();
+        ctx.end_pass();
+        ctx.end_frame();
+    }
+
+    device.wait_idle();
+
+    float center_pixel[4] = {};
+    bool read_ok = device.read_pixel_rgba8(rt, kWidth / 2, kHeight / 2, center_pixel);
+    printf("FSQ Slang artifact center pixel: (%.2f %.2f %.2f %.2f)\n",
+           center_pixel[0], center_pixel[1], center_pixel[2], center_pixel[3]);
+
+    const bool matches_artifact_uv =
+        read_ok &&
+        center_pixel[0] > 0.15f && center_pixel[0] < 0.30f &&
+        center_pixel[1] > 0.70f && center_pixel[1] < 0.90f &&
+        center_pixel[2] < 0.10f;
+
+    device.destroy(fs);
+    device.destroy(rt);
+    return matches_artifact_uv;
 }
 
 int main(int argc, char** argv) {
@@ -523,15 +622,19 @@ int main(int argc, char** argv) {
 
         std::filesystem::path vertex_slang = artifact_root / "matrix.vert.slang";
         std::filesystem::path fragment_slang = artifact_root / "matrix.frag.slang";
+        std::filesystem::path fsq_slang = artifact_root / "fsq.vert.slang";
         std::filesystem::path vertex_spv = artifact_dir / (std::string(artifact_uuid) + ".vert.spv");
         std::filesystem::path fragment_spv = artifact_dir / (std::string(artifact_uuid) + ".frag.spv");
+        std::filesystem::path fsq_spv = artifact_dir / "termin-engine-fsq.vert.spv";
 
         if (slang_artifact_ok) {
             slang_artifact_ok =
                 write_text_file(vertex_slang, slang_matrix_vertex_src) &&
                 write_text_file(fragment_slang, slang_matrix_fragment_src) &&
+                write_text_file(fsq_slang, slang_fsq_vertex_src) &&
                 run_shaderc(*shaderc, *slangc, "vertex", vertex_slang, vertex_spv) &&
-                run_shaderc(*shaderc, *slangc, "fragment", fragment_slang, fragment_spv);
+                run_shaderc(*shaderc, *slangc, "fragment", fragment_slang, fragment_spv) &&
+                run_shaderc(*shaderc, *slangc, "vertex", fsq_slang, fsq_spv);
         }
 
         tgfx::TextureHandle slang_rt_tex;
@@ -681,7 +784,6 @@ int main(int argc, char** argv) {
             }
         }
 
-        termin::tgfx2_set_shader_artifact_root("");
         if (matrix_set) device->destroy(matrix_set);
         if (slang_rt_tex) device->destroy(slang_rt_tex);
         if (matrix_ubo) device->destroy(matrix_ubo);
@@ -690,6 +792,13 @@ int main(int argc, char** argv) {
         if (!tc_shader_handle_is_invalid(slang_shader_handle)) {
             tc_shader_destroy(slang_shader_handle);
         }
+
+        if (slang_artifact_ok && !render_fsq_artifact_smoke(*device)) {
+            fprintf(stderr, "FSQ Slang artifact render smoke failed\n");
+            slang_artifact_ok = false;
+        }
+
+        termin::tgfx2_set_shader_artifact_root("");
         std::filesystem::remove_all(artifact_root, fs_ec);
         if (fs_ec) {
             fprintf(stderr, "Failed to remove Slang artifact temp root: %s (%s)\n",
