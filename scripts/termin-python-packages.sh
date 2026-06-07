@@ -14,12 +14,12 @@ TERMIN_PYTHON_PACKAGES=(
     termin-graphics
     termin-materials
     termin-gui
+    termin-inspect
+    termin-scene
     termin-display
     termin-csg
     termin-modules
-    termin-inspect
     termin-components/termin-components-kinematic
-    termin-scene
     termin-lighting
     termin-components/termin-components-mesh
     termin-input
