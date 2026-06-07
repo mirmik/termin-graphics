@@ -3,6 +3,7 @@
 #include "tgfx2/opengl/opengl_type_conversions.hpp"
 #include "tgfx2/i_command_list.hpp"
 #include "tgfx2/internal/shader_preprocess.hpp"
+#include "tgfx2/tc_shader_bridge.hpp"
 
 #include <stdexcept>
 #include <string>
@@ -289,6 +290,23 @@ std::vector<uint8_t> normalize_tc_texture_pixels(const tc_texture* tex, PixelFor
     return pixels;
 }
 
+bool load_opengl_shader_artifact_source(
+    const char* shader_uuid,
+    ShaderStage stage,
+    std::string& out_source
+) {
+    std::vector<uint8_t> bytes;
+    if (!termin::tgfx2_load_shader_artifact_for_backend(
+            shader_uuid,
+            BackendType::OpenGL,
+            stage,
+            bytes)) {
+        return false;
+    }
+    out_source.assign(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    return true;
+}
+
 } // anonymous namespace
 
 TextureHandle OpenGLRenderDevice::ensure_tc_texture(tc_texture* tex) {
@@ -532,7 +550,9 @@ bool OpenGLRenderDevice::ensure_tc_shader(
         ShaderDesc vs_desc;
         vs_desc.stage = ShaderStage::Vertex;
         vs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":vertex";
-        vs_desc.source = shader->vertex_source;
+        if (!load_opengl_shader_artifact_source(shader->uuid, vs_desc.stage, vs_desc.source)) {
+            vs_desc.source = shader->vertex_source;
+        }
         vs = create_shader(vs_desc);
         if (!vs) {
             tc_log_error("OpenGLRenderDevice::ensure_tc_shader: VS compile failed for '%s'",
@@ -544,7 +564,9 @@ bool OpenGLRenderDevice::ensure_tc_shader(
     ShaderDesc fs_desc;
     fs_desc.stage = ShaderStage::Fragment;
     fs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":fragment";
-    fs_desc.source = shader->fragment_source;
+    if (!load_opengl_shader_artifact_source(shader->uuid, fs_desc.stage, fs_desc.source)) {
+        fs_desc.source = shader->fragment_source;
+    }
     ShaderHandle fs = create_shader(fs_desc);
     if (!fs) {
         if (vs) destroy(vs);

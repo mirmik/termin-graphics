@@ -42,15 +42,63 @@ static const char* stage_extension(tgfx::ShaderStage stage) {
     return "spv";
 }
 
-bool tgfx2_load_shader_artifact(
+static const char* backend_directory(tgfx::BackendType backend) {
+    switch (backend) {
+        case tgfx::BackendType::OpenGL: return "opengl";
+        case tgfx::BackendType::Vulkan: return "vulkan";
+        case tgfx::BackendType::D3D11: return "d3d11";
+        case tgfx::BackendType::Metal:
+        case tgfx::BackendType::Null:
+            return "";
+    }
+    return "";
+}
+
+static const char* backend_stage_suffix(
+    tgfx::BackendType backend,
+    tgfx::ShaderStage stage
+) {
+    switch (backend) {
+        case tgfx::BackendType::OpenGL:
+        case tgfx::BackendType::Vulkan:
+            return stage_extension(stage);
+        case tgfx::BackendType::D3D11:
+            switch (stage) {
+                case tgfx::ShaderStage::Vertex: return "vs";
+                case tgfx::ShaderStage::Fragment: return "ps";
+                case tgfx::ShaderStage::Geometry: return "gs";
+                case tgfx::ShaderStage::Compute: return "cs";
+            }
+            return "";
+        case tgfx::BackendType::Metal:
+        case tgfx::BackendType::Null:
+            return "";
+    }
+    return "";
+}
+
+static const char* backend_artifact_extension(tgfx::BackendType backend) {
+    switch (backend) {
+        case tgfx::BackendType::OpenGL: return "glsl";
+        case tgfx::BackendType::Vulkan: return "spv";
+        case tgfx::BackendType::D3D11: return "cso";
+        case tgfx::BackendType::Metal:
+        case tgfx::BackendType::Null:
+            return "";
+    }
+    return "";
+}
+
+bool tgfx2_shader_artifact_path(
     const char* shader_uuid,
+    tgfx::BackendType backend,
     tgfx::ShaderStage stage,
-    std::vector<uint8_t>& out
+    std::string& out
 ) {
     const char* root = tgfx2_get_shader_artifact_root();
     if (!shader_uuid || shader_uuid[0] == '\0') {
         tc_log(TC_LOG_ERROR,
-               "tc_shader_ensure_tgfx2: cannot load SPIR-V artifact, shader_uuid='%s'",
+               "tgfx2_shader_artifact_path: missing shader_uuid='%s'",
                shader_uuid ? shader_uuid : "<null>");
         return false;
     }
@@ -58,21 +106,56 @@ bool tgfx2_load_shader_artifact(
         return false;
     }
 
-    std::string path = std::string(root) + "/shaders/vulkan/"
-        + shader_uuid + "." + stage_extension(stage) + ".spv";
+    const char* backend_dir = backend_directory(backend);
+    const char* stage_suffix = backend_stage_suffix(backend, stage);
+    const char* artifact_ext = backend_artifact_extension(backend);
+    if (!backend_dir[0] || !stage_suffix[0] || !artifact_ext[0]) {
+        tc_log(TC_LOG_ERROR,
+               "tgfx2_shader_artifact_path: unsupported backend/stage for shader '%s'",
+               shader_uuid);
+        return false;
+    }
+
+    out = std::string(root) + "/shaders/" + backend_dir + "/"
+        + shader_uuid + "." + stage_suffix + "." + artifact_ext;
+    return true;
+}
+
+bool tgfx2_load_shader_artifact_for_backend(
+    const char* shader_uuid,
+    tgfx::BackendType backend,
+    tgfx::ShaderStage stage,
+    std::vector<uint8_t>& out
+) {
+    std::string path;
+    if (!tgfx2_shader_artifact_path(shader_uuid, backend, stage, path)) {
+        return false;
+    }
 
     std::ifstream in(path, std::ios::binary);
     if (!in) {
-        tc_log(TC_LOG_ERROR, "tc_shader_ensure_tgfx2: missing shader artifact '%s'", path.c_str());
+        tc_log(TC_LOG_ERROR, "tgfx2_load_shader_artifact: missing shader artifact '%s'", path.c_str());
         return false;
     }
 
     out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
     if (out.empty()) {
-        tc_log(TC_LOG_ERROR, "tc_shader_ensure_tgfx2: empty shader artifact '%s'", path.c_str());
+        tc_log(TC_LOG_ERROR, "tgfx2_load_shader_artifact: empty shader artifact '%s'", path.c_str());
         return false;
     }
     return true;
+}
+
+bool tgfx2_load_shader_artifact(
+    const char* shader_uuid,
+    tgfx::ShaderStage stage,
+    std::vector<uint8_t>& out
+) {
+    return tgfx2_load_shader_artifact_for_backend(
+        shader_uuid,
+        tgfx::BackendType::Vulkan,
+        stage,
+        out);
 }
 
 bool tc_shader_ensure_tgfx2(

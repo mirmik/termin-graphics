@@ -20,6 +20,7 @@
 #include "tgfx2/handles.hpp"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 extern "C" {
@@ -48,6 +49,16 @@ TGFX2_API bool tc_shader_ensure_tgfx2(
 
 TGFX2_API void tgfx2_set_shader_artifact_root(const char* root);
 TGFX2_API const char* tgfx2_get_shader_artifact_root(void);
+TGFX2_API bool tgfx2_shader_artifact_path(
+    const char* shader_uuid,
+    tgfx::BackendType backend,
+    tgfx::ShaderStage stage,
+    std::string& out);
+TGFX2_API bool tgfx2_load_shader_artifact_for_backend(
+    const char* shader_uuid,
+    tgfx::BackendType backend,
+    tgfx::ShaderStage stage,
+    std::vector<uint8_t>& out);
 TGFX2_API bool tgfx2_load_shader_artifact(
     const char* shader_uuid,
     tgfx::ShaderStage stage,
