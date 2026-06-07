@@ -37,3 +37,15 @@ function(termin_set_rpath_pip target)
         )
     endif()
 endfunction()
+
+# For build-tree test executables. Keep the current build's shared libraries
+# ahead of any SDK prefix libraries so tests do not accidentally validate a
+# previously installed SDK.
+function(termin_set_rpath_test target)
+    if(NOT WIN32)
+        set_target_properties(${target} PROPERTIES
+            BUILD_WITH_INSTALL_RPATH FALSE
+            BUILD_RPATH "${CMAKE_BINARY_DIR}/bin"
+        )
+    endif()
+endfunction()

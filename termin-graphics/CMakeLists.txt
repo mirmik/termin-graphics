@@ -284,11 +284,13 @@ if(BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
     )
     target_link_libraries(tgfx_tests PRIVATE termin_graphics)
+    termin_set_rpath_test(tgfx_tests)
 
     add_test(NAME tgfx_tests COMMAND tgfx_tests)
 
     add_executable(tgfx_mesh_test tests/test_mesh.c)
     target_link_libraries(tgfx_mesh_test PRIVATE termin_graphics)
+    termin_set_rpath_test(tgfx_mesh_test)
     add_test(NAME tgfx_mesh_test COMMAND tgfx_mesh_test)
 
     add_custom_target(termin_graphics_run_tests
@@ -325,6 +327,7 @@ if(BUILD_TGFX2_TESTS)
 
         add_executable(tgfx2_smoke tests/test_tgfx2_smoke.cpp)
         target_link_libraries(tgfx2_smoke PRIVATE termin_graphics2 glfw)
+        termin_set_rpath_test(tgfx2_smoke)
         add_test(NAME tgfx2_smoke COMMAND tgfx2_smoke)
         set_tests_properties(tgfx2_smoke PROPERTIES
             TIMEOUT 10
@@ -332,6 +335,7 @@ if(BUILD_TGFX2_TESTS)
 
         add_executable(tgfx2_sdf_test tests/test_tgfx2_sdf.cpp)
         target_link_libraries(tgfx2_sdf_test PRIVATE termin_graphics2 glfw)
+        termin_set_rpath_test(tgfx2_sdf_test)
         add_test(NAME tgfx2_sdf_test COMMAND tgfx2_sdf_test)
         set_tests_properties(tgfx2_sdf_test PROPERTIES
             TIMEOUT 10
@@ -339,6 +343,7 @@ if(BUILD_TGFX2_TESTS)
 
         add_executable(tgfx2_render_context_test tests/test_render_context2.cpp)
         target_link_libraries(tgfx2_render_context_test PRIVATE termin_graphics2 glfw)
+        termin_set_rpath_test(tgfx2_render_context_test)
         add_test(NAME tgfx2_render_context_test COMMAND tgfx2_render_context_test)
         set_tests_properties(tgfx2_render_context_test PROPERTIES
             TIMEOUT 10
@@ -355,6 +360,10 @@ if(BUILD_TGFX2_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
     )
     target_link_libraries(tgfx2_device_factory_test PRIVATE termin_graphics2)
+    if(TGFX2_ENABLE_VULKAN)
+        target_compile_definitions(tgfx2_device_factory_test PRIVATE TGFX2_HAS_VULKAN)
+    endif()
+    termin_set_rpath_test(tgfx2_device_factory_test)
     add_test(NAME tgfx2_device_factory_test COMMAND tgfx2_device_factory_test)
 
     # Vulkan smoke test (no GLFW needed — offscreen)
@@ -362,6 +371,7 @@ if(BUILD_TGFX2_TESTS)
         add_executable(tgfx2_vulkan_smoke tests/test_tgfx2_vulkan_smoke.cpp)
         target_compile_definitions(tgfx2_vulkan_smoke PRIVATE TGFX2_HAS_VULKAN)
         target_link_libraries(tgfx2_vulkan_smoke PRIVATE termin_graphics2 Vulkan::Vulkan)
+        termin_set_rpath_test(tgfx2_vulkan_smoke)
         add_test(NAME tgfx2_vulkan_smoke COMMAND tgfx2_vulkan_smoke)
     endif()
 
@@ -387,6 +397,7 @@ if(BUILD_TGFX2_TESTS)
             target_compile_definitions(tgfx2_vulkan_window PRIVATE TGFX2_HAS_VULKAN)
             target_link_libraries(tgfx2_vulkan_window
                 PRIVATE termin_graphics2 Vulkan::Vulkan ${SDL2_SMOKE_LIBRARY})
+            termin_set_rpath_test(tgfx2_vulkan_window)
             add_test(NAME tgfx2_vulkan_window COMMAND tgfx2_vulkan_window)
             set_tests_properties(tgfx2_vulkan_window PROPERTIES
                 TIMEOUT 10
