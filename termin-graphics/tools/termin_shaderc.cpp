@@ -53,12 +53,10 @@ static std::string slang_stage_for_stage(const std::string& stage) {
 
 static std::optional<std::string> slang_matrix_layout_arg(const std::string& layout) {
     if (layout == "column" || layout == "col" || layout == "column-major" || layout == "col-major") {
-        // Termin's option names target the emitted artifact layout. Slang 2026.5.2
-        // emits GLSL column_major / SPIR-V ColMajor when invoked with this flag.
-        return "-matrix-layout-row-major";
+        return "-matrix-layout-column-major";
     }
     if (layout == "row" || layout == "row-major") {
-        return "-matrix-layout-column-major";
+        return "-matrix-layout-row-major";
     }
     return std::nullopt;
 }

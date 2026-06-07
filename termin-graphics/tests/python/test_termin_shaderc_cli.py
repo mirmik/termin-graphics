@@ -101,7 +101,7 @@ def test_termin_shaderc_invokes_fake_slangc_for_vulkan(tmp_path: Path) -> None:
         "vertex",
         "-target",
         "spirv",
-        "-matrix-layout-row-major",
+        "-matrix-layout-column-major",
         "-profile",
         "spirv_1_5",
         "-o",
@@ -167,8 +167,8 @@ def test_termin_shaderc_can_override_slang_matrix_layout(tmp_path: Path) -> None
 
     assert result.returncode == 0, result.stderr
     slang_args = json.loads(args_path.read_text(encoding="utf-8"))
-    assert "-matrix-layout-column-major" in slang_args
-    assert "-matrix-layout-row-major" not in slang_args
+    assert "-matrix-layout-row-major" in slang_args
+    assert "-matrix-layout-column-major" not in slang_args
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")

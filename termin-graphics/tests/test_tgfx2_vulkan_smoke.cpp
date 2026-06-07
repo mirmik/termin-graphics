@@ -1,15 +1,26 @@
 // Smoke test for tgfx2 Vulkan backend: offscreen render to texture.
 // No swapchain — we render to a texture and read back pixels.
+#include <array>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <optional>
 #include <span>
+#include <string>
 #include <vector>
 
 #include "tgfx2/enums.hpp"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/i_command_list.hpp"
+#include "tgfx2/tc_shader_bridge.hpp"
+
+extern "C" {
+#include "tgfx/resources/tc_shader_registry.h"
+}
 
 #ifdef TGFX2_HAS_VULKAN
 #include "tgfx2/vulkan/vulkan_render_device.hpp"
@@ -35,7 +46,172 @@ void main() {
 }
 )";
 
-int main() {
+static const char* slang_matrix_vertex_src = R"(
+struct TransformUBO
+{
+    float4x4 mvp;
+};
+
+[[vk::binding(0, 0)]]
+ConstantBuffer<TransformUBO> u_transform;
+
+struct VertexInput
+{
+    [[vk::location(0)]]
+    float2 position : POSITION;
+};
+
+struct VertexOutput
+{
+    float4 position : SV_Position;
+};
+
+[shader("vertex")]
+VertexOutput main(VertexInput input)
+{
+    VertexOutput output;
+    output.position = mul(u_transform.mvp, float4(input.position, 0.0, 1.0));
+    return output;
+}
+)";
+
+static const char* slang_matrix_fragment_src = R"(
+struct FragmentOutput
+{
+    [[vk::location(0)]]
+    float4 color : SV_Target0;
+};
+
+[shader("fragment")]
+FragmentOutput main()
+{
+    FragmentOutput output;
+    output.color = float4(0.90, 0.05, 0.75, 1.0);
+    return output;
+}
+)";
+
+static const char* invalid_fallback_src = R"(
+#version 450 core
+#error Vulkan Slang artifact smoke must not compile fallback source
+void main() {}
+)";
+
+static bool write_text_file(const std::filesystem::path& path, const char* text) {
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        fprintf(stderr, "Failed to open file for writing: %s\n", path.string().c_str());
+        return false;
+    }
+    out << text;
+    if (!out) {
+        fprintf(stderr, "Failed to write file: %s\n", path.string().c_str());
+        return false;
+    }
+    return true;
+}
+
+static bool is_existing_file(const std::filesystem::path& path) {
+    std::error_code ec;
+    return std::filesystem::exists(path, ec) && !std::filesystem::is_directory(path, ec);
+}
+
+static std::vector<std::string> split_paths(const char* value) {
+    std::vector<std::string> paths;
+    if (!value || value[0] == '\0') return paths;
+    std::string text(value);
+    size_t start = 0;
+    while (start <= text.size()) {
+        size_t end = text.find(':', start);
+        std::string part = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        if (!part.empty()) paths.push_back(part);
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    return paths;
+}
+
+static std::optional<std::filesystem::path> find_on_path(const char* exe_name) {
+    for (const std::string& dir : split_paths(std::getenv("PATH"))) {
+        std::filesystem::path candidate = std::filesystem::path(dir) / exe_name;
+        if (is_existing_file(candidate)) return candidate;
+    }
+    return std::nullopt;
+}
+
+static std::optional<std::filesystem::path> resolve_slangc() {
+    if (const char* env = std::getenv("TERMIN_SLANGC")) {
+        if (env[0] != '\0' && is_existing_file(env)) {
+            return std::filesystem::path(env);
+        }
+    }
+    return find_on_path("slangc");
+}
+
+static std::optional<std::filesystem::path> resolve_termin_shaderc(const char* argv0) {
+    if (const char* env = std::getenv("TERMIN_SHADERC")) {
+        if (env[0] != '\0' && is_existing_file(env)) {
+            return std::filesystem::path(env);
+        }
+    }
+
+    std::vector<std::filesystem::path> candidates;
+    if (argv0 && argv0[0] != '\0') {
+        std::error_code ec;
+        std::filesystem::path exe_dir = std::filesystem::absolute(argv0, ec).parent_path();
+        if (!ec) {
+            candidates.push_back(exe_dir / "termin_shaderc");
+        }
+    }
+    if (const char* sdk = std::getenv("TERMIN_SDK")) {
+        if (sdk[0] != '\0') {
+            candidates.push_back(std::filesystem::path(sdk) / "bin" / "termin_shaderc");
+        }
+    }
+    candidates.push_back(std::filesystem::current_path() / "sdk" / "bin" / "termin_shaderc");
+
+    for (const auto& candidate : candidates) {
+        if (is_existing_file(candidate)) return candidate;
+    }
+    return find_on_path("termin_shaderc");
+}
+
+static std::string quote_arg(const std::filesystem::path& value) {
+    std::string text = value.string();
+    std::string out = "'";
+    for (char ch : text) {
+        if (ch == '\'') {
+            out += "'\\''";
+        } else {
+            out.push_back(ch);
+        }
+    }
+    out.push_back('\'');
+    return out;
+}
+
+static bool run_shaderc(
+    const std::filesystem::path& shaderc,
+    const std::filesystem::path& slangc,
+    const char* stage,
+    const std::filesystem::path& input,
+    const std::filesystem::path& output)
+{
+    std::string cmd =
+        quote_arg(shaderc) +
+        " compile --language slang --target vulkan --stage " + stage +
+        " --entry main --input " + quote_arg(input) +
+        " --output " + quote_arg(output) +
+        " --slangc " + quote_arg(slangc);
+    int rc = std::system(cmd.c_str());
+    if (rc != 0) {
+        fprintf(stderr, "termin_shaderc failed for %s with status %d\n", input.string().c_str(), rc);
+        return false;
+    }
+    return true;
+}
+
+int main(int argc, char** argv) {
 #ifndef TGFX2_HAS_VULKAN
     printf("Vulkan backend not compiled, skipping test\n");
     return 0;
@@ -320,6 +496,207 @@ int main() {
     bool center_drawn = (pixels[center] > 30 || pixels[center+1] > 30 || pixels[center+2] > 60);
     bool corner_is_blue = (pixels[0] < 10 && pixels[1] < 10 && pixels[2] > 40);
 
+    // --- Generated Slang artifact smoke ---
+    bool slang_artifact_ok = true;
+    auto slangc = resolve_slangc();
+    auto shaderc = resolve_termin_shaderc(argc > 0 ? argv[0] : nullptr);
+    if (!slangc || !shaderc) {
+        printf("Slang Vulkan artifact smoke: skipped (termin_shaderc=%s, slangc=%s)\n",
+               shaderc ? shaderc->string().c_str() : "<missing>",
+               slangc ? slangc->string().c_str() : "<missing>");
+    } else {
+        printf("Slang Vulkan artifact smoke: termin_shaderc=%s, slangc=%s\n",
+               shaderc->string().c_str(), slangc->string().c_str());
+
+        const char* artifact_uuid = "termin-vulkan-slang-matrix-smoke";
+        const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+        std::filesystem::path artifact_root =
+            std::filesystem::temp_directory_path() /
+            ("termin-vulkan-slang-artifact-smoke-" + std::to_string(now));
+        std::filesystem::path artifact_dir = artifact_root / "shaders" / "vulkan";
+        std::error_code fs_ec;
+        if (!std::filesystem::create_directories(artifact_dir, fs_ec) && fs_ec) {
+            fprintf(stderr, "Failed to create Slang artifact directory: %s (%s)\n",
+                    artifact_dir.string().c_str(), fs_ec.message().c_str());
+            slang_artifact_ok = false;
+        }
+
+        std::filesystem::path vertex_slang = artifact_root / "matrix.vert.slang";
+        std::filesystem::path fragment_slang = artifact_root / "matrix.frag.slang";
+        std::filesystem::path vertex_spv = artifact_dir / (std::string(artifact_uuid) + ".vert.spv");
+        std::filesystem::path fragment_spv = artifact_dir / (std::string(artifact_uuid) + ".frag.spv");
+
+        if (slang_artifact_ok) {
+            slang_artifact_ok =
+                write_text_file(vertex_slang, slang_matrix_vertex_src) &&
+                write_text_file(fragment_slang, slang_matrix_fragment_src) &&
+                run_shaderc(*shaderc, *slangc, "vertex", vertex_slang, vertex_spv) &&
+                run_shaderc(*shaderc, *slangc, "fragment", fragment_slang, fragment_spv);
+        }
+
+        tgfx::TextureHandle slang_rt_tex;
+        tgfx::BufferHandle slang_vb;
+        tgfx::BufferHandle matrix_ubo;
+        tgfx::ResourceSetHandle matrix_set;
+        tgfx::PipelineHandle slang_pipeline;
+        tc_shader_handle slang_shader_handle = tc_shader_handle_invalid();
+
+        if (slang_artifact_ok) {
+            termin::tgfx2_set_shader_artifact_root(artifact_root.string().c_str());
+            slang_shader_handle = tc_shader_from_sources_ex(
+                invalid_fallback_src,
+                invalid_fallback_src,
+                nullptr,
+                "tgfx2 Vulkan Slang matrix smoke",
+                nullptr,
+                artifact_uuid,
+                TC_SHADER_LANGUAGE_SLANG,
+                TC_SHADER_ARTIFACT_REQUIRED
+            );
+
+            tc_shader* slang_shader = tc_shader_get(slang_shader_handle);
+            tgfx::ShaderHandle slang_vs;
+            tgfx::ShaderHandle slang_fs;
+            if (!slang_shader) {
+                fprintf(stderr, "Failed to create Vulkan Slang smoke tc_shader\n");
+                slang_artifact_ok = false;
+            } else if (!vk_device->ensure_tc_shader(slang_shader, &slang_vs, &slang_fs)) {
+                fprintf(stderr, "Failed to load generated Vulkan Slang artifacts\n");
+                slang_artifact_ok = false;
+            } else {
+                tgfx::PipelineDesc slang_pipe_desc;
+                slang_pipe_desc.vertex_shader = slang_vs;
+                slang_pipe_desc.fragment_shader = slang_fs;
+                slang_pipe_desc.topology = tgfx::PrimitiveTopology::TriangleList;
+                slang_pipe_desc.depth_stencil.depth_test = false;
+                slang_pipe_desc.depth_stencil.depth_write = false;
+                slang_pipe_desc.depth_format = tgfx::PixelFormat::Undefined;
+                slang_pipe_desc.raster.cull = tgfx::CullMode::None;
+                slang_pipe_desc.color_formats = {tgfx::PixelFormat::RGBA8_UNorm};
+
+                tgfx::VertexBufferLayout slang_layout;
+                slang_layout.stride = 2 * sizeof(float);
+                slang_layout.attributes = {
+                    {0, tgfx::VertexFormat::Float2, 0},
+                };
+                slang_pipe_desc.vertex_layouts.push_back(slang_layout);
+                slang_pipeline = device->create_pipeline(slang_pipe_desc);
+
+                const float slang_vertices[] = {
+                    -0.25f, -0.25f,
+                     0.25f, -0.25f,
+                     0.00f,  0.25f,
+                };
+                tgfx::BufferDesc slang_vb_desc;
+                slang_vb_desc.size = sizeof(slang_vertices);
+                slang_vb_desc.usage = tgfx::BufferUsage::Vertex | tgfx::BufferUsage::CopyDst;
+                slang_vb = device->create_buffer(slang_vb_desc);
+                device->upload_buffer(
+                    slang_vb,
+                    std::span<const uint8_t>(
+                        reinterpret_cast<const uint8_t*>(slang_vertices),
+                        sizeof(slang_vertices)));
+
+                const std::array<float, 16> mvp_column_major = {
+                    1.0f, 0.0f, 0.0f, 0.0f,
+                    0.0f, 1.0f, 0.0f, 0.0f,
+                    0.0f, 0.0f, 1.0f, 0.0f,
+                   -0.5f, 0.0f, 0.0f, 1.0f,
+                };
+                tgfx::BufferDesc ubo_desc;
+                ubo_desc.size = sizeof(mvp_column_major);
+                ubo_desc.usage = tgfx::BufferUsage::Uniform | tgfx::BufferUsage::CopyDst;
+                ubo_desc.cpu_visible = true;
+                matrix_ubo = device->create_buffer(ubo_desc);
+                device->upload_buffer(
+                    matrix_ubo,
+                    std::span<const uint8_t>(
+                        reinterpret_cast<const uint8_t*>(mvp_column_major.data()),
+                        sizeof(mvp_column_major)));
+
+                tgfx::ResourceBinding matrix_binding;
+                matrix_binding.kind = tgfx::ResourceBinding::Kind::UniformBuffer;
+                matrix_binding.binding = 0;
+                matrix_binding.buffer = matrix_ubo;
+                matrix_binding.range = sizeof(mvp_column_major);
+                tgfx::ResourceSetDesc matrix_set_desc;
+                matrix_set_desc.bindings.push_back(matrix_binding);
+                matrix_set = device->create_resource_set(matrix_set_desc);
+
+                tgfx::TextureDesc slang_rt_desc;
+                slang_rt_desc.width = 128;
+                slang_rt_desc.height = 128;
+                slang_rt_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+                slang_rt_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
+                slang_rt_tex = device->create_texture(slang_rt_desc);
+
+                if (!slang_pipeline || !slang_vb || !matrix_ubo || !matrix_set || !slang_rt_tex) {
+                    fprintf(stderr, "Failed to create Vulkan Slang smoke resources\n");
+                    slang_artifact_ok = false;
+                } else {
+                    auto slang_cmd = device->create_command_list();
+                    slang_cmd->begin();
+
+                    tgfx::RenderPassDesc slang_pass;
+                    tgfx::ColorAttachmentDesc slang_color;
+                    slang_color.texture = slang_rt_tex;
+                    slang_color.load = tgfx::LoadOp::Clear;
+                    slang_color.clear_color[0] = 0.0f;
+                    slang_color.clear_color[1] = 0.0f;
+                    slang_color.clear_color[2] = 0.0f;
+                    slang_color.clear_color[3] = 1.0f;
+                    slang_pass.colors.push_back(slang_color);
+
+                    slang_cmd->begin_render_pass(slang_pass);
+                    slang_cmd->bind_pipeline(slang_pipeline);
+                    slang_cmd->bind_resource_set(matrix_set);
+                    slang_cmd->bind_vertex_buffer(0, slang_vb);
+                    slang_cmd->draw(3);
+                    slang_cmd->end_render_pass();
+
+                    slang_cmd->end();
+                    device->submit(*slang_cmd);
+                    device->wait_idle();
+
+                    float left_pixel[4] = {};
+                    float center_pixel[4] = {};
+                    bool left_read_ok = device->read_pixel_rgba8(slang_rt_tex, 32, 64, left_pixel);
+                    bool center_read_ok = device->read_pixel_rgba8(slang_rt_tex, 64, 64, center_pixel);
+                    printf("Slang matrix left pixel: (%.2f %.2f %.2f %.2f), center: (%.2f %.2f %.2f %.2f)\n",
+                           left_pixel[0], left_pixel[1], left_pixel[2], left_pixel[3],
+                           center_pixel[0], center_pixel[1], center_pixel[2], center_pixel[3]);
+
+                    const bool left_is_shader_color =
+                        left_read_ok &&
+                        left_pixel[0] > 0.70f &&
+                        left_pixel[1] < 0.20f &&
+                        left_pixel[2] > 0.55f;
+                    const bool center_is_clear =
+                        center_read_ok &&
+                        center_pixel[0] < 0.20f &&
+                        center_pixel[1] < 0.20f &&
+                        center_pixel[2] < 0.20f;
+                    slang_artifact_ok = left_is_shader_color && center_is_clear;
+                }
+            }
+        }
+
+        termin::tgfx2_set_shader_artifact_root("");
+        if (matrix_set) device->destroy(matrix_set);
+        if (slang_rt_tex) device->destroy(slang_rt_tex);
+        if (matrix_ubo) device->destroy(matrix_ubo);
+        if (slang_vb) device->destroy(slang_vb);
+        if (slang_pipeline) device->destroy(slang_pipeline);
+        if (!tc_shader_handle_is_invalid(slang_shader_handle)) {
+            tc_shader_destroy(slang_shader_handle);
+        }
+        std::filesystem::remove_all(artifact_root, fs_ec);
+        if (fs_ec) {
+            fprintf(stderr, "Failed to remove Slang artifact temp root: %s (%s)\n",
+                    artifact_root.string().c_str(), fs_ec.message().c_str());
+        }
+    }
+
     // Cleanup
     cmd.reset();
     device->destroy(readback_buf);
@@ -330,8 +707,9 @@ int main() {
     device->destroy(fs);
     device.reset();
 
-    printf("\nCenter drawn: %d, Corner is blue: %d\n", center_drawn, corner_is_blue);
-    if (center_drawn && corner_is_blue) {
+    printf("\nCenter drawn: %d, Corner is blue: %d, Slang artifacts: %d\n",
+           center_drawn, corner_is_blue, slang_artifact_ok);
+    if (center_drawn && corner_is_blue && slang_artifact_ok) {
         printf("VULKAN SMOKE TEST PASSED\n");
         return 0;
     } else {
