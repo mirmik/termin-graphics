@@ -8,6 +8,23 @@ env:
   BUILD_TYPE: Release
 
 jobs:
+  # ── 0. Python lint ─────────────────────────────────────────────
+  lint-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Run Python lint
+        run: ./run-lint-python.sh --no-venv
+
   # ── 1. Build C++ libraries ───────────────────────────────────────
   build-cpp-libs:
     runs-on: ubuntu-latest
