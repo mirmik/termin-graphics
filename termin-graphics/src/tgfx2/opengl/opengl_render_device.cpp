@@ -526,6 +526,7 @@ bool OpenGLRenderDevice::ensure_tc_shader(
 
     const bool has_vs = shader->vertex_source && shader->vertex_source[0] != '\0';
     const bool artifacts_required = tc_shader_requires_artifacts(shader);
+    const auto shader_language = static_cast<tc_shader_language>(shader->language);
     const uint32_t pool_index = shader->pool_index;
     const uint32_t version = shader->version;
     auto it = tc_shader_cache_.find(pool_index);
@@ -552,10 +553,12 @@ bool OpenGLRenderDevice::ensure_tc_shader(
         vs_desc.stage = ShaderStage::Vertex;
         vs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":vertex";
         if (!load_opengl_shader_artifact_source(shader, vs_desc.stage, vs_desc.source)) {
-            if (artifacts_required) {
+            if (artifacts_required || shader_language != TC_SHADER_LANGUAGE_GLSL) {
                 tc_log_error(
-                    "OpenGLRenderDevice::ensure_tc_shader: required vertex artifact missing for '%s'",
-                    shader->name ? shader->name : shader->uuid);
+                    "OpenGLRenderDevice::ensure_tc_shader: %s vertex artifact missing or dev compile failed for '%s' language=%u",
+                    artifacts_required ? "required" : "non-GLSL",
+                    shader->name ? shader->name : shader->uuid,
+                    static_cast<unsigned>(shader->language));
                 return false;
             }
             vs_desc.source = shader->vertex_source;
@@ -572,11 +575,13 @@ bool OpenGLRenderDevice::ensure_tc_shader(
     fs_desc.stage = ShaderStage::Fragment;
     fs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":fragment";
     if (!load_opengl_shader_artifact_source(shader, fs_desc.stage, fs_desc.source)) {
-        if (artifacts_required) {
+        if (artifacts_required || shader_language != TC_SHADER_LANGUAGE_GLSL) {
             if (vs) destroy(vs);
             tc_log_error(
-                "OpenGLRenderDevice::ensure_tc_shader: required fragment artifact missing for '%s'",
-                shader->name ? shader->name : shader->uuid);
+                "OpenGLRenderDevice::ensure_tc_shader: %s fragment artifact missing or dev compile failed for '%s' language=%u",
+                artifacts_required ? "required" : "non-GLSL",
+                shader->name ? shader->name : shader->uuid,
+                static_cast<unsigned>(shader->language));
             return false;
         }
         fs_desc.source = shader->fragment_source;

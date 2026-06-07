@@ -104,6 +104,15 @@ def test_termin_shaderc_invokes_fake_slangc_for_vulkan(tmp_path: Path) -> None:
         "-matrix-layout-column-major",
         "-profile",
         "spirv_1_5",
+        "-fvk-b-shift",
+        "0",
+        "all",
+        "-fvk-t-shift",
+        "0",
+        "all",
+        "-fvk-s-shift",
+        "0",
+        "all",
         "-o",
         str(output),
     ]
@@ -114,6 +123,7 @@ def test_termin_shaderc_invokes_fake_slangc_for_opengl(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text("[shader(\"fragment\")] void main() {}\n", encoding="utf-8")
     output = tmp_path / "out.glsl"
+    args_path = tmp_path / "slang_args.json"
     fake_slangc = _write_fake_slangc(tmp_path / "fake_slangc.py")
 
     result = _run_shaderc([
@@ -130,10 +140,14 @@ def test_termin_shaderc_invokes_fake_slangc_for_opengl(tmp_path: Path) -> None:
         str(output),
         "--slangc",
         str(fake_slangc),
-    ])
+    ], env={"FAKE_SLANGC_ARGS": str(args_path)})
 
     assert result.returncode == 0, result.stderr
     assert output.read_bytes() == b"FAKE-glsl"
+    slang_args = json.loads(args_path.read_text(encoding="utf-8"))
+    assert "-fvk-b-shift" in slang_args
+    assert "-fvk-t-shift" in slang_args
+    assert "-fvk-s-shift" in slang_args
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")

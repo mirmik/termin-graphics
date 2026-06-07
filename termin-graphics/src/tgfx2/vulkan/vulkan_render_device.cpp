@@ -3726,6 +3726,7 @@ bool VulkanRenderDevice::ensure_tc_shader(
 
     const bool has_vs = shader->vertex_source && shader->vertex_source[0] != '\0';
     const bool artifacts_required = tc_shader_requires_artifacts(shader);
+    const auto shader_language = static_cast<tc_shader_language>(shader->language);
     const uint32_t pool_index = shader->pool_index;
     const uint32_t version = shader->version;
     {
@@ -3758,10 +3759,12 @@ bool VulkanRenderDevice::ensure_tc_shader(
                 BackendType::Vulkan,
                 vs_desc.stage,
                 vs_desc.bytecode)) {
-            if (artifacts_required) {
+            if (artifacts_required || shader_language != TC_SHADER_LANGUAGE_GLSL) {
                 tc_log(TC_LOG_ERROR,
-                       "VulkanRenderDevice::ensure_tc_shader: required vertex artifact missing for '%s'",
-                       shader->name ? shader->name : shader->uuid);
+                       "VulkanRenderDevice::ensure_tc_shader: %s vertex artifact missing or dev compile failed for '%s' language=%u",
+                       artifacts_required ? "required" : "non-GLSL",
+                       shader->name ? shader->name : shader->uuid,
+                       static_cast<unsigned>(shader->language));
                 return false;
             }
             vs_desc.source = shader->vertex_source;
@@ -3783,11 +3786,13 @@ bool VulkanRenderDevice::ensure_tc_shader(
             BackendType::Vulkan,
             fs_desc.stage,
             fs_desc.bytecode)) {
-        if (artifacts_required) {
+        if (artifacts_required || shader_language != TC_SHADER_LANGUAGE_GLSL) {
             if (vs) destroy(vs);
             tc_log(TC_LOG_ERROR,
-                   "VulkanRenderDevice::ensure_tc_shader: required fragment artifact missing for '%s'",
-                   shader->name ? shader->name : shader->uuid);
+                   "VulkanRenderDevice::ensure_tc_shader: %s fragment artifact missing or dev compile failed for '%s' language=%u",
+                   artifacts_required ? "required" : "non-GLSL",
+                   shader->name ? shader->name : shader->uuid,
+                   static_cast<unsigned>(shader->language));
             return false;
         }
         fs_desc.source = shader->fragment_source;
