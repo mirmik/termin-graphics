@@ -5,40 +5,26 @@
 # dependencies. Keep this file as the single source of truth for shell scripts
 # that install or build Termin Python packages.
 
-TERMIN_PYTHON_PACKAGES=(
-    termin-build-tools
-    termin-nanobind-sdk
-    termin-base
-    termin-assets
-    termin-mesh
-    termin-graphics
-    termin-materials
-    termin-gui
-    termin-inspect
-    termin-scene
-    termin-display
-    termin-csg
-    termin-modules
-    termin-components/termin-components-kinematic
-    termin-lighting
-    termin-components/termin-components-mesh
-    termin-input
-    termin-collision
-    termin-render
-    termin-components/termin-components-render
-    termin-components/termin-components-foliage
-    termin-render-passes
-    termin-navmesh
-    termin-qopt
-    termin-pga
-    termin-physics
-    termin-engine
-    termin-skeleton
-    termin-animation
-    termin-nodegraph
-    termin-app
-    tcplot
+_TERMIN_PACKAGE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_TERMIN_PACKAGE_REPO_ROOT="$(cd "$_TERMIN_PACKAGE_SCRIPT_DIR/.." && pwd)"
+_TERMIN_PACKAGE_PYTHON="${PYTHON_BIN:-}"
+if [[ -z "$_TERMIN_PACKAGE_PYTHON" ]]; then
+    _TERMIN_PACKAGE_PYTHON="$(command -v python3 || command -v python || true)"
+fi
+if [[ -z "$_TERMIN_PACKAGE_PYTHON" ]]; then
+    echo "ERROR: python3 not found; cannot load build-system/packages.json" >&2
+    return 1 2>/dev/null || exit 1
+fi
+
+mapfile -t TERMIN_PYTHON_PACKAGES < <(
+    PYTHONPATH="$_TERMIN_PACKAGE_REPO_ROOT/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
+        "$_TERMIN_PACKAGE_PYTHON" -m termin_build.package_manifest \
+        --repo-root "$_TERMIN_PACKAGE_REPO_ROOT" --list
 )
+
+unset _TERMIN_PACKAGE_SCRIPT_DIR
+unset _TERMIN_PACKAGE_REPO_ROOT
+unset _TERMIN_PACKAGE_PYTHON
 
 termin_clear_python_package_build_caches() {
     local repo_root="$1"

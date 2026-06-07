@@ -1,0 +1,219 @@
+{
+  "schema": 1,
+  "description": "Termin SDK Python package manifest. This is the migration target for package order, native extension mapping, and feature gates.",
+  "packages": [
+    {
+      "path": "termin-build-tools",
+      "distribution": "termin-build-tools"
+    },
+    {
+      "path": "termin-nanobind-sdk",
+      "distribution": "termin-nanobind"
+    },
+    {
+      "path": "termin-base",
+      "distribution": "tcbase",
+      "native_extensions": [
+        {"extension": "tcbase._tcbase_native", "target": "_tcbase_native"},
+        {"extension": "tcbase._geom_native", "target": "_geom_native"}
+      ]
+    },
+    {
+      "path": "termin-assets",
+      "distribution": "termin-assets"
+    },
+    {
+      "path": "termin-mesh",
+      "distribution": "tmesh",
+      "native_extensions": [
+        {"extension": "tmesh._tmesh_native", "target": "_tmesh_native"}
+      ]
+    },
+    {
+      "path": "termin-graphics",
+      "distribution": "tgfx",
+      "native_extensions": [
+        {"extension": "tgfx._tgfx_native", "target": "_tgfx_native"}
+      ]
+    },
+    {
+      "path": "termin-materials",
+      "distribution": "termin-materials",
+      "native_extensions": [
+        {"extension": "termin.materials._materials_native", "target": "_materials_native"}
+      ]
+    },
+    {
+      "path": "termin-gui",
+      "distribution": "tcgui"
+    },
+    {
+      "path": "termin-inspect",
+      "distribution": "termin-inspect",
+      "native_extensions": [
+        {"extension": "termin.inspect._inspect_native", "target": "_inspect_native"}
+      ]
+    },
+    {
+      "path": "termin-scene",
+      "distribution": "termin-scene",
+      "native_extensions": [
+        {"extension": "termin.scene._scene_native", "target": "_scene_native"}
+      ]
+    },
+    {
+      "path": "termin-display",
+      "distribution": "termin-display",
+      "native_extensions": [
+        {"extension": "termin.display._display_native", "target": "_display_native"},
+        {"extension": "termin.viewport._viewport_native", "target": "_viewport_native"},
+        {"extension": "termin.display._platform_native", "target": "_platform_native", "optional": true, "features": ["sdl"]}
+      ]
+    },
+    {
+      "path": "termin-csg",
+      "distribution": "termin-csg",
+      "native_extensions": [
+        {"extension": "termin.csg._csg_native", "target": "_csg_native"}
+      ]
+    },
+    {
+      "path": "termin-modules",
+      "distribution": "termin-modules",
+      "native_extensions": [
+        {"extension": "termin_modules._termin_modules_native", "target": "_termin_modules_native"}
+      ]
+    },
+    {
+      "path": "termin-components/termin-components-kinematic",
+      "distribution": "termin-components-kinematic",
+      "native_extensions": [
+        {"extension": "termin.kinematic._components_kinematic_native", "target": "_components_kinematic_native"}
+      ]
+    },
+    {
+      "path": "termin-lighting",
+      "distribution": "termin-lighting",
+      "native_extensions": [
+        {"extension": "termin.lighting._lighting_native", "target": "_lighting_native"}
+      ]
+    },
+    {
+      "path": "termin-components/termin-components-mesh",
+      "distribution": "termin-components-mesh",
+      "native_extensions": [
+        {"extension": "termin.mesh._components_mesh_native", "target": "_components_mesh_native"}
+      ]
+    },
+    {
+      "path": "termin-input",
+      "distribution": "termin-input",
+      "native_extensions": [
+        {"extension": "termin.input._input_native", "target": "_input_native"}
+      ]
+    },
+    {
+      "path": "termin-collision",
+      "distribution": "termin-collision",
+      "native_extensions": [
+        {"extension": "termin.colliders._colliders_native", "target": "_colliders_native"},
+        {"extension": "termin.colliders._components_collision_native", "target": "_components_collision_native"},
+        {"extension": "termin.collision._collision_native", "target": "_collision_native"}
+      ]
+    },
+    {
+      "path": "termin-render",
+      "distribution": "termin-render",
+      "native_extensions": [
+        {"extension": "termin.render_framework._render_framework_native", "target": "_render_framework_native"},
+        {"extension": "termin.render._render_native", "target": "_render_native"}
+      ]
+    },
+    {
+      "path": "termin-components/termin-components-render",
+      "distribution": "termin-components-render",
+      "native_extensions": [
+        {"extension": "termin.render_components._components_render_native", "target": "_components_render_native"}
+      ]
+    },
+    {
+      "path": "termin-components/termin-components-foliage",
+      "distribution": "termin-components-foliage",
+      "native_extensions": [
+        {"extension": "termin.foliage._foliage_native", "target": "_foliage_native"}
+      ]
+    },
+    {
+      "path": "termin-render-passes",
+      "distribution": "termin-render-passes",
+      "native_extensions": [
+        {"extension": "termin.render_passes._render_passes_native", "target": "_render_passes_native"}
+      ]
+    },
+    {
+      "path": "termin-navmesh",
+      "distribution": "termin-navmesh",
+      "features": ["recast"],
+      "native_extensions": [
+        {"extension": "termin.navmesh._navmesh_native", "target": "_navmesh_native", "features": ["recast"]}
+      ]
+    },
+    {
+      "path": "termin-qopt",
+      "distribution": "termin-qopt"
+    },
+    {
+      "path": "termin-pga",
+      "distribution": "termin-pga"
+    },
+    {
+      "path": "termin-physics",
+      "distribution": "termin-physics",
+      "native_extensions": [
+        {"extension": "termin.physics._physics_native", "target": "_physics_native"}
+      ]
+    },
+    {
+      "path": "termin-engine",
+      "distribution": "termin-engine",
+      "native_extensions": [
+        {"extension": "termin.engine._engine_native", "target": "_engine_native"}
+      ]
+    },
+    {
+      "path": "termin-skeleton",
+      "distribution": "termin-skeleton",
+      "native_extensions": [
+        {"extension": "termin.skeleton._skeleton_native", "target": "_skeleton_native"},
+        {"extension": "termin.skeleton._components_skeleton_native", "target": "_components_skeleton_native"}
+      ]
+    },
+    {
+      "path": "termin-animation",
+      "distribution": "termin-animation",
+      "native_extensions": [
+        {"extension": "termin.animation._animation_native", "target": "_animation_native"},
+        {"extension": "termin.animation._components_animation_native", "target": "_components_animation_native"}
+      ]
+    },
+    {
+      "path": "termin-nodegraph",
+      "distribution": "termin-nodegraph"
+    },
+    {
+      "path": "termin-app",
+      "distribution": "termin-app",
+      "native_extensions": [
+        {"extension": "termin._native", "target": "_native"},
+        {"extension": "termin.voxels._voxels_native", "target": "_voxels_native"}
+      ]
+    },
+    {
+      "path": "tcplot",
+      "distribution": "tcplot",
+      "native_extensions": [
+        {"extension": "tcplot._tcplot_native", "target": "_tcplot_native"}
+      ]
+    }
+  ]
+}

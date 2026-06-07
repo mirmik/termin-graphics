@@ -1,37 +1,11 @@
-$TerminPythonPackages = @(
-    "termin-build-tools",
-    "termin-nanobind-sdk",
-    "termin-base",
-    "termin-assets",
-    "termin-mesh",
-    "termin-graphics",
-    "termin-materials",
-    "termin-gui",
-    "termin-inspect",
-    "termin-scene",
-    "termin-display",
-    "termin-csg",
-    "termin-modules",
-    "termin-components/termin-components-kinematic",
-    "termin-lighting",
-    "termin-components/termin-components-mesh",
-    "termin-input",
-    "termin-collision",
-    "termin-render",
-    "termin-components/termin-components-render",
-    "termin-components/termin-components-foliage",
-    "termin-render-passes",
-    "termin-navmesh",
-    "termin-qopt",
-    "termin-pga",
-    "termin-physics",
-    "termin-engine",
-    "termin-skeleton",
-    "termin-animation",
-    "termin-nodegraph",
-    "termin-app",
-    "tcplot"
-)
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$PackageManifestPath = Join-Path $RepoRoot "build-system\packages.json"
+if (-not (Test-Path $PackageManifestPath)) {
+    throw "Package manifest not found: $PackageManifestPath"
+}
+
+$PackageManifest = Get-Content -LiteralPath $PackageManifestPath -Raw | ConvertFrom-Json
+$TerminPythonPackages = @($PackageManifest.packages | ForEach-Object { $_.path })
 
 function Clear-TerminPythonPackageBuildCaches {
     param([string]$RepoRoot)
