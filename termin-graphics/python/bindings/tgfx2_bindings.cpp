@@ -79,6 +79,57 @@ void bind_tgfx2(nb::module_& m) {
         .def_ro("vs", &ShaderPair::vs)
         .def_ro("fs", &ShaderPair::fs);
 
+    m.def("set_shader_artifact_root",
+          [](const std::string& root) {
+              termin::tgfx2_set_shader_artifact_root(root.c_str());
+          },
+          nb::arg("root"));
+    m.def("get_shader_artifact_root",
+          []() {
+              return std::string(termin::tgfx2_get_shader_artifact_root());
+          });
+    m.def("set_shader_cache_root",
+          [](const std::string& root) {
+              termin::tgfx2_set_shader_cache_root(root.c_str());
+          },
+          nb::arg("root"));
+    m.def("get_shader_cache_root",
+          []() {
+              return std::string(termin::tgfx2_get_shader_cache_root());
+          });
+    m.def("set_shader_compiler_path",
+          [](const std::string& path) {
+              termin::tgfx2_set_shader_compiler_path(path.c_str());
+          },
+          nb::arg("path"));
+    m.def("get_shader_compiler_path",
+          []() {
+              return std::string(termin::tgfx2_get_shader_compiler_path());
+          });
+    m.def("configure_shader_runtime",
+          [](const std::string& artifact_root,
+             const std::string& cache_root,
+             const std::string& shader_compiler,
+             bool dev_compile) {
+              termin::tgfx2_set_shader_artifact_root(artifact_root.c_str());
+              termin::tgfx2_set_shader_cache_root(cache_root.c_str());
+              termin::tgfx2_set_shader_compiler_path(shader_compiler.c_str());
+              termin::tgfx2_set_shader_dev_compile_enabled(dev_compile);
+          },
+          nb::arg("artifact_root") = "",
+          nb::arg("cache_root") = "",
+          nb::arg("shader_compiler") = "",
+          nb::arg("dev_compile") = false);
+    m.def("set_shader_dev_compile_enabled",
+          [](bool enabled) {
+              termin::tgfx2_set_shader_dev_compile_enabled(enabled);
+          },
+          nb::arg("enabled"));
+    m.def("get_shader_dev_compile_enabled",
+          []() {
+              return termin::tgfx2_get_shader_dev_compile_enabled();
+          });
+
     nb::class_<tgfx::LinePoint3>(m, "LinePoint3")
         .def(nb::init<>())
         .def(nb::init<float, float, float>(),

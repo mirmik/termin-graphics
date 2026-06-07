@@ -3753,8 +3753,8 @@ bool VulkanRenderDevice::ensure_tc_shader(
         ShaderDesc vs_desc;
         vs_desc.stage = ShaderStage::Vertex;
         vs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":vertex";
-        if (!termin::tgfx2_load_shader_artifact_for_backend(
-                shader->uuid,
+        if (!termin::tgfx2_load_or_compile_shader_artifact_for_backend(
+                shader,
                 BackendType::Vulkan,
                 vs_desc.stage,
                 vs_desc.bytecode)) {
@@ -3778,8 +3778,8 @@ bool VulkanRenderDevice::ensure_tc_shader(
     ShaderDesc fs_desc;
     fs_desc.stage = ShaderStage::Fragment;
     fs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":fragment";
-    if (!termin::tgfx2_load_shader_artifact_for_backend(
-            shader->uuid,
+    if (!termin::tgfx2_load_or_compile_shader_artifact_for_backend(
+            shader,
             BackendType::Vulkan,
             fs_desc.stage,
             fs_desc.bytecode)) {
