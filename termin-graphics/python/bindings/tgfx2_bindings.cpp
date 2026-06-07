@@ -372,11 +372,12 @@ void bind_tgfx2(nb::module_& m) {
         // validation with `VK_IMAGE_USAGE_TRANSFER_SRC_BIT required`.
         .def("create_color_attachment",
              [](tgfx::RenderContext2& self, uint32_t w, uint32_t h,
-                tgfx::PixelFormat fmt) -> tgfx::TextureHandle {
+                tgfx::PixelFormat fmt, uint32_t samples) -> tgfx::TextureHandle {
                  tgfx::TextureDesc desc;
                  desc.width = w;
                  desc.height = h;
                  desc.format = fmt;
+                 desc.sample_count = samples == 0 ? 1 : samples;
                  desc.usage = tgfx::TextureUsage::Sampled |
                               tgfx::TextureUsage::ColorAttachment |
                               tgfx::TextureUsage::CopySrc |
@@ -384,17 +385,19 @@ void bind_tgfx2(nb::module_& m) {
                  return self.device().create_texture(desc);
              },
              nb::arg("width"), nb::arg("height"),
-             nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm)
+             nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm,
+             nb::arg("samples") = 1)
 
         // Same convenience for depth targets. Resource creation belongs to
         // IRenderDevice, but Python passes often only receive RenderContext2.
         .def("create_depth_attachment",
              [](tgfx::RenderContext2& self, uint32_t w, uint32_t h,
-                tgfx::PixelFormat fmt) -> tgfx::TextureHandle {
+                tgfx::PixelFormat fmt, uint32_t samples) -> tgfx::TextureHandle {
                  tgfx::TextureDesc desc;
                  desc.width = w;
                  desc.height = h;
                  desc.format = fmt;
+                 desc.sample_count = samples == 0 ? 1 : samples;
                  desc.usage = tgfx::TextureUsage::DepthStencilAttachment |
                               tgfx::TextureUsage::Sampled |
                               tgfx::TextureUsage::CopySrc |
@@ -402,7 +405,8 @@ void bind_tgfx2(nb::module_& m) {
                  return self.device().create_texture(desc);
              },
              nb::arg("width"), nb::arg("height"),
-             nb::arg("format") = tgfx::PixelFormat::D32F)
+             nb::arg("format") = tgfx::PixelFormat::D32F,
+             nb::arg("samples") = 1)
 
         // Shader
         .def("bind_shader",
@@ -683,11 +687,12 @@ void bind_tgfx2(nb::module_& m) {
         // this texture onto the swapchain image).
         .def("create_color_attachment",
             [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h,
-               tgfx::PixelFormat fmt) -> tgfx::TextureHandle {
+               tgfx::PixelFormat fmt, uint32_t samples) -> tgfx::TextureHandle {
                 tgfx::TextureDesc desc;
                 desc.width = w;
                 desc.height = h;
                 desc.format = fmt;
+                desc.sample_count = samples == 0 ? 1 : samples;
                 desc.usage = tgfx::TextureUsage::Sampled |
                              tgfx::TextureUsage::ColorAttachment |
                              tgfx::TextureUsage::CopySrc |
@@ -695,18 +700,20 @@ void bind_tgfx2(nb::module_& m) {
                 return self.device->create_texture(desc);
             },
             nb::arg("width"), nb::arg("height"),
-            nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm)
+            nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm,
+            nb::arg("samples") = 1)
 
         // Create an offscreen depth attachment. Usage is
         // DepthStencilAttachment|Sampled|CopySrc|CopyDst so passes can write
         // depth, sample it, and debug/copy it through the framegraph tools.
         .def("create_depth_attachment",
             [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h,
-               tgfx::PixelFormat fmt) -> tgfx::TextureHandle {
+               tgfx::PixelFormat fmt, uint32_t samples) -> tgfx::TextureHandle {
                 tgfx::TextureDesc desc;
                 desc.width = w;
                 desc.height = h;
                 desc.format = fmt;
+                desc.sample_count = samples == 0 ? 1 : samples;
                 desc.usage = tgfx::TextureUsage::DepthStencilAttachment |
                              tgfx::TextureUsage::Sampled |
                              tgfx::TextureUsage::CopySrc |
@@ -714,7 +721,8 @@ void bind_tgfx2(nb::module_& m) {
                 return self.device->create_texture(desc);
             },
             nb::arg("width"), nb::arg("height"),
-            nb::arg("format") = tgfx::PixelFormat::D24_UNorm);
+            nb::arg("format") = tgfx::PixelFormat::D24_UNorm,
+            nb::arg("samples") = 1);
 
     // --- Helpers: bridge core_c resources to tgfx2 handles ---
     // Compile a TcShader's GLSL sources into a tgfx2 VS/FS pair.
