@@ -46,6 +46,15 @@ void bind_shader(nb::module_& m) {
         .value("NONE", TC_SHADER_FEATURE_NONE)
         .value("LIGHTING_UBO", TC_SHADER_FEATURE_LIGHTING_UBO);
 
+    nb::enum_<tc_shader_language>(m, "ShaderLanguage")
+        .value("GLSL", TC_SHADER_LANGUAGE_GLSL)
+        .value("SLANG", TC_SHADER_LANGUAGE_SLANG)
+        .value("HLSL", TC_SHADER_LANGUAGE_HLSL);
+
+    nb::enum_<tc_shader_artifact_policy>(m, "ShaderArtifactPolicy")
+        .value("OPTIONAL", TC_SHADER_ARTIFACT_OPTIONAL)
+        .value("REQUIRED", TC_SHADER_ARTIFACT_REQUIRED);
+
     // TcShader - RAII wrapper
     nb::class_<TcShader>(m, "TcShader")
         .def(nb::init<>())
@@ -64,15 +73,22 @@ void bind_shader(nb::module_& m) {
         .def_prop_ro("is_variant", &TcShader::is_variant)
         .def_prop_ro("variant_op", &TcShader::variant_op)
         .def_prop_ro("features", &TcShader::features)
+        .def_prop_ro("language", &TcShader::language)
+        .def_prop_ro("artifact_policy", &TcShader::artifact_policy)
+        .def_prop_ro("requires_artifacts", &TcShader::requires_artifacts)
         .def("has_feature", &TcShader::has_feature, nb::arg("feature"))
         .def("set_feature", &TcShader::set_feature, nb::arg("feature"))
         .def("set_features", &TcShader::set_features, nb::arg("features"))
+        .def("set_language", &TcShader::set_language, nb::arg("language"))
+        .def("set_artifact_policy", &TcShader::set_artifact_policy, nb::arg("policy"))
         .def("variant_is_stale", &TcShader::variant_is_stale)
         .def("original", &TcShader::original)
         .def("set_variant_info", &TcShader::set_variant_info)
         .def_static("from_sources", &TcShader::from_sources,
             nb::arg("vertex"), nb::arg("fragment"),
-            nb::arg("geometry") = "", nb::arg("name") = "", nb::arg("source_path") = "")
+            nb::arg("geometry") = "", nb::arg("name") = "", nb::arg("source_path") = "",
+            nb::arg("language") = TC_SHADER_LANGUAGE_GLSL,
+            nb::arg("artifact_policy") = TC_SHADER_ARTIFACT_OPTIONAL)
         .def_static("from_uuid", &TcShader::from_uuid)
         .def_static("from_hash", &TcShader::from_hash)
         .def_static("from_name", &TcShader::from_name)
@@ -150,6 +166,8 @@ void bind_shader(nb::module_& m) {
                 info["ref_count"] = infos[i].ref_count;
                 info["version"] = infos[i].version;
                 info["features"] = infos[i].features;
+                info["language"] = infos[i].language;
+                info["artifact_policy"] = infos[i].artifact_policy;
                 info["source_size"] = infos[i].source_size;
                 info["is_variant"] = (bool)infos[i].is_variant;
                 info["variant_op"] = (int)infos[i].variant_op;

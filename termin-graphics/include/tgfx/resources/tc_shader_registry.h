@@ -51,6 +51,17 @@ TGFX_API tc_shader_handle tc_shader_from_sources(
     const char* uuid
 );
 
+TGFX_API tc_shader_handle tc_shader_from_sources_ex(
+    const char* vertex_source,
+    const char* fragment_source,
+    const char* geometry_source,
+    const char* name,
+    const char* source_path,
+    const char* uuid,
+    tc_shader_language language,
+    tc_shader_artifact_policy artifact_policy
+);
+
 // Register a shader with process-lifetime ownership. The registry holds
 // a permanent ref on the returned handle — the shader will NOT be
 // destroyed when external refs reach zero, so callers don't need to
@@ -115,6 +126,8 @@ typedef struct tc_shader_info {
     uint32_t ref_count;
     uint32_t version;
     uint32_t features;
+    uint32_t language;
+    uint32_t artifact_policy;
     size_t source_size;
     uint8_t is_variant;
     uint8_t variant_op;

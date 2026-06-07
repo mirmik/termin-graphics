@@ -45,6 +45,21 @@ typedef enum tc_shader_feature {
 } tc_shader_feature;
 
 // ============================================================================
+// Shader source language and artifact policy
+// ============================================================================
+
+typedef enum tc_shader_language {
+    TC_SHADER_LANGUAGE_GLSL = 0,
+    TC_SHADER_LANGUAGE_SLANG = 1,
+    TC_SHADER_LANGUAGE_HLSL = 2,
+} tc_shader_language;
+
+typedef enum tc_shader_artifact_policy {
+    TC_SHADER_ARTIFACT_OPTIONAL = 0,
+    TC_SHADER_ARTIFACT_REQUIRED = 1,
+} tc_shader_artifact_policy;
+
+// ============================================================================
 // Shader data
 // ============================================================================
 
@@ -67,7 +82,7 @@ typedef struct tc_shader {
     char* vertex_source;         // vertex shader source (owned)
     char* fragment_source;       // fragment shader source (owned)
     char* geometry_source;       // geometry shader source (owned, may be NULL)
-    char source_hash[TC_SHADER_HASH_LEN];  // hash of sources for variant lookup
+    char source_hash[TC_SHADER_HASH_LEN];  // source + metadata identity hash
     uint32_t version;            // incremented on source change
     uint32_t ref_count;          // reference count for ownership
     char uuid[40];               // unique identifier
@@ -82,6 +97,8 @@ typedef struct tc_shader {
     tc_shader_handle original_handle;  // handle to original shader (if is_variant)
     uint32_t original_version;   // version of original when variant was created
     uint32_t features;           // tc_shader_feature bitflags
+    uint32_t language;           // tc_shader_language
+    uint32_t artifact_policy;    // tc_shader_artifact_policy
     uint32_t pool_index;         // index in shader pool (for GPUContext lookup)
 
     // Optional std140 material UBO layout, populated by the shader parser
@@ -126,6 +143,10 @@ static inline void tc_shader_clear_feature(tc_shader* shader, tc_shader_feature 
     shader->features &= ~feature;
 }
 
+static inline bool tc_shader_requires_artifacts(const tc_shader* shader) {
+    return shader && shader->artifact_policy == TC_SHADER_ARTIFACT_REQUIRED;
+}
+
 // ============================================================================
 // Reference counting
 // ============================================================================
@@ -140,7 +161,8 @@ TGFX_API bool tc_shader_release(tc_shader* shader);
 // Hash computation
 // ============================================================================
 
-// Compute hash from shader sources (SHA256 truncated to 16 hex chars)
+// Compute legacy source-only FNV-1a hash, truncated to 16 hex chars.
+// Registry identity hashing also includes shader language and artifact policy.
 // Result is written to hash_out (must be at least TC_SHADER_HASH_LEN bytes)
 TGFX_API void tc_shader_compute_hash(
     const char* vertex_source,
@@ -151,6 +173,11 @@ TGFX_API void tc_shader_compute_hash(
 
 // Recompute and update shader's source_hash field
 TGFX_API void tc_shader_update_hash(tc_shader* shader);
+
+TGFX_API bool tc_shader_set_language(tc_shader* shader, tc_shader_language language);
+TGFX_API tc_shader_language tc_shader_get_language(const tc_shader* shader);
+TGFX_API bool tc_shader_set_artifact_policy(tc_shader* shader, tc_shader_artifact_policy policy);
+TGFX_API tc_shader_artifact_policy tc_shader_get_artifact_policy(const tc_shader* shader);
 
 // ============================================================================
 // Material UBO layout (populated by the shader parser after set_sources)

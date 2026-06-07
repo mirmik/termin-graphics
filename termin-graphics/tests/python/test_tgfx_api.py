@@ -13,6 +13,8 @@ def test_basic_types_and_render_state():
     assert rs.depth_test is True
     assert rs.depth_write is True
     assert tgfx.ShaderVariantOp.LINE_MATERIAL_FRAGMENT is not tgfx.ShaderVariantOp.NONE
+    assert tgfx.ShaderLanguage.GLSL is not tgfx.ShaderLanguage.SLANG
+    assert tgfx.ShaderArtifactPolicy.REQUIRED is not tgfx.ShaderArtifactPolicy.OPTIONAL
 
 
 def test_render_state_transparent():
@@ -20,6 +22,23 @@ def test_render_state_transparent():
     assert rs.depth_test is True
     assert rs.depth_write is False
     assert rs.blend is True
+
+
+def test_shader_metadata_binding_smoke():
+    shader = tgfx.TcShader.from_sources(
+        "#version 330 core\nvoid main(){gl_Position=vec4(0.0);}",
+        "#version 330 core\nout vec4 c; void main(){c=vec4(1.0);}",
+        "",
+        "python_shader_metadata_smoke",
+        "",
+        tgfx.ShaderLanguage.SLANG,
+        tgfx.ShaderArtifactPolicy.REQUIRED,
+    )
+
+    assert shader.is_valid
+    assert shader.language == tgfx.ShaderLanguage.SLANG
+    assert shader.artifact_policy == tgfx.ShaderArtifactPolicy.REQUIRED
+    assert shader.requires_artifacts is True
 
 
 def test_canvas2d_binding_smoke():

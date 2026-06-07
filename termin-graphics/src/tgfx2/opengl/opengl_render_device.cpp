@@ -525,6 +525,7 @@ bool OpenGLRenderDevice::ensure_tc_shader(
     }
 
     const bool has_vs = shader->vertex_source && shader->vertex_source[0] != '\0';
+    const bool artifacts_required = tc_shader_requires_artifacts(shader);
     const uint32_t pool_index = shader->pool_index;
     const uint32_t version = shader->version;
     auto it = tc_shader_cache_.find(pool_index);
@@ -551,6 +552,12 @@ bool OpenGLRenderDevice::ensure_tc_shader(
         vs_desc.stage = ShaderStage::Vertex;
         vs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":vertex";
         if (!load_opengl_shader_artifact_source(shader->uuid, vs_desc.stage, vs_desc.source)) {
+            if (artifacts_required) {
+                tc_log_error(
+                    "OpenGLRenderDevice::ensure_tc_shader: required vertex artifact missing for '%s'",
+                    shader->name ? shader->name : shader->uuid);
+                return false;
+            }
             vs_desc.source = shader->vertex_source;
         }
         vs = create_shader(vs_desc);
@@ -565,6 +572,13 @@ bool OpenGLRenderDevice::ensure_tc_shader(
     fs_desc.stage = ShaderStage::Fragment;
     fs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":fragment";
     if (!load_opengl_shader_artifact_source(shader->uuid, fs_desc.stage, fs_desc.source)) {
+        if (artifacts_required) {
+            if (vs) destroy(vs);
+            tc_log_error(
+                "OpenGLRenderDevice::ensure_tc_shader: required fragment artifact missing for '%s'",
+                shader->name ? shader->name : shader->uuid);
+            return false;
+        }
         fs_desc.source = shader->fragment_source;
     }
     ShaderHandle fs = create_shader(fs_desc);

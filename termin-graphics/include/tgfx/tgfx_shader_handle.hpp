@@ -158,6 +158,31 @@ public:
         if (s) s->features = features;
     }
 
+    tc_shader_language language() const {
+        tc_shader* s = get();
+        return tc_shader_get_language(s);
+    }
+
+    bool set_language(tc_shader_language language) {
+        tc_shader* s = get();
+        return s && tc_shader_set_language(s, language);
+    }
+
+    tc_shader_artifact_policy artifact_policy() const {
+        tc_shader* s = get();
+        return tc_shader_get_artifact_policy(s);
+    }
+
+    bool set_artifact_policy(tc_shader_artifact_policy policy) {
+        tc_shader* s = get();
+        return s && tc_shader_set_artifact_policy(s, policy);
+    }
+
+    bool requires_artifacts() const {
+        tc_shader* s = get();
+        return tc_shader_requires_artifacts(s);
+    }
+
     // Variant info
     bool is_variant() const {
         tc_shader* s = get();
@@ -221,15 +246,19 @@ public:
         const std::string& fragment,
         const std::string& geometry = "",
         const std::string& name = "",
-        const std::string& source_path = ""
+        const std::string& source_path = "",
+        tc_shader_language language = TC_SHADER_LANGUAGE_GLSL,
+        tc_shader_artifact_policy artifact_policy = TC_SHADER_ARTIFACT_OPTIONAL
     ) {
-        tc_shader_handle h = tc_shader_from_sources(
+        tc_shader_handle h = tc_shader_from_sources_ex(
             vertex.c_str(),
             fragment.c_str(),
             geometry.empty() ? nullptr : geometry.c_str(),
             name.empty() ? nullptr : name.c_str(),
             source_path.empty() ? nullptr : source_path.c_str(),
-            nullptr
+            nullptr,
+            language,
+            artifact_policy
         );
         if (tc_shader_handle_is_invalid(h)) {
             return TcShader();

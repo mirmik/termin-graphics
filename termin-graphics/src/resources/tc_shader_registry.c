@@ -31,6 +31,17 @@ static char* dup_string(const char* s) {
     return copy;
 }
 
+static bool tc_shader_language_valid(tc_shader_language language) {
+    return language == TC_SHADER_LANGUAGE_GLSL
+        || language == TC_SHADER_LANGUAGE_SLANG
+        || language == TC_SHADER_LANGUAGE_HLSL;
+}
+
+static bool tc_shader_artifact_policy_valid(tc_shader_artifact_policy policy) {
+    return policy == TC_SHADER_ARTIFACT_OPTIONAL
+        || policy == TC_SHADER_ARTIFACT_REQUIRED;
+}
+
 // Free shader internal data (sources)
 static void shader_free_data(tc_shader* shader) {
     if (!shader) return;
@@ -67,6 +78,14 @@ static uint64_t fnv1a_string(const char* str, uint64_t hash) {
     return hash;
 }
 
+static uint64_t fnv1a_u32(uint32_t value, uint64_t hash) {
+    for (uint32_t i = 0; i < 4; i++) {
+        hash ^= (uint8_t)((value >> (i * 8)) & 0xffu);
+        hash *= 0x100000001b3ULL;
+    }
+    return hash;
+}
+
 void tc_shader_compute_hash(
     const char* vertex_source,
     const char* fragment_source,
@@ -84,12 +103,60 @@ void tc_shader_compute_hash(
     snprintf(hash_out, TC_SHADER_HASH_LEN, "%016llx", (unsigned long long)hash);
 }
 
+static void tc_shader_compute_identity_hash(
+    const char* vertex_source,
+    const char* fragment_source,
+    const char* geometry_source,
+    tc_shader_language language,
+    tc_shader_artifact_policy artifact_policy,
+    char* hash_out
+) {
+    if (language == TC_SHADER_LANGUAGE_GLSL
+        && artifact_policy == TC_SHADER_ARTIFACT_OPTIONAL) {
+        tc_shader_compute_hash(vertex_source, fragment_source, geometry_source, hash_out);
+        return;
+    }
+
+    uint64_t hash = 0xcbf29ce484222325ULL;
+
+    hash = fnv1a_string(vertex_source, hash);
+    hash = fnv1a_string("::", hash);
+    hash = fnv1a_string(fragment_source, hash);
+    hash = fnv1a_string("::", hash);
+    hash = fnv1a_string(geometry_source, hash);
+    hash = fnv1a_string("::meta::", hash);
+    hash = fnv1a_u32((uint32_t)language, hash);
+    hash = fnv1a_string("::", hash);
+    hash = fnv1a_u32((uint32_t)artifact_policy, hash);
+
+    snprintf(hash_out, TC_SHADER_HASH_LEN, "%016llx", (unsigned long long)hash);
+}
+
+static void shader_remove_hash_mapping(tc_shader* shader) {
+    if (shader && shader->source_hash[0] != '\0') {
+        tc_resource_map_remove(g_shader_hash_to_index, shader->source_hash);
+    }
+}
+
+static void shader_add_hash_mapping(tc_shader* shader) {
+    if (!shader || shader->source_hash[0] == '\0') {
+        return;
+    }
+    tc_resource_map_add(
+        g_shader_hash_to_index,
+        shader->source_hash,
+        tc_pack_index(shader->pool_index)
+    );
+}
+
 void tc_shader_update_hash(tc_shader* shader) {
     if (!shader) return;
-    tc_shader_compute_hash(
+    tc_shader_compute_identity_hash(
         shader->vertex_source,
         shader->fragment_source,
         shader->geometry_source,
+        (tc_shader_language)shader->language,
+        (tc_shader_artifact_policy)shader->artifact_policy,
         shader->source_hash
     );
 }
@@ -183,6 +250,8 @@ tc_shader_handle tc_shader_create(const char* uuid) {
     shader->uuid[sizeof(shader->uuid) - 1] = '\0';
     shader->version = 1;
     shader->ref_count = 0;
+    shader->language = TC_SHADER_LANGUAGE_GLSL;
+    shader->artifact_policy = TC_SHADER_ARTIFACT_OPTIONAL;
     shader->pool_index = h.index;
     shader->original_handle = tc_shader_handle_invalid();
 
@@ -370,7 +439,14 @@ bool tc_shader_set_sources(
 
     // Compute new hash to check if sources actually changed
     char new_hash[TC_SHADER_HASH_LEN];
-    tc_shader_compute_hash(vertex_source, fragment_source, geometry_source, new_hash);
+    tc_shader_compute_identity_hash(
+        vertex_source,
+        fragment_source,
+        geometry_source,
+        (tc_shader_language)shader->language,
+        (tc_shader_artifact_policy)shader->artifact_policy,
+        new_hash
+    );
 
     // Check if sources are the same (by hash)
     if (shader->source_hash[0] != '\0' && strcmp(shader->source_hash, new_hash) == 0) {
@@ -378,9 +454,7 @@ bool tc_shader_set_sources(
     }
 
     // Remove from old hash mapping
-    if (shader->source_hash[0] != '\0') {
-        tc_resource_map_remove(g_shader_hash_to_index, shader->source_hash);
-    }
+    shader_remove_hash_mapping(shader);
 
     // Free old sources
     shader_free_data(shader);
@@ -394,18 +468,7 @@ bool tc_shader_set_sources(
     memcpy(shader->source_hash, new_hash, TC_SHADER_HASH_LEN);
 
     // Add to hash map (find by hash for deduplication)
-    if (shader->source_hash[0] != '\0') {
-        // Get handle from pool to find index
-        for (uint32_t i = 0; i < g_shader_pool.capacity; i++) {
-            if (g_shader_pool.states[i] == TC_SLOT_OCCUPIED) {
-                tc_shader* s = (tc_shader*)tc_pool_get_unchecked(&g_shader_pool, i);
-                if (s == shader) {
-                    tc_resource_map_add(g_shader_hash_to_index, shader->source_hash, tc_pack_index(i));
-                    break;
-                }
-            }
-        }
-    }
+    shader_add_hash_mapping(shader);
 
     // Set name and path
     if (name && name[0] != '\0') {
@@ -419,13 +482,15 @@ bool tc_shader_set_sources(
     return true;
 }
 
-tc_shader_handle tc_shader_from_sources(
+tc_shader_handle tc_shader_from_sources_ex(
     const char* vertex_source,
     const char* fragment_source,
     const char* geometry_source,
     const char* name,
     const char* source_path,
-    const char* uuid
+    const char* uuid,
+    tc_shader_language language,
+    tc_shader_artifact_policy artifact_policy
 ) {
     // NULL vertex_source is permitted for FS-only shaders — e.g. post-
     // effect passes that reuse RenderContext2's built-in FSQ vertex shader
@@ -436,12 +501,27 @@ tc_shader_handle tc_shader_from_sources(
         return tc_shader_handle_invalid();
     }
 
+    if (!tc_shader_language_valid(language)) {
+        tc_log(TC_LOG_ERROR,
+               "tc_shader_from_sources_ex: invalid shader language %u",
+               (unsigned)language);
+        return tc_shader_handle_invalid();
+    }
+    if (!tc_shader_artifact_policy_valid(artifact_policy)) {
+        tc_log(TC_LOG_ERROR,
+               "tc_shader_from_sources_ex: invalid artifact policy %u",
+               (unsigned)artifact_policy);
+        return tc_shader_handle_invalid();
+    }
+
     // If uuid provided, find or create shader with that uuid
     if (uuid && uuid[0] != '\0') {
         tc_shader_handle existing = tc_shader_find(uuid);
         if (!tc_shader_handle_is_invalid(existing)) {
             // Update existing shader's sources
             tc_shader* shader = tc_shader_get(existing);
+            tc_shader_set_language(shader, language);
+            tc_shader_set_artifact_policy(shader, artifact_policy);
             tc_shader_set_sources(shader, vertex_source, fragment_source, geometry_source, name, source_path);
             return existing;
         }
@@ -451,6 +531,8 @@ tc_shader_handle tc_shader_from_sources(
             return h;
         }
         tc_shader* shader = tc_shader_get(h);
+        shader->language = (uint32_t)language;
+        shader->artifact_policy = (uint32_t)artifact_policy;
         if (!tc_shader_set_sources(shader, vertex_source, fragment_source, geometry_source, name, source_path)) {
             tc_shader_destroy(h);
             return tc_shader_handle_invalid();
@@ -460,7 +542,14 @@ tc_shader_handle tc_shader_from_sources(
 
     // No uuid - use hash-based lookup
     char hash[TC_SHADER_HASH_LEN];
-    tc_shader_compute_hash(vertex_source, fragment_source, geometry_source, hash);
+    tc_shader_compute_identity_hash(
+        vertex_source,
+        fragment_source,
+        geometry_source,
+        language,
+        artifact_policy,
+        hash
+    );
 
     tc_shader_handle existing = tc_shader_find_by_hash(hash);
     if (!tc_shader_handle_is_invalid(existing)) {
@@ -474,12 +563,34 @@ tc_shader_handle tc_shader_from_sources(
     }
 
     tc_shader* shader = tc_shader_get(h);
+    shader->language = (uint32_t)language;
+    shader->artifact_policy = (uint32_t)artifact_policy;
     if (!tc_shader_set_sources(shader, vertex_source, fragment_source, geometry_source, name, source_path)) {
         tc_shader_destroy(h);
         return tc_shader_handle_invalid();
     }
 
     return h;
+}
+
+tc_shader_handle tc_shader_from_sources(
+    const char* vertex_source,
+    const char* fragment_source,
+    const char* geometry_source,
+    const char* name,
+    const char* source_path,
+    const char* uuid
+) {
+    return tc_shader_from_sources_ex(
+        vertex_source,
+        fragment_source,
+        geometry_source,
+        name,
+        source_path,
+        uuid,
+        TC_SHADER_LANGUAGE_GLSL,
+        TC_SHADER_ARTIFACT_OPTIONAL
+    );
 }
 
 tc_shader_handle tc_shader_register_static(
@@ -528,6 +639,68 @@ tc_shader_handle tc_shader_register_static_uuid(
         tc_shader_add_ref(shader);
     }
     return h;
+}
+
+bool tc_shader_set_language(tc_shader* shader, tc_shader_language language) {
+    if (!shader) {
+        tc_log(TC_LOG_ERROR, "tc_shader_set_language: shader is NULL");
+        return false;
+    }
+    if (!tc_shader_language_valid(language)) {
+        tc_log(TC_LOG_ERROR,
+               "tc_shader_set_language: invalid shader language %u for '%s'",
+               (unsigned)language,
+               shader->name ? shader->name : shader->uuid);
+        return false;
+    }
+    if (shader->language == (uint32_t)language) {
+        return false;
+    }
+
+    shader_remove_hash_mapping(shader);
+    shader->language = (uint32_t)language;
+    tc_shader_update_hash(shader);
+    shader_add_hash_mapping(shader);
+    shader->version++;
+    return true;
+}
+
+tc_shader_language tc_shader_get_language(const tc_shader* shader) {
+    if (!shader || !tc_shader_language_valid((tc_shader_language)shader->language)) {
+        return TC_SHADER_LANGUAGE_GLSL;
+    }
+    return (tc_shader_language)shader->language;
+}
+
+bool tc_shader_set_artifact_policy(tc_shader* shader, tc_shader_artifact_policy policy) {
+    if (!shader) {
+        tc_log(TC_LOG_ERROR, "tc_shader_set_artifact_policy: shader is NULL");
+        return false;
+    }
+    if (!tc_shader_artifact_policy_valid(policy)) {
+        tc_log(TC_LOG_ERROR,
+               "tc_shader_set_artifact_policy: invalid artifact policy %u for '%s'",
+               (unsigned)policy,
+               shader->name ? shader->name : shader->uuid);
+        return false;
+    }
+    if (shader->artifact_policy == (uint32_t)policy) {
+        return false;
+    }
+
+    shader_remove_hash_mapping(shader);
+    shader->artifact_policy = (uint32_t)policy;
+    tc_shader_update_hash(shader);
+    shader_add_hash_mapping(shader);
+    shader->version++;
+    return true;
+}
+
+tc_shader_artifact_policy tc_shader_get_artifact_policy(const tc_shader* shader) {
+    if (!shader || !tc_shader_artifact_policy_valid((tc_shader_artifact_policy)shader->artifact_policy)) {
+        return TC_SHADER_ARTIFACT_OPTIONAL;
+    }
+    return (tc_shader_artifact_policy)shader->artifact_policy;
 }
 
 // ============================================================================
@@ -585,6 +758,8 @@ void tc_shader_set_variant_info(
     shader->variant_op = (uint8_t)op;
     shader->original_handle = original;
     shader->original_version = orig->version;
+    tc_shader_set_language(shader, tc_shader_get_language(orig));
+    tc_shader_set_artifact_policy(shader, tc_shader_get_artifact_policy(orig));
 }
 
 bool tc_shader_variant_is_stale(tc_shader_handle variant) {
@@ -672,6 +847,8 @@ static bool collect_shader_info(tc_shader_handle h, tc_shader* shader, void* use
     info->ref_count = shader->ref_count;
     info->version = shader->version;
     info->features = shader->features;
+    info->language = shader->language;
+    info->artifact_policy = shader->artifact_policy;
     info->source_size = tc_shader_source_size(shader);
     info->is_variant = shader->is_variant;
     info->variant_op = shader->variant_op;

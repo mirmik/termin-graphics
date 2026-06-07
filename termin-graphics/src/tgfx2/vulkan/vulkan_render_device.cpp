@@ -3725,6 +3725,7 @@ bool VulkanRenderDevice::ensure_tc_shader(
     }
 
     const bool has_vs = shader->vertex_source && shader->vertex_source[0] != '\0';
+    const bool artifacts_required = tc_shader_requires_artifacts(shader);
     const uint32_t pool_index = shader->pool_index;
     const uint32_t version = shader->version;
     {
@@ -3752,7 +3753,17 @@ bool VulkanRenderDevice::ensure_tc_shader(
         ShaderDesc vs_desc;
         vs_desc.stage = ShaderStage::Vertex;
         vs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":vertex";
-        if (!termin::tgfx2_load_shader_artifact(shader->uuid, vs_desc.stage, vs_desc.bytecode)) {
+        if (!termin::tgfx2_load_shader_artifact_for_backend(
+                shader->uuid,
+                BackendType::Vulkan,
+                vs_desc.stage,
+                vs_desc.bytecode)) {
+            if (artifacts_required) {
+                tc_log(TC_LOG_ERROR,
+                       "VulkanRenderDevice::ensure_tc_shader: required vertex artifact missing for '%s'",
+                       shader->name ? shader->name : shader->uuid);
+                return false;
+            }
             vs_desc.source = shader->vertex_source;
         }
         vs = create_shader(vs_desc);
@@ -3767,7 +3778,18 @@ bool VulkanRenderDevice::ensure_tc_shader(
     ShaderDesc fs_desc;
     fs_desc.stage = ShaderStage::Fragment;
     fs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":fragment";
-    if (!termin::tgfx2_load_shader_artifact(shader->uuid, fs_desc.stage, fs_desc.bytecode)) {
+    if (!termin::tgfx2_load_shader_artifact_for_backend(
+            shader->uuid,
+            BackendType::Vulkan,
+            fs_desc.stage,
+            fs_desc.bytecode)) {
+        if (artifacts_required) {
+            if (vs) destroy(vs);
+            tc_log(TC_LOG_ERROR,
+                   "VulkanRenderDevice::ensure_tc_shader: required fragment artifact missing for '%s'",
+                   shader->name ? shader->name : shader->uuid);
+            return false;
+        }
         fs_desc.source = shader->fragment_source;
     }
     ShaderHandle fs = create_shader(fs_desc);
