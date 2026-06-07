@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
-from setuptools import setup, Extension
+from setuptools import setup
 from termin_build.cmake_ext import TerminCMakeBuild, TerminCMakeBuildExt
+from termin_build.setup_helpers import native_extensions_for_source
 
 import os
 _DIR = os.path.dirname(os.path.realpath(__file__))
 
 
 class BuildExt(TerminCMakeBuildExt):
-    module_names = ["_render_framework_native", "_render_native"]
     source_dir = _DIR
 
 
@@ -31,10 +31,7 @@ setup(
         "termin-scene",
         "termin-inspect",
     ],
-    ext_modules=[
-        Extension("termin.render_framework._render_framework_native", sources=[]),
-        Extension("termin.render._render_native", sources=[]),
-    ],
+    ext_modules=native_extensions_for_source(_DIR),
     cmdclass={"build": TerminCMakeBuild, "build_ext": BuildExt},
     zip_safe=False,
 )

@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [master]
+  pull_request:
+  workflow_dispatch:
 
 env:
   BUILD_TYPE: Release
@@ -24,6 +26,36 @@ jobs:
 
       - name: Run Python lint
         run: ./run-lint-python.sh --no-venv
+
+  # ── 0b. Build system smoke ─────────────────────────────────────
+  smoke-build-system-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Install test dependencies
+        run: python -m pip install pytest setuptools wheel
+
+      - name: Validate package manifest
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = "$pwd\termin-build-tools"
+          python -m termin_build.package_manifest --repo-root . --check
+
+      - name: Run build-tools tests
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = "$pwd\termin-build-tools"
+          python -m pytest termin-build-tools/tests/ -v
+
+      - name: Smoke build-sdk.ps1 wrapper
+        shell: pwsh
+        run: .\build-sdk.ps1 --no-wheels --no-parallel --dry-run
 
   # ── 1. Build C++ libraries ───────────────────────────────────────
   build-cpp-libs:

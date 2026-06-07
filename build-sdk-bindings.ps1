@@ -141,10 +141,14 @@ if (-not $pythonCommand) {
 }
 $pythonExec = $pythonCommand.Source
 
-& $pythonExec -c "import nanobind" 2>$null
-if ($LASTEXITCODE -ne 0) {
-    throw "nanobind not installed for $pythonExec. Run: pip install nanobind"
+$oldPythonPath = $env:PYTHONPATH
+$env:PYTHONPATH = (Join-Path $ScriptDir "termin-build-tools")
+if ($oldPythonPath) {
+    $env:PYTHONPATH = "$env:PYTHONPATH$([IO.Path]::PathSeparator)$oldPythonPath"
 }
+
+& $pythonExec -m termin_build.sdk --repo-root $ScriptDir doctor --profile sdk-bindings --vulkan $TerminEnableVulkan --init-submodules
+if ($LASTEXITCODE -ne 0) { throw "SDK bindings preflight failed" }
 
 Write-Host ""
 Write-Host "========================================"
@@ -222,6 +226,9 @@ if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
 
 & cmake --install $BuildDir --config $BuildType
 if ($LASTEXITCODE -ne 0) { throw "cmake install failed" }
+
+& $pythonExec -m termin_build.sdk --repo-root $ScriptDir write-artifacts --build-dir $BuildDir --sdk-prefix $SdkPrefix
+if ($LASTEXITCODE -ne 0) { throw "failed to write SDK artifact manifest" }
 
 Write-Host ""
 Write-Host "========================================"

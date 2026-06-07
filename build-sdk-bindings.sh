@@ -195,7 +195,8 @@ rsync -a --exclude '/lib/python/' "$INSTALL_STAGING_DIR"/ "$SDK_PREFIX"/
 PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
     "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" write-artifacts \
     --build-dir "$BUILD_DIR" \
-    --sdk-prefix "$SDK_PREFIX"
+    --sdk-prefix "$SDK_PREFIX" \
+    --install-dir "$INSTALL_STAGING_DIR"
 
 echo ""
 echo "========================================"

@@ -112,6 +112,9 @@ if (( ${#PYTEST_TARGETS[@]} > 0 )); then
     run_suite "selected python" \
         "${PYTHON_BIN}" -m pytest "${PYTEST_TARGETS[@]}" -v
 else
+run_suite "termin-build-tools python" \
+    "${PYTHON_BIN}" -m pytest termin-build-tools/tests/ -v
+
 run_suite "termin-base python" \
     "${PYTHON_BIN}" -m pytest termin-base/tests/python/ -v
 

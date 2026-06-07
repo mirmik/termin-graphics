@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
-from setuptools import setup, Extension
+from setuptools import setup
 from termin_build.cmake_ext import TerminCMakeBuild, TerminCMakeBuildExt
+from termin_build.setup_helpers import native_extensions_for_source
 
 import os
 _DIR = os.path.dirname(os.path.realpath(__file__))
 
 
 class BuildExt(TerminCMakeBuildExt):
-    module_names = ["_materials_native"]
     upstream_packages = {"tcbase": "libtermin_base", "tgfx": "libtermin_graphics", "termin_nanobind": "libnanobind"}
     source_dir = _DIR
 
@@ -24,9 +24,7 @@ setup(
     packages=["termin.materials"],
     package_dir={"termin.materials": "python/termin/materials"},
     install_requires=["tcbase", "tgfx", "termin-nanobind"],
-    ext_modules=[
-        Extension("termin.materials._materials_native", sources=[]),
-    ],
+    ext_modules=native_extensions_for_source(_DIR),
     cmdclass={"build": TerminCMakeBuild, "build_ext": BuildExt},
     zip_safe=False,
 )

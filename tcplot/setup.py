@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 import os
 
-from setuptools import setup, Extension
+from setuptools import setup
 
 from termin_build.cmake_ext import TerminCMakeBuild, TerminCMakeBuildExt
+from termin_build.setup_helpers import native_extensions_for_source
 
 _DIR = os.path.dirname(os.path.realpath(__file__))
 
 
 class BuildExt(TerminCMakeBuildExt):
-    module_names = ["_tcplot_native"]
     upstream_packages = {
         "tcbase": "libtermin_base",
         "tmesh": "libtermin_mesh",
@@ -45,9 +45,7 @@ setup(
             "lib/*.lib",
         ],
     },
-    ext_modules=[
-        Extension("tcplot._tcplot_native", sources=[]),
-    ],
+    ext_modules=native_extensions_for_source(_DIR),
     cmdclass={"build": TerminCMakeBuild, "build_ext": BuildExt},
     zip_safe=False,
 )
