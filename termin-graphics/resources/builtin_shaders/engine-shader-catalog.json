@@ -51,6 +51,36 @@
       ]
     },
     {
+      "uuid": "termin-engine-grayscale",
+      "name": "GrayscaleEngineFS",
+      "language": "glsl",
+      "stages": {
+        "fragment": {
+          "path": "termin-engine-grayscale.frag.glsl",
+          "inputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "FragColor", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "GrayscaleParams",
+          "logical_name": "params",
+          "kind": "constant_buffer",
+          "legacy_binding": 0
+        },
+        {
+          "name": "u_input",
+          "logical_name": "input_texture",
+          "kind": "combined_sampler2d",
+          "legacy_binding": 4
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-bloom-downsample",
       "name": "BloomDownsampleFS",
       "language": "glsl",
