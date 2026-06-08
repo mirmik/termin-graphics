@@ -21,6 +21,39 @@
       "resources": []
     },
     {
+      "uuid": "termin-engine-shadow",
+      "name": "ShadowEngineVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-shadow.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0}
+          ],
+          "outputs": []
+        },
+        "fragment": {
+          "path": "termin-engine-shadow.frag.glsl",
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "resources": [
+        {
+          "name": "PerFrame",
+          "logical_name": "per_frame",
+          "kind": "constant_buffer",
+          "legacy_binding": 0
+        },
+        {
+          "name": "ShadowPushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-bloom-bright",
       "name": "BloomBrightFS",
       "language": "glsl",
