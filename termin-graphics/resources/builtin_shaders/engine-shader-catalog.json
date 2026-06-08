@@ -1,0 +1,180 @@
+{
+  "version": 1,
+  "shaders": [
+    {
+      "uuid": "termin-engine-fsq",
+      "name": "FullscreenQuadEngineVS",
+      "language": "slang",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-fsq.vert.slang",
+          "inputs": [
+            {"name": "position", "semantic": "POSITION", "location": 0},
+            {"name": "uv", "semantic": "TEXCOORD0", "location": 1}
+          ],
+          "outputs": [
+            {"name": "position", "semantic": "SV_Position"},
+            {"name": "uv", "semantic": "TEXCOORD0", "location": 0}
+          ]
+        }
+      },
+      "resources": []
+    },
+    {
+      "uuid": "termin-engine-bloom-bright",
+      "name": "BloomBrightFS",
+      "language": "glsl",
+      "stages": {
+        "fragment": {
+          "path": "termin-engine-bloom-bright.frag.glsl",
+          "inputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "FragColor", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "BloomBrightParams",
+          "logical_name": "params",
+          "kind": "constant_buffer",
+          "legacy_binding": 0
+        },
+        {
+          "name": "u_texture",
+          "logical_name": "input_texture",
+          "kind": "combined_sampler2d",
+          "legacy_binding": 4
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-bloom-downsample",
+      "name": "BloomDownsampleFS",
+      "language": "glsl",
+      "stages": {
+        "fragment": {
+          "path": "termin-engine-bloom-downsample.frag.glsl",
+          "inputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "FragColor", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "BloomDownsampleParams",
+          "logical_name": "params",
+          "kind": "constant_buffer",
+          "legacy_binding": 0
+        },
+        {
+          "name": "u_texture",
+          "logical_name": "input_texture",
+          "kind": "combined_sampler2d",
+          "legacy_binding": 4
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-bloom-upsample",
+      "name": "BloomUpsampleFS",
+      "language": "glsl",
+      "stages": {
+        "fragment": {
+          "path": "termin-engine-bloom-upsample.frag.glsl",
+          "inputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "FragColor", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "BloomUpsampleParams",
+          "logical_name": "params",
+          "kind": "constant_buffer",
+          "legacy_binding": 0
+        },
+        {
+          "name": "u_texture",
+          "logical_name": "input_texture",
+          "kind": "combined_sampler2d",
+          "legacy_binding": 4
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-bloom-composite",
+      "name": "BloomCompositeFS",
+      "language": "glsl",
+      "stages": {
+        "fragment": {
+          "path": "termin-engine-bloom-composite.frag.glsl",
+          "inputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "FragColor", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "BloomCompositeParams",
+          "logical_name": "params",
+          "kind": "constant_buffer",
+          "legacy_binding": 0
+        },
+        {
+          "name": "u_original",
+          "logical_name": "original_texture",
+          "kind": "combined_sampler2d",
+          "legacy_binding": 4
+        },
+        {
+          "name": "u_bloom",
+          "logical_name": "bloom_texture",
+          "kind": "combined_sampler2d",
+          "legacy_binding": 5
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-tonemap",
+      "name": "TonemapEngineFS",
+      "language": "glsl",
+      "stages": {
+        "fragment": {
+          "path": "termin-engine-tonemap.frag.glsl",
+          "inputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "FragColor", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "TonemapParams",
+          "logical_name": "params",
+          "kind": "constant_buffer",
+          "legacy_binding": 0
+        },
+        {
+          "name": "u_input",
+          "logical_name": "input_texture",
+          "kind": "combined_sampler2d",
+          "legacy_binding": 4
+        }
+      ]
+    }
+  ]
+}

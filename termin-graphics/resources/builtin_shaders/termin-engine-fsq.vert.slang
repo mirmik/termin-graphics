@@ -1,9 +1,7 @@
 struct VertexInput
 {
-    [[vk::location(0)]]
     float2 position : POSITION;
 
-    [[vk::location(1)]]
     float2 uv : TEXCOORD0;
 };
 
@@ -11,7 +9,6 @@ struct VertexOutput
 {
     float4 position : SV_Position;
 
-    [[vk::location(0)]]
     float2 uv : TEXCOORD0;
 };
 
