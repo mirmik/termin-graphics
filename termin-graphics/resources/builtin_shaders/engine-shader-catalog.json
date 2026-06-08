@@ -54,6 +54,33 @@
       ]
     },
     {
+      "uuid": "termin-engine-debug-triangle",
+      "name": "DebugTrianglePassVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-debug-triangle.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0},
+            {"name": "a_color", "semantic": "COLOR0", "location": 1}
+          ],
+          "outputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 0}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-debug-triangle.frag.glsl",
+          "inputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "fragColor", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": []
+    },
+    {
       "uuid": "termin-engine-bloom-bright",
       "name": "BloomBrightFS",
       "language": "glsl",
