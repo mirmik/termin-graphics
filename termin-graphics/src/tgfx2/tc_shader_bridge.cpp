@@ -330,8 +330,8 @@ static std::optional<std::filesystem::path> resolve_shader_compiler() {
 
     for (const std::string& dir : split_paths(std::getenv("PATH"))) {
 #ifdef _WIN32
-        std::filesystem::path candidate = std::filesystem::path(dir) / "termin_shaderc.exe";
-        if (is_existing_file(candidate)) return candidate;
+        std::filesystem::path exe_candidate = std::filesystem::path(dir) / "termin_shaderc.exe";
+        if (is_existing_file(exe_candidate)) return exe_candidate;
 #endif
         std::filesystem::path candidate = std::filesystem::path(dir) / "termin_shaderc";
         if (is_existing_file(candidate)) return candidate;
