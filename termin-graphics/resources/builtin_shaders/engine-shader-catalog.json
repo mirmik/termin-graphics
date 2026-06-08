@@ -81,6 +81,22 @@
       "resources": []
     },
     {
+      "uuid": "termin-engine-skybox",
+      "name": "SkyboxEngineVSFS",
+      "language": "shader",
+      "program": {
+        "path": "termin-engine-skybox.shader"
+      },
+      "resources": [
+        {
+          "name": "MaterialParams",
+          "logical_name": "material_params",
+          "kind": "constant_buffer",
+          "legacy_binding": 1
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-bloom-bright",
       "name": "BloomBrightFS",
       "language": "glsl",
