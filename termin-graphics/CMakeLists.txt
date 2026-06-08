@@ -95,6 +95,7 @@ termin_set_rpath_lib(termin_graphics)
 set(TGFX2_SOURCES
     src/tgfx2/device_factory.cpp
     src/tgfx2/canvas2d_renderer.cpp
+    src/tgfx2/engine_shader_catalog.cpp
     src/tgfx2/font_atlas.cpp
     src/tgfx2/immediate_renderer.cpp
     src/tgfx2/line_mesh_builder.cpp
@@ -371,7 +372,10 @@ if(BUILD_TGFX2_TESTS)
     # Vulkan smoke test (no GLFW needed — offscreen)
     if(TGFX2_ENABLE_VULKAN)
         add_executable(tgfx2_vulkan_smoke tests/test_tgfx2_vulkan_smoke.cpp)
-        target_compile_definitions(tgfx2_vulkan_smoke PRIVATE TGFX2_HAS_VULKAN)
+        target_compile_definitions(tgfx2_vulkan_smoke
+            PRIVATE
+                TGFX2_HAS_VULKAN
+                TGFX2_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
         target_link_libraries(tgfx2_vulkan_smoke PRIVATE termin_graphics2 Vulkan::Vulkan)
         termin_set_rpath_test(tgfx2_vulkan_smoke)
         add_test(NAME tgfx2_vulkan_smoke COMMAND tgfx2_vulkan_smoke)
@@ -429,6 +433,10 @@ install(DIRECTORY include/tgfx include/tgfx2
 
 install(DIRECTORY third/glad/include/glad third/glad/include/KHR
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(DIRECTORY resources/builtin_shaders
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/termin
 )
 
 # --- CMake config for find_package ---

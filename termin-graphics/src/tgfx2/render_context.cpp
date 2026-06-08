@@ -1,5 +1,6 @@
 // render_context.cpp - Mid-level rendering abstraction over tgfx2.
 #include "tgfx2/render_context.hpp"
+#include "tgfx2/engine_shader_catalog.hpp"
 #include "tgfx2/pipeline_cache.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/i_command_list.hpp"
@@ -9,25 +10,13 @@ extern "C" {
 }
 
 #include <cstring>
+#include <string>
 
 namespace tgfx {
 
 // ============================================================================
 // Fullscreen quad shader (built-in, minimal)
 // ============================================================================
-
-// Built-in FSQ vertex shader. `#version 450 core` + explicit location
-// qualifiers on varyings — both required for Vulkan shaderc (SPIR-V).
-// GL 4.3+ accepts the same source via core GL_ARB_shading_language_420pack.
-static const char* FSQ_VERT_SRC = R"(#version 450 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUV;
-layout(location = 0) out vec2 v_uv;
-void main() {
-    gl_Position = vec4(aPos, 0.0, 1.0);
-    v_uv = aUV;
-}
-)";
 
 // Fullscreen quad geometry: two triangles covering [-1,1]
 // Vertex format: [x, y, u, v]
@@ -617,13 +606,14 @@ void RenderContext2::ensure_fsq_resources() {
     });
 
     // Create built-in vertex shader
+    const EngineShaderStageSource& fsq_shader = engine_fullscreen_quad_vertex_shader();
     ShaderDesc vs_desc;
-    vs_desc.stage = ShaderStage::Vertex;
-    vs_desc.debug_name = "termin-engine-fsq:vertex";
+    vs_desc.stage = fsq_shader.stage;
+    vs_desc.debug_name = std::string(fsq_shader.uuid) + ":vertex";
     if (device_.backend_type() == BackendType::Vulkan
-        && termin::tgfx2_load_shader_artifact("termin-engine-fsq", vs_desc.stage, vs_desc.bytecode)) {
+        && termin::tgfx2_load_shader_artifact(fsq_shader.uuid, vs_desc.stage, vs_desc.bytecode)) {
     } else {
-        vs_desc.source = FSQ_VERT_SRC;
+        vs_desc.source = fsq_shader.fallback_glsl_source;
     }
     fsq_vs_ = device_.create_shader(vs_desc);
 }

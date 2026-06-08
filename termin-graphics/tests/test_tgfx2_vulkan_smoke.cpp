@@ -7,6 +7,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <optional>
 #include <span>
 #include <string>
@@ -14,6 +15,7 @@
 
 #include "tgfx2/enums.hpp"
 #include "tgfx2/descriptors.hpp"
+#include "tgfx2/engine_shader_catalog.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/i_command_list.hpp"
 #include "tgfx2/pipeline_cache.hpp"
@@ -93,32 +95,6 @@ FragmentOutput main()
 }
 )";
 
-static const char* slang_fsq_vertex_src = R"(
-struct VertexInput
-{
-    [[vk::location(0)]]
-    float2 position : POSITION;
-    [[vk::location(1)]]
-    float2 uv : TEXCOORD0;
-};
-
-struct VertexOutput
-{
-    float4 position : SV_Position;
-    [[vk::location(0)]]
-    float2 uv : TEXCOORD0;
-};
-
-[shader("vertex")]
-VertexOutput main(VertexInput input)
-{
-    VertexOutput output;
-    output.position = float4(input.position, 0.0, 1.0);
-    output.uv = float2(0.20, 0.80);
-    return output;
-}
-)";
-
 static const char* fsq_uv_fragment_src = R"(
 #version 450 core
 layout(location = 0) in vec2 v_uv;
@@ -146,6 +122,17 @@ static bool write_text_file(const std::filesystem::path& path, const char* text)
         return false;
     }
     return true;
+}
+
+static std::optional<std::string> read_text_file(const std::filesystem::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        fprintf(stderr, "Failed to open text file: %s\n", path.string().c_str());
+        return std::nullopt;
+    }
+    return std::string(
+        std::istreambuf_iterator<char>(in),
+        std::istreambuf_iterator<char>());
 }
 
 static bool is_existing_file(const std::filesystem::path& path) {
@@ -299,15 +286,15 @@ static bool render_fsq_artifact_smoke(tgfx::IRenderDevice& device) {
     printf("FSQ Slang artifact center pixel: (%.2f %.2f %.2f %.2f)\n",
            center_pixel[0], center_pixel[1], center_pixel[2], center_pixel[3]);
 
-    const bool matches_artifact_uv =
+    const bool matches_canonical_uv =
         read_ok &&
-        center_pixel[0] > 0.15f && center_pixel[0] < 0.30f &&
-        center_pixel[1] > 0.70f && center_pixel[1] < 0.90f &&
+        center_pixel[0] > 0.40f && center_pixel[0] < 0.60f &&
+        center_pixel[1] > 0.40f && center_pixel[1] < 0.60f &&
         center_pixel[2] < 0.10f;
 
     device.destroy(fs);
     device.destroy(rt);
-    return matches_artifact_uv;
+    return matches_canonical_uv;
 }
 
 int main(int argc, char** argv) {
@@ -625,16 +612,24 @@ int main(int argc, char** argv) {
 
         std::filesystem::path vertex_slang = artifact_root / "matrix.vert.slang";
         std::filesystem::path fragment_slang = artifact_root / "matrix.frag.slang";
+        const tgfx::EngineShaderStageSource& fsq_shader =
+            tgfx::engine_fullscreen_quad_vertex_shader();
+        const std::filesystem::path fsq_source_path =
+            std::filesystem::path(TGFX2_SOURCE_DIR) / "resources" / fsq_shader.source_resource_path;
+        std::optional<std::string> fsq_source = read_text_file(fsq_source_path);
         std::filesystem::path fsq_slang = artifact_root / "fsq.vert.slang";
         std::filesystem::path vertex_spv = artifact_dir / (std::string(artifact_uuid) + ".vert.spv");
         std::filesystem::path fragment_spv = artifact_dir / (std::string(artifact_uuid) + ".frag.spv");
-        std::filesystem::path fsq_spv = artifact_dir / "termin-engine-fsq.vert.spv";
+        std::filesystem::path fsq_spv = artifact_dir / (std::string(fsq_shader.uuid) + ".vert.spv");
 
+        if (slang_artifact_ok && !fsq_source) {
+            slang_artifact_ok = false;
+        }
         if (slang_artifact_ok) {
             slang_artifact_ok =
                 write_text_file(vertex_slang, slang_matrix_vertex_src) &&
                 write_text_file(fragment_slang, slang_matrix_fragment_src) &&
-                write_text_file(fsq_slang, slang_fsq_vertex_src) &&
+                write_text_file(fsq_slang, fsq_source->c_str()) &&
                 run_shaderc(*shaderc, *slangc, "vertex", vertex_slang, vertex_spv) &&
                 run_shaderc(*shaderc, *slangc, "fragment", fragment_slang, fragment_spv) &&
                 run_shaderc(*shaderc, *slangc, "vertex", fsq_slang, fsq_spv);
