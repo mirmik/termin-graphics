@@ -910,6 +910,35 @@
       ]
     },
     {
+      "uuid": "termin-engine-gizmo-mask",
+      "name": "GizmoMaskVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-gizmo-mask.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0}
+          ],
+          "outputs": []
+        },
+        "fragment": {
+          "path": "termin-engine-gizmo-mask.frag.glsl",
+          "inputs": [],
+          "outputs": [
+            {"name": "fragColor", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "GizmoPushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-grayscale",
       "name": "GrayscaleEngineFS",
       "language": "glsl",
