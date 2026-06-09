@@ -974,6 +974,39 @@
       ]
     },
     {
+      "uuid": "termin-engine-solid-primitive",
+      "name": "SolidPrimitiveEngineVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-solid-primitive.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0}
+          ],
+          "outputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 0}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-solid-primitive.frag.glsl",
+          "inputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "fragColor", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "SolidPushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-grayscale",
       "name": "GrayscaleEngineFS",
       "language": "glsl",
