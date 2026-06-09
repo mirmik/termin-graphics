@@ -939,6 +939,41 @@
       ]
     },
     {
+      "uuid": "termin-engine-ground-grid",
+      "name": "GroundGridEngineVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-ground-grid.vert.glsl",
+          "inputs": [
+            {"name": "a_pos", "semantic": "POSITION", "location": 0}
+          ],
+          "outputs": [
+            {"name": "v_near_point", "semantic": "TEXCOORD0", "location": 0},
+            {"name": "v_far_point", "semantic": "TEXCOORD1", "location": 1}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-ground-grid.frag.glsl",
+          "inputs": [
+            {"name": "v_near_point", "semantic": "TEXCOORD0", "location": 0},
+            {"name": "v_far_point", "semantic": "TEXCOORD1", "location": 1}
+          ],
+          "outputs": [
+            {"name": "fragColor", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "GridParams",
+          "logical_name": "grid_params",
+          "kind": "constant_buffer",
+          "legacy_binding": 0
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-grayscale",
       "name": "GrayscaleEngineFS",
       "language": "glsl",
