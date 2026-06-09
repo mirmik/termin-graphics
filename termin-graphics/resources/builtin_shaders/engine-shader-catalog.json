@@ -21,6 +21,46 @@
       "resources": []
     },
     {
+      "uuid": "termin-runtime-default-color",
+      "name": "TerminRuntimeDefaultColor",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-runtime-default-color.vert.glsl",
+          "inputs": [
+            {"name": "in_position", "semantic": "POSITION", "location": 0},
+            {"name": "in_color", "semantic": "COLOR0", "location": 1}
+          ],
+          "outputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 0}
+          ]
+        },
+        "fragment": {
+          "path": "termin-runtime-default-color.frag.glsl",
+          "inputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "out_color", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "CameraUBO",
+          "logical_name": "camera",
+          "kind": "constant_buffer",
+          "legacy_set": 0,
+          "legacy_binding": 0
+        },
+        {
+          "name": "PushConstants",
+          "logical_name": "push_constants",
+          "kind": "push_constant"
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-shadow",
       "name": "ShadowEngineVSFS",
       "language": "glsl",
