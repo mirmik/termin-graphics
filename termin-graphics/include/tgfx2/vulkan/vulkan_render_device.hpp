@@ -296,6 +296,17 @@ private:
     // and dimensions, not only attachment image views.
     std::map<VkFramebufferCacheKey, VkFramebuffer> framebuffer_cache_;
 
+    // Pipeline layout cache. Key is the ordered list of VkDescriptorSetLayout
+    // handles (set=0, then set=1, ...). Enables per-shader material layouts
+    // (set=1) while engine pass layouts (set=0-only) continue to share.
+    std::map<std::vector<VkDescriptorSetLayout>, VkPipelineLayout> pipeline_layout_cache_;
+
+    // Descriptor set layout cache for per-shader set=1 layouts. Key is
+    // an FNV-1a hash of the tc_shader_resource_binding signature (binding,
+    // kind, count). Lookups happen from create_pipeline when a shader
+    // declares set=1 resources.
+    std::unordered_map<uint64_t, VkDescriptorSetLayout> descriptor_set_layout_cache_;
+
     bool validation_enabled_ = false;
 
     std::array<VkFence, kFrameSlotCount> frame_fences_ = {};
@@ -612,6 +623,21 @@ private:
     void create_shared_layouts();
     void create_ring_ubo();
     void create_transient_vertex_ring();
+
+    // Get or create a VkPipelineLayout for the given ordered set layouts.
+    // Cached by the vector of layouts; identical signatures share one layout.
+    VkPipelineLayout get_or_create_pipeline_layout(
+        const std::vector<VkDescriptorSetLayout>& set_layouts);
+
+    // Get or create a VkDescriptorSetLayout from tc_shader resource bindings
+    // for the given set index. Primarily used for per-shader material set=1
+    // layouts. Cached by FNV-1a hash of the binding signature.
+    // `bindings` is a flat C array of tc_shader_resource_binding, passed as
+    // void* to keep this header decoupled from the C structure definition.
+    VkDescriptorSetLayout get_or_create_descriptor_set_layout_for_bindings(
+        const void* bindings,
+        uint32_t count,
+        uint32_t set_index);
 
     // Drain `q` now — actually free the underlying Vk objects. Caller is
     // responsible for ensuring GPU has finished using these resources.

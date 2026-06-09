@@ -506,7 +506,16 @@ VulkanRenderDevice::~VulkanRenderDevice() {
         if (fence) vkDestroyFence(device_, fence, nullptr);
     }
     if (default_sampler_) vkDestroySampler(device_, default_sampler_, nullptr);
-    if (shared_pipeline_layout_) vkDestroyPipelineLayout(device_, shared_pipeline_layout_, nullptr);
+    // shared_pipeline_layout_ is owned by pipeline_layout_cache_ — destroyed below.
+    for (auto& [layouts, pl] : pipeline_layout_cache_) {
+        if (pl) vkDestroyPipelineLayout(device_, pl, nullptr);
+    }
+    pipeline_layout_cache_.clear();
+    shared_pipeline_layout_ = VK_NULL_HANDLE;
+    for (auto& [hash, dsl] : descriptor_set_layout_cache_) {
+        if (dsl) vkDestroyDescriptorSetLayout(device_, dsl, nullptr);
+    }
+    descriptor_set_layout_cache_.clear();
     for (VkDescriptorSetLayout layout : descriptor_set_layouts_) {
         if (layout) vkDestroyDescriptorSetLayout(device_, layout, nullptr);
     }
@@ -881,6 +890,18 @@ void VulkanRenderDevice::create_shared_layouts() {
     // Text2D / Text3D style where a single `layout(push_constant)`
     // block carries all per-draw state. Shaders that need more must
     // fall back to UBO bindings 0-3.
+    shared_pipeline_layout_ =
+        get_or_create_pipeline_layout({descriptor_set_layouts_[0]});
+}
+
+VkPipelineLayout VulkanRenderDevice::get_or_create_pipeline_layout(
+    const std::vector<VkDescriptorSetLayout>& set_layouts)
+{
+    auto it = pipeline_layout_cache_.find(set_layouts);
+    if (it != pipeline_layout_cache_.end()) {
+        return it->second;
+    }
+
     VkPushConstantRange pc_range{};
     pc_range.stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
     pc_range.offset = 0;
@@ -888,14 +909,112 @@ void VulkanRenderDevice::create_shared_layouts() {
 
     VkPipelineLayoutCreateInfo pl_ci{};
     pl_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pl_ci.setLayoutCount = 1;
-    pl_ci.pSetLayouts = &descriptor_set_layouts_[0];
+    pl_ci.setLayoutCount = static_cast<uint32_t>(set_layouts.size());
+    pl_ci.pSetLayouts = set_layouts.data();
     pl_ci.pushConstantRangeCount = 1;
     pl_ci.pPushConstantRanges = &pc_range;
 
-    if (vkCreatePipelineLayout(device_, &pl_ci, nullptr, &shared_pipeline_layout_) != VK_SUCCESS) {
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    if (vkCreatePipelineLayout(device_, &pl_ci, nullptr, &layout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create pipeline layout");
     }
+    pipeline_layout_cache_.emplace(set_layouts, layout);
+    return layout;
+}
+
+VkDescriptorSetLayout VulkanRenderDevice::get_or_create_descriptor_set_layout_for_bindings(
+    const void* bindings_in,
+    uint32_t count,
+    uint32_t set_index)
+{
+    const tc_shader_resource_binding* bindings =
+        static_cast<const tc_shader_resource_binding*>(bindings_in);
+    // FNV-1a hash of (set, binding, kind, count) for cache key.
+    uint64_t hash = 0xcbf29ce484222325ull;
+    auto mix = [&hash](uint64_t v) {
+        hash ^= v;
+        hash *= 0x100000001b3ull;
+    };
+    mix(set_index);
+    mix(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        mix(bindings[i].set);
+        mix(bindings[i].binding);
+        mix(bindings[i].kind);
+        mix(bindings[i].stage_mask);
+        mix(bindings[i].size);
+    }
+
+    auto cache_it = descriptor_set_layout_cache_.find(hash);
+    if (cache_it != descriptor_set_layout_cache_.end()) {
+        return cache_it->second;
+    }
+
+    std::vector<VkDescriptorSetLayoutBinding> vk_bindings;
+    vk_bindings.reserve(count);
+
+    for (uint32_t i = 0; i < count; ++i) {
+        const tc_shader_resource_binding& rb = bindings[i];
+        if (rb.set != set_index) continue;
+
+        VkDescriptorSetLayoutBinding b{};
+        b.binding = rb.binding;
+        b.descriptorCount = 1;
+
+        // Map tc_shader_stage_mask to VkShaderStageFlags
+        VkShaderStageFlags stage_flags = 0;
+        if (rb.stage_mask & TC_SHADER_STAGE_VERTEX)    stage_flags |= VK_SHADER_STAGE_VERTEX_BIT;
+        if (rb.stage_mask & TC_SHADER_STAGE_FRAGMENT)  stage_flags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+        if (rb.stage_mask & TC_SHADER_STAGE_GEOMETRY)  stage_flags |= VK_SHADER_STAGE_GEOMETRY_BIT;
+        if (rb.stage_mask & TC_SHADER_STAGE_COMPUTE)   stage_flags |= VK_SHADER_STAGE_COMPUTE_BIT;
+        if (stage_flags == 0) stage_flags = VK_SHADER_STAGE_ALL;
+        b.stageFlags = stage_flags;
+
+        switch (rb.kind) {
+            case TC_SHADER_RESOURCE_CONSTANT_BUFFER:
+                b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+                break;
+            case TC_SHADER_RESOURCE_TEXTURE:
+                b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                break;
+            case TC_SHADER_RESOURCE_SAMPLER:
+                b.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+                break;
+            case TC_SHADER_RESOURCE_STORAGE_BUFFER:
+                b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                break;
+            case TC_SHADER_RESOURCE_STORAGE_TEXTURE:
+                b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+                break;
+            default:
+                continue;
+        }
+        vk_bindings.push_back(b);
+    }
+
+    if (vk_bindings.empty()) {
+        descriptor_set_layout_cache_.emplace(hash, VK_NULL_HANDLE);
+        return VK_NULL_HANDLE;
+    }
+
+    VkDescriptorSetLayoutCreateInfo ci{};
+    ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    ci.bindingCount = static_cast<uint32_t>(vk_bindings.size());
+    ci.pBindings = vk_bindings.data();
+
+    VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+    VkResult rc = vkCreateDescriptorSetLayout(device_, &ci, nullptr, &layout);
+    if (rc != VK_SUCCESS) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice: vkCreateDescriptorSetLayout for set=%u "
+               "with %zu bindings failed: VkResult=%d",
+               set_index, vk_bindings.size(), static_cast<int>(rc));
+        descriptor_set_layout_cache_.emplace(hash, VK_NULL_HANDLE);
+        return VK_NULL_HANDLE;
+    }
+
+    descriptor_set_layout_cache_.emplace(hash, layout);
+    return layout;
 }
 
 // --- Ring UBO ---
@@ -1515,7 +1634,10 @@ ShaderHandle VulkanRenderDevice::create_shader(const ShaderDesc& desc) {
 PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
     VkPipelineResource res;
     res.desc = desc;
-    res.layout = shared_pipeline_layout_;
+    // For now all pipelines use set=0 only. When a pipeline has material
+    // resources in set=1, the layout will combine descriptor_set_layouts_[0]
+    // with the per-shader set=1 layout from descriptor_set_layout_cache_.
+    res.layout = get_or_create_pipeline_layout({descriptor_set_layouts_[0]});
     res.set_count = 1;
 
     // Get or create render pass from formats. `needs_depth` is driven
