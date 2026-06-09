@@ -1120,6 +1120,141 @@
       ]
     },
     {
+      "uuid": "termin-engine-pick-material",
+      "name": "PickShader",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-pick-material.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0},
+            {"name": "a_normal", "semantic": "NORMAL", "location": 1},
+            {"name": "a_texcoord", "semantic": "TEXCOORD0", "location": 2}
+          ],
+          "outputs": []
+        },
+        "fragment": {
+          "path": "termin-engine-pick-material.frag.glsl",
+          "inputs": [],
+          "outputs": [
+            {"name": "fragColor", "semantic": "SV_Target0"}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "u_model",
+          "logical_name": "model_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_view",
+          "logical_name": "view_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_projection",
+          "logical_name": "projection_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_pickColor",
+          "logical_name": "pick_color",
+          "kind": "legacy_uniform"
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-shadow-material",
+      "name": "ShadowShader",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-shadow-material.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0}
+          ],
+          "outputs": []
+        },
+        "fragment": {
+          "path": "termin-engine-shadow-material.frag.glsl",
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "resources": [
+        {
+          "name": "u_model",
+          "logical_name": "model_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_view",
+          "logical_name": "view_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_projection",
+          "logical_name": "projection_matrix",
+          "kind": "legacy_uniform"
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-depth-material",
+      "name": "DepthShader",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-depth-material.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0},
+            {"name": "a_normal", "semantic": "NORMAL", "location": 1},
+            {"name": "a_texcoord", "semantic": "TEXCOORD0", "location": 2}
+          ],
+          "outputs": [
+            {"name": "v_linear_depth", "semantic": "TEXCOORD0"}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-depth-material.frag.glsl",
+          "inputs": [
+            {"name": "v_linear_depth", "semantic": "TEXCOORD0"}
+          ],
+          "outputs": [
+            {"name": "FragColor", "semantic": "SV_Target0"}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "u_model",
+          "logical_name": "model_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_view",
+          "logical_name": "view_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_projection",
+          "logical_name": "projection_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_near",
+          "logical_name": "near_plane",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_far",
+          "logical_name": "far_plane",
+          "kind": "legacy_uniform"
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-foliage-shadow",
       "name": "FoliageShadowVariantVS",
       "language": "glsl",
