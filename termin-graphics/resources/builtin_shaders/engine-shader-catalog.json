@@ -915,6 +915,211 @@
       ]
     },
     {
+      "uuid": "termin-engine-navmesh-debug",
+      "name": "NavMeshDebugVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-navmesh-debug.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0},
+            {"name": "a_color", "semantic": "COLOR0", "location": 5}
+          ],
+          "outputs": [
+            {"name": "v_color", "semantic": "COLOR0"}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-navmesh-debug.frag.glsl",
+          "inputs": [
+            {"name": "v_color", "semantic": "COLOR0"}
+          ],
+          "outputs": [
+            {"name": "frag_color", "semantic": "SV_Target0"}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "u_model",
+          "logical_name": "model_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_view",
+          "logical_name": "view_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_projection",
+          "logical_name": "projection_matrix",
+          "kind": "legacy_uniform"
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-off-mesh-link-debug",
+      "name": "OffMeshLinkDebugVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-off-mesh-link-debug.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0}
+          ],
+          "outputs": []
+        },
+        "fragment": {
+          "path": "termin-engine-off-mesh-link-debug.frag.glsl",
+          "inputs": [],
+          "outputs": [
+            {"name": "frag_color", "semantic": "SV_Target0"}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "u_model",
+          "logical_name": "model_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_view",
+          "logical_name": "view_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_projection",
+          "logical_name": "projection_matrix",
+          "kind": "legacy_uniform"
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-voxel-display",
+      "name": "VoxelDisplay",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-voxel-display.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0},
+            {"name": "a_normal", "semantic": "NORMAL", "location": 1},
+            {"name": "a_uv", "semantic": "TEXCOORD0", "location": 2},
+            {"name": "a_color", "semantic": "COLOR0", "location": 5}
+          ],
+          "outputs": [
+            {"name": "v_world_pos", "semantic": "POSITION1"},
+            {"name": "v_normal", "semantic": "NORMAL"},
+            {"name": "v_uv", "semantic": "TEXCOORD0"},
+            {"name": "v_color", "semantic": "COLOR0"}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-voxel-display.frag.glsl",
+          "inputs": [
+            {"name": "v_world_pos", "semantic": "POSITION1"},
+            {"name": "v_normal", "semantic": "NORMAL"},
+            {"name": "v_uv", "semantic": "TEXCOORD0"},
+            {"name": "v_color", "semantic": "COLOR0"}
+          ],
+          "outputs": [
+            {"name": "FragColor", "semantic": "SV_Target0"}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "u_model",
+          "logical_name": "model_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_view",
+          "logical_name": "view_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_projection",
+          "logical_name": "projection_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_color_below",
+          "logical_name": "color_below",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_color_above",
+          "logical_name": "color_above",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_slice_axis",
+          "logical_name": "slice_axis",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_fill_percent",
+          "logical_name": "fill_percent",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_bounds_min",
+          "logical_name": "bounds_min",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_bounds_max",
+          "logical_name": "bounds_max",
+          "kind": "legacy_uniform"
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-voxelizer-line",
+      "name": "VoxelizerLine",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-voxelizer-line.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0},
+            {"name": "a_color", "semantic": "COLOR0", "location": 5}
+          ],
+          "outputs": [
+            {"name": "v_color", "semantic": "COLOR0"}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-voxelizer-line.frag.glsl",
+          "inputs": [
+            {"name": "v_color", "semantic": "COLOR0"}
+          ],
+          "outputs": [
+            {"name": "FragColor", "semantic": "SV_Target0"}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "u_model",
+          "logical_name": "model_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_view",
+          "logical_name": "view_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_projection",
+          "logical_name": "projection_matrix",
+          "kind": "legacy_uniform"
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-foliage-shadow",
       "name": "FoliageShadowVariantVS",
       "language": "glsl",
