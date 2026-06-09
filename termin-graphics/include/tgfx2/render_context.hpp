@@ -166,17 +166,19 @@ public:
     void set_topology(PrimitiveTopology topo);
 
     // --- Resource bindings (UBOs, textures, samplers) ---
-    // Register a uniform buffer at the given binding slot. The buffer is
-    // resolved into a ResourceSet lazily at draw time; call-sites do not
-    // manage ResourceSetHandle lifecycles.
+    // Register a uniform buffer at the given binding and set slot. The
+    // buffer is resolved into a ResourceSet lazily at draw time; call-sites
+    // do not manage ResourceSetHandle lifecycles.
+    // `set` defaults to 0 (engine resources); material resources use set=1.
     // Passing range=0 means "bind whole buffer" (backend uses glBindBufferBase).
     void bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
-                             uint64_t offset = 0, uint64_t range = 0);
+                             uint64_t offset = 0, uint64_t range = 0,
+                             uint32_t set = 0);
 
     // Write `size` bytes of `data` into the backend's shared ring UBO
-    // and bind it at `binding`. No caller-managed BufferHandle, no
-    // per-draw upload_buffer, no descriptor-set allocation for UBO-only
-    // differences between draws: on Vulkan this lands as a dynamic
+    // and bind it at `binding` in the given descriptor set. No
+    // caller-managed BufferHandle, no per-draw upload_buffer, no
+    // descriptor-set allocation for UBO-only differences between draws.
     // descriptor offset on the shared set; on OpenGL as a
     // `glBindBufferRange` into the ring buffer. `size` must be ≤ the
     // UBO block size declared by the shader.
@@ -184,7 +186,10 @@ public:
     // `binding` must be one of the layout's UNIFORM_BUFFER_DYNAMIC slots
     // (0..3, 16, 24). Other slots fall back to the classic bind_uniform_buffer
     // path and pay the old per-draw churn.
-    void bind_uniform_buffer_ring(uint32_t binding, const void* data, uint32_t size);
+    // `set` defaults to 0 (engine); use set=1 for material UBOs in the
+    // two-set scheme.
+    void bind_uniform_buffer_ring(uint32_t binding, const void* data, uint32_t size,
+                                  uint32_t set = 0);
 
     // Set per-draw push constants. Payload becomes visible to the next
     // draw call at binding slot TGFX2_PUSH_CONSTANTS_BINDING (GL) or via
@@ -207,12 +212,14 @@ public:
     // optional; if omitted, the backend uses the texture's default sampling
     // parameters (useful for GL 3.3 style shaders without separate samplers).
     void bind_sampled_texture(uint32_t binding, TextureHandle tex,
-                              SamplerHandle sampler = {});
+                              SamplerHandle sampler = {},
+                              uint32_t set = 0);
     void bind_sampled_texture_array_element(
         uint32_t binding,
         uint32_t array_element,
         TextureHandle tex,
-        SamplerHandle sampler = {}
+        SamplerHandle sampler = {},
+        uint32_t set = 0
     );
 
     // Drop all pending resource bindings — next draw starts from an empty

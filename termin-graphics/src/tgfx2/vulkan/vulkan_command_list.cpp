@@ -249,6 +249,7 @@ void VulkanCommandList::bind_pipeline(PipelineHandle pipeline) {
 }
 
 void VulkanCommandList::bind_resource_set(ResourceSetHandle set,
+                                           uint32_t set_index,
                                            const uint32_t* dynamic_offsets,
                                            uint32_t dynamic_offset_count) {
     auto* rs = device_.get_resource_set(set);
@@ -281,7 +282,7 @@ void VulkanCommandList::bind_resource_set(ResourceSetHandle set,
     }
 
     vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                             current_layout_, 0, 1, &rs->descriptor_set,
+                             current_layout_, set_index, 1, &rs->descriptor_set,
                              EXPECTED, offsets_ptr);
     g_bind_rset_count.fetch_add(1, std::memory_order_relaxed);
 }

@@ -41,11 +41,13 @@ public:
 
     // Pipeline & resources
     virtual void bind_pipeline(PipelineHandle pipeline) = 0;
-    // Bind a descriptor/resource set. `dynamic_offsets` corresponds to the
-    // UNIFORM_BUFFER_DYNAMIC bindings declared by the pipeline's shared
-    // descriptor set layout, in ascending-binding order. Backends that do
-    // not use dynamic descriptors (OpenGL) ignore the array.
+    // Bind a descriptor/resource set at the given set index (default 0).
+    // `dynamic_offsets` corresponds to the UNIFORM_BUFFER_DYNAMIC bindings
+    // declared by the pipeline's descriptor set layout for this set, in
+    // ascending-binding order. Backends that do not use dynamic descriptors
+    // (OpenGL) ignore the array.
     virtual void bind_resource_set(ResourceSetHandle set,
+                                   uint32_t set_index = 0,
                                    const uint32_t* dynamic_offsets = nullptr,
                                    uint32_t dynamic_offset_count = 0) = 0;
 

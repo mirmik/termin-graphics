@@ -45,6 +45,7 @@ public:
 
     void bind_pipeline(PipelineHandle pipeline) override;
     void bind_resource_set(ResourceSetHandle set,
+                           uint32_t set_index = 0,
                            const uint32_t* dynamic_offsets = nullptr,
                            uint32_t dynamic_offset_count = 0) override;
     void set_push_constants(const void* data, uint32_t size) override;

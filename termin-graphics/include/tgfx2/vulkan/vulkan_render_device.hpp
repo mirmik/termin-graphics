@@ -66,11 +66,13 @@ struct VkPipelineResource {
     VkPipelineLayout layout = VK_NULL_HANDLE;
     VkRenderPass render_pass = VK_NULL_HANDLE;
     PipelineDesc desc;
+    uint32_t set_count = 1;  // number of descriptor sets used by this pipeline
 };
 
 struct VkResourceSetResource {
     VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
     ResourceSetDesc desc;
+    uint32_t set_index = 0;  // descriptor set number (0 = engine, 1 = material)
     // Dynamic offsets emitted at bind time, in the order the layout
     // declares DYNAMIC bindings (currently 0, 1, 2, 3, 16, 24 → 6 offsets).
     // Populated by create_resource_set() from ResourceBinding::offset on
@@ -262,8 +264,15 @@ private:
     // the corresponding pool is reset in `submit()`.
     std::array<std::unordered_map<uint64_t, ResourceSetHandle>, kFrameSlotCount> descriptor_cache_;
 
-    // Shared layouts (MVP: one universal layout)
-    VkDescriptorSetLayout descriptor_set_layout_ = VK_NULL_HANDLE;
+    static constexpr uint32_t kMaxDescriptorSets = 2;
+
+    // Shared descriptor set layouts. Index corresponds to VkDescriptorSet
+    // set number. Currently only set=0 is populated (universal layout);
+    // set=1 is reserved for per-material descriptor sets in the two-set
+    // scheme (see docs/plans/2026-06-09-slang-two-set-material-layout.md).
+    std::array<VkDescriptorSetLayout, kMaxDescriptorSets> descriptor_set_layouts_ = {};
+
+    // Pipeline layout for set=0 only (legacy / engine pass shaders).
     VkPipelineLayout shared_pipeline_layout_ = VK_NULL_HANDLE;
 
     // Lazy-created default sampler (see ensure_default_sampler()).
@@ -464,8 +473,10 @@ public:
                                   VkImageLayout old_layout, VkImageLayout new_layout,
                                   VkImageAspectFlags aspect);
 
-    // Shared descriptor set layout (MVP: fixed layout for all pipelines)
-    VkDescriptorSetLayout descriptor_set_layout() const { return descriptor_set_layout_; }
+    // Shared descriptor set layout for the given set index (default set=0).
+    VkDescriptorSetLayout descriptor_set_layout(uint32_t set = 0) const {
+        return set < kMaxDescriptorSets ? descriptor_set_layouts_[set] : VK_NULL_HANDLE;
+    }
     VkPipelineLayout shared_pipeline_layout() const { return shared_pipeline_layout_; }
 
     // Lazy-create a default linear/clamp sampler used when a caller

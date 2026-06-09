@@ -507,7 +507,9 @@ VulkanRenderDevice::~VulkanRenderDevice() {
     }
     if (default_sampler_) vkDestroySampler(device_, default_sampler_, nullptr);
     if (shared_pipeline_layout_) vkDestroyPipelineLayout(device_, shared_pipeline_layout_, nullptr);
-    if (descriptor_set_layout_) vkDestroyDescriptorSetLayout(device_, descriptor_set_layout_, nullptr);
+    for (VkDescriptorSetLayout layout : descriptor_set_layouts_) {
+        if (layout) vkDestroyDescriptorSetLayout(device_, layout, nullptr);
+    }
     for (VkDescriptorPool pool : descriptor_pools_) {
         if (pool) vkDestroyDescriptorPool(device_, pool, nullptr);
     }
@@ -868,8 +870,8 @@ void VulkanRenderDevice::create_shared_layouts() {
     layout_ci.bindingCount = static_cast<uint32_t>(bindings.size());
     layout_ci.pBindings = bindings.data();
 
-    if (vkCreateDescriptorSetLayout(device_, &layout_ci, nullptr, &descriptor_set_layout_) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create descriptor set layout");
+    if (vkCreateDescriptorSetLayout(device_, &layout_ci, nullptr, &descriptor_set_layouts_[0]) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create descriptor set layout (set=0)");
     }
 
     // Push-constant range: 128 bytes accessible from every graphics
@@ -887,7 +889,7 @@ void VulkanRenderDevice::create_shared_layouts() {
     VkPipelineLayoutCreateInfo pl_ci{};
     pl_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pl_ci.setLayoutCount = 1;
-    pl_ci.pSetLayouts = &descriptor_set_layout_;
+    pl_ci.pSetLayouts = &descriptor_set_layouts_[0];
     pl_ci.pushConstantRangeCount = 1;
     pl_ci.pPushConstantRanges = &pc_range;
 
@@ -1514,6 +1516,7 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
     VkPipelineResource res;
     res.desc = desc;
     res.layout = shared_pipeline_layout_;
+    res.set_count = 1;
 
     // Get or create render pass from formats. `needs_depth` is driven
     // by the attachment presence (depth_format != Undefined), NOT by the
@@ -1758,6 +1761,7 @@ static uint64_t hash_resource_set_desc(const ResourceSetDesc& desc) {
         h *= 0x100000001b3ull;
     };
     for (const auto& b : desc.bindings) {
+        mix(b.set);
         mix(b.binding);
         mix(b.array_element);
         mix(static_cast<uint64_t>(b.kind));
@@ -1866,11 +1870,28 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
     VkResourceSetResource res;
     res.desc = normalized_desc;
 
+    // Derive the set index from bindings (all bindings in a ResourceSetDesc
+    // share the same set). Falls back to 0 for empty sets or legacy callers.
+    uint32_t set_index = 0;
+    if (!normalized_desc.bindings.empty()) {
+        set_index = normalized_desc.bindings[0].set;
+        if (set_index >= kMaxDescriptorSets) set_index = 0;
+    }
+    res.set_index = set_index;
+
+    VkDescriptorSetLayout layout = descriptor_set_layouts_[set_index];
+    if (!layout) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice: no descriptor set layout for set=%u; "
+               "allocating with set=0 layout as fallback", set_index);
+        layout = descriptor_set_layouts_[0];
+    }
+
     VkDescriptorSetAllocateInfo ai{};
     ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     ai.descriptorPool = descriptor_pools_[current_pool_idx_];
     ai.descriptorSetCount = 1;
-    ai.pSetLayouts = &descriptor_set_layout_;
+    ai.pSetLayouts = &layout;
 
     VkResult alloc_result = vkAllocateDescriptorSets(device_, &ai, &res.descriptor_set);
     if (alloc_result != VK_SUCCESS) {

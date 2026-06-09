@@ -272,6 +272,7 @@ void OpenGLCommandList::apply_pending_push_constants() {
 // --- Resource binding ---
 
 void OpenGLCommandList::bind_resource_set(ResourceSetHandle set,
+                                           uint32_t /*set_index*/,
                                            const uint32_t* /*dynamic_offsets*/,
                                            uint32_t /*dynamic_offset_count*/) {
     auto* rs = device_.get_resource_set(set);

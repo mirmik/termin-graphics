@@ -323,10 +323,11 @@ static ResourceBinding* find_binding(
     std::vector<ResourceBinding>& bindings,
     uint32_t binding,
     ResourceBinding::Kind kind,
+    uint32_t set = 0,
     uint32_t array_element = 0
 ) {
     for (auto& b : bindings) {
-        if (b.binding == binding && b.kind == kind && b.array_element == array_element) {
+        if (b.set == set && b.binding == binding && b.kind == kind && b.array_element == array_element) {
             return &b;
         }
     }
@@ -334,9 +335,10 @@ static ResourceBinding* find_binding(
 }
 
 void RenderContext2::bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
-                                          uint64_t offset, uint64_t range) {
+                                          uint64_t offset, uint64_t range,
+                                          uint32_t set) {
     ResourceBinding* existing =
-        find_binding(pending_bindings_, binding, ResourceBinding::Kind::UniformBuffer);
+        find_binding(pending_bindings_, binding, ResourceBinding::Kind::UniformBuffer, set);
     if (existing) {
         if (existing->buffer == buffer && existing->offset == offset &&
             existing->range == range) {
@@ -347,6 +349,7 @@ void RenderContext2::bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
         existing->range = range;
     } else {
         ResourceBinding b;
+        b.set = set;
         b.kind = ResourceBinding::Kind::UniformBuffer;
         b.binding = binding;
         b.buffer = buffer;
@@ -358,7 +361,8 @@ void RenderContext2::bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
 }
 
 void RenderContext2::bind_uniform_buffer_ring(uint32_t binding,
-                                                const void* data, uint32_t size) {
+                                                const void* data, uint32_t size,
+                                                uint32_t set) {
     if (!data || size == 0) return;
     // Write into the device ring; the returned offset is aligned to
     // minUniformBufferOffsetAlignment. An invalid ring (handle.id == 0)
@@ -375,29 +379,31 @@ void RenderContext2::bind_uniform_buffer_ring(uint32_t binding,
         BufferHandle tmp = device_.create_buffer(bd);
         device_.upload_buffer(tmp, {reinterpret_cast<const uint8_t*>(data), size});
         defer_destroy(tmp);
-        bind_uniform_buffer(binding, tmp, 0, size);
+        bind_uniform_buffer(binding, tmp, 0, size, set);
         return;
     }
     uint32_t offset = device_.ring_ubo_write(data, size);
-    bind_uniform_buffer(binding, ring, offset, size);
+    bind_uniform_buffer(binding, ring, offset, size, set);
 }
 
 void RenderContext2::bind_sampled_texture(uint32_t binding, TextureHandle tex,
-                                           SamplerHandle sampler) {
-    bind_sampled_texture_array_element(binding, 0, tex, sampler);
+                                           SamplerHandle sampler, uint32_t set) {
+    bind_sampled_texture_array_element(binding, 0, tex, sampler, set);
 }
 
 void RenderContext2::bind_sampled_texture_array_element(
     uint32_t binding,
     uint32_t array_element,
     TextureHandle tex,
-    SamplerHandle sampler
+    SamplerHandle sampler,
+    uint32_t set
 ) {
     ResourceBinding* existing =
         find_binding(
             pending_bindings_,
             binding,
             ResourceBinding::Kind::SampledTexture,
+            set,
             array_element
         );
     if (existing) {
@@ -408,6 +414,7 @@ void RenderContext2::bind_sampled_texture_array_element(
         existing->sampler = sampler;
     } else {
         ResourceBinding b;
+        b.set = set;
         b.kind = ResourceBinding::Kind::SampledTexture;
         b.binding = binding;
         b.array_element = array_element;
@@ -572,7 +579,7 @@ void RenderContext2::flush_resource_set() {
                 }
             }
         }
-        cmd_->bind_resource_set(current_resource_set_, offsets, 6);
+        cmd_->bind_resource_set(current_resource_set_, 0, offsets, 6);
     }
 
     bindings_dirty_ = false;
