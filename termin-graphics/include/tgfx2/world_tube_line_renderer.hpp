@@ -7,6 +7,10 @@
 #include "tgfx2/line_mesh_builder.hpp"
 #include "tgfx2/tgfx2_api.h"
 
+extern "C" {
+#include <tgfx/resources/tc_shader_registry.h>
+}
+
 namespace tgfx {
 
 class RenderContext2;
@@ -48,6 +52,9 @@ private:
     ShaderHandle cap_vertex_shader_;
     ShaderHandle cap_fragment_shader_;
     ShaderHandle lit_fragment_shader_;
+    tc_shader_handle body_shader_handle_ = tc_shader_handle_invalid();
+    tc_shader_handle cap_shader_handle_ = tc_shader_handle_invalid();
+    tc_shader_handle lit_shader_handle_ = tc_shader_handle_invalid();
     uint32_t body_corner_count_ = 0;
     uint32_t cap_corner_count_ = 0;
     int template_sides_ = 0;

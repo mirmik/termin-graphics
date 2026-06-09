@@ -651,6 +651,112 @@
       ]
     },
     {
+      "uuid": "termin-engine-world-tube-line",
+      "name": "WorldTubeLineVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-world-tube-line.vert.glsl",
+          "inputs": [
+            {"name": "a_corner", "semantic": "TEXCOORD0", "location": 0},
+            {"name": "a_p0", "semantic": "POSITION0", "location": 1},
+            {"name": "a_width", "semantic": "TEXCOORD1", "location": 2},
+            {"name": "a_p1", "semantic": "POSITION1", "location": 3},
+            {"name": "a_color", "semantic": "COLOR0", "location": 4}
+          ],
+          "outputs": [
+            {"name": "v_world_pos", "semantic": "POSITION1", "location": 0},
+            {"name": "v_normal", "semantic": "NORMAL", "location": 1},
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 2},
+            {"name": "v_color", "semantic": "COLOR0", "location": 3}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-world-tube-line.frag.glsl",
+          "inputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 3}
+          ],
+          "outputs": [
+            {"name": "frag_color", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "TubePushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-world-tube-line-cap",
+      "name": "WorldTubeLineCapVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-world-tube-line-cap.vert.glsl",
+          "inputs": [
+            {"name": "a_corner", "semantic": "TEXCOORD0", "location": 0},
+            {"name": "a_center", "semantic": "POSITION0", "location": 1},
+            {"name": "a_width", "semantic": "TEXCOORD1", "location": 2},
+            {"name": "a_neighbor", "semantic": "POSITION1", "location": 3},
+            {"name": "a_color", "semantic": "COLOR0", "location": 4}
+          ],
+          "outputs": [
+            {"name": "v_world_pos", "semantic": "POSITION1", "location": 0},
+            {"name": "v_normal", "semantic": "NORMAL", "location": 1},
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 2},
+            {"name": "v_color", "semantic": "COLOR0", "location": 3}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-world-tube-line.frag.glsl",
+          "inputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 3}
+          ],
+          "outputs": [
+            {"name": "frag_color", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "TubePushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-world-tube-line-lit",
+      "name": "WorldTubeLineLitFS",
+      "language": "glsl",
+      "stages": {
+        "fragment": {
+          "path": "termin-engine-world-tube-line-lit.frag.glsl",
+          "inputs": [
+            {"name": "v_world_pos", "semantic": "POSITION1", "location": 0},
+            {"name": "v_normal", "semantic": "NORMAL", "location": 1},
+            {"name": "v_color", "semantic": "COLOR0", "location": 3}
+          ],
+          "outputs": [
+            {"name": "frag_color", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "LightingBlock",
+          "logical_name": "lighting",
+          "kind": "constant_buffer",
+          "legacy_binding": 0
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-id",
       "name": "IdEngineVSFS",
       "language": "glsl",

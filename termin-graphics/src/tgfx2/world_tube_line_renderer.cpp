@@ -1,5 +1,6 @@
 #include "tgfx2/world_tube_line_renderer.hpp"
 
+#include "tgfx2/builtin_shader_sources.hpp"
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -7,12 +8,18 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
-#include <string>
 #include <vector>
 
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/render_context.hpp"
+#include "tgfx2/tc_shader_bridge.hpp"
+
+extern "C" {
+#include <tgfx/resources/tc_shader.h>
+}
+
+#include <tcbase/tc_log.hpp>
 
 namespace tgfx {
 namespace {
@@ -51,83 +58,69 @@ struct TubePush {
 };
 
 constexpr float kPi = 3.14159265358979323846f;
+constexpr const char* WORLD_TUBE_LINE_SHADER_UUID = "termin-engine-world-tube-line";
+constexpr const char* WORLD_TUBE_LINE_CAP_SHADER_UUID =
+    "termin-engine-world-tube-line-cap";
+constexpr const char* WORLD_TUBE_LINE_LIT_SHADER_UUID =
+    "termin-engine-world-tube-line-lit";
 
-constexpr const char* kTubeLightingCommon = R"(
-const int LIGHT_TYPE_DIRECTIONAL = 0;
-const int LIGHT_TYPE_POINT = 1;
-const int LIGHT_TYPE_SPOT = 2;
-const int MAX_LIGHTS = 8;
-
-struct LightData {
-    vec4 color_intensity;
-    vec4 direction_range;
-    vec4 position_type;
-    vec4 attenuation_inner;
-    vec4 outer_cascade;
-};
-
-layout(std140, binding = 0) uniform LightingBlock {
-    LightData u_lights[MAX_LIGHTS];
-    vec4 u_ambient_data;
-    vec4 u_camera_light_count;
-    vec4 u_shadow_settings;
-};
-
-float distance_attenuation(vec3 attenuation, float range, float dist) {
-    float denom = attenuation.x + attenuation.y * dist + attenuation.z * dist * dist;
-    float value = denom > 0.0 ? 1.0 / denom : 1.0;
-    if (range > 0.0 && dist > range) {
-        value = 0.0;
+bool ensure_shader_pair(
+    IRenderDevice& device,
+    tc_shader_handle& registry_handle,
+    const char* uuid,
+    const char* label,
+    ShaderHandle& vertex_shader,
+    ShaderHandle& fragment_shader)
+{
+    if (vertex_shader && fragment_shader) {
+        return true;
     }
-    return value;
+
+    if (tc_shader_handle_is_invalid(registry_handle)) {
+        registry_handle = register_builtin_shader_from_catalog(uuid);
+    }
+    if (tc_shader_handle_is_invalid(registry_handle)) {
+        tc::Log::error("[WorldTubeLineRenderer] failed to register %s shader", label);
+        return false;
+    }
+
+    tc_shader* raw = tc_shader_get(registry_handle);
+    if (!raw || !termin::tc_shader_ensure_tgfx2(raw, &device, &vertex_shader, &fragment_shader)) {
+        tc::Log::error("[WorldTubeLineRenderer] failed to create %s shader", label);
+        vertex_shader = {};
+        fragment_shader = {};
+        return false;
+    }
+    return true;
 }
 
-float spot_weight(vec3 light_dir, vec3 L, float inner_angle, float outer_angle) {
-    float cos_theta = dot(light_dir, -L);
-    float cos_outer = cos(outer_angle);
-    float cos_inner = cos(inner_angle);
-    if (cos_theta <= cos_outer) {
-        return 0.0;
+bool ensure_fragment_shader(
+    IRenderDevice& device,
+    tc_shader_handle& registry_handle,
+    const char* uuid,
+    const char* label,
+    ShaderHandle& fragment_shader)
+{
+    if (fragment_shader) {
+        return true;
     }
-    if (cos_theta >= cos_inner) {
-        return 1.0;
-    }
-    float t = (cos_theta - cos_outer) / max(cos_inner - cos_outer, 1.0e-4);
-    return t * t * (3.0 - 2.0 * t);
-}
 
-vec3 apply_tube_lighting(vec3 base_color, vec3 normal, vec3 world_pos) {
-    vec3 N = normalize(normal);
-    vec3 result = base_color * u_ambient_data.rgb * u_ambient_data.w;
-    int count = min(int(u_camera_light_count.w), MAX_LIGHTS);
-    for (int i = 0; i < count; ++i) {
-        int type = int(u_lights[i].position_type.w);
-        vec3 L;
-        float weight = 1.0;
-        if (type == LIGHT_TYPE_DIRECTIONAL) {
-            L = normalize(-u_lights[i].direction_range.xyz);
-        } else {
-            vec3 to_light = u_lights[i].position_type.xyz - world_pos;
-            float dist = length(to_light);
-            L = dist > 1.0e-4 ? to_light / dist : vec3(0.0, 1.0, 0.0);
-            weight *= distance_attenuation(
-                u_lights[i].attenuation_inner.xyz,
-                u_lights[i].direction_range.w,
-                dist);
-            if (type == LIGHT_TYPE_SPOT) {
-                weight *= spot_weight(
-                    u_lights[i].direction_range.xyz,
-                    L,
-                    u_lights[i].attenuation_inner.w,
-                    u_lights[i].outer_cascade.x);
-            }
-        }
-        float ndotl = abs(dot(N, L));
-        result += base_color * u_lights[i].color_intensity.rgb * u_lights[i].color_intensity.w * ndotl * weight;
+    if (tc_shader_handle_is_invalid(registry_handle)) {
+        registry_handle = register_builtin_shader_from_catalog(uuid);
     }
-    return result;
+    if (tc_shader_handle_is_invalid(registry_handle)) {
+        tc::Log::error("[WorldTubeLineRenderer] failed to register %s shader", label);
+        return false;
+    }
+
+    tc_shader* raw = tc_shader_get(registry_handle);
+    if (!raw || !termin::tc_shader_ensure_tgfx2(raw, &device, nullptr, &fragment_shader)) {
+        tc::Log::error("[WorldTubeLineRenderer] failed to create %s shader", label);
+        fragment_shader = {};
+        return false;
+    }
+    return true;
 }
-)";
 
 bool same_point(LinePoint3 a, LinePoint3 b) {
     const float dx = a.x - b.x;
@@ -179,135 +172,6 @@ std::vector<TubeCapCornerVertex> build_cap_template(int sides) {
         vertices.push_back({0.0f, a[0], a[1]});
     }
     return vertices;
-}
-
-std::string make_tube_common() {
-    return R"(
-struct TubePush {
-    mat4 u_view_projection;
-    vec4 u_up_hint;
-};
-#ifdef VULKAN
-layout(push_constant) uniform TubePushBlock { TubePush pc; };
-#else
-layout(std140, binding = 14) uniform TubePushBlock { TubePush pc; };
-#endif
-
-vec3 safe_normalize(vec3 v, vec3 fallback) {
-    float len = length(v);
-    if (len < 1.0e-6) {
-        return fallback;
-    }
-    return v / len;
-}
-
-vec3 basis_axis0(vec3 dir) {
-    vec3 up = safe_normalize(pc.u_up_hint.xyz, vec3(0.0, 1.0, 0.0));
-    vec3 axis0 = cross(up, dir);
-    float len = length(axis0);
-    if (len >= 1.0e-6) {
-        return axis0 / len;
-    }
-
-    axis0 = cross(vec3(1.0, 0.0, 0.0), dir);
-    len = length(axis0);
-    if (len >= 1.0e-6) {
-        return axis0 / len;
-    }
-
-    return safe_normalize(cross(vec3(0.0, 0.0, 1.0), dir), vec3(1.0, 0.0, 0.0));
-}
-
-vec3 tube_offset(vec3 dir, float axis0_factor, float axis1_factor, float radius) {
-    vec3 axis0 = basis_axis0(dir);
-    vec3 axis1 = safe_normalize(cross(dir, axis0), vec3(0.0, 1.0, 0.0));
-    return (axis0 * axis0_factor + axis1 * axis1_factor) * radius;
-}
-
-vec3 tube_normal(vec3 dir, float axis0_factor, float axis1_factor) {
-    return safe_normalize(tube_offset(dir, axis0_factor, axis1_factor, 1.0), vec3(0.0, 1.0, 0.0));
-}
-)";
-}
-
-std::string make_tube_body_vert() {
-    return std::string("#version 450 core\n") + make_tube_common() + R"(
-layout(location=0) in vec3 a_corner;
-layout(location=1) in vec3 a_p0;
-layout(location=2) in float a_width;
-layout(location=3) in vec3 a_p1;
-layout(location=4) in vec4 a_color;
-
-layout(location=0) out vec3 v_world_pos;
-layout(location=1) out vec3 v_normal;
-layout(location=2) out vec2 v_uv;
-layout(location=3) out vec4 v_color;
-
-void main() {
-    vec3 dir = safe_normalize(a_p1 - a_p0, vec3(1.0, 0.0, 0.0));
-    vec3 base = mix(a_p0, a_p1, a_corner.x);
-    vec3 expanded = base + tube_offset(dir, a_corner.y, a_corner.z, a_width * 0.5);
-    gl_Position = pc.u_view_projection * vec4(expanded, 1.0);
-    v_world_pos = expanded;
-    v_normal = tube_normal(dir, a_corner.y, a_corner.z);
-    v_uv = vec2(a_corner.x, atan(a_corner.z, a_corner.y) / 6.28318530718 + 0.5);
-    v_color = a_color;
-}
-)";
-}
-
-std::string make_tube_cap_vert() {
-    return std::string("#version 450 core\n") + make_tube_common() + R"(
-layout(location=0) in vec3 a_corner;
-layout(location=1) in vec3 a_center;
-layout(location=2) in float a_width;
-layout(location=3) in vec3 a_neighbor;
-layout(location=4) in vec4 a_color;
-
-layout(location=0) out vec3 v_world_pos;
-layout(location=1) out vec3 v_normal;
-layout(location=2) out vec2 v_uv;
-layout(location=3) out vec4 v_color;
-
-void main() {
-    vec3 dir = safe_normalize(a_neighbor - a_center, vec3(1.0, 0.0, 0.0));
-    vec3 expanded = a_center;
-    if (a_corner.x < 0.5) {
-        expanded += tube_offset(dir, a_corner.y, a_corner.z, a_width * 0.5);
-    }
-    gl_Position = pc.u_view_projection * vec4(expanded, 1.0);
-    v_world_pos = expanded;
-    v_normal = a_corner.x < 0.5 ? tube_normal(dir, a_corner.y, a_corner.z) : -dir;
-    v_uv = a_corner.x < 0.5
-        ? vec2(a_corner.y * 0.5 + 0.5, a_corner.z * 0.5 + 0.5)
-        : vec2(0.5, 0.5);
-    v_color = a_color;
-}
-)";
-}
-
-std::string make_tube_frag() {
-    return std::string("#version 450 core\n") + R"(
-layout(location=3) in vec4 v_color;
-layout(location=0) out vec4 frag_color;
-
-void main() {
-    frag_color = v_color;
-}
-)";
-}
-
-std::string make_tube_lit_frag() {
-    return std::string("#version 450 core\n") + kTubeLightingCommon + R"(
-layout(location=0) in vec3 v_world_pos;
-layout(location=1) in vec3 v_normal;
-layout(location=3) in vec4 v_color;
-layout(location=0) out vec4 frag_color;
-
-void main() {
-    frag_color = vec4(apply_tube_lighting(v_color.rgb, v_normal, v_world_pos), v_color.a);
-}
-)";
 }
 
 struct UploadedInstanceStream {
@@ -389,45 +253,26 @@ void WorldTubeLineRenderer::ensure_resources(RenderContext2& ctx, int sides) {
             {reinterpret_cast<const uint8_t*>(vertices.data()), desc.size});
     }
 
-    if (!body_vertex_shader_) {
-        ShaderDesc desc;
-        desc.stage = ShaderStage::Vertex;
-        desc.source = make_tube_body_vert();
-        desc.debug_name = "tgfx2_world_tube_line_vs";
-        body_vertex_shader_ = device.create_shader(desc);
-    }
-
-    if (!body_fragment_shader_) {
-        ShaderDesc desc;
-        desc.stage = ShaderStage::Fragment;
-        desc.source = make_tube_frag();
-        desc.debug_name = "tgfx2_world_tube_line_fs";
-        body_fragment_shader_ = device.create_shader(desc);
-    }
-
-    if (!cap_vertex_shader_) {
-        ShaderDesc desc;
-        desc.stage = ShaderStage::Vertex;
-        desc.source = make_tube_cap_vert();
-        desc.debug_name = "tgfx2_world_tube_line_cap_vs";
-        cap_vertex_shader_ = device.create_shader(desc);
-    }
-
-    if (!cap_fragment_shader_) {
-        ShaderDesc desc;
-        desc.stage = ShaderStage::Fragment;
-        desc.source = make_tube_frag();
-        desc.debug_name = "tgfx2_world_tube_line_cap_fs";
-        cap_fragment_shader_ = device.create_shader(desc);
-    }
-
-    if (!lit_fragment_shader_) {
-        ShaderDesc desc;
-        desc.stage = ShaderStage::Fragment;
-        desc.source = make_tube_lit_frag();
-        desc.debug_name = "tgfx2_world_tube_line_lit_fs";
-        lit_fragment_shader_ = device.create_shader(desc);
-    }
+    ensure_shader_pair(
+        device,
+        body_shader_handle_,
+        WORLD_TUBE_LINE_SHADER_UUID,
+        "body",
+        body_vertex_shader_,
+        body_fragment_shader_);
+    ensure_shader_pair(
+        device,
+        cap_shader_handle_,
+        WORLD_TUBE_LINE_CAP_SHADER_UUID,
+        "cap",
+        cap_vertex_shader_,
+        cap_fragment_shader_);
+    ensure_fragment_shader(
+        device,
+        lit_shader_handle_,
+        WORLD_TUBE_LINE_LIT_SHADER_UUID,
+        "lit fragment",
+        lit_fragment_shader_);
 }
 
 void WorldTubeLineRenderer::draw_polyline(
@@ -508,6 +353,12 @@ void WorldTubeLineRenderer::draw_polyline(
     }
 
     ensure_resources(ctx, style.sides);
+    const ShaderHandle body_selected_fragment_shader = params.fragment_shader
+        ? params.fragment_shader
+        : (params.lighting_enabled ? lit_fragment_shader_ : body_fragment_shader_);
+    if (!body_vertex_shader_ || !body_selected_fragment_shader) {
+        return;
+    }
 
     const UploadedInstanceStream segment_stream = upload_instance_stream(
         ctx,
@@ -543,9 +394,7 @@ void WorldTubeLineRenderer::draw_polyline(
         {4, VertexFormat::Float4, offsetof(TubeSegmentInstance, color)},
     };
 
-    ctx.bind_shader(body_vertex_shader_, params.fragment_shader
-        ? params.fragment_shader
-        : (params.lighting_enabled ? lit_fragment_shader_ : body_fragment_shader_));
+    ctx.bind_shader(body_vertex_shader_, body_selected_fragment_shader);
     ctx.set_vertex_layouts({corners, segment_layout});
     ctx.set_topology(PrimitiveTopology::TriangleList);
     ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
@@ -586,9 +435,14 @@ void WorldTubeLineRenderer::draw_polyline(
         {4, VertexFormat::Float4, offsetof(TubeCapInstance, color)},
     };
 
-    ctx.bind_shader(cap_vertex_shader_, params.fragment_shader
+    const ShaderHandle cap_selected_fragment_shader = params.fragment_shader
         ? params.fragment_shader
-        : (params.lighting_enabled ? lit_fragment_shader_ : cap_fragment_shader_));
+        : (params.lighting_enabled ? lit_fragment_shader_ : cap_fragment_shader_);
+    if (!cap_vertex_shader_ || !cap_selected_fragment_shader) {
+        return;
+    }
+
+    ctx.bind_shader(cap_vertex_shader_, cap_selected_fragment_shader);
     ctx.set_vertex_layouts({cap_corners, cap_layout});
     ctx.set_topology(PrimitiveTopology::TriangleList);
     ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
@@ -613,26 +467,11 @@ void WorldTubeLineRenderer::release(RenderContext2& ctx) {
         cap_corner_vbo_ = {};
         cap_corner_count_ = 0;
     }
-    if (body_vertex_shader_) {
-        device.destroy(body_vertex_shader_);
-        body_vertex_shader_ = {};
-    }
-    if (body_fragment_shader_) {
-        device.destroy(body_fragment_shader_);
-        body_fragment_shader_ = {};
-    }
-    if (cap_vertex_shader_) {
-        device.destroy(cap_vertex_shader_);
-        cap_vertex_shader_ = {};
-    }
-    if (cap_fragment_shader_) {
-        device.destroy(cap_fragment_shader_);
-        cap_fragment_shader_ = {};
-    }
-    if (lit_fragment_shader_) {
-        device.destroy(lit_fragment_shader_);
-        lit_fragment_shader_ = {};
-    }
+    body_vertex_shader_ = {};
+    body_fragment_shader_ = {};
+    cap_vertex_shader_ = {};
+    cap_fragment_shader_ = {};
+    lit_fragment_shader_ = {};
     template_sides_ = 0;
 }
 
