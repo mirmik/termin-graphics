@@ -193,6 +193,94 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_assigns_slang_engine_constant_buffers_by_name(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "struct PerFrame { float4x4 u_view; };\n"
+        "struct SlangDrawData { float4x4 u_model; };\n"
+        "ConstantBuffer<PerFrame> per_frame;\n"
+        "ConstantBuffer<SlangDrawData> draw_data;\n"
+        "[shader(\"vertex\")] float4 main(float3 position : POSITION) : SV_Position {\n"
+        "    return mul(per_frame.u_view, mul(draw_data.u_model, float4(position, 1.0)));\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_bytes(b'FAKE-spirv')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {\n"
+        "            'name': 'per_frame',\n"
+        "            'binding': {'kind': 'constantBuffer', 'index': 1},\n"
+        "            'type': {\n"
+        "                'kind': 'constantBuffer',\n"
+        "                'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 64}},\n"
+        "            },\n"
+        "        },\n"
+        "        {\n"
+        "            'name': 'draw_data',\n"
+        "            'binding': {'kind': 'constantBuffer', 'index': 2},\n"
+        "            'type': {\n"
+        "                'kind': 'constantBuffer',\n"
+        "                'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 64}},\n"
+        "            },\n"
+        "        },\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "vertex",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    assert layout["resources"] == [
+        {
+            "name": "per_frame",
+            "kind": "constant_buffer",
+            "set": 0,
+            "binding": 2,
+            "stage_mask": 1,
+            "size": 64,
+        },
+        {
+            "name": "draw_data",
+            "kind": "constant_buffer",
+            "set": 0,
+            "binding": 24,
+            "stage_mask": 1,
+            "size": 64,
+        },
+    ]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_writes_slang_texture_resources_from_reflection(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -398,6 +486,7 @@ def test_termin_shaderc_invokes_fake_slangc_for_opengl(tmp_path: Path) -> None:
     assert "-fvk-b-shift" in slang_args
     assert slang_args[slang_args.index("-fvk-b-shift") + 1] == "1"
     assert "-fvk-t-shift" in slang_args
+    assert slang_args[slang_args.index("-fvk-t-shift") + 1] == "0"
     assert "-fvk-s-shift" in slang_args
 
 

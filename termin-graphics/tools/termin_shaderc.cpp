@@ -535,6 +535,19 @@ static bool apply_slang_vulkan_shared_layout_policy(
 
     uint32_t next_sampled_slot = 0;
     for (ShaderResourceBinding& resource : resources) {
+        if (resource.kind == "constant_buffer") {
+            if (resource.name == "material") {
+                resource.set = 0;
+                resource.binding = 1;
+            } else if (resource.name == "per_frame") {
+                resource.set = 0;
+                resource.binding = 2;
+            } else if (resource.name == "draw_data") {
+                resource.set = 0;
+                resource.binding = 24;
+            }
+            continue;
+        }
         if (resource.slang_split_texture) {
             std::cerr
                 << "termin_shaderc: Vulkan shared layout does not support split Slang "
