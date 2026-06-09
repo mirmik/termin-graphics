@@ -381,8 +381,8 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
             ShaderResourceBinding binding;
             binding.name = "material";
             binding.kind = "constant_buffer";
-            binding.set = 0;
-            binding.binding = 1;
+            binding.set = 1;
+            binding.binding = 0;
             binding.stage_mask = stage_mask;
             append_unique_resource(resources, std::move(binding));
         }
@@ -527,59 +527,23 @@ static bool write_resource_layout_sidecar(
 static bool apply_slang_vulkan_shared_layout_policy(
     std::vector<ShaderResourceBinding>& resources
 ) {
-    constexpr uint32_t sampled_slots[] = {
-        4, 5, 6, 7,
-        9, 10, 11, 12, 13, 14, 15,
-        17, 18, 19, 20, 21, 22, 23,
-    };
-
-    uint32_t next_sampled_slot = 0;
+    // Two-set layout policy:
+    //   set=0  — engine resources (per_frame, bound by passes at fixed slots)
+    //   set=1  — material resources (per-shader, bindings from slangc / specification)
+    //
+    // Everything not explicitly placed in set=0 lands in set=1 with its
+    // original binding from slangc reflection or explicit source attributes.
+    // The sampled_slots array and the hardcoded binding assignments for
+    // material / draw_data are gone — per-shader set=1 layouts handle those.
     for (ShaderResourceBinding& resource : resources) {
-        if (resource.kind == "constant_buffer") {
-            if (resource.name == "material") {
-                resource.set = 0;
-                resource.binding = 1;
-            } else if (resource.name == "per_frame") {
-                resource.set = 0;
-                resource.binding = 2;
-            } else if (resource.name == "draw_data") {
-                resource.set = 0;
-                resource.binding = 24;
-            }
+        if (resource.kind == "constant_buffer" && resource.name == "per_frame") {
+            resource.set = 0;
+            resource.binding = 2;
             continue;
         }
-        if (resource.slang_split_texture) {
-            std::cerr
-                << "termin_shaderc: Vulkan shared layout does not support split Slang "
-                << "Texture*/SamplerState resource '" << resource.name
-                << "' yet; use Sampler2D for combined sampled textures\n";
-            return false;
-        }
-        if (resource.slang_separate_sampler) {
-            std::cerr
-                << "termin_shaderc: Vulkan shared layout does not support separate Slang "
-                << "SamplerState resource '" << resource.name
-                << "' yet; use Sampler2D for combined sampled textures\n";
-            return false;
-        }
-        if (resource.slang_storage_texture) {
-            std::cerr
-                << "termin_shaderc: Vulkan shared layout does not support storage texture "
-                << "resource '" << resource.name << "' yet\n";
-            return false;
-        }
-        if (!resource.slang_combined_texture) {
-            continue;
-        }
-        if (next_sampled_slot >=
-            sizeof(sampled_slots) / sizeof(sampled_slots[0])) {
-            std::cerr
-                << "termin_shaderc: too many Slang Sampler2D resources for the "
-                << "current Vulkan shared layout\n";
-            return false;
-        }
-        resource.set = 0;
-        resource.binding = sampled_slots[next_sampled_slot++];
+        // All other resources (material UBO, draw_data, textures, samplers,
+        // storage textures) go to set=1 with their original bindings.
+        resource.set = 1;
     }
     return true;
 }

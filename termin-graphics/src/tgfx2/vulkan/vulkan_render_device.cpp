@@ -1634,11 +1634,22 @@ ShaderHandle VulkanRenderDevice::create_shader(const ShaderDesc& desc) {
 PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
     VkPipelineResource res;
     res.desc = desc;
-    // For now all pipelines use set=0 only. When a pipeline has material
-    // resources in set=1, the layout will combine descriptor_set_layouts_[0]
-    // with the per-shader set=1 layout from descriptor_set_layout_cache_.
-    res.layout = get_or_create_pipeline_layout({descriptor_set_layouts_[0]});
-    res.set_count = 1;
+    // Build the descriptor set layout list for this pipeline.
+    // set=0 is always the shared engine layout.
+    // set=1 is the per-shader material layout, if any stage has one.
+    std::vector<VkDescriptorSetLayout> set_layouts = {descriptor_set_layouts_[0]};
+    VkDescriptorSetLayout vs_set1 = VK_NULL_HANDLE;
+    VkDescriptorSetLayout fs_set1 = VK_NULL_HANDLE;
+    if (auto* vs = get_shader(desc.vertex_shader)) vs_set1 = vs->set1_layout;
+    if (auto* fs = get_shader(desc.fragment_shader)) fs_set1 = fs->set1_layout;
+    VkDescriptorSetLayout set1 = vs_set1 ? vs_set1 : fs_set1;
+    if (set1) {
+        set_layouts.push_back(set1);
+        res.set_count = 2;
+    } else {
+        res.set_count = 1;
+    }
+    res.layout = get_or_create_pipeline_layout(set_layouts);
 
     // Get or create render pass from formats. `needs_depth` is driven
     // by the attachment presence (depth_format != Undefined), NOT by the
@@ -3960,6 +3971,24 @@ bool VulkanRenderDevice::ensure_tc_shader(
                "VulkanRenderDevice::ensure_tc_shader: FS compile failed for '%s'",
                shader->name ? shader->name : shader->uuid);
         return false;
+    }
+
+    // Create per-shader set=1 descriptor layouts from resource bindings.
+    // This is done here (after artifact load, before pipeline creation)
+    // so create_pipeline can build a two-set VkPipelineLayout when needed.
+    // Layouts are cached globally by binding signature — multiple shaders
+    // with the same material resource signature share one layout.
+    const uint32_t rb_count = tc_shader_resource_binding_count(shader);
+    if (rb_count > 0) {
+        const tc_shader_resource_binding* rb = tc_shader_resource_bindings(shader);
+        VkDescriptorSetLayout set1 =
+            get_or_create_descriptor_set_layout_for_bindings(rb, rb_count, 1);
+        if (set1 && vs) {
+            get_shader(vs)->set1_layout = set1;
+        }
+        if (set1 && fs) {
+            get_shader(fs)->set1_layout = set1;
+        }
     }
 
     std::lock_guard<std::mutex> lock(tc_shader_cache_mtx_);

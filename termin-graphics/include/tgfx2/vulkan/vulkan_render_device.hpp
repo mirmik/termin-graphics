@@ -59,6 +59,10 @@ struct VkShaderResource {
     std::string debug_name;
     bool vertex_input_locations_known = false;
     std::vector<uint32_t> vertex_input_locations;
+    // Per-shader set=1 descriptor layout, created from tc_shader resource
+    // bindings in ensure_tc_shader(). VK_NULL_HANDLE for set=0-only shaders.
+    // Owned by descriptor_set_layout_cache_ — do not destroy individually.
+    VkDescriptorSetLayout set1_layout = VK_NULL_HANDLE;
 };
 
 struct VkPipelineResource {
