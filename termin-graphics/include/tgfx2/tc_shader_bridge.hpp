@@ -67,7 +67,7 @@ TGFX2_API bool tgfx2_load_shader_artifact_for_backend(
     tgfx::ShaderStage stage,
     std::vector<uint8_t>& out);
 TGFX2_API bool tgfx2_load_or_compile_shader_artifact_for_backend(
-    const ::tc_shader* shader,
+    ::tc_shader* shader,
     tgfx::BackendType backend,
     tgfx::ShaderStage stage,
     std::vector<uint8_t>& out);

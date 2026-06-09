@@ -6,6 +6,7 @@
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/enums.hpp"
+#include <tcbase/trent/json.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -13,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -374,6 +376,194 @@ static bool write_engine_shader_artifact_metadata(
     return static_cast<bool>(out);
 }
 
+static std::filesystem::path shader_resource_layout_sidecar_path(
+    const std::filesystem::path& artifact_path
+) {
+    return std::filesystem::path(artifact_path.string() + ".layout.json");
+}
+
+static bool read_text_file(const std::filesystem::path& path, std::string& out) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        return false;
+    }
+    out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    return true;
+}
+
+static uint32_t shader_resource_kind_from_name(const std::string& name) {
+    if (name == "constant_buffer") return TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    if (name == "texture") return TC_SHADER_RESOURCE_TEXTURE;
+    if (name == "sampler") return TC_SHADER_RESOURCE_SAMPLER;
+    if (name == "storage_buffer") return TC_SHADER_RESOURCE_STORAGE_BUFFER;
+    if (name == "storage_texture") return TC_SHADER_RESOURCE_STORAGE_TEXTURE;
+    return TC_SHADER_RESOURCE_NONE;
+}
+
+static const nos::trent* trent_dict_get(const nos::trent& value, const char* key) {
+    if (!value.is_dict()) {
+        return nullptr;
+    }
+    return value._get(key);
+}
+
+static bool trent_string_field(
+    const nos::trent& value,
+    const char* key,
+    std::string& out
+) {
+    const nos::trent* field = trent_dict_get(value, key);
+    if (!field || !field->is_string()) {
+        return false;
+    }
+    out = field->as_string();
+    return true;
+}
+
+static bool trent_uint_field(
+    const nos::trent& value,
+    const char* key,
+    uint32_t& out
+) {
+    const nos::trent* field = trent_dict_get(value, key);
+    if (!field || !field->is_numer()) {
+        return false;
+    }
+    const int64_t number = field->as_integer();
+    if (number < 0 ||
+        number > static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
+        return false;
+    }
+    out = static_cast<uint32_t>(number);
+    return true;
+}
+
+static bool parse_shader_resource_layout_sidecar(
+    const std::string& text,
+    std::vector<tc_shader_resource_binding>& out_bindings
+) {
+    nos::trent root;
+    try {
+        root = nos::json::parse(text);
+    } catch (const std::exception&) {
+        return false;
+    }
+    const nos::trent* resources = trent_dict_get(root, "resources");
+    if (!resources || !resources->is_list()) {
+        return false;
+    }
+
+    for (const nos::trent& object : resources->as_list()) {
+        if (!object.is_dict()) {
+            return false;
+        }
+        std::string name;
+        std::string kind_name;
+        uint32_t set = 0;
+        uint32_t binding = 0;
+        uint32_t stage_mask = TC_SHADER_STAGE_NONE;
+        uint32_t size = 0;
+        if (!trent_string_field(object, "name", name) ||
+            !trent_string_field(object, "kind", kind_name) ||
+            !trent_uint_field(object, "set", set) ||
+            !trent_uint_field(object, "binding", binding) ||
+            !trent_uint_field(object, "stage_mask", stage_mask)) {
+            return false;
+        }
+        trent_uint_field(object, "size", size);
+
+        const uint32_t kind = shader_resource_kind_from_name(kind_name);
+        if (kind == TC_SHADER_RESOURCE_NONE || name.empty()) {
+            return false;
+        }
+
+        tc_shader_resource_binding resource{};
+        std::snprintf(resource.name, sizeof(resource.name), "%s", name.c_str());
+        resource.kind = kind;
+        resource.set = set;
+        resource.binding = binding;
+        resource.stage_mask = stage_mask;
+        resource.size = size;
+        out_bindings.push_back(resource);
+    }
+    return true;
+}
+
+static void merge_shader_resource_binding(
+    std::vector<tc_shader_resource_binding>& bindings,
+    const tc_shader_resource_binding& incoming
+) {
+    for (tc_shader_resource_binding& existing : bindings) {
+        if (std::strcmp(existing.name, incoming.name) == 0) {
+            const uint32_t previous_size = existing.size;
+            const uint32_t previous_stage_mask = existing.stage_mask;
+            existing = incoming;
+            existing.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+            existing.stage_mask |= previous_stage_mask;
+            if (incoming.size == 0 && previous_size != 0) {
+                existing.size = previous_size;
+            }
+            return;
+        }
+    }
+    bindings.push_back(incoming);
+    bindings.back().name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+}
+
+static bool apply_shader_resource_layout_sidecar(
+    tc_shader* shader,
+    const std::filesystem::path& artifact_path
+) {
+    if (!shader) {
+        return true;
+    }
+
+    const std::filesystem::path sidecar = shader_resource_layout_sidecar_path(artifact_path);
+    std::error_code ec;
+    if (!std::filesystem::exists(sidecar, ec) ||
+        std::filesystem::is_directory(sidecar, ec)) {
+        return true;
+    }
+
+    std::string text;
+    if (!read_text_file(sidecar, text)) {
+        tc_log(TC_LOG_ERROR,
+               "tgfx2 shader resource layout: failed to read '%s'",
+               sidecar.string().c_str());
+        return false;
+    }
+
+    std::vector<tc_shader_resource_binding> incoming;
+    if (!parse_shader_resource_layout_sidecar(text, incoming)) {
+        tc_log(TC_LOG_ERROR,
+               "tgfx2 shader resource layout: malformed sidecar '%s'",
+               sidecar.string().c_str());
+        return false;
+    }
+    if (incoming.empty()) {
+        return true;
+    }
+
+    std::vector<tc_shader_resource_binding> merged;
+    const uint32_t existing_count = tc_shader_resource_binding_count(shader);
+    const tc_shader_resource_binding* existing = tc_shader_resource_bindings(shader);
+    if (existing && existing_count > 0) {
+        merged.assign(existing, existing + existing_count);
+    }
+    for (const tc_shader_resource_binding& binding : incoming) {
+        merge_shader_resource_binding(merged, binding);
+    }
+    tc_shader_set_resource_layout(
+        shader,
+        merged.data(),
+        static_cast<uint32_t>(merged.size()));
+    tc_log(TC_LOG_DEBUG,
+           "tgfx2 shader resource layout: loaded %zu resource(s) from '%s'",
+           incoming.size(),
+           sidecar.string().c_str());
+    return true;
+}
+
 static std::vector<std::string> split_paths(const char* value) {
     std::vector<std::string> paths;
     if (!value || value[0] == '\0') return paths;
@@ -675,7 +865,7 @@ bool tgfx2_load_shader_artifact_for_backend(
 }
 
 bool tgfx2_load_or_compile_shader_artifact_for_backend(
-    const ::tc_shader* shader,
+    ::tc_shader* shader,
     tgfx::BackendType backend,
     tgfx::ShaderStage stage,
     std::vector<uint8_t>& out
@@ -693,17 +883,20 @@ bool tgfx2_load_or_compile_shader_artifact_for_backend(
 
     const bool dev_compile = tgfx2_get_shader_dev_compile_enabled();
     if (!dev_compile) {
-        return tgfx2_load_shader_artifact_for_backend(shader->uuid, backend, stage, out);
+        if (!tgfx2_load_shader_artifact_for_backend(shader->uuid, backend, stage, out)) {
+            return false;
+        }
+        return apply_shader_resource_layout_sidecar(shader, artifact_path);
     }
 
     const tc_shader_language language = (tc_shader_language)shader->language;
     const bool supported = shader_language_target_supported(language, backend);
     if (read_binary_file(artifact_path, out)) {
         if (artifact_metadata_current(artifact_path, shader, backend, stage)) {
-            return true;
+            return apply_shader_resource_layout_sidecar(shader, artifact_path);
         }
         if (!supported) {
-            return true;
+            return apply_shader_resource_layout_sidecar(shader, artifact_path);
         }
     } else if (!supported) {
         if (tc_shader_requires_artifacts(shader)) {
@@ -720,7 +913,10 @@ bool tgfx2_load_or_compile_shader_artifact_for_backend(
     if (!compile_shader_artifact(shader, backend, stage, artifact_path)) {
         return false;
     }
-    return read_binary_file(artifact_path, out);
+    if (!read_binary_file(artifact_path, out)) {
+        return false;
+    }
+    return apply_shader_resource_layout_sidecar(shader, artifact_path);
 }
 
 bool tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(

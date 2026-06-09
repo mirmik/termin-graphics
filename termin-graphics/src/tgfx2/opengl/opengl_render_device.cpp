@@ -291,7 +291,7 @@ std::vector<uint8_t> normalize_tc_texture_pixels(const tc_texture* tex, PixelFor
 }
 
 bool load_opengl_shader_artifact_source(
-    const tc_shader* shader,
+    tc_shader* shader,
     ShaderStage stage,
     std::string& out_source
 ) {

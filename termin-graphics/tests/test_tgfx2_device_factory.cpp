@@ -1,6 +1,7 @@
 #include "guard_main.h"
 
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -331,6 +332,107 @@ float4 main() : SV_Target {
     CHECK(bytes == std::vector<uint8_t>({'S', 'P', 'I', 'R', 'V'}));
     CHECK(read_test_text_file(root / "compile_count.txt") == "1");
     CHECK(read_test_text_file(source).find("VSOut main") != std::string::npos);
+
+    termin::tgfx2_set_shader_dev_compile_enabled(false);
+    termin::tgfx2_set_shader_compiler_path("");
+    termin::tgfx2_set_shader_cache_root("");
+    termin::tgfx2_set_shader_artifact_root("");
+    tc_shader_destroy(handle);
+    fs::remove_all(root);
+#endif
+}
+
+TEST_CASE("tgfx2 shader runtime loads resource layout sidecar") {
+#ifdef _WIN32
+    CHECK(true);
+#else
+    namespace fs = std::filesystem;
+
+    const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
+    const std::string shader_uuid = "layout-sidecar-shader-" + std::to_string(unique);
+    const fs::path root = fs::temp_directory_path()
+        / ("termin_tgfx2_layout_sidecar_" + std::to_string(unique));
+    const fs::path artifact_root = root / "assets";
+    const fs::path cache_root = root / "cache";
+    const fs::path compiler = root / "fake_termin_shaderc.sh";
+    fs::create_directories(root);
+
+    {
+        std::ofstream out(compiler, std::ios::binary);
+        out
+            << "#!/bin/sh\n"
+            << "out=''\n"
+            << "while [ \"$#\" -gt 0 ]; do\n"
+            << "  if [ \"$1\" = '--output' ]; then shift; out=\"$1\"; fi\n"
+            << "  shift\n"
+            << "done\n"
+            << "if [ -z \"$out\" ]; then exit 9; fi\n"
+            << "mkdir -p \"$(dirname \"$out\")\"\n"
+            << "printf 'SPIRV' > \"$out\"\n"
+            << "cat > \"$out.layout.json\" <<'JSON'\n"
+            << "{\n"
+            << "  \"version\": 1,\n"
+            << "  \"language\": \"slang\",\n"
+            << "  \"target\": \"vulkan\",\n"
+            << "  \"stage\": \"fragment\",\n"
+            << "  \"resources\": [\n"
+            << "    {\"name\": \"material\", \"kind\": \"constant_buffer\", \"set\": 2, \"binding\": 7, \"stage_mask\": 2, \"size\": 0}\n"
+            << "  ]\n"
+            << "}\n"
+            << "JSON\n";
+    }
+    fs::permissions(
+        compiler,
+        fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec,
+        fs::perm_options::add);
+
+    const char* fs_src = R"(
+float4 main() : SV_Target {
+    return float4(1.0, 0.0, 1.0, 1.0);
+}
+)";
+
+    tc_shader_handle handle = tc_shader_from_sources_ex(
+        "",
+        fs_src,
+        nullptr,
+        "layout_sidecar_shader",
+        nullptr,
+        shader_uuid.c_str(),
+        TC_SHADER_LANGUAGE_SLANG,
+        TC_SHADER_ARTIFACT_REQUIRED
+    );
+    CHECK(!tc_shader_handle_is_invalid(handle));
+    tc_shader* shader = tc_shader_get(handle);
+    REQUIRE(shader != nullptr);
+
+    tc_material_ubo_entry entry{};
+    std::snprintf(entry.name, sizeof(entry.name), "%s", "u_strength");
+    std::snprintf(entry.property_type, sizeof(entry.property_type), "%s", "Float");
+    entry.offset = 0;
+    entry.size = 4;
+    tc_shader_set_material_ubo_layout(shader, &entry, 1, 16);
+
+    termin::tgfx2_set_shader_artifact_root(artifact_root.string().c_str());
+    termin::tgfx2_set_shader_cache_root(cache_root.string().c_str());
+    termin::tgfx2_set_shader_compiler_path(compiler.string().c_str());
+    termin::tgfx2_set_shader_dev_compile_enabled(true);
+
+    std::vector<uint8_t> bytes;
+    CHECK(termin::tgfx2_load_or_compile_shader_artifact_for_backend(
+        shader,
+        tgfx::BackendType::Vulkan,
+        tgfx::ShaderStage::Fragment,
+        bytes));
+
+    const tc_shader_resource_binding* binding =
+        tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_MATERIAL);
+    REQUIRE(binding != nullptr);
+    CHECK(binding->kind == TC_SHADER_RESOURCE_CONSTANT_BUFFER);
+    CHECK(binding->set == 2u);
+    CHECK(binding->binding == 7u);
+    CHECK(binding->size == 16u);
+    CHECK((binding->stage_mask & TC_SHADER_STAGE_FRAGMENT) != 0u);
 
     termin::tgfx2_set_shader_dev_compile_enabled(false);
     termin::tgfx2_set_shader_compiler_path("");

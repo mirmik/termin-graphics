@@ -119,6 +119,56 @@ def test_termin_shaderc_invokes_fake_slangc_for_vulkan(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "struct MaterialParams { float u_strength; };\n"
+        "ConstantBuffer<MaterialParams> material : register(b7, space2);\n"
+        "[shader(\"fragment\")] float4 main() : SV_Target0 { return float4(material.u_strength); }\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = _write_fake_slangc(tmp_path / "fake_slangc.py")
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    assert layout["version"] == 1
+    assert layout["language"] == "slang"
+    assert layout["target"] == "vulkan"
+    assert layout["stage"] == "fragment"
+    assert layout["resources"] == [
+        {
+            "name": "material",
+            "kind": "constant_buffer",
+            "set": 2,
+            "binding": 7,
+            "stage_mask": 2,
+            "size": 0,
+        }
+    ]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_invokes_fake_slangc_for_opengl(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text("[shader(\"fragment\")] void main() {}\n", encoding="utf-8")

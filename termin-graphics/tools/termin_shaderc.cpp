@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iostream>
 #include <optional>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -26,6 +27,15 @@ struct CompileOptions {
     std::string debug_name = "shader";
     std::string slangc;
     std::string matrix_layout = "column";
+};
+
+struct ShaderResourceBinding {
+    std::string name;
+    std::string kind;
+    uint32_t set = 0;
+    uint32_t binding = 0;
+    uint32_t stage_mask = 0;
+    uint32_t size = 0;
 };
 
 static void usage() {
@@ -80,6 +90,132 @@ static bool write_spirv(const std::string& path, const std::vector<uint32_t>& wo
     out.write(reinterpret_cast<const char*>(words.data()),
               static_cast<std::streamsize>(words.size() * sizeof(uint32_t)));
     return static_cast<bool>(out);
+}
+
+static uint32_t stage_mask_for_stage(const std::string& stage) {
+    if (stage == "vertex") return 1u << 0;
+    if (stage == "fragment") return 1u << 1;
+    if (stage == "geometry") return 1u << 2;
+    if (stage == "compute") return 1u << 3;
+    return 0u;
+}
+
+static std::string json_escape(const std::string& value) {
+    std::string out;
+    out.reserve(value.size() + 8);
+    for (char ch : value) {
+        switch (ch) {
+            case '\\': out += "\\\\"; break;
+            case '"': out += "\\\""; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default: out.push_back(ch); break;
+        }
+    }
+    return out;
+}
+
+static void append_unique_resource(
+    std::vector<ShaderResourceBinding>& resources,
+    ShaderResourceBinding binding
+) {
+    for (ShaderResourceBinding& existing : resources) {
+        if (existing.name == binding.name) {
+            existing.kind = binding.kind;
+            existing.set = binding.set;
+            existing.binding = binding.binding;
+            existing.stage_mask |= binding.stage_mask;
+            if (binding.size != 0) {
+                existing.size = binding.size;
+            }
+            return;
+        }
+    }
+    resources.push_back(std::move(binding));
+}
+
+static std::vector<ShaderResourceBinding> infer_resource_bindings(
+    const std::string& source,
+    const CompileOptions& options
+) {
+    std::vector<ShaderResourceBinding> resources;
+    const uint32_t stage_mask = stage_mask_for_stage(options.stage);
+
+    if (options.language == "slang") {
+        static const std::regex material_buffer_re(
+            R"(ConstantBuffer\s*<\s*MaterialParams\s*>\s*material\s*:\s*register\s*\(\s*b([0-9]+)\s*,\s*space([0-9]+)\s*\))");
+        std::smatch match;
+        if (std::regex_search(source, match, material_buffer_re)) {
+            ShaderResourceBinding binding;
+            binding.name = "material";
+            binding.kind = "constant_buffer";
+            binding.binding = static_cast<uint32_t>(std::stoul(match[1].str()));
+            binding.set = static_cast<uint32_t>(std::stoul(match[2].str()));
+            binding.stage_mask = stage_mask;
+            append_unique_resource(resources, std::move(binding));
+        }
+    }
+
+    if (options.language == "glsl") {
+        static const std::regex material_ubo_re(
+            R"(layout\s*\([^\)]*binding\s*=\s*([0-9]+)[^\)]*\)\s*uniform\s+MaterialParams)");
+        std::smatch match;
+        if (std::regex_search(source, match, material_ubo_re)) {
+            ShaderResourceBinding binding;
+            binding.name = "material";
+            binding.kind = "constant_buffer";
+            binding.set = 0;
+            binding.binding = static_cast<uint32_t>(std::stoul(match[1].str()));
+            binding.stage_mask = stage_mask;
+            append_unique_resource(resources, std::move(binding));
+        }
+    }
+
+    return resources;
+}
+
+static bool write_resource_layout_sidecar(
+    const CompileOptions& options,
+    const std::string& source
+) {
+    const std::string path = options.output + ".layout.json";
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        std::cerr << "termin_shaderc: failed to open layout sidecar: " << path << "\n";
+        return false;
+    }
+
+    std::vector<ShaderResourceBinding> resources = infer_resource_bindings(source, options);
+
+    out << "{\n";
+    out << "  \"version\": 1,\n";
+    out << "  \"language\": \"" << json_escape(options.language) << "\",\n";
+    out << "  \"target\": \"" << json_escape(options.target) << "\",\n";
+    out << "  \"stage\": \"" << json_escape(options.stage) << "\",\n";
+    out << "  \"resources\": [\n";
+    for (size_t i = 0; i < resources.size(); ++i) {
+        const ShaderResourceBinding& binding = resources[i];
+        out << "    {"
+            << "\"name\": \"" << json_escape(binding.name) << "\", "
+            << "\"kind\": \"" << json_escape(binding.kind) << "\", "
+            << "\"set\": " << binding.set << ", "
+            << "\"binding\": " << binding.binding << ", "
+            << "\"stage_mask\": " << binding.stage_mask << ", "
+            << "\"size\": " << binding.size
+            << "}";
+        if (i + 1 < resources.size()) {
+            out << ",";
+        }
+        out << "\n";
+    }
+    out << "  ]\n";
+    out << "}\n";
+    if (!out) {
+        std::cerr << "termin_shaderc: failed to write layout sidecar: " << path << "\n";
+        return false;
+    }
+    return true;
 }
 
 static bool is_existing_file(const std::filesystem::path& path) {
@@ -288,7 +424,7 @@ static bool compile_glsl_to_vulkan(const CompileOptions& options) {
         return false;
     }
 
-    return true;
+    return write_resource_layout_sidecar(options, source);
 }
 
 static bool compile_slang(const CompileOptions& options, const char* argv0) {
@@ -337,6 +473,10 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
             << " (expected column or row)\n";
         return false;
     }
+    std::string source;
+    if (!read_file(options.input, source)) {
+        return false;
+    }
 
     std::vector<std::string> args = {
         *slangc,
@@ -360,7 +500,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
                   << options.output << "\n";
         return false;
     }
-    return true;
+    return write_resource_layout_sidecar(options, source);
 }
 
 } // namespace
