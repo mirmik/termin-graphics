@@ -12,28 +12,35 @@
 
 #include "tgfx2/text3d_renderer.hpp"
 
+#include "tgfx2/builtin_shader_sources.hpp"
 #include <algorithm>
 #include <cstring>
-#include <string>
 #include <vector>
 
-#include "tgfx2/descriptors.hpp"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/font_atlas.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/render_context.hpp"
+#include "tgfx2/tc_shader_bridge.hpp"
 
 #include "internal/utf8_decode.hpp"
 
 extern "C" {
+#include <tgfx/resources/tc_shader.h>
+}
+
+extern "C" {
 #include "tgfx/tgfx2_interop.h"
 }
+
+#include <tcbase/tc_log.hpp>
 
 namespace tgfx {
 
 namespace {
 
 constexpr float kText3DRasterPx = 16.0f;
+constexpr const char* TEXT3D_SHADER_UUID = "termin-engine-text3d";
 
 struct Text3DPushData {
     float mvp[16];
@@ -43,54 +50,6 @@ struct Text3DPushData {
 };
 static_assert(sizeof(Text3DPushData) == 112,
               "Text3DPushData layout drift — shader and C++ disagree");
-
-constexpr const char* kText3DCommon = R"(
-struct Text3DPush {
-    mat4 u_mvp;
-    vec4 u_color;
-    vec4 u_cam_right;
-    vec4 u_cam_up;
-};
-#ifdef VULKAN
-layout(push_constant) uniform Text3DPushBlock { Text3DPush pc; };
-#else
-layout(std140, binding = 14) uniform Text3DPushBlock { Text3DPush pc; };
-#endif
-)";
-
-static std::string make_text3d_vert() {
-    return std::string("#version 450 core\n") + kText3DCommon + R"(
-layout(location=0) in vec3 a_world_pos;
-layout(location=1) in vec4 a_offset_uv;  // (offset.x, offset.y, u, v)
-
-layout(location=0) out vec2 v_uv;
-
-void main() {
-    vec3 pos = a_world_pos
-             + pc.u_cam_right.xyz * a_offset_uv.x
-             + pc.u_cam_up.xyz    * a_offset_uv.y;
-    gl_Position = pc.u_mvp * vec4(pos, 1.0);
-    v_uv = a_offset_uv.zw;
-}
-)";
-}
-
-static std::string make_text3d_frag() {
-    return std::string("#version 450 core\n") + kText3DCommon + R"(
-layout(binding=4) uniform sampler2D u_font_atlas;
-
-layout(location=0) in vec2 v_uv;
-layout(location=0) out vec4 frag_color;
-
-void main() {
-    float a = texture(u_font_atlas, v_uv).r * pc.u_color.a;
-    // Threshold at one 8-bit alpha level — same rationale as in
-    // Text2DRenderer. 0.01 was high enough to nibble AA tail pixels.
-    if (a < (1.0/255.0)) discard;
-    frag_color = vec4(pc.u_color.rgb, a);
-}
-)";
-}
 
 }  // namespace
 
@@ -106,36 +65,30 @@ void Text3DRenderer::ensure_shader_(IRenderDevice& device) {
     if (compiled_on_ == &device && vs_.id != 0 && fs_.id != 0) {
         return;
     }
-    if (compiled_on_ != nullptr) {
-        if (vs_.id != 0) compiled_on_->destroy(vs_);
-        if (fs_.id != 0) compiled_on_->destroy(fs_);
-    }
     vs_ = ShaderHandle{};
     fs_ = ShaderHandle{};
 
-    ShaderDesc vs_desc;
-    vs_desc.stage = ShaderStage::Vertex;
-    vs_desc.source = make_text3d_vert();
-    vs_ = device.create_shader(vs_desc);
+    if (tc_shader_handle_is_invalid(shader_handle_)) {
+        shader_handle_ = register_builtin_shader_from_catalog(TEXT3D_SHADER_UUID);
+    }
 
-    ShaderDesc fs_desc;
-    fs_desc.stage = ShaderStage::Fragment;
-    fs_desc.source = make_text3d_frag();
-    fs_ = device.create_shader(fs_desc);
+    if (!tc_shader_handle_is_invalid(shader_handle_)) {
+        tc_shader* raw = tc_shader_get(shader_handle_);
+        if (raw && !termin::tc_shader_ensure_tgfx2(raw, &device, &vs_, &fs_)) {
+            tc::Log::error("[Text3DRenderer] failed to create shader");
+        }
+    }
+
+    if (vs_.id == 0 || fs_.id == 0) {
+        tc::Log::error("[Text3DRenderer] shader is unavailable");
+    }
 
     compiled_on_ = &device;
 }
 
 void Text3DRenderer::release_gpu() {
-    // See Text2DRenderer::release_gpu for the lifetime story. Leak at
-    // interpreter shutdown when the device is already gone.
-    if (compiled_on_ != nullptr) {
-        void* live = tgfx2_interop_get_device();
-        if (live == compiled_on_) {
-            if (vs_.id != 0) compiled_on_->destroy(vs_);
-            if (fs_.id != 0) compiled_on_->destroy(fs_);
-        }
-    }
+    // Shaders live in the tc_shader registry and are shared across
+    // Text3DRenderer instances; cached handles are local views only.
     vs_ = ShaderHandle{};
     fs_ = ShaderHandle{};
     compiled_on_ = nullptr;

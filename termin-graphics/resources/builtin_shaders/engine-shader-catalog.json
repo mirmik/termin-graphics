@@ -267,6 +267,46 @@
       ]
     },
     {
+      "uuid": "termin-engine-text3d",
+      "name": "Text3DEngineVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-text3d.vert.glsl",
+          "inputs": [
+            {"name": "a_world_pos", "semantic": "POSITION", "location": 0},
+            {"name": "a_offset_uv", "semantic": "TEXCOORD0", "location": 1}
+          ],
+          "outputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-text3d.frag.glsl",
+          "inputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "frag_color", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "Text3DPushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        },
+        {
+          "name": "u_font_atlas",
+          "logical_name": "font_atlas",
+          "kind": "combined_sampler2d",
+          "legacy_binding": 4
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-id",
       "name": "IdEngineVSFS",
       "language": "glsl",

@@ -24,6 +24,9 @@
 
 #include "tgfx2/handles.hpp"
 #include "tgfx2/tgfx2_api.h"
+extern "C" {
+#include <tgfx/resources/tc_shader_registry.h>
+}
 
 namespace tgfx {
 
@@ -37,6 +40,7 @@ public:
 
 private:
     IRenderDevice* compiled_on_ = nullptr;
+    tc_shader_handle shader_handle_ = tc_shader_handle_invalid();
     ShaderHandle vs_{};
     ShaderHandle fs_{};
 
