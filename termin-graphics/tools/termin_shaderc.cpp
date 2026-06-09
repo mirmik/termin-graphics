@@ -177,8 +177,9 @@ static bool trent_uint_field(
     return true;
 }
 
-static bool slang_parameter_binding_index(
+static bool slang_parameter_binding(
     const nos::trent& parameter,
+    std::string& out_binding_kind,
     uint32_t& out_binding,
     uint32_t& out_set
 ) {
@@ -187,12 +188,7 @@ static bool slang_parameter_binding_index(
         return false;
     }
 
-    std::string binding_kind;
-    if (!trent_string_field(*binding, "kind", binding_kind)) {
-        return false;
-    }
-    if (binding_kind != "constantBuffer" &&
-        binding_kind != "descriptorTableSlot") {
+    if (!trent_string_field(*binding, "kind", out_binding_kind)) {
         return false;
     }
     if (!trent_uint_field(*binding, "index", out_binding)) {
@@ -219,6 +215,70 @@ static uint32_t slang_parameter_buffer_size(const nos::trent& parameter) {
     uint32_t size = 0;
     trent_uint_field(*binding, "size", size);
     return size;
+}
+
+static bool is_slang_texture_base_shape(const std::string& base_shape) {
+    return base_shape.rfind("texture", 0) == 0;
+}
+
+static bool slang_resource_kind_from_parameter(
+    const nos::trent& parameter,
+    const std::string& binding_kind,
+    std::string& out_kind,
+    uint32_t& out_size
+) {
+    const nos::trent* type = trent_dict_get(parameter, "type");
+    std::string type_kind;
+    if (!type || !type->is_dict() ||
+        !trent_string_field(*type, "kind", type_kind)) {
+        return false;
+    }
+
+    if (type_kind == "constantBuffer") {
+        if (binding_kind != "constantBuffer" &&
+            binding_kind != "descriptorTableSlot") {
+            return false;
+        }
+        out_kind = "constant_buffer";
+        out_size = slang_parameter_buffer_size(parameter);
+        return true;
+    }
+
+    if (type_kind == "samplerState") {
+        if (binding_kind != "samplerState") {
+            return false;
+        }
+        out_kind = "sampler";
+        out_size = 0;
+        return true;
+    }
+
+    if (type_kind == "resource") {
+        std::string base_shape;
+        if (!trent_string_field(*type, "baseShape", base_shape) ||
+            !is_slang_texture_base_shape(base_shape)) {
+            return false;
+        }
+
+        std::string access;
+        const bool has_access = trent_string_field(*type, "access", access);
+        if (has_access && access == "readWrite") {
+            if (binding_kind != "descriptorTableSlot") {
+                return false;
+            }
+            out_kind = "storage_texture";
+        } else {
+            if (binding_kind != "shaderResource" &&
+                binding_kind != "descriptorTableSlot") {
+                return false;
+            }
+            out_kind = "texture";
+        }
+        out_size = 0;
+        return true;
+    }
+
+    return false;
 }
 
 static std::vector<ShaderResourceBinding> infer_resource_bindings_from_slang_reflection(
@@ -248,26 +308,27 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings_from_slang_ref
             continue;
         }
 
-        const nos::trent* type = trent_dict_get(parameter, "type");
-        std::string type_kind;
-        if (!type || !type->is_dict() ||
-            !trent_string_field(*type, "kind", type_kind)) {
+        ShaderResourceBinding binding;
+        std::string binding_kind;
+        if (!slang_parameter_binding(
+                parameter,
+                binding_kind,
+                binding.binding,
+                binding.set)) {
             continue;
         }
 
-        ShaderResourceBinding binding;
+        uint32_t size = 0;
+        if (!slang_resource_kind_from_parameter(
+                parameter,
+                binding_kind,
+                binding.kind,
+                size)) {
+            continue;
+        }
         binding.name = name;
         binding.stage_mask = stage_mask;
-        if (type_kind == "constantBuffer") {
-            binding.kind = "constant_buffer";
-            binding.size = slang_parameter_buffer_size(parameter);
-        } else {
-            continue;
-        }
-
-        if (!slang_parameter_binding_index(parameter, binding.binding, binding.set)) {
-            continue;
-        }
+        binding.size = size;
         append_unique_resource(resources, std::move(binding));
     }
     return resources;
@@ -304,6 +365,39 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
             binding.stage_mask = stage_mask;
             append_unique_resource(resources, std::move(binding));
         }
+        static const std::regex texture_register_re(
+            R"((Texture[A-Za-z0-9_<>, \t]*|RWTexture[A-Za-z0-9_<>, \t]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*([tu])([0-9]+)\s*,\s*space([0-9]+)\s*\))");
+        for (std::sregex_iterator it(source.begin(), source.end(), texture_register_re), end;
+             it != end;
+             ++it) {
+            const std::smatch& match = *it;
+            ShaderResourceBinding binding;
+            const std::string type = match[1].str();
+            const std::string reg_space = match[3].str();
+            binding.name = match[2].str();
+            binding.kind =
+                (reg_space == "u" || type.rfind("RWTexture", 0) == 0)
+                ? "storage_texture"
+                : "texture";
+            binding.binding = static_cast<uint32_t>(std::stoul(match[4].str()));
+            binding.set = static_cast<uint32_t>(std::stoul(match[5].str()));
+            binding.stage_mask = stage_mask;
+            append_unique_resource(resources, std::move(binding));
+        }
+        static const std::regex sampler_register_re(
+            R"((SamplerState|SamplerComparisonState)\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*s([0-9]+)\s*,\s*space([0-9]+)\s*\))");
+        for (std::sregex_iterator it(source.begin(), source.end(), sampler_register_re), end;
+             it != end;
+             ++it) {
+            const std::smatch& match = *it;
+            ShaderResourceBinding binding;
+            binding.name = match[2].str();
+            binding.kind = "sampler";
+            binding.binding = static_cast<uint32_t>(std::stoul(match[3].str()));
+            binding.set = static_cast<uint32_t>(std::stoul(match[4].str()));
+            binding.stage_mask = stage_mask;
+            append_unique_resource(resources, std::move(binding));
+        }
     }
 
     if (options.language == "glsl") {
@@ -314,6 +408,20 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
             ShaderResourceBinding binding;
             binding.name = "material";
             binding.kind = "constant_buffer";
+            binding.set = 0;
+            binding.binding = static_cast<uint32_t>(std::stoul(match[1].str()));
+            binding.stage_mask = stage_mask;
+            append_unique_resource(resources, std::move(binding));
+        }
+        static const std::regex sampler_re(
+            R"(layout\s*\([^\)]*binding\s*=\s*([0-9]+)[^\)]*\)\s*uniform\s+sampler[A-Za-z0-9_]*\s+([A-Za-z_][A-Za-z0-9_]*))");
+        for (std::sregex_iterator it(source.begin(), source.end(), sampler_re), end;
+             it != end;
+             ++it) {
+            const std::smatch& match = *it;
+            ShaderResourceBinding binding;
+            binding.name = match[2].str();
+            binding.kind = "texture";
             binding.set = 0;
             binding.binding = static_cast<uint32_t>(std::stoul(match[1].str()));
             binding.stage_mask = stage_mask;
