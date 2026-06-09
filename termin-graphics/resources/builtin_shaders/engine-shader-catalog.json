@@ -834,6 +834,78 @@
       ]
     },
     {
+      "uuid": "termin-engine-foliage-instanced",
+      "name": "FoliageInstancedVariantVS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-foliage-instanced.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0},
+            {"name": "a_normal", "semantic": "NORMAL", "location": 1},
+            {"name": "a_uv", "semantic": "TEXCOORD0", "location": 2},
+            {"name": "i_position", "semantic": "POSITION1", "location": 8},
+            {"name": "i_yaw", "semantic": "TEXCOORD1", "location": 9},
+            {"name": "i_normal", "semantic": "NORMAL1", "location": 10},
+            {"name": "i_seed", "semantic": "TEXCOORD2", "location": 11}
+          ],
+          "outputs": [
+            {"name": "v_world_pos", "semantic": "POSITION2"},
+            {"name": "v_normal", "semantic": "NORMAL2"},
+            {"name": "v_uv", "semantic": "TEXCOORD0"},
+            {"name": "v_TBN", "semantic": "TEXCOORD3"},
+            {"name": "v_tangent", "semantic": "TANGENT"},
+            {"name": "v_foliage_seed", "semantic": "TEXCOORD6"}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "PerFrame",
+          "logical_name": "per_frame",
+          "kind": "constant_buffer",
+          "legacy_binding": 2
+        },
+        {
+          "name": "FoliagePushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-foliage-shadow",
+      "name": "FoliageShadowVariantVS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-foliage-shadow.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0},
+            {"name": "i_position", "semantic": "POSITION1", "location": 8},
+            {"name": "i_yaw", "semantic": "TEXCOORD1", "location": 9},
+            {"name": "i_normal", "semantic": "NORMAL1", "location": 10}
+          ],
+          "outputs": []
+        }
+      },
+      "resources": [
+        {
+          "name": "PerFrame",
+          "logical_name": "per_frame",
+          "kind": "constant_buffer",
+          "legacy_binding": 0
+        },
+        {
+          "name": "FoliagePushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-id",
       "name": "IdEngineVSFS",
       "language": "glsl",

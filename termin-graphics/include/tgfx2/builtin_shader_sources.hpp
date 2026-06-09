@@ -25,6 +25,9 @@ TGFX2_API tc_shader_handle register_builtin_vertex_fragment_shader(
     const char* fragment_filename,
     const char* name,
     const char* uuid);
+TGFX2_API std::string load_builtin_shader_stage_source_from_catalog(
+    const char* uuid,
+    const char* stage_name);
 TGFX2_API tc_shader_handle register_builtin_shader_from_catalog(const char* uuid);
 TGFX2_API BuiltinShaderProgramSource load_builtin_shader_program_from_catalog(const char* uuid);
 

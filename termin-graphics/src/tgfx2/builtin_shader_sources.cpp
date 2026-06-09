@@ -253,6 +253,49 @@ tc_shader_handle register_builtin_vertex_fragment_shader(
         vertex_source.c_str(), fragment_source.c_str(), nullptr, name, uuid);
 }
 
+std::string load_builtin_shader_stage_source_from_catalog(
+    const char* uuid,
+    const char* stage_name)
+{
+    if (!stage_name || stage_name[0] == '\0') {
+        tc::Log::error(
+            "[BuiltInShaderCatalog] Shader '%s' requested with missing stage name",
+            uuid ? uuid : "<null>");
+        return {};
+    }
+
+    std::optional<nos::trent> entry = find_builtin_shader_catalog_entry(uuid);
+    if (!entry) {
+        return {};
+    }
+
+    const std::string language = string_field(*entry, "language");
+    if (language != "glsl") {
+        tc::Log::error(
+            "[BuiltInShaderCatalog] Shader '%s' has unsupported live stage language '%s'",
+            uuid ? uuid : "<null>",
+            language.c_str());
+        return {};
+    }
+
+    const std::string name = string_field(*entry, "name");
+    if (name.empty()) {
+        tc::Log::error("[BuiltInShaderCatalog] Shader '%s' has no name", uuid);
+        return {};
+    }
+
+    const std::string path = stage_path(*entry, stage_name);
+    if (path.empty()) {
+        tc::Log::error(
+            "[BuiltInShaderCatalog] Shader '%s' has no '%s' stage",
+            uuid ? uuid : "<null>",
+            stage_name);
+        return {};
+    }
+
+    return load_builtin_shader_source(path.c_str(), name.c_str());
+}
+
 tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
     std::optional<nos::trent> entry = find_builtin_shader_catalog_entry(uuid);
     if (!entry) {
