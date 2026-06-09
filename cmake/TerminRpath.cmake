@@ -6,12 +6,23 @@
 #
 #   termin_set_rpath_lib(my_shared_lib)
 #   termin_set_rpath_python(my_nanobind_module)
+#   termin_set_rpath_tool(my_sdk_executable)
 
 # For native shared libraries (.so) installed into lib/
 function(termin_set_rpath_lib target)
     if(NOT WIN32)
         set_target_properties(${target} PROPERTIES
             INSTALL_RPATH "$ORIGIN;${CMAKE_INSTALL_PREFIX}/lib"
+            BUILD_WITH_INSTALL_RPATH TRUE
+        )
+    endif()
+endfunction()
+
+# For native executables installed into bin/.
+function(termin_set_rpath_tool target)
+    if(NOT WIN32)
+        set_target_properties(${target} PROPERTIES
+            INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;${CMAKE_INSTALL_PREFIX}/lib"
             BUILD_WITH_INSTALL_RPATH TRUE
         )
     endif()

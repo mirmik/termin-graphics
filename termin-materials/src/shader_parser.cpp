@@ -278,7 +278,7 @@ std::string synthesize_material_ubo_slang(const MaterialUboLayout& layout) {
         out << "    " << t << " " << e.name << ";\n";
     }
     out << "};\n";
-    out << "ConstantBuffer<MaterialParams> material : register(b1, space0);\n";
+    out << "ConstantBuffer<MaterialParams> material;\n";
     return out.str();
 }
 

@@ -1,10 +1,12 @@
 #include <shaderc/shaderc.hpp>
+#include <tcbase/trent/json.h>
 
 #include <cstdlib>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <regex>
 #include <sstream>
@@ -92,6 +94,8 @@ static bool write_spirv(const std::string& path, const std::vector<uint32_t>& wo
     return static_cast<bool>(out);
 }
 
+static bool is_existing_file(const std::filesystem::path& path);
+
 static uint32_t stage_mask_for_stage(const std::string& stage) {
     if (stage == "vertex") return 1u << 0;
     if (stage == "fragment") return 1u << 1;
@@ -135,6 +139,140 @@ static void append_unique_resource(
     resources.push_back(std::move(binding));
 }
 
+static const nos::trent* trent_dict_get(const nos::trent& value, const char* key) {
+    if (!value.is_dict()) {
+        return nullptr;
+    }
+    return value._get(key);
+}
+
+static bool trent_string_field(
+    const nos::trent& value,
+    const char* key,
+    std::string& out
+) {
+    const nos::trent* field = trent_dict_get(value, key);
+    if (!field || !field->is_string()) {
+        return false;
+    }
+    out = field->as_string();
+    return true;
+}
+
+static bool trent_uint_field(
+    const nos::trent& value,
+    const char* key,
+    uint32_t& out
+) {
+    const nos::trent* field = trent_dict_get(value, key);
+    if (!field || !field->is_numer()) {
+        return false;
+    }
+    const int64_t number = field->as_integer();
+    if (number < 0 ||
+        number > static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
+        return false;
+    }
+    out = static_cast<uint32_t>(number);
+    return true;
+}
+
+static bool slang_parameter_binding_index(
+    const nos::trent& parameter,
+    uint32_t& out_binding,
+    uint32_t& out_set
+) {
+    const nos::trent* binding = trent_dict_get(parameter, "binding");
+    if (!binding || !binding->is_dict()) {
+        return false;
+    }
+
+    std::string binding_kind;
+    if (!trent_string_field(*binding, "kind", binding_kind)) {
+        return false;
+    }
+    if (binding_kind != "constantBuffer" &&
+        binding_kind != "descriptorTableSlot") {
+        return false;
+    }
+    if (!trent_uint_field(*binding, "index", out_binding)) {
+        return false;
+    }
+    out_set = 0;
+    trent_uint_field(*binding, "space", out_set);
+    return true;
+}
+
+static uint32_t slang_parameter_buffer_size(const nos::trent& parameter) {
+    const nos::trent* type = trent_dict_get(parameter, "type");
+    if (!type || !type->is_dict()) {
+        return 0;
+    }
+    const nos::trent* element_layout = trent_dict_get(*type, "elementVarLayout");
+    if (!element_layout || !element_layout->is_dict()) {
+        return 0;
+    }
+    const nos::trent* binding = trent_dict_get(*element_layout, "binding");
+    if (!binding || !binding->is_dict()) {
+        return 0;
+    }
+    uint32_t size = 0;
+    trent_uint_field(*binding, "size", size);
+    return size;
+}
+
+static std::vector<ShaderResourceBinding> infer_resource_bindings_from_slang_reflection(
+    const std::string& reflection_text,
+    const CompileOptions& options
+) {
+    std::vector<ShaderResourceBinding> resources;
+    nos::trent root;
+    try {
+        root = nos::json::parse(reflection_text);
+    } catch (const std::exception&) {
+        return resources;
+    }
+
+    const nos::trent* parameters = trent_dict_get(root, "parameters");
+    if (!parameters || !parameters->is_list()) {
+        return resources;
+    }
+
+    const uint32_t stage_mask = stage_mask_for_stage(options.stage);
+    for (const nos::trent& parameter : parameters->as_list()) {
+        if (!parameter.is_dict()) {
+            continue;
+        }
+        std::string name;
+        if (!trent_string_field(parameter, "name", name) || name.empty()) {
+            continue;
+        }
+
+        const nos::trent* type = trent_dict_get(parameter, "type");
+        std::string type_kind;
+        if (!type || !type->is_dict() ||
+            !trent_string_field(*type, "kind", type_kind)) {
+            continue;
+        }
+
+        ShaderResourceBinding binding;
+        binding.name = name;
+        binding.stage_mask = stage_mask;
+        if (type_kind == "constantBuffer") {
+            binding.kind = "constant_buffer";
+            binding.size = slang_parameter_buffer_size(parameter);
+        } else {
+            continue;
+        }
+
+        if (!slang_parameter_binding_index(parameter, binding.binding, binding.set)) {
+            continue;
+        }
+        append_unique_resource(resources, std::move(binding));
+    }
+    return resources;
+}
+
 static std::vector<ShaderResourceBinding> infer_resource_bindings(
     const std::string& source,
     const CompileOptions& options
@@ -152,6 +290,17 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
             binding.kind = "constant_buffer";
             binding.binding = static_cast<uint32_t>(std::stoul(match[1].str()));
             binding.set = static_cast<uint32_t>(std::stoul(match[2].str()));
+            binding.stage_mask = stage_mask;
+            append_unique_resource(resources, std::move(binding));
+        }
+        static const std::regex material_buffer_clean_re(
+            R"(ConstantBuffer\s*<\s*MaterialParams\s*>\s*material\s*;)");
+        if (std::regex_search(source, material_buffer_clean_re)) {
+            ShaderResourceBinding binding;
+            binding.name = "material";
+            binding.kind = "constant_buffer";
+            binding.set = 0;
+            binding.binding = 1;
             binding.stage_mask = stage_mask;
             append_unique_resource(resources, std::move(binding));
         }
@@ -177,7 +326,8 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
 
 static bool write_resource_layout_sidecar(
     const CompileOptions& options,
-    const std::string& source
+    const std::string& source,
+    const std::optional<std::filesystem::path>& reflection_path = std::nullopt
 ) {
     const std::string path = options.output + ".layout.json";
     std::ofstream out(path, std::ios::binary);
@@ -186,7 +336,18 @@ static bool write_resource_layout_sidecar(
         return false;
     }
 
-    std::vector<ShaderResourceBinding> resources = infer_resource_bindings(source, options);
+    std::vector<ShaderResourceBinding> resources;
+    if (reflection_path && is_existing_file(*reflection_path)) {
+        std::string reflection_text;
+        if (read_file(reflection_path->string(), reflection_text)) {
+            resources = infer_resource_bindings_from_slang_reflection(
+                reflection_text,
+                options);
+        }
+    }
+    if (resources.empty()) {
+        resources = infer_resource_bindings(source, options);
+    }
 
     out << "{\n";
     out << "  \"version\": 1,\n";
@@ -440,7 +601,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         slang_target = "spirv";
         extra_args = {
             "-profile", "spirv_1_5",
-            "-fvk-b-shift", "0", "all",
+            "-fvk-b-shift", "1", "all",
             "-fvk-t-shift", "0", "all",
             "-fvk-s-shift", "0", "all",
         };
@@ -448,7 +609,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         slang_target = "glsl";
         extra_args = {
             "-profile", "glsl_450",
-            "-fvk-b-shift", "0", "all",
+            "-fvk-b-shift", "1", "all",
             "-fvk-t-shift", "0", "all",
             "-fvk-s-shift", "0", "all",
         };
@@ -486,6 +647,8 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         "-target", slang_target,
         *matrix_layout_arg,
     };
+    const std::filesystem::path reflection_path(options.output + ".reflection.json");
+    args.insert(args.end(), {"-reflection-json", reflection_path.string()});
     args.insert(args.end(), extra_args.begin(), extra_args.end());
     args.insert(args.end(), {"-o", options.output});
 
@@ -500,7 +663,10 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
                   << options.output << "\n";
         return false;
     }
-    return write_resource_layout_sidecar(options, source);
+    bool wrote_layout = write_resource_layout_sidecar(options, source, reflection_path);
+    std::error_code ec;
+    std::filesystem::remove(reflection_path, ec);
+    return wrote_layout;
 }
 
 } // namespace

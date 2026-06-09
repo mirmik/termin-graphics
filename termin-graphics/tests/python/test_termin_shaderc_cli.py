@@ -92,6 +92,7 @@ def test_termin_shaderc_invokes_fake_slangc_for_vulkan(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert output.read_bytes() == b"FAKE-spirv"
+    assert not (tmp_path / "out.spv.reflection.json").exists()
     slang_args = json.loads(args_path.read_text(encoding="utf-8"))
     assert slang_args == [
         str(shader),
@@ -102,10 +103,12 @@ def test_termin_shaderc_invokes_fake_slangc_for_vulkan(tmp_path: Path) -> None:
         "-target",
         "spirv",
         "-matrix-layout-column-major",
+        "-reflection-json",
+        str(output) + ".reflection.json",
         "-profile",
         "spirv_1_5",
         "-fvk-b-shift",
-        "0",
+        "1",
         "all",
         "-fvk-t-shift",
         "0",
@@ -123,12 +126,32 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
     shader = tmp_path / "test.slang"
     shader.write_text(
         "struct MaterialParams { float u_strength; };\n"
-        "ConstantBuffer<MaterialParams> material : register(b7, space2);\n"
+        "ConstantBuffer<MaterialParams> material;\n"
         "[shader(\"fragment\")] float4 main() : SV_Target0 { return float4(material.u_strength); }\n",
         encoding="utf-8",
     )
     output = tmp_path / "out.spv"
-    fake_slangc = _write_fake_slangc(tmp_path / "fake_slangc.py")
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_bytes(b'FAKE-spirv')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [{\n"
+        "        'name': 'material',\n"
+        "        'binding': {'kind': 'constantBuffer', 'index': 1},\n"
+        "        'type': {\n"
+        "            'kind': 'constantBuffer',\n"
+        "            'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 16}},\n"
+        "        },\n"
+        "    }]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
 
     result = _run_shaderc(
         [
@@ -151,6 +174,7 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
     )
 
     assert result.returncode == 0, result.stderr
+    assert not (tmp_path / "out.spv.reflection.json").exists()
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
     assert layout["version"] == 1
     assert layout["language"] == "slang"
@@ -160,10 +184,10 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
         {
             "name": "material",
             "kind": "constant_buffer",
-            "set": 2,
-            "binding": 7,
+            "set": 0,
+            "binding": 1,
             "stage_mask": 2,
-            "size": 0,
+            "size": 16,
         }
     ]
 
@@ -196,6 +220,7 @@ def test_termin_shaderc_invokes_fake_slangc_for_opengl(tmp_path: Path) -> None:
     assert output.read_bytes() == b"FAKE-glsl"
     slang_args = json.loads(args_path.read_text(encoding="utf-8"))
     assert "-fvk-b-shift" in slang_args
+    assert slang_args[slang_args.index("-fvk-b-shift") + 1] == "1"
     assert "-fvk-t-shift" in slang_args
     assert "-fvk-s-shift" in slang_args
 

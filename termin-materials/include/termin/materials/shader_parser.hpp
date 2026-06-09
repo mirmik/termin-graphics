@@ -280,11 +280,10 @@ MaterialUboLayout compute_std140_layout(const std::vector<MaterialProperty>& pro
 std::string synthesize_material_ubo_glsl(const MaterialUboLayout& layout);
 
 /**
- * Produce the Slang text for a `MaterialParams` struct plus
+ * Produce the Slang text for a `MaterialParams` struct plus a backend-neutral
  * `ConstantBuffer<MaterialParams> material` declaration matching the given
- * std140 layout. The runtime currently binds this block to the same material
- * UBO slot as GLSL, so the declaration keeps an explicit register bridge until
- * the material interface moves to reflection/name-based binding.
+ * std140 layout. Backend binding assignment is captured by compiled artifact
+ * layout metadata.
  */
 std::string synthesize_material_ubo_slang(const MaterialUboLayout& layout);
 
