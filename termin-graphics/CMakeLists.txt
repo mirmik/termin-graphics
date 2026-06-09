@@ -195,8 +195,32 @@ if(COMMAND termin_add_alias_if_missing)
 endif()
 target_compile_definitions(termin_graphics2 PRIVATE
     TGFX2_EXPORTS
-    TERMIN_GRAPHICS_SOURCE_DIR="${CMAKE_CURRENT_LIST_DIR}"
 )
+
+file(GLOB TERMIN_BUILTIN_SHADER_FILES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/builtin_shaders/*"
+)
+set(TERMIN_BUILTIN_SHADER_BUILD_ROOT
+    "${CMAKE_BINARY_DIR}/share/termin/builtin_shaders"
+)
+set(TERMIN_BUILTIN_SHADER_BUILD_STAMP
+    "${CMAKE_BINARY_DIR}/share/termin/.builtin_shaders.stamp"
+)
+add_custom_command(
+    OUTPUT "${TERMIN_BUILTIN_SHADER_BUILD_STAMP}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${TERMIN_BUILTIN_SHADER_BUILD_ROOT}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/resources/builtin_shaders"
+            "${TERMIN_BUILTIN_SHADER_BUILD_ROOT}"
+    COMMAND ${CMAKE_COMMAND} -E touch "${TERMIN_BUILTIN_SHADER_BUILD_STAMP}"
+    DEPENDS ${TERMIN_BUILTIN_SHADER_FILES}
+    COMMENT "Staging built-in shaders in the build tree"
+    VERBATIM
+)
+add_custom_target(termin_builtin_shaders_build_tree
+    DEPENDS "${TERMIN_BUILTIN_SHADER_BUILD_STAMP}"
+)
+add_dependencies(termin_graphics2 termin_builtin_shaders_build_tree)
 
 if(TGFX2_ENABLE_OPENGL)
     target_compile_definitions(termin_graphics2 PUBLIC TGFX2_HAS_OPENGL)

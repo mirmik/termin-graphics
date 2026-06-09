@@ -106,14 +106,6 @@ std::vector<std::filesystem::path> builtin_shader_roots() {
         add_root(roots, cwd / "share" / "termin" / "builtin_shaders");
     }
 
-#ifdef TERMIN_GRAPHICS_SOURCE_DIR
-    add_root(
-        roots,
-        std::filesystem::path(TERMIN_GRAPHICS_SOURCE_DIR) / "resources" / "builtin_shaders");
-#endif
-
-    add_root(roots, std::filesystem::path("termin-graphics") / "resources" / "builtin_shaders");
-    add_root(roots, std::filesystem::path("..") / "termin-graphics" / "resources" / "builtin_shaders");
     return roots;
 }
 
