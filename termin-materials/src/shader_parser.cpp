@@ -331,6 +331,44 @@ std::string strip_sampler_decls(
     return result;
 }
 
+std::string strip_slang_sampler_decls(
+    const std::string& source,
+    const std::vector<std::string>& sampler_names
+) {
+    if (sampler_names.empty()) return source;
+
+    std::vector<std::regex> res;
+    res.reserve(sampler_names.size());
+    for (const auto& name : sampler_names) {
+        std::string pattern =
+            std::string("[ \\t]*Sampler[0-9A-Za-z_]*[ \\t]+")
+            + name + "[ \\t]*;[ \\t]*";
+        res.emplace_back(pattern);
+    }
+
+    std::string result;
+    size_t i = 0;
+    while (i < source.size()) {
+        size_t eol = source.find('\n', i);
+        size_t line_end = (eol == std::string::npos) ? source.size() : eol;
+        std::string line = source.substr(i, line_end - i);
+        bool drop = false;
+        for (const auto& re : res) {
+            if (std::regex_match(line, re)) {
+                drop = true;
+                break;
+            }
+        }
+        if (!drop) {
+            result.append(line);
+            if (eol != std::string::npos) result.push_back('\n');
+        }
+        if (eol == std::string::npos) break;
+        i = eol + 1;
+    }
+    return result;
+}
+
 bool source_uses_identifier(const std::string& source, const std::string& name) {
     std::regex re(std::string("\\b") + name + "\\b");
     return std::regex_search(source, re);
@@ -350,6 +388,22 @@ std::string synthesize_material_sampler_glsl(
         }
         out << "layout(binding = " << material_texture_binding_for_index(static_cast<uint32_t>(i))
             << ") uniform sampler2D " << name << ";\n";
+    }
+    return out.str();
+}
+
+std::string synthesize_material_sampler_slang(
+    const std::vector<std::string>& texture_names,
+    const std::string& stage_source
+) {
+    if (texture_names.empty()) return "";
+
+    std::ostringstream out;
+    for (const std::string& name : texture_names) {
+        if (!source_uses_identifier(stage_source, name)) {
+            continue;
+        }
+        out << "Sampler2D " << name << ";\n";
     }
     return out.str();
 }
@@ -1341,19 +1395,11 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
                 result.material_properties,
                 phase);
 
-            for (const auto& prop : phase.uniforms) {
-                if (prop.property_type == "Texture") {
-                    throw std::runtime_error(
-                        "Slang .shader texture @property is not wired yet; "
-                        "use scalar/vector @property or explicit Slang Texture2D resources for now");
-                }
-            }
-
             MaterialUboLayout layout = compute_std140_layout(phase.uniforms);
-            if (layout.empty()) {
-                continue;
-            }
-            if (contains_slang_material_params_declaration(phase)) {
+            std::vector<std::string> texture_names =
+                collect_texture_properties(phase.uniforms);
+
+            if (!layout.empty() && contains_slang_material_params_declaration(phase)) {
                 throw std::runtime_error(
                     "Slang .shader @property auto-generates MaterialParams; "
                     "remove the manual MaterialParams/ConstantBuffer declaration");
@@ -1361,11 +1407,21 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
 
             std::string block_slang = synthesize_material_ubo_slang(layout);
             for (auto& kv : phase.stages) {
+                std::string sampler_slang =
+                    synthesize_material_sampler_slang(texture_names, kv.second.source);
+                if (!sampler_slang.empty()) {
+                    kv.second.source =
+                        strip_slang_sampler_decls(kv.second.source, texture_names);
+                }
                 if (stage_uses_material_ubo_layout(kv.second, layout)) {
-                    kv.second.source = block_slang + kv.second.source;
+                    kv.second.source = block_slang + sampler_slang + kv.second.source;
+                } else if (!sampler_slang.empty()) {
+                    kv.second.source = sampler_slang + kv.second.source;
                 }
             }
-            phase.material_ubo_layout = std::move(layout);
+            if (!layout.empty()) {
+                phase.material_ubo_layout = std::move(layout);
+            }
         }
         return result;
     }
