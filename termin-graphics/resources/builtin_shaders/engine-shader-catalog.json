@@ -791,6 +791,49 @@
       ]
     },
     {
+      "uuid": "termin-engine-line-default",
+      "name": "DefaultLineShader",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-line-default.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0}
+          ],
+          "outputs": []
+        },
+        "fragment": {
+          "path": "termin-engine-line-default.frag.glsl",
+          "inputs": [],
+          "outputs": [
+            {"name": "FragColor", "semantic": "SV_Target0"}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "u_model",
+          "logical_name": "model_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_view",
+          "logical_name": "view_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_projection",
+          "logical_name": "projection_matrix",
+          "kind": "legacy_uniform"
+        },
+        {
+          "name": "u_color",
+          "logical_name": "color",
+          "kind": "legacy_uniform"
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-id",
       "name": "IdEngineVSFS",
       "language": "glsl",
