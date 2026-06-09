@@ -81,6 +81,40 @@
       "resources": []
     },
     {
+      "uuid": "termin-engine-immediate",
+      "name": "ImmediateEngineVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-immediate.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0},
+            {"name": "a_color", "semantic": "COLOR0", "location": 1}
+          ],
+          "outputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 0}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-immediate.frag.glsl",
+          "inputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "fragColor", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "ImmediatePushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-id",
       "name": "IdEngineVSFS",
       "language": "glsl",

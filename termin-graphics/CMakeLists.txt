@@ -93,6 +93,7 @@ termin_set_rpath_lib(termin_graphics)
 
 # --- termin_graphics2 (new backend-neutral API) ---
 set(TGFX2_SOURCES
+    src/tgfx2/builtin_shader_sources.cpp
     src/tgfx2/device_factory.cpp
     src/tgfx2/canvas2d_renderer.cpp
     src/tgfx2/engine_shader_catalog.cpp
@@ -192,7 +193,10 @@ add_library(termin_graphics2 SHARED ${TGFX2_SOURCES})
 if(COMMAND termin_add_alias_if_missing)
     termin_add_alias_if_missing(tgfx::termin_graphics2 termin_graphics2)
 endif()
-target_compile_definitions(termin_graphics2 PRIVATE TGFX2_EXPORTS)
+target_compile_definitions(termin_graphics2 PRIVATE
+    TGFX2_EXPORTS
+    TERMIN_GRAPHICS_SOURCE_DIR="${CMAKE_CURRENT_LIST_DIR}"
+)
 
 if(TGFX2_ENABLE_OPENGL)
     target_compile_definitions(termin_graphics2 PUBLIC TGFX2_HAS_OPENGL)
