@@ -6,7 +6,17 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <vector>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
 
 #include <tcbase/tc_log.hpp>
 #include <tcbase/trent/json.h>
@@ -32,6 +42,51 @@ void add_root(std::vector<std::filesystem::path>& roots, const std::filesystem::
     roots.push_back(root);
 }
 
+std::filesystem::path current_module_dir() {
+#if defined(_WIN32)
+    HMODULE module = nullptr;
+    if (!GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&current_module_dir),
+            &module)) {
+        return {};
+    }
+
+    std::vector<wchar_t> buffer(MAX_PATH);
+    for (;;) {
+        const DWORD size = GetModuleFileNameW(module, buffer.data(), static_cast<DWORD>(buffer.size()));
+        if (size == 0) {
+            return {};
+        }
+        if (size < buffer.size() - 1) {
+            return std::filesystem::path(buffer.data()).parent_path();
+        }
+        buffer.resize(buffer.size() * 2);
+    }
+#else
+    Dl_info info{};
+    if (dladdr(reinterpret_cast<void*>(&current_module_dir), &info) == 0 || !info.dli_fname) {
+        return {};
+    }
+    return std::filesystem::path(info.dli_fname).parent_path();
+#endif
+}
+
+void add_share_roots_from_ancestors(
+    std::vector<std::filesystem::path>& roots,
+    std::filesystem::path base)
+{
+    for (int depth = 0; depth < 5 && !base.empty(); ++depth) {
+        add_root(roots, base / "share" / "termin" / "builtin_shaders");
+        const std::filesystem::path parent = base.parent_path();
+        if (parent == base) {
+            break;
+        }
+        base = parent;
+    }
+}
+
 std::vector<std::filesystem::path> builtin_shader_roots() {
     std::vector<std::filesystem::path> roots;
 
@@ -41,6 +96,14 @@ std::vector<std::filesystem::path> builtin_shader_roots() {
 
     if (const char* sdk = std::getenv("TERMIN_SDK")) {
         add_root(roots, std::filesystem::path(sdk) / "share" / "termin" / "builtin_shaders");
+    }
+
+    add_share_roots_from_ancestors(roots, current_module_dir());
+
+    std::error_code current_path_error;
+    const std::filesystem::path cwd = std::filesystem::current_path(current_path_error);
+    if (!current_path_error) {
+        add_root(roots, cwd / "share" / "termin" / "builtin_shaders");
     }
 
 #ifdef TERMIN_GRAPHICS_SOURCE_DIR
