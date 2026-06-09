@@ -253,6 +253,35 @@ std::string synthesize_material_ubo_glsl(const MaterialUboLayout& layout) {
     return out.str();
 }
 
+std::string synthesize_material_ubo_slang(const MaterialUboLayout& layout) {
+    if (layout.empty()) return "";
+
+    auto slang_type = [](const std::string& prop_type) -> const char* {
+        if (prop_type == "Float") return "float";
+        if (prop_type == "Int")   return "int";
+        // Runtime packing writes Bool as a 32-bit 0/1 integer. Keep the Slang
+        // ABI explicit instead of depending on backend bool buffer layout.
+        if (prop_type == "Bool")  return "int";
+        if (prop_type == "Vec2")  return "float2";
+        if (prop_type == "Vec3")  return "float3";
+        if (prop_type == "Vec4")  return "float4";
+        if (prop_type == "Color") return "float4";
+        if (prop_type == "Mat4")  return "column_major float4x4";
+        return nullptr;
+    };
+
+    std::ostringstream out;
+    out << "struct MaterialParams {\n";
+    for (const auto& e : layout.entries) {
+        const char* t = slang_type(e.property_type);
+        if (!t) continue;
+        out << "    " << t << " " << e.name << ";\n";
+    }
+    out << "};\n";
+    out << "ConstantBuffer<MaterialParams> material : register(b1, space0);\n";
+    return out.str();
+}
+
 std::vector<std::string> collect_texture_properties(const std::vector<MaterialProperty>& properties) {
     std::vector<std::string> names;
     for (const auto& prop : properties) {
@@ -407,6 +436,29 @@ std::vector<MaterialProperty> collect_used_material_properties(
         }
     }
     return used;
+}
+
+bool contains_slang_material_params_declaration(const ShaderPhase& phase) {
+    for (const auto& kv : phase.stages) {
+        const std::string& src = kv.second.source;
+        if (src.find("struct MaterialParams") != std::string::npos ||
+            src.find("ConstantBuffer<MaterialParams>") != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool stage_uses_material_ubo_layout(
+    const ShaderStage& stage,
+    const MaterialUboLayout& layout)
+{
+    for (const auto& entry : layout.entries) {
+        if (source_uses_identifier(stage.source, entry.name)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // ============================================================================
@@ -1283,11 +1335,37 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
         std::move(material_properties));
     result.language = language;
 
-    if (result.language != "glsl") {
-        if (!result.material_properties.empty()) {
-            throw std::runtime_error(
-                "Slang .shader material properties are not wired yet; "
-                "declare Slang resource bindings explicitly for now");
+    if (result.language == "slang") {
+        for (auto& phase : result.phases) {
+            phase.uniforms = collect_used_material_properties(
+                result.material_properties,
+                phase);
+
+            for (const auto& prop : phase.uniforms) {
+                if (prop.property_type == "Texture") {
+                    throw std::runtime_error(
+                        "Slang .shader texture @property is not wired yet; "
+                        "use scalar/vector @property or explicit Slang Texture2D resources for now");
+                }
+            }
+
+            MaterialUboLayout layout = compute_std140_layout(phase.uniforms);
+            if (layout.empty()) {
+                continue;
+            }
+            if (contains_slang_material_params_declaration(phase)) {
+                throw std::runtime_error(
+                    "Slang .shader @property auto-generates MaterialParams; "
+                    "remove the manual MaterialParams/ConstantBuffer declaration");
+            }
+
+            std::string block_slang = synthesize_material_ubo_slang(layout);
+            for (auto& kv : phase.stages) {
+                if (stage_uses_material_ubo_layout(kv.second, layout)) {
+                    kv.second.source = block_slang + kv.second.source;
+                }
+            }
+            phase.material_ubo_layout = std::move(layout);
         }
         return result;
     }
