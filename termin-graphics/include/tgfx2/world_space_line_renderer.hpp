@@ -7,6 +7,10 @@
 #include "tgfx2/line_mesh_builder.hpp"
 #include "tgfx2/tgfx2_api.h"
 
+extern "C" {
+#include <tgfx/resources/tc_shader_registry.h>
+}
+
 namespace tgfx {
 
 class RenderContext2;
@@ -56,6 +60,11 @@ private:
     ShaderHandle round_join_vertex_shader_;
     ShaderHandle round_join_fragment_shader_;
     ShaderHandle lit_fragment_shader_;
+    tc_shader_handle shader_handle_ = tc_shader_handle_invalid();
+    tc_shader_handle cap_shader_handle_ = tc_shader_handle_invalid();
+    tc_shader_handle join_shader_handle_ = tc_shader_handle_invalid();
+    tc_shader_handle round_join_shader_handle_ = tc_shader_handle_invalid();
+    tc_shader_handle lit_shader_handle_ = tc_shader_handle_invalid();
     uint32_t cap_corner_count_ = 0;
     uint32_t round_join_corner_count_ = 0;
     int cap_round_segments_ = 0;
