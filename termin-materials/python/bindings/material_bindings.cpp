@@ -632,6 +632,37 @@ void bind_tc_material(nb::module_& m) {
             return self.default_phase();
         }, nb::rv_policy::reference)
         .def("clear_phases", &TcMaterial::clear_phases)
+        .def("add_phase", [](
+            TcMaterial& self,
+            TcShader& shader,
+            const std::string& phase_mark,
+            int priority
+        ) -> tc_material_phase* {
+            if (!shader.is_valid()) {
+                tc::Log::error(
+                    "Failed to add phase '%s' to material '%s': shader is invalid",
+                    phase_mark.c_str(),
+                    self.name()
+                );
+                throw std::runtime_error("TcMaterial.add_phase requires a valid TcShader");
+            }
+
+            tc_material_phase* phase = self.add_phase(
+                shader,
+                phase_mark.c_str(),
+                priority
+            );
+            if (!phase) {
+                tc::Log::error(
+                    "Failed to add phase '%s' to material '%s'",
+                    phase_mark.c_str(),
+                    self.name()
+                );
+                throw std::runtime_error("Failed to add material phase");
+            }
+            return phase;
+        }, nb::arg("shader"), nb::arg("phase_mark") = "opaque",
+           nb::arg("priority") = 0, nb::rv_policy::reference)
         .def("add_phase_from_sources", [](
             TcMaterial& self,
             const std::string& vertex_source,
