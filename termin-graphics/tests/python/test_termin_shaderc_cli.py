@@ -196,13 +196,9 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
 def test_termin_shaderc_writes_slang_texture_resources_from_reflection(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
-        "Texture2D<float4> albedo_texture;\n"
-        "SamplerState linear_sampler;\n"
-        "RWTexture2D<float4> out_texture;\n"
+        "Sampler2D albedo_texture;\n"
         "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
-        "    float4 color = albedo_texture.Sample(linear_sampler, uv);\n"
-        "    out_texture[int2(0, 0)] = color;\n"
-        "    return color;\n"
+        "    return albedo_texture.Sample(uv);\n"
         "}\n",
         encoding="utf-8",
     )
@@ -219,18 +215,8 @@ def test_termin_shaderc_writes_slang_texture_resources_from_reflection(tmp_path:
         "    'parameters': [\n"
         "        {\n"
         "            'name': 'albedo_texture',\n"
-        "            'binding': {'kind': 'shaderResource', 'index': 4},\n"
-        "            'type': {'kind': 'resource', 'baseShape': 'texture2D'},\n"
-        "        },\n"
-        "        {\n"
-        "            'name': 'linear_sampler',\n"
-        "            'binding': {'kind': 'samplerState', 'index': 5},\n"
-        "            'type': {'kind': 'samplerState'},\n"
-        "        },\n"
-        "        {\n"
-        "            'name': 'out_texture',\n"
         "            'binding': {'kind': 'descriptorTableSlot', 'index': 6},\n"
-        "            'type': {'kind': 'resource', 'baseShape': 'texture2D', 'access': 'readWrite'},\n"
+        "            'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True},\n"
         "        },\n"
         "    ]\n"
         "}), encoding='utf-8')\n",
@@ -269,34 +255,79 @@ def test_termin_shaderc_writes_slang_texture_resources_from_reflection(tmp_path:
             "stage_mask": 2,
             "size": 0,
         },
-        {
-            "name": "linear_sampler",
-            "kind": "sampler",
-            "set": 0,
-            "binding": 5,
-            "stage_mask": 2,
-            "size": 0,
-        },
-        {
-            "name": "out_texture",
-            "kind": "storage_texture",
-            "set": 0,
-            "binding": 6,
-            "stage_mask": 2,
-            "size": 0,
-        },
     ]
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
-def test_termin_shaderc_falls_back_to_slang_register_resource_layout(tmp_path: Path) -> None:
+def test_termin_shaderc_rejects_split_slang_texture_resources_for_vulkan(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
-        "Texture2D<float4> albedo_texture : register(t7, space2);\n"
-        "SamplerState linear_sampler : register(s3, space2);\n"
-        "RWTexture2D<float4> out_texture : register(u4, space2);\n"
+        "Texture2D<float4> albedo_texture;\n"
+        "SamplerState linear_sampler;\n"
         "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
         "    return albedo_texture.Sample(linear_sampler, uv);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_bytes(b'FAKE-spirv')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {\n"
+        "            'name': 'albedo_texture',\n"
+        "            'binding': {'kind': 'shaderResource', 'index': 0},\n"
+        "            'type': {'kind': 'resource', 'baseShape': 'texture2D'},\n"
+        "        },\n"
+        "        {\n"
+        "            'name': 'linear_sampler',\n"
+        "            'binding': {'kind': 'samplerState', 'index': 0},\n"
+        "            'type': {'kind': 'samplerState'},\n"
+        "        },\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode == 1
+    assert "does not support split Slang" in result.stderr
+    assert not (tmp_path / "out.spv.reflection.json").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_falls_back_to_slang_sampler2d_register_resource_layout(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "Sampler2D albedo_texture : register(t7, space2);\n"
+        "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
+        "    return albedo_texture.Sample(uv);\n"
         "}\n",
         encoding="utf-8",
     )
@@ -331,22 +362,6 @@ def test_termin_shaderc_falls_back_to_slang_register_resource_layout(tmp_path: P
             "kind": "texture",
             "set": 2,
             "binding": 7,
-            "stage_mask": 2,
-            "size": 0,
-        },
-        {
-            "name": "out_texture",
-            "kind": "storage_texture",
-            "set": 2,
-            "binding": 4,
-            "stage_mask": 2,
-            "size": 0,
-        },
-        {
-            "name": "linear_sampler",
-            "kind": "sampler",
-            "set": 2,
-            "binding": 3,
             "stage_mask": 2,
             "size": 0,
         },

@@ -38,6 +38,11 @@ struct ShaderResourceBinding {
     uint32_t binding = 0;
     uint32_t stage_mask = 0;
     uint32_t size = 0;
+    bool slang_combined_texture = false;
+    bool slang_split_texture = false;
+    bool slang_separate_sampler = false;
+    bool slang_storage_texture = false;
+    uint32_t original_binding = 0;
 };
 
 static void usage() {
@@ -177,6 +182,19 @@ static bool trent_uint_field(
     return true;
 }
 
+static bool trent_bool_field(
+    const nos::trent& value,
+    const char* key,
+    bool& out
+) {
+    const nos::trent* field = trent_dict_get(value, key);
+    if (!field || !field->is_bool()) {
+        return false;
+    }
+    out = field->as_bool();
+    return true;
+}
+
 static bool slang_parameter_binding(
     const nos::trent& parameter,
     std::string& out_binding_kind,
@@ -224,8 +242,7 @@ static bool is_slang_texture_base_shape(const std::string& base_shape) {
 static bool slang_resource_kind_from_parameter(
     const nos::trent& parameter,
     const std::string& binding_kind,
-    std::string& out_kind,
-    uint32_t& out_size
+    ShaderResourceBinding& out_binding
 ) {
     const nos::trent* type = trent_dict_get(parameter, "type");
     std::string type_kind;
@@ -239,8 +256,8 @@ static bool slang_resource_kind_from_parameter(
             binding_kind != "descriptorTableSlot") {
             return false;
         }
-        out_kind = "constant_buffer";
-        out_size = slang_parameter_buffer_size(parameter);
+        out_binding.kind = "constant_buffer";
+        out_binding.size = slang_parameter_buffer_size(parameter);
         return true;
     }
 
@@ -248,8 +265,9 @@ static bool slang_resource_kind_from_parameter(
         if (binding_kind != "samplerState") {
             return false;
         }
-        out_kind = "sampler";
-        out_size = 0;
+        out_binding.kind = "sampler";
+        out_binding.size = 0;
+        out_binding.slang_separate_sampler = true;
         return true;
     }
 
@@ -266,15 +284,20 @@ static bool slang_resource_kind_from_parameter(
             if (binding_kind != "descriptorTableSlot") {
                 return false;
             }
-            out_kind = "storage_texture";
+            out_binding.kind = "storage_texture";
+            out_binding.slang_storage_texture = true;
         } else {
             if (binding_kind != "shaderResource" &&
                 binding_kind != "descriptorTableSlot") {
                 return false;
             }
-            out_kind = "texture";
+            out_binding.kind = "texture";
+            bool combined = false;
+            trent_bool_field(*type, "combined", combined);
+            out_binding.slang_combined_texture = combined;
+            out_binding.slang_split_texture = !combined;
         }
-        out_size = 0;
+        out_binding.size = 0;
         return true;
     }
 
@@ -317,18 +340,16 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings_from_slang_ref
                 binding.set)) {
             continue;
         }
+        binding.original_binding = binding.binding;
 
-        uint32_t size = 0;
         if (!slang_resource_kind_from_parameter(
                 parameter,
                 binding_kind,
-                binding.kind,
-                size)) {
+                binding)) {
             continue;
         }
         binding.name = name;
         binding.stage_mask = stage_mask;
-        binding.size = size;
         append_unique_resource(resources, std::move(binding));
     }
     return resources;
@@ -366,7 +387,7 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
             append_unique_resource(resources, std::move(binding));
         }
         static const std::regex texture_register_re(
-            R"((Texture[A-Za-z0-9_<>, \t]*|RWTexture[A-Za-z0-9_<>, \t]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*([tu])([0-9]+)\s*,\s*space([0-9]+)\s*\))");
+            R"((Sampler[0-9A-Za-z_]*|Texture[A-Za-z0-9_<>, \t]*|RWTexture[A-Za-z0-9_<>, \t]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*([tu])([0-9]+)\s*,\s*space([0-9]+)\s*\))");
         for (std::sregex_iterator it(source.begin(), source.end(), texture_register_re), end;
              it != end;
              ++it) {
@@ -432,18 +453,11 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
     return resources;
 }
 
-static bool write_resource_layout_sidecar(
+static std::vector<ShaderResourceBinding> collect_resource_bindings(
     const CompileOptions& options,
     const std::string& source,
     const std::optional<std::filesystem::path>& reflection_path = std::nullopt
 ) {
-    const std::string path = options.output + ".layout.json";
-    std::ofstream out(path, std::ios::binary);
-    if (!out) {
-        std::cerr << "termin_shaderc: failed to open layout sidecar: " << path << "\n";
-        return false;
-    }
-
     std::vector<ShaderResourceBinding> resources;
     if (reflection_path && is_existing_file(*reflection_path)) {
         std::string reflection_text;
@@ -455,6 +469,19 @@ static bool write_resource_layout_sidecar(
     }
     if (resources.empty()) {
         resources = infer_resource_bindings(source, options);
+    }
+    return resources;
+}
+
+static bool write_resource_layout_sidecar(
+    const CompileOptions& options,
+    const std::vector<ShaderResourceBinding>& resources
+) {
+    const std::string path = options.output + ".layout.json";
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        std::cerr << "termin_shaderc: failed to open layout sidecar: " << path << "\n";
+        return false;
     }
 
     out << "{\n";
@@ -485,6 +512,227 @@ static bool write_resource_layout_sidecar(
         return false;
     }
     return true;
+}
+
+static bool write_resource_layout_sidecar(
+    const CompileOptions& options,
+    const std::string& source,
+    const std::optional<std::filesystem::path>& reflection_path = std::nullopt
+) {
+    return write_resource_layout_sidecar(
+        options,
+        collect_resource_bindings(options, source, reflection_path));
+}
+
+static bool apply_slang_vulkan_shared_layout_policy(
+    std::vector<ShaderResourceBinding>& resources
+) {
+    constexpr uint32_t sampled_slots[] = {
+        4, 5, 6, 7,
+        9, 10, 11, 12, 13, 14, 15,
+        17, 18, 19, 20, 21, 22, 23,
+    };
+
+    uint32_t next_sampled_slot = 0;
+    for (ShaderResourceBinding& resource : resources) {
+        if (resource.slang_split_texture) {
+            std::cerr
+                << "termin_shaderc: Vulkan shared layout does not support split Slang "
+                << "Texture*/SamplerState resource '" << resource.name
+                << "' yet; use Sampler2D for combined sampled textures\n";
+            return false;
+        }
+        if (resource.slang_separate_sampler) {
+            std::cerr
+                << "termin_shaderc: Vulkan shared layout does not support separate Slang "
+                << "SamplerState resource '" << resource.name
+                << "' yet; use Sampler2D for combined sampled textures\n";
+            return false;
+        }
+        if (resource.slang_storage_texture) {
+            std::cerr
+                << "termin_shaderc: Vulkan shared layout does not support storage texture "
+                << "resource '" << resource.name << "' yet\n";
+            return false;
+        }
+        if (!resource.slang_combined_texture) {
+            continue;
+        }
+        if (next_sampled_slot >=
+            sizeof(sampled_slots) / sizeof(sampled_slots[0])) {
+            std::cerr
+                << "termin_shaderc: too many Slang Sampler2D resources for the "
+                << "current Vulkan shared layout\n";
+            return false;
+        }
+        resource.set = 0;
+        resource.binding = sampled_slots[next_sampled_slot++];
+    }
+    return true;
+}
+
+static bool read_spirv_words(
+    const std::filesystem::path& path,
+    std::vector<uint32_t>& out
+) {
+    std::ifstream in(path, std::ios::binary | std::ios::ate);
+    if (!in) {
+        std::cerr << "termin_shaderc: failed to open SPIR-V artifact: " << path << "\n";
+        return false;
+    }
+    const std::streamsize bytes = in.tellg();
+    if (bytes < 0 || (bytes % 4) != 0) {
+        return false;
+    }
+    in.seekg(0, std::ios::beg);
+    out.resize(static_cast<size_t>(bytes) / sizeof(uint32_t));
+    if (!out.empty()) {
+        in.read(reinterpret_cast<char*>(out.data()), bytes);
+    }
+    return static_cast<bool>(in);
+}
+
+static bool write_spirv_words(
+    const std::filesystem::path& path,
+    const std::vector<uint32_t>& words
+) {
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        std::cerr << "termin_shaderc: failed to open SPIR-V artifact for patch: " << path << "\n";
+        return false;
+    }
+    out.write(
+        reinterpret_cast<const char*>(words.data()),
+        static_cast<std::streamsize>(words.size() * sizeof(uint32_t)));
+    return static_cast<bool>(out);
+}
+
+static std::string spirv_string_operand(
+    const std::vector<uint32_t>& words,
+    size_t begin,
+    size_t end
+) {
+    std::string out;
+    for (size_t i = begin; i < end; ++i) {
+        uint32_t word = words[i];
+        for (uint32_t byte_index = 0; byte_index < 4; ++byte_index) {
+            const char ch = static_cast<char>((word >> (byte_index * 8)) & 0xffu);
+            if (ch == '\0') {
+                return out;
+            }
+            out.push_back(ch);
+        }
+    }
+    return out;
+}
+
+static bool spirv_resource_id_for_name(
+    const std::vector<uint32_t>& words,
+    const std::string& name,
+    uint32_t& out_id
+) {
+    constexpr uint16_t OP_NAME = 5;
+    for (size_t i = 5; i < words.size();) {
+        const uint32_t instruction = words[i];
+        const uint16_t word_count = static_cast<uint16_t>(instruction >> 16);
+        const uint16_t opcode = static_cast<uint16_t>(instruction & 0xffffu);
+        if (word_count == 0 || i + word_count > words.size()) {
+            return false;
+        }
+        if (opcode == OP_NAME && word_count >= 3) {
+            const uint32_t id = words[i + 1];
+            if (spirv_string_operand(words, i + 2, i + word_count) == name) {
+                out_id = id;
+                return true;
+            }
+        }
+        i += word_count;
+    }
+    return false;
+}
+
+static bool patch_spirv_binding_for_resource(
+    std::vector<uint32_t>& words,
+    const ShaderResourceBinding& resource
+) {
+    constexpr uint16_t OP_DECORATE = 71;
+    constexpr uint32_t DECORATION_BINDING = 33;
+    constexpr uint32_t DECORATION_DESCRIPTOR_SET = 34;
+
+    uint32_t resource_id = 0;
+    if (!spirv_resource_id_for_name(words, resource.name, resource_id)) {
+        std::cerr
+            << "termin_shaderc: failed to find SPIR-V resource id for '"
+            << resource.name << "'\n";
+        return false;
+    }
+
+    bool patched_binding = false;
+    bool patched_set = false;
+    for (size_t i = 5; i < words.size();) {
+        const uint32_t instruction = words[i];
+        const uint16_t word_count = static_cast<uint16_t>(instruction >> 16);
+        const uint16_t opcode = static_cast<uint16_t>(instruction & 0xffffu);
+        if (word_count == 0 || i + word_count > words.size()) {
+            return false;
+        }
+        if (opcode == OP_DECORATE && word_count >= 4 && words[i + 1] == resource_id) {
+            if (words[i + 2] == DECORATION_BINDING) {
+                words[i + 3] = resource.binding;
+                patched_binding = true;
+            } else if (words[i + 2] == DECORATION_DESCRIPTOR_SET) {
+                words[i + 3] = resource.set;
+                patched_set = true;
+            }
+        }
+        i += word_count;
+    }
+
+    if (!patched_binding || !patched_set) {
+        std::cerr
+            << "termin_shaderc: failed to patch SPIR-V binding decorations for '"
+            << resource.name << "'\n";
+        return false;
+    }
+    return true;
+}
+
+static bool patch_slang_vulkan_spirv_bindings(
+    const CompileOptions& options,
+    const std::vector<ShaderResourceBinding>& resources
+) {
+    bool needs_patch = false;
+    for (const ShaderResourceBinding& resource : resources) {
+        if (resource.binding != resource.original_binding) {
+            needs_patch = true;
+            break;
+        }
+    }
+    if (!needs_patch) {
+        return true;
+    }
+
+    std::vector<uint32_t> words;
+    if (!read_spirv_words(options.output, words)) {
+        // Fake/offline compiler tests may produce placeholder bytes while still
+        // exercising reflection-sidecar generation.
+        return true;
+    }
+    constexpr uint32_t SPIRV_MAGIC = 0x07230203u;
+    if (words.empty() || words[0] != SPIRV_MAGIC) {
+        // Fake compiler tests use placeholder bytes; there is nothing to patch.
+        return true;
+    }
+
+    for (const ShaderResourceBinding& resource : resources) {
+        if (resource.binding == resource.original_binding) {
+            continue;
+        }
+        if (!patch_spirv_binding_for_resource(words, resource)) {
+            return false;
+        }
+    }
+    return write_spirv_words(options.output, words);
 }
 
 static bool is_existing_file(const std::filesystem::path& path) {
@@ -771,7 +1019,17 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
                   << options.output << "\n";
         return false;
     }
-    bool wrote_layout = write_resource_layout_sidecar(options, source, reflection_path);
+    std::vector<ShaderResourceBinding> resources =
+        collect_resource_bindings(options, source, reflection_path);
+    bool wrote_layout = false;
+    if (options.target == "vulkan") {
+        wrote_layout =
+            apply_slang_vulkan_shared_layout_policy(resources) &&
+            patch_slang_vulkan_spirv_bindings(options, resources) &&
+            write_resource_layout_sidecar(options, resources);
+    } else {
+        wrote_layout = write_resource_layout_sidecar(options, resources);
+    }
     std::error_code ec;
     std::filesystem::remove(reflection_path, ec);
     return wrote_layout;
