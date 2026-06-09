@@ -45,7 +45,7 @@ private:
     tc_shader_handle shader_handle_ = tc_shader_handle_invalid();
     ShaderHandle vs_{};
     ShaderHandle fs_{};
-    // SDF shader pair (different fragment shader, extended push constants).
+    // SDF shader pair uses extended push constants.
     tc_shader_handle sdf_shader_handle_ = tc_shader_handle_invalid();
     ShaderHandle vs_sdf_{};
     ShaderHandle fs_sdf_{};

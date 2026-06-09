@@ -8,11 +8,11 @@
 
 #include "tgfx2/text2d_renderer.hpp"
 
+#include "tgfx2/builtin_shader_sources.hpp"
 #include <cmath>
 #include <cstring>
 #include <vector>
 
-#include "tgfx2/descriptors.hpp"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/font_atlas.hpp"
 #include "tgfx2/i_render_device.hpp"
@@ -27,6 +27,8 @@ extern "C" {
 #include <tgfx/resources/tc_shader.h>
 }
 
+#include <tcbase/tc_log.hpp>
+
 #include "internal/utf8_decode.hpp"
 
 extern "C" {
@@ -37,111 +39,8 @@ namespace tgfx {
 
 namespace {
 
-// Single source that compiles on both backends. The `#ifdef VULKAN`
-// is tripped by the `-DVULKAN=1` macro definition the Vulkan shader
-// compiler adds (see vulkan_shader_compiler.cpp). Under GL we take
-// the std140 UBO branch bound at the same slot tgfx2's push-constant
-// ring buffer uses (TGFX2_PUSH_CONSTANTS_BINDING = 14). Data layout
-// matches `Text2DPush` in this TU.
-constexpr const char* kText2DCommon = R"(
-struct Text2DPushData {
-    mat4 u_projection;
-    vec4 u_color;
-};
-#ifdef VULKAN
-layout(push_constant) uniform Text2DPushBlock { Text2DPushData pc; };
-#else
-layout(std140, binding = 14) uniform Text2DPushBlock { Text2DPushData pc; };
-#endif
-)";
-
-static std::string make_text2d_vert() {
-    return std::string("#version 450 core\n") + kText2DCommon + R"(
-layout(location=0) in vec3 a_pos;
-layout(location=1) in vec4 a_uv_pad;
-
-layout(location=0) out vec2 v_uv;
-
-void main() {
-    gl_Position = pc.u_projection * vec4(a_pos.xy, 0.0, 1.0);
-    v_uv = a_uv_pad.xy;
-}
-)";
-}
-
-static std::string make_text2d_sdf_vert() {
-    return std::string("#version 450 core\n") + R"(
-struct Text2DSdfPushData {
-    mat4 u_projection;
-    vec4 u_color;
-    float u_smoothing;
-};
-#ifdef VULKAN
-layout(push_constant) uniform Text2DSdfPushBlock { Text2DSdfPushData pc; };
-#else
-layout(std140, binding = 14) uniform Text2DSdfPushBlock { Text2DSdfPushData pc; };
-#endif
-
-layout(location=0) in vec3 a_pos;
-layout(location=1) in vec4 a_uv_pad;
-
-layout(location=0) out vec2 v_uv;
-
-void main() {
-    gl_Position = pc.u_projection * vec4(a_pos.xy, 0.0, 1.0);
-    v_uv = a_uv_pad.xy;
-}
-)";
-}
-
-static std::string make_text2d_frag() {
-    return std::string("#version 450 core\n") + kText2DCommon + R"(
-layout(binding = 4) uniform sampler2D u_font_atlas;
-
-layout(location=0) in vec2 v_uv;
-layout(location=0) out vec4 frag_color;
-
-void main() {
-    float a = texture(u_font_atlas, v_uv).r * pc.u_color.a;
-    // Threshold at one 8-bit alpha level. Anything we'd discard above
-    // this can't contribute to the blended output anyway; anything
-    // below this (but > 0) is AA tail we want to keep — the old 0.01
-    // cutoff was high enough to nibble visible edge gradients.
-    if (a < (1.0/255.0)) discard;
-    frag_color = vec4(pc.u_color.rgb, a);
-}
-)";
-}
-
-// SDF shader — same vertex shader, different fragment shader.
-// Push constant layout is extended with a smoothing parameter.
-static std::string make_text2d_sdf_frag() {
-    return std::string("#version 450 core\n") + R"(
-struct Text2DSdfPushData {
-    mat4 u_projection;
-    vec4 u_color;
-    float u_smoothing;
-};
-#ifdef VULKAN
-layout(push_constant) uniform Text2DSdfPushBlock { Text2DSdfPushData pc; };
-#else
-layout(std140, binding = 14) uniform Text2DSdfPushBlock { Text2DSdfPushData pc; };
-#endif
-
-layout(binding = 4) uniform sampler2D u_font_atlas;
-
-layout(location=0) in vec2 v_uv;
-layout(location=0) out vec4 frag_color;
-
-void main() {
-    float d = texture(u_font_atlas, v_uv).r;
-    float a = smoothstep(0.5 - pc.u_smoothing, 0.5 + pc.u_smoothing, d)
-            * pc.u_color.a;
-    if (a < (1.0/255.0)) discard;
-    frag_color = vec4(pc.u_color.rgb, a);
-}
-)";
-}
+constexpr const char* TEXT2D_SHADER_UUID = "termin-engine-text2d";
+constexpr const char* TEXT2D_SDF_SHADER_UUID = "termin-engine-text2d-sdf";
 
 // Python-side struct Text2DPushData mirror. mat4 (64B) + vec4 (16B) = 80B.
 struct Text2DPushData {
@@ -204,10 +103,7 @@ void Text2DRenderer::ensure_shader_(IRenderDevice& device) {
 
     // Bitmap shader pair.
     if (tc_shader_handle_is_invalid(shader_handle_)) {
-        std::string vs = make_text2d_vert();
-        std::string fs = make_text2d_frag();
-        shader_handle_ = tc_shader_register_static(
-            vs.c_str(), fs.c_str(), nullptr, "Text2DEngineVSFS");
+        shader_handle_ = register_builtin_shader_from_catalog(TEXT2D_SHADER_UUID);
     }
 
     vs_ = ShaderHandle{};
@@ -215,28 +111,19 @@ void Text2DRenderer::ensure_shader_(IRenderDevice& device) {
     if (!tc_shader_handle_is_invalid(shader_handle_)) {
         tc_shader* raw = tc_shader_get(shader_handle_);
         if (raw) {
-            termin::tc_shader_ensure_tgfx2(raw, &device, &vs_, &fs_);
+            if (!termin::tc_shader_ensure_tgfx2(raw, &device, &vs_, &fs_)) {
+                tc::Log::error("[Text2DRenderer] failed to create bitmap shader");
+            }
         }
     }
 
     if (vs_.id == 0 || fs_.id == 0) {
-        ShaderDesc vs_desc;
-        vs_desc.stage = ShaderStage::Vertex;
-        vs_desc.source = make_text2d_vert();
-        vs_ = device.create_shader(vs_desc);
-
-        ShaderDesc fs_desc;
-        fs_desc.stage = ShaderStage::Fragment;
-        fs_desc.source = make_text2d_frag();
-        fs_ = device.create_shader(fs_desc);
+        tc::Log::error("[Text2DRenderer] bitmap shader is unavailable");
     }
 
-    // SDF shader pair — same vertex shader, SDF fragment shader.
+    // SDF shader pair uses a larger push block than the bitmap path.
     if (tc_shader_handle_is_invalid(sdf_shader_handle_)) {
-        std::string vs = make_text2d_sdf_vert();
-        std::string fs = make_text2d_sdf_frag();
-        sdf_shader_handle_ = tc_shader_register_static(
-            vs.c_str(), fs.c_str(), nullptr, "Text2DEngineSdfVSFS");
+        sdf_shader_handle_ = register_builtin_shader_from_catalog(TEXT2D_SDF_SHADER_UUID);
     }
 
     vs_sdf_ = ShaderHandle{};
@@ -244,20 +131,14 @@ void Text2DRenderer::ensure_shader_(IRenderDevice& device) {
     if (!tc_shader_handle_is_invalid(sdf_shader_handle_)) {
         tc_shader* raw = tc_shader_get(sdf_shader_handle_);
         if (raw) {
-            termin::tc_shader_ensure_tgfx2(raw, &device, &vs_sdf_, &fs_sdf_);
+            if (!termin::tc_shader_ensure_tgfx2(raw, &device, &vs_sdf_, &fs_sdf_)) {
+                tc::Log::error("[Text2DRenderer] failed to create SDF shader");
+            }
         }
     }
 
     if (vs_sdf_.id == 0 || fs_sdf_.id == 0) {
-        ShaderDesc vs_desc;
-        vs_desc.stage = ShaderStage::Vertex;
-        vs_desc.source = make_text2d_sdf_vert();
-        vs_sdf_ = device.create_shader(vs_desc);
-
-        ShaderDesc fs_desc;
-        fs_desc.stage = ShaderStage::Fragment;
-        fs_desc.source = make_text2d_sdf_frag();
-        fs_sdf_ = device.create_shader(fs_desc);
+        tc::Log::error("[Text2DRenderer] SDF shader is unavailable");
     }
 }
 

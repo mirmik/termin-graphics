@@ -187,6 +187,86 @@
       ]
     },
     {
+      "uuid": "termin-engine-text2d",
+      "name": "Text2DEngineVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-text2d.vert.glsl",
+          "inputs": [
+            {"name": "a_pos", "semantic": "POSITION", "location": 0},
+            {"name": "a_uv_pad", "semantic": "TEXCOORD0", "location": 1}
+          ],
+          "outputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-text2d.frag.glsl",
+          "inputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "frag_color", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "Text2DPushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        },
+        {
+          "name": "u_font_atlas",
+          "logical_name": "font_atlas",
+          "kind": "combined_sampler2d",
+          "legacy_binding": 4
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-text2d-sdf",
+      "name": "Text2DEngineSdfVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-text2d-sdf.vert.glsl",
+          "inputs": [
+            {"name": "a_pos", "semantic": "POSITION", "location": 0},
+            {"name": "a_uv_pad", "semantic": "TEXCOORD0", "location": 1}
+          ],
+          "outputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-text2d-sdf.frag.glsl",
+          "inputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "frag_color", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "Text2DSdfPushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        },
+        {
+          "name": "u_font_atlas",
+          "logical_name": "font_atlas",
+          "kind": "combined_sampler2d",
+          "legacy_binding": 4
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-id",
       "name": "IdEngineVSFS",
       "language": "glsl",
