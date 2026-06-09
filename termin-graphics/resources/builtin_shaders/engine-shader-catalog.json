@@ -828,6 +828,172 @@
       ]
     },
     {
+      "uuid": "termin-engine-normal",
+      "name": "NormalEngineVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-normal.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0},
+            {"name": "a_normal", "semantic": "NORMAL", "location": 1}
+          ],
+          "outputs": [
+            {"name": "v_world_normal", "semantic": "NORMAL1", "location": 0}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-normal.frag.glsl",
+          "inputs": [
+            {"name": "v_world_normal", "semantic": "NORMAL1", "location": 0}
+          ],
+          "outputs": [
+            {"name": "FragColor", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "PerFrame",
+          "logical_name": "per_frame",
+          "kind": "constant_buffer",
+          "legacy_binding": 0
+        },
+        {
+          "name": "NormalPushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-depth",
+      "name": "DepthEngineVSFS_Encoding",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-depth.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0},
+            {"name": "a_normal", "semantic": "NORMAL", "location": 1},
+            {"name": "a_texcoord", "semantic": "TEXCOORD0", "location": 2}
+          ],
+          "outputs": [
+            {"name": "v_linear_depth", "semantic": "TEXCOORD0", "location": 0},
+            {"name": "v_perspective_depth", "semantic": "TEXCOORD1", "location": 1},
+            {"name": "v_log_depth", "semantic": "TEXCOORD2", "location": 2}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-depth.frag.glsl",
+          "inputs": [
+            {"name": "v_linear_depth", "semantic": "TEXCOORD0", "location": 0},
+            {"name": "v_perspective_depth", "semantic": "TEXCOORD1", "location": 1},
+            {"name": "v_log_depth", "semantic": "TEXCOORD2", "location": 2}
+          ],
+          "outputs": [
+            {"name": "FragColor", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "PerFrame",
+          "logical_name": "per_frame",
+          "kind": "constant_buffer",
+          "legacy_binding": 0
+        },
+        {
+          "name": "DepthPushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-depth-only",
+      "name": "DepthOnlyEngineVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-depth-only.vert.glsl",
+          "inputs": [
+            {"name": "a_position", "semantic": "POSITION", "location": 0},
+            {"name": "a_normal", "semantic": "NORMAL", "location": 1},
+            {"name": "a_texcoord", "semantic": "TEXCOORD0", "location": 2}
+          ],
+          "outputs": []
+        },
+        "fragment": {
+          "path": "termin-engine-depth-only.frag.glsl",
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "resources": [
+        {
+          "name": "PerFrame",
+          "logical_name": "per_frame",
+          "kind": "constant_buffer",
+          "legacy_binding": 0
+        },
+        {
+          "name": "DepthPushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-depth-to-color",
+      "name": "DepthToColorFS",
+      "language": "glsl",
+      "stages": {
+        "fragment": {
+          "path": "termin-engine-depth-to-color.frag.glsl",
+          "inputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "FragColor", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "u_depth_tex",
+          "logical_name": "depth_texture",
+          "kind": "combined_sampler2d",
+          "legacy_binding": 9
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-color-to-depth",
+      "name": "ColorToDepthFS",
+      "language": "glsl",
+      "stages": {
+        "fragment": {
+          "path": "termin-engine-color-to-depth.frag.glsl",
+          "inputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ],
+          "outputs": []
+        }
+      },
+      "resources": [
+        {
+          "name": "u_color_tex",
+          "logical_name": "color_texture",
+          "kind": "combined_sampler2d",
+          "legacy_binding": 9
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-skybox",
       "name": "SkyboxEngineVSFS",
       "language": "shader",
