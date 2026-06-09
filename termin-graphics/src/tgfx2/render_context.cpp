@@ -611,7 +611,10 @@ void RenderContext2::ensure_fsq_resources() {
     vs_desc.stage = fsq_shader.stage;
     vs_desc.debug_name = std::string(fsq_shader.uuid) + ":vertex";
     if (device_.backend_type() == BackendType::Vulkan
-        && termin::tgfx2_load_shader_artifact(fsq_shader.uuid, vs_desc.stage, vs_desc.bytecode)) {
+        && termin::tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
+            fsq_shader,
+            device_.backend_type(),
+            vs_desc.bytecode)) {
     } else {
         vs_desc.source = fsq_shader.fallback_glsl_source;
     }

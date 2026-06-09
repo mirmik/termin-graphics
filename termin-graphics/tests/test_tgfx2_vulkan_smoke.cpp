@@ -610,17 +610,37 @@ int main(int argc, char** argv) {
             slang_artifact_ok = false;
         }
 
-        std::filesystem::path vertex_slang = artifact_root / "matrix.vert.slang";
-        std::filesystem::path fragment_slang = artifact_root / "matrix.frag.slang";
         const tgfx::EngineShaderStageSource& fsq_shader =
             tgfx::engine_fullscreen_quad_vertex_shader();
+        std::filesystem::path fsq_spv = artifact_dir / (std::string(fsq_shader.uuid) + ".vert.spv");
+        if (slang_artifact_ok) {
+            std::vector<uint8_t> fsq_bytecode;
+            termin::tgfx2_set_shader_artifact_root(artifact_root.string().c_str());
+            termin::tgfx2_set_shader_cache_root((artifact_root / "shader-cache").string().c_str());
+            termin::tgfx2_set_shader_compiler_path(shaderc->string().c_str());
+            termin::tgfx2_set_shader_dev_compile_enabled(true);
+
+            if (!termin::tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
+                    fsq_shader,
+                    tgfx::BackendType::Vulkan,
+                    fsq_bytecode)) {
+                fprintf(stderr, "FSQ Slang on-demand artifact compile failed\n");
+                slang_artifact_ok = false;
+            } else if (fsq_bytecode.empty() || !is_existing_file(fsq_spv)) {
+                fprintf(stderr, "FSQ Slang on-demand artifact compile produced no bytecode\n");
+                slang_artifact_ok = false;
+            }
+            termin::tgfx2_set_shader_dev_compile_enabled(false);
+        }
+
+        std::filesystem::path vertex_slang = artifact_root / "matrix.vert.slang";
+        std::filesystem::path fragment_slang = artifact_root / "matrix.frag.slang";
         const std::filesystem::path fsq_source_path =
             std::filesystem::path(TGFX2_SOURCE_DIR) / "resources" / fsq_shader.source_resource_path;
         std::optional<std::string> fsq_source = read_text_file(fsq_source_path);
         std::filesystem::path fsq_slang = artifact_root / "fsq.vert.slang";
         std::filesystem::path vertex_spv = artifact_dir / (std::string(artifact_uuid) + ".vert.spv");
         std::filesystem::path fragment_spv = artifact_dir / (std::string(artifact_uuid) + ".frag.spv");
-        std::filesystem::path fsq_spv = artifact_dir / (std::string(fsq_shader.uuid) + ".vert.spv");
 
         if (slang_artifact_ok && !fsq_source) {
             slang_artifact_ok = false;
@@ -797,6 +817,9 @@ int main(int argc, char** argv) {
         }
 
         termin::tgfx2_set_shader_artifact_root("");
+        termin::tgfx2_set_shader_cache_root("");
+        termin::tgfx2_set_shader_compiler_path("");
+        termin::tgfx2_set_shader_dev_compile_enabled(false);
         std::filesystem::remove_all(artifact_root, fs_ec);
         if (fs_ec) {
             fprintf(stderr, "Failed to remove Slang artifact temp root: %s (%s)\n",

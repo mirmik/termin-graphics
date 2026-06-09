@@ -28,6 +28,7 @@ struct tc_shader;
 }
 
 namespace tgfx {
+struct EngineShaderStageSource;
 class IRenderDevice;
 }
 
@@ -69,6 +70,10 @@ TGFX2_API bool tgfx2_load_or_compile_shader_artifact_for_backend(
     const ::tc_shader* shader,
     tgfx::BackendType backend,
     tgfx::ShaderStage stage,
+    std::vector<uint8_t>& out);
+TGFX2_API bool tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
+    const tgfx::EngineShaderStageSource& shader,
+    tgfx::BackendType backend,
     std::vector<uint8_t>& out);
 TGFX2_API bool tgfx2_load_shader_artifact(
     const char* shader_uuid,

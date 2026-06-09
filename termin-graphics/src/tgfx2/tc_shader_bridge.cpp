@@ -1,11 +1,15 @@
 // tc_shader_bridge.cpp - TcShader ↔ tgfx2 interop.
 #include "tgfx2/tc_shader_bridge.hpp"
 
+#include "tgfx2/builtin_shader_sources.hpp"
+#include "tgfx2/engine_shader_catalog.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/enums.hpp"
 
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -161,6 +165,25 @@ static const char* shader_language_name(tc_shader_language language) {
     return "";
 }
 
+static bool shader_language_from_name(const char* language_name, tc_shader_language& out) {
+    if (!language_name || language_name[0] == '\0') {
+        return false;
+    }
+    if (std::string(language_name) == "glsl") {
+        out = TC_SHADER_LANGUAGE_GLSL;
+        return true;
+    }
+    if (std::string(language_name) == "slang") {
+        out = TC_SHADER_LANGUAGE_SLANG;
+        return true;
+    }
+    if (std::string(language_name) == "hlsl") {
+        out = TC_SHADER_LANGUAGE_HLSL;
+        return true;
+    }
+    return false;
+}
+
 static const char* shader_source_extension(tc_shader_language language) {
     switch (language) {
         case TC_SHADER_LANGUAGE_SLANG: return "slang";
@@ -225,6 +248,19 @@ static bool write_text_file(const std::filesystem::path& path, const std::string
     return static_cast<bool>(out);
 }
 
+static std::string fnv1a_hash_text(const char* text) {
+    uint64_t hash = 1469598103934665603ULL;
+    if (text) {
+        for (const unsigned char* p = reinterpret_cast<const unsigned char*>(text); *p; ++p) {
+            hash ^= static_cast<uint64_t>(*p);
+            hash *= 1099511628211ULL;
+        }
+    }
+    char out[17];
+    std::snprintf(out, sizeof(out), "%016llx", static_cast<unsigned long long>(hash));
+    return std::string(out);
+}
+
 static std::filesystem::path shader_cache_source_path(
     const tc_shader* shader,
     tgfx::ShaderStage stage
@@ -257,6 +293,21 @@ static std::string artifact_metadata_text(
     return out.str();
 }
 
+static std::string engine_shader_artifact_metadata_text(
+    const tgfx::EngineShaderStageSource& shader,
+    const std::string& source_hash,
+    tgfx::BackendType backend
+) {
+    std::ostringstream out;
+    out << "source_hash=" << source_hash << "\n";
+    out << "language=" << (shader.language ? shader.language : "") << "\n";
+    out << "target=" << backend_name(backend) << "\n";
+    out << "stage=" << stage_name(shader.stage) << "\n";
+    out << "shader_uuid=" << (shader.uuid ? shader.uuid : "") << "\n";
+    out << "shader_name=" << (shader.name ? shader.name : "") << "\n";
+    return out.str();
+}
+
 static bool artifact_metadata_current(
     const std::filesystem::path& artifact_path,
     const tc_shader* shader,
@@ -273,6 +324,22 @@ static bool artifact_metadata_current(
     return text == artifact_metadata_text(shader, backend, stage);
 }
 
+static bool engine_shader_artifact_metadata_current(
+    const std::filesystem::path& artifact_path,
+    const tgfx::EngineShaderStageSource& shader,
+    const std::string& source_hash,
+    tgfx::BackendType backend
+) {
+    std::ifstream in(artifact_path.string() + ".meta", std::ios::binary);
+    if (!in) {
+        return false;
+    }
+    std::string text{
+        std::istreambuf_iterator<char>(in),
+        std::istreambuf_iterator<char>()};
+    return text == engine_shader_artifact_metadata_text(shader, source_hash, backend);
+}
+
 static bool write_artifact_metadata(
     const std::filesystem::path& artifact_path,
     const tc_shader* shader,
@@ -287,6 +354,23 @@ static bool write_artifact_metadata(
         return false;
     }
     out << artifact_metadata_text(shader, backend, stage);
+    return static_cast<bool>(out);
+}
+
+static bool write_engine_shader_artifact_metadata(
+    const std::filesystem::path& artifact_path,
+    const tgfx::EngineShaderStageSource& shader,
+    const std::string& source_hash,
+    tgfx::BackendType backend
+) {
+    std::ofstream out(artifact_path.string() + ".meta", std::ios::binary);
+    if (!out) {
+        tc_log(TC_LOG_ERROR,
+               "tgfx2 engine shader dev compile: failed to open metadata for '%s'",
+               artifact_path.string().c_str());
+        return false;
+    }
+    out << engine_shader_artifact_metadata_text(shader, source_hash, backend);
     return static_cast<bool>(out);
 }
 
@@ -437,6 +521,102 @@ static bool compile_shader_artifact(
     return write_artifact_metadata(artifact_path, shader, backend, stage);
 }
 
+static std::string builtin_source_filename(const char* source_resource_path) {
+    if (!source_resource_path || source_resource_path[0] == '\0') {
+        return {};
+    }
+    std::string path(source_resource_path);
+    constexpr const char* kPrefix = "builtin_shaders/";
+    if (path.rfind(kPrefix, 0) == 0) {
+        path.erase(0, std::strlen(kPrefix));
+    }
+    return path;
+}
+
+static std::filesystem::path engine_shader_cache_source_path(
+    const tgfx::EngineShaderStageSource& shader,
+    tc_shader_language language
+) {
+    const char* cache_root = tgfx2_get_shader_cache_root();
+    if (cache_root && cache_root[0] != '\0') {
+        return std::filesystem::path(cache_root) / "source" /
+            (std::string(shader.uuid) + "." + stage_extension(shader.stage) + "." +
+             shader_source_extension(language));
+    }
+
+    const char* artifact_root = tgfx2_get_shader_artifact_root();
+    return std::filesystem::path(artifact_root) / ".build" / "shaders" / "source" /
+        (std::string(shader.uuid) + "." + stage_extension(shader.stage) + "." +
+         shader_source_extension(language));
+}
+
+static bool compile_engine_shader_stage_artifact(
+    const tgfx::EngineShaderStageSource& shader,
+    tc_shader_language language,
+    tgfx::BackendType backend,
+    const std::string& source,
+    const std::string& source_hash,
+    const std::filesystem::path& artifact_path
+) {
+    if (!shader_language_target_supported(language, backend)) {
+        tc_log(TC_LOG_ERROR,
+               "tgfx2 engine shader dev compile: unsupported language/target for shader '%s': %s -> %s",
+               shader.name ? shader.name : shader.uuid,
+               shader_language_name(language),
+               backend_name(backend));
+        return false;
+    }
+
+    auto compiler = resolve_shader_compiler();
+    if (!compiler) {
+        return false;
+    }
+
+    const std::filesystem::path source_path = engine_shader_cache_source_path(shader, language);
+    if (!write_text_file(source_path, source)) {
+        return false;
+    }
+
+    std::error_code ec;
+    std::filesystem::create_directories(artifact_path.parent_path(), ec);
+    if (ec) {
+        tc_log(TC_LOG_ERROR,
+               "tgfx2 engine shader dev compile: failed to create artifact directory '%s': %s",
+               artifact_path.parent_path().string().c_str(),
+               ec.message().c_str());
+        return false;
+    }
+
+    std::string cmd =
+        quote_arg(*compiler) +
+        " compile --language " + shader_language_name(language) +
+        " --target " + backend_name(backend) +
+        " --stage " + stage_name(shader.stage) +
+        " --entry main --input " + quote_arg(source_path) +
+        " --output " + quote_arg(artifact_path) +
+        " --debug-name " + quote_arg(std::filesystem::path(
+            std::string(shader.name ? shader.name : shader.uuid) + ":" + stage_name(shader.stage)));
+
+    const int rc = std::system(cmd.c_str());
+    if (rc != 0) {
+        tc_log(TC_LOG_ERROR,
+               "tgfx2 engine shader dev compile: termin_shaderc failed for '%s' stage=%s target=%s rc=%d",
+               shader.name ? shader.name : shader.uuid,
+               stage_name(shader.stage),
+               backend_name(backend),
+               rc);
+        return false;
+    }
+
+    if (!is_existing_file(artifact_path)) {
+        tc_log(TC_LOG_ERROR,
+               "tgfx2 engine shader dev compile: compiler did not produce '%s'",
+               artifact_path.string().c_str());
+        return false;
+    }
+    return write_engine_shader_artifact_metadata(artifact_path, shader, source_hash, backend);
+}
+
 bool tgfx2_shader_artifact_path(
     const char* shader_uuid,
     tgfx::BackendType backend,
@@ -538,6 +718,64 @@ bool tgfx2_load_or_compile_shader_artifact_for_backend(
 
     out.clear();
     if (!compile_shader_artifact(shader, backend, stage, artifact_path)) {
+        return false;
+    }
+    return read_binary_file(artifact_path, out);
+}
+
+bool tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
+    const tgfx::EngineShaderStageSource& shader,
+    tgfx::BackendType backend,
+    std::vector<uint8_t>& out
+) {
+    std::string path_text;
+    if (!tgfx2_shader_artifact_path(shader.uuid, backend, shader.stage, path_text)) {
+        return false;
+    }
+    const std::filesystem::path artifact_path(path_text);
+
+    tc_shader_language language = TC_SHADER_LANGUAGE_GLSL;
+    if (!shader_language_from_name(shader.language, language)) {
+        tc_log(TC_LOG_ERROR,
+               "tgfx2 engine shader dev compile: unsupported source language '%s' for shader '%s'",
+               shader.language ? shader.language : "<null>",
+               shader.name ? shader.name : shader.uuid);
+        return false;
+    }
+
+    const bool dev_compile = tgfx2_get_shader_dev_compile_enabled();
+    if (!dev_compile) {
+        return tgfx2_load_shader_artifact_for_backend(shader.uuid, backend, shader.stage, out);
+    }
+
+    const std::string source_filename = builtin_source_filename(shader.source_resource_path);
+    const std::string source = tgfx::load_builtin_shader_source(
+        source_filename.c_str(),
+        shader.name ? shader.name : shader.uuid);
+    if (source.empty()) {
+        return false;
+    }
+    const std::string source_hash = fnv1a_hash_text(source.c_str());
+    const bool supported = shader_language_target_supported(language, backend);
+
+    if (read_binary_file(artifact_path, out)) {
+        if (engine_shader_artifact_metadata_current(artifact_path, shader, source_hash, backend)) {
+            return true;
+        }
+        if (!supported) {
+            return true;
+        }
+    } else if (!supported) {
+        tc_log(TC_LOG_ERROR,
+               "tgfx2 engine shader dev compile: missing artifact and unsupported language/target for shader '%s': %s -> %s",
+               shader.name ? shader.name : shader.uuid,
+               shader_language_name(language),
+               backend_name(backend));
+        return false;
+    }
+
+    out.clear();
+    if (!compile_engine_shader_stage_artifact(shader, language, backend, source, source_hash, artifact_path)) {
         return false;
     }
     return read_binary_file(artifact_path, out);
