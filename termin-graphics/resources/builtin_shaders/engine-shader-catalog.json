@@ -874,6 +874,42 @@
       ]
     },
     {
+      "uuid": "termin-engine-highlight",
+      "name": "HighlightEngineFS",
+      "language": "glsl",
+      "stages": {
+        "fragment": {
+          "path": "termin-engine-highlight.frag.glsl",
+          "inputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "FragColor", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "HighlightPushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        },
+        {
+          "name": "u_color",
+          "logical_name": "color_texture",
+          "kind": "combined_sampler2d",
+          "legacy_binding": 4
+        },
+        {
+          "name": "u_id",
+          "logical_name": "id_texture",
+          "kind": "combined_sampler2d",
+          "legacy_binding": 5
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-grayscale",
       "name": "GrayscaleEngineFS",
       "language": "glsl",
