@@ -10,6 +10,7 @@
 
 #include "tgfx/tgfx_shader_handle.hpp"
 #include "tgfx/resources/tc_shader.h"
+#include "tgfx2/builtin_shader_sources.hpp"
 
 namespace nb = nanobind;
 
@@ -89,6 +90,17 @@ void bind_shader(nb::module_& m) {
             nb::arg("geometry") = "", nb::arg("name") = "", nb::arg("source_path") = "",
             nb::arg("language") = TC_SHADER_LANGUAGE_GLSL,
             nb::arg("artifact_policy") = TC_SHADER_ARTIFACT_OPTIONAL)
+        .def_static("from_builtin_catalog",
+            [](const std::string& uuid) {
+                const tc_shader_handle h =
+                    tgfx::register_builtin_shader_from_catalog(uuid.c_str());
+                if (tc_shader_handle_is_invalid(h)) {
+                    return TcShader();
+                }
+                return TcShader(h);
+            },
+            nb::arg("uuid"),
+            "Register and return a built-in engine shader by catalog UUID")
         .def_static("from_uuid", &TcShader::from_uuid)
         .def_static("from_hash", &TcShader::from_hash)
         .def_static("from_name", &TcShader::from_name)

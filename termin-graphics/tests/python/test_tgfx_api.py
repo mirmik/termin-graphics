@@ -41,6 +41,16 @@ def test_shader_metadata_binding_smoke():
     assert shader.requires_artifacts is True
 
 
+def test_builtin_catalog_shader_binding_smoke():
+    shader = tgfx.TcShader.from_builtin_catalog("termin-engine-present-blit")
+
+    assert shader.is_valid
+    assert shader.uuid == "termin-engine-present-blit"
+    assert shader.name == "PresentBlitVSFS"
+    assert "a_pos" in shader.vertex_source
+    assert "u_tex" in shader.fragment_source
+
+
 def test_canvas2d_binding_smoke():
     color = tgfx.CanvasColor(1.0, 0.5, 0.25, 1.0)
     assert tuple(color) == (1.0, 0.5, 0.25, 1.0)

@@ -81,6 +81,40 @@
       "resources": []
     },
     {
+      "uuid": "termin-engine-present-blit",
+      "name": "PresentBlitVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-present-blit.vert.glsl",
+          "inputs": [
+            {"name": "a_pos", "semantic": "POSITION", "location": 0},
+            {"name": "a_uv", "semantic": "TEXCOORD0", "location": 1}
+          ],
+          "outputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-present-blit.frag.glsl",
+          "inputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "FragColor", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "u_tex",
+          "logical_name": "input_texture",
+          "kind": "combined_sampler2d",
+          "legacy_binding": 4
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-immediate",
       "name": "ImmediateEngineVSFS",
       "language": "glsl",
