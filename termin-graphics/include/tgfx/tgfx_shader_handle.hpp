@@ -11,6 +11,7 @@ extern "C" {
 
 #include <string>
 #include <cstring>
+#include <optional>
 
 namespace termin {
 
@@ -181,6 +182,22 @@ public:
     bool requires_artifacts() const {
         tc_shader* s = get();
         return tc_shader_requires_artifacts(s);
+    }
+
+    uint32_t resource_binding_count() const {
+        tc_shader* s = get();
+        return tc_shader_resource_binding_count(s);
+    }
+
+    const tc_shader_resource_binding* find_resource_binding(const char* name) const {
+        tc_shader* s = get();
+        return tc_shader_find_resource_binding(s, name);
+    }
+
+    std::optional<tc_shader_resource_binding> resource_binding(const char* name) const {
+        const tc_shader_resource_binding* binding = find_resource_binding(name);
+        if (!binding) return std::nullopt;
+        return *binding;
     }
 
     // Variant info

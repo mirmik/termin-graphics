@@ -63,6 +63,11 @@ static void shader_free_data(tc_shader* shader) {
     }
     shader->material_ubo_entry_count = 0;
     shader->material_ubo_block_size = 0;
+    if (shader->resource_bindings) {
+        free(shader->resource_bindings);
+        shader->resource_bindings = NULL;
+    }
+    shader->resource_binding_count = 0;
 }
 
 // ============================================================================
@@ -883,6 +888,73 @@ tc_shader_info* tc_shader_get_all_info(size_t* count) {
 // Material UBO layout transport
 // ============================================================================
 
+static int tc_shader_find_resource_binding_index(
+    const tc_shader* shader,
+    const char* name
+) {
+    if (!shader || !name || name[0] == '\0') return -1;
+    for (uint32_t i = 0; i < shader->resource_binding_count; i++) {
+        if (strcmp(shader->resource_bindings[i].name, name) == 0) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+static bool tc_shader_upsert_resource_binding(
+    tc_shader* shader,
+    const tc_shader_resource_binding* binding
+) {
+    if (!shader || !binding || binding->name[0] == '\0') return false;
+
+    int existing = tc_shader_find_resource_binding_index(shader, binding->name);
+    if (existing >= 0) {
+        shader->resource_bindings[existing] = *binding;
+        shader->resource_bindings[existing].name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+        return true;
+    }
+
+    uint32_t new_count = shader->resource_binding_count + 1u;
+    size_t bytes = (size_t)new_count * sizeof(tc_shader_resource_binding);
+    tc_shader_resource_binding* copy =
+        (tc_shader_resource_binding*)realloc(shader->resource_bindings, bytes);
+    if (!copy) {
+        tc_log(TC_LOG_ERROR,
+               "tc_shader_upsert_resource_binding: allocation failed (%u entries)",
+               new_count);
+        return false;
+    }
+    shader->resource_bindings = copy;
+    shader->resource_bindings[shader->resource_binding_count] = *binding;
+    shader->resource_bindings[shader->resource_binding_count]
+        .name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+    shader->resource_binding_count = new_count;
+    return true;
+}
+
+static void tc_shader_remove_resource_binding(tc_shader* shader, const char* name) {
+    int index = tc_shader_find_resource_binding_index(shader, name);
+    if (index < 0) return;
+
+    uint32_t last = shader->resource_binding_count - 1u;
+    if ((uint32_t)index != last) {
+        shader->resource_bindings[index] = shader->resource_bindings[last];
+    }
+    shader->resource_binding_count = last;
+    if (last == 0) {
+        free(shader->resource_bindings);
+        shader->resource_bindings = NULL;
+        return;
+    }
+
+    size_t bytes = (size_t)last * sizeof(tc_shader_resource_binding);
+    tc_shader_resource_binding* copy =
+        (tc_shader_resource_binding*)realloc(shader->resource_bindings, bytes);
+    if (copy) {
+        shader->resource_bindings = copy;
+    }
+}
+
 void tc_shader_set_material_ubo_layout(
     tc_shader* shader,
     const tc_material_ubo_entry* entries,
@@ -902,7 +974,10 @@ void tc_shader_set_material_ubo_layout(
     shader->material_ubo_entry_count = 0;
     shader->material_ubo_block_size = 0;
 
-    if (count == 0 || !entries) return;
+    if (count == 0 || !entries) {
+        tc_shader_remove_resource_binding(shader, TC_SHADER_RESOURCE_MATERIAL);
+        return;
+    }
 
     size_t bytes = (size_t)count * sizeof(tc_material_ubo_entry);
     tc_material_ubo_entry* copy = (tc_material_ubo_entry*)malloc(bytes);
@@ -915,6 +990,20 @@ void tc_shader_set_material_ubo_layout(
     shader->material_ubo_entries = copy;
     shader->material_ubo_entry_count = count;
     shader->material_ubo_block_size = block_size;
+
+    tc_shader_resource_binding material_binding;
+    memset(&material_binding, 0, sizeof(material_binding));
+    strncpy(
+        material_binding.name,
+        TC_SHADER_RESOURCE_MATERIAL,
+        TC_SHADER_RESOURCE_NAME_MAX - 1);
+    material_binding.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+    material_binding.kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    material_binding.set = TC_SHADER_RESOURCE_SET_DEFAULT;
+    material_binding.binding = TC_SHADER_RESOURCE_BINDING_MATERIAL;
+    material_binding.stage_mask = TC_SHADER_STAGE_ALL_GRAPHICS;
+    material_binding.size = block_size;
+    tc_shader_upsert_resource_binding(shader, &material_binding);
 }
 
 uint32_t tc_shader_material_ubo_entry_count(const tc_shader* shader) {
@@ -927,4 +1016,61 @@ const tc_material_ubo_entry* tc_shader_material_ubo_entries(const tc_shader* sha
 
 uint32_t tc_shader_material_ubo_block_size(const tc_shader* shader) {
     return shader ? shader->material_ubo_block_size : 0u;
+}
+
+// ============================================================================
+// Shader resource layout
+// ============================================================================
+
+void tc_shader_set_resource_layout(
+    tc_shader* shader,
+    const tc_shader_resource_binding* bindings,
+    uint32_t count
+) {
+    if (!shader) {
+        tc_log(TC_LOG_ERROR, "tc_shader_set_resource_layout called with NULL shader");
+        return;
+    }
+
+    if (shader->resource_bindings) {
+        free(shader->resource_bindings);
+        shader->resource_bindings = NULL;
+    }
+    shader->resource_binding_count = 0;
+
+    if (count == 0 || !bindings) return;
+
+    size_t bytes = (size_t)count * sizeof(tc_shader_resource_binding);
+    tc_shader_resource_binding* copy =
+        (tc_shader_resource_binding*)malloc(bytes);
+    if (!copy) {
+        tc_log(TC_LOG_ERROR,
+               "tc_shader_set_resource_layout: allocation failed (%u entries)",
+               count);
+        return;
+    }
+    memcpy(copy, bindings, bytes);
+    for (uint32_t i = 0; i < count; i++) {
+        copy[i].name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+    }
+
+    shader->resource_bindings = copy;
+    shader->resource_binding_count = count;
+}
+
+uint32_t tc_shader_resource_binding_count(const tc_shader* shader) {
+    return shader ? shader->resource_binding_count : 0u;
+}
+
+const tc_shader_resource_binding* tc_shader_resource_bindings(const tc_shader* shader) {
+    return shader ? shader->resource_bindings : NULL;
+}
+
+const tc_shader_resource_binding* tc_shader_find_resource_binding(
+    const tc_shader* shader,
+    const char* name
+) {
+    int index = tc_shader_find_resource_binding_index(shader, name);
+    if (index < 0) return NULL;
+    return &shader->resource_bindings[index];
 }

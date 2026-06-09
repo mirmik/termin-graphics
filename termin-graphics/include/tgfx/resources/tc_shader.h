@@ -66,6 +66,46 @@ typedef enum tc_shader_artifact_policy {
 #define TC_SHADER_HASH_LEN 17  // 16 hex chars + null terminator
 #define TC_MATERIAL_UBO_NAME_MAX 64
 #define TC_MATERIAL_UBO_TYPE_MAX 16
+#define TC_SHADER_RESOURCE_NAME_MAX 64
+
+typedef enum tc_shader_resource_kind {
+    TC_SHADER_RESOURCE_NONE = 0,
+    TC_SHADER_RESOURCE_CONSTANT_BUFFER = 1,
+    TC_SHADER_RESOURCE_TEXTURE = 2,
+    TC_SHADER_RESOURCE_SAMPLER = 3,
+    TC_SHADER_RESOURCE_STORAGE_BUFFER = 4,
+    TC_SHADER_RESOURCE_STORAGE_TEXTURE = 5,
+} tc_shader_resource_kind;
+
+typedef enum tc_shader_stage_mask {
+    TC_SHADER_STAGE_NONE = 0,
+    TC_SHADER_STAGE_VERTEX = 1 << 0,
+    TC_SHADER_STAGE_FRAGMENT = 1 << 1,
+    TC_SHADER_STAGE_GEOMETRY = 1 << 2,
+    TC_SHADER_STAGE_COMPUTE = 1 << 3,
+    TC_SHADER_STAGE_ALL_GRAPHICS =
+        TC_SHADER_STAGE_VERTEX | TC_SHADER_STAGE_FRAGMENT | TC_SHADER_STAGE_GEOMETRY,
+    TC_SHADER_STAGE_ALL = 0xffffffffu,
+} tc_shader_stage_mask;
+
+// Engine-reserved resource names. These names are part of the Termin shader
+// interface; backend set/binding numbers are runtime metadata and should not
+// be authored into Slang sources long-term.
+#define TC_SHADER_RESOURCE_MATERIAL "material"
+#define TC_SHADER_RESOURCE_PER_FRAME "per_frame"
+#define TC_SHADER_RESOURCE_DRAW "draw"
+
+#define TC_SHADER_RESOURCE_SET_DEFAULT 0u
+#define TC_SHADER_RESOURCE_BINDING_MATERIAL 1u
+
+typedef struct tc_shader_resource_binding {
+    char name[TC_SHADER_RESOURCE_NAME_MAX];
+    uint32_t kind;        // tc_shader_resource_kind
+    uint32_t set;
+    uint32_t binding;
+    uint32_t stage_mask;  // tc_shader_stage_mask
+    uint32_t size;        // bytes for buffers, 0 when unknown/not applicable
+} tc_shader_resource_binding;
 
 // One field inside a shader's generated std140 material UBO block.
 // Populated by the shader parser (see termin-app/cpp/termin/render/shader_parser.cpp)
@@ -108,6 +148,12 @@ typedef struct tc_shader {
     tc_material_ubo_entry* material_ubo_entries;
     uint32_t material_ubo_entry_count;
     uint32_t material_ubo_block_size;
+
+    // Runtime resource layout for this shader. This is the bridge toward
+    // backend-neutral Slang sources: shader source names resources, compiled
+    // artifact/reflection fills set/binding metadata, runtime binds by name.
+    tc_shader_resource_binding* resource_bindings;
+    uint32_t resource_binding_count;
 } tc_shader;
 
 // ============================================================================
@@ -198,6 +244,27 @@ TGFX_API void tc_shader_set_material_ubo_layout(
 TGFX_API uint32_t tc_shader_material_ubo_entry_count(const tc_shader* shader);
 TGFX_API const tc_material_ubo_entry* tc_shader_material_ubo_entries(const tc_shader* shader);
 TGFX_API uint32_t tc_shader_material_ubo_block_size(const tc_shader* shader);
+
+// ============================================================================
+// Shader resource layout
+// ============================================================================
+
+// Replace the whole resource layout. A copy of `bindings` is made; caller
+// retains ownership. Pass count=0 to clear. Version is not bumped for the same
+// reason as material UBO layout: resource layout belongs to the compiled source
+// identity and is populated immediately after source/artifact load.
+TGFX_API void tc_shader_set_resource_layout(
+    tc_shader* shader,
+    const tc_shader_resource_binding* bindings,
+    uint32_t count
+);
+
+TGFX_API uint32_t tc_shader_resource_binding_count(const tc_shader* shader);
+TGFX_API const tc_shader_resource_binding* tc_shader_resource_bindings(const tc_shader* shader);
+TGFX_API const tc_shader_resource_binding* tc_shader_find_resource_binding(
+    const tc_shader* shader,
+    const char* name
+);
 
 #ifdef __cplusplus
 }

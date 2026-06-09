@@ -56,6 +56,14 @@ void bind_shader(nb::module_& m) {
         .value("OPTIONAL", TC_SHADER_ARTIFACT_OPTIONAL)
         .value("REQUIRED", TC_SHADER_ARTIFACT_REQUIRED);
 
+    nb::enum_<tc_shader_resource_kind>(m, "ShaderResourceKind")
+        .value("NONE", TC_SHADER_RESOURCE_NONE)
+        .value("CONSTANT_BUFFER", TC_SHADER_RESOURCE_CONSTANT_BUFFER)
+        .value("TEXTURE", TC_SHADER_RESOURCE_TEXTURE)
+        .value("SAMPLER", TC_SHADER_RESOURCE_SAMPLER)
+        .value("STORAGE_BUFFER", TC_SHADER_RESOURCE_STORAGE_BUFFER)
+        .value("STORAGE_TEXTURE", TC_SHADER_RESOURCE_STORAGE_TEXTURE);
+
     // TcShader - RAII wrapper
     nb::class_<TcShader>(m, "TcShader")
         .def(nb::init<>())
@@ -77,6 +85,23 @@ void bind_shader(nb::module_& m) {
         .def_prop_ro("language", &TcShader::language)
         .def_prop_ro("artifact_policy", &TcShader::artifact_policy)
         .def_prop_ro("requires_artifacts", &TcShader::requires_artifacts)
+        .def_prop_ro("resource_binding_count", &TcShader::resource_binding_count)
+        .def("find_resource_binding",
+            [](const TcShader& self, const std::string& name) -> nb::object {
+                const tc_shader_resource_binding* binding =
+                    self.find_resource_binding(name.c_str());
+                if (!binding) return nb::none();
+                nb::dict result;
+                result["name"] = std::string(binding->name);
+                result["kind"] = binding->kind;
+                result["set"] = binding->set;
+                result["binding"] = binding->binding;
+                result["stage_mask"] = binding->stage_mask;
+                result["size"] = binding->size;
+                return result;
+            },
+            nb::arg("name"),
+            "Return resource layout entry by shader resource name, or None")
         .def("has_feature", &TcShader::has_feature, nb::arg("feature"))
         .def("set_feature", &TcShader::set_feature, nb::arg("feature"))
         .def("set_features", &TcShader::set_features, nb::arg("features"))
