@@ -115,6 +115,78 @@
       ]
     },
     {
+      "uuid": "termin-engine-canvas2d-solid",
+      "name": "Canvas2DSolidVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-canvas2d.vert.glsl",
+          "inputs": [
+            {"name": "a_pos", "semantic": "POSITION", "location": 0},
+            {"name": "a_uv_pad", "semantic": "TEXCOORD0", "location": 1}
+          ],
+          "outputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-canvas2d-solid.frag.glsl",
+          "inputs": [],
+          "outputs": [
+            {"name": "frag_color", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "CanvasPushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-canvas2d-texture",
+      "name": "Canvas2DTextureVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-canvas2d.vert.glsl",
+          "inputs": [
+            {"name": "a_pos", "semantic": "POSITION", "location": 0},
+            {"name": "a_uv_pad", "semantic": "TEXCOORD0", "location": 1}
+          ],
+          "outputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-canvas2d-texture.frag.glsl",
+          "inputs": [
+            {"name": "v_uv", "semantic": "TEXCOORD0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "frag_color", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "CanvasPushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        },
+        {
+          "name": "u_texture",
+          "logical_name": "input_texture",
+          "kind": "combined_sampler2d",
+          "legacy_binding": 4
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-id",
       "name": "IdEngineVSFS",
       "language": "glsl",

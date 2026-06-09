@@ -2,13 +2,12 @@
 
 #include "tgfx2/canvas2d_renderer.hpp"
 
+#include "tgfx2/builtin_shader_sources.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <iterator>
-#include <string>
 
-#include "tgfx2/descriptors.hpp"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/render_context.hpp"
@@ -16,8 +15,9 @@
 
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
-#include <tgfx/resources/tc_shader_registry.h>
 }
+
+#include <tcbase/tc_log.hpp>
 
 namespace tgfx {
 
@@ -30,62 +30,13 @@ struct CanvasPushData {
 static_assert(sizeof(CanvasPushData) == 80,
               "CanvasPushData layout drift - shader and C++ disagree");
 
-constexpr const char* kCanvasPush = R"(
-struct CanvasPushData {
-    mat4 u_projection;
-    vec4 u_color;
-};
-#ifdef VULKAN
-layout(push_constant) uniform CanvasPushBlock { CanvasPushData pc; };
-#else
-layout(std140, binding = 14) uniform CanvasPushBlock { CanvasPushData pc; };
-#endif
-)";
-
-std::string make_canvas_vert() {
-    return std::string("#version 450 core\n") + kCanvasPush + R"(
-layout(location=0) in vec3 a_pos;
-layout(location=1) in vec4 a_uv_pad;
-
-layout(location=0) out vec2 v_uv;
-
-void main() {
-    gl_Position = pc.u_projection * vec4(a_pos.xy, 0.0, 1.0);
-    v_uv = a_uv_pad.xy;
-}
-)";
-}
-
-std::string make_solid_frag() {
-    return std::string("#version 450 core\n") + kCanvasPush + R"(
-layout(location=0) out vec4 frag_color;
-
-void main() {
-    frag_color = pc.u_color;
-}
-)";
-}
-
-std::string make_texture_frag() {
-    return std::string("#version 450 core\n") + kCanvasPush + R"(
-layout(binding = 4) uniform sampler2D u_texture;
-
-layout(location=0) in vec2 v_uv;
-layout(location=0) out vec4 frag_color;
-
-void main() {
-    frag_color = texture(u_texture, v_uv) * pc.u_color;
-}
-)";
-}
+constexpr const char* CANVAS2D_SOLID_SHADER_UUID = "termin-engine-canvas2d-solid";
+constexpr const char* CANVAS2D_TEXTURE_SHADER_UUID = "termin-engine-canvas2d-texture";
 
 tc_shader_handle solid_shader_handle() {
     static tc_shader_handle handle = tc_shader_handle_invalid();
     if (tc_shader_handle_is_invalid(handle)) {
-        const std::string vs = make_canvas_vert();
-        const std::string fs = make_solid_frag();
-        handle = tc_shader_register_static(
-            vs.c_str(), fs.c_str(), nullptr, "Canvas2DSolidVSFS");
+        handle = register_builtin_shader_from_catalog(CANVAS2D_SOLID_SHADER_UUID);
     }
     return handle;
 }
@@ -93,10 +44,7 @@ tc_shader_handle solid_shader_handle() {
 tc_shader_handle texture_shader_handle() {
     static tc_shader_handle handle = tc_shader_handle_invalid();
     if (tc_shader_handle_is_invalid(handle)) {
-        const std::string vs = make_canvas_vert();
-        const std::string fs = make_texture_frag();
-        handle = tc_shader_register_static(
-            vs.c_str(), fs.c_str(), nullptr, "Canvas2DTextureVSFS");
+        handle = register_builtin_shader_from_catalog(CANVAS2D_TEXTURE_SHADER_UUID);
     }
     return handle;
 }
@@ -386,34 +334,22 @@ void Canvas2DRenderer::ensure_shaders_(IRenderDevice& device) {
     texture_fs_ = ShaderHandle{};
 
     if (tc_shader* raw = tc_shader_get(solid_shader_handle())) {
-        termin::tc_shader_ensure_tgfx2(raw, &device, &solid_vs_, &solid_fs_);
+        if (!termin::tc_shader_ensure_tgfx2(raw, &device, &solid_vs_, &solid_fs_)) {
+            tc::Log::error("[Canvas2DRenderer] failed to create solid shader");
+        }
     }
     if (tc_shader* raw = tc_shader_get(texture_shader_handle())) {
-        termin::tc_shader_ensure_tgfx2(raw, &device, &texture_vs_, &texture_fs_);
+        if (!termin::tc_shader_ensure_tgfx2(raw, &device, &texture_vs_, &texture_fs_)) {
+            tc::Log::error("[Canvas2DRenderer] failed to create texture shader");
+        }
     }
 
     if (solid_vs_.id == 0 || solid_fs_.id == 0) {
-        ShaderDesc vs;
-        vs.stage = ShaderStage::Vertex;
-        vs.source = make_canvas_vert();
-        solid_vs_ = device.create_shader(vs);
-
-        ShaderDesc fs;
-        fs.stage = ShaderStage::Fragment;
-        fs.source = make_solid_frag();
-        solid_fs_ = device.create_shader(fs);
+        tc::Log::error("[Canvas2DRenderer] solid shader is unavailable");
     }
 
     if (texture_vs_.id == 0 || texture_fs_.id == 0) {
-        ShaderDesc vs;
-        vs.stage = ShaderStage::Vertex;
-        vs.source = make_canvas_vert();
-        texture_vs_ = device.create_shader(vs);
-
-        ShaderDesc fs;
-        fs.stage = ShaderStage::Fragment;
-        fs.source = make_texture_frag();
-        texture_fs_ = device.create_shader(fs);
+        tc::Log::error("[Canvas2DRenderer] texture shader is unavailable");
     }
 
     compiled_on_ = &device;
