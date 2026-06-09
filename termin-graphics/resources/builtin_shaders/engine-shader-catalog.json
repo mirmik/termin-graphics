@@ -307,6 +307,159 @@
       ]
     },
     {
+      "uuid": "termin-engine-screen-line",
+      "name": "ScreenSpaceLineVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-screen-line.vert.glsl",
+          "inputs": [
+            {"name": "a_corner", "semantic": "TEXCOORD0", "location": 0},
+            {"name": "a_p0", "semantic": "POSITION0", "location": 1},
+            {"name": "a_width_px", "semantic": "TEXCOORD1", "location": 2},
+            {"name": "a_p1", "semantic": "POSITION1", "location": 3},
+            {"name": "a_flags", "semantic": "TEXCOORD2", "location": 4},
+            {"name": "a_color", "semantic": "COLOR0", "location": 5}
+          ],
+          "outputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 0}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-screen-line.frag.glsl",
+          "inputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "frag_color", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "ScreenLinePushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-screen-line-cap",
+      "name": "ScreenSpaceLineCapVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-screen-line-cap.vert.glsl",
+          "inputs": [
+            {"name": "a_local", "semantic": "TEXCOORD0", "location": 0},
+            {"name": "a_center", "semantic": "POSITION0", "location": 1},
+            {"name": "a_width_px", "semantic": "TEXCOORD1", "location": 2},
+            {"name": "a_neighbor", "semantic": "POSITION1", "location": 3},
+            {"name": "a_flags", "semantic": "TEXCOORD2", "location": 4},
+            {"name": "a_color", "semantic": "COLOR0", "location": 5}
+          ],
+          "outputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 0}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-screen-line.frag.glsl",
+          "inputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "frag_color", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "ScreenLinePushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-screen-line-join",
+      "name": "ScreenSpaceLineJoinVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-screen-line-join.vert.glsl",
+          "inputs": [
+            {"name": "a_corner", "semantic": "TEXCOORD0", "location": 0},
+            {"name": "a_prev", "semantic": "POSITION0", "location": 1},
+            {"name": "a_width_px", "semantic": "TEXCOORD1", "location": 2},
+            {"name": "a_center", "semantic": "POSITION1", "location": 3},
+            {"name": "a_flags", "semantic": "TEXCOORD2", "location": 4},
+            {"name": "a_next", "semantic": "POSITION2", "location": 5},
+            {"name": "a_color", "semantic": "COLOR0", "location": 6}
+          ],
+          "outputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 0}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-screen-line.frag.glsl",
+          "inputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "frag_color", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "ScreenLinePushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-screen-line-round-join",
+      "name": "ScreenSpaceLineRoundJoinVSFS",
+      "language": "glsl",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-screen-line-round-join.vert.glsl",
+          "inputs": [
+            {"name": "a_local", "semantic": "TEXCOORD0", "location": 0},
+            {"name": "a_center", "semantic": "POSITION0", "location": 1},
+            {"name": "a_width_px", "semantic": "TEXCOORD1", "location": 2},
+            {"name": "a_neighbor", "semantic": "POSITION1", "location": 3},
+            {"name": "a_flags", "semantic": "TEXCOORD2", "location": 4},
+            {"name": "a_color", "semantic": "COLOR0", "location": 5}
+          ],
+          "outputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 0}
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-screen-line.frag.glsl",
+          "inputs": [
+            {"name": "v_color", "semantic": "COLOR0", "location": 0}
+          ],
+          "outputs": [
+            {"name": "frag_color", "semantic": "SV_Target0", "location": 0}
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "ScreenLinePushBlock",
+          "logical_name": "push_constants",
+          "kind": "push_constant",
+          "legacy_binding": 14
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-id",
       "name": "IdEngineVSFS",
       "language": "glsl",

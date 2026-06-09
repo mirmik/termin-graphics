@@ -1,5 +1,6 @@
 #include "tgfx2/screen_space_line_renderer.hpp"
 
+#include "tgfx2/builtin_shader_sources.hpp"
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -7,12 +8,18 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
-#include <string>
 #include <vector>
 
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/render_context.hpp"
+#include "tgfx2/tc_shader_bridge.hpp"
+
+extern "C" {
+#include <tgfx/resources/tc_shader.h>
+}
+
+#include <tcbase/tc_log.hpp>
 
 namespace tgfx {
 namespace {
@@ -80,208 +87,39 @@ constexpr std::array<JoinCornerVertex, 3> kBevelJoinCorners{{
 constexpr float kPi = 3.14159265358979323846f;
 constexpr float kFlagExtendStart = 1.0f;
 constexpr float kFlagExtendEnd = 2.0f;
+constexpr const char* SCREEN_LINE_SHADER_UUID = "termin-engine-screen-line";
+constexpr const char* SCREEN_LINE_CAP_SHADER_UUID = "termin-engine-screen-line-cap";
+constexpr const char* SCREEN_LINE_JOIN_SHADER_UUID = "termin-engine-screen-line-join";
+constexpr const char* SCREEN_LINE_ROUND_JOIN_SHADER_UUID = "termin-engine-screen-line-round-join";
 
-constexpr const char* kScreenLineCommon = R"(
-struct ScreenLinePush {
-    mat4 u_view_projection;
-    vec4 u_viewport;
-};
-#ifdef VULKAN
-layout(push_constant) uniform ScreenLinePushBlock { ScreenLinePush pc; };
-#else
-layout(std140, binding = 14) uniform ScreenLinePushBlock { ScreenLinePush pc; };
-#endif
-)";
-
-std::string make_screen_line_vert() {
-    return std::string("#version 450 core\n") + kScreenLineCommon + R"(
-layout(location=0) in vec2 a_corner;
-layout(location=1) in vec3 a_p0;
-layout(location=2) in float a_width_px;
-layout(location=3) in vec3 a_p1;
-layout(location=4) in float a_flags;
-layout(location=5) in vec4 a_color;
-
-layout(location=0) out vec4 v_color;
-
-void main() {
-    vec4 c0 = pc.u_view_projection * vec4(a_p0, 1.0);
-    vec4 c1 = pc.u_view_projection * vec4(a_p1, 1.0);
-
-    float endpoint = a_corner.x;
-    float side_sign = a_corner.y;
-
-    vec2 viewport = max(pc.u_viewport.xy, vec2(1.0));
-    vec2 ndc0 = c0.xy / c0.w;
-    vec2 ndc1 = c1.xy / c1.w;
-    vec2 px0 = (ndc0 * 0.5 + 0.5) * viewport;
-    vec2 px1 = (ndc1 * 0.5 + 0.5) * viewport;
-
-    vec2 dir = px1 - px0;
-    float len = length(dir);
-    if (len < 1.0e-5) {
-        dir = vec2(1.0, 0.0);
-    } else {
-        dir /= len;
+bool ensure_shader_pair(
+    IRenderDevice& device,
+    tc_shader_handle& registry_handle,
+    const char* uuid,
+    const char* label,
+    ShaderHandle& vertex_shader,
+    ShaderHandle& fragment_shader)
+{
+    if (vertex_shader && fragment_shader) {
+        return true;
     }
 
-    vec2 side = vec2(-dir.y, dir.x);
-    vec2 base_px = mix(px0, px1, endpoint);
-    bool extend_start = mod(a_flags, 2.0) >= 1.0;
-    bool extend_end = a_flags >= 2.0;
-    if (endpoint < 0.5 && extend_start) {
-        base_px -= dir * (a_width_px * 0.5);
-    } else if (endpoint >= 0.5 && extend_end) {
-        base_px += dir * (a_width_px * 0.5);
+    if (tc_shader_handle_is_invalid(registry_handle)) {
+        registry_handle = register_builtin_shader_from_catalog(uuid);
     }
-    vec2 expanded_px = base_px + side * side_sign * (a_width_px * 0.5);
-    vec2 expanded_ndc = expanded_px / viewport * 2.0 - 1.0;
-
-    vec4 clip = mix(c0, c1, endpoint);
-    clip.xy = expanded_ndc * clip.w;
-    gl_Position = clip;
-    v_color = a_color;
-}
-)";
-}
-
-std::string make_screen_line_cap_vert() {
-    return std::string("#version 450 core\n") + kScreenLineCommon + R"(
-layout(location=0) in vec2 a_local;
-layout(location=1) in vec3 a_center;
-layout(location=2) in float a_width_px;
-layout(location=3) in vec3 a_neighbor;
-layout(location=4) in float a_flags;
-layout(location=5) in vec4 a_color;
-
-layout(location=0) out vec4 v_color;
-
-void main() {
-    vec4 c0 = pc.u_view_projection * vec4(a_center, 1.0);
-    vec4 c1 = pc.u_view_projection * vec4(a_neighbor, 1.0);
-
-    vec2 viewport = max(pc.u_viewport.xy, vec2(1.0));
-    vec2 ndc0 = c0.xy / c0.w;
-    vec2 ndc1 = c1.xy / c1.w;
-    vec2 px0 = (ndc0 * 0.5 + 0.5) * viewport;
-    vec2 px1 = (ndc1 * 0.5 + 0.5) * viewport;
-
-    vec2 dir = px0 - px1;
-    float len = length(dir);
-    if (len < 1.0e-5) {
-        dir = vec2(1.0, 0.0);
-    } else {
-        dir /= len;
+    if (tc_shader_handle_is_invalid(registry_handle)) {
+        tc::Log::error("[ScreenSpaceLineRenderer] failed to register %s shader", label);
+        return false;
     }
 
-    vec2 side = vec2(-dir.y, dir.x);
-    vec2 expanded_px = px0
-        + dir * a_local.x * (a_width_px * 0.5)
-        + side * a_local.y * (a_width_px * 0.5);
-    vec2 expanded_ndc = expanded_px / viewport * 2.0 - 1.0;
-
-    vec4 clip = c0;
-    clip.xy = expanded_ndc * clip.w;
-    gl_Position = clip;
-    v_color = a_color;
-}
-)";
-}
-
-std::string make_screen_line_join_vert() {
-    return std::string("#version 450 core\n") + kScreenLineCommon + R"(
-layout(location=0) in float a_corner;
-layout(location=1) in vec3 a_prev;
-layout(location=2) in float a_width_px;
-layout(location=3) in vec3 a_center;
-layout(location=4) in float a_flags;
-layout(location=5) in vec3 a_next;
-layout(location=6) in vec4 a_color;
-
-layout(location=0) out vec4 v_color;
-
-void main() {
-    vec4 cp = pc.u_view_projection * vec4(a_prev, 1.0);
-    vec4 cc = pc.u_view_projection * vec4(a_center, 1.0);
-    vec4 cn = pc.u_view_projection * vec4(a_next, 1.0);
-
-    vec2 viewport = max(pc.u_viewport.xy, vec2(1.0));
-    vec2 px_prev = ((cp.xy / cp.w) * 0.5 + 0.5) * viewport;
-    vec2 px_center = ((cc.xy / cc.w) * 0.5 + 0.5) * viewport;
-    vec2 px_next = ((cn.xy / cn.w) * 0.5 + 0.5) * viewport;
-
-    vec2 d0 = px_center - px_prev;
-    vec2 d1 = px_next - px_center;
-    float len0 = length(d0);
-    float len1 = length(d1);
-    if (len0 < 1.0e-5 || len1 < 1.0e-5) {
-        gl_Position = cc;
-        v_color = a_color;
-        return;
+    tc_shader* raw = tc_shader_get(registry_handle);
+    if (!raw || !termin::tc_shader_ensure_tgfx2(raw, &device, &vertex_shader, &fragment_shader)) {
+        tc::Log::error("[ScreenSpaceLineRenderer] failed to create %s shader", label);
+        vertex_shader = {};
+        fragment_shader = {};
+        return false;
     }
-    d0 /= len0;
-    d1 /= len1;
-
-    float cross_z = d0.x * d1.y - d0.y * d1.x;
-    float side_sign = cross_z >= 0.0 ? 1.0 : -1.0;
-    if (abs(cross_z) < 1.0e-5) {
-        side_sign = 0.0;
-    }
-
-    vec2 side0 = vec2(-d0.y, d0.x);
-    vec2 side1 = vec2(-d1.y, d1.x);
-    vec2 p = px_center;
-    if (a_corner > 0.5 && a_corner < 1.5) {
-        p = px_center + side0 * side_sign * (a_width_px * 0.5);
-    } else if (a_corner >= 1.5) {
-        p = px_center + side1 * side_sign * (a_width_px * 0.5);
-    }
-
-    vec2 ndc = p / viewport * 2.0 - 1.0;
-    vec4 clip = cc;
-    clip.xy = ndc * clip.w;
-    gl_Position = clip;
-    v_color = a_color;
-}
-)";
-}
-
-std::string make_screen_line_round_join_vert() {
-    return std::string("#version 450 core\n") + kScreenLineCommon + R"(
-layout(location=0) in vec2 a_local;
-layout(location=1) in vec3 a_center;
-layout(location=2) in float a_width_px;
-layout(location=3) in vec3 a_neighbor;
-layout(location=4) in float a_flags;
-layout(location=5) in vec4 a_color;
-
-layout(location=0) out vec4 v_color;
-
-void main() {
-    vec4 cc = pc.u_view_projection * vec4(a_center, 1.0);
-
-    vec2 viewport = max(pc.u_viewport.xy, vec2(1.0));
-    vec2 px_center = ((cc.xy / cc.w) * 0.5 + 0.5) * viewport;
-    vec2 expanded_px = px_center + a_local * (a_width_px * 0.5);
-    vec2 expanded_ndc = expanded_px / viewport * 2.0 - 1.0;
-
-    vec4 clip = cc;
-    clip.xy = expanded_ndc * clip.w;
-    gl_Position = clip;
-    v_color = a_color;
-}
-)";
-}
-
-std::string make_screen_line_frag() {
-    return std::string("#version 450 core\n") + R"(
-layout(location=0) in vec4 v_color;
-layout(location=0) out vec4 frag_color;
-
-void main() {
-    frag_color = v_color;
-}
-)";
+    return true;
 }
 
 bool same_point(LinePoint3 a, LinePoint3 b) {
@@ -385,21 +223,13 @@ void ScreenSpaceLineRenderer::ensure_resources(RenderContext2& ctx) {
             {reinterpret_cast<const uint8_t*>(kSegmentCorners.data()), desc.size});
     }
 
-    if (!vertex_shader_) {
-        ShaderDesc desc;
-        desc.stage = ShaderStage::Vertex;
-        desc.source = make_screen_line_vert();
-        desc.debug_name = "tgfx2_screen_space_line_vs";
-        vertex_shader_ = device.create_shader(desc);
-    }
-
-    if (!fragment_shader_) {
-        ShaderDesc desc;
-        desc.stage = ShaderStage::Fragment;
-        desc.source = make_screen_line_frag();
-        desc.debug_name = "tgfx2_screen_space_line_fs";
-        fragment_shader_ = device.create_shader(desc);
-    }
+    ensure_shader_pair(
+        device,
+        shader_handle_,
+        SCREEN_LINE_SHADER_UUID,
+        "segment",
+        vertex_shader_,
+        fragment_shader_);
 
     if (!join_corner_vbo_) {
         BufferDesc desc;
@@ -411,53 +241,29 @@ void ScreenSpaceLineRenderer::ensure_resources(RenderContext2& ctx) {
             {reinterpret_cast<const uint8_t*>(kBevelJoinCorners.data()), desc.size});
     }
 
-    if (!cap_vertex_shader_) {
-        ShaderDesc desc;
-        desc.stage = ShaderStage::Vertex;
-        desc.source = make_screen_line_cap_vert();
-        desc.debug_name = "tgfx2_screen_space_line_cap_vs";
-        cap_vertex_shader_ = device.create_shader(desc);
-    }
+    ensure_shader_pair(
+        device,
+        cap_shader_handle_,
+        SCREEN_LINE_CAP_SHADER_UUID,
+        "cap",
+        cap_vertex_shader_,
+        cap_fragment_shader_);
 
-    if (!cap_fragment_shader_) {
-        ShaderDesc desc;
-        desc.stage = ShaderStage::Fragment;
-        desc.source = make_screen_line_frag();
-        desc.debug_name = "tgfx2_screen_space_line_cap_fs";
-        cap_fragment_shader_ = device.create_shader(desc);
-    }
+    ensure_shader_pair(
+        device,
+        join_shader_handle_,
+        SCREEN_LINE_JOIN_SHADER_UUID,
+        "join",
+        join_vertex_shader_,
+        join_fragment_shader_);
 
-    if (!join_vertex_shader_) {
-        ShaderDesc desc;
-        desc.stage = ShaderStage::Vertex;
-        desc.source = make_screen_line_join_vert();
-        desc.debug_name = "tgfx2_screen_space_line_join_vs";
-        join_vertex_shader_ = device.create_shader(desc);
-    }
-
-    if (!join_fragment_shader_) {
-        ShaderDesc desc;
-        desc.stage = ShaderStage::Fragment;
-        desc.source = make_screen_line_frag();
-        desc.debug_name = "tgfx2_screen_space_line_join_fs";
-        join_fragment_shader_ = device.create_shader(desc);
-    }
-
-    if (!round_join_vertex_shader_) {
-        ShaderDesc desc;
-        desc.stage = ShaderStage::Vertex;
-        desc.source = make_screen_line_round_join_vert();
-        desc.debug_name = "tgfx2_screen_space_line_round_join_vs";
-        round_join_vertex_shader_ = device.create_shader(desc);
-    }
-
-    if (!round_join_fragment_shader_) {
-        ShaderDesc desc;
-        desc.stage = ShaderStage::Fragment;
-        desc.source = make_screen_line_frag();
-        desc.debug_name = "tgfx2_screen_space_line_round_join_fs";
-        round_join_fragment_shader_ = device.create_shader(desc);
-    }
+    ensure_shader_pair(
+        device,
+        round_join_shader_handle_,
+        SCREEN_LINE_ROUND_JOIN_SHADER_UUID,
+        "round join",
+        round_join_vertex_shader_,
+        round_join_fragment_shader_);
 }
 
 void ScreenSpaceLineRenderer::ensure_cap_template(RenderContext2& ctx,
@@ -639,6 +445,9 @@ void ScreenSpaceLineRenderer::draw_polyline(
     }
 
     ensure_resources(ctx);
+    if (!vertex_shader_ || !fragment_shader_) {
+        return;
+    }
 
     const UploadedInstanceStream segment_stream = upload_instance_stream(
         ctx,
@@ -687,6 +496,9 @@ void ScreenSpaceLineRenderer::draw_polyline(
 
     if (!cap_instances.empty()) {
         ensure_cap_template(ctx, style.round_segments);
+        if (!cap_vertex_shader_ || !cap_fragment_shader_) {
+            return;
+        }
         const UploadedInstanceStream cap_stream = upload_instance_stream(
             ctx,
             cap_instances.data(),
@@ -728,6 +540,9 @@ void ScreenSpaceLineRenderer::draw_polyline(
 
     if (!round_join_instances.empty()) {
         ensure_round_join_template(ctx, style.round_segments);
+        if (!round_join_vertex_shader_ || !round_join_fragment_shader_) {
+            return;
+        }
         const UploadedInstanceStream round_join_stream = upload_instance_stream(
             ctx,
             round_join_instances.data(),
@@ -768,6 +583,9 @@ void ScreenSpaceLineRenderer::draw_polyline(
     }
 
     if (!join_instances.empty()) {
+        if (!join_vertex_shader_ || !join_fragment_shader_) {
+            return;
+        }
         const UploadedInstanceStream join_stream = upload_instance_stream(
             ctx,
             join_instances.data(),
@@ -831,38 +649,14 @@ void ScreenSpaceLineRenderer::release(RenderContext2& ctx) {
         round_join_corner_count_ = 0;
         round_join_segments_ = 0;
     }
-    if (vertex_shader_) {
-        device.destroy(vertex_shader_);
-        vertex_shader_ = {};
-    }
-    if (fragment_shader_) {
-        device.destroy(fragment_shader_);
-        fragment_shader_ = {};
-    }
-    if (cap_vertex_shader_) {
-        device.destroy(cap_vertex_shader_);
-        cap_vertex_shader_ = {};
-    }
-    if (cap_fragment_shader_) {
-        device.destroy(cap_fragment_shader_);
-        cap_fragment_shader_ = {};
-    }
-    if (join_vertex_shader_) {
-        device.destroy(join_vertex_shader_);
-        join_vertex_shader_ = {};
-    }
-    if (join_fragment_shader_) {
-        device.destroy(join_fragment_shader_);
-        join_fragment_shader_ = {};
-    }
-    if (round_join_vertex_shader_) {
-        device.destroy(round_join_vertex_shader_);
-        round_join_vertex_shader_ = {};
-    }
-    if (round_join_fragment_shader_) {
-        device.destroy(round_join_fragment_shader_);
-        round_join_fragment_shader_ = {};
-    }
+    vertex_shader_ = {};
+    fragment_shader_ = {};
+    cap_vertex_shader_ = {};
+    cap_fragment_shader_ = {};
+    join_vertex_shader_ = {};
+    join_fragment_shader_ = {};
+    round_join_vertex_shader_ = {};
+    round_join_fragment_shader_ = {};
 }
 
 } // namespace tgfx
