@@ -1037,10 +1037,15 @@ VkDescriptorSetLayout VulkanRenderDevice::get_or_create_descriptor_set_layout(
 VkPipelineLayout VulkanRenderDevice::get_or_create_pipeline_layout(
     VkDescriptorSetLayout set_layout)
 {
-    if (!set_layout) return VK_NULL_HANDLE;
-
-    auto it = pipeline_layout_cache_.find(set_layout);
-    if (it != pipeline_layout_cache_.end()) return it->second;
+    // A pipeline with no descriptor resources still needs a valid
+    // VkPipelineLayout (e.g. for push constants). Vulkan allows
+    // setLayoutCount=0; use a sentinel to cache the "null set" layout.
+    VkDescriptorSetLayout cache_key = set_layout ? set_layout
+        : reinterpret_cast<VkDescriptorSetLayout>(static_cast<uintptr_t>(1));
+    {
+        auto it = pipeline_layout_cache_.find(cache_key);
+        if (it != pipeline_layout_cache_.end()) return it->second;
+    }
 
     VkPushConstantRange pc_range{};
     pc_range.stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
@@ -1049,8 +1054,10 @@ VkPipelineLayout VulkanRenderDevice::get_or_create_pipeline_layout(
 
     VkPipelineLayoutCreateInfo pl_ci{};
     pl_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pl_ci.setLayoutCount = 1;
-    pl_ci.pSetLayouts = &set_layout;
+    if (set_layout) {
+        pl_ci.setLayoutCount = 1;
+        pl_ci.pSetLayouts = &set_layout;
+    }
     pl_ci.pushConstantRangeCount = 1;
     pl_ci.pPushConstantRanges = &pc_range;
 
@@ -1058,7 +1065,7 @@ VkPipelineLayout VulkanRenderDevice::get_or_create_pipeline_layout(
     if (vkCreatePipelineLayout(device_, &pl_ci, nullptr, &layout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create pipeline layout");
     }
-    pipeline_layout_cache_.emplace(set_layout, layout);
+    pipeline_layout_cache_.emplace(cache_key, layout);
     return layout;
 }
 
