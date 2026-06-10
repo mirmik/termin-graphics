@@ -29,6 +29,7 @@ struct CompileOptions {
     std::string debug_name = "shader";
     std::string slangc;
     std::string matrix_layout = "column";
+    std::string layout_scheme = "shared";  // "shared" or "per-pipeline"
 };
 
 struct ShaderResourceBinding {
@@ -51,7 +52,8 @@ static void usage() {
         << "--target opengl|vulkan|d3d11 --stage vertex|fragment|geometry "
         << "--input <source> --output <artifact> [--entry main] "
         << "[--debug-name name] [--slangc <path>] "
-        << "[--matrix-layout column|row]\n";
+        << "[--matrix-layout column|row] "
+        << "[--layout-scheme shared|per-pipeline]\n";
 }
 
 static shaderc_shader_kind shader_kind_for_stage(const std::string& stage) {
@@ -1000,10 +1002,19 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         collect_resource_bindings(options, source, reflection_path);
     bool wrote_layout = false;
     if (options.target == "vulkan") {
-        wrote_layout =
-            apply_slang_vulkan_shared_layout_policy(resources) &&
-            patch_slang_vulkan_spirv_bindings(options, resources) &&
-            write_resource_layout_sidecar(options, resources);
+        if (options.layout_scheme == "per-pipeline") {
+            // Per-pipeline mode: leave SPIR-V bindings as-is from Slang
+            // reflection. The Vulkan backend builds VkDescriptorSetLayout
+            // from the SPIR-V decorations at pipeline creation time.
+            wrote_layout = write_resource_layout_sidecar(options, resources);
+        } else {
+            // Shared-layout mode: remap all Slang resources into the
+            // fixed engine descriptor table (legacy / GLSL compat).
+            wrote_layout =
+                apply_slang_vulkan_shared_layout_policy(resources) &&
+                patch_slang_vulkan_spirv_bindings(options, resources) &&
+                write_resource_layout_sidecar(options, resources);
+        }
     } else {
         wrote_layout = write_resource_layout_sidecar(options, resources);
     }
@@ -1051,6 +1062,8 @@ int main(int argc, char** argv) {
             if (!take_value(options.slangc)) return 2;
         } else if (arg == "--matrix-layout") {
             if (!take_value(options.matrix_layout)) return 2;
+        } else if (arg == "--layout-scheme") {
+            if (!take_value(options.layout_scheme)) return 2;
         } else {
             std::cerr << "termin_shaderc: unknown argument: " << arg << "\n";
             usage();

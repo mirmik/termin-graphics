@@ -226,7 +226,8 @@ static bool run_shaderc(
         " compile --language slang --target vulkan --stage " + stage +
         " --entry main --input " + quote_arg(input) +
         " --output " + quote_arg(output) +
-        " --slangc " + quote_arg(slangc);
+        " --slangc " + quote_arg(slangc) +
+        " --layout-scheme per-pipeline";
     int rc = std::system(cmd.c_str());
     if (rc != 0) {
         fprintf(stderr, "termin_shaderc failed for %s with status %d\n", input.string().c_str(), rc);
