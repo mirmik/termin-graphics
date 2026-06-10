@@ -925,20 +925,10 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
     std::vector<std::string> extra_args;
     if (options.target == "vulkan") {
         slang_target = "spirv";
-        extra_args = {
-            "-profile", "spirv_1_5",
-            "-fvk-b-shift", "1", "all",
-            "-fvk-t-shift", "0", "all",
-            "-fvk-s-shift", "0", "all",
-        };
+        extra_args = {"-profile", "spirv_1_5"};
     } else if (options.target == "opengl") {
         slang_target = "glsl";
-        extra_args = {
-            "-profile", "glsl_450",
-            "-fvk-b-shift", "1", "all",
-            "-fvk-t-shift", "0", "all",
-            "-fvk-s-shift", "0", "all",
-        };
+        extra_args = {"-profile", "glsl_450"};
     } else if (options.target == "d3d11") {
         std::cerr
             << "termin_shaderc: slang -> d3d11 requires the Windows FXC/DXBC path; "

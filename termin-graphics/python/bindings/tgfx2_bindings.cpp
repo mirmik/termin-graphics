@@ -526,8 +526,7 @@ void bind_tgfx2(nb::module_& m) {
         // `layout(push_constant) uniform ...` declaration (std140 rules
         // with push-constant tightening). OpenGL receives the same payload
         // through tgfx2's push-constant emulation UBO. 128 bytes max
-        // (pipeline layout reserves exactly that — see
-        // VulkanRenderDevice::create_shared_layouts).
+        // (Vulkan 1.0 min guaranteed by maxPushConstantsSize).
         .def("set_push_constants",
              [](tgfx::RenderContext2& self,
                 nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {

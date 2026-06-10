@@ -303,7 +303,9 @@ tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
     }
 
     const std::string language = string_field(*entry, "language");
-    if (language != "glsl") {
+    const bool is_glsl = (language == "glsl");
+    const bool is_slang = (language == "slang");
+    if (!is_glsl && !is_slang) {
         tc::Log::error(
             "[BuiltInShaderCatalog] Shader '%s' has unsupported live stage language '%s'",
             uuid ? uuid : "<null>",
@@ -340,12 +342,22 @@ tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
         }
     }
 
-    return tc_shader_register_static_uuid(
+    tc_shader_handle handle = tc_shader_register_static_uuid(
         vertex_source.empty() ? nullptr : vertex_source.c_str(),
         fragment_source.empty() ? nullptr : fragment_source.c_str(),
         nullptr,
         name.c_str(),
         uuid);
+
+    if (!tc_shader_handle_is_invalid(handle) && is_slang) {
+        tc_shader* shader = tc_shader_get(handle);
+        if (shader) {
+            tc_shader_set_language(shader, TC_SHADER_LANGUAGE_SLANG);
+            tc_shader_set_artifact_policy(shader, TC_SHADER_ARTIFACT_REQUIRED);
+        }
+    }
+
+    return handle;
 }
 
 BuiltinShaderProgramSource load_builtin_shader_program_from_catalog(const char* uuid) {
