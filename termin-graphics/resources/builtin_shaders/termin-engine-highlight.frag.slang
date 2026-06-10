@@ -30,7 +30,7 @@ float is_selected(float3 id_color) {
 }
 
 [shader("fragment")]
-FragmentOutput main(FragmentInput input) {
+FragmentOutput fs_main(FragmentInput input) {
     float4 base = u_color.Sample(input.uv);
 
     if (u_params.enabled < 0.5) {

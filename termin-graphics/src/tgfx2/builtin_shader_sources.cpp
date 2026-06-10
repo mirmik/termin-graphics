@@ -357,6 +357,26 @@ tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
         }
     }
 
+    // Set per-stage entry points from catalog.
+    {
+        tc_shader* shader = tc_shader_get(handle);
+        if (shader) {
+            auto set_entry = [&](const char* stage_name, char** target) {
+                const nos::trent* stages = dict_get(*entry, "stages");
+                if (!stages || !stages->is_dict()) return;
+                const nos::trent* stage_obj = dict_get(*stages, stage_name);
+                if (!stage_obj || !stage_obj->is_dict()) return;
+                std::string ename = string_field(*stage_obj, "entry");
+                if (!ename.empty()) {
+                    free(*target);
+                    *target = strdup(ename.c_str());
+                }
+            };
+            set_entry("vertex", &shader->vertex_entry);
+            set_entry("fragment", &shader->fragment_entry);
+        }
+    }
+
     return handle;
 }
 

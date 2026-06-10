@@ -30,7 +30,8 @@
               "semantic": "TEXCOORD0",
               "location": 0
             }
-          ]
+          ],
+          "entry": "vs_main"
         }
       },
       "resources": []
@@ -135,42 +136,43 @@
     {
       "uuid": "termin-engine-debug-triangle",
       "name": "DebugTrianglePassVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-debug-triangle.vert.glsl",
+          "path": "termin-engine-debug-triangle.slang",
+          "entry": "vs_main",
           "inputs": [
             {
-              "name": "a_position",
+              "name": "position",
               "semantic": "POSITION",
               "location": 0
             },
             {
-              "name": "a_color",
+              "name": "color",
               "semantic": "COLOR0",
-              "location": 1
+              "location": 5
             }
           ],
           "outputs": [
             {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 0
+              "name": "position",
+              "semantic": "SV_Position"
             }
           ]
         },
         "fragment": {
-          "path": "termin-engine-debug-triangle.frag.glsl",
+          "path": "termin-engine-debug-triangle.slang",
+          "entry": "fs_main",
           "inputs": [
             {
-              "name": "v_color",
+              "name": "color",
               "semantic": "COLOR0",
               "location": 0
             }
           ],
           "outputs": [
             {
-              "name": "fragColor",
+              "name": "color",
               "semantic": "SV_Target0",
               "location": 0
             }
@@ -182,42 +184,43 @@
     {
       "uuid": "termin-engine-present-blit",
       "name": "PresentBlitVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-present-blit.vert.glsl",
+          "path": "termin-engine-present-blit.slang",
+          "entry": "vs_main",
           "inputs": [
             {
-              "name": "a_pos",
+              "name": "position",
               "semantic": "POSITION",
               "location": 0
             },
             {
-              "name": "a_uv",
+              "name": "uv",
               "semantic": "TEXCOORD0",
               "location": 1
             }
           ],
           "outputs": [
             {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
+              "name": "position",
+              "semantic": "SV_Position"
             }
           ]
         },
         "fragment": {
-          "path": "termin-engine-present-blit.frag.glsl",
+          "path": "termin-engine-present-blit.slang",
+          "entry": "fs_main",
           "inputs": [
             {
-              "name": "v_uv",
+              "name": "uv",
               "semantic": "TEXCOORD0",
               "location": 0
             }
           ],
           "outputs": [
             {
-              "name": "FragColor",
+              "name": "color",
               "semantic": "SV_Target0",
               "location": 0
             }
@@ -228,50 +231,55 @@
         {
           "name": "u_tex",
           "logical_name": "input_texture",
-          "kind": "combined_sampler2d",
-          "legacy_binding": 4
+          "kind": "combined_sampler2d"
         }
       ]
     },
     {
       "uuid": "termin-engine-immediate",
       "name": "ImmediateEngineVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-immediate.vert.glsl",
+          "path": "termin-engine-immediate.slang",
+          "entry": "vs_main",
           "inputs": [
             {
-              "name": "a_position",
+              "name": "position",
               "semantic": "POSITION",
               "location": 0
             },
             {
-              "name": "a_color",
+              "name": "color",
               "semantic": "COLOR0",
               "location": 1
             }
           ],
           "outputs": [
             {
-              "name": "v_color",
+              "name": "position",
+              "semantic": "SV_Position"
+            },
+            {
+              "name": "color",
               "semantic": "COLOR0",
               "location": 0
             }
           ]
         },
         "fragment": {
-          "path": "termin-engine-immediate.frag.glsl",
+          "path": "termin-engine-immediate.slang",
+          "entry": "fs_main",
           "inputs": [
             {
-              "name": "v_color",
+              "name": "color",
               "semantic": "COLOR0",
               "location": 0
             }
           ],
           "outputs": [
             {
-              "name": "fragColor",
+              "name": "color",
               "semantic": "SV_Target0",
               "location": 0
             }
@@ -282,8 +290,7 @@
         {
           "name": "ImmediatePushBlock",
           "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "kind": "constant_buffer"
         }
       ]
     },
@@ -2140,35 +2147,42 @@
     {
       "uuid": "termin-engine-id",
       "name": "IdEngineVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-id.vert.glsl",
+          "path": "termin-engine-id.slang",
+          "entry": "vs_main",
           "inputs": [
             {
-              "name": "a_position",
+              "name": "position",
               "semantic": "POSITION",
               "location": 0
             },
             {
-              "name": "a_normal",
+              "name": "normal",
               "semantic": "NORMAL",
               "location": 1
             },
             {
-              "name": "a_texcoord",
+              "name": "uv",
               "semantic": "TEXCOORD0",
               "location": 2
             }
           ],
-          "outputs": []
+          "outputs": [
+            {
+              "name": "position",
+              "semantic": "SV_Position"
+            }
+          ]
         },
         "fragment": {
-          "path": "termin-engine-id.frag.glsl",
+          "path": "termin-engine-id.slang",
+          "entry": "fs_main",
           "inputs": [],
           "outputs": [
             {
-              "name": "fragColor",
+              "name": "color",
               "semantic": "SV_Target0",
               "location": 0
             }
@@ -2179,14 +2193,12 @@
         {
           "name": "PerFrame",
           "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "legacy_binding": 0
+          "kind": "constant_buffer"
         },
         {
           "name": "IdPushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "logical_name": "push",
+          "kind": "constant_buffer"
         }
       ]
     },
@@ -2385,58 +2397,58 @@
     {
       "uuid": "termin-engine-depth-to-color",
       "name": "DepthToColorFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "fragment": {
-          "path": "termin-engine-depth-to-color.frag.glsl",
+          "path": "termin-engine-depth-to-color.frag.slang",
           "inputs": [
             {
-              "name": "v_uv",
+              "name": "uv",
               "semantic": "TEXCOORD0",
               "location": 0
             }
           ],
           "outputs": [
             {
-              "name": "FragColor",
+              "name": "color",
               "semantic": "SV_Target0",
               "location": 0
             }
-          ]
+          ],
+          "entry": "fs_main"
         }
       },
       "resources": [
         {
           "name": "u_depth_tex",
           "logical_name": "depth_texture",
-          "kind": "combined_sampler2d",
-          "legacy_binding": 9
+          "kind": "combined_sampler2d"
         }
       ]
     },
     {
       "uuid": "termin-engine-color-to-depth",
       "name": "ColorToDepthFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "fragment": {
-          "path": "termin-engine-color-to-depth.frag.glsl",
+          "path": "termin-engine-color-to-depth.frag.slang",
           "inputs": [
             {
-              "name": "v_uv",
+              "name": "uv",
               "semantic": "TEXCOORD0",
               "location": 0
             }
           ],
-          "outputs": []
+          "outputs": [],
+          "entry": "fs_main"
         }
       },
       "resources": [
         {
           "name": "u_color_tex",
           "logical_name": "color_texture",
-          "kind": "combined_sampler2d",
-          "legacy_binding": 9
+          "kind": "combined_sampler2d"
         }
       ]
     },
@@ -2476,7 +2488,8 @@
               "semantic": "SV_Target0",
               "location": 0
             }
-          ]
+          ],
+          "entry": "fs_main"
         }
       },
       "resources": [
@@ -2512,7 +2525,8 @@
               "semantic": "SV_Target0",
               "location": 0
             }
-          ]
+          ],
+          "entry": "fs_main"
         }
       },
       "resources": [
@@ -2632,37 +2646,32 @@
     {
       "uuid": "termin-engine-solid-primitive",
       "name": "SolidPrimitiveEngineVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-solid-primitive.vert.glsl",
+          "path": "termin-engine-solid-primitive.slang",
+          "entry": "vs_main",
           "inputs": [
             {
-              "name": "a_position",
+              "name": "position",
               "semantic": "POSITION",
               "location": 0
             }
           ],
           "outputs": [
             {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 0
+              "name": "position",
+              "semantic": "SV_Position"
             }
           ]
         },
         "fragment": {
-          "path": "termin-engine-solid-primitive.frag.glsl",
-          "inputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 0
-            }
-          ],
+          "path": "termin-engine-solid-primitive.slang",
+          "entry": "fs_main",
+          "inputs": [],
           "outputs": [
             {
-              "name": "fragColor",
+              "name": "color",
               "semantic": "SV_Target0",
               "location": 0
             }
@@ -2673,8 +2682,7 @@
         {
           "name": "SolidPushBlock",
           "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "kind": "constant_buffer"
         }
       ]
     },
@@ -2698,7 +2706,8 @@
               "semantic": "SV_Target0",
               "location": 0
             }
-          ]
+          ],
+          "entry": "fs_main"
         }
       },
       "resources": [
@@ -2734,7 +2743,8 @@
               "semantic": "SV_Target0",
               "location": 0
             }
-          ]
+          ],
+          "entry": "fs_main"
         }
       },
       "resources": [
@@ -2770,7 +2780,8 @@
               "semantic": "SV_Target0",
               "location": 0
             }
-          ]
+          ],
+          "entry": "fs_main"
         }
       },
       "resources": [
@@ -2806,7 +2817,8 @@
               "semantic": "SV_Target0",
               "location": 0
             }
-          ]
+          ],
+          "entry": "fs_main"
         }
       },
       "resources": [
@@ -2847,7 +2859,8 @@
               "semantic": "SV_Target0",
               "location": 0
             }
-          ]
+          ],
+          "entry": "fs_main"
         }
       },
       "resources": [

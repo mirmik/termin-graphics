@@ -57,6 +57,18 @@ static void shader_free_data(tc_shader* shader) {
         free(shader->geometry_source);
         shader->geometry_source = NULL;
     }
+    if (shader->vertex_entry) {
+        free(shader->vertex_entry);
+        shader->vertex_entry = NULL;
+    }
+    if (shader->fragment_entry) {
+        free(shader->fragment_entry);
+        shader->fragment_entry = NULL;
+    }
+    if (shader->geometry_entry) {
+        free(shader->geometry_entry);
+        shader->geometry_entry = NULL;
+    }
     if (shader->material_ubo_entries) {
         free(shader->material_ubo_entries);
         shader->material_ubo_entries = NULL;

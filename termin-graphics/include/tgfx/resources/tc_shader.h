@@ -132,6 +132,9 @@ typedef struct tc_shader {
     char* vertex_source;         // vertex shader source (owned)
     char* fragment_source;       // fragment shader source (owned)
     char* geometry_source;       // geometry shader source (owned, may be NULL)
+    char* vertex_entry;          // vertex shader entry point (owned, defaults to "main")
+    char* fragment_entry;        // fragment shader entry point (owned, defaults to "main")
+    char* geometry_entry;        // geometry shader entry point (owned, defaults to "main")
     char source_hash[TC_SHADER_HASH_LEN];  // source + metadata identity hash
     uint32_t version;            // incremented on source change
     uint32_t ref_count;          // reference count for ownership

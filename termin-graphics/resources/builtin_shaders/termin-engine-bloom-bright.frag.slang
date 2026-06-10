@@ -19,7 +19,7 @@ struct FragmentOutput {
 };
 
 [shader("fragment")]
-FragmentOutput main(FragmentInput input) {
+FragmentOutput fs_main(FragmentInput input) {
     float3 color = u_texture.Sample(input.uv).rgb;
     float brightness = dot(color, float3(0.2126, 0.7152, 0.0722));
     float knee = u_params.threshold * u_params.soft_threshold;

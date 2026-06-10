@@ -17,7 +17,7 @@ struct FragmentOutput {
 };
 
 [shader("fragment")]
-FragmentOutput main(FragmentInput input) {
+FragmentOutput fs_main(FragmentInput input) {
     float2 ts = u_params.texel_size;
     float3 a = u_texture.Sample(input.uv + float2(-2.0, -2.0) * ts).rgb;
     float3 b = u_texture.Sample(input.uv + float2( 0.0, -2.0) * ts).rgb;

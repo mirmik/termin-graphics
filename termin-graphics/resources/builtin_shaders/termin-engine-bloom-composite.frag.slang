@@ -18,7 +18,7 @@ struct FragmentOutput {
 };
 
 [shader("fragment")]
-FragmentOutput main(FragmentInput input) {
+FragmentOutput fs_main(FragmentInput input) {
     float3 original = u_original.Sample(input.uv).rgb;
     float3 bloom = u_bloom.Sample(input.uv).rgb;
     float3 result = original + bloom * u_params.intensity;

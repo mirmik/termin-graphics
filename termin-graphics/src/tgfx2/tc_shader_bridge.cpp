@@ -708,12 +708,18 @@ static bool compile_shader_artifact(
         return false;
     }
 
+    const char* entry = "main";
+    if (stage == tgfx::ShaderStage::Vertex && shader->vertex_entry && shader->vertex_entry[0])
+        entry = shader->vertex_entry;
+    else if (stage == tgfx::ShaderStage::Fragment && shader->fragment_entry && shader->fragment_entry[0])
+        entry = shader->fragment_entry;
+
     std::string cmd =
         quote_arg(*compiler) +
         " compile --language " + shader_language_name(language) +
         " --target " + backend_name(backend) +
         " --stage " + stage_name(stage) +
-        " --entry main --input " + quote_arg(source_path) +
+        " --entry " + std::string(entry) + " --input " + quote_arg(source_path) +
         " --output " + quote_arg(artifact_path) +
         " --debug-name " + quote_arg(std::filesystem::path(
             std::string(shader->name ? shader->name : shader->uuid) + ":" + stage_name(stage)));

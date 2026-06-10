@@ -31,7 +31,7 @@ float3 reinhard_tonemap(float3 x) {
 }
 
 [shader("fragment")]
-FragmentOutput main(FragmentInput input) {
+FragmentOutput fs_main(FragmentInput input) {
     float3 color = u_input.Sample(input.uv).rgb;
     color *= u_params.exposure;
     if (u_params.method == 0) {
