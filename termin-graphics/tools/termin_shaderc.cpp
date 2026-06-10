@@ -29,7 +29,7 @@ struct CompileOptions {
     std::string debug_name = "shader";
     std::string slangc;
     std::string matrix_layout = "column";
-    std::string layout_scheme = "shared";  // "shared" or "per-pipeline"
+    std::string layout_scheme = "per-pipeline";  // shader-driven, Godot 4 model
 };
 
 struct ShaderResourceBinding {
