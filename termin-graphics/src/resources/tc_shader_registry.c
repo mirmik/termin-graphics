@@ -64,6 +64,12 @@ static void shader_free_data(tc_shader* shader) {
     shader->material_ubo_entry_count = 0;
     shader->material_ubo_block_size = 0;
     if (shader->resource_bindings) {
+        for (uint32_t i = 0; i < shader->resource_binding_count; ++i) {
+            if (shader->resource_bindings[i].fields) {
+                free(shader->resource_bindings[i].fields);
+                shader->resource_bindings[i].fields = NULL;
+            }
+        }
         free(shader->resource_bindings);
         shader->resource_bindings = NULL;
     }

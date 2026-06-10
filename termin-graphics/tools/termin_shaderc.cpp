@@ -44,6 +44,13 @@ struct ShaderResourceBinding {
     bool slang_separate_sampler = false;
     bool slang_storage_texture = false;
     uint32_t original_binding = 0;
+    // Field-level layout for constant_buffers (populated from Slang reflection).
+    struct Field {
+        std::string name;
+        uint32_t offset = 0;
+        uint32_t size = 0;
+    };
+    std::vector<Field> fields;
 };
 
 static void usage() {
@@ -260,6 +267,28 @@ static bool slang_resource_kind_from_parameter(
         }
         out_binding.kind = "constant_buffer";
         out_binding.size = slang_parameter_buffer_size(parameter);
+        // Extract struct field offsets from Slang reflection.
+        // Fields are in: type.elementVarLayout.type.fields[]
+        const nos::trent* el = trent_dict_get(*type, "elementVarLayout");
+        if (el && el->is_dict()) {
+            const nos::trent* el_type = trent_dict_get(*el, "type");
+            if (el_type && el_type->is_dict()) {
+                const nos::trent* fields = trent_dict_get(*el_type, "fields");
+                if (fields && fields->is_list()) {
+                    for (const nos::trent& field : fields->as_list()) {
+                        if (!field.is_dict()) continue;
+                        ShaderResourceBinding::Field f;
+                        if (!trent_string_field(field, "name", f.name)) continue;
+                        const nos::trent* fb = trent_dict_get(field, "binding");
+                        if (fb && fb->is_dict()) {
+                            trent_uint_field(*fb, "offset", f.offset);
+                            trent_uint_field(*fb, "size", f.size);
+                        }
+                        out_binding.fields.push_back(std::move(f));
+                    }
+                }
+            }
+        }
         return true;
     }
 
@@ -500,8 +529,19 @@ static bool write_resource_layout_sidecar(
             << "\"set\": " << binding.set << ", "
             << "\"binding\": " << binding.binding << ", "
             << "\"stage_mask\": " << binding.stage_mask << ", "
-            << "\"size\": " << binding.size
-            << "}";
+            << "\"size\": " << binding.size;
+        if (!binding.fields.empty()) {
+            out << ", \"fields\": [";
+            for (size_t fi = 0; fi < binding.fields.size(); ++fi) {
+                const auto& f = binding.fields[fi];
+                out << "{\"name\":\"" << json_escape(f.name) << "\","
+                    << "\"offset\":" << f.offset << ","
+                    << "\"size\":" << f.size << "}";
+                if (fi + 1 < binding.fields.size()) out << ", ";
+            }
+            out << "]";
+        }
+        out << "}";
         if (i + 1 < resources.size()) {
             out << ",";
         }

@@ -98,6 +98,14 @@ typedef enum tc_shader_stage_mask {
 #define TC_SHADER_RESOURCE_SET_DEFAULT 0u
 #define TC_SHADER_RESOURCE_BINDING_MATERIAL 1u
 
+// One field inside a constant-buffer resource layout. Offsets and sizes
+// are in bytes. Populated from Slang reflection / shader layout sidecar.
+typedef struct tc_shader_resource_field {
+    char name[TC_SHADER_RESOURCE_NAME_MAX];
+    uint32_t offset;
+    uint32_t size;
+} tc_shader_resource_field;
+
 typedef struct tc_shader_resource_binding {
     char name[TC_SHADER_RESOURCE_NAME_MAX];
     uint32_t kind;        // tc_shader_resource_kind
@@ -105,6 +113,8 @@ typedef struct tc_shader_resource_binding {
     uint32_t binding;
     uint32_t stage_mask;  // tc_shader_stage_mask
     uint32_t size;        // bytes for buffers, 0 when unknown/not applicable
+    tc_shader_resource_field* fields;
+    uint32_t field_count;
 } tc_shader_resource_binding;
 
 // One field inside a shader's generated std140 material UBO block.

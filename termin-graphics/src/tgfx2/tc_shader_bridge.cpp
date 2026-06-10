@@ -484,6 +484,29 @@ static bool parse_shader_resource_layout_sidecar(
         resource.binding = binding;
         resource.stage_mask = stage_mask;
         resource.size = size;
+
+        // Parse per-field layout for constant buffers.
+        const nos::trent* fields_list = trent_dict_get(object, "fields");
+        if (fields_list && fields_list->is_list()) {
+            const auto& fl = fields_list->as_list();
+            resource.field_count = static_cast<uint32_t>(fl.size());
+            resource.fields = static_cast<tc_shader_resource_field*>(
+                std::malloc(resource.field_count * sizeof(tc_shader_resource_field)));
+            if (resource.fields) {
+                size_t fi = 0;
+                for (const nos::trent& field_obj : fl) {
+                    if (!field_obj.is_dict()) continue;
+                    tc_shader_resource_field& f = resource.fields[fi];
+                    std::string fname;
+                    trent_string_field(field_obj, "name", fname);
+                    std::snprintf(f.name, sizeof(f.name), "%s", fname.c_str());
+                    trent_uint_field(field_obj, "offset", f.offset);
+                    trent_uint_field(field_obj, "size", f.size);
+                    ++fi;
+                }
+            }
+        }
+
         out_bindings.push_back(resource);
     }
     return true;
@@ -497,6 +520,10 @@ static void merge_shader_resource_binding(
         if (std::strcmp(existing.name, incoming.name) == 0) {
             const uint32_t previous_size = existing.size;
             const uint32_t previous_stage_mask = existing.stage_mask;
+            // Free old fields if they exist before overwriting.
+            if (existing.fields) {
+                std::free(existing.fields);
+            }
             existing = incoming;
             existing.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
             existing.stage_mask |= previous_stage_mask;

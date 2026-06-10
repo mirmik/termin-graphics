@@ -85,6 +85,9 @@ void bind_shader(nb::module_& m) {
         .def_prop_ro("language", &TcShader::language)
         .def_prop_ro("artifact_policy", &TcShader::artifact_policy)
         .def_prop_ro("requires_artifacts", &TcShader::requires_artifacts)
+        .def_prop_ro("_raw_ptr", [](const TcShader& s) -> const ::tc_shader* {
+            return s.shader_ptr();
+        })
         .def_prop_ro("resource_binding_count", &TcShader::resource_binding_count)
         .def("find_resource_binding",
             [](const TcShader& self, const std::string& name) -> nb::object {
@@ -98,6 +101,17 @@ void bind_shader(nb::module_& m) {
                 result["binding"] = binding->binding;
                 result["stage_mask"] = binding->stage_mask;
                 result["size"] = binding->size;
+                if (binding->fields && binding->field_count > 0) {
+                    nb::list fields;
+                    for (uint32_t i = 0; i < binding->field_count; ++i) {
+                        nb::dict fd;
+                        fd["name"] = std::string(binding->fields[i].name);
+                        fd["offset"] = binding->fields[i].offset;
+                        fd["size"] = binding->fields[i].size;
+                        fields.append(fd);
+                    }
+                    result["fields"] = fields;
+                }
                 return result;
             },
             nb::arg("name"),

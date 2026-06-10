@@ -201,6 +201,11 @@ public:
                       uint64_t offset = 0, uint64_t range = 0);
     void bind_texture(std::string_view name, TextureHandle texture,
                       SamplerHandle sampler = {});
+    // Symbolic uniform with inline data — resolves the name and writes
+    // to the ring UBO at the resolved binding. Convenience for Python
+    // passes that only need small per-draw uniform data without managing
+    // a BufferHandle.
+    void bind_uniform_data(std::string_view name, const void* data, uint32_t size);
 
     // Set the shader resource layout used for symbolic binding
     // resolution. Call once after bind_shader() when symbolic

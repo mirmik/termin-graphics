@@ -472,6 +472,24 @@ void RenderContext2::bind_texture(std::string_view name, TextureHandle texture,
     bindings_dirty_ = true;
 }
 
+void RenderContext2::bind_uniform_data(std::string_view name, const void* data, uint32_t size) {
+    if (!data || size == 0) return;
+    if (!active_shader_layout_) {
+        tc_log(TC_LOG_WARN, "RenderContext2: bind_uniform_data('%.*s') called without active shader layout",
+               static_cast<int>(name.size()), name.data());
+        return;
+    }
+    const tc_shader_resource_binding* rb =
+        tc_shader_find_resource_binding(active_shader_layout_, std::string(name).c_str());
+    if (!rb) {
+        tc_log(TC_LOG_WARN, "RenderContext2: bind_uniform_data('%.*s') not found in shader '%s'",
+               static_cast<int>(name.size()), name.data(),
+               active_shader_layout_->name ? active_shader_layout_->name : active_shader_layout_->uuid);
+        return;
+    }
+    bind_uniform_buffer_ring(rb->binding, data, size, rb->set);
+}
+
 void RenderContext2::set_push_constants(const void* data, uint32_t size) {
     if (!cmd_) return;
     // Stash the bytes and mark dirty — the actual vkCmdPushConstants

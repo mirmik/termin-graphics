@@ -1,7 +1,7 @@
 // Highlight pass — outlines selected entities based on ID buffer.
 //
-// Push constants carry the selection state (small per-frame data).
-// Textures are read-only sampled images from the color and ID passes.
+// Per-frame uniform data carries the selection state.
+// Textures are sampled from the color and ID passes.
 
 Sampler2D u_color;
 Sampler2D u_id;
@@ -14,7 +14,6 @@ struct HighlightPushData {
     float2 texel_size;
 };
 
-// Per-frame data passed as a uniform buffer (push constants on Vulkan GLSL path).
 ConstantBuffer<HighlightPushData> u_params;
 
 struct FragmentInput {

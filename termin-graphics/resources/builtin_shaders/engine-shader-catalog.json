@@ -2495,20 +2495,20 @@
     {
       "uuid": "termin-engine-highlight",
       "name": "HighlightEngineFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "fragment": {
-          "path": "termin-engine-highlight.frag.glsl",
+          "path": "termin-engine-highlight.frag.slang",
           "inputs": [
             {
-              "name": "v_uv",
+              "name": "uv",
               "semantic": "TEXCOORD0",
               "location": 0
             }
           ],
           "outputs": [
             {
-              "name": "FragColor",
+              "name": "color",
               "semantic": "SV_Target0",
               "location": 0
             }
@@ -2517,22 +2517,19 @@
       },
       "resources": [
         {
-          "name": "HighlightPushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "u_params",
+          "logical_name": "params",
+          "kind": "constant_buffer"
         },
         {
           "name": "u_color",
           "logical_name": "color_texture",
-          "kind": "combined_sampler2d",
-          "legacy_binding": 4
+          "kind": "combined_sampler2d"
         },
         {
           "name": "u_id",
           "logical_name": "id_texture",
-          "kind": "combined_sampler2d",
-          "legacy_binding": 5
+          "kind": "combined_sampler2d"
         }
       ]
     },
