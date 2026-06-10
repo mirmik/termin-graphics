@@ -80,4 +80,17 @@ TGFX2_API bool tgfx2_load_shader_artifact(
     tgfx::ShaderStage stage,
     std::vector<uint8_t>& out);
 
+// Look up a resource binding from the shader's layout metadata.
+// Returns the binding number for the named resource, or `fallback`
+// when the shader has no resource metadata (legacy GLSL) or the
+// resource is not found.
+//
+// Pass code should use this instead of hardcoded binding constants
+// so that the shader source is the single source of truth for
+// binding numbers.
+TGFX2_API uint32_t engine_shader_binding(
+    const ::tc_shader* shader,
+    const char* resource_name,
+    uint32_t fallback);
+
 } // namespace termin

@@ -1010,4 +1010,16 @@ bool tc_shader_ensure_tgfx2(
     return device->ensure_tc_shader(shader, out_vs, out_fs);
 }
 
+uint32_t engine_shader_binding(
+    const tc_shader* shader,
+    const char* resource_name,
+    uint32_t fallback)
+{
+    if (!shader || !resource_name) return fallback;
+    const tc_shader_resource_binding* rb =
+        tc_shader_find_resource_binding(shader, resource_name);
+    if (!rb) return fallback;
+    return rb->binding;
+}
+
 } // namespace termin
