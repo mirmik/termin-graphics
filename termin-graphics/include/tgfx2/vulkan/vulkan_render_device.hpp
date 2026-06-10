@@ -59,10 +59,14 @@ struct VkShaderResource {
     std::string debug_name;
     bool vertex_input_locations_known = false;
     std::vector<uint32_t> vertex_input_locations;
-    // Per-shader set=1 descriptor layout, created from tc_shader resource
-    // bindings in ensure_tc_shader(). VK_NULL_HANDLE for set=0-only shaders.
-    // Owned by descriptor_set_layout_cache_ — do not destroy individually.
-    VkDescriptorSetLayout set1_layout = VK_NULL_HANDLE;
+    // Descriptor bindings reflected from SPIR-V bytecode.
+    // Used by create_pipeline() to build per-pipeline VkDescriptorSetLayout.
+    struct DescriptorBinding {
+        uint32_t binding = 0;
+        VkDescriptorType descriptor_type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        uint32_t count = 1;
+    };
+    std::vector<DescriptorBinding> descriptor_bindings;
 };
 
 struct VkPipelineResource {
@@ -70,20 +74,17 @@ struct VkPipelineResource {
     VkPipelineLayout layout = VK_NULL_HANDLE;
     VkRenderPass render_pass = VK_NULL_HANDLE;
     PipelineDesc desc;
-    uint32_t set_count = 1;  // number of descriptor sets used by this pipeline
+    VkDescriptorSetLayout descriptor_set_layout = VK_NULL_HANDLE;
 };
 
 struct VkResourceSetResource {
     VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
     ResourceSetDesc desc;
-    uint32_t set_index = 0;  // descriptor set number (0 = engine, 1 = material)
-    // Dynamic offsets emitted at bind time, in the order the layout
-    // declares DYNAMIC bindings (currently 0, 1, 2, 3, 16, 24 → 6 offsets).
-    // Populated by create_resource_set() from ResourceBinding::offset on
-    // the matching slots; unset slots stay at 0 so the descriptor is
-    // always valid (ring buffer is range-checked against WHOLE_SIZE).
-    static constexpr uint32_t DYNAMIC_UBO_COUNT = 6;
-    uint32_t dynamic_offsets[DYNAMIC_UBO_COUNT] = {0, 0, 0, 0, 0, 0};
+    // Dynamic offsets emitted at bind time, in binding-number order.
+    // Sized for the worst-case dynamic UBO count per layout.
+    static constexpr uint32_t MAX_DYNAMIC_OFFSETS = 8;
+    uint32_t dynamic_offsets[MAX_DYNAMIC_OFFSETS] = {};
+    uint32_t dynamic_offset_count = 0;
 };
 
 struct VkFramebufferCacheKey {
@@ -268,17 +269,6 @@ private:
     // the corresponding pool is reset in `submit()`.
     std::array<std::unordered_map<uint64_t, ResourceSetHandle>, kFrameSlotCount> descriptor_cache_;
 
-    static constexpr uint32_t kMaxDescriptorSets = 2;
-
-    // Shared descriptor set layouts. Index corresponds to VkDescriptorSet
-    // set number. Currently only set=0 is populated (universal layout);
-    // set=1 is reserved for per-material descriptor sets in the two-set
-    // scheme (see docs/plans/2026-06-09-slang-two-set-material-layout.md).
-    std::array<VkDescriptorSetLayout, kMaxDescriptorSets> descriptor_set_layouts_ = {};
-
-    // Pipeline layout for set=0 only (legacy / engine pass shaders).
-    VkPipelineLayout shared_pipeline_layout_ = VK_NULL_HANDLE;
-
     // Lazy-created default sampler (see ensure_default_sampler()).
     VkSampler default_sampler_ = VK_NULL_HANDLE;
     TextureHandle default_sampled_texture_{};
@@ -300,16 +290,14 @@ private:
     // and dimensions, not only attachment image views.
     std::map<VkFramebufferCacheKey, VkFramebuffer> framebuffer_cache_;
 
-    // Pipeline layout cache. Key is the ordered list of VkDescriptorSetLayout
-    // handles (set=0, then set=1, ...). Enables per-shader material layouts
-    // (set=1) while engine pass layouts (set=0-only) continue to share.
-    std::map<std::vector<VkDescriptorSetLayout>, VkPipelineLayout> pipeline_layout_cache_;
+    // Pipeline layout cache. Key: VkDescriptorSetLayout.
+    // Per-pipeline single-set model — every pipeline owns its descriptor
+    // layout, and VkPipelineLayout is derived from it.
+    std::unordered_map<VkDescriptorSetLayout, VkPipelineLayout> pipeline_layout_cache_;
 
-    // Descriptor set layout cache for per-shader set=1 layouts. Key is
-    // an FNV-1a hash of the tc_shader_resource_binding signature (binding,
-    // kind, count). Lookups happen from create_pipeline when a shader
-    // declares set=1 resources.
-    std::unordered_map<uint64_t, VkDescriptorSetLayout> descriptor_set_layout_cache_;
+    // Cache of VkDescriptorSetLayout built from merged shader bindings.
+    // Key: FNV-1a hash of (binding, descriptor_type, count) sorted.
+    std::unordered_map<uint64_t, VkDescriptorSetLayout> descriptor_layout_cache_;
 
     bool validation_enabled_ = false;
 
@@ -396,6 +384,7 @@ public:
     TextureHandle register_external_texture(
         uintptr_t native_handle, const TextureDesc& desc) override;
     TextureDesc texture_desc(TextureHandle handle) const override;
+    uintptr_t pipeline_descriptor_set_layout(PipelineHandle pipeline) const override;
     SamplerHandle create_sampler(const SamplerDesc& desc) override;
     ShaderHandle create_shader(const ShaderDesc& desc) override;
     PipelineHandle create_pipeline(const PipelineDesc& desc) override;
@@ -487,12 +476,6 @@ public:
     void transition_image_layout(VkCommandBuffer cmd, VkImage image,
                                   VkImageLayout old_layout, VkImageLayout new_layout,
                                   VkImageAspectFlags aspect);
-
-    // Shared descriptor set layout for the given set index (default set=0).
-    VkDescriptorSetLayout descriptor_set_layout(uint32_t set = 0) const {
-        return set < kMaxDescriptorSets ? descriptor_set_layouts_[set] : VK_NULL_HANDLE;
-    }
-    VkPipelineLayout shared_pipeline_layout() const { return shared_pipeline_layout_; }
 
     // Lazy-create a default linear/clamp sampler used when a caller
     // binds a SampledTexture without an explicit sampler. One per
@@ -624,24 +607,18 @@ private:
     void create_allocator();
     void create_command_pool();
     void create_descriptor_pool();
-    void create_shared_layouts();
     void create_ring_ubo();
     void create_transient_vertex_ring();
 
-    // Get or create a VkPipelineLayout for the given ordered set layouts.
-    // Cached by the vector of layouts; identical signatures share one layout.
-    VkPipelineLayout get_or_create_pipeline_layout(
-        const std::vector<VkDescriptorSetLayout>& set_layouts);
+    // Get or create a VkPipelineLayout from a single VkDescriptorSetLayout
+    // plus the standard 128-byte push constant range. Cached by layout handle.
+    VkPipelineLayout get_or_create_pipeline_layout(VkDescriptorSetLayout set_layout);
 
-    // Get or create a VkDescriptorSetLayout from tc_shader resource bindings
-    // for the given set index. Primarily used for per-shader material set=1
-    // layouts. Cached by FNV-1a hash of the binding signature.
-    // `bindings` is a flat C array of tc_shader_resource_binding, passed as
-    // void* to keep this header decoupled from the C structure definition.
-    VkDescriptorSetLayout get_or_create_descriptor_set_layout_for_bindings(
-        const void* bindings,
-        uint32_t count,
-        uint32_t set_index);
+    // Build a VkDescriptorSetLayout from merged VS+FS descriptor bindings
+    // (VkShaderResource::DescriptorBinding). Cached by FNV-1a hash of the
+    // (binding, descriptor_type, count) signature.
+    VkDescriptorSetLayout get_or_create_descriptor_set_layout(
+        const std::vector<VkShaderResource::DescriptorBinding>& bindings);
 
     // Drain `q` now — actually free the underlying Vk objects. Caller is
     // responsible for ensuring GPU has finished using these resources.

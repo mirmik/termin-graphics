@@ -180,6 +180,201 @@ static SpirvVertexInputs reflect_spirv_vertex_inputs(
     return result;
 }
 
+// Reflect descriptor bindings from SPIR-V bytecode.
+// Walks OpDecorate (DescriptorSet=0, Binding=N) → OpType*, OpVariable
+// to determine (binding, VkDescriptorType, count) per resource.
+static std::vector<VkShaderResource::DescriptorBinding> reflect_spirv_descriptor_bindings(
+    const std::vector<uint32_t>& spirv)
+{
+    std::vector<VkShaderResource::DescriptorBinding> result;
+    if (spirv.size() < 5) return result;
+
+    static constexpr uint32_t OP_DECORATE = 71;
+    static constexpr uint32_t OP_VARIABLE = 59;
+    static constexpr uint32_t OP_TYPE_IMAGE = 25;
+    static constexpr uint32_t OP_TYPE_SAMPLER = 26;
+    static constexpr uint32_t OP_TYPE_SAMPLED_IMAGE = 27;
+    static constexpr uint32_t OP_TYPE_STRUCT = 30;
+    static constexpr uint32_t OP_TYPE_ARRAY = 28;
+    static constexpr uint32_t OP_TYPE_POINTER = 32;
+    static constexpr uint32_t DECORATION_DESCRIPTOR_SET = 3;
+    static constexpr uint32_t DECORATION_BINDING = 33;
+    static constexpr uint32_t DECORATION_BLOCK = 2;
+
+    // Build tables: a variable's descriptor set & binding, type chain.
+    std::unordered_map<uint32_t, uint32_t> desc_set_by_id;    // var_id → set
+    std::unordered_map<uint32_t, uint32_t> binding_by_id;     // var_id → binding
+    std::unordered_map<uint32_t, uint32_t> var_type_id;       // var_id → result_type_id
+    std::unordered_map<uint32_t, uint32_t> var_storage_class; // var_id → storage_class
+    std::unordered_map<uint32_t, uint32_t> pointer_pointee;   // pointer_type_id → pointee_type_id
+    std::unordered_map<uint32_t, uint32_t> array_elem_type;   // array_type_id → element_type_id
+    std::unordered_map<uint32_t, uint32_t> array_length;      // array_type_id → length
+    std::unordered_set<uint32_t> block_structs;               // struct decorated with Block
+    std::unordered_map<uint32_t, uint32_t> image_sampled;     // image_type_id → sampled (0=unknown,1=yes,2=no)
+    std::unordered_map<uint32_t, uint32_t> type_opcode;       // type_id → opcode
+
+    for (uint32_t offset = 5; offset < spirv.size();) {
+        uint32_t op_word = spirv[offset];
+        uint32_t word_count = op_word >> 16u;
+        uint32_t opcode = op_word & 0xffffu;
+        if (word_count == 0 || offset + word_count > spirv.size()) break;
+
+        const uint32_t* words = spirv.data() + offset;
+
+        if (opcode == OP_DECORATE && word_count >= 3) {
+            uint32_t target_id = words[1];
+            uint32_t decoration = words[2];
+            if (decoration == DECORATION_DESCRIPTOR_SET && word_count >= 4) {
+                if (words[3] == 0) {  // set=0 only
+                    desc_set_by_id[target_id] = words[3];
+                }
+            } else if (decoration == DECORATION_BINDING && word_count >= 4) {
+                binding_by_id[target_id] = words[3];
+            } else if (decoration == DECORATION_BLOCK) {
+                block_structs.insert(target_id);
+            }
+        } else if (opcode == OP_VARIABLE && word_count >= 4) {
+            var_type_id[words[2]] = words[1];
+            var_storage_class[words[2]] = words[3];
+        } else if (opcode == OP_TYPE_POINTER && word_count >= 4) {
+            type_opcode[words[1]] = opcode;
+            pointer_pointee[words[1]] = words[3];
+        } else if (opcode == OP_TYPE_ARRAY && word_count >= 4) {
+            type_opcode[words[1]] = opcode;
+            array_elem_type[words[1]] = words[2];
+            // Constant for array length — usually OpConstant, word 3 is the constant id
+            // We need to resolve it. Simplification: look up OpConstant.
+        } else if (opcode == OP_TYPE_IMAGE && word_count >= 8) {
+            type_opcode[words[1]] = opcode;
+            image_sampled[words[1]] = words[7];  // Sampled operand
+        } else {
+            // Record type opcodes for type-chain walking.
+            if (opcode >= OP_TYPE_IMAGE && opcode <= OP_TYPE_POINTER) {
+                type_opcode[words[1]] = opcode;
+            }
+        }
+
+        offset += word_count;
+    }
+
+    // Resolve array lengths from OpConstant.
+    std::unordered_map<uint32_t, uint32_t> constant_values;
+    for (uint32_t offset = 5; offset < spirv.size();) {
+        uint32_t op_word = spirv[offset];
+        uint32_t word_count = op_word >> 16u;
+        uint32_t opcode = op_word & 0xffffu;
+        if (word_count == 0 || offset + word_count > spirv.size()) break;
+        const uint32_t* words = spirv.data() + offset;
+        // OpConstant %type %id %value  (word_count >= 4)
+        static constexpr uint32_t OP_CONSTANT = 43;
+        if (opcode == OP_CONSTANT && word_count >= 4) {
+            constant_values[words[2]] = words[3];
+        }
+        offset += word_count;
+    }
+    // Populate array lengths from the type table.
+    for (uint32_t offset = 5; offset < spirv.size();) {
+        uint32_t op_word = spirv[offset];
+        uint32_t word_count = op_word >> 16u;
+        uint32_t opcode = op_word & 0xffffu;
+        if (word_count == 0 || offset + word_count > spirv.size()) break;
+        const uint32_t* words = spirv.data() + offset;
+        if (opcode == OP_TYPE_ARRAY && word_count >= 4) {
+            auto it = constant_values.find(words[3]);
+            if (it != constant_values.end()) {
+                array_length[words[1]] = it->second;
+            }
+        }
+        offset += word_count;
+    }
+
+    // Walk variables with binding decorations.
+    for (const auto& [var_id, binding] : binding_by_id) {
+        if (desc_set_by_id.find(var_id) == desc_set_by_id.end()) continue;
+
+        auto type_it = var_type_id.find(var_id);
+        if (type_it == var_type_id.end()) continue;
+
+        // Follow pointer → pointee type chain.
+        uint32_t type_id = type_it->second;
+        // Unwrap pointer.
+        auto ptr_it = pointer_pointee.find(type_id);
+        if (ptr_it != pointer_pointee.end()) {
+            type_id = ptr_it->second;
+        }
+
+        // Determine descriptor type from the pointee.
+        VkDescriptorType desc_type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        uint32_t count = 1;
+
+        // Check for array.
+        auto arr_elem_it = array_elem_type.find(type_id);
+        auto arr_len_it = array_length.find(type_id);
+        if (arr_elem_it != array_elem_type.end()) {
+            // Unwrap array to get the element type.
+            if (arr_len_it != array_length.end()) {
+                count = arr_len_it->second;
+            }
+            type_id = arr_elem_it->second;
+            // Follow pointer inside array element if needed.
+            auto inner_ptr = pointer_pointee.find(type_id);
+            if (inner_ptr != pointer_pointee.end()) {
+                type_id = inner_ptr->second;
+            }
+        }
+
+        auto op_it = type_opcode.find(type_id);
+        if (op_it != type_opcode.end()) {
+            switch (op_it->second) {
+                case OP_TYPE_STRUCT:
+                    desc_type = block_structs.count(type_id)
+                        ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
+                        : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                    break;
+                case OP_TYPE_SAMPLED_IMAGE:
+                    desc_type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                    break;
+                case OP_TYPE_SAMPLER:
+                    desc_type = VK_DESCRIPTOR_TYPE_SAMPLER;
+                    break;
+                case OP_TYPE_IMAGE: {
+                    auto samp_it = image_sampled.find(type_id);
+                    desc_type = (samp_it != image_sampled.end() && samp_it->second == 2)
+                        ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
+                        : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+                    break;
+                }
+                default:
+                    continue;  // unknown type, skip
+            }
+        } else {
+            continue;  // can't determine type
+        }
+
+        VkShaderResource::DescriptorBinding db;
+        db.binding = binding;
+        db.descriptor_type = desc_type;
+        db.count = count;
+        result.push_back(db);
+    }
+
+    // Deduplicate by binding.
+    std::sort(result.begin(), result.end(),
+        [](const VkShaderResource::DescriptorBinding& a,
+           const VkShaderResource::DescriptorBinding& b) {
+            return a.binding < b.binding;
+        });
+    result.erase(
+        std::unique(result.begin(), result.end(),
+            [](const VkShaderResource::DescriptorBinding& a,
+               const VkShaderResource::DescriptorBinding& b) {
+                return a.binding == b.binding;
+            }),
+        result.end());
+
+    return result;
+}
+
 static bool vertex_shader_uses_location(const VkShaderResource* shader, uint32_t location) {
     if (!shader || !shader->vertex_input_locations_known) return true;
     return std::find(shader->vertex_input_locations.begin(),
@@ -352,7 +547,6 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     create_allocator();
     create_command_pool();
     create_descriptor_pool();
-    create_shared_layouts();
     create_ring_ubo();
     create_transient_vertex_ring();
 
@@ -506,19 +700,14 @@ VulkanRenderDevice::~VulkanRenderDevice() {
         if (fence) vkDestroyFence(device_, fence, nullptr);
     }
     if (default_sampler_) vkDestroySampler(device_, default_sampler_, nullptr);
-    // shared_pipeline_layout_ is owned by pipeline_layout_cache_ — destroyed below.
-    for (auto& [layouts, pl] : pipeline_layout_cache_) {
+    for (auto& [dsl, pl] : pipeline_layout_cache_) {
         if (pl) vkDestroyPipelineLayout(device_, pl, nullptr);
     }
     pipeline_layout_cache_.clear();
-    shared_pipeline_layout_ = VK_NULL_HANDLE;
-    for (auto& [hash, dsl] : descriptor_set_layout_cache_) {
+    for (auto& [hash, dsl] : descriptor_layout_cache_) {
         if (dsl) vkDestroyDescriptorSetLayout(device_, dsl, nullptr);
     }
-    descriptor_set_layout_cache_.clear();
-    for (VkDescriptorSetLayout layout : descriptor_set_layouts_) {
-        if (layout) vkDestroyDescriptorSetLayout(device_, layout, nullptr);
-    }
+    descriptor_layout_cache_.clear();
     for (VkDescriptorPool pool : descriptor_pools_) {
         if (pool) vkDestroyDescriptorPool(device_, pool, nullptr);
     }
@@ -780,221 +969,51 @@ void VulkanRenderDevice::create_descriptor_pool() {
     }
 }
 
-// --- Shared layouts (MVP: universal layout) ---
+// --- Per-pipeline descriptor set layout ---
 
-void VulkanRenderDevice::create_shared_layouts() {
-    // Universal descriptor set layout:
-    //   binding 0..3  = UBO  (lighting=0, material=1, per-frame=2, shadow-block=3)
-    //   binding 4..7  = COMBINED_IMAGE_SAMPLER, 1 each (material textures)
-    //   binding 8     = COMBINED_IMAGE_SAMPLER, MAX_SHADOW_MAPS (shadow depth array;
-    //                    `layout(binding = 8) sampler2DShadow u_shadow_map[N]`
-    //                    compiles to a single array descriptor, so Vulkan
-    //                    needs descriptorCount = N on binding 8)
-    //   binding 9..15 = COMBINED_IMAGE_SAMPLER, 1 each (more material textures)
-    //   binding 16    = UBO  (BoneBlock — SkinnedMeshRenderer bone matrices,
-    //                          used by VS only, see shader_skinning.cpp)
-    //   binding 17..23 = COMBINED_IMAGE_SAMPLER, 1 each (extra slots)
-    //   binding 24    = UBO  (SlangDrawBlock — per-draw model data for
-    //                          Slang/HLSL material shaders)
-    //
-    // MAX_SHADOW_MAPS must match the GLSL macro in shadows.glsl (currently 16).
-    constexpr uint32_t MAX_SHADOW_MAPS = 16;
-    std::vector<VkDescriptorSetLayoutBinding> bindings;
-    // UBO bindings 0..3 are DYNAMIC: per-draw offset supplied via the
-    // last argument of vkCmdBindDescriptorSets, not baked into the
-    // descriptor write. Lets a single ring buffer back many draws without
-    // per-draw vkUpdateDescriptorSets churn (see create_ring_ubo).
-    for (uint32_t i = 0; i < 4; ++i) {
-        VkDescriptorSetLayoutBinding b{};
-        b.binding = i;
-        b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-        b.descriptorCount = 1;
-        b.stageFlags = VK_SHADER_STAGE_ALL;
-        bindings.push_back(b);
+static uint64_t hash_descriptor_bindings(
+    const std::vector<VkShaderResource::DescriptorBinding>& bindings)
+{
+    // FNV-1a over (binding, descriptor_type, count). Sorted for determinism
+    // because reflection order is not guaranteed stable.
+    auto sorted = bindings;
+    std::sort(sorted.begin(), sorted.end(),
+        [](const VkShaderResource::DescriptorBinding& a,
+           const VkShaderResource::DescriptorBinding& b) {
+            return a.binding < b.binding;
+        });
+    uint64_t h = 0xcbf29ce484222325ull;
+    for (const auto& b : sorted) {
+        h ^= static_cast<uint64_t>(b.binding);
+        h *= 0x100000001b3ull;
+        h ^= static_cast<uint64_t>(b.descriptor_type);
+        h *= 0x100000001b3ull;
+        h ^= static_cast<uint64_t>(b.count);
+        h *= 0x100000001b3ull;
     }
-    // Material samplers 4..7 (individual).
-    for (uint32_t i = 4; i < 8; ++i) {
-        VkDescriptorSetLayoutBinding b{};
-        b.binding = i;
-        b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        b.descriptorCount = 1;
-        b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-        bindings.push_back(b);
-    }
-    // Shadow-map array at binding 8 (MAX_SHADOW_MAPS descriptors).
-    {
-        VkDescriptorSetLayoutBinding b{};
-        b.binding = 8;
-        b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        b.descriptorCount = MAX_SHADOW_MAPS;
-        b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-        bindings.push_back(b);
-    }
-    // More material samplers 9..15 (individual).
-    for (uint32_t i = 9; i < 16; ++i) {
-        VkDescriptorSetLayoutBinding b{};
-        b.binding = i;
-        b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        b.descriptorCount = 1;
-        b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-        bindings.push_back(b);
-    }
-    // BoneBlock UBO at binding 16 (skinning variant VS, see
-    // shader_skinning.cpp). Kept out of the 0..3 UBO block because the
-    // skinned path is optional — materials without skinning never touch
-    // this slot and Vulkan allows declared-but-unused descriptors.
-    // DYNAMIC for the same reason as 0..3 — SkinnedMeshRenderer will
-    // route bone matrices through the ring buffer.
-    {
-        VkDescriptorSetLayoutBinding b{};
-        b.binding = 16;
-        b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-        b.descriptorCount = 1;
-        b.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-        bindings.push_back(b);
-    }
-    // Extras 17..23 (individual — debug overlays etc.).
-    for (uint32_t i = 17; i < 24; ++i) {
-        VkDescriptorSetLayoutBinding b{};
-        b.binding = i;
-        b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        b.descriptorCount = 1;
-        b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-        bindings.push_back(b);
-    }
-    // Slang/HLSL per-draw data at binding 24. DYNAMIC so ColorPass can
-    // update model matrices via the ring UBO without per-draw descriptor
-    // allocation. Kept outside sampler slots 4..23 to avoid layout clashes.
-    {
-        VkDescriptorSetLayoutBinding b{};
-        b.binding = 24;
-        b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-        b.descriptorCount = 1;
-        b.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-        bindings.push_back(b);
-    }
-
-    VkDescriptorSetLayoutCreateInfo layout_ci{};
-    layout_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layout_ci.bindingCount = static_cast<uint32_t>(bindings.size());
-    layout_ci.pBindings = bindings.data();
-
-    if (vkCreateDescriptorSetLayout(device_, &layout_ci, nullptr, &descriptor_set_layouts_[0]) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create descriptor set layout (set=0)");
-    }
-
-    // Push-constant range: 128 bytes accessible from every graphics
-    // stage. That is the minimum guaranteed by `maxPushConstantsSize`
-    // in Vulkan 1.0 (lots of mobile GPUs stop at exactly 128). Fits
-    // a mat4 + a vec4 + spare ints, which covers the UIRenderer /
-    // Text2D / Text3D style where a single `layout(push_constant)`
-    // block carries all per-draw state. Shaders that need more must
-    // fall back to UBO bindings 0-3.
-    shared_pipeline_layout_ =
-        get_or_create_pipeline_layout({descriptor_set_layouts_[0]});
+    return h;
 }
 
-VkPipelineLayout VulkanRenderDevice::get_or_create_pipeline_layout(
-    const std::vector<VkDescriptorSetLayout>& set_layouts)
+VkDescriptorSetLayout VulkanRenderDevice::get_or_create_descriptor_set_layout(
+    const std::vector<VkShaderResource::DescriptorBinding>& bindings)
 {
-    auto it = pipeline_layout_cache_.find(set_layouts);
-    if (it != pipeline_layout_cache_.end()) {
-        return it->second;
-    }
+    if (bindings.empty()) return VK_NULL_HANDLE;
 
-    VkPushConstantRange pc_range{};
-    pc_range.stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
-    pc_range.offset = 0;
-    pc_range.size = 128;
-
-    VkPipelineLayoutCreateInfo pl_ci{};
-    pl_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pl_ci.setLayoutCount = static_cast<uint32_t>(set_layouts.size());
-    pl_ci.pSetLayouts = set_layouts.data();
-    pl_ci.pushConstantRangeCount = 1;
-    pl_ci.pPushConstantRanges = &pc_range;
-
-    VkPipelineLayout layout = VK_NULL_HANDLE;
-    if (vkCreatePipelineLayout(device_, &pl_ci, nullptr, &layout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create pipeline layout");
-    }
-    pipeline_layout_cache_.emplace(set_layouts, layout);
-    return layout;
-}
-
-VkDescriptorSetLayout VulkanRenderDevice::get_or_create_descriptor_set_layout_for_bindings(
-    const void* bindings_in,
-    uint32_t count,
-    uint32_t set_index)
-{
-    const tc_shader_resource_binding* bindings =
-        static_cast<const tc_shader_resource_binding*>(bindings_in);
-    // FNV-1a hash of (set, binding, kind, count) for cache key.
-    uint64_t hash = 0xcbf29ce484222325ull;
-    auto mix = [&hash](uint64_t v) {
-        hash ^= v;
-        hash *= 0x100000001b3ull;
-    };
-    mix(set_index);
-    mix(count);
-    for (uint32_t i = 0; i < count; ++i) {
-        mix(bindings[i].set);
-        mix(bindings[i].binding);
-        mix(bindings[i].kind);
-        mix(bindings[i].stage_mask);
-        mix(bindings[i].size);
-    }
-
-    auto cache_it = descriptor_set_layout_cache_.find(hash);
-    if (cache_it != descriptor_set_layout_cache_.end()) {
-        return cache_it->second;
+    const uint64_t hash = hash_descriptor_bindings(bindings);
+    {
+        auto it = descriptor_layout_cache_.find(hash);
+        if (it != descriptor_layout_cache_.end()) return it->second;
     }
 
     std::vector<VkDescriptorSetLayoutBinding> vk_bindings;
-    vk_bindings.reserve(count);
-
-    for (uint32_t i = 0; i < count; ++i) {
-        const tc_shader_resource_binding& rb = bindings[i];
-        if (rb.set != set_index) continue;
-
-        VkDescriptorSetLayoutBinding b{};
-        b.binding = rb.binding;
-        b.descriptorCount = 1;
-
-        // Map tc_shader_stage_mask to VkShaderStageFlags
-        VkShaderStageFlags stage_flags = 0;
-        if (rb.stage_mask & TC_SHADER_STAGE_VERTEX)    stage_flags |= VK_SHADER_STAGE_VERTEX_BIT;
-        if (rb.stage_mask & TC_SHADER_STAGE_FRAGMENT)  stage_flags |= VK_SHADER_STAGE_FRAGMENT_BIT;
-        if (rb.stage_mask & TC_SHADER_STAGE_GEOMETRY)  stage_flags |= VK_SHADER_STAGE_GEOMETRY_BIT;
-        if (rb.stage_mask & TC_SHADER_STAGE_COMPUTE)   stage_flags |= VK_SHADER_STAGE_COMPUTE_BIT;
-        if (stage_flags == 0) stage_flags = VK_SHADER_STAGE_ALL;
-        b.stageFlags = stage_flags;
-
-        switch (rb.kind) {
-            case TC_SHADER_RESOURCE_CONSTANT_BUFFER:
-                b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-                break;
-            case TC_SHADER_RESOURCE_TEXTURE:
-                b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-                break;
-            case TC_SHADER_RESOURCE_SAMPLER:
-                b.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-                break;
-            case TC_SHADER_RESOURCE_STORAGE_BUFFER:
-                b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                break;
-            case TC_SHADER_RESOURCE_STORAGE_TEXTURE:
-                b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-                break;
-            default:
-                continue;
-        }
-        vk_bindings.push_back(b);
-    }
-
-    if (vk_bindings.empty()) {
-        descriptor_set_layout_cache_.emplace(hash, VK_NULL_HANDLE);
-        return VK_NULL_HANDLE;
+    vk_bindings.reserve(bindings.size());
+    for (const auto& b : bindings) {
+        VkDescriptorSetLayoutBinding lb{};
+        lb.binding = b.binding;
+        lb.descriptorType = b.descriptor_type;
+        lb.descriptorCount = b.count;
+        lb.stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
+        vk_bindings.push_back(lb);
     }
 
     VkDescriptorSetLayoutCreateInfo ci{};
@@ -1006,14 +1025,40 @@ VkDescriptorSetLayout VulkanRenderDevice::get_or_create_descriptor_set_layout_fo
     VkResult rc = vkCreateDescriptorSetLayout(device_, &ci, nullptr, &layout);
     if (rc != VK_SUCCESS) {
         tc_log(TC_LOG_ERROR,
-               "VulkanRenderDevice: vkCreateDescriptorSetLayout for set=%u "
-               "with %zu bindings failed: VkResult=%d",
-               set_index, vk_bindings.size(), static_cast<int>(rc));
-        descriptor_set_layout_cache_.emplace(hash, VK_NULL_HANDLE);
+               "VulkanRenderDevice: vkCreateDescriptorSetLayout failed for %zu bindings: VkResult=%d",
+               vk_bindings.size(), static_cast<int>(rc));
+        descriptor_layout_cache_.emplace(hash, VK_NULL_HANDLE);
         return VK_NULL_HANDLE;
     }
+    descriptor_layout_cache_.emplace(hash, layout);
+    return layout;
+}
 
-    descriptor_set_layout_cache_.emplace(hash, layout);
+VkPipelineLayout VulkanRenderDevice::get_or_create_pipeline_layout(
+    VkDescriptorSetLayout set_layout)
+{
+    if (!set_layout) return VK_NULL_HANDLE;
+
+    auto it = pipeline_layout_cache_.find(set_layout);
+    if (it != pipeline_layout_cache_.end()) return it->second;
+
+    VkPushConstantRange pc_range{};
+    pc_range.stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
+    pc_range.offset = 0;
+    pc_range.size = 128;
+
+    VkPipelineLayoutCreateInfo pl_ci{};
+    pl_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pl_ci.setLayoutCount = 1;
+    pl_ci.pSetLayouts = &set_layout;
+    pl_ci.pushConstantRangeCount = 1;
+    pl_ci.pPushConstantRanges = &pc_range;
+
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    if (vkCreatePipelineLayout(device_, &pl_ci, nullptr, &layout) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create pipeline layout");
+    }
+    pipeline_layout_cache_.emplace(set_layout, layout);
     return layout;
 }
 
@@ -1586,6 +1631,9 @@ ShaderHandle VulkanRenderDevice::create_shader(const ShaderDesc& desc) {
             res.vertex_input_locations = std::move(inputs.locations);
         }
 
+        // Reflect descriptor bindings from SPIR-V for per-pipeline layouts.
+        res.descriptor_bindings = reflect_spirv_descriptor_bindings(spirv);
+
         VkShaderModuleCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
         ci.codeSize = spirv.size() * sizeof(uint32_t);
@@ -1634,22 +1682,23 @@ ShaderHandle VulkanRenderDevice::create_shader(const ShaderDesc& desc) {
 PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
     VkPipelineResource res;
     res.desc = desc;
-    // Build the descriptor set layout list for this pipeline.
-    // set=0 is always the shared engine layout.
-    // set=1 is the per-shader material layout, if any stage has one.
-    std::vector<VkDescriptorSetLayout> set_layouts = {descriptor_set_layouts_[0]};
-    VkDescriptorSetLayout vs_set1 = VK_NULL_HANDLE;
-    VkDescriptorSetLayout fs_set1 = VK_NULL_HANDLE;
-    if (auto* vs = get_shader(desc.vertex_shader)) vs_set1 = vs->set1_layout;
-    if (auto* fs = get_shader(desc.fragment_shader)) fs_set1 = fs->set1_layout;
-    VkDescriptorSetLayout set1 = vs_set1 ? vs_set1 : fs_set1;
-    if (set1) {
-        set_layouts.push_back(set1);
-        res.set_count = 2;
-    } else {
-        res.set_count = 1;
+
+    // Build per-pipeline VkDescriptorSetLayout from VS+FS SPIR-V reflection.
+    // Merged bindings from both stages; duplicates resolved by binding number.
+    std::vector<VkShaderResource::DescriptorBinding> merged_bindings;
+    auto* vs = get_shader(desc.vertex_shader);
+    auto* fs = get_shader(desc.fragment_shader);
+    if (vs) {
+        merged_bindings.insert(merged_bindings.end(),
+            vs->descriptor_bindings.begin(), vs->descriptor_bindings.end());
     }
-    res.layout = get_or_create_pipeline_layout(set_layouts);
+    if (fs) {
+        merged_bindings.insert(merged_bindings.end(),
+            fs->descriptor_bindings.begin(), fs->descriptor_bindings.end());
+    }
+    res.descriptor_set_layout =
+        get_or_create_descriptor_set_layout(merged_bindings);
+    res.layout = get_or_create_pipeline_layout(res.descriptor_set_layout);
 
     // Get or create render pass from formats. `needs_depth` is driven
     // by the attachment presence (depth_format != Undefined), NOT by the
@@ -1906,119 +1955,41 @@ static uint64_t hash_resource_set_desc(const ResourceSetDesc& desc) {
         mix(b.texture.id);
         mix(b.sampler.id);
     }
+    // Mix in the descriptor set layout so that identical binding sets under
+    // different VkDescriptorSetLayouts don't collide in the per-pool cache.
+    mix(desc.descriptor_set_layout);
     return h;
 }
 
 ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc& desc) {
-    ResourceSetDesc normalized_desc = desc;
-
-    // The Vulkan backend currently uses one shared descriptor set layout for
-    // all graphics pipelines. If a shader statically uses a binding from that
-    // layout, Vulkan requires the descriptor to have been updated even when a
-    // particular pass did not bind it explicitly. Fill missing dynamic UBO
-    // slots with the ring buffer at offset 0; real pass bindings still win
-    // because they are already present in normalized_desc and provide the
-    // dynamic offset used by bind_resource_set().
-    constexpr uint32_t DYNAMIC_UBO_BINDINGS[VkResourceSetResource::DYNAMIC_UBO_COUNT] =
-        {0, 1, 2, 3, 16, 24};
-    auto has_uniform_binding = [&](uint32_t binding) -> bool {
-        for (const auto& b : normalized_desc.bindings) {
-            if (b.binding == binding &&
-                b.kind == ResourceBinding::Kind::UniformBuffer &&
-                b.array_element == 0) {
-                return true;
-            }
-        }
-        return false;
-    };
-    if (ring_ubo_handle_) {
-        for (uint32_t binding : DYNAMIC_UBO_BINDINGS) {
-            if (has_uniform_binding(binding)) continue;
-            ResourceBinding b;
-            b.kind = ResourceBinding::Kind::UniformBuffer;
-            b.binding = binding;
-            b.buffer = ring_ubo_handle_;
-            b.offset = 0;
-            b.range = 65536;
-            normalized_desc.bindings.push_back(b);
-        }
-    }
-
-    auto has_sampled_binding = [&](uint32_t binding, uint32_t array_element = 0) -> bool {
-        for (const auto& b : normalized_desc.bindings) {
-            if (b.binding == binding &&
-                b.kind == ResourceBinding::Kind::SampledTexture &&
-                b.array_element == array_element) {
-                return true;
-            }
-        }
-        return false;
-    };
-    TextureHandle default_tex = ensure_default_sampled_texture();
-    if (default_tex) {
-        // Keep every sampled slot declared by the shared descriptor layout valid.
-        // Shaders may statically use material slots 4..7 and 9..15,
-        // shadow-map array 8, or extra sampled slots 17..23.
-        for (uint32_t binding = 4; binding < 24; ++binding) {
-            if (binding == 8 || binding == 16) continue;
-            if (has_sampled_binding(binding)) continue;
-            ResourceBinding b;
-            b.kind = ResourceBinding::Kind::SampledTexture;
-            b.binding = binding;
-            b.texture = default_tex;
-            normalized_desc.bindings.push_back(b);
-        }
-        constexpr uint32_t SHADOW_MAP_DESCRIPTOR_COUNT = 16;
-        for (uint32_t array_element = 0; array_element < SHADOW_MAP_DESCRIPTOR_COUNT; ++array_element) {
-            if (has_sampled_binding(8, array_element)) continue;
-            ResourceBinding b;
-            b.kind = ResourceBinding::Kind::SampledTexture;
-            b.binding = 8;
-            b.array_element = array_element;
-            b.texture = default_tex;
-            normalized_desc.bindings.push_back(b);
-        }
-    }
-
-    std::sort(normalized_desc.bindings.begin(), normalized_desc.bindings.end(),
+    ResourceSetDesc sorted_desc = desc;
+    std::sort(sorted_desc.bindings.begin(), sorted_desc.bindings.end(),
               [](const ResourceBinding& a, const ResourceBinding& b) {
                   if (a.binding != b.binding) return a.binding < b.binding;
-                  if (a.array_element != b.array_element) return a.array_element < b.array_element;
-                  return static_cast<int>(a.kind) < static_cast<int>(b.kind);
+                  return a.array_element < b.array_element;
               });
 
-    // Per-frame cache: multiple draws with the same bindings (typical —
-    // many meshes share a material + PerFrame UBO + shadow array) reuse
-    // one VkDescriptorSet instead of paying for another
-    // vkAllocateDescriptorSets + vkUpdateDescriptorSets. Cache is
-    // cleared when the pool is reset in submit(), so every entry is
-    // always backed by a live set in descriptor_pools_[current_pool_idx_].
-    const uint64_t key = hash_resource_set_desc(normalized_desc);
+    // Per-frame cache: identical binding combos reuse one VkDescriptorSet.
+    const uint64_t key = hash_resource_set_desc(sorted_desc);
     auto& cache = descriptor_cache_[current_pool_idx_];
     if (auto it = cache.find(key); it != cache.end()) {
         return it->second;
     }
 
-    g_resource_set_count.fetch_add(1, std::memory_order_relaxed);
-    VkResourceSetResource res;
-    res.desc = normalized_desc;
-
-    // Derive the set index from bindings (all bindings in a ResourceSetDesc
-    // share the same set). Falls back to 0 for empty sets or legacy callers.
-    uint32_t set_index = 0;
-    if (!normalized_desc.bindings.empty()) {
-        set_index = normalized_desc.bindings[0].set;
-        if (set_index >= kMaxDescriptorSets) set_index = 0;
+    // Use the per-pipeline layout from ResourceSetDesc, or fail.
+    VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+    if (desc.descriptor_set_layout != 0) {
+        layout = reinterpret_cast<VkDescriptorSetLayout>(desc.descriptor_set_layout);
     }
-    res.set_index = set_index;
-
-    VkDescriptorSetLayout layout = descriptor_set_layouts_[set_index];
     if (!layout) {
         tc_log(TC_LOG_ERROR,
-               "VulkanRenderDevice: no descriptor set layout for set=%u; "
-               "allocating with set=0 layout as fallback", set_index);
-        layout = descriptor_set_layouts_[0];
+               "VulkanRenderDevice: create_resource_set called without descriptor_set_layout");
+        return {};
     }
+
+    g_resource_set_count.fetch_add(1, std::memory_order_relaxed);
+    VkResourceSetResource res;
+    res.desc = sorted_desc;
 
     VkDescriptorSetAllocateInfo ai{};
     ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -2033,28 +2004,22 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
                static_cast<int>(alloc_result),
                current_pool_idx_,
                cache.size(),
-               normalized_desc.bindings.size());
+               sorted_desc.bindings.size());
         throw std::runtime_error("Failed to allocate descriptor set");
     }
 
-    // Write descriptors
+    // Write descriptors.
     std::vector<VkWriteDescriptorSet> writes;
     std::vector<VkDescriptorBufferInfo> buf_infos;
     std::vector<VkDescriptorImageInfo> img_infos;
-    buf_infos.reserve(normalized_desc.bindings.size());
-    img_infos.reserve(normalized_desc.bindings.size());
+    buf_infos.reserve(sorted_desc.bindings.size());
+    img_infos.reserve(sorted_desc.bindings.size());
 
-    // Dynamic-UBO bindings declared by the shared layout, in the exact
-    // order vkCmdBindDescriptorSets consumes the dynamic_offsets[] array
-    // (sorted ascending by binding, per Vulkan spec).
-    // Keep in sync with create_shared_layouts().
-    auto dynamic_idx_for_binding = [&](uint32_t binding) -> int {
-        for (uint32_t i = 0; i < VkResourceSetResource::DYNAMIC_UBO_COUNT; ++i)
-            if (DYNAMIC_UBO_BINDINGS[i] == binding) return static_cast<int>(i);
-        return -1;
-    };
+    // Collect dynamic UBO offsets in binding-number order.
+    struct DynSlot { uint32_t binding; uint32_t offset; };
+    std::vector<DynSlot> dyn_slots;
 
-    for (const auto& b : normalized_desc.bindings) {
+    for (const auto& b : sorted_desc.bindings) {
         VkWriteDescriptorSet w{};
         w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         w.dstSet = res.descriptor_set;
@@ -2067,35 +2032,18 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
             case ResourceBinding::Kind::StorageBuffer: {
                 auto* buf = get_buffer(b.buffer);
                 if (!buf) continue;
-                // UBOs on shared-layout DYNAMIC slots route their offset through
-                // the dynamic_offsets[] argument at bind time — the write
-                // itself uses offset=0 with an explicit range. Two hard
-                // Vulkan rules apply to this binding type:
-                //   1. range must be <= maxUniformBufferRange (64 KB min).
-                //      Setting VK_WHOLE_SIZE on a 16 MB ring buffer
-                //      trips VUID-VkWriteDescriptorSet-descriptorType-00332.
-                //   2. With VK_WHOLE_SIZE the dynamic offset must be 0
-                //      (VUID-vkCmdBindDescriptorSets-pDescriptorSets-06715) —
-                //      defeating the whole point of dynamic bindings.
-                // So we *always* bake an explicit range. Callers supply
-                // the block size through ResourceBinding::range; for the
-                // legacy bind_uniform_buffer(handle) path where range==0
-                // we fall back to min(buffer.size, 64 KB) — the per-UBO
-                // buffers are small (a few KB), so this lands at the real
-                // size and not a truncated view.
-                const int dyn_idx = (b.kind == ResourceBinding::Kind::UniformBuffer)
-                    ? dynamic_idx_for_binding(b.binding) : -1;
-                const bool is_dynamic_ubo = (dyn_idx >= 0);
-                if (is_dynamic_ubo) {
+                // Ring-buffer UBOs are DYNAMIC: offset supplied at bind time.
+                bool is_dynamic = (b.kind == ResourceBinding::Kind::UniformBuffer)
+                    && ring_ubo_handle_ && (b.buffer == ring_ubo_handle_);
+                if (is_dynamic) {
                     constexpr uint64_t VK_MIN_MAX_UBO_RANGE = 65536;
                     uint64_t range = b.range;
-                    if (range == 0) {
+                    if (range == 0)
                         range = std::min<uint64_t>(buf->desc.size, VK_MIN_MAX_UBO_RANGE);
-                    }
                     if (range > VK_MIN_MAX_UBO_RANGE) range = VK_MIN_MAX_UBO_RANGE;
                     buf_infos.push_back({buf->buffer, 0, range});
                     w.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-                    res.dynamic_offsets[dyn_idx] = static_cast<uint32_t>(b.offset);
+                    dyn_slots.push_back({b.binding, static_cast<uint32_t>(b.offset)});
                 } else {
                     buf_infos.push_back({buf->buffer, b.offset, b.range ? b.range : VK_WHOLE_SIZE});
                     w.descriptorType = (b.kind == ResourceBinding::Kind::UniformBuffer)
@@ -2105,12 +2053,6 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
                 break;
             }
             case ResourceBinding::Kind::SampledTexture: {
-                // GLSL `sampler2D` compiles to a COMBINED_IMAGE_SAMPLER
-                // descriptor in SPIR-V; layout bindings 4-7 are of that
-                // type. Pack the view + sampler into a single image info.
-                // If caller didn't supply a sampler, fall back to a
-                // cached default linear-clamp one so the slot is never
-                // descriptor-wise empty.
                 auto* tex = get_texture(b.texture);
                 if (!tex) continue;
                 VkSampler samp_vk = VK_NULL_HANDLE;
@@ -2118,20 +2060,13 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
                     auto* samp = get_sampler(b.sampler);
                     if (samp) samp_vk = samp->sampler;
                 }
-                if (samp_vk == VK_NULL_HANDLE) {
-                    samp_vk = ensure_default_sampler();
-                }
+                if (samp_vk == VK_NULL_HANDLE) samp_vk = ensure_default_sampler();
                 img_infos.push_back({samp_vk, tex->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
                 w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
                 w.pImageInfo = &img_infos.back();
                 break;
             }
             case ResourceBinding::Kind::Sampler: {
-                // Kept for forward compatibility with shaders using the
-                // separate texture2D + sampler split. No layout slots
-                // for it in the current descriptor set layout; the
-                // write is effectively a no-op on the shared layout
-                // but other layouts may use it.
                 auto* samp = get_sampler(b.sampler);
                 if (!samp) continue;
                 img_infos.push_back({samp->sampler, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED});
@@ -2147,6 +2082,14 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
         vkUpdateDescriptorSets(device_, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
     }
 
+    // Copy dynamic offsets sorted by binding number.
+    std::sort(dyn_slots.begin(), dyn_slots.end(),
+        [](const DynSlot& a, const DynSlot& b) { return a.binding < b.binding; });
+    res.dynamic_offset_count = static_cast<uint32_t>(std::min(
+        dyn_slots.size(), static_cast<size_t>(VkResourceSetResource::MAX_DYNAMIC_OFFSETS)));
+    for (uint32_t i = 0; i < res.dynamic_offset_count; ++i)
+        res.dynamic_offsets[i] = dyn_slots[i].offset;
+
     ResourceSetHandle handle{resource_sets_.add(std::move(res))};
     cache[key] = handle;
     return handle;
@@ -2155,14 +2098,19 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
 // --- Destroy ---
 
 TextureDesc VulkanRenderDevice::texture_desc(TextureHandle handle) const {
-    // Re-declare a local VkTextureResource* lookup because the member
-    // accessor is non-const; this is a read-only query so const_cast
-    // is safe — the pool's map is the only thing we touch.
     auto* self = const_cast<VulkanRenderDevice*>(this);
     if (auto* r = self->textures_.get(handle.id)) {
         return r->desc;
     }
     return {};
+}
+
+uintptr_t VulkanRenderDevice::pipeline_descriptor_set_layout(PipelineHandle pipeline) const {
+    auto* self = const_cast<VulkanRenderDevice*>(this);
+    if (auto* p = self->pipelines_.get(pipeline.id)) {
+        return reinterpret_cast<uintptr_t>(p->descriptor_set_layout);
+    }
+    return 0;
 }
 
 // All `destroy(*Handle)` calls queue the handle into
@@ -3971,24 +3919,6 @@ bool VulkanRenderDevice::ensure_tc_shader(
                "VulkanRenderDevice::ensure_tc_shader: FS compile failed for '%s'",
                shader->name ? shader->name : shader->uuid);
         return false;
-    }
-
-    // Create per-shader set=1 descriptor layouts from resource bindings.
-    // This is done here (after artifact load, before pipeline creation)
-    // so create_pipeline can build a two-set VkPipelineLayout when needed.
-    // Layouts are cached globally by binding signature — multiple shaders
-    // with the same material resource signature share one layout.
-    const uint32_t rb_count = tc_shader_resource_binding_count(shader);
-    if (rb_count > 0) {
-        const tc_shader_resource_binding* rb = tc_shader_resource_bindings(shader);
-        VkDescriptorSetLayout set1 =
-            get_or_create_descriptor_set_layout_for_bindings(rb, rb_count, 1);
-        if (set1 && vs) {
-            get_shader(vs)->set1_layout = set1;
-        }
-        if (set1 && fs) {
-            get_shader(fs)->set1_layout = set1;
-        }
     }
 
     std::lock_guard<std::mutex> lock(tc_shader_cache_mtx_);

@@ -742,6 +742,8 @@ int main(int argc, char** argv) {
                 matrix_binding.range = sizeof(mvp_column_major);
                 tgfx::ResourceSetDesc matrix_set_desc;
                 matrix_set_desc.bindings.push_back(matrix_binding);
+                matrix_set_desc.descriptor_set_layout =
+                    device->pipeline_descriptor_set_layout(slang_pipeline);
                 matrix_set = device->create_resource_set(matrix_set_desc);
 
                 tgfx::TextureDesc slang_rt_desc;

@@ -108,6 +108,10 @@ struct ResourceBinding {
 
 struct ResourceSetDesc {
     std::vector<ResourceBinding> bindings;
+    // Per-pipeline descriptor set layout hint.
+    // Vulkan backend: cast to VkDescriptorSetLayout. OpenGL: ignored.
+    // Set to 0 to use the legacy shared layout (backward compat).
+    uintptr_t descriptor_set_layout = 0;
 };
 
 } // namespace tgfx

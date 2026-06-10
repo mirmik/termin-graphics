@@ -255,35 +255,17 @@ void VulkanCommandList::bind_resource_set(ResourceSetHandle set,
     auto* rs = device_.get_resource_set(set);
     if (!rs || !current_layout_) return;
 
-    // Sampled textures are required to already be in
-    // SHADER_READ_ONLY_OPTIMAL here. Producers handle it:
-    //   - upload_texture / copy_texture / blit_to_texture leave dst in
-    //     SHADER_READ_ONLY_OPTIMAL.
-    //   - end_render_pass transitions color and depth attachments.
-    // vkCmdPipelineBarrier from inside a render pass is forbidden for
-    // non-attachment images and cannot change layout regardless, so
-    // there is no correct fix-up we could apply here — a mismatch is a
-    // caller/producer bug upstream.
-
-    // The shared pipeline layout declares DYNAMIC_UBO_COUNT dynamic-UBO
-    // bindings. Vulkan requires the exact same count passed to
-    // vkCmdBindDescriptorSets: short payloads would leave descriptors
-    // "bound to invalid offsets" and trip validation, while over-long
-    // payloads trip a count-mismatch VUID. Fall back to the per-set
-    // offsets stashed at create_resource_set() time when the caller
-    // doesn't supply any.
-    constexpr uint32_t EXPECTED = VkResourceSetResource::DYNAMIC_UBO_COUNT;
-    uint32_t offsets_tmp[EXPECTED] = {};
-    const uint32_t* offsets_ptr = offsets_tmp;
-    if (dynamic_offsets && dynamic_offset_count == EXPECTED) {
-        offsets_ptr = dynamic_offsets;
-    } else {
-        for (uint32_t i = 0; i < EXPECTED; ++i) offsets_tmp[i] = rs->dynamic_offsets[i];
+    // Use the stored dynamic offsets when the caller doesn't supply any.
+    const uint32_t* offsets_ptr = dynamic_offsets;
+    uint32_t count = dynamic_offset_count;
+    if (!dynamic_offsets || dynamic_offset_count == 0) {
+        offsets_ptr = rs->dynamic_offsets;
+        count = rs->dynamic_offset_count;
     }
 
     vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS,
                              current_layout_, set_index, 1, &rs->descriptor_set,
-                             EXPECTED, offsets_ptr);
+                             count, offsets_ptr);
     g_bind_rset_count.fetch_add(1, std::memory_order_relaxed);
 }
 

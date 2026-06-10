@@ -75,6 +75,14 @@ public:
     // --- Data readback ---
     virtual void read_buffer(BufferHandle src, std::span<uint8_t> data, uint64_t offset = 0) = 0;
 
+    // --- Pipeline introspection ---
+    // Return the backend-specific descriptor set layout for a pipeline.
+    // Vulkan: cast to VkDescriptorSetLayout. OpenGL: always 0.
+    virtual uintptr_t pipeline_descriptor_set_layout(PipelineHandle pipeline) const {
+        (void)pipeline;
+        return 0;
+    }
+
     // --- Introspection ---
     // Query the descriptor (width/height/format/...) that a texture was
     // created or registered with. Returns a default-initialised
