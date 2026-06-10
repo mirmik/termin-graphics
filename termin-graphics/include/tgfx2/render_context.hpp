@@ -27,6 +27,9 @@
 #include "tgfx2/vertex_layout.hpp"
 #include "tgfx2/descriptors.hpp"
 
+// Forward declaration for C-level shader type (global namespace, extern "C").
+struct tc_shader;
+
 namespace tgfx {
 
 class IRenderDevice;
@@ -68,6 +71,21 @@ private:
     std::vector<ResourceBinding> pending_bindings_;
     bool bindings_dirty_ = true;
     ResourceSetHandle current_resource_set_;
+
+    // Symbolic binding support — resolved in flush_resource_set().
+    struct SymbolicBinding {
+        std::string name;
+        enum class Kind { Uniform, Texture } kind = Kind::Uniform;
+        BufferHandle buffer;
+        TextureHandle texture;
+        SamplerHandle sampler;
+        uint64_t offset = 0;
+        uint64_t range = 0;
+    };
+    std::vector<SymbolicBinding> pending_symbolic_bindings_;
+    // Shader resource layout for symbolic resolution. Set by
+    // use_shader_resource_layout(), cleared when shader changes.
+    const struct ::tc_shader* active_shader_layout_ = nullptr;
 
     // Queued push-constant bytes. Re-emitted after every flush_pipeline
     // so the data lands on the freshly-bound VkPipelineLayout (Vulkan)
@@ -170,10 +188,25 @@ public:
     // buffer is resolved into a ResourceSet lazily at draw time; call-sites
     // do not manage ResourceSetHandle lifecycles.
     // `set` defaults to 0 (engine resources); material resources use set=1.
-    // Passing range=0 means "bind whole buffer" (backend uses glBindBufferBase).
+    // Passing range=0 means \"bind whole buffer\" (backend uses glBindBufferBase).
     void bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
                              uint64_t offset = 0, uint64_t range = 0,
                              uint32_t set = 0);
+
+    // Symbolic resource binding — resolved to backend binding numbers
+    // from the shader layout set via use_shader_resource_layout().
+    // Falls back to a logged warning + no-op when the name is not
+    // found in the active layout.
+    void bind_uniform(std::string_view name, BufferHandle buffer,
+                      uint64_t offset = 0, uint64_t range = 0);
+    void bind_texture(std::string_view name, TextureHandle texture,
+                      SamplerHandle sampler = {});
+
+    // Set the shader resource layout used for symbolic binding
+    // resolution. Call once after bind_shader() when symbolic
+    // bind_uniform / bind_texture will be used later in the pass.
+    // Passing nullptr clears the layout (back to numeric-only mode).
+    void use_shader_resource_layout(const struct ::tc_shader* shader);
 
     // Write `size` bytes of `data` into the backend's shared ring UBO
     // and bind it at `binding` in the given descriptor set. No

@@ -2684,20 +2684,20 @@
     {
       "uuid": "termin-engine-grayscale",
       "name": "GrayscaleEngineFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "fragment": {
-          "path": "termin-engine-grayscale.frag.glsl",
+          "path": "termin-engine-grayscale.frag.slang",
           "inputs": [
             {
-              "name": "v_uv",
+              "name": "uv",
               "semantic": "TEXCOORD0",
               "location": 0
             }
           ],
           "outputs": [
             {
-              "name": "FragColor",
+              "name": "color",
               "semantic": "SV_Target0",
               "location": 0
             }
@@ -2706,16 +2706,14 @@
       },
       "resources": [
         {
-          "name": "GrayscaleParams",
+          "name": "u_params",
           "logical_name": "params",
-          "kind": "constant_buffer",
-          "legacy_binding": 0
+          "kind": "constant_buffer"
         },
         {
           "name": "u_input",
           "logical_name": "input_texture",
-          "kind": "combined_sampler2d",
-          "legacy_binding": 4
+          "kind": "combined_sampler2d"
         }
       ]
     },
@@ -2835,20 +2833,20 @@
     {
       "uuid": "termin-engine-tonemap",
       "name": "TonemapEngineFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "fragment": {
-          "path": "termin-engine-tonemap.frag.glsl",
+          "path": "termin-engine-tonemap.frag.slang",
           "inputs": [
             {
-              "name": "v_uv",
+              "name": "uv",
               "semantic": "TEXCOORD0",
               "location": 0
             }
           ],
           "outputs": [
             {
-              "name": "FragColor",
+              "name": "color",
               "semantic": "SV_Target0",
               "location": 0
             }
@@ -2857,16 +2855,14 @@
       },
       "resources": [
         {
-          "name": "TonemapParams",
+          "name": "u_params",
           "logical_name": "params",
-          "kind": "constant_buffer",
-          "legacy_binding": 0
+          "kind": "constant_buffer"
         },
         {
           "name": "u_input",
           "logical_name": "input_texture",
-          "kind": "combined_sampler2d",
-          "legacy_binding": 4
+          "kind": "combined_sampler2d"
         }
       ]
     }

@@ -7,11 +7,13 @@
 #include "tgfx2/tc_shader_bridge.hpp"
 #include "tcbase/tc_log.h"
 extern "C" {
+#include "tgfx/resources/tc_shader.h"
 #include "tc_profiler.h"
 }
 
 #include <cstring>
 #include <string>
+#include <string_view>
 
 namespace tgfx {
 
@@ -427,8 +429,46 @@ void RenderContext2::bind_sampled_texture_array_element(
 }
 
 void RenderContext2::clear_resource_bindings() {
-    if (pending_bindings_.empty()) return;
+    if (pending_bindings_.empty() && pending_symbolic_bindings_.empty()) return;
     pending_bindings_.clear();
+    pending_symbolic_bindings_.clear();
+    bindings_dirty_ = true;
+}
+
+// ============================================================================
+// Symbolic resource binding
+// ============================================================================
+
+void RenderContext2::use_shader_resource_layout(const struct ::tc_shader* shader) {
+    active_shader_layout_ = shader;
+    // When the layout changes, clear any previously resolved symbolic
+    // bindings — they came from a different shader's layout.
+    if (!pending_symbolic_bindings_.empty()) {
+        pending_symbolic_bindings_.clear();
+        bindings_dirty_ = true;
+    }
+}
+
+void RenderContext2::bind_uniform(std::string_view name, BufferHandle buffer,
+                                  uint64_t offset, uint64_t range) {
+    SymbolicBinding sb;
+    sb.name = std::string(name);
+    sb.kind = SymbolicBinding::Kind::Uniform;
+    sb.buffer = buffer;
+    sb.offset = offset;
+    sb.range = range;
+    pending_symbolic_bindings_.push_back(std::move(sb));
+    bindings_dirty_ = true;
+}
+
+void RenderContext2::bind_texture(std::string_view name, TextureHandle texture,
+                                  SamplerHandle sampler) {
+    SymbolicBinding sb;
+    sb.name = std::string(name);
+    sb.kind = SymbolicBinding::Kind::Texture;
+    sb.texture = texture;
+    sb.sampler = sampler;
+    pending_symbolic_bindings_.push_back(std::move(sb));
     bindings_dirty_ = true;
 }
 
@@ -544,6 +584,59 @@ void RenderContext2::flush_pipeline() {
 
 void RenderContext2::flush_resource_set() {
     if (!bindings_dirty_) return;
+
+    // Resolve symbolic bindings against the active shader layout.
+    if (!pending_symbolic_bindings_.empty() && active_shader_layout_) {
+        for (const SymbolicBinding& sb : pending_symbolic_bindings_) {
+            const tc_shader_resource_binding* rb =
+                tc_shader_find_resource_binding(active_shader_layout_, sb.name.c_str());
+            if (!rb) {
+                tc_log(TC_LOG_WARN,
+                       "RenderContext2: symbolic binding '%.*s' not found in shader '%s'",
+                       static_cast<int>(sb.name.size()), sb.name.data(),
+                       active_shader_layout_->name ? active_shader_layout_->name
+                                                   : active_shader_layout_->uuid);
+                continue;
+            }
+
+            ResourceBinding resolved;
+            resolved.set = rb->set;
+            resolved.binding = rb->binding;
+
+            if (sb.kind == SymbolicBinding::Kind::Uniform) {
+                if (rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
+                    tc_log(TC_LOG_WARN,
+                           "RenderContext2: symbolic binding '%.*s' resolved to kind=%u, expected constant_buffer",
+                           static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
+                    continue;
+                }
+                resolved.kind = ResourceBinding::Kind::UniformBuffer;
+                resolved.buffer = sb.buffer;
+                resolved.offset = sb.offset;
+                resolved.range = sb.range;
+            } else {
+                if (rb->kind != TC_SHADER_RESOURCE_TEXTURE) {
+                    tc_log(TC_LOG_WARN,
+                           "RenderContext2: symbolic binding '%.*s' resolved to kind=%u, expected texture",
+                           static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
+                    continue;
+                }
+                resolved.kind = ResourceBinding::Kind::SampledTexture;
+                resolved.texture = sb.texture;
+                resolved.sampler = sb.sampler;
+            }
+
+            // Merge into pending_bindings_ (dedup by set+binding+kind).
+            ResourceBinding* existing =
+                find_binding(pending_bindings_, resolved.binding, resolved.kind, resolved.set);
+            if (existing) {
+                *existing = resolved;
+            } else {
+                pending_bindings_.push_back(resolved);
+            }
+        }
+        pending_symbolic_bindings_.clear();
+    }
 
     // Defer-destroy the previous set: the command buffer we're still
     // recording into may reference it, and Vulkan forbids mutating
