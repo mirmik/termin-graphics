@@ -522,9 +522,10 @@ void ImmediateRenderer::_flush_buffers(
 
     _ensure_shader(&ctx2->device());
     tgfx::ShaderHandle imm_vs, imm_fs;
+    tc_shader* imm_raw = nullptr;
     {
-        tc_shader* raw = tc_shader_get(_shader_handle);
-        if (!raw || !tc_shader_ensure_tgfx2(raw, _device, &imm_vs, &imm_fs)) {
+        imm_raw = tc_shader_get(_shader_handle);
+        if (!imm_raw || !tc_shader_ensure_tgfx2(imm_raw, _device, &imm_vs, &imm_fs)) {
             return;
         }
     }
@@ -539,6 +540,7 @@ void ImmediateRenderer::_flush_buffers(
     }
     ctx2->set_cull(tgfx::CullMode::None);
     ctx2->bind_shader(imm_vs, imm_fs);
+    ctx2->use_shader_resource_layout(imm_raw);
 
     // View-projection combined on CPU: shader only needs one matrix,
     // fits comfortably in 128-byte push constants. Double→float narrow
@@ -548,7 +550,7 @@ void ImmediateRenderer::_flush_buffers(
     for (int i = 0; i < 16; ++i) {
         push.u_vp[i] = static_cast<float>(vp.data[i]);
     }
-    ctx2->set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
+    ctx2->bind_uniform_data("u_push", &push, static_cast<uint32_t>(sizeof(push)));
     if (detailed) tc_profiler_end_section();
 
     if (!lines.empty()) {

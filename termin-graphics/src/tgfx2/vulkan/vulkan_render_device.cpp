@@ -1999,10 +1999,20 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
               });
 
     // Per-frame cache: identical binding combos reuse one VkDescriptorSet.
+    // Skip caching when the set includes ring-buffer bindings whose dynamic
+    // offsets change per draw (multiple draws sharing one pipeline).
+    bool has_ring = false;
+    if (ring_ubo_handle_) {
+        for (const auto& b : sorted_desc.bindings) {
+            if (b.buffer == ring_ubo_handle_) { has_ring = true; break; }
+        }
+    }
     const uint64_t key = hash_resource_set_desc(sorted_desc);
     auto& cache = descriptor_cache_[current_pool_idx_];
-    if (auto it = cache.find(key); it != cache.end()) {
-        return it->second;
+    if (!has_ring) {
+        if (auto it = cache.find(key); it != cache.end()) {
+            return it->second;
+        }
     }
 
     // Use the per-pipeline layout from ResourceSetDesc, or fail.
@@ -2123,7 +2133,7 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
         res.dynamic_offsets[i] = dyn_slots[i].offset;
 
     ResourceSetHandle handle{resource_sets_.add(std::move(res))};
-    cache[key] = handle;
+    if (!has_ring) cache[key] = handle;
     return handle;
 }
 
