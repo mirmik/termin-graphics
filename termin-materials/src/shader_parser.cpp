@@ -701,6 +701,43 @@ std::string synthesize_engine_uniform_glsl(const EngineUniformDeclUsage& usage) 
     return block;
 }
 
+// Slang equivalents of the engine uniform blocks — same data, same bindings,
+// only the syntax differs (ConstantBuffer<T>).
+const char* ENGINE_PER_FRAME_BLOCK_SLANG = R"(
+struct PerFrame {
+    column_major float4x4 u_view;
+    column_major float4x4 u_projection;
+    column_major float4x4 u_view_projection;
+    column_major float4x4 u_inv_view;
+    column_major float4x4 u_inv_proj;
+    float4 u_camera_position;
+    float2 u_resolution;
+    float u_near;
+    float u_far;
+};
+ConstantBuffer<PerFrame> per_frame;
+)";
+
+const char* ENGINE_MODEL_PUSH_BLOCK_SLANG = R"(
+struct ColorPushData {
+    column_major float4x4 _u_model;
+};
+[[vk::push_constant]]
+ConstantBuffer<ColorPushData> pc;
+#define u_model pc._u_model
+)";
+
+std::string synthesize_engine_uniform_slang(const EngineUniformDeclUsage& usage) {
+    std::string block;
+    if (usage.per_frame) {
+        block += ENGINE_PER_FRAME_BLOCK_SLANG;
+    }
+    if (usage.model) {
+        block += ENGINE_MODEL_PUSH_BLOCK_SLANG;
+    }
+    return block;
+}
+
 std::string strip_uniform_decls(const std::string& source,
                                 const std::vector<std::string>& names) {
     if (names.empty()) return source;
@@ -1413,10 +1450,22 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
                     kv.second.source =
                         strip_slang_sampler_decls(kv.second.source, texture_names);
                 }
+
+                // Engine uniforms for Slang: detect u_view / u_model usage
+                // and inject matching PerFrame UBO + push_constant block.
+                EngineUniformDeclUsage eng_usage =
+                    collect_engine_uniform_usage(kv.second.source);
+                std::string eng_slang;
+                if (eng_usage.any()) {
+                    kv.second.source =
+                        strip_engine_uniform_decls(kv.second.source);
+                    eng_slang = synthesize_engine_uniform_slang(eng_usage);
+                }
+
                 if (stage_uses_material_ubo_layout(kv.second, layout)) {
-                    kv.second.source = block_slang + sampler_slang + kv.second.source;
-                } else if (!sampler_slang.empty()) {
-                    kv.second.source = sampler_slang + kv.second.source;
+                    kv.second.source = block_slang + eng_slang + sampler_slang + kv.second.source;
+                } else if (!sampler_slang.empty() || !eng_slang.empty()) {
+                    kv.second.source = eng_slang + sampler_slang + kv.second.source;
                 }
             }
             if (!layout.empty()) {

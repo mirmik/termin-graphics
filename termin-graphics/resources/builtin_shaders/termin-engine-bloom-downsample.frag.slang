@@ -1,6 +1,5 @@
 // Bloom downsample pass — 13-tap box filter for mip chain.
 //
-// No [[vk::binding]] attributes — slangc auto-assigns bindings.
 
 struct BloomDownsampleParams {
     float2 texel_size;

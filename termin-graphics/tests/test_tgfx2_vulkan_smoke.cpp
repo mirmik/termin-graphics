@@ -56,7 +56,6 @@ struct TransformUBO
     float4x4 mvp;
 };
 
-[[vk::binding(0, 0)]]
 ConstantBuffer<TransformUBO> u_transform;
 
 struct VertexInput

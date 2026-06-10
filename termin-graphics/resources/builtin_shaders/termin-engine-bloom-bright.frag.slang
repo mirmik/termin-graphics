@@ -1,6 +1,5 @@
 // Bloom bright pass — extracts pixels above a luminance threshold.
 //
-// No [[vk::binding]] attributes — slangc auto-assigns bindings.
 // Pass code reads the assigned numbers from shader layout metadata.
 
 struct BloomBrightParams {

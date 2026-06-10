@@ -1,6 +1,5 @@
 // Bloom composite pass — blends bloom result over the original image.
 //
-// No [[vk::binding]] attributes — slangc auto-assigns bindings.
 
 struct BloomCompositeParams {
     float intensity;

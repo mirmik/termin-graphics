@@ -4,6 +4,10 @@
 
 #include <cstring>
 
+extern "C" {
+#include <tgfx/resources/tc_shader.h>
+}
+
 namespace termin {
 
 EnginePerFrameStd140 make_engine_per_frame_uniforms(
@@ -75,6 +79,24 @@ void bind_engine_per_frame_uniforms(
 void bind_engine_per_frame_uniforms(tgfx::RenderContext2& ctx2, const ExecuteContext& ctx) {
     EnginePerFrameStd140 uniforms = make_engine_per_frame_uniforms(ctx);
     bind_engine_per_frame_uniforms(ctx2, uniforms);
+}
+
+uint32_t resolve_per_frame_binding(const tc_shader* shader, uint32_t fallback) {
+    if (!shader) return fallback;
+    const tc_shader_resource_binding* rb =
+        tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_PER_FRAME);
+    if (!rb || rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) return fallback;
+    return rb->binding;
+}
+
+void bind_engine_per_frame_uniforms(
+    tgfx::RenderContext2& ctx2,
+    const EnginePerFrameStd140& uniforms,
+    const tc_shader* shader)
+{
+    uint32_t slot = resolve_per_frame_binding(
+        shader, ENGINE_PER_FRAME_UBO_BINDING);
+    ctx2.bind_uniform_buffer_ring(slot, &uniforms, sizeof(uniforms));
 }
 
 } // namespace termin

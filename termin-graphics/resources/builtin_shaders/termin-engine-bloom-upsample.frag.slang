@@ -1,6 +1,5 @@
 // Bloom upsample pass — 9-tap tent filter with blend factor.
 //
-// No [[vk::binding]] attributes — slangc auto-assigns bindings.
 
 struct BloomUpsampleParams {
     float2 texel_size;
