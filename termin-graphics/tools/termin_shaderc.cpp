@@ -529,23 +529,14 @@ static bool write_resource_layout_sidecar(
 static bool apply_slang_vulkan_shared_layout_policy(
     std::vector<ShaderResourceBinding>& resources
 ) {
-    // Two-set layout policy:
-    //   set=0  — engine resources (per_frame, bound by passes at fixed slots)
-    //   set=1  — material resources (per-shader, bindings from slangc / specification)
+    // Single-set layout policy:
+    //   set=0  — all resources (engine + material)
     //
-    // Everything not explicitly placed in set=0 lands in set=1 with its
-    // original binding from slangc reflection or explicit source attributes.
-    // The sampled_slots array and the hardcoded binding assignments for
-    // material / draw_data are gone — per-shader set=1 layouts handle those.
+    // All resources share one descriptor set, which matches the per-pipeline
+    // merged VkDescriptorSetLayout built from SPIR-V reflection in the Vulkan
+    // backend. The Vulkan backend always binds at set=0.
     for (ShaderResourceBinding& resource : resources) {
-        if (resource.kind == "constant_buffer" && resource.name == "per_frame") {
-            resource.set = 0;
-            resource.binding = 2;
-            continue;
-        }
-        // All other resources (material UBO, draw_data, textures, samplers,
-        // storage textures) go to set=1 with their original bindings.
-        resource.set = 1;
+        resource.set = 0;
     }
     return true;
 }

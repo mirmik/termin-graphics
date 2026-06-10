@@ -5,6 +5,7 @@
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/i_command_list.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
+#include "tcbase/tc_log.h"
 extern "C" {
 #include "tc_profiler.h"
 }
@@ -563,8 +564,18 @@ void RenderContext2::flush_resource_set() {
             desc.descriptor_set_layout =
                 device_.pipeline_descriptor_set_layout(last_bound_pipeline_);
         }
-        current_resource_set_ = device_.create_resource_set(desc);
-        cmd_->bind_resource_set(current_resource_set_, 0);
+        // Pipelines built from shaders with no descriptor bindings have a
+        // null descriptor_set_layout. Skip the allocation — there is nothing
+        // to bind against and create_resource_set rejects a null layout.
+        if (desc.descriptor_set_layout != 0) {
+            current_resource_set_ = device_.create_resource_set(desc);
+            cmd_->bind_resource_set(current_resource_set_, 0);
+        } else {
+            tc_log(TC_LOG_WARN,
+                   "RenderContext2: flush_resource_set skipping pipeline=%u "
+                   "(descriptor_set_layout is null) with %zu pending bindings",
+                   last_bound_pipeline_.id, pending_bindings_.size());
+        }
     }
 
     bindings_dirty_ = false;

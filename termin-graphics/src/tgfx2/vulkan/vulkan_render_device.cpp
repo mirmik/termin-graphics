@@ -225,9 +225,13 @@ static std::vector<VkShaderResource::DescriptorBinding> reflect_spirv_descriptor
             uint32_t target_id = words[1];
             uint32_t decoration = words[2];
             if (decoration == DECORATION_DESCRIPTOR_SET && word_count >= 4) {
-                if (words[3] == 0) {  // set=0 only
-                    desc_set_by_id[target_id] = words[3];
+                if (words[3] != 0) {
+                    tc_log(TC_LOG_ERROR,
+                           "VulkanRenderDevice: SPIR-V decoration DescriptorSet=%u != 0 "
+                           "on target %u; only set=0 is supported",
+                           words[3], target_id);
                 }
+                desc_set_by_id[target_id] = words[3];
             } else if (decoration == DECORATION_BINDING && word_count >= 4) {
                 binding_by_id[target_id] = words[3];
             } else if (decoration == DECORATION_BLOCK) {
@@ -290,7 +294,6 @@ static std::vector<VkShaderResource::DescriptorBinding> reflect_spirv_descriptor
 
     // Walk variables with binding decorations.
     for (const auto& [var_id, binding] : binding_by_id) {
-        if (desc_set_by_id.find(var_id) == desc_set_by_id.end()) continue;
 
         auto type_it = var_type_id.find(var_id);
         if (type_it == var_type_id.end()) continue;
@@ -327,9 +330,7 @@ static std::vector<VkShaderResource::DescriptorBinding> reflect_spirv_descriptor
         if (op_it != type_opcode.end()) {
             switch (op_it->second) {
                 case OP_TYPE_STRUCT:
-                    desc_type = block_structs.count(type_id)
-                        ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
-                        : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                    desc_type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
                     break;
                 case OP_TYPE_SAMPLED_IMAGE:
                     desc_type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1006,15 +1007,28 @@ VkDescriptorSetLayout VulkanRenderDevice::get_or_create_descriptor_set_layout(
     }
 
     std::vector<VkDescriptorSetLayoutBinding> vk_bindings;
-    vk_bindings.reserve(bindings.size());
+    // Deduplicate: VS and FS may share the same binding (e.g. per_frame UBO).
+    // Keep the first occurrence; count sums if the same binding is used for
+    // an array in both stages, but for simplicity we just deduplicate by key.
+    std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> seen;
     for (const auto& b : bindings) {
+        auto it = seen.find(b.binding);
+        if (it != seen.end()) {
+            // Same binding from both stages — keep the one with the higher
+            // descriptorCount and merge stageFlags.
+            it->second.descriptorCount = std::max(it->second.descriptorCount, b.count);
+            it->second.stageFlags |= VK_SHADER_STAGE_ALL_GRAPHICS;
+            continue;
+        }
         VkDescriptorSetLayoutBinding lb{};
         lb.binding = b.binding;
         lb.descriptorType = b.descriptor_type;
         lb.descriptorCount = b.count;
         lb.stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
-        vk_bindings.push_back(lb);
+        seen[b.binding] = lb;
     }
+    vk_bindings.reserve(seen.size());
+    for (auto& [_, lb] : seen) vk_bindings.push_back(lb);
 
     VkDescriptorSetLayoutCreateInfo ci{};
     ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1707,6 +1721,14 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
         get_or_create_descriptor_set_layout(merged_bindings);
     res.layout = get_or_create_pipeline_layout(res.descriptor_set_layout);
 
+    if (merged_bindings.empty()) {
+        tc_log(TC_LOG_WARN,
+               "VulkanRenderDevice: create_pipeline vs='%s' fs='%s' — "
+               "no descriptor bindings reflected from SPIR-V",
+               vs ? vs->debug_name.c_str() : "null",
+               fs ? fs->debug_name.c_str() : "null");
+    }
+
     // Get or create render pass from formats. `needs_depth` is driven
     // by the attachment presence (depth_format != Undefined), NOT by the
     // depth_test/depth_write flags — a pipeline that has depth_test off
@@ -2039,22 +2061,25 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
             case ResourceBinding::Kind::StorageBuffer: {
                 auto* buf = get_buffer(b.buffer);
                 if (!buf) continue;
-                // Ring-buffer UBOs are DYNAMIC: offset supplied at bind time.
-                bool is_dynamic = (b.kind == ResourceBinding::Kind::UniformBuffer)
-                    && ring_ubo_handle_ && (b.buffer == ring_ubo_handle_);
-                if (is_dynamic) {
+                if (b.kind == ResourceBinding::Kind::UniformBuffer) {
+                    // All UBOs use DYNAMIC because the VkDescriptorSetLayout
+                    // (built from SPIR-V reflection) marks every Block-decorated
+                    // struct as VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC.
+                    // Ring-buffer UBOs supply their real offset; regular UBOs
+                    // supply offset 0 and the base offset baked into the
+                    // VkDescriptorBufferInfo.
                     constexpr uint64_t VK_MIN_MAX_UBO_RANGE = 65536;
                     uint64_t range = b.range;
                     if (range == 0)
                         range = std::min<uint64_t>(buf->desc.size, VK_MIN_MAX_UBO_RANGE);
                     if (range > VK_MIN_MAX_UBO_RANGE) range = VK_MIN_MAX_UBO_RANGE;
+                    bool is_ring = ring_ubo_handle_ && (b.buffer == ring_ubo_handle_);
                     buf_infos.push_back({buf->buffer, 0, range});
                     w.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-                    dyn_slots.push_back({b.binding, static_cast<uint32_t>(b.offset)});
+                    dyn_slots.push_back({b.binding, is_ring ? static_cast<uint32_t>(b.offset) : 0u});
                 } else {
                     buf_infos.push_back({buf->buffer, b.offset, b.range ? b.range : VK_WHOLE_SIZE});
-                    w.descriptorType = (b.kind == ResourceBinding::Kind::UniformBuffer)
-                        ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                    w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
                 }
                 w.pBufferInfo = &buf_infos.back();
                 break;
@@ -2115,8 +2140,28 @@ TextureDesc VulkanRenderDevice::texture_desc(TextureHandle handle) const {
 uintptr_t VulkanRenderDevice::pipeline_descriptor_set_layout(PipelineHandle pipeline) const {
     auto* self = const_cast<VulkanRenderDevice*>(this);
     if (auto* p = self->pipelines_.get(pipeline.id)) {
-        return reinterpret_cast<uintptr_t>(p->descriptor_set_layout);
+        uintptr_t layout = reinterpret_cast<uintptr_t>(p->descriptor_set_layout);
+        if (layout == 0) {
+            const char* vs_name = "N/A";
+            const char* fs_name = "N/A";
+            if (p->desc.vertex_shader.id) {
+                if (auto* vs = self->get_shader(p->desc.vertex_shader))
+                    vs_name = vs->debug_name.c_str();
+            }
+            if (p->desc.fragment_shader.id) {
+                if (auto* fs = self->get_shader(p->desc.fragment_shader))
+                    fs_name = fs->debug_name.c_str();
+            }
+            tc_log(TC_LOG_WARN,
+                   "VulkanRenderDevice: pipeline_descriptor_set_layout pipeline=%u "
+                   "vs='%s' fs='%s' — descriptor_set_layout is VK_NULL_HANDLE",
+                   pipeline.id, vs_name, fs_name);
+        }
+        return layout;
     }
+    tc_log(TC_LOG_ERROR,
+           "VulkanRenderDevice: pipeline_descriptor_set_layout pipeline=%u NOT FOUND",
+           pipeline.id);
     return 0;
 }
 

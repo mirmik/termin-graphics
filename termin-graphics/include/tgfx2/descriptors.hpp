@@ -109,8 +109,8 @@ struct ResourceBinding {
 struct ResourceSetDesc {
     std::vector<ResourceBinding> bindings;
     // Per-pipeline descriptor set layout hint.
-    // Vulkan backend: cast to VkDescriptorSetLayout. OpenGL: ignored.
-    // Set to 0 to use the legacy shared layout (backward compat).
+    // Vulkan backend: cast to VkDescriptorSetLayout; 0 means "no layout"
+    // (pipelines without descriptor bindings). OpenGL: ignored.
     uintptr_t descriptor_set_layout = 0;
 };
 
