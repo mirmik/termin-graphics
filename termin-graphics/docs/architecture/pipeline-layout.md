@@ -80,6 +80,20 @@ The active shader layout resolves names to backend placement. Vulkan can later
 map scopes to descriptor sets, while OpenGL flattens the same metadata to
 binding numbers.
 
+Explicit Slang resource scope should be authored through a Termin user
+attribute supplied by an engine prelude:
+
+```slang
+import termin_prelude;
+
+[[TerminScope("pass")]]
+ConstantBuffer<LightingData> lighting;
+```
+
+The verified reflection path is `slangc -reflection-json` `userAttribs`.
+Do not use `[[termin::scope("...")]]`: `slangc 2026.1-52-gc8ddf20bb` treats the
+namespaced form as an unknown attribute and omits it from reflection JSON.
+
 ## Current Invariants
 
 - No universal binding table should be reintroduced.
