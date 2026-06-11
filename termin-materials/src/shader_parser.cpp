@@ -10,10 +10,9 @@
 #include <utility>
 
 // Use tgfx2's shared include-resolution hook so the parser's strip /
-// inject passes see the full expanded source — including content
-// pulled in from lighting.glsl / shadows.glsl. Without this, plain
-// `uniform mat4 u_view;` decls hiding inside included .glsl files
-// slip past the engine-uniforms strip and break Vulkan compilation.
+// inject passes see the full expanded source. Without this, plain
+// `uniform mat4 u_view;` decls hiding inside included GLSL files slip
+// past the engine-uniforms strip and break Vulkan compilation.
 #include "tgfx2/internal/shader_preprocess.hpp"
 
 namespace termin {
@@ -749,11 +748,10 @@ EngineUniformDeclUsage collect_engine_uniform_usage(const std::string& source) {
         }
     }
 
-    // Stdlib helper code such as shadows.glsl uses `u_view` but intentionally
-    // does not redeclare it. Slang materials use the same compact engine names
-    // without GLSL-style `uniform` declarations, so expression-level references
-    // must also request the scoped engine blocks. The scan deliberately skips
-    // declarations and member accesses; fields such as
+    // Legacy helper code and Slang materials may use compact engine names such
+    // as `u_view` without GLSL-style `uniform` declarations, so expression-level
+    // references must also request the scoped engine blocks. The scan deliberately
+    // skips declarations and member accesses; fields such as
     // `struct IdPushData { mat4 u_model; }` are not engine bindings.
     if (!usage.per_frame && stage_uses_per_frame_engine_uniform(source)) {
         usage.per_frame = true;
