@@ -194,6 +194,160 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_reads_slang_scope_user_attributes(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "import termin_prelude;\n"
+        "[[TerminScope(\"transient\")]] Sampler2D albedo_texture;\n"
+        "[[Scope(\"material\")]] ConstantBuffer<float4> custom_params;\n"
+        "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
+        "    return albedo_texture.Sample(uv) + custom_params;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_bytes(b'FAKE-spirv')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {\n"
+        "            'name': 'albedo_texture',\n"
+        "            'userAttribs': [\n"
+        "                {'name': 'TerminScope', 'arguments': ['transient']},\n"
+        "            ],\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 3},\n"
+        "            'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True},\n"
+        "        },\n"
+        "        {\n"
+        "            'name': 'custom_params',\n"
+        "            'userAttribs': [\n"
+        "                {'name': 'Scope', 'arguments': ['material']},\n"
+        "            ],\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 4},\n"
+        "            'type': {\n"
+        "                'kind': 'constantBuffer',\n"
+        "                'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 16}},\n"
+        "            },\n"
+        "        },\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    assert layout["resources"] == [
+        {
+            "name": "albedo_texture",
+            "kind": "texture",
+            "scope": "transient",
+            "set": 0,
+            "binding": 3,
+            "stage_mask": 2,
+            "size": 0,
+        },
+        {
+            "name": "custom_params",
+            "kind": "constant_buffer",
+            "scope": "material",
+            "set": 0,
+            "binding": 4,
+            "stage_mask": 2,
+            "size": 16,
+        },
+    ]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_rejects_invalid_slang_scope_user_attribute(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "import termin_prelude;\n"
+        "[[TerminScope(\"materail\")]] ConstantBuffer<float4> material;\n"
+        "[shader(\"fragment\")] float4 main() : SV_Target0 { return material; }\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_bytes(b'FAKE-spirv')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [{\n"
+        "        'name': 'material',\n"
+        "        'userAttribs': [\n"
+        "            {'name': 'TerminScope', 'arguments': ['materail']},\n"
+        "        ],\n"
+        "        'binding': {'kind': 'descriptorTableSlot', 'index': 1},\n"
+        "        'type': {\n"
+        "            'kind': 'constantBuffer',\n"
+        "            'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 16}},\n"
+        "        },\n"
+        "    }]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode == 1
+    assert "invalid TerminScope value 'materail'" in result.stderr
+    assert not output.exists()
+    assert not (tmp_path / "out.spv.layout.json").exists()
+    assert not (tmp_path / "out.spv.reflection.json").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_assigns_slang_engine_constant_buffers_by_name(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(

@@ -143,6 +143,14 @@ static bool string_starts_with(const std::string& value, const char* prefix) {
     return value.rfind(prefix, 0) == 0;
 }
 
+static bool is_valid_explicit_resource_scope(const std::string& scope) {
+    return scope == "frame" ||
+           scope == "pass" ||
+           scope == "material" ||
+           scope == "draw" ||
+           scope == "transient";
+}
+
 static std::string infer_resource_scope(
     const std::string& name,
     const std::string& kind
@@ -405,10 +413,92 @@ static bool slang_resource_kind_from_parameter(
     return false;
 }
 
+static std::optional<std::string> slang_scope_attribute_from_parameter(
+    const nos::trent& parameter,
+    const std::string& resource_name,
+    bool& out_ok
+) {
+    out_ok = true;
+    const nos::trent* user_attribs = trent_dict_get(parameter, "userAttribs");
+    if (!user_attribs) {
+        return std::nullopt;
+    }
+    if (!user_attribs->is_list()) {
+        std::cerr
+            << "termin_shaderc: malformed userAttribs for resource '"
+            << resource_name << "'\n";
+        out_ok = false;
+        return std::nullopt;
+    }
+
+    std::optional<std::string> scope;
+    for (const nos::trent& attrib : user_attribs->as_list()) {
+        if (!attrib.is_dict()) {
+            std::cerr
+                << "termin_shaderc: malformed user attribute for resource '"
+                << resource_name << "'\n";
+            out_ok = false;
+            return std::nullopt;
+        }
+
+        std::string attrib_name;
+        if (!trent_string_field(attrib, "name", attrib_name)) {
+            std::cerr
+                << "termin_shaderc: unnamed user attribute for resource '"
+                << resource_name << "'\n";
+            out_ok = false;
+            return std::nullopt;
+        }
+        if (attrib_name != "TerminScope" && attrib_name != "Scope") {
+            continue;
+        }
+
+        const nos::trent* args = trent_dict_get(attrib, "arguments");
+        if (!args || !args->is_list()) {
+            std::cerr
+                << "termin_shaderc: " << attrib_name << " on resource '"
+                << resource_name << "' must have exactly one string argument\n";
+            out_ok = false;
+            return std::nullopt;
+        }
+        const auto& arg_list = args->as_list();
+        if (arg_list.size() != 1 || !arg_list[0].is_string()) {
+            std::cerr
+                << "termin_shaderc: " << attrib_name << " on resource '"
+                << resource_name << "' must have exactly one string argument\n";
+            out_ok = false;
+            return std::nullopt;
+        }
+
+        const std::string candidate = arg_list[0].as_string();
+        if (!is_valid_explicit_resource_scope(candidate)) {
+            std::cerr
+                << "termin_shaderc: invalid " << attrib_name << " value '"
+                << candidate << "' on resource '" << resource_name
+                << "' (expected frame, pass, material, draw, or transient)\n";
+            out_ok = false;
+            return std::nullopt;
+        }
+
+        if (scope && *scope != candidate) {
+            std::cerr
+                << "termin_shaderc: conflicting scope attributes on resource '"
+                << resource_name << "': '" << *scope << "' and '"
+                << candidate << "'\n";
+            out_ok = false;
+            return std::nullopt;
+        }
+        scope = candidate;
+    }
+    return scope;
+}
+
 static std::vector<ShaderResourceBinding> infer_resource_bindings_from_slang_reflection(
     const std::string& reflection_text,
-    const CompileOptions& options
+    const CompileOptions& options,
+    bool& out_ok
 ) {
+    out_ok = true;
     std::vector<ShaderResourceBinding> resources;
     nos::trent root;
     try {
@@ -448,6 +538,16 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings_from_slang_ref
                 binding_kind,
                 binding)) {
             continue;
+        }
+        bool scope_ok = true;
+        std::optional<std::string> explicit_scope =
+            slang_scope_attribute_from_parameter(parameter, name, scope_ok);
+        if (!scope_ok) {
+            out_ok = false;
+            return {};
+        }
+        if (explicit_scope) {
+            binding.scope = *explicit_scope;
         }
         binding.name = name;
         binding.stage_mask = stage_mask;
@@ -554,25 +654,31 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
     return resources;
 }
 
-static std::vector<ShaderResourceBinding> collect_resource_bindings(
+static bool collect_resource_bindings(
     const CompileOptions& options,
     const std::string& source,
-    const std::optional<std::filesystem::path>& reflection_path = std::nullopt
+    const std::optional<std::filesystem::path>& reflection_path,
+    std::vector<ShaderResourceBinding>& resources
 ) {
-    std::vector<ShaderResourceBinding> resources;
+    resources.clear();
     if (reflection_path && is_existing_file(*reflection_path)) {
         std::string reflection_text;
         if (read_file(reflection_path->string(), reflection_text)) {
+            bool reflection_ok = true;
             resources = infer_resource_bindings_from_slang_reflection(
                 reflection_text,
-                options);
+                options,
+                reflection_ok);
+            if (!reflection_ok) {
+                return false;
+            }
         }
     }
     if (resources.empty()) {
         resources = infer_resource_bindings(source, options);
     }
     assign_missing_resource_scopes(resources);
-    return resources;
+    return true;
 }
 
 static bool write_resource_layout_sidecar(
@@ -633,9 +739,11 @@ static bool write_resource_layout_sidecar(
     const std::string& source,
     const std::optional<std::filesystem::path>& reflection_path = std::nullopt
 ) {
-    return write_resource_layout_sidecar(
-        options,
-        collect_resource_bindings(options, source, reflection_path));
+    std::vector<ShaderResourceBinding> resources;
+    if (!collect_resource_bindings(options, source, reflection_path, resources)) {
+        return false;
+    }
+    return write_resource_layout_sidecar(options, resources);
 }
 
 static bool apply_slang_vulkan_shared_layout_policy(
@@ -932,7 +1040,7 @@ static std::string quote_arg(const std::string& value) {
 #ifdef _WIN32
     std::string out = "\"";
     for (char ch : value) {
-        if (ch == '"' || ch == '\\') {
+        if (ch == '"') {
             out.push_back('\\');
         }
         out.push_back(ch);
@@ -955,6 +1063,9 @@ static std::string quote_arg(const std::string& value) {
 
 static int run_command(const std::vector<std::string>& args) {
     std::ostringstream cmd;
+#ifdef _WIN32
+    cmd << "call ";
+#endif
     for (size_t i = 0; i < args.size(); ++i) {
         if (i) cmd << ' ';
         cmd << quote_arg(args[i]);
@@ -1088,8 +1199,14 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
                   << options.output << "\n";
         return false;
     }
-    std::vector<ShaderResourceBinding> resources =
-        collect_resource_bindings(options, source, reflection_path);
+    std::vector<ShaderResourceBinding> resources;
+    if (!collect_resource_bindings(options, source, reflection_path, resources)) {
+        std::error_code ec;
+        std::filesystem::remove(reflection_path, ec);
+        std::filesystem::remove(options.output, ec);
+        std::filesystem::remove(options.output + ".layout.json", ec);
+        return false;
+    }
     bool wrote_layout = false;
     if (options.target == "vulkan") {
         if (options.layout_scheme == "per-pipeline") {
