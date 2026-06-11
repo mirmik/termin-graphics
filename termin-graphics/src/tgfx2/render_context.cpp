@@ -14,6 +14,7 @@ extern "C" {
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace tgfx {
 
@@ -72,7 +73,7 @@ void RenderContext2::end_frame() {
         device_.destroy(current_resource_set_);
         current_resource_set_ = {};
     }
-    pending_bindings_.clear();
+    clear_pending_binding_buckets();
     bindings_dirty_ = true;
 
     // Drain deferred-destroy lists. Pass code accumulated non-owning
@@ -175,7 +176,7 @@ void RenderContext2::begin_pass(
     // different textures or buffers. Keep stale sampler slots from
     // leaking into shaders that intentionally leave a slot unbound and
     // rely on backend defaults.
-    pending_bindings_.clear();
+    clear_pending_binding_buckets();
     bindings_dirty_ = true;
     // Vulkan's cmd-buffer-level binds don't survive a render pass
     // boundary — reset cached state so draw() re-binds on first use.
@@ -337,11 +338,95 @@ static ResourceBinding* find_binding(
     return nullptr;
 }
 
+RenderContext2::ResourceScope RenderContext2::scope_from_shader_resource(
+    uint32_t shader_scope
+) {
+    switch (shader_scope) {
+        case TC_SHADER_RESOURCE_SCOPE_FRAME: return ResourceScope::Frame;
+        case TC_SHADER_RESOURCE_SCOPE_PASS: return ResourceScope::Pass;
+        case TC_SHADER_RESOURCE_SCOPE_MATERIAL: return ResourceScope::Material;
+        case TC_SHADER_RESOURCE_SCOPE_DRAW: return ResourceScope::Draw;
+        case TC_SHADER_RESOURCE_SCOPE_TRANSIENT: return ResourceScope::Transient;
+        case TC_SHADER_RESOURCE_SCOPE_UNKNOWN:
+        default:
+            return ResourceScope::Unknown;
+    }
+}
+
+RenderContext2::ResourceScope RenderContext2::default_numeric_scope() {
+    return ResourceScope::Unknown;
+}
+
+ResourceBinding* RenderContext2::find_pending_binding(
+    ResourceScope scope,
+    uint32_t binding,
+    ResourceBinding::Kind kind,
+    uint32_t set,
+    uint32_t array_element
+) {
+    auto& bucket = pending_binding_buckets_[static_cast<size_t>(scope)];
+    return find_binding(bucket.numeric, binding, kind, set, array_element);
+}
+
+void RenderContext2::upsert_pending_binding(
+    ResourceScope scope,
+    const ResourceBinding& binding
+) {
+    auto& bucket = pending_binding_buckets_[static_cast<size_t>(scope)];
+    ResourceBinding* existing = find_binding(
+        bucket.numeric,
+        binding.binding,
+        binding.kind,
+        binding.set,
+        binding.array_element);
+    if (existing) {
+        *existing = binding;
+    } else {
+        bucket.numeric.push_back(binding);
+    }
+}
+
+bool RenderContext2::pending_binding_buckets_empty() const {
+    for (const ResourceBindingBucket& bucket : pending_binding_buckets_) {
+        if (!bucket.numeric.empty() || !bucket.symbolic.empty()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void RenderContext2::clear_pending_binding_buckets() {
+    for (ResourceBindingBucket& bucket : pending_binding_buckets_) {
+        bucket.numeric.clear();
+        bucket.symbolic.clear();
+    }
+}
+
+std::vector<ResourceBinding> RenderContext2::flatten_pending_bindings() const {
+    std::vector<ResourceBinding> flattened;
+    size_t count = 0;
+    for (const ResourceBindingBucket& bucket : pending_binding_buckets_) {
+        count += bucket.numeric.size();
+    }
+    flattened.reserve(count);
+    for (const ResourceBindingBucket& bucket : pending_binding_buckets_) {
+        flattened.insert(
+            flattened.end(),
+            bucket.numeric.begin(),
+            bucket.numeric.end());
+    }
+    return flattened;
+}
+
 void RenderContext2::bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
                                           uint64_t offset, uint64_t range,
                                           uint32_t set) {
     ResourceBinding* existing =
-        find_binding(pending_bindings_, binding, ResourceBinding::Kind::UniformBuffer, set);
+        find_pending_binding(
+            default_numeric_scope(),
+            binding,
+            ResourceBinding::Kind::UniformBuffer,
+            set);
     if (existing) {
         if (existing->buffer == buffer && existing->offset == offset &&
             existing->range == range) {
@@ -358,7 +443,7 @@ void RenderContext2::bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
         b.buffer = buffer;
         b.offset = offset;
         b.range = range;
-        pending_bindings_.push_back(b);
+        upsert_pending_binding(default_numeric_scope(), b);
     }
     bindings_dirty_ = true;
 }
@@ -402,8 +487,8 @@ void RenderContext2::bind_sampled_texture_array_element(
     uint32_t set
 ) {
     ResourceBinding* existing =
-        find_binding(
-            pending_bindings_,
+        find_pending_binding(
+            default_numeric_scope(),
             binding,
             ResourceBinding::Kind::SampledTexture,
             set,
@@ -423,15 +508,14 @@ void RenderContext2::bind_sampled_texture_array_element(
         b.array_element = array_element;
         b.texture = tex;
         b.sampler = sampler;
-        pending_bindings_.push_back(b);
+        upsert_pending_binding(default_numeric_scope(), b);
     }
     bindings_dirty_ = true;
 }
 
 void RenderContext2::clear_resource_bindings() {
-    if (pending_bindings_.empty() && pending_symbolic_bindings_.empty()) return;
-    pending_bindings_.clear();
-    pending_symbolic_bindings_.clear();
+    if (pending_binding_buckets_empty()) return;
+    clear_pending_binding_buckets();
     bindings_dirty_ = true;
 }
 
@@ -441,10 +525,16 @@ void RenderContext2::clear_resource_bindings() {
 
 void RenderContext2::use_shader_resource_layout(const struct ::tc_shader* shader) {
     active_shader_layout_ = shader;
-    // When the layout changes, clear any previously resolved symbolic
-    // bindings — they came from a different shader's layout.
-    if (!pending_symbolic_bindings_.empty()) {
-        pending_symbolic_bindings_.clear();
+    // When the layout changes, clear any queued symbolic bindings — they must
+    // be resolved against the new shader's layout.
+    bool cleared = false;
+    for (ResourceBindingBucket& bucket : pending_binding_buckets_) {
+        if (!bucket.symbolic.empty()) {
+            bucket.symbolic.clear();
+            cleared = true;
+        }
+    }
+    if (cleared) {
         bindings_dirty_ = true;
     }
 }
@@ -457,7 +547,8 @@ void RenderContext2::bind_uniform(std::string_view name, BufferHandle buffer,
     sb.buffer = buffer;
     sb.offset = offset;
     sb.range = range;
-    pending_symbolic_bindings_.push_back(std::move(sb));
+    pending_binding_buckets_[static_cast<size_t>(ResourceScope::Unknown)]
+        .symbolic.push_back(std::move(sb));
     bindings_dirty_ = true;
 }
 
@@ -468,7 +559,8 @@ void RenderContext2::bind_texture(std::string_view name, TextureHandle texture,
     sb.kind = SymbolicBinding::Kind::Texture;
     sb.texture = texture;
     sb.sampler = sampler;
-    pending_symbolic_bindings_.push_back(std::move(sb));
+    pending_binding_buckets_[static_cast<size_t>(ResourceScope::Unknown)]
+        .symbolic.push_back(std::move(sb));
     bindings_dirty_ = true;
 }
 
@@ -603,57 +695,67 @@ void RenderContext2::flush_pipeline() {
 void RenderContext2::flush_resource_set() {
     if (!bindings_dirty_) return;
 
-    // Resolve symbolic bindings against the active shader layout.
-    if (!pending_symbolic_bindings_.empty() && active_shader_layout_) {
-        for (const SymbolicBinding& sb : pending_symbolic_bindings_) {
-            const tc_shader_resource_binding* rb =
-                tc_shader_find_resource_binding(active_shader_layout_, sb.name.c_str());
-            if (!rb) {
+    // Resolve symbolic bindings against the active shader layout. The queued
+    // symbolic call may initially sit in Unknown; the shader metadata decides
+    // the final scope bucket.
+    if (!active_shader_layout_) {
+        for (ResourceBindingBucket& bucket : pending_binding_buckets_) {
+            if (bucket.symbolic.empty()) continue;
+            for (const SymbolicBinding& sb : bucket.symbolic) {
                 tc_log(TC_LOG_WARN,
-                       "RenderContext2: symbolic binding '%.*s' not found in shader '%s'",
-                       static_cast<int>(sb.name.size()), sb.name.data(),
-                       active_shader_layout_->name ? active_shader_layout_->name
-                                                   : active_shader_layout_->uuid);
-                continue;
+                       "RenderContext2: symbolic binding '%.*s' called without active shader layout",
+                       static_cast<int>(sb.name.size()), sb.name.data());
             }
-
-            ResourceBinding resolved;
-            resolved.set = rb->set;
-            resolved.binding = rb->binding;
-
-            if (sb.kind == SymbolicBinding::Kind::Uniform) {
-                if (rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
-                    tc_log(TC_LOG_WARN,
-                           "RenderContext2: symbolic binding '%.*s' resolved to kind=%u, expected constant_buffer",
-                           static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
-                    continue;
-                }
-                resolved.kind = ResourceBinding::Kind::UniformBuffer;
-                resolved.buffer = sb.buffer;
-                resolved.offset = sb.offset;
-                resolved.range = sb.range;
-            } else {
-                if (rb->kind != TC_SHADER_RESOURCE_TEXTURE) {
-                    tc_log(TC_LOG_WARN,
-                           "RenderContext2: symbolic binding '%.*s' resolved to kind=%u, expected texture",
-                           static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
-                    continue;
-                }
-                resolved.kind = ResourceBinding::Kind::SampledTexture;
-                resolved.texture = sb.texture;
-                resolved.sampler = sb.sampler;
-            }
-
-            // Merge into pending_bindings_ (dedup by set+binding+kind).
-            ResourceBinding* existing =
-                find_binding(pending_bindings_, resolved.binding, resolved.kind, resolved.set);
-            if (existing) {
-                *existing = resolved;
-            } else {
-                pending_bindings_.push_back(resolved);
-            }
+            bucket.symbolic.clear();
         }
-        pending_symbolic_bindings_.clear();
+    } else {
+        for (ResourceBindingBucket& bucket : pending_binding_buckets_) {
+            if (bucket.symbolic.empty()) continue;
+            for (const SymbolicBinding& sb : bucket.symbolic) {
+                const tc_shader_resource_binding* rb =
+                    tc_shader_find_resource_binding(active_shader_layout_, sb.name.c_str());
+                if (!rb) {
+                    tc_log(TC_LOG_WARN,
+                           "RenderContext2: symbolic binding '%.*s' not found in shader '%s'",
+                           static_cast<int>(sb.name.size()), sb.name.data(),
+                           active_shader_layout_->name ? active_shader_layout_->name
+                                                       : active_shader_layout_->uuid);
+                    continue;
+                }
+
+                ResourceBinding resolved;
+                resolved.set = rb->set;
+                resolved.binding = rb->binding;
+
+                if (sb.kind == SymbolicBinding::Kind::Uniform) {
+                    if (rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
+                        tc_log(TC_LOG_WARN,
+                               "RenderContext2: symbolic binding '%.*s' resolved to kind=%u, expected constant_buffer",
+                               static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
+                        continue;
+                    }
+                    resolved.kind = ResourceBinding::Kind::UniformBuffer;
+                    resolved.buffer = sb.buffer;
+                    resolved.offset = sb.offset;
+                    resolved.range = sb.range;
+                } else {
+                    if (rb->kind != TC_SHADER_RESOURCE_TEXTURE) {
+                        tc_log(TC_LOG_WARN,
+                               "RenderContext2: symbolic binding '%.*s' resolved to kind=%u, expected texture",
+                               static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
+                        continue;
+                    }
+                    resolved.kind = ResourceBinding::Kind::SampledTexture;
+                    resolved.texture = sb.texture;
+                    resolved.sampler = sb.sampler;
+                }
+
+                upsert_pending_binding(
+                    scope_from_shader_resource(rb->scope),
+                    resolved);
+            }
+            bucket.symbolic.clear();
+        }
     }
 
     // Defer-destroy the previous set: the command buffer we're still
@@ -666,9 +768,10 @@ void RenderContext2::flush_resource_set() {
         current_resource_set_ = {};
     }
 
-    if (!pending_bindings_.empty()) {
+    std::vector<ResourceBinding> flattened_bindings = flatten_pending_bindings();
+    if (!flattened_bindings.empty()) {
         ResourceSetDesc desc;
-        desc.bindings = pending_bindings_;
+        desc.bindings = std::move(flattened_bindings);
         // Pass the current pipeline's descriptor set layout so the backend
         // allocates against the right VkDescriptorSetLayout.
         if (last_bound_pipeline_) {
@@ -685,7 +788,7 @@ void RenderContext2::flush_resource_set() {
             tc_log(TC_LOG_WARN,
                    "RenderContext2: flush_resource_set skipping pipeline=%u "
                    "(descriptor_set_layout is null) with %zu pending bindings",
-                   last_bound_pipeline_.id, pending_bindings_.size());
+                   last_bound_pipeline_.id, desc.bindings.size());
         }
     }
 

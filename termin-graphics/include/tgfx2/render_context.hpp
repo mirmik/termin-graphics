@@ -17,6 +17,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -67,11 +68,6 @@ private:
     bool in_pass_ = false;
     bool pipeline_dirty_ = true;
 
-    // Pending resource bindings, rebuilt into a ResourceSet on dirty.
-    std::vector<ResourceBinding> pending_bindings_;
-    bool bindings_dirty_ = true;
-    ResourceSetHandle current_resource_set_;
-
     // Symbolic binding support — resolved in flush_resource_set().
     struct SymbolicBinding {
         std::string name;
@@ -82,10 +78,48 @@ private:
         uint64_t offset = 0;
         uint64_t range = 0;
     };
-    std::vector<SymbolicBinding> pending_symbolic_bindings_;
+
+    enum class ResourceScope : uint8_t {
+        Unknown = 0,
+        Frame,
+        Pass,
+        Material,
+        Draw,
+        Transient,
+        Count,
+    };
+
+    struct ResourceBindingBucket {
+        std::vector<ResourceBinding> numeric;
+        std::vector<SymbolicBinding> symbolic;
+    };
+
+    // Pending resource bindings grouped by update scope. The current backends
+    // still receive a flattened ResourceSetDesc; this structure prepares the
+    // RenderContext side for dirty-per-scope and future Vulkan descriptor sets.
+    std::array<
+        ResourceBindingBucket,
+        static_cast<size_t>(ResourceScope::Count)
+    > pending_binding_buckets_;
+    bool bindings_dirty_ = true;
+    ResourceSetHandle current_resource_set_;
+
     // Shader resource layout for symbolic resolution. Set by
     // use_shader_resource_layout(), cleared when shader changes.
     const struct ::tc_shader* active_shader_layout_ = nullptr;
+
+    static ResourceScope scope_from_shader_resource(uint32_t shader_scope);
+    static ResourceScope default_numeric_scope();
+    ResourceBinding* find_pending_binding(
+        ResourceScope scope,
+        uint32_t binding,
+        ResourceBinding::Kind kind,
+        uint32_t set = 0,
+        uint32_t array_element = 0);
+    void upsert_pending_binding(ResourceScope scope, const ResourceBinding& binding);
+    bool pending_binding_buckets_empty() const;
+    void clear_pending_binding_buckets();
+    std::vector<ResourceBinding> flatten_pending_bindings() const;
 
     // Queued push-constant bytes. Re-emitted after every flush_pipeline
     // so the data lands on the freshly-bound VkPipelineLayout (Vulkan)
