@@ -2555,25 +2555,32 @@
     {
       "uuid": "termin-engine-gizmo-mask",
       "name": "GizmoMaskVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-gizmo-mask.vert.glsl",
+          "path": "termin-engine-gizmo-mask.slang",
+          "entry": "vs_main",
           "inputs": [
             {
-              "name": "a_position",
+              "name": "pos",
               "semantic": "POSITION",
               "location": 0
             }
           ],
-          "outputs": []
+          "outputs": [
+            {
+              "name": "pos",
+              "semantic": "SV_Position"
+            }
+          ]
         },
         "fragment": {
-          "path": "termin-engine-gizmo-mask.frag.glsl",
+          "path": "termin-engine-gizmo-mask.slang",
+          "entry": "fs_main",
           "inputs": [],
           "outputs": [
             {
-              "name": "fragColor",
+              "name": "color",
               "semantic": "SV_Target0",
               "location": 0
             }
@@ -2582,10 +2589,10 @@
       },
       "resources": [
         {
-          "name": "GizmoPushBlock",
+          "name": "gizmo_push",
           "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
