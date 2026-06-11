@@ -39,10 +39,11 @@
     {
       "uuid": "termin-runtime-default-color",
       "name": "TerminRuntimeDefaultColor",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-runtime-default-color.vert.glsl",
+          "path": "termin-runtime-default-color.slang",
+          "entry": "vs_main",
           "inputs": [
             {
               "name": "in_position",
@@ -64,7 +65,8 @@
           ]
         },
         "fragment": {
-          "path": "termin-runtime-default-color.frag.glsl",
+          "path": "termin-runtime-default-color.slang",
+          "entry": "fs_main",
           "inputs": [
             {
               "name": "v_color",
@@ -87,7 +89,7 @@
           "logical_name": "camera",
           "kind": "constant_buffer",
           "legacy_set": 0,
-          "legacy_binding": 0
+          "legacy_binding": 2
         },
         {
           "name": "PushConstants",
@@ -99,10 +101,11 @@
     {
       "uuid": "termin-engine-shadow",
       "name": "ShadowEngineVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-shadow.vert.glsl",
+          "path": "termin-engine-shadow.slang",
+          "entry": "vs_main",
           "inputs": [
             {
               "name": "a_position",
@@ -113,17 +116,18 @@
           "outputs": []
         },
         "fragment": {
-          "path": "termin-engine-shadow.frag.glsl",
+          "path": "termin-engine-shadow.slang",
+          "entry": "fs_main",
           "inputs": [],
           "outputs": []
         }
       },
       "resources": [
         {
-          "name": "PerFrame",
+          "name": "per_frame",
           "logical_name": "per_frame",
           "kind": "constant_buffer",
-          "legacy_binding": 0
+          "legacy_binding": 2
         },
         {
           "name": "ShadowPushBlock",
@@ -1553,6 +1557,7 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-foliage-instanced.vert.slang",
+          "entry": "vs_main",
           "inputs": [
             {
               "name": "a_position",
@@ -2096,6 +2101,7 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-foliage-shadow.vert.slang",
+          "entry": "vs_main",
           "inputs": [
             {
               "name": "a_position",
@@ -2188,10 +2194,11 @@
     {
       "uuid": "termin-engine-normal",
       "name": "NormalEngineVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-normal.vert.glsl",
+          "path": "termin-engine-normal.slang",
+          "entry": "vs_main",
           "inputs": [
             {
               "name": "a_position",
@@ -2206,18 +2213,19 @@
           ],
           "outputs": [
             {
-              "name": "v_world_normal",
-              "semantic": "NORMAL1",
+              "name": "world_normal",
+              "semantic": "TEXCOORD0",
               "location": 0
             }
           ]
         },
         "fragment": {
-          "path": "termin-engine-normal.frag.glsl",
+          "path": "termin-engine-normal.slang",
+          "entry": "fs_main",
           "inputs": [
             {
-              "name": "v_world_normal",
-              "semantic": "NORMAL1",
+              "name": "world_normal",
+              "semantic": "TEXCOORD0",
               "location": 0
             }
           ],
@@ -2232,10 +2240,10 @@
       },
       "resources": [
         {
-          "name": "PerFrame",
+          "name": "per_frame",
           "logical_name": "per_frame",
           "kind": "constant_buffer",
-          "legacy_binding": 0
+          "legacy_binding": 2
         },
         {
           "name": "NormalPushBlock",
@@ -2248,10 +2256,11 @@
     {
       "uuid": "termin-engine-depth",
       "name": "DepthEngineVSFS_Encoding",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-depth.vert.glsl",
+          "path": "termin-engine-depth.slang",
+          "entry": "vs_main",
           "inputs": [
             {
               "name": "a_position",
@@ -2271,37 +2280,38 @@
           ],
           "outputs": [
             {
-              "name": "v_linear_depth",
+              "name": "linear_depth",
               "semantic": "TEXCOORD0",
               "location": 0
             },
             {
-              "name": "v_perspective_depth",
+              "name": "perspective_depth",
               "semantic": "TEXCOORD1",
               "location": 1
             },
             {
-              "name": "v_log_depth",
+              "name": "log_depth",
               "semantic": "TEXCOORD2",
               "location": 2
             }
           ]
         },
         "fragment": {
-          "path": "termin-engine-depth.frag.glsl",
+          "path": "termin-engine-depth.slang",
+          "entry": "fs_main",
           "inputs": [
             {
-              "name": "v_linear_depth",
+              "name": "linear_depth",
               "semantic": "TEXCOORD0",
               "location": 0
             },
             {
-              "name": "v_perspective_depth",
+              "name": "perspective_depth",
               "semantic": "TEXCOORD1",
               "location": 1
             },
             {
-              "name": "v_log_depth",
+              "name": "log_depth",
               "semantic": "TEXCOORD2",
               "location": 2
             }
@@ -2317,10 +2327,10 @@
       },
       "resources": [
         {
-          "name": "PerFrame",
+          "name": "per_frame",
           "logical_name": "per_frame",
           "kind": "constant_buffer",
-          "legacy_binding": 0
+          "legacy_binding": 2
         },
         {
           "name": "DepthPushBlock",
@@ -2333,10 +2343,11 @@
     {
       "uuid": "termin-engine-depth-only",
       "name": "DepthOnlyEngineVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-depth-only.vert.glsl",
+          "path": "termin-engine-depth-only.slang",
+          "entry": "vs_main",
           "inputs": [
             {
               "name": "a_position",
@@ -2357,17 +2368,18 @@
           "outputs": []
         },
         "fragment": {
-          "path": "termin-engine-depth-only.frag.glsl",
+          "path": "termin-engine-depth-only.slang",
+          "entry": "fs_main",
           "inputs": [],
           "outputs": []
         }
       },
       "resources": [
         {
-          "name": "PerFrame",
+          "name": "per_frame",
           "logical_name": "per_frame",
           "kind": "constant_buffer",
-          "legacy_binding": 0
+          "legacy_binding": 2
         },
         {
           "name": "DepthPushBlock",

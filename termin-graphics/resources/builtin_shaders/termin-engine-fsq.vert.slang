@@ -13,7 +13,7 @@ struct VertexOutput
 };
 
 [shader("vertex")]
-VertexOutput main(VertexInput input)
+VertexOutput vs_main(VertexInput input)
 {
     VertexOutput output;
     output.position = float4(input.position, 0.0, 1.0);

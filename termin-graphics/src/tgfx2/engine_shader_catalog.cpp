@@ -32,6 +32,7 @@ const EngineShaderStageSource kFullscreenQuadVertexShader{
     ShaderStage::Vertex,
     "slang",
     "builtin_shaders/termin-engine-fsq.vert.slang",
+    "vs_main",
     kFullscreenQuadFallbackGlsl,
     kFullscreenQuadInputs,
     std::size(kFullscreenQuadInputs),

@@ -26,6 +26,7 @@ struct EngineShaderStageSource {
     ShaderStage stage;
     const char* language;
     const char* source_resource_path;
+    const char* entry_point;
     const char* fallback_glsl_source;
     const EngineShaderStageIo* inputs;
     std::size_t input_count;

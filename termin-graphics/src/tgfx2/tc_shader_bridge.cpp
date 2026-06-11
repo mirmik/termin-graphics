@@ -285,11 +285,21 @@ static std::string artifact_metadata_text(
     tgfx::BackendType backend,
     tgfx::ShaderStage stage
 ) {
+    const char* entry = "main";
+    if (stage == tgfx::ShaderStage::Vertex && shader->vertex_entry && shader->vertex_entry[0]) {
+        entry = shader->vertex_entry;
+    } else if (stage == tgfx::ShaderStage::Fragment && shader->fragment_entry && shader->fragment_entry[0]) {
+        entry = shader->fragment_entry;
+    } else if (stage == tgfx::ShaderStage::Geometry && shader->geometry_entry && shader->geometry_entry[0]) {
+        entry = shader->geometry_entry;
+    }
+
     std::ostringstream out;
     out << "source_hash=" << shader->source_hash << "\n";
     out << "language=" << shader_language_name((tc_shader_language)shader->language) << "\n";
     out << "target=" << backend_name(backend) << "\n";
     out << "stage=" << stage_name(stage) << "\n";
+    out << "entry=" << entry << "\n";
     out << "shader_uuid=" << shader->uuid << "\n";
     out << "shader_version=" << shader->version << "\n";
     return out.str();
@@ -305,6 +315,7 @@ static std::string engine_shader_artifact_metadata_text(
     out << "language=" << (shader.language ? shader.language : "") << "\n";
     out << "target=" << backend_name(backend) << "\n";
     out << "stage=" << stage_name(shader.stage) << "\n";
+    out << "entry=" << (shader.entry_point ? shader.entry_point : "main") << "\n";
     out << "shader_uuid=" << (shader.uuid ? shader.uuid : "") << "\n";
     out << "shader_name=" << (shader.name ? shader.name : "") << "\n";
     return out.str();
@@ -919,7 +930,9 @@ static bool compile_engine_shader_stage_artifact(
         " compile --language " + shader_language_name(language) +
         " --target " + backend_name(backend) +
         " --stage " + stage_name(shader.stage) +
-        " --entry main --input " + quote_arg(source_path) +
+        " --entry " + quote_arg(std::filesystem::path(
+            shader.entry_point && shader.entry_point[0] ? shader.entry_point : "main")) +
+        " --input " + quote_arg(source_path) +
         " --output " + quote_arg(artifact_path) +
         " --debug-name " + quote_arg(std::filesystem::path(
             std::string(shader.name ? shader.name : shader.uuid) + ":" + stage_name(shader.stage)));

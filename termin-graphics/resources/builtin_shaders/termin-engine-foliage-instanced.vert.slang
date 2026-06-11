@@ -50,7 +50,7 @@ struct VertexOutput {
 };
 
 [shader("vertex")]
-VertexOutput main(VertexInput input, uint instance_id : SV_InstanceID) {
+VertexOutput vs_main(VertexInput input, uint instance_id : SV_InstanceID) {
     VertexOutput output;
     FoliageInstance instance = foliage_instances[instance_id];
 
