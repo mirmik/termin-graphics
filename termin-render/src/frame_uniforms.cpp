@@ -10,6 +10,15 @@ extern "C" {
 }
 
 namespace termin {
+namespace {
+
+bool shader_uses_layout_only_bindings(const tc_shader* shader) {
+    return shader
+        && tc_shader_has_resource_layout(shader)
+        && tc_shader_get_language(shader) != TC_SHADER_LANGUAGE_GLSL;
+}
+
+} // namespace
 
 EnginePerFrameStd140 make_engine_per_frame_uniforms(
     const Mat44f& view,
@@ -107,7 +116,7 @@ void bind_engine_per_frame_uniforms(
         ctx2.bind_uniform_data(rb->name, &uniforms, sizeof(uniforms));
         return;
     }
-    if (tc_shader_has_resource_layout(shader)) {
+    if (shader_uses_layout_only_bindings(shader)) {
         return;
     }
     uint32_t slot = resolve_per_frame_binding(shader, ENGINE_PER_FRAME_UBO_BINDING);
