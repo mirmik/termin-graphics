@@ -172,8 +172,8 @@ typedef struct tc_material_phase {
 // ============================================================================
 
 // Reserved UBO binding slot for the per-material std140 block. Shared
-// convention across all tgfx2 passes that bind material UBOs. Slot 0 is
-// per-frame/lighting, slot 14 is push constants, slot 1 is per-material.
+// convention across all tgfx2 passes that bind material UBOs.
+// Related engine slots live in tc_shader.h.
 #define TC_MATERIAL_UBO_BINDING_SLOT 1
 
 // ============================================================================

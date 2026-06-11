@@ -285,7 +285,9 @@ termin_set_rpath_lib(termin_graphics2)
 if(TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC AND NOT ANDROID)
     add_executable(termin_shaderc tools/termin_shaderc.cpp)
     target_compile_features(termin_shaderc PRIVATE cxx_std_20)
-    target_include_directories(termin_shaderc PRIVATE ${Vulkan_INCLUDE_DIR})
+    target_include_directories(termin_shaderc PRIVATE
+        ${Vulkan_INCLUDE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(termin_shaderc PRIVATE ${SHADERC_LIB} termin_base)
     termin_set_rpath_tool(termin_shaderc)
     install(TARGETS termin_shaderc RUNTIME DESTINATION bin)

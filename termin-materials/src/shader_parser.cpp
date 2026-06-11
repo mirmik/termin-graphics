@@ -660,13 +660,68 @@ bool is_per_frame_engine_uniform_name(const std::string& name) {
            name == "u_far";
 }
 
+bool is_identifier_char(char c) {
+    return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+}
+
+bool line_declares_engine_identifier(const std::string& line,
+                                     const std::string& name) {
+    const std::string pattern =
+        std::string(R"(^[ \t]*(?:layout[ \t]*\([^)]*\)[ \t]*)?)")
+        + R"((?:uniform[ \t]+)?)"
+        + R"((?:column_major[ \t]+|row_major[ \t]+)?)"
+        + R"([A-Za-z_][A-Za-z0-9_]*(?:[ \t]*x[ \t]*[0-9]+)?[ \t]+)"
+        + name
+        + R"((?:[ \t]*\[[^\]]+\])?[ \t]*(?:;|:).*$)";
+    return std::regex_match(line, std::regex(pattern));
+}
+
+bool source_uses_engine_identifier_reference(const std::string& source,
+                                             const std::string& name) {
+    std::istringstream lines(source);
+    std::string line;
+    while (std::getline(lines, line)) {
+        size_t comment = line.find("//");
+        if (comment != std::string::npos) {
+            line = line.substr(0, comment);
+        }
+        if (line_declares_engine_identifier(line, name) ||
+            line.find("#define") != std::string::npos) {
+            continue;
+        }
+
+        size_t pos = line.find(name);
+        while (pos != std::string::npos) {
+            const bool left_ok =
+                pos == 0 || !is_identifier_char(line[pos - 1]);
+            const size_t end = pos + name.size();
+            const bool right_ok =
+                end >= line.size() || !is_identifier_char(line[end]);
+            const bool member_access =
+                pos > 0 && line[pos - 1] == '.';
+            if (left_ok && right_ok && !member_access) {
+                return true;
+            }
+            pos = line.find(name, pos + name.size());
+        }
+    }
+    return false;
+}
+
+bool source_declares_slang_constant_buffer(const std::string& source,
+                                           const std::string& resource_name) {
+    const std::string pattern =
+        std::string(R"(ConstantBuffer[ \t]*<[^>]+>[ \t]*)") +
+        resource_name + R"(\b)";
+    return std::regex_search(source, std::regex(pattern));
+}
+
 bool stage_uses_per_frame_engine_uniform(const std::string& source) {
     for (const char* name : ENGINE_PLAIN_UNIFORM_NAMES) {
         if (!is_per_frame_engine_uniform_name(name)) {
             continue;
         }
-        std::regex re(std::string("\\b") + name + "\\b");
-        if (std::regex_search(source, re)) {
+        if (source_uses_engine_identifier_reference(source, name)) {
             return true;
         }
     }
@@ -695,12 +750,25 @@ EngineUniformDeclUsage collect_engine_uniform_usage(const std::string& source) {
     }
 
     // Stdlib helper code such as shadows.glsl uses `u_view` but intentionally
-    // does not redeclare it. PerFrame has no macro side effects, so usage-based
-    // injection is safe for these names. Keep `u_model` declaration-based only:
-    // injecting its macro on identifier use corrupts user push-constant structs
-    // with fields named `u_model`.
+    // does not redeclare it. Slang materials use the same compact engine names
+    // without GLSL-style `uniform` declarations, so expression-level references
+    // must also request the scoped engine blocks. The scan deliberately skips
+    // declarations and member accesses; fields such as
+    // `struct IdPushData { mat4 u_model; }` are not engine bindings.
     if (!usage.per_frame && stage_uses_per_frame_engine_uniform(source)) {
         usage.per_frame = true;
+    }
+    if (!usage.model &&
+        source_uses_engine_identifier_reference(source, "u_model")) {
+        usage.model = true;
+    }
+    if (usage.per_frame &&
+        source_declares_slang_constant_buffer(source, "per_frame")) {
+        usage.per_frame = false;
+    }
+    if (usage.model &&
+        source_declares_slang_constant_buffer(source, "draw_data")) {
+        usage.model = false;
     }
 
     return usage;
@@ -733,6 +801,15 @@ struct PerFrame {
 };
 [[TerminScope("frame")]]
 ConstantBuffer<PerFrame> per_frame;
+#define u_view per_frame.u_view
+#define u_projection per_frame.u_projection
+#define u_view_projection per_frame.u_view_projection
+#define u_inv_view per_frame.u_inv_view
+#define u_inv_proj per_frame.u_inv_proj
+#define u_camera_position per_frame.u_camera_position
+#define u_resolution per_frame.u_resolution
+#define u_near per_frame.u_near
+#define u_far per_frame.u_far
 )";
 
 const char* ENGINE_MODEL_PUSH_BLOCK_SLANG = R"(

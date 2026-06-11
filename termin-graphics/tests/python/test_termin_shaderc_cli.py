@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+TC_SHADER_RESOURCE_BINDING_DRAW_DATA = 24
+
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
@@ -410,7 +412,7 @@ def test_termin_shaderc_assigns_slang_engine_constant_buffers_by_name(tmp_path: 
             "kind": "constant_buffer",
             "scope": "frame",
             "set": 0,
-            "binding": 1,
+            "binding": 2,
             "stage_mask": 1,
             "size": 64,
         },
@@ -419,7 +421,7 @@ def test_termin_shaderc_assigns_slang_engine_constant_buffers_by_name(tmp_path: 
             "kind": "constant_buffer",
             "scope": "draw",
             "set": 0,
-            "binding": 2,
+            "binding": TC_SHADER_RESOURCE_BINDING_DRAW_DATA,
             "stage_mask": 1,
             "size": 64,
         },
@@ -449,7 +451,7 @@ def test_termin_shaderc_writes_slang_texture_resources_from_reflection(tmp_path:
         "    'parameters': [\n"
         "        {\n"
         "            'name': 'albedo_texture',\n"
-        "            'binding': {'kind': 'descriptorTableSlot', 'index': 6},\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 0},\n"
         "            'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True},\n"
         "        },\n"
         "    ]\n"
@@ -486,7 +488,7 @@ def test_termin_shaderc_writes_slang_texture_resources_from_reflection(tmp_path:
             "kind": "texture",
             "scope": "material",
             "set": 0,
-            "binding": 6,
+            "binding": 4,
             "stage_mask": 2,
             "size": 0,
         },

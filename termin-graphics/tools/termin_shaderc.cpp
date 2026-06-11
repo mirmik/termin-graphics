@@ -1,5 +1,6 @@
 #include <shaderc/shaderc.hpp>
 #include <tcbase/trent/json.h>
+#include <tgfx/resources/tc_shader.h>
 
 #include <cstdlib>
 #include <cstdint>
@@ -46,7 +47,9 @@ struct ShaderResourceBinding {
     bool slang_split_texture = false;
     bool slang_separate_sampler = false;
     bool slang_storage_texture = false;
+    uint32_t original_set = 0;
     uint32_t original_binding = 0;
+    bool original_placement_set = false;
     // Field-level layout for constant_buffers (populated from Slang reflection).
     struct Field {
         std::string name;
@@ -120,6 +123,14 @@ static uint32_t stage_mask_for_stage(const std::string& stage) {
     if (stage == "geometry") return 1u << 2;
     if (stage == "compute") return 1u << 3;
     return 0u;
+}
+
+static uint32_t material_texture_binding_for_index(uint32_t index) {
+    uint32_t binding = 4u + index;
+    if (binding >= 8u) {
+        ++binding;
+    }
+    return binding;
 }
 
 static std::string json_escape(const std::string& value) {
@@ -214,6 +225,11 @@ static void append_unique_resource(
     std::vector<ShaderResourceBinding>& resources,
     ShaderResourceBinding binding
 ) {
+    if (!binding.original_placement_set) {
+        binding.original_set = binding.set;
+        binding.original_binding = binding.binding;
+        binding.original_placement_set = true;
+    }
     for (ShaderResourceBinding& existing : resources) {
         if (existing.name == binding.name) {
             existing.kind = binding.kind;
@@ -534,7 +550,9 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings_from_slang_ref
                 binding.set)) {
             continue;
         }
+        binding.original_set = binding.set;
         binding.original_binding = binding.binding;
+        binding.original_placement_set = true;
 
         if (!slang_resource_kind_from_parameter(
                 parameter,
@@ -791,6 +809,35 @@ static bool apply_slang_vulkan_shared_layout_policy(
     return true;
 }
 
+static bool apply_slang_vulkan_scope_layout_policy(
+    std::vector<ShaderResourceBinding>& resources
+) {
+    for (ShaderResourceBinding& resource : resources) {
+        if (resource.scope == "frame" && resource.kind == "constant_buffer") {
+            resource.set = 0;
+            resource.binding = TC_SHADER_RESOURCE_BINDING_PER_FRAME;
+        } else if (resource.scope == "material") {
+            if (resource.kind == "constant_buffer" &&
+                resource.name == "material") {
+                resource.set = 0;
+                resource.binding = TC_SHADER_RESOURCE_BINDING_MATERIAL;
+            } else if ((resource.kind == "texture" ||
+                        resource.kind == "storage_texture" ||
+                        resource.kind == "sampler") &&
+                       resource.original_set == 0) {
+                resource.set = 0;
+                resource.binding =
+                    material_texture_binding_for_index(resource.original_binding);
+            }
+        } else if (resource.scope == "draw" &&
+                   resource.kind == "constant_buffer") {
+            resource.set = 0;
+            resource.binding = TC_SHADER_RESOURCE_BINDING_DRAW_DATA;
+        }
+    }
+    return true;
+}
+
 static bool read_spirv_words(
     const std::filesystem::path& path,
     std::vector<uint32_t>& out
@@ -923,7 +970,8 @@ static bool patch_slang_vulkan_spirv_bindings(
 ) {
     bool needs_patch = false;
     for (const ShaderResourceBinding& resource : resources) {
-        if (resource.binding != resource.original_binding) {
+        if (resource.set != resource.original_set ||
+            resource.binding != resource.original_binding) {
             needs_patch = true;
             break;
         }
@@ -945,7 +993,8 @@ static bool patch_slang_vulkan_spirv_bindings(
     }
 
     for (const ShaderResourceBinding& resource : resources) {
-        if (resource.binding == resource.original_binding) {
+        if (resource.set == resource.original_set &&
+            resource.binding == resource.original_binding) {
             continue;
         }
         if (!patch_spirv_binding_for_resource(words, resource)) {
@@ -1308,10 +1357,13 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
     bool wrote_layout = false;
     if (options.target == "vulkan") {
         if (options.layout_scheme == "per-pipeline") {
-            // Per-pipeline mode: leave SPIR-V bindings as-is from Slang
-            // reflection. The Vulkan backend builds VkDescriptorSetLayout
-            // from the SPIR-V decorations at pipeline creation time.
-            wrote_layout = write_resource_layout_sidecar(options, resources);
+            // Per-pipeline mode keeps shader-owned layouts, but Termin-scoped
+            // engine resources still occupy stable slots so separately
+            // compiled stages can merge into one pipeline descriptor layout.
+            wrote_layout =
+                apply_slang_vulkan_scope_layout_policy(resources) &&
+                patch_slang_vulkan_spirv_bindings(options, resources) &&
+                write_resource_layout_sidecar(options, resources);
         } else {
             // Shared-layout mode: remap all Slang resources into the
             // fixed engine descriptor table (legacy / GLSL compat).

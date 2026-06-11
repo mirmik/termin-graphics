@@ -261,9 +261,10 @@ public:
     // `glBindBufferRange` into the ring buffer. `size` must be ≤ the
     // UBO block size declared by the shader.
     //
-    // `binding` must be one of the layout's UNIFORM_BUFFER_DYNAMIC slots
-    // (0..3, 16, 24). Other slots fall back to the classic bind_uniform_buffer
-    // path and pay the old per-draw churn.
+    // `binding` must be one of the layout's UNIFORM_BUFFER_DYNAMIC slots.
+    // Engine draw data uses TC_SHADER_RESOURCE_BINDING_DRAW_DATA. Other slots
+    // fall back to the classic bind_uniform_buffer path and pay the old
+    // per-draw churn.
     // `set` is retained for compatibility with future scoped layouts; the
     // current Vulkan backend flattens migrated resources into set 0.
     void bind_uniform_buffer_ring(uint32_t binding, const void* data, uint32_t size,
