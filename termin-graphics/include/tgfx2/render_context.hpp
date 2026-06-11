@@ -160,6 +160,7 @@ private:
     // flush_pipeline() to skip a redundant vkCmdBindPipeline when the
     // pipeline cache returned the same handle again (same state combo).
     PipelineHandle last_bound_pipeline_ = {};
+    uint64_t last_bound_resource_set_layout_ = 0;
 
 public:
     RenderContext2(IRenderDevice& device, PipelineCache& cache);
@@ -236,6 +237,10 @@ public:
                       uint64_t offset = 0, uint64_t range = 0);
     void bind_texture(std::string_view name, TextureHandle texture,
                       SamplerHandle sampler = {});
+    void bind_texture_array_element(std::string_view name,
+                                    uint32_t array_element,
+                                    TextureHandle texture,
+                                    SamplerHandle sampler = {});
     // Symbolic uniform with inline data — resolves the name and writes
     // to the ring UBO at the resolved binding. Convenience for Python
     // passes that only need small per-draw uniform data without managing

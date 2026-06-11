@@ -298,6 +298,8 @@ private:
     // Cache of VkDescriptorSetLayout built from merged shader bindings.
     // Key: FNV-1a hash of (binding, descriptor_type, count) sorted.
     std::unordered_map<uint64_t, VkDescriptorSetLayout> descriptor_layout_cache_;
+    std::unordered_map<VkDescriptorSetLayout, std::vector<VkDescriptorSetLayoutBinding>>
+        descriptor_layout_bindings_;
 
     bool validation_enabled_ = false;
 

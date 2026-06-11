@@ -186,6 +186,7 @@ void RenderContext2::begin_pass(
     last_bound_ibo_offset_ = 0;
     last_bound_index_type_ = IndexType::Uint32;
     last_bound_pipeline_ = {};
+    last_bound_resource_set_layout_ = 0;
     pipeline_dirty_ = true;
 }
 
@@ -524,14 +525,38 @@ void RenderContext2::clear_resource_bindings() {
 // ============================================================================
 
 void RenderContext2::use_shader_resource_layout(const struct ::tc_shader* shader) {
+    if (!shader) {
+        active_shader_layout_ = nullptr;
+        if (!pending_binding_buckets_empty()) {
+            clear_pending_binding_buckets();
+            bindings_dirty_ = true;
+        }
+        return;
+    }
+
+    const bool layout_changed = active_shader_layout_ != shader;
     active_shader_layout_ = shader;
-    // When the layout changes, clear any queued symbolic bindings — they must
-    // be resolved against the new shader's layout.
+    // When the layout changes, unresolved symbolic bindings and per-draw
+    // numeric leftovers must not be resolved/flushed against the new shader.
+    // Frame/pass/material numeric buckets are kept for legacy compatibility;
+    // migrated resources should enter those buckets through symbolic layout
+    // resolution after this call.
     bool cleared = false;
     for (ResourceBindingBucket& bucket : pending_binding_buckets_) {
         if (!bucket.symbolic.empty()) {
             bucket.symbolic.clear();
             cleared = true;
+        }
+    }
+    if (layout_changed) {
+        for (ResourceScope scope :
+             {ResourceScope::Unknown, ResourceScope::Draw, ResourceScope::Transient}) {
+            ResourceBindingBucket& bucket =
+                pending_binding_buckets_[static_cast<size_t>(scope)];
+            if (!bucket.numeric.empty()) {
+                bucket.numeric.clear();
+                cleared = true;
+            }
         }
     }
     if (cleared) {
@@ -554,11 +579,19 @@ void RenderContext2::bind_uniform(std::string_view name, BufferHandle buffer,
 
 void RenderContext2::bind_texture(std::string_view name, TextureHandle texture,
                                   SamplerHandle sampler) {
+    bind_texture_array_element(name, 0, texture, sampler);
+}
+
+void RenderContext2::bind_texture_array_element(std::string_view name,
+                                                uint32_t array_element,
+                                                TextureHandle texture,
+                                                SamplerHandle sampler) {
     SymbolicBinding sb;
     sb.name = std::string(name);
     sb.kind = SymbolicBinding::Kind::Texture;
     sb.texture = texture;
     sb.sampler = sampler;
+    sb.offset = array_element;
     pending_binding_buckets_[static_cast<size_t>(ResourceScope::Unknown)]
         .symbolic.push_back(std::move(sb));
     bindings_dirty_ = true;
@@ -579,7 +612,36 @@ void RenderContext2::bind_uniform_data(std::string_view name, const void* data, 
                active_shader_layout_->name ? active_shader_layout_->name : active_shader_layout_->uuid);
         return;
     }
-    bind_uniform_buffer_ring(rb->binding, data, size, rb->set);
+    if (rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
+        tc_log(TC_LOG_WARN,
+               "RenderContext2: bind_uniform_data('%.*s') resolved to kind=%u, expected constant_buffer",
+               static_cast<int>(name.size()), name.data(), rb->kind);
+        return;
+    }
+
+    BufferHandle buffer = device_.ring_ubo_handle();
+    uint64_t offset = 0;
+    if (buffer.id != 0) {
+        offset = device_.ring_ubo_write(data, size);
+    } else {
+        BufferDesc bd;
+        bd.size = size;
+        bd.usage = BufferUsage::Uniform;
+        bd.cpu_visible = true;
+        buffer = device_.create_buffer(bd);
+        device_.upload_buffer(buffer, {reinterpret_cast<const uint8_t*>(data), size});
+        defer_destroy(buffer);
+    }
+
+    ResourceBinding resolved;
+    resolved.set = rb->set;
+    resolved.binding = rb->binding;
+    resolved.kind = ResourceBinding::Kind::UniformBuffer;
+    resolved.buffer = buffer;
+    resolved.offset = offset;
+    resolved.range = size;
+    upsert_pending_binding(scope_from_shader_resource(rb->scope), resolved);
+    bindings_dirty_ = true;
 }
 
 void RenderContext2::set_push_constants(const void* data, uint32_t size) {
@@ -673,6 +735,16 @@ void RenderContext2::flush_pipeline() {
     if (pipeline_changed) {
         cmd_->bind_pipeline(pipeline);
         last_bound_pipeline_ = pipeline;
+        const uint64_t descriptor_set_layout =
+            device_.pipeline_descriptor_set_layout(pipeline);
+        if (descriptor_set_layout != last_bound_resource_set_layout_) {
+            if (current_resource_set_) {
+                deferred_destroy_resource_sets_.push_back(current_resource_set_);
+                current_resource_set_ = {};
+            }
+            last_bound_resource_set_layout_ = descriptor_set_layout;
+            bindings_dirty_ = true;
+        }
         // Vertex attribute interpretation is pipeline-local (and OpenGL
         // recreates the VAO on bind_pipeline), so force vertex buffers to
         // be rebound even if the handle ids are unchanged.
@@ -748,6 +820,7 @@ void RenderContext2::flush_resource_set() {
                     resolved.kind = ResourceBinding::Kind::SampledTexture;
                     resolved.texture = sb.texture;
                     resolved.sampler = sb.sampler;
+                    resolved.array_element = static_cast<uint32_t>(sb.offset);
                 }
 
                 upsert_pending_binding(
@@ -768,27 +841,28 @@ void RenderContext2::flush_resource_set() {
         current_resource_set_ = {};
     }
 
-    std::vector<ResourceBinding> flattened_bindings = flatten_pending_bindings();
-    if (!flattened_bindings.empty()) {
-        ResourceSetDesc desc;
-        desc.bindings = std::move(flattened_bindings);
-        // Pass the current pipeline's descriptor set layout so the backend
-        // allocates against the right VkDescriptorSetLayout.
-        if (last_bound_pipeline_) {
-            desc.descriptor_set_layout =
-                device_.pipeline_descriptor_set_layout(last_bound_pipeline_);
-        }
-        // Pipelines built from shaders with no descriptor bindings have a
-        // null descriptor_set_layout. Skip the allocation — there is nothing
-        // to bind against and create_resource_set rejects a null layout.
-        if (desc.descriptor_set_layout != 0) {
-            current_resource_set_ = device_.create_resource_set(desc);
+    ResourceSetDesc desc;
+    desc.bindings = flatten_pending_bindings();
+    // Pass the current pipeline's descriptor set layout so the backend
+    // allocates against the right VkDescriptorSetLayout. Vulkan needs a
+    // descriptor set bound for statically-used layouts even when this draw
+    // did not enqueue explicit bindings; backend defaults fill the slots.
+    if (last_bound_pipeline_) {
+        desc.descriptor_set_layout =
+            device_.pipeline_descriptor_set_layout(last_bound_pipeline_);
+    }
+    if (desc.descriptor_set_layout != 0) {
+        current_resource_set_ = device_.create_resource_set(desc);
+        if (current_resource_set_) {
             cmd_->bind_resource_set(current_resource_set_, 0);
-        } else {
+        }
+    } else {
+        if (!desc.bindings.empty()) {
             tc_log(TC_LOG_WARN,
                    "RenderContext2: flush_resource_set skipping pipeline=%u "
                    "(descriptor_set_layout is null) with %zu pending bindings",
                    last_bound_pipeline_.id, desc.bindings.size());
+            clear_pending_binding_buckets();
         }
     }
 

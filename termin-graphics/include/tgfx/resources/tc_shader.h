@@ -156,7 +156,8 @@ typedef struct tc_shader {
     uint8_t is_static;           // true if registered via tc_shader_register_static
                                  // (engine shader, never destroyed — see
                                  // tc_shader_register_static in tc_shader_registry.h)
-    uint8_t _pad[1];
+    uint8_t has_resource_layout; // true once artifact/catalog layout was loaded,
+                                 // even if the reflected resource list is empty
     tc_shader_handle original_handle;  // handle to original shader (if is_variant)
     uint32_t original_version;   // version of original when variant was created
     uint32_t features;           // tc_shader_feature bitflags
@@ -288,6 +289,8 @@ TGFX_API const tc_shader_resource_binding* tc_shader_find_resource_binding(
     const tc_shader* shader,
     const char* name
 );
+TGFX_API bool tc_shader_has_resource_layout(const tc_shader* shader);
+TGFX_API void tc_shader_mark_resource_layout_known(tc_shader* shader);
 
 #ifdef __cplusplus
 }

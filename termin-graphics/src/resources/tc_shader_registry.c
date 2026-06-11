@@ -86,6 +86,7 @@ static void shader_free_data(tc_shader* shader) {
         shader->resource_bindings = NULL;
     }
     shader->resource_binding_count = 0;
+    shader->has_resource_layout = 0;
 }
 
 // ============================================================================
@@ -1041,6 +1042,52 @@ uint32_t tc_shader_material_ubo_block_size(const tc_shader* shader) {
 // Shader resource layout
 // ============================================================================
 
+static void tc_shader_free_resource_binding_array(
+    tc_shader_resource_binding* bindings,
+    uint32_t count
+) {
+    if (!bindings) return;
+    for (uint32_t i = 0; i < count; ++i) {
+        free(bindings[i].fields);
+        bindings[i].fields = NULL;
+        bindings[i].field_count = 0;
+    }
+    free(bindings);
+}
+
+static bool tc_shader_validate_resource_layout(
+    const tc_shader_resource_binding* bindings,
+    uint32_t count
+) {
+    if (!bindings || count == 0) return true;
+    for (uint32_t i = 0; i < count; ++i) {
+        for (uint32_t j = i + 1u; j < count; ++j) {
+            const tc_shader_resource_binding* a = &bindings[i];
+            const tc_shader_resource_binding* b = &bindings[j];
+            if (a->set != b->set || a->binding != b->binding) {
+                continue;
+            }
+            if (strncmp(a->name, b->name, TC_SHADER_RESOURCE_NAME_MAX) != 0 ||
+                a->kind != b->kind ||
+                a->scope != b->scope) {
+                tc_log(
+                    TC_LOG_ERROR,
+                    "tc_shader_set_resource_layout: conflicting resources at set=%u binding=%u: '%s' kind=%u scope=%u vs '%s' kind=%u scope=%u",
+                    a->set,
+                    a->binding,
+                    a->name,
+                    a->kind,
+                    a->scope,
+                    b->name,
+                    b->kind,
+                    b->scope);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 void tc_shader_set_resource_layout(
     tc_shader* shader,
     const tc_shader_resource_binding* bindings,
@@ -1051,30 +1098,68 @@ void tc_shader_set_resource_layout(
         return;
     }
 
-    if (shader->resource_bindings) {
-        free(shader->resource_bindings);
-        shader->resource_bindings = NULL;
+    if (count == 0 || !bindings) {
+        if (shader->resource_bindings) {
+            tc_shader_free_resource_binding_array(
+                shader->resource_bindings,
+                shader->resource_binding_count);
+            shader->resource_bindings = NULL;
+        }
+        shader->resource_binding_count = 0;
+        shader->has_resource_layout = 0;
+        return;
     }
-    shader->resource_binding_count = 0;
 
-    if (count == 0 || !bindings) return;
-
-    size_t bytes = (size_t)count * sizeof(tc_shader_resource_binding);
     tc_shader_resource_binding* copy =
-        (tc_shader_resource_binding*)malloc(bytes);
+        (tc_shader_resource_binding*)calloc(count, sizeof(tc_shader_resource_binding));
     if (!copy) {
         tc_log(TC_LOG_ERROR,
                "tc_shader_set_resource_layout: allocation failed (%u entries)",
                count);
         return;
     }
-    memcpy(copy, bindings, bytes);
     for (uint32_t i = 0; i < count; i++) {
+        copy[i] = bindings[i];
         copy[i].name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+        copy[i].fields = NULL;
+        if (bindings[i].field_count > 0 && bindings[i].fields) {
+            size_t field_bytes =
+                (size_t)bindings[i].field_count * sizeof(tc_shader_resource_field);
+            copy[i].fields = (tc_shader_resource_field*)malloc(field_bytes);
+            if (!copy[i].fields) {
+                tc_log(
+                    TC_LOG_ERROR,
+                    "tc_shader_set_resource_layout: field allocation failed for '%s' (%u fields)",
+                    copy[i].name,
+                    bindings[i].field_count);
+                tc_shader_free_resource_binding_array(copy, count);
+                return;
+            }
+            memcpy(copy[i].fields, bindings[i].fields, field_bytes);
+            for (uint32_t f = 0; f < bindings[i].field_count; ++f) {
+                copy[i].fields[f].name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+            }
+        } else {
+            copy[i].field_count = 0;
+        }
     }
+
+    if (!tc_shader_validate_resource_layout(copy, count)) {
+        tc_shader_free_resource_binding_array(copy, count);
+        return;
+    }
+
+    if (shader->resource_bindings) {
+        tc_shader_free_resource_binding_array(
+            shader->resource_bindings,
+            shader->resource_binding_count);
+        shader->resource_bindings = NULL;
+    }
+    shader->resource_binding_count = 0;
 
     shader->resource_bindings = copy;
     shader->resource_binding_count = count;
+    shader->has_resource_layout = 1;
 }
 
 uint32_t tc_shader_resource_binding_count(const tc_shader* shader) {
@@ -1092,4 +1177,14 @@ const tc_shader_resource_binding* tc_shader_find_resource_binding(
     int index = tc_shader_find_resource_binding_index(shader, name);
     if (index < 0) return NULL;
     return &shader->resource_bindings[index];
+}
+
+bool tc_shader_has_resource_layout(const tc_shader* shader) {
+    return shader && shader->has_resource_layout != 0;
+}
+
+void tc_shader_mark_resource_layout_known(tc_shader* shader) {
+    if (shader) {
+        shader->has_resource_layout = 1;
+    }
 }

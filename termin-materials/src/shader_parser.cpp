@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstring>
 #include <regex>
+#include <utility>
 
 // Use tgfx2's shared include-resolution hook so the parser's strip /
 // inject passes see the full expanded source — including content
@@ -278,6 +279,7 @@ std::string synthesize_material_ubo_slang(const MaterialUboLayout& layout) {
         out << "    " << t << " " << e.name << ";\n";
     }
     out << "};\n";
+    out << "[[TerminScope(\"material\")]]\n";
     out << "ConstantBuffer<MaterialParams> material;\n";
     return out.str();
 }
@@ -374,6 +376,19 @@ bool source_uses_identifier(const std::string& source, const std::string& name) 
     return std::regex_search(source, re);
 }
 
+bool slang_source_has_prelude_import(const std::string& source) {
+    static const std::regex re(R"(\bimport\s+termin_prelude\s*;)");
+    return std::regex_search(source, re);
+}
+
+std::string ensure_slang_prelude_import(std::string source) {
+    if (source.find("TerminScope(") == std::string::npos ||
+        slang_source_has_prelude_import(source)) {
+        return source;
+    }
+    return "import termin_prelude;\n" + source;
+}
+
 std::string synthesize_material_sampler_glsl(
     const std::vector<std::string>& texture_names,
     const std::string& stage_source
@@ -403,6 +418,7 @@ std::string synthesize_material_sampler_slang(
         if (!source_uses_identifier(stage_source, name)) {
             continue;
         }
+        out << "[[TerminScope(\"material\")]]\n";
         out << "Sampler2D " << name << ";\n";
     }
     return out.str();
@@ -715,16 +731,17 @@ struct PerFrame {
     float u_near;
     float u_far;
 };
+[[TerminScope("frame")]]
 ConstantBuffer<PerFrame> per_frame;
 )";
 
 const char* ENGINE_MODEL_PUSH_BLOCK_SLANG = R"(
-struct ColorPushData {
+struct DrawData {
     column_major float4x4 _u_model;
 };
-[[vk::push_constant]]
-ConstantBuffer<ColorPushData> pc;
-#define u_model pc._u_model
+[[TerminScope("draw")]]
+ConstantBuffer<DrawData> draw_data;
+#define u_model draw_data._u_model
 )";
 
 std::string synthesize_engine_uniform_slang(const EngineUniformDeclUsage& usage) {
@@ -1467,6 +1484,7 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
                 } else if (!sampler_slang.empty() || !eng_slang.empty()) {
                     kv.second.source = eng_slang + sampler_slang + kv.second.source;
                 }
+                kv.second.source = ensure_slang_prelude_import(std::move(kv.second.source));
             }
             if (!layout.empty()) {
                 phase.material_ubo_layout = std::move(layout);

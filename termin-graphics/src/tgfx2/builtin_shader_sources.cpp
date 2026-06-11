@@ -124,7 +124,7 @@ const nos::trent* dict_get(const nos::trent& value, const char* key) {
     if (value.get_type() != nos::trent_type::dict || !value.contains(key)) {
         return nullptr;
     }
-    return &value[key];
+    return value._get(key);
 }
 
 std::string string_field(const nos::trent& value, const char* key) {

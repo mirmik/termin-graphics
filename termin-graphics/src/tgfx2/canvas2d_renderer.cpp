@@ -389,6 +389,7 @@ void Canvas2DRenderer::bind_solid_(CanvasColor color) {
     push.color[2] = color.b;
     push.color[3] = color.a;
 
+    ctx_->use_shader_resource_layout(nullptr);
     ctx_->bind_shader(solid_vs_, solid_fs_);
     ctx_->set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
 }
@@ -402,8 +403,14 @@ void Canvas2DRenderer::bind_texture_(CanvasColor tint, TextureHandle texture) {
     push.color[3] = tint.a;
 
     ctx_->bind_shader(texture_vs_, texture_fs_);
+    tc_shader* raw = tc_shader_get(texture_shader_handle());
+    ctx_->use_shader_resource_layout(raw);
     ctx_->set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
-    ctx_->bind_sampled_texture(4, texture);
+    if (raw && tc_shader_has_resource_layout(raw)) {
+        ctx_->bind_texture("u_texture", texture);
+    } else {
+        ctx_->bind_sampled_texture(4, texture);
+    }
 }
 
 void Canvas2DRenderer::push_quad_(float x0, float y0, float x1, float y1,

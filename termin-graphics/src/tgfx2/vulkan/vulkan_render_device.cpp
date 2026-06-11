@@ -709,6 +709,7 @@ VulkanRenderDevice::~VulkanRenderDevice() {
         if (dsl) vkDestroyDescriptorSetLayout(device_, dsl, nullptr);
     }
     descriptor_layout_cache_.clear();
+    descriptor_layout_bindings_.clear();
     for (VkDescriptorPool pool : descriptor_pools_) {
         if (pool) vkDestroyDescriptorPool(device_, pool, nullptr);
     }
@@ -1045,6 +1046,7 @@ VkDescriptorSetLayout VulkanRenderDevice::get_or_create_descriptor_set_layout(
         return VK_NULL_HANDLE;
     }
     descriptor_layout_cache_.emplace(hash, layout);
+    descriptor_layout_bindings_.emplace(layout, vk_bindings);
     return layout;
 }
 
@@ -1991,7 +1993,80 @@ static uint64_t hash_resource_set_desc(const ResourceSetDesc& desc) {
 }
 
 ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc& desc) {
+    VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+    if (desc.descriptor_set_layout != 0) {
+        layout = reinterpret_cast<VkDescriptorSetLayout>(desc.descriptor_set_layout);
+    }
+    if (!layout) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice: create_resource_set called without descriptor_set_layout");
+        return {};
+    }
+
+    const auto layout_it = descriptor_layout_bindings_.find(layout);
+    if (layout_it == descriptor_layout_bindings_.end()) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice: create_resource_set called with unknown descriptor_set_layout=%p",
+               static_cast<void*>(layout));
+        return {};
+    }
+    const std::vector<VkDescriptorSetLayoutBinding>& layout_bindings = layout_it->second;
+    auto find_layout_binding = [&](uint32_t binding) -> const VkDescriptorSetLayoutBinding* {
+        for (const VkDescriptorSetLayoutBinding& lb : layout_bindings) {
+            if (lb.binding == binding) return &lb;
+        }
+        return nullptr;
+    };
+    auto expected_descriptor_type = [](ResourceBinding::Kind kind) -> VkDescriptorType {
+        switch (kind) {
+            case ResourceBinding::Kind::UniformBuffer:
+                return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+            case ResourceBinding::Kind::StorageBuffer:
+                return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            case ResourceBinding::Kind::SampledTexture:
+                return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            case ResourceBinding::Kind::Sampler:
+                return VK_DESCRIPTOR_TYPE_SAMPLER;
+        }
+        return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+    };
+
     ResourceSetDesc sorted_desc = desc;
+    sorted_desc.bindings.erase(
+        std::remove_if(
+            sorted_desc.bindings.begin(),
+            sorted_desc.bindings.end(),
+            [&](const ResourceBinding& b) {
+                const VkDescriptorSetLayoutBinding* lb =
+                    find_layout_binding(b.binding);
+                if (!lb) {
+                    tc_log(TC_LOG_DEBUG,
+                           "VulkanRenderDevice: skipping resource binding %u[%u], not present in descriptor_set_layout",
+                           b.binding,
+                           b.array_element);
+                    return true;
+                }
+                const VkDescriptorType expected = expected_descriptor_type(b.kind);
+                if (lb->descriptorType != expected) {
+                    tc_log(TC_LOG_WARN,
+                           "VulkanRenderDevice: skipping resource binding %u[%u], descriptor type mismatch layout=%u binding=%u",
+                           b.binding,
+                           b.array_element,
+                           static_cast<unsigned>(lb->descriptorType),
+                           static_cast<unsigned>(expected));
+                    return true;
+                }
+                if (b.array_element >= lb->descriptorCount) {
+                    tc_log(TC_LOG_WARN,
+                           "VulkanRenderDevice: skipping resource binding %u[%u], descriptor array count is %u",
+                           b.binding,
+                           b.array_element,
+                           lb->descriptorCount);
+                    return true;
+                }
+                return false;
+            }),
+        sorted_desc.bindings.end());
     std::sort(sorted_desc.bindings.begin(), sorted_desc.bindings.end(),
               [](const ResourceBinding& a, const ResourceBinding& b) {
                   if (a.binding != b.binding) return a.binding < b.binding;
@@ -2013,17 +2088,6 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
         if (auto it = cache.find(key); it != cache.end()) {
             return it->second;
         }
-    }
-
-    // Use the per-pipeline layout from ResourceSetDesc, or fail.
-    VkDescriptorSetLayout layout = VK_NULL_HANDLE;
-    if (desc.descriptor_set_layout != 0) {
-        layout = reinterpret_cast<VkDescriptorSetLayout>(desc.descriptor_set_layout);
-    }
-    if (!layout) {
-        tc_log(TC_LOG_ERROR,
-               "VulkanRenderDevice: create_resource_set called without descriptor_set_layout");
-        return {};
     }
 
     g_resource_set_count.fetch_add(1, std::memory_order_relaxed);
@@ -2051,73 +2115,116 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
     std::vector<VkWriteDescriptorSet> writes;
     std::vector<VkDescriptorBufferInfo> buf_infos;
     std::vector<VkDescriptorImageInfo> img_infos;
-    buf_infos.reserve(sorted_desc.bindings.size());
-    img_infos.reserve(sorted_desc.bindings.size());
+    size_t layout_descriptor_count = 0;
+    for (const VkDescriptorSetLayoutBinding& lb : layout_bindings) {
+        layout_descriptor_count += std::max(lb.descriptorCount, 1u);
+    }
+    buf_infos.reserve(layout_descriptor_count);
+    img_infos.reserve(layout_descriptor_count);
 
     // Collect dynamic UBO offsets in binding-number order.
     struct DynSlot { uint32_t binding; uint32_t offset; };
     std::vector<DynSlot> dyn_slots;
 
-    for (const auto& b : sorted_desc.bindings) {
-        VkWriteDescriptorSet w{};
-        w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        w.dstSet = res.descriptor_set;
-        w.dstBinding = b.binding;
-        w.dstArrayElement = b.array_element;
-        w.descriptorCount = 1;
+    auto find_resource_binding = [&](uint32_t binding, uint32_t array_element)
+        -> const ResourceBinding* {
+        for (const ResourceBinding& b : sorted_desc.bindings) {
+            if (b.binding == binding && b.array_element == array_element) {
+                return &b;
+            }
+        }
+        return nullptr;
+    };
 
-        switch (b.kind) {
-            case ResourceBinding::Kind::UniformBuffer:
-            case ResourceBinding::Kind::StorageBuffer: {
-                auto* buf = get_buffer(b.buffer);
-                if (!buf) continue;
-                if (b.kind == ResourceBinding::Kind::UniformBuffer) {
-                    // All UBOs use DYNAMIC because the VkDescriptorSetLayout
-                    // (built from SPIR-V reflection) marks every Block-decorated
-                    // struct as VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC.
-                    // Ring-buffer UBOs supply their real offset; regular UBOs
-                    // supply offset 0 and the base offset baked into the
-                    // VkDescriptorBufferInfo.
+    for (const VkDescriptorSetLayoutBinding& lb : layout_bindings) {
+        const uint32_t descriptor_count = std::max(lb.descriptorCount, 1u);
+        for (uint32_t element = 0; element < descriptor_count; ++element) {
+            const ResourceBinding* provided =
+                find_resource_binding(lb.binding, element);
+
+            VkWriteDescriptorSet w{};
+            w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            w.dstSet = res.descriptor_set;
+            w.dstBinding = lb.binding;
+            w.dstArrayElement = element;
+            w.descriptorCount = 1;
+            w.descriptorType = lb.descriptorType;
+
+            switch (lb.descriptorType) {
+                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: {
+                    BufferHandle buffer = ring_ubo_handle_;
+                    uint64_t offset = 0;
+                    uint64_t range = 16;
+                    if (provided && provided->kind == ResourceBinding::Kind::UniformBuffer) {
+                        buffer = provided->buffer;
+                        offset = provided->offset;
+                        range = provided->range;
+                    }
+                    auto* buf = get_buffer(buffer);
+                    if (!buf) continue;
                     constexpr uint64_t VK_MIN_MAX_UBO_RANGE = 65536;
-                    uint64_t range = b.range;
                     if (range == 0)
                         range = std::min<uint64_t>(buf->desc.size, VK_MIN_MAX_UBO_RANGE);
                     if (range > VK_MIN_MAX_UBO_RANGE) range = VK_MIN_MAX_UBO_RANGE;
-                    bool is_ring = ring_ubo_handle_ && (b.buffer == ring_ubo_handle_);
+                    const bool is_ring = ring_ubo_handle_ && (buffer == ring_ubo_handle_);
                     buf_infos.push_back({buf->buffer, 0, range});
-                    w.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-                    dyn_slots.push_back({b.binding, is_ring ? static_cast<uint32_t>(b.offset) : 0u});
-                } else {
-                    buf_infos.push_back({buf->buffer, b.offset, b.range ? b.range : VK_WHOLE_SIZE});
-                    w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                    w.pBufferInfo = &buf_infos.back();
+                    dyn_slots.push_back({lb.binding, is_ring ? static_cast<uint32_t>(offset) : 0u});
+                    break;
                 }
-                w.pBufferInfo = &buf_infos.back();
-                break;
-            }
-            case ResourceBinding::Kind::SampledTexture: {
-                auto* tex = get_texture(b.texture);
-                if (!tex) continue;
-                VkSampler samp_vk = VK_NULL_HANDLE;
-                if (b.sampler) {
-                    auto* samp = get_sampler(b.sampler);
-                    if (samp) samp_vk = samp->sampler;
+                case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: {
+                    if (!provided || provided->kind != ResourceBinding::Kind::StorageBuffer) {
+                        continue;
+                    }
+                    auto* buf = get_buffer(provided->buffer);
+                    if (!buf) continue;
+                    buf_infos.push_back({
+                        buf->buffer,
+                        provided->offset,
+                        provided->range ? provided->range : VK_WHOLE_SIZE});
+                    w.pBufferInfo = &buf_infos.back();
+                    break;
                 }
-                if (samp_vk == VK_NULL_HANDLE) samp_vk = ensure_default_sampler();
-                img_infos.push_back({samp_vk, tex->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
-                w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-                w.pImageInfo = &img_infos.back();
-                break;
+                case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: {
+                    TextureHandle texture = ensure_default_sampled_texture();
+                    SamplerHandle sampler{};
+                    if (provided && provided->kind == ResourceBinding::Kind::SampledTexture) {
+                        texture = provided->texture;
+                        sampler = provided->sampler;
+                    }
+                    auto* tex = get_texture(texture);
+                    if (!tex) continue;
+                    VkSampler samp_vk = VK_NULL_HANDLE;
+                    if (sampler) {
+                        auto* samp = get_sampler(sampler);
+                        if (samp) samp_vk = samp->sampler;
+                    }
+                    if (samp_vk == VK_NULL_HANDLE) samp_vk = ensure_default_sampler();
+                    img_infos.push_back({
+                        samp_vk,
+                        tex->view,
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+                    w.pImageInfo = &img_infos.back();
+                    break;
+                }
+                case VK_DESCRIPTOR_TYPE_SAMPLER: {
+                    VkSampler samp_vk = ensure_default_sampler();
+                    if (provided && provided->kind == ResourceBinding::Kind::Sampler) {
+                        auto* samp = get_sampler(provided->sampler);
+                        if (samp) samp_vk = samp->sampler;
+                    }
+                    img_infos.push_back({
+                        samp_vk,
+                        VK_NULL_HANDLE,
+                        VK_IMAGE_LAYOUT_UNDEFINED});
+                    w.pImageInfo = &img_infos.back();
+                    break;
+                }
+                default:
+                    continue;
             }
-            case ResourceBinding::Kind::Sampler: {
-                auto* samp = get_sampler(b.sampler);
-                if (!samp) continue;
-                img_infos.push_back({samp->sampler, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED});
-                w.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-                w.pImageInfo = &img_infos.back();
-                break;
-            }
+            writes.push_back(w);
         }
-        writes.push_back(w);
     }
 
     if (!writes.empty()) {
@@ -2150,24 +2257,7 @@ TextureDesc VulkanRenderDevice::texture_desc(TextureHandle handle) const {
 uintptr_t VulkanRenderDevice::pipeline_descriptor_set_layout(PipelineHandle pipeline) const {
     auto* self = const_cast<VulkanRenderDevice*>(this);
     if (auto* p = self->pipelines_.get(pipeline.id)) {
-        uintptr_t layout = reinterpret_cast<uintptr_t>(p->descriptor_set_layout);
-        if (layout == 0) {
-            const char* vs_name = "N/A";
-            const char* fs_name = "N/A";
-            if (p->desc.vertex_shader.id) {
-                if (auto* vs = self->get_shader(p->desc.vertex_shader))
-                    vs_name = vs->debug_name.c_str();
-            }
-            if (p->desc.fragment_shader.id) {
-                if (auto* fs = self->get_shader(p->desc.fragment_shader))
-                    fs_name = fs->debug_name.c_str();
-            }
-            tc_log(TC_LOG_WARN,
-                   "VulkanRenderDevice: pipeline_descriptor_set_layout pipeline=%u "
-                   "vs='%s' fs='%s' — descriptor_set_layout is VK_NULL_HANDLE",
-                   pipeline.id, vs_name, fs_name);
-        }
-        return layout;
+        return reinterpret_cast<uintptr_t>(p->descriptor_set_layout);
     }
     tc_log(TC_LOG_ERROR,
            "VulkanRenderDevice: pipeline_descriptor_set_layout pipeline=%u NOT FOUND",

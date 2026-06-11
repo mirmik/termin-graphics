@@ -94,31 +94,20 @@ def test_termin_shaderc_invokes_fake_slangc_for_vulkan(tmp_path: Path) -> None:
     assert output.read_bytes() == b"FAKE-spirv"
     assert not (tmp_path / "out.spv.reflection.json").exists()
     slang_args = json.loads(args_path.read_text(encoding="utf-8"))
-    assert slang_args == [
-        str(shader),
-        "-entry",
-        "main",
-        "-stage",
-        "vertex",
-        "-target",
-        "spirv",
-        "-matrix-layout-column-major",
-        "-reflection-json",
-        str(output) + ".reflection.json",
-        "-profile",
-        "spirv_1_5",
-        "-fvk-b-shift",
-        "1",
-        "all",
-        "-fvk-t-shift",
-        "0",
-        "all",
-        "-fvk-s-shift",
-        "0",
-        "all",
-        "-o",
-        str(output),
+    assert slang_args[0] == str(shader)
+    assert slang_args[slang_args.index("-entry") + 1] == "main"
+    assert slang_args[slang_args.index("-stage") + 1] == "vertex"
+    assert slang_args[slang_args.index("-target") + 1] == "spirv"
+    assert "-matrix-layout-column-major" in slang_args
+    assert slang_args[slang_args.index("-reflection-json") + 1] == str(output) + ".reflection.json"
+    assert slang_args[slang_args.index("-profile") + 1] == "spirv_1_5"
+    assert slang_args[slang_args.index("-o") + 1] == str(output)
+    include_values = [
+        slang_args[i + 1]
+        for i, value in enumerate(slang_args[:-1])
+        if value == "-I"
     ]
+    assert str(tmp_path) in include_values
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
@@ -421,7 +410,7 @@ def test_termin_shaderc_assigns_slang_engine_constant_buffers_by_name(tmp_path: 
             "kind": "constant_buffer",
             "scope": "frame",
             "set": 0,
-            "binding": 2,
+            "binding": 1,
             "stage_mask": 1,
             "size": 64,
         },
@@ -430,7 +419,7 @@ def test_termin_shaderc_assigns_slang_engine_constant_buffers_by_name(tmp_path: 
             "kind": "constant_buffer",
             "scope": "draw",
             "set": 0,
-            "binding": 24,
+            "binding": 2,
             "stage_mask": 1,
             "size": 64,
         },
@@ -497,7 +486,7 @@ def test_termin_shaderc_writes_slang_texture_resources_from_reflection(tmp_path:
             "kind": "texture",
             "scope": "material",
             "set": 0,
-            "binding": 4,
+            "binding": 6,
             "stage_mask": 2,
             "size": 0,
         },
@@ -642,11 +631,9 @@ def test_termin_shaderc_invokes_fake_slangc_for_opengl(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert output.read_bytes() == b"FAKE-glsl"
     slang_args = json.loads(args_path.read_text(encoding="utf-8"))
-    assert "-fvk-b-shift" in slang_args
-    assert slang_args[slang_args.index("-fvk-b-shift") + 1] == "1"
-    assert "-fvk-t-shift" in slang_args
-    assert slang_args[slang_args.index("-fvk-t-shift") + 1] == "0"
-    assert "-fvk-s-shift" in slang_args
+    assert "-fvk-b-shift" not in slang_args
+    assert "-fvk-t-shift" not in slang_args
+    assert "-fvk-s-shift" not in slang_args
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")

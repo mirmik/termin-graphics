@@ -6,6 +6,7 @@
 
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
+#include <tgfx/resources/tc_shader_registry.h>
 }
 
 namespace termin {
@@ -85,6 +86,9 @@ uint32_t resolve_per_frame_binding(const tc_shader* shader, uint32_t fallback) {
     if (!shader) return fallback;
     const tc_shader_resource_binding* rb =
         tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_PER_FRAME);
+    if (!rb) {
+        rb = tc_shader_find_resource_binding(shader, "u_per_frame");
+    }
     if (!rb || rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) return fallback;
     return rb->binding;
 }
@@ -94,8 +98,19 @@ void bind_engine_per_frame_uniforms(
     const EnginePerFrameStd140& uniforms,
     const tc_shader* shader)
 {
-    uint32_t slot = resolve_per_frame_binding(
-        shader, ENGINE_PER_FRAME_UBO_BINDING);
+    const tc_shader_resource_binding* rb =
+        shader ? tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_PER_FRAME) : nullptr;
+    if (!rb && shader) {
+        rb = tc_shader_find_resource_binding(shader, "u_per_frame");
+    }
+    if (rb && rb->kind == TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
+        ctx2.bind_uniform_data(rb->name, &uniforms, sizeof(uniforms));
+        return;
+    }
+    if (tc_shader_has_resource_layout(shader)) {
+        return;
+    }
+    uint32_t slot = resolve_per_frame_binding(shader, ENGINE_PER_FRAME_UBO_BINDING);
     ctx2.bind_uniform_buffer_ring(slot, &uniforms, sizeof(uniforms));
 }
 

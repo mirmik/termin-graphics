@@ -580,6 +580,24 @@ static void merge_shader_resource_binding(
     std::vector<tc_shader_resource_binding>& bindings,
     const tc_shader_resource_binding& incoming
 ) {
+    auto clone_binding = [](const tc_shader_resource_binding& src) {
+        tc_shader_resource_binding dst = src;
+        dst.fields = nullptr;
+        if (src.field_count > 0 && src.fields) {
+            dst.fields = static_cast<tc_shader_resource_field*>(
+                std::malloc(src.field_count * sizeof(tc_shader_resource_field)));
+            if (dst.fields) {
+                std::memcpy(
+                    dst.fields,
+                    src.fields,
+                    src.field_count * sizeof(tc_shader_resource_field));
+            } else {
+                dst.field_count = 0;
+            }
+        }
+        return dst;
+    };
+
     for (tc_shader_resource_binding& existing : bindings) {
         if (std::strcmp(existing.name, incoming.name) == 0) {
             const uint32_t previous_size = existing.size;
@@ -589,7 +607,7 @@ static void merge_shader_resource_binding(
             if (existing.fields) {
                 std::free(existing.fields);
             }
-            existing = incoming;
+            existing = clone_binding(incoming);
             existing.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
             existing.stage_mask |= previous_stage_mask;
             if (incoming.scope == TC_SHADER_RESOURCE_SCOPE_UNKNOWN &&
@@ -602,8 +620,20 @@ static void merge_shader_resource_binding(
             return;
         }
     }
-    bindings.push_back(incoming);
+    bindings.push_back(clone_binding(incoming));
     bindings.back().name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+}
+
+static void free_shader_resource_binding_fields(
+    std::vector<tc_shader_resource_binding>& bindings
+) {
+    for (tc_shader_resource_binding& binding : bindings) {
+        if (binding.fields) {
+            std::free(binding.fields);
+            binding.fields = nullptr;
+        }
+        binding.field_count = 0;
+    }
 }
 
 static bool apply_shader_resource_layout_sidecar(
@@ -637,6 +667,7 @@ static bool apply_shader_resource_layout_sidecar(
         return false;
     }
     if (incoming.empty()) {
+        tc_shader_mark_resource_layout_known(shader);
         return true;
     }
 
@@ -644,7 +675,9 @@ static bool apply_shader_resource_layout_sidecar(
     const uint32_t existing_count = tc_shader_resource_binding_count(shader);
     const tc_shader_resource_binding* existing = tc_shader_resource_bindings(shader);
     if (existing && existing_count > 0) {
-        merged.assign(existing, existing + existing_count);
+        for (uint32_t i = 0; i < existing_count; ++i) {
+            merge_shader_resource_binding(merged, existing[i]);
+        }
     }
     for (const tc_shader_resource_binding& binding : incoming) {
         merge_shader_resource_binding(merged, binding);
@@ -653,6 +686,8 @@ static bool apply_shader_resource_layout_sidecar(
         shader,
         merged.data(),
         static_cast<uint32_t>(merged.size()));
+    free_shader_resource_binding_fields(merged);
+    free_shader_resource_binding_fields(incoming);
     tc_log(TC_LOG_DEBUG,
            "tgfx2 shader resource layout: loaded %zu resource(s) from '%s'",
            incoming.size(),

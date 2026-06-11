@@ -308,6 +308,7 @@ if(BUILD_TESTS)
         tests/main.cpp
         tests/tests_vertex_layout.cpp
         tests/tests_log.cpp
+        tests/tests_shader_resource_layout.cpp
     )
     target_include_directories(tgfx_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/tests

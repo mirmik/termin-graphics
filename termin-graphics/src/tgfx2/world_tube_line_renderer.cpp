@@ -394,6 +394,7 @@ void WorldTubeLineRenderer::draw_polyline(
         {4, VertexFormat::Float4, offsetof(TubeSegmentInstance, color)},
     };
 
+    ctx.use_shader_resource_layout(nullptr);
     ctx.bind_shader(body_vertex_shader_, body_selected_fragment_shader);
     ctx.set_vertex_layouts({corners, segment_layout});
     ctx.set_topology(PrimitiveTopology::TriangleList);
@@ -442,6 +443,7 @@ void WorldTubeLineRenderer::draw_polyline(
         return;
     }
 
+    ctx.use_shader_resource_layout(nullptr);
     ctx.bind_shader(cap_vertex_shader_, cap_selected_fragment_shader);
     ctx.set_vertex_layouts({cap_corners, cap_layout});
     ctx.set_topology(PrimitiveTopology::TriangleList);

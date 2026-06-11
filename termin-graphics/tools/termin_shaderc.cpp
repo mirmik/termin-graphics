@@ -11,6 +11,7 @@
 #include <regex>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #ifndef _WIN32
@@ -30,6 +31,7 @@ struct CompileOptions {
     std::string slangc;
     std::string matrix_layout = "column";
     std::string layout_scheme = "per-pipeline";  // shader-driven, Godot 4 model
+    std::vector<std::string> include_dirs;
 };
 
 struct ShaderResourceBinding {
@@ -61,6 +63,7 @@ static void usage() {
         << "--input <source> --output <artifact> [--entry main] "
         << "[--debug-name name] [--slangc <path>] "
         << "[--matrix-layout column|row] "
+        << "[-I <include-dir>] "
         << "[--layout-scheme shared|per-pipeline]\n";
 }
 
@@ -678,6 +681,17 @@ static bool collect_resource_bindings(
         resources = infer_resource_bindings(source, options);
     }
     assign_missing_resource_scopes(resources);
+    if (options.language == "slang" && options.target == "vulkan") {
+        for (const ShaderResourceBinding& resource : resources) {
+            if (resource.slang_split_texture || resource.slang_separate_sampler) {
+                std::cerr
+                    << "termin_shaderc: Vulkan path does not support split Slang "
+                    << "Texture/Sampler resources for '" << resource.name
+                    << "'; use Sampler2D until split sampler layout metadata is implemented\n";
+                return false;
+            }
+        }
+    }
     return true;
 }
 
@@ -685,6 +699,25 @@ static bool write_resource_layout_sidecar(
     const CompileOptions& options,
     const std::vector<ShaderResourceBinding>& resources
 ) {
+    for (size_t i = 0; i < resources.size(); ++i) {
+        for (size_t j = i + 1; j < resources.size(); ++j) {
+            const ShaderResourceBinding& a = resources[i];
+            const ShaderResourceBinding& b = resources[j];
+            if (a.set != b.set || a.binding != b.binding) {
+                continue;
+            }
+            if (a.name != b.name || a.kind != b.kind || a.scope != b.scope) {
+                std::cerr
+                    << "termin_shaderc: conflicting resources at set="
+                    << a.set << " binding=" << a.binding << ": '"
+                    << a.name << "' (" << a.kind << ", " << a.scope
+                    << ") vs '" << b.name << "' (" << b.kind << ", "
+                    << b.scope << ")\n";
+                return false;
+            }
+        }
+    }
+
     const std::string path = options.output + ".layout.json";
     std::ofstream out(path, std::ios::binary);
     if (!out) {
@@ -1036,6 +1069,68 @@ static std::optional<std::string> resolve_slangc(const CompileOptions& options, 
     return std::nullopt;
 }
 
+static void append_unique_existing_dir(
+    std::vector<std::string>& dirs,
+    const std::filesystem::path& path
+) {
+    std::error_code ec;
+    if (path.empty() ||
+        !std::filesystem::exists(path, ec) ||
+        !std::filesystem::is_directory(path, ec)) {
+        return;
+    }
+    std::filesystem::path normalized = std::filesystem::absolute(path, ec);
+    std::string text = ec ? path.string() : normalized.lexically_normal().string();
+    for (const std::string& existing : dirs) {
+        if (existing == text) {
+            return;
+        }
+    }
+    dirs.push_back(std::move(text));
+}
+
+static std::vector<std::string> slang_include_dirs(
+    const CompileOptions& options,
+    const char* argv0
+) {
+    std::vector<std::string> dirs;
+    for (const std::string& dir : options.include_dirs) {
+        append_unique_existing_dir(dirs, dir);
+    }
+
+    append_unique_existing_dir(dirs, std::filesystem::path(options.input).parent_path());
+
+    if (const char* sdk = std::getenv("TERMIN_SDK")) {
+        if (sdk[0] != '\0') {
+            append_unique_existing_dir(
+                dirs,
+                std::filesystem::path(sdk) / "share" / "termin" / "builtin_shaders");
+        }
+    }
+
+    if (argv0 && argv0[0] != '\0') {
+        std::error_code ec;
+        std::filesystem::path tool_dir = std::filesystem::absolute(argv0, ec).parent_path();
+        if (!ec) {
+            append_unique_existing_dir(
+                dirs,
+                tool_dir.parent_path() / "share" / "termin" / "builtin_shaders");
+            append_unique_existing_dir(
+                dirs,
+                tool_dir / "share" / "termin" / "builtin_shaders");
+        }
+    }
+
+    std::error_code ec;
+    std::filesystem::path cwd = std::filesystem::current_path(ec);
+    if (!ec) {
+        append_unique_existing_dir(dirs, cwd / "share" / "termin" / "builtin_shaders");
+        append_unique_existing_dir(dirs, cwd / "termin-graphics" / "resources" / "builtin_shaders");
+    }
+
+    return dirs;
+}
+
 static std::string quote_arg(const std::string& value) {
 #ifdef _WIN32
     std::string out = "\"";
@@ -1183,6 +1278,9 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         "-target", slang_target,
         *matrix_layout_arg,
     };
+    for (const std::string& include_dir : slang_include_dirs(options, argv0)) {
+        args.insert(args.end(), {"-I", include_dir});
+    }
     const std::filesystem::path reflection_path(options.output + ".reflection.json");
     args.insert(args.end(), {"-reflection-json", reflection_path.string()});
     args.insert(args.end(), extra_args.begin(), extra_args.end());
@@ -1271,6 +1369,10 @@ int main(int argc, char** argv) {
             if (!take_value(options.matrix_layout)) return 2;
         } else if (arg == "--layout-scheme") {
             if (!take_value(options.layout_scheme)) return 2;
+        } else if (arg == "-I" || arg == "--include-dir") {
+            std::string include_dir;
+            if (!take_value(include_dir)) return 2;
+            options.include_dirs.push_back(std::move(include_dir));
         } else {
             std::cerr << "termin_shaderc: unknown argument: " << arg << "\n";
             usage();
