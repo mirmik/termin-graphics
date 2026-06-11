@@ -400,6 +400,62 @@ static uint32_t shader_resource_kind_from_name(const std::string& name) {
     return TC_SHADER_RESOURCE_NONE;
 }
 
+static uint32_t shader_resource_scope_from_name(const std::string& name) {
+    if (name == "frame") return TC_SHADER_RESOURCE_SCOPE_FRAME;
+    if (name == "pass") return TC_SHADER_RESOURCE_SCOPE_PASS;
+    if (name == "material") return TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    if (name == "draw") return TC_SHADER_RESOURCE_SCOPE_DRAW;
+    if (name == "transient") return TC_SHADER_RESOURCE_SCOPE_TRANSIENT;
+    if (name == "unknown") return TC_SHADER_RESOURCE_SCOPE_UNKNOWN;
+    return TC_SHADER_RESOURCE_SCOPE_UNKNOWN;
+}
+
+static bool string_contains(const std::string& value, const char* needle) {
+    return value.find(needle) != std::string::npos;
+}
+
+static uint32_t infer_shader_resource_scope(
+    const std::string& name,
+    uint32_t kind
+) {
+    if (name == TC_SHADER_RESOURCE_PER_FRAME || name == "u_per_frame") {
+        return TC_SHADER_RESOURCE_SCOPE_FRAME;
+    }
+    if (name == TC_SHADER_RESOURCE_MATERIAL) {
+        return TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    }
+    if (name == TC_SHADER_RESOURCE_DRAW || name == "draw_data" ||
+        name == "u_draw" || name == "u_push" || name == "pc") {
+        return TC_SHADER_RESOURCE_SCOPE_DRAW;
+    }
+    if (name == "lighting" || name == "lighting_ubo" ||
+        string_contains(name, "shadow") || name == "u_params") {
+        return TC_SHADER_RESOURCE_SCOPE_PASS;
+    }
+    if (kind == TC_SHADER_RESOURCE_TEXTURE ||
+        kind == TC_SHADER_RESOURCE_STORAGE_TEXTURE ||
+        kind == TC_SHADER_RESOURCE_SAMPLER) {
+        if (name == "u_input" || name == "u_texture" ||
+            name == "u_original" || name == "u_bloom" ||
+            name == "u_color" || name == "u_id" ||
+            name == "u_depth_tex" || name == "u_color_tex" ||
+            name == "u_tex") {
+            return TC_SHADER_RESOURCE_SCOPE_TRANSIENT;
+        }
+        if (string_contains(name, "albedo") ||
+            string_contains(name, "normal") ||
+            string_contains(name, "metallic") ||
+            string_contains(name, "roughness") ||
+            string_contains(name, "occlusion") ||
+            string_contains(name, "emissive") ||
+            string_contains(name, "diffuse") ||
+            string_contains(name, "tint")) {
+            return TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+        }
+    }
+    return TC_SHADER_RESOURCE_SCOPE_UNKNOWN;
+}
+
 static const nos::trent* trent_dict_get(const nos::trent& value, const char* key) {
     if (!value.is_dict()) {
         return nullptr;
@@ -459,6 +515,7 @@ static bool parse_shader_resource_layout_sidecar(
         }
         std::string name;
         std::string kind_name;
+        std::string scope_name;
         uint32_t set = 0;
         uint32_t binding = 0;
         uint32_t stage_mask = TC_SHADER_STAGE_NONE;
@@ -476,10 +533,17 @@ static bool parse_shader_resource_layout_sidecar(
         if (kind == TC_SHADER_RESOURCE_NONE || name.empty()) {
             return false;
         }
+        uint32_t scope = TC_SHADER_RESOURCE_SCOPE_UNKNOWN;
+        if (trent_string_field(object, "scope", scope_name)) {
+            scope = shader_resource_scope_from_name(scope_name);
+        } else {
+            scope = infer_shader_resource_scope(name, kind);
+        }
 
         tc_shader_resource_binding resource{};
         std::snprintf(resource.name, sizeof(resource.name), "%s", name.c_str());
         resource.kind = kind;
+        resource.scope = scope;
         resource.set = set;
         resource.binding = binding;
         resource.stage_mask = stage_mask;
@@ -520,6 +584,7 @@ static void merge_shader_resource_binding(
         if (std::strcmp(existing.name, incoming.name) == 0) {
             const uint32_t previous_size = existing.size;
             const uint32_t previous_stage_mask = existing.stage_mask;
+            const uint32_t previous_scope = existing.scope;
             // Free old fields if they exist before overwriting.
             if (existing.fields) {
                 std::free(existing.fields);
@@ -527,6 +592,10 @@ static void merge_shader_resource_binding(
             existing = incoming;
             existing.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
             existing.stage_mask |= previous_stage_mask;
+            if (incoming.scope == TC_SHADER_RESOURCE_SCOPE_UNKNOWN &&
+                previous_scope != TC_SHADER_RESOURCE_SCOPE_UNKNOWN) {
+                existing.scope = previous_scope;
+            }
             if (incoming.size == 0 && previous_size != 0) {
                 existing.size = previous_size;
             }

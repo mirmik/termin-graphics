@@ -184,6 +184,7 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
         {
             "name": "material",
             "kind": "constant_buffer",
+            "scope": "material",
             "set": 0,
             "binding": 1,
             "stage_mask": 2,
@@ -264,6 +265,7 @@ def test_termin_shaderc_assigns_slang_engine_constant_buffers_by_name(tmp_path: 
         {
             "name": "per_frame",
             "kind": "constant_buffer",
+            "scope": "frame",
             "set": 0,
             "binding": 2,
             "stage_mask": 1,
@@ -272,6 +274,7 @@ def test_termin_shaderc_assigns_slang_engine_constant_buffers_by_name(tmp_path: 
         {
             "name": "draw_data",
             "kind": "constant_buffer",
+            "scope": "draw",
             "set": 0,
             "binding": 24,
             "stage_mask": 1,
@@ -338,6 +341,7 @@ def test_termin_shaderc_writes_slang_texture_resources_from_reflection(tmp_path:
         {
             "name": "albedo_texture",
             "kind": "texture",
+            "scope": "material",
             "set": 0,
             "binding": 4,
             "stage_mask": 2,
@@ -448,6 +452,7 @@ def test_termin_shaderc_falls_back_to_slang_sampler2d_register_resource_layout(t
         {
             "name": "albedo_texture",
             "kind": "texture",
+            "scope": "material",
             "set": 2,
             "binding": 7,
             "stage_mask": 2,

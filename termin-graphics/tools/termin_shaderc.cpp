@@ -35,6 +35,7 @@ struct CompileOptions {
 struct ShaderResourceBinding {
     std::string name;
     std::string kind;
+    std::string scope;
     uint32_t set = 0;
     uint32_t binding = 0;
     uint32_t stage_mask = 0;
@@ -134,6 +135,70 @@ static std::string json_escape(const std::string& value) {
     return out;
 }
 
+static bool string_contains(const std::string& value, const char* needle) {
+    return value.find(needle) != std::string::npos;
+}
+
+static bool string_starts_with(const std::string& value, const char* prefix) {
+    return value.rfind(prefix, 0) == 0;
+}
+
+static std::string infer_resource_scope(
+    const std::string& name,
+    const std::string& kind
+) {
+    if (name == "per_frame" || name == "u_per_frame") {
+        return "frame";
+    }
+    if (name == "material") {
+        return "material";
+    }
+    if (name == "draw" || name == "draw_data" || name == "u_draw" ||
+        name == "u_push" || name == "pc") {
+        return "draw";
+    }
+    if (name == "lighting" || name == "lighting_ubo" ||
+        string_contains(name, "shadow")) {
+        return "pass";
+    }
+    if (name == "u_params") {
+        return "pass";
+    }
+    if (kind == "texture" || kind == "storage_texture" || kind == "sampler") {
+        if (name == "u_input" || name == "u_texture" ||
+            name == "u_original" || name == "u_bloom" ||
+            name == "u_color" || name == "u_id" ||
+            name == "u_depth_tex" || name == "u_color_tex" ||
+            name == "u_tex") {
+            return "transient";
+        }
+        if (string_contains(name, "albedo") ||
+            string_contains(name, "normal") ||
+            string_contains(name, "metallic") ||
+            string_contains(name, "roughness") ||
+            string_contains(name, "occlusion") ||
+            string_contains(name, "emissive") ||
+            string_contains(name, "diffuse") ||
+            string_contains(name, "tint")) {
+            return "material";
+        }
+    }
+    if (string_starts_with(name, "u_")) {
+        return "unknown";
+    }
+    return "unknown";
+}
+
+static void assign_missing_resource_scopes(
+    std::vector<ShaderResourceBinding>& resources
+) {
+    for (ShaderResourceBinding& resource : resources) {
+        if (resource.scope.empty()) {
+            resource.scope = infer_resource_scope(resource.name, resource.kind);
+        }
+    }
+}
+
 static void append_unique_resource(
     std::vector<ShaderResourceBinding>& resources,
     ShaderResourceBinding binding
@@ -141,6 +206,11 @@ static void append_unique_resource(
     for (ShaderResourceBinding& existing : resources) {
         if (existing.name == binding.name) {
             existing.kind = binding.kind;
+            if (!binding.scope.empty() && binding.scope != "unknown") {
+                existing.scope = binding.scope;
+            } else if (existing.scope.empty()) {
+                existing.scope = binding.scope;
+            }
             existing.set = binding.set;
             existing.binding = binding.binding;
             existing.stage_mask |= binding.stage_mask;
@@ -501,6 +571,7 @@ static std::vector<ShaderResourceBinding> collect_resource_bindings(
     if (resources.empty()) {
         resources = infer_resource_bindings(source, options);
     }
+    assign_missing_resource_scopes(resources);
     return resources;
 }
 
@@ -526,6 +597,7 @@ static bool write_resource_layout_sidecar(
         out << "    {"
             << "\"name\": \"" << json_escape(binding.name) << "\", "
             << "\"kind\": \"" << json_escape(binding.kind) << "\", "
+            << "\"scope\": \"" << json_escape(binding.scope) << "\", "
             << "\"set\": " << binding.set << ", "
             << "\"binding\": " << binding.binding << ", "
             << "\"stage_mask\": " << binding.stage_mask << ", "

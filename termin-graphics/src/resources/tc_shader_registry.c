@@ -1017,6 +1017,7 @@ void tc_shader_set_material_ubo_layout(
         TC_SHADER_RESOURCE_NAME_MAX - 1);
     material_binding.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
     material_binding.kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    material_binding.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
     material_binding.set = TC_SHADER_RESOURCE_SET_DEFAULT;
     material_binding.binding = TC_SHADER_RESOURCE_BINDING_MATERIAL;
     material_binding.stage_mask = TC_SHADER_STAGE_ALL_GRAPHICS;

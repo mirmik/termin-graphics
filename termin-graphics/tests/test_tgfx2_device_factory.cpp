@@ -429,6 +429,7 @@ float4 main() : SV_Target {
         tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_MATERIAL);
     REQUIRE(binding != nullptr);
     CHECK(binding->kind == TC_SHADER_RESOURCE_CONSTANT_BUFFER);
+    CHECK(binding->scope == TC_SHADER_RESOURCE_SCOPE_MATERIAL);
     CHECK(binding->set == 2u);
     CHECK(binding->binding == 7u);
     CHECK(binding->size == 16u);

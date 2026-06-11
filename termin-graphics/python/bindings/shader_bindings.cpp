@@ -64,6 +64,14 @@ void bind_shader(nb::module_& m) {
         .value("STORAGE_BUFFER", TC_SHADER_RESOURCE_STORAGE_BUFFER)
         .value("STORAGE_TEXTURE", TC_SHADER_RESOURCE_STORAGE_TEXTURE);
 
+    nb::enum_<tc_shader_resource_scope>(m, "ShaderResourceScope")
+        .value("UNKNOWN", TC_SHADER_RESOURCE_SCOPE_UNKNOWN)
+        .value("FRAME", TC_SHADER_RESOURCE_SCOPE_FRAME)
+        .value("PASS", TC_SHADER_RESOURCE_SCOPE_PASS)
+        .value("MATERIAL", TC_SHADER_RESOURCE_SCOPE_MATERIAL)
+        .value("DRAW", TC_SHADER_RESOURCE_SCOPE_DRAW)
+        .value("TRANSIENT", TC_SHADER_RESOURCE_SCOPE_TRANSIENT);
+
     // TcShader - RAII wrapper
     nb::class_<TcShader>(m, "TcShader")
         .def(nb::init<>())
@@ -97,6 +105,7 @@ void bind_shader(nb::module_& m) {
                 nb::dict result;
                 result["name"] = std::string(binding->name);
                 result["kind"] = binding->kind;
+                result["scope"] = binding->scope;
                 result["set"] = binding->set;
                 result["binding"] = binding->binding;
                 result["stage_mask"] = binding->stage_mask;

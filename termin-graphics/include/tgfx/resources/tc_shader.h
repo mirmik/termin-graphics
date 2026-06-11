@@ -77,6 +77,15 @@ typedef enum tc_shader_resource_kind {
     TC_SHADER_RESOURCE_STORAGE_TEXTURE = 5,
 } tc_shader_resource_kind;
 
+typedef enum tc_shader_resource_scope {
+    TC_SHADER_RESOURCE_SCOPE_UNKNOWN = 0,
+    TC_SHADER_RESOURCE_SCOPE_FRAME = 1,
+    TC_SHADER_RESOURCE_SCOPE_PASS = 2,
+    TC_SHADER_RESOURCE_SCOPE_MATERIAL = 3,
+    TC_SHADER_RESOURCE_SCOPE_DRAW = 4,
+    TC_SHADER_RESOURCE_SCOPE_TRANSIENT = 5,
+} tc_shader_resource_scope;
+
 typedef enum tc_shader_stage_mask {
     TC_SHADER_STAGE_NONE = 0,
     TC_SHADER_STAGE_VERTEX = 1 << 0,
@@ -109,6 +118,7 @@ typedef struct tc_shader_resource_field {
 typedef struct tc_shader_resource_binding {
     char name[TC_SHADER_RESOURCE_NAME_MAX];
     uint32_t kind;        // tc_shader_resource_kind
+    uint32_t scope;       // tc_shader_resource_scope
     uint32_t set;
     uint32_t binding;
     uint32_t stage_mask;  // tc_shader_stage_mask
