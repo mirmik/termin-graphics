@@ -1,21 +1,26 @@
 import termin_prelude;
 
-struct CameraData {
-    column_major float4x4 view;
-    column_major float4x4 proj;
-    column_major float4x4 view_proj;
-    float4 camera_pos;
+struct PerFrame {
+    column_major float4x4 u_view;
+    column_major float4x4 u_projection;
+    column_major float4x4 u_view_projection;
+    column_major float4x4 u_inv_view;
+    column_major float4x4 u_inv_proj;
+    float4 u_camera_position;
+    float2 u_resolution;
+    float u_near;
+    float u_far;
 };
 
 [[TerminScope("frame")]]
-ConstantBuffer<CameraData> CameraUBO;
+ConstantBuffer<PerFrame> per_frame;
 
-struct PushConstantsData {
+struct DrawData {
     column_major float4x4 model;
 };
 
-[[vk::push_constant]]
-ConstantBuffer<PushConstantsData> PushConstants;
+[[TerminScope("draw")]]
+ConstantBuffer<DrawData> draw_data;
 
 struct VertexInput {
     float3 position : POSITION;
@@ -32,7 +37,7 @@ VertexOutput vs_main(VertexInput input) {
     VertexOutput output;
     output.color = input.color;
     output.position =
-        mul(CameraUBO.view_proj, mul(PushConstants.model, float4(input.position, 1.0)));
+        mul(per_frame.u_view_projection, mul(draw_data.model, float4(input.position, 1.0)));
     return output;
 }
 

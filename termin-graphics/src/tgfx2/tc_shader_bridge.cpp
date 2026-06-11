@@ -838,6 +838,18 @@ static bool compile_shader_artifact(
         " --output " + quote_arg(artifact_path) +
         " --debug-name " + quote_arg(std::filesystem::path(
             std::string(shader->name ? shader->name : shader->uuid) + ":" + stage_name(stage)));
+    if (language == TC_SHADER_LANGUAGE_SLANG) {
+        for (const auto& root : tgfx::builtin_shader_roots()) {
+            cmd += " -I " + quote_arg(root);
+        }
+    }
+    tc_log(TC_LOG_DEBUG,
+           "tgfx2 shader dev compile: %s stage=%s entry=%s input='%s' output='%s'",
+           shader->name ? shader->name : shader->uuid,
+           stage_name(stage),
+           entry,
+           source_path.string().c_str(),
+           artifact_path.string().c_str());
 
     const int rc = std::system(cmd.c_str());
     if (rc != 0) {

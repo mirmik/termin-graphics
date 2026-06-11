@@ -14,8 +14,8 @@ struct DepthPushData {
     column_major float4x4 u_model;
 };
 
-[[vk::push_constant]]
-ConstantBuffer<DepthPushData> pc;
+[[TerminScope("draw")]]
+ConstantBuffer<DepthPushData> depth_draw;
 
 struct VertexInput {
     float3 position : POSITION;
@@ -28,7 +28,7 @@ struct VertexOutput {
 [shader("vertex")]
 VertexOutput vs_main(VertexInput input) {
     VertexOutput output;
-    float4 world_pos = mul(pc.u_model, float4(input.position, 1.0));
+    float4 world_pos = mul(depth_draw.u_model, float4(input.position, 1.0));
     float4 view_pos = mul(per_frame.u_view, world_pos);
     output.position = mul(per_frame.u_projection, view_pos);
     return output;

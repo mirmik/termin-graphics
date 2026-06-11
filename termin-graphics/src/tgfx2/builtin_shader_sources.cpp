@@ -87,6 +87,8 @@ void add_share_roots_from_ancestors(
     }
 }
 
+} // anonymous namespace
+
 std::vector<std::filesystem::path> builtin_shader_roots() {
     std::vector<std::filesystem::path> roots;
 
@@ -108,6 +110,8 @@ std::vector<std::filesystem::path> builtin_shader_roots() {
 
     return roots;
 }
+
+namespace {
 
 std::string roots_for_log(const std::vector<std::filesystem::path>& roots) {
     std::string text;

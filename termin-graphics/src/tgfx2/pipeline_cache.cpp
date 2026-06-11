@@ -11,14 +11,17 @@ namespace tgfx {
 // ============================================================================
 
 static bool layouts_equal(const VertexBufferLayout& a, const VertexBufferLayout& b) {
-    if (a.stride != b.stride || a.per_instance != b.per_instance)
+    if (a.stride != b.stride || a.per_instance != b.per_instance ||
+        a.use_shader_input_locations != b.use_shader_input_locations)
         return false;
     if (a.attributes.size() != b.attributes.size())
         return false;
     for (size_t i = 0; i < a.attributes.size(); i++) {
-        if (a.attributes[i].location != b.attributes[i].location ||
-            a.attributes[i].format != b.attributes[i].format ||
+        if (a.attributes[i].format != b.attributes[i].format ||
             a.attributes[i].offset != b.attributes[i].offset)
+            return false;
+        if (!a.use_shader_input_locations &&
+            a.attributes[i].location != b.attributes[i].location)
             return false;
     }
     return true;

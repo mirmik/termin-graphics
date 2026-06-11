@@ -85,16 +85,16 @@
       },
       "resources": [
         {
-          "name": "CameraUBO",
-          "logical_name": "camera",
+          "name": "per_frame",
+          "logical_name": "per_frame",
           "kind": "constant_buffer",
-          "legacy_set": 0,
-          "legacy_binding": 2
+          "scope": "frame"
         },
         {
-          "name": "PushConstants",
-          "logical_name": "push_constants",
-          "kind": "push_constant"
+          "name": "draw_data",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
@@ -127,13 +127,13 @@
           "name": "per_frame",
           "logical_name": "per_frame",
           "kind": "constant_buffer",
-          "legacy_binding": 2
+          "scope": "frame"
         },
         {
-          "name": "ShadowPushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "shadow_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
@@ -301,10 +301,11 @@
     {
       "uuid": "termin-engine-canvas2d-solid",
       "name": "Canvas2DSolidVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-canvas2d.vert.glsl",
+          "path": "termin-engine-canvas2d-solid.slang",
+          "entry": "vs_main",
           "inputs": [
             {
               "name": "a_pos",
@@ -326,7 +327,8 @@
           ]
         },
         "fragment": {
-          "path": "termin-engine-canvas2d-solid.frag.glsl",
+          "path": "termin-engine-canvas2d-solid.slang",
+          "entry": "fs_main",
           "inputs": [],
           "outputs": [
             {
@@ -339,20 +341,21 @@
       },
       "resources": [
         {
-          "name": "CanvasPushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "canvas_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
     {
       "uuid": "termin-engine-canvas2d-texture",
       "name": "Canvas2DTextureVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-canvas2d.vert.glsl",
+          "path": "termin-engine-canvas2d-texture.slang",
+          "entry": "vs_main",
           "inputs": [
             {
               "name": "a_pos",
@@ -374,7 +377,8 @@
           ]
         },
         "fragment": {
-          "path": "termin-engine-canvas2d-texture.frag.glsl",
+          "path": "termin-engine-canvas2d-texture.slang",
+          "entry": "fs_main",
           "inputs": [
             {
               "name": "v_uv",
@@ -393,26 +397,27 @@
       },
       "resources": [
         {
-          "name": "CanvasPushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "canvas_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         },
         {
           "name": "u_texture",
           "logical_name": "input_texture",
-          "kind": "combined_sampler2d",
-          "legacy_binding": 4
+          "kind": "texture",
+          "scope": "transient"
         }
       ]
     },
     {
       "uuid": "termin-engine-text2d",
       "name": "Text2DEngineVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-text2d.vert.glsl",
+          "path": "termin-engine-text2d.slang",
+          "entry": "vs_main",
           "inputs": [
             {
               "name": "a_pos",
@@ -434,7 +439,8 @@
           ]
         },
         "fragment": {
-          "path": "termin-engine-text2d.frag.glsl",
+          "path": "termin-engine-text2d.slang",
+          "entry": "fs_main",
           "inputs": [
             {
               "name": "v_uv",
@@ -453,26 +459,27 @@
       },
       "resources": [
         {
-          "name": "Text2DPushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "text2d_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         },
         {
           "name": "u_font_atlas",
           "logical_name": "font_atlas",
-          "kind": "combined_sampler2d",
-          "legacy_binding": 4
+          "kind": "texture",
+          "scope": "transient"
         }
       ]
     },
     {
       "uuid": "termin-engine-text2d-sdf",
       "name": "Text2DEngineSdfVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-text2d-sdf.vert.glsl",
+          "path": "termin-engine-text2d-sdf.slang",
+          "entry": "vs_main",
           "inputs": [
             {
               "name": "a_pos",
@@ -494,7 +501,8 @@
           ]
         },
         "fragment": {
-          "path": "termin-engine-text2d-sdf.frag.glsl",
+          "path": "termin-engine-text2d-sdf.slang",
+          "entry": "fs_main",
           "inputs": [
             {
               "name": "v_uv",
@@ -513,26 +521,27 @@
       },
       "resources": [
         {
-          "name": "Text2DSdfPushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "text2d_sdf_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         },
         {
           "name": "u_font_atlas",
           "logical_name": "font_atlas",
-          "kind": "combined_sampler2d",
-          "legacy_binding": 4
+          "kind": "texture",
+          "scope": "transient"
         }
       ]
     },
     {
       "uuid": "termin-engine-text3d",
       "name": "Text3DEngineVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-text3d.vert.glsl",
+          "path": "termin-engine-text3d.slang",
+          "entry": "vs_main",
           "inputs": [
             {
               "name": "a_world_pos",
@@ -554,7 +563,8 @@
           ]
         },
         "fragment": {
-          "path": "termin-engine-text3d.frag.glsl",
+          "path": "termin-engine-text3d.slang",
+          "entry": "fs_main",
           "inputs": [
             {
               "name": "v_uv",
@@ -573,16 +583,16 @@
       },
       "resources": [
         {
-          "name": "Text3DPushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "text3d_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         },
         {
           "name": "u_font_atlas",
           "logical_name": "font_atlas",
-          "kind": "combined_sampler2d",
-          "legacy_binding": 4
+          "kind": "texture",
+          "scope": "transient"
         }
       ]
     },
@@ -2243,13 +2253,13 @@
           "name": "per_frame",
           "logical_name": "per_frame",
           "kind": "constant_buffer",
-          "legacy_binding": 2
+          "scope": "frame"
         },
         {
-          "name": "NormalPushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "normal_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
@@ -2330,13 +2340,13 @@
           "name": "per_frame",
           "logical_name": "per_frame",
           "kind": "constant_buffer",
-          "legacy_binding": 2
+          "scope": "frame"
         },
         {
-          "name": "DepthPushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "depth_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
@@ -2379,13 +2389,13 @@
           "name": "per_frame",
           "logical_name": "per_frame",
           "kind": "constant_buffer",
-          "legacy_binding": 2
+          "scope": "frame"
         },
         {
-          "name": "DepthPushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "depth_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },

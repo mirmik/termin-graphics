@@ -2,7 +2,9 @@
 
 #include "tgfx2/tgfx2_api.h"
 
+#include <filesystem>
 #include <string>
+#include <vector>
 
 extern "C" {
 #include <tgfx/resources/tc_shader_registry.h>
@@ -16,6 +18,7 @@ struct BuiltinShaderProgramSource {
 };
 
 TGFX2_API std::string load_builtin_shader_source(const char* filename, const char* debug_name);
+TGFX2_API std::vector<std::filesystem::path> builtin_shader_roots();
 TGFX2_API tc_shader_handle register_builtin_fragment_shader(
     const char* filename,
     const char* name,

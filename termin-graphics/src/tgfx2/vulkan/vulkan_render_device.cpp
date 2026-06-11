@@ -101,6 +101,20 @@ struct SpirvVertexInputs {
     std::vector<uint32_t> locations;
 };
 
+static uint32_t spirv_execution_model_for_stage(ShaderStage stage) {
+    switch (stage) {
+        case ShaderStage::Vertex:
+            return 0; // Vertex
+        case ShaderStage::Fragment:
+            return 4; // Fragment
+        case ShaderStage::Geometry:
+            return 3; // Geometry
+        case ShaderStage::Compute:
+            return 5; // GLCompute
+    }
+    return UINT32_MAX;
+}
+
 static std::string spirv_read_string(const uint32_t* words, uint32_t word_count, uint32_t start_word) {
     std::string out;
     for (uint32_t i = start_word; i < word_count; ++i) {
@@ -118,6 +132,33 @@ static uint32_t spirv_string_word_count(const std::string& text) {
     return static_cast<uint32_t>((text.size() + 4u) / 4u);
 }
 
+static std::string reflect_spirv_stage_entry_point(
+    const std::vector<uint32_t>& spirv,
+    ShaderStage stage
+) {
+    if (spirv.size() < 5) return {};
+
+    static constexpr uint32_t OP_ENTRY_POINT = 15;
+    const uint32_t execution_model = spirv_execution_model_for_stage(stage);
+    if (execution_model == UINT32_MAX) return {};
+
+    for (uint32_t offset = 5; offset < spirv.size();) {
+        uint32_t op_word = spirv[offset];
+        uint32_t word_count = op_word >> 16u;
+        uint32_t opcode = op_word & 0xffffu;
+        if (word_count == 0 || offset + word_count > spirv.size()) return {};
+
+        const uint32_t* words = spirv.data() + offset;
+        if (opcode == OP_ENTRY_POINT && word_count >= 3 && words[1] == execution_model) {
+            return spirv_read_string(words, word_count, 3);
+        }
+
+        offset += word_count;
+    }
+
+    return {};
+}
+
 static SpirvVertexInputs reflect_spirv_vertex_inputs(
     const std::vector<uint32_t>& spirv,
     const std::string& entry_point
@@ -132,7 +173,8 @@ static SpirvVertexInputs reflect_spirv_vertex_inputs(
     static constexpr uint32_t STORAGE_CLASS_INPUT = 1;
     static constexpr uint32_t DECORATION_LOCATION = 30;
 
-    std::unordered_set<uint32_t> vertex_entry_interfaces;
+    std::vector<uint32_t> vertex_entry_interfaces;
+    std::unordered_set<uint32_t> vertex_entry_interface_seen;
     std::unordered_map<uint32_t, uint32_t> storage_class_by_id;
     std::unordered_map<uint32_t, uint32_t> location_by_id;
 
@@ -149,7 +191,9 @@ static SpirvVertexInputs reflect_spirv_vertex_inputs(
             if (name == entry_point) {
                 uint32_t first_interface = 3u + spirv_string_word_count(name);
                 for (uint32_t i = first_interface; i < word_count; ++i) {
-                    vertex_entry_interfaces.insert(words[i]);
+                    if (vertex_entry_interface_seen.insert(words[i]).second) {
+                        vertex_entry_interfaces.push_back(words[i]);
+                    }
                 }
                 result.known = true;
             }
@@ -164,7 +208,6 @@ static SpirvVertexInputs reflect_spirv_vertex_inputs(
 
     if (!result.known) return result;
 
-    std::set<uint32_t> sorted_locations;
     for (uint32_t id : vertex_entry_interfaces) {
         auto storage_it = storage_class_by_id.find(id);
         if (storage_it == storage_class_by_id.end() || storage_it->second != STORAGE_CLASS_INPUT) {
@@ -172,11 +215,9 @@ static SpirvVertexInputs reflect_spirv_vertex_inputs(
         }
         auto location_it = location_by_id.find(id);
         if (location_it != location_by_id.end()) {
-            sorted_locations.insert(location_it->second);
+            result.locations.push_back(location_it->second);
         }
     }
-
-    result.locations.assign(sorted_locations.begin(), sorted_locations.end());
     return result;
 }
 
@@ -1708,9 +1749,26 @@ ShaderHandle VulkanRenderDevice::create_shader(const ShaderDesc& desc) {
         res.stage = desc.stage;
         res.entry_point = desc.entry_point;
         res.debug_name = desc.debug_name;
+        if (!spirv.empty()) {
+            std::string reflected_entry =
+                reflect_spirv_stage_entry_point(spirv, desc.stage);
+            if (!reflected_entry.empty()) {
+                if (reflected_entry != desc.entry_point) {
+                    tc_log(TC_LOG_DEBUG,
+                        "[VulkanRenderDevice] shader entry remapped from source entry "
+                        "to SPIR-V entry: debug='%s' stage=%d source_entry='%s' "
+                        "spirv_entry='%s'",
+                        desc.debug_name.c_str(),
+                        static_cast<int>(desc.stage),
+                        desc.entry_point.c_str(),
+                        reflected_entry.c_str());
+                }
+                res.entry_point = std::move(reflected_entry);
+            }
+        }
         if (desc.stage == ShaderStage::Vertex) {
             auto t_reflect0 = std::chrono::steady_clock::now();
-            SpirvVertexInputs inputs = reflect_spirv_vertex_inputs(spirv, desc.entry_point);
+            SpirvVertexInputs inputs = reflect_spirv_vertex_inputs(spirv, res.entry_point);
             auto t_reflect1 = std::chrono::steady_clock::now();
             g_shader_reflect_us.fetch_add(
                 std::chrono::duration_cast<std::chrono::microseconds>(t_reflect1 - t_reflect0).count(),
@@ -1854,12 +1912,40 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
         bd.inputRate = vl.per_instance ? VK_VERTEX_INPUT_RATE_INSTANCE : VK_VERTEX_INPUT_RATE_VERTEX;
         bindings.push_back(bd);
 
-        for (const auto& attr : vl.attributes) {
-            if (!vertex_shader_uses_location(vertex_shader, attr.location)) {
+        for (uint32_t attr_index = 0;
+             attr_index < static_cast<uint32_t>(vl.attributes.size());
+             ++attr_index) {
+            const auto& attr = vl.attributes[attr_index];
+            uint32_t location = attr.location;
+            if (vl.use_shader_input_locations) {
+                if (!vertex_shader || !vertex_shader->vertex_input_locations_known) {
+                    tc_log(TC_LOG_ERROR,
+                        "[VulkanRenderDevice] shader-owned vertex input layout requested "
+                        "but reflection is unavailable: shader='%s' binding=%u "
+                        "attribute_index=%u",
+                        vertex_shader ? vertex_shader->debug_name.c_str() : "null",
+                        i,
+                        attr_index);
+                    continue;
+                }
+                if (attr_index >= vertex_shader->vertex_input_locations.size()) {
+                    tc_log(TC_LOG_ERROR,
+                        "[VulkanRenderDevice] shader-owned vertex input layout has more "
+                        "attributes than the shader entry point declares: shader='%s' "
+                        "binding=%u attribute_index=%u shader_locations=[%s]",
+                        vertex_shader->debug_name.c_str(),
+                        i,
+                        attr_index,
+                        join_u32s(vertex_shader->vertex_input_locations).c_str());
+                    continue;
+                }
+                location = vertex_shader->vertex_input_locations[attr_index];
+            }
+            if (!vertex_shader_uses_location(vertex_shader, location)) {
                 continue;
             }
             VkVertexInputAttributeDescription ad{};
-            ad.location = attr.location;
+            ad.location = location;
             ad.binding = i;
             ad.format = vk::to_vk_vertex_format(attr.format);
             ad.offset = attr.offset;
@@ -4086,6 +4172,9 @@ bool VulkanRenderDevice::ensure_tc_shader(
         ShaderDesc vs_desc;
         vs_desc.stage = ShaderStage::Vertex;
         vs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":vertex";
+        if (shader->vertex_entry && shader->vertex_entry[0]) {
+            vs_desc.entry_point = shader->vertex_entry;
+        }
         if (!termin::tgfx2_load_or_compile_shader_artifact_for_backend(
                 shader,
                 BackendType::Vulkan,
@@ -4113,6 +4202,9 @@ bool VulkanRenderDevice::ensure_tc_shader(
     ShaderDesc fs_desc;
     fs_desc.stage = ShaderStage::Fragment;
     fs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":fragment";
+    if (shader->fragment_entry && shader->fragment_entry[0]) {
+        fs_desc.entry_point = shader->fragment_entry;
+    }
     if (!termin::tgfx2_load_or_compile_shader_artifact_for_backend(
             shader,
             BackendType::Vulkan,

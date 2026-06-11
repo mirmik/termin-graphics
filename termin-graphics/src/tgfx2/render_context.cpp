@@ -302,9 +302,12 @@ void RenderContext2::set_vertex_layouts(const std::vector<VertexBufferLayout>& l
     for (const auto& layout : layouts) {
         mix(std::hash<uint32_t>{}(layout.stride));
         mix(std::hash<bool>{}(layout.per_instance));
+        mix(std::hash<bool>{}(layout.use_shader_input_locations));
         mix(std::hash<size_t>{}(layout.attributes.size()));
         for (const auto& a : layout.attributes) {
-            mix(std::hash<uint32_t>{}(a.location));
+            if (!layout.use_shader_input_locations) {
+                mix(std::hash<uint32_t>{}(a.location));
+            }
             mix(std::hash<int>{}(static_cast<int>(a.format)));
             mix(std::hash<uint32_t>{}(a.offset));
         }
@@ -1222,6 +1225,7 @@ void RenderContext2::draw_immediate_generic(const float* data,
     if (profile) tc_profiler_begin_section("immediate.pipeline");
     VertexBufferLayout layout;
     layout.stride = 7 * sizeof(float);
+    layout.use_shader_input_locations = true;
     layout.attributes = {
         {0, VertexFormat::Float3, 0},
         {1, VertexFormat::Float4, 3 * sizeof(float)},

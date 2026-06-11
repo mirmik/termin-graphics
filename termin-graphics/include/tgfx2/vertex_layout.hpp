@@ -48,6 +48,11 @@ struct VertexBufferLayout {
     uint32_t stride = 0;
     std::vector<VertexAttribute> attributes;
     bool per_instance = false;
+    // When true, VertexAttribute::location is treated as a fallback only.
+    // Vulkan maps attributes by order to the reflected vertex input locations
+    // of the compiled shader entry point. This is for renderer-owned transient
+    // streams where the shader compiler owns the final location assignment.
+    bool use_shader_input_locations = false;
 };
 
 } // namespace tgfx

@@ -235,14 +235,18 @@ void Text2DRenderer::draw(std::string_view text_utf8,
         : 0.0f;
 
     if (profile) tc_profiler_begin_section("text.bind_shader");
+    tc_shader* raw = nullptr;
     if (use_sdf) {
         ctx.bind_shader(vs_sdf_, fs_sdf_);
+        raw = tc_shader_get(sdf_shader_handle_);
     } else {
         ctx.bind_shader(vs_, fs_);
+        raw = tc_shader_get(shader_handle_);
     }
+    ctx.use_shader_resource_layout(raw);
     if (profile) tc_profiler_end_section();
 
-    if (profile) tc_profiler_begin_section("text.push_constants");
+    if (profile) tc_profiler_begin_section("text.draw_data");
     // Shader expects column-major mat4; `proj_` was stored row-major
     // (see build_ortho_pixel_to_ndc's comment). Transpose here before
     // shipping raw bytes to GPU.
@@ -261,7 +265,7 @@ void Text2DRenderer::draw(std::string_view text_utf8,
         // texture space where edge=0.5 and dist=[0,1] maps to
         // [-spread, +spread] reference texels.
         push.smoothing = 1.0f / (2.0f * static_cast<float>(font_->sdf_spread()));
-        ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
+        ctx.bind_uniform_data("text2d_sdf_draw", &push, static_cast<uint32_t>(sizeof(push)));
     } else {
         Text2DPushData push;
         for (int row = 0; row < 4; ++row) {
@@ -273,7 +277,7 @@ void Text2DRenderer::draw(std::string_view text_utf8,
         push.color[1] = g;
         push.color[2] = b;
         push.color[3] = a;
-        ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
+        ctx.bind_uniform_data("text2d_draw", &push, static_cast<uint32_t>(sizeof(push)));
     }
     if (profile) tc_profiler_end_section();
 
@@ -283,9 +287,7 @@ void Text2DRenderer::draw(std::string_view text_utf8,
     if (profile) tc_profiler_end_section();
 
     if (profile) tc_profiler_begin_section("text.bind_texture");
-    // Binding 4 matches `layout(binding=4) uniform sampler2D
-    // u_font_atlas` in both shader variants.
-    ctx.bind_sampled_texture(4, atlas);
+    ctx.bind_texture("u_font_atlas", atlas);
     if (profile) tc_profiler_end_section();
 
     // Build one flat vertex array for the whole string.

@@ -148,6 +148,8 @@ void Text3DRenderer::draw(std::string_view text_utf8,
     // survive state changes made by interleaved callers.
     RenderContext2& ctx = *ctx_;
     ctx.bind_shader(vs_, fs_);
+    tc_shader* raw = tc_shader_get(shader_handle_);
+    ctx.use_shader_resource_layout(raw);
 
     Text3DPushData push{};
     // mvp_ arrived column-major from the caller (PlotEngine3D /
@@ -163,10 +165,10 @@ void Text3DRenderer::draw(std::string_view text_utf8,
     push.cam_up[0] = cam_up_[0];
     push.cam_up[1] = cam_up_[1];
     push.cam_up[2] = cam_up_[2];
-    ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
+    ctx.bind_uniform_data("text3d_draw", &push, static_cast<uint32_t>(sizeof(push)));
 
     TextureHandle atlas = font_->ensure_texture(&ctx);
-    ctx.bind_sampled_texture(4, atlas);
+    ctx.bind_texture("u_font_atlas", atlas);
 
     // Build one flat vertex array for the whole string.
     std::vector<float> verts;

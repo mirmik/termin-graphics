@@ -12,8 +12,8 @@ struct ShadowPushData {
     column_major float4x4 u_model;
 };
 
-[[vk::push_constant]]
-ConstantBuffer<ShadowPushData> pc;
+[[TerminScope("draw")]]
+ConstantBuffer<ShadowPushData> shadow_draw;
 
 struct VertexInput {
     float3 position : POSITION;
@@ -26,7 +26,7 @@ struct VertexOutput {
 [shader("vertex")]
 VertexOutput vs_main(VertexInput input) {
     VertexOutput output;
-    float4 world_pos = mul(pc.u_model, float4(input.position, 1.0));
+    float4 world_pos = mul(shadow_draw.u_model, float4(input.position, 1.0));
     output.position = mul(per_frame.u_projection, mul(per_frame.u_view, world_pos));
     return output;
 }
