@@ -1,4 +1,5 @@
 #include "termin/render/frame_uniforms.hpp"
+#include "termin/render/shader_binding_policy.hpp"
 
 #include "tgfx2/render_context.hpp"
 
@@ -10,15 +11,6 @@ extern "C" {
 }
 
 namespace termin {
-namespace {
-
-bool shader_uses_layout_only_bindings(const tc_shader* shader) {
-    return shader
-        && tc_shader_has_resource_layout(shader)
-        && tc_shader_get_language(shader) != TC_SHADER_LANGUAGE_GLSL;
-}
-
-} // namespace
 
 EnginePerFrameStd140 make_engine_per_frame_uniforms(
     const Mat44f& view,

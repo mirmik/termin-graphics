@@ -121,6 +121,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/render_pipeline.hpp
     include/termin/render/render_engine.hpp
     include/termin/render/scene_pipeline_template.hpp
+    include/termin/render/shader_binding_policy.hpp
     include/termin/render/shader_usage_collector.hpp
     include/termin/lighting/shadow.hpp
     include/tc_project_settings.h
@@ -199,9 +200,17 @@ if(TERMIN_RENDER_BUILD_TESTS)
     target_link_libraries(termin_render_drawable_phase_ref_test PRIVATE termin_render)
     add_test(NAME termin_render_drawable_phase_ref_test COMMAND termin_render_drawable_phase_ref_test)
 
+    add_executable(termin_render_shader_binding_policy_test tests/test_shader_binding_policy.cpp)
+    target_include_directories(termin_render_shader_binding_policy_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_render_shader_binding_policy_test PRIVATE termin_render)
+    add_test(NAME termin_render_shader_binding_policy_test COMMAND termin_render_shader_binding_policy_test)
+
     set_target_properties(
         termin_render_drawable_test
         termin_render_drawable_phase_ref_test
+        termin_render_shader_binding_policy_test
         PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
 endif()
