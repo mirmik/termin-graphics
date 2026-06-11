@@ -184,17 +184,18 @@ public:
     void set_topology(PrimitiveTopology topo);
 
     // --- Resource bindings (UBOs, textures, samplers) ---
-    // Register a uniform buffer at the given binding and set slot. The
-    // buffer is resolved into a ResourceSet lazily at draw time; call-sites
-    // do not manage ResourceSetHandle lifecycles.
-    // `set` defaults to 0 (engine resources); material resources use set=1.
+    // Legacy numeric uniform binding. The buffer is resolved into a
+    // ResourceSet lazily at draw time; call-sites do not manage
+    // ResourceSetHandle lifecycles. Migrated Slang paths should prefer
+    // bind_uniform(name). The `set` parameter is currently flattened by the
+    // Vulkan backend and kept for compatibility with future scoped layouts.
     // Passing range=0 means \"bind whole buffer\" (backend uses glBindBufferBase).
     void bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
                              uint64_t offset = 0, uint64_t range = 0,
                              uint32_t set = 0);
 
-    // Symbolic resource binding — resolved to backend binding numbers
-    // from the shader layout set via use_shader_resource_layout().
+    // Symbolic resource binding — resolved to backend placement from the
+    // shader layout set via use_shader_resource_layout().
     // Falls back to a logged warning + no-op when the name is not
     // found in the active layout.
     void bind_uniform(std::string_view name, BufferHandle buffer,
@@ -217,15 +218,15 @@ public:
     // and bind it at `binding` in the given descriptor set. No
     // caller-managed BufferHandle, no per-draw upload_buffer, no
     // descriptor-set allocation for UBO-only differences between draws.
-    // descriptor offset on the shared set; on OpenGL as a
+    // On Vulkan this becomes a dynamic descriptor offset; on OpenGL as a
     // `glBindBufferRange` into the ring buffer. `size` must be ≤ the
     // UBO block size declared by the shader.
     //
     // `binding` must be one of the layout's UNIFORM_BUFFER_DYNAMIC slots
     // (0..3, 16, 24). Other slots fall back to the classic bind_uniform_buffer
     // path and pay the old per-draw churn.
-    // `set` defaults to 0 (engine); use set=1 for material UBOs in the
-    // two-set scheme.
+    // `set` is retained for compatibility with future scoped layouts; the
+    // current Vulkan backend flattens migrated resources into set 0.
     void bind_uniform_buffer_ring(uint32_t binding, const void* data, uint32_t size,
                                   uint32_t set = 0);
 

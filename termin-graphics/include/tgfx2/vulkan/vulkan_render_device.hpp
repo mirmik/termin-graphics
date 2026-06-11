@@ -291,8 +291,8 @@ private:
     std::map<VkFramebufferCacheKey, VkFramebuffer> framebuffer_cache_;
 
     // Pipeline layout cache. Key: VkDescriptorSetLayout.
-    // Per-pipeline single-set model — every pipeline owns its descriptor
-    // layout, and VkPipelineLayout is derived from it.
+    // Current transitional backend model: one reflected descriptor set layout
+    // per pipeline. The frontend migration target is scope-first bind-by-name.
     std::unordered_map<VkDescriptorSetLayout, VkPipelineLayout> pipeline_layout_cache_;
 
     // Cache of VkDescriptorSetLayout built from merged shader bindings.
@@ -610,8 +610,9 @@ private:
     void create_ring_ubo();
     void create_transient_vertex_ring();
 
-    // Get or create a VkPipelineLayout from a single VkDescriptorSetLayout
-    // plus the standard 128-byte push constant range. Cached by layout handle.
+    // Get or create a VkPipelineLayout from the current reflected
+    // VkDescriptorSetLayout plus the standard 128-byte push constant range.
+    // Cached by layout handle.
     VkPipelineLayout get_or_create_pipeline_layout(VkDescriptorSetLayout set_layout);
 
     // Build a VkDescriptorSetLayout from merged VS+FS descriptor bindings

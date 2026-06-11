@@ -569,12 +569,9 @@ static bool write_resource_layout_sidecar(
 static bool apply_slang_vulkan_shared_layout_policy(
     std::vector<ShaderResourceBinding>& resources
 ) {
-    // Single-set layout policy:
-    //   set=0  — all resources (engine + material)
-    //
-    // All resources share one descriptor set, which matches the per-pipeline
-    // merged VkDescriptorSetLayout built from SPIR-V reflection in the Vulkan
-    // backend. The Vulkan backend always binds at set=0.
+    // Legacy compatibility policy: flatten reflected Slang resources to set 0.
+    // The active migration target is scope-first metadata; this path exists
+    // only for old shared-layout artifacts/tests.
     for (ShaderResourceBinding& resource : resources) {
         resource.set = 0;
     }
