@@ -111,6 +111,7 @@ typedef enum tc_shader_stage_mask {
 #define TC_SHADER_RESOURCE_BINDING_SHADOW_BLOCK 3u
 #define TC_SHADER_RESOURCE_BINDING_SHADOW_MAPS 8u
 #define TC_SHADER_RESOURCE_BINDING_DRAW_DATA 24u
+#define TC_SHADER_RESOURCE_BINDING_DRAW_STORAGE 25u
 
 // One field inside a constant-buffer resource layout. Offsets and sizes
 // are in bytes. Populated from Slang reflection / shader layout sidecar.

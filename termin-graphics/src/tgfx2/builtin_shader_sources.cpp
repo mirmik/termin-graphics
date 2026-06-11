@@ -270,7 +270,7 @@ std::string load_builtin_shader_stage_source_from_catalog(
     }
 
     const std::string language = string_field(*entry, "language");
-    if (language != "glsl") {
+    if (language != "glsl" && language != "slang") {
         tc::Log::error(
             "[BuiltInShaderCatalog] Shader '%s' has unsupported live stage language '%s'",
             uuid ? uuid : "<null>",

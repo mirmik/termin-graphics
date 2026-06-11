@@ -1549,10 +1549,10 @@
     {
       "uuid": "termin-engine-foliage-instanced",
       "name": "FoliageInstancedVariantVS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-foliage-instanced.vert.glsl",
+          "path": "termin-engine-foliage-instanced.vert.slang",
           "inputs": [
             {
               "name": "a_position",
@@ -1568,52 +1568,38 @@
               "name": "a_uv",
               "semantic": "TEXCOORD0",
               "location": 2
-            },
-            {
-              "name": "i_position",
-              "semantic": "POSITION1",
-              "location": 8
-            },
-            {
-              "name": "i_yaw",
-              "semantic": "TEXCOORD1",
-              "location": 9
-            },
-            {
-              "name": "i_normal",
-              "semantic": "NORMAL1",
-              "location": 10
-            },
-            {
-              "name": "i_seed",
-              "semantic": "TEXCOORD2",
-              "location": 11
             }
           ],
           "outputs": [
             {
               "name": "v_world_pos",
-              "semantic": "POSITION2"
+              "semantic": "TEXCOORD0",
+              "location": 0
             },
             {
               "name": "v_normal",
-              "semantic": "NORMAL2"
+              "semantic": "TEXCOORD1",
+              "location": 1
             },
             {
               "name": "v_uv",
-              "semantic": "TEXCOORD0"
-            },
-            {
-              "name": "v_TBN",
-              "semantic": "TEXCOORD3"
+              "semantic": "TEXCOORD2",
+              "location": 2
             },
             {
               "name": "v_tangent",
-              "semantic": "TANGENT"
+              "semantic": "TEXCOORD3",
+              "location": 3
             },
             {
-              "name": "v_foliage_seed",
-              "semantic": "TEXCOORD6"
+              "name": "v_bitangent",
+              "semantic": "TEXCOORD4",
+              "location": 4
+            },
+            {
+              "name": "v_tbn_valid",
+              "semantic": "TEXCOORD5",
+              "location": 5
             }
           ]
         }
@@ -1623,13 +1609,19 @@
           "name": "PerFrame",
           "logical_name": "per_frame",
           "kind": "constant_buffer",
-          "legacy_binding": 2
+          "scope": "frame"
         },
         {
-          "name": "FoliagePushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "foliage_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
+        },
+        {
+          "name": "foliage_instances",
+          "logical_name": "draw",
+          "kind": "storage_buffer",
+          "scope": "draw"
         }
       ]
     },
@@ -2100,30 +2092,15 @@
     {
       "uuid": "termin-engine-foliage-shadow",
       "name": "FoliageShadowVariantVS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-foliage-shadow.vert.glsl",
+          "path": "termin-engine-foliage-shadow.vert.slang",
           "inputs": [
             {
               "name": "a_position",
               "semantic": "POSITION",
               "location": 0
-            },
-            {
-              "name": "i_position",
-              "semantic": "POSITION1",
-              "location": 8
-            },
-            {
-              "name": "i_yaw",
-              "semantic": "TEXCOORD1",
-              "location": 9
-            },
-            {
-              "name": "i_normal",
-              "semantic": "NORMAL1",
-              "location": 10
             }
           ],
           "outputs": []
@@ -2134,13 +2111,19 @@
           "name": "PerFrame",
           "logical_name": "per_frame",
           "kind": "constant_buffer",
-          "legacy_binding": 0
+          "scope": "frame"
         },
         {
-          "name": "FoliagePushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "foliage_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
+        },
+        {
+          "name": "foliage_instances",
+          "logical_name": "draw",
+          "kind": "storage_buffer",
+          "scope": "draw"
         }
       ]
     },

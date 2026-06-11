@@ -449,6 +449,36 @@ void RenderContext2::bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
     bindings_dirty_ = true;
 }
 
+void RenderContext2::bind_storage_buffer(uint32_t binding, BufferHandle buffer,
+                                          uint64_t offset, uint64_t range,
+                                          uint32_t set) {
+    ResourceBinding* existing =
+        find_pending_binding(
+            default_numeric_scope(),
+            binding,
+            ResourceBinding::Kind::StorageBuffer,
+            set);
+    if (existing) {
+        if (existing->buffer == buffer && existing->offset == offset &&
+            existing->range == range) {
+            return;
+        }
+        existing->buffer = buffer;
+        existing->offset = offset;
+        existing->range = range;
+    } else {
+        ResourceBinding b;
+        b.set = set;
+        b.kind = ResourceBinding::Kind::StorageBuffer;
+        b.binding = binding;
+        b.buffer = buffer;
+        b.offset = offset;
+        b.range = range;
+        upsert_pending_binding(default_numeric_scope(), b);
+    }
+    bindings_dirty_ = true;
+}
+
 void RenderContext2::bind_uniform_buffer_ring(uint32_t binding,
                                                 const void* data, uint32_t size,
                                                 uint32_t set) {
@@ -569,6 +599,19 @@ void RenderContext2::bind_uniform(std::string_view name, BufferHandle buffer,
     SymbolicBinding sb;
     sb.name = std::string(name);
     sb.kind = SymbolicBinding::Kind::Uniform;
+    sb.buffer = buffer;
+    sb.offset = offset;
+    sb.range = range;
+    pending_binding_buckets_[static_cast<size_t>(ResourceScope::Unknown)]
+        .symbolic.push_back(std::move(sb));
+    bindings_dirty_ = true;
+}
+
+void RenderContext2::bind_storage_buffer(std::string_view name, BufferHandle buffer,
+                                         uint64_t offset, uint64_t range) {
+    SymbolicBinding sb;
+    sb.name = std::string(name);
+    sb.kind = SymbolicBinding::Kind::StorageBuffer;
     sb.buffer = buffer;
     sb.offset = offset;
     sb.range = range;
@@ -799,28 +842,43 @@ void RenderContext2::flush_resource_set() {
                 resolved.set = rb->set;
                 resolved.binding = rb->binding;
 
-                if (sb.kind == SymbolicBinding::Kind::Uniform) {
-                    if (rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
-                        tc_log(TC_LOG_WARN,
-                               "RenderContext2: symbolic binding '%.*s' resolved to kind=%u, expected constant_buffer",
-                               static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
-                        continue;
-                    }
-                    resolved.kind = ResourceBinding::Kind::UniformBuffer;
-                    resolved.buffer = sb.buffer;
-                    resolved.offset = sb.offset;
-                    resolved.range = sb.range;
-                } else {
-                    if (rb->kind != TC_SHADER_RESOURCE_TEXTURE) {
-                        tc_log(TC_LOG_WARN,
-                               "RenderContext2: symbolic binding '%.*s' resolved to kind=%u, expected texture",
-                               static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
-                        continue;
-                    }
-                    resolved.kind = ResourceBinding::Kind::SampledTexture;
-                    resolved.texture = sb.texture;
-                    resolved.sampler = sb.sampler;
-                    resolved.array_element = static_cast<uint32_t>(sb.offset);
+                switch (sb.kind) {
+                    case SymbolicBinding::Kind::Uniform:
+                        if (rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
+                            tc_log(TC_LOG_WARN,
+                                   "RenderContext2: symbolic binding '%.*s' resolved to kind=%u, expected constant_buffer",
+                                   static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
+                            continue;
+                        }
+                        resolved.kind = ResourceBinding::Kind::UniformBuffer;
+                        resolved.buffer = sb.buffer;
+                        resolved.offset = sb.offset;
+                        resolved.range = sb.range;
+                        break;
+                    case SymbolicBinding::Kind::StorageBuffer:
+                        if (rb->kind != TC_SHADER_RESOURCE_STORAGE_BUFFER) {
+                            tc_log(TC_LOG_WARN,
+                                   "RenderContext2: symbolic binding '%.*s' resolved to kind=%u, expected storage_buffer",
+                                   static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
+                            continue;
+                        }
+                        resolved.kind = ResourceBinding::Kind::StorageBuffer;
+                        resolved.buffer = sb.buffer;
+                        resolved.offset = sb.offset;
+                        resolved.range = sb.range;
+                        break;
+                    case SymbolicBinding::Kind::Texture:
+                        if (rb->kind != TC_SHADER_RESOURCE_TEXTURE) {
+                            tc_log(TC_LOG_WARN,
+                                   "RenderContext2: symbolic binding '%.*s' resolved to kind=%u, expected texture",
+                                   static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
+                            continue;
+                        }
+                        resolved.kind = ResourceBinding::Kind::SampledTexture;
+                        resolved.texture = sb.texture;
+                        resolved.sampler = sb.sampler;
+                        resolved.array_element = static_cast<uint32_t>(sb.offset);
+                        break;
                 }
 
                 upsert_pending_binding(
@@ -1028,8 +1086,8 @@ void RenderContext2::draw_indexed_instanced(
         last_bound_vbos_[0] = vertex_vbo;
         last_bound_vbo_offsets_[0] = vertex_offset;
     }
-    if (instance_vbo != last_bound_vbos_[1]
-        || instance_offset != last_bound_vbo_offsets_[1]) {
+    if (instance_vbo && (instance_vbo != last_bound_vbos_[1]
+        || instance_offset != last_bound_vbo_offsets_[1])) {
         cmd_->bind_vertex_buffer(1, instance_vbo, instance_offset);
         last_bound_vbos_[1] = instance_vbo;
         last_bound_vbo_offsets_[1] = instance_offset;

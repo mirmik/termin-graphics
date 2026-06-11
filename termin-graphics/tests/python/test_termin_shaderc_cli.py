@@ -125,11 +125,26 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
     fake_slangc = tmp_path / "fake_slangc.py"
     fake_slangc.write_text(
         "#!/usr/bin/env python3\n"
-        "import json, pathlib, sys\n"
+        "import json, pathlib, struct, sys\n"
+        "OP_NAME = 5\n"
+        "OP_DECORATE = 71\n"
+        "DECORATION_BINDING = 33\n"
+        "DECORATION_DESCRIPTOR_SET = 34\n"
+        "def string_words(value):\n"
+        "    raw = value.encode('utf-8') + b'\\0'\n"
+        "    raw += b'\\0' * ((4 - len(raw) % 4) % 4)\n"
+        "    return [struct.unpack('<I', raw[i:i + 4])[0] for i in range(0, len(raw), 4)]\n"
+        "def inst(op, operands):\n"
+        "    return [((len(operands) + 1) << 16) | op] + operands\n"
         "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
         "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
         "out.parent.mkdir(parents=True, exist_ok=True)\n"
-        "out.write_bytes(b'FAKE-spirv')\n"
+        "resource_id = 17\n"
+        "words = [0x07230203, 0x00010500, 0, 32, 0]\n"
+        "words += inst(OP_NAME, [resource_id] + string_words('material'))\n"
+        "words += inst(OP_DECORATE, [resource_id, DECORATION_BINDING, 1])\n"
+        "words += inst(OP_DECORATE, [resource_id, DECORATION_DESCRIPTOR_SET, 0])\n"
+        "out.write_bytes(struct.pack('<' + 'I' * len(words), *words))\n"
         "reflection.write_text(json.dumps({\n"
         "    'parameters': [{\n"
         "        'name': 'material',\n"
@@ -185,6 +200,80 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_drops_dead_slang_reflection_resources(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "struct PerFrame { float4x4 view; };\n"
+        "struct PushData { float4 color; };\n"
+        "ConstantBuffer<PerFrame> u_per_frame;\n"
+        "ConstantBuffer<PushData> u_push;\n"
+        "[shader(\"fragment\")] float4 main() : SV_Target0 { return u_push.color; }\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, struct, sys\n"
+        "OP_NAME = 5\n"
+        "OP_DECORATE = 71\n"
+        "DECORATION_BINDING = 33\n"
+        "DECORATION_DESCRIPTOR_SET = 34\n"
+        "def string_words(value):\n"
+        "    raw = value.encode('utf-8') + b'\\0'\n"
+        "    raw += b'\\0' * ((4 - len(raw) % 4) % 4)\n"
+        "    return [struct.unpack('<I', raw[i:i + 4])[0] for i in range(0, len(raw), 4)]\n"
+        "def inst(op, operands):\n"
+        "    return [((len(operands) + 1) << 16) | op] + operands\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "push_id = 17\n"
+        "words = [0x07230203, 0x00010500, 0, 32, 0]\n"
+        "words += inst(OP_NAME, [push_id] + string_words('u_push'))\n"
+        "words += inst(OP_DECORATE, [push_id, DECORATION_BINDING, 13])\n"
+        "words += inst(OP_DECORATE, [push_id, DECORATION_DESCRIPTOR_SET, 0])\n"
+        "out.write_bytes(struct.pack('<' + 'I' * len(words), *words))\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {'name': 'u_per_frame', 'binding': {'kind': 'constantBuffer', 'index': 2},\n"
+        "         'type': {'kind': 'constantBuffer', 'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 64}}}},\n"
+        "        {'name': 'u_push', 'binding': {'kind': 'constantBuffer', 'index': 13},\n"
+        "         'type': {'kind': 'constantBuffer', 'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 16}}}},\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    assert [resource["name"] for resource in layout["resources"]] == ["u_push"]
+    assert layout["resources"][0]["scope"] == "draw"
+    assert layout["resources"][0]["binding"] == 24
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_reads_slang_scope_user_attributes(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -200,11 +289,30 @@ def test_termin_shaderc_reads_slang_scope_user_attributes(tmp_path: Path) -> Non
     fake_slangc = tmp_path / "fake_slangc.py"
     fake_slangc.write_text(
         "#!/usr/bin/env python3\n"
-        "import json, pathlib, sys\n"
+        "import json, pathlib, struct, sys\n"
+        "OP_NAME = 5\n"
+        "OP_DECORATE = 71\n"
+        "DECORATION_BINDING = 33\n"
+        "DECORATION_DESCRIPTOR_SET = 34\n"
+        "def string_words(value):\n"
+        "    raw = value.encode('utf-8') + b'\\0'\n"
+        "    raw += b'\\0' * ((4 - len(raw) % 4) % 4)\n"
+        "    return [struct.unpack('<I', raw[i:i + 4])[0] for i in range(0, len(raw), 4)]\n"
+        "def inst(op, operands):\n"
+        "    return [((len(operands) + 1) << 16) | op] + operands\n"
         "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
         "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
         "out.parent.mkdir(parents=True, exist_ok=True)\n"
-        "out.write_bytes(b'FAKE-spirv')\n"
+        "albedo_id = 17\n"
+        "custom_id = 18\n"
+        "words = [0x07230203, 0x00010500, 0, 32, 0]\n"
+        "words += inst(OP_NAME, [albedo_id] + string_words('albedo_texture'))\n"
+        "words += inst(OP_DECORATE, [albedo_id, DECORATION_BINDING, 3])\n"
+        "words += inst(OP_DECORATE, [albedo_id, DECORATION_DESCRIPTOR_SET, 0])\n"
+        "words += inst(OP_NAME, [custom_id] + string_words('custom_params'))\n"
+        "words += inst(OP_DECORATE, [custom_id, DECORATION_BINDING, 4])\n"
+        "words += inst(OP_DECORATE, [custom_id, DECORATION_DESCRIPTOR_SET, 0])\n"
+        "out.write_bytes(struct.pack('<' + 'I' * len(words), *words))\n"
         "reflection.write_text(json.dumps({\n"
         "    'parameters': [\n"
         "        {\n"
@@ -492,6 +600,91 @@ def test_termin_shaderc_writes_slang_texture_resources_from_reflection(tmp_path:
             "stage_mask": 2,
             "size": 0,
         },
+    ]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_maps_slang_draw_storage_buffer_scope(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "import termin_prelude;\n"
+        "struct FoliageInstance { float3 position; float yaw; float3 normal; float seed; };\n"
+        "[[TerminScope(\"draw\")]] StructuredBuffer<FoliageInstance> foliage_instances;\n"
+        "[shader(\"vertex\")] float4 main(uint instance_id : SV_InstanceID) : SV_Position {\n"
+        "    return float4(foliage_instances[instance_id].position, 1.0);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, struct, sys\n"
+        "OP_NAME = 5\n"
+        "OP_DECORATE = 71\n"
+        "DECORATION_BINDING = 33\n"
+        "DECORATION_DESCRIPTOR_SET = 34\n"
+        "def string_words(value):\n"
+        "    raw = value.encode('utf-8') + b'\\0'\n"
+        "    raw += b'\\0' * ((4 - len(raw) % 4) % 4)\n"
+        "    return [struct.unpack('<I', raw[i:i + 4])[0] for i in range(0, len(raw), 4)]\n"
+        "def inst(op, operands):\n"
+        "    return [((len(operands) + 1) << 16) | op] + operands\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "resource_id = 17\n"
+        "words = [0x07230203, 0x00010500, 0, 32, 0]\n"
+        "words += inst(OP_NAME, [resource_id] + string_words('foliage_instances'))\n"
+        "words += inst(OP_DECORATE, [resource_id, DECORATION_BINDING, 0])\n"
+        "words += inst(OP_DECORATE, [resource_id, DECORATION_DESCRIPTOR_SET, 0])\n"
+        "out.write_bytes(struct.pack('<' + 'I' * len(words), *words))\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {\n"
+        "            'name': 'foliage_instances',\n"
+        "            'userAttribs': [{'name': 'TerminScope', 'arguments': ['draw']}],\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 0},\n"
+        "            'type': {'kind': 'resource', 'baseShape': 'structuredBuffer'},\n"
+        "        },\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "vertex",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    assert layout["resources"] == [
+        {
+            "name": "foliage_instances",
+            "kind": "storage_buffer",
+            "scope": "draw",
+            "set": 0,
+            "binding": 25,
+            "stage_mask": 1,
+            "size": 0,
+        }
     ]
 
 

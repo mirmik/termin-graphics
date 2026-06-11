@@ -200,6 +200,8 @@ static std::vector<VkShaderResource::DescriptorBinding> reflect_spirv_descriptor
     static constexpr uint32_t DECORATION_DESCRIPTOR_SET = 3;
     static constexpr uint32_t DECORATION_BINDING = 33;
     static constexpr uint32_t DECORATION_BLOCK = 2;
+    static constexpr uint32_t STORAGE_CLASS_UNIFORM = 2;
+    static constexpr uint32_t STORAGE_CLASS_STORAGE_BUFFER = 12;
 
     // Build tables: a variable's descriptor set & binding, type chain.
     std::unordered_map<uint32_t, uint32_t> desc_set_by_id;    // var_id → set
@@ -309,6 +311,8 @@ static std::vector<VkShaderResource::DescriptorBinding> reflect_spirv_descriptor
         // Determine descriptor type from the pointee.
         VkDescriptorType desc_type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         uint32_t count = 1;
+        const uint32_t storage_class =
+            var_storage_class.count(var_id) ? var_storage_class[var_id] : STORAGE_CLASS_UNIFORM;
 
         // Check for array.
         auto arr_elem_it = array_elem_type.find(type_id);
@@ -330,7 +334,9 @@ static std::vector<VkShaderResource::DescriptorBinding> reflect_spirv_descriptor
         if (op_it != type_opcode.end()) {
             switch (op_it->second) {
                 case OP_TYPE_STRUCT:
-                    desc_type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+                    desc_type = (storage_class == STORAGE_CLASS_STORAGE_BUFFER)
+                        ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
+                        : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
                     break;
                 case OP_TYPE_SAMPLED_IMAGE:
                     desc_type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -510,6 +516,40 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
         fprintf(stderr, "[Vulkan] %s\n", data->pMessage);
     }
     return VK_FALSE;
+}
+
+static bool physical_device_supports_extension(
+    VkPhysicalDevice physical_device,
+    const char* extension_name)
+{
+    uint32_t count = 0;
+    if (vkEnumerateDeviceExtensionProperties(
+            physical_device, nullptr, &count, nullptr) != VK_SUCCESS) {
+        return false;
+    }
+    std::vector<VkExtensionProperties> extensions(count);
+    if (vkEnumerateDeviceExtensionProperties(
+            physical_device, nullptr, &count, extensions.data()) != VK_SUCCESS) {
+        return false;
+    }
+    for (const VkExtensionProperties& extension : extensions) {
+        if (std::strcmp(extension.extensionName, extension_name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool contains_extension(
+    const std::vector<const char*>& extensions,
+    const char* extension_name)
+{
+    return std::find_if(
+        extensions.begin(),
+        extensions.end(),
+        [extension_name](const char* current) {
+            return current && std::strcmp(current, extension_name) == 0;
+        }) != extensions.end();
 }
 
 // --- Constructor / Destructor ---
@@ -882,12 +922,37 @@ void VulkanRenderDevice::create_logical_device() {
     // projection matrices (see termin-base/geom/mat44.hpp) build
     // matrices that target exactly that. No VK_EXT_depth_clip_control
     // needed.
+    VkPhysicalDeviceVulkan11Features vulkan11_features{};
+    vulkan11_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+    VkPhysicalDeviceFeatures2 supported_features2{};
+    supported_features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    supported_features2.pNext = &vulkan11_features;
+    vkGetPhysicalDeviceFeatures2(physical_device_, &supported_features2);
+
+    VkPhysicalDeviceVulkan11Features enabled_vulkan11_features{};
+    enabled_vulkan11_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+    if (vulkan11_features.shaderDrawParameters) {
+        enabled_vulkan11_features.shaderDrawParameters = VK_TRUE;
+    } else if (physical_device_supports_extension(
+                   physical_device_,
+                   VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME)) {
+        if (!contains_extension(extensions, VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME)) {
+            extensions.push_back(VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME);
+        }
+    } else {
+        tc_log_info(
+            "VulkanRenderDevice: shaderDrawParameters unsupported; "
+            "Slang shaders using SV_InstanceID with BaseInstance may fail validation");
+    }
 
     VkDeviceCreateInfo ci{};
     ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     ci.queueCreateInfoCount = static_cast<uint32_t>(queue_cis.size());
     ci.pQueueCreateInfos = queue_cis.data();
     ci.pEnabledFeatures = &features;
+    ci.pNext = enabled_vulkan11_features.shaderDrawParameters
+        ? &enabled_vulkan11_features
+        : nullptr;
     ci.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     ci.ppEnabledExtensionNames = extensions.data();
 

@@ -345,6 +345,13 @@ static bool is_slang_texture_base_shape(const std::string& base_shape) {
     return base_shape.rfind("texture", 0) == 0;
 }
 
+static bool is_slang_storage_buffer_base_shape(const std::string& base_shape) {
+    return base_shape == "structuredBuffer" ||
+           base_shape == "byteAddressBuffer" ||
+           base_shape == "rwStructuredBuffer" ||
+           base_shape == "rwByteAddressBuffer";
+}
+
 static bool slang_resource_kind_from_parameter(
     const nos::trent& parameter,
     const std::string& binding_kind,
@@ -403,8 +410,21 @@ static bool slang_resource_kind_from_parameter(
         const nos::trent& resource_type,
         ShaderResourceBinding& binding) -> bool {
         std::string base_shape;
-        if (!trent_string_field(resource_type, "baseShape", base_shape) ||
-            !is_slang_texture_base_shape(base_shape)) {
+        if (!trent_string_field(resource_type, "baseShape", base_shape)) {
+            return false;
+        }
+
+        if (is_slang_storage_buffer_base_shape(base_shape)) {
+            if (binding_kind != "descriptorTableSlot" &&
+                binding_kind != "shaderResource") {
+                return false;
+            }
+            binding.kind = "storage_buffer";
+            binding.size = 0;
+            return true;
+        }
+
+        if (!is_slang_texture_base_shape(base_shape)) {
             return false;
         }
 
@@ -852,6 +872,10 @@ static bool apply_slang_vulkan_scope_layout_policy(
                    resource.kind == "constant_buffer") {
             resource.set = 0;
             resource.binding = TC_SHADER_RESOURCE_BINDING_DRAW_DATA;
+        } else if (resource.scope == "draw" &&
+                   resource.kind == "storage_buffer") {
+            resource.set = 0;
+            resource.binding = TC_SHADER_RESOURCE_BINDING_DRAW_STORAGE;
         } else if (resource.scope == "pass") {
             if (resource.kind == "constant_buffer" &&
                 (resource.name == "lighting" ||
@@ -953,6 +977,69 @@ static bool spirv_resource_id_for_name(
         i += word_count;
     }
     return false;
+}
+
+static bool spirv_resource_has_descriptor_decorations(
+    const std::vector<uint32_t>& words,
+    uint32_t resource_id
+) {
+    constexpr uint16_t OP_DECORATE = 71;
+    constexpr uint32_t DECORATION_BINDING = 33;
+    constexpr uint32_t DECORATION_DESCRIPTOR_SET = 34;
+
+    bool has_binding = false;
+    bool has_set = false;
+    for (size_t i = 5; i < words.size();) {
+        const uint32_t instruction = words[i];
+        const uint16_t word_count = static_cast<uint16_t>(instruction >> 16);
+        const uint16_t opcode = static_cast<uint16_t>(instruction & 0xffffu);
+        if (word_count == 0 || i + word_count > words.size()) {
+            return false;
+        }
+        if (opcode == OP_DECORATE && word_count >= 4 && words[i + 1] == resource_id) {
+            if (words[i + 2] == DECORATION_BINDING) {
+                has_binding = true;
+            } else if (words[i + 2] == DECORATION_DESCRIPTOR_SET) {
+                has_set = true;
+            }
+        }
+        i += word_count;
+    }
+    return has_binding && has_set;
+}
+
+static bool filter_slang_vulkan_resources_for_spirv(
+    const CompileOptions& options,
+    std::vector<ShaderResourceBinding>& resources
+) {
+    std::vector<uint32_t> words;
+    if (!read_spirv_words(options.output, words)) {
+        // Fake/offline compiler tests may produce placeholder bytes while still
+        // exercising reflection-sidecar generation.
+        return true;
+    }
+    constexpr uint32_t SPIRV_MAGIC = 0x07230203u;
+    if (words.empty() || words[0] != SPIRV_MAGIC) {
+        // Fake compiler tests use placeholder bytes; there is nothing to
+        // stage-filter.
+        return true;
+    }
+
+    std::vector<ShaderResourceBinding> active;
+    active.reserve(resources.size());
+    for (const ShaderResourceBinding& resource : resources) {
+        uint32_t resource_id = 0;
+        if (!spirv_resource_id_for_name(words, resource.name, resource_id)) {
+            continue;
+        }
+        if (!spirv_resource_has_descriptor_decorations(words, resource_id)) {
+            continue;
+        }
+        active.push_back(resource);
+    }
+
+    resources = std::move(active);
+    return true;
 }
 
 static bool patch_spirv_binding_for_resource(
@@ -1399,6 +1486,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
             // compiled stages can merge into one pipeline descriptor layout.
             wrote_layout =
                 apply_slang_vulkan_scope_layout_policy(resources) &&
+                filter_slang_vulkan_resources_for_spirv(options, resources) &&
                 patch_slang_vulkan_spirv_bindings(options, resources) &&
                 write_resource_layout_sidecar(options, resources);
         } else {
@@ -1406,6 +1494,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
             // fixed engine descriptor table (legacy / GLSL compat).
             wrote_layout =
                 apply_slang_vulkan_shared_layout_policy(resources) &&
+                filter_slang_vulkan_resources_for_spirv(options, resources) &&
                 patch_slang_vulkan_spirv_bindings(options, resources) &&
                 write_resource_layout_sidecar(options, resources);
         }

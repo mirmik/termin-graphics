@@ -71,7 +71,7 @@ private:
     // Symbolic binding support — resolved in flush_resource_set().
     struct SymbolicBinding {
         std::string name;
-        enum class Kind { Uniform, Texture } kind = Kind::Uniform;
+        enum class Kind { Uniform, StorageBuffer, Texture } kind = Kind::Uniform;
         BufferHandle buffer;
         TextureHandle texture;
         SamplerHandle sampler;
@@ -228,6 +228,9 @@ public:
     void bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
                              uint64_t offset = 0, uint64_t range = 0,
                              uint32_t set = 0);
+    void bind_storage_buffer(uint32_t binding, BufferHandle buffer,
+                             uint64_t offset = 0, uint64_t range = 0,
+                             uint32_t set = 0);
 
     // Symbolic resource binding — resolved to backend placement from the
     // shader layout set via use_shader_resource_layout().
@@ -235,6 +238,8 @@ public:
     // found in the active layout.
     void bind_uniform(std::string_view name, BufferHandle buffer,
                       uint64_t offset = 0, uint64_t range = 0);
+    void bind_storage_buffer(std::string_view name, BufferHandle buffer,
+                             uint64_t offset = 0, uint64_t range = 0);
     void bind_texture(std::string_view name, TextureHandle texture,
                       SamplerHandle sampler = {});
     void bind_texture_array_element(std::string_view name,
