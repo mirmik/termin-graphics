@@ -399,34 +399,51 @@ static bool slang_resource_kind_from_parameter(
         return true;
     }
 
-    if (type_kind == "resource") {
+    auto resource_kind_from_type = [&](
+        const nos::trent& resource_type,
+        ShaderResourceBinding& binding) -> bool {
         std::string base_shape;
-        if (!trent_string_field(*type, "baseShape", base_shape) ||
+        if (!trent_string_field(resource_type, "baseShape", base_shape) ||
             !is_slang_texture_base_shape(base_shape)) {
             return false;
         }
 
         std::string access;
-        const bool has_access = trent_string_field(*type, "access", access);
+        const bool has_access = trent_string_field(resource_type, "access", access);
         if (has_access && access == "readWrite") {
             if (binding_kind != "descriptorTableSlot") {
                 return false;
             }
-            out_binding.kind = "storage_texture";
-            out_binding.slang_storage_texture = true;
+            binding.kind = "storage_texture";
+            binding.slang_storage_texture = true;
         } else {
             if (binding_kind != "shaderResource" &&
                 binding_kind != "descriptorTableSlot") {
                 return false;
             }
-            out_binding.kind = "texture";
+            binding.kind = "texture";
             bool combined = false;
-            trent_bool_field(*type, "combined", combined);
-            out_binding.slang_combined_texture = combined;
-            out_binding.slang_split_texture = !combined;
+            trent_bool_field(resource_type, "combined", combined);
+            binding.slang_combined_texture = combined;
+            binding.slang_split_texture = !combined;
         }
-        out_binding.size = 0;
+        binding.size = 0;
         return true;
+    };
+
+    if (type_kind == "resource") {
+        return resource_kind_from_type(*type, out_binding);
+    }
+
+    if (type_kind == "array") {
+        const nos::trent* element_type = trent_dict_get(*type, "elementType");
+        std::string element_kind;
+        if (!element_type || !element_type->is_dict() ||
+            !trent_string_field(*element_type, "kind", element_kind) ||
+            element_kind != "resource") {
+            return false;
+        }
+        return resource_kind_from_type(*element_type, out_binding);
     }
 
     return false;
@@ -812,6 +829,7 @@ static bool apply_slang_vulkan_shared_layout_policy(
 static bool apply_slang_vulkan_scope_layout_policy(
     std::vector<ShaderResourceBinding>& resources
 ) {
+    uint32_t material_texture_index = 0;
     for (ShaderResourceBinding& resource : resources) {
         if (resource.scope == "frame" && resource.kind == "constant_buffer") {
             resource.set = 0;
@@ -827,12 +845,31 @@ static bool apply_slang_vulkan_scope_layout_policy(
                        resource.original_set == 0) {
                 resource.set = 0;
                 resource.binding =
-                    material_texture_binding_for_index(resource.original_binding);
+                    material_texture_binding_for_index(material_texture_index);
+                ++material_texture_index;
             }
         } else if (resource.scope == "draw" &&
                    resource.kind == "constant_buffer") {
             resource.set = 0;
             resource.binding = TC_SHADER_RESOURCE_BINDING_DRAW_DATA;
+        } else if (resource.scope == "pass") {
+            if (resource.kind == "constant_buffer" &&
+                (resource.name == "lighting" ||
+                 resource.name == "lighting_ubo" ||
+                 resource.name == "LightingBlock")) {
+                resource.set = 0;
+                resource.binding = TC_SHADER_RESOURCE_BINDING_LIGHTING;
+            } else if (resource.kind == "constant_buffer" &&
+                       (resource.name == "shadow_block" ||
+                        resource.name == "ShadowBlock")) {
+                resource.set = 0;
+                resource.binding = TC_SHADER_RESOURCE_BINDING_SHADOW_BLOCK;
+            } else if (resource.kind == "texture" &&
+                       (resource.name == "shadow_maps" ||
+                        resource.name == "u_shadow_map")) {
+                resource.set = 0;
+                resource.binding = TC_SHADER_RESOURCE_BINDING_SHADOW_MAPS;
+            }
         }
     }
     return true;

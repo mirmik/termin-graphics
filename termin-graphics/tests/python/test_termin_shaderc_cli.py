@@ -496,6 +496,149 @@ def test_termin_shaderc_writes_slang_texture_resources_from_reflection(tmp_path:
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_numbers_slang_material_textures_after_material_cbuffer(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "struct MaterialParams { float4 color; };\n"
+        "[[TerminScope(\"material\")]] ConstantBuffer<MaterialParams> material;\n"
+        "[[TerminScope(\"material\")]] Sampler2D albedo_texture;\n"
+        "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
+        "    return material.color * albedo_texture.Sample(uv);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_bytes(b'FAKE-spirv')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {\n"
+        "            'name': 'material',\n"
+        "            'userAttribs': [{'name': 'TerminScope', 'arguments': ['material']}],\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 0},\n"
+        "            'type': {\n"
+        "                'kind': 'constantBuffer',\n"
+        "                'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 16}},\n"
+        "            },\n"
+        "        },\n"
+        "        {\n"
+        "            'name': 'albedo_texture',\n"
+        "            'userAttribs': [{'name': 'TerminScope', 'arguments': ['material']}],\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 1},\n"
+        "            'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True},\n"
+        "        },\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    assert layout["resources"][0]["name"] == "material"
+    assert layout["resources"][0]["binding"] == 1
+    assert layout["resources"][1]["name"] == "albedo_texture"
+    assert layout["resources"][1]["binding"] == 4
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_maps_slang_pass_shadow_texture_arrays(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "[[TerminScope(\"pass\")]] Sampler2DShadow shadow_maps[16];\n"
+        "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
+        "    return float4(shadow_maps[0].SampleCmp(uv, 0.5));\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_bytes(b'FAKE-spirv')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {\n"
+        "            'name': 'shadow_maps',\n"
+        "            'userAttribs': [{'name': 'TerminScope', 'arguments': ['pass']}],\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 3},\n"
+        "            'type': {\n"
+        "                'kind': 'array',\n"
+        "                'elementType': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True},\n"
+        "            },\n"
+        "        },\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    assert layout["resources"] == [
+        {
+            "name": "shadow_maps",
+            "kind": "texture",
+            "scope": "pass",
+            "set": 0,
+            "binding": 8,
+            "stage_mask": 2,
+            "size": 0,
+        },
+    ]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_rejects_split_slang_texture_resources_for_vulkan(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(

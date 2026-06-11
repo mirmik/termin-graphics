@@ -667,13 +667,13 @@ bool is_identifier_char(char c) {
 bool line_declares_engine_identifier(const std::string& line,
                                      const std::string& name) {
     const std::string pattern =
-        std::string(R"(^[ \t]*(?:layout[ \t]*\([^)]*\)[ \t]*)?)")
+        std::string(R"((^|[;{,(])[ \t]*(?:layout[ \t]*\([^)]*\)[ \t]*)?)")
         + R"((?:uniform[ \t]+)?)"
         + R"((?:column_major[ \t]+|row_major[ \t]+)?)"
         + R"([A-Za-z_][A-Za-z0-9_]*(?:[ \t]*x[ \t]*[0-9]+)?[ \t]+)"
         + name
         + R"((?:[ \t]*\[[^\]]+\])?[ \t]*(?:;|:).*$)";
-    return std::regex_match(line, std::regex(pattern));
+    return std::regex_search(line, std::regex(pattern));
 }
 
 bool source_uses_engine_identifier_reference(const std::string& source,
