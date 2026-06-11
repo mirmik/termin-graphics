@@ -907,6 +907,13 @@ tc_shader_info* tc_shader_get_all_info(size_t* count) {
 // Material UBO layout transport
 // ============================================================================
 
+
+static int tc_shader_resource_binding_compare(const void* a, const void* b) {
+    const tc_shader_resource_binding* ra = (const tc_shader_resource_binding*)a;
+    const tc_shader_resource_binding* rb = (const tc_shader_resource_binding*)b;
+    return strcmp(ra->name, rb->name);
+}
+
 static int tc_shader_find_resource_binding_index(
     const tc_shader* shader,
     const char* name
@@ -915,6 +922,29 @@ static int tc_shader_find_resource_binding_index(
     for (uint32_t i = 0; i < shader->resource_binding_count; i++) {
         if (strcmp(shader->resource_bindings[i].name, name) == 0) {
             return (int)i;
+        }
+    }
+    return -1;
+}
+
+static int tc_shader_find_resource_binding_index_sorted(
+    const tc_shader* shader,
+    const char* name
+) {
+    if (!shader || !name || name[0] == '\0' || shader->resource_binding_count == 0) {
+        return -1;
+    }
+    uint32_t lo = 0;
+    uint32_t hi = shader->resource_binding_count;
+    while (lo < hi) {
+        uint32_t mid = lo + (hi - lo) / 2;
+        int cmp = strcmp(shader->resource_bindings[mid].name, name);
+        if (cmp < 0) {
+            lo = mid + 1;
+        } else if (cmp > 0) {
+            hi = mid;
+        } else {
+            return (int)mid;
         }
     }
     return -1;
@@ -1149,6 +1179,11 @@ void tc_shader_set_resource_layout(
         return;
     }
 
+    if (count > 1) {
+        qsort(copy, count, sizeof(tc_shader_resource_binding),
+              tc_shader_resource_binding_compare);
+    }
+
     if (shader->resource_bindings) {
         tc_shader_free_resource_binding_array(
             shader->resource_bindings,
@@ -1174,7 +1209,7 @@ const tc_shader_resource_binding* tc_shader_find_resource_binding(
     const tc_shader* shader,
     const char* name
 ) {
-    int index = tc_shader_find_resource_binding_index(shader, name);
+    int index = tc_shader_find_resource_binding_index_sorted(shader, name);
     if (index < 0) return NULL;
     return &shader->resource_bindings[index];
 }

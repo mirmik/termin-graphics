@@ -549,6 +549,13 @@ static bool parse_shader_resource_layout_sidecar(
             scope = shader_resource_scope_from_name(scope_name);
         } else {
             scope = infer_shader_resource_scope(name, kind);
+            if (scope == TC_SHADER_RESOURCE_SCOPE_UNKNOWN) {
+                tc_log(TC_LOG_WARN,
+                       "shader resource layout: '%s' (kind=%u) has no [[TerminScope]] "
+                       "attribute and name did not match any heuristic — scope set to "
+                       "UNKNOWN; consider adding [[TerminScope]] to the shader variable",
+                       name.c_str(), kind);
+            }
         }
 
         tc_shader_resource_binding resource{};
@@ -611,6 +618,25 @@ static void merge_shader_resource_binding(
 
     for (tc_shader_resource_binding& existing : bindings) {
         if (std::strcmp(existing.name, incoming.name) == 0) {
+            // Detect binding/set conflicts between shader stages.
+            // When vertex and fragment stages declare the same resource with
+            // different binding numbers, the merged layout becomes ambiguous.
+            if (existing.binding != incoming.binding || existing.set != incoming.set) {
+                tc_log(TC_LOG_WARN,
+                       "merge_shader_resource_binding: '%s' has conflicting "
+                       "placements — existing set=%u binding=%u vs incoming "
+                       "set=%u binding=%u (stages 0x%x | 0x%x); keeping existing",
+                       incoming.name,
+                       existing.set, existing.binding,
+                       incoming.set, incoming.binding,
+                       existing.stage_mask, incoming.stage_mask);
+            }
+            if (existing.kind != incoming.kind) {
+                tc_log(TC_LOG_WARN,
+                       "merge_shader_resource_binding: '%s' kind mismatch — "
+                       "existing=%u vs incoming=%u",
+                       incoming.name, existing.kind, incoming.kind);
+            }
             const uint32_t previous_size = existing.size;
             const uint32_t previous_stage_mask = existing.stage_mask;
             const uint32_t previous_scope = existing.scope;

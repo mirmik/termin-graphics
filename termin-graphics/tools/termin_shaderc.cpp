@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <cstdio>
 #include <limits>
 #include <optional>
 #include <regex>
@@ -754,6 +755,40 @@ static bool write_resource_layout_sidecar(
     const CompileOptions& options,
     const std::vector<ShaderResourceBinding>& resources
 ) {
+    // --- Validate resource layout before writing sidecar ---
+    // Vulkan limits: MaxUniformBufferRange typically 16KB (65536),
+    // MaxDescriptorSetUniformBuffers typically 120.
+    const uint32_t max_ubo_size = 65536;  // 64KB
+    const uint32_t max_binding = 1024;     // reasonable upper bound
+
+    for (const auto& res : resources) {
+        // UBO size limit
+        if (res.kind == "uniform_buffer" && res.size > max_ubo_size) {
+            std::cerr
+                << "termin_shaderc: UBO '" << res.name
+                << "' size " << res.size << " exceeds limit " << max_ubo_size
+                << " bytes; shader will likely fail validation on GPU\n";
+            return false;
+        }
+        // Binding range
+        if (res.binding > max_binding) {
+            std::cerr
+                << "termin_shaderc: resource '" << res.name
+                << "' binding=" << res.binding
+                << " exceeds reasonable limit " << max_binding
+                << "; check [[VulkanSet]] / [[VulkanBinding]] attributes\n";
+            return false;
+        }
+        // Scope consistency — warn if unknown
+        if (res.scope.empty() || res.scope == "unknown") {
+            std::string attr = std::string("[") + "[TerminScope]]";
+            std::cerr
+                << "termin_shaderc: WARNING — resource '" << res.name
+                << "' has unknown scope; consider adding " << attr
+                << " attribute in the shader for optimal descriptor set layout\n";
+        }
+    }
+
     for (size_t i = 0; i < resources.size(); ++i) {
         for (size_t j = i + 1; j < resources.size(); ++j) {
             const ShaderResourceBinding& a = resources[i];
@@ -1338,10 +1373,30 @@ static int run_command(const std::vector<std::string>& args) {
         if (i) cmd << ' ';
         cmd << quote_arg(args[i]);
     }
-    int status = std::system(cmd.str().c_str());
+    std::string command = cmd.str();
+
 #ifdef _WIN32
+    // On Windows, use std::system (popen not ideal for batch commands)
+    int status = std::system(command.c_str());
     return status;
 #else
+    // Use popen to capture stdout/stderr for better diagnostics
+    std::string pop_cmd = command + " 2>&1";
+    FILE* pipe = popen(pop_cmd.c_str(), "r");
+    if (!pipe) {
+        std::cerr << "termin_shaderc: failed to execute: " << command << "\n";
+        return 127;
+    }
+    char buffer[256];
+    std::string output;
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        output += buffer;
+    }
+    int status = pclose(pipe);
+    // Print captured output to stderr for diagnostics
+    if (!output.empty()) {
+        std::cerr << output;
+    }
     if (status == -1) {
         return 127;
     }
