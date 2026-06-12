@@ -37,13 +37,13 @@ include(TerminRpath)
 # Kept even when TGFX2_ENABLE_OPENGL=OFF: some legacy headers/bindings still
 # mention GL-only APIs, and glad does not require linking system OpenGL.
 add_library(glad STATIC
-    third/glad/src/glad.c
+    ../termin-thirdparty/glad/src/glad.c
 )
 if(COMMAND termin_add_alias_if_missing)
     termin_add_alias_if_missing(tgfx::glad glad)
 endif()
 target_include_directories(glad PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third/glad/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/glad/include>
     $<INSTALL_INTERFACE:include>
 )
 target_link_libraries(glad PUBLIC ${CMAKE_DL_LIBS})
@@ -257,7 +257,7 @@ target_include_directories(termin_graphics2 PUBLIC
 # implementation needs it; the public header keeps stb out of its
 # include surface by pimpl-wrapping stbtt_fontinfo.
 target_include_directories(termin_graphics2 PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/third/stb
+    ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/stb
 )
 
 target_link_libraries(termin_graphics2 PUBLIC
@@ -463,7 +463,9 @@ install(DIRECTORY include/tgfx include/tgfx2
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-install(DIRECTORY third/glad/include/glad third/glad/include/KHR
+install(DIRECTORY
+    ../termin-thirdparty/glad/include/glad
+    ../termin-thirdparty/glad/include/KHR
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 

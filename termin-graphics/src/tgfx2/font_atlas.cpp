@@ -42,7 +42,7 @@ extern "C" {
 }
 
 // stb_truetype - single-header; define the implementation in this TU
-// only. The header itself lives at termin-graphics/third/stb/.
+// only. The header itself lives at termin-thirdparty/stb/.
 #define STB_TRUETYPE_IMPLEMENTATION
 #define STBTT_STATIC
 #include "stb_truetype.h"
