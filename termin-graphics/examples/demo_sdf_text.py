@@ -16,7 +16,7 @@ from tcgui.widgets.label import Label
 from tcgui.widgets.vstack import VStack
 from tcgui.widgets.theme import current_theme as _t
 from termin.display import SDLBackendWindow
-from tgfx import Tgfx2Context
+from tgfx import Tgfx2Context, configure_default_shader_runtime
 
 
 _SDL_BUTTON_MAP = {1: MouseButton.LEFT, 2: MouseButton.MIDDLE, 3: MouseButton.RIGHT}
@@ -38,6 +38,7 @@ def make_ui():
 
 
 def main():
+    configure_default_shader_runtime("examples")
     window = SDLBackendWindow("SDF Text Demo", 1000, 700)
     ctx = Tgfx2Context.from_window(window.device_ptr(), window.context_ptr())
     ui = UI(graphics=ctx)

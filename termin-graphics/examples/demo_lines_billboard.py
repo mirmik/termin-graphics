@@ -18,6 +18,7 @@ from tgfx import (
     WorldSpaceLineParams,
     WorldSpaceLineRenderer,
     WorldSpaceLineStyle,
+    configure_default_shader_runtime,
 )
 
 
@@ -175,6 +176,7 @@ def _dispatch(event: sdl2.SDL_Event, window: SDLBackendWindow,
 
 
 def main() -> None:
+    configure_default_shader_runtime("examples")
     window = SDLBackendWindow(
         "tgfx2 GPU billboard world-width line demo", 1100, 760)
     ctx = Tgfx2Context.from_window(window.device_ptr(), window.context_ptr())

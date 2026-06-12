@@ -25,6 +25,7 @@ from tgfx import (
     Tgfx2PixelFormat,
     Tgfx2ShaderStage,
     build_line_mesh,
+    configure_default_shader_runtime,
 )
 
 
@@ -191,6 +192,7 @@ def _dispatch(event: sdl2.SDL_Event, window: SDLBackendWindow,
 
 
 def main() -> None:
+    configure_default_shader_runtime("examples")
     window = SDLBackendWindow("tgfx2 3D line mesh demo", 1100, 760)
     ctx = Tgfx2Context.from_window(window.device_ptr(), window.context_ptr())
     target = RenderTarget(ctx, 1100, 760)
