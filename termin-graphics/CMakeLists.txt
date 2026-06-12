@@ -183,9 +183,14 @@ if(TGFX2_ENABLE_VULKAN)
     list(APPEND TGFX2_SOURCES
         src/tgfx2/vulkan/vulkan_render_device.cpp
         src/tgfx2/vulkan/vulkan_command_list.cpp
+        src/tgfx2/vulkan/vulkan_pipeline_resource_sets.cpp
+        src/tgfx2/vulkan/vulkan_spirv_reflection.cpp
         src/tgfx2/vulkan/vulkan_type_conversions.cpp
+        src/tgfx2/vulkan/vulkan_transfer.cpp
         src/tgfx2/vulkan/vulkan_shader_compiler.cpp
+        src/tgfx2/vulkan/vulkan_stats.cpp
         src/tgfx2/vulkan/vulkan_swapchain.cpp
+        src/tgfx2/vulkan/vulkan_tc_bridge.cpp
     )
 endif()
 
@@ -283,7 +288,10 @@ endif()
 termin_set_rpath_lib(termin_graphics2)
 
 if(TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC AND NOT ANDROID)
-    add_executable(termin_shaderc tools/termin_shaderc.cpp)
+    add_executable(termin_shaderc
+        tools/termin_shaderc.cpp
+        tools/termin_shaderc/cli.cpp
+    )
     target_compile_features(termin_shaderc PRIVATE cxx_std_20)
     target_include_directories(termin_shaderc PRIVATE
         ${Vulkan_INCLUDE_DIR}

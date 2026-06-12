@@ -2,21 +2,13 @@
 
 #include "tgfx2/vulkan/vulkan_command_list.hpp"
 #include "tgfx2/vulkan/vulkan_type_conversions.hpp"
+#include "vulkan_stats.hpp"
 
 #include <algorithm>
-#include <atomic>
 #include <chrono>
 #include <cstdio>
 
 namespace tgfx {
-
-extern std::atomic<uint64_t> g_draw_count;
-extern std::atomic<uint64_t> g_bind_pipeline_count;
-extern std::atomic<uint64_t> g_bind_rset_count;
-extern std::atomic<uint64_t> g_bind_vbo_count;
-extern std::atomic<uint64_t> g_bind_ibo_count;
-extern std::atomic<uint64_t> g_push_constants_count;
-extern std::atomic<uint64_t> g_record_us;
 
 VulkanCommandList::VulkanCommandList(VulkanRenderDevice& device)
     : device_(device)
@@ -300,8 +292,6 @@ void VulkanCommandList::bind_index_buffer(BufferHandle buffer, IndexType type, u
 }
 
 // --- Draw ---
-
-extern std::atomic<uint64_t> g_draw_count;
 
 void VulkanCommandList::draw(uint32_t vertex_count, uint32_t first_vertex) {
     vkCmdDraw(cmd_, vertex_count, 1, first_vertex, 0);

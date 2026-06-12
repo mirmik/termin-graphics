@@ -45,7 +45,7 @@ struct LineMesh {
     bool empty() const { return vertices.empty() || indices.empty(); }
 };
 
-TGFX2_TYPE_API LineMesh build_line_mesh(std::span<const LinePoint3> points,
-                                        const LineStyle& style);
+TGFX2_API LineMesh build_line_mesh(std::span<const LinePoint3> points,
+                                   const LineStyle& style);
 
 } // namespace tgfx
