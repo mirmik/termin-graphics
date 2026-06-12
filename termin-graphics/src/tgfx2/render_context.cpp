@@ -283,32 +283,6 @@ void RenderContext2::bind_shader(ShaderHandle vs, ShaderHandle fs, ShaderHandle 
         bound_fs_ = fs;
         bound_gs_ = gs;
         pipeline_dirty_ = true;
-
-        // A shader switch starts a new per-draw binding context. Migrated
-        // shader paths immediately install their tc_shader layout with
-        // use_shader_resource_layout(); legacy/custom shaders may never do
-        // that and must not inherit draw/transient resources resolved for the
-        // previous shader.
-        active_shader_layout_ = nullptr;
-        bool cleared = false;
-        for (ResourceBindingBucket& bucket : pending_binding_buckets_) {
-            if (!bucket.symbolic.empty()) {
-                bucket.symbolic.clear();
-                cleared = true;
-            }
-        }
-        for (ResourceScope scope :
-             {ResourceScope::Unknown, ResourceScope::Draw, ResourceScope::Transient}) {
-            ResourceBindingBucket& bucket =
-                pending_binding_buckets_[static_cast<size_t>(scope)];
-            if (!bucket.numeric.empty()) {
-                bucket.numeric.clear();
-                cleared = true;
-            }
-        }
-        if (cleared) {
-            bindings_dirty_ = true;
-        }
     }
 }
 
