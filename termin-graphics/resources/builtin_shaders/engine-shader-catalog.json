@@ -1932,10 +1932,10 @@
     {
       "uuid": "termin-engine-pick-material",
       "name": "PickShader",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-pick-material.vert.glsl",
+          "path": "termin-engine-pick-material.slang",
           "inputs": [
             {
               "name": "a_position",
@@ -1953,49 +1953,49 @@
               "location": 2
             }
           ],
-          "outputs": []
+          "outputs": [],
+          "entry": "vs_main"
         },
         "fragment": {
-          "path": "termin-engine-pick-material.frag.glsl",
+          "path": "termin-engine-pick-material.slang",
           "inputs": [],
           "outputs": [
             {
               "name": "fragColor",
               "semantic": "SV_Target0"
             }
-          ]
+          ],
+          "entry": "fs_main"
         }
       },
       "resources": [
         {
-          "name": "u_model",
-          "logical_name": "model_matrix",
-          "kind": "legacy_uniform"
+          "name": "per_frame",
+          "logical_name": "per_frame",
+          "kind": "constant_buffer",
+          "scope": "frame"
         },
         {
-          "name": "u_view",
-          "logical_name": "view_matrix",
-          "kind": "legacy_uniform"
+          "name": "draw_data",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         },
         {
-          "name": "u_projection",
-          "logical_name": "projection_matrix",
-          "kind": "legacy_uniform"
-        },
-        {
-          "name": "u_pickColor",
-          "logical_name": "pick_color",
-          "kind": "legacy_uniform"
+          "name": "material",
+          "logical_name": "material",
+          "kind": "constant_buffer",
+          "scope": "material"
         }
       ]
     },
     {
       "uuid": "termin-engine-shadow-material",
       "name": "ShadowShader",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-shadow-material.vert.glsl",
+          "path": "termin-engine-shadow-material.slang",
           "inputs": [
             {
               "name": "a_position",
@@ -2003,39 +2003,38 @@
               "location": 0
             }
           ],
-          "outputs": []
+          "outputs": [],
+          "entry": "vs_main"
         },
         "fragment": {
-          "path": "termin-engine-shadow-material.frag.glsl",
+          "path": "termin-engine-shadow-material.slang",
           "inputs": [],
-          "outputs": []
+          "outputs": [],
+          "entry": "fs_main"
         }
       },
       "resources": [
         {
-          "name": "u_model",
-          "logical_name": "model_matrix",
-          "kind": "legacy_uniform"
+          "name": "per_frame",
+          "logical_name": "per_frame",
+          "kind": "constant_buffer",
+          "scope": "frame"
         },
         {
-          "name": "u_view",
-          "logical_name": "view_matrix",
-          "kind": "legacy_uniform"
-        },
-        {
-          "name": "u_projection",
-          "logical_name": "projection_matrix",
-          "kind": "legacy_uniform"
+          "name": "shadow_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
     {
       "uuid": "termin-engine-depth-material",
       "name": "DepthShader",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-depth-material.vert.glsl",
+          "path": "termin-engine-depth-material.slang",
           "inputs": [
             {
               "name": "a_position",
@@ -2058,10 +2057,11 @@
               "name": "v_linear_depth",
               "semantic": "TEXCOORD0"
             }
-          ]
+          ],
+          "entry": "vs_main"
         },
         "fragment": {
-          "path": "termin-engine-depth-material.frag.glsl",
+          "path": "termin-engine-depth-material.slang",
           "inputs": [
             {
               "name": "v_linear_depth",
@@ -2073,34 +2073,28 @@
               "name": "FragColor",
               "semantic": "SV_Target0"
             }
-          ]
+          ],
+          "entry": "fs_main"
         }
       },
       "resources": [
         {
-          "name": "u_model",
-          "logical_name": "model_matrix",
-          "kind": "legacy_uniform"
+          "name": "per_frame",
+          "logical_name": "per_frame",
+          "kind": "constant_buffer",
+          "scope": "frame"
         },
         {
-          "name": "u_view",
-          "logical_name": "view_matrix",
-          "kind": "legacy_uniform"
+          "name": "draw_data",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         },
         {
-          "name": "u_projection",
-          "logical_name": "projection_matrix",
-          "kind": "legacy_uniform"
-        },
-        {
-          "name": "u_near",
-          "logical_name": "near_plane",
-          "kind": "legacy_uniform"
-        },
-        {
-          "name": "u_far",
-          "logical_name": "far_plane",
-          "kind": "legacy_uniform"
+          "name": "material",
+          "logical_name": "material",
+          "kind": "constant_buffer",
+          "scope": "material"
         }
       ]
     },
