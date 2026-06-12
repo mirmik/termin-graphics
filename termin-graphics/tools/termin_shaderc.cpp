@@ -1158,6 +1158,21 @@ static bool filter_slang_opengl_resources_for_glsl(
     return true;
 }
 
+static bool replace_all_literal(
+    std::string& text,
+    const std::string& needle,
+    const std::string& replacement
+) {
+    bool changed = false;
+    size_t pos = 0;
+    while ((pos = text.find(needle, pos)) != std::string::npos) {
+        text.replace(pos, needle.size(), replacement);
+        pos += replacement.size();
+        changed = true;
+    }
+    return changed;
+}
+
 static bool replace_first_two_group_regex(
     std::string& text,
     const std::regex& pattern,
@@ -1185,6 +1200,34 @@ static bool write_text_file(
     }
     out.write(text.data(), static_cast<std::streamsize>(text.size()));
     return static_cast<bool>(out);
+}
+
+static bool legalize_slang_opengl_glsl_builtins(
+    const CompileOptions& options
+) {
+    std::string glsl;
+    if (!read_file(options.output, glsl)) {
+        return false;
+    }
+
+    bool changed = false;
+    changed |= replace_all_literal(
+        glsl,
+        "uint(gl_InstanceIndex - gl_BaseInstance)",
+        "uint(gl_InstanceID)");
+    changed |= replace_all_literal(
+        glsl,
+        "gl_InstanceIndex - gl_BaseInstance",
+        "gl_InstanceID");
+    changed |= replace_all_literal(
+        glsl,
+        "gl_InstanceIndex",
+        "gl_InstanceID");
+
+    if (!changed) {
+        return true;
+    }
+    return write_text_file(options.output, glsl);
 }
 
 static bool patch_slang_opengl_glsl_bindings(
@@ -1254,10 +1297,18 @@ static bool patch_slang_opengl_glsl_bindings(
             patched = replace_first_two_group_regex(glsl, pattern, new_binding);
         } else if (resource.kind == "storage_buffer") {
             const std::regex pattern(
-                "(layout\\s*\\(\\s*binding\\s*=\\s*)" + old_binding +
-                "(\\s*\\)\\s*(?:readonly\\s+|writeonly\\s+)?buffer\\s+" +
+                "(layout\\s*\\([^\\)]*\\bbinding\\s*=\\s*)" + old_binding +
+                "([^\\)]*\\)\\s*(?:readonly\\s+|writeonly\\s+)?buffer\\s+" +
                 regex_escape(resource.slang_glsl_symbol) + "\\b)");
             patched = replace_first_two_group_regex(glsl, pattern, new_binding);
+            if (!patched) {
+                const std::regex instance_pattern(
+                    "(layout\\s*\\([^\\)]*\\bbinding\\s*=\\s*)" + old_binding +
+                    "([^\\)]*\\)\\s*(?:readonly\\s+|writeonly\\s+)?buffer\\s+"
+                    "[A-Za-z_][A-Za-z0-9_]*\\b[\\s\\S]*?}\\s*" +
+                    regex_escape(resource.name + "_0") + "\\b)");
+                patched = replace_first_two_group_regex(glsl, instance_pattern, new_binding);
+            }
         } else {
             std::cerr
                 << "termin_shaderc: unsupported OpenGL GLSL binding patch kind '"
@@ -1901,6 +1952,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         if (options.layout_scheme == "per-pipeline") {
             annotate_slang_glsl_symbols(resources, source);
             wrote_layout =
+                legalize_slang_opengl_glsl_builtins(options) &&
                 filter_slang_opengl_resources_for_glsl(options, resources) &&
                 apply_slang_scope_layout_policy(resources) &&
                 patch_slang_opengl_glsl_bindings(options, resources) &&

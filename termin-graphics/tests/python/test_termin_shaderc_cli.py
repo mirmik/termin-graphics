@@ -1435,6 +1435,122 @@ def test_termin_shaderc_patches_imported_opengl_slang_constant_buffer_by_instanc
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_legalizes_opengl_slang_instance_index_builtin(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "[shader(\"vertex\")] float4 main(uint instance_id : SV_InstanceID) : SV_Position {\n"
+        "    return float4(float(instance_id), 0.0, 0.0, 1.0);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.vert.glsl"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_text(\n"
+        "    '#version 460\\n'\n"
+        "    '#extension GL_ARB_shader_draw_parameters : require\\n'\n"
+        "    'void main() { uint instance_id = uint(gl_InstanceIndex - gl_BaseInstance); }\\n',\n"
+        "    encoding='utf-8')\n"
+        "reflection.write_text(json.dumps({'parameters': []}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc([
+        "compile",
+        "--language",
+        "slang",
+        "--target",
+        "opengl",
+        "--stage",
+        "vertex",
+        "--entry",
+        "main",
+        "--input",
+        str(shader),
+        "--output",
+        str(output),
+        "--slangc",
+        str(fake_slangc),
+    ])
+
+    assert result.returncode == 0, result.stderr
+    glsl = output.read_text(encoding="utf-8")
+    assert "gl_InstanceIndex" not in glsl
+    assert "uint(gl_InstanceID)" in glsl
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_patches_opengl_slang_storage_buffer_bindings(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "struct InstanceData { float3 position; };\n"
+        "[[TerminScope(\"draw\")]] StructuredBuffer<InstanceData> foliage_instances;\n"
+        "[shader(\"vertex\")] float4 main(uint instance_id : SV_InstanceID) : SV_Position {\n"
+        "    return float4(foliage_instances[instance_id].position, 1.0);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.vert.glsl"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_text(\n"
+        "    'layout(std430, binding = 2) readonly buffer StructuredBuffer_InstanceData_t_0 {\\n'\n"
+        "    '    vec4 _data[];\\n'\n"
+        "    '} foliage_instances_0;\\n',\n"
+        "    encoding='utf-8')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {\n"
+        "            'name': 'foliage_instances',\n"
+        "            'userAttribs': [{'name': 'TerminScope', 'arguments': ['draw']}],\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 2},\n"
+        "            'type': {'kind': 'resource', 'baseShape': 'structuredBuffer'},\n"
+        "        },\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc([
+        "compile",
+        "--language",
+        "slang",
+        "--target",
+        "opengl",
+        "--stage",
+        "vertex",
+        "--entry",
+        "main",
+        "--input",
+        str(shader),
+        "--output",
+        str(output),
+        "--slangc",
+        str(fake_slangc),
+    ])
+
+    assert result.returncode == 0, result.stderr
+    glsl = output.read_text(encoding="utf-8")
+    assert "layout(std430, binding = 25) readonly buffer" in glsl
+    layout = json.loads((tmp_path / "out.vert.glsl.layout.json").read_text(encoding="utf-8"))
+    assert [(r["name"], r["binding"]) for r in layout["resources"]] == [
+        ("foliage_instances", 25),
+    ]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_can_override_slang_matrix_layout(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text("[shader(\"vertex\")] void main() {}\n", encoding="utf-8")
