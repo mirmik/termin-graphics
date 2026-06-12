@@ -257,6 +257,9 @@ public:
     // bind_uniform / bind_texture will be used later in the pass.
     // Passing nullptr clears the layout (back to numeric-only mode).
     void use_shader_resource_layout(const struct ::tc_shader* shader);
+    const struct ::tc_shader* active_shader_resource_layout() const {
+        return active_shader_layout_;
+    }
 
     // Write `size` bytes of `data` into the backend's shared ring UBO
     // and bind it at `binding` in the given descriptor set. No

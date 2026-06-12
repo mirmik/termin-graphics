@@ -227,6 +227,9 @@ static std::string infer_resource_scope(
         name == "u_push" || name == "pc") {
         return "draw";
     }
+    if (name == "bone_block" || name == "BoneBlock") {
+        return "draw";
+    }
     if (name == "lighting" || name == "lighting_ubo" ||
         string_contains(name, "shadow")) {
         return "pass";
@@ -807,6 +810,17 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
             binding.stage_mask = stage_mask;
             append_unique_resource(resources, std::move(binding));
         }
+        static const std::regex bone_block_re(
+            R"(layout\s*\([^\)]*binding\s*=\s*([0-9]+)[^\)]*\)\s*uniform\s+(BoneBlock|bone_block))");
+        if (std::regex_search(source, match, bone_block_re)) {
+            ShaderResourceBinding binding;
+            binding.name = match[2].str();
+            binding.kind = "constant_buffer";
+            binding.set = 0;
+            binding.binding = static_cast<uint32_t>(std::stoul(match[1].str()));
+            binding.stage_mask = stage_mask;
+            append_unique_resource(resources, std::move(binding));
+        }
         static const std::regex sampler_re(
             R"(layout\s*\([^\)]*binding\s*=\s*([0-9]+)[^\)]*\)\s*uniform\s+sampler[A-Za-z0-9_]*\s+([A-Za-z_][A-Za-z0-9_]*))");
         for (std::sregex_iterator it(source.begin(), source.end(), sampler_re), end;
@@ -1020,7 +1034,12 @@ static bool apply_slang_vulkan_scope_layout_policy(
         } else if (resource.scope == "draw" &&
                    resource.kind == "constant_buffer") {
             resource.set = 0;
-            resource.binding = TC_SHADER_RESOURCE_BINDING_DRAW_DATA;
+            if (resource.name == TC_SHADER_RESOURCE_BONE_BLOCK ||
+                resource.name == "BoneBlock") {
+                resource.binding = TC_SHADER_RESOURCE_BINDING_BONE_BLOCK;
+            } else {
+                resource.binding = TC_SHADER_RESOURCE_BINDING_DRAW_DATA;
+            }
         } else if (resource.scope == "draw" &&
                    resource.kind == "storage_buffer") {
             resource.set = 0;

@@ -599,10 +599,11 @@
     {
       "uuid": "termin-engine-screen-line",
       "name": "ScreenSpaceLineVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-screen-line.vert.glsl",
+          "path": "termin-engine-screen-line.slang",
+          "entry": "vs_main",
           "inputs": [
             {
               "name": "a_corner",
@@ -644,7 +645,8 @@
           ]
         },
         "fragment": {
-          "path": "termin-engine-screen-line.frag.glsl",
+          "path": "termin-engine-screen-line.slang",
+          "entry": "fs_main",
           "inputs": [
             {
               "name": "v_color",
@@ -663,20 +665,21 @@
       },
       "resources": [
         {
-          "name": "ScreenLinePushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "screen_line_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
     {
       "uuid": "termin-engine-screen-line-cap",
       "name": "ScreenSpaceLineCapVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-screen-line-cap.vert.glsl",
+          "path": "termin-engine-screen-line.slang",
+          "entry": "vs_cap_main",
           "inputs": [
             {
               "name": "a_local",
@@ -718,7 +721,8 @@
           ]
         },
         "fragment": {
-          "path": "termin-engine-screen-line.frag.glsl",
+          "path": "termin-engine-screen-line.slang",
+          "entry": "fs_main",
           "inputs": [
             {
               "name": "v_color",
@@ -737,20 +741,21 @@
       },
       "resources": [
         {
-          "name": "ScreenLinePushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "screen_line_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
     {
       "uuid": "termin-engine-screen-line-join",
       "name": "ScreenSpaceLineJoinVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-screen-line-join.vert.glsl",
+          "path": "termin-engine-screen-line.slang",
+          "entry": "vs_join_main",
           "inputs": [
             {
               "name": "a_corner",
@@ -797,7 +802,8 @@
           ]
         },
         "fragment": {
-          "path": "termin-engine-screen-line.frag.glsl",
+          "path": "termin-engine-screen-line.slang",
+          "entry": "fs_main",
           "inputs": [
             {
               "name": "v_color",
@@ -816,20 +822,21 @@
       },
       "resources": [
         {
-          "name": "ScreenLinePushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "screen_line_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
     {
       "uuid": "termin-engine-screen-line-round-join",
       "name": "ScreenSpaceLineRoundJoinVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-screen-line-round-join.vert.glsl",
+          "path": "termin-engine-screen-line.slang",
+          "entry": "vs_round_join_main",
           "inputs": [
             {
               "name": "a_local",
@@ -871,7 +878,8 @@
           ]
         },
         "fragment": {
-          "path": "termin-engine-screen-line.frag.glsl",
+          "path": "termin-engine-screen-line.slang",
+          "entry": "fs_main",
           "inputs": [
             {
               "name": "v_color",
@@ -890,20 +898,21 @@
       },
       "resources": [
         {
-          "name": "ScreenLinePushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "screen_line_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
     {
       "uuid": "termin-engine-world-line",
       "name": "WorldSpaceLineVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-world-line.vert.glsl",
+          "path": "termin-engine-world-line.slang",
+          "entry": "vs_main",
           "inputs": [
             {
               "name": "a_corner",
@@ -960,7 +969,8 @@
           ]
         },
         "fragment": {
-          "path": "termin-engine-world-line.frag.glsl",
+          "path": "termin-engine-world-line.slang",
+          "entry": "fs_main",
           "inputs": [
             {
               "name": "v_color",
@@ -979,20 +989,21 @@
       },
       "resources": [
         {
-          "name": "WorldLinePushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "world_line_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
     {
       "uuid": "termin-engine-world-line-cap",
       "name": "WorldSpaceLineCapVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-world-line-cap.vert.glsl",
+          "path": "termin-engine-world-line.slang",
+          "entry": "vs_cap_main",
           "inputs": [
             {
               "name": "a_local",
@@ -1049,7 +1060,8 @@
           ]
         },
         "fragment": {
-          "path": "termin-engine-world-line.frag.glsl",
+          "path": "termin-engine-world-line.slang",
+          "entry": "fs_main",
           "inputs": [
             {
               "name": "v_color",
@@ -1068,20 +1080,21 @@
       },
       "resources": [
         {
-          "name": "WorldLinePushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "world_line_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
     {
       "uuid": "termin-engine-world-line-join",
       "name": "WorldSpaceLineJoinVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-world-line-join.vert.glsl",
+          "path": "termin-engine-world-line.slang",
+          "entry": "vs_join_main",
           "inputs": [
             {
               "name": "a_corner",
@@ -1143,7 +1156,8 @@
           ]
         },
         "fragment": {
-          "path": "termin-engine-world-line.frag.glsl",
+          "path": "termin-engine-world-line.slang",
+          "entry": "fs_main",
           "inputs": [
             {
               "name": "v_color",
@@ -1162,20 +1176,21 @@
       },
       "resources": [
         {
-          "name": "WorldLinePushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "world_line_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
     {
       "uuid": "termin-engine-world-line-round-join",
       "name": "WorldSpaceLineRoundJoinVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-world-line-round-join.vert.glsl",
+          "path": "termin-engine-world-line.slang",
+          "entry": "vs_round_join_main",
           "inputs": [
             {
               "name": "a_local",
@@ -1232,7 +1247,8 @@
           ]
         },
         "fragment": {
-          "path": "termin-engine-world-line.frag.glsl",
+          "path": "termin-engine-world-line.slang",
+          "entry": "fs_main",
           "inputs": [
             {
               "name": "v_color",
@@ -1251,20 +1267,21 @@
       },
       "resources": [
         {
-          "name": "WorldLinePushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "world_line_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
     {
       "uuid": "termin-engine-world-line-lit",
       "name": "WorldSpaceLineLitFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "fragment": {
-          "path": "termin-engine-world-line-lit.frag.glsl",
+          "path": "termin-engine-world-line.slang",
+          "entry": "fs_lit_main",
           "inputs": [
             {
               "name": "v_world_pos",
@@ -1293,20 +1310,21 @@
       },
       "resources": [
         {
-          "name": "LightingBlock",
+          "name": "lighting",
           "logical_name": "lighting",
           "kind": "constant_buffer",
-          "legacy_binding": 0
+          "scope": "pass"
         }
       ]
     },
     {
       "uuid": "termin-engine-world-tube-line",
       "name": "WorldTubeLineVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-world-tube-line.vert.glsl",
+          "path": "termin-engine-world-tube-line.slang",
+          "entry": "vs_main",
           "inputs": [
             {
               "name": "a_corner",
@@ -1358,7 +1376,8 @@
           ]
         },
         "fragment": {
-          "path": "termin-engine-world-tube-line.frag.glsl",
+          "path": "termin-engine-world-tube-line.slang",
+          "entry": "fs_main",
           "inputs": [
             {
               "name": "v_color",
@@ -1377,20 +1396,21 @@
       },
       "resources": [
         {
-          "name": "TubePushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "tube_line_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
     {
       "uuid": "termin-engine-world-tube-line-cap",
       "name": "WorldTubeLineCapVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-world-tube-line-cap.vert.glsl",
+          "path": "termin-engine-world-tube-line.slang",
+          "entry": "vs_cap_main",
           "inputs": [
             {
               "name": "a_corner",
@@ -1442,7 +1462,8 @@
           ]
         },
         "fragment": {
-          "path": "termin-engine-world-tube-line.frag.glsl",
+          "path": "termin-engine-world-tube-line.slang",
+          "entry": "fs_main",
           "inputs": [
             {
               "name": "v_color",
@@ -1461,20 +1482,21 @@
       },
       "resources": [
         {
-          "name": "TubePushBlock",
-          "logical_name": "push_constants",
-          "kind": "push_constant",
-          "legacy_binding": 14
+          "name": "tube_line_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
     {
       "uuid": "termin-engine-world-tube-line-lit",
       "name": "WorldTubeLineLitFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "fragment": {
-          "path": "termin-engine-world-tube-line-lit.frag.glsl",
+          "path": "termin-engine-world-tube-line.slang",
+          "entry": "fs_lit_main",
           "inputs": [
             {
               "name": "v_world_pos",
@@ -1503,20 +1525,21 @@
       },
       "resources": [
         {
-          "name": "LightingBlock",
+          "name": "lighting",
           "logical_name": "lighting",
           "kind": "constant_buffer",
-          "legacy_binding": 0
+          "scope": "pass"
         }
       ]
     },
     {
       "uuid": "termin-engine-line-default",
       "name": "DefaultLineShader",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-line-default.vert.glsl",
+          "path": "termin-engine-line-default.slang",
+          "entry": "vs_main",
           "inputs": [
             {
               "name": "a_position",
@@ -1527,7 +1550,8 @@
           "outputs": []
         },
         "fragment": {
-          "path": "termin-engine-line-default.frag.glsl",
+          "path": "termin-engine-line-default.slang",
+          "entry": "fs_main",
           "inputs": [],
           "outputs": [
             {
@@ -1539,24 +1563,22 @@
       },
       "resources": [
         {
-          "name": "u_model",
-          "logical_name": "model_matrix",
-          "kind": "legacy_uniform"
+          "name": "per_frame",
+          "logical_name": "per_frame",
+          "kind": "constant_buffer",
+          "scope": "frame"
         },
         {
-          "name": "u_view",
-          "logical_name": "view_matrix",
-          "kind": "legacy_uniform"
+          "name": "draw_data",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         },
         {
-          "name": "u_projection",
-          "logical_name": "projection_matrix",
-          "kind": "legacy_uniform"
-        },
-        {
-          "name": "u_color",
-          "logical_name": "color",
-          "kind": "legacy_uniform"
+          "name": "material",
+          "logical_name": "material",
+          "kind": "constant_buffer",
+          "scope": "material"
         }
       ]
     },

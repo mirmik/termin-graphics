@@ -242,6 +242,51 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
     ]
 
 
+def test_termin_shaderc_writes_glsl_bone_block_resource_layout(tmp_path: Path) -> None:
+    shader = tmp_path / "skinned.vert.glsl"
+    shader.write_text(
+        "#version 450 core\n"
+        "layout(location = 0) in vec3 a_position;\n"
+        "layout(location = 6) in vec4 a_joints;\n"
+        "layout(location = 7) in vec4 a_weights;\n"
+        "layout(std140, binding = 16) uniform BoneBlock {\n"
+        "    mat4 u_bone_matrices[128];\n"
+        "    int u_bone_count;\n"
+        "};\n"
+        "void main() { gl_Position = vec4(a_position, 1.0); }\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "skinned.vert.spv"
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "glsl",
+            "--target",
+            "vulkan",
+            "--stage",
+            "vertex",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    layout = json.loads((tmp_path / "skinned.vert.spv.layout.json").read_text(encoding="utf-8"))
+    assert {
+        "name": "BoneBlock",
+        "kind": "constant_buffer",
+        "scope": "draw",
+        "set": 0,
+        "binding": 16,
+        "stage_mask": 1,
+        "size": 0,
+    } in layout["resources"]
+
+
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_drops_dead_slang_reflection_resources(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
@@ -728,6 +773,114 @@ def test_termin_shaderc_maps_slang_draw_storage_buffer_scope(tmp_path: Path) -> 
             "stage_mask": 1,
             "size": 0,
         }
+    ]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_maps_slang_bone_block_draw_scope_separately(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "import termin_prelude;\n"
+        "struct DrawData { float4x4 model; };\n"
+        "struct BoneBlock { float4x4 bones[128]; int count; };\n"
+        "[[TerminScope(\"draw\")]] ConstantBuffer<DrawData> draw_data;\n"
+        "[[TerminScope(\"draw\")]] ConstantBuffer<BoneBlock> bone_block;\n"
+        "[shader(\"vertex\")] float4 main(float3 position : POSITION) : SV_Position {\n"
+        "    return mul(draw_data.model, float4(position, 1.0));\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, struct, sys\n"
+        "OP_NAME = 5\n"
+        "OP_DECORATE = 71\n"
+        "DECORATION_BINDING = 33\n"
+        "DECORATION_DESCRIPTOR_SET = 34\n"
+        "def string_words(value):\n"
+        "    raw = value.encode('utf-8') + b'\\0'\n"
+        "    raw += b'\\0' * ((4 - len(raw) % 4) % 4)\n"
+        "    return [struct.unpack('<I', raw[i:i + 4])[0] for i in range(0, len(raw), 4)]\n"
+        "def inst(op, operands):\n"
+        "    return [((len(operands) + 1) << 16) | op] + operands\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "words = [0x07230203, 0x00010500, 0, 64, 0]\n"
+        "for resource_id, name, binding in [(17, 'draw_data', 3), (18, 'bone_block', 4)]:\n"
+        "    words += inst(OP_NAME, [resource_id] + string_words(name))\n"
+        "    words += inst(OP_DECORATE, [resource_id, DECORATION_BINDING, binding])\n"
+        "    words += inst(OP_DECORATE, [resource_id, DECORATION_DESCRIPTOR_SET, 0])\n"
+        "out.write_bytes(struct.pack('<' + 'I' * len(words), *words))\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {\n"
+        "            'name': 'draw_data',\n"
+        "            'userAttribs': [{'name': 'TerminScope', 'arguments': ['draw']}],\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 3},\n"
+        "            'type': {\n"
+        "                'kind': 'constantBuffer',\n"
+        "                'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 64}},\n"
+        "            },\n"
+        "        },\n"
+        "        {\n"
+        "            'name': 'bone_block',\n"
+        "            'userAttribs': [{'name': 'TerminScope', 'arguments': ['draw']}],\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 4},\n"
+        "            'type': {\n"
+        "                'kind': 'constantBuffer',\n"
+        "                'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 8208}},\n"
+        "            },\n"
+        "        },\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "vertex",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    assert layout["resources"] == [
+        {
+            "name": "draw_data",
+            "kind": "constant_buffer",
+            "scope": "draw",
+            "set": 0,
+            "binding": TC_SHADER_RESOURCE_BINDING_DRAW_DATA,
+            "stage_mask": 1,
+            "size": 64,
+        },
+        {
+            "name": "bone_block",
+            "kind": "constant_buffer",
+            "scope": "draw",
+            "set": 0,
+            "binding": 16,
+            "stage_mask": 1,
+            "size": 8208,
+        },
     ]
 
 

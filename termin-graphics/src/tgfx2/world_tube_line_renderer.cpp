@@ -63,6 +63,7 @@ constexpr const char* WORLD_TUBE_LINE_CAP_SHADER_UUID =
     "termin-engine-world-tube-line-cap";
 constexpr const char* WORLD_TUBE_LINE_LIT_SHADER_UUID =
     "termin-engine-world-tube-line-lit";
+constexpr const char* TUBE_LINE_DRAW_RESOURCE = "tube_line_draw";
 
 bool ensure_shader_pair(
     IRenderDevice& device,
@@ -207,6 +208,19 @@ UploadedInstanceStream upload_instance_stream(RenderContext2& ctx,
         {reinterpret_cast<const uint8_t*>(data), byte_size});
     ctx.defer_destroy(stream.buffer);
     return stream;
+}
+
+void bind_tube_line_shader(RenderContext2& ctx,
+                           tc_shader_handle shader_handle,
+                           ShaderHandle vertex_shader,
+                           ShaderHandle fragment_shader,
+                           const TubePush& draw_data) {
+    ctx.bind_shader(vertex_shader, fragment_shader);
+    ctx.use_shader_resource_layout(tc_shader_get(shader_handle));
+    ctx.bind_uniform_data(
+        TUBE_LINE_DRAW_RESOURCE,
+        &draw_data,
+        static_cast<uint32_t>(sizeof(draw_data)));
 }
 
 } // namespace
@@ -380,6 +394,7 @@ void WorldTubeLineRenderer::draw_polyline(
     VertexBufferLayout corners;
     corners.stride = sizeof(TubeCornerVertex);
     corners.per_instance = false;
+    corners.use_shader_input_locations = true;
     corners.attributes = {
         {0, VertexFormat::Float3, 0},
     };
@@ -387,6 +402,7 @@ void WorldTubeLineRenderer::draw_polyline(
     VertexBufferLayout segment_layout;
     segment_layout.stride = sizeof(TubeSegmentInstance);
     segment_layout.per_instance = true;
+    segment_layout.use_shader_input_locations = true;
     segment_layout.attributes = {
         {1, VertexFormat::Float3, offsetof(TubeSegmentInstance, p0)},
         {2, VertexFormat::Float,  offsetof(TubeSegmentInstance, width)},
@@ -394,11 +410,14 @@ void WorldTubeLineRenderer::draw_polyline(
         {4, VertexFormat::Float4, offsetof(TubeSegmentInstance, color)},
     };
 
-    ctx.use_shader_resource_layout(nullptr);
-    ctx.bind_shader(body_vertex_shader_, body_selected_fragment_shader);
+    bind_tube_line_shader(
+        ctx,
+        body_shader_handle_,
+        body_vertex_shader_,
+        body_selected_fragment_shader,
+        push);
     ctx.set_vertex_layouts({corners, segment_layout});
     ctx.set_topology(PrimitiveTopology::TriangleList);
-    ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
     ctx.draw_arrays_instanced(
         body_corner_vbo_,
         0,
@@ -422,6 +441,7 @@ void WorldTubeLineRenderer::draw_polyline(
     VertexBufferLayout cap_corners;
     cap_corners.stride = sizeof(TubeCapCornerVertex);
     cap_corners.per_instance = false;
+    cap_corners.use_shader_input_locations = true;
     cap_corners.attributes = {
         {0, VertexFormat::Float3, 0},
     };
@@ -429,6 +449,7 @@ void WorldTubeLineRenderer::draw_polyline(
     VertexBufferLayout cap_layout;
     cap_layout.stride = sizeof(TubeCapInstance);
     cap_layout.per_instance = true;
+    cap_layout.use_shader_input_locations = true;
     cap_layout.attributes = {
         {1, VertexFormat::Float3, offsetof(TubeCapInstance, center)},
         {2, VertexFormat::Float,  offsetof(TubeCapInstance, width)},
@@ -443,11 +464,14 @@ void WorldTubeLineRenderer::draw_polyline(
         return;
     }
 
-    ctx.use_shader_resource_layout(nullptr);
-    ctx.bind_shader(cap_vertex_shader_, cap_selected_fragment_shader);
+    bind_tube_line_shader(
+        ctx,
+        cap_shader_handle_,
+        cap_vertex_shader_,
+        cap_selected_fragment_shader,
+        push);
     ctx.set_vertex_layouts({cap_corners, cap_layout});
     ctx.set_topology(PrimitiveTopology::TriangleList);
-    ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
     ctx.draw_arrays_instanced(
         cap_corner_vbo_,
         0,

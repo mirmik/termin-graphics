@@ -93,6 +93,7 @@ constexpr const char* WORLD_LINE_JOIN_SHADER_UUID = "termin-engine-world-line-jo
 constexpr const char* WORLD_LINE_ROUND_JOIN_SHADER_UUID =
     "termin-engine-world-line-round-join";
 constexpr const char* WORLD_LINE_LIT_SHADER_UUID = "termin-engine-world-line-lit";
+constexpr const char* WORLD_LINE_DRAW_RESOURCE = "world_line_draw";
 
 bool ensure_shader_pair(
     IRenderDevice& device,
@@ -236,6 +237,19 @@ UploadedInstanceStream upload_instance_stream(RenderContext2& ctx,
         {reinterpret_cast<const uint8_t*>(data), byte_size});
     ctx.defer_destroy(stream.buffer);
     return stream;
+}
+
+void bind_world_line_shader(RenderContext2& ctx,
+                            tc_shader_handle shader_handle,
+                            ShaderHandle vertex_shader,
+                            ShaderHandle fragment_shader,
+                            const WorldLinePush& draw_data) {
+    ctx.bind_shader(vertex_shader, fragment_shader);
+    ctx.use_shader_resource_layout(tc_shader_get(shader_handle));
+    ctx.bind_uniform_data(
+        WORLD_LINE_DRAW_RESOURCE,
+        &draw_data,
+        static_cast<uint32_t>(sizeof(draw_data)));
 }
 
 } // namespace
@@ -505,6 +519,7 @@ void WorldSpaceLineRenderer::draw_polyline(
     VertexBufferLayout corners;
     corners.stride = sizeof(CornerVertex);
     corners.per_instance = false;
+    corners.use_shader_input_locations = true;
     corners.attributes = {
         {0, VertexFormat::Float2, 0},
     };
@@ -512,6 +527,7 @@ void WorldSpaceLineRenderer::draw_polyline(
     VertexBufferLayout segment;
     segment.stride = sizeof(SegmentInstance);
     segment.per_instance = true;
+    segment.use_shader_input_locations = true;
     segment.attributes = {
         {1, VertexFormat::Float3, offsetof(SegmentInstance, p0)},
         {2, VertexFormat::Float,  offsetof(SegmentInstance, width)},
@@ -520,10 +536,9 @@ void WorldSpaceLineRenderer::draw_polyline(
         {5, VertexFormat::Float4, offsetof(SegmentInstance, color)},
     };
 
-    ctx.bind_shader(vertex_shader_, segment_fragment_shader);
+    bind_world_line_shader(ctx, shader_handle_, vertex_shader_, segment_fragment_shader, push);
     ctx.set_vertex_layouts({corners, segment});
     ctx.set_topology(PrimitiveTopology::TriangleList);
-    ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
     ctx.draw_arrays_instanced(
         corner_vbo_,
         0,
@@ -545,6 +560,7 @@ void WorldSpaceLineRenderer::draw_polyline(
         VertexBufferLayout cap_corners;
         cap_corners.stride = sizeof(CapCornerVertex);
         cap_corners.per_instance = false;
+        cap_corners.use_shader_input_locations = true;
         cap_corners.attributes = {
             {0, VertexFormat::Float2, 0},
         };
@@ -552,6 +568,7 @@ void WorldSpaceLineRenderer::draw_polyline(
         VertexBufferLayout cap_layout;
         cap_layout.stride = sizeof(CapInstance);
         cap_layout.per_instance = true;
+        cap_layout.use_shader_input_locations = true;
         cap_layout.attributes = {
             {1, VertexFormat::Float3, offsetof(CapInstance, center)},
             {2, VertexFormat::Float,  offsetof(CapInstance, width)},
@@ -567,10 +584,14 @@ void WorldSpaceLineRenderer::draw_polyline(
             return;
         }
 
-        ctx.bind_shader(cap_vertex_shader_, cap_selected_fragment_shader);
+        bind_world_line_shader(
+            ctx,
+            cap_shader_handle_,
+            cap_vertex_shader_,
+            cap_selected_fragment_shader,
+            push);
         ctx.set_vertex_layouts({cap_corners, cap_layout});
         ctx.set_topology(PrimitiveTopology::TriangleList);
-        ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
         ctx.draw_arrays_instanced(
             cap_corner_vbo_,
             0,
@@ -593,6 +614,7 @@ void WorldSpaceLineRenderer::draw_polyline(
         VertexBufferLayout round_join_corners;
         round_join_corners.stride = sizeof(CapCornerVertex);
         round_join_corners.per_instance = false;
+        round_join_corners.use_shader_input_locations = true;
         round_join_corners.attributes = {
             {0, VertexFormat::Float2, 0},
         };
@@ -600,6 +622,7 @@ void WorldSpaceLineRenderer::draw_polyline(
         VertexBufferLayout round_join_layout;
         round_join_layout.stride = sizeof(CapInstance);
         round_join_layout.per_instance = true;
+        round_join_layout.use_shader_input_locations = true;
         round_join_layout.attributes = {
             {1, VertexFormat::Float3, offsetof(CapInstance, center)},
             {2, VertexFormat::Float,  offsetof(CapInstance, width)},
@@ -615,10 +638,14 @@ void WorldSpaceLineRenderer::draw_polyline(
             return;
         }
 
-        ctx.bind_shader(round_join_vertex_shader_, round_join_selected_fragment_shader);
+        bind_world_line_shader(
+            ctx,
+            round_join_shader_handle_,
+            round_join_vertex_shader_,
+            round_join_selected_fragment_shader,
+            push);
         ctx.set_vertex_layouts({round_join_corners, round_join_layout});
         ctx.set_topology(PrimitiveTopology::TriangleList);
-        ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
         ctx.draw_arrays_instanced(
             round_join_corner_vbo_,
             0,
@@ -640,6 +667,7 @@ void WorldSpaceLineRenderer::draw_polyline(
         VertexBufferLayout join_corners;
         join_corners.stride = sizeof(JoinCornerVertex);
         join_corners.per_instance = false;
+        join_corners.use_shader_input_locations = true;
         join_corners.attributes = {
             {0, VertexFormat::Float, 0},
         };
@@ -647,6 +675,7 @@ void WorldSpaceLineRenderer::draw_polyline(
         VertexBufferLayout join_layout;
         join_layout.stride = sizeof(JoinInstance);
         join_layout.per_instance = true;
+        join_layout.use_shader_input_locations = true;
         join_layout.attributes = {
             {1, VertexFormat::Float3, offsetof(JoinInstance, prev)},
             {2, VertexFormat::Float,  offsetof(JoinInstance, width)},
@@ -663,10 +692,14 @@ void WorldSpaceLineRenderer::draw_polyline(
             return;
         }
 
-        ctx.bind_shader(join_vertex_shader_, join_selected_fragment_shader);
+        bind_world_line_shader(
+            ctx,
+            join_shader_handle_,
+            join_vertex_shader_,
+            join_selected_fragment_shader,
+            push);
         ctx.set_vertex_layouts({join_corners, join_layout});
         ctx.set_topology(PrimitiveTopology::TriangleList);
-        ctx.set_push_constants(&push, static_cast<uint32_t>(sizeof(push)));
         ctx.draw_arrays_instanced(
             join_corner_vbo_,
             0,

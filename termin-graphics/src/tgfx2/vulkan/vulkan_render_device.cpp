@@ -1904,6 +1904,7 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
     // Vertex input
     std::vector<VkVertexInputBindingDescription> bindings;
     std::vector<VkVertexInputAttributeDescription> attributes;
+    uint32_t reflected_attr_index = 0;
     for (uint32_t i = 0; i < desc.vertex_layouts.size(); ++i) {
         const auto& vl = desc.vertex_layouts[i];
         VkVertexInputBindingDescription bd{};
@@ -1928,18 +1929,21 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
                         attr_index);
                     continue;
                 }
-                if (attr_index >= vertex_shader->vertex_input_locations.size()) {
+                if (reflected_attr_index >= vertex_shader->vertex_input_locations.size()) {
                     tc_log(TC_LOG_ERROR,
                         "[VulkanRenderDevice] shader-owned vertex input layout has more "
                         "attributes than the shader entry point declares: shader='%s' "
-                        "binding=%u attribute_index=%u shader_locations=[%s]",
+                        "binding=%u attribute_index=%u reflected_attribute_index=%u "
+                        "shader_locations=[%s]",
                         vertex_shader->debug_name.c_str(),
                         i,
                         attr_index,
+                        reflected_attr_index,
                         join_u32s(vertex_shader->vertex_input_locations).c_str());
                     continue;
                 }
-                location = vertex_shader->vertex_input_locations[attr_index];
+                location = vertex_shader->vertex_input_locations[reflected_attr_index];
+                ++reflected_attr_index;
             }
             if (!vertex_shader_uses_location(vertex_shader, location)) {
                 continue;
