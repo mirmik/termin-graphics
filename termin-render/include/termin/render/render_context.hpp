@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <string>
 
 #include <termin/geom/mat44.hpp>
@@ -8,6 +9,10 @@
 #include <termin/render/render_camera.hpp>
 #include <termin/tc_scene.hpp>
 #include <tgfx/tgfx_shader_handle.hpp>
+
+struct tc_material_phase;
+struct tc_shader;
+namespace tgfx { class RenderContext2; }
 
 namespace termin {
 
@@ -25,6 +30,8 @@ struct RenderContext {
     int viewport_height = 0;
     TcSceneRef scene;
     RenderCamera* camera = nullptr;
+    std::function<void(tgfx::RenderContext2&, const tc_shader*, tc_material_phase*)>
+        prepare_tgfx2_material_resources;
 
     void set_model(const Mat44f& m) { model = m; }
 

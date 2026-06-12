@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <functional>
 #include <span>
 
 #include "tgfx2/handles.hpp"
@@ -8,6 +9,7 @@
 #include "tgfx2/tgfx2_api.h"
 
 extern "C" {
+#include <tgfx/resources/tc_shader.h>
 #include <tgfx/resources/tc_shader_registry.h>
 }
 
@@ -27,6 +29,16 @@ struct WorldTubeLineParams {
     std::array<float, 16> view_projection{};
     bool lighting_enabled = false;
     ShaderHandle fragment_shader{};
+
+    ShaderHandle body_vertex_shader{};
+    ShaderHandle body_fragment_shader{};
+    const tc_shader* body_shader_layout = nullptr;
+
+    ShaderHandle cap_vertex_shader{};
+    ShaderHandle cap_fragment_shader{};
+    const tc_shader* cap_shader_layout = nullptr;
+
+    std::function<void(RenderContext2&, const tc_shader*)> bind_resources;
 };
 
 class TGFX2_TYPE_API WorldTubeLineRenderer {

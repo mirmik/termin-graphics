@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cmath>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <vector>
 
@@ -211,12 +212,16 @@ UploadedInstanceStream upload_instance_stream(RenderContext2& ctx,
 }
 
 void bind_tube_line_shader(RenderContext2& ctx,
-                           tc_shader_handle shader_handle,
+                           const tc_shader* shader_layout,
                            ShaderHandle vertex_shader,
                            ShaderHandle fragment_shader,
-                           const TubePush& draw_data) {
+                           const TubePush& draw_data,
+                           const std::function<void(RenderContext2&, const tc_shader*)>& bind_resources) {
     ctx.bind_shader(vertex_shader, fragment_shader);
-    ctx.use_shader_resource_layout(tc_shader_get(shader_handle));
+    ctx.use_shader_resource_layout(shader_layout);
+    if (bind_resources) {
+        bind_resources(ctx, shader_layout);
+    }
     ctx.bind_uniform_data(
         TUBE_LINE_DRAW_RESOURCE,
         &draw_data,
@@ -367,10 +372,18 @@ void WorldTubeLineRenderer::draw_polyline(
     }
 
     ensure_resources(ctx, style.sides);
-    const ShaderHandle body_selected_fragment_shader = params.fragment_shader
-        ? params.fragment_shader
-        : (params.lighting_enabled ? lit_fragment_shader_ : body_fragment_shader_);
-    if (!body_vertex_shader_ || !body_selected_fragment_shader) {
+    const ShaderHandle body_selected_vertex_shader = params.body_vertex_shader
+        ? params.body_vertex_shader
+        : body_vertex_shader_;
+    const ShaderHandle body_selected_fragment_shader = params.body_fragment_shader
+        ? params.body_fragment_shader
+        : (params.fragment_shader
+            ? params.fragment_shader
+            : (params.lighting_enabled ? lit_fragment_shader_ : body_fragment_shader_));
+    const tc_shader* body_selected_layout = params.body_shader_layout
+        ? params.body_shader_layout
+        : tc_shader_get(body_shader_handle_);
+    if (!body_selected_vertex_shader || !body_selected_fragment_shader) {
         return;
     }
 
@@ -412,10 +425,11 @@ void WorldTubeLineRenderer::draw_polyline(
 
     bind_tube_line_shader(
         ctx,
-        body_shader_handle_,
-        body_vertex_shader_,
+        body_selected_layout,
+        body_selected_vertex_shader,
         body_selected_fragment_shader,
-        push);
+        push,
+        params.bind_resources);
     ctx.set_vertex_layouts({corners, segment_layout});
     ctx.set_topology(PrimitiveTopology::TriangleList);
     ctx.draw_arrays_instanced(
@@ -457,19 +471,28 @@ void WorldTubeLineRenderer::draw_polyline(
         {4, VertexFormat::Float4, offsetof(TubeCapInstance, color)},
     };
 
-    const ShaderHandle cap_selected_fragment_shader = params.fragment_shader
-        ? params.fragment_shader
-        : (params.lighting_enabled ? lit_fragment_shader_ : cap_fragment_shader_);
-    if (!cap_vertex_shader_ || !cap_selected_fragment_shader) {
+    const ShaderHandle cap_selected_vertex_shader = params.cap_vertex_shader
+        ? params.cap_vertex_shader
+        : cap_vertex_shader_;
+    const ShaderHandle cap_selected_fragment_shader = params.cap_fragment_shader
+        ? params.cap_fragment_shader
+        : (params.fragment_shader
+            ? params.fragment_shader
+            : (params.lighting_enabled ? lit_fragment_shader_ : cap_fragment_shader_));
+    const tc_shader* cap_selected_layout = params.cap_shader_layout
+        ? params.cap_shader_layout
+        : tc_shader_get(cap_shader_handle_);
+    if (!cap_selected_vertex_shader || !cap_selected_fragment_shader) {
         return;
     }
 
     bind_tube_line_shader(
         ctx,
-        cap_shader_handle_,
-        cap_vertex_shader_,
+        cap_selected_layout,
+        cap_selected_vertex_shader,
         cap_selected_fragment_shader,
-        push);
+        push,
+        params.bind_resources);
     ctx.set_vertex_layouts({cap_corners, cap_layout});
     ctx.set_topology(PrimitiveTopology::TriangleList);
     ctx.draw_arrays_instanced(
