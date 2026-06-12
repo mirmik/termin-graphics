@@ -31,6 +31,11 @@ else()
     find_package(termin_lighting REQUIRED)
 endif()
 if(COMMAND termin_require_package)
+    termin_require_package(termin_materials termin_materials::termin_materials)
+else()
+    find_package(termin_materials REQUIRED)
+endif()
+if(COMMAND termin_require_package)
     termin_require_package(termin_scene termin_scene::termin_scene)
 else()
     find_package(termin_scene REQUIRED)
@@ -67,10 +72,13 @@ set(TERMIN_RENDER_SOURCES
     src/graph_compiler.cpp
     src/graph_data.cpp
     src/graph_node_def.cpp
+    src/material_pipeline.cpp
+    src/material_ubo_apply.cpp
     src/material_ubo_runtime.cpp
     src/render_pipeline.cpp
     src/render_engine.cpp
     src/shader_usage_collector.cpp
+    src/shader_resource_apply.cpp
     src/tgfx2_bridge.cpp
     src/scene_pipeline_template.cpp
     src/shadow.cpp
@@ -116,12 +124,15 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/graph_compiler.hpp
     include/termin/render/graph_data.hpp
     include/termin/render/graph_node_def.hpp
+    include/termin/render/material_pipeline.hpp
+    include/termin/render/material_ubo_apply.hpp
     include/termin/render/material_ubo_runtime.hpp
     include/termin/render/resource_aliases.hpp
     include/termin/render/render_pipeline.hpp
     include/termin/render/render_engine.hpp
     include/termin/render/scene_pipeline_template.hpp
     include/termin/render/shader_binding_policy.hpp
+    include/termin/render/shader_resource_apply.hpp
     include/termin/render/shader_usage_collector.hpp
     include/termin/lighting/shadow.hpp
     include/tc_project_settings.h
@@ -170,6 +181,7 @@ target_link_libraries(termin_render PUBLIC
     termin_scene::termin_scene
     termin_inspect::termin_inspect
     termin_lighting::termin_lighting
+    termin_materials::termin_materials
 )
 
 if(UNIX AND NOT APPLE)
