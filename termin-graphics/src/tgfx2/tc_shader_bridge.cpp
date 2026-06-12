@@ -6,6 +6,7 @@
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/enums.hpp"
+#include "tgfx2/internal/shader_logging.hpp"
 #include <tcbase/trent/json.h>
 
 #include <cstdio>
@@ -729,10 +730,12 @@ static bool apply_shader_resource_layout_sidecar(
         static_cast<uint32_t>(merged.size()));
     free_shader_resource_binding_fields(merged);
     free_shader_resource_binding_fields(incoming);
-    tc_log(TC_LOG_DEBUG,
-           "tgfx2 shader resource layout: loaded %zu resource(s) from '%s'",
-           incoming.size(),
-           sidecar.string().c_str());
+    if (tgfx::internal::shader_verbose_logging_enabled()) {
+        tc_log(TC_LOG_DEBUG,
+               "tgfx2 shader resource layout: loaded %zu resource(s) from '%s'",
+               incoming.size(),
+               sidecar.string().c_str());
+    }
     return true;
 }
 
@@ -873,13 +876,15 @@ static bool compile_shader_artifact(
             cmd += " -I " + quote_arg(root);
         }
     }
-    tc_log(TC_LOG_DEBUG,
-           "tgfx2 shader dev compile: %s stage=%s entry=%s input='%s' output='%s'",
-           shader->name ? shader->name : shader->uuid,
-           stage_name(stage),
-           entry,
-           source_path.string().c_str(),
-           artifact_path.string().c_str());
+    if (tgfx::internal::shader_verbose_logging_enabled()) {
+        tc_log(TC_LOG_DEBUG,
+               "tgfx2 shader dev compile: %s stage=%s entry=%s input='%s' output='%s'",
+               shader->name ? shader->name : shader->uuid,
+               stage_name(stage),
+               entry,
+               source_path.string().c_str(),
+               artifact_path.string().c_str());
+    }
 
     const int rc = std::system(cmd.c_str());
     if (rc != 0) {

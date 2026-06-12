@@ -6,6 +6,7 @@
 #include "tgfx2/vulkan/vulkan_shader_compiler.hpp"
 #include "tgfx2/vulkan/vulkan_type_conversions.hpp"
 #include "tgfx2/internal/shader_preprocess.hpp"
+#include "tgfx2/internal/shader_logging.hpp"
 #include "vulkan_spirv_reflection.hpp"
 #include "vulkan_stats.hpp"
 
@@ -182,7 +183,8 @@ ShaderHandle VulkanRenderDevice::create_shader(const ShaderDesc& desc) {
             std::string reflected_entry =
                 reflect_spirv_stage_entry_point(spirv, desc.stage);
             if (!reflected_entry.empty()) {
-                if (reflected_entry != desc.entry_point) {
+                if (reflected_entry != desc.entry_point &&
+                    internal::shader_verbose_logging_enabled()) {
                     tc_log(TC_LOG_DEBUG,
                         "[VulkanRenderDevice] shader entry remapped from source entry "
                         "to SPIR-V entry: debug='%s' stage=%d source_entry='%s' "
