@@ -18,6 +18,34 @@ using namespace termin;
 
 namespace tgfx_bindings {
 
+namespace {
+
+const char* shader_resource_kind_name(uint32_t kind) {
+    switch (kind) {
+        case TC_SHADER_RESOURCE_NONE: return "none";
+        case TC_SHADER_RESOURCE_CONSTANT_BUFFER: return "constant_buffer";
+        case TC_SHADER_RESOURCE_TEXTURE: return "texture";
+        case TC_SHADER_RESOURCE_SAMPLER: return "sampler";
+        case TC_SHADER_RESOURCE_STORAGE_BUFFER: return "storage_buffer";
+        case TC_SHADER_RESOURCE_STORAGE_TEXTURE: return "storage_texture";
+        default: return "unknown";
+    }
+}
+
+const char* shader_resource_scope_name(uint32_t scope) {
+    switch (scope) {
+        case TC_SHADER_RESOURCE_SCOPE_UNKNOWN: return "unknown";
+        case TC_SHADER_RESOURCE_SCOPE_FRAME: return "frame";
+        case TC_SHADER_RESOURCE_SCOPE_PASS: return "pass";
+        case TC_SHADER_RESOURCE_SCOPE_MATERIAL: return "material";
+        case TC_SHADER_RESOURCE_SCOPE_DRAW: return "draw";
+        case TC_SHADER_RESOURCE_SCOPE_TRANSIENT: return "transient";
+        default: return "unknown";
+    }
+}
+
+} // namespace
+
 void bind_shader(nb::module_& m) {
     // tc_shader_handle - C struct
     nb::class_<tc_shader_handle>(m, "TcShaderHandle")
@@ -105,7 +133,9 @@ void bind_shader(nb::module_& m) {
                 nb::dict result;
                 result["name"] = std::string(binding->name);
                 result["kind"] = binding->kind;
+                result["kind_name"] = shader_resource_kind_name(binding->kind);
                 result["scope"] = binding->scope;
+                result["scope_name"] = shader_resource_scope_name(binding->scope);
                 result["set"] = binding->set;
                 result["binding"] = binding->binding;
                 result["stage_mask"] = binding->stage_mask;
@@ -115,6 +145,7 @@ void bind_shader(nb::module_& m) {
                     for (uint32_t i = 0; i < binding->field_count; ++i) {
                         nb::dict fd;
                         fd["name"] = std::string(binding->fields[i].name);
+                        fd["type"] = std::string(binding->fields[i].type);
                         fd["offset"] = binding->fields[i].offset;
                         fd["size"] = binding->fields[i].size;
                         fields.append(fd);

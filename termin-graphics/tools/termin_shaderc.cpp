@@ -54,6 +54,7 @@ struct ShaderResourceBinding {
     // Field-level layout for constant_buffers (populated from Slang reflection).
     struct Field {
         std::string name;
+        std::string type;
         uint32_t offset = 0;
         uint32_t size = 0;
     };
@@ -291,6 +292,9 @@ static void append_unique_resource(
             if (binding.size != 0) {
                 existing.size = binding.size;
             }
+            if (!binding.fields.empty()) {
+                existing.fields = std::move(binding.fields);
+            }
             return;
         }
     }
@@ -388,6 +392,65 @@ static uint32_t slang_parameter_buffer_size(const nos::trent& parameter) {
     return size;
 }
 
+static std::string material_property_type_from_slang_type(const nos::trent& type) {
+    if (!type.is_dict()) {
+        return {};
+    }
+
+    std::string kind;
+    if (!trent_string_field(type, "kind", kind)) {
+        return {};
+    }
+
+    if (kind == "scalar") {
+        std::string scalar_type;
+        if (!trent_string_field(type, "scalarType", scalar_type)) {
+            return {};
+        }
+        if (scalar_type == "float32" || scalar_type == "float16") return "Float";
+        if (scalar_type == "int32" || scalar_type == "int16" || scalar_type == "int8") return "Int";
+        if (scalar_type == "uint32" || scalar_type == "uint16" || scalar_type == "uint8") return "Int";
+        if (scalar_type == "bool") return "Bool";
+        return {};
+    }
+
+    if (kind == "vector") {
+        uint32_t element_count = 0;
+        if (!trent_uint_field(type, "elementCount", element_count)) {
+            return {};
+        }
+        const nos::trent* element_type = trent_dict_get(type, "elementType");
+        if (!element_type || !element_type->is_dict()) {
+            return {};
+        }
+        std::string element_kind;
+        std::string scalar_type;
+        if (!trent_string_field(*element_type, "kind", element_kind) ||
+            element_kind != "scalar" ||
+            !trent_string_field(*element_type, "scalarType", scalar_type) ||
+            scalar_type != "float32") {
+            return {};
+        }
+        if (element_count == 2) return "Vec2";
+        if (element_count == 3) return "Vec3";
+        if (element_count == 4) return "Vec4";
+        return {};
+    }
+
+    if (kind == "matrix") {
+        uint32_t row_count = 0;
+        uint32_t col_count = 0;
+        trent_uint_field(type, "rowCount", row_count);
+        trent_uint_field(type, "columnCount", col_count);
+        if (row_count == 4 && col_count == 4) {
+            return "Mat4";
+        }
+        return {};
+    }
+
+    return {};
+}
+
 static bool is_slang_texture_base_shape(const std::string& base_shape) {
     return base_shape.rfind("texture", 0) == 0;
 }
@@ -430,6 +493,10 @@ static bool slang_resource_kind_from_parameter(
                         if (!field.is_dict()) continue;
                         ShaderResourceBinding::Field f;
                         if (!trent_string_field(field, "name", f.name)) continue;
+                        const nos::trent* ft = trent_dict_get(field, "type");
+                        if (ft && ft->is_dict()) {
+                            f.type = material_property_type_from_slang_type(*ft);
+                        }
                         const nos::trent* fb = trent_dict_get(field, "binding");
                         if (fb && fb->is_dict()) {
                             trent_uint_field(*fb, "offset", f.offset);
@@ -882,6 +949,7 @@ static bool write_resource_layout_sidecar(
             for (size_t fi = 0; fi < binding.fields.size(); ++fi) {
                 const auto& f = binding.fields[fi];
                 out << "{\"name\":\"" << json_escape(f.name) << "\","
+                    << "\"type\":\"" << json_escape(f.type) << "\","
                     << "\"offset\":" << f.offset << ","
                     << "\"size\":" << f.size << "}";
                 if (fi + 1 < binding.fields.size()) out << ", ";

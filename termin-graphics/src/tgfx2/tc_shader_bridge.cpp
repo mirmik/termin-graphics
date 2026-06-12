@@ -580,12 +580,16 @@ static bool parse_shader_resource_layout_sidecar(
                     if (!field_obj.is_dict()) continue;
                     tc_shader_resource_field& f = resource.fields[fi];
                     std::string fname;
+                    std::string ftype;
                     trent_string_field(field_obj, "name", fname);
+                    trent_string_field(field_obj, "type", ftype);
                     std::snprintf(f.name, sizeof(f.name), "%s", fname.c_str());
+                    std::snprintf(f.type, sizeof(f.type), "%s", ftype.c_str());
                     trent_uint_field(field_obj, "offset", f.offset);
                     trent_uint_field(field_obj, "size", f.size);
                     ++fi;
                 }
+                resource.field_count = static_cast<uint32_t>(fi);
             }
         }
 

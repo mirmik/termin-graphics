@@ -176,7 +176,17 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
         "        'binding': {'kind': 'constantBuffer', 'index': 1},\n"
         "        'type': {\n"
         "            'kind': 'constantBuffer',\n"
-        "            'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 16}},\n"
+        "            'elementVarLayout': {\n"
+        "                'binding': {'kind': 'uniform', 'size': 16},\n"
+        "                'type': {\n"
+        "                    'kind': 'struct',\n"
+        "                    'fields': [{\n"
+        "                        'name': 'u_strength',\n"
+        "                        'type': {'kind': 'scalar', 'scalarType': 'float32'},\n"
+        "                        'binding': {'kind': 'uniform', 'offset': 0, 'size': 4},\n"
+        "                    }],\n"
+        "                },\n"
+        "            },\n"
         "        },\n"
         "    }]\n"
         "}), encoding='utf-8')\n",
@@ -220,6 +230,14 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
             "binding": 1,
             "stage_mask": 2,
             "size": 16,
+            "fields": [
+                {
+                    "name": "u_strength",
+                    "type": "Float",
+                    "offset": 0,
+                    "size": 4,
+                }
+            ],
         }
     ]
 

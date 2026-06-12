@@ -1746,10 +1746,10 @@
     {
       "uuid": "termin-engine-voxel-display",
       "name": "VoxelDisplay",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-voxel-display.vert.glsl",
+          "path": "termin-engine-voxel-display.slang",
           "inputs": [
             {
               "name": "a_position",
@@ -1789,10 +1789,11 @@
               "name": "v_color",
               "semantic": "COLOR0"
             }
-          ]
+          ],
+          "entry": "vs_main"
         },
         "fragment": {
-          "path": "termin-engine-voxel-display.frag.glsl",
+          "path": "termin-engine-voxel-display.slang",
           "inputs": [
             {
               "name": "v_world_pos",
@@ -1816,54 +1817,28 @@
               "name": "FragColor",
               "semantic": "SV_Target0"
             }
-          ]
+          ],
+          "entry": "fs_main"
         }
       },
       "resources": [
         {
-          "name": "u_model",
-          "logical_name": "model_matrix",
-          "kind": "legacy_uniform"
+          "name": "per_frame",
+          "logical_name": "per_frame",
+          "kind": "constant_buffer",
+          "scope": "frame"
         },
         {
-          "name": "u_view",
-          "logical_name": "view_matrix",
-          "kind": "legacy_uniform"
+          "name": "draw_data",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         },
         {
-          "name": "u_projection",
-          "logical_name": "projection_matrix",
-          "kind": "legacy_uniform"
-        },
-        {
-          "name": "u_color_below",
-          "logical_name": "color_below",
-          "kind": "legacy_uniform"
-        },
-        {
-          "name": "u_color_above",
-          "logical_name": "color_above",
-          "kind": "legacy_uniform"
-        },
-        {
-          "name": "u_slice_axis",
-          "logical_name": "slice_axis",
-          "kind": "legacy_uniform"
-        },
-        {
-          "name": "u_fill_percent",
-          "logical_name": "fill_percent",
-          "kind": "legacy_uniform"
-        },
-        {
-          "name": "u_bounds_min",
-          "logical_name": "bounds_min",
-          "kind": "legacy_uniform"
-        },
-        {
-          "name": "u_bounds_max",
-          "logical_name": "bounds_max",
-          "kind": "legacy_uniform"
+          "name": "material",
+          "logical_name": "material",
+          "kind": "constant_buffer",
+          "scope": "material"
         }
       ]
     },

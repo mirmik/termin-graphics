@@ -1035,6 +1035,9 @@ bool property_types_compatible(const std::string& a, const std::string& b) {
     if (a == b) return true;
     // Color and Vec4 are the same std140 payload.
     if ((a == "Color" && b == "Vec4") || (a == "Vec4" && b == "Color")) return true;
+    // Scalar std140 slots are 4 bytes. Reflected layouts may only know
+    // the slot size; allow the packer to coerce numeric scalar values.
+    if ((a == "Float" || a == "Int") && (b == "Float" || b == "Int")) return true;
     return false;
 }
 

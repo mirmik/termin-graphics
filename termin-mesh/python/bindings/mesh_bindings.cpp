@@ -253,6 +253,7 @@ void bind_mesh(nb::module_& m) {
         })
         .def_ro("stride", &tc_vertex_layout::stride)
         .def_ro("attrib_count", &tc_vertex_layout::attrib_count)
+        .def_rw("use_shader_input_locations", &tc_vertex_layout::use_shader_input_locations)
         .def("add", [](tc_vertex_layout& self, const std::string& name, uint8_t size, tc_attrib_type type, uint8_t location) {
             return tc_vertex_layout_add(&self, name.c_str(), size, type, location);
         }, nb::arg("name"), nb::arg("size"), nb::arg("type"), nb::arg("location"))

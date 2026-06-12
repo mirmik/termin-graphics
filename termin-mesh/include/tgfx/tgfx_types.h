@@ -45,7 +45,7 @@ typedef struct tgfx_vertex_attrib {
 typedef struct tgfx_vertex_layout {
     uint16_t stride;                                    // bytes per vertex
     uint8_t attrib_count;                               // number of attributes
-    uint8_t _pad;
+    uint8_t use_shader_input_locations;                 // map attributes by order to reflected shader inputs
     tgfx_vertex_attrib attribs[TGFX_VERTEX_ATTRIBS_MAX];
 } tgfx_vertex_layout;
 

@@ -117,6 +117,7 @@ typedef enum tc_shader_stage_mask {
 // are in bytes. Populated from Slang reflection / shader layout sidecar.
 typedef struct tc_shader_resource_field {
     char name[TC_SHADER_RESOURCE_NAME_MAX];
+    char type[TC_MATERIAL_UBO_TYPE_MAX];
     uint32_t offset;
     uint32_t size;
 } tc_shader_resource_field;

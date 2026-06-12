@@ -20,6 +20,14 @@ def test_vertex_layout_building():
     assert uv["offset"] == 24
 
 
+def test_vertex_layout_can_request_shader_owned_input_locations():
+    layout = tmesh.TcVertexLayout()
+    assert layout.use_shader_input_locations == 0
+
+    layout.use_shader_input_locations = 1
+    assert layout.use_shader_input_locations == 1
+
+
 def test_skinned_layout_matches_gpu_contract():
     layout = tmesh.TcVertexLayout.skinned()
     assert layout.attrib_count == 6

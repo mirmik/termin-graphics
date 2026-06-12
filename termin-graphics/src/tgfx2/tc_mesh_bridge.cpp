@@ -17,6 +17,8 @@ namespace {
 
 bool fill_binding_from_mesh(Tgfx2MeshBinding& out, tc_mesh* mesh) {
     out.layout.stride = mesh->layout.stride;
+    out.layout.use_shader_input_locations =
+        mesh->layout.use_shader_input_locations != 0;
     out.layout.attributes.reserve(mesh->layout.attrib_count);
     for (uint8_t i = 0; i < mesh->layout.attrib_count; i++) {
         const tgfx_vertex_attrib& a = mesh->layout.attribs[i];
