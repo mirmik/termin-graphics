@@ -2877,6 +2877,86 @@
           "kind": "combined_sampler2d"
         }
       ]
+    },
+    {
+      "uuid": "termin-engine-skinned-material",
+      "name": "SkinnedMaterialVariantVS",
+      "language": "slang",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-skinned-material.vert.slang",
+          "entry": "vs_main"
+        }
+      },
+      "resources": [
+        {"name": "per_frame", "logical_name": "per_frame", "kind": "constant_buffer", "scope": "frame"},
+        {"name": "draw_data", "logical_name": "draw", "kind": "constant_buffer", "scope": "draw"},
+        {"name": "bone_block", "logical_name": "bone_block", "kind": "constant_buffer", "scope": "draw"}
+      ]
+    },
+    {
+      "uuid": "termin-engine-skinned-shadow",
+      "name": "SkinnedShadowVariantVS",
+      "language": "slang",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-skinned-shadow.vert.slang",
+          "entry": "vs_main"
+        }
+      },
+      "resources": [
+        {"name": "per_frame", "logical_name": "per_frame", "kind": "constant_buffer", "scope": "frame"},
+        {"name": "shadow_draw", "logical_name": "draw", "kind": "constant_buffer", "scope": "draw"},
+        {"name": "bone_block", "logical_name": "bone_block", "kind": "constant_buffer", "scope": "draw"}
+      ]
+    },
+    {
+      "uuid": "termin-engine-skinned-depth",
+      "name": "SkinnedDepthVariantVS",
+      "language": "slang",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-skinned-depth.vert.slang",
+          "entry": "vs_main"
+        }
+      },
+      "resources": [
+        {"name": "per_frame", "logical_name": "per_frame", "kind": "constant_buffer", "scope": "frame"},
+        {"name": "depth_draw", "logical_name": "draw", "kind": "constant_buffer", "scope": "draw"},
+        {"name": "bone_block", "logical_name": "bone_block", "kind": "constant_buffer", "scope": "draw"}
+      ]
+    },
+    {
+      "uuid": "termin-engine-skinned-id",
+      "name": "SkinnedIdVariantVS",
+      "language": "slang",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-skinned-id.vert.slang",
+          "entry": "vs_main"
+        }
+      },
+      "resources": [
+        {"name": "u_per_frame", "logical_name": "per_frame", "kind": "constant_buffer", "scope": "frame"},
+        {"name": "u_push", "logical_name": "draw", "kind": "constant_buffer", "scope": "draw"},
+        {"name": "bone_block", "logical_name": "bone_block", "kind": "constant_buffer", "scope": "draw"}
+      ]
+    },
+    {
+      "uuid": "termin-engine-skinned-normal",
+      "name": "SkinnedNormalVariantVS",
+      "language": "slang",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-skinned-normal.vert.slang",
+          "entry": "vs_main"
+        }
+      },
+      "resources": [
+        {"name": "per_frame", "logical_name": "per_frame", "kind": "constant_buffer", "scope": "frame"},
+        {"name": "normal_draw", "logical_name": "draw", "kind": "constant_buffer", "scope": "draw"},
+        {"name": "bone_block", "logical_name": "bone_block", "kind": "constant_buffer", "scope": "draw"}
+      ]
     }
   ]
 }

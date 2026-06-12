@@ -43,7 +43,8 @@ TGFX2_API void release_mesh_binding(
 
 TGFX2_API VertexBufferLayout filter_vertex_layout_to_locations(
     const VertexBufferLayout& layout,
-    std::initializer_list<uint32_t> used_locations
+    std::initializer_list<uint32_t> used_locations,
+    bool use_shader_input_locations = false
 );
 
 // Draws a tc_mesh into the currently open RenderContext2 pass using the
@@ -59,7 +60,8 @@ TGFX2_API bool draw_tc_mesh(
 TGFX2_API bool draw_tc_mesh(
     RenderContext2& ctx,
     tc_mesh* mesh,
-    std::initializer_list<uint32_t> used_locations
+    std::initializer_list<uint32_t> used_locations,
+    bool use_shader_input_locations = false
 );
 
 } // namespace tgfx

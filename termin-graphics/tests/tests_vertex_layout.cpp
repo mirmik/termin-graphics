@@ -167,8 +167,8 @@ TEST_CASE("predefined layout skinned") {
     CHECK(tgfx_vertex_layout_find(&layout, "tangent") != nullptr);
     CHECK(tgfx_vertex_layout_find(&layout, "joints") != nullptr);
     CHECK(tgfx_vertex_layout_find(&layout, "weights") != nullptr);
-    CHECK_EQ(tgfx_vertex_layout_find(&layout, "joints")->location, 6);
-    CHECK_EQ(tgfx_vertex_layout_find(&layout, "weights")->location, 7);
+    CHECK_EQ(tgfx_vertex_layout_find(&layout, "joints")->location, 4);
+    CHECK_EQ(tgfx_vertex_layout_find(&layout, "weights")->location, 5);
 }
 
 TEST_CASE("predefined layout locations are sequential") {

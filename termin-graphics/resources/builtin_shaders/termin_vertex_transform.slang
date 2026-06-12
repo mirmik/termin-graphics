@@ -3,7 +3,7 @@ import termin_prelude;
 static const int TERMIN_MAX_BONES = 128;
 
 struct TerminBoneBlock {
-    float4x4 u_bone_matrices[TERMIN_MAX_BONES];
+    column_major float4x4 u_bone_matrices[TERMIN_MAX_BONES];
     int u_bone_count;
 };
 
@@ -30,6 +30,54 @@ struct TerminWorldVertex {
     float4 tangent;
 };
 
+float3 termin_skinned_position(
+    float3 position,
+    float4 joints,
+    float4 weights,
+    TerminBoneBlock bones
+) {
+    if (bones.u_bone_count <= 0) {
+        return position;
+    }
+
+    float4 skinned_position = float4(0.0, 0.0, 0.0, 0.0);
+    float total_weight = 0.0;
+    for (int i = 0; i < 4; ++i) {
+        int bone_index = int(joints[i]);
+        float weight = weights[i];
+        if (weight > 0.0 && bone_index >= 0 && bone_index < bones.u_bone_count) {
+            skinned_position += weight * mul(bones.u_bone_matrices[bone_index], float4(position, 1.0));
+            total_weight += weight;
+        }
+    }
+
+    return total_weight > 0.0 ? skinned_position.xyz : position;
+}
+
+float3 termin_skinned_normal(
+    float3 normal,
+    float4 joints,
+    float4 weights,
+    TerminBoneBlock bones
+) {
+    if (bones.u_bone_count <= 0) {
+        return normal;
+    }
+
+    float3 skinned_normal = float3(0.0, 0.0, 0.0);
+    float total_weight = 0.0;
+    for (int i = 0; i < 4; ++i) {
+        int bone_index = int(joints[i]);
+        float weight = weights[i];
+        if (weight > 0.0 && bone_index >= 0 && bone_index < bones.u_bone_count) {
+            skinned_normal += weight * mul((float3x3)bones.u_bone_matrices[bone_index], normal);
+            total_weight += weight;
+        }
+    }
+
+    return total_weight > 0.0 ? skinned_normal : normal;
+}
+
 TerminWorldVertex termin_static_vertex(
     TerminMeshVertexInput input,
     float4x4 model
@@ -49,30 +97,10 @@ TerminWorldVertex termin_skinned_vertex(
     float4x4 model,
     TerminBoneBlock bones
 ) {
-    float3 local_position = input.position;
-    float3 local_normal = input.normal;
-
-    if (bones.u_bone_count > 0) {
-        float4 skinned_position = float4(0.0, 0.0, 0.0, 0.0);
-        float3 skinned_normal = float3(0.0, 0.0, 0.0);
-        float total_weight = 0.0;
-
-        for (int i = 0; i < 4; ++i) {
-            int bone_index = int(input.joints[i]);
-            float weight = input.weights[i];
-            if (weight > 0.0 && bone_index >= 0 && bone_index < bones.u_bone_count) {
-                float4x4 bone = bones.u_bone_matrices[bone_index];
-                skinned_position += weight * mul(bone, float4(input.position, 1.0));
-                skinned_normal += weight * mul((float3x3)bone, input.normal);
-                total_weight += weight;
-            }
-        }
-
-        if (total_weight > 0.0) {
-            local_position = skinned_position.xyz;
-            local_normal = skinned_normal;
-        }
-    }
+    float3 local_position =
+        termin_skinned_position(input.position, input.joints, input.weights, bones);
+    float3 local_normal =
+        termin_skinned_normal(input.normal, input.joints, input.weights, bones);
 
     TerminMeshVertexInput static_input;
     static_input.position = local_position;

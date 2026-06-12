@@ -117,11 +117,9 @@ tgfx_vertex_layout tgfx_vertex_layout_skinned(void) {
     // the source model has no tangent data — the shader's Gram-Schmidt
     // branch already handles vec3(0) via the `length > 0.001` test.
     tgfx_vertex_layout_add(&layout, "tangent", 4, TGFX_ATTRIB_FLOAT32, 3);
-    // joints/weights on locations 6/7 — past tangent (3) and `color` (5
-    // in tgfx_vertex_layout_pos_normal_uv_color). shaderc for Vulkan
-    // rejects overlapping `in` declarations; the previous slots 3/4 only
-    // worked on GL because the driver silently reused tangent storage.
-    tgfx_vertex_layout_add(&layout, "joints", 4, TGFX_ATTRIB_FLOAT32, 6);
-    tgfx_vertex_layout_add(&layout, "weights", 4, TGFX_ATTRIB_FLOAT32, 7);
+    // Slang assigns struct inputs sequentially for the standard skinned
+    // contract: position, normal, uv, tangent, joints, weights.
+    tgfx_vertex_layout_add(&layout, "joints", 4, TGFX_ATTRIB_FLOAT32, 4);
+    tgfx_vertex_layout_add(&layout, "weights", 4, TGFX_ATTRIB_FLOAT32, 5);
     return layout;
 }

@@ -40,9 +40,9 @@ def test_skinned_layout_matches_gpu_contract():
     assert tangent is not None
     assert tangent["location"] == 3
     assert joints is not None
-    assert joints["location"] == 6
+    assert joints["location"] == 4
     assert weights is not None
-    assert weights["location"] == 7
+    assert weights["location"] == 5
 
 
 def test_mesh3_from_numpy_arrays():

@@ -74,7 +74,8 @@ RENDER_API void release_mesh_binding(
 // `filter_vertex_layout_to_locations(layout, {0})`.
 RENDER_API tgfx::VertexBufferLayout filter_vertex_layout_to_locations(
     const tgfx::VertexBufferLayout& layout,
-    std::initializer_list<uint32_t> used_locations
+    std::initializer_list<uint32_t> used_locations,
+    bool use_shader_input_locations = false
 );
 
 RENDER_API bool draw_tc_mesh(
@@ -86,7 +87,8 @@ RENDER_API bool draw_tc_mesh(
 RENDER_API bool draw_tc_mesh(
     tgfx::RenderContext2& ctx,
     tc_mesh* mesh,
-    std::initializer_list<uint32_t> used_locations
+    std::initializer_list<uint32_t> used_locations,
+    bool use_shader_input_locations = false
 );
 
 } // namespace termin

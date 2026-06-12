@@ -56,9 +56,13 @@ void release_mesh_binding(
 
 tgfx::VertexBufferLayout filter_vertex_layout_to_locations(
     const tgfx::VertexBufferLayout& layout,
-    std::initializer_list<uint32_t> used_locations
+    std::initializer_list<uint32_t> used_locations,
+    bool use_shader_input_locations
 ) {
-    return tgfx::filter_vertex_layout_to_locations(layout, used_locations);
+    return tgfx::filter_vertex_layout_to_locations(
+        layout,
+        used_locations,
+        use_shader_input_locations);
 }
 
 bool draw_tc_mesh(
@@ -72,9 +76,10 @@ bool draw_tc_mesh(
 bool draw_tc_mesh(
     tgfx::RenderContext2& ctx,
     tc_mesh* mesh,
-    std::initializer_list<uint32_t> used_locations
+    std::initializer_list<uint32_t> used_locations,
+    bool use_shader_input_locations
 ) {
-    return tgfx::draw_tc_mesh(ctx, mesh, used_locations);
+    return tgfx::draw_tc_mesh(ctx, mesh, used_locations, use_shader_input_locations);
 }
 
 } // namespace termin

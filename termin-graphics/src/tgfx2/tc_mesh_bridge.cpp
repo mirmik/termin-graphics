@@ -218,11 +218,13 @@ void release_mesh_binding(IRenderDevice& device, const Tgfx2MeshBinding& binding
 
 VertexBufferLayout filter_vertex_layout_to_locations(
     const VertexBufferLayout& layout,
-    std::initializer_list<uint32_t> used_locations
+    std::initializer_list<uint32_t> used_locations,
+    bool use_shader_input_locations
 ) {
     VertexBufferLayout out;
     out.stride = layout.stride;
     out.per_instance = layout.per_instance;
+    out.use_shader_input_locations = use_shader_input_locations;
     for (const auto& attr : layout.attributes) {
         for (uint32_t loc : used_locations) {
             if (attr.location == loc) {
@@ -254,13 +256,17 @@ bool draw_tc_mesh(
 bool draw_tc_mesh(
     RenderContext2& ctx,
     tc_mesh* mesh,
-    std::initializer_list<uint32_t> used_locations
+    std::initializer_list<uint32_t> used_locations,
+    bool use_shader_input_locations
 ) {
     Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
     if (binding.index_count == 0) return false;
 
     VertexBufferLayout filtered =
-        filter_vertex_layout_to_locations(binding.layout, used_locations);
+        filter_vertex_layout_to_locations(
+            binding.layout,
+            used_locations,
+            use_shader_input_locations);
     ctx.set_vertex_layout(filtered);
     ctx.set_topology(binding.topology);
     ctx.draw(binding.vertex_buffer, binding.index_buffer,
