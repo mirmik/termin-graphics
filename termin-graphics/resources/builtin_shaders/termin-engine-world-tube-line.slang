@@ -27,9 +27,12 @@ struct TubeCapInput {
 
 struct TubeOutput {
     float4 position : SV_Position;
-    float3 world_pos : POSITION1;
-    float3 normal : NORMAL;
-    float2 uv : TEXCOORD0;
+    float3 world_pos : TEXCOORD0;
+    float3 normal_world : TEXCOORD1;
+    float2 uv : TEXCOORD2;
+    float3 tangent_world : TEXCOORD3;
+    float3 bitangent_world : TEXCOORD4;
+    float tbn_valid : TEXCOORD5;
     float4 color : COLOR0;
 };
 
@@ -83,8 +86,11 @@ TubeOutput vs_main(TubeSegmentInput input) {
     TubeOutput output;
     output.position = mul(tube_line_draw.u_view_projection, float4(expanded, 1.0));
     output.world_pos = expanded;
-    output.normal = tube_normal(dir, input.corner.y, input.corner.z);
+    output.normal_world = tube_normal(dir, input.corner.y, input.corner.z);
     output.uv = float2(input.corner.x, atan2(input.corner.z, input.corner.y) / 6.28318530718 + 0.5);
+    output.tangent_world = float3(0.0, 0.0, 0.0);
+    output.bitangent_world = float3(0.0, 0.0, 0.0);
+    output.tbn_valid = 0.0;
     output.color = input.color;
     return output;
 }
@@ -100,12 +106,15 @@ TubeOutput vs_cap_main(TubeCapInput input) {
     TubeOutput output;
     output.position = mul(tube_line_draw.u_view_projection, float4(expanded, 1.0));
     output.world_pos = expanded;
-    output.normal = input.corner.x < 0.5
+    output.normal_world = input.corner.x < 0.5
         ? tube_normal(dir, input.corner.y, input.corner.z)
         : -dir;
     output.uv = input.corner.x < 0.5
         ? float2(input.corner.y * 0.5 + 0.5, input.corner.z * 0.5 + 0.5)
         : float2(0.5, 0.5);
+    output.tangent_world = float3(0.0, 0.0, 0.0);
+    output.bitangent_world = float3(0.0, 0.0, 0.0);
+    output.tbn_valid = 0.0;
     output.color = input.color;
     return output;
 }
@@ -153,7 +162,7 @@ float3 apply_tube_lighting(float3 base_color, float3 normal, float3 world_pos) {
 FragmentOutput fs_lit_main(TubeOutput input) {
     FragmentOutput output;
     output.color = float4(
-        apply_tube_lighting(input.color.rgb, input.normal, input.world_pos),
+        apply_tube_lighting(input.color.rgb, input.normal_world, input.world_pos),
         input.color.a);
     return output;
 }
