@@ -150,6 +150,10 @@ int main() {
 
     auto pipeline = device->create_pipeline(pipe_desc);
     printf("Pipeline created: id=%u\n", pipeline.id);
+    if (device->pipeline_descriptor_set_layout(pipeline) == 0) {
+        fprintf(stderr, "OpenGL pipeline resource layout token is null\n");
+        return 1;
+    }
 
     // --- Create vertex buffer ---
     float vertices[] = {

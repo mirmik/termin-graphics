@@ -894,6 +894,18 @@ ResourceSetHandle OpenGLRenderDevice::create_resource_set(const ResourceSetDesc&
     return {resource_sets_.add(std::move(rs))};
 }
 
+uintptr_t OpenGLRenderDevice::pipeline_descriptor_set_layout(PipelineHandle pipeline) const {
+    if (!pipelines_.get_const(pipeline.id)) {
+        return 0;
+    }
+
+    // OpenGL has no descriptor set layout object, but RenderContext2 still
+    // needs a non-zero, stable token to decide when a pipeline has a distinct
+    // resource binding layout and when pending bind-by-name data may be
+    // flushed into a ResourceSet.
+    return static_cast<uintptr_t>(pipeline.id);
+}
+
 // --- Destroy ---
 
 void OpenGLRenderDevice::destroy(BufferHandle handle) {

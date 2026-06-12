@@ -76,8 +76,9 @@ public:
     virtual void read_buffer(BufferHandle src, std::span<uint8_t> data, uint64_t offset = 0) = 0;
 
     // --- Pipeline introspection ---
-    // Return the backend-specific descriptor set layout for a pipeline.
-    // Vulkan: cast to VkDescriptorSetLayout. OpenGL: always 0.
+    // Return the backend-specific resource layout token for a pipeline.
+    // Vulkan: cast to VkDescriptorSetLayout. OpenGL: stable pipeline-local
+    // token used by RenderContext2 to manage resource set lifetime.
     virtual uintptr_t pipeline_descriptor_set_layout(PipelineHandle pipeline) const {
         (void)pipeline;
         return 0;
