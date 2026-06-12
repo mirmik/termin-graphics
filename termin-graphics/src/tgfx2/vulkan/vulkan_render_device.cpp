@@ -2195,10 +2195,6 @@ ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc&
                 const VkDescriptorSetLayoutBinding* lb =
                     find_layout_binding(b.binding);
                 if (!lb) {
-                    tc_log(TC_LOG_DEBUG,
-                           "VulkanRenderDevice: skipping resource binding %u[%u], not present in descriptor_set_layout",
-                           b.binding,
-                           b.array_element);
                     return true;
                 }
                 const VkDescriptorType expected = expected_descriptor_type(b.kind);
