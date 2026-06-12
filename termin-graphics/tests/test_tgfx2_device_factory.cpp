@@ -194,6 +194,48 @@ TEST_CASE("tc_shader records language and artifact policy") {
     tc_shader_destroy(legacy);
 }
 
+TEST_CASE("static uuid registration preserves non-default shader identity") {
+    const char* vs = "struct VOut { float4 position : SV_Position; };"
+                     "[shader(\"vertex\")] VOut vs_main() {"
+                     "VOut o; o.position = float4(0.0, 0.0, 0.0, 1.0); return o; }";
+    const char* fs = "struct FOut { float4 color : SV_Target0; };"
+                     "[shader(\"fragment\")] FOut fs_main() {"
+                     "FOut o; o.color = float4(1.0, 1.0, 1.0, 1.0); return o; }";
+
+    tc_shader_handle first = tc_shader_register_static_uuid_ex(
+        vs,
+        fs,
+        nullptr,
+        "static_slang_identity_test",
+        "static-slang-identity-test",
+        TC_SHADER_LANGUAGE_SLANG,
+        TC_SHADER_ARTIFACT_REQUIRED);
+    REQUIRE(!tc_shader_handle_is_invalid(first));
+    tc_shader* first_shader = tc_shader_get(first);
+    REQUIRE(first_shader != nullptr);
+
+    const uint32_t version = first_shader->version;
+    const std::string source_hash = first_shader->source_hash;
+
+    tc_shader_handle second = tc_shader_register_static_uuid_ex(
+        vs,
+        fs,
+        nullptr,
+        "static_slang_identity_test",
+        "static-slang-identity-test",
+        TC_SHADER_LANGUAGE_SLANG,
+        TC_SHADER_ARTIFACT_REQUIRED);
+    CHECK(second.index == first.index);
+    CHECK(second.generation == first.generation);
+
+    tc_shader* second_shader = tc_shader_get(second);
+    REQUIRE(second_shader != nullptr);
+    CHECK(second_shader->version == version);
+    CHECK(std::string(second_shader->source_hash) == source_hash);
+    CHECK(tc_shader_get_language(second_shader) == TC_SHADER_LANGUAGE_SLANG);
+    CHECK(tc_shader_get_artifact_policy(second_shader) == TC_SHADER_ARTIFACT_REQUIRED);
+}
+
 TEST_CASE("tc_shader identity hash separates source languages") {
     const char* vs = "#version 330 core\nvoid main(){gl_Position=vec4(0.0);}";
     const char* fs = "#version 330 core\nout vec4 c; void main(){c=vec4(1.0);}";

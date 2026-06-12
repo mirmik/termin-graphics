@@ -2,12 +2,17 @@
 //
 // Pass code reads the assigned numbers from shader layout metadata.
 
+import termin_prelude;
+
 struct BloomBrightParams {
     float threshold;
     float soft_threshold;
 };
 
+[[TerminScope("draw")]]
 ConstantBuffer<BloomBrightParams> u_params;
+
+[[TerminScope("transient")]]
 Sampler2D u_texture;
 
 struct FragmentInput {

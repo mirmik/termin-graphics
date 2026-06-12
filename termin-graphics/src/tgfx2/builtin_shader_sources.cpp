@@ -346,20 +346,19 @@ tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
         }
     }
 
-    tc_shader_handle handle = tc_shader_register_static_uuid(
+    const tc_shader_language shader_language =
+        is_slang ? TC_SHADER_LANGUAGE_SLANG : TC_SHADER_LANGUAGE_GLSL;
+    const tc_shader_artifact_policy artifact_policy =
+        is_slang ? TC_SHADER_ARTIFACT_REQUIRED : TC_SHADER_ARTIFACT_OPTIONAL;
+
+    tc_shader_handle handle = tc_shader_register_static_uuid_ex(
         vertex_source.empty() ? nullptr : vertex_source.c_str(),
         fragment_source.empty() ? nullptr : fragment_source.c_str(),
         nullptr,
         name.c_str(),
-        uuid);
-
-    if (!tc_shader_handle_is_invalid(handle) && is_slang) {
-        tc_shader* shader = tc_shader_get(handle);
-        if (shader) {
-            tc_shader_set_language(shader, TC_SHADER_LANGUAGE_SLANG);
-            tc_shader_set_artifact_policy(shader, TC_SHADER_ARTIFACT_REQUIRED);
-        }
-    }
+        uuid,
+        shader_language,
+        artifact_policy);
 
     // Set per-stage entry points from catalog.
     {

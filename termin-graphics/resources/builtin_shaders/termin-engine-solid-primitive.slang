@@ -1,7 +1,11 @@
 // Solid primitive — flat-colored geometry for editor primitives.
 //
 
+import termin_prelude;
+
 struct SolidPush { float4x4 mvp; float4 color; };
+
+[[TerminScope("draw")]]
 ConstantBuffer<SolidPush> u_push;
 
 // --- vertex ---

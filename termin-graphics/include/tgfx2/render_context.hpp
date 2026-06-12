@@ -318,6 +318,9 @@ public:
     // --- Drawing ---
     // Fullscreen quad (built-in, for post-processing passes).
     void draw_fullscreen_quad();
+    // Fullscreen quad geometry with the currently bound shader program.
+    // Use when a pass has its own vertex shader for the same quad stream.
+    void draw_fullscreen_quad_with_bound_shader();
 
     // Draw with bound vertex/index buffers.
     void draw(BufferHandle vbo, BufferHandle ibo,

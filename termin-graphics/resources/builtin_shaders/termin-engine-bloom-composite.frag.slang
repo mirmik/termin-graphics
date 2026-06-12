@@ -1,12 +1,19 @@
 // Bloom composite pass — blends bloom result over the original image.
 //
 
+import termin_prelude;
+
 struct BloomCompositeParams {
     float intensity;
 };
 
+[[TerminScope("draw")]]
 ConstantBuffer<BloomCompositeParams> u_params;
+
+[[TerminScope("transient")]]
 Sampler2D u_original;
+
+[[TerminScope("transient")]]
 Sampler2D u_bloom;
 
 struct FragmentInput {

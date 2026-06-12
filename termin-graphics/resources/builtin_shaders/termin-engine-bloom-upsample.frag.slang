@@ -1,12 +1,17 @@
 // Bloom upsample pass — 9-tap tent filter with blend factor.
 //
 
+import termin_prelude;
+
 struct BloomUpsampleParams {
     float2 texel_size;
     float blend_factor;
 };
 
+[[TerminScope("draw")]]
 ConstantBuffer<BloomUpsampleParams> u_params;
+
+[[TerminScope("transient")]]
 Sampler2D u_texture;
 
 struct FragmentInput {

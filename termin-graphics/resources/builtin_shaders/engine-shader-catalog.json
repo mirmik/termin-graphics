@@ -2599,13 +2599,14 @@
     {
       "uuid": "termin-engine-ground-grid",
       "name": "GroundGridEngineVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-ground-grid.vert.glsl",
+          "path": "termin-engine-ground-grid.slang",
+          "entry": "vs_main",
           "inputs": [
             {
-              "name": "a_pos",
+              "name": "position",
               "semantic": "POSITION",
               "location": 0
             }
@@ -2624,15 +2625,16 @@
           ]
         },
         "fragment": {
-          "path": "termin-engine-ground-grid.frag.glsl",
+          "path": "termin-engine-ground-grid.slang",
+          "entry": "fs_main",
           "inputs": [
             {
-              "name": "v_near_point",
+              "name": "near_point",
               "semantic": "TEXCOORD0",
               "location": 0
             },
             {
-              "name": "v_far_point",
+              "name": "far_point",
               "semantic": "TEXCOORD1",
               "location": 1
             }
@@ -2651,7 +2653,7 @@
           "name": "GridParams",
           "logical_name": "grid_params",
           "kind": "constant_buffer",
-          "legacy_binding": 0
+          "scope": "draw"
         }
       ]
     },

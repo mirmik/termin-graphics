@@ -1,11 +1,16 @@
 // Bloom downsample pass — 13-tap box filter for mip chain.
 //
 
+import termin_prelude;
+
 struct BloomDownsampleParams {
     float2 texel_size;
 };
 
+[[TerminScope("draw")]]
 ConstantBuffer<BloomDownsampleParams> u_params;
+
+[[TerminScope("transient")]]
 Sampler2D u_texture;
 
 struct FragmentInput {

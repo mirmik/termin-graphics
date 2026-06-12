@@ -51,16 +51,18 @@ void main() {
 )";
 
 static const char* slang_matrix_vertex_src = R"(
+import termin_prelude;
+
 struct TransformUBO
 {
     float4x4 mvp;
 };
 
+[[TerminScope("draw")]]
 ConstantBuffer<TransformUBO> u_transform;
 
 struct VertexInput
 {
-    [[vk::location(0)]]
     float2 position : POSITION;
 };
 
@@ -70,7 +72,7 @@ struct VertexOutput
 };
 
 [shader("vertex")]
-VertexOutput main(VertexInput input)
+VertexOutput vs_main(VertexInput input)
 {
     VertexOutput output;
     output.position = mul(u_transform.mvp, float4(input.position, 0.0, 1.0));
@@ -81,12 +83,11 @@ VertexOutput main(VertexInput input)
 static const char* slang_matrix_fragment_src = R"(
 struct FragmentOutput
 {
-    [[vk::location(0)]]
     float4 color : SV_Target0;
 };
 
 [shader("fragment")]
-FragmentOutput main()
+FragmentOutput fs_main()
 {
     FragmentOutput output;
     output.color = float4(0.90, 0.05, 0.75, 1.0);
@@ -217,13 +218,14 @@ static bool run_shaderc(
     const std::filesystem::path& shaderc,
     const std::filesystem::path& slangc,
     const char* stage,
+    const char* entry,
     const std::filesystem::path& input,
     const std::filesystem::path& output)
 {
     std::string cmd =
         quote_arg(shaderc) +
         " compile --language slang --target vulkan --stage " + stage +
-        " --entry main --input " + quote_arg(input) +
+        " --entry " + entry + " --input " + quote_arg(input) +
         " --output " + quote_arg(output) +
         " --slangc " + quote_arg(slangc) +
         " --layout-scheme per-pipeline";
@@ -650,16 +652,13 @@ int main(int argc, char** argv) {
                 write_text_file(vertex_slang, slang_matrix_vertex_src) &&
                 write_text_file(fragment_slang, slang_matrix_fragment_src) &&
                 write_text_file(fsq_slang, fsq_source->c_str()) &&
-                run_shaderc(*shaderc, *slangc, "vertex", vertex_slang, vertex_spv) &&
-                run_shaderc(*shaderc, *slangc, "fragment", fragment_slang, fragment_spv) &&
-                run_shaderc(*shaderc, *slangc, "vertex", fsq_slang, fsq_spv);
+                run_shaderc(*shaderc, *slangc, "vertex", "vs_main", vertex_slang, vertex_spv) &&
+                run_shaderc(*shaderc, *slangc, "fragment", "fs_main", fragment_slang, fragment_spv) &&
+                run_shaderc(*shaderc, *slangc, "vertex", "vs_main", fsq_slang, fsq_spv);
         }
 
         tgfx::TextureHandle slang_rt_tex;
         tgfx::BufferHandle slang_vb;
-        tgfx::BufferHandle matrix_ubo;
-        tgfx::ResourceSetHandle matrix_set;
-        tgfx::PipelineHandle slang_pipeline;
         tc_shader_handle slang_shader_handle = tc_shader_handle_invalid();
 
         if (slang_artifact_ok) {
@@ -685,23 +684,11 @@ int main(int argc, char** argv) {
                 fprintf(stderr, "Failed to load generated Vulkan Slang artifacts\n");
                 slang_artifact_ok = false;
             } else {
-                tgfx::PipelineDesc slang_pipe_desc;
-                slang_pipe_desc.vertex_shader = slang_vs;
-                slang_pipe_desc.fragment_shader = slang_fs;
-                slang_pipe_desc.topology = tgfx::PrimitiveTopology::TriangleList;
-                slang_pipe_desc.depth_stencil.depth_test = false;
-                slang_pipe_desc.depth_stencil.depth_write = false;
-                slang_pipe_desc.depth_format = tgfx::PixelFormat::Undefined;
-                slang_pipe_desc.raster.cull = tgfx::CullMode::None;
-                slang_pipe_desc.color_formats = {tgfx::PixelFormat::RGBA8_UNorm};
-
                 tgfx::VertexBufferLayout slang_layout;
                 slang_layout.stride = 2 * sizeof(float);
                 slang_layout.attributes = {
                     {0, tgfx::VertexFormat::Float2, 0},
                 };
-                slang_pipe_desc.vertex_layouts.push_back(slang_layout);
-                slang_pipeline = device->create_pipeline(slang_pipe_desc);
 
                 const float slang_vertices[] = {
                     -0.25f, -0.25f,
@@ -724,27 +711,6 @@ int main(int argc, char** argv) {
                     0.0f, 0.0f, 1.0f, 0.0f,
                    -0.5f, 0.0f, 0.0f, 1.0f,
                 };
-                tgfx::BufferDesc ubo_desc;
-                ubo_desc.size = sizeof(mvp_column_major);
-                ubo_desc.usage = tgfx::BufferUsage::Uniform | tgfx::BufferUsage::CopyDst;
-                ubo_desc.cpu_visible = true;
-                matrix_ubo = device->create_buffer(ubo_desc);
-                device->upload_buffer(
-                    matrix_ubo,
-                    std::span<const uint8_t>(
-                        reinterpret_cast<const uint8_t*>(mvp_column_major.data()),
-                        sizeof(mvp_column_major)));
-
-                tgfx::ResourceBinding matrix_binding;
-                matrix_binding.kind = tgfx::ResourceBinding::Kind::UniformBuffer;
-                matrix_binding.binding = 0;
-                matrix_binding.buffer = matrix_ubo;
-                matrix_binding.range = sizeof(mvp_column_major);
-                tgfx::ResourceSetDesc matrix_set_desc;
-                matrix_set_desc.bindings.push_back(matrix_binding);
-                matrix_set_desc.descriptor_set_layout =
-                    device->pipeline_descriptor_set_layout(slang_pipeline);
-                matrix_set = device->create_resource_set(matrix_set_desc);
 
                 tgfx::TextureDesc slang_rt_desc;
                 slang_rt_desc.width = 128;
@@ -753,32 +719,31 @@ int main(int argc, char** argv) {
                 slang_rt_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
                 slang_rt_tex = device->create_texture(slang_rt_desc);
 
-                if (!slang_pipeline || !slang_vb || !matrix_ubo || !matrix_set || !slang_rt_tex) {
+                if (!slang_vb || !slang_rt_tex) {
                     fprintf(stderr, "Failed to create Vulkan Slang smoke resources\n");
                     slang_artifact_ok = false;
                 } else {
-                    auto slang_cmd = device->create_command_list();
-                    slang_cmd->begin();
+                    tgfx::PipelineCache slang_cache(*device);
+                    tgfx::RenderContext2 slang_ctx(*device, slang_cache);
+                    slang_ctx.begin_frame();
 
-                    tgfx::RenderPassDesc slang_pass;
-                    tgfx::ColorAttachmentDesc slang_color;
-                    slang_color.texture = slang_rt_tex;
-                    slang_color.load = tgfx::LoadOp::Clear;
-                    slang_color.clear_color[0] = 0.0f;
-                    slang_color.clear_color[1] = 0.0f;
-                    slang_color.clear_color[2] = 0.0f;
-                    slang_color.clear_color[3] = 1.0f;
-                    slang_pass.colors.push_back(slang_color);
-
-                    slang_cmd->begin_render_pass(slang_pass);
-                    slang_cmd->bind_pipeline(slang_pipeline);
-                    slang_cmd->bind_resource_set(matrix_set);
-                    slang_cmd->bind_vertex_buffer(0, slang_vb);
-                    slang_cmd->draw(3);
-                    slang_cmd->end_render_pass();
-
-                    slang_cmd->end();
-                    device->submit(*slang_cmd);
+                    float clear[] = {0.0f, 0.0f, 0.0f, 1.0f};
+                    slang_ctx.begin_pass(slang_rt_tex, {}, clear);
+                    slang_ctx.set_viewport(0, 0, 128, 128);
+                    slang_ctx.set_depth_test(false);
+                    slang_ctx.set_depth_write(false);
+                    slang_ctx.set_blend(false);
+                    slang_ctx.set_cull(tgfx::CullMode::None);
+                    slang_ctx.bind_shader(slang_vs, slang_fs);
+                    slang_ctx.set_vertex_layout(slang_layout);
+                    slang_ctx.use_shader_resource_layout(slang_shader);
+                    slang_ctx.bind_uniform_data(
+                        "u_transform",
+                        mvp_column_major.data(),
+                        static_cast<uint32_t>(sizeof(mvp_column_major)));
+                    slang_ctx.draw_arrays(slang_vb, 3);
+                    slang_ctx.end_pass();
+                    slang_ctx.end_frame();
                     device->wait_idle();
 
                     float left_pixel[4] = {};
@@ -804,11 +769,8 @@ int main(int argc, char** argv) {
             }
         }
 
-        if (matrix_set) device->destroy(matrix_set);
         if (slang_rt_tex) device->destroy(slang_rt_tex);
-        if (matrix_ubo) device->destroy(matrix_ubo);
         if (slang_vb) device->destroy(slang_vb);
-        if (slang_pipeline) device->destroy(slang_pipeline);
         if (!tc_shader_handle_is_invalid(slang_shader_handle)) {
             tc_shader_destroy(slang_shader_handle);
         }

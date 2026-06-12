@@ -1013,6 +1013,26 @@ void RenderContext2::draw_fullscreen_quad() {
     cmd_->draw_indexed(6);
 }
 
+void RenderContext2::draw_fullscreen_quad_with_bound_shader() {
+    ensure_fsq_resources();
+
+    VertexBufferLayout fsq_layout;
+    fsq_layout.stride = 4 * sizeof(float);
+    fsq_layout.attributes = {
+        {0, VertexFormat::Float2, 0},
+        {1, VertexFormat::Float2, 2 * sizeof(float)},
+    };
+    set_vertex_layout(fsq_layout);
+    set_topology(PrimitiveTopology::TriangleList);
+
+    flush_pipeline();
+    flush_resource_set();
+
+    cmd_->bind_vertex_buffer(0, fsq_vbo_);
+    cmd_->bind_index_buffer(fsq_ibo_, IndexType::Uint32);
+    cmd_->draw_indexed(6);
+}
+
 void RenderContext2::draw(
     BufferHandle vbo, BufferHandle ibo,
     uint32_t index_count, IndexType idx_type

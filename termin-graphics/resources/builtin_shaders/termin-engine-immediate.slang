@@ -1,7 +1,11 @@
 // Immediate renderer — vertex-color triangles/lines for UI/debug.
 //
 
+import termin_prelude;
+
 struct ImmPush { float4x4 mvp; };
+
+[[TerminScope("draw")]]
 ConstantBuffer<ImmPush> u_push;
 
 // --- vertex ---

@@ -1,6 +1,9 @@
 // Present blit — copies a texture to the output framebuffer.
 //
 
+import termin_prelude;
+
+[[TerminScope("transient")]]
 Sampler2D u_tex;
 
 // --- vertex ---

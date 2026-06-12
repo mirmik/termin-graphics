@@ -1,6 +1,8 @@
 // ID pass — entity picking shader. Single source for vertex + fragment.
 //
 
+import termin_prelude;
+
 struct PerFrame {
     float4x4 view;
     float4x4 projection;
@@ -11,7 +13,10 @@ struct PushData {
     float4 pick_color;
 };
 
+[[TerminScope("frame")]]
 ConstantBuffer<PerFrame> u_per_frame;
+
+[[TerminScope("draw")]]
 ConstantBuffer<PushData> u_push;
 
 // --- vertex stage ---

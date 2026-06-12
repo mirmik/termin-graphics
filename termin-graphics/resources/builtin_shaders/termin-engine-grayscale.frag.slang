@@ -1,11 +1,16 @@
 // Grayscale pass — desaturates the input image.
 //
 
+import termin_prelude;
+
 struct GrayscaleParams {
     float strength;
 };
 
+[[TerminScope("draw")]]
 ConstantBuffer<GrayscaleParams> u_params;
+
+[[TerminScope("transient")]]
 Sampler2D u_input;
 
 struct FragmentInput {

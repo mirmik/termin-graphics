@@ -1,6 +1,9 @@
 // Depth-to-color pass — reads a depth texture, outputs grayscale color.
 //
 
+import termin_prelude;
+
+[[TerminScope("transient")]]
 Sampler2D u_depth_tex;
 
 struct FragmentInput {

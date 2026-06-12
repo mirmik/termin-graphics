@@ -1,12 +1,17 @@
 // Tonemap pass — HDR to LDR with ACES / Reinhard.
 //
 
+import termin_prelude;
+
 struct TonemapParams {
     float exposure;
     int method;
 };
 
+[[TerminScope("draw")]]
 ConstantBuffer<TonemapParams> u_params;
+
+[[TerminScope("transient")]]
 Sampler2D u_input;
 
 struct FragmentInput {

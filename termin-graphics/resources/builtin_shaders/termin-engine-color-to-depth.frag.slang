@@ -1,6 +1,9 @@
 // Color-to-depth pass — reads a color/R32F texture, writes depth.
 //
 
+import termin_prelude;
+
+[[TerminScope("transient")]]
 Sampler2D u_color_tex;
 
 struct FragmentInput {

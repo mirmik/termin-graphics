@@ -3,7 +3,12 @@
 // Per-frame uniform data carries the selection state.
 // Textures are sampled from the color and ID passes.
 
+import termin_prelude;
+
+[[TerminScope("transient")]]
 Sampler2D u_color;
+
+[[TerminScope("transient")]]
 Sampler2D u_id;
 
 struct HighlightPushData {
@@ -14,6 +19,7 @@ struct HighlightPushData {
     float2 texel_size;
 };
 
+[[TerminScope("draw")]]
 ConstantBuffer<HighlightPushData> u_params;
 
 struct FragmentInput {

@@ -94,6 +94,20 @@ TGFX_API tc_shader_handle tc_shader_register_static_uuid(
     const char* uuid
 );
 
+// Same as tc_shader_register_static_uuid(), but includes language and artifact
+// policy in the initial identity. Use this when registering non-default shader
+// languages so repeated registration does not transiently rewrite the shader
+// identity and invalidate existing artifacts.
+TGFX_API tc_shader_handle tc_shader_register_static_uuid_ex(
+    const char* vertex_source,
+    const char* fragment_source,
+    const char* geometry_source,
+    const char* name,
+    const char* uuid,
+    tc_shader_language language,
+    tc_shader_artifact_policy artifact_policy
+);
+
 // ============================================================================
 // Variant support
 // ============================================================================
