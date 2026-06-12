@@ -40,6 +40,7 @@ struct ShaderResourceBinding {
     std::string name;
     std::string kind;
     std::string scope;
+    std::string slang_glsl_symbol;
     uint32_t set = 0;
     uint32_t binding = 0;
     uint32_t stage_mask = 0;
@@ -205,6 +206,35 @@ static bool string_starts_with(const std::string& value, const char* prefix) {
     return value.rfind(prefix, 0) == 0;
 }
 
+static std::string regex_escape(const std::string& value) {
+    std::string out;
+    out.reserve(value.size() * 2);
+    for (char ch : value) {
+        switch (ch) {
+            case '\\':
+            case '^':
+            case '$':
+            case '.':
+            case '|':
+            case '?':
+            case '*':
+            case '+':
+            case '(':
+            case ')':
+            case '[':
+            case ']':
+            case '{':
+            case '}':
+                out.push_back('\\');
+                break;
+            default:
+                break;
+        }
+        out.push_back(ch);
+    }
+    return out;
+}
+
 static bool is_valid_explicit_resource_scope(const std::string& scope) {
     return scope == "frame" ||
            scope == "pass" ||
@@ -297,6 +327,9 @@ static void append_unique_resource(
             }
             if (!binding.fields.empty()) {
                 existing.fields = std::move(binding.fields);
+            }
+            if (!binding.slang_glsl_symbol.empty()) {
+                existing.slang_glsl_symbol = std::move(binding.slang_glsl_symbol);
             }
             return;
         }
@@ -1009,7 +1042,7 @@ static bool apply_slang_vulkan_shared_layout_policy(
     return true;
 }
 
-static bool apply_slang_vulkan_scope_layout_policy(
+static bool apply_slang_scope_layout_policy(
     std::vector<ShaderResourceBinding>& resources
 ) {
     uint32_t material_texture_index = 0;
@@ -1065,6 +1098,184 @@ static bool apply_slang_vulkan_scope_layout_policy(
         }
     }
     return true;
+}
+
+static void annotate_slang_glsl_symbols(
+    std::vector<ShaderResourceBinding>& resources,
+    const std::string& source
+) {
+    for (ShaderResourceBinding& resource : resources) {
+        if (!resource.slang_glsl_symbol.empty()) {
+            continue;
+        }
+
+        if (resource.kind == "constant_buffer") {
+            const std::regex cbuffer_re(
+                "ConstantBuffer\\s*<\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*>\\s*" +
+                regex_escape(resource.name) +
+                "\\b");
+            std::smatch match;
+            if (std::regex_search(source, match, cbuffer_re)) {
+                resource.slang_glsl_symbol = "block_" + match[1].str() + "_0";
+            } else {
+                resource.slang_glsl_symbol = resource.name + "_0";
+            }
+        } else {
+            resource.slang_glsl_symbol = resource.name + "_0";
+        }
+    }
+}
+
+static bool slang_opengl_resource_present_in_glsl(
+    const std::string& glsl,
+    const ShaderResourceBinding& resource
+) {
+    if (!resource.slang_glsl_symbol.empty() &&
+        glsl.find(resource.slang_glsl_symbol) != std::string::npos) {
+        return true;
+    }
+    const std::string instance_symbol = resource.name + "_0";
+    return glsl.find(instance_symbol) != std::string::npos;
+}
+
+static bool filter_slang_opengl_resources_for_glsl(
+    const CompileOptions& options,
+    std::vector<ShaderResourceBinding>& resources
+) {
+    std::string glsl;
+    if (!read_file(options.output, glsl)) {
+        return false;
+    }
+
+    std::vector<ShaderResourceBinding> active;
+    active.reserve(resources.size());
+    for (const ShaderResourceBinding& resource : resources) {
+        if (slang_opengl_resource_present_in_glsl(glsl, resource)) {
+            active.push_back(resource);
+        }
+    }
+    resources = std::move(active);
+    return true;
+}
+
+static bool replace_first_two_group_regex(
+    std::string& text,
+    const std::regex& pattern,
+    const std::string& middle
+) {
+    std::smatch match;
+    if (!std::regex_search(text, match, pattern) || match.size() != 3) {
+        return false;
+    }
+    text.replace(
+        static_cast<size_t>(match.position(0)),
+        static_cast<size_t>(match.length(0)),
+        match[1].str() + middle + match[2].str());
+    return true;
+}
+
+static bool write_text_file(
+    const std::string& path,
+    const std::string& text
+) {
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        std::cerr << "termin_shaderc: failed to open output for patch: " << path << "\n";
+        return false;
+    }
+    out.write(text.data(), static_cast<std::streamsize>(text.size()));
+    return static_cast<bool>(out);
+}
+
+static bool patch_slang_opengl_glsl_bindings(
+    const CompileOptions& options,
+    const std::vector<ShaderResourceBinding>& resources
+) {
+    bool needs_patch = false;
+    for (const ShaderResourceBinding& resource : resources) {
+        if (resource.set != resource.original_set ||
+            resource.binding != resource.original_binding) {
+            needs_patch = true;
+            break;
+        }
+    }
+    if (!needs_patch) {
+        return true;
+    }
+
+    std::string glsl;
+    if (!read_file(options.output, glsl)) {
+        return false;
+    }
+
+    for (const ShaderResourceBinding& resource : resources) {
+        if (resource.set == resource.original_set &&
+            resource.binding == resource.original_binding) {
+            continue;
+        }
+        if (resource.original_set != 0 || resource.set != 0) {
+            std::cerr
+                << "termin_shaderc: OpenGL GLSL binding patch only supports set 0 for '"
+                << resource.name << "' (original set=" << resource.original_set
+                << ", new set=" << resource.set << ")\n";
+            return false;
+        }
+        if (resource.slang_glsl_symbol.empty()) {
+            std::cerr
+                << "termin_shaderc: cannot patch OpenGL binding for Slang resource '"
+                << resource.name << "': generated GLSL symbol is unknown\n";
+            return false;
+        }
+
+        const std::string old_binding = std::to_string(resource.original_binding);
+        const std::string new_binding = std::to_string(resource.binding);
+        bool patched = false;
+        if (resource.kind == "constant_buffer") {
+            const std::regex pattern(
+                "(layout\\s*\\(\\s*binding\\s*=\\s*)" + old_binding +
+                "(\\s*\\)\\s*\\n\\s*layout\\s*\\(\\s*std140\\s*\\)\\s*uniform\\s+" +
+                regex_escape(resource.slang_glsl_symbol) + "\\b)");
+            patched = replace_first_two_group_regex(glsl, pattern, new_binding);
+            if (!patched) {
+                const std::regex instance_pattern(
+                    "(layout\\s*\\(\\s*binding\\s*=\\s*)" + old_binding +
+                    "(\\s*\\)\\s*\\n\\s*layout\\s*\\(\\s*std140\\s*\\)\\s*uniform\\s+"
+                    "[A-Za-z_][A-Za-z0-9_]*\\b[\\s\\S]*?}\\s*" +
+                    regex_escape(resource.name + "_0") + "\\b)");
+                patched = replace_first_two_group_regex(glsl, instance_pattern, new_binding);
+            }
+        } else if (resource.kind == "texture" ||
+                   resource.kind == "storage_texture" ||
+                   resource.kind == "sampler") {
+            const std::regex pattern(
+                "(layout\\s*\\(\\s*binding\\s*=\\s*)" + old_binding +
+                "(\\s*\\)\\s*uniform\\s+[A-Za-z0-9_]+\\s+" +
+                regex_escape(resource.slang_glsl_symbol) + "\\b)");
+            patched = replace_first_two_group_regex(glsl, pattern, new_binding);
+        } else if (resource.kind == "storage_buffer") {
+            const std::regex pattern(
+                "(layout\\s*\\(\\s*binding\\s*=\\s*)" + old_binding +
+                "(\\s*\\)\\s*(?:readonly\\s+|writeonly\\s+)?buffer\\s+" +
+                regex_escape(resource.slang_glsl_symbol) + "\\b)");
+            patched = replace_first_two_group_regex(glsl, pattern, new_binding);
+        } else {
+            std::cerr
+                << "termin_shaderc: unsupported OpenGL GLSL binding patch kind '"
+                << resource.kind << "' for resource '" << resource.name << "'\n";
+            return false;
+        }
+
+        if (!patched) {
+            std::cerr
+                << "termin_shaderc: failed to patch OpenGL GLSL binding for resource '"
+                << resource.name << "' generated symbol '" << resource.slang_glsl_symbol
+                << "' from binding " << resource.original_binding << " to "
+                << resource.binding << "\n";
+            return false;
+        }
+    }
+
+    return write_text_file(options.output, glsl);
 }
 
 static bool read_spirv_words(
@@ -1673,7 +1884,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
             // engine resources still occupy stable slots so separately
             // compiled stages can merge into one pipeline descriptor layout.
             wrote_layout =
-                apply_slang_vulkan_scope_layout_policy(resources) &&
+                apply_slang_scope_layout_policy(resources) &&
                 filter_slang_vulkan_resources_for_spirv(options, resources) &&
                 patch_slang_vulkan_spirv_bindings(options, resources) &&
                 write_resource_layout_sidecar(options, resources);
@@ -1684,6 +1895,19 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
                 apply_slang_vulkan_shared_layout_policy(resources) &&
                 filter_slang_vulkan_resources_for_spirv(options, resources) &&
                 patch_slang_vulkan_spirv_bindings(options, resources) &&
+                write_resource_layout_sidecar(options, resources);
+        }
+    } else if (options.target == "opengl") {
+        if (options.layout_scheme == "per-pipeline") {
+            annotate_slang_glsl_symbols(resources, source);
+            wrote_layout =
+                filter_slang_opengl_resources_for_glsl(options, resources) &&
+                apply_slang_scope_layout_policy(resources) &&
+                patch_slang_opengl_glsl_bindings(options, resources) &&
+                write_resource_layout_sidecar(options, resources);
+        } else {
+            wrote_layout =
+                apply_slang_vulkan_shared_layout_policy(resources) &&
                 write_resource_layout_sidecar(options, resources);
         }
     } else {
