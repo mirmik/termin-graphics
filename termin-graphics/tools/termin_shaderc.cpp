@@ -60,15 +60,61 @@ struct ShaderResourceBinding {
     std::vector<Field> fields;
 };
 
+static void print_help(std::ostream& out) {
+    out
+        << "termin_shaderc - Termin shader artifact compiler\n"
+        << "\n"
+        << "Usage:\n"
+        << "  termin_shaderc --help\n"
+        << "  termin_shaderc help [compile]\n"
+        << "  termin_shaderc compile [options]\n"
+        << "\n"
+        << "Commands:\n"
+        << "  compile              Compile one shader stage and write an artifact.\n"
+        << "  help [compile]       Show this help text.\n"
+        << "\n"
+        << "Compile options:\n"
+        << "  --language <name>    Source language: glsl or slang. Default: glsl.\n"
+        << "  --target <name>      Backend target: vulkan, opengl, or d3d11.\n"
+        << "  --stage <name>       Shader stage: vertex, fragment, or geometry.\n"
+        << "  --input <path>       Source file to compile.\n"
+        << "  --output <path>      Artifact output path (.spv for Vulkan Slang/GLSL).\n"
+        << "  --entry <name>       Entry point. Default: main.\n"
+        << "  --debug-name <name>  Name used in diagnostics and artifact metadata.\n"
+        << "  -I <dir>             Add an include directory. Repeatable.\n"
+        << "  --include-dir <dir>  Same as -I.\n"
+        << "\n"
+        << "Slang options:\n"
+        << "  --slangc <path>          Explicit slangc executable path.\n"
+        << "  --matrix-layout <mode>   Matrix layout: column, col, column-major,\n"
+        << "                           col-major, row, or row-major. Default: column.\n"
+        << "  --layout-scheme <mode>   Vulkan descriptor policy: per-pipeline or shared.\n"
+        << "                           Default: per-pipeline.\n"
+        << "\n"
+        << "Outputs:\n"
+        << "  <output>                 Compiled backend artifact.\n"
+        << "  <output>.layout.json     Reflected resource layout sidecar.\n"
+        << "  <output>.meta            Written by runtime dev-compile callers, not by\n"
+        << "                           standalone termin_shaderc compile.\n"
+        << "\n"
+        << "Resource scopes:\n"
+        << "  Slang resources may use [[TerminScope(\"frame|pass|material|draw|transient\")]].\n"
+        << "  If omitted, termin_shaderc infers a scope from resource kind/name and\n"
+        << "  writes it to the layout sidecar. Unknown scopes are reported as warnings.\n"
+        << "\n"
+        << "Examples:\n"
+        << "  termin_shaderc compile --language slang --target vulkan --stage vertex \\\n"
+        << "    --entry vs_main --input shader.slang --output shader.vert.spv -I builtin_shaders\n"
+        << "  termin_shaderc compile --language glsl --target vulkan --stage fragment \\\n"
+        << "    --input shader.frag.glsl --output shader.frag.spv\n";
+}
+
 static void usage() {
     std::cerr
         << "Usage: termin_shaderc compile --language glsl|slang "
         << "--target opengl|vulkan|d3d11 --stage vertex|fragment|geometry "
-        << "--input <source> --output <artifact> [--entry main] "
-        << "[--debug-name name] [--slangc <path>] "
-        << "[--matrix-layout column|row] "
-        << "[-I <include-dir>] "
-        << "[--layout-scheme shared|per-pipeline]\n";
+        << "--input <source> --output <artifact> [--entry main]\n"
+        << "Run 'termin_shaderc --help' for full help.\n";
 }
 
 static shaderc_shader_kind shader_kind_for_stage(const std::string& stage) {
@@ -1564,9 +1610,34 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
 } // namespace
 
 int main(int argc, char** argv) {
+    if (argc >= 2) {
+        const std::string command = argv[1];
+        if (command == "--help" || command == "-h" || command == "help") {
+            if (argc > 3 || (argc == 3 && std::string(argv[2]) != "compile")) {
+                std::cerr << "termin_shaderc: unknown help topic";
+                if (argc >= 3) {
+                    std::cerr << ": " << argv[2];
+                }
+                std::cerr << "\n";
+                usage();
+                return 2;
+            }
+            print_help(std::cout);
+            return 0;
+        }
+    }
+
     if (argc < 2 || std::string(argv[1]) != "compile") {
         usage();
         return 2;
+    }
+
+    if (argc == 3) {
+        const std::string arg = argv[2];
+        if (arg == "--help" || arg == "-h") {
+            print_help(std::cout);
+            return 0;
+        }
     }
 
     CompileOptions options;

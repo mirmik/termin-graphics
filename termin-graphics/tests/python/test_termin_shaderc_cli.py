@@ -63,6 +63,31 @@ def _run_shaderc(args: list[str], *, env: dict[str, str] | None = None) -> subpr
     )
 
 
+def test_termin_shaderc_help_describes_compile_debug_options() -> None:
+    result = _run_shaderc(["--help"])
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert "termin_shaderc - Termin shader artifact compiler" in result.stdout
+    assert "termin_shaderc compile [options]" in result.stdout
+    assert "--layout-scheme <mode>" in result.stdout
+    assert "--slangc <path>" in result.stdout
+    assert "--include-dir <dir>" in result.stdout
+    assert "<output>.layout.json" in result.stdout
+    assert '[[TerminScope("frame|pass|material|draw|transient")]]' in result.stdout
+
+
+def test_termin_shaderc_compile_help_is_successful() -> None:
+    direct = _run_shaderc(["compile", "--help"])
+    topic = _run_shaderc(["help", "compile"])
+
+    assert direct.returncode == 0
+    assert topic.returncode == 0
+    assert direct.stdout == topic.stdout
+    assert "Compile options:" in direct.stdout
+    assert "Examples:" in direct.stdout
+
+
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_invokes_fake_slangc_for_vulkan(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
