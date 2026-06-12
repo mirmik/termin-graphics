@@ -1643,10 +1643,10 @@
     {
       "uuid": "termin-engine-navmesh-debug",
       "name": "NavMeshDebugVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-navmesh-debug.vert.glsl",
+          "path": "termin-engine-navmesh-debug.slang",
           "inputs": [
             {
               "name": "a_position",
@@ -1664,10 +1664,11 @@
               "name": "v_color",
               "semantic": "COLOR0"
             }
-          ]
+          ],
+          "entry": "vs_main"
         },
         "fragment": {
-          "path": "termin-engine-navmesh-debug.frag.glsl",
+          "path": "termin-engine-navmesh-debug.slang",
           "inputs": [
             {
               "name": "v_color",
@@ -1679,34 +1680,32 @@
               "name": "frag_color",
               "semantic": "SV_Target0"
             }
-          ]
+          ],
+          "entry": "fs_main"
         }
       },
       "resources": [
         {
-          "name": "u_model",
-          "logical_name": "model_matrix",
-          "kind": "legacy_uniform"
+          "name": "per_frame",
+          "logical_name": "per_frame",
+          "kind": "constant_buffer",
+          "scope": "frame"
         },
         {
-          "name": "u_view",
-          "logical_name": "view_matrix",
-          "kind": "legacy_uniform"
-        },
-        {
-          "name": "u_projection",
-          "logical_name": "projection_matrix",
-          "kind": "legacy_uniform"
+          "name": "draw_data",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
     {
       "uuid": "termin-engine-off-mesh-link-debug",
       "name": "OffMeshLinkDebugVSFS",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-off-mesh-link-debug.vert.glsl",
+          "path": "termin-engine-off-mesh-link-debug.slang",
           "inputs": [
             {
               "name": "a_position",
@@ -1714,34 +1713,33 @@
               "location": 0
             }
           ],
-          "outputs": []
+          "outputs": [],
+          "entry": "vs_main"
         },
         "fragment": {
-          "path": "termin-engine-off-mesh-link-debug.frag.glsl",
+          "path": "termin-engine-off-mesh-link-debug.slang",
           "inputs": [],
           "outputs": [
             {
               "name": "frag_color",
               "semantic": "SV_Target0"
             }
-          ]
+          ],
+          "entry": "fs_main"
         }
       },
       "resources": [
         {
-          "name": "u_model",
-          "logical_name": "model_matrix",
-          "kind": "legacy_uniform"
+          "name": "per_frame",
+          "logical_name": "per_frame",
+          "kind": "constant_buffer",
+          "scope": "frame"
         },
         {
-          "name": "u_view",
-          "logical_name": "view_matrix",
-          "kind": "legacy_uniform"
-        },
-        {
-          "name": "u_projection",
-          "logical_name": "projection_matrix",
-          "kind": "legacy_uniform"
+          "name": "draw_data",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
@@ -1872,10 +1870,10 @@
     {
       "uuid": "termin-engine-voxelizer-line",
       "name": "VoxelizerLine",
-      "language": "glsl",
+      "language": "slang",
       "stages": {
         "vertex": {
-          "path": "termin-engine-voxelizer-line.vert.glsl",
+          "path": "termin-engine-voxelizer-line.slang",
           "inputs": [
             {
               "name": "a_position",
@@ -1893,10 +1891,11 @@
               "name": "v_color",
               "semantic": "COLOR0"
             }
-          ]
+          ],
+          "entry": "vs_main"
         },
         "fragment": {
-          "path": "termin-engine-voxelizer-line.frag.glsl",
+          "path": "termin-engine-voxelizer-line.slang",
           "inputs": [
             {
               "name": "v_color",
@@ -1908,24 +1907,22 @@
               "name": "FragColor",
               "semantic": "SV_Target0"
             }
-          ]
+          ],
+          "entry": "fs_main"
         }
       },
       "resources": [
         {
-          "name": "u_model",
-          "logical_name": "model_matrix",
-          "kind": "legacy_uniform"
+          "name": "per_frame",
+          "logical_name": "per_frame",
+          "kind": "constant_buffer",
+          "scope": "frame"
         },
         {
-          "name": "u_view",
-          "logical_name": "view_matrix",
-          "kind": "legacy_uniform"
-        },
-        {
-          "name": "u_projection",
-          "logical_name": "projection_matrix",
-          "kind": "legacy_uniform"
+          "name": "draw_data",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
