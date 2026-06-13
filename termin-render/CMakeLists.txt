@@ -74,7 +74,6 @@ set(TERMIN_RENDER_SOURCES
     src/graph_node_def.cpp
     src/material_pipeline.cpp
     src/material_ubo_apply.cpp
-    src/material_ubo_runtime.cpp
     src/render_pipeline.cpp
     src/render_engine.cpp
     src/shader_usage_collector.cpp
@@ -126,7 +125,6 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/graph_node_def.hpp
     include/termin/render/material_pipeline.hpp
     include/termin/render/material_ubo_apply.hpp
-    include/termin/render/material_ubo_runtime.hpp
     include/termin/render/resource_aliases.hpp
     include/termin/render/render_pipeline.hpp
     include/termin/render/render_engine.hpp
