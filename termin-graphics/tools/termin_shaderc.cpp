@@ -2,6 +2,7 @@
 
 #include <shaderc/shaderc.hpp>
 #include <tcbase/trent/json.h>
+#include <tgfx/resources/tc_material_binding_slots.hpp>
 #include <tgfx/resources/tc_shader.h>
 
 #include <cstdlib>
@@ -105,14 +106,6 @@ static uint32_t stage_mask_for_stage(const std::string& stage) {
     if (stage == "geometry") return 1u << 2;
     if (stage == "compute") return 1u << 3;
     return 0u;
-}
-
-static uint32_t material_texture_binding_for_index(uint32_t index) {
-    uint32_t binding = 4u + index;
-    if (binding >= 8u) {
-        ++binding;
-    }
-    return binding;
 }
 
 static std::string json_escape(const std::string& value) {
@@ -994,7 +987,7 @@ static bool apply_slang_scope_layout_policy(
                        resource.original_set == 0) {
                 resource.set = 0;
                 resource.binding =
-                    material_texture_binding_for_index(material_texture_index);
+                    termin::material_texture_binding_for_index(material_texture_index);
                 ++material_texture_index;
             }
         } else if (resource.scope == "draw" &&

@@ -10,7 +10,7 @@
 #include <stdexcept>
 #include <algorithm>
 
-#include "termin/materials/material_binding_slots.hpp"
+#include "tgfx/resources/tc_material_binding_slots.hpp"
 
 namespace termin {
 
