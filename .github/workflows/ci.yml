@@ -247,9 +247,10 @@ jobs:
         env:
           TERMIN_SDK: ${{ github.workspace }}/sdk
           LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
-          PYTHONPATH: ${{ github.workspace }}/sdk/lib/python:${{ github.workspace }}/termin-app/install/lib/python
+          PYTHONPATH: ${{ github.workspace }}/sdk/lib/python:${{ github.workspace }}/sdk-python-staging:${{ github.workspace }}/termin-app/install/lib/python
           QT_QPA_PLATFORM: offscreen
         run: |
+          python -c "from tgfx import TcShader; shader = TcShader.from_builtin_catalog('termin-engine-voxel-display'); assert shader.is_valid, 'termin-engine-voxel-display failed preflight'"
           pytest termin-app/tests/ -v
 
   # ── 6. Build termin-csharp ──────────────────────────────────────

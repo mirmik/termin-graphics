@@ -124,6 +124,10 @@ std::string roots_for_log(const std::vector<std::filesystem::path>& roots) {
     return text;
 }
 
+std::string builtin_shader_roots_for_log() {
+    return roots_for_log(builtin_shader_roots());
+}
+
 const nos::trent* dict_get(const nos::trent& value, const char* key) {
     if (value.get_type() != nos::trent_type::dict || !value.contains(key)) {
         return nullptr;
@@ -334,6 +338,11 @@ tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
     if (!vertex_path.empty()) {
         vertex_source = load_builtin_shader_source(vertex_path.c_str(), name.c_str());
         if (vertex_source.empty()) {
+            tc::Log::error(
+                "[BuiltInShaderCatalog] Shader '%s' failed to load vertex stage '%s'. Roots: %s",
+                uuid ? uuid : "<null>",
+                vertex_path.c_str(),
+                builtin_shader_roots_for_log().c_str());
             return tc_shader_handle_invalid();
         }
     }
@@ -342,6 +351,11 @@ tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
     if (!fragment_path.empty()) {
         fragment_source = load_builtin_shader_source(fragment_path.c_str(), name.c_str());
         if (fragment_source.empty()) {
+            tc::Log::error(
+                "[BuiltInShaderCatalog] Shader '%s' failed to load fragment stage '%s'. Roots: %s",
+                uuid ? uuid : "<null>",
+                fragment_path.c_str(),
+                builtin_shader_roots_for_log().c_str());
             return tc_shader_handle_invalid();
         }
     }
@@ -360,24 +374,56 @@ tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
         shader_language,
         artifact_policy);
 
+    if (tc_shader_handle_is_invalid(handle)) {
+        tc::Log::error(
+            "[BuiltInShaderCatalog] Failed to register shader '%s' "
+            "(name='%s', language='%s', vertex='%s' size=%zu, fragment='%s' size=%zu, roots=%s)",
+            uuid ? uuid : "<null>",
+            name.c_str(),
+            language.c_str(),
+            vertex_path.c_str(),
+            vertex_source.size(),
+            fragment_path.c_str(),
+            fragment_source.size(),
+            builtin_shader_roots_for_log().c_str());
+        return handle;
+    }
+
     // Set per-stage entry points from catalog.
     {
         tc_shader* shader = tc_shader_get(handle);
-        if (shader) {
-            auto set_entry = [&](const char* stage_name, char** target) {
-                const nos::trent* stages = dict_get(*entry, "stages");
-                if (!stages || !stages->is_dict()) return;
-                const nos::trent* stage_obj = dict_get(*stages, stage_name);
-                if (!stage_obj || !stage_obj->is_dict()) return;
-                std::string ename = string_field(*stage_obj, "entry");
-                if (!ename.empty()) {
-                    free(*target);
-                    *target = strdup(ename.c_str());
-                }
-            };
-            set_entry("vertex", &shader->vertex_entry);
-            set_entry("fragment", &shader->fragment_entry);
+        if (!shader) {
+            tc::Log::error(
+                "[BuiltInShaderCatalog] Registered shader '%s' but registry lookup returned null",
+                uuid ? uuid : "<null>");
+            return tc_shader_handle_invalid();
         }
+
+        if (!fragment_path.empty() && (!shader->fragment_source || shader->fragment_source[0] == '\0')) {
+            tc::Log::error(
+                "[BuiltInShaderCatalog] Registered shader '%s' has empty fragment source "
+                "(name='%s', language='%s', fragment='%s' size=%zu)",
+                uuid ? uuid : "<null>",
+                name.c_str(),
+                language.c_str(),
+                fragment_path.c_str(),
+                fragment_source.size());
+            return tc_shader_handle_invalid();
+        }
+
+        auto set_entry = [&](const char* stage_name, char** target) {
+            const nos::trent* stages = dict_get(*entry, "stages");
+            if (!stages || !stages->is_dict()) return;
+            const nos::trent* stage_obj = dict_get(*stages, stage_name);
+            if (!stage_obj || !stage_obj->is_dict()) return;
+            std::string ename = string_field(*stage_obj, "entry");
+            if (!ename.empty()) {
+                free(*target);
+                *target = strdup(ename.c_str());
+            }
+        };
+        set_entry("vertex", &shader->vertex_entry);
+        set_entry("fragment", &shader->fragment_entry);
     }
 
     return handle;
