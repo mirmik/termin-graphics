@@ -5,6 +5,7 @@
 #include <span>
 
 #include "termin/render/frame_uniforms.hpp"
+#include "tgfx/tgfx_shader_handle.hpp"
 #include "tgfx2/handles.hpp"
 
 extern "C" {
@@ -48,6 +49,20 @@ struct MaterialPipelineFallbackBindings {
     uint32_t shadow_map_base = 0;
     size_t max_shadow_maps = 0;
 };
+
+struct MaterialVertexVariantRequest {
+    TcShader original_shader;
+    tc_shader_variant_op variant_op = TC_SHADER_VARIANT_NONE;
+    const char* vertex_template_uuid = nullptr;
+    const char* variant_name_suffix = nullptr;
+    const char* debug_context = nullptr;
+    const char* vertex_entry = "vs_main";
+    const char* fragment_source_override = nullptr;
+    const char* fragment_entry_override = nullptr;
+    bool require_slang_original = true;
+};
+
+TcShader get_material_vertex_variant(const MaterialVertexVariantRequest& request);
 
 bool ensure_material_pipeline_shader(
     tgfx::RenderContext2& ctx,
