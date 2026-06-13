@@ -174,7 +174,7 @@ TcMaterial create_material_from_parsed(
         }
 
         const MaterialUboLayout& layout = shader_phase.material_ubo_layout;
-        if (!layout.empty()) {
+        if (language == TC_SHADER_LANGUAGE_GLSL && !layout.empty()) {
             std::vector<tc_material_ubo_entry> entries;
             entries.reserve(layout.entries.size());
             for (const auto& src : layout.entries) {
@@ -196,6 +196,9 @@ TcMaterial create_material_from_parsed(
                 static_cast<uint32_t>(entries.size()),
                 layout.block_size);
         } else {
+            // Migrated Slang shaders derive the material parameter layout from
+            // shaderc sidecar field metadata. Keep the parser-authored layout
+            // only for legacy GLSL, and clear stale data after reloads.
             tc_shader_set_material_ubo_layout(tc_shader_get(phase->shader), nullptr, 0, 0);
         }
 
