@@ -2,6 +2,7 @@
 
 #include "termin/render/material_ubo_apply.hpp"
 #include "termin/render/shader_resource_apply.hpp"
+#include "termin/render/tgfx2_bridge.hpp"
 #include "tgfx2/builtin_shader_sources.hpp"
 #include "tgfx2/render_context.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
@@ -267,6 +268,54 @@ TcShader get_material_vertex_variant(const MaterialVertexVariantRequest& request
     variant.set_variant_info(original_shader, request.variant_op);
     cache[key] = variant;
     return variant;
+}
+
+MaterialMeshVertexInput material_mesh_vertex_input_for_shader(
+    const tc_shader* shader,
+    MaterialMeshVertexInput static_input)
+{
+    if (!shader) {
+        return static_input;
+    }
+
+    if (shader->variant_op != TC_SHADER_VARIANT_SKINNING) {
+        return static_input;
+    }
+
+    switch (static_input) {
+        case MaterialMeshVertexInput::Position:
+            return MaterialMeshVertexInput::SkinnedPositionJointsWeights;
+        case MaterialMeshVertexInput::PositionNormal:
+            return MaterialMeshVertexInput::SkinnedPositionNormalJointsWeights;
+        case MaterialMeshVertexInput::FullMaterial:
+        case MaterialMeshVertexInput::SkinnedPositionJointsWeights:
+        case MaterialMeshVertexInput::SkinnedPositionNormalJointsWeights:
+            return static_input;
+    }
+    return static_input;
+}
+
+bool draw_material_pipeline_mesh(
+    tgfx::RenderContext2& ctx,
+    tc_mesh* mesh,
+    MaterialMeshVertexInput input)
+{
+    // Transitional policy: material pass code should talk in logical input
+    // contracts. The remaining standard-location ABI is isolated here until
+    // tgfx2 draw layouts can be built from reflected mesh semantic names.
+    switch (input) {
+        case MaterialMeshVertexInput::FullMaterial:
+            return ::termin::draw_tc_mesh(ctx, mesh);
+        case MaterialMeshVertexInput::Position:
+            return ::termin::draw_tc_mesh(ctx, mesh, {0});
+        case MaterialMeshVertexInput::PositionNormal:
+            return ::termin::draw_tc_mesh(ctx, mesh, {0, 1});
+        case MaterialMeshVertexInput::SkinnedPositionJointsWeights:
+            return ::termin::draw_tc_mesh(ctx, mesh, {0, 4, 5}, true);
+        case MaterialMeshVertexInput::SkinnedPositionNormalJointsWeights:
+            return ::termin::draw_tc_mesh(ctx, mesh, {0, 1, 4, 5}, true);
+    }
+    return false;
 }
 
 bool ensure_material_pipeline_shader(

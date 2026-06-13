@@ -13,6 +13,8 @@ extern "C" {
 #include "tgfx/resources/tc_shader.h"
 }
 
+struct tc_mesh;
+
 namespace tgfx {
 class IRenderDevice;
 class RenderContext2;
@@ -63,6 +65,23 @@ struct MaterialVertexVariantRequest {
 };
 
 TcShader get_material_vertex_variant(const MaterialVertexVariantRequest& request);
+
+enum class MaterialMeshVertexInput {
+    FullMaterial,
+    Position,
+    PositionNormal,
+    SkinnedPositionJointsWeights,
+    SkinnedPositionNormalJointsWeights,
+};
+
+MaterialMeshVertexInput material_mesh_vertex_input_for_shader(
+    const tc_shader* shader,
+    MaterialMeshVertexInput static_input);
+
+bool draw_material_pipeline_mesh(
+    tgfx::RenderContext2& ctx,
+    tc_mesh* mesh,
+    MaterialMeshVertexInput input);
 
 bool ensure_material_pipeline_shader(
     tgfx::RenderContext2& ctx,
