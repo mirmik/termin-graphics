@@ -356,11 +356,12 @@ float4 main() : SV_Target {
         bytes));
     CHECK(bytes == std::vector<uint8_t>({'S', 'P', 'I', 'R', 'V'}));
 
+    const std::string actual_shader_uuid = shader->uuid;
     const fs::path artifact = artifact_root / "shaders" / "vulkan"
-        / (shader_uuid + ".vert.spv");
+        / (actual_shader_uuid + ".vert.spv");
     const fs::path metadata = fs::path(artifact.string() + ".meta");
     const fs::path source = cache_root / "source"
-        / (shader_uuid + ".vert.slang");
+        / (actual_shader_uuid + ".vert.slang");
     CHECK(fs::exists(artifact));
     CHECK(fs::exists(metadata));
     CHECK(fs::exists(source));
