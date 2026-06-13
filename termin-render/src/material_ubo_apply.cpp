@@ -10,6 +10,9 @@
 
 #include <cstdint>
 #include <cstring>
+#include <mutex>
+#include <string>
+#include <unordered_set>
 #include <vector>
 
 extern "C" {
@@ -79,6 +82,40 @@ void bind_material_ubo(
 // ============================================================================
 
 namespace {
+
+const char* shader_debug_name(const tc_shader* shader) {
+    if (!shader) return "<null>";
+    if (shader->name && shader->name[0] != '\0') return shader->name;
+    if (shader->uuid[0] != '\0') return shader->uuid;
+    return "<unnamed>";
+}
+
+void log_missing_material_resource_once(
+    const tc_shader* shader,
+    const char* resource_name,
+    const char* reason)
+{
+    static std::mutex mutex;
+    static std::unordered_set<std::string> emitted;
+
+    std::string key = std::string(shader_debug_name(shader))
+        + "\n"
+        + (resource_name ? resource_name : "")
+        + "\n"
+        + (reason ? reason : "");
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (!emitted.insert(key).second) {
+            return;
+        }
+    }
+
+    tc::Log::error(
+        "[MaterialPipeline] shader '%s' is missing reflected material resource '%s': %s",
+        shader_debug_name(shader),
+        resource_name ? resource_name : "<null>",
+        reason ? reason : "required by material phase");
+}
 
 // Runtime→C++ converter: build a `MaterialProperty` carrying the current
 // value out of a `tc_uniform_value`. The parser's `default_value` variant
@@ -195,12 +232,10 @@ bool apply_material_phase_ubo(
     tc_material_phase* phase,
     const tc_shader* shader,
     uint32_t ubo_slot,
-    uint32_t tex_slot_start,
     tgfx::IRenderDevice& device,
     tgfx::RenderContext2& ctx)
 {
     if (!phase || !shader) return false;
-    (void)tex_slot_start;
 
     // Translate phase uniforms (C) into MaterialProperty (C++) for
     // std140_pack. Linear, tiny (≤ 32 uniforms).
@@ -236,6 +271,17 @@ bool apply_material_phase_ubo(
                 material_ubo_set_for_shader(shader));
             bound_any = true;
         }
+    } else if (phase->uniform_count > 0 &&
+               material_rb &&
+               tc_shader_get_language(shader) != TC_SHADER_LANGUAGE_GLSL) {
+        const char* reason = "reflected material constant buffer has no field metadata";
+        if (material_rb && material_rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
+            reason = "reflected resource named 'material' is not a constant buffer";
+        }
+        log_missing_material_resource_once(
+            shader,
+            TC_SHADER_RESOURCE_MATERIAL,
+            reason);
     }
 
     // Wrap each phase texture as a tgfx::TextureHandle. New layout-backed
@@ -264,6 +310,11 @@ bool apply_material_phase_ubo(
                 b.texture = tex2;
                 textures.push_back(b);
                 bound_any = true;
+            } else if (rb && tc_shader_get_language(shader) != TC_SHADER_LANGUAGE_GLSL) {
+                log_missing_material_resource_once(
+                    shader,
+                    mat_tex.name,
+                    "reflected material resource is not a texture");
             }
         }
     }

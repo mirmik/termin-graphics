@@ -100,7 +100,6 @@ bool prepare_material_pipeline_resources(
             phase,
             shader,
             fallback.material_ubo,
-            fallback.material_texture_base,
             device,
             ctx);
     }
