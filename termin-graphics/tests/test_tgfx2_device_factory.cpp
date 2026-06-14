@@ -294,6 +294,7 @@ TEST_CASE("tgfx2 shader runtime lazily compiles stale artifacts in dev mode") {
         std::ofstream out(compiler, std::ios::binary);
         out
             << "#!/bin/sh\n"
+            << "printf '%s\\n' \"$@\" > \"$(dirname \"$0\")/compile_args.txt\"\n"
             << "out=''\n"
             << "while [ \"$#\" -gt 0 ]; do\n"
             << "  if [ \"$1\" = '--output' ]; then shift; out=\"$1\"; fi\n"
@@ -374,6 +375,7 @@ float4 main() : SV_Target {
         bytes));
     CHECK(bytes == std::vector<uint8_t>({'S', 'P', 'I', 'R', 'V'}));
     CHECK(read_test_text_file(root / "compile_count.txt") == "1");
+    CHECK(read_test_text_file(root / "compile_args.txt").find("--layout-scheme") == std::string::npos);
     CHECK(read_test_text_file(source).find("VSOut main") != std::string::npos);
 
     termin::tgfx2_set_shader_dev_compile_enabled(false);
