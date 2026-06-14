@@ -39,3 +39,20 @@ TEST_CASE("semantic filter falls back to standard locations") {
     CHECK_EQ(filtered.attributes[0].location, 0u);
     CHECK_EQ(filtered.attributes[1].location, 1u);
 }
+
+TEST_CASE("vertex semantic helpers prefer explicit names over standard locations") {
+    tgfx::VertexAttribute position{0, tgfx::VertexFormat::Float3, 0};
+    tgfx::VertexAttribute custom{0, tgfx::VertexFormat::Float3, 0, "custom_position"};
+
+    CHECK_EQ(tgfx::standard_vertex_semantic_for_location(0), "position");
+    CHECK_EQ(tgfx::vertex_attribute_semantic(position), "position");
+    CHECK_EQ(tgfx::vertex_attribute_semantic(custom), "custom_position");
+
+    tgfx::VertexBufferLayout layout;
+    layout.attributes.push_back(position);
+    layout.attributes.push_back({2, tgfx::VertexFormat::Float2, 12});
+
+    CHECK(tgfx::vertex_layout_has_semantic(layout, "position"));
+    CHECK(tgfx::vertex_layout_has_semantic(layout, "uv"));
+    CHECK_FALSE(tgfx::vertex_layout_has_semantic(layout, "normal"));
+}

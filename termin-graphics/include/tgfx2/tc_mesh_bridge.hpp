@@ -54,6 +54,15 @@ TGFX2_API VertexBufferLayout filter_vertex_layout_to_semantics(
     bool use_shader_input_locations = false
 );
 
+TGFX2_API std::string_view standard_vertex_semantic_for_location(uint32_t location);
+
+TGFX2_API std::string_view vertex_attribute_semantic(const VertexAttribute& attr);
+
+TGFX2_API bool vertex_layout_has_semantic(
+    const VertexBufferLayout& layout,
+    std::string_view semantic
+);
+
 // Draws a tc_mesh into the currently open RenderContext2 pass using the
 // currently bound shader/resources/render state. Optional layout override lets
 // depth/id/shadow passes trim unused attributes while keeping the standard mesh

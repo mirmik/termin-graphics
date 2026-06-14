@@ -124,26 +124,6 @@ bool layout_has_location(const VertexBufferLayout& layout, uint32_t location) {
         });
 }
 
-std::string_view standard_semantic_for_location(uint32_t location) {
-    switch (location) {
-        case 0: return "position";
-        case 1: return "normal";
-        case 2: return "uv";
-        case 3: return "tangent";
-        case 4: return "joints";
-        case 5: return "weights";
-        case 6: return "color";
-        default: return {};
-    }
-}
-
-std::string_view attribute_semantic(const VertexAttribute& attr) {
-    if (!attr.semantic.empty()) {
-        return attr.semantic;
-    }
-    return standard_semantic_for_location(attr.location);
-}
-
 bool semantic_in_list(
     std::string_view semantic,
     std::initializer_list<std::string_view> used_semantics
@@ -154,16 +134,6 @@ bool semantic_in_list(
         }
     }
     return false;
-}
-
-bool layout_has_semantic(
-    const VertexBufferLayout& layout,
-    std::string_view semantic
-) {
-    return std::any_of(layout.attributes.begin(), layout.attributes.end(),
-        [semantic](const VertexAttribute& attr) {
-            return attribute_semantic(attr) == semantic;
-        });
 }
 
 void hash_combine(size_t& seed, size_t v) {
@@ -328,6 +298,36 @@ BufferHandle create_augmented_vertex_buffer(
 
 } // namespace
 
+std::string_view standard_vertex_semantic_for_location(uint32_t location) {
+    switch (location) {
+        case 0: return "position";
+        case 1: return "normal";
+        case 2: return "uv";
+        case 3: return "tangent";
+        case 4: return "joints";
+        case 5: return "weights";
+        case 6: return "color";
+        default: return {};
+    }
+}
+
+std::string_view vertex_attribute_semantic(const VertexAttribute& attr) {
+    if (!attr.semantic.empty()) {
+        return attr.semantic;
+    }
+    return standard_vertex_semantic_for_location(attr.location);
+}
+
+bool vertex_layout_has_semantic(
+    const VertexBufferLayout& layout,
+    std::string_view semantic
+) {
+    return std::any_of(layout.attributes.begin(), layout.attributes.end(),
+        [semantic](const VertexAttribute& attr) {
+            return vertex_attribute_semantic(attr) == semantic;
+        });
+}
+
 Tgfx2MeshBinding wrap_mesh_as_tgfx2(IRenderDevice& device, tc_mesh* mesh) {
     Tgfx2MeshBinding out;
     if (!mesh) {
@@ -419,12 +419,12 @@ VertexBufferLayout filter_vertex_layout_to_semantics(
     out.per_instance = layout.per_instance;
     out.use_shader_input_locations = use_shader_input_locations;
     for (const auto& attr : layout.attributes) {
-        if (semantic_in_list(attribute_semantic(attr), used_semantics)) {
+        if (semantic_in_list(vertex_attribute_semantic(attr), used_semantics)) {
             out.attributes.push_back(attr);
         }
     }
     for (std::string_view semantic : used_semantics) {
-        if (!layout_has_semantic(out, semantic)) {
+        if (!vertex_layout_has_semantic(out, semantic)) {
             tc::Log::error(
                 "filter_vertex_layout_to_semantics: layout has no '%.*s' attribute",
                 static_cast<int>(semantic.size()),
