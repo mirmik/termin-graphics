@@ -27,6 +27,12 @@ namespace {
 
 using termin_shaderc::CompileOptions;
 
+enum class SlangLayoutScheme {
+    PerPipeline,
+    LegacyEngine,
+    Shared,
+};
+
 struct ShaderResourceBinding {
     std::string name;
     std::string kind;
@@ -73,6 +79,21 @@ static std::optional<std::string> slang_matrix_layout_arg(const std::string& lay
     }
     if (layout == "row" || layout == "row-major") {
         return "-matrix-layout-row-major";
+    }
+    return std::nullopt;
+}
+
+static std::optional<SlangLayoutScheme> parse_slang_layout_scheme(
+    const std::string& scheme
+) {
+    if (scheme == "per-pipeline") {
+        return SlangLayoutScheme::PerPipeline;
+    }
+    if (scheme == "legacy-engine" || scheme == "engine-legacy") {
+        return SlangLayoutScheme::LegacyEngine;
+    }
+    if (scheme == "shared") {
+        return SlangLayoutScheme::Shared;
     }
     return std::nullopt;
 }
@@ -968,7 +989,7 @@ static bool apply_slang_vulkan_shared_layout_policy(
     return true;
 }
 
-static bool apply_slang_scope_layout_policy(
+static bool apply_slang_legacy_engine_layout_policy(
     std::vector<ShaderResourceBinding>& resources
 ) {
     uint32_t material_texture_index = 0;
@@ -1818,6 +1839,14 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
     if (!read_file(options.input, source)) {
         return false;
     }
+    auto layout_scheme = parse_slang_layout_scheme(options.layout_scheme);
+    if (!layout_scheme) {
+        std::cerr
+            << "termin_shaderc: unsupported layout scheme: "
+            << options.layout_scheme
+            << " (expected per-pipeline, legacy-engine, or shared)\n";
+        return false;
+    }
 
     std::vector<std::string> args = {
         *slangc,
@@ -1856,12 +1885,19 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
     }
     bool wrote_layout = false;
     if (options.target == "vulkan") {
-        if (options.layout_scheme == "per-pipeline") {
-            // Per-pipeline mode keeps shader-owned layouts, but Termin-scoped
-            // engine resources still occupy stable slots so separately
-            // compiled stages can merge into one pipeline descriptor layout.
+        if (*layout_scheme == SlangLayoutScheme::PerPipeline) {
+            // Per-pipeline mode keeps shader-owned layout placement exactly as
+            // reported by Slang reflection. Runtime code binds by logical
+            // names/scopes from the sidecar; backend set/binding numbers are
+            // artifact metadata, not Termin's legacy ABI.
             wrote_layout =
-                apply_slang_scope_layout_policy(resources) &&
+                filter_slang_vulkan_resources_for_spirv(options, resources) &&
+                write_resource_layout_sidecar(options, resources);
+        } else if (*layout_scheme == SlangLayoutScheme::LegacyEngine) {
+            // Legacy-engine mode remaps scoped Slang resources into Termin's
+            // historical fixed descriptor slots and patches artifacts to match.
+            wrote_layout =
+                apply_slang_legacy_engine_layout_policy(resources) &&
                 filter_slang_vulkan_resources_for_spirv(options, resources) &&
                 patch_slang_vulkan_spirv_bindings(options, resources) &&
                 write_resource_layout_sidecar(options, resources);
@@ -1875,12 +1911,18 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
                 write_resource_layout_sidecar(options, resources);
         }
     } else if (options.target == "opengl") {
-        if (options.layout_scheme == "per-pipeline") {
+        if (*layout_scheme == SlangLayoutScheme::PerPipeline) {
             annotate_slang_glsl_symbols(resources, source);
             wrote_layout =
                 legalize_slang_opengl_glsl_builtins(options) &&
                 filter_slang_opengl_resources_for_glsl(options, resources) &&
-                apply_slang_scope_layout_policy(resources) &&
+                write_resource_layout_sidecar(options, resources);
+        } else if (*layout_scheme == SlangLayoutScheme::LegacyEngine) {
+            annotate_slang_glsl_symbols(resources, source);
+            wrote_layout =
+                legalize_slang_opengl_glsl_builtins(options) &&
+                filter_slang_opengl_resources_for_glsl(options, resources) &&
+                apply_slang_legacy_engine_layout_policy(resources) &&
                 patch_slang_opengl_glsl_bindings(options, resources) &&
                 write_resource_layout_sidecar(options, resources);
         } else {
