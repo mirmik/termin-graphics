@@ -1,4 +1,4 @@
-// material_ubo_apply.cpp - Implementation of bind_material_ubo.
+// material_ubo_apply.cpp - Apply material phase resources by reflected names.
 #include "termin/render/material_ubo_apply.hpp"
 #include "termin/materials/shader_parser.hpp"
 #include "termin/render/tgfx2_bridge.hpp"
@@ -8,7 +8,6 @@
 #include "tcbase/tc_log.hpp"
 
 #include <cstdint>
-#include <cstring>
 #include <mutex>
 #include <string>
 #include <unordered_set>
@@ -19,39 +18,6 @@ extern "C" {
 }
 
 namespace termin {
-
-void bind_material_ubo(
-    const MaterialUboLayout& layout,
-    const std::vector<MaterialProperty>& values,
-    const std::vector<MaterialTextureBinding>& textures,
-    uint32_t ubo_slot,
-    uint32_t set,
-    tgfx::RenderContext2& ctx)
-{
-    if (!layout.empty()) {
-        // Zero-initialised staging — unset properties become zero bytes,
-        // which matches std140 padding expectations and gives deterministic
-        // defaults when hot-reload drops a property between frames.
-        std::vector<uint8_t> staging(layout.block_size, 0);
-        std140_pack(layout, values, staging.data());
-
-        // RenderContext2 owns the backend-specific transient path:
-        // Vulkan uses the device ring UBO, while backends without a ring
-        // allocate a deferred transient UBO. Material phases therefore do
-        // not need to carry GPU buffer handles.
-        ctx.bind_uniform_buffer_ring(ubo_slot, staging.data(),
-                                     static_cast<uint32_t>(staging.size()),
-                                     set);
-    }
-
-    for (const auto& tex : textures) {
-        ctx.bind_sampled_texture(tex.slot, tex.texture, tex.sampler, set);
-    }
-}
-
-// ============================================================================
-// Per-phase UBO lifecycle
-// ============================================================================
 
 namespace {
 
