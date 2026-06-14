@@ -476,7 +476,7 @@ def test_termin_shaderc_reads_slang_scope_user_attributes(tmp_path: Path) -> Non
             "kind": "texture",
             "scope": "transient",
             "set": 0,
-            "binding": 3,
+            "binding": 32,
             "stage_mask": 2,
             "size": 0,
         },
@@ -772,10 +772,79 @@ def test_termin_shaderc_infers_framebuffer_inputs_as_transient(tmp_path: Path) -
     assert result.returncode == 0, result.stderr
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
     assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
-        ("u_input_tex", "transient", 1),
-        ("u_depth_texture", "transient", 2),
-        ("u_fov", "transient", 3),
-        ("u_normal_texture", "transient", 4),
+        ("u_input_tex", "transient", 32),
+        ("u_depth_texture", "transient", 33),
+        ("u_fov", "transient", 34),
+        ("u_normal_texture", "transient", 35),
+    ]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_separates_slang_transient_textures_from_material_ubo(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "struct MaterialParams { float strength; };\n"
+        "[[TerminScope(\"material\")]] ConstantBuffer<MaterialParams> material;\n"
+        "[[TerminScope(\"transient\")]] Sampler2D u_input_tex;\n"
+        "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
+        "    return u_input_tex.Sample(uv) * material.strength;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_bytes(b'FAKE-spirv')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {\n"
+        "            'name': 'material',\n"
+        "            'userAttribs': [{'name': 'TerminScope', 'arguments': ['material']}],\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 1},\n"
+        "            'type': {'kind': 'constantBuffer', 'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 16}}},\n"
+        "        },\n"
+        "        {\n"
+        "            'name': 'u_input_tex',\n"
+        "            'userAttribs': [{'name': 'TerminScope', 'arguments': ['transient']}],\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 1},\n"
+        "            'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True},\n"
+        "        },\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
+        ("material", "material", 1),
+        ("u_input_tex", "transient", 32),
     ]
 
 

@@ -182,8 +182,11 @@ void bind_shader_parser(nb::module_& m) {
         .def(nb::init<>())
         .def(nb::init<std::string, std::string>(),
              nb::arg("name"), nb::arg("source"))
+        .def(nb::init<std::string, std::string, std::string>(),
+             nb::arg("name"), nb::arg("source"), nb::arg("entry"))
         .def_rw("name", &ShaderStage::name)
-        .def_rw("source", &ShaderStage::source);
+        .def_rw("source", &ShaderStage::source)
+        .def_rw("entry", &ShaderStage::entry);
 
     // Alias for typo compatibility
     m.attr("ShasderStage") = m.attr("ShaderStage");

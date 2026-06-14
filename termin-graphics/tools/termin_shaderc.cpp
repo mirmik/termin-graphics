@@ -265,9 +265,11 @@ static void apply_framebuffer_input_scope_hints(
 }
 
 static void normalize_scope_first_binding_slots(
-    std::vector<ShaderResourceBinding>& resources
+    std::vector<ShaderResourceBinding>& resources,
+    bool normalize_transient_resources
 ) {
     uint32_t next_material_texture_binding = 4;
+    uint32_t next_transient_resource_binding = 32;
     for (ShaderResourceBinding& resource : resources) {
         resource.set = 0;
         if (resource.kind == "constant_buffer" || resource.kind == "uniform_buffer") {
@@ -297,6 +299,12 @@ static void normalize_scope_first_binding_slots(
                 ++next_material_texture_binding;
             }
             resource.binding = next_material_texture_binding++;
+        } else if (normalize_transient_resources &&
+                   (resource.kind == "texture" ||
+                    resource.kind == "storage_texture" ||
+                    resource.kind == "sampler") &&
+                   resource.scope == "transient") {
+            resource.binding = next_transient_resource_binding++;
         } else if (resource.kind == "storage_buffer" && resource.scope == "draw") {
             resource.binding = 25;
         }
@@ -890,7 +898,9 @@ static bool collect_resource_bindings(
     }
     assign_missing_resource_scopes(resources);
     apply_framebuffer_input_scope_hints(resources);
-    normalize_scope_first_binding_slots(resources);
+    normalize_scope_first_binding_slots(
+        resources,
+        options.language == "slang");
     if (options.language == "slang" && options.target == "vulkan") {
         for (const ShaderResourceBinding& resource : resources) {
             if (resource.slang_split_texture || resource.slang_separate_sampler) {

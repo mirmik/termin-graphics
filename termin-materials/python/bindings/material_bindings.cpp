@@ -88,6 +88,12 @@ tc_shader_language shader_language_from_string(const std::string& language) {
     throw std::runtime_error("Unsupported shader language: " + language);
 }
 
+tc_shader_artifact_policy artifact_policy_for_language(tc_shader_language language) {
+    return language == TC_SHADER_LANGUAGE_SLANG
+        ? TC_SHADER_ARTIFACT_REQUIRED
+        : TC_SHADER_ARTIFACT_OPTIONAL;
+}
+
 void put_uniform_value(nb::dict& result, const std::string& name, tc_uniform_value& u) {
     switch (u.type) {
         case TC_UNIFORM_BOOL:
@@ -283,7 +289,11 @@ TcMaterial create_material_from_parsed(
             shader_phase.priority,
             rs,
             nullptr,
-            language
+            language,
+            artifact_policy_for_language(language),
+            it_vert->second.entry.c_str(),
+            it_frag->second.entry.c_str(),
+            it_geom != shader_phase.stages.end() ? it_geom->second.entry.c_str() : nullptr
         );
 
         if (!phase) {
@@ -787,9 +797,15 @@ void bind_tc_material(nb::module_& m) {
             int priority,
             const tc_render_state& state,
             const std::string& shader_uuid,
-            int language
+            int language,
+            int artifact_policy,
+            const std::string& vertex_entry,
+            const std::string& fragment_entry,
+            const std::string& geometry_entry
         ) -> tc_material_phase* {
             tc_shader_language shader_language = static_cast<tc_shader_language>(language);
+            tc_shader_artifact_policy shader_artifact_policy =
+                static_cast<tc_shader_artifact_policy>(artifact_policy);
             std::string vs = shader_language == TC_SHADER_LANGUAGE_GLSL
                 ? rewrite_engine_uniforms_for_stage_source(vertex_source, "vertex")
                 : vertex_source;
@@ -813,7 +829,11 @@ void bind_tc_material(nb::module_& m) {
                 priority,
                 state,
                 shader_uuid.empty() ? nullptr : shader_uuid.c_str(),
-                shader_language
+                shader_language,
+                shader_artifact_policy,
+                vertex_entry.empty() ? nullptr : vertex_entry.c_str(),
+                fragment_entry.empty() ? nullptr : fragment_entry.c_str(),
+                geometry_entry.empty() ? nullptr : geometry_entry.c_str()
             );
 
             if (phase && shader_language == TC_SHADER_LANGUAGE_GLSL) {
@@ -831,6 +851,10 @@ void bind_tc_material(nb::module_& m) {
            nb::arg("state") = tc_render_state_opaque(),
            nb::arg("shader_uuid") = "",
            nb::arg("language") = static_cast<int>(TC_SHADER_LANGUAGE_GLSL),
+           nb::arg("artifact_policy") = static_cast<int>(TC_SHADER_ARTIFACT_OPTIONAL),
+           nb::arg("vertex_entry") = "",
+           nb::arg("fragment_entry") = "",
+           nb::arg("geometry_entry") = "",
            nb::rv_policy::reference)
         .def("bump_version", &TcMaterial::bump_version)
         // Color

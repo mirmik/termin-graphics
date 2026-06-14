@@ -62,10 +62,15 @@ using UniformProperty = MaterialProperty;
 struct ShaderStage {
     std::string name;
     std::string source;
+    std::string entry = "main";
 
     ShaderStage() = default;
     ShaderStage(std::string name_, std::string source_)
         : name(std::move(name_)), source(std::move(source_)) {}
+    ShaderStage(std::string name_, std::string source_, std::string entry_)
+        : name(std::move(name_)),
+          source(std::move(source_)),
+          entry(entry_.empty() ? "main" : std::move(entry_)) {}
 };
 
 
@@ -224,7 +229,7 @@ public:
  *   @property <Type> <name> [= DefaultValue] [range(min, max)]
  *      Material-level property. Inside @phase is accepted for legacy syntax,
  *      but per-phase properties are not supported.
- *   @stage <stage_name>
+ *   @stage <stage_name> [entry_name|entry=<entry_name>]
  *   @endstage
  *   @endphase
  *
@@ -234,6 +239,7 @@ public:
  *   @endsettings                      // Optional end of settings block
  *   @property ...                     // Material-level properties
  *   @stage vertex / @stage fragment   // Shared stages (outside @phase)
+ *                                      // Entry defaults to "main".
  */
 ShaderMultyPhaseProgramm parse_shader_text(const std::string& text);
 

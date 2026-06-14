@@ -1168,6 +1168,7 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
     ShaderPhase* current_phase = nullptr;
     std::string current_settings_phase;  // Which phase @settings applies to
     std::string current_stage_name;
+    std::string current_stage_entry = "main";
     std::vector<std::string> current_stage_lines;
     bool in_shared_stage = false;  // Stage outside @phase (for @phases mode)
 
@@ -1198,13 +1199,16 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
 
         if (in_shared_stage) {
             // Shared stage (for @phases mode)
-            shared_stages[current_stage_name] = ShaderStage(current_stage_name, source);
+            shared_stages[current_stage_name] =
+                ShaderStage(current_stage_name, source, current_stage_entry);
         } else if (current_phase) {
             // Traditional @phase mode
-            current_phase->stages[current_stage_name] = ShaderStage(current_stage_name, source);
+            current_phase->stages[current_stage_name] =
+                ShaderStage(current_stage_name, source, current_stage_entry);
         }
 
         current_stage_name.clear();
+        current_stage_entry = "main";
         current_stage_lines.clear();
         in_shared_stage = false;
     };
@@ -1428,6 +1432,14 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
                 throw std::runtime_error("Nested @stage not supported");
             }
             current_stage_name = parts[1];
+            current_stage_entry = parts.size() >= 3 ? parts[2] : "main";
+            const std::string entry_prefix = "entry=";
+            if (current_stage_entry.rfind(entry_prefix, 0) == 0) {
+                current_stage_entry = current_stage_entry.substr(entry_prefix.size());
+            }
+            if (current_stage_entry.empty()) {
+                throw std::runtime_error("@stage entry name is empty");
+            }
             current_stage_lines.clear();
 
             // If inside @phase, it's phase-specific; otherwise shared
