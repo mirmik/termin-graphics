@@ -18,6 +18,7 @@ extern "C" {
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace termin {
 
@@ -186,6 +187,18 @@ void FrameGraphPresenter::ensure_fs(tgfx::IRenderDevice& device) {
     if (tc_shader_handle_is_invalid(shader_handle_)) {
         shader_handle_ = tc_shader_register_static(
             nullptr, PRESENTER_FRAG_SRC, nullptr, "FrameGraphPresenterFS");
+        tc_shader* shader = tc_shader_get(shader_handle_);
+        if (shader) {
+            tc_shader_resource_binding u_tex{};
+            std::strncpy(u_tex.name, "u_tex", TC_SHADER_RESOURCE_NAME_MAX - 1);
+            u_tex.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+            u_tex.kind = TC_SHADER_RESOURCE_TEXTURE;
+            u_tex.scope = TC_SHADER_RESOURCE_SCOPE_TRANSIENT;
+            u_tex.set = TC_SHADER_RESOURCE_SET_DEFAULT;
+            u_tex.binding = 0;
+            u_tex.stage_mask = TC_SHADER_STAGE_FRAGMENT;
+            tc_shader_set_resource_layout(shader, &u_tex, 1);
+        }
     }
 }
 
@@ -224,8 +237,9 @@ void FrameGraphPresenter::render(
     ctx2->set_cull(tgfx::CullMode::None);
 
     ctx2->bind_shader(ctx2->fsq_vertex_shader(), fs);
+    ctx2->use_shader_resource_layout(tc_shader_get(shader_handle_));
 
-    ctx2->bind_sampled_texture(0, capture_tex);
+    ctx2->bind_texture("u_tex", capture_tex);
     PresenterPushData push{};
     push.channel_mode = channel_mode;
     push.highlight_hdr = highlight_hdr ? 1 : 0;
