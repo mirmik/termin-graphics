@@ -11,6 +11,7 @@
 
 #include "tgfx2/device_factory.hpp"
 #include "tgfx2/enums.hpp"
+#include "tgfx2/engine_shader_catalog.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
 #include "tgfx/resources/tc_shader_registry.h"
 
@@ -34,6 +35,20 @@ static std::string read_test_text_file(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);
     return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
 }
+
+struct ShaderRuntimeTestGuard {
+    std::filesystem::path root;
+
+    ~ShaderRuntimeTestGuard() {
+        termin::tgfx2_set_shader_dev_compile_enabled(false);
+        termin::tgfx2_set_shader_compiler_path("");
+        termin::tgfx2_set_shader_cache_root("");
+        termin::tgfx2_set_shader_artifact_root("");
+        if (!root.empty()) {
+            std::filesystem::remove_all(root);
+        }
+    }
+};
 
 TEST_CASE("tgfx2 device factory parses TERMIN_BACKEND aliases") {
     set_backend_env(nullptr);
@@ -306,6 +321,7 @@ TEST_CASE("tgfx2 shader runtime lazily compiles stale artifacts in dev mode") {
     const fs::path cache_root = root / "cache";
     const fs::path compiler = root / "fake_termin_shaderc.sh";
     fs::create_directories(root);
+    ShaderRuntimeTestGuard runtime_config_guard{root};
 
     {
         std::ofstream out(compiler, std::ios::binary);
@@ -383,6 +399,7 @@ float4 main() : SV_Target {
     CHECK(fs::exists(artifact));
     CHECK(fs::exists(metadata));
     CHECK(fs::exists(source));
+    CHECK(read_test_text_file(metadata).find("layout_schema=2\n") != std::string::npos);
 
     bytes.clear();
     CHECK(termin::tgfx2_load_or_compile_shader_artifact_for_backend(
@@ -395,12 +412,84 @@ float4 main() : SV_Target {
     CHECK(read_test_text_file(root / "compile_args.txt").find("--layout-scheme") == std::string::npos);
     CHECK(read_test_text_file(source).find("VSOut main") != std::string::npos);
 
-    termin::tgfx2_set_shader_dev_compile_enabled(false);
-    termin::tgfx2_set_shader_compiler_path("");
-    termin::tgfx2_set_shader_cache_root("");
-    termin::tgfx2_set_shader_artifact_root("");
     tc_shader_destroy(handle);
-    fs::remove_all(root);
+#endif
+}
+
+TEST_CASE("tgfx2 engine shader artifact metadata invalidates stale layout schema") {
+#ifdef _WIN32
+    CHECK(true);
+#else
+    namespace fs = std::filesystem;
+
+    const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
+    const fs::path root = fs::temp_directory_path()
+        / ("termin_tgfx2_engine_schema_" + std::to_string(unique));
+    const fs::path artifact_root = root / "assets";
+    const fs::path cache_root = root / "cache";
+    const fs::path compiler = root / "fake_termin_shaderc.sh";
+    fs::create_directories(root);
+    ShaderRuntimeTestGuard runtime_config_guard{root};
+
+    {
+        std::ofstream out(compiler, std::ios::binary);
+        out
+            << "#!/bin/sh\n"
+            << "out=''\n"
+            << "while [ \"$#\" -gt 0 ]; do\n"
+            << "  if [ \"$1\" = '--output' ]; then shift; out=\"$1\"; fi\n"
+            << "  shift\n"
+            << "done\n"
+            << "if [ -z \"$out\" ]; then exit 9; fi\n"
+            << "count_file='" << (root / "compile_count.txt").string() << "'\n"
+            << "count=0\n"
+            << "if [ -f \"$count_file\" ]; then count=$(cat \"$count_file\"); fi\n"
+            << "count=$((count + 1))\n"
+            << "printf '%s' \"$count\" > \"$count_file\"\n"
+            << "mkdir -p \"$(dirname \"$out\")\"\n"
+            << "printf 'SPIRV%s' \"$count\" > \"$out\"\n";
+    }
+    fs::permissions(
+        compiler,
+        fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec,
+        fs::perm_options::add);
+
+    const tgfx::EngineShaderStageSource& shader =
+        tgfx::engine_fullscreen_quad_vertex_shader();
+    const fs::path artifact = artifact_root / "shaders" / "vulkan"
+        / (std::string(shader.uuid) + ".vert.spv");
+    const fs::path metadata = fs::path(artifact.string() + ".meta");
+
+    termin::tgfx2_set_shader_artifact_root(artifact_root.string().c_str());
+    termin::tgfx2_set_shader_cache_root(cache_root.string().c_str());
+    termin::tgfx2_set_shader_compiler_path(compiler.string().c_str());
+    termin::tgfx2_set_shader_dev_compile_enabled(true);
+
+    std::vector<uint8_t> bytes;
+    REQUIRE(termin::tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
+        shader,
+        tgfx::BackendType::Vulkan,
+        bytes));
+    CHECK(bytes == std::vector<uint8_t>({'S', 'P', 'I', 'R', 'V', '1'}));
+    CHECK(read_test_text_file(metadata).find("layout_schema=2\n") != std::string::npos);
+
+    {
+        std::string stale_metadata = read_test_text_file(metadata);
+        const std::string schema_line = "layout_schema=2\n";
+        const size_t pos = stale_metadata.find(schema_line);
+        REQUIRE(pos != std::string::npos);
+        stale_metadata.erase(pos, schema_line.size());
+        std::ofstream out(metadata, std::ios::binary);
+        out << stale_metadata;
+    }
+
+    bytes.clear();
+    REQUIRE(termin::tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
+        shader,
+        tgfx::BackendType::Vulkan,
+        bytes));
+    CHECK(bytes == std::vector<uint8_t>({'S', 'P', 'I', 'R', 'V', '2'}));
+    CHECK(read_test_text_file(root / "compile_count.txt") == "2");
 #endif
 }
 

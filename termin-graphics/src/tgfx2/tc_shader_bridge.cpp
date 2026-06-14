@@ -33,6 +33,10 @@ static std::string g_shader_cache_root;
 static std::string g_shader_compiler_path;
 static bool g_shader_dev_compile_enabled = false;
 
+// Bump when termin_shaderc reflected resource placement or sidecar semantics
+// change in a way that requires recompiling cached shader artifacts.
+static constexpr uint32_t kShaderArtifactLayoutSchemaVersion = 2;
+
 void tgfx2_set_shader_artifact_root(const char* root) {
     g_shader_artifact_root = root ? root : "";
 }
@@ -296,6 +300,7 @@ static std::string artifact_metadata_text(
     }
 
     std::ostringstream out;
+    out << "layout_schema=" << kShaderArtifactLayoutSchemaVersion << "\n";
     out << "source_hash=" << shader->source_hash << "\n";
     out << "language=" << shader_language_name((tc_shader_language)shader->language) << "\n";
     out << "target=" << backend_name(backend) << "\n";
@@ -312,6 +317,7 @@ static std::string engine_shader_artifact_metadata_text(
     tgfx::BackendType backend
 ) {
     std::ostringstream out;
+    out << "layout_schema=" << kShaderArtifactLayoutSchemaVersion << "\n";
     out << "source_hash=" << source_hash << "\n";
     out << "language=" << (shader.language ? shader.language : "") << "\n";
     out << "target=" << backend_name(backend) << "\n";
