@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <cstring>
+#include <mutex>
 #include <span>
+#include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include <tcbase/tc_log.hpp>
@@ -163,6 +166,111 @@ bool layout_has_semantic(
         });
 }
 
+void hash_combine(size_t& seed, size_t v) {
+    seed ^= v + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}
+
+struct VertexAttributeSignature {
+    uint32_t location = 0;
+    VertexFormat format = VertexFormat::Float3;
+    uint32_t offset = 0;
+    std::string semantic;
+
+    bool operator==(const VertexAttributeSignature& other) const {
+        return location == other.location &&
+               format == other.format &&
+               offset == other.offset &&
+               semantic == other.semantic;
+    }
+};
+
+struct VertexLayoutSignature {
+    uint32_t stride = 0;
+    bool per_instance = false;
+    bool use_shader_input_locations = false;
+    std::vector<VertexAttributeSignature> attributes;
+
+    bool operator==(const VertexLayoutSignature& other) const {
+        return stride == other.stride &&
+               per_instance == other.per_instance &&
+               use_shader_input_locations == other.use_shader_input_locations &&
+               attributes == other.attributes;
+    }
+};
+
+struct VertexLayoutSignatureHash {
+    size_t operator()(const VertexLayoutSignature& layout) const {
+        size_t hash = 0;
+        hash_combine(hash, std::hash<uint32_t>{}(layout.stride));
+        hash_combine(hash, std::hash<bool>{}(layout.per_instance));
+        hash_combine(hash, std::hash<bool>{}(layout.use_shader_input_locations));
+        hash_combine(hash, std::hash<size_t>{}(layout.attributes.size()));
+        for (const VertexAttributeSignature& attr : layout.attributes) {
+            hash_combine(hash, std::hash<uint32_t>{}(attr.location));
+            hash_combine(hash, std::hash<int>{}(static_cast<int>(attr.format)));
+            hash_combine(hash, std::hash<uint32_t>{}(attr.offset));
+            hash_combine(hash, std::hash<std::string>{}(attr.semantic));
+        }
+        return hash;
+    }
+};
+
+VertexLayoutSignature make_vertex_layout_signature(const VertexBufferLayout& layout) {
+    VertexLayoutSignature signature;
+    signature.stride = layout.stride;
+    signature.per_instance = layout.per_instance;
+    signature.use_shader_input_locations = layout.use_shader_input_locations;
+    signature.attributes.reserve(layout.attributes.size());
+    for (const VertexAttribute& attr : layout.attributes) {
+        signature.attributes.push_back({
+            attr.location,
+            attr.format,
+            attr.offset,
+            attr.semantic,
+        });
+    }
+    return signature;
+}
+
+struct SemanticLayoutCacheKey {
+    VertexLayoutSignature layout;
+    bool use_shader_input_locations = false;
+    std::vector<std::string> semantics;
+
+    bool operator==(const SemanticLayoutCacheKey& other) const {
+        return layout == other.layout &&
+               use_shader_input_locations == other.use_shader_input_locations &&
+               semantics == other.semantics;
+    }
+};
+
+struct SemanticLayoutCacheKeyHash {
+    size_t operator()(const SemanticLayoutCacheKey& key) const {
+        size_t hash = VertexLayoutSignatureHash{}(key.layout);
+        hash_combine(hash, std::hash<bool>{}(key.use_shader_input_locations));
+        hash_combine(hash, std::hash<size_t>{}(key.semantics.size()));
+        for (const std::string& semantic : key.semantics) {
+            hash_combine(hash, std::hash<std::string>{}(semantic));
+        }
+        return hash;
+    }
+};
+
+SemanticLayoutCacheKey make_semantic_layout_cache_key(
+    const VertexBufferLayout& layout,
+    std::initializer_list<std::string_view> used_semantics,
+    bool use_shader_input_locations
+) {
+    SemanticLayoutCacheKey key;
+    key.layout = make_vertex_layout_signature(layout);
+    key.use_shader_input_locations = use_shader_input_locations;
+    key.semantics.reserve(used_semantics.size());
+    for (std::string_view semantic : used_semantics) {
+        key.semantics.emplace_back(semantic);
+    }
+    return key;
+}
+
 void append_default_standard_attributes(Tgfx2MeshBinding& out, uint32_t old_stride) {
     uint32_t offset = old_stride;
     if (!layout_has_location(out.layout, 1)) {
@@ -285,6 +393,27 @@ VertexBufferLayout filter_vertex_layout_to_semantics(
     std::initializer_list<std::string_view> used_semantics,
     bool use_shader_input_locations
 ) {
+    static std::mutex cache_mutex;
+    static std::unordered_map<
+        SemanticLayoutCacheKey,
+        VertexBufferLayout,
+        SemanticLayoutCacheKeyHash
+    > cache;
+
+    SemanticLayoutCacheKey key =
+        make_semantic_layout_cache_key(
+            layout,
+            used_semantics,
+            use_shader_input_locations);
+
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex);
+        auto it = cache.find(key);
+        if (it != cache.end()) {
+            return it->second;
+        }
+    }
+
     VertexBufferLayout out;
     out.stride = layout.stride;
     out.per_instance = layout.per_instance;
@@ -302,7 +431,12 @@ VertexBufferLayout filter_vertex_layout_to_semantics(
                 semantic.data());
         }
     }
-    return out;
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex);
+        auto [it, inserted] = cache.emplace(std::move(key), out);
+        (void)inserted;
+        return it->second;
+    }
 }
 
 bool draw_tc_mesh(
