@@ -1,6 +1,7 @@
 #include "guard_main.h"
 
 #include <cstdio>
+#include <cstring>
 
 extern "C" {
 #include <tgfx/resources/tc_shader_registry.h>
@@ -98,5 +99,77 @@ void main() {
     CHECK_EQ(draw->binding, 24u);
 
     tc_shader_destroy(handle);
+    tc_shader_shutdown();
+}
+
+TEST_CASE("shader source identity includes explicit stage entry points") {
+    tc_shader_init();
+
+    const char* vertex_source = R"(
+import termin_prelude;
+struct VertexOutput { float4 position : SV_Position; };
+[shader("vertex")] VertexOutput vs_main() {
+    VertexOutput output;
+    output.position = float4(0.0, 0.0, 0.0, 1.0);
+    return output;
+}
+[shader("vertex")] VertexOutput vs_alt() {
+    VertexOutput output;
+    output.position = float4(1.0, 0.0, 0.0, 1.0);
+    return output;
+}
+)";
+    const char* fragment_source = R"(
+struct FragmentOutput { float4 color : SV_Target0; };
+[shader("fragment")] FragmentOutput fs_main() {
+    FragmentOutput output;
+    output.color = float4(1.0);
+    return output;
+}
+)";
+
+    tc_shader_handle first = tc_shader_from_sources_with_entries_ex(
+        vertex_source,
+        fragment_source,
+        nullptr,
+        "entry-point-identity-test",
+        nullptr,
+        nullptr,
+        TC_SHADER_LANGUAGE_SLANG,
+        TC_SHADER_ARTIFACT_REQUIRED,
+        "vs_main",
+        "fs_main",
+        nullptr);
+    REQUIRE(!tc_shader_handle_is_invalid(first));
+
+    tc_shader_handle second = tc_shader_from_sources_with_entries_ex(
+        vertex_source,
+        fragment_source,
+        nullptr,
+        "entry-point-identity-test-alt",
+        nullptr,
+        nullptr,
+        TC_SHADER_LANGUAGE_SLANG,
+        TC_SHADER_ARTIFACT_REQUIRED,
+        "vs_alt",
+        "fs_main",
+        nullptr);
+    REQUIRE(!tc_shader_handle_is_invalid(second));
+    CHECK(first.index != second.index);
+
+    tc_shader* first_shader = tc_shader_get(first);
+    tc_shader* second_shader = tc_shader_get(second);
+    REQUIRE(first_shader != nullptr);
+    REQUIRE(second_shader != nullptr);
+    REQUIRE(first_shader->vertex_entry != nullptr);
+    REQUIRE(first_shader->fragment_entry != nullptr);
+    REQUIRE(second_shader->vertex_entry != nullptr);
+    CHECK(std::strcmp(first_shader->vertex_entry, "vs_main") == 0);
+    CHECK(std::strcmp(first_shader->fragment_entry, "fs_main") == 0);
+    CHECK(std::strcmp(second_shader->vertex_entry, "vs_alt") == 0);
+    CHECK(std::strcmp(first_shader->source_hash, second_shader->source_hash) != 0);
+
+    tc_shader_destroy(first);
+    tc_shader_destroy(second);
     tc_shader_shutdown();
 }

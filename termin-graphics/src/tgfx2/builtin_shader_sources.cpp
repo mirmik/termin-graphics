@@ -365,14 +365,28 @@ tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
     const tc_shader_artifact_policy artifact_policy =
         is_slang ? TC_SHADER_ARTIFACT_REQUIRED : TC_SHADER_ARTIFACT_OPTIONAL;
 
-    tc_shader_handle handle = tc_shader_register_static_uuid_ex(
+    auto stage_entry = [&](const char* stage_name) -> std::string {
+        const nos::trent* stages = dict_get(*entry, "stages");
+        if (!stages || !stages->is_dict()) return {};
+        const nos::trent* stage_obj = dict_get(*stages, stage_name);
+        if (!stage_obj || !stage_obj->is_dict()) return {};
+        return string_field(*stage_obj, "entry");
+    };
+    const std::string vertex_entry = stage_entry("vertex");
+    const std::string fragment_entry = stage_entry("fragment");
+
+    tc_shader_handle handle = tc_shader_from_sources_with_entries_ex(
         vertex_source.empty() ? nullptr : vertex_source.c_str(),
         fragment_source.empty() ? nullptr : fragment_source.c_str(),
         nullptr,
         name.c_str(),
+        /*source_path=*/nullptr,
         uuid,
         shader_language,
-        artifact_policy);
+        artifact_policy,
+        vertex_entry.empty() ? nullptr : vertex_entry.c_str(),
+        fragment_entry.empty() ? nullptr : fragment_entry.c_str(),
+        nullptr);
 
     if (tc_shader_handle_is_invalid(handle)) {
         tc::Log::error(
@@ -389,7 +403,6 @@ tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
         return handle;
     }
 
-    // Set per-stage entry points from catalog.
     {
         tc_shader* shader = tc_shader_get(handle);
         if (!shader) {
@@ -411,19 +424,10 @@ tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
             return tc_shader_handle_invalid();
         }
 
-        auto set_entry = [&](const char* stage_name, char** target) {
-            const nos::trent* stages = dict_get(*entry, "stages");
-            if (!stages || !stages->is_dict()) return;
-            const nos::trent* stage_obj = dict_get(*stages, stage_name);
-            if (!stage_obj || !stage_obj->is_dict()) return;
-            std::string ename = string_field(*stage_obj, "entry");
-            if (!ename.empty()) {
-                free(*target);
-                *target = strdup(ename.c_str());
-            }
-        };
-        set_entry("vertex", &shader->vertex_entry);
-        set_entry("fragment", &shader->fragment_entry);
+        if (!shader->is_static) {
+            shader->is_static = 1;
+            tc_shader_add_ref(shader);
+        }
     }
 
     return handle;

@@ -8,7 +8,6 @@
 #include "tgfx2/tc_shader_bridge.hpp"
 #include "tcbase/tc_log.hpp"
 
-#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <unordered_map>
@@ -21,19 +20,6 @@ extern "C" {
 
 namespace termin {
 namespace {
-
-char* duplicate_c_string(const char* value) {
-    if (!value) {
-        return nullptr;
-    }
-    const size_t size = std::strlen(value) + 1;
-    char* copy = static_cast<char*>(std::malloc(size));
-    if (!copy) {
-        return nullptr;
-    }
-    std::memcpy(copy, value, size);
-    return copy;
-}
 
 struct MaterialVertexVariantKey {
     uint32_t shader_index = 0;
@@ -352,7 +338,18 @@ TcShader get_material_vertex_variant(const MaterialVertexVariantRequest& request
         original_shader.uuid(),
         request.variant_op);
 
-    tc_shader_handle handle = tc_shader_from_sources_ex(
+    const char* vertex_entry = request.vertex_entry && request.vertex_entry[0] != '\0'
+        ? request.vertex_entry
+        : "vs_main";
+    tc_shader* original_raw = original_shader.get();
+    const char* fragment_entry = request.fragment_entry_override
+        ? request.fragment_entry_override
+        : (original_raw ? original_raw->fragment_entry : nullptr);
+    if (!fragment_entry || fragment_entry[0] == '\0') {
+        fragment_entry = "main";
+    }
+
+    tc_shader_handle handle = tc_shader_from_sources_with_entries_ex(
         vertex_source.c_str(),
         fragment_source,
         nullptr,
@@ -360,7 +357,10 @@ TcShader get_material_vertex_variant(const MaterialVertexVariantRequest& request
         original_shader.source_path(),
         variant_uuid,
         TC_SHADER_LANGUAGE_SLANG,
-        TC_SHADER_ARTIFACT_REQUIRED);
+        TC_SHADER_ARTIFACT_REQUIRED,
+        vertex_entry,
+        fragment_entry,
+        nullptr);
     if (tc_shader_handle_is_invalid(handle)) {
         tc::Log::error(
             "[%s] failed to create material vertex variant for '%s'",
@@ -374,34 +374,8 @@ TcShader get_material_vertex_variant(const MaterialVertexVariantRequest& request
     variant.set_language(TC_SHADER_LANGUAGE_SLANG);
     variant.set_artifact_policy(TC_SHADER_ARTIFACT_REQUIRED);
 
-    tc_shader* original_raw = original_shader.get();
     tc_shader* variant_raw = variant.get();
     if (original_raw && variant_raw) {
-        const char* vertex_entry = request.vertex_entry && request.vertex_entry[0] != '\0'
-            ? request.vertex_entry
-            : "vs_main";
-        free(variant_raw->vertex_entry);
-        variant_raw->vertex_entry = duplicate_c_string(vertex_entry);
-        if (!variant_raw->vertex_entry) {
-            tc::Log::error("[%s] failed to assign vertex entry for '%s'", context, variant_name.c_str());
-            tc_shader_destroy(handle);
-            return TcShader();
-        }
-
-        const char* fragment_entry = request.fragment_entry_override
-            ? request.fragment_entry_override
-            : original_raw->fragment_entry;
-        if (!fragment_entry || fragment_entry[0] == '\0') {
-            fragment_entry = "main";
-        }
-        free(variant_raw->fragment_entry);
-        variant_raw->fragment_entry = duplicate_c_string(fragment_entry);
-        if (!variant_raw->fragment_entry) {
-            tc::Log::error("[%s] failed to assign fragment entry for '%s'", context, variant_name.c_str());
-            tc_shader_destroy(handle);
-            return TcShader();
-        }
-
         // Material vertex variants must get field/resource metadata from
         // shaderc sidecar reflection. Parser-authored legacy material UBO
         // entries would create a second source of truth.

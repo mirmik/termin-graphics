@@ -114,6 +114,18 @@ void bind_shader(nb::module_& m) {
         .def_prop_ro("vertex_source", [](const TcShader& s) { return std::string(s.vertex_source()); })
         .def_prop_ro("fragment_source", [](const TcShader& s) { return std::string(s.fragment_source()); })
         .def_prop_ro("geometry_source", [](const TcShader& s) { return std::string(s.geometry_source()); })
+        .def_prop_ro("vertex_entry", [](const TcShader& s) {
+            const tc_shader* shader = s.shader_ptr();
+            return std::string(shader && shader->vertex_entry ? shader->vertex_entry : "");
+        })
+        .def_prop_ro("fragment_entry", [](const TcShader& s) {
+            const tc_shader* shader = s.shader_ptr();
+            return std::string(shader && shader->fragment_entry ? shader->fragment_entry : "");
+        })
+        .def_prop_ro("geometry_entry", [](const TcShader& s) {
+            const tc_shader* shader = s.shader_ptr();
+            return std::string(shader && shader->geometry_entry ? shader->geometry_entry : "");
+        })
         .def_prop_ro("has_geometry", &TcShader::has_geometry)
         .def_prop_ro("is_variant", &TcShader::is_variant)
         .def_prop_ro("variant_op", &TcShader::variant_op)
@@ -201,7 +213,10 @@ void bind_shader(nb::module_& m) {
             nb::arg("vertex"), nb::arg("fragment"),
             nb::arg("geometry") = "", nb::arg("name") = "", nb::arg("source_path") = "",
             nb::arg("language") = TC_SHADER_LANGUAGE_GLSL,
-            nb::arg("artifact_policy") = TC_SHADER_ARTIFACT_OPTIONAL)
+            nb::arg("artifact_policy") = TC_SHADER_ARTIFACT_OPTIONAL,
+            nb::arg("vertex_entry") = "",
+            nb::arg("fragment_entry") = "",
+            nb::arg("geometry_entry") = "")
         .def_static("from_builtin_catalog",
             [](const std::string& uuid) {
                 const tc_shader_handle h =

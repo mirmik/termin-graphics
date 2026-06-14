@@ -209,10 +209,22 @@ static void tc_shader_compute_identity_hash(
     const char* geometry_source,
     tc_shader_language language,
     tc_shader_artifact_policy artifact_policy,
+    const char* vertex_entry,
+    const char* fragment_entry,
+    const char* geometry_entry,
     char* hash_out
 ) {
+    const char* ve = (vertex_entry && vertex_entry[0]) ? vertex_entry : "main";
+    const char* fe = (fragment_entry && fragment_entry[0]) ? fragment_entry : "main";
+    const char* ge = (geometry_entry && geometry_entry[0]) ? geometry_entry : "main";
+    const bool default_entries =
+        strcmp(ve, "main") == 0 &&
+        strcmp(fe, "main") == 0 &&
+        strcmp(ge, "main") == 0;
+
     if (language == TC_SHADER_LANGUAGE_GLSL
-        && artifact_policy == TC_SHADER_ARTIFACT_OPTIONAL) {
+        && artifact_policy == TC_SHADER_ARTIFACT_OPTIONAL
+        && default_entries) {
         tc_shader_compute_hash(vertex_source, fragment_source, geometry_source, hash_out);
         return;
     }
@@ -228,6 +240,12 @@ static void tc_shader_compute_identity_hash(
     hash = fnv1a_u32((uint32_t)language, hash);
     hash = fnv1a_string("::", hash);
     hash = fnv1a_u32((uint32_t)artifact_policy, hash);
+    hash = fnv1a_string("::entry::", hash);
+    hash = fnv1a_string(ve, hash);
+    hash = fnv1a_string("::", hash);
+    hash = fnv1a_string(fe, hash);
+    hash = fnv1a_string("::", hash);
+    hash = fnv1a_string(ge, hash);
 
     snprintf(hash_out, TC_SHADER_HASH_LEN, "%016llx", (unsigned long long)hash);
 }
@@ -257,6 +275,9 @@ void tc_shader_update_hash(tc_shader* shader) {
         shader->geometry_source,
         (tc_shader_language)shader->language,
         (tc_shader_artifact_policy)shader->artifact_policy,
+        shader->vertex_entry,
+        shader->fragment_entry,
+        shader->geometry_entry,
         shader->source_hash
     );
 }
@@ -535,7 +556,34 @@ bool tc_shader_set_sources(
     const char* name,
     const char* source_path
 ) {
+    return tc_shader_set_sources_with_entries(
+        shader,
+        vertex_source,
+        fragment_source,
+        geometry_source,
+        name,
+        source_path,
+        NULL,
+        NULL,
+        NULL);
+}
+
+bool tc_shader_set_sources_with_entries(
+    tc_shader* shader,
+    const char* vertex_source,
+    const char* fragment_source,
+    const char* geometry_source,
+    const char* name,
+    const char* source_path,
+    const char* vertex_entry,
+    const char* fragment_entry,
+    const char* geometry_entry
+) {
     if (!shader) return false;
+
+    const char* ve = (vertex_entry && vertex_entry[0]) ? vertex_entry : "main";
+    const char* fe = (fragment_entry && fragment_entry[0]) ? fragment_entry : "main";
+    const char* ge = (geometry_entry && geometry_entry[0]) ? geometry_entry : "main";
 
     // Compute new hash to check if sources actually changed
     char new_hash[TC_SHADER_HASH_LEN];
@@ -545,6 +593,9 @@ bool tc_shader_set_sources(
         geometry_source,
         (tc_shader_language)shader->language,
         (tc_shader_artifact_policy)shader->artifact_policy,
+        ve,
+        fe,
+        ge,
         new_hash
     );
 
@@ -563,6 +614,14 @@ bool tc_shader_set_sources(
     shader->vertex_source = dup_string(vertex_source);
     shader->fragment_source = dup_string(fragment_source);
     shader->geometry_source = dup_string(geometry_source);
+    shader->vertex_entry = dup_string(ve);
+    shader->fragment_entry = dup_string(fe);
+    shader->geometry_entry = dup_string(ge);
+    if (!shader->vertex_entry || !shader->fragment_entry || !shader->geometry_entry) {
+        tc_log(TC_LOG_ERROR, "tc_shader_set_sources_with_entries: entry allocation failed");
+        shader_free_data(shader);
+        return false;
+    }
 
     // Update hash
     memcpy(shader->source_hash, new_hash, TC_SHADER_HASH_LEN);
@@ -592,6 +651,33 @@ tc_shader_handle tc_shader_from_sources_ex(
     tc_shader_language language,
     tc_shader_artifact_policy artifact_policy
 ) {
+    return tc_shader_from_sources_with_entries_ex(
+        vertex_source,
+        fragment_source,
+        geometry_source,
+        name,
+        source_path,
+        uuid,
+        language,
+        artifact_policy,
+        NULL,
+        NULL,
+        NULL);
+}
+
+tc_shader_handle tc_shader_from_sources_with_entries_ex(
+    const char* vertex_source,
+    const char* fragment_source,
+    const char* geometry_source,
+    const char* name,
+    const char* source_path,
+    const char* uuid,
+    tc_shader_language language,
+    tc_shader_artifact_policy artifact_policy,
+    const char* vertex_entry,
+    const char* fragment_entry,
+    const char* geometry_entry
+) {
     // NULL vertex_source is permitted for FS-only shaders — e.g. post-
     // effect passes that reuse RenderContext2's built-in FSQ vertex shader
     // and only need to register the FS in the tc_shader registry for
@@ -603,13 +689,13 @@ tc_shader_handle tc_shader_from_sources_ex(
 
     if (!tc_shader_language_valid(language)) {
         tc_log(TC_LOG_ERROR,
-               "tc_shader_from_sources_ex: invalid shader language %u",
+               "tc_shader_from_sources_with_entries_ex: invalid shader language %u",
                (unsigned)language);
         return tc_shader_handle_invalid();
     }
     if (!tc_shader_artifact_policy_valid(artifact_policy)) {
         tc_log(TC_LOG_ERROR,
-               "tc_shader_from_sources_ex: invalid artifact policy %u",
+               "tc_shader_from_sources_with_entries_ex: invalid artifact policy %u",
                (unsigned)artifact_policy);
         return tc_shader_handle_invalid();
     }
@@ -622,7 +708,16 @@ tc_shader_handle tc_shader_from_sources_ex(
             tc_shader* shader = tc_shader_get(existing);
             tc_shader_set_language(shader, language);
             tc_shader_set_artifact_policy(shader, artifact_policy);
-            tc_shader_set_sources(shader, vertex_source, fragment_source, geometry_source, name, source_path);
+            tc_shader_set_sources_with_entries(
+                shader,
+                vertex_source,
+                fragment_source,
+                geometry_source,
+                name,
+                source_path,
+                vertex_entry,
+                fragment_entry,
+                geometry_entry);
             infer_raw_glsl_engine_resource_layout(shader);
             return existing;
         }
@@ -634,7 +729,16 @@ tc_shader_handle tc_shader_from_sources_ex(
         tc_shader* shader = tc_shader_get(h);
         shader->language = (uint32_t)language;
         shader->artifact_policy = (uint32_t)artifact_policy;
-        if (!tc_shader_set_sources(shader, vertex_source, fragment_source, geometry_source, name, source_path)) {
+        if (!tc_shader_set_sources_with_entries(
+                shader,
+                vertex_source,
+                fragment_source,
+                geometry_source,
+                name,
+                source_path,
+                vertex_entry,
+                fragment_entry,
+                geometry_entry)) {
             tc_shader_destroy(h);
             return tc_shader_handle_invalid();
         }
@@ -650,6 +754,9 @@ tc_shader_handle tc_shader_from_sources_ex(
         geometry_source,
         language,
         artifact_policy,
+        vertex_entry,
+        fragment_entry,
+        geometry_entry,
         hash
     );
 
@@ -668,7 +775,16 @@ tc_shader_handle tc_shader_from_sources_ex(
     tc_shader* shader = tc_shader_get(h);
     shader->language = (uint32_t)language;
     shader->artifact_policy = (uint32_t)artifact_policy;
-    if (!tc_shader_set_sources(shader, vertex_source, fragment_source, geometry_source, name, source_path)) {
+    if (!tc_shader_set_sources_with_entries(
+            shader,
+            vertex_source,
+            fragment_source,
+            geometry_source,
+            name,
+            source_path,
+            vertex_entry,
+            fragment_entry,
+            geometry_entry)) {
         tc_shader_destroy(h);
         return tc_shader_handle_invalid();
     }

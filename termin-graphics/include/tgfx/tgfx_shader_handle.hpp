@@ -265,9 +265,12 @@ public:
         const std::string& name = "",
         const std::string& source_path = "",
         tc_shader_language language = TC_SHADER_LANGUAGE_GLSL,
-        tc_shader_artifact_policy artifact_policy = TC_SHADER_ARTIFACT_OPTIONAL
+        tc_shader_artifact_policy artifact_policy = TC_SHADER_ARTIFACT_OPTIONAL,
+        const std::string& vertex_entry = "",
+        const std::string& fragment_entry = "",
+        const std::string& geometry_entry = ""
     ) {
-        tc_shader_handle h = tc_shader_from_sources_ex(
+        tc_shader_handle h = tc_shader_from_sources_with_entries_ex(
             vertex.c_str(),
             fragment.c_str(),
             geometry.empty() ? nullptr : geometry.c_str(),
@@ -275,7 +278,10 @@ public:
             source_path.empty() ? nullptr : source_path.c_str(),
             nullptr,
             language,
-            artifact_policy
+            artifact_policy,
+            vertex_entry.empty() ? nullptr : vertex_entry.c_str(),
+            fragment_entry.empty() ? nullptr : fragment_entry.c_str(),
+            geometry_entry.empty() ? nullptr : geometry_entry.c_str()
         );
         if (tc_shader_handle_is_invalid(h)) {
             return TcShader();

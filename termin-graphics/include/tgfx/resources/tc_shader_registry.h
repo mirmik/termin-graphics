@@ -42,6 +42,18 @@ TGFX_API bool tc_shader_set_sources(
     const char* source_path
 );
 
+TGFX_API bool tc_shader_set_sources_with_entries(
+    tc_shader* shader,
+    const char* vertex_source,
+    const char* fragment_source,
+    const char* geometry_source,
+    const char* name,
+    const char* source_path,
+    const char* vertex_entry,
+    const char* fragment_entry,
+    const char* geometry_entry
+);
+
 TGFX_API tc_shader_handle tc_shader_from_sources(
     const char* vertex_source,
     const char* fragment_source,
@@ -60,6 +72,20 @@ TGFX_API tc_shader_handle tc_shader_from_sources_ex(
     const char* uuid,
     tc_shader_language language,
     tc_shader_artifact_policy artifact_policy
+);
+
+TGFX_API tc_shader_handle tc_shader_from_sources_with_entries_ex(
+    const char* vertex_source,
+    const char* fragment_source,
+    const char* geometry_source,
+    const char* name,
+    const char* source_path,
+    const char* uuid,
+    tc_shader_language language,
+    tc_shader_artifact_policy artifact_policy,
+    const char* vertex_entry,
+    const char* fragment_entry,
+    const char* geometry_entry
 );
 
 // Register a shader with process-lifetime ownership. The registry holds

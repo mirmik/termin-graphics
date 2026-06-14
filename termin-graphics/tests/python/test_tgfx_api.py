@@ -41,12 +41,38 @@ def test_shader_metadata_binding_smoke():
     assert shader.requires_artifacts is True
 
 
+def test_shader_from_sources_accepts_explicit_entries():
+    shader = tgfx.TcShader.from_sources(
+        "import termin_prelude;\n"
+        "struct VertexOutput { float4 position : SV_Position; };\n"
+        "[shader(\"vertex\")] VertexOutput vs_main() { "
+        "VertexOutput o; o.position = float4(0, 0, 0, 1); return o; }",
+        "struct FragmentOutput { float4 color : SV_Target0; };\n"
+        "[shader(\"fragment\")] FragmentOutput fs_main() { "
+        "FragmentOutput o; o.color = float4(1); return o; }",
+        "",
+        "python_shader_entry_smoke",
+        "",
+        tgfx.ShaderLanguage.SLANG,
+        tgfx.ShaderArtifactPolicy.REQUIRED,
+        "vs_main",
+        "fs_main",
+    )
+
+    assert shader.is_valid
+    assert shader.vertex_entry == "vs_main"
+    assert shader.fragment_entry == "fs_main"
+    assert shader.geometry_entry == "main"
+
+
 def test_builtin_catalog_shader_binding_smoke():
     shader = tgfx.TcShader.from_builtin_catalog("termin-engine-present-blit")
 
     assert shader.is_valid
     assert shader.uuid == "termin-engine-present-blit"
     assert shader.name == "PresentBlitVSFS"
+    assert shader.vertex_entry == "vs_main"
+    assert shader.fragment_entry == "fs_main"
     assert "POSITION" in shader.vertex_source
     assert "vs_main" in shader.vertex_source
     assert "u_tex" in shader.fragment_source
