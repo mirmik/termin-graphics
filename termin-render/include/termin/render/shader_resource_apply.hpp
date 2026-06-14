@@ -22,22 +22,19 @@ bool shader_layout_present(const tc_shader* shader);
 bool bind_lighting_ubo_for_shader(
     tgfx::RenderContext2& ctx,
     const tc_shader* shader,
-    tgfx::BufferHandle lighting_ubo,
-    uint32_t fallback_binding);
+    tgfx::BufferHandle lighting_ubo);
 
 bool bind_shadow_block_for_shader(
     tgfx::RenderContext2& ctx,
     const tc_shader* shader,
     const void* data,
-    uint32_t size,
-    uint32_t fallback_binding);
+    uint32_t size);
 
 bool bind_shadow_maps_for_shader(
     tgfx::RenderContext2& ctx,
     const tc_shader* shader,
     std::span<const tgfx::TextureHandle> shadow_maps,
     tgfx::SamplerHandle sampler,
-    uint32_t fallback_binding,
     size_t max_count);
 
 } // namespace termin

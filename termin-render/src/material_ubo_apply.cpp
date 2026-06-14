@@ -1,7 +1,6 @@
 // material_ubo_apply.cpp - Implementation of bind_material_ubo.
 #include "termin/render/material_ubo_apply.hpp"
 #include "termin/materials/shader_parser.hpp"
-#include "termin/render/shader_binding_policy.hpp"
 #include "termin/render/tgfx2_bridge.hpp"
 
 #include "tgfx2/i_render_device.hpp"
@@ -20,33 +19,6 @@ extern "C" {
 }
 
 namespace termin {
-
-uint32_t material_ubo_binding_for_shader(
-    const tc_shader* shader,
-    uint32_t fallback_binding)
-{
-    const tc_shader_resource_binding* binding =
-        tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_MATERIAL);
-    if (!binding) {
-        return fallback_binding;
-    }
-    if (binding->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
-        tc::Log::error(
-            "Shader resource '%s' has kind %u, expected constant buffer; using fallback binding %u",
-            TC_SHADER_RESOURCE_MATERIAL,
-            binding->kind,
-            fallback_binding);
-        return fallback_binding;
-    }
-    return binding->binding;
-}
-
-// Look up the descriptor set index for the material resource binding.
-// Returns 0 — single-set per-pipeline model; set parameter is vestigial.
-static uint32_t material_ubo_set_for_shader(const tc_shader* shader) {
-    (void)shader;
-    return 0;
-}
 
 void bind_material_ubo(
     const MaterialUboLayout& layout,
@@ -231,7 +203,6 @@ MaterialUboLayout layout_from_tc_shader(const tc_shader* shader) {
 bool apply_material_phase_ubo(
     tc_material_phase* phase,
     const tc_shader* shader,
-    uint32_t ubo_slot,
     tgfx::IRenderDevice& device,
     tgfx::RenderContext2& ctx)
 {
@@ -247,8 +218,6 @@ bool apply_material_phase_ubo(
 
     // Build the layout view on the tc_shader C-side entries.
     MaterialUboLayout layout = layout_from_tc_shader(shader);
-    uint32_t resolved_ubo_slot =
-        material_ubo_binding_for_shader(shader, ubo_slot);
     const tc_shader_resource_binding* material_rb =
         tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_MATERIAL);
 
@@ -263,17 +232,15 @@ bool apply_material_phase_ubo(
                 staging.data(),
                 static_cast<uint32_t>(staging.size()));
             bound_any = true;
-        } else if (!shader_uses_layout_only_bindings(shader)) {
-            ctx.bind_uniform_buffer_ring(
-                resolved_ubo_slot,
-                staging.data(),
-                static_cast<uint32_t>(staging.size()),
-                material_ubo_set_for_shader(shader));
-            bound_any = true;
+        } else {
+            log_missing_material_resource_once(
+                shader,
+                TC_SHADER_RESOURCE_MATERIAL,
+                "material UBO layout exists but shader has no reflected material "
+                "constant-buffer resource");
         }
     } else if (phase->uniform_count > 0 &&
-               material_rb &&
-               tc_shader_get_language(shader) != TC_SHADER_LANGUAGE_GLSL) {
+               material_rb) {
         const char* reason = "reflected material constant buffer has no field metadata";
         if (material_rb && material_rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
             reason = "reflected resource named 'material' is not a constant buffer";
@@ -284,12 +251,9 @@ bool apply_material_phase_ubo(
             reason);
     }
 
-    // Wrap each phase texture as a tgfx::TextureHandle. New layout-backed
-    // shaders bind by material property name so RenderContext2 can resolve
-    // kind/scope/backend placement from tc_shader_resource_binding. Legacy
-    // shaders without resource metadata keep the old index-based slots.
-    std::vector<MaterialTextureBinding> textures;
-    textures.reserve(phase->texture_count);
+    // Wrap each phase texture as a tgfx::TextureHandle. Textures bind by
+    // material property name so RenderContext2 can resolve kind/scope/backend
+    // placement from tc_shader_resource_binding.
     for (size_t i = 0; i < phase->texture_count; i++) {
         const tc_material_texture& mat_tex = phase->textures[i];
         if (tc_texture_handle_is_invalid(mat_tex.texture)) {
@@ -303,25 +267,17 @@ bool apply_material_phase_ubo(
             if (rb && rb->kind == TC_SHADER_RESOURCE_TEXTURE) {
                 ctx.bind_texture(mat_tex.name, tex2);
                 bound_any = true;
-            } else if (!shader_uses_layout_only_bindings(shader)) {
-                MaterialTextureBinding b;
-                b.slot = material_texture_binding_for_index(
-                    static_cast<uint32_t>(i));
-                b.texture = tex2;
-                textures.push_back(b);
-                bound_any = true;
-            } else if (rb && tc_shader_get_language(shader) != TC_SHADER_LANGUAGE_GLSL) {
+            } else {
+                if (!rb && tc_shader_has_resource_layout(shader)) {
+                    continue;
+                }
                 log_missing_material_resource_once(
                     shader,
                     mat_tex.name,
-                    "reflected material resource is not a texture");
+                    rb ? "reflected material resource is not a texture"
+                       : "material texture has no reflected texture resource");
             }
         }
-    }
-
-    for (const auto& tex : textures) {
-        ctx.bind_sampled_texture(tex.slot, tex.texture, tex.sampler,
-                                 material_ubo_set_for_shader(shader));
     }
     return bound_any;
 }

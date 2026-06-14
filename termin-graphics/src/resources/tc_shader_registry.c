@@ -42,6 +42,82 @@ static bool tc_shader_artifact_policy_valid(tc_shader_artifact_policy policy) {
         || policy == TC_SHADER_ARTIFACT_REQUIRED;
 }
 
+static bool source_contains_token(const char* source, const char* token) {
+    return source && token && strstr(source, token) != NULL;
+}
+
+static bool any_source_contains_token(const tc_shader* shader, const char* token) {
+    return source_contains_token(shader ? shader->vertex_source : NULL, token)
+        || source_contains_token(shader ? shader->fragment_source : NULL, token)
+        || source_contains_token(shader ? shader->geometry_source : NULL, token);
+}
+
+static void append_compact_resource_binding(
+    tc_shader_resource_binding* bindings,
+    uint32_t* count,
+    const char* name,
+    uint32_t kind,
+    uint32_t scope,
+    uint32_t binding_index,
+    uint32_t size)
+{
+    tc_shader_resource_binding* binding = &bindings[*count];
+    memset(binding, 0, sizeof(*binding));
+    strncpy(binding->name, name, TC_SHADER_RESOURCE_NAME_MAX - 1);
+    binding->name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+    binding->kind = kind;
+    binding->scope = scope;
+    binding->set = TC_SHADER_RESOURCE_SET_DEFAULT;
+    binding->binding = binding_index;
+    binding->stage_mask =
+        TC_SHADER_STAGE_VERTEX | TC_SHADER_STAGE_FRAGMENT | TC_SHADER_STAGE_GEOMETRY;
+    binding->size = size;
+    (*count)++;
+}
+
+static void infer_raw_glsl_engine_resource_layout(tc_shader* shader) {
+    if (!shader ||
+        shader->language != TC_SHADER_LANGUAGE_GLSL ||
+        tc_shader_has_resource_layout(shader)) {
+        return;
+    }
+
+    const bool uses_per_frame =
+        any_source_contains_token(shader, "uniform PerFrame") ||
+        any_source_contains_token(shader, "ConstantBuffer<PerFrame>") ||
+        any_source_contains_token(shader, "u_per_frame");
+    const bool uses_draw_data =
+        any_source_contains_token(shader, "uniform DrawData") ||
+        any_source_contains_token(shader, "ConstantBuffer<DrawData>") ||
+        any_source_contains_token(shader, "draw_data");
+
+    tc_shader_resource_binding bindings[2];
+    uint32_t count = 0;
+    if (uses_per_frame) {
+        append_compact_resource_binding(
+            bindings,
+            &count,
+            TC_SHADER_RESOURCE_PER_FRAME,
+            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+            TC_SHADER_RESOURCE_SCOPE_FRAME,
+            2,
+            0);
+    }
+    if (uses_draw_data) {
+        append_compact_resource_binding(
+            bindings,
+            &count,
+            TC_SHADER_RESOURCE_DRAW,
+            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+            TC_SHADER_RESOURCE_SCOPE_DRAW,
+            24,
+            64);
+    }
+    if (count > 0) {
+        tc_shader_set_resource_layout(shader, bindings, count);
+    }
+}
+
 // Free shader internal data (sources)
 static void shader_free_data(tc_shader* shader) {
     if (!shader) return;
@@ -547,6 +623,7 @@ tc_shader_handle tc_shader_from_sources_ex(
             tc_shader_set_language(shader, language);
             tc_shader_set_artifact_policy(shader, artifact_policy);
             tc_shader_set_sources(shader, vertex_source, fragment_source, geometry_source, name, source_path);
+            infer_raw_glsl_engine_resource_layout(shader);
             return existing;
         }
         // Create new shader with specified uuid
@@ -561,6 +638,7 @@ tc_shader_handle tc_shader_from_sources_ex(
             tc_shader_destroy(h);
             return tc_shader_handle_invalid();
         }
+        infer_raw_glsl_engine_resource_layout(shader);
         return h;
     }
 
@@ -577,6 +655,7 @@ tc_shader_handle tc_shader_from_sources_ex(
 
     tc_shader_handle existing = tc_shader_find_by_hash(hash);
     if (!tc_shader_handle_is_invalid(existing)) {
+        infer_raw_glsl_engine_resource_layout(tc_shader_get(existing));
         return existing;
     }
 
@@ -593,6 +672,7 @@ tc_shader_handle tc_shader_from_sources_ex(
         tc_shader_destroy(h);
         return tc_shader_handle_invalid();
     }
+    infer_raw_glsl_engine_resource_layout(shader);
 
     return h;
 }
@@ -811,12 +891,20 @@ void tc_shader_set_variant_info(
         return;
     }
 
+    const tc_shader_artifact_policy current_policy = tc_shader_get_artifact_policy(shader);
+    const tc_shader_artifact_policy original_policy = tc_shader_get_artifact_policy(orig);
+
     shader->is_variant = 1;
     shader->variant_op = (uint8_t)op;
     shader->original_handle = original;
     shader->original_version = orig->version;
     tc_shader_set_language(shader, tc_shader_get_language(orig));
-    tc_shader_set_artifact_policy(shader, tc_shader_get_artifact_policy(orig));
+    tc_shader_set_artifact_policy(
+        shader,
+        current_policy == TC_SHADER_ARTIFACT_REQUIRED ||
+                original_policy == TC_SHADER_ARTIFACT_REQUIRED
+            ? TC_SHADER_ARTIFACT_REQUIRED
+            : TC_SHADER_ARTIFACT_OPTIONAL);
 }
 
 bool tc_shader_variant_is_stale(tc_shader_handle variant) {
@@ -1083,7 +1171,7 @@ void tc_shader_set_material_ubo_layout(
     material_binding.kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
     material_binding.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
     material_binding.set = TC_SHADER_RESOURCE_SET_DEFAULT;
-    material_binding.binding = TC_SHADER_RESOURCE_BINDING_MATERIAL;
+    material_binding.binding = 1u;
     material_binding.stage_mask = TC_SHADER_STAGE_ALL_GRAPHICS;
     material_binding.size = block_size;
     tc_shader_upsert_resource_binding(shader, &material_binding);

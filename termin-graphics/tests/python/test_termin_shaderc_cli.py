@@ -1,12 +1,11 @@
 import json
 import os
 import subprocess
+import struct
 import sys
 from pathlib import Path
 
 import pytest
-
-TC_SHADER_RESOURCE_BINDING_DRAW_DATA = 24
 
 
 def _repo_root() -> Path:
@@ -63,6 +62,25 @@ def _run_shaderc(args: list[str], *, env: dict[str, str] | None = None) -> subpr
     )
 
 
+def _spirv_decoration_value(path: Path, resource_id: int, decoration: int) -> int | None:
+    data = path.read_bytes()
+    if len(data) % 4 != 0:
+        return None
+    words = struct.unpack("<" + "I" * (len(data) // 4), data)
+    index = 5
+    while index < len(words):
+        instruction = words[index]
+        word_count = instruction >> 16
+        opcode = instruction & 0xFFFF
+        if word_count == 0 or index + word_count > len(words):
+            return None
+        if opcode == 71 and word_count >= 4 and words[index + 1] == resource_id:
+            if words[index + 2] == decoration:
+                return words[index + 3]
+        index += word_count
+    return None
+
+
 def test_termin_shaderc_help_describes_compile_debug_options() -> None:
     result = _run_shaderc(["--help"])
 
@@ -70,7 +88,6 @@ def test_termin_shaderc_help_describes_compile_debug_options() -> None:
     assert result.stderr == ""
     assert "termin_shaderc - Termin shader artifact compiler" in result.stdout
     assert "termin_shaderc compile [options]" in result.stdout
-    assert "--layout-scheme <mode>" in result.stdout
     assert "--slangc <path>" in result.stdout
     assert "--include-dir <dir>" in result.stdout
     assert "<output>.layout.json" in result.stdout
@@ -86,7 +103,7 @@ def test_termin_shaderc_compile_help_is_successful() -> None:
     assert direct.stdout == topic.stdout
     assert "Compile options:" in direct.stdout
     assert "Examples:" in direct.stdout
-    assert "legacy-engine" in direct.stdout
+    assert "--layout-scheme" not in direct.stdout
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
@@ -359,7 +376,9 @@ def test_termin_shaderc_drops_dead_slang_reflection_resources(tmp_path: Path) ->
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
     assert [resource["name"] for resource in layout["resources"]] == ["u_push"]
     assert layout["resources"][0]["scope"] == "draw"
-    assert layout["resources"][0]["binding"] == 13
+    assert layout["resources"][0]["binding"] == 24
+    assert _spirv_decoration_value(output, 17, 33) == 24
+    assert _spirv_decoration_value(output, 17, 34) == 0
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
@@ -536,7 +555,7 @@ def test_termin_shaderc_rejects_invalid_slang_scope_user_attribute(tmp_path: Pat
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
-def test_termin_shaderc_preserves_slang_engine_constant_buffer_reflection_placement(tmp_path: Path) -> None:
+def test_termin_shaderc_normalizes_slang_engine_constant_buffer_reflection_placement(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
         "struct PerFrame { float4x4 u_view; };\n"
@@ -609,7 +628,7 @@ def test_termin_shaderc_preserves_slang_engine_constant_buffer_reflection_placem
             "kind": "constant_buffer",
             "scope": "frame",
             "set": 0,
-            "binding": 1,
+            "binding": 2,
             "stage_mask": 1,
             "size": 64,
         },
@@ -618,7 +637,7 @@ def test_termin_shaderc_preserves_slang_engine_constant_buffer_reflection_placem
             "kind": "constant_buffer",
             "scope": "draw",
             "set": 0,
-            "binding": 2,
+            "binding": 24,
             "stage_mask": 1,
             "size": 64,
         },
@@ -685,10 +704,134 @@ def test_termin_shaderc_writes_slang_texture_resources_from_reflection(tmp_path:
             "kind": "texture",
             "scope": "material",
             "set": 0,
-            "binding": 0,
+            "binding": 4,
             "stage_mask": 2,
             "size": 0,
         },
+    ]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_infers_framebuffer_inputs_as_transient(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "Sampler2D u_input_tex;\n"
+        "Sampler2D u_depth_texture;\n"
+        "Sampler2D u_fov;\n"
+        "Sampler2D u_normal_texture;\n"
+        "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
+        "    return u_input_tex.Sample(uv) + u_depth_texture.Sample(uv) + u_fov.Sample(uv) + u_normal_texture.Sample(uv);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_bytes(b'FAKE-spirv')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {'name': 'u_input_tex', 'binding': {'kind': 'descriptorTableSlot', 'index': 1},\n"
+        "         'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True}},\n"
+        "        {'name': 'u_depth_texture', 'binding': {'kind': 'descriptorTableSlot', 'index': 2},\n"
+        "         'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True}},\n"
+        "        {'name': 'u_fov', 'binding': {'kind': 'descriptorTableSlot', 'index': 3},\n"
+        "         'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True}},\n"
+        "        {'name': 'u_normal_texture', 'binding': {'kind': 'descriptorTableSlot', 'index': 4},\n"
+        "         'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True}},\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
+        ("u_input_tex", "transient", 1),
+        ("u_depth_texture", "transient", 2),
+        ("u_fov", "transient", 3),
+        ("u_normal_texture", "transient", 4),
+    ]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
+def test_termin_shaderc_keeps_standalone_normal_texture_material_scoped(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "Sampler2D u_normal_texture;\n"
+        "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
+        "    return u_normal_texture.Sample(uv);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_bytes(b'FAKE-spirv')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {'name': 'u_normal_texture', 'binding': {'kind': 'descriptorTableSlot', 'index': 9},\n"
+        "         'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True}},\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
+        ("u_normal_texture", "material", 4),
     ]
 
 
@@ -770,7 +913,7 @@ def test_termin_shaderc_preserves_slang_draw_storage_buffer_reflection_placement
             "kind": "storage_buffer",
             "scope": "draw",
             "set": 0,
-            "binding": 0,
+            "binding": 25,
             "stage_mask": 1,
             "size": 0,
         }
@@ -778,7 +921,7 @@ def test_termin_shaderc_preserves_slang_draw_storage_buffer_reflection_placement
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
-def test_termin_shaderc_preserves_slang_bone_block_draw_scope_reflection_placement(tmp_path: Path) -> None:
+def test_termin_shaderc_normalizes_slang_draw_scope_reflection_placement(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
         "import termin_prelude;\n"
@@ -869,7 +1012,7 @@ def test_termin_shaderc_preserves_slang_bone_block_draw_scope_reflection_placeme
             "kind": "constant_buffer",
             "scope": "draw",
             "set": 0,
-            "binding": 3,
+            "binding": 24,
             "stage_mask": 1,
             "size": 64,
         },
@@ -878,7 +1021,7 @@ def test_termin_shaderc_preserves_slang_bone_block_draw_scope_reflection_placeme
             "kind": "constant_buffer",
             "scope": "draw",
             "set": 0,
-            "binding": 4,
+            "binding": 16,
             "stage_mask": 1,
             "size": 8208,
         },
@@ -886,7 +1029,7 @@ def test_termin_shaderc_preserves_slang_bone_block_draw_scope_reflection_placeme
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
-def test_termin_shaderc_preserves_slang_material_texture_reflection_placement(tmp_path: Path) -> None:
+def test_termin_shaderc_normalizes_slang_material_texture_reflection_placement(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
         "struct MaterialParams { float4 color; };\n"
@@ -952,13 +1095,13 @@ def test_termin_shaderc_preserves_slang_material_texture_reflection_placement(tm
     assert result.returncode == 0, result.stderr
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
     assert layout["resources"][0]["name"] == "material"
-    assert layout["resources"][0]["binding"] == 0
+    assert layout["resources"][0]["binding"] == 1
     assert layout["resources"][1]["name"] == "albedo_texture"
-    assert layout["resources"][1]["binding"] == 1
+    assert layout["resources"][1]["binding"] == 4
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
-def test_termin_shaderc_preserves_slang_pass_shadow_texture_reflection_placement(tmp_path: Path) -> None:
+def test_termin_shaderc_normalizes_slang_pass_shadow_texture_reflection_placement(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
         "[[TerminScope(\"pass\")]] Sampler2DShadow shadow_maps[16];\n"
@@ -1021,7 +1164,7 @@ def test_termin_shaderc_preserves_slang_pass_shadow_texture_reflection_placement
             "kind": "texture",
             "scope": "pass",
             "set": 0,
-            "binding": 3,
+            "binding": 8,
             "stage_mask": 2,
             "size": 0,
         },
@@ -1092,7 +1235,7 @@ def test_termin_shaderc_rejects_split_slang_texture_resources_for_vulkan(tmp_pat
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
-def test_termin_shaderc_falls_back_to_slang_sampler2d_register_resource_layout(tmp_path: Path) -> None:
+def test_termin_shaderc_normalizes_slang_sampler2d_register_resource_layout(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
         "Sampler2D albedo_texture : register(t7, space2);\n"
@@ -1131,8 +1274,8 @@ def test_termin_shaderc_falls_back_to_slang_sampler2d_register_resource_layout(t
             "name": "albedo_texture",
             "kind": "texture",
             "scope": "material",
-            "set": 2,
-            "binding": 7,
+            "set": 0,
+            "binding": 4,
             "stage_mask": 2,
             "size": 0,
         },
@@ -1172,7 +1315,7 @@ def test_termin_shaderc_invokes_fake_slangc_for_opengl(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
-def test_termin_shaderc_patches_opengl_slang_constant_buffer_bindings(tmp_path: Path) -> None:
+def test_termin_shaderc_preserves_opengl_slang_constant_buffer_bindings(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
         "struct PerFrame { float4x4 view_projection; };\n"
@@ -1224,8 +1367,6 @@ def test_termin_shaderc_patches_opengl_slang_constant_buffer_bindings(tmp_path: 
         "slang",
         "--target",
         "opengl",
-        "--layout-scheme",
-        "legacy-engine",
         "--stage",
         "vertex",
         "--entry",
@@ -1240,17 +1381,17 @@ def test_termin_shaderc_patches_opengl_slang_constant_buffer_bindings(tmp_path: 
 
     assert result.returncode == 0, result.stderr
     glsl = output.read_text(encoding="utf-8")
-    assert "layout(binding = 2)\nlayout(std140) uniform block_PerFrame_0" in glsl
-    assert "layout(binding = 24)\nlayout(std140) uniform block_DrawData_0" in glsl
+    assert "layout(binding = 0)\nlayout(std140) uniform block_PerFrame_0" in glsl
+    assert "layout(binding = 1)\nlayout(std140) uniform block_DrawData_0" in glsl
     layout = json.loads((tmp_path / "out.vert.glsl.layout.json").read_text(encoding="utf-8"))
     assert [(r["name"], r["binding"]) for r in layout["resources"]] == [
         ("per_frame", 2),
-        ("draw_data", TC_SHADER_RESOURCE_BINDING_DRAW_DATA),
+        ("draw_data", 24),
     ]
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
-def test_termin_shaderc_patches_opengl_slang_material_texture_bindings(tmp_path: Path) -> None:
+def test_termin_shaderc_preserves_opengl_slang_material_texture_bindings(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
         "struct MaterialParams { float4 color; };\n"
@@ -1300,8 +1441,6 @@ def test_termin_shaderc_patches_opengl_slang_material_texture_bindings(tmp_path:
         "slang",
         "--target",
         "opengl",
-        "--layout-scheme",
-        "legacy-engine",
         "--stage",
         "fragment",
         "--entry",
@@ -1316,8 +1455,8 @@ def test_termin_shaderc_patches_opengl_slang_material_texture_bindings(tmp_path:
 
     assert result.returncode == 0, result.stderr
     glsl = output.read_text(encoding="utf-8")
-    assert "layout(binding = 1)\nlayout(std140) uniform block_MaterialParams_0" in glsl
-    assert "layout(binding = 4) uniform sampler2D albedo_texture_0" in glsl
+    assert "layout(binding = 0)\nlayout(std140) uniform block_MaterialParams_0" in glsl
+    assert "layout(binding = 1) uniform sampler2D albedo_texture_0" in glsl
     layout = json.loads((tmp_path / "out.frag.glsl.layout.json").read_text(encoding="utf-8"))
     assert [(r["name"], r["binding"]) for r in layout["resources"]] == [
         ("material", 1),
@@ -1381,7 +1520,7 @@ def test_termin_shaderc_filters_inactive_opengl_slang_reflection_resources(tmp_p
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
-def test_termin_shaderc_patches_imported_opengl_slang_constant_buffer_by_instance(tmp_path: Path) -> None:
+def test_termin_shaderc_preserves_imported_opengl_slang_constant_buffer_by_instance(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
         "import termin_lighting;\n"
@@ -1420,8 +1559,6 @@ def test_termin_shaderc_patches_imported_opengl_slang_constant_buffer_by_instanc
         "slang",
         "--target",
         "opengl",
-        "--layout-scheme",
-        "legacy-engine",
         "--stage",
         "fragment",
         "--entry",
@@ -1436,7 +1573,7 @@ def test_termin_shaderc_patches_imported_opengl_slang_constant_buffer_by_instanc
 
     assert result.returncode == 0, result.stderr
     glsl = output.read_text(encoding="utf-8")
-    assert "layout(binding = 0)\nlayout(std140) uniform block_LightingBlock_0" in glsl
+    assert "layout(binding = 6)\nlayout(std140) uniform block_LightingBlock_0" in glsl
     layout = json.loads((tmp_path / "out.frag.glsl.layout.json").read_text(encoding="utf-8"))
     assert [(r["name"], r["binding"]) for r in layout["resources"]] == [("lighting", 0)]
 
@@ -1493,7 +1630,7 @@ def test_termin_shaderc_legalizes_opengl_slang_instance_index_builtin(tmp_path: 
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
-def test_termin_shaderc_patches_opengl_slang_storage_buffer_bindings(tmp_path: Path) -> None:
+def test_termin_shaderc_preserves_opengl_slang_storage_buffer_bindings(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
         "struct InstanceData { float3 position; };\n"
@@ -1536,8 +1673,6 @@ def test_termin_shaderc_patches_opengl_slang_storage_buffer_bindings(tmp_path: P
         "slang",
         "--target",
         "opengl",
-        "--layout-scheme",
-        "legacy-engine",
         "--stage",
         "vertex",
         "--entry",
@@ -1552,7 +1687,7 @@ def test_termin_shaderc_patches_opengl_slang_storage_buffer_bindings(tmp_path: P
 
     assert result.returncode == 0, result.stderr
     glsl = output.read_text(encoding="utf-8")
-    assert "layout(std430, binding = 25) readonly buffer" in glsl
+    assert "layout(std430, binding = 2) readonly buffer" in glsl
     layout = json.loads((tmp_path / "out.vert.glsl.layout.json").read_text(encoding="utf-8"))
     assert [(r["name"], r["binding"]) for r in layout["resources"]] == [
         ("foliage_instances", 25),

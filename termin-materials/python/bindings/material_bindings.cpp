@@ -8,6 +8,7 @@
 #include "tgfx/render_state.hpp"
 #include <tgfx/tgfx_shader_handle.hpp>
 #include <tcbase/tc_log.hpp>
+#include <initializer_list>
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
 #include <tgfx/resources/tc_material_registry.h>
@@ -18,6 +19,45 @@ namespace termin {
 namespace nb = nanobind;
 
 namespace {
+
+constexpr uint32_t GLSL_MATERIAL_BINDING = 1;
+constexpr uint32_t GLSL_PER_FRAME_BINDING = 2;
+constexpr uint32_t GLSL_DRAW_DATA_BINDING = 24;
+constexpr uint32_t GLSL_MATERIAL_TEXTURE_BINDING_BASE = 4;
+constexpr uint32_t STAGE_ALL_GRAPHICS =
+    TC_SHADER_STAGE_VERTEX | TC_SHADER_STAGE_FRAGMENT | TC_SHADER_STAGE_GEOMETRY;
+
+bool source_contains_any(
+    const std::string& source,
+    std::initializer_list<const char*> tokens)
+{
+    for (const char* token : tokens) {
+        if (source.find(token) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+ShaderPhase infer_raw_glsl_resource_phase(
+    const std::string& vertex_source,
+    const std::string& fragment_source,
+    const std::string& geometry_source)
+{
+    ShaderPhase shader_phase;
+    const bool uses_per_frame =
+        source_contains_any(vertex_source, {"uniform PerFrame", "ConstantBuffer<PerFrame>", "u_per_frame"}) ||
+        source_contains_any(fragment_source, {"uniform PerFrame", "ConstantBuffer<PerFrame>", "u_per_frame"}) ||
+        source_contains_any(geometry_source, {"uniform PerFrame", "ConstantBuffer<PerFrame>", "u_per_frame"});
+    const bool uses_draw_data =
+        source_contains_any(vertex_source, {"uniform DrawData", "ConstantBuffer<DrawData>", "draw_data"}) ||
+        source_contains_any(fragment_source, {"uniform DrawData", "ConstantBuffer<DrawData>", "draw_data"}) ||
+        source_contains_any(geometry_source, {"uniform DrawData", "ConstantBuffer<DrawData>", "draw_data"});
+
+    shader_phase.uses_engine_per_frame = uses_per_frame;
+    shader_phase.uses_engine_draw_data = uses_draw_data;
+    return shader_phase;
+}
 
 TcTexture require_tc_texture(nb::object value, const std::string& context) {
     if (nb::isinstance<TcTexture>(value)) {
@@ -69,6 +109,99 @@ void put_uniform_value(nb::dict& result, const std::string& name, tc_uniform_val
         default:
             break;
     }
+}
+
+void append_resource_binding(
+    std::vector<tc_shader_resource_binding>& bindings,
+    const std::string& name,
+    uint32_t kind,
+    uint32_t scope,
+    uint32_t binding_index,
+    uint32_t size = 0)
+{
+    tc_shader_resource_binding binding{};
+    std::strncpy(binding.name, name.c_str(), TC_SHADER_RESOURCE_NAME_MAX - 1);
+    binding.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+    binding.kind = kind;
+    binding.scope = scope;
+    binding.set = TC_SHADER_RESOURCE_SET_DEFAULT;
+    binding.binding = binding_index;
+    binding.stage_mask = STAGE_ALL_GRAPHICS;
+    binding.size = size;
+    bindings.push_back(binding);
+}
+
+void apply_parser_resource_layout(
+    tc_shader* shader,
+    const ShaderPhase& shader_phase,
+    const MaterialUboLayout& layout,
+    tc_shader_language language)
+{
+    std::vector<tc_shader_resource_binding> bindings;
+    if (language == TC_SHADER_LANGUAGE_GLSL && !layout.empty()) {
+        std::vector<tc_material_ubo_entry> entries;
+        entries.reserve(layout.entries.size());
+        for (const auto& src : layout.entries) {
+            tc_material_ubo_entry entry{};
+            std::strncpy(entry.name, src.name.c_str(), TC_MATERIAL_UBO_NAME_MAX - 1);
+            entry.name[TC_MATERIAL_UBO_NAME_MAX - 1] = '\0';
+            std::strncpy(
+                entry.property_type,
+                src.property_type.c_str(),
+                TC_MATERIAL_UBO_TYPE_MAX - 1);
+            entry.property_type[TC_MATERIAL_UBO_TYPE_MAX - 1] = '\0';
+            entry.offset = src.offset;
+            entry.size = src.size;
+            entries.push_back(entry);
+        }
+        tc_shader_set_material_ubo_layout(
+            shader,
+            entries.data(),
+            static_cast<uint32_t>(entries.size()),
+            layout.block_size);
+        append_resource_binding(
+            bindings,
+            TC_SHADER_RESOURCE_MATERIAL,
+            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+            TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+            GLSL_MATERIAL_BINDING,
+            layout.block_size);
+    } else {
+        tc_shader_set_material_ubo_layout(shader, nullptr, 0, 0);
+    }
+
+    if (language == TC_SHADER_LANGUAGE_GLSL) {
+        if (shader_phase.uses_engine_per_frame) {
+            append_resource_binding(
+                bindings,
+                TC_SHADER_RESOURCE_PER_FRAME,
+                TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+                TC_SHADER_RESOURCE_SCOPE_FRAME,
+                GLSL_PER_FRAME_BINDING);
+        }
+        if (shader_phase.uses_engine_draw_data) {
+            append_resource_binding(
+                bindings,
+                TC_SHADER_RESOURCE_DRAW,
+                TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+                TC_SHADER_RESOURCE_SCOPE_DRAW,
+                GLSL_DRAW_DATA_BINDING,
+                64);
+        }
+        for (size_t i = 0; i < shader_phase.material_texture_resources.size(); ++i) {
+            append_resource_binding(
+                bindings,
+                shader_phase.material_texture_resources[i],
+                TC_SHADER_RESOURCE_TEXTURE,
+                TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+                GLSL_MATERIAL_TEXTURE_BINDING_BASE + static_cast<uint32_t>(i));
+        }
+    }
+
+    tc_shader_set_resource_layout(
+        shader,
+        bindings.empty() ? nullptr : bindings.data(),
+        static_cast<uint32_t>(bindings.size()));
 }
 
 } // namespace
@@ -174,33 +307,11 @@ TcMaterial create_material_from_parsed(
         }
 
         const MaterialUboLayout& layout = shader_phase.material_ubo_layout;
-        if (language == TC_SHADER_LANGUAGE_GLSL && !layout.empty()) {
-            std::vector<tc_material_ubo_entry> entries;
-            entries.reserve(layout.entries.size());
-            for (const auto& src : layout.entries) {
-                tc_material_ubo_entry entry{};
-                std::strncpy(entry.name, src.name.c_str(), TC_MATERIAL_UBO_NAME_MAX - 1);
-                entry.name[TC_MATERIAL_UBO_NAME_MAX - 1] = '\0';
-                std::strncpy(
-                    entry.property_type,
-                    src.property_type.c_str(),
-                    TC_MATERIAL_UBO_TYPE_MAX - 1);
-                entry.property_type[TC_MATERIAL_UBO_TYPE_MAX - 1] = '\0';
-                entry.offset = src.offset;
-                entry.size = src.size;
-                entries.push_back(entry);
-            }
-            tc_shader_set_material_ubo_layout(
-                tc_shader_get(phase->shader),
-                entries.data(),
-                static_cast<uint32_t>(entries.size()),
-                layout.block_size);
-        } else {
-            // Migrated Slang shaders derive the material parameter layout from
-            // shaderc sidecar field metadata. Keep the parser-authored layout
-            // only for legacy GLSL, and clear stale data after reloads.
-            tc_shader_set_material_ubo_layout(tc_shader_get(phase->shader), nullptr, 0, 0);
-        }
+        apply_parser_resource_layout(
+            tc_shader_get(phase->shader),
+            shader_phase,
+            layout,
+            language);
 
         std::vector<MaterialProperty> shader_uniforms = shader_phase.uniforms;
         shader_uniforms.insert(
@@ -693,7 +804,7 @@ void bind_tc_material(nb::module_& m) {
                     : geometry_source;
                 gs_ptr = gs.c_str();
             }
-            return self.add_phase_from_sources(
+            tc_material_phase* phase = self.add_phase_from_sources(
                 vs.c_str(),
                 fs.c_str(),
                 gs_ptr,
@@ -704,6 +815,16 @@ void bind_tc_material(nb::module_& m) {
                 shader_uuid.empty() ? nullptr : shader_uuid.c_str(),
                 shader_language
             );
+
+            if (phase && shader_language == TC_SHADER_LANGUAGE_GLSL) {
+                ShaderPhase raw_phase = infer_raw_glsl_resource_phase(vs, fs, gs);
+                apply_parser_resource_layout(
+                    tc_shader_get(phase->shader),
+                    raw_phase,
+                    MaterialUboLayout{},
+                    shader_language);
+            }
+            return phase;
         }, nb::arg("vertex_source"), nb::arg("fragment_source"),
            nb::arg("geometry_source") = "", nb::arg("shader_name") = "",
            nb::arg("phase_mark") = "opaque", nb::arg("priority") = 0,

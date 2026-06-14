@@ -13,6 +13,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 extern "C" {
 #include "tgfx/resources/tc_shader_registry.h"
@@ -102,6 +103,148 @@ bool should_log_material_vertex_variant_error(
 
 const char* material_vertex_variant_context(const MaterialVertexVariantRequest& request) {
     return request.debug_context ? request.debug_context : "MaterialVertexVariant";
+}
+
+bool same_shader_resource_identity(
+    const tc_shader_resource_binding& a,
+    const tc_shader_resource_binding& b)
+{
+    return std::strncmp(a.name, b.name, TC_SHADER_RESOURCE_NAME_MAX) == 0 &&
+           a.kind == b.kind &&
+           a.scope == b.scope &&
+           a.set == b.set &&
+           a.binding == b.binding;
+}
+
+void merge_seed_resource_binding(
+    std::vector<tc_shader_resource_binding>& bindings,
+    const tc_shader_resource_binding& incoming,
+    const char* context)
+{
+    for (tc_shader_resource_binding& existing : bindings) {
+        if (same_shader_resource_identity(existing, incoming)) {
+            existing.stage_mask |= incoming.stage_mask;
+            if (incoming.size > existing.size) {
+                existing.size = incoming.size;
+            }
+            return;
+        }
+        if (existing.set == incoming.set && existing.binding == incoming.binding &&
+            (std::strncmp(existing.name, incoming.name, TC_SHADER_RESOURCE_NAME_MAX) != 0 ||
+             existing.kind != incoming.kind ||
+             existing.scope != incoming.scope)) {
+            tc::Log::error(
+                "[%s] material vertex variant seed has conflicting resources at set=%u binding=%u: "
+                "'%s' kind=%u scope=%u vs '%s' kind=%u scope=%u",
+                context,
+                incoming.set,
+                incoming.binding,
+                existing.name,
+                existing.kind,
+                existing.scope,
+                incoming.name,
+                incoming.kind,
+                incoming.scope);
+            return;
+        }
+    }
+    bindings.push_back(incoming);
+}
+
+void append_seed_resource_binding(
+    std::vector<tc_shader_resource_binding>& bindings,
+    const char* name,
+    uint32_t kind,
+    uint32_t scope,
+    uint32_t binding,
+    uint32_t stage_mask,
+    uint32_t size,
+    const char* context)
+{
+    tc_shader_resource_binding resource{};
+    std::strncpy(resource.name, name, TC_SHADER_RESOURCE_NAME_MAX - 1);
+    resource.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+    resource.kind = kind;
+    resource.scope = scope;
+    resource.set = TC_SHADER_RESOURCE_SET_DEFAULT;
+    resource.binding = binding;
+    resource.stage_mask = stage_mask;
+    resource.size = size;
+    merge_seed_resource_binding(bindings, resource, context);
+}
+
+void seed_material_vertex_variant_resource_layout(
+    tc_shader* variant,
+    const tc_shader* original,
+    const MaterialVertexVariantRequest& request)
+{
+    if (!variant) {
+        return;
+    }
+
+    const char* context = material_vertex_variant_context(request);
+    std::vector<tc_shader_resource_binding> bindings;
+    if (original) {
+        const tc_shader_resource_binding* original_bindings = tc_shader_resource_bindings(original);
+        const uint32_t original_count = tc_shader_resource_binding_count(original);
+        bindings.reserve(original_count + 4u);
+        for (uint32_t i = 0; i < original_count; ++i) {
+            merge_seed_resource_binding(bindings, original_bindings[i], context);
+        }
+    }
+
+    switch (request.variant_op) {
+    case TC_SHADER_VARIANT_SKINNING:
+        append_seed_resource_binding(
+            bindings,
+            "bone_block",
+            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+            TC_SHADER_RESOURCE_SCOPE_DRAW,
+            16u,
+            TC_SHADER_STAGE_VERTEX,
+            0u,
+            context);
+        break;
+    case TC_SHADER_VARIANT_FOLIAGE:
+    case TC_SHADER_VARIANT_FOLIAGE_SHADOW:
+        append_seed_resource_binding(
+            bindings,
+            TC_SHADER_RESOURCE_PER_FRAME,
+            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+            TC_SHADER_RESOURCE_SCOPE_FRAME,
+            2u,
+            TC_SHADER_STAGE_VERTEX,
+            0u,
+            context);
+        append_seed_resource_binding(
+            bindings,
+            "foliage_draw",
+            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+            TC_SHADER_RESOURCE_SCOPE_DRAW,
+            24u,
+            TC_SHADER_STAGE_VERTEX,
+            128u,
+            context);
+        append_seed_resource_binding(
+            bindings,
+            "foliage_instances",
+            TC_SHADER_RESOURCE_STORAGE_BUFFER,
+            TC_SHADER_RESOURCE_SCOPE_DRAW,
+            25u,
+            TC_SHADER_STAGE_VERTEX,
+            0u,
+            context);
+        break;
+    default:
+        break;
+    }
+
+    if (!bindings.empty()) {
+        tc_shader_set_resource_layout(
+            variant,
+            bindings.data(),
+            static_cast<uint32_t>(bindings.size()));
+    }
 }
 
 } // namespace
@@ -263,6 +406,7 @@ TcShader get_material_vertex_variant(const MaterialVertexVariantRequest& request
         // shaderc sidecar reflection. Parser-authored legacy material UBO
         // entries would create a second source of truth.
         tc_shader_set_material_ubo_layout(variant_raw, nullptr, 0, 0);
+        seed_material_vertex_variant_resource_layout(variant_raw, original_raw, request);
     }
 
     variant.set_variant_info(original_shader, request.variant_op);
@@ -366,8 +510,7 @@ bool prepare_material_pipeline_resources(
     tgfx::IRenderDevice& device,
     const tc_shader* shader,
     tc_material_phase* phase,
-    const MaterialPipelineResourceContext& resources,
-    const MaterialPipelineFallbackBindings& fallback)
+    const MaterialPipelineResourceContext& resources)
 {
     if (!shader) {
         return false;
@@ -393,8 +536,7 @@ bool prepare_material_pipeline_resources(
             ctx,
             shader,
             resources.shadow_block,
-            resources.shadow_block_size,
-            fallback.shadow_block);
+            resources.shadow_block_size);
     }
 
     if (resources.lighting_ubo &&
@@ -402,15 +544,13 @@ bool prepare_material_pipeline_resources(
         bound_any |= bind_lighting_ubo_for_shader(
             ctx,
             shader,
-            resources.lighting_ubo,
-            fallback.lighting_ubo);
+            resources.lighting_ubo);
     }
 
     if (phase) {
         bound_any |= apply_material_phase_ubo(
             phase,
             shader,
-            fallback.material_ubo,
             device,
             ctx);
     }
@@ -421,8 +561,7 @@ bool prepare_material_pipeline_resources(
             shader,
             resources.shadow_maps,
             resources.shadow_sampler,
-            fallback.shadow_map_base,
-            fallback.max_shadow_maps);
+            resources.max_shadow_maps);
     }
 
     return bound_any;

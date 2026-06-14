@@ -189,6 +189,23 @@ TEST_CASE("tc_shader records language and artifact policy") {
     CHECK(tc_shader_get_language(variant_shader) == TC_SHADER_LANGUAGE_SLANG);
     CHECK(tc_shader_get_artifact_policy(variant_shader) == TC_SHADER_ARTIFACT_REQUIRED);
 
+    tc_shader_handle required_variant = tc_shader_from_sources_ex(
+        vs,
+        fs,
+        nullptr,
+        "required_variant_metadata_test",
+        nullptr,
+        "shader-metadata-required-variant",
+        TC_SHADER_LANGUAGE_SLANG,
+        TC_SHADER_ARTIFACT_REQUIRED);
+    CHECK(!tc_shader_handle_is_invalid(required_variant));
+    tc_shader* required_variant_shader = tc_shader_get(required_variant);
+    REQUIRE(required_variant_shader != nullptr);
+    tc_shader_set_variant_info(required_variant_shader, legacy, TC_SHADER_VARIANT_FOLIAGE);
+    CHECK(tc_shader_get_language(required_variant_shader) == TC_SHADER_LANGUAGE_GLSL);
+    CHECK(tc_shader_get_artifact_policy(required_variant_shader) == TC_SHADER_ARTIFACT_REQUIRED);
+
+    tc_shader_destroy(required_variant);
     tc_shader_destroy(variant);
     tc_shader_destroy(slang);
     tc_shader_destroy(legacy);

@@ -2457,7 +2457,7 @@
           "name": "MaterialParams",
           "logical_name": "material_params",
           "kind": "constant_buffer",
-          "legacy_binding": 1
+          "binding": 1
         }
       ]
     },

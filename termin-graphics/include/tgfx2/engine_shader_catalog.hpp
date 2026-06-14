@@ -17,7 +17,7 @@ struct EngineShaderResourceBinding {
     const char* name;
     const char* logical_name;
     const char* kind;
-    int legacy_binding;
+    int binding;
 };
 
 struct EngineShaderStageSource {
@@ -27,7 +27,6 @@ struct EngineShaderStageSource {
     const char* language;
     const char* source_resource_path;
     const char* entry_point;
-    const char* fallback_glsl_source;
     const EngineShaderStageIo* inputs;
     std::size_t input_count;
     const EngineShaderStageIo* outputs;

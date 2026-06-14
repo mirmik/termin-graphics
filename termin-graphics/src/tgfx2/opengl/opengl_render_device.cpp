@@ -529,12 +529,16 @@ bool OpenGLRenderDevice::ensure_tc_shader(
     const auto shader_language = static_cast<tc_shader_language>(shader->language);
     const uint32_t pool_index = shader->pool_index;
     const uint32_t version = shader->version;
+    const bool resource_layout_ready =
+        tc_shader_has_resource_layout(shader) ||
+        (!artifacts_required && shader_language == TC_SHADER_LANGUAGE_GLSL);
     auto it = tc_shader_cache_.find(pool_index);
     if (it != tc_shader_cache_.end() &&
         it->second.version == version &&
         it->second.has_vs == has_vs &&
         it->second.fs &&
-        (!has_vs || it->second.vs))
+        (!has_vs || it->second.vs) &&
+        resource_layout_ready)
     {
         if (out_vs) *out_vs = it->second.vs;
         *out_fs = it->second.fs;

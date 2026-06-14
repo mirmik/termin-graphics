@@ -18,6 +18,21 @@ extern "C" {
 
 namespace tgfx {
 
+namespace {
+
+const char* render_context_backend_name(BackendType backend) {
+    switch (backend) {
+        case BackendType::OpenGL: return "opengl";
+        case BackendType::Vulkan: return "vulkan";
+        case BackendType::Metal: return "metal";
+        case BackendType::D3D11: return "d3d11";
+        case BackendType::Null: return "null";
+    }
+    return "unknown";
+}
+
+} // namespace
+
 // ============================================================================
 // Fullscreen quad shader (built-in, minimal)
 // ============================================================================
@@ -962,13 +977,22 @@ void RenderContext2::ensure_fsq_resources() {
     ShaderDesc vs_desc;
     vs_desc.stage = fsq_shader.stage;
     vs_desc.debug_name = std::string(fsq_shader.uuid) + ":vertex";
-    if (device_.backend_type() == BackendType::Vulkan
-        && termin::tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
+    std::vector<uint8_t> shader_artifact;
+    if (!termin::tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
             fsq_shader,
             device_.backend_type(),
-            vs_desc.bytecode)) {
+            shader_artifact)) {
+        tc_log(TC_LOG_ERROR,
+               "RenderContext2: failed to load fullscreen quad shader artifact for backend=%s",
+               render_context_backend_name(device_.backend_type()));
+        return;
+    }
+    if (device_.backend_type() == BackendType::OpenGL) {
+        vs_desc.source.assign(
+            reinterpret_cast<const char*>(shader_artifact.data()),
+            shader_artifact.size());
     } else {
-        vs_desc.source = fsq_shader.fallback_glsl_source;
+        vs_desc.bytecode = std::move(shader_artifact);
     }
     fsq_vs_ = device_.create_shader(vs_desc);
 }
@@ -980,6 +1004,10 @@ ShaderHandle RenderContext2::fsq_vertex_shader() {
 
 void RenderContext2::draw_fullscreen_quad() {
     ensure_fsq_resources();
+    if (!fsq_vs_) {
+        tc_log(TC_LOG_ERROR, "RenderContext2: fullscreen quad vertex shader is not available");
+        return;
+    }
 
     // Set FSQ vertex layout if not already set
     VertexBufferLayout fsq_layout;

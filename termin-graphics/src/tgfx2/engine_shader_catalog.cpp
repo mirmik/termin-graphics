@@ -6,16 +6,6 @@ namespace tgfx {
 
 namespace {
 
-constexpr const char* kFullscreenQuadFallbackGlsl = R"(#version 450 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUV;
-layout(location = 0) out vec2 v_uv;
-void main() {
-    gl_Position = vec4(aPos, 0.0, 1.0);
-    v_uv = aUV;
-}
-)";
-
 constexpr EngineShaderStageIo kFullscreenQuadInputs[] = {
     {"position", "POSITION", 0},
     {"uv", "TEXCOORD0", 1},
@@ -33,7 +23,6 @@ const EngineShaderStageSource kFullscreenQuadVertexShader{
     "slang",
     "builtin_shaders/termin-engine-fsq.vert.slang",
     "vs_main",
-    kFullscreenQuadFallbackGlsl,
     kFullscreenQuadInputs,
     std::size(kFullscreenQuadInputs),
     kFullscreenQuadOutputs,

@@ -272,6 +272,9 @@ void bind_shader_parser(nb::module_& m) {
         // synthesized a MaterialParams block for the phase). Empty
         // layout on raw shaders or system shaders without properties.
         .def_rw("material_ubo_layout", &ShaderPhase::material_ubo_layout)
+        .def_rw("material_texture_resources", &ShaderPhase::material_texture_resources)
+        .def_rw("uses_engine_per_frame", &ShaderPhase::uses_engine_per_frame)
+        .def_rw("uses_engine_draw_data", &ShaderPhase::uses_engine_draw_data)
         .def_rw("mark_settings", &ShaderPhase::mark_settings)
         // Backward compatibility: identity transform
         .def_static("from_tree", [](const ShaderPhase& phase) {

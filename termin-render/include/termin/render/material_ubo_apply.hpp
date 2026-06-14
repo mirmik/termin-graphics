@@ -24,14 +24,6 @@ class RenderContext2;
 
 namespace termin {
 
-// Fallback UBO binding slot for the per-material std140 block.
-// Convention:
-//   slot 1  — per-material (this)
-//   slot 2  — per-frame view/proj data
-//   slot 14 — per-object push constants (TGFX2_PUSH_CONSTANTS_BINDING)
-//   slot 24 — per-draw data (TC_SHADER_RESOURCE_BINDING_DRAW_DATA)
-constexpr uint32_t MATERIAL_UBO_BINDING = 1;
-
 struct MaterialProperty;
 struct MaterialUboLayout;
 
@@ -41,13 +33,6 @@ struct MaterialTextureBinding {
     tgfx::TextureHandle texture;
     tgfx::SamplerHandle sampler;  // may be {} for default sampling
 };
-
-// Resolve the per-material UBO binding from shader resource metadata. The
-// fallback keeps legacy shaders working until every load path populates
-// ShaderResourceLayout from compiled artifacts/reflection.
-uint32_t material_ubo_binding_for_shader(
-    const tc_shader* shader,
-    uint32_t fallback_binding = MATERIAL_UBO_BINDING);
 
 // Pack, upload, and bind one material UBO + its textures.
 //
@@ -72,7 +57,6 @@ void bind_material_ubo(
 bool apply_material_phase_ubo(
     tc_material_phase* phase,
     const tc_shader* shader,
-    uint32_t ubo_slot,
     tgfx::IRenderDevice& device,
     tgfx::RenderContext2& ctx);
 

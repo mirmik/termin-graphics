@@ -19,6 +19,11 @@ namespace termin {
 
 namespace {
 
+constexpr uint32_t GLSL_MATERIAL_BINDING = 1;
+constexpr uint32_t GLSL_PER_FRAME_BINDING = 2;
+constexpr uint32_t GLSL_DRAW_DATA_BINDING = 24;
+constexpr uint32_t GLSL_MATERIAL_TEXTURE_BINDING_BASE = 4;
+
 // Trim whitespace from both ends
 std::string trim(const std::string& s) {
     size_t start = s.find_first_not_of(" \t\r\n");
@@ -235,15 +240,9 @@ std::string synthesize_material_ubo_glsl(const MaterialUboLayout& layout) {
         return nullptr;
     };
 
-    // Binding 1 matches MATERIAL_UBO_BINDING in ColorPass's C++ side —
-    // apply_material_phase_ubo calls bind_uniform_buffer(1, ubo). On
-    // Vulkan the binding is prescribed here and baked into SPIR-V, since
-    // set_block_binding is a GL-only escape hatch that no-ops on Vulkan.
-    // GL 4.3+ accepts the qualifier via core GL_ARB_shading_language_420pack
-    // and glBindBufferBase(GL_UNIFORM_BUFFER, 1, ...) lands on the same
-    // slot without needing glUniformBlockBinding.
     std::ostringstream out;
-    out << "layout(std140, binding = 1) uniform MaterialParams {\n";
+    out << "layout(std140, binding = " << GLSL_MATERIAL_BINDING
+        << ") uniform MaterialParams {\n";
     for (const auto& e : layout.entries) {
         const char* t = glsl_type(e.property_type);
         if (!t) continue;
@@ -390,7 +389,8 @@ std::string ensure_slang_prelude_import(std::string source) {
 
 std::string synthesize_material_sampler_glsl(
     const std::vector<std::string>& texture_names,
-    const std::string& stage_source
+    const std::string& stage_source,
+    std::vector<std::string>* emitted_names = nullptr
 ) {
     if (texture_names.empty()) return "";
 
@@ -400,7 +400,11 @@ std::string synthesize_material_sampler_glsl(
         if (!source_uses_identifier(stage_source, name)) {
             continue;
         }
-        out << "layout(binding = " << material_texture_binding_for_index(static_cast<uint32_t>(i))
+        if (emitted_names &&
+            std::find(emitted_names->begin(), emitted_names->end(), name) == emitted_names->end()) {
+            emitted_names->push_back(name);
+        }
+        out << "layout(binding = " << (GLSL_MATERIAL_TEXTURE_BINDING_BASE + static_cast<uint32_t>(i))
             << ") uniform sampler2D " << name << ";\n";
     }
     return out.str();
@@ -534,17 +538,16 @@ bool stage_uses_material_ubo_layout(
 // Engine uniforms auto-substitution
 // ============================================================================
 //
-// Legacy shaders declare the engine-provided per-frame / per-draw data
+// GLSL shaders can declare engine-provided per-frame / per-draw data
 // as plain `uniform mat4 u_view;` etc. — fine on GL 3.3, but SPIR-V
 // disallows non-opaque uniforms outside a block. Transform the stage
 // source so that:
 //
 //   - `uniform <type> <name>;` decls for known engine names are stripped
-//   - a PerFrame UBO (binding 2, matches ColorPass's per_frame_ubo_) is
-//     injected with view / projection / view_projection / camera_position
-//   - a push_constant block with `u_model` is injected (on Vulkan; on GL
-//     it's a std140 emulation UBO at TGFX2_PUSH_CONSTANTS_BINDING = 14)
-//   - `#define u_model pc.u_model` so stage bodies keep writing
+//   - a PerFrame UBO is injected with view / projection / view_projection /
+//     camera_position
+//   - a draw-scope UBO with `u_model` is injected
+//   - `#define u_model draw_data._u_model` so stage bodies keep writing
 //     `u_model * vec4(pos, 1.0)` without manual rewrite
 //
 // This is the minimal substitution needed to get stdlib materials
@@ -623,21 +626,16 @@ layout(std140, binding = 2) uniform PerFrame {
 )";
 
 // Engine-supplied per-draw block. `u_model` is aliased via `#define` so
-// existing stage bodies keep using the plain identifier and don't need to know
-// about the push_constant indirection. This block is intentionally separate
-// from PerFrame: the macro is only safe when the source actually declared a
-// top-level legacy `uniform mat4 u_model;`.
+// existing stage bodies keep using the plain identifier. This block is
+// intentionally separate from PerFrame: the macro is only safe when the source
+// actually declared a top-level `uniform mat4 u_model;`.
 const char* ENGINE_MODEL_PUSH_BLOCK = R"(
 
 struct ColorPushData {
     mat4 _u_model;
 };
-#ifdef VULKAN
-layout(push_constant) uniform ColorPushBlock { ColorPushData pc; };
-#else
-layout(std140, binding = 14) uniform ColorPushBlock { ColorPushData pc; };
-#endif
-#define u_model pc._u_model
+layout(std140, binding = 24) uniform DrawData { ColorPushData draw_data; };
+#define u_model draw_data._u_model
 )";
 
 struct EngineUniformDeclUsage {
@@ -874,8 +872,9 @@ std::string inject_after_version(const std::string& source, const std::string& b
     // source declares 330" warning and treats legacy (attribute/
     // varying) syntax inconsistently; with it every stage is uniform.
 
-    // The synthesised block uses `layout(std140, binding = 1)` which is
-    // a GL 4.2+ / GL_ARB_shading_language_420pack feature and also the
+    // Synthesized GLSL blocks use parser-owned compact bindings, mirrored
+    // into tc_shader_resource_binding by material/shader asset loaders. This
+    // is a GL 4.2+ / GL_ARB_shading_language_420pack feature and also the
     // baseline for Vulkan GLSL via shaderc. User-authored `.shader`
     // stages often start with `#version 330 core` — safe to upgrade in
     // place since everything we inject is forward-compatible and the
@@ -915,8 +914,8 @@ std::string rewrite_engine_uniforms_for_stage_source(
     // the helper idempotent.
     bool already_rewritten =
         src.find("uniform PerFrame") != std::string::npos ||
-        src.find("uniform ColorPushBlock") != std::string::npos ||
-        src.find("#define u_model pc._u_model") != std::string::npos;
+        src.find("uniform DrawData") != std::string::npos ||
+        src.find("#define u_model draw_data._u_model") != std::string::npos;
     if (already_rewritten) {
         return inject_after_version(src, "");
     }
@@ -1547,7 +1546,7 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
                 }
 
                 // Engine uniforms for Slang: detect u_view / u_model usage
-                // and inject matching PerFrame UBO + push_constant block.
+                // and inject matching PerFrame / draw-data resources.
                 EngineUniformDeclUsage eng_usage =
                     collect_engine_uniform_usage(kv.second.source);
                 std::string eng_slang;
@@ -1609,6 +1608,9 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
         std::vector<std::string> texture_names = collect_texture_properties(shader_uniforms);
         std::string block_glsl;
         std::vector<std::string> ubo_names;
+        phase.material_texture_resources = texture_names;
+        phase.uses_engine_per_frame = false;
+        phase.uses_engine_draw_data = false;
         if (!layout.empty()) {
             block_glsl = synthesize_material_ubo_glsl(layout);
             ubo_names.reserve(layout.entries.size());
@@ -1621,7 +1623,9 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
             std::string& src = kv.second.source;
 
             std::string sampler_glsl =
-                synthesize_material_sampler_glsl(texture_names, src);
+                synthesize_material_sampler_glsl(
+                    texture_names,
+                    src);
             src = strip_sampler_decls(src, texture_names);
 
             // Material UBO: strip @property plain-uniform decls and
@@ -1636,7 +1640,7 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
 
             // Engine uniforms: strip plain decls of u_view / u_projection /
             // u_model / u_view_projection / u_camera_position, then inject the
-            // matching PerFrame UBO and/or push_constant block.
+            // matching PerFrame and/or draw-data UBO blocks.
             //
             // Skip the engine injection entirely when any of the engine
             // names collide with a MaterialParams @property entry — this
@@ -1662,6 +1666,10 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
                 engine_usage = collect_engine_uniform_usage(src);
             }
             if (engine_usage.any()) {
+                phase.uses_engine_per_frame =
+                    phase.uses_engine_per_frame || engine_usage.per_frame;
+                phase.uses_engine_draw_data =
+                    phase.uses_engine_draw_data || engine_usage.model;
                 src = strip_engine_uniform_decls(src);
             }
 

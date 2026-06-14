@@ -2,6 +2,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <string>
 #include <vector>
 
 #include <glad/glad.h>
@@ -10,6 +14,7 @@
 #include <tgfx2/opengl/opengl_render_device.hpp>
 #include <tgfx2/pipeline_cache.hpp>
 #include <tgfx2/render_context.hpp>
+#include <tgfx2/tc_shader_bridge.hpp>
 #include <tgfx2/world_space_line_renderer.hpp>
 
 static int test_count = 0;
@@ -50,6 +55,34 @@ void main() {
     FragColor = vec4(1.0, 0.0, 0.0, 1.0);
 }
 )";
+
+static const char* FSQ_OPENGL_ARTIFACT_SRC = R"(
+#version 330 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aUV;
+out vec2 v_uv;
+void main() {
+    gl_Position = vec4(aPos, 0.0, 1.0);
+    v_uv = aUV;
+}
+)";
+
+static std::filesystem::path make_fsq_artifact_root() {
+    const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+    std::filesystem::path root =
+        std::filesystem::temp_directory_path() /
+        ("termin-render-context2-fsq-" + std::to_string(stamp));
+    std::filesystem::path shader_dir = root / "shaders" / "opengl";
+    std::filesystem::create_directories(shader_dir);
+    std::ofstream out(shader_dir / "termin-engine-fsq.vert.glsl", std::ios::binary);
+    out << FSQ_OPENGL_ARTIFACT_SRC;
+    if (!out) {
+        fprintf(stderr, "Failed to write FSQ OpenGL artifact under %s\n",
+                shader_dir.string().c_str());
+        return {};
+    }
+    return root;
+}
 
 static void test_triangle_draw(tgfx::IRenderDevice& device, tgfx::PipelineCache& cache) {
     printf("\n--- Triangle Draw via RenderContext2 ---\n");
@@ -414,6 +447,14 @@ int main() {
     printf("=== RenderContext2 + PipelineCache test ===\n");
     printf("GL: %s\n", glGetString(GL_RENDERER));
 
+    std::filesystem::path fsq_artifact_root = make_fsq_artifact_root();
+    if (fsq_artifact_root.empty()) {
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return 1;
+    }
+    termin::tgfx2_set_shader_artifact_root(fsq_artifact_root.string().c_str());
+
     // Each test uses its own device+cache to avoid FBO cache conflicts
     // when GL texture IDs are reused after deletion.
     {
@@ -438,6 +479,15 @@ int main() {
     }
 
     printf("\n=== Results: %d/%d passed ===\n", pass_count, test_count);
+
+    termin::tgfx2_set_shader_artifact_root("");
+    std::error_code remove_error;
+    std::filesystem::remove_all(fsq_artifact_root, remove_error);
+    if (remove_error) {
+        fprintf(stderr, "Failed to remove FSQ artifact root %s: %s\n",
+                fsq_artifact_root.string().c_str(),
+                remove_error.message().c_str());
+    }
 
     glfwDestroyWindow(window);
     glfwTerminate();

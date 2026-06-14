@@ -42,13 +42,6 @@ struct MaterialPipelineResourceContext {
     tgfx::BufferHandle lighting_ubo;
     std::span<const tgfx::TextureHandle> shadow_maps;
     tgfx::SamplerHandle shadow_sampler;
-};
-
-struct MaterialPipelineFallbackBindings {
-    uint32_t shadow_block = 0;
-    uint32_t material_ubo = 0;
-    uint32_t lighting_ubo = 0;
-    uint32_t shadow_map_base = 0;
     size_t max_shadow_maps = 0;
 };
 
@@ -95,7 +88,6 @@ bool prepare_material_pipeline_resources(
     tgfx::IRenderDevice& device,
     const tc_shader* shader,
     tc_material_phase* phase,
-    const MaterialPipelineResourceContext& resources,
-    const MaterialPipelineFallbackBindings& fallback);
+    const MaterialPipelineResourceContext& resources);
 
 } // namespace termin

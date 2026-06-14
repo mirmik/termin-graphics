@@ -156,6 +156,39 @@ void bind_shader(nb::module_& m) {
             },
             nb::arg("name"),
             "Return resource layout entry by shader resource name, or None")
+        .def("set_resource_layout",
+            [](TcShader& self,
+               const std::vector<std::tuple<std::string, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t>>& entries
+            ) {
+                tc_shader* shader = self.get();
+                if (!shader) return;
+                if (entries.empty()) {
+                    tc_shader_set_resource_layout(shader, nullptr, 0);
+                    return;
+                }
+                std::vector<tc_shader_resource_binding> bindings;
+                bindings.reserve(entries.size());
+                for (const auto& item : entries) {
+                    tc_shader_resource_binding binding{};
+                    const std::string& name = std::get<0>(item);
+                    std::strncpy(binding.name, name.c_str(), TC_SHADER_RESOURCE_NAME_MAX - 1);
+                    binding.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+                    binding.kind = std::get<1>(item);
+                    binding.scope = std::get<2>(item);
+                    binding.set = std::get<3>(item);
+                    binding.binding = std::get<4>(item);
+                    binding.stage_mask = std::get<5>(item);
+                    binding.size = std::get<6>(item);
+                    bindings.push_back(binding);
+                }
+                tc_shader_set_resource_layout(
+                    shader,
+                    bindings.data(),
+                    static_cast<uint32_t>(bindings.size()));
+            },
+            nb::arg("entries"),
+            "Replace shader resource layout with tuples: "
+            "(name, kind, scope, set, binding, stage_mask, size)")
         .def("has_feature", &TcShader::has_feature, nb::arg("feature"))
         .def("set_feature", &TcShader::set_feature, nb::arg("feature"))
         .def("set_features", &TcShader::set_features, nb::arg("features"))

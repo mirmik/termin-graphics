@@ -1,6 +1,6 @@
 #include "termin/render/frame_uniforms.hpp"
-#include "termin/render/shader_binding_policy.hpp"
 
+#include "tcbase/tc_log.hpp"
 #include "tgfx2/render_context.hpp"
 
 #include <cstring>
@@ -70,32 +70,6 @@ EnginePerFrameStd140 make_engine_per_frame_uniforms(const ExecuteContext& ctx) {
 
 void bind_engine_per_frame_uniforms(
     tgfx::RenderContext2& ctx2,
-    const EnginePerFrameStd140& uniforms)
-{
-    ctx2.bind_uniform_buffer_ring(
-        ENGINE_PER_FRAME_UBO_BINDING,
-        &uniforms,
-        sizeof(uniforms));
-}
-
-void bind_engine_per_frame_uniforms(tgfx::RenderContext2& ctx2, const ExecuteContext& ctx) {
-    EnginePerFrameStd140 uniforms = make_engine_per_frame_uniforms(ctx);
-    bind_engine_per_frame_uniforms(ctx2, uniforms);
-}
-
-uint32_t resolve_per_frame_binding(const tc_shader* shader, uint32_t fallback) {
-    if (!shader) return fallback;
-    const tc_shader_resource_binding* rb =
-        tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_PER_FRAME);
-    if (!rb) {
-        rb = tc_shader_find_resource_binding(shader, "u_per_frame");
-    }
-    if (!rb || rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) return fallback;
-    return rb->binding;
-}
-
-void bind_engine_per_frame_uniforms(
-    tgfx::RenderContext2& ctx2,
     const EnginePerFrameStd140& uniforms,
     const tc_shader* shader)
 {
@@ -108,11 +82,12 @@ void bind_engine_per_frame_uniforms(
         ctx2.bind_uniform_data(rb->name, &uniforms, sizeof(uniforms));
         return;
     }
-    if (shader_uses_layout_only_bindings(shader)) {
+    if (shader && tc_shader_has_resource_layout(shader)) {
         return;
     }
-    uint32_t slot = resolve_per_frame_binding(shader, ENGINE_PER_FRAME_UBO_BINDING);
-    ctx2.bind_uniform_buffer_ring(slot, &uniforms, sizeof(uniforms));
+    tc::Log::error(
+        "[FrameUniforms] shader '%s' has no per_frame constant-buffer resource layout entry",
+        shader && shader->name ? shader->name : "<unnamed>");
 }
 
 } // namespace termin

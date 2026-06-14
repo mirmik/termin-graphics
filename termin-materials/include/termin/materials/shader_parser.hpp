@@ -10,8 +10,6 @@
 #include <stdexcept>
 #include <algorithm>
 
-#include "tgfx/resources/tc_material_binding_slots.hpp"
-
 namespace termin {
 
 /**
@@ -144,6 +142,12 @@ struct ShaderPhase {
     // parser sees scalar/vector @property or plain uniform entries; in that
     // case it rewrites the stage sources to reference the generated block.
     MaterialUboLayout material_ubo_layout;
+
+    // Parser-synthesized GLSL resources that must be mirrored into
+    // tc_shader_resource_binding for bind-by-name runtime code.
+    std::vector<std::string> material_texture_resources;
+    bool uses_engine_per_frame = false;
+    bool uses_engine_draw_data = false;
 
     ShaderPhase() = default;
     ShaderPhase(std::string mark) : phase_mark(std::move(mark)) {
@@ -297,7 +301,7 @@ std::string inject_after_version(const std::string& source, const std::string& b
  * GLSL stage source created through TcMaterial.add_phase_from_sources().
  *
  * This strips plain u_model/u_view/u_projection-style declarations and
- * injects the engine PerFrame block/push-constant bridge when the stage
+ * injects parser-owned PerFrame/DrawData resource blocks when the stage
  * references those names. It also normalizes #version to 450 core.
  */
 std::string rewrite_engine_uniforms_for_stage_source(

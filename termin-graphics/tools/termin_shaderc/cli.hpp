@@ -15,7 +15,6 @@ struct CompileOptions {
     std::string debug_name = "shader";
     std::string slangc;
     std::string matrix_layout = "column";
-    std::string layout_scheme = "per-pipeline";  // shader-owned placement metadata
     std::vector<std::string> include_dirs;
 };
 

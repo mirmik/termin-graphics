@@ -2,7 +2,6 @@
 
 #include <shaderc/shaderc.hpp>
 #include <tcbase/trent/json.h>
-#include <tgfx/resources/tc_material_binding_slots.hpp>
 #include <tgfx/resources/tc_shader.h>
 
 #include <cstdlib>
@@ -27,12 +26,6 @@ namespace {
 
 using termin_shaderc::CompileOptions;
 
-enum class SlangLayoutScheme {
-    PerPipeline,
-    LegacyEngine,
-    Shared,
-};
-
 struct ShaderResourceBinding {
     std::string name;
     std::string kind;
@@ -46,9 +39,6 @@ struct ShaderResourceBinding {
     bool slang_split_texture = false;
     bool slang_separate_sampler = false;
     bool slang_storage_texture = false;
-    uint32_t original_set = 0;
-    uint32_t original_binding = 0;
-    bool original_placement_set = false;
     // Field-level layout for constant_buffers (populated from Slang reflection).
     struct Field {
         std::string name;
@@ -79,21 +69,6 @@ static std::optional<std::string> slang_matrix_layout_arg(const std::string& lay
     }
     if (layout == "row" || layout == "row-major") {
         return "-matrix-layout-row-major";
-    }
-    return std::nullopt;
-}
-
-static std::optional<SlangLayoutScheme> parse_slang_layout_scheme(
-    const std::string& scheme
-) {
-    if (scheme == "per-pipeline") {
-        return SlangLayoutScheme::PerPipeline;
-    }
-    if (scheme == "legacy-engine" || scheme == "engine-legacy") {
-        return SlangLayoutScheme::LegacyEngine;
-    }
-    if (scheme == "shared") {
-        return SlangLayoutScheme::Shared;
     }
     return std::nullopt;
 }
@@ -215,10 +190,13 @@ static std::string infer_resource_scope(
         return "pass";
     }
     if (kind == "texture" || kind == "storage_texture" || kind == "sampler") {
-        if (name == "u_input" || name == "u_texture" ||
+        if (name == "u_input" || name == "u_input_tex" ||
+            name == "u_texture" ||
             name == "u_original" || name == "u_bloom" ||
             name == "u_color" || name == "u_id" ||
-            name == "u_depth_tex" || name == "u_color_tex" ||
+            name == "u_depth_tex" || name == "u_depth_texture" ||
+            name == "u_color_tex" ||
+            name == "u_fov" ||
             name == "u_tex") {
             return "transient";
         }
@@ -249,15 +227,86 @@ static void assign_missing_resource_scopes(
     }
 }
 
+static bool has_resource_named(
+    const std::vector<ShaderResourceBinding>& resources,
+    const char* name)
+{
+    return std::any_of(
+        resources.begin(),
+        resources.end(),
+        [name](const ShaderResourceBinding& resource) {
+            return resource.name == name;
+        });
+}
+
+static void apply_framebuffer_input_scope_hints(
+    std::vector<ShaderResourceBinding>& resources
+) {
+    const bool looks_like_framebuffer_pass =
+        (has_resource_named(resources, "u_input_tex") ||
+         has_resource_named(resources, "u_input")) &&
+        (has_resource_named(resources, "u_depth_texture") ||
+         has_resource_named(resources, "u_depth_tex"));
+    if (!looks_like_framebuffer_pass) {
+        return;
+    }
+
+    for (ShaderResourceBinding& resource : resources) {
+        if (resource.kind != "texture" && resource.kind != "storage_texture" &&
+            resource.kind != "sampler") {
+            continue;
+        }
+        if (resource.name == "u_input_tex" || resource.name == "u_input" ||
+            resource.name == "u_depth_texture" || resource.name == "u_depth_tex" ||
+            resource.name == "u_normal_texture" || resource.name == "u_fov") {
+            resource.scope = "transient";
+        }
+    }
+}
+
+static void normalize_scope_first_binding_slots(
+    std::vector<ShaderResourceBinding>& resources
+) {
+    uint32_t next_material_texture_binding = 4;
+    for (ShaderResourceBinding& resource : resources) {
+        resource.set = 0;
+        if (resource.kind == "constant_buffer" || resource.kind == "uniform_buffer") {
+            if (resource.scope == "frame" &&
+                (resource.name == "per_frame" || resource.name == "u_per_frame")) {
+                resource.binding = 2;
+            } else if (resource.scope == "pass" && resource.name == "lighting") {
+                resource.binding = 0;
+            } else if (resource.scope == "pass" && resource.name == "shadow_block") {
+                resource.binding = 3;
+            } else if (resource.scope == "material" && resource.name == "material") {
+                resource.binding = 1;
+            } else if (resource.scope == "draw" &&
+                       (resource.name == "bone_block" ||
+                        resource.name == "BoneBlock")) {
+                resource.binding = 16;
+            } else if (resource.scope == "draw") {
+                resource.binding = 24;
+            }
+        } else if (resource.kind == "texture" && resource.scope == "pass" &&
+                   (resource.name == "shadow_maps" ||
+                    resource.name == "u_shadow_map" ||
+                    resource.name == "u_shadow_maps")) {
+            resource.binding = 8;
+        } else if (resource.kind == "texture" && resource.scope == "material") {
+            if (next_material_texture_binding == 8) {
+                ++next_material_texture_binding;
+            }
+            resource.binding = next_material_texture_binding++;
+        } else if (resource.kind == "storage_buffer" && resource.scope == "draw") {
+            resource.binding = 25;
+        }
+    }
+}
+
 static void append_unique_resource(
     std::vector<ShaderResourceBinding>& resources,
     ShaderResourceBinding binding
 ) {
-    if (!binding.original_placement_set) {
-        binding.original_set = binding.set;
-        binding.original_binding = binding.binding;
-        binding.original_placement_set = true;
-    }
     for (ShaderResourceBinding& existing : resources) {
         if (existing.name == binding.name) {
             existing.kind = binding.kind;
@@ -684,10 +733,6 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings_from_slang_ref
                 binding.set)) {
             continue;
         }
-        binding.original_set = binding.set;
-        binding.original_binding = binding.binding;
-        binding.original_placement_set = true;
-
         if (!slang_resource_kind_from_parameter(
                 parameter,
                 binding_kind,
@@ -844,6 +889,8 @@ static bool collect_resource_bindings(
         resources = infer_resource_bindings(source, options);
     }
     assign_missing_resource_scopes(resources);
+    apply_framebuffer_input_scope_hints(resources);
+    normalize_scope_first_binding_slots(resources);
     if (options.language == "slang" && options.target == "vulkan") {
         for (const ShaderResourceBinding& resource : resources) {
             if (resource.slang_split_texture || resource.slang_separate_sampler) {
@@ -977,76 +1024,6 @@ static bool write_resource_layout_sidecar(
     return write_resource_layout_sidecar(options, resources);
 }
 
-static bool apply_slang_vulkan_shared_layout_policy(
-    std::vector<ShaderResourceBinding>& resources
-) {
-    // Legacy compatibility policy: flatten reflected Slang resources to set 0.
-    // The active migration target is scope-first metadata; this path exists
-    // only for old shared-layout artifacts/tests.
-    for (ShaderResourceBinding& resource : resources) {
-        resource.set = 0;
-    }
-    return true;
-}
-
-static bool apply_slang_legacy_engine_layout_policy(
-    std::vector<ShaderResourceBinding>& resources
-) {
-    uint32_t material_texture_index = 0;
-    for (ShaderResourceBinding& resource : resources) {
-        if (resource.scope == "frame" && resource.kind == "constant_buffer") {
-            resource.set = 0;
-            resource.binding = TC_SHADER_RESOURCE_BINDING_PER_FRAME;
-        } else if (resource.scope == "material") {
-            if (resource.kind == "constant_buffer" &&
-                resource.name == "material") {
-                resource.set = 0;
-                resource.binding = TC_SHADER_RESOURCE_BINDING_MATERIAL;
-            } else if ((resource.kind == "texture" ||
-                        resource.kind == "storage_texture" ||
-                        resource.kind == "sampler") &&
-                       resource.original_set == 0) {
-                resource.set = 0;
-                resource.binding =
-                    termin::material_texture_binding_for_index(material_texture_index);
-                ++material_texture_index;
-            }
-        } else if (resource.scope == "draw" &&
-                   resource.kind == "constant_buffer") {
-            resource.set = 0;
-            if (resource.name == TC_SHADER_RESOURCE_BONE_BLOCK ||
-                resource.name == "BoneBlock") {
-                resource.binding = TC_SHADER_RESOURCE_BINDING_BONE_BLOCK;
-            } else {
-                resource.binding = TC_SHADER_RESOURCE_BINDING_DRAW_DATA;
-            }
-        } else if (resource.scope == "draw" &&
-                   resource.kind == "storage_buffer") {
-            resource.set = 0;
-            resource.binding = TC_SHADER_RESOURCE_BINDING_DRAW_STORAGE;
-        } else if (resource.scope == "pass") {
-            if (resource.kind == "constant_buffer" &&
-                (resource.name == "lighting" ||
-                 resource.name == "lighting_ubo" ||
-                 resource.name == "LightingBlock")) {
-                resource.set = 0;
-                resource.binding = TC_SHADER_RESOURCE_BINDING_LIGHTING;
-            } else if (resource.kind == "constant_buffer" &&
-                       (resource.name == "shadow_block" ||
-                        resource.name == "ShadowBlock")) {
-                resource.set = 0;
-                resource.binding = TC_SHADER_RESOURCE_BINDING_SHADOW_BLOCK;
-            } else if (resource.kind == "texture" &&
-                       (resource.name == "shadow_maps" ||
-                        resource.name == "u_shadow_map")) {
-                resource.set = 0;
-                resource.binding = TC_SHADER_RESOURCE_BINDING_SHADOW_MAPS;
-            }
-        }
-    }
-    return true;
-}
-
 static void annotate_slang_glsl_symbols(
     std::vector<ShaderResourceBinding>& resources,
     const std::string& source
@@ -1120,22 +1097,6 @@ static bool replace_all_literal(
     return changed;
 }
 
-static bool replace_first_two_group_regex(
-    std::string& text,
-    const std::regex& pattern,
-    const std::string& middle
-) {
-    std::smatch match;
-    if (!std::regex_search(text, match, pattern) || match.size() != 3) {
-        return false;
-    }
-    text.replace(
-        static_cast<size_t>(match.position(0)),
-        static_cast<size_t>(match.length(0)),
-        match[1].str() + middle + match[2].str());
-    return true;
-}
-
 static bool write_text_file(
     const std::string& path,
     const std::string& text
@@ -1177,105 +1138,6 @@ static bool legalize_slang_opengl_glsl_builtins(
     return write_text_file(options.output, glsl);
 }
 
-static bool patch_slang_opengl_glsl_bindings(
-    const CompileOptions& options,
-    const std::vector<ShaderResourceBinding>& resources
-) {
-    bool needs_patch = false;
-    for (const ShaderResourceBinding& resource : resources) {
-        if (resource.set != resource.original_set ||
-            resource.binding != resource.original_binding) {
-            needs_patch = true;
-            break;
-        }
-    }
-    if (!needs_patch) {
-        return true;
-    }
-
-    std::string glsl;
-    if (!read_file(options.output, glsl)) {
-        return false;
-    }
-
-    for (const ShaderResourceBinding& resource : resources) {
-        if (resource.set == resource.original_set &&
-            resource.binding == resource.original_binding) {
-            continue;
-        }
-        if (resource.original_set != 0 || resource.set != 0) {
-            std::cerr
-                << "termin_shaderc: OpenGL GLSL binding patch only supports set 0 for '"
-                << resource.name << "' (original set=" << resource.original_set
-                << ", new set=" << resource.set << ")\n";
-            return false;
-        }
-        if (resource.slang_glsl_symbol.empty()) {
-            std::cerr
-                << "termin_shaderc: cannot patch OpenGL binding for Slang resource '"
-                << resource.name << "': generated GLSL symbol is unknown\n";
-            return false;
-        }
-
-        const std::string old_binding = std::to_string(resource.original_binding);
-        const std::string new_binding = std::to_string(resource.binding);
-        bool patched = false;
-        if (resource.kind == "constant_buffer") {
-            const std::regex pattern(
-                "(layout\\s*\\(\\s*binding\\s*=\\s*)" + old_binding +
-                "(\\s*\\)\\s*\\n\\s*layout\\s*\\(\\s*std140\\s*\\)\\s*uniform\\s+" +
-                regex_escape(resource.slang_glsl_symbol) + "\\b)");
-            patched = replace_first_two_group_regex(glsl, pattern, new_binding);
-            if (!patched) {
-                const std::regex instance_pattern(
-                    "(layout\\s*\\(\\s*binding\\s*=\\s*)" + old_binding +
-                    "(\\s*\\)\\s*\\n\\s*layout\\s*\\(\\s*std140\\s*\\)\\s*uniform\\s+"
-                    "[A-Za-z_][A-Za-z0-9_]*\\b[\\s\\S]*?}\\s*" +
-                    regex_escape(resource.name + "_0") + "\\b)");
-                patched = replace_first_two_group_regex(glsl, instance_pattern, new_binding);
-            }
-        } else if (resource.kind == "texture" ||
-                   resource.kind == "storage_texture" ||
-                   resource.kind == "sampler") {
-            const std::regex pattern(
-                "(layout\\s*\\(\\s*binding\\s*=\\s*)" + old_binding +
-                "(\\s*\\)\\s*uniform\\s+[A-Za-z0-9_]+\\s+" +
-                regex_escape(resource.slang_glsl_symbol) + "\\b)");
-            patched = replace_first_two_group_regex(glsl, pattern, new_binding);
-        } else if (resource.kind == "storage_buffer") {
-            const std::regex pattern(
-                "(layout\\s*\\([^\\)]*\\bbinding\\s*=\\s*)" + old_binding +
-                "([^\\)]*\\)\\s*(?:readonly\\s+|writeonly\\s+)?buffer\\s+" +
-                regex_escape(resource.slang_glsl_symbol) + "\\b)");
-            patched = replace_first_two_group_regex(glsl, pattern, new_binding);
-            if (!patched) {
-                const std::regex instance_pattern(
-                    "(layout\\s*\\([^\\)]*\\bbinding\\s*=\\s*)" + old_binding +
-                    "([^\\)]*\\)\\s*(?:readonly\\s+|writeonly\\s+)?buffer\\s+"
-                    "[A-Za-z_][A-Za-z0-9_]*\\b[\\s\\S]*?}\\s*" +
-                    regex_escape(resource.name + "_0") + "\\b)");
-                patched = replace_first_two_group_regex(glsl, instance_pattern, new_binding);
-            }
-        } else {
-            std::cerr
-                << "termin_shaderc: unsupported OpenGL GLSL binding patch kind '"
-                << resource.kind << "' for resource '" << resource.name << "'\n";
-            return false;
-        }
-
-        if (!patched) {
-            std::cerr
-                << "termin_shaderc: failed to patch OpenGL GLSL binding for resource '"
-                << resource.name << "' generated symbol '" << resource.slang_glsl_symbol
-                << "' from binding " << resource.original_binding << " to "
-                << resource.binding << "\n";
-            return false;
-        }
-    }
-
-    return write_text_file(options.output, glsl);
-}
-
 static bool read_spirv_words(
     const std::filesystem::path& path,
     std::vector<uint32_t>& out
@@ -1295,21 +1157,6 @@ static bool read_spirv_words(
         in.read(reinterpret_cast<char*>(out.data()), bytes);
     }
     return static_cast<bool>(in);
-}
-
-static bool write_spirv_words(
-    const std::filesystem::path& path,
-    const std::vector<uint32_t>& words
-) {
-    std::ofstream out(path, std::ios::binary);
-    if (!out) {
-        std::cerr << "termin_shaderc: failed to open SPIR-V artifact for patch: " << path << "\n";
-        return false;
-    }
-    out.write(
-        reinterpret_cast<const char*>(words.data()),
-        static_cast<std::streamsize>(words.size() * sizeof(uint32_t)));
-    return static_cast<bool>(out);
 }
 
 static std::string spirv_string_operand(
@@ -1419,68 +1266,10 @@ static bool filter_slang_vulkan_resources_for_spirv(
     return true;
 }
 
-static bool patch_spirv_binding_for_resource(
-    std::vector<uint32_t>& words,
-    const ShaderResourceBinding& resource
-) {
-    constexpr uint16_t OP_DECORATE = 71;
-    constexpr uint32_t DECORATION_BINDING = 33;
-    constexpr uint32_t DECORATION_DESCRIPTOR_SET = 34;
-
-    uint32_t resource_id = 0;
-    if (!spirv_resource_id_for_name(words, resource.name, resource_id)) {
-        std::cerr
-            << "termin_shaderc: failed to find SPIR-V resource id for '"
-            << resource.name << "'\n";
-        return false;
-    }
-
-    bool patched_binding = false;
-    bool patched_set = false;
-    for (size_t i = 5; i < words.size();) {
-        const uint32_t instruction = words[i];
-        const uint16_t word_count = static_cast<uint16_t>(instruction >> 16);
-        const uint16_t opcode = static_cast<uint16_t>(instruction & 0xffffu);
-        if (word_count == 0 || i + word_count > words.size()) {
-            return false;
-        }
-        if (opcode == OP_DECORATE && word_count >= 4 && words[i + 1] == resource_id) {
-            if (words[i + 2] == DECORATION_BINDING) {
-                words[i + 3] = resource.binding;
-                patched_binding = true;
-            } else if (words[i + 2] == DECORATION_DESCRIPTOR_SET) {
-                words[i + 3] = resource.set;
-                patched_set = true;
-            }
-        }
-        i += word_count;
-    }
-
-    if (!patched_binding || !patched_set) {
-        std::cerr
-            << "termin_shaderc: failed to patch SPIR-V binding decorations for '"
-            << resource.name << "'\n";
-        return false;
-    }
-    return true;
-}
-
-static bool patch_slang_vulkan_spirv_bindings(
+static bool patch_slang_vulkan_spirv_descriptor_decorations(
     const CompileOptions& options,
     const std::vector<ShaderResourceBinding>& resources
 ) {
-    bool needs_patch = false;
-    for (const ShaderResourceBinding& resource : resources) {
-        if (resource.set != resource.original_set ||
-            resource.binding != resource.original_binding) {
-            needs_patch = true;
-            break;
-        }
-    }
-    if (!needs_patch) {
-        return true;
-    }
-
     std::vector<uint32_t> words;
     if (!read_spirv_words(options.output, words)) {
         // Fake/offline compiler tests may produce placeholder bytes while still
@@ -1489,20 +1278,67 @@ static bool patch_slang_vulkan_spirv_bindings(
     }
     constexpr uint32_t SPIRV_MAGIC = 0x07230203u;
     if (words.empty() || words[0] != SPIRV_MAGIC) {
-        // Fake compiler tests use placeholder bytes; there is nothing to patch.
         return true;
     }
 
+    constexpr uint16_t OP_DECORATE = 71;
+    constexpr uint32_t DECORATION_BINDING = 33;
+    constexpr uint32_t DECORATION_DESCRIPTOR_SET = 34;
+
+    bool changed = false;
     for (const ShaderResourceBinding& resource : resources) {
-        if (resource.set == resource.original_set &&
-            resource.binding == resource.original_binding) {
-            continue;
+        uint32_t resource_id = 0;
+        if (!spirv_resource_id_for_name(words, resource.name, resource_id)) {
+            std::cerr
+                << "termin_shaderc: reflected SPIR-V resource '"
+                << resource.name
+                << "' is missing an OpName entry; cannot patch descriptor placement\n";
+            return false;
         }
-        if (!patch_spirv_binding_for_resource(words, resource)) {
+
+        bool patched_binding = false;
+        bool patched_set = false;
+        for (size_t i = 5; i < words.size();) {
+            const uint32_t instruction = words[i];
+            const uint16_t word_count = static_cast<uint16_t>(instruction >> 16);
+            const uint16_t opcode = static_cast<uint16_t>(instruction & 0xffffu);
+            if (word_count == 0 || i + word_count > words.size()) {
+                std::cerr
+                    << "termin_shaderc: invalid SPIR-V instruction stream while "
+                       "patching descriptor placement\n";
+                return false;
+            }
+            if (opcode == OP_DECORATE && word_count >= 4 && words[i + 1] == resource_id) {
+                if (words[i + 2] == DECORATION_BINDING) {
+                    if (words[i + 3] != resource.binding) {
+                        words[i + 3] = resource.binding;
+                        changed = true;
+                    }
+                    patched_binding = true;
+                } else if (words[i + 2] == DECORATION_DESCRIPTOR_SET) {
+                    if (words[i + 3] != resource.set) {
+                        words[i + 3] = resource.set;
+                        changed = true;
+                    }
+                    patched_set = true;
+                }
+            }
+            i += word_count;
+        }
+
+        if (!patched_binding || !patched_set) {
+            std::cerr
+                << "termin_shaderc: reflected SPIR-V resource '"
+                << resource.name
+                << "' has no complete descriptor decorations; cannot patch descriptor placement\n";
             return false;
         }
     }
-    return write_spirv_words(options.output, words);
+
+    if (!changed) {
+        return true;
+    }
+    return write_spirv(options.output, words);
 }
 
 static bool is_existing_file(const std::filesystem::path& path) {
@@ -1839,15 +1675,6 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
     if (!read_file(options.input, source)) {
         return false;
     }
-    auto layout_scheme = parse_slang_layout_scheme(options.layout_scheme);
-    if (!layout_scheme) {
-        std::cerr
-            << "termin_shaderc: unsupported layout scheme: "
-            << options.layout_scheme
-            << " (expected per-pipeline, legacy-engine, or shared)\n";
-        return false;
-    }
-
     std::vector<std::string> args = {
         *slangc,
         options.input,
@@ -1885,51 +1712,19 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
     }
     bool wrote_layout = false;
     if (options.target == "vulkan") {
-        if (*layout_scheme == SlangLayoutScheme::PerPipeline) {
-            // Per-pipeline mode keeps shader-owned layout placement exactly as
-            // reported by Slang reflection. Runtime code binds by logical
-            // names/scopes from the sidecar; backend set/binding numbers are
-            // artifact metadata, not Termin's legacy ABI.
-            wrote_layout =
-                filter_slang_vulkan_resources_for_spirv(options, resources) &&
-                write_resource_layout_sidecar(options, resources);
-        } else if (*layout_scheme == SlangLayoutScheme::LegacyEngine) {
-            // Legacy-engine mode remaps scoped Slang resources into Termin's
-            // historical fixed descriptor slots and patches artifacts to match.
-            wrote_layout =
-                apply_slang_legacy_engine_layout_policy(resources) &&
-                filter_slang_vulkan_resources_for_spirv(options, resources) &&
-                patch_slang_vulkan_spirv_bindings(options, resources) &&
-                write_resource_layout_sidecar(options, resources);
-        } else {
-            // Shared-layout mode: remap all Slang resources into the
-            // fixed engine descriptor table (legacy / GLSL compat).
-            wrote_layout =
-                apply_slang_vulkan_shared_layout_policy(resources) &&
-                filter_slang_vulkan_resources_for_spirv(options, resources) &&
-                patch_slang_vulkan_spirv_bindings(options, resources) &&
-                write_resource_layout_sidecar(options, resources);
-        }
+        // Slang reflection is stage-local, so resources from separate vertex
+        // and fragment compiles can collide. Normalize both the sidecar and
+        // SPIR-V descriptor decorations to the same scope-first placement.
+        wrote_layout =
+            filter_slang_vulkan_resources_for_spirv(options, resources) &&
+            patch_slang_vulkan_spirv_descriptor_decorations(options, resources) &&
+            write_resource_layout_sidecar(options, resources);
     } else if (options.target == "opengl") {
-        if (*layout_scheme == SlangLayoutScheme::PerPipeline) {
-            annotate_slang_glsl_symbols(resources, source);
-            wrote_layout =
-                legalize_slang_opengl_glsl_builtins(options) &&
-                filter_slang_opengl_resources_for_glsl(options, resources) &&
-                write_resource_layout_sidecar(options, resources);
-        } else if (*layout_scheme == SlangLayoutScheme::LegacyEngine) {
-            annotate_slang_glsl_symbols(resources, source);
-            wrote_layout =
-                legalize_slang_opengl_glsl_builtins(options) &&
-                filter_slang_opengl_resources_for_glsl(options, resources) &&
-                apply_slang_legacy_engine_layout_policy(resources) &&
-                patch_slang_opengl_glsl_bindings(options, resources) &&
-                write_resource_layout_sidecar(options, resources);
-        } else {
-            wrote_layout =
-                apply_slang_vulkan_shared_layout_policy(resources) &&
-                write_resource_layout_sidecar(options, resources);
-        }
+        annotate_slang_glsl_symbols(resources, source);
+        wrote_layout =
+            legalize_slang_opengl_glsl_builtins(options) &&
+            filter_slang_opengl_resources_for_glsl(options, resources) &&
+            write_resource_layout_sidecar(options, resources);
     } else {
         wrote_layout = write_resource_layout_sidecar(options, resources);
     }

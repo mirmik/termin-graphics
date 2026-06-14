@@ -35,8 +35,6 @@ void print_help(std::ostream& out) {
         << "  --slangc <path>          Explicit slangc executable path.\n"
         << "  --matrix-layout <mode>   Matrix layout: column, col, column-major,\n"
         << "                           col-major, row, or row-major. Default: column.\n"
-        << "  --layout-scheme <mode>   Descriptor policy: per-pipeline, legacy-engine,\n"
-        << "                           or shared. Default: per-pipeline.\n"
         << "\n"
         << "Outputs:\n"
         << "  <output>                 Compiled backend artifact.\n"
@@ -157,11 +155,6 @@ ParsedCommandLine parse_command_line(int argc, char** argv) {
             }
         } else if (arg == "--matrix-layout") {
             if (!take_value(options.matrix_layout)) {
-                parsed.exit_code = 2;
-                return parsed;
-            }
-        } else if (arg == "--layout-scheme") {
-            if (!take_value(options.layout_scheme)) {
                 parsed.exit_code = 2;
                 return parsed;
             }
