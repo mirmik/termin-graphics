@@ -300,20 +300,25 @@ bool draw_material_pipeline_mesh(
     tc_mesh* mesh,
     MaterialMeshVertexInput input)
 {
-    // Transitional policy: material pass code should talk in logical input
-    // contracts. The remaining standard-location ABI is isolated here until
-    // tgfx2 draw layouts can be built from reflected mesh semantic names.
     switch (input) {
         case MaterialMeshVertexInput::FullMaterial:
             return ::termin::draw_tc_mesh(ctx, mesh);
         case MaterialMeshVertexInput::Position:
-            return ::termin::draw_tc_mesh(ctx, mesh, {0});
+            return ::termin::draw_tc_mesh(ctx, mesh, {"position"});
         case MaterialMeshVertexInput::PositionNormal:
-            return ::termin::draw_tc_mesh(ctx, mesh, {0, 1});
+            return ::termin::draw_tc_mesh(ctx, mesh, {"position", "normal"});
         case MaterialMeshVertexInput::SkinnedPositionJointsWeights:
-            return ::termin::draw_tc_mesh(ctx, mesh, {0, 4, 5}, true);
+            return ::termin::draw_tc_mesh(
+                ctx,
+                mesh,
+                {"position", "joints", "weights"},
+                true);
         case MaterialMeshVertexInput::SkinnedPositionNormalJointsWeights:
-            return ::termin::draw_tc_mesh(ctx, mesh, {0, 1, 4, 5}, true);
+            return ::termin::draw_tc_mesh(
+                ctx,
+                mesh,
+                {"position", "normal", "joints", "weights"},
+                true);
     }
     return false;
 }

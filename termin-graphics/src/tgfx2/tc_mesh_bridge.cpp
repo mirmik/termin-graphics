@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstring>
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include <tcbase/tc_log.hpp>
@@ -25,6 +26,7 @@ bool fill_binding_from_mesh(Tgfx2MeshBinding& out, tc_mesh* mesh) {
         VertexAttribute va;
         va.location = a.location;
         va.offset = a.offset;
+        va.semantic = a.name;
 
         bool ok = true;
         switch (static_cast<tgfx_attrib_type>(a.type)) {
@@ -119,18 +121,60 @@ bool layout_has_location(const VertexBufferLayout& layout, uint32_t location) {
         });
 }
 
+std::string_view standard_semantic_for_location(uint32_t location) {
+    switch (location) {
+        case 0: return "position";
+        case 1: return "normal";
+        case 2: return "uv";
+        case 3: return "tangent";
+        case 4: return "joints";
+        case 5: return "weights";
+        case 6: return "color";
+        default: return {};
+    }
+}
+
+std::string_view attribute_semantic(const VertexAttribute& attr) {
+    if (!attr.semantic.empty()) {
+        return attr.semantic;
+    }
+    return standard_semantic_for_location(attr.location);
+}
+
+bool semantic_in_list(
+    std::string_view semantic,
+    std::initializer_list<std::string_view> used_semantics
+) {
+    for (std::string_view requested : used_semantics) {
+        if (semantic == requested) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool layout_has_semantic(
+    const VertexBufferLayout& layout,
+    std::string_view semantic
+) {
+    return std::any_of(layout.attributes.begin(), layout.attributes.end(),
+        [semantic](const VertexAttribute& attr) {
+            return attribute_semantic(attr) == semantic;
+        });
+}
+
 void append_default_standard_attributes(Tgfx2MeshBinding& out, uint32_t old_stride) {
     uint32_t offset = old_stride;
     if (!layout_has_location(out.layout, 1)) {
-        out.layout.attributes.push_back({1, VertexFormat::Float3, offset});
+        out.layout.attributes.push_back({1, VertexFormat::Float3, offset, "normal"});
         offset += 3u * sizeof(float);
     }
     if (!layout_has_location(out.layout, 2)) {
-        out.layout.attributes.push_back({2, VertexFormat::Float2, offset});
+        out.layout.attributes.push_back({2, VertexFormat::Float2, offset, "uv"});
         offset += 2u * sizeof(float);
     }
     if (!layout_has_location(out.layout, 3)) {
-        out.layout.attributes.push_back({3, VertexFormat::Float4, offset});
+        out.layout.attributes.push_back({3, VertexFormat::Float4, offset, "tangent"});
         offset += 4u * sizeof(float);
     }
     out.layout.stride = offset;
@@ -236,6 +280,31 @@ VertexBufferLayout filter_vertex_layout_to_locations(
     return out;
 }
 
+VertexBufferLayout filter_vertex_layout_to_semantics(
+    const VertexBufferLayout& layout,
+    std::initializer_list<std::string_view> used_semantics,
+    bool use_shader_input_locations
+) {
+    VertexBufferLayout out;
+    out.stride = layout.stride;
+    out.per_instance = layout.per_instance;
+    out.use_shader_input_locations = use_shader_input_locations;
+    for (const auto& attr : layout.attributes) {
+        if (semantic_in_list(attribute_semantic(attr), used_semantics)) {
+            out.attributes.push_back(attr);
+        }
+    }
+    for (std::string_view semantic : used_semantics) {
+        if (!layout_has_semantic(out, semantic)) {
+            tc::Log::error(
+                "filter_vertex_layout_to_semantics: layout has no '%.*s' attribute",
+                static_cast<int>(semantic.size()),
+                semantic.data());
+        }
+    }
+    return out;
+}
+
 bool draw_tc_mesh(
     RenderContext2& ctx,
     tc_mesh* mesh,
@@ -266,6 +335,29 @@ bool draw_tc_mesh(
         filter_vertex_layout_to_locations(
             binding.layout,
             used_locations,
+            use_shader_input_locations);
+    ctx.set_vertex_layout(filtered);
+    ctx.set_topology(binding.topology);
+    ctx.draw(binding.vertex_buffer, binding.index_buffer,
+             binding.index_count, binding.index_type);
+
+    release_mesh_binding(ctx.device(), binding);
+    return true;
+}
+
+bool draw_tc_mesh(
+    RenderContext2& ctx,
+    tc_mesh* mesh,
+    std::initializer_list<std::string_view> used_semantics,
+    bool use_shader_input_locations
+) {
+    Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
+    if (binding.index_count == 0) return false;
+
+    VertexBufferLayout filtered =
+        filter_vertex_layout_to_semantics(
+            binding.layout,
+            used_semantics,
             use_shader_input_locations);
     ctx.set_vertex_layout(filtered);
     ctx.set_topology(binding.topology);

@@ -7,6 +7,9 @@ namespace tgfx {
 // Vulkan hot-path counters — swept once per second from submit().
 std::atomic<uint64_t> g_resource_set_count{0};
 std::atomic<uint64_t> g_pipeline_count{0};
+std::atomic<uint64_t> g_pipeline_cache_hit_count{0};
+std::atomic<uint64_t> g_pipeline_cache_miss_count{0};
+std::atomic<uint64_t> g_pipeline_cache_unique_vertex_layout_count{0};
 std::atomic<uint64_t> g_shader_count{0};
 std::atomic<uint64_t> g_shader_preprocess_us{0};
 std::atomic<uint64_t> g_shader_compile_us{0};

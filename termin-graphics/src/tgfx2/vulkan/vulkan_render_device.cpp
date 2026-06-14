@@ -1270,6 +1270,10 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
         uint64_t draws    = g_draw_count.exchange(0, std::memory_order_relaxed);
         uint64_t rsets    = g_resource_set_count.exchange(0, std::memory_order_relaxed);
         uint64_t pipes    = g_pipeline_count.exchange(0, std::memory_order_relaxed);
+        uint64_t pipe_hits = g_pipeline_cache_hit_count.exchange(0, std::memory_order_relaxed);
+        uint64_t pipe_misses = g_pipeline_cache_miss_count.exchange(0, std::memory_order_relaxed);
+        uint64_t pipe_layouts =
+            g_pipeline_cache_unique_vertex_layout_count.exchange(0, std::memory_order_relaxed);
         uint64_t shaders  = g_shader_count.exchange(0, std::memory_order_relaxed);
         uint64_t bp       = g_bind_pipeline_count.exchange(0, std::memory_order_relaxed);
         uint64_t brs      = g_bind_rset_count.exchange(0, std::memory_order_relaxed);
@@ -1287,12 +1291,16 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
         if (vulkan_stats_enabled()) {
             tc_log(TC_LOG_INFO,
                    "[tgfx2-vulkan] submit stats: submits=%llu draws=%llu "
-                   "pipelines=%llu resource_sets=%llu bind_pipeline=%llu "
+                   "pipelines=%llu pipeline_cache_hit=%llu pipeline_cache_miss=%llu "
+                   "new_vertex_layouts=%llu resource_sets=%llu bind_pipeline=%llu "
                    "bind_rset=%llu bind_vbo=%llu bind_ibo=%llu push_constants=%llu "
                    "record_ms=%.3f submit_ms=%.3f fence_wait_ms=%.3f",
                    static_cast<unsigned long long>(s_submits),
                    static_cast<unsigned long long>(draws),
                    static_cast<unsigned long long>(pipes),
+                   static_cast<unsigned long long>(pipe_hits),
+                   static_cast<unsigned long long>(pipe_misses),
+                   static_cast<unsigned long long>(pipe_layouts),
                    static_cast<unsigned long long>(rsets),
                    static_cast<unsigned long long>(bp),
                    static_cast<unsigned long long>(brs),

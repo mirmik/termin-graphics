@@ -9,6 +9,9 @@ namespace tgfx {
 
 extern std::atomic<uint64_t> g_resource_set_count;
 extern std::atomic<uint64_t> g_pipeline_count;
+extern std::atomic<uint64_t> g_pipeline_cache_hit_count;
+extern std::atomic<uint64_t> g_pipeline_cache_miss_count;
+extern std::atomic<uint64_t> g_pipeline_cache_unique_vertex_layout_count;
 extern std::atomic<uint64_t> g_shader_count;
 extern std::atomic<uint64_t> g_shader_preprocess_us;
 extern std::atomic<uint64_t> g_shader_compile_us;

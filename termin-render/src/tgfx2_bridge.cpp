@@ -65,6 +65,17 @@ tgfx::VertexBufferLayout filter_vertex_layout_to_locations(
         use_shader_input_locations);
 }
 
+tgfx::VertexBufferLayout filter_vertex_layout_to_semantics(
+    const tgfx::VertexBufferLayout& layout,
+    std::initializer_list<std::string_view> used_semantics,
+    bool use_shader_input_locations
+) {
+    return tgfx::filter_vertex_layout_to_semantics(
+        layout,
+        used_semantics,
+        use_shader_input_locations);
+}
+
 bool draw_tc_mesh(
     tgfx::RenderContext2& ctx,
     tc_mesh* mesh,
@@ -80,6 +91,15 @@ bool draw_tc_mesh(
     bool use_shader_input_locations
 ) {
     return tgfx::draw_tc_mesh(ctx, mesh, used_locations, use_shader_input_locations);
+}
+
+bool draw_tc_mesh(
+    tgfx::RenderContext2& ctx,
+    tc_mesh* mesh,
+    std::initializer_list<std::string_view> used_semantics,
+    bool use_shader_input_locations
+) {
+    return tgfx::draw_tc_mesh(ctx, mesh, used_semantics, use_shader_input_locations);
 }
 
 } // namespace termin

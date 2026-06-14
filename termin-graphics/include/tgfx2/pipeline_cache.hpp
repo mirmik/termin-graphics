@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "tgfx2/tgfx2_api.h"
 #include "tgfx2/enums.hpp"
@@ -55,6 +56,7 @@ class TGFX2_TYPE_API PipelineCache {
 private:
     IRenderDevice& device_;
     std::unordered_map<PipelineCacheKey, PipelineHandle, PipelineCacheKeyHash> cache_;
+    std::unordered_set<size_t> observed_vertex_layout_hashes_;
 
 public:
     explicit PipelineCache(IRenderDevice& device);

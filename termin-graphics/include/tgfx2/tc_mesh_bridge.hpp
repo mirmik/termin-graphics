@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <initializer_list>
+#include <string_view>
 
 #include "tgfx2/tgfx2_api.h"
 #include "tgfx2/enums.hpp"
@@ -47,6 +48,12 @@ TGFX2_API VertexBufferLayout filter_vertex_layout_to_locations(
     bool use_shader_input_locations = false
 );
 
+TGFX2_API VertexBufferLayout filter_vertex_layout_to_semantics(
+    const VertexBufferLayout& layout,
+    std::initializer_list<std::string_view> used_semantics,
+    bool use_shader_input_locations = false
+);
+
 // Draws a tc_mesh into the currently open RenderContext2 pass using the
 // currently bound shader/resources/render state. Optional layout override lets
 // depth/id/shadow passes trim unused attributes while keeping the standard mesh
@@ -61,6 +68,13 @@ TGFX2_API bool draw_tc_mesh(
     RenderContext2& ctx,
     tc_mesh* mesh,
     std::initializer_list<uint32_t> used_locations,
+    bool use_shader_input_locations = false
+);
+
+TGFX2_API bool draw_tc_mesh(
+    RenderContext2& ctx,
+    tc_mesh* mesh,
+    std::initializer_list<std::string_view> used_semantics,
     bool use_shader_input_locations = false
 );
 

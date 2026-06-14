@@ -2,6 +2,10 @@
 #include "tgfx2/pipeline_cache.hpp"
 #include "tgfx2/i_render_device.hpp"
 
+#ifdef TGFX2_HAS_VULKAN
+#include "vulkan/vulkan_stats.hpp"
+#endif
+
 #include <functional>
 
 namespace tgfx {
@@ -125,8 +129,18 @@ PipelineCache::~PipelineCache() {
 PipelineHandle PipelineCache::get(const PipelineCacheKey& key) {
     auto it = cache_.find(key);
     if (it != cache_.end()) {
+#ifdef TGFX2_HAS_VULKAN
+        g_pipeline_cache_hit_count.fetch_add(1, std::memory_order_relaxed);
+#endif
         return it->second;
     }
+
+#ifdef TGFX2_HAS_VULKAN
+    g_pipeline_cache_miss_count.fetch_add(1, std::memory_order_relaxed);
+    if (observed_vertex_layout_hashes_.insert(key.vertex_layouts_hash).second) {
+        g_pipeline_cache_unique_vertex_layout_count.fetch_add(1, std::memory_order_relaxed);
+    }
+#endif
 
     // Build PipelineDesc from key
     PipelineDesc desc;
@@ -159,6 +173,7 @@ void PipelineCache::clear() {
         device_.destroy(h);
     }
     cache_.clear();
+    observed_vertex_layout_hashes_.clear();
 }
 
 } // namespace tgfx

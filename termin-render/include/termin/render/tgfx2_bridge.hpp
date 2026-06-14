@@ -2,6 +2,8 @@
 #pragma once
 
 #include <cstdint>
+#include <initializer_list>
+#include <string_view>
 
 #include "tgfx2/handles.hpp"
 #include "tgfx2/enums.hpp"
@@ -78,6 +80,12 @@ RENDER_API tgfx::VertexBufferLayout filter_vertex_layout_to_locations(
     bool use_shader_input_locations = false
 );
 
+RENDER_API tgfx::VertexBufferLayout filter_vertex_layout_to_semantics(
+    const tgfx::VertexBufferLayout& layout,
+    std::initializer_list<std::string_view> used_semantics,
+    bool use_shader_input_locations = false
+);
+
 RENDER_API bool draw_tc_mesh(
     tgfx::RenderContext2& ctx,
     tc_mesh* mesh,
@@ -88,6 +96,13 @@ RENDER_API bool draw_tc_mesh(
     tgfx::RenderContext2& ctx,
     tc_mesh* mesh,
     std::initializer_list<uint32_t> used_locations,
+    bool use_shader_input_locations = false
+);
+
+RENDER_API bool draw_tc_mesh(
+    tgfx::RenderContext2& ctx,
+    tc_mesh* mesh,
+    std::initializer_list<std::string_view> used_semantics,
     bool use_shader_input_locations = false
 );
 

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace tgfx {
@@ -42,6 +44,22 @@ struct VertexAttribute {
     uint32_t location = 0;
     VertexFormat format = VertexFormat::Float3;
     uint32_t offset = 0;
+    // Logical mesh/input name, e.g. position, normal, joints, weights.
+    // Backend pipeline identity remains location/format/offset based.
+    std::string semantic;
+
+    VertexAttribute() = default;
+    VertexAttribute(
+        uint32_t location_,
+        VertexFormat format_,
+        uint32_t offset_,
+        std::string semantic_ = {}
+    )
+        : location(location_)
+        , format(format_)
+        , offset(offset_)
+        , semantic(std::move(semantic_))
+    {}
 };
 
 struct VertexBufferLayout {
