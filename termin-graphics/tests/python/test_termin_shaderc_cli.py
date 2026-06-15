@@ -1384,7 +1384,7 @@ def test_termin_shaderc_invokes_fake_slangc_for_opengl(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
-def test_termin_shaderc_preserves_opengl_slang_constant_buffer_bindings(tmp_path: Path) -> None:
+def test_termin_shaderc_patches_opengl_slang_constant_buffer_bindings(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
         "struct PerFrame { float4x4 view_projection; };\n"
@@ -1450,8 +1450,8 @@ def test_termin_shaderc_preserves_opengl_slang_constant_buffer_bindings(tmp_path
 
     assert result.returncode == 0, result.stderr
     glsl = output.read_text(encoding="utf-8")
-    assert "layout(binding = 0)\nlayout(std140) uniform block_PerFrame_0" in glsl
-    assert "layout(binding = 1)\nlayout(std140) uniform block_DrawData_0" in glsl
+    assert "layout(binding = 2)\nlayout(std140) uniform block_PerFrame_0" in glsl
+    assert "layout(binding = 24)\nlayout(std140) uniform block_DrawData_0" in glsl
     layout = json.loads((tmp_path / "out.vert.glsl.layout.json").read_text(encoding="utf-8"))
     assert [(r["name"], r["binding"]) for r in layout["resources"]] == [
         ("per_frame", 2),
@@ -1460,7 +1460,7 @@ def test_termin_shaderc_preserves_opengl_slang_constant_buffer_bindings(tmp_path
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
-def test_termin_shaderc_preserves_opengl_slang_material_texture_bindings(tmp_path: Path) -> None:
+def test_termin_shaderc_patches_opengl_slang_material_texture_bindings(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
         "struct MaterialParams { float4 color; };\n"
@@ -1524,8 +1524,8 @@ def test_termin_shaderc_preserves_opengl_slang_material_texture_bindings(tmp_pat
 
     assert result.returncode == 0, result.stderr
     glsl = output.read_text(encoding="utf-8")
-    assert "layout(binding = 0)\nlayout(std140) uniform block_MaterialParams_0" in glsl
-    assert "layout(binding = 1) uniform sampler2D albedo_texture_0" in glsl
+    assert "layout(binding = 1)\nlayout(std140) uniform block_MaterialParams_0" in glsl
+    assert "layout(binding = 4) uniform sampler2D albedo_texture_0" in glsl
     layout = json.loads((tmp_path / "out.frag.glsl.layout.json").read_text(encoding="utf-8"))
     assert [(r["name"], r["binding"]) for r in layout["resources"]] == [
         ("material", 1),
@@ -1589,7 +1589,7 @@ def test_termin_shaderc_filters_inactive_opengl_slang_reflection_resources(tmp_p
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
-def test_termin_shaderc_preserves_imported_opengl_slang_constant_buffer_by_instance(tmp_path: Path) -> None:
+def test_termin_shaderc_patches_imported_opengl_slang_constant_buffer_by_instance(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
         "import termin_lighting;\n"
@@ -1642,7 +1642,7 @@ def test_termin_shaderc_preserves_imported_opengl_slang_constant_buffer_by_insta
 
     assert result.returncode == 0, result.stderr
     glsl = output.read_text(encoding="utf-8")
-    assert "layout(binding = 6)\nlayout(std140) uniform block_LightingBlock_0" in glsl
+    assert "layout(binding = 0)\nlayout(std140) uniform block_LightingBlock_0" in glsl
     layout = json.loads((tmp_path / "out.frag.glsl.layout.json").read_text(encoding="utf-8"))
     assert [(r["name"], r["binding"]) for r in layout["resources"]] == [("lighting", 0)]
 
@@ -1699,7 +1699,7 @@ def test_termin_shaderc_legalizes_opengl_slang_instance_index_builtin(tmp_path: 
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
-def test_termin_shaderc_preserves_opengl_slang_storage_buffer_bindings(tmp_path: Path) -> None:
+def test_termin_shaderc_patches_opengl_slang_storage_buffer_bindings(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
         "struct InstanceData { float3 position; };\n"
@@ -1756,7 +1756,7 @@ def test_termin_shaderc_preserves_opengl_slang_storage_buffer_bindings(tmp_path:
 
     assert result.returncode == 0, result.stderr
     glsl = output.read_text(encoding="utf-8")
-    assert "layout(std430, binding = 2) readonly buffer" in glsl
+    assert "layout(std430, binding = 25) readonly buffer" in glsl
     layout = json.loads((tmp_path / "out.vert.glsl.layout.json").read_text(encoding="utf-8"))
     assert [(r["name"], r["binding"]) for r in layout["resources"]] == [
         ("foliage_instances", 25),

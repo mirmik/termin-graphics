@@ -4,6 +4,7 @@
 #include <tcbase/trent/json.h>
 #include <tgfx/resources/tc_shader.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstdint>
 #include <filesystem>
@@ -1092,6 +1093,107 @@ static bool filter_slang_opengl_resources_for_glsl(
     return true;
 }
 
+static bool write_text_file(
+    const std::string& path,
+    const std::string& text
+);
+
+static std::vector<std::string> slang_opengl_resource_symbols(
+    const ShaderResourceBinding& resource
+) {
+    std::vector<std::string> symbols;
+    if (!resource.slang_glsl_symbol.empty()) {
+        symbols.push_back(resource.slang_glsl_symbol);
+    }
+    const std::string instance_symbol = resource.name + "_0";
+    if (std::find(symbols.begin(), symbols.end(), instance_symbol) == symbols.end()) {
+        symbols.push_back(instance_symbol);
+    }
+    return symbols;
+}
+
+static bool patch_slang_opengl_glsl_resource_binding(
+    std::string& glsl,
+    const ShaderResourceBinding& resource,
+    bool& changed
+) {
+    const std::vector<std::string> symbols = slang_opengl_resource_symbols(resource);
+    size_t symbol_pos = std::string::npos;
+    std::string matched_symbol;
+    for (const std::string& symbol : symbols) {
+        symbol_pos = glsl.find(symbol);
+        if (symbol_pos != std::string::npos) {
+            matched_symbol = symbol;
+            break;
+        }
+    }
+    if (symbol_pos == std::string::npos) {
+        std::cerr
+            << "termin_shaderc: OpenGL GLSL is missing reflected resource '"
+            << resource.name << "'; cannot patch binding placement\n";
+        return false;
+    }
+
+    const std::regex binding_layout_re(
+        R"(layout\s*\(([^\)]*?\bbinding\s*=\s*)([0-9]+)([^\)]*)\))");
+
+    size_t search_before = symbol_pos;
+    while (true) {
+        const size_t layout_pos = glsl.rfind("layout", search_before);
+        if (layout_pos == std::string::npos) {
+            break;
+        }
+
+        const std::string declaration_prefix =
+            glsl.substr(layout_pos, symbol_pos - layout_pos + matched_symbol.size());
+        std::smatch match;
+        if (std::regex_search(declaration_prefix, match, binding_layout_re)) {
+            const size_t value_begin =
+                layout_pos +
+                static_cast<size_t>(match.position(2));
+            const size_t value_size = static_cast<size_t>(match.length(2));
+            const std::string normalized_binding = std::to_string(resource.binding);
+            if (glsl.compare(value_begin, value_size, normalized_binding) == 0) {
+                return true;
+            }
+            glsl.replace(value_begin, value_size, normalized_binding);
+            changed = true;
+            return true;
+        }
+
+        if (layout_pos == 0) {
+            break;
+        }
+        search_before = layout_pos - 1;
+    }
+
+    std::cerr
+        << "termin_shaderc: OpenGL GLSL declaration for resource '"
+        << resource.name << "' has no layout(binding=...) to patch\n";
+    return false;
+}
+
+static bool patch_slang_opengl_glsl_resource_bindings(
+    const CompileOptions& options,
+    const std::vector<ShaderResourceBinding>& resources
+) {
+    std::string glsl;
+    if (!read_file(options.output, glsl)) {
+        return false;
+    }
+
+    bool changed = false;
+    for (const ShaderResourceBinding& resource : resources) {
+        if (!patch_slang_opengl_glsl_resource_binding(glsl, resource, changed)) {
+            return false;
+        }
+    }
+    if (!changed) {
+        return true;
+    }
+    return write_text_file(options.output, glsl);
+}
+
 static bool replace_all_literal(
     std::string& text,
     const std::string& needle,
@@ -1734,6 +1836,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         wrote_layout =
             legalize_slang_opengl_glsl_builtins(options) &&
             filter_slang_opengl_resources_for_glsl(options, resources) &&
+            patch_slang_opengl_glsl_resource_bindings(options, resources) &&
             write_resource_layout_sidecar(options, resources);
     } else {
         wrote_layout = write_resource_layout_sidecar(options, resources);
