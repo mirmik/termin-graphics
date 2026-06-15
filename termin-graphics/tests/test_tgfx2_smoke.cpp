@@ -4,7 +4,9 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <span>
 #include <string>
+#include <vector>
 
 #include <glad/glad.h>
 #define GLFW_INCLUDE_NONE
@@ -118,6 +120,41 @@ int main() {
     printf("Backend: OpenGL, max_tex: %u, compute: %s\n",
            caps.max_texture_dimension_2d,
            caps.supports_compute ? "yes" : "no");
+
+    // Full texture readback must use the public tgfx2 top-left row order,
+    // even though OpenGL glReadPixels itself returns bottom-left rows.
+    tgfx::TextureDesc readback_desc;
+    readback_desc.width = 2;
+    readback_desc.height = 2;
+    readback_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    readback_desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopySrc;
+    auto readback_tex = device->create_texture(readback_desc);
+    const uint8_t readback_rgba[] = {
+        255, 0, 0, 255,      0, 255, 0, 255,
+        0, 0, 255, 255,      255, 255, 255, 255,
+    };
+    device->upload_texture(
+        readback_tex,
+        std::span<const uint8_t>(readback_rgba, sizeof(readback_rgba)));
+    std::vector<float> readback_pixels(2 * 2 * 4, 0.0f);
+    bool readback_ok = device->read_texture_rgba_float(readback_tex, readback_pixels.data());
+    bool readback_order_ok =
+        readback_ok &&
+        readback_pixels[0] > 0.9f && readback_pixels[1] < 0.1f &&
+        readback_pixels[4] < 0.1f && readback_pixels[5] > 0.9f &&
+        readback_pixels[8] < 0.1f && readback_pixels[9] < 0.1f && readback_pixels[10] > 0.9f &&
+        readback_pixels[12] > 0.9f && readback_pixels[13] > 0.9f && readback_pixels[14] > 0.9f;
+    printf("OpenGL full color readback row order: %s\n", readback_order_ok ? "ok" : "failed");
+    if (!readback_order_ok) {
+        fprintf(stderr,
+                "OpenGL full color readback mismatch: first row=(%.2f %.2f %.2f %.2f) (%.2f %.2f %.2f %.2f), second row=(%.2f %.2f %.2f %.2f) (%.2f %.2f %.2f %.2f)\n",
+                readback_pixels[0], readback_pixels[1], readback_pixels[2], readback_pixels[3],
+                readback_pixels[4], readback_pixels[5], readback_pixels[6], readback_pixels[7],
+                readback_pixels[8], readback_pixels[9], readback_pixels[10], readback_pixels[11],
+                readback_pixels[12], readback_pixels[13], readback_pixels[14], readback_pixels[15]);
+        return 1;
+    }
+    device->destroy(readback_tex);
 
     // --- Create shaders ---
     tgfx::ShaderDesc vs_desc;

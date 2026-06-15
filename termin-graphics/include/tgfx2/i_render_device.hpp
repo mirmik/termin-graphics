@@ -202,15 +202,18 @@ public:
         return false;
     }
     // Read a full color texture as tightly-packed RGBA float32 into
-    // `out` (>= width*height*4 floats). Used by the framegraph
-    // debugger's HDR stats.
+    // `out` (>= width*height*4 floats). Row 0 in `out` is the top
+    // image row for every backend; native framebuffer/image origins
+    // must be normalized inside the backend implementation.
+    // Used by screenshots and the framegraph debugger's HDR stats.
     virtual bool read_texture_rgba_float(TextureHandle tex, float* out) {
         (void)tex; (void)out;
         return false;
     }
     // Read a full depth texture as tightly-packed float32 depth values
-    // into `out` (>= width*height floats). Used by the framegraph
-    // debugger's depth preview.
+    // into `out` (>= width*height floats). Row 0 in `out` is the top
+    // image row for every backend.
+    // Used by screenshots and the framegraph debugger's depth preview.
     virtual bool read_texture_depth_float(TextureHandle tex, float* out) {
         (void)tex; (void)out;
         return false;

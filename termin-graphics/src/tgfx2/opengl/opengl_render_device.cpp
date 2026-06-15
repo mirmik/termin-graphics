@@ -7,6 +7,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <vector>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -78,6 +79,19 @@ static void opengl_invalidate_tc_shader_trampoline(uint32_t pool_index, void* us
 }
 
 namespace tgfx {
+
+static void flip_rows_in_place(float* data, uint32_t width, uint32_t height, uint32_t channels) {
+    if (!data || width == 0 || height < 2 || channels == 0) return;
+    const size_t row_values = static_cast<size_t>(width) * channels;
+    std::vector<float> tmp(row_values);
+    for (uint32_t y = 0; y < height / 2; ++y) {
+        float* top = data + static_cast<size_t>(y) * row_values;
+        float* bottom = data + static_cast<size_t>(height - y - 1) * row_values;
+        std::memcpy(tmp.data(), top, row_values * sizeof(float));
+        std::memcpy(top, bottom, row_values * sizeof(float));
+        std::memcpy(bottom, tmp.data(), row_values * sizeof(float));
+    }
+}
 
 OpenGLRenderDevice::OpenGLRenderDevice() {
     // glad is a static library — each DLL/exe gets its own copy of function pointers.
@@ -1259,6 +1273,7 @@ bool OpenGLRenderDevice::read_texture_rgba_float(
                      static_cast<GLsizei>(t->desc.width),
                      static_cast<GLsizei>(t->desc.height),
                      GL_RGBA, GL_FLOAT, out);
+        flip_rows_in_place(out, t->desc.width, t->desc.height, 4);
     }
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_read_fbo));
@@ -1291,6 +1306,7 @@ bool OpenGLRenderDevice::read_texture_depth_float(
                      static_cast<GLsizei>(t->desc.width),
                      static_cast<GLsizei>(t->desc.height),
                      GL_DEPTH_COMPONENT, GL_FLOAT, out);
+        flip_rows_in_place(out, t->desc.width, t->desc.height, 1);
     }
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_read_fbo));

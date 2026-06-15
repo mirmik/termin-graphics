@@ -281,9 +281,8 @@ void bind_tgfx2(nb::module_& m) {
         // Thin tcgui-only hosts need to read whole
         // render targets back to the CPU without dragging in the editor
         // runtime. Delegates to IRenderDevice::read_texture_rgba_float
-        // (GL: one glReadPixels into a framebuffer bound to `tex`;
-        // Vulkan: not implemented yet — returns False). Caller supplies
-        // a pre-sized float numpy array of width*height*4 elements.
+        // with backend-normalized top-left row order. Caller supplies a
+        // pre-sized float numpy array of width*height*4 elements.
         .def("read_texture_rgba_float",
              [](tgfx::IRenderDevice& self, tgfx::TextureHandle tex,
                 nb::ndarray<float, nb::c_contig, nb::device::cpu> buf) {
