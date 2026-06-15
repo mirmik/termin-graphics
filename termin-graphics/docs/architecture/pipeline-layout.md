@@ -20,6 +20,7 @@ mechanical mapping from resource scopes.
 
 See also:
 
+- [Shader Resource Contracts](shader-resource-contracts.md)
 - `docs/plans/2026-06-11-slang-scope-first-binding.md`
 - `docs/plans/2026-06-09-slang-bind-by-name-runtime.md`
 
