@@ -393,13 +393,17 @@ float4 main() : SV_Target {
     const std::string actual_shader_uuid = shader->uuid;
     const fs::path artifact = artifact_root / "shaders" / "vulkan"
         / (actual_shader_uuid + ".vert.spv");
-    const fs::path metadata = fs::path(artifact.string() + ".meta");
+    const fs::path metadata = fs::path(artifact.string() + ".artifact");
+    const fs::path legacy_metadata = fs::path(artifact.string() + ".meta");
     const fs::path source = cache_root / "source"
         / (actual_shader_uuid + ".vert.slang");
     CHECK(fs::exists(artifact));
     CHECK(fs::exists(metadata));
+    CHECK(!fs::exists(legacy_metadata));
     CHECK(fs::exists(source));
+    CHECK(read_test_text_file(metadata).find("artifact_metadata_schema=1\n") != std::string::npos);
     CHECK(read_test_text_file(metadata).find("layout_schema=2\n") != std::string::npos);
+    CHECK(read_test_text_file(metadata).find("shader_compiler=") != std::string::npos);
 
     bytes.clear();
     CHECK(termin::tgfx2_load_or_compile_shader_artifact_for_backend(
@@ -411,6 +415,17 @@ float4 main() : SV_Target {
     CHECK(read_test_text_file(root / "compile_count.txt") == "1");
     CHECK(read_test_text_file(root / "compile_args.txt").find("--layout-scheme") == std::string::npos);
     CHECK(read_test_text_file(source).find("VSOut main") != std::string::npos);
+
+    const auto compiler_mtime = fs::last_write_time(compiler);
+    fs::last_write_time(compiler, compiler_mtime + std::chrono::seconds(1));
+    bytes.clear();
+    CHECK(termin::tgfx2_load_or_compile_shader_artifact_for_backend(
+        shader,
+        tgfx::BackendType::Vulkan,
+        tgfx::ShaderStage::Vertex,
+        bytes));
+    CHECK(bytes == std::vector<uint8_t>({'S', 'P', 'I', 'R', 'V'}));
+    CHECK(read_test_text_file(root / "compile_count.txt") == "2");
 
     tc_shader_destroy(handle);
 #endif
@@ -458,7 +473,7 @@ TEST_CASE("tgfx2 engine shader artifact metadata invalidates stale layout schema
         tgfx::engine_fullscreen_quad_vertex_shader();
     const fs::path artifact = artifact_root / "shaders" / "vulkan"
         / (std::string(shader.uuid) + ".vert.spv");
-    const fs::path metadata = fs::path(artifact.string() + ".meta");
+    const fs::path metadata = fs::path(artifact.string() + ".artifact");
 
     termin::tgfx2_set_shader_artifact_root(artifact_root.string().c_str());
     termin::tgfx2_set_shader_cache_root(cache_root.string().c_str());
@@ -471,6 +486,7 @@ TEST_CASE("tgfx2 engine shader artifact metadata invalidates stale layout schema
         tgfx::BackendType::Vulkan,
         bytes));
     CHECK(bytes == std::vector<uint8_t>({'S', 'P', 'I', 'R', 'V', '1'}));
+    CHECK(read_test_text_file(metadata).find("artifact_metadata_schema=1\n") != std::string::npos);
     CHECK(read_test_text_file(metadata).find("layout_schema=2\n") != std::string::npos);
 
     {

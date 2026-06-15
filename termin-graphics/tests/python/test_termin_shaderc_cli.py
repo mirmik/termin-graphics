@@ -91,6 +91,7 @@ def test_termin_shaderc_help_describes_compile_debug_options() -> None:
     assert "--slangc <path>" in result.stdout
     assert "--include-dir <dir>" in result.stdout
     assert "<output>.layout.json" in result.stdout
+    assert "<output>.artifact" in result.stdout
     assert '[[TerminScope("frame|pass|material|draw|transient")]]' in result.stdout
 
 

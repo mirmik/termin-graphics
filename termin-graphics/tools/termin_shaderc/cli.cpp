@@ -39,7 +39,7 @@ void print_help(std::ostream& out) {
         << "Outputs:\n"
         << "  <output>                 Compiled backend artifact.\n"
         << "  <output>.layout.json     Reflected resource layout sidecar.\n"
-        << "  <output>.meta            Written by runtime dev-compile callers, not by\n"
+        << "  <output>.artifact        Written by runtime dev-compile callers, not by\n"
         << "                           standalone termin_shaderc compile.\n"
         << "\n"
         << "Resource scopes:\n"
