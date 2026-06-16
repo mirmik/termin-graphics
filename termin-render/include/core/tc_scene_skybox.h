@@ -24,9 +24,7 @@ typedef struct tc_scene_skybox {
     float top_color[3];          // Gradient top RGB
     float bottom_color[3];       // Gradient bottom RGB
     tc_mesh_handle mesh;             // Skybox cube mesh (refcounted via handle)
-    tc_material_handle material;     // Current skybox material handle, alias to one of below
-    tc_material_handle gradient_material;  // Gradient skybox material (refcounted via handle)
-    tc_material_handle solid_material;     // Solid skybox material (refcounted via handle)
+    tc_material_handle material;     // Optional external skybox material handle
 } tc_scene_skybox;
 
 // Initialize with defaults
@@ -37,10 +35,6 @@ TC_API void tc_scene_skybox_free(tc_scene_skybox* skybox);
 
 // Ensure skybox mesh exists (creates lazily if needed)
 TC_API struct tc_mesh* tc_scene_skybox_ensure_mesh(tc_scene_skybox* skybox);
-
-// Ensure skybox material exists for given type (creates lazily if needed)
-// type: 0=none, 1=gradient, 2=solid
-TC_API struct tc_material* tc_scene_skybox_ensure_material(tc_scene_skybox* skybox, int type);
 
 // Note: Scene skybox API functions (tc_scene_get_skybox, tc_scene_set_skybox_*, etc.)
 // are declared in tc_scene_render_state.h with tc_scene_handle parameter

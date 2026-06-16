@@ -5,56 +5,9 @@
 #include <tgfx/resources/tc_mesh_registry.h>
 #include <tgfx/resources/tc_material.h>
 #include <tgfx/resources/tc_material_registry.h>
-#include <tgfx/resources/tc_shader.h>
-#include <tgfx/resources/tc_shader_registry.h>
 #include <tcbase/tc_resource.h>
 #include <stdlib.h>
 #include <string.h>
-
-// ============================================================================
-// Skybox Shaders
-// ============================================================================
-
-static const char* SKYBOX_VERTEX_SHADER =
-    "#version 330 core\n"
-    "layout(location = 0) in vec3 a_position;\n"
-    "\n"
-    "uniform mat4 u_view;\n"
-    "uniform mat4 u_projection;\n"
-    "\n"
-    "out vec3 v_dir;\n"
-    "\n"
-    "void main() {\n"
-    "    mat4 view_no_translation = mat4(mat3(u_view));\n"
-    "    v_dir = a_position;\n"
-    "    gl_Position = u_projection * view_no_translation * vec4(a_position, 1.0);\n"
-    "}\n";
-
-static const char* SKYBOX_GRADIENT_FRAGMENT_SHADER =
-    "#version 330 core\n"
-    "\n"
-    "in vec3 v_dir;\n"
-    "out vec4 FragColor;\n"
-    "\n"
-    "uniform vec3 u_skybox_top_color;\n"
-    "uniform vec3 u_skybox_bottom_color;\n"
-    "\n"
-    "void main() {\n"
-    "    float t = normalize(v_dir).z * 0.5 + 0.5;\n"
-    "    FragColor = vec4(mix(u_skybox_bottom_color, u_skybox_top_color, t), 1.0);\n"
-    "}\n";
-
-static const char* SKYBOX_SOLID_FRAGMENT_SHADER =
-    "#version 330 core\n"
-    "\n"
-    "in vec3 v_dir;\n"
-    "out vec4 FragColor;\n"
-    "\n"
-    "uniform vec3 u_skybox_color;\n"
-    "\n"
-    "void main() {\n"
-    "    FragColor = vec4(u_skybox_color, 1.0);\n"
-    "}\n";
 
 // Skybox cube geometry - 8 vertices, 12 triangles
 static const float SKYBOX_VERTICES[8 * 3] = {
@@ -93,17 +46,6 @@ static void release_material_handle(tc_material_handle* handle) {
         tc_material_release(material);
     }
     *handle = tc_material_handle_invalid();
-}
-
-static bool skybox_material_is_builtin_alias(const tc_scene_skybox* skybox) {
-    if (!skybox || tc_material_handle_is_invalid(skybox->material)) return false;
-    return tc_material_handle_eq(skybox->material, skybox->gradient_material) ||
-           tc_material_handle_eq(skybox->material, skybox->solid_material);
-}
-
-static void release_external_material_alias(tc_scene_skybox* skybox) {
-    if (!skybox || skybox_material_is_builtin_alias(skybox)) return;
-    release_material_handle(&skybox->material);
 }
 
 // Create skybox cube mesh
@@ -182,18 +124,12 @@ void tc_scene_skybox_init(tc_scene_skybox* skybox) {
     skybox->bottom_color[2] = 0.4f;
     skybox->mesh = tc_mesh_handle_invalid();
     skybox->material = tc_material_handle_invalid();
-    skybox->gradient_material = tc_material_handle_invalid();
-    skybox->solid_material = tc_material_handle_invalid();
 }
 
 void tc_scene_skybox_free(tc_scene_skybox* skybox) {
     if (!skybox) return;
     release_mesh_handle(&skybox->mesh);
-    release_external_material_alias(skybox);
-    // Builtin material is an alias, don't release separately
-    skybox->material = tc_material_handle_invalid();
-    release_material_handle(&skybox->gradient_material);
-    release_material_handle(&skybox->solid_material);
+    release_material_handle(&skybox->material);
 }
 
 tc_mesh* tc_scene_skybox_ensure_mesh(tc_scene_skybox* skybox) {
@@ -205,92 +141,4 @@ tc_mesh* tc_scene_skybox_ensure_mesh(tc_scene_skybox* skybox) {
     // Create skybox mesh lazily
     skybox->mesh = create_skybox_cube_mesh();
     return tc_mesh_get(skybox->mesh);
-}
-
-// Create skybox material with given shader
-static tc_material_handle create_skybox_material(const char* name, const char* frag_source) {
-    // Try to find existing material
-    tc_material_handle mh = tc_material_find_by_name(name);
-    if (tc_material_is_valid(mh)) {
-        tc_material* mat = tc_material_get(mh);
-        if (mat) {
-            tc_material_add_ref(mat);
-            return mh;
-        }
-    }
-
-    // Create shader
-    tc_shader_handle sh = tc_shader_from_sources(
-        SKYBOX_VERTEX_SHADER,
-        frag_source,
-        NULL,  // no geometry shader
-        name,
-        NULL,  // no source path
-        NULL   // auto-generate uuid
-    );
-    if (!tc_shader_is_valid(sh)) {
-        return tc_material_handle_invalid();
-    }
-
-    // Add ref for material's usage + extra ref to keep builtin shader alive forever
-    tc_shader* shader = tc_shader_get(sh);
-    if (shader) {
-        tc_shader_add_ref(shader);  // ref for material
-        tc_shader_add_ref(shader);  // ref to prevent deletion (builtin shader)
-    }
-
-    // Create material
-    mh = tc_material_create(NULL, name);
-    if (!tc_material_is_valid(mh)) {
-        return tc_material_handle_invalid();
-    }
-
-    tc_material* mat = tc_material_get(mh);
-    if (!mat) {
-        return tc_material_handle_invalid();
-    }
-
-    // Setup default phase with shader
-    mat->phase_count = 1;
-    mat->phases[0].shader = sh;
-    mat->phases[0].state = tc_render_state_opaque();
-    mat->phases[0].state.depth_write = 0;  // Skybox doesn't write depth
-    mat->phases[0].state.cull = 0;         // Render inside of cube
-    strncpy(mat->phases[0].phase_mark, "skybox", TC_PHASE_MARK_MAX - 1);
-
-    tc_material_add_ref(mat);
-    return mh;
-}
-
-tc_material* tc_scene_skybox_ensure_material(tc_scene_skybox* skybox, int type) {
-    if (!skybox) return NULL;
-
-    if (type == TC_SKYBOX_NONE) {
-        release_external_material_alias(skybox);
-        skybox->material = tc_material_handle_invalid();
-        return NULL;
-    }
-
-    if (type == TC_SKYBOX_SOLID) {
-        if (tc_material_handle_is_invalid(skybox->solid_material)) {
-            skybox->solid_material = create_skybox_material(
-                "__builtin_skybox_solid",
-                SKYBOX_SOLID_FRAGMENT_SHADER
-            );
-        }
-        release_external_material_alias(skybox);
-        skybox->material = skybox->solid_material;
-        return tc_material_get(skybox->solid_material);
-    }
-
-    // Default: gradient
-    if (tc_material_handle_is_invalid(skybox->gradient_material)) {
-        skybox->gradient_material = create_skybox_material(
-            "__builtin_skybox_gradient",
-            SKYBOX_GRADIENT_FRAGMENT_SHADER
-        );
-    }
-    release_external_material_alias(skybox);
-    skybox->material = skybox->gradient_material;
-    return tc_material_get(skybox->gradient_material);
 }

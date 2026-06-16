@@ -9,14 +9,8 @@
 #include <tgfx/resources/tc_material_registry.h>
 #include <stdlib.h>
 
-static bool skybox_material_is_builtin_alias(const tc_scene_skybox* skybox) {
-    if (!skybox || tc_material_handle_is_invalid(skybox->material)) return false;
-    return tc_material_handle_eq(skybox->material, skybox->gradient_material) ||
-           tc_material_handle_eq(skybox->material, skybox->solid_material);
-}
-
-static void release_skybox_external_material_alias(tc_scene_skybox* skybox) {
-    if (!skybox || skybox_material_is_builtin_alias(skybox)) return;
+static void release_skybox_material(tc_scene_skybox* skybox) {
+    if (!skybox || tc_material_handle_is_invalid(skybox->material)) return;
     tc_material* material = tc_material_get(skybox->material);
     if (material) {
         tc_material_release(material);
@@ -422,13 +416,11 @@ void tc_scene_set_skybox_material(tc_scene_handle h, tc_material* material) {
             return;
         }
     }
-    release_skybox_external_material_alias(skybox);
+    release_skybox_material(skybox);
     skybox->material = tc_material_handle_invalid();
     if (material) {
         skybox->material = material_handle;
-        if (!skybox_material_is_builtin_alias(skybox)) {
-            tc_material_add_ref(material);
-        }
+        tc_material_add_ref(material);
     }
 }
 
