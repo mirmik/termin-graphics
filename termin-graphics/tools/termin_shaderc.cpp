@@ -3,6 +3,7 @@
 #include <shaderc/shaderc.hpp>
 #include <tcbase/trent/json.h>
 #include <tgfx/resources/tc_shader.h>
+#include <tgfx2/internal/process_runner.hpp>
 
 #include <algorithm>
 #include <cstdlib>
@@ -18,10 +19,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#ifndef _WIN32
-#include <sys/wait.h>
-#endif
 
 namespace {
 
@@ -1629,72 +1626,17 @@ static std::vector<std::string> slang_include_dirs(
     return dirs;
 }
 
-static std::string quote_arg(const std::string& value) {
-#ifdef _WIN32
-    std::string out = "\"";
-    for (char ch : value) {
-        if (ch == '"') {
-            out.push_back('\\');
-        }
-        out.push_back(ch);
-    }
-    out.push_back('"');
-    return out;
-#else
-    std::string out = "'";
-    for (char ch : value) {
-        if (ch == '\'') {
-            out += "'\\''";
-        } else {
-            out.push_back(ch);
-        }
-    }
-    out.push_back('\'');
-    return out;
-#endif
-}
-
 static int run_command(const std::vector<std::string>& args) {
-    std::ostringstream cmd;
-#ifdef _WIN32
-    cmd << "call ";
-#endif
-    for (size_t i = 0; i < args.size(); ++i) {
-        if (i) cmd << ' ';
-        cmd << quote_arg(args[i]);
+    tgfx::internal::ProcessResult result = tgfx::internal::run_process(args, true);
+    if (!result.start_error.empty()) {
+        std::cerr << "termin_shaderc: failed to run "
+                  << (args.empty() ? "<empty>" : args[0])
+                  << ": " << result.start_error << "\n";
     }
-    std::string command = cmd.str();
-
-#ifdef _WIN32
-    // On Windows, use std::system (popen not ideal for batch commands)
-    int status = std::system(command.c_str());
-    return status;
-#else
-    // Use popen to capture stdout/stderr for better diagnostics
-    std::string pop_cmd = command + " 2>&1";
-    FILE* pipe = popen(pop_cmd.c_str(), "r");
-    if (!pipe) {
-        std::cerr << "termin_shaderc: failed to execute: " << command << "\n";
-        return 127;
+    if (!result.output.empty()) {
+        std::cerr << result.output;
     }
-    char buffer[256];
-    std::string output;
-    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-        output += buffer;
-    }
-    int status = pclose(pipe);
-    // Print captured output to stderr for diagnostics
-    if (!output.empty()) {
-        std::cerr << output;
-    }
-    if (status == -1) {
-        return 127;
-    }
-    if (WIFEXITED(status)) {
-        return WEXITSTATUS(status);
-    }
-    return status;
-#endif
+    return result.exit_code;
 }
 
 static bool compile_glsl_to_vulkan(const CompileOptions& options) {

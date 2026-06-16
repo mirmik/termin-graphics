@@ -12,33 +12,47 @@ from tcbase import log
 _configured = False
 
 
-def _find_repo_root() -> Path | None:
-    for parent in Path(__file__).resolve().parents:
-        if (parent / "sdk" / "bin" / "termin_shaderc").is_file():
-            return parent
+def _candidate_tool_paths(path: Path) -> tuple[Path, ...]:
+    if os.name == "nt" and path.suffix == "":
+        return (path.with_name(f"{path.name}.exe"), path)
+    return (path,)
+
+
+def _existing_tool(path: Path) -> Path | None:
+    for candidate in _candidate_tool_paths(path):
+        if candidate.is_file():
+            return candidate
     return None
+
+
+def _sdk_tool_dirs() -> tuple[Path, ...]:
+    dirs: list[Path] = []
+
+    sdk = os.environ.get("TERMIN_SDK")
+    if sdk:
+        dirs.append(Path(sdk) / "bin")
+
+    for parent in Path(__file__).resolve().parents:
+        dirs.append(parent / "bin")
+        dirs.append(parent / "sdk" / "bin")
+
+    return tuple(dirs)
 
 
 def _resolve_tool(name: str, env_name: str) -> Path | None:
     configured = os.environ.get(env_name)
     if configured:
         path = Path(configured)
-        if path.is_file():
-            return path
+        resolved = _existing_tool(path)
+        if resolved is not None:
+            return resolved
         log.error(f"[ShaderRuntime] {env_name} points to missing file: {configured}")
         return None
 
-    sdk = os.environ.get("TERMIN_SDK")
-    if sdk:
-        candidate = Path(sdk) / "bin" / name
-        if candidate.is_file():
-            return candidate
-
-    repo_root = _find_repo_root()
-    if repo_root is not None:
-        candidate = repo_root / "sdk" / "bin" / name
-        if candidate.is_file():
-            return candidate
+    for directory in _sdk_tool_dirs():
+        resolved = _existing_tool(directory / name)
+        if resolved is not None:
+            return resolved
 
     found = shutil.which(name)
     if found:
@@ -50,6 +64,11 @@ def _cache_root(label: str) -> Path:
     configured = os.environ.get("TERMIN_SDK_SHADER_CACHE_ROOT")
     if configured:
         return Path(configured) / label
+
+    if os.name == "nt":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        base = Path(local_app_data) if local_app_data else Path.home() / "AppData" / "Local"
+        return base / "Termin" / "Cache" / f"{label}-shaders"
 
     xdg_cache = os.environ.get("XDG_CACHE_HOME")
     base = Path(xdg_cache) if xdg_cache else Path.home() / ".cache"
@@ -84,8 +103,14 @@ def configure_default_shader_runtime(label: str = "python") -> bool:
     root = _cache_root(label)
     artifact_root = root / "artifacts"
     cache_root = root / "cache"
-    artifact_root.mkdir(parents=True, exist_ok=True)
-    cache_root.mkdir(parents=True, exist_ok=True)
+    try:
+        artifact_root.mkdir(parents=True, exist_ok=True)
+        cache_root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        log.error(
+            f"[ShaderRuntime] failed to create {label} shader cache directories: {exc}"
+        )
+        return False
     os.environ["TERMIN_SLANGC"] = str(slangc)
 
     tgfx.configure_shader_runtime(

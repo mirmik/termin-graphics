@@ -7,6 +7,7 @@
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/internal/shader_logging.hpp"
+#include "tgfx2/internal/process_runner.hpp"
 #include <tcbase/trent/json.h>
 
 #include <chrono>
@@ -856,25 +857,16 @@ static std::optional<std::filesystem::path> resolve_shader_compiler() {
     return std::nullopt;
 }
 
-static std::string quote_arg(const std::filesystem::path& value) {
-    std::string text = value.string();
-#ifdef _WIN32
-    std::string out = "\"";
-    for (char ch : text) {
-        if (ch == '"') out += "\\\"";
-        else out.push_back(ch);
+static int run_shader_tool(const std::vector<std::string>& args, const char* log_prefix) {
+    tgfx::internal::ProcessResult result = tgfx::internal::run_process(args);
+    if (!result.start_error.empty()) {
+        tc_log(TC_LOG_ERROR,
+               "%s: failed to run '%s': %s",
+               log_prefix,
+               args.empty() ? "<empty>" : args[0].c_str(),
+               result.start_error.c_str());
     }
-    out.push_back('"');
-    return out;
-#else
-    std::string out = "'";
-    for (char ch : text) {
-        if (ch == '\'') out += "'\\''";
-        else out.push_back(ch);
-    }
-    out.push_back('\'');
-    return out;
-#endif
+    return result.exit_code;
 }
 
 static bool compile_shader_artifact(
@@ -925,18 +917,21 @@ static bool compile_shader_artifact(
     else if (stage == tgfx::ShaderStage::Fragment && shader->fragment_entry && shader->fragment_entry[0])
         entry = shader->fragment_entry;
 
-    std::string cmd =
-        quote_arg(compiler.string()) +
-        " compile --language " + shader_language_name(language) +
-        " --target " + backend_name(backend) +
-        " --stage " + stage_name(stage) +
-        " --entry " + std::string(entry) + " --input " + quote_arg(source_path) +
-        " --output " + quote_arg(artifact_path) +
-        " --debug-name " + quote_arg(std::filesystem::path(
-            std::string(shader->name ? shader->name : shader->uuid) + ":" + stage_name(stage)));
+    std::vector<std::string> args = {
+        compiler.string(),
+        "compile",
+        "--language", shader_language_name(language),
+        "--target", backend_name(backend),
+        "--stage", stage_name(stage),
+        "--entry", entry,
+        "--input", source_path.string(),
+        "--output", artifact_path.string(),
+        "--debug-name",
+        std::string(shader->name ? shader->name : shader->uuid) + ":" + stage_name(stage),
+    };
     if (language == TC_SHADER_LANGUAGE_SLANG) {
         for (const auto& root : tgfx::builtin_shader_roots()) {
-            cmd += " -I " + quote_arg(root);
+            args.insert(args.end(), {"-I", root.string()});
         }
     }
     if (tgfx::internal::shader_verbose_logging_enabled()) {
@@ -949,7 +944,7 @@ static bool compile_shader_artifact(
                artifact_path.string().c_str());
     }
 
-    const int rc = std::system(cmd.c_str());
+    const int rc = run_shader_tool(args, "tgfx2 shader dev compile");
     if (rc != 0) {
         tc_log(TC_LOG_ERROR,
                "tgfx2 shader dev compile: termin_shaderc failed for '%s' stage=%s target=%s rc=%d",
@@ -1037,19 +1032,20 @@ static bool compile_engine_shader_stage_artifact(
         return false;
     }
 
-    std::string cmd =
-        quote_arg(compiler.string()) +
-        " compile --language " + shader_language_name(language) +
-        " --target " + backend_name(backend) +
-        " --stage " + stage_name(shader.stage) +
-        " --entry " + quote_arg(std::filesystem::path(
-            shader.entry_point && shader.entry_point[0] ? shader.entry_point : "main")) +
-        " --input " + quote_arg(source_path) +
-        " --output " + quote_arg(artifact_path) +
-        " --debug-name " + quote_arg(std::filesystem::path(
-            std::string(shader.name ? shader.name : shader.uuid) + ":" + stage_name(shader.stage)));
+    std::vector<std::string> args = {
+        compiler.string(),
+        "compile",
+        "--language", shader_language_name(language),
+        "--target", backend_name(backend),
+        "--stage", stage_name(shader.stage),
+        "--entry", shader.entry_point && shader.entry_point[0] ? shader.entry_point : "main",
+        "--input", source_path.string(),
+        "--output", artifact_path.string(),
+        "--debug-name",
+        std::string(shader.name ? shader.name : shader.uuid) + ":" + stage_name(shader.stage),
+    };
 
-    const int rc = std::system(cmd.c_str());
+    const int rc = run_shader_tool(args, "tgfx2 engine shader dev compile");
     if (rc != 0) {
         tc_log(TC_LOG_ERROR,
                "tgfx2 engine shader dev compile: termin_shaderc failed for '%s' stage=%s target=%s rc=%d",
