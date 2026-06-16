@@ -237,6 +237,13 @@ void bind_shader(nb::module_& m) {
             nb::arg("vertex"), nb::arg("fragment"),
             nb::arg("geometry") = "", nb::arg("name") = "", nb::arg("source_path") = "",
             "Set shader sources (bumps version if changed)")
+        .def("set_sources_with_entries", &TcShader::set_sources_with_entries,
+            nb::arg("vertex"), nb::arg("fragment"),
+            nb::arg("geometry") = "", nb::arg("name") = "", nb::arg("source_path") = "",
+            nb::arg("vertex_entry") = "",
+            nb::arg("fragment_entry") = "",
+            nb::arg("geometry_entry") = "",
+            "Set shader sources and explicit stage entry points")
         // Push a std140 material UBO layout onto the shader. `entries`
         // is a list of (name, property_type, offset, size) tuples
         // produced by the parser (see ShaderPhase.material_ubo_layout).

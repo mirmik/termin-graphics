@@ -247,6 +247,31 @@ public:
         );
     }
 
+    bool set_sources_with_entries(
+        const std::string& vertex,
+        const std::string& fragment,
+        const std::string& geometry = "",
+        const std::string& shader_name = "",
+        const std::string& src_path = "",
+        const std::string& vertex_entry = "",
+        const std::string& fragment_entry = "",
+        const std::string& geometry_entry = ""
+    ) {
+        tc_shader* s = get();
+        if (!s) return false;
+        return tc_shader_set_sources_with_entries(
+            s,
+            vertex.c_str(),
+            fragment.c_str(),
+            geometry.empty() ? nullptr : geometry.c_str(),
+            shader_name.empty() ? nullptr : shader_name.c_str(),
+            src_path.empty() ? nullptr : src_path.c_str(),
+            vertex_entry.empty() ? nullptr : vertex_entry.c_str(),
+            fragment_entry.empty() ? nullptr : fragment_entry.c_str(),
+            geometry_entry.empty() ? nullptr : geometry_entry.c_str()
+        );
+    }
+
     // Set variant info (called after creating variant shader)
     void set_variant_info(const TcShader& original, tc_shader_variant_op op) {
         tc_shader* s = get();
