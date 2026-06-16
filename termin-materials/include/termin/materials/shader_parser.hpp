@@ -217,7 +217,7 @@ public:
  *
  * Supported directives:
  *   @program <name>
- *   @language glsl|slang
+ *   @language slang                 // Required. GLSL .shader programs are not supported.
  *
  *   // Traditional multi-phase (explicit):
  *   @phase <mark>

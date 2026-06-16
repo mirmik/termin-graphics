@@ -1155,7 +1155,8 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
     std::string raw_line;
 
     std::string program_name;
-    std::string language = "glsl";
+    std::string language;
+    bool language_seen = false;
     std::vector<ShaderPhase> phases;
     std::vector<std::string> features;  // From @features directive
 
@@ -1281,8 +1282,14 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
                 throw std::runtime_error("@language expects exactly one value");
             }
             language = to_lower(parts[1]);
+            language_seen = true;
             if (language != "glsl" && language != "slang") {
                 throw std::runtime_error("Unsupported shader language: " + parts[1]);
+            }
+            if (language != "slang") {
+                throw std::runtime_error(
+                    ".shader files must declare @language slang; GLSL .shader "
+                    "programs are no longer supported");
             }
         }
         else if (directive == "@features") {
@@ -1522,6 +1529,12 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
         }
 
         phases.push_back(std::move(phase));
+    }
+
+    if (!language_seen) {
+        throw std::runtime_error(
+            ".shader files must declare @language slang; implicit GLSL .shader "
+            "programs are no longer supported");
     }
 
     ShaderMultyPhaseProgramm result(
