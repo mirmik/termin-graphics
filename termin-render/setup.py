@@ -27,11 +27,25 @@ setup(
     },
     install_requires=[
         "termin-nanobind",
+        "termin-assets",
         "tcbase",
+        "tgfx",
         "termin-scene",
         "termin-inspect",
+        "numpy",
+        "Pillow>=9.0",
     ],
     ext_modules=native_extensions_for_source(_DIR),
     cmdclass={"build": TerminCMakeBuild, "build_ext": BuildExt},
+    entry_points={
+        "termin.asset_import_plugins": [
+            "glsl = termin.render.glsl_plugin:GlslImportPlugin",
+            "texture = termin.render.texture_plugin:TextureImportPlugin",
+        ],
+        "termin.asset_runtime_plugins": [
+            "glsl = termin.render.glsl_plugin:GlslRuntimePlugin",
+            "texture = termin.render.texture_plugin:TextureRuntimePlugin",
+        ],
+    },
     zip_safe=False,
 )
