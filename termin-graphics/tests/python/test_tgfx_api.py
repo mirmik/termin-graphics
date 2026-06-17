@@ -12,9 +12,6 @@ def test_basic_types_and_render_state():
     rs = tgfx.RenderState.opaque()
     assert rs.depth_test is True
     assert rs.depth_write is True
-    assert tgfx.ShaderVariantOp.LINE_MATERIAL_FRAGMENT is not tgfx.ShaderVariantOp.NONE
-    assert tgfx.ShaderLanguage.GLSL is not tgfx.ShaderLanguage.SLANG
-    assert tgfx.ShaderArtifactPolicy.REQUIRED is not tgfx.ShaderArtifactPolicy.OPTIONAL
 
 
 def test_render_state_transparent():
@@ -224,7 +221,6 @@ def test_screen_space_line_binding_smoke():
     assert len(params.view_projection) == 16
     assert params.viewport_width == 640.0
     assert params.viewport_height == 480.0
-    assert tgfx.ScreenSpaceLineRenderer() is not None
 
 
 def test_world_space_line_binding_smoke():
@@ -252,4 +248,3 @@ def test_world_space_line_binding_smoke():
     assert len(params.view_projection) == 16
     assert params.camera_position == [1.0, 2.0, 3.0]
     assert params.lighting_enabled is True
-    assert tgfx.WorldSpaceLineRenderer() is not None

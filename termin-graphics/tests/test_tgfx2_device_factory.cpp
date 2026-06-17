@@ -307,10 +307,8 @@ TEST_CASE("tc_shader identity hash separates source languages") {
     tc_shader_destroy(glsl);
 }
 
+#ifndef _WIN32
 TEST_CASE("tgfx2 shader runtime lazily compiles stale artifacts in dev mode") {
-#ifdef _WIN32
-    CHECK(true);
-#else
     namespace fs = std::filesystem;
 
     const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -428,13 +426,11 @@ float4 main() : SV_Target {
     CHECK(read_test_text_file(root / "compile_count.txt") == "2");
 
     tc_shader_destroy(handle);
-#endif
 }
+#endif
 
+#ifndef _WIN32
 TEST_CASE("tgfx2 engine shader artifact metadata invalidates stale layout schema") {
-#ifdef _WIN32
-    CHECK(true);
-#else
     namespace fs = std::filesystem;
 
     const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -506,13 +502,11 @@ TEST_CASE("tgfx2 engine shader artifact metadata invalidates stale layout schema
         bytes));
     CHECK(bytes == std::vector<uint8_t>({'S', 'P', 'I', 'R', 'V', '2'}));
     CHECK(read_test_text_file(root / "compile_count.txt") == "2");
-#endif
 }
+#endif
 
+#ifndef _WIN32
 TEST_CASE("tgfx2 shader runtime loads resource layout sidecar") {
-#ifdef _WIN32
-    CHECK(true);
-#else
     namespace fs = std::filesystem;
 
     const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -608,5 +602,5 @@ float4 main() : SV_Target {
     termin::tgfx2_set_shader_artifact_root("");
     tc_shader_destroy(handle);
     fs::remove_all(root);
-#endif
 }
+#endif
