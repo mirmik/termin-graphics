@@ -66,6 +66,7 @@ from termin.render_framework._render_framework_native import (
     tc_resources_allocate_dict,
 )
 from termin.render_framework.frame_graph_view import PipelineFrameGraphView
+from termin.render_framework.frame_pass_registry import FramePassRegistry
 from termin.render_framework.python_pass import PythonFramePass, deserialize_pass
 
 __all__ = [
@@ -131,6 +132,7 @@ __all__ = [
     "tc_pipeline_remove_passes_by_name",
     "tc_resources_allocate_dict",
     "PipelineFrameGraphView",
+    "FramePassRegistry",
     "PythonFramePass",
     "deserialize_pass",
 ]
