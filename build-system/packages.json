@@ -23,6 +23,10 @@
       "distribution": "termin-assets"
     },
     {
+      "path": "termin-tween",
+      "distribution": "termin-tween"
+    },
+    {
       "path": "termin-mesh",
       "distribution": "tmesh",
       "native_extensions": [
@@ -104,6 +108,10 @@
       "native_extensions": [
         {"extension": "termin.mesh._components_mesh_native", "target": "_components_mesh_native"}
       ]
+    },
+    {
+      "path": "termin-components/termin-components-tween",
+      "distribution": "termin-components-tween"
     },
     {
       "path": "termin-input",
