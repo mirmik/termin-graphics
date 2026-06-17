@@ -22,7 +22,10 @@ setup(
     python_requires=">=3.8",
     packages=["termin.skeleton"],
     package_dir={"termin.skeleton": "python/termin/skeleton"},
-    install_requires=["termin-nanobind"],
+    install_requires=[
+        "termin-nanobind",
+        "termin-assets",
+    ],
     ext_modules=native_extensions_for_source(_DIR),
     cmdclass={"build": TerminCMakeBuild, "build_ext": BuildExt},
     zip_safe=False,

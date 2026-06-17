@@ -27,6 +27,10 @@
       "distribution": "termin-tween"
     },
     {
+      "path": "termin-audio",
+      "distribution": "termin-audio"
+    },
+    {
       "path": "termin-mesh",
       "distribution": "tmesh",
       "native_extensions": [
