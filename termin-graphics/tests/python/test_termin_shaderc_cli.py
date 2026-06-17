@@ -2,7 +2,6 @@ import json
 import os
 import subprocess
 import struct
-import sys
 from pathlib import Path
 
 import pytest

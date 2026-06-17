@@ -12,7 +12,6 @@ from termin.mesh.mesh_spec import DEFAULT_AXIS_X, DEFAULT_AXIS_Y, DEFAULT_AXIS_Z
 
 if TYPE_CHECKING:
     from termin.mesh.mesh_spec import MeshSpec
-    from termin.visualization.render.render_context import RenderContext
 
 
 class MeshAsset(DataAsset[TcMesh]):

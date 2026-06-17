@@ -22,7 +22,6 @@ from tgfx._tgfx_native import Text3DRenderer as _NativeText3DRenderer
 
 if TYPE_CHECKING:
     from tgfx.font import FontTextureAtlas
-    from tgfx._tgfx_native import Tgfx2Context
 
 
 __all__ = ["Text3DRenderer"]
