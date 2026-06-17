@@ -30,6 +30,7 @@ setup(
         "termin-assets",
         "tcbase",
         "tgfx",
+        "termin-materials",
         "termin-scene",
         "termin-inspect",
         "numpy",
@@ -40,10 +41,14 @@ setup(
     entry_points={
         "termin.asset_import_plugins": [
             "glsl = termin.render.glsl_plugin:GlslImportPlugin",
+            "material = termin.render.material_plugin:MaterialImportPlugin",
+            "shader = termin.render.shader_plugin:ShaderImportPlugin",
             "texture = termin.render.texture_plugin:TextureImportPlugin",
         ],
         "termin.asset_runtime_plugins": [
             "glsl = termin.render.glsl_plugin:GlslRuntimePlugin",
+            "material = termin.render.material_plugin:MaterialRuntimePlugin",
+            "shader = termin.render.shader_plugin:ShaderRuntimePlugin",
             "texture = termin.render.texture_plugin:TextureRuntimePlugin",
         ],
     },
