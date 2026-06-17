@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from setuptools import setup
+from setuptools import find_namespace_packages, setup
 from termin_build.cmake_ext import TerminCMakeBuild, TerminCMakeBuildExt
 from termin_build.setup_helpers import native_extensions_for_source
 
@@ -23,9 +23,22 @@ setup(
     author="mirmik",
     author_email="mirmikns@yandex.ru",
     python_requires=">=3.8",
-    packages=["tmesh"],
-    package_dir={"tmesh": "python/tmesh"},
-    install_requires=["tcbase", "termin-nanobind", "numpy"],
+    packages=[
+        "tmesh",
+        *find_namespace_packages(
+            where="python",
+            include=["termin.mesh", "termin.mesh.*"],
+        ),
+    ],
+    package_dir={
+        "": "python",
+    },
+    install_requires=[
+        "tcbase",
+        "termin-assets",
+        "termin-nanobind",
+        "numpy",
+    ],
     package_data={
         "tmesh": [
             "include/**/*.h",
@@ -39,5 +52,13 @@ setup(
     },
     ext_modules=native_extensions_for_source(_DIR),
     cmdclass={"build": TerminCMakeBuild, "build_ext": BuildExt},
+    entry_points={
+        "termin.asset_import_plugins": [
+            "mesh = termin.mesh.asset_plugin:create_import_plugin",
+        ],
+        "termin.asset_runtime_plugins": [
+            "mesh = termin.mesh.asset_plugin:create_runtime_plugin",
+        ],
+    },
     zip_safe=False,
 )
