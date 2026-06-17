@@ -519,10 +519,19 @@ void tc_texture_compute_uuid(
     uint64_t hash = 14695981039346656037ULL;
     const uint8_t* bytes = (const uint8_t*)data;
 
-    uint32_t dims[3] = { width, height, channels };
-    for (size_t i = 0; i < sizeof(dims); i++) {
-        hash ^= ((const uint8_t*)dims)[i];
-        hash *= 1099511628211ULL;
+    const uint32_t dims[3] = { width, height, channels };
+    for (size_t i = 0; i < 3; i++) {
+        uint32_t value = dims[i];
+        for (int byte = 0; byte < 4; byte++) {
+            hash ^= (uint8_t)((value >> (byte * 8)) & 0xFFu);
+            hash *= 1099511628211ULL;
+        }
+    }
+
+    if (!data && size > 0) {
+        tc_log_error("tc_texture_compute_uuid: data is NULL for non-empty texture data");
+        snprintf(uuid_out, 40, "%016llx", (unsigned long long)hash);
+        return;
     }
 
     for (size_t i = 0; i < size; i++) {

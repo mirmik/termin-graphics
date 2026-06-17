@@ -385,10 +385,12 @@ static bool tc_mesh_endpoint_less(const int64_t a[3], const int64_t b[3]) {
 
 static uint64_t tc_mesh_hash_edge_key(const int64_t key[6]) {
     uint64_t hash = 14695981039346656037ULL;
-    const uint8_t* bytes = (const uint8_t*)key;
-    for (size_t i = 0; i < sizeof(int64_t) * 6; ++i) {
-        hash ^= bytes[i];
-        hash *= 1099511628211ULL;
+    for (size_t i = 0; i < 6; ++i) {
+        uint64_t value = (uint64_t)key[i];
+        for (int byte = 0; byte < 8; ++byte) {
+            hash ^= (uint8_t)((value >> (byte * 8)) & 0xFFu);
+            hash *= 1099511628211ULL;
+        }
     }
     return hash;
 }

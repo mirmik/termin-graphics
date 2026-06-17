@@ -20,8 +20,6 @@ namespace termin {
 namespace {
 
 constexpr uint32_t GLSL_MATERIAL_BINDING = 1;
-constexpr uint32_t GLSL_PER_FRAME_BINDING = 2;
-constexpr uint32_t GLSL_DRAW_DATA_BINDING = 24;
 constexpr uint32_t GLSL_MATERIAL_TEXTURE_BINDING_BASE = 4;
 
 // Trim whitespace from both ends

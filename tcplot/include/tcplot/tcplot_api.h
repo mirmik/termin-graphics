@@ -8,9 +8,7 @@
         #define TCPLOT_API __declspec(dllimport)
     #endif
 #else
-    #if defined(__clang__)
-        #define TCPLOT_API __attribute__((visibility("default"), type_visibility("default")))
-    #elif defined(__GNUC__)
+    #if defined(__clang__) || defined(__GNUC__)
         #define TCPLOT_API __attribute__((visibility("default")))
     #else
         #define TCPLOT_API
