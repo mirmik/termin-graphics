@@ -20,7 +20,7 @@ setup(
         "termin-default-assets",
         "termin-components-render",
         "tmesh",
-        "termin-graphics",
+        "tgfx",
         "termin-materials",
         "termin-skeleton",
         "termin-animation",
