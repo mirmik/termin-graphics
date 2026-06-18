@@ -19,7 +19,7 @@ setup(
         "termin-scene",
         "termin-default-assets",
         "termin-components-render",
-        "termin-mesh",
+        "tmesh",
         "termin-graphics",
         "termin-materials",
         "termin-skeleton",
