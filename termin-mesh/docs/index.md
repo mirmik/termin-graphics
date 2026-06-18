@@ -36,10 +36,12 @@ C/C++ API публикуется через installed headers из `include/`.
 `tc_mesh` и `tc_texture` считаются canonical engine resources. Renderer/device-specific upload и handle adapters должны оставаться отдельным слоем поверх этих типов.
 
 Compatibility status:
-- `termin.assets.mesh_asset` and `termin.loaders.mesh_spec` remain temporary
-  compatibility re-exports during migration.
-- `termin.assets.mesh_plugin`, `termin.loaders.obj_loader`, and
-  `termin.loaders.stl_loader` were removed on 2026-06-18. Use
+- `termin.assets.mesh_asset` remains a temporary compatibility re-export during
+  migration.
+- `termin.assets.mesh_plugin`, `termin.loaders.mesh_spec`,
+  `termin.loaders.obj_loader`, and `termin.loaders.stl_loader` were removed on
+  2026-06-18. Use
+  `termin.default_assets.mesh.mesh_spec`,
   `termin.default_assets.mesh.asset_plugin`,
   `termin.default_assets.mesh.obj_loader`, and
   `termin.default_assets.mesh.stl_loader` directly.

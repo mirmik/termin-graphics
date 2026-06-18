@@ -13,7 +13,6 @@ from termin.mesh.mesh_spec import MeshSpec as DomainMeshSpec
 from termin.mesh.obj_loader import OBJMeshData, parse_obj_text
 from termin.mesh.stl_loader import STLMeshData
 from termin.assets.mesh_asset import MeshAsset as AppLegacyMeshAsset
-from termin.loaders.mesh_spec import MeshSpec as AppLegacyMeshSpec
 
 
 def test_mesh_asset_legacy_modules_reexport_canonical_class() -> None:
@@ -22,7 +21,6 @@ def test_mesh_asset_legacy_modules_reexport_canonical_class() -> None:
     assert LegacyDomainMeshAsset is MeshAsset
     assert AppLegacyMeshAsset is MeshAsset
     assert DomainMeshSpec is MeshSpec
-    assert AppLegacyMeshSpec is MeshSpec
 
 
 def test_mesh_loader_legacy_modules_reexport_canonical_symbols() -> None:
