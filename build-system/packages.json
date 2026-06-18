@@ -228,6 +228,10 @@
       ]
     },
     {
+      "path": "termin-glb",
+      "distribution": "termin-glb"
+    },
+    {
       "path": "termin-nodegraph",
       "distribution": "termin-nodegraph"
     },

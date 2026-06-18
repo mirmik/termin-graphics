@@ -127,6 +127,9 @@ run_suite "termin-mesh python" \
 run_suite "termin-prefab python" \
     "${PYTHON_BIN}" -m pytest termin-prefab/tests/ -v
 
+run_suite "termin-glb python" \
+    "${PYTHON_BIN}" -m pytest termin-glb/tests/ -v
+
 run_suite "termin-default-assets python" \
     "${PYTHON_BIN}" -m pytest termin-default-assets/tests/ -v
 

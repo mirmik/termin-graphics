@@ -20,8 +20,11 @@ setup(
     author="mirmik",
     author_email="mirmikns@yandex.ru",
     python_requires=">=3.8",
-    packages=["termin.animation"],
-    package_dir={"termin.animation": "python/termin/animation"},
+    packages=["termin.animation", "termin.animation_components"],
+    package_dir={
+        "termin.animation": "python/termin/animation",
+        "termin.animation_components": "python/termin/animation_components",
+    },
     install_requires=[
         "termin-nanobind",
         "tcbase",
