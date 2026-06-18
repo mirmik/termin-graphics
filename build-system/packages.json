@@ -38,6 +38,10 @@
       ]
     },
     {
+      "path": "termin-default-assets",
+      "distribution": "termin-default-assets"
+    },
+    {
       "path": "termin-graphics",
       "distribution": "tgfx",
       "native_extensions": [

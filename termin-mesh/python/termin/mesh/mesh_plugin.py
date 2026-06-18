@@ -1,6 +1,6 @@
 """Compatibility re-export for mesh asset plugins."""
 
-from termin.mesh.asset_plugin import (
+from termin.default_assets.mesh.asset_plugin import (
     MeshAssetPlugin,
     MeshImportPlugin,
     MeshRuntimePlugin,
