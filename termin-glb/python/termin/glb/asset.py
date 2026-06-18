@@ -118,9 +118,15 @@ class GLBAsset(DataAsset["GLBSceneData"]):
 
         # Create child assets from resources section
         resources = spec_data.get("resources", {})
-        self._create_mesh_assets(resources.get("meshes", {}))
-        self._create_skeleton_assets(resources.get("skeletons", {}))
-        self._create_animation_assets(resources.get("animations", {}))
+        mesh_uuids = resources.get("meshes", {})
+        skeleton_uuids = resources.get("skeletons", {})
+        animation_uuids = resources.get("animations", {})
+        if mesh_uuids:
+            self._create_mesh_assets(mesh_uuids)
+        if skeleton_uuids:
+            self._create_skeleton_assets(skeleton_uuids)
+        if animation_uuids:
+            self._create_animation_assets(animation_uuids)
 
     def _create_mesh_assets(self, mesh_uuids: Dict[str, str]) -> None:
         """Get or create child MeshAssets with UUIDs from spec via ResourceManager.
