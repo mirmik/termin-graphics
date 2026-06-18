@@ -8,7 +8,8 @@ The package contains:
 - `termin.glb.loader` for parsing `.glb` and JSON `.gltf` files into GLB scene
   data.
 - `termin.glb.asset.GLBAsset` for lazy GLB loading and embedded mesh,
-  skeleton, and animation child assets.
+  skeleton, and animation child assets through the generic `termin-assets`
+  embedded-asset API.
 - `termin.glb.asset_plugin` import/runtime plugins for asset discovery and hot
   reload.
 - `termin.glb.instantiator.instantiate_glb` for creating scene entities and

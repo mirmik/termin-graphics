@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Protocol
+from typing import TYPE_CHECKING, Dict, Protocol, cast
 
 from tcbase import log
-from termin_assets import DataAsset, get_resource_manager
+from termin_assets import DataAsset, EmbeddedAssetSpec, get_resource_manager
 
 if TYPE_CHECKING:
+    from termin_assets import Asset
     from termin.glb.loader import GLBSceneData
     from termin.default_assets.mesh.asset import MeshAsset
     from termin.skeleton.asset import SkeletonAsset
@@ -18,13 +19,7 @@ if TYPE_CHECKING:
 class GLBResourceManager(Protocol):
     """Resource-manager surface needed by GLB child asset registration."""
 
-    def get_or_create_mesh_asset(self, name: str, source_path: str | None = None, uuid: str | None = None, parent=None, parent_key: str | None = None):
-        ...
-
-    def get_or_create_skeleton_asset(self, name: str, source_path: str | None = None, uuid: str | None = None, parent=None, parent_key: str | None = None):
-        ...
-
-    def get_or_create_animation_clip_asset(self, name: str, source_path: str | None = None, uuid: str | None = None, parent=None, parent_key: str | None = None):
+    def get_or_create_embedded_asset(self, spec: EmbeddedAssetSpec):
         ...
 
 
@@ -41,9 +36,9 @@ class GLBAsset(DataAsset["GLBSceneData"]):
     - Child SkeletonAssets for each skin
     - Child AnimationClipAssets for each animation
 
-    Child assets are requested from ResourceManager during spec parsing
-    (via get_or_create_*_asset methods). GLBAsset never creates assets
-    directly - only ResourceManager is allowed to create assets.
+    Child assets are requested from ResourceManager during spec parsing through
+    the generic embedded-asset API. GLBAsset never creates assets directly -
+    only ResourceManager is allowed to create assets.
     """
 
     _uses_binary = True  # GLB is binary format
@@ -84,6 +79,27 @@ class GLBAsset(DataAsset["GLBSceneData"]):
             raise RuntimeError("Resource manager is not configured for GLB child assets")
         return resource_manager
 
+    def _source_path_string(self) -> str | None:
+        return str(self._source_path) if self._source_path else None
+
+    def _get_or_create_child_asset(
+        self,
+        type_id: str,
+        name: str,
+        parent_key: str,
+        uuid: str | None,
+    ) -> "Asset":
+        return self._child_resource_manager().get_or_create_embedded_asset(
+            EmbeddedAssetSpec(
+                type_id=type_id,
+                name=name,
+                parent=self,
+                parent_key=parent_key,
+                source_path=self._source_path_string(),
+                uuid=uuid,
+            )
+        )
+
     # --- Convenience property ---
 
     @property
@@ -117,15 +133,11 @@ class GLBAsset(DataAsset["GLBSceneData"]):
             tc_mesh_is_loaded,
         )
 
-        rm = self._child_resource_manager()
         for mesh_name, mesh_uuid in mesh_uuids.items():
             full_name = f"{self._name}_{mesh_name}"
-            asset = rm.get_or_create_mesh_asset(
-                name=full_name,
-                source_path=str(self._source_path) if self._source_path else None,
-                uuid=mesh_uuid,
-                parent=self,
-                parent_key=mesh_name,
+            asset = cast(
+                "MeshAsset",
+                self._get_or_create_child_asset("mesh", full_name, mesh_name, mesh_uuid),
             )
             self._mesh_assets[mesh_name] = asset
 
@@ -135,8 +147,7 @@ class GLBAsset(DataAsset["GLBSceneData"]):
                 # Set load callback that will trigger GLBAsset loading
                 tc_mesh_set_load_callback(tc_mesh, self._make_mesh_load_callback(mesh_name))
                 # Store handle in MeshAsset
-                asset._data = tc_mesh
-                asset._loaded = False
+                asset.set_runtime_data(tc_mesh, loaded=False)
 
     def _create_skeleton_assets(self, skeleton_uuids: Dict[str, str]) -> None:
         """Get or create child SkeletonAssets with UUIDs from spec via ResourceManager.
@@ -149,18 +160,14 @@ class GLBAsset(DataAsset["GLBSceneData"]):
             tc_skeleton_is_loaded,
         )
 
-        rm = self._child_resource_manager()
         for skeleton_key, skeleton_uuid in skeleton_uuids.items():
             # skeleton_key is "skeleton" or "skeleton_N"
             idx = 0 if skeleton_key == "skeleton" else int(skeleton_key.split("_")[1])
             skeleton_name = f"{self._name}_skeleton" if idx == 0 else f"{self._name}_skeleton_{idx}"
 
-            asset = rm.get_or_create_skeleton_asset(
-                name=skeleton_name,
-                source_path=str(self._source_path) if self._source_path else None,
-                uuid=skeleton_uuid,
-                parent=self,
-                parent_key=skeleton_key,
+            asset = cast(
+                "SkeletonAsset",
+                self._get_or_create_child_asset("skeleton", skeleton_name, skeleton_key, skeleton_uuid),
             )
             self._skeleton_assets[skeleton_key] = asset
 
@@ -170,19 +177,14 @@ class GLBAsset(DataAsset["GLBSceneData"]):
                 # Set load callback that will trigger GLBAsset loading
                 tc_skeleton_set_load_callback(tc_skel, self._make_skeleton_load_callback(skeleton_key))
                 # Store handle in SkeletonAsset
-                asset._data = tc_skel
-                asset._loaded = False
+                asset.set_runtime_data(tc_skel, loaded=False)
 
     def _create_animation_assets(self, animation_uuids: Dict[str, str]) -> None:
         """Get or create child AnimationClipAssets with UUIDs from spec via ResourceManager."""
-        rm = self._child_resource_manager()
         for anim_name, anim_uuid in animation_uuids.items():
-            asset = rm.get_or_create_animation_clip_asset(
-                name=anim_name,
-                source_path=str(self._source_path) if self._source_path else None,
-                uuid=anim_uuid,
-                parent=self,
-                parent_key=anim_name,
+            asset = cast(
+                "AnimationClipAsset",
+                self._get_or_create_child_asset("animation_clip", anim_name, anim_name, anim_uuid),
             )
             self._animation_assets[anim_name] = asset
 
@@ -343,14 +345,15 @@ class GLBAsset(DataAsset["GLBSceneData"]):
         for mesh_name, asset in self._mesh_assets.items():
             for glb_mesh in self._data.meshes:
                 if glb_mesh.name == mesh_name:
-                    if asset._data is not None and asset._data.is_valid:
+                    tc_mesh = asset.cached_data
+                    if tc_mesh is not None and tc_mesh.is_valid:
                         # Mesh was declared, populate existing entry
-                        if not tc_mesh_is_loaded(asset._data):
-                            _populate_tc_mesh_from_glb(asset._data, glb_mesh)
+                        if not tc_mesh_is_loaded(tc_mesh):
+                            _populate_tc_mesh_from_glb(tc_mesh, glb_mesh)
                     else:
                         # Create new mesh entry with asset's UUID
-                        asset._data = _glb_mesh_to_tc_mesh(glb_mesh, asset._uuid)
-                    asset._loaded = True
+                        tc_mesh = _glb_mesh_to_tc_mesh(glb_mesh, asset.uuid)
+                    asset.set_runtime_data(tc_mesh, loaded=True)
                     break
 
         # Populate skeleton assets
@@ -362,69 +365,57 @@ class GLBAsset(DataAsset["GLBSceneData"]):
                 index = int(skeleton_key.split("_")[-1])
 
             if index < len(self._data.skins):
-                if asset._data is not None and asset._data.is_valid:
+                tc_skel = asset.cached_data
+                if tc_skel is not None and tc_skel.is_valid:
                     # Skeleton was declared, populate existing entry
-                    if not tc_skeleton_is_loaded(asset._data):
+                    if not tc_skeleton_is_loaded(tc_skel):
                         _populate_tc_skeleton_from_glb(
-                            asset._data,
+                            tc_skel,
                             self._data.skins[index],
                             self._data.nodes,
                         )
                 else:
                     # Create new skeleton entry with asset's UUID
-                    asset._data = _glb_skin_to_tc_skeleton(
+                    tc_skel = _glb_skin_to_tc_skeleton(
                         self._data.skins[index],
                         self._data.nodes,
-                        asset._uuid,
+                        asset.uuid,
                     )
-                asset._loaded = True
+                asset.set_runtime_data(tc_skel, loaded=True)
 
         # Populate animation assets
         for anim_name, asset in self._animation_assets.items():
-            if asset._data is None:
+            if asset.cached_data is None:
                 for glb_anim in self._data.animations:
                     if glb_anim.name == anim_name:
-                        asset._data = clip_from_glb(glb_anim)
-                        asset._loaded = True
+                        asset.set_runtime_data(clip_from_glb(glb_anim), loaded=True)
                         break
 
     def _create_new_mesh_asset(self, mesh_name: str) -> "MeshAsset":
         """Get or create a MeshAsset for a mesh discovered during load via ResourceManager."""
-        rm = self._child_resource_manager()
         full_name = f"{self._name}_{mesh_name}"
-        asset = rm.get_or_create_mesh_asset(
-            name=full_name,
-            source_path=str(self._source_path) if self._source_path else None,
-            uuid=None,  # Will auto-generate
-            parent=self,
-            parent_key=mesh_name,
+        asset = cast(
+            "MeshAsset",
+            self._get_or_create_child_asset("mesh", full_name, mesh_name, None),
         )
         self._mesh_assets[mesh_name] = asset
         return asset
 
     def _create_new_skeleton_asset(self, skeleton_key: str, index: int) -> "SkeletonAsset":
         """Get or create a SkeletonAsset for a skeleton discovered during load via ResourceManager."""
-        rm = self._child_resource_manager()
         skeleton_name = f"{self._name}_skeleton" if index == 0 else f"{self._name}_skeleton_{index}"
-        asset = rm.get_or_create_skeleton_asset(
-            name=skeleton_name,
-            source_path=str(self._source_path) if self._source_path else None,
-            uuid=None,  # Will auto-generate
-            parent=self,
-            parent_key=skeleton_key,
+        asset = cast(
+            "SkeletonAsset",
+            self._get_or_create_child_asset("skeleton", skeleton_name, skeleton_key, None),
         )
         self._skeleton_assets[skeleton_key] = asset
         return asset
 
     def _create_new_animation_asset(self, anim_name: str) -> "AnimationClipAsset":
         """Get or create an AnimationClipAsset for an animation discovered during load via ResourceManager."""
-        rm = self._child_resource_manager()
-        asset = rm.get_or_create_animation_clip_asset(
-            name=anim_name,
-            source_path=str(self._source_path) if self._source_path else None,
-            uuid=None,  # Will auto-generate
-            parent=self,
-            parent_key=anim_name,
+        asset = cast(
+            "AnimationClipAsset",
+            self._get_or_create_child_asset("animation_clip", anim_name, anim_name, None),
         )
         self._animation_assets[anim_name] = asset
         return asset
