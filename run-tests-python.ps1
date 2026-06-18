@@ -179,6 +179,8 @@ if ($PytestTargets.Count -gt 0) {
     Invoke-TestSuite "termin-base python" (@("-m", "pytest", "termin-base/tests/python/") + (New-PytestSuiteArgs "termin-base-python") + @("-v"))
     Invoke-TestSuite "termin-modules import smoke" @("-c", "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())")
     Invoke-TestSuite "termin-mesh python" (@("-m", "pytest", "termin-mesh/tests/python/") + (New-PytestSuiteArgs "termin-mesh-python") + @("-v"))
+    Invoke-TestSuite "termin-prefab python" (@("-m", "pytest", "termin-prefab/tests/") + (New-PytestSuiteArgs "termin-prefab-python") + @("-v"))
+    Invoke-TestSuite "termin-default-assets python" (@("-m", "pytest", "termin-default-assets/tests/") + (New-PytestSuiteArgs "termin-default-assets-python") + @("-v"))
     Invoke-TestSuite "termin-csg python" (@("-m", "pytest", "termin-csg/tests/") + (New-PytestSuiteArgs "termin-csg-python") + @("-v"))
     Invoke-TestSuite "termin-graphics python" (@("-m", "pytest", "termin-graphics/tests/python/") + (New-PytestSuiteArgs "termin-graphics-python") + @("-v"))
     Invoke-TestSuite "termin-gui python" (@("-m", "pytest", "termin-gui/python/tests/") + (New-PytestSuiteArgs "termin-gui-python") + @("-v"))

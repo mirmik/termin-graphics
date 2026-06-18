@@ -23,6 +23,10 @@
       "distribution": "termin-assets"
     },
     {
+      "path": "termin-prefab",
+      "distribution": "termin-prefab"
+    },
+    {
       "path": "termin-tween",
       "distribution": "termin-tween"
     },

@@ -124,6 +124,9 @@ run_suite "termin-modules import smoke" \
 run_suite "termin-mesh python" \
     "${PYTHON_BIN}" -m pytest termin-mesh/tests/python/ -v
 
+run_suite "termin-prefab python" \
+    "${PYTHON_BIN}" -m pytest termin-prefab/tests/ -v
+
 run_suite "termin-default-assets python" \
     "${PYTHON_BIN}" -m pytest termin-default-assets/tests/ -v
 
