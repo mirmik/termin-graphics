@@ -20,4 +20,7 @@ The package contains:
 Boundary note: GLB is a multi-domain importer, not a mesh-domain asset. The
 package may depend on mesh, render, skeleton, animation, graphics, and default
 asset adapters. It must not depend on `termin-app`; editor UI and drag/drop
-orchestration stay in `termin-app`.
+orchestration stay in `termin-app`. GLB registers embedded mesh, skeleton,
+animation, and texture assets through generic `termin-assets` runtime registry
+APIs; builtin material lookup is still provided by the composing application
+resource manager.

@@ -27,6 +27,8 @@ if TYPE_CHECKING:
     from termin.default_assets.mesh.asset import MeshAsset
     from termin.glb.loader import GLBSceneData, GLBMeshData, GLBMaterialData, GLBTcTexture
 
+TEXTURE_ASSET_TYPE = "texture"
+
 
 class SceneLike(Protocol):
     """Scene surface needed by GLB instantiation."""
@@ -325,14 +327,14 @@ def _safe_glb_texture_name(texture: "GLBTcTexture") -> str:
 
 def _unique_glb_texture_name(rm, texture: "GLBTcTexture", texture_uuid: str) -> str:
     base_name = _safe_glb_texture_name(texture)
-    asset = rm.get_texture_asset(base_name)
+    asset = rm.get_runtime_asset(TEXTURE_ASSET_TYPE, base_name)
     if asset is None or asset.uuid == texture_uuid:
         return base_name
 
     suffix = 2
     while True:
         candidate = f"{base_name}_{suffix}"
-        asset = rm.get_texture_asset(candidate)
+        asset = rm.get_runtime_asset(TEXTURE_ASSET_TYPE, candidate)
         if asset is None or asset.uuid == texture_uuid:
             return candidate
         suffix += 1
@@ -341,17 +343,12 @@ def _unique_glb_texture_name(rm, texture: "GLBTcTexture", texture_uuid: str) -> 
 def _tc_texture_from_asset_name(rm, name: str):
     from tcbase import log
 
-    asset = rm.get_texture_asset(name)
+    asset = rm.get_runtime_asset(TEXTURE_ASSET_TYPE, name)
     if asset is None:
         log.error(f"[glb_instantiator] Texture asset not found by name: {name}")
         return None
 
-    handle = rm.get_texture_handle(name)
-    if handle is None:
-        log.error(f"[glb_instantiator] Texture asset handle not found: {name}")
-        return None
-
-    tc_texture = handle.get()
+    tc_texture = asset.texture_data
     if tc_texture is None or not tc_texture.is_valid:
         log.error(f"[glb_instantiator] Texture asset failed to load: {name}")
         return None
@@ -369,8 +366,9 @@ def _texture_name_for_source_path(rm, source_path: Path) -> str | None:
 
     target_path = source_path.resolve()
 
-    for name in rm.list_texture_names():
-        asset = rm.get_texture_asset(name)
+    texture_names = rm.list_runtime_asset_names(TEXTURE_ASSET_TYPE)
+    for name in texture_names:
+        asset = rm.get_runtime_asset(TEXTURE_ASSET_TYPE, name)
         if asset is None:
             continue
         asset_source_path = asset.source_path
@@ -382,7 +380,7 @@ def _texture_name_for_source_path(rm, source_path: Path) -> str | None:
             return name
 
     stem_name = source_path.stem
-    stem_asset = rm.get_texture_asset(stem_name)
+    stem_asset = rm.get_runtime_asset(TEXTURE_ASSET_TYPE, stem_name)
     if stem_asset is not None and _texture_asset_matches_source_content(stem_asset, source_path):
         log.info(
             f"[glb_instantiator] matched glTF texture source by stem/content: "
@@ -392,7 +390,7 @@ def _texture_name_for_source_path(rm, source_path: Path) -> str | None:
         return stem_name
     log.warning(
         f"[glb_instantiator] no registered texture asset matched glTF source: "
-        f"source_path={target_path} stem='{stem_name}' registered_textures={len(rm.list_texture_names())}"
+        f"source_path={target_path} stem='{stem_name}' registered_textures={len(texture_names)}"
     )
     return None
 
@@ -431,7 +429,7 @@ def _register_external_texture_asset(rm, source_path: Path, texture: "GLBTcTextu
     spec_data = read_spec_file(str(source_path))
     texture_uuid = spec_data.get("uuid") if spec_data else None
     name = source_path.stem
-    existing = rm.get_texture_asset(name)
+    existing = rm.get_runtime_asset(TEXTURE_ASSET_TYPE, name)
     if existing is not None and existing.source_path is not None:
         if existing.source_path.resolve() != source_path.resolve():
             name = _unique_glb_texture_name(rm, texture, texture_uuid or _stable_glb_texture_uuid(texture))
@@ -448,7 +446,7 @@ def _register_external_texture_asset(rm, source_path: Path, texture: "GLBTcTextu
         uuid=texture_uuid,
     )
     asset.parse_spec(spec_data)
-    rm.register_texture_asset(name, asset, source_path=str(source_path), uuid=asset.uuid)
+    rm.register_runtime_asset(TEXTURE_ASSET_TYPE, name, asset, source_path=str(source_path), uuid=asset.uuid)
     log.info(
         f"[glb_instantiator] registered external glTF texture asset: "
         f"name='{name}' uuid={asset.uuid} source_path={source_path.resolve()} "
@@ -494,7 +492,7 @@ def _decode_glb_texture(rm, texture: "GLBTcTexture"):
     from tcbase import log
 
     texture_uuid = _stable_glb_texture_uuid(texture)
-    existing_asset = rm.get_texture_asset_by_uuid(texture_uuid)
+    existing_asset = rm.get_runtime_asset_by_uuid(TEXTURE_ASSET_TYPE, texture_uuid)
     if existing_asset is not None:
         tc_texture = existing_asset.texture_data
         if tc_texture is not None and tc_texture.is_valid:
@@ -527,7 +525,7 @@ def _decode_glb_texture(rm, texture: "GLBTcTexture"):
             name=texture_name,
             uuid=texture_uuid,
         )
-        rm.register_texture_asset(texture_name, asset, uuid=texture_uuid)
+        rm.register_runtime_asset(TEXTURE_ASSET_TYPE, texture_name, asset, uuid=texture_uuid)
         log.info(
             f"[glb_instantiator] decoded glTF texture bytes into runtime asset: "
             f"index={texture.index} name='{texture.name}' registered_name='{texture_name}' "
@@ -543,9 +541,10 @@ def _build_texture_lookup(rm, scene_data: "GLBSceneData") -> dict[int, object]:
     """Create a glTF texture-index to TcTexture map."""
     from tcbase import log
 
+    texture_names = rm.list_runtime_asset_names(TEXTURE_ASSET_TYPE)
     log.info(
         f"[glb_instantiator] building glTF texture lookup: "
-        f"textures={len(scene_data.textures)} registered_texture_assets={len(rm.list_texture_names())}"
+        f"textures={len(scene_data.textures)} registered_texture_assets={len(texture_names)}"
     )
     textures: dict[int, object] = {}
     for texture in scene_data.textures:
@@ -554,7 +553,7 @@ def _build_texture_lookup(rm, scene_data: "GLBSceneData") -> dict[int, object]:
             tc_texture = _decode_glb_texture(rm, texture)
         if tc_texture is not None and tc_texture.is_valid:
             textures[texture.index] = tc_texture
-            resolved_name = rm.find_texture_name(tc_texture)
+            resolved_name = _find_texture_name_for_tc_texture(rm, tc_texture)
             log.info(
                 f"[glb_instantiator] glTF texture lookup entry: index={texture.index} "
                 f"glTF_name='{texture.name}' resolved_asset_name='{resolved_name}' "
@@ -566,6 +565,17 @@ def _build_texture_lookup(rm, scene_data: "GLBSceneData") -> dict[int, object]:
                 f"index={texture.index} name='{texture.name}' source_path={texture.source_path}"
             )
     return textures
+
+
+def _find_texture_name_for_tc_texture(rm, tc_texture) -> str | None:
+    for name in rm.list_runtime_asset_names(TEXTURE_ASSET_TYPE):
+        asset = rm.get_runtime_asset(TEXTURE_ASSET_TYPE, name)
+        if asset is None:
+            continue
+        cached_texture = asset.cached_data
+        if cached_texture is not None and cached_texture.is_valid and cached_texture.uuid == tc_texture.uuid:
+            return name
+    return None
 
 
 def _texture_for_index(textures: dict[int, object], texture_index: int | None):
