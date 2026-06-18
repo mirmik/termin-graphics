@@ -38,10 +38,6 @@
       ]
     },
     {
-      "path": "termin-default-assets",
-      "distribution": "termin-default-assets"
-    },
-    {
       "path": "termin-graphics",
       "distribution": "tgfx",
       "native_extensions": [
@@ -184,6 +180,10 @@
       "native_extensions": [
         {"extension": "termin.navmesh._navmesh_native", "target": "_navmesh_native", "features": ["recast"]}
       ]
+    },
+    {
+      "path": "termin-default-assets",
+      "distribution": "termin-default-assets"
     },
     {
       "path": "termin-qopt",

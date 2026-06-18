@@ -27,7 +27,6 @@ setup(
     },
     install_requires=[
         "termin-nanobind",
-        "termin-assets",
         "tcbase",
         "tgfx",
         "termin-materials",
@@ -38,23 +37,5 @@ setup(
     ],
     ext_modules=native_extensions_for_source(_DIR),
     cmdclass={"build": TerminCMakeBuild, "build_ext": BuildExt},
-    entry_points={
-        "termin.asset_import_plugins": [
-            "glsl = termin.render.glsl_plugin:GlslImportPlugin",
-            "material = termin.render.material_plugin:MaterialImportPlugin",
-            "pipeline = termin.render.pipeline_plugin:PipelineImportPlugin",
-            "scene_pipeline = termin.render.scene_pipeline_plugin:ScenePipelineImportPlugin",
-            "shader = termin.render.shader_plugin:ShaderImportPlugin",
-            "texture = termin.render.texture_plugin:TextureImportPlugin",
-        ],
-        "termin.asset_runtime_plugins": [
-            "glsl = termin.render.glsl_plugin:GlslRuntimePlugin",
-            "material = termin.render.material_plugin:MaterialRuntimePlugin",
-            "pipeline = termin.render.pipeline_plugin:PipelineRuntimePlugin",
-            "scene_pipeline = termin.render.scene_pipeline_plugin:ScenePipelineRuntimePlugin",
-            "shader = termin.render.shader_plugin:ShaderRuntimePlugin",
-            "texture = termin.render.texture_plugin:TextureRuntimePlugin",
-        ],
-    },
     zip_safe=False,
 )
