@@ -23,10 +23,6 @@
       "distribution": "termin-assets"
     },
     {
-      "path": "termin-prefab",
-      "distribution": "termin-prefab"
-    },
-    {
       "path": "termin-tween",
       "distribution": "termin-tween"
     },
@@ -79,6 +75,10 @@
       "native_extensions": [
         {"extension": "termin.scene._scene_native", "target": "_scene_native"}
       ]
+    },
+    {
+      "path": "termin-prefab",
+      "distribution": "termin-prefab"
     },
     {
       "path": "termin-display",
