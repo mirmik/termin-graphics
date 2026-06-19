@@ -131,6 +131,10 @@ public:
 
     bool ensure_tc_shader(tc_shader* shader, ShaderHandle* out_vs, ShaderHandle* out_fs) override;
     void invalidate_tc_shader_cache(uint32_t pool_index) override;
+    TextureHandle ensure_tc_texture(tc_texture* tex) override;
+    void invalidate_tc_texture_cache(uint32_t pool_index) override;
+    std::pair<BufferHandle, BufferHandle> ensure_tc_mesh(tc_mesh* mesh) override;
+    void invalidate_tc_mesh_cache(uint32_t pool_index) override;
 
     ID3D11Device* native_device() const { return device_.Get(); }
     ID3D11DeviceContext* immediate_context() const { return context_.Get(); }
@@ -166,6 +170,19 @@ private:
         bool has_vs = false;
     };
     std::unordered_map<uint32_t, CachedTcShaderEntry> tc_shader_cache_;
+
+    struct CachedTcTextureEntry {
+        TextureHandle handle;
+        uint32_t version = 0;
+    };
+    std::unordered_map<uint32_t, CachedTcTextureEntry> tc_texture_cache_;
+
+    struct CachedTcMeshEntry {
+        BufferHandle vbo;
+        BufferHandle ebo;
+        uint32_t version = 0;
+    };
+    std::unordered_map<uint32_t, CachedTcMeshEntry> tc_mesh_cache_;
 };
 
 } // namespace tgfx
