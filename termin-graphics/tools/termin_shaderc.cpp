@@ -29,6 +29,8 @@ struct ShaderResourceBinding {
     std::string kind;
     std::string scope;
     std::string slang_glsl_symbol;
+    std::string d3d11_register_class;
+    uint32_t d3d11_register_index = 0;
     uint32_t set = 0;
     uint32_t binding = 0;
     uint32_t stage_mask = 0;
@@ -58,6 +60,7 @@ static std::string slang_stage_for_stage(const std::string& stage) {
     if (stage == "vertex") return "vertex";
     if (stage == "fragment") return "fragment";
     if (stage == "geometry") return "geometry";
+    if (stage == "compute") return "compute";
     return "";
 }
 
@@ -100,6 +103,29 @@ static uint32_t stage_mask_for_stage(const std::string& stage) {
     if (stage == "geometry") return 1u << 2;
     if (stage == "compute") return 1u << 3;
     return 0u;
+}
+
+static std::string d3d11_register_class_for_kind(const std::string& kind) {
+    if (kind == "constant_buffer" || kind == "uniform_buffer") return "b";
+    if (kind == "texture") return "t";
+    if (kind == "sampler") return "s";
+    if (kind == "storage_buffer" || kind == "storage_texture") return "u";
+    return {};
+}
+
+static void assign_d3d11_register_placement(std::vector<ShaderResourceBinding>& resources) {
+    for (ShaderResourceBinding& resource : resources) {
+        resource.d3d11_register_class = d3d11_register_class_for_kind(resource.kind);
+        resource.d3d11_register_index = resource.binding;
+    }
+}
+
+static const char* d3d11_profile_for_stage(const std::string& stage) {
+    if (stage == "vertex") return "vs_5_0";
+    if (stage == "fragment") return "ps_5_0";
+    if (stage == "geometry") return "gs_5_0";
+    if (stage == "compute") return "cs_5_0";
+    return "";
 }
 
 static std::string json_escape(const std::string& value) {
@@ -899,6 +925,9 @@ static bool collect_resource_bindings(
     normalize_scope_first_binding_slots(
         resources,
         options.language == "slang");
+    if (options.target == "d3d11") {
+        assign_d3d11_register_placement(resources);
+    }
     if (options.language == "slang" && options.target == "vulkan") {
         for (const ShaderResourceBinding& resource : resources) {
             if (resource.slang_split_texture || resource.slang_separate_sampler) {
@@ -951,21 +980,53 @@ static bool write_resource_layout_sidecar(
         }
     }
 
-    for (size_t i = 0; i < resources.size(); ++i) {
-        for (size_t j = i + 1; j < resources.size(); ++j) {
-            const ShaderResourceBinding& a = resources[i];
-            const ShaderResourceBinding& b = resources[j];
-            if (a.set != b.set || a.binding != b.binding) {
-                continue;
-            }
-            if (a.name != b.name || a.kind != b.kind || a.scope != b.scope) {
+    if (options.target == "d3d11") {
+        for (const ShaderResourceBinding& res : resources) {
+            if (res.d3d11_register_class.empty()) {
                 std::cerr
-                    << "termin_shaderc: conflicting resources at set="
-                    << a.set << " binding=" << a.binding << ": '"
-                    << a.name << "' (" << a.kind << ", " << a.scope
-                    << ") vs '" << b.name << "' (" << b.kind << ", "
-                    << b.scope << ")\n";
+                    << "termin_shaderc: resource '" << res.name
+                    << "' kind '" << res.kind
+                    << "' has no D3D11 register class mapping\n";
                 return false;
+            }
+        }
+        for (size_t i = 0; i < resources.size(); ++i) {
+            for (size_t j = i + 1; j < resources.size(); ++j) {
+                const ShaderResourceBinding& a = resources[i];
+                const ShaderResourceBinding& b = resources[j];
+                if (a.d3d11_register_class != b.d3d11_register_class ||
+                    a.d3d11_register_index != b.d3d11_register_index ||
+                    (a.stage_mask & b.stage_mask) == 0) {
+                    continue;
+                }
+                if (a.name != b.name || a.kind != b.kind || a.scope != b.scope) {
+                    std::cerr
+                        << "termin_shaderc: conflicting D3D11 resources at register("
+                        << a.d3d11_register_class << a.d3d11_register_index
+                        << "): '" << a.name << "' (" << a.kind << ", " << a.scope
+                        << ") vs '" << b.name << "' (" << b.kind << ", "
+                        << b.scope << ")\n";
+                    return false;
+                }
+            }
+        }
+    } else {
+        for (size_t i = 0; i < resources.size(); ++i) {
+            for (size_t j = i + 1; j < resources.size(); ++j) {
+                const ShaderResourceBinding& a = resources[i];
+                const ShaderResourceBinding& b = resources[j];
+                if (a.set != b.set || a.binding != b.binding) {
+                    continue;
+                }
+                if (a.name != b.name || a.kind != b.kind || a.scope != b.scope) {
+                    std::cerr
+                        << "termin_shaderc: conflicting resources at set="
+                        << a.set << " binding=" << a.binding << ": '"
+                        << a.name << "' (" << a.kind << ", " << a.scope
+                        << ") vs '" << b.name << "' (" << b.kind << ", "
+                        << b.scope << ")\n";
+                    return false;
+                }
             }
         }
     }
@@ -977,8 +1038,9 @@ static bool write_resource_layout_sidecar(
         return false;
     }
 
+    const uint32_t sidecar_version = options.target == "d3d11" ? 2u : 1u;
     out << "{\n";
-    out << "  \"version\": 1,\n";
+    out << "  \"version\": " << sidecar_version << ",\n";
     out << "  \"language\": \"" << json_escape(options.language) << "\",\n";
     out << "  \"target\": \"" << json_escape(options.target) << "\",\n";
     out << "  \"stage\": \"" << json_escape(options.stage) << "\",\n";
@@ -993,6 +1055,12 @@ static bool write_resource_layout_sidecar(
             << "\"binding\": " << binding.binding << ", "
             << "\"stage_mask\": " << binding.stage_mask << ", "
             << "\"size\": " << binding.size;
+        if (options.target == "d3d11") {
+            out << ", \"d3d11\": {"
+                << "\"register_class\": \"" << json_escape(binding.d3d11_register_class) << "\", "
+                << "\"register_index\": " << binding.d3d11_register_index
+                << "}";
+        }
         if (!binding.fields.empty()) {
             out << ", \"fields\": [";
             for (size_t fi = 0; fi < binding.fields.size(); ++fi) {
@@ -1564,6 +1632,38 @@ static std::optional<std::string> resolve_slangc(const CompileOptions& options, 
     return std::nullopt;
 }
 
+static std::optional<std::string> resolve_fxc(const CompileOptions& options, const char* argv0) {
+    if (!options.fxc.empty()) {
+        if (!is_existing_file(options.fxc)) {
+            std::cerr << "termin_shaderc: fxc does not exist: " << options.fxc << "\n";
+            return std::nullopt;
+        }
+        return options.fxc;
+    }
+
+    if (const char* env = std::getenv("TERMIN_FXC")) {
+        if (env[0] != '\0') {
+            if (!is_existing_file(env)) {
+                std::cerr << "termin_shaderc: TERMIN_FXC points to missing fxc: " << env << "\n";
+                return std::nullopt;
+            }
+            return std::string(env);
+        }
+    }
+
+    if (auto found = find_on_path("fxc")) {
+        return found;
+    }
+    if (auto found = find_sdk_tool("fxc", argv0)) {
+        return found;
+    }
+
+    std::cerr
+        << "termin_shaderc: fxc not found. Set TERMIN_FXC, add fxc to PATH, "
+        << "or install it under TERMIN_SDK/bin.\n";
+    return std::nullopt;
+}
+
 static void append_unique_existing_dir(
     std::vector<std::string>& dirs,
     const std::filesystem::path& path
@@ -1698,6 +1798,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
 
     std::string slang_target;
     std::vector<std::string> extra_args;
+    std::string d3d11_profile;
     if (options.target == "vulkan") {
         slang_target = "spirv";
         extra_args = {"-profile", "spirv_1_5"};
@@ -1705,10 +1806,13 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         slang_target = "glsl";
         extra_args = {"-profile", "glsl_450"};
     } else if (options.target == "d3d11") {
-        std::cerr
-            << "termin_shaderc: slang -> d3d11 requires the Windows FXC/DXBC path; "
-            << "this target is reserved for the Windows backend phase\n";
-        return false;
+        slang_target = "hlsl";
+        d3d11_profile = d3d11_profile_for_stage(options.stage);
+        if (d3d11_profile.empty()) {
+            std::cerr << "termin_shaderc: unsupported D3D11 stage: " << options.stage << "\n";
+            return false;
+        }
+        extra_args = {"-profile", "sm_5_0"};
     } else {
         std::cerr << "termin_shaderc: unsupported target: " << options.target << "\n";
         return false;
@@ -1717,6 +1821,13 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
     auto slangc = resolve_slangc(options, argv0);
     if (!slangc) {
         return false;
+    }
+    std::optional<std::string> fxc;
+    if (options.target == "d3d11") {
+        fxc = resolve_fxc(options, argv0);
+        if (!fxc) {
+            return false;
+        }
     }
     auto matrix_layout_arg = slang_matrix_layout_arg(options.matrix_layout);
     if (!matrix_layout_arg) {
@@ -1729,6 +1840,9 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
     if (!read_file(options.input, source)) {
         return false;
     }
+    const bool is_d3d11 = options.target == "d3d11";
+    const std::filesystem::path slang_output_path(
+        is_d3d11 ? options.output + ".hlsl" : options.output);
     std::vector<std::string> args = {
         *slangc,
         options.input,
@@ -1743,7 +1857,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
     const std::filesystem::path reflection_path(options.output + ".reflection.json");
     args.insert(args.end(), {"-reflection-json", reflection_path.string()});
     args.insert(args.end(), extra_args.begin(), extra_args.end());
-    args.insert(args.end(), {"-o", options.output});
+    args.insert(args.end(), {"-o", slang_output_path.string()});
 
     int rc = run_command(args);
     if (rc != 0) {
@@ -1751,9 +1865,9 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         return false;
     }
 
-    if (!is_existing_file(options.output)) {
+    if (!is_existing_file(slang_output_path)) {
         std::cerr << "termin_shaderc: slangc did not produce expected output: "
-                  << options.output << "\n";
+                  << slang_output_path.string() << "\n";
         return false;
     }
     std::vector<ShaderResourceBinding> resources;
@@ -1762,7 +1876,42 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         std::filesystem::remove(reflection_path, ec);
         std::filesystem::remove(options.output, ec);
         std::filesystem::remove(options.output + ".layout.json", ec);
+        if (is_d3d11 && !std::getenv("TERMIN_SHADERC_KEEP_INTERMEDIATE")) {
+            std::filesystem::remove(slang_output_path, ec);
+        }
         return false;
+    }
+    if (is_d3d11) {
+        std::vector<std::string> fxc_args = {
+            *fxc,
+            "/nologo",
+            "/T", d3d11_profile,
+            "/E", options.entry,
+            "/Fo", options.output,
+            slang_output_path.string(),
+        };
+        rc = run_command(fxc_args);
+        if (rc != 0) {
+            std::cerr << "termin_shaderc: fxc failed with exit code " << rc << "\n";
+            std::error_code ec;
+            std::filesystem::remove(options.output, ec);
+            std::filesystem::remove(options.output + ".layout.json", ec);
+            if (!std::getenv("TERMIN_SHADERC_KEEP_INTERMEDIATE")) {
+                std::filesystem::remove(slang_output_path, ec);
+            }
+            std::filesystem::remove(reflection_path, ec);
+            return false;
+        }
+        if (!is_existing_file(options.output)) {
+            std::cerr << "termin_shaderc: fxc did not produce expected output: "
+                      << options.output << "\n";
+            std::error_code ec;
+            if (!std::getenv("TERMIN_SHADERC_KEEP_INTERMEDIATE")) {
+                std::filesystem::remove(slang_output_path, ec);
+            }
+            std::filesystem::remove(reflection_path, ec);
+            return false;
+        }
     }
     bool wrote_layout = false;
     if (options.target == "vulkan") {
@@ -1780,11 +1929,16 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
             filter_slang_opengl_resources_for_glsl(options, resources) &&
             patch_slang_opengl_glsl_resource_bindings(options, resources) &&
             write_resource_layout_sidecar(options, resources);
+    } else if (options.target == "d3d11") {
+        wrote_layout = write_resource_layout_sidecar(options, resources);
     } else {
         wrote_layout = write_resource_layout_sidecar(options, resources);
     }
     std::error_code ec;
     std::filesystem::remove(reflection_path, ec);
+    if (is_d3d11 && !std::getenv("TERMIN_SHADERC_KEEP_INTERMEDIATE")) {
+        std::filesystem::remove(slang_output_path, ec);
+    }
     return wrote_layout;
 }
 

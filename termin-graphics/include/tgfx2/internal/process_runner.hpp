@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cwchar>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -145,6 +146,28 @@ inline std::wstring quote_windows_arg(const std::wstring& arg) {
     out.push_back(L'"');
     return out;
 }
+
+inline bool windows_arg_ends_with_case_insensitive(const std::wstring& arg, const wchar_t* suffix) {
+    const size_t arg_len = arg.size();
+    const size_t suffix_len = std::wcslen(suffix);
+    if (arg_len < suffix_len) {
+        return false;
+    }
+    for (size_t i = 0; i < suffix_len; ++i) {
+        wchar_t lhs = arg[arg_len - suffix_len + i];
+        wchar_t rhs = suffix[i];
+        if (lhs >= L'A' && lhs <= L'Z') {
+            lhs = static_cast<wchar_t>(lhs - L'A' + L'a');
+        }
+        if (rhs >= L'A' && rhs <= L'Z') {
+            rhs = static_cast<wchar_t>(rhs - L'A' + L'a');
+        }
+        if (lhs != rhs) {
+            return false;
+        }
+    }
+    return true;
+}
 #endif
 
 inline ProcessResult run_process(const std::vector<std::string>& args, bool capture_output = false) {
@@ -170,11 +193,24 @@ inline ProcessResult run_process(const std::vector<std::string>& args, bool capt
         command_line += quote_windows_arg(wide_args[i]);
     }
 
+    std::wstring application_name = wide_args[0];
+    if (windows_arg_ends_with_case_insensitive(wide_args[0], L".py")) {
+        command_line = quote_windows_arg(L"python") + L" " + command_line;
+        application_name.clear();
+    } else if (
+        windows_arg_ends_with_case_insensitive(wide_args[0], L".cmd") ||
+        windows_arg_ends_with_case_insensitive(wide_args[0], L".bat")) {
+        const wchar_t* comspec = _wgetenv(L"COMSPEC");
+        const std::wstring shell = (comspec && comspec[0] != L'\0') ? comspec : L"cmd.exe";
+        command_line = quote_windows_arg(shell) + L" /d /c " + command_line;
+        application_name.clear();
+    }
+
     STARTUPINFOW startup_info{};
     startup_info.cb = sizeof(startup_info);
     PROCESS_INFORMATION process_info{};
     BOOL ok = CreateProcessW(
-        wide_args[0].c_str(),
+        application_name.empty() ? nullptr : application_name.c_str(),
         command_line.data(),
         nullptr,
         nullptr,

@@ -33,6 +33,7 @@ void print_help(std::ostream& out) {
         << "\n"
         << "Slang options:\n"
         << "  --slangc <path>          Explicit slangc executable path.\n"
+        << "  --fxc <path>             Explicit Windows FXC executable path for d3d11.\n"
         << "  --matrix-layout <mode>   Matrix layout: column, col, column-major,\n"
         << "                           col-major, row, or row-major. Default: column.\n"
         << "\n"
@@ -150,6 +151,11 @@ ParsedCommandLine parse_command_line(int argc, char** argv) {
             }
         } else if (arg == "--slangc") {
             if (!take_value(options.slangc)) {
+                parsed.exit_code = 2;
+                return parsed;
+            }
+        } else if (arg == "--fxc") {
+            if (!take_value(options.fxc)) {
                 parsed.exit_code = 2;
                 return parsed;
             }
