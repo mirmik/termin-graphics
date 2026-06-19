@@ -251,12 +251,14 @@ public:
     // --- tc_texture / tc_mesh per-device resource cache ------------------
     //
     // Lookup-or-upload entry points consumed by `tgfx2_bridge::wrap_*_as_tgfx2`.
-    // Each call is keyed on the resource's `header.pool_index` and re-uploads
-    // when `header.version` bumps. Returned handles are OWNED by the device —
-    // the caller must NOT pass them to `destroy()`.
+    // tc_* registries are the canonical engine resource layer; each backend
+    // materializes those resources into native GPU objects and caches them by
+    // `header.pool_index`, re-uploading when `header.version` bumps. Returned
+    // handles are OWNED by the device - the caller must NOT pass them to
+    // `destroy()`.
     //
-    // Backends that cannot import legacy tc_* resources leave the default
-    // empty implementation in place.
+    // Backends that cannot materialize canonical tc_* resources leave the
+    // default empty implementation in place.
     virtual TextureHandle ensure_tc_texture(tc_texture* /*tex*/) {
         return {};
     }

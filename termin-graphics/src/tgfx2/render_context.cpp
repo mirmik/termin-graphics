@@ -325,6 +325,7 @@ void RenderContext2::set_vertex_layouts(const std::vector<VertexBufferLayout>& l
             }
             mix(std::hash<int>{}(static_cast<int>(a.format)));
             mix(std::hash<uint32_t>{}(a.offset));
+            mix(std::hash<std::string>{}(a.semantic));
         }
     }
     vertex_layouts_hash_ = h;
@@ -1013,8 +1014,8 @@ void RenderContext2::draw_fullscreen_quad() {
     VertexBufferLayout fsq_layout;
     fsq_layout.stride = 4 * sizeof(float);
     fsq_layout.attributes = {
-        {0, VertexFormat::Float2, 0},                    // aPos
-        {1, VertexFormat::Float2, 2 * sizeof(float)},    // aUV
+        {0, VertexFormat::Float2, 0, "POSITION"},                    // aPos
+        {1, VertexFormat::Float2, 2 * sizeof(float), "TEXCOORD"},    // aUV
     };
     set_vertex_layout(fsq_layout);
     // Explicit topology — previous draws (ImmediateRenderer line/point
@@ -1047,8 +1048,8 @@ void RenderContext2::draw_fullscreen_quad_with_bound_shader() {
     VertexBufferLayout fsq_layout;
     fsq_layout.stride = 4 * sizeof(float);
     fsq_layout.attributes = {
-        {0, VertexFormat::Float2, 0},
-        {1, VertexFormat::Float2, 2 * sizeof(float)},
+        {0, VertexFormat::Float2, 0, "POSITION"},
+        {1, VertexFormat::Float2, 2 * sizeof(float), "TEXCOORD"},
     };
     set_vertex_layout(fsq_layout);
     set_topology(PrimitiveTopology::TriangleList);

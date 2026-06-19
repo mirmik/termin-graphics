@@ -7,6 +7,10 @@
 #include "tgfx2/vulkan/vulkan_render_device.hpp"
 #endif
 
+#ifdef TGFX2_HAS_D3D11
+#include "tgfx2/d3d11/d3d11_render_device.hpp"
+#endif
+
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
@@ -23,6 +27,8 @@ BackendType default_compiled_backend() {
     return BackendType::Vulkan;
 #elif defined(TGFX2_HAS_OPENGL)
     return BackendType::OpenGL;
+#elif defined(TGFX2_HAS_D3D11)
+    return BackendType::D3D11;
 #else
     return BackendType::Null;
 #endif
@@ -75,8 +81,14 @@ std::unique_ptr<IRenderDevice> create_device(BackendType type) {
             throw std::runtime_error("Vulkan backend not compiled (set TGFX2_ENABLE_VULKAN=ON)");
 #endif
 
-        case BackendType::Metal:
         case BackendType::D3D11:
+#ifdef TGFX2_HAS_D3D11
+            return std::make_unique<D3D11RenderDevice>();
+#else
+            throw std::runtime_error("D3D11 backend not compiled (set TGFX2_ENABLE_D3D11=ON)");
+#endif
+
+        case BackendType::Metal:
             throw std::runtime_error("Backend not yet implemented");
 
         case BackendType::Null:

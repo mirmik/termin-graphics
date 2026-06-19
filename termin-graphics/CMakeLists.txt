@@ -7,6 +7,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(TGFX2_ENABLE_OPENGL "Enable OpenGL backend for tgfx2" ON)
+if(WIN32)
+    set(_TGFX2_D3D11_DEFAULT ON)
+else()
+    set(_TGFX2_D3D11_DEFAULT OFF)
+endif()
+option(TGFX2_ENABLE_D3D11 "Enable Direct3D 11 backend for tgfx2" ${_TGFX2_D3D11_DEFAULT})
 if(ANDROID)
     set(_TGFX2_SHADERC_DEFAULT OFF)
 else()
@@ -194,6 +200,17 @@ if(TGFX2_ENABLE_VULKAN)
     )
 endif()
 
+if(TGFX2_ENABLE_D3D11)
+    if(NOT WIN32)
+        message(FATAL_ERROR "TGFX2_ENABLE_D3D11 requires Windows")
+    endif()
+    list(APPEND TGFX2_SOURCES
+        src/tgfx2/d3d11/d3d11_render_device.cpp
+        src/tgfx2/d3d11/d3d11_command_list.cpp
+        src/tgfx2/d3d11/d3d11_type_conversions.cpp
+    )
+endif()
+
 add_library(termin_graphics2 SHARED ${TGFX2_SOURCES})
 if(COMMAND termin_add_alias_if_missing)
     termin_add_alias_if_missing(tgfx::termin_graphics2 termin_graphics2)
@@ -247,6 +264,11 @@ if(TGFX2_ENABLE_VULKAN)
         target_compile_definitions(termin_graphics2 PRIVATE VMA_VULKAN_VERSION=1000000)
     endif()
     target_include_directories(termin_graphics2 PRIVATE "${TERMIN_VMA_DIR}/include")
+endif()
+
+if(TGFX2_ENABLE_D3D11)
+    target_compile_definitions(termin_graphics2 PRIVATE TGFX2_HAS_D3D11)
+    target_link_libraries(termin_graphics2 PRIVATE d3d11 dxgi)
 endif()
 
 if(MSVC)
@@ -453,6 +475,17 @@ if(BUILD_TGFX2_TESTS)
                 TIMEOUT 10
                 SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
         endif()
+    endif()
+
+    if(TGFX2_ENABLE_D3D11)
+        add_executable(tgfx2_d3d11_smoke tests/test_tgfx2_d3d11_smoke.cpp)
+        target_compile_definitions(tgfx2_d3d11_smoke PRIVATE TGFX2_HAS_D3D11)
+        target_link_libraries(tgfx2_d3d11_smoke PRIVATE termin_graphics2 d3dcompiler)
+        termin_set_rpath_test(tgfx2_d3d11_smoke)
+        add_test(NAME tgfx2_d3d11_smoke COMMAND tgfx2_d3d11_smoke)
+        set_tests_properties(tgfx2_d3d11_smoke PROPERTIES
+            TIMEOUT 10
+            SKIP_REGULAR_EXPRESSION "D3D11CreateDevice failed|No D3D11")
     endif()
 endif()
 
