@@ -84,7 +84,26 @@ static bool read_file(const std::string& path, std::string& out) {
     return true;
 }
 
+static bool ensure_parent_directory(const std::filesystem::path& path, const char* label) {
+    const std::filesystem::path parent = path.parent_path();
+    if (parent.empty()) {
+        return true;
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(parent, ec);
+    if (ec) {
+        std::cerr << "termin_shaderc: failed to create " << label
+                  << " directory: " << parent.string() << ": "
+                  << ec.message() << "\n";
+        return false;
+    }
+    return true;
+}
+
 static bool write_spirv(const std::string& path, const std::vector<uint32_t>& words) {
+    if (!ensure_parent_directory(path, "output")) {
+        return false;
+    }
     std::ofstream out(path, std::ios::binary);
     if (!out) {
         std::cerr << "termin_shaderc: failed to open output: " << path << "\n";
@@ -1843,6 +1862,12 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
     const bool is_d3d11 = options.target == "d3d11";
     const std::filesystem::path slang_output_path(
         is_d3d11 ? options.output + ".hlsl" : options.output);
+    const std::filesystem::path reflection_path(options.output + ".reflection.json");
+    if (!ensure_parent_directory(slang_output_path, "Slang output") ||
+        !ensure_parent_directory(reflection_path, "Slang reflection") ||
+        !ensure_parent_directory(options.output, "artifact output")) {
+        return false;
+    }
     std::vector<std::string> args = {
         *slangc,
         options.input,
@@ -1854,7 +1879,6 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
     for (const std::string& include_dir : slang_include_dirs(options, argv0)) {
         args.insert(args.end(), {"-I", include_dir});
     }
-    const std::filesystem::path reflection_path(options.output + ".reflection.json");
     args.insert(args.end(), {"-reflection-json", reflection_path.string()});
     args.insert(args.end(), extra_args.begin(), extra_args.end());
     args.insert(args.end(), {"-o", slang_output_path.string()});
