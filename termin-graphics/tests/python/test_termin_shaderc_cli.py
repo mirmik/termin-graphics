@@ -13,14 +13,20 @@ def _repo_root() -> Path:
 
 def _termin_shaderc() -> Path:
     candidates: list[Path] = []
+    binary_names = ["termin_shaderc.exe", "termin_shaderc"] if os.name == "nt" else ["termin_shaderc"]
+    explicit = os.environ.get("TERMIN_SHADERC")
+    if explicit:
+        candidates.append(Path(explicit))
+    root = _repo_root()
+    candidate_dirs = [
+        root / "build" / "Release" / "bin" / "Release",
+        root / "build" / "Release" / "bin",
+        root / "sdk" / "bin",
+    ]
+    candidates.extend(candidate_dir / name for candidate_dir in candidate_dirs for name in binary_names)
     sdk = os.environ.get("TERMIN_SDK")
     if sdk:
-        candidates.append(Path(sdk) / "bin" / "termin_shaderc")
-    root = _repo_root()
-    candidates.extend([
-        root / "sdk" / "bin" / "termin_shaderc",
-        root / "build" / "Release" / "bin" / "termin_shaderc",
-    ])
+        candidates.extend(Path(sdk) / "bin" / name for name in binary_names)
     for candidate in candidates:
         if candidate.exists():
             return candidate
@@ -127,7 +133,6 @@ def test_termin_shaderc_compile_help_is_successful() -> None:
     assert "--layout-scheme" not in direct.stdout
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_invokes_fake_slangc_for_vulkan(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text("[shader(\"vertex\")] void main() {}\n", encoding="utf-8")
@@ -176,7 +181,6 @@ def test_termin_shaderc_invokes_fake_slangc_for_vulkan(tmp_path: Path) -> None:
     assert str(tmp_path) in include_values
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -326,7 +330,6 @@ def test_termin_shaderc_writes_glsl_bone_block_resource_layout(tmp_path: Path) -
     } in layout["resources"]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_drops_dead_slang_reflection_resources(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -402,7 +405,6 @@ def test_termin_shaderc_drops_dead_slang_reflection_resources(tmp_path: Path) ->
     assert _spirv_decoration_value(output, 17, 34) == 0
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_reads_slang_scope_user_attributes(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -513,7 +515,6 @@ def test_termin_shaderc_reads_slang_scope_user_attributes(tmp_path: Path) -> Non
     ]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_rejects_invalid_slang_scope_user_attribute(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -575,7 +576,6 @@ def test_termin_shaderc_rejects_invalid_slang_scope_user_attribute(tmp_path: Pat
     assert not (tmp_path / "out.spv.reflection.json").exists()
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_normalizes_slang_engine_constant_buffer_reflection_placement(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -665,7 +665,6 @@ def test_termin_shaderc_normalizes_slang_engine_constant_buffer_reflection_place
     ]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_writes_slang_texture_resources_from_reflection(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -732,7 +731,6 @@ def test_termin_shaderc_writes_slang_texture_resources_from_reflection(tmp_path:
     ]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_infers_framebuffer_inputs_as_transient(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -800,7 +798,6 @@ def test_termin_shaderc_infers_framebuffer_inputs_as_transient(tmp_path: Path) -
     ]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_separates_slang_transient_textures_from_material_ubo(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -869,7 +866,6 @@ def test_termin_shaderc_separates_slang_transient_textures_from_material_ubo(tmp
     ]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_keeps_standalone_normal_texture_material_scoped(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -925,7 +921,6 @@ def test_termin_shaderc_keeps_standalone_normal_texture_material_scoped(tmp_path
     ]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_preserves_slang_draw_storage_buffer_reflection_placement(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -1010,7 +1005,6 @@ def test_termin_shaderc_preserves_slang_draw_storage_buffer_reflection_placement
     ]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_normalizes_slang_draw_scope_reflection_placement(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -1118,7 +1112,6 @@ def test_termin_shaderc_normalizes_slang_draw_scope_reflection_placement(tmp_pat
     ]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_normalizes_slang_material_texture_reflection_placement(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -1190,7 +1183,6 @@ def test_termin_shaderc_normalizes_slang_material_texture_reflection_placement(t
     assert layout["resources"][1]["binding"] == 4
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_normalizes_slang_pass_shadow_texture_reflection_placement(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -1261,7 +1253,6 @@ def test_termin_shaderc_normalizes_slang_pass_shadow_texture_reflection_placemen
     ]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_rejects_split_slang_texture_resources_for_vulkan(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -1324,7 +1315,6 @@ def test_termin_shaderc_rejects_split_slang_texture_resources_for_vulkan(tmp_pat
     assert not (tmp_path / "out.spv.reflection.json").exists()
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_normalizes_slang_sampler2d_register_resource_layout(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -1372,7 +1362,6 @@ def test_termin_shaderc_normalizes_slang_sampler2d_register_resource_layout(tmp_
     ]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_invokes_fake_slangc_for_opengl(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text("[shader(\"fragment\")] void main() {}\n", encoding="utf-8")
@@ -1404,7 +1393,6 @@ def test_termin_shaderc_invokes_fake_slangc_for_opengl(tmp_path: Path) -> None:
     assert "-fvk-s-shift" not in slang_args
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_patches_opengl_slang_constant_buffer_bindings(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -1480,7 +1468,6 @@ def test_termin_shaderc_patches_opengl_slang_constant_buffer_bindings(tmp_path: 
     ]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_patches_opengl_slang_material_texture_bindings(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -1554,7 +1541,6 @@ def test_termin_shaderc_patches_opengl_slang_material_texture_bindings(tmp_path:
     ]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_filters_inactive_opengl_slang_reflection_resources(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -1609,7 +1595,6 @@ def test_termin_shaderc_filters_inactive_opengl_slang_reflection_resources(tmp_p
     assert layout["resources"] == []
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_patches_imported_opengl_slang_constant_buffer_by_instance(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -1668,7 +1653,6 @@ def test_termin_shaderc_patches_imported_opengl_slang_constant_buffer_by_instanc
     assert [(r["name"], r["binding"]) for r in layout["resources"]] == [("lighting", 0)]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_legalizes_opengl_slang_instance_index_builtin(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -1719,7 +1703,6 @@ def test_termin_shaderc_legalizes_opengl_slang_instance_index_builtin(tmp_path: 
     assert "uint(gl_InstanceID)" in glsl
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_patches_opengl_slang_storage_buffer_bindings(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -1784,7 +1767,6 @@ def test_termin_shaderc_patches_opengl_slang_storage_buffer_bindings(tmp_path: P
     ]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_can_override_slang_matrix_layout(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text("[shader(\"vertex\")] void main() {}\n", encoding="utf-8")
@@ -1819,7 +1801,6 @@ def test_termin_shaderc_can_override_slang_matrix_layout(tmp_path: Path) -> None
     assert "-matrix-layout-column-major" not in slang_args
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_rejects_unknown_slang_matrix_layout(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text("[shader(\"vertex\")] void main() {}\n", encoding="utf-8")
@@ -1872,7 +1853,6 @@ def test_termin_shaderc_reports_missing_slangc(tmp_path: Path) -> None:
     assert "TERMIN_SLANGC points to missing slangc" in result.stderr
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_propagates_slangc_failure(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text("void main() {}\n", encoding="utf-8")
@@ -1920,7 +1900,6 @@ def test_termin_shaderc_rejects_glsl_opengl_until_generation_exists(tmp_path: Pa
     assert "GLSL input currently supports only --target vulkan" in result.stderr
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake tool scripts are POSIX executable")
 def test_termin_shaderc_compiles_slang_to_d3d11_cso_with_fake_tools(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -1939,7 +1918,10 @@ def test_termin_shaderc_compiles_slang_to_d3d11_cso_with_fake_tools(tmp_path: Pa
     fake_slangc = tmp_path / "fake_slangc.py"
     fake_slangc.write_text(
         "#!/usr/bin/env python3\n"
-        "import json, pathlib, sys\n"
+        "import json, os, pathlib, sys\n"
+        "args_path = os.environ.get('FAKE_SLANGC_ARGS')\n"
+        "if args_path:\n"
+        "    pathlib.Path(args_path).write_text(json.dumps(sys.argv[1:]), encoding='utf-8')\n"
         "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
         "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
         "out.parent.mkdir(parents=True, exist_ok=True)\n"
@@ -2038,7 +2020,6 @@ def test_termin_shaderc_compiles_slang_to_d3d11_cso_with_fake_tools(tmp_path: Pa
     ]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake slangc script is POSIX executable")
 def test_termin_shaderc_reports_missing_fxc_for_d3d11(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text("void main() {}\n", encoding="utf-8")
