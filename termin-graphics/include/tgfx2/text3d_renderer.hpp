@@ -1,9 +1,10 @@
-// text3d_renderer.hpp - World-space billboard text renderer for tgfx2.
+// text3d_renderer.hpp - World-space plane text renderer for tgfx2.
 //
-// Draws text attached to a 3D world position, always facing the camera.
+// Draws text attached to a 3D world position. The caller supplies the two
+// world-space basis vectors used by the text plane, so this renderer supports
+// both camera-facing billboards and fixed-orientation world labels.
 // The shader expands each glyph quad by (offset_x * cam_right +
-// offset_y * cam_up) so the glyphs stay legible regardless of camera
-// rotation.
+// offset_y * cam_up).
 //
 // Usage:
 //   Text3DRenderer t3d(font);
@@ -11,12 +12,10 @@
 //   t3d.draw("hello", pos, 1,1,1,1, 0.1f);
 //   t3d.end();
 //
-// The caller supplies the camera basis directly:
+// The caller supplies the text plane basis directly:
 //   - mvp:      4x4 column-major (projection * view * model). 16 floats.
-//   - cam_right: 3 floats — world-space camera-right basis.
-//   - cam_up:    3 floats — world-space camera-up basis.
-// For a typical view matrix V (row-major in math notation, column-major
-// in storage), these are rows 0 and 1 of V respectively.
+//   - cam_right: 3 floats — world-space text-right basis.
+//   - cam_up:    3 floats — world-space text-up basis.
 #pragma once
 
 #include <cstdint>

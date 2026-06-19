@@ -1,4 +1,4 @@
-// text3d_renderer.cpp - World-space billboard text on tgfx2.
+// text3d_renderer.cpp - World-space plane text on tgfx2.
 //
 // Port of termin-graphics/python/tgfx/text3d.py.
 //
@@ -6,9 +6,9 @@
 // vec3 + vec4). The shader re-interprets the second slot as
 // (offset_x, offset_y, u, v) — same byte shape, different semantics.
 //
-// Every vertex of a glyph quad carries the SAME world position; the
-// shader expands the quad via (offset * cam_right + offset * cam_up),
-// so the glyph always faces the camera regardless of view rotation.
+// Every vertex of a glyph quad carries the SAME world position. The shader
+// expands the quad via (offset * cam_right + offset * cam_up), where those
+// basis vectors may be camera-facing billboard axes or fixed world-plane axes.
 
 #include "tgfx2/text3d_renderer.hpp"
 
@@ -152,8 +152,8 @@ void Text3DRenderer::draw(std::string_view text_utf8,
     ctx.use_shader_resource_layout(raw);
 
     Text3DPushData push{};
-    // mvp_ arrived column-major from the caller (PlotEngine3D /
-    // orbit_camera). The shader consumes the same column-major layout.
+    // mvp_ arrived column-major from the caller. The shader consumes the same
+    // column-major layout.
     std::memcpy(push.mvp, mvp_, sizeof(push.mvp));
     push.color[0] = r;
     push.color[1] = g;
