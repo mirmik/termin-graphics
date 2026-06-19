@@ -7,7 +7,6 @@ struct GrayscaleParams {
     float strength;
 };
 
-[[TerminScope("draw")]]
 ConstantBuffer<GrayscaleParams> u_params;
 
 [[TerminScope("transient")]]

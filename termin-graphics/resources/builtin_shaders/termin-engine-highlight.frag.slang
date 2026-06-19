@@ -19,7 +19,6 @@ struct HighlightPushData {
     float2 texel_size;
 };
 
-[[TerminScope("draw")]]
 ConstantBuffer<HighlightPushData> u_params;
 
 struct FragmentInput {

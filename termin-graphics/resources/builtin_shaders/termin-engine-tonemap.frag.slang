@@ -8,7 +8,6 @@ struct TonemapParams {
     int method;
 };
 
-[[TerminScope("draw")]]
 ConstantBuffer<TonemapParams> u_params;
 
 [[TerminScope("transient")]]

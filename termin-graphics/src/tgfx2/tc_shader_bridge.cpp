@@ -493,52 +493,6 @@ static uint32_t shader_resource_scope_from_name(const std::string& name) {
     return TC_SHADER_RESOURCE_SCOPE_UNKNOWN;
 }
 
-static bool string_contains(const std::string& value, const char* needle) {
-    return value.find(needle) != std::string::npos;
-}
-
-static uint32_t infer_shader_resource_scope(
-    const std::string& name,
-    uint32_t kind
-) {
-    if (name == TC_SHADER_RESOURCE_PER_FRAME || name == "u_per_frame") {
-        return TC_SHADER_RESOURCE_SCOPE_FRAME;
-    }
-    if (name == TC_SHADER_RESOURCE_MATERIAL) {
-        return TC_SHADER_RESOURCE_SCOPE_MATERIAL;
-    }
-    if (name == TC_SHADER_RESOURCE_DRAW || name == "draw_data" ||
-        name == "u_draw" || name == "u_push" || name == "pc") {
-        return TC_SHADER_RESOURCE_SCOPE_DRAW;
-    }
-    if (name == "lighting" || name == "lighting_ubo" ||
-        string_contains(name, "shadow") || name == "u_params") {
-        return TC_SHADER_RESOURCE_SCOPE_PASS;
-    }
-    if (kind == TC_SHADER_RESOURCE_TEXTURE ||
-        kind == TC_SHADER_RESOURCE_STORAGE_TEXTURE ||
-        kind == TC_SHADER_RESOURCE_SAMPLER) {
-        if (name == "u_input" || name == "u_texture" ||
-            name == "u_original" || name == "u_bloom" ||
-            name == "u_color" || name == "u_id" ||
-            name == "u_depth_tex" || name == "u_color_tex" ||
-            name == "u_tex") {
-            return TC_SHADER_RESOURCE_SCOPE_TRANSIENT;
-        }
-        if (string_contains(name, "albedo") ||
-            string_contains(name, "normal") ||
-            string_contains(name, "metallic") ||
-            string_contains(name, "roughness") ||
-            string_contains(name, "occlusion") ||
-            string_contains(name, "emissive") ||
-            string_contains(name, "diffuse") ||
-            string_contains(name, "tint")) {
-            return TC_SHADER_RESOURCE_SCOPE_MATERIAL;
-        }
-    }
-    return TC_SHADER_RESOURCE_SCOPE_UNKNOWN;
-}
-
 static const nos::trent* trent_dict_get(const nos::trent& value, const char* key) {
     if (!value.is_dict()) {
         return nullptr;
@@ -620,14 +574,7 @@ static bool parse_shader_resource_layout_sidecar(
         if (trent_string_field(object, "scope", scope_name)) {
             scope = shader_resource_scope_from_name(scope_name);
         } else {
-            scope = infer_shader_resource_scope(name, kind);
-            if (scope == TC_SHADER_RESOURCE_SCOPE_UNKNOWN) {
-                tc_log(TC_LOG_WARN,
-                       "shader resource layout: '%s' (kind=%u) has no [[TerminScope]] "
-                       "attribute and name did not match any heuristic — scope set to "
-                       "UNKNOWN; consider adding [[TerminScope]] to the shader variable",
-                       name.c_str(), kind);
-            }
+            scope = TC_SHADER_RESOURCE_SCOPE_TRANSIENT;
         }
 
         tc_shader_resource_binding resource{};

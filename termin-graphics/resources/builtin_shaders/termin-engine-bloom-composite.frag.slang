@@ -7,7 +7,6 @@ struct BloomCompositeParams {
     float intensity;
 };
 
-[[TerminScope("draw")]]
 ConstantBuffer<BloomCompositeParams> u_params;
 
 [[TerminScope("transient")]]

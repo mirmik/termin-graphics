@@ -268,7 +268,7 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
         {
             "name": "material",
             "kind": "constant_buffer",
-            "scope": "material",
+            "scope": "transient",
             "set": 0,
             "binding": 1,
             "stage_mask": 2,
@@ -322,7 +322,7 @@ def test_termin_shaderc_writes_glsl_bone_block_resource_layout(tmp_path: Path) -
     assert {
         "name": "BoneBlock",
         "kind": "constant_buffer",
-        "scope": "draw",
+        "scope": "transient",
         "set": 0,
         "binding": 16,
         "stage_mask": 1,
@@ -336,6 +336,7 @@ def test_termin_shaderc_drops_dead_slang_reflection_resources(tmp_path: Path) ->
         "struct PerFrame { float4x4 view; };\n"
         "struct PushData { float4 color; };\n"
         "ConstantBuffer<PerFrame> u_per_frame;\n"
+        "[[TerminScope(\"draw\")]]\n"
         "ConstantBuffer<PushData> u_push;\n"
         "[shader(\"fragment\")] float4 main() : SV_Target0 { return u_push.color; }\n",
         encoding="utf-8",
@@ -369,6 +370,7 @@ def test_termin_shaderc_drops_dead_slang_reflection_resources(tmp_path: Path) ->
         "        {'name': 'u_per_frame', 'binding': {'kind': 'constantBuffer', 'index': 2},\n"
         "         'type': {'kind': 'constantBuffer', 'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 64}}}},\n"
         "        {'name': 'u_push', 'binding': {'kind': 'constantBuffer', 'index': 13},\n"
+        "         'userAttribs': [{'name': 'TerminScope', 'arguments': ['draw']}],\n"
         "         'type': {'kind': 'constantBuffer', 'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 16}}}},\n"
         "    ]\n"
         "}), encoding='utf-8')\n",
@@ -581,7 +583,9 @@ def test_termin_shaderc_normalizes_slang_engine_constant_buffer_reflection_place
     shader.write_text(
         "struct PerFrame { float4x4 u_view; };\n"
         "struct SlangDrawData { float4x4 u_model; };\n"
+        "[[TerminScope(\"frame\")]]\n"
         "ConstantBuffer<PerFrame> per_frame;\n"
+        "[[TerminScope(\"draw\")]]\n"
         "ConstantBuffer<SlangDrawData> draw_data;\n"
         "[shader(\"vertex\")] float4 main(float3 position : POSITION) : SV_Position {\n"
         "    return mul(per_frame.u_view, mul(draw_data.u_model, float4(position, 1.0)));\n"
@@ -601,6 +605,7 @@ def test_termin_shaderc_normalizes_slang_engine_constant_buffer_reflection_place
         "    'parameters': [\n"
         "        {\n"
         "            'name': 'per_frame',\n"
+        "            'userAttribs': [{'name': 'TerminScope', 'arguments': ['frame']}],\n"
         "            'binding': {'kind': 'constantBuffer', 'index': 1},\n"
         "            'type': {\n"
         "                'kind': 'constantBuffer',\n"
@@ -609,6 +614,7 @@ def test_termin_shaderc_normalizes_slang_engine_constant_buffer_reflection_place
         "        },\n"
         "        {\n"
         "            'name': 'draw_data',\n"
+        "            'userAttribs': [{'name': 'TerminScope', 'arguments': ['draw']}],\n"
         "            'binding': {'kind': 'constantBuffer', 'index': 2},\n"
         "            'type': {\n"
         "                'kind': 'constantBuffer',\n"
@@ -722,9 +728,9 @@ def test_termin_shaderc_writes_slang_texture_resources_from_reflection(tmp_path:
         {
             "name": "albedo_texture",
             "kind": "texture",
-            "scope": "material",
+            "scope": "transient",
             "set": 0,
-            "binding": 4,
+            "binding": 32,
             "stage_mask": 2,
             "size": 0,
         },
@@ -869,6 +875,7 @@ def test_termin_shaderc_separates_slang_transient_textures_from_material_ubo(tmp
 def test_termin_shaderc_keeps_standalone_normal_texture_material_scoped(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
+        "[[TerminScope(\"material\")]]\n"
         "Sampler2D u_normal_texture;\n"
         "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
         "    return u_normal_texture.Sample(uv);\n"
@@ -887,6 +894,7 @@ def test_termin_shaderc_keeps_standalone_normal_texture_material_scoped(tmp_path
         "reflection.write_text(json.dumps({\n"
         "    'parameters': [\n"
         "        {'name': 'u_normal_texture', 'binding': {'kind': 'descriptorTableSlot', 'index': 9},\n"
+        "         'userAttribs': [{'name': 'TerminScope', 'arguments': ['material']}],\n"
         "         'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True}},\n"
         "    ]\n"
         "}), encoding='utf-8')\n",
@@ -1353,9 +1361,9 @@ def test_termin_shaderc_normalizes_slang_sampler2d_register_resource_layout(tmp_
         {
             "name": "albedo_texture",
             "kind": "texture",
-            "scope": "material",
+            "scope": "transient",
             "set": 0,
-            "binding": 4,
+            "binding": 32,
             "stage_mask": 2,
             "size": 0,
         },

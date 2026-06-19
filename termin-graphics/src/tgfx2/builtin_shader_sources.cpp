@@ -1,6 +1,7 @@
 #include "tgfx2/builtin_shader_sources.hpp"
 
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -141,6 +142,165 @@ std::string string_field(const nos::trent& value, const char* key) {
         return {};
     }
     return field->as_string();
+}
+
+uint32_t resource_kind_from_catalog(const std::string& kind) {
+    if (kind == "constant_buffer" || kind == "uniform_buffer") {
+        return TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    }
+    if (kind == "texture") {
+        return TC_SHADER_RESOURCE_TEXTURE;
+    }
+    if (kind == "combined_sampler2d") {
+        return TC_SHADER_RESOURCE_TEXTURE;
+    }
+    if (kind == "sampler") {
+        return TC_SHADER_RESOURCE_SAMPLER;
+    }
+    if (kind == "storage_buffer") {
+        return TC_SHADER_RESOURCE_STORAGE_BUFFER;
+    }
+    if (kind == "storage_texture") {
+        return TC_SHADER_RESOURCE_STORAGE_TEXTURE;
+    }
+    return TC_SHADER_RESOURCE_NONE;
+}
+
+uint32_t resource_scope_from_catalog(const std::string& scope) {
+    if (scope == "frame") {
+        return TC_SHADER_RESOURCE_SCOPE_FRAME;
+    }
+    if (scope == "pass") {
+        return TC_SHADER_RESOURCE_SCOPE_PASS;
+    }
+    if (scope == "material") {
+        return TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    }
+    if (scope == "draw") {
+        return TC_SHADER_RESOURCE_SCOPE_DRAW;
+    }
+    if (scope == "transient") {
+        return TC_SHADER_RESOURCE_SCOPE_TRANSIENT;
+    }
+    return TC_SHADER_RESOURCE_SCOPE_UNKNOWN;
+}
+
+uint32_t binding_slot_for_catalog_resource(
+    const std::string& name,
+    uint32_t kind,
+    uint32_t scope,
+    uint32_t& next_material_texture_binding,
+    uint32_t& next_transient_resource_binding)
+{
+    if (kind == TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
+        if (scope == TC_SHADER_RESOURCE_SCOPE_FRAME &&
+            (name == "per_frame" || name == "u_per_frame")) {
+            return 2;
+        }
+        if (scope == TC_SHADER_RESOURCE_SCOPE_PASS && name == "lighting") {
+            return 0;
+        }
+        if (scope == TC_SHADER_RESOURCE_SCOPE_PASS && name == "shadow_block") {
+            return 3;
+        }
+        if (scope == TC_SHADER_RESOURCE_SCOPE_PASS) {
+            return 0;
+        }
+        if (scope == TC_SHADER_RESOURCE_SCOPE_MATERIAL && name == "material") {
+            return 1;
+        }
+        if (scope == TC_SHADER_RESOURCE_SCOPE_DRAW &&
+            (name == "bone_block" || name == "BoneBlock")) {
+            return 16;
+        }
+        if (scope == TC_SHADER_RESOURCE_SCOPE_DRAW) {
+            return 24;
+        }
+    }
+    if (kind == TC_SHADER_RESOURCE_TEXTURE &&
+        scope == TC_SHADER_RESOURCE_SCOPE_PASS &&
+        (name == "shadow_maps" || name == "u_shadow_map" || name == "u_shadow_maps")) {
+        return 8;
+    }
+    if (kind == TC_SHADER_RESOURCE_TEXTURE &&
+        scope == TC_SHADER_RESOURCE_SCOPE_MATERIAL) {
+        if (next_material_texture_binding == 8) {
+            ++next_material_texture_binding;
+        }
+        return next_material_texture_binding++;
+    }
+    if ((kind == TC_SHADER_RESOURCE_TEXTURE ||
+         kind == TC_SHADER_RESOURCE_STORAGE_TEXTURE ||
+         kind == TC_SHADER_RESOURCE_SAMPLER) &&
+        scope == TC_SHADER_RESOURCE_SCOPE_TRANSIENT) {
+        return next_transient_resource_binding++;
+    }
+    if (kind == TC_SHADER_RESOURCE_STORAGE_BUFFER &&
+        scope == TC_SHADER_RESOURCE_SCOPE_DRAW) {
+        return 25;
+    }
+    return 0;
+}
+
+void apply_catalog_resource_layout(tc_shader* shader, const nos::trent& entry) {
+    if (!shader) {
+        return;
+    }
+
+    const nos::trent* resources = dict_get(entry, "resources");
+    if (!resources || resources->get_type() != nos::trent_type::list) {
+        return;
+    }
+
+    std::vector<tc_shader_resource_binding> bindings;
+    uint32_t next_material_texture_binding = 4;
+    uint32_t next_transient_resource_binding = 32;
+
+    for (const nos::trent& resource_data : resources->as_list()) {
+        if (resource_data.get_type() != nos::trent_type::dict) {
+            continue;
+        }
+
+        const std::string name = string_field(resource_data, "name");
+        const uint32_t kind = resource_kind_from_catalog(string_field(resource_data, "kind"));
+        uint32_t scope = resource_scope_from_catalog(string_field(resource_data, "scope"));
+        if (scope == TC_SHADER_RESOURCE_SCOPE_UNKNOWN) {
+            scope = TC_SHADER_RESOURCE_SCOPE_TRANSIENT;
+        }
+        if (name.empty() || kind == TC_SHADER_RESOURCE_NONE) {
+            tc::Log::warn(
+                "[BuiltInShaderCatalog] Shader '%s' has invalid resource entry name='%s'",
+                shader->uuid,
+                name.c_str());
+            continue;
+        }
+
+        tc_shader_resource_binding binding{};
+        std::strncpy(binding.name, name.c_str(), TC_SHADER_RESOURCE_NAME_MAX - 1);
+        binding.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+        binding.kind = kind;
+        binding.scope = scope;
+        binding.set = TC_SHADER_RESOURCE_SET_DEFAULT;
+        binding.binding = binding_slot_for_catalog_resource(
+            name,
+            kind,
+            scope,
+            next_material_texture_binding,
+            next_transient_resource_binding);
+        binding.stage_mask = TC_SHADER_STAGE_ALL_GRAPHICS;
+        binding.size = 0;
+        bindings.push_back(binding);
+    }
+
+    if (bindings.empty()) {
+        tc_shader_mark_resource_layout_known(shader);
+        return;
+    }
+
+    tc_shader_set_resource_layout(
+        shader,
+        bindings.data(),
+        static_cast<uint32_t>(bindings.size()));
 }
 
 std::optional<nos::trent> load_builtin_shader_catalog() {
@@ -428,6 +588,7 @@ tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
             shader->is_static = 1;
             tc_shader_add_ref(shader);
         }
+        apply_catalog_resource_layout(shader, *entry);
     }
 
     return handle;

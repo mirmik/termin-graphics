@@ -9,7 +9,6 @@ struct BloomBrightParams {
     float soft_threshold;
 };
 
-[[TerminScope("draw")]]
 ConstantBuffer<BloomBrightParams> u_params;
 
 [[TerminScope("transient")]]
