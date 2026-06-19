@@ -1,7 +1,6 @@
 from termin.animation import AnimationClipAsset as PackageAnimationClipAsset
 from termin.animation.asset import AnimationClipAsset
 from termin.animation.animation_clip_asset import AnimationClipAsset as LegacyAnimationClipAsset
-from termin.assets.animation_clip_asset import AnimationClipAsset as AppLegacyAnimationClipAsset
 
 
 class FakeAnimationClip:
@@ -20,7 +19,6 @@ def test_animation_clip_asset_wraps_clip() -> None:
     assert str(asset.source_path) == "/tmp/walk.anim"
 
 
-def test_animation_clip_asset_legacy_modules_reexport_canonical_class() -> None:
+def test_animation_clip_asset_domain_legacy_modules_reexport_canonical_class() -> None:
     assert PackageAnimationClipAsset is AnimationClipAsset
     assert LegacyAnimationClipAsset is AnimationClipAsset
-    assert AppLegacyAnimationClipAsset is AnimationClipAsset

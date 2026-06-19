@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING, List, Protocol, Set, runtime_checkable
 
 if TYPE_CHECKING:
     from termin.materials import TcMaterialPhase
-    from termin.visualization.render.render_context import RenderContext
+    from termin.render_framework import RenderContext
 
 
 # Идентификатор геометрии по умолчанию
