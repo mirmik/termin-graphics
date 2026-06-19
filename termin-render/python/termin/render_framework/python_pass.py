@@ -35,6 +35,12 @@ def _collect_graph_socket_metadata(cls: type) -> dict:
     }
 
 
+def _inspect_registry():
+    from termin.inspect import InspectRegistry
+
+    return InspectRegistry.instance()
+
+
 class PythonFramePass:
     """
     Base class for Python-authored render pipeline passes.
@@ -147,34 +153,29 @@ class PythonFramePass:
         if not tc_pass_registry_has(cls.__name__):
             tc_pass_registry_register_python(cls.__name__, cls)
 
-        try:
-            from termin._native.inspect import InspectRegistry
-            registry = InspectRegistry.instance()
+        registry = _inspect_registry()
 
-            own_fields = cls.__dict__.get("inspect_fields", {})
-            if own_fields:
-                registry.register_python_fields(cls.__name__, own_fields)
+        own_fields = cls.__dict__.get("inspect_fields", {})
+        if own_fields:
+            registry.register_python_fields(cls.__name__, own_fields)
 
-            metadata = registry.get_type_metadata(cls.__name__)
-            if not isinstance(metadata, dict):
-                metadata = {}
-            metadata["graph"] = _collect_graph_socket_metadata(cls)
-            registry.set_type_metadata(cls.__name__, metadata)
+        metadata = registry.get_type_metadata(cls.__name__)
+        if not isinstance(metadata, dict):
+            metadata = {}
+        metadata["graph"] = _collect_graph_socket_metadata(cls)
+        registry.set_type_metadata(cls.__name__, metadata)
 
-            parent_name = None
-            for klass in cls.__mro__[1:]:
-                if klass.__name__ in ("PythonFramePass", "FramePass", "RenderFramePass"):
-                    parent_name = "PythonFramePass"
-                    break
-                if "inspect_fields" in klass.__dict__:
-                    parent_name = klass.__name__
-                    break
+        parent_name = None
+        for klass in cls.__mro__[1:]:
+            if klass.__name__ in ("PythonFramePass", "FramePass", "RenderFramePass"):
+                parent_name = "PythonFramePass"
+                break
+            if "inspect_fields" in klass.__dict__:
+                parent_name = klass.__name__
+                break
 
-            if parent_name:
-                registry.set_type_parent(cls.__name__, parent_name)
-        except ImportError as e:
-            from tcbase import log
-            log.debug(f"[PythonFramePass] InspectRegistry not available for '{cls.__name__}': {e}")
+        if parent_name:
+            registry.set_type_parent(cls.__name__, parent_name)
 
     def __repr__(self) -> str:
         return f"PythonFramePass({self.pass_name!r})"
@@ -209,14 +210,12 @@ class PythonFramePass:
         return self._debugger_window
 
     def serialize_data(self) -> dict:
-        from termin._native.inspect import InspectRegistry
-        return InspectRegistry.instance().serialize_all(self)
+        return _inspect_registry().serialize_all(self)
 
     def deserialize_data(self, data: dict) -> None:
         if not data:
             return
-        from termin._native.inspect import InspectRegistry
-        InspectRegistry.instance().deserialize_all(self, data)
+        _inspect_registry().deserialize_all(self, data)
 
     def serialize(self) -> dict:
         result = {
