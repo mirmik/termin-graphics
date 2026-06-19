@@ -10,11 +10,13 @@ from termin.render._render_native import (
 )
 from termin.render.drawable import DEFAULT_GEOMETRY_ID, Drawable, GeometryDrawCall
 from termin.render.drawable_component import DrawableComponent
+from termin.render.immediate import ImmediateRenderer
 
 __all__ = [
     "DEFAULT_GEOMETRY_ID",
     "Drawable",
     "GeometryDrawCall",
+    "ImmediateRenderer",
     "drawable_capability_id",
     "install_drawable_vtable",
     "is_drawable",
