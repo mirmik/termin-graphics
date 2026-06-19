@@ -14,6 +14,7 @@ struct CompileOptions {
     std::string entry = "main";
     std::string debug_name = "shader";
     std::string slangc;
+    std::string fxc;
     std::string matrix_layout = "column";
     std::vector<std::string> include_dirs;
 };
