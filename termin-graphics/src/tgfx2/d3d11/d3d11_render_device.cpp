@@ -2,14 +2,29 @@
 
 #include "tgfx2/d3d11/d3d11_command_list.hpp"
 #include "tgfx2/d3d11/d3d11_type_conversions.hpp"
+#include "tgfx2/tc_shader_bridge.hpp"
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <cstring>
 #include <stdexcept>
 #include <string>
 
 #include <tcbase/tc_log.hpp>
+
+extern "C" {
+#include "tgfx/resources/tc_shader.h"
+#include "tgfx/resources/tc_shader_registry.h"
+}
+
+namespace {
+
+void d3d11_invalidate_tc_shader_trampoline(uint32_t pool_index, void* user) {
+    static_cast<tgfx::D3D11RenderDevice*>(user)->invalidate_tc_shader_cache(pool_index);
+}
+
+} // namespace
 
 namespace tgfx {
 namespace {
@@ -62,9 +77,16 @@ std::string semantic_name_for_attribute(const VertexAttribute& attr) {
 D3D11RenderDevice::D3D11RenderDevice() {
     create_device();
     query_capabilities();
+    tc_shader_registry_add_destroy_hook(&d3d11_invalidate_tc_shader_trampoline, this);
 }
 
 D3D11RenderDevice::~D3D11RenderDevice() {
+    tc_shader_registry_remove_destroy_hook(&d3d11_invalidate_tc_shader_trampoline, this);
+    for (auto& pair : tc_shader_cache_) {
+        if (pair.second.vs) destroy(pair.second.vs);
+        if (pair.second.fs) destroy(pair.second.fs);
+    }
+    tc_shader_cache_.clear();
     wait_idle();
 }
 
@@ -579,6 +601,122 @@ void D3D11RenderDevice::flush() {
 
 void D3D11RenderDevice::finish() {
     wait_idle();
+}
+
+bool D3D11RenderDevice::ensure_tc_shader(
+    tc_shader* shader,
+    ShaderHandle* out_vs,
+    ShaderHandle* out_fs)
+{
+    if (!shader) {
+        tc::Log::error("D3D11RenderDevice::ensure_tc_shader: shader is NULL");
+        return false;
+    }
+    if (!out_fs) {
+        tc::Log::error("D3D11RenderDevice::ensure_tc_shader: out_fs is NULL");
+        return false;
+    }
+    if (!shader->fragment_source) {
+        tc::Log::error(
+            "D3D11RenderDevice::ensure_tc_shader: missing fragment_source for '%s'",
+            shader->name ? shader->name : shader->uuid);
+        return false;
+    }
+
+    const bool has_vs = shader->vertex_source && shader->vertex_source[0] != '\0';
+    const uint32_t pool_index = shader->pool_index;
+    const uint32_t version = shader->version;
+    const bool resource_layout_ready = tc_shader_has_resource_layout(shader) ||
+                                       !tc_shader_requires_artifacts(shader);
+
+    auto it = tc_shader_cache_.find(pool_index);
+    if (it != tc_shader_cache_.end() &&
+        it->second.version == version &&
+        it->second.has_vs == has_vs &&
+        it->second.fs &&
+        (!has_vs || it->second.vs) &&
+        resource_layout_ready) {
+        if (out_vs) *out_vs = it->second.vs;
+        *out_fs = it->second.fs;
+        return true;
+    }
+    if (it != tc_shader_cache_.end()) {
+        if (it->second.vs) destroy(it->second.vs);
+        if (it->second.fs) destroy(it->second.fs);
+        tc_shader_cache_.erase(it);
+    }
+
+    ShaderHandle vs;
+    if (has_vs) {
+        ShaderDesc vs_desc;
+        vs_desc.stage = ShaderStage::Vertex;
+        vs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":vertex";
+        if (shader->vertex_entry && shader->vertex_entry[0]) {
+            vs_desc.entry_point = shader->vertex_entry;
+        }
+        if (!termin::tgfx2_load_or_compile_shader_artifact_for_backend(
+                shader,
+                BackendType::D3D11,
+                vs_desc.stage,
+                vs_desc.bytecode)) {
+            tc::Log::error(
+                "D3D11RenderDevice::ensure_tc_shader: vertex .cso artifact missing or dev compile failed for '%s'",
+                shader->name ? shader->name : shader->uuid);
+            return false;
+        }
+        vs = create_shader(vs_desc);
+        if (!vs) {
+            tc::Log::error(
+                "D3D11RenderDevice::ensure_tc_shader: VS create failed for '%s'",
+                shader->name ? shader->name : shader->uuid);
+            return false;
+        }
+    }
+
+    ShaderDesc fs_desc;
+    fs_desc.stage = ShaderStage::Fragment;
+    fs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":fragment";
+    if (shader->fragment_entry && shader->fragment_entry[0]) {
+        fs_desc.entry_point = shader->fragment_entry;
+    }
+    if (!termin::tgfx2_load_or_compile_shader_artifact_for_backend(
+            shader,
+            BackendType::D3D11,
+            fs_desc.stage,
+            fs_desc.bytecode)) {
+        if (vs) destroy(vs);
+        tc::Log::error(
+            "D3D11RenderDevice::ensure_tc_shader: fragment .cso artifact missing or dev compile failed for '%s'",
+            shader->name ? shader->name : shader->uuid);
+        return false;
+    }
+    ShaderHandle fs = create_shader(fs_desc);
+    if (!fs) {
+        if (vs) destroy(vs);
+        tc::Log::error(
+            "D3D11RenderDevice::ensure_tc_shader: PS create failed for '%s'",
+            shader->name ? shader->name : shader->uuid);
+        return false;
+    }
+
+    CachedTcShaderEntry entry;
+    entry.vs = vs;
+    entry.fs = fs;
+    entry.version = version;
+    entry.has_vs = has_vs;
+    tc_shader_cache_.emplace(pool_index, entry);
+
+    if (out_vs) *out_vs = vs;
+    *out_fs = fs;
+    return true;
+}
+
+void D3D11RenderDevice::invalidate_tc_shader_cache(uint32_t pool_index) {
+    auto it = tc_shader_cache_.find(pool_index);
+    if (it == tc_shader_cache_.end()) return;
+    if (it->second.vs) destroy(it->second.vs);
+    if (it->second.fs) destroy(it->second.fs);
+    tc_shader_cache_.erase(it);
 }
 
 } // namespace tgfx

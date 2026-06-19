@@ -129,6 +129,9 @@ public:
     void flush() override;
     void finish() override;
 
+    bool ensure_tc_shader(tc_shader* shader, ShaderHandle* out_vs, ShaderHandle* out_fs) override;
+    void invalidate_tc_shader_cache(uint32_t pool_index) override;
+
     ID3D11Device* native_device() const { return device_.Get(); }
     ID3D11DeviceContext* immediate_context() const { return context_.Get(); }
 
@@ -155,6 +158,14 @@ private:
     D3D11HandlePool<D3D11ShaderModule> shaders_;
     D3D11HandlePool<D3D11Pipeline> pipelines_;
     D3D11HandlePool<D3D11ResourceSet> resource_sets_;
+
+    struct CachedTcShaderEntry {
+        ShaderHandle vs;
+        ShaderHandle fs;
+        uint32_t version = 0;
+        bool has_vs = false;
+    };
+    std::unordered_map<uint32_t, CachedTcShaderEntry> tc_shader_cache_;
 };
 
 } // namespace tgfx

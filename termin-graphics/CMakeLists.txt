@@ -480,7 +480,7 @@ if(BUILD_TGFX2_TESTS)
     if(TGFX2_ENABLE_D3D11)
         add_executable(tgfx2_d3d11_smoke tests/test_tgfx2_d3d11_smoke.cpp)
         target_compile_definitions(tgfx2_d3d11_smoke PRIVATE TGFX2_HAS_D3D11)
-        target_link_libraries(tgfx2_d3d11_smoke PRIVATE termin_graphics2)
+        target_link_libraries(tgfx2_d3d11_smoke PRIVATE termin_graphics2 d3dcompiler)
         termin_set_rpath_test(tgfx2_d3d11_smoke)
         add_test(NAME tgfx2_d3d11_smoke COMMAND tgfx2_d3d11_smoke)
         set_tests_properties(tgfx2_d3d11_smoke PROPERTIES
