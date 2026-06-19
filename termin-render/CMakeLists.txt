@@ -133,6 +133,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/scene_pipeline_template.hpp
     include/termin/render/shader_resource_apply.hpp
     include/termin/render/shader_usage_collector.hpp
+    include/termin/render/tc_scene_render_ext.hpp
     include/termin/viewport_config.hpp
     include/termin/render_target_config.hpp
     include/termin/lighting/shadow.hpp

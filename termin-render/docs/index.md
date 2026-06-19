@@ -1,6 +1,6 @@
 # termin-render
 
-`termin-render` содержит rendering framework поверх canonical engine resources: render pipelines, frame graph, render engine bindings, scene render mount data и integration helpers.
+`termin-render` содержит rendering framework поверх canonical engine resources: render pipelines, frame graph, render engine bindings, scene render mount data и render-state integration helpers.
 
 Связанные документы:
 
@@ -13,6 +13,9 @@
 - Render framework implementation в `src/`.
 - Scene render mount config C/C++ wrappers: `tc_viewport_config`,
   `tc_render_target_config`, `ViewportConfig`, `RenderTargetConfig`.
+- C++ scene render extension helpers: render-state accessors, render
+  mount config/template accessors, and legacy render mount/state migration
+  adapter.
 - Python package/bindings в `python/termin/render*`.
 - Tests в `tests/`.
 
