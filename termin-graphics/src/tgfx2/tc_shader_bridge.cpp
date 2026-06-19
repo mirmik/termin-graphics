@@ -225,7 +225,11 @@ static bool shader_language_target_supported(
     }
     if (language == TC_SHADER_LANGUAGE_SLANG) {
         return backend == tgfx::BackendType::Vulkan ||
-               backend == tgfx::BackendType::OpenGL;
+               backend == tgfx::BackendType::OpenGL ||
+               backend == tgfx::BackendType::D3D11;
+    }
+    if (language == TC_SHADER_LANGUAGE_HLSL) {
+        return backend == tgfx::BackendType::D3D11;
     }
     return false;
 }

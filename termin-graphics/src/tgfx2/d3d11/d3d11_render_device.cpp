@@ -402,6 +402,12 @@ PipelineHandle D3D11RenderDevice::create_pipeline(const PipelineDesc& desc) {
 
     std::vector<std::string> semantic_names;
     std::vector<D3D11_INPUT_ELEMENT_DESC> input_elements;
+    size_t input_element_count = 0;
+    for (const auto& layout : desc.vertex_layouts) {
+        input_element_count += layout.attributes.size();
+    }
+    semantic_names.reserve(input_element_count);
+    input_elements.reserve(input_element_count);
     for (uint32_t slot = 0; slot < desc.vertex_layouts.size(); ++slot) {
         const auto& layout = desc.vertex_layouts[slot];
         for (const auto& attr : layout.attributes) {

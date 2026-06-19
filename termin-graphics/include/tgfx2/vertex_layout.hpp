@@ -44,8 +44,9 @@ struct VertexAttribute {
     uint32_t location = 0;
     VertexFormat format = VertexFormat::Float3;
     uint32_t offset = 0;
-    // Logical mesh/input name, e.g. position, normal, joints, weights.
-    // Backend pipeline identity remains location/format/offset based.
+    // Logical mesh/input name, e.g. POSITION, TEXCOORD, NORMAL. Backends
+    // with semantic-based input layouts (D3D11) use this when creating
+    // the pipeline, so it is part of pipeline cache identity.
     std::string semantic;
 
     VertexAttribute() = default;

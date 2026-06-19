@@ -1,6 +1,9 @@
 #include "tgfx2/device_factory.hpp"
+#include "tgfx2/engine_shader_catalog.hpp"
 #include "tgfx2/i_command_list.hpp"
 #include "tgfx2/i_render_device.hpp"
+#include "tgfx2/pipeline_cache.hpp"
+#include "tgfx2/render_context.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
 #include "tgfx2/vertex_layout.hpp"
 
@@ -20,7 +23,9 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
+#include <vector>
 
 extern "C" {
 #include "tgfx/resources/tc_mesh.h"
@@ -82,6 +87,20 @@ bool compile_hlsl_to_file(
     out.write(static_cast<const char*>(blob->GetBufferPointer()),
               static_cast<std::streamsize>(blob->GetBufferSize()));
     return static_cast<bool>(out);
+}
+
+bool read_binary_file(const std::filesystem::path& path, std::vector<uint8_t>& out) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        std::fprintf(stderr, "D3D11 smoke: failed to open %s\n", path.string().c_str());
+        return false;
+    }
+    out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    if (out.empty()) {
+        std::fprintf(stderr, "D3D11 smoke: empty file %s\n", path.string().c_str());
+        return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -417,6 +436,76 @@ int main() {
             return 1;
         }
 
+        const auto& fsq_shader = tgfx::engine_fullscreen_quad_vertex_shader();
+        const auto fsq_vs_path = shader_dir / (std::string(fsq_shader.uuid) + ".vs.cso");
+        const auto render_context_ps_path = shader_dir / "d3d11-smoke-render-context.ps.cso";
+        const char* fsq_vs_source =
+            "struct VSIn { float2 position : POSITION; float2 uv : TEXCOORD0; };\n"
+            "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
+            "VSOut main(VSIn input) {\n"
+            "    VSOut o;\n"
+            "    o.pos = float4(input.position, 0.0, 1.0);\n"
+            "    o.uv = input.uv;\n"
+            "    return o;\n"
+            "}\n";
+        const char* render_context_ps_source =
+            "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
+            "float4 main(VSOut input) : SV_Target0 {\n"
+            "    return float4(0.20, 0.70, 0.35, 1.0);\n"
+            "}\n";
+        if (!compile_hlsl_to_file(fsq_vs_source, "vs_5_0", fsq_vs_path) ||
+            !compile_hlsl_to_file(render_context_ps_source, "ps_5_0", render_context_ps_path)) {
+            return 1;
+        }
+
+        std::vector<uint8_t> render_context_ps_bytecode;
+        if (!read_binary_file(render_context_ps_path, render_context_ps_bytecode)) {
+            return 1;
+        }
+        tgfx::ShaderDesc render_context_ps_desc;
+        render_context_ps_desc.stage = tgfx::ShaderStage::Fragment;
+        render_context_ps_desc.debug_name = "D3D11 smoke RenderContext2 FS";
+        render_context_ps_desc.bytecode = std::move(render_context_ps_bytecode);
+        auto render_context_fs = device->create_shader(render_context_ps_desc);
+        if (!render_context_fs) {
+            std::fprintf(stderr, "D3D11 smoke: RenderContext2 fragment shader creation failed\n");
+            return 1;
+        }
+
+        tgfx::PipelineCache pipeline_cache(*device);
+        tgfx::RenderContext2 ctx(*device, pipeline_cache);
+        const float context_clear[] = {0.0f, 0.0f, 0.0f, 1.0f};
+        auto fsq_vs = ctx.fsq_vertex_shader();
+        if (!fsq_vs) {
+            std::fprintf(stderr, "D3D11 smoke: RenderContext2 fullscreen quad VS failed\n");
+            return 1;
+        }
+        ctx.begin_frame();
+        ctx.begin_pass(color, {}, context_clear, 1.0f, false);
+        ctx.set_depth_test(false);
+        ctx.set_depth_write(false);
+        ctx.set_cull(tgfx::CullMode::None);
+        ctx.set_blend(false);
+        ctx.bind_shader(fsq_vs, render_context_fs);
+        ctx.draw_fullscreen_quad_with_bound_shader();
+        ctx.end_pass();
+        ctx.end_frame();
+
+        if (!device->read_pixel_rgba8(color, 2, 2, rgba)) {
+            std::fprintf(stderr, "D3D11 smoke: RenderContext2 draw readback failed\n");
+            return 1;
+        }
+        if (!close_enough(rgba[0], 0.20f) ||
+            !close_enough(rgba[1], 0.70f) ||
+            !close_enough(rgba[2], 0.35f) ||
+            !close_enough(rgba[3], 1.00f)) {
+            std::fprintf(stderr,
+                         "D3D11 smoke: unexpected RenderContext2 pixel %.3f %.3f %.3f %.3f\n",
+                         rgba[0], rgba[1], rgba[2], rgba[3]);
+            return 1;
+        }
+
+        device->destroy(render_context_fs);
         device->destroy(resource_set);
         device->destroy(sampler);
         device->destroy(textured_pipeline);

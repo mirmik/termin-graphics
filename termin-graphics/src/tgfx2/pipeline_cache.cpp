@@ -22,7 +22,8 @@ static bool layouts_equal(const VertexBufferLayout& a, const VertexBufferLayout&
         return false;
     for (size_t i = 0; i < a.attributes.size(); i++) {
         if (a.attributes[i].format != b.attributes[i].format ||
-            a.attributes[i].offset != b.attributes[i].offset)
+            a.attributes[i].offset != b.attributes[i].offset ||
+            a.attributes[i].semantic != b.attributes[i].semantic)
             return false;
         if (!a.use_shader_input_locations &&
             a.attributes[i].location != b.attributes[i].location)
