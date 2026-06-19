@@ -62,6 +62,8 @@ set(TERMIN_RENDER_SOURCES
     src/tc_pipeline.c
     src/tc_frame_graph.c
     src/tc_scene_render_ext.cpp
+    src/viewport_config.cpp
+    src/render_target_config.cpp
     src/drawable.cpp
     src/fbo_pool.cpp
     src/frame_pass.cpp
@@ -131,6 +133,8 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/scene_pipeline_template.hpp
     include/termin/render/shader_resource_apply.hpp
     include/termin/render/shader_usage_collector.hpp
+    include/termin/viewport_config.hpp
+    include/termin/render_target_config.hpp
     include/termin/lighting/shadow.hpp
     include/tc_project_settings.h
     include/tc_viewport_config.h
