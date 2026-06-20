@@ -27,7 +27,41 @@ jobs:
       - name: Run Python lint
         run: ./run-lint-python.sh --no-venv
 
-  # ── 0b. Build system smoke ─────────────────────────────────────
+  # ── 0a. C/C++ lint ─────────────────────────────────────────────
+  lint-cpp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang-tidy \
+            cmake \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libshaderc-dev \
+            libsdl2-dev \
+            libvulkan-dev \
+            mesa-vulkan-drivers
+
+      - name: Run C/C++ lint
+        run: ./run-lint-cpp.sh
+
+  # ── 0b. Source size lint ───────────────────────────────────────
+  lint-source-size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check source file length
+        run: python3 scripts/find-long-files.py --threshold 2000 --fail .
+
+  # ── 0c. Build system smoke ─────────────────────────────────────
   smoke-build-system-windows:
     runs-on: windows-latest
     steps:
