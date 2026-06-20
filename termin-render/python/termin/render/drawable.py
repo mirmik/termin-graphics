@@ -34,10 +34,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, List, Protocol, Set, runtime_checkable
 
-from termin.render._render_native import GeometryDrawCall, PhaseDrawCall
+from termin.render._render_native import GeometryDrawCall
 
 if TYPE_CHECKING:
-    from termin.materials import TcMaterialPhase
     from termin.render_framework import RenderContext
 
 
