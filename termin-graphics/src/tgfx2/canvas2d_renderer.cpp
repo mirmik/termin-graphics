@@ -49,7 +49,14 @@ tc_shader_handle texture_shader_handle() {
     return handle;
 }
 
-void build_ortho_pixel_to_ndc(float x, float y, float w, float h, float out[16]) {
+void build_ortho_pixel_to_ndc(
+    float x,
+    float y,
+    float w,
+    float h,
+    bool d3d11_clip_space,
+    float out[16])
+{
     if (w <= 0.0f || h <= 0.0f) {
         std::memset(out, 0, 16 * sizeof(float));
         out[0] = out[5] = out[10] = out[15] = 1.0f;
@@ -59,12 +66,20 @@ void build_ortho_pixel_to_ndc(float x, float y, float w, float h, float out[16])
     // Row-major math matrix, then transposed to column-major storage
     // for push constants. Pixel coords are absolute in the current
     // render target; viewport origin is accounted for by the constant.
-    const float rm[16] = {
-        2.0f / w, 0.0f,     0.0f, -1.0f - 2.0f * x / w,
-        0.0f,     2.0f / h, 0.0f, -1.0f - 2.0f * y / h,
-        0.0f,     0.0f,     1.0f,  0.0f,
-        0.0f,     0.0f,     0.0f,  1.0f,
-    };
+    float rm[16]{};
+    rm[0] = 2.0f / w;
+    rm[3] = -1.0f - 2.0f * x / w;
+    if (d3d11_clip_space) {
+        // D3D viewport transform maps clip-space y=+1 to the top edge.
+        // Vulkan and OpenGL-with-upper-left clip control map y=-1 there.
+        rm[5] = -2.0f / h;
+        rm[7] = 1.0f + 2.0f * y / h;
+    } else {
+        rm[5] = 2.0f / h;
+        rm[7] = -1.0f - 2.0f * y / h;
+    }
+    rm[10] = 1.0f;
+    rm[15] = 1.0f;
     for (int row = 0; row < 4; ++row) {
         for (int col = 0; col < 4; ++col) {
             out[col * 4 + row] = rm[row * 4 + col];
@@ -360,6 +375,8 @@ void Canvas2DRenderer::build_projection_() {
                              static_cast<float>(viewport_y_),
                              static_cast<float>(viewport_w_),
                              static_cast<float>(viewport_h_),
+                             ctx_ != nullptr &&
+                                 ctx_->device().backend_type() == BackendType::D3D11,
                              projection_);
 }
 

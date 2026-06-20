@@ -7,10 +7,13 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <chrono>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <d3dcompiler.h>
@@ -249,6 +252,9 @@ D3D11RenderDevice::~D3D11RenderDevice() {
     tc_texture_registry_remove_destroy_hook(&d3d11_invalidate_tc_texture_trampoline, this);
     tc_shader_registry_remove_destroy_hook(&d3d11_invalidate_tc_shader_trampoline, this);
 
+    reset_state();
+    wait_idle();
+
     for (auto& pair : tc_mesh_cache_) {
         if (pair.second.vbo) destroy(pair.second.vbo);
         if (pair.second.ebo) destroy(pair.second.ebo);
@@ -263,6 +269,7 @@ D3D11RenderDevice::~D3D11RenderDevice() {
         if (pair.second.fs) destroy(pair.second.fs);
     }
     tc_shader_cache_.clear();
+    reset_state();
     wait_idle();
 }
 
@@ -277,6 +284,10 @@ void D3D11RenderDevice::create_device() {
 #if defined(_DEBUG)
     flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
+    if (const char* debug_env = std::getenv("TERMIN_D3D11_DEBUG");
+        debug_env != nullptr && debug_env[0] != '\0' && debug_env[0] != '0') {
+        flags |= D3D11_CREATE_DEVICE_DEBUG;
+    }
 
     HRESULT hr = D3D11CreateDevice(
         nullptr,
@@ -290,7 +301,6 @@ void D3D11RenderDevice::create_device() {
         &feature_level_,
         &context_);
 
-#if defined(_DEBUG)
     if (FAILED(hr)) {
         flags &= ~D3D11_CREATE_DEVICE_DEBUG;
         hr = D3D11CreateDevice(
@@ -305,7 +315,6 @@ void D3D11RenderDevice::create_device() {
             &feature_level_,
             &context_);
     }
-#endif
 
     throw_if_failed(hr, "D3D11CreateDevice");
 }
@@ -503,6 +512,31 @@ void D3D11RenderDevice::query_capabilities() {
 
 void D3D11RenderDevice::wait_idle() {
     if (context_) {
+        Microsoft::WRL::ComPtr<ID3D11Query> query;
+        D3D11_QUERY_DESC desc{};
+        desc.Query = D3D11_QUERY_EVENT;
+        HRESULT hr = device_->CreateQuery(&desc, &query);
+        if (SUCCEEDED(hr) && query) {
+            context_->End(query.Get());
+            context_->Flush();
+            for (uint32_t i = 0; i < 10000; ++i) {
+                hr = context_->GetData(query.Get(), nullptr, 0, 0);
+                if (hr == S_OK) {
+                    return;
+                }
+                if (FAILED(hr)) {
+                    tc::Log::error(
+                        "D3D11RenderDevice::wait_idle GetData failed: "
+                        "HRESULT=0x%08X device_removed_reason=0x%08X",
+                        static_cast<unsigned>(hr),
+                        static_cast<unsigned>(device_->GetDeviceRemovedReason()));
+                    return;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            tc::Log::error("D3D11RenderDevice::wait_idle timed out waiting for GPU");
+            return;
+        }
         context_->Flush();
     }
 }
@@ -1124,7 +1158,11 @@ bool D3D11RenderDevice::read_texture_rgba_float(TextureHandle handle, float* out
     D3D11_MAPPED_SUBRESOURCE mapped{};
     HRESULT hr = context_->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped);
     if (FAILED(hr)) {
-        tc::Log::error("D3D11RenderDevice::read_texture_rgba_float Map failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
+        tc::Log::error(
+            "D3D11RenderDevice::read_texture_rgba_float Map failed: "
+            "HRESULT=0x%08X device_removed_reason=0x%08X",
+            static_cast<unsigned>(hr),
+            static_cast<unsigned>(device_->GetDeviceRemovedReason()));
         return false;
     }
     for (uint32_t y = 0; y < tex->desc.height; ++y) {

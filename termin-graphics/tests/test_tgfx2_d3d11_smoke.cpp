@@ -1,6 +1,7 @@
 #include "tgfx2/canvas2d_renderer.hpp"
 #include "tgfx2/device_factory.hpp"
 #include "tgfx2/engine_shader_catalog.hpp"
+#include "tgfx2/font_atlas.hpp"
 #include "tgfx2/i_command_list.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/pipeline_cache.hpp"
@@ -188,6 +189,32 @@ std::filesystem::path find_slangc() {
         return from_path;
     }
 #endif
+    return {};
+}
+
+std::filesystem::path find_text_smoke_font() {
+    const std::filesystem::path recast_font =
+        std::filesystem::current_path() /
+        "termin-thirdparty" / "recastnavigation" / "RecastDemo" /
+        "Bin" / "DroidSans.ttf";
+    if (std::filesystem::exists(recast_font)) {
+        return recast_font;
+    }
+
+#ifdef _WIN32
+    const char* windir_env = std::getenv("WINDIR");
+    const std::filesystem::path fonts_dir =
+        (windir_env != nullptr && windir_env[0] != '\0')
+            ? std::filesystem::path(windir_env) / "Fonts"
+            : std::filesystem::path("C:/Windows/Fonts");
+    for (const char* name : {"segoeui.ttf", "arial.ttf", "tahoma.ttf"}) {
+        std::filesystem::path candidate = fonts_dir / name;
+        if (std::filesystem::exists(candidate)) {
+            return candidate;
+        }
+    }
+#endif
+
     return {};
 }
 
@@ -752,6 +779,184 @@ int main() {
                 return 1;
             }
             device->destroy(canvas_texture);
+
+            const std::filesystem::path font_path = find_text_smoke_font();
+            if (!font_path.empty()) {
+                tgfx::TextureDesc text_desc;
+                text_desc.width = 128;
+                text_desc.height = 64;
+                text_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+                text_desc.usage = tgfx::TextureUsage::Sampled |
+                                  tgfx::TextureUsage::ColorAttachment |
+                                  tgfx::TextureUsage::CopySrc |
+                                  tgfx::TextureUsage::CopyDst;
+                auto text_target = device->create_texture(text_desc);
+                if (!text_target) {
+                    std::fprintf(stderr, "D3D11 smoke: Text2D target creation failed\n");
+                    return 1;
+                }
+
+                auto assert_text_has_signal = [&](const char* label) -> bool {
+                    std::vector<float> pixels(static_cast<size_t>(text_desc.width) *
+                                              static_cast<size_t>(text_desc.height) * 4u);
+                    if (!device->read_texture_rgba_float(text_target, pixels.data())) {
+                        std::fprintf(stderr, "D3D11 smoke: %s text readback failed\n", label);
+                        return false;
+                    }
+                    uint32_t lit_pixels = 0;
+                    for (size_t i = 0; i + 3 < pixels.size(); i += 4) {
+                        if (pixels[i] > 0.05f ||
+                            pixels[i + 1] > 0.05f ||
+                            pixels[i + 2] > 0.05f) {
+                            ++lit_pixels;
+                        }
+                    }
+                    if (lit_pixels < 8) {
+                        std::fprintf(stderr,
+                                     "D3D11 smoke: %s text produced too few lit pixels (%u)\n",
+                                     label,
+                                     lit_pixels);
+                        return false;
+                    }
+                    return true;
+                };
+
+                tgfx::FontAtlas bitmap_font(font_path.string(), 14, 512, 512);
+                bitmap_font.set_sdf_enabled(false);
+                ctx.begin_frame();
+                ctx.begin_pass(text_target, {}, canvas_clear, 1.0f, false);
+                tgfx::Canvas2DRenderer bitmap_canvas(&bitmap_font);
+                bitmap_canvas.begin(ctx, static_cast<int>(text_desc.width), static_cast<int>(text_desc.height));
+                bitmap_canvas.draw_text(
+                    "Text",
+                    8.0f,
+                    8.0f,
+                    18.0f,
+                    tgfx::CanvasColor{1.0f, 1.0f, 1.0f, 1.0f},
+                    &bitmap_font,
+                    tgfx::Text2DRenderer::Anchor::Left);
+                bitmap_canvas.end();
+                ctx.end_pass();
+                ctx.end_frame();
+                if (!assert_text_has_signal("bitmap")) {
+                    device->destroy(text_target);
+                    return 1;
+                }
+
+                tgfx::FontAtlas sdf_font(font_path.string(), 14, 512, 512);
+                ctx.begin_frame();
+                ctx.begin_pass(text_target, {}, canvas_clear, 1.0f, false);
+                tgfx::Canvas2DRenderer sdf_canvas(&sdf_font);
+                sdf_canvas.begin(ctx, static_cast<int>(text_desc.width), static_cast<int>(text_desc.height));
+                sdf_canvas.draw_text(
+                    "Text",
+                    8.0f,
+                    8.0f,
+                    28.0f,
+                    tgfx::CanvasColor{1.0f, 1.0f, 1.0f, 1.0f},
+                    &sdf_font,
+                    tgfx::Text2DRenderer::Anchor::Left);
+                sdf_canvas.end();
+                ctx.end_pass();
+                ctx.end_frame();
+                if (!assert_text_has_signal("SDF")) {
+                    device->destroy(text_target);
+                    return 1;
+                }
+
+                tgfx::TextureDesc mixed_texture_desc;
+                mixed_texture_desc.width = 2;
+                mixed_texture_desc.height = 2;
+                mixed_texture_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+                mixed_texture_desc.usage = tgfx::TextureUsage::Sampled |
+                                           tgfx::TextureUsage::CopyDst |
+                                           tgfx::TextureUsage::CopySrc;
+                auto mixed_texture = device->create_texture(mixed_texture_desc);
+                if (!mixed_texture) {
+                    std::fprintf(stderr, "D3D11 smoke: mixed Canvas2D texture creation failed\n");
+                    device->destroy(text_target);
+                    return 1;
+                }
+                const uint8_t mixed_pixels[] = {
+                    51, 153, 204, 255, 51, 153, 204, 255,
+                    51, 153, 204, 255, 51, 153, 204, 255,
+                };
+                device->upload_texture(
+                    mixed_texture,
+                    std::span<const uint8_t>(mixed_pixels, sizeof(mixed_pixels)));
+
+                ctx.begin_frame();
+                ctx.begin_pass(text_target, {}, canvas_clear, 1.0f, false);
+                tgfx::Canvas2DRenderer mixed_canvas(&bitmap_font);
+                mixed_canvas.begin(ctx, static_cast<int>(text_desc.width), static_cast<int>(text_desc.height));
+                mixed_canvas.draw_rect(
+                    0.0f, 0.0f, static_cast<float>(text_desc.width), static_cast<float>(text_desc.height),
+                    tgfx::CanvasColor{0.02f, 0.02f, 0.03f, 1.0f});
+                mixed_canvas.draw_texture(mixed_texture, 4.0f, 4.0f, 24.0f, 24.0f);
+                mixed_canvas.draw_rect(
+                    34.0f, 4.0f, 80.0f, 32.0f,
+                    tgfx::CanvasColor{0.12f, 0.12f, 0.16f, 1.0f});
+                mixed_canvas.draw_text(
+                    "Text",
+                    38.0f,
+                    8.0f,
+                    18.0f,
+                    tgfx::CanvasColor{1.0f, 1.0f, 1.0f, 1.0f},
+                    &bitmap_font,
+                    tgfx::Text2DRenderer::Anchor::Left);
+                mixed_canvas.end();
+                ctx.end_pass();
+                ctx.end_frame();
+
+                std::vector<float> mixed_readback(static_cast<size_t>(text_desc.width) *
+                                                   static_cast<size_t>(text_desc.height) * 4u);
+                if (!device->read_texture_rgba_float(text_target, mixed_readback.data())) {
+                    std::fprintf(stderr, "D3D11 smoke: mixed Canvas2D readback failed\n");
+                    device->destroy(mixed_texture);
+                    device->destroy(text_target);
+                    return 1;
+                }
+                const size_t mixed_texture_px = (12u * text_desc.width + 12u) * 4u;
+                if (!close_enough(mixed_readback[mixed_texture_px + 0], 51.0f / 255.0f) ||
+                    !close_enough(mixed_readback[mixed_texture_px + 1], 153.0f / 255.0f) ||
+                    !close_enough(mixed_readback[mixed_texture_px + 2], 204.0f / 255.0f) ||
+                    !close_enough(mixed_readback[mixed_texture_px + 3], 1.0f)) {
+                    std::fprintf(stderr,
+                                 "D3D11 smoke: unexpected mixed Canvas2D texture pixel %.3f %.3f %.3f %.3f\n",
+                                 mixed_readback[mixed_texture_px + 0],
+                                 mixed_readback[mixed_texture_px + 1],
+                                 mixed_readback[mixed_texture_px + 2],
+                                 mixed_readback[mixed_texture_px + 3]);
+                    device->destroy(mixed_texture);
+                    device->destroy(text_target);
+                    return 1;
+                }
+                uint32_t mixed_text_pixels = 0;
+                for (uint32_t y = 0; y < text_desc.height; ++y) {
+                    for (uint32_t x = 34; x < text_desc.width; ++x) {
+                        const size_t i = (static_cast<size_t>(y) * text_desc.width + x) * 4u;
+                        if (mixed_readback[i + 0] > 0.2f &&
+                            mixed_readback[i + 1] > 0.2f &&
+                            mixed_readback[i + 2] > 0.2f) {
+                            ++mixed_text_pixels;
+                        }
+                    }
+                }
+                if (mixed_text_pixels < 8) {
+                    std::fprintf(stderr,
+                                 "D3D11 smoke: mixed Canvas2D text produced too few lit pixels (%u)\n",
+                                 mixed_text_pixels);
+                    device->destroy(mixed_texture);
+                    device->destroy(text_target);
+                    return 1;
+                }
+                device->destroy(mixed_texture);
+                device->destroy(text_target);
+            } else {
+                std::printf(
+                    "D3D11 smoke: Text2D smoke skipped (font missing: %s)\n",
+                    font_path.string().c_str());
+            }
         } else {
             std::printf(
                 "D3D11 smoke: Canvas2D builtin shader smoke skipped "

@@ -258,6 +258,26 @@ void apply_catalog_resource_layout(tc_shader* shader, const nos::trent& entry) {
     std::vector<tc_shader_resource_binding> bindings;
     uint32_t next_material_texture_binding = 4;
     uint32_t next_transient_resource_binding = 32;
+    const tc_shader_resource_binding* existing_bindings =
+        tc_shader_resource_bindings(shader);
+    const uint32_t existing_count =
+        tc_shader_resource_binding_count(shader);
+
+    auto existing_binding_by_name =
+        [&](const std::string& name) -> const tc_shader_resource_binding* {
+            if (name.empty() || !existing_bindings) {
+                return nullptr;
+            }
+            for (uint32_t i = 0; i < existing_count; ++i) {
+                if (std::strncmp(
+                        existing_bindings[i].name,
+                        name.c_str(),
+                        TC_SHADER_RESOURCE_NAME_MAX) == 0) {
+                    return &existing_bindings[i];
+                }
+            }
+            return nullptr;
+        };
 
     for (const nos::trent& resource_data : resources->as_list()) {
         if (resource_data.get_type() != nos::trent_type::dict) {
@@ -292,6 +312,15 @@ void apply_catalog_resource_layout(tc_shader* shader, const nos::trent& entry) {
             next_transient_resource_binding);
         binding.stage_mask = TC_SHADER_STAGE_ALL_GRAPHICS;
         binding.size = 0;
+        if (const tc_shader_resource_binding* existing =
+                existing_binding_by_name(name)) {
+            if (existing->has_d3d11_placement ||
+                existing->field_count > 0 ||
+                existing->size != 0) {
+                binding = *existing;
+                binding.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+            }
+        }
         bindings.push_back(binding);
     }
 

@@ -7,6 +7,7 @@ import termin_prelude;
 Sampler2D u_depth_tex;
 
 struct FragmentInput {
+    float4 screen_pos : SV_Position;
     float2 uv : TEXCOORD0;
 };
 
