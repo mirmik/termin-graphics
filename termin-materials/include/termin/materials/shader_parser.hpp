@@ -10,6 +10,8 @@
 #include <stdexcept>
 #include <algorithm>
 
+#include <termin/materials/termin_materials_api.h>
+
 namespace termin {
 
 /**
@@ -241,17 +243,17 @@ public:
  *   @stage vertex / @stage fragment   // Shared stages (outside @phase)
  *                                      // Entry defaults to "main".
  */
-ShaderMultyPhaseProgramm parse_shader_text(const std::string& text);
+TERMIN_MATERIALS_API ShaderMultyPhaseProgramm parse_shader_text(const std::string& text);
 
 /**
  * Parse bool from string.
  */
-bool parse_bool(const std::string& value);
+TERMIN_MATERIALS_API bool parse_bool(const std::string& value);
 
 /**
  * Parse @property directive.
  */
-MaterialProperty parse_property_directive(const std::string& line);
+TERMIN_MATERIALS_API MaterialProperty parse_property_directive(const std::string& line);
 
 // ========== std140 Material UBO generator ==========
 
@@ -265,20 +267,20 @@ MaterialProperty parse_property_directive(const std::string& line);
  *   Vec3                : size=12, align=16
  *   Vec4 / Color        : size=16, align=16
  */
-std::pair<uint32_t, uint32_t> std140_size_align(const std::string& property_type);
+TERMIN_MATERIALS_API std::pair<uint32_t, uint32_t> std140_size_align(const std::string& property_type);
 
 /**
  * Compute a MaterialUboLayout for the given ordered list of properties.
  * Texture properties are skipped (they become samplers, not UBO members).
  */
-MaterialUboLayout compute_std140_layout(const std::vector<MaterialProperty>& properties);
+TERMIN_MATERIALS_API MaterialUboLayout compute_std140_layout(const std::vector<MaterialProperty>& properties);
 
 /**
  * Produce the GLSL text for a `layout(std140) uniform MaterialParams { ... };`
  * block matching the given layout. The returned string includes a trailing
  * newline. Empty layout yields an empty string.
  */
-std::string synthesize_material_ubo_glsl(const MaterialUboLayout& layout);
+TERMIN_MATERIALS_API std::string synthesize_material_ubo_glsl(const MaterialUboLayout& layout);
 
 /**
  * Produce the Slang text for a `MaterialParams` struct plus a backend-neutral
@@ -286,21 +288,23 @@ std::string synthesize_material_ubo_glsl(const MaterialUboLayout& layout);
  * std140 layout. Backend binding assignment is captured by compiled artifact
  * layout metadata.
  */
-std::string synthesize_material_ubo_slang(const MaterialUboLayout& layout);
+TERMIN_MATERIALS_API std::string synthesize_material_ubo_slang(const MaterialUboLayout& layout);
 
 /**
  * Remove top-level `uniform <type> <name>;` declarations whose names are in
  * `names`. Works line-oriented; lines that do not look like a simple uniform
  * declaration are preserved as-is.
  */
-std::string strip_uniform_decls(const std::string& source,
-                                const std::vector<std::string>& names);
+TERMIN_MATERIALS_API std::string strip_uniform_decls(
+    const std::string& source,
+    const std::vector<std::string>& names
+);
 
 /**
  * Insert a GLSL text block into a shader source immediately after its
  * `#version ...` line (or at the top if there is none).
  */
-std::string inject_after_version(const std::string& source, const std::string& block);
+TERMIN_MATERIALS_API std::string inject_after_version(const std::string& source, const std::string& block);
 
 /**
  * Apply the same engine uniform rewrite used by .shader assets to a raw
@@ -310,7 +314,7 @@ std::string inject_after_version(const std::string& source, const std::string& b
  * injects parser-owned PerFrame/DrawData resource blocks when the stage
  * references those names. It also normalizes #version to 450 core.
  */
-std::string rewrite_engine_uniforms_for_stage_source(
+TERMIN_MATERIALS_API std::string rewrite_engine_uniforms_for_stage_source(
     const std::string& source,
     const std::string& stage_name
 );
@@ -327,8 +331,10 @@ std::string rewrite_engine_uniforms_for_stage_source(
  * bytes long. Values are written as 32-bit floats (even booleans, per
  * std140). `Texture` properties are ignored — they are not in the UBO.
  */
-void std140_pack(const MaterialUboLayout& layout,
-                 const std::vector<MaterialProperty>& values,
-                 uint8_t* out_buffer);
+TERMIN_MATERIALS_API void std140_pack(
+    const MaterialUboLayout& layout,
+    const std::vector<MaterialProperty>& values,
+    uint8_t* out_buffer
+);
 
 } // namespace termin
