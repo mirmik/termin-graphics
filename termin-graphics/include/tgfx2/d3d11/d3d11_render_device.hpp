@@ -162,12 +162,19 @@ private:
     TextureHandle register_external_texture(ID3D11Texture2D* texture, const TextureDesc& desc);
     void create_device();
     void create_default_sampler();
+    bool ensure_blit_resources();
     void query_capabilities();
     Microsoft::WRL::ComPtr<ID3D11Texture2D> create_staging_texture(const D3D11Texture& src) const;
 
     Microsoft::WRL::ComPtr<ID3D11Device> device_;
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
     Microsoft::WRL::ComPtr<ID3D11SamplerState> default_sampler_;
+    Microsoft::WRL::ComPtr<ID3D11VertexShader> blit_vertex_shader_;
+    Microsoft::WRL::ComPtr<ID3D11PixelShader> blit_pixel_shader_;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> blit_constant_buffer_;
+    Microsoft::WRL::ComPtr<ID3D11RasterizerState> blit_raster_state_;
+    Microsoft::WRL::ComPtr<ID3D11DepthStencilState> blit_depth_stencil_state_;
+    Microsoft::WRL::ComPtr<ID3D11BlendState> blit_blend_state_;
     D3D_FEATURE_LEVEL feature_level_ = D3D_FEATURE_LEVEL_11_0;
     BackendCapabilities caps_;
 

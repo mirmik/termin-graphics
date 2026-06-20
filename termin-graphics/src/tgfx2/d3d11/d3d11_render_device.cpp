@@ -329,6 +329,166 @@ void D3D11RenderDevice::create_default_sampler() {
     throw_if_failed(hr, "ID3D11Device::CreateSamplerState(default)");
 }
 
+bool D3D11RenderDevice::ensure_blit_resources() {
+    if (blit_vertex_shader_ && blit_pixel_shader_ && blit_constant_buffer_ &&
+        blit_raster_state_ && blit_depth_stencil_state_ && blit_blend_state_) {
+        return true;
+    }
+
+    static constexpr const char* kBlitVs = R"(
+cbuffer BlitConstants : register(b0) {
+    float2 src_uv_min;
+    float2 src_uv_size;
+};
+
+struct VSOut {
+    float4 position : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+VSOut main(uint vertex_id : SV_VertexID) {
+    float2 base_uv = float2((vertex_id << 1) & 2, vertex_id & 2);
+    VSOut output;
+    output.position = float4(base_uv * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
+    output.uv = src_uv_min + base_uv * src_uv_size;
+    return output;
+}
+)";
+
+    static constexpr const char* kBlitPs = R"(
+Texture2D src_texture : register(t0);
+SamplerState src_sampler : register(s0);
+
+struct VSOut {
+    float4 position : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+float4 main(VSOut input) : SV_Target {
+    return src_texture.Sample(src_sampler, input.uv);
+}
+)";
+
+    UINT compile_flags = D3DCOMPILE_ENABLE_STRICTNESS;
+#if defined(_DEBUG)
+    compile_flags |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+#endif
+
+    auto compile_stage = [&](const char* source,
+                             const char* profile,
+                             Microsoft::WRL::ComPtr<ID3DBlob>& out) -> bool {
+        Microsoft::WRL::ComPtr<ID3DBlob> errors;
+        HRESULT hr = D3DCompile(
+            source,
+            std::strlen(source),
+            nullptr,
+            nullptr,
+            nullptr,
+            "main",
+            profile,
+            compile_flags,
+            0,
+            &out,
+            &errors);
+        if (FAILED(hr)) {
+            const char* message = errors
+                ? static_cast<const char*>(errors->GetBufferPointer())
+                : "";
+            tc::Log::error(
+                "D3D11RenderDevice::ensure_blit_resources: D3DCompile(%s) failed: "
+                "HRESULT=0x%08X %s",
+                profile,
+                static_cast<unsigned>(hr),
+                message);
+            return false;
+        }
+        return true;
+    };
+
+    const char* vs_profile = feature_level_ >= D3D_FEATURE_LEVEL_11_0 ? "vs_5_0" : "vs_4_0";
+    const char* ps_profile = feature_level_ >= D3D_FEATURE_LEVEL_11_0 ? "ps_5_0" : "ps_4_0";
+    Microsoft::WRL::ComPtr<ID3DBlob> vs_blob;
+    Microsoft::WRL::ComPtr<ID3DBlob> ps_blob;
+    if (!compile_stage(kBlitVs, vs_profile, vs_blob) ||
+        !compile_stage(kBlitPs, ps_profile, ps_blob)) {
+        return false;
+    }
+
+    HRESULT hr = device_->CreateVertexShader(
+        vs_blob->GetBufferPointer(),
+        vs_blob->GetBufferSize(),
+        nullptr,
+        &blit_vertex_shader_);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::ensure_blit_resources: CreateVertexShader failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return false;
+    }
+
+    hr = device_->CreatePixelShader(
+        ps_blob->GetBufferPointer(),
+        ps_blob->GetBufferSize(),
+        nullptr,
+        &blit_pixel_shader_);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::ensure_blit_resources: CreatePixelShader failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return false;
+    }
+
+    D3D11_BUFFER_DESC cb_desc{};
+    cb_desc.ByteWidth = 16;
+    cb_desc.Usage = D3D11_USAGE_DEFAULT;
+    cb_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    hr = device_->CreateBuffer(&cb_desc, nullptr, &blit_constant_buffer_);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::ensure_blit_resources: CreateBuffer(constants) failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return false;
+    }
+
+    D3D11_RASTERIZER_DESC rs_desc{};
+    rs_desc.FillMode = D3D11_FILL_SOLID;
+    rs_desc.CullMode = D3D11_CULL_NONE;
+    rs_desc.DepthClipEnable = TRUE;
+    hr = device_->CreateRasterizerState(&rs_desc, &blit_raster_state_);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::ensure_blit_resources: CreateRasterizerState failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return false;
+    }
+
+    D3D11_DEPTH_STENCIL_DESC ds_desc{};
+    ds_desc.DepthEnable = FALSE;
+    ds_desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+    ds_desc.DepthFunc = D3D11_COMPARISON_ALWAYS;
+    ds_desc.StencilEnable = FALSE;
+    hr = device_->CreateDepthStencilState(&ds_desc, &blit_depth_stencil_state_);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::ensure_blit_resources: CreateDepthStencilState failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return false;
+    }
+
+    D3D11_BLEND_DESC blend_desc{};
+    blend_desc.RenderTarget[0].BlendEnable = FALSE;
+    blend_desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    hr = device_->CreateBlendState(&blend_desc, &blit_blend_state_);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::ensure_blit_resources: CreateBlendState failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return false;
+    }
+
+    return true;
+}
+
 void D3D11RenderDevice::query_capabilities() {
     caps_.backend = BackendType::D3D11;
     caps_.texture_origin_top_left = true;
@@ -782,16 +942,6 @@ void D3D11RenderDevice::blit_to_texture(TextureHandle dst,
         tc::Log::error("D3D11RenderDevice::blit_to_texture: invalid empty region");
         return;
     }
-    if (src_w != dst_w || src_h != dst_h) {
-        tc::Log::error(
-            "D3D11RenderDevice::blit_to_texture: scaled blits are not implemented "
-            "(src=%dx%d dst=%dx%d)",
-            src_w,
-            src_h,
-            dst_w,
-            dst_h);
-        return;
-    }
     if (src_x < 0 || src_y < 0 || dst_x < 0 || dst_y < 0 ||
         src_x + src_w > static_cast<int>(src_tex->desc.width) ||
         src_y + src_h > static_cast<int>(src_tex->desc.height) ||
@@ -801,22 +951,106 @@ void D3D11RenderDevice::blit_to_texture(TextureHandle dst,
         return;
     }
 
-    D3D11_BOX src_box{};
-    src_box.left = static_cast<UINT>(src_x);
-    src_box.top = static_cast<UINT>(src_y);
-    src_box.front = 0;
-    src_box.right = static_cast<UINT>(src_x + src_w);
-    src_box.bottom = static_cast<UINT>(src_y + src_h);
-    src_box.back = 1;
-    context_->CopySubresourceRegion(
-        dst_tex->texture.Get(),
-        0,
-        static_cast<UINT>(dst_x),
-        static_cast<UINT>(dst_y),
-        0,
-        src_tex->texture.Get(),
-        0,
-        &src_box);
+    if (src.id == dst.id) {
+        tc::Log::error("D3D11RenderDevice::blit_to_texture: self-blit is not supported");
+        return;
+    }
+
+    const bool can_raw_copy = src_tex->desc.format == dst_tex->desc.format &&
+                              src_w == dst_w &&
+                              src_h == dst_h &&
+                              src_tex->desc.sample_count == dst_tex->desc.sample_count;
+    if (can_raw_copy) {
+        D3D11_BOX src_box{};
+        src_box.left = static_cast<UINT>(src_x);
+        src_box.top = static_cast<UINT>(src_y);
+        src_box.front = 0;
+        src_box.right = static_cast<UINT>(src_x + src_w);
+        src_box.bottom = static_cast<UINT>(src_y + src_h);
+        src_box.back = 1;
+        context_->CopySubresourceRegion(
+            dst_tex->texture.Get(),
+            0,
+            static_cast<UINT>(dst_x),
+            static_cast<UINT>(dst_y),
+            0,
+            src_tex->texture.Get(),
+            0,
+            &src_box);
+        return;
+    }
+
+    if (src_tex->desc.sample_count != 1 || dst_tex->desc.sample_count != 1) {
+        tc::Log::error(
+            "D3D11RenderDevice::blit_to_texture: shader blit requires single-sample textures "
+            "(src_samples=%u dst_samples=%u)",
+            src_tex->desc.sample_count,
+            dst_tex->desc.sample_count);
+        return;
+    }
+    if (!src_tex->srv || !dst_tex->rtv) {
+        tc::Log::error(
+            "D3D11RenderDevice::blit_to_texture: shader blit requires src SRV and dst RTV "
+            "(src=%u srv=%d dst=%u rtv=%d)",
+            src.id,
+            src_tex->srv ? 1 : 0,
+            dst.id,
+            dst_tex->rtv ? 1 : 0);
+        return;
+    }
+    if (!ensure_blit_resources()) {
+        return;
+    }
+
+    struct BlitConstants {
+        float src_uv_min[2];
+        float src_uv_size[2];
+    };
+    const BlitConstants constants{
+        {
+            static_cast<float>(src_x) / static_cast<float>(src_tex->desc.width),
+            static_cast<float>(src_y) / static_cast<float>(src_tex->desc.height),
+        },
+        {
+            static_cast<float>(src_w) / static_cast<float>(src_tex->desc.width),
+            static_cast<float>(src_h) / static_cast<float>(src_tex->desc.height),
+        },
+    };
+    context_->UpdateSubresource(blit_constant_buffer_.Get(), 0, nullptr, &constants, 0, 0);
+
+    D3D11_VIEWPORT viewport{};
+    viewport.TopLeftX = static_cast<float>(dst_x);
+    viewport.TopLeftY = static_cast<float>(dst_y);
+    viewport.Width = static_cast<float>(dst_w);
+    viewport.Height = static_cast<float>(dst_h);
+    viewport.MinDepth = 0.0f;
+    viewport.MaxDepth = 1.0f;
+
+    ID3D11RenderTargetView* rtv = dst_tex->rtv.Get();
+    ID3D11ShaderResourceView* srv = src_tex->srv.Get();
+    ID3D11SamplerState* sampler = default_sampler_state();
+    ID3D11Buffer* constant_buffer = blit_constant_buffer_.Get();
+    const float blend_factor[4] = {0, 0, 0, 0};
+
+    context_->OMSetRenderTargets(1, &rtv, nullptr);
+    context_->RSSetViewports(1, &viewport);
+    context_->RSSetState(blit_raster_state_.Get());
+    context_->OMSetDepthStencilState(blit_depth_stencil_state_.Get(), 0);
+    context_->OMSetBlendState(blit_blend_state_.Get(), blend_factor, 0xffffffffu);
+    context_->IASetInputLayout(nullptr);
+    context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    context_->VSSetShader(blit_vertex_shader_.Get(), nullptr, 0);
+    context_->VSSetConstantBuffers(0, 1, &constant_buffer);
+    context_->PSSetShader(blit_pixel_shader_.Get(), nullptr, 0);
+    context_->PSSetShaderResources(0, 1, &srv);
+    context_->PSSetSamplers(0, 1, &sampler);
+    context_->GSSetShader(nullptr, nullptr, 0);
+    context_->Draw(3, 0);
+
+    ID3D11ShaderResourceView* null_srv = nullptr;
+    ID3D11RenderTargetView* null_rtv = nullptr;
+    context_->PSSetShaderResources(0, 1, &null_srv);
+    context_->OMSetRenderTargets(1, &null_rtv, nullptr);
 }
 
 Microsoft::WRL::ComPtr<ID3D11Texture2D> D3D11RenderDevice::create_staging_texture(const D3D11Texture& src) const {

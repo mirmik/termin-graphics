@@ -96,7 +96,7 @@ void D3D11Swapchain::refresh_backbuffer_texture() {
     desc.format = PixelFormat::BGRA8_UNorm;
     desc.mip_levels = 1;
     desc.sample_count = native_desc.SampleDesc.Count;
-    desc.usage = TextureUsage::ColorAttachment | TextureUsage::CopySrc;
+    desc.usage = TextureUsage::ColorAttachment | TextureUsage::CopySrc | TextureUsage::CopyDst;
     backbuffer_texture_ = device_.register_external_texture(
         reinterpret_cast<uintptr_t>(backbuffer.Get()),
         desc);

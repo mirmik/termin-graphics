@@ -246,6 +246,36 @@ int main() {
             return 1;
         }
 
+        tgfx::TextureDesc bgra_desc;
+        bgra_desc.width = 4;
+        bgra_desc.height = 4;
+        bgra_desc.format = tgfx::PixelFormat::BGRA8_UNorm;
+        bgra_desc.usage = tgfx::TextureUsage::ColorAttachment |
+                          tgfx::TextureUsage::CopySrc |
+                          tgfx::TextureUsage::CopyDst;
+        auto bgra_target = device->create_texture(bgra_desc);
+        if (!bgra_target) {
+            std::fprintf(stderr, "D3D11 smoke: BGRA blit target creation failed\n");
+            return 1;
+        }
+        device->blit_to_texture(bgra_target, color, 0, 0, 4, 4, 0, 0, 4, 4);
+        if (!device->read_pixel_rgba8(bgra_target, 2, 2, rgba)) {
+            std::fprintf(stderr, "D3D11 smoke: RGBA->BGRA blit readback failed\n");
+            device->destroy(bgra_target);
+            return 1;
+        }
+        if (!close_enough(rgba[0], 0.25f) ||
+            !close_enough(rgba[1], 0.50f) ||
+            !close_enough(rgba[2], 0.75f) ||
+            !close_enough(rgba[3], 1.00f)) {
+            std::fprintf(stderr,
+                         "D3D11 smoke: unexpected RGBA->BGRA blit pixel %.3f %.3f %.3f %.3f\n",
+                         rgba[0], rgba[1], rgba[2], rgba[3]);
+            device->destroy(bgra_target);
+            return 1;
+        }
+        device->destroy(bgra_target);
+
         const char* shader_uuid = "d3d11-smoke-artifact";
         const auto artifact_root =
             std::filesystem::temp_directory_path() / "termin-tgfx2-d3d11-smoke-artifacts";

@@ -73,8 +73,9 @@ int main() {
         tgfx::TextureDesc offscreen_desc;
         offscreen_desc.width = kWidth;
         offscreen_desc.height = kHeight;
-        offscreen_desc.format = tgfx::PixelFormat::BGRA8_UNorm;
+        offscreen_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
         offscreen_desc.usage = tgfx::TextureUsage::ColorAttachment |
+                               tgfx::TextureUsage::Sampled |
                                tgfx::TextureUsage::CopySrc;
         tgfx::TextureHandle offscreen = device.create_texture(offscreen_desc);
         if (!offscreen) {
