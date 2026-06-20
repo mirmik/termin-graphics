@@ -51,10 +51,17 @@ ownership and update frequency, not the final backend slot.
 | `material` | Material system | `material`, material textures |
 | `draw` | Draw submission | `draw_data`, `depth_draw`, `normal_draw`, `bone_block`, instance data |
 | `transient` | Local pass graph edge | fullscreen inputs, scratch textures, temporary buffers |
+| `unscoped` | Unresolved compiler/import state | resource was reflected without Termin scope metadata |
 
 Current Vulkan/OpenGL implementations may still flatten scopes into one
 backend resource set. That is an implementation detail. Source, sidecars, and
 runtime APIs should already behave as if scopes are distinct.
+
+`unscoped` is not semantic ownership. It exists so missing metadata is not
+silently treated as `transient` or any other real owner. Production artifact
+pipelines should resolve it before runtime binding, either by adding explicit
+`[[TerminScope(... )]]` metadata in source or by invoking `termin_shaderc` with
+an appropriate default scope.
 
 ## Shader Authoring Contract
 
@@ -90,8 +97,9 @@ Stage inputs and outputs remain shader-owned and should use Slang/HLSL
 semantics such as `POSITION`, `NORMAL`, `TEXCOORD0`, `SV_Position`, and
 `SV_Target0`.
 
-New production Slang resources should use explicit scope attributes. Name-based
-scope inference is migration compatibility only and should shrink over time.
+New production Slang resources should use explicit scope attributes or a
+compiler invocation default scope supplied by the caller that knows the shader
+domain. The compiler must not infer semantic ownership from resource names.
 
 ## Pass Authoring Contract
 
@@ -126,8 +134,10 @@ logic.
 artifacts. It should:
 
 - read Slang reflection and Termin scope metadata;
-- reject invalid or missing scope metadata for artifact-required migrated
-  resources;
+- preserve missing scope metadata as `unscoped` until a policy resolves it;
+- apply `--default-scope <frame|pass|material|draw|transient>` only to
+  unscoped resources, without overriding explicit `TerminScope` metadata;
+- reject invalid scope metadata for artifact-required migrated resources;
 - assign backend placement according to Termin policy;
 - patch/emit artifacts so backend bytecode and sidecar metadata agree;
 - write layout sidecars containing at least `name`, `kind`, `scope`, stage

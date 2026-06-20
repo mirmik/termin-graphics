@@ -200,49 +200,30 @@ static bool is_valid_explicit_resource_scope(const std::string& scope) {
            scope == "transient";
 }
 
+static bool is_unscoped_resource_scope(const std::string& scope) {
+    return scope.empty() || scope == "unscoped";
+}
+
 static void assign_missing_resource_scopes(
     std::vector<ShaderResourceBinding>& resources
 ) {
     for (ShaderResourceBinding& resource : resources) {
         if (resource.scope.empty()) {
-            resource.scope = "transient";
+            resource.scope = "unscoped";
         }
     }
 }
 
-static bool has_resource_named(
-    const std::vector<ShaderResourceBinding>& resources,
-    const char* name)
-{
-    return std::any_of(
-        resources.begin(),
-        resources.end(),
-        [name](const ShaderResourceBinding& resource) {
-            return resource.name == name;
-        });
-}
-
-static void apply_framebuffer_input_scope_hints(
-    std::vector<ShaderResourceBinding>& resources
+static void apply_default_resource_scope(
+    std::vector<ShaderResourceBinding>& resources,
+    const std::string& default_scope
 ) {
-    const bool looks_like_framebuffer_pass =
-        (has_resource_named(resources, "u_input_tex") ||
-         has_resource_named(resources, "u_input")) &&
-        (has_resource_named(resources, "u_depth_texture") ||
-         has_resource_named(resources, "u_depth_tex"));
-    if (!looks_like_framebuffer_pass) {
+    if (default_scope.empty()) {
         return;
     }
-
     for (ShaderResourceBinding& resource : resources) {
-        if (resource.kind != "texture" && resource.kind != "storage_texture" &&
-            resource.kind != "sampler") {
-            continue;
-        }
-        if (resource.name == "u_input_tex" || resource.name == "u_input" ||
-            resource.name == "u_depth_texture" || resource.name == "u_depth_tex" ||
-            resource.name == "u_normal_texture" || resource.name == "u_fov") {
-            resource.scope = "transient";
+        if (is_unscoped_resource_scope(resource.scope)) {
+            resource.scope = default_scope;
         }
     }
 }
@@ -301,7 +282,8 @@ static void append_unique_resource(
     for (ShaderResourceBinding& existing : resources) {
         if (existing.name == binding.name) {
             existing.kind = binding.kind;
-            if (!binding.scope.empty() && binding.scope != "unknown") {
+            if (!binding.scope.empty() && binding.scope != "unknown" &&
+                binding.scope != "unscoped") {
                 existing.scope = binding.scope;
             } else if (existing.scope.empty()) {
                 existing.scope = binding.scope;
@@ -880,7 +862,7 @@ static bool collect_resource_bindings(
         resources = infer_resource_bindings(source, options);
     }
     assign_missing_resource_scopes(resources);
-    apply_framebuffer_input_scope_hints(resources);
+    apply_default_resource_scope(resources, options.default_scope);
     normalize_scope_first_binding_slots(
         resources,
         options.language == "slang");
@@ -930,12 +912,14 @@ static bool write_resource_layout_sidecar(
             return false;
         }
         // Scope consistency — warn if unknown
-        if (res.scope.empty() || res.scope == "unknown") {
+        if (res.scope.empty() || res.scope == "unknown" || res.scope == "unscoped") {
             std::string attr = std::string("[") + "[TerminScope]]";
             std::cerr
                 << "termin_shaderc: WARNING — resource '" << res.name
-                << "' has unknown scope; consider adding " << attr
-                << " attribute in the shader for optimal descriptor set layout\n";
+                << "' has "
+                << (res.scope == "unscoped" ? "no scope" : "unknown scope")
+                << "; consider adding " << attr
+                << " attribute or passing --default-scope\n";
         }
     }
 

@@ -367,6 +367,7 @@ RenderContext2::ResourceScope RenderContext2::scope_from_shader_resource(
         case TC_SHADER_RESOURCE_SCOPE_MATERIAL: return ResourceScope::Material;
         case TC_SHADER_RESOURCE_SCOPE_DRAW: return ResourceScope::Draw;
         case TC_SHADER_RESOURCE_SCOPE_TRANSIENT: return ResourceScope::Transient;
+        case TC_SHADER_RESOURCE_SCOPE_UNSCOPED:
         case TC_SHADER_RESOURCE_SCOPE_UNKNOWN:
         default:
             return ResourceScope::Unknown;

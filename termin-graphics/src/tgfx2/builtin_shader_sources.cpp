@@ -182,6 +182,9 @@ uint32_t resource_scope_from_catalog(const std::string& scope) {
     if (scope == "transient") {
         return TC_SHADER_RESOURCE_SCOPE_TRANSIENT;
     }
+    if (scope == "unscoped") {
+        return TC_SHADER_RESOURCE_SCOPE_UNSCOPED;
+    }
     return TC_SHADER_RESOURCE_SCOPE_UNKNOWN;
 }
 

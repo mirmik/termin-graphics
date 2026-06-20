@@ -36,6 +36,8 @@ void print_help(std::ostream& out) {
         << "  --fxc <path>             Explicit Windows FXC executable path for d3d11.\n"
         << "  --matrix-layout <mode>   Matrix layout: column, col, column-major,\n"
         << "                           col-major, row, or row-major. Default: column.\n"
+        << "  --default-scope <scope>  Scope for resources without TerminScope metadata:\n"
+        << "                           frame, pass, material, draw, or transient.\n"
         << "\n"
         << "Outputs:\n"
         << "  <output>                 Compiled backend artifact.\n"
@@ -45,8 +47,8 @@ void print_help(std::ostream& out) {
         << "\n"
         << "Resource scopes:\n"
         << "  Slang resources may use [[TerminScope(\"frame|pass|material|draw|transient\")]].\n"
-        << "  If omitted, termin_shaderc infers a scope from resource kind/name and\n"
-        << "  writes it to the layout sidecar. Unknown scopes are reported as warnings.\n"
+        << "  If omitted and no --default-scope is set, resources are marked unscoped\n"
+        << "  in the layout sidecar. Unknown scopes are reported as warnings.\n"
         << "\n"
         << "Examples:\n"
         << "  termin_shaderc compile --language slang --target vulkan --stage vertex \\\n"
@@ -164,6 +166,11 @@ ParsedCommandLine parse_command_line(int argc, char** argv) {
                 parsed.exit_code = 2;
                 return parsed;
             }
+        } else if (arg == "--default-scope") {
+            if (!take_value(options.default_scope)) {
+                parsed.exit_code = 2;
+                return parsed;
+            }
         } else if (arg == "-I" || arg == "--include-dir") {
             std::string include_dir;
             if (!take_value(include_dir)) {
@@ -182,6 +189,19 @@ ParsedCommandLine parse_command_line(int argc, char** argv) {
     if (options.target.empty() || options.stage.empty()
         || options.input.empty() || options.output.empty()) {
         usage();
+        parsed.exit_code = 2;
+        return parsed;
+    }
+    if (!options.default_scope.empty() &&
+        options.default_scope != "frame" &&
+        options.default_scope != "pass" &&
+        options.default_scope != "material" &&
+        options.default_scope != "draw" &&
+        options.default_scope != "transient") {
+        std::cerr
+            << "termin_shaderc: invalid --default-scope value '"
+            << options.default_scope
+            << "'; expected frame, pass, material, draw, or transient\n";
         parsed.exit_code = 2;
         return parsed;
     }

@@ -40,6 +40,7 @@ const char* shader_resource_scope_name(uint32_t scope) {
         case TC_SHADER_RESOURCE_SCOPE_MATERIAL: return "material";
         case TC_SHADER_RESOURCE_SCOPE_DRAW: return "draw";
         case TC_SHADER_RESOURCE_SCOPE_TRANSIENT: return "transient";
+        case TC_SHADER_RESOURCE_SCOPE_UNSCOPED: return "unscoped";
         default: return "unknown";
     }
 }
@@ -98,7 +99,8 @@ void bind_shader(nb::module_& m) {
         .value("PASS", TC_SHADER_RESOURCE_SCOPE_PASS)
         .value("MATERIAL", TC_SHADER_RESOURCE_SCOPE_MATERIAL)
         .value("DRAW", TC_SHADER_RESOURCE_SCOPE_DRAW)
-        .value("TRANSIENT", TC_SHADER_RESOURCE_SCOPE_TRANSIENT);
+        .value("TRANSIENT", TC_SHADER_RESOURCE_SCOPE_TRANSIENT)
+        .value("UNSCOPED", TC_SHADER_RESOURCE_SCOPE_UNSCOPED);
 
     // TcShader - RAII wrapper
     nb::class_<TcShader>(m, "TcShader")

@@ -16,6 +16,7 @@ struct CompileOptions {
     std::string slangc;
     std::string fxc;
     std::string matrix_layout = "column";
+    std::string default_scope;
     std::vector<std::string> include_dirs;
 };
 

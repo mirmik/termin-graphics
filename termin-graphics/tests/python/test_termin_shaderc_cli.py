@@ -116,6 +116,7 @@ def test_termin_shaderc_help_describes_compile_debug_options() -> None:
     assert "--slangc <path>" in result.stdout
     assert "--fxc <path>" in result.stdout
     assert "--include-dir <dir>" in result.stdout
+    assert "--default-scope <scope>" in result.stdout
     assert "<output>.layout.json" in result.stdout
     assert "<output>.artifact" in result.stdout
     assert '[[TerminScope("frame|pass|material|draw|transient")]]' in result.stdout
@@ -131,6 +132,34 @@ def test_termin_shaderc_compile_help_is_successful() -> None:
     assert "Compile options:" in direct.stdout
     assert "Examples:" in direct.stdout
     assert "--layout-scheme" not in direct.stdout
+
+
+def test_termin_shaderc_rejects_invalid_default_scope(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text("[shader(\"fragment\")] float4 main() : SV_Target0 { return 1; }\n", encoding="utf-8")
+    output = tmp_path / "out.spv"
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--default-scope",
+            "materialish",
+        ]
+    )
+
+    assert result.returncode == 2
+    assert "invalid --default-scope value 'materialish'" in result.stderr
+    assert not output.exists()
 
 
 def test_termin_shaderc_invokes_fake_slangc_for_vulkan(tmp_path: Path) -> None:
@@ -268,7 +297,7 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
         {
             "name": "material",
             "kind": "constant_buffer",
-            "scope": "transient",
+            "scope": "unscoped",
             "set": 0,
             "binding": 1,
             "stage_mask": 2,
@@ -322,7 +351,7 @@ def test_termin_shaderc_writes_glsl_bone_block_resource_layout(tmp_path: Path) -
     assert {
         "name": "BoneBlock",
         "kind": "constant_buffer",
-        "scope": "transient",
+        "scope": "unscoped",
         "set": 0,
         "binding": 16,
         "stage_mask": 1,
@@ -514,6 +543,142 @@ def test_termin_shaderc_reads_slang_scope_user_attributes(tmp_path: Path) -> Non
             "stage_mask": 2,
             "size": 16,
         },
+    ]
+
+
+def test_termin_shaderc_marks_missing_scope_as_unscoped(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "struct MaterialParams { float4 color; };\n"
+        "ConstantBuffer<MaterialParams> material;\n"
+        "Sampler2D albedo_texture;\n"
+        "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
+        "    return material.color * albedo_texture.Sample(uv);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_bytes(b'FAKE-spirv')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {\n"
+        "            'name': 'material',\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 0},\n"
+        "            'type': {'kind': 'constantBuffer', 'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 16}}},\n"
+        "        },\n"
+        "        {\n"
+        "            'name': 'albedo_texture',\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 1},\n"
+        "            'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True},\n"
+        "        },\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "resource 'material' has no scope" in result.stderr
+    layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
+        ("material", "unscoped", 0),
+        ("albedo_texture", "unscoped", 1),
+    ]
+
+
+def test_termin_shaderc_default_scope_material_resolves_unscoped_resources(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "struct MaterialParams { float4 color; };\n"
+        "ConstantBuffer<MaterialParams> material;\n"
+        "Sampler2D albedo_texture;\n"
+        "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
+        "    return material.color * albedo_texture.Sample(uv);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_bytes(b'FAKE-spirv')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {\n"
+        "            'name': 'material',\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 0},\n"
+        "            'type': {'kind': 'constantBuffer', 'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 16}}},\n"
+        "        },\n"
+        "        {\n"
+        "            'name': 'albedo_texture',\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 1},\n"
+        "            'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True},\n"
+        "        },\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+            "--default-scope",
+            "material",
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "has no scope" not in result.stderr
+    layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
+        ("material", "material", 1),
+        ("albedo_texture", "material", 4),
     ]
 
 
@@ -728,16 +893,16 @@ def test_termin_shaderc_writes_slang_texture_resources_from_reflection(tmp_path:
         {
             "name": "albedo_texture",
             "kind": "texture",
-            "scope": "transient",
+            "scope": "unscoped",
             "set": 0,
-            "binding": 32,
+            "binding": 0,
             "stage_mask": 2,
             "size": 0,
         },
     ]
 
 
-def test_termin_shaderc_infers_framebuffer_inputs_as_transient(tmp_path: Path) -> None:
+def test_termin_shaderc_default_scope_transient_resolves_framebuffer_inputs(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
         "Sampler2D u_input_tex;\n"
@@ -791,6 +956,8 @@ def test_termin_shaderc_infers_framebuffer_inputs_as_transient(tmp_path: Path) -
             str(output),
             "--slangc",
             str(fake_slangc),
+            "--default-scope",
+            "transient",
         ]
     )
 
@@ -801,6 +968,65 @@ def test_termin_shaderc_infers_framebuffer_inputs_as_transient(tmp_path: Path) -
         ("u_depth_texture", "transient", 33),
         ("u_fov", "transient", 34),
         ("u_normal_texture", "transient", 35),
+    ]
+
+
+def test_termin_shaderc_does_not_infer_framebuffer_inputs_from_names(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "Sampler2D u_input_tex;\n"
+        "Sampler2D u_depth_texture;\n"
+        "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
+        "    return u_input_tex.Sample(uv) + u_depth_texture.Sample(uv);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_bytes(b'FAKE-spirv')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {'name': 'u_input_tex', 'binding': {'kind': 'descriptorTableSlot', 'index': 1},\n"
+        "         'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True}},\n"
+        "        {'name': 'u_depth_texture', 'binding': {'kind': 'descriptorTableSlot', 'index': 2},\n"
+        "         'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True}},\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
+        ("u_input_tex", "unscoped", 1),
+        ("u_depth_texture", "unscoped", 2),
     ]
 
 
@@ -1361,9 +1587,9 @@ def test_termin_shaderc_normalizes_slang_sampler2d_register_resource_layout(tmp_
         {
             "name": "albedo_texture",
             "kind": "texture",
-            "scope": "transient",
+            "scope": "unscoped",
             "set": 0,
-            "binding": 32,
+            "binding": 7,
             "stage_mask": 2,
             "size": 0,
         },

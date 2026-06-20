@@ -86,6 +86,9 @@ typedef enum tc_shader_resource_scope {
     TC_SHADER_RESOURCE_SCOPE_MATERIAL = 3,
     TC_SHADER_RESOURCE_SCOPE_DRAW = 4,
     TC_SHADER_RESOURCE_SCOPE_TRANSIENT = 5,
+    // Scope was not declared by source/reflection. This is a compiler/import
+    // state, not a semantic runtime ownership scope.
+    TC_SHADER_RESOURCE_SCOPE_UNSCOPED = 6,
 } tc_shader_resource_scope;
 
 typedef enum tc_shader_stage_mask {

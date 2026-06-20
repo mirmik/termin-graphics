@@ -489,6 +489,7 @@ static uint32_t shader_resource_scope_from_name(const std::string& name) {
     if (name == "material") return TC_SHADER_RESOURCE_SCOPE_MATERIAL;
     if (name == "draw") return TC_SHADER_RESOURCE_SCOPE_DRAW;
     if (name == "transient") return TC_SHADER_RESOURCE_SCOPE_TRANSIENT;
+    if (name == "unscoped") return TC_SHADER_RESOURCE_SCOPE_UNSCOPED;
     if (name == "unknown") return TC_SHADER_RESOURCE_SCOPE_UNKNOWN;
     return TC_SHADER_RESOURCE_SCOPE_UNKNOWN;
 }
@@ -584,11 +585,9 @@ static bool parse_shader_resource_layout_sidecar(
         if (stage_mask == TC_SHADER_STAGE_NONE) {
             return false;
         }
-        uint32_t scope = TC_SHADER_RESOURCE_SCOPE_UNKNOWN;
+        uint32_t scope = TC_SHADER_RESOURCE_SCOPE_UNSCOPED;
         if (trent_string_field(object, "scope", scope_name)) {
             scope = shader_resource_scope_from_name(scope_name);
-        } else {
-            scope = TC_SHADER_RESOURCE_SCOPE_TRANSIENT;
         }
 
         tc_shader_resource_binding resource{};
@@ -683,7 +682,7 @@ static void merge_shader_resource_binding(
                 tc_log(TC_LOG_WARN,
                        "merge_shader_resource_binding: '%s' has conflicting "
                        "placements — existing set=%u binding=%u vs incoming "
-                       "set=%u binding=%u (stages 0x%x | 0x%x); keeping existing",
+                       "set=%u binding=%u (stages 0x%x | 0x%x); using incoming",
                        incoming.name,
                        existing.set, existing.binding,
                        incoming.set, incoming.binding,
@@ -727,8 +726,10 @@ static void merge_shader_resource_binding(
                 existing.has_d3d11_placement = 1;
                 existing.d3d11 = previous_d3d11;
             }
-            if (incoming.scope == TC_SHADER_RESOURCE_SCOPE_UNKNOWN &&
-                previous_scope != TC_SHADER_RESOURCE_SCOPE_UNKNOWN) {
+            if ((incoming.scope == TC_SHADER_RESOURCE_SCOPE_UNKNOWN ||
+                 incoming.scope == TC_SHADER_RESOURCE_SCOPE_UNSCOPED) &&
+                previous_scope != TC_SHADER_RESOURCE_SCOPE_UNKNOWN &&
+                previous_scope != TC_SHADER_RESOURCE_SCOPE_UNSCOPED) {
                 existing.scope = previous_scope;
             }
             if (incoming.size == 0 && previous_size != 0) {
