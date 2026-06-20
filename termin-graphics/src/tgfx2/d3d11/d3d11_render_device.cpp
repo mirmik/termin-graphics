@@ -594,6 +594,120 @@ void D3D11RenderDevice::present() {
     context_->Flush();
 }
 
+TextureHandle D3D11RenderDevice::register_external_texture(uintptr_t native_handle, const TextureDesc& desc) {
+    return register_external_texture(reinterpret_cast<ID3D11Texture2D*>(native_handle), desc);
+}
+
+TextureHandle D3D11RenderDevice::register_external_texture(ID3D11Texture2D* texture, const TextureDesc& desc) {
+    if (!texture) {
+        tc::Log::error("D3D11RenderDevice::register_external_texture: null native texture");
+        return {};
+    }
+
+    D3D11Texture out;
+    out.texture = texture;
+    out.desc = desc;
+
+    if (has_flag(desc.usage, TextureUsage::Sampled)) {
+        D3D11_SHADER_RESOURCE_VIEW_DESC sv{};
+        sv.Format = d3d11::to_dxgi_srv_format(desc.format);
+        sv.ViewDimension = desc.sample_count > 1 ? D3D11_SRV_DIMENSION_TEXTURE2DMS : D3D11_SRV_DIMENSION_TEXTURE2D;
+        if (sv.ViewDimension == D3D11_SRV_DIMENSION_TEXTURE2D) {
+            sv.Texture2D.MipLevels = std::max(1u, desc.mip_levels);
+        }
+        HRESULT hr = device_->CreateShaderResourceView(out.texture.Get(), &sv, &out.srv);
+        if (FAILED(hr)) {
+            tc::Log::error(
+                "D3D11RenderDevice::register_external_texture SRV failed: HRESULT=0x%08X",
+                static_cast<unsigned>(hr));
+        }
+    }
+
+    if (has_flag(desc.usage, TextureUsage::ColorAttachment)) {
+        HRESULT hr = device_->CreateRenderTargetView(out.texture.Get(), nullptr, &out.rtv);
+        if (FAILED(hr)) {
+            tc::Log::error(
+                "D3D11RenderDevice::register_external_texture RTV failed: HRESULT=0x%08X",
+                static_cast<unsigned>(hr));
+        }
+    }
+
+    if (has_flag(desc.usage, TextureUsage::DepthStencilAttachment) || d3d11::is_depth_format(desc.format)) {
+        D3D11_DEPTH_STENCIL_VIEW_DESC dv{};
+        dv.Format = d3d11::to_dxgi_dsv_format(desc.format);
+        dv.ViewDimension = desc.sample_count > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMS : D3D11_DSV_DIMENSION_TEXTURE2D;
+        HRESULT hr = device_->CreateDepthStencilView(out.texture.Get(), &dv, &out.dsv);
+        if (FAILED(hr)) {
+            tc::Log::error(
+                "D3D11RenderDevice::register_external_texture DSV failed: HRESULT=0x%08X",
+                static_cast<unsigned>(hr));
+        }
+    }
+
+    return {textures_.add(std::move(out))};
+}
+
+void D3D11RenderDevice::blit_to_texture(TextureHandle dst,
+                                        TextureHandle src,
+                                        int src_x,
+                                        int src_y,
+                                        int src_w,
+                                        int src_h,
+                                        int dst_x,
+                                        int dst_y,
+                                        int dst_w,
+                                        int dst_h) {
+    auto* src_tex = get_texture(src);
+    auto* dst_tex = get_texture(dst);
+    if (!src_tex || !src_tex->texture || !dst_tex || !dst_tex->texture) {
+        tc::Log::error(
+            "D3D11RenderDevice::blit_to_texture: invalid texture handle src=%u dst=%u",
+            src.id,
+            dst.id);
+        return;
+    }
+
+    if (src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) {
+        tc::Log::error("D3D11RenderDevice::blit_to_texture: invalid empty region");
+        return;
+    }
+    if (src_w != dst_w || src_h != dst_h) {
+        tc::Log::error(
+            "D3D11RenderDevice::blit_to_texture: scaled blits are not implemented "
+            "(src=%dx%d dst=%dx%d)",
+            src_w,
+            src_h,
+            dst_w,
+            dst_h);
+        return;
+    }
+    if (src_x < 0 || src_y < 0 || dst_x < 0 || dst_y < 0 ||
+        src_x + src_w > static_cast<int>(src_tex->desc.width) ||
+        src_y + src_h > static_cast<int>(src_tex->desc.height) ||
+        dst_x + dst_w > static_cast<int>(dst_tex->desc.width) ||
+        dst_y + dst_h > static_cast<int>(dst_tex->desc.height)) {
+        tc::Log::error("D3D11RenderDevice::blit_to_texture: region outside texture bounds");
+        return;
+    }
+
+    D3D11_BOX src_box{};
+    src_box.left = static_cast<UINT>(src_x);
+    src_box.top = static_cast<UINT>(src_y);
+    src_box.front = 0;
+    src_box.right = static_cast<UINT>(src_x + src_w);
+    src_box.bottom = static_cast<UINT>(src_y + src_h);
+    src_box.back = 1;
+    context_->CopySubresourceRegion(
+        dst_tex->texture.Get(),
+        0,
+        static_cast<UINT>(dst_x),
+        static_cast<UINT>(dst_y),
+        0,
+        src_tex->texture.Get(),
+        0,
+        &src_box);
+}
+
 Microsoft::WRL::ComPtr<ID3D11Texture2D> D3D11RenderDevice::create_staging_texture(const D3D11Texture& src) const {
     D3D11_TEXTURE2D_DESC desc{};
     src.texture->GetDesc(&desc);

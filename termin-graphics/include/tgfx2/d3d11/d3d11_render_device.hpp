@@ -121,6 +121,17 @@ public:
     std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) override;
     void submit(ICommandList& cmd) override;
     void present() override;
+    TextureHandle register_external_texture(uintptr_t native_handle, const TextureDesc& desc) override;
+    void blit_to_texture(TextureHandle dst,
+                         TextureHandle src,
+                         int src_x,
+                         int src_y,
+                         int src_w,
+                         int src_h,
+                         int dst_x,
+                         int dst_y,
+                         int dst_w,
+                         int dst_h) override;
 
     bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]) override;
     bool read_texture_rgba_float(TextureHandle tex, float* out) override;
@@ -147,6 +158,7 @@ public:
     D3D11ResourceSet* get_resource_set(ResourceSetHandle h) { return resource_sets_.get(h.id); }
 
 private:
+    TextureHandle register_external_texture(ID3D11Texture2D* texture, const TextureDesc& desc);
     void create_device();
     void query_capabilities();
     Microsoft::WRL::ComPtr<ID3D11Texture2D> create_staging_texture(const D3D11Texture& src) const;

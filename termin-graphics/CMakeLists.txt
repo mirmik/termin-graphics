@@ -207,6 +207,7 @@ if(TGFX2_ENABLE_D3D11)
     list(APPEND TGFX2_SOURCES
         src/tgfx2/d3d11/d3d11_render_device.cpp
         src/tgfx2/d3d11/d3d11_command_list.cpp
+        src/tgfx2/d3d11/d3d11_swapchain.cpp
         src/tgfx2/d3d11/d3d11_type_conversions.cpp
     )
 endif()
@@ -367,6 +368,7 @@ endif()
 # --- tgfx2 tests ---
 option(BUILD_TGFX2_TESTS "Build tgfx2 smoke tests" OFF)
 option(BUILD_TGFX2_WINDOW_TESTS "Build tgfx2 tests that create windows/GL contexts" ON)
+option(BUILD_TGFX2_D3D11_WINDOW_TEST "Build tgfx2 D3D11 SDL/DXGI window smoke test" ${BUILD_TGFX2_WINDOW_TESTS})
 
 if(BUILD_TGFX2_TESTS)
     enable_testing()
@@ -486,6 +488,43 @@ if(BUILD_TGFX2_TESTS)
         set_tests_properties(tgfx2_d3d11_smoke PROPERTIES
             TIMEOUT 10
             SKIP_REGULAR_EXPRESSION "D3D11CreateDevice failed|No D3D11")
+
+        if(BUILD_TGFX2_D3D11_WINDOW_TEST)
+            set(SDL2_SMOKE_FOUND FALSE)
+            find_path(SDL2_SMOKE_INCLUDE_DIR SDL.h PATH_SUFFIXES SDL2)
+            find_library(SDL2_SMOKE_LIBRARY SDL2)
+            if(SDL2_SMOKE_INCLUDE_DIR AND SDL2_SMOKE_LIBRARY)
+                set(SDL2_SMOKE_FOUND TRUE)
+                message(STATUS "tgfx2 D3D11 window smoke: SDL2 at ${SDL2_SMOKE_LIBRARY}")
+            else()
+                message(STATUS "tgfx2 D3D11 window smoke: SDL2 not found; skipping")
+            endif()
+            if(SDL2_SMOKE_FOUND)
+                add_executable(tgfx2_d3d11_window tests/test_tgfx2_d3d11_window.cpp)
+                target_include_directories(tgfx2_d3d11_window PRIVATE ${SDL2_SMOKE_INCLUDE_DIR})
+                target_compile_definitions(tgfx2_d3d11_window PRIVATE TGFX2_HAS_D3D11)
+                target_link_libraries(tgfx2_d3d11_window
+                    PRIVATE termin_graphics2 ${SDL2_SMOKE_LIBRARY})
+                get_filename_component(SDL2_SMOKE_LIBRARY_DIR "${SDL2_SMOKE_LIBRARY}" DIRECTORY)
+                find_file(SDL2_SMOKE_DLL
+                    NAMES SDL2.dll
+                    PATHS
+                        "${SDL2_SMOKE_LIBRARY_DIR}"
+                        "${SDL2_SMOKE_LIBRARY_DIR}/../bin"
+                        "${SDL2_SMOKE_LIBRARY_DIR}/..")
+                if(SDL2_SMOKE_DLL)
+                    add_custom_command(TARGET tgfx2_d3d11_window POST_BUILD
+                        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                            "${SDL2_SMOKE_DLL}"
+                            "$<TARGET_FILE_DIR:tgfx2_d3d11_window>")
+                endif()
+                termin_set_rpath_test(tgfx2_d3d11_window)
+                add_test(NAME tgfx2_d3d11_window COMMAND tgfx2_d3d11_window)
+                set_tests_properties(tgfx2_d3d11_window PROPERTIES
+                    TIMEOUT 10
+                    SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}|D3D11CreateDevice failed")
+            endif()
+        endif()
     endif()
 endif()
 
