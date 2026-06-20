@@ -250,6 +250,7 @@ if(TERMIN_BUILD_PYTHON)
     nanobind_add_module(_render_native NB_SHARED
         python/render_native_bindings.cpp
         python/drawable_bindings.cpp
+        python/render_config_bindings.cpp
     )
     target_link_libraries(_render_native PRIVATE termin_render)
     termin_set_rpath_python(_render_native)
