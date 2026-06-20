@@ -5,6 +5,7 @@
 #include <span>
 
 #include "termin/render/frame_uniforms.hpp"
+#include "termin/render/render_export.hpp"
 #include "tgfx/tgfx_shader_handle.hpp"
 #include "tgfx2/handles.hpp"
 
@@ -57,7 +58,7 @@ struct MaterialVertexVariantRequest {
     bool require_slang_original = true;
 };
 
-TcShader get_material_vertex_variant(const MaterialVertexVariantRequest& request);
+RENDER_API TcShader get_material_vertex_variant(const MaterialVertexVariantRequest& request);
 
 enum class MaterialMeshVertexInput {
     FullMaterial,
@@ -67,23 +68,23 @@ enum class MaterialMeshVertexInput {
     SkinnedPositionNormalJointsWeights,
 };
 
-MaterialMeshVertexInput material_mesh_vertex_input_for_shader(
+RENDER_API MaterialMeshVertexInput material_mesh_vertex_input_for_shader(
     const tc_shader* shader,
     MaterialMeshVertexInput static_input);
 
-bool draw_material_pipeline_mesh(
+RENDER_API bool draw_material_pipeline_mesh(
     tgfx::RenderContext2& ctx,
     tc_mesh* mesh,
     MaterialMeshVertexInput input);
 
-bool ensure_material_pipeline_shader(
+RENDER_API bool ensure_material_pipeline_shader(
     tgfx::RenderContext2& ctx,
     tgfx::IRenderDevice& device,
     tc_shader_handle shader_handle,
     const char* debug_context,
     MaterialPipelineShaderBinding& out);
 
-bool prepare_material_pipeline_resources(
+RENDER_API bool prepare_material_pipeline_resources(
     tgfx::RenderContext2& ctx,
     tgfx::IRenderDevice& device,
     const tc_shader* shader,
