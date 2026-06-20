@@ -139,6 +139,9 @@ run_suite "termin-csg python" \
 run_suite "termin-graphics python" \
     "${PYTHON_BIN}" -m pytest termin-graphics/tests/python/ -v
 
+run_suite "termin-materials python" \
+    "${PYTHON_BIN}" -m pytest termin-materials/tests/ -v
+
 run_suite "termin-gui python" \
     "${PYTHON_BIN}" -m pytest termin-gui/python/tests/ -v
 
