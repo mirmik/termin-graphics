@@ -568,6 +568,11 @@ if(TGFX2_ENABLE_OPENGL)
 else()
     set(PACKAGE_TGFX2_ENABLE_OPENGL FALSE)
 endif()
+if(TGFX2_ENABLE_D3D11)
+    set(PACKAGE_TGFX2_ENABLE_D3D11 TRUE)
+else()
+    set(PACKAGE_TGFX2_ENABLE_D3D11 FALSE)
+endif()
 
 configure_package_config_file(
     cmake/termin_graphicsConfig.cmake.in
