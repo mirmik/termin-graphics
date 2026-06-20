@@ -107,16 +107,28 @@ switch ($WindowTestsMode) {
     }
 }
 
+$buildBinDir = Join-Path $BuildDir "bin"
+$buildLibDir = Join-Path $BuildDir "lib"
+
 $pathEntries = @(
+    (Join-Path $buildBinDir $BuildType),
+    $buildBinDir,
+    (Join-Path $buildLibDir $BuildType),
+    $buildLibDir,
     (Join-Path $SdkPrefix "bin"),
-    (Join-Path $SdkPrefix "lib"),
-    (Join-Path $BuildDir "bin")
+    (Join-Path $SdkPrefix "lib")
 ) | Where-Object { Test-Path $_ }
 if ($pathEntries.Count -gt 0) {
     $env:PATH = ($pathEntries -join [IO.Path]::PathSeparator) + [IO.Path]::PathSeparator + $env:PATH
 }
 
-$ldEntries = @((Join-Path $SdkPrefix "lib"), (Join-Path $BuildDir "bin"))
+$ldEntries = @(
+    (Join-Path $buildBinDir $BuildType),
+    $buildBinDir,
+    (Join-Path $buildLibDir $BuildType),
+    $buildLibDir,
+    (Join-Path $SdkPrefix "lib")
+) | Where-Object { Test-Path $_ }
 if ($env:LD_LIBRARY_PATH) {
     $ldEntries += $env:LD_LIBRARY_PATH
 }

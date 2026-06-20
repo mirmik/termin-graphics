@@ -9,6 +9,8 @@
 #include <iostream>
 #include <functional>
 
+#include <termin/materials/termin_materials_api.h>
+
 namespace termin {
 
 /**
@@ -162,6 +164,6 @@ private:
  * Global GLSL preprocessor instance.
  * Defined in glsl_preprocessor.cpp to ensure single instance across DLLs.
  */
-GlslPreprocessor& glsl_preprocessor();
+TERMIN_MATERIALS_API GlslPreprocessor& glsl_preprocessor();
 
 } // namespace termin
