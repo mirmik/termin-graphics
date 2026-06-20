@@ -116,8 +116,8 @@ private:
     void ensure_shaders_(IRenderDevice& device);
     void build_projection_();
     void flush_();
-    void bind_solid_(CanvasColor color);
-    void bind_texture_(CanvasColor tint, TextureHandle texture);
+    bool bind_solid_(CanvasColor color);
+    bool bind_texture_(CanvasColor tint, TextureHandle texture);
     void push_quad_(float x0, float y0, float x1, float y1,
                     float u0, float v0, float u1, float v1);
     void append_solid_quad_(float x0, float y0, float x1, float y1,

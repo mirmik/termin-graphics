@@ -1,3 +1,4 @@
+#include "tgfx2/canvas2d_renderer.hpp"
 #include "tgfx2/device_factory.hpp"
 #include "tgfx2/engine_shader_catalog.hpp"
 #include "tgfx2/i_command_list.hpp"
@@ -19,11 +20,13 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -101,6 +104,91 @@ bool read_binary_file(const std::filesystem::path& path, std::vector<uint8_t>& o
         return false;
     }
     return true;
+}
+
+std::filesystem::path find_termin_shaderc() {
+    if (const char* env = std::getenv("TERMIN_SHADERC")) {
+        std::filesystem::path configured(env);
+        if (std::filesystem::exists(configured)) {
+            return configured;
+        }
+    }
+
+#ifdef _WIN32
+    constexpr const char* kToolName = "termin_shaderc.exe";
+#else
+    constexpr const char* kToolName = "termin_shaderc";
+#endif
+
+    std::filesystem::path cursor = std::filesystem::current_path();
+    for (int depth = 0; depth < 6; ++depth) {
+        std::filesystem::path candidate = cursor / "sdk" / "bin" / kToolName;
+        if (std::filesystem::exists(candidate)) {
+            return candidate;
+        }
+        if (!cursor.has_parent_path() || cursor.parent_path() == cursor) {
+            break;
+        }
+        cursor = cursor.parent_path();
+    }
+    return {};
+}
+
+std::filesystem::path find_on_path(const char* executable_name) {
+    const char* path_env = std::getenv("PATH");
+    if (!path_env || !path_env[0]) {
+        return {};
+    }
+#ifdef _WIN32
+    constexpr char kSeparator = ';';
+#else
+    constexpr char kSeparator = ':';
+#endif
+    std::stringstream stream(path_env);
+    std::string dir;
+    while (std::getline(stream, dir, kSeparator)) {
+        if (dir.empty()) {
+            continue;
+        }
+        std::filesystem::path candidate = std::filesystem::path(dir) / executable_name;
+        if (std::filesystem::exists(candidate)) {
+            return candidate;
+        }
+    }
+    return {};
+}
+
+std::filesystem::path find_slangc() {
+    if (const char* env = std::getenv("TERMIN_SLANGC")) {
+        std::filesystem::path configured(env);
+        if (std::filesystem::exists(configured)) {
+            return configured;
+        }
+    }
+
+#ifdef _WIN32
+    if (auto from_path = find_on_path("slangc.exe"); !from_path.empty()) {
+        return from_path;
+    }
+    const std::filesystem::path vulkan_root("C:/VulkanSDK");
+    std::error_code ec;
+    if (std::filesystem::exists(vulkan_root, ec)) {
+        for (const auto& entry : std::filesystem::directory_iterator(vulkan_root, ec)) {
+            if (!entry.is_directory()) {
+                continue;
+            }
+            std::filesystem::path candidate = entry.path() / "Bin" / "slangc.exe";
+            if (std::filesystem::exists(candidate)) {
+                return candidate;
+            }
+        }
+    }
+#else
+    if (auto from_path = find_on_path("slangc"); !from_path.empty()) {
+        return from_path;
+    }
+#endif
+    return {};
 }
 
 } // namespace
@@ -505,6 +593,145 @@ int main() {
             return 1;
         }
 
+        const auto reflected_input_vs_path = shader_dir / "d3d11-smoke-reflected-input.vs.cso";
+        const auto reflected_input_ps_path = shader_dir / "d3d11-smoke-reflected-input.ps.cso";
+        const char* reflected_input_vs_source =
+            "struct VSIn { float3 pos : POSITION; float4 uv_pad : TEXCOORD0; };\n"
+            "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
+            "VSOut main(VSIn input) {\n"
+            "    VSOut o;\n"
+            "    o.pos = float4(input.pos, 1.0);\n"
+            "    o.uv = input.uv_pad.xy;\n"
+            "    return o;\n"
+            "}\n";
+        const char* reflected_input_ps_source =
+            "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
+            "float4 main(VSOut input) : SV_Target0 {\n"
+            "    return float4(0.31, 0.19, 0.25, 1.0);\n"
+            "}\n";
+        if (!compile_hlsl_to_file(reflected_input_vs_source, "vs_5_0", reflected_input_vs_path) ||
+            !compile_hlsl_to_file(reflected_input_ps_source, "ps_5_0", reflected_input_ps_path)) {
+            return 1;
+        }
+
+        std::vector<uint8_t> reflected_input_vs_bytecode;
+        std::vector<uint8_t> reflected_input_ps_bytecode;
+        if (!read_binary_file(reflected_input_vs_path, reflected_input_vs_bytecode) ||
+            !read_binary_file(reflected_input_ps_path, reflected_input_ps_bytecode)) {
+            return 1;
+        }
+        tgfx::ShaderDesc reflected_input_vs_desc;
+        reflected_input_vs_desc.stage = tgfx::ShaderStage::Vertex;
+        reflected_input_vs_desc.debug_name = "D3D11 smoke reflected input VS";
+        reflected_input_vs_desc.bytecode = std::move(reflected_input_vs_bytecode);
+        auto reflected_input_vs = device->create_shader(reflected_input_vs_desc);
+        tgfx::ShaderDesc reflected_input_ps_desc;
+        reflected_input_ps_desc.stage = tgfx::ShaderStage::Fragment;
+        reflected_input_ps_desc.debug_name = "D3D11 smoke reflected input PS";
+        reflected_input_ps_desc.bytecode = std::move(reflected_input_ps_bytecode);
+        auto reflected_input_fs = device->create_shader(reflected_input_ps_desc);
+        if (!reflected_input_vs || !reflected_input_fs) {
+            std::fprintf(stderr, "D3D11 smoke: reflected input shader creation failed\n");
+            return 1;
+        }
+
+        const float reflected_clear[] = {0.0f, 0.0f, 0.0f, 1.0f};
+        const float reflected_vertices[] = {
+            -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+             3.0f, -1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+            -1.0f,  3.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        };
+        ctx.begin_frame();
+        ctx.begin_pass(color, {}, reflected_clear, 1.0f, false);
+        ctx.set_depth_test(false);
+        ctx.set_depth_write(false);
+        ctx.set_cull(tgfx::CullMode::None);
+        ctx.set_blend(false);
+        ctx.bind_shader(reflected_input_vs, reflected_input_fs);
+        ctx.draw_immediate_triangles(reflected_vertices, 3);
+        ctx.end_pass();
+        ctx.end_frame();
+
+        if (!device->read_pixel_rgba8(color, 2, 2, rgba)) {
+            std::fprintf(stderr, "D3D11 smoke: reflected input draw readback failed\n");
+            return 1;
+        }
+        if (!close_enough(rgba[0], 0.31f) ||
+            !close_enough(rgba[1], 0.19f) ||
+            !close_enough(rgba[2], 0.25f) ||
+            !close_enough(rgba[3], 1.00f)) {
+            std::fprintf(stderr,
+                         "D3D11 smoke: unexpected reflected input pixel %.3f %.3f %.3f %.3f\n",
+                         rgba[0], rgba[1], rgba[2], rgba[3]);
+            return 1;
+        }
+
+        const std::filesystem::path shaderc = find_termin_shaderc();
+        const std::filesystem::path slangc = find_slangc();
+        if (!shaderc.empty() && !slangc.empty()) {
+#ifdef _WIN32
+            _putenv_s("TERMIN_SLANGC", slangc.string().c_str());
+#else
+            setenv("TERMIN_SLANGC", slangc.string().c_str(), 1);
+#endif
+            termin::tgfx2_set_shader_compiler_path(shaderc.string().c_str());
+            termin::tgfx2_set_shader_cache_root((artifact_root / "cache").string().c_str());
+            termin::tgfx2_set_shader_dev_compile_enabled(true);
+
+            tgfx::TextureDesc canvas_texture_desc;
+            canvas_texture_desc.width = 2;
+            canvas_texture_desc.height = 2;
+            canvas_texture_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+            canvas_texture_desc.usage = tgfx::TextureUsage::Sampled |
+                                        tgfx::TextureUsage::CopyDst |
+                                        tgfx::TextureUsage::CopySrc;
+            auto canvas_texture = device->create_texture(canvas_texture_desc);
+            if (!canvas_texture) {
+                std::fprintf(stderr, "D3D11 smoke: Canvas2D texture creation failed\n");
+                return 1;
+            }
+            const uint8_t canvas_pixels[] = {
+                51, 153, 204, 255, 51, 153, 204, 255,
+                51, 153, 204, 255, 51, 153, 204, 255,
+            };
+            device->upload_texture(
+                canvas_texture,
+                std::span<const uint8_t>(canvas_pixels, sizeof(canvas_pixels)));
+
+            const float canvas_clear[] = {0.0f, 0.0f, 0.0f, 1.0f};
+            ctx.begin_frame();
+            ctx.begin_pass(color, {}, canvas_clear, 1.0f, false);
+            tgfx::Canvas2DRenderer canvas;
+            canvas.begin(ctx, 4, 4);
+            canvas.draw_texture(canvas_texture, 0.0f, 0.0f, 4.0f, 4.0f);
+            canvas.end();
+            ctx.end_pass();
+            ctx.end_frame();
+
+            if (!device->read_pixel_rgba8(color, 2, 2, rgba)) {
+                std::fprintf(stderr, "D3D11 smoke: Canvas2D readback failed\n");
+                return 1;
+            }
+            if (!close_enough(rgba[0], 51.0f / 255.0f) ||
+                !close_enough(rgba[1], 153.0f / 255.0f) ||
+                !close_enough(rgba[2], 204.0f / 255.0f) ||
+                !close_enough(rgba[3], 1.00f)) {
+                std::fprintf(stderr,
+                             "D3D11 smoke: unexpected Canvas2D pixel %.3f %.3f %.3f %.3f\n",
+                             rgba[0], rgba[1], rgba[2], rgba[3]);
+                return 1;
+            }
+            device->destroy(canvas_texture);
+        } else {
+            std::printf(
+                "D3D11 smoke: Canvas2D builtin shader smoke skipped "
+                "(termin_shaderc=%s slangc=%s)\n",
+                shaderc.empty() ? "missing" : "ok",
+                slangc.empty() ? "missing" : "ok");
+        }
+
+        device->destroy(reflected_input_fs);
+        device->destroy(reflected_input_vs);
         device->destroy(render_context_fs);
         device->destroy(resource_set);
         device->destroy(sampler);

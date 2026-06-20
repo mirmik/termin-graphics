@@ -2235,7 +2235,7 @@ def test_termin_shaderc_compiles_slang_to_d3d11_cso_with_fake_tools(tmp_path: Pa
             "size": 16,
             "d3d11": {
                 "register_class": "b",
-                "register_index": 1,
+                "register_index": 0,
             },
         },
         {
@@ -2248,9 +2248,72 @@ def test_termin_shaderc_compiles_slang_to_d3d11_cso_with_fake_tools(tmp_path: Pa
             "size": 0,
             "d3d11": {
                 "register_class": "t",
-                "register_index": 4,
+                "register_index": 0,
             },
         },
+    ]
+
+
+def test_termin_shaderc_merges_bare_slang_sampler2d_when_reflection_is_partial(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "import termin_prelude;\n"
+        "struct DrawParams { float4 color; };\n"
+        "[[TerminScope(\"draw\")]] ConstantBuffer<DrawParams> canvas_draw;\n"
+        "[[TerminScope(\"transient\")]] Sampler2D u_texture;\n"
+        "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
+        "    return u_texture.Sample(uv) * canvas_draw.color;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.ps.cso"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_text('// generated hlsl\\nfloat4 main() : SV_Target0 { return 1; }\\n', encoding='utf-8')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [{\n"
+        "        'name': 'canvas_draw',\n"
+        "        'userAttribs': [{'name': 'TerminScope', 'arguments': ['draw']}],\n"
+        "        'binding': {'kind': 'descriptorTableSlot', 'index': 0},\n"
+        "        'type': {'kind': 'constantBuffer', 'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 16}}},\n"
+        "    }]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+    fake_fxc = _write_fake_fxc(tmp_path / "fake_fxc.py")
+
+    result = _run_shaderc([
+        "compile",
+        "--language",
+        "slang",
+        "--target",
+        "d3d11",
+        "--stage",
+        "fragment",
+        "--input",
+        str(shader),
+        "--output",
+        str(output),
+        "--slangc",
+        str(fake_slangc),
+        "--fxc",
+        str(fake_fxc),
+    ])
+
+    assert result.returncode == 0, result.stderr
+    layout = json.loads((tmp_path / "out.ps.cso.layout.json").read_text(encoding="utf-8"))
+    assert [
+        (resource["name"], resource["kind"], resource["scope"], resource["binding"], resource["d3d11"])
+        for resource in layout["resources"]
+    ] == [
+        ("canvas_draw", "constant_buffer", "draw", 24, {"register_class": "b", "register_index": 0}),
+        ("u_texture", "texture", "transient", 32, {"register_class": "t", "register_index": 0}),
     ]
 
 

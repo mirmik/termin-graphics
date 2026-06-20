@@ -366,11 +366,16 @@ void Canvas2DRenderer::build_projection_() {
 void Canvas2DRenderer::flush_() {
     if (ctx_ == nullptr || batch_vertices_.empty()) return;
 
+    bool bound = false;
     if (batch_mode_ == BatchMode::Solid) {
-        bind_solid_(batch_color_);
+        bound = bind_solid_(batch_color_);
     } else if (batch_mode_ == BatchMode::Texture) {
-        bind_texture_(batch_color_, batch_texture_);
+        bound = bind_texture_(batch_color_, batch_texture_);
     } else {
+        batch_vertices_.clear();
+        return;
+    }
+    if (!bound) {
         batch_vertices_.clear();
         return;
     }
@@ -381,7 +386,12 @@ void Canvas2DRenderer::flush_() {
     batch_vertices_.clear();
 }
 
-void Canvas2DRenderer::bind_solid_(CanvasColor color) {
+bool Canvas2DRenderer::bind_solid_(CanvasColor color) {
+    if (solid_vs_.id == 0 || solid_fs_.id == 0) {
+        tc::Log::error("[Canvas2DRenderer] solid shader is unavailable; skipping batch");
+        return false;
+    }
+
     CanvasPushData push;
     std::memcpy(push.projection, projection_, sizeof(projection_));
     push.color[0] = color.r;
@@ -393,9 +403,19 @@ void Canvas2DRenderer::bind_solid_(CanvasColor color) {
     tc_shader* raw = tc_shader_get(solid_shader_handle());
     ctx_->use_shader_resource_layout(raw);
     ctx_->bind_uniform_data("canvas_draw", &push, static_cast<uint32_t>(sizeof(push)));
+    return true;
 }
 
-void Canvas2DRenderer::bind_texture_(CanvasColor tint, TextureHandle texture) {
+bool Canvas2DRenderer::bind_texture_(CanvasColor tint, TextureHandle texture) {
+    if (texture_vs_.id == 0 || texture_fs_.id == 0) {
+        tc::Log::error("[Canvas2DRenderer] texture shader is unavailable; skipping batch");
+        return false;
+    }
+    if (texture.id == 0) {
+        tc::Log::error("[Canvas2DRenderer] texture batch has no texture; skipping batch");
+        return false;
+    }
+
     CanvasPushData push;
     std::memcpy(push.projection, projection_, sizeof(projection_));
     push.color[0] = tint.r;
@@ -408,6 +428,7 @@ void Canvas2DRenderer::bind_texture_(CanvasColor tint, TextureHandle texture) {
     ctx_->use_shader_resource_layout(raw);
     ctx_->bind_uniform_data("canvas_draw", &push, static_cast<uint32_t>(sizeof(push)));
     ctx_->bind_texture("u_texture", texture);
+    return true;
 }
 
 void Canvas2DRenderer::push_quad_(float x0, float y0, float x1, float y1,

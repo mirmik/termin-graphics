@@ -269,7 +269,7 @@ endif()
 
 if(TGFX2_ENABLE_D3D11)
     target_compile_definitions(termin_graphics2 PRIVATE TGFX2_HAS_D3D11)
-    target_link_libraries(termin_graphics2 PRIVATE d3d11 dxgi)
+    target_link_libraries(termin_graphics2 PRIVATE d3d11 dxgi d3dcompiler)
 endif()
 
 if(MSVC)
@@ -310,16 +310,20 @@ if(COMMAND termin_enable_pch_for)
 endif()
 termin_set_rpath_lib(termin_graphics2)
 
-if(TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC AND NOT ANDROID)
+if((TGFX2_ENABLE_D3D11 OR (TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC)) AND NOT ANDROID)
     add_executable(termin_shaderc
         tools/termin_shaderc.cpp
         tools/termin_shaderc/cli.cpp
     )
     target_compile_features(termin_shaderc PRIVATE cxx_std_20)
     target_include_directories(termin_shaderc PRIVATE
-        ${Vulkan_INCLUDE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_link_libraries(termin_shaderc PRIVATE ${SHADERC_LIB} termin_base)
+    target_link_libraries(termin_shaderc PRIVATE termin_base)
+    if(TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC)
+        target_compile_definitions(termin_shaderc PRIVATE TERMIN_SHADERC_HAS_SHADERC)
+        target_include_directories(termin_shaderc PRIVATE ${Vulkan_INCLUDE_DIR})
+        target_link_libraries(termin_shaderc PRIVATE ${SHADERC_LIB})
+    endif()
     termin_set_rpath_tool(termin_shaderc)
     install(TARGETS termin_shaderc RUNTIME DESTINATION bin)
 endif()

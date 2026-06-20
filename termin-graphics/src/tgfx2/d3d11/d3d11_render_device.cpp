@@ -6,12 +6,14 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include <d3dcompiler.h>
 #include <tcbase/tc_log.hpp>
 
 extern "C" {
@@ -78,11 +80,89 @@ UINT buffer_cpu_access(const BufferDesc& desc) {
     return desc.cpu_visible ? D3D11_CPU_ACCESS_WRITE : 0;
 }
 
-std::string semantic_name_for_attribute(const VertexAttribute& attr) {
-    if (!attr.semantic.empty()) {
-        return attr.semantic;
+struct D3D11InputSemantic {
+    std::string name;
+    UINT index = 0;
+};
+
+std::string uppercase_ascii(std::string value) {
+    for (char& ch : value) {
+        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
     }
-    return "TEXCOORD";
+    return value;
+}
+
+D3D11InputSemantic parse_d3d11_semantic(std::string semantic) {
+    if (semantic.empty()) {
+        return {"TEXCOORD", 0};
+    }
+
+    semantic = uppercase_ascii(std::move(semantic));
+    size_t suffix_start = semantic.size();
+    while (suffix_start > 0 &&
+           std::isdigit(static_cast<unsigned char>(semantic[suffix_start - 1]))) {
+        --suffix_start;
+    }
+    if (suffix_start == semantic.size()) {
+        return {std::move(semantic), 0};
+    }
+
+    const std::string suffix = semantic.substr(suffix_start);
+    semantic.resize(suffix_start);
+    if (semantic.empty()) {
+        return {"TEXCOORD", static_cast<UINT>(std::stoul(suffix))};
+    }
+    return {std::move(semantic), static_cast<UINT>(std::stoul(suffix))};
+}
+
+D3D11InputSemantic semantic_for_attribute(const VertexAttribute& attr) {
+    if (!attr.semantic.empty()) {
+        return parse_d3d11_semantic(attr.semantic);
+    }
+    return {"TEXCOORD", attr.location};
+}
+
+std::vector<D3D11InputSemantic> reflect_d3d11_vertex_inputs(const D3D11ShaderModule& vs) {
+    std::vector<D3D11InputSemantic> out;
+    if (vs.bytecode.empty()) {
+        return out;
+    }
+
+    Microsoft::WRL::ComPtr<ID3D11ShaderReflection> reflection;
+    HRESULT hr = D3DReflect(
+        vs.bytecode.data(),
+        vs.bytecode.size(),
+        __uuidof(ID3D11ShaderReflection),
+        reinterpret_cast<void**>(reflection.GetAddressOf()));
+    if (FAILED(hr) || !reflection) {
+        tc::Log::error(
+            "D3D11RenderDevice::create_pipeline: D3DReflect failed for vertex shader: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return out;
+    }
+
+    D3D11_SHADER_DESC shader_desc{};
+    hr = reflection->GetDesc(&shader_desc);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::create_pipeline: shader reflection GetDesc failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return out;
+    }
+
+    out.reserve(shader_desc.InputParameters);
+    for (UINT i = 0; i < shader_desc.InputParameters; ++i) {
+        D3D11_SIGNATURE_PARAMETER_DESC param{};
+        hr = reflection->GetInputParameterDesc(i, &param);
+        if (FAILED(hr) || !param.SemanticName) {
+            continue;
+        }
+        if (param.SystemValueType != D3D_NAME_UNDEFINED) {
+            continue;
+        }
+        out.push_back({param.SemanticName, param.SemanticIndex});
+    }
+    return out;
 }
 
 PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
@@ -157,6 +237,7 @@ std::vector<uint8_t> normalize_tc_texture_pixels(const tc_texture* tex, PixelFor
 
 D3D11RenderDevice::D3D11RenderDevice() {
     create_device();
+    create_default_sampler();
     query_capabilities();
     tc_shader_registry_add_destroy_hook(&d3d11_invalidate_tc_shader_trampoline, this);
     tc_texture_registry_add_destroy_hook(&d3d11_invalidate_tc_texture_trampoline, this);
@@ -227,6 +308,25 @@ void D3D11RenderDevice::create_device() {
 #endif
 
     throw_if_failed(hr, "D3D11CreateDevice");
+}
+
+void D3D11RenderDevice::create_default_sampler() {
+    D3D11_SAMPLER_DESC sd{};
+    sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    sd.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sd.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sd.MipLODBias = 0.0f;
+    sd.MaxAnisotropy = 1;
+    sd.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    sd.BorderColor[0] = 0.0f;
+    sd.BorderColor[1] = 0.0f;
+    sd.BorderColor[2] = 0.0f;
+    sd.BorderColor[3] = 1.0f;
+    sd.MinLOD = 0.0f;
+    sd.MaxLOD = D3D11_FLOAT32_MAX;
+    HRESULT hr = device_->CreateSamplerState(&sd, &default_sampler_);
+    throw_if_failed(hr, "ID3D11Device::CreateSamplerState(default)");
 }
 
 void D3D11RenderDevice::query_capabilities() {
@@ -402,19 +502,30 @@ PipelineHandle D3D11RenderDevice::create_pipeline(const PipelineDesc& desc) {
 
     std::vector<std::string> semantic_names;
     std::vector<D3D11_INPUT_ELEMENT_DESC> input_elements;
+    const auto reflected_inputs = reflect_d3d11_vertex_inputs(*vs);
     size_t input_element_count = 0;
     for (const auto& layout : desc.vertex_layouts) {
         input_element_count += layout.attributes.size();
     }
     semantic_names.reserve(input_element_count);
     input_elements.reserve(input_element_count);
+    size_t reflected_input_index = 0;
     for (uint32_t slot = 0; slot < desc.vertex_layouts.size(); ++slot) {
         const auto& layout = desc.vertex_layouts[slot];
         for (const auto& attr : layout.attributes) {
-            semantic_names.push_back(semantic_name_for_attribute(attr));
+            D3D11InputSemantic semantic = semantic_for_attribute(attr);
+            if (layout.use_shader_input_locations && attr.semantic.empty()) {
+                if (reflected_input_index >= reflected_inputs.size()) {
+                    throw std::runtime_error(
+                        "D3D11RenderDevice::create_pipeline: vertex layout requests shader input "
+                        "reflection but the vertex shader has fewer reflected inputs");
+                }
+                semantic = reflected_inputs[reflected_input_index++];
+            }
+            semantic_names.push_back(semantic.name);
             D3D11_INPUT_ELEMENT_DESC element{};
             element.SemanticName = semantic_names.back().c_str();
-            element.SemanticIndex = attr.semantic.empty() ? attr.location : 0;
+            element.SemanticIndex = semantic.index;
             element.Format = d3d11::to_dxgi_vertex_format(attr.format);
             element.InputSlot = slot;
             element.AlignedByteOffset = attr.offset;

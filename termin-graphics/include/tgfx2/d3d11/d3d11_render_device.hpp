@@ -149,6 +149,7 @@ public:
 
     ID3D11Device* native_device() const { return device_.Get(); }
     ID3D11DeviceContext* immediate_context() const { return context_.Get(); }
+    ID3D11SamplerState* default_sampler_state() const { return default_sampler_.Get(); }
 
     D3D11Buffer* get_buffer(BufferHandle h) { return buffers_.get(h.id); }
     D3D11Texture* get_texture(TextureHandle h) { return textures_.get(h.id); }
@@ -160,11 +161,13 @@ public:
 private:
     TextureHandle register_external_texture(ID3D11Texture2D* texture, const TextureDesc& desc);
     void create_device();
+    void create_default_sampler();
     void query_capabilities();
     Microsoft::WRL::ComPtr<ID3D11Texture2D> create_staging_texture(const D3D11Texture& src) const;
 
     Microsoft::WRL::ComPtr<ID3D11Device> device_;
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
+    Microsoft::WRL::ComPtr<ID3D11SamplerState> default_sampler_;
     D3D_FEATURE_LEVEL feature_level_ = D3D_FEATURE_LEVEL_11_0;
     BackendCapabilities caps_;
 

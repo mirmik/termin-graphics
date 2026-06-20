@@ -224,7 +224,9 @@ void D3D11CommandList::bind_resource_set(ResourceSetHandle set,
                 ID3D11ShaderResourceView* srv = tex ? tex->srv.Get() : nullptr;
                 set_shader_resources(ctx_, stage_mask, slot, &srv);
                 auto* sampler = device_.get_sampler(binding.sampler);
-                ID3D11SamplerState* native_sampler = sampler ? sampler->sampler.Get() : nullptr;
+                ID3D11SamplerState* native_sampler = sampler
+                    ? sampler->sampler.Get()
+                    : device_.default_sampler_state();
                 set_samplers(ctx_, stage_mask, slot, &native_sampler);
                 break;
             }
