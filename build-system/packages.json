@@ -190,10 +190,6 @@
       ]
     },
     {
-      "path": "termin-default-assets",
-      "distribution": "termin-default-assets"
-    },
-    {
       "path": "termin-qopt",
       "distribution": "termin-qopt"
     },
@@ -207,6 +203,14 @@
       "native_extensions": [
         {"extension": "termin.physics._physics_native", "target": "_physics_native"}
       ]
+    },
+    {
+      "path": "termin-components/termin-components-physics",
+      "distribution": "termin-components-physics"
+    },
+    {
+      "path": "termin-default-assets",
+      "distribution": "termin-default-assets"
     },
     {
       "path": "termin-engine",
