@@ -96,6 +96,12 @@ struct ResourceBinding {
     uint32_t set = 0;
     uint32_t binding = 0;
     uint32_t array_element = 0;
+    uint32_t stage_mask = 0;
+    struct D3D11Placement {
+        bool has_placement = false;
+        uint32_t register_class = 0;
+        uint32_t register_index = 0;
+    } d3d11;
     enum class Kind {
         UniformBuffer, StorageBuffer, SampledTexture, Sampler,
     } kind = Kind::UniformBuffer;
