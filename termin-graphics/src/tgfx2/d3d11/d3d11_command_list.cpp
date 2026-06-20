@@ -5,8 +5,101 @@
 #include <array>
 
 #include <tcbase/tc_log.hpp>
+extern "C" {
+#include "tgfx/resources/tc_shader.h"
+}
 
 namespace tgfx {
+
+namespace {
+
+uint32_t effective_stage_mask(const ResourceBinding& binding) {
+    return binding.stage_mask == TC_SHADER_STAGE_NONE
+        ? TC_SHADER_STAGE_ALL_GRAPHICS
+        : binding.stage_mask;
+}
+
+UINT d3d11_slot(const ResourceBinding& binding) {
+    const uint32_t base = binding.d3d11.has_placement
+        ? binding.d3d11.register_index
+        : binding.binding;
+    return static_cast<UINT>(base + binding.array_element);
+}
+
+bool validate_d3d11_register_class(
+    const ResourceBinding& binding,
+    uint32_t expected,
+    const char* kind_name
+) {
+    if (!binding.d3d11.has_placement) {
+        return true;
+    }
+    if (binding.d3d11.register_class == expected) {
+        return true;
+    }
+    tc::Log::error(
+        "D3D11CommandList::bind_resource_set: %s binding at set=%u binding=%u "
+        "has D3D11 class=%u, expected class=%u",
+        kind_name,
+        binding.set,
+        binding.binding,
+        binding.d3d11.register_class,
+        expected);
+    return false;
+}
+
+void set_constant_buffers(
+    ID3D11DeviceContext* ctx,
+    uint32_t stage_mask,
+    UINT slot,
+    ID3D11Buffer* const* buffer
+) {
+    if (stage_mask & TC_SHADER_STAGE_VERTEX) {
+        ctx->VSSetConstantBuffers(slot, 1, buffer);
+    }
+    if (stage_mask & TC_SHADER_STAGE_FRAGMENT) {
+        ctx->PSSetConstantBuffers(slot, 1, buffer);
+    }
+    if (stage_mask & TC_SHADER_STAGE_GEOMETRY) {
+        ctx->GSSetConstantBuffers(slot, 1, buffer);
+    }
+}
+
+void set_shader_resources(
+    ID3D11DeviceContext* ctx,
+    uint32_t stage_mask,
+    UINT slot,
+    ID3D11ShaderResourceView* const* srv
+) {
+    if (stage_mask & TC_SHADER_STAGE_VERTEX) {
+        ctx->VSSetShaderResources(slot, 1, srv);
+    }
+    if (stage_mask & TC_SHADER_STAGE_FRAGMENT) {
+        ctx->PSSetShaderResources(slot, 1, srv);
+    }
+    if (stage_mask & TC_SHADER_STAGE_GEOMETRY) {
+        ctx->GSSetShaderResources(slot, 1, srv);
+    }
+}
+
+void set_samplers(
+    ID3D11DeviceContext* ctx,
+    uint32_t stage_mask,
+    UINT slot,
+    ID3D11SamplerState* const* sampler
+) {
+    if (stage_mask & TC_SHADER_STAGE_VERTEX) {
+        ctx->VSSetSamplers(slot, 1, sampler);
+    }
+    if (stage_mask & TC_SHADER_STAGE_FRAGMENT) {
+        ctx->PSSetSamplers(slot, 1, sampler);
+    }
+    if (stage_mask & TC_SHADER_STAGE_GEOMETRY) {
+        ctx->GSSetSamplers(slot, 1, sampler);
+    }
+}
+
+} // namespace
 
 D3D11CommandList::D3D11CommandList(D3D11RenderDevice& device)
     : device_(device), ctx_(device.immediate_context()) {
@@ -105,41 +198,55 @@ void D3D11CommandList::bind_resource_set(ResourceSetHandle set,
     if (!rs) return;
 
     for (const auto& binding : rs->desc.bindings) {
-        const UINT slot = binding.binding + binding.array_element;
+        const UINT slot = d3d11_slot(binding);
+        const uint32_t stage_mask = effective_stage_mask(binding);
         switch (binding.kind) {
             case ResourceBinding::Kind::UniformBuffer: {
+                if (!validate_d3d11_register_class(
+                        binding,
+                        TC_SHADER_D3D11_REGISTER_B,
+                        "uniform buffer")) {
+                    break;
+                }
                 auto* buf = device_.get_buffer(binding.buffer);
                 ID3D11Buffer* native = buf ? buf->buffer.Get() : nullptr;
-                ctx_->VSSetConstantBuffers(slot, 1, &native);
-                ctx_->PSSetConstantBuffers(slot, 1, &native);
-                ctx_->GSSetConstantBuffers(slot, 1, &native);
+                set_constant_buffers(ctx_, stage_mask, slot, &native);
                 break;
             }
             case ResourceBinding::Kind::SampledTexture: {
+                if (!validate_d3d11_register_class(
+                        binding,
+                        TC_SHADER_D3D11_REGISTER_T,
+                        "sampled texture")) {
+                    break;
+                }
                 auto* tex = device_.get_texture(binding.texture);
                 ID3D11ShaderResourceView* srv = tex ? tex->srv.Get() : nullptr;
-                ctx_->VSSetShaderResources(slot, 1, &srv);
-                ctx_->PSSetShaderResources(slot, 1, &srv);
-                ctx_->GSSetShaderResources(slot, 1, &srv);
+                set_shader_resources(ctx_, stage_mask, slot, &srv);
                 auto* sampler = device_.get_sampler(binding.sampler);
                 ID3D11SamplerState* native_sampler = sampler ? sampler->sampler.Get() : nullptr;
-                if (native_sampler) {
-                    ctx_->VSSetSamplers(slot, 1, &native_sampler);
-                    ctx_->PSSetSamplers(slot, 1, &native_sampler);
-                    ctx_->GSSetSamplers(slot, 1, &native_sampler);
-                }
+                set_samplers(ctx_, stage_mask, slot, &native_sampler);
                 break;
             }
             case ResourceBinding::Kind::Sampler: {
+                if (!validate_d3d11_register_class(
+                        binding,
+                        TC_SHADER_D3D11_REGISTER_S,
+                        "sampler")) {
+                    break;
+                }
                 auto* sampler = device_.get_sampler(binding.sampler);
                 ID3D11SamplerState* native = sampler ? sampler->sampler.Get() : nullptr;
-                ctx_->VSSetSamplers(slot, 1, &native);
-                ctx_->PSSetSamplers(slot, 1, &native);
-                ctx_->GSSetSamplers(slot, 1, &native);
+                set_samplers(ctx_, stage_mask, slot, &native);
                 break;
             }
             case ResourceBinding::Kind::StorageBuffer:
-                tc::Log::error("D3D11CommandList::bind_resource_set: storage buffers are not implemented");
+                if (validate_d3d11_register_class(
+                        binding,
+                        TC_SHADER_D3D11_REGISTER_U,
+                        "storage buffer")) {
+                    tc::Log::error("D3D11CommandList::bind_resource_set: storage buffers are not implemented");
+                }
                 break;
         }
     }

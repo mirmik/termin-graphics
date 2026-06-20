@@ -99,6 +99,14 @@ typedef enum tc_shader_stage_mask {
     TC_SHADER_STAGE_ALL = 0xffffffffu,
 } tc_shader_stage_mask;
 
+typedef enum tc_shader_d3d11_register_class {
+    TC_SHADER_D3D11_REGISTER_NONE = 0,
+    TC_SHADER_D3D11_REGISTER_B = 1,
+    TC_SHADER_D3D11_REGISTER_T = 2,
+    TC_SHADER_D3D11_REGISTER_S = 3,
+    TC_SHADER_D3D11_REGISTER_U = 4,
+} tc_shader_d3d11_register_class;
+
 // Engine-reserved resource names. These names are part of the Termin shader
 // interface; backend set/binding numbers are runtime metadata and should not
 // be authored into Slang sources long-term.
@@ -118,6 +126,11 @@ typedef struct tc_shader_resource_field {
     uint32_t size;
 } tc_shader_resource_field;
 
+typedef struct tc_shader_d3d11_placement {
+    uint32_t register_class; // tc_shader_d3d11_register_class
+    uint32_t register_index;
+} tc_shader_d3d11_placement;
+
 typedef struct tc_shader_resource_binding {
     char name[TC_SHADER_RESOURCE_NAME_MAX];
     uint32_t kind;        // tc_shader_resource_kind
@@ -126,6 +139,9 @@ typedef struct tc_shader_resource_binding {
     uint32_t binding;
     uint32_t stage_mask;  // tc_shader_stage_mask
     uint32_t size;        // bytes for buffers, 0 when unknown/not applicable
+    uint8_t has_d3d11_placement;
+    uint8_t _resource_binding_reserved[3];
+    tc_shader_d3d11_placement d3d11;
     tc_shader_resource_field* fields;
     uint32_t field_count;
 } tc_shader_resource_binding;

@@ -493,6 +493,14 @@ static uint32_t shader_resource_scope_from_name(const std::string& name) {
     return TC_SHADER_RESOURCE_SCOPE_UNKNOWN;
 }
 
+static uint32_t shader_d3d11_register_class_from_name(const std::string& name) {
+    if (name == "b") return TC_SHADER_D3D11_REGISTER_B;
+    if (name == "t") return TC_SHADER_D3D11_REGISTER_T;
+    if (name == "s") return TC_SHADER_D3D11_REGISTER_S;
+    if (name == "u") return TC_SHADER_D3D11_REGISTER_U;
+    return TC_SHADER_D3D11_REGISTER_NONE;
+}
+
 static const nos::trent* trent_dict_get(const nos::trent& value, const char* key) {
     if (!value.is_dict()) {
         return nullptr;
@@ -545,6 +553,9 @@ static bool parse_shader_resource_layout_sidecar(
     if (!resources || !resources->is_list()) {
         return false;
     }
+    std::string target;
+    const bool has_target = trent_string_field(root, "target", target);
+    const bool require_d3d11_placement = has_target && target == "d3d11";
 
     for (const nos::trent& object : resources->as_list()) {
         if (!object.is_dict()) {
@@ -570,6 +581,9 @@ static bool parse_shader_resource_layout_sidecar(
         if (kind == TC_SHADER_RESOURCE_NONE || name.empty()) {
             return false;
         }
+        if (stage_mask == TC_SHADER_STAGE_NONE) {
+            return false;
+        }
         uint32_t scope = TC_SHADER_RESOURCE_SCOPE_UNKNOWN;
         if (trent_string_field(object, "scope", scope_name)) {
             scope = shader_resource_scope_from_name(scope_name);
@@ -585,6 +599,27 @@ static bool parse_shader_resource_layout_sidecar(
         resource.binding = binding;
         resource.stage_mask = stage_mask;
         resource.size = size;
+
+        const nos::trent* d3d11 = trent_dict_get(object, "d3d11");
+        if (d3d11) {
+            std::string register_class_name;
+            uint32_t register_index = 0;
+            if (!d3d11->is_dict() ||
+                !trent_string_field(*d3d11, "register_class", register_class_name) ||
+                !trent_uint_field(*d3d11, "register_index", register_index)) {
+                return false;
+            }
+            const uint32_t register_class =
+                shader_d3d11_register_class_from_name(register_class_name);
+            if (register_class == TC_SHADER_D3D11_REGISTER_NONE) {
+                return false;
+            }
+            resource.has_d3d11_placement = 1;
+            resource.d3d11.register_class = register_class;
+            resource.d3d11.register_index = register_index;
+        } else if (require_d3d11_placement) {
+            return false;
+        }
 
         // Parse per-field layout for constant buffers.
         const nos::trent* fields_list = trent_dict_get(object, "fields");
@@ -663,6 +698,24 @@ static void merge_shader_resource_binding(
             const uint32_t previous_size = existing.size;
             const uint32_t previous_stage_mask = existing.stage_mask;
             const uint32_t previous_scope = existing.scope;
+            const uint8_t previous_has_d3d11_placement =
+                existing.has_d3d11_placement;
+            const tc_shader_d3d11_placement previous_d3d11 = existing.d3d11;
+            if (previous_has_d3d11_placement && incoming.has_d3d11_placement &&
+                (previous_d3d11.register_class != incoming.d3d11.register_class ||
+                 previous_d3d11.register_index != incoming.d3d11.register_index)) {
+                tc_log(TC_LOG_WARN,
+                       "merge_shader_resource_binding: '%s' has conflicting "
+                       "D3D11 placements — existing class=%u register=%u vs "
+                       "incoming class=%u register=%u (stages 0x%x | 0x%x); keeping incoming",
+                       incoming.name,
+                       previous_d3d11.register_class,
+                       previous_d3d11.register_index,
+                       incoming.d3d11.register_class,
+                       incoming.d3d11.register_index,
+                       existing.stage_mask,
+                       incoming.stage_mask);
+            }
             // Free old fields if they exist before overwriting.
             if (existing.fields) {
                 std::free(existing.fields);
@@ -670,6 +723,10 @@ static void merge_shader_resource_binding(
             existing = clone_binding(incoming);
             existing.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
             existing.stage_mask |= previous_stage_mask;
+            if (!incoming.has_d3d11_placement && previous_has_d3d11_placement) {
+                existing.has_d3d11_placement = 1;
+                existing.d3d11 = previous_d3d11;
+            }
             if (incoming.scope == TC_SHADER_RESOURCE_SCOPE_UNKNOWN &&
                 previous_scope != TC_SHADER_RESOURCE_SCOPE_UNKNOWN) {
                 existing.scope = previous_scope;

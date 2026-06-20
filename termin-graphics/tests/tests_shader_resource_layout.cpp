@@ -43,6 +43,84 @@ TEST_CASE("shader resource layout presence distinguishes known empty layout") {
     tc_shader_shutdown();
 }
 
+TEST_CASE("shader resource layout preserves D3D11 register placement") {
+    tc_shader_init();
+
+    tc_shader_handle handle = tc_shader_create("resource-layout-d3d11-placement-test");
+    REQUIRE(!tc_shader_handle_is_invalid(handle));
+
+    tc_shader* shader = tc_shader_get(handle);
+    REQUIRE(shader != nullptr);
+
+    tc_shader_resource_binding binding{};
+    std::snprintf(binding.name, sizeof(binding.name), "%s", "material");
+    binding.kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    binding.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    binding.set = 0;
+    binding.binding = 1;
+    binding.stage_mask = TC_SHADER_STAGE_FRAGMENT;
+    binding.has_d3d11_placement = 1;
+    binding.d3d11.register_class = TC_SHADER_D3D11_REGISTER_B;
+    binding.d3d11.register_index = 3;
+
+    tc_shader_set_resource_layout(shader, &binding, 1);
+
+    const tc_shader_resource_binding* stored =
+        tc_shader_find_resource_binding(shader, "material");
+    REQUIRE(stored != nullptr);
+    CHECK_EQ(stored->has_d3d11_placement, 1u);
+    CHECK_EQ(stored->d3d11.register_class, TC_SHADER_D3D11_REGISTER_B);
+    CHECK_EQ(stored->d3d11.register_index, 3u);
+
+    tc_shader_destroy(handle);
+    tc_shader_shutdown();
+}
+
+TEST_CASE("shader resource layout rejects overlapping D3D11 register placement") {
+    tc_shader_init();
+
+    tc_shader_handle handle = tc_shader_create("resource-layout-d3d11-conflict-test");
+    REQUIRE(!tc_shader_handle_is_invalid(handle));
+
+    tc_shader* shader = tc_shader_get(handle);
+    REQUIRE(shader != nullptr);
+
+    tc_shader_resource_binding bindings[2]{};
+    std::snprintf(bindings[0].name, sizeof(bindings[0].name), "%s", "material");
+    bindings[0].kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    bindings[0].scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    bindings[0].set = 0;
+    bindings[0].binding = 1;
+    bindings[0].stage_mask = TC_SHADER_STAGE_FRAGMENT;
+    bindings[0].has_d3d11_placement = 1;
+    bindings[0].d3d11.register_class = TC_SHADER_D3D11_REGISTER_B;
+    bindings[0].d3d11.register_index = 1;
+
+    std::snprintf(bindings[1].name, sizeof(bindings[1].name), "%s", "draw");
+    bindings[1].kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    bindings[1].scope = TC_SHADER_RESOURCE_SCOPE_DRAW;
+    bindings[1].set = 0;
+    bindings[1].binding = 2;
+    bindings[1].stage_mask = TC_SHADER_STAGE_FRAGMENT;
+    bindings[1].has_d3d11_placement = 1;
+    bindings[1].d3d11.register_class = TC_SHADER_D3D11_REGISTER_B;
+    bindings[1].d3d11.register_index = 1;
+
+    tc_shader_set_resource_layout(shader, bindings, 2);
+
+    CHECK(!tc_shader_has_resource_layout(shader));
+    CHECK_EQ(tc_shader_resource_binding_count(shader), 0u);
+
+    bindings[1].stage_mask = TC_SHADER_STAGE_VERTEX;
+    tc_shader_set_resource_layout(shader, bindings, 2);
+
+    CHECK(tc_shader_has_resource_layout(shader));
+    CHECK_EQ(tc_shader_resource_binding_count(shader), 2u);
+
+    tc_shader_destroy(handle);
+    tc_shader_shutdown();
+}
+
 TEST_CASE("raw rewritten GLSL source infers compact engine resource layout") {
     tc_shader_init();
 

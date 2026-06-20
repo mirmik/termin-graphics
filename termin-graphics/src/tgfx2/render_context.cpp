@@ -377,6 +377,20 @@ RenderContext2::ResourceScope RenderContext2::default_numeric_scope() {
     return ResourceScope::Unknown;
 }
 
+static void apply_shader_resource_binding_metadata(
+    ResourceBinding& dst,
+    const tc_shader_resource_binding& src
+) {
+    dst.set = src.set;
+    dst.binding = src.binding;
+    dst.stage_mask = src.stage_mask;
+    if (src.has_d3d11_placement) {
+        dst.d3d11.has_placement = true;
+        dst.d3d11.register_class = src.d3d11.register_class;
+        dst.d3d11.register_index = src.d3d11.register_index;
+    }
+}
+
 ResourceBinding* RenderContext2::find_pending_binding(
     ResourceScope scope,
     uint32_t binding,
@@ -696,8 +710,7 @@ void RenderContext2::bind_uniform_data(std::string_view name, const void* data, 
     }
 
     ResourceBinding resolved;
-    resolved.set = rb->set;
-    resolved.binding = rb->binding;
+    apply_shader_resource_binding_metadata(resolved, *rb);
     resolved.kind = ResourceBinding::Kind::UniformBuffer;
     resolved.buffer = buffer;
     resolved.offset = offset;
@@ -858,8 +871,7 @@ void RenderContext2::flush_resource_set() {
                 }
 
                 ResourceBinding resolved;
-                resolved.set = rb->set;
-                resolved.binding = rb->binding;
+                apply_shader_resource_binding_metadata(resolved, *rb);
 
                 switch (sb.kind) {
                     case SymbolicBinding::Kind::Uniform:

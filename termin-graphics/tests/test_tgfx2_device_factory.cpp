@@ -505,6 +505,90 @@ TEST_CASE("tgfx2 engine shader artifact metadata invalidates stale layout schema
 }
 #endif
 
+TEST_CASE("tgfx2 shader runtime loads D3D11 resource placement sidecar") {
+    namespace fs = std::filesystem;
+
+    const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
+    const std::string shader_uuid = "d3d11-layout-sidecar-shader-" + std::to_string(unique);
+    const fs::path root = fs::temp_directory_path()
+        / ("termin_tgfx2_d3d11_layout_sidecar_" + std::to_string(unique));
+    const fs::path artifact_root = root / "assets";
+    const fs::path shader_dir = artifact_root / "shaders" / "d3d11";
+    fs::create_directories(shader_dir);
+
+    ShaderRuntimeTestGuard guard;
+    guard.root = root;
+
+    tc_shader_handle handle = tc_shader_from_sources_ex(
+        "",
+        "float4 main() : SV_Target0 { return 1; }",
+        nullptr,
+        "d3d11_layout_sidecar_shader",
+        nullptr,
+        shader_uuid.c_str(),
+        TC_SHADER_LANGUAGE_SLANG,
+        TC_SHADER_ARTIFACT_REQUIRED
+    );
+    CHECK(!tc_shader_handle_is_invalid(handle));
+    tc_shader* shader = tc_shader_get(handle);
+    REQUIRE(shader != nullptr);
+
+    const fs::path artifact = shader_dir / (std::string(shader->uuid) + ".ps.cso");
+    {
+        std::ofstream out(artifact, std::ios::binary);
+        out << "CSO";
+    }
+    {
+        std::ofstream out(fs::path(artifact.string() + ".layout.json"), std::ios::binary);
+        out
+            << "{\n"
+            << "  \"version\": 2,\n"
+            << "  \"language\": \"slang\",\n"
+            << "  \"target\": \"d3d11\",\n"
+            << "  \"stage\": \"fragment\",\n"
+            << "  \"resources\": [\n"
+            << "    {\"name\": \"material\", \"kind\": \"constant_buffer\", "
+            << "\"scope\": \"material\", \"set\": 0, \"binding\": 1, "
+            << "\"stage_mask\": 2, \"size\": 16, "
+            << "\"d3d11\": {\"register_class\": \"b\", \"register_index\": 1}},\n"
+            << "    {\"name\": \"albedo_texture\", \"kind\": \"texture\", "
+            << "\"scope\": \"material\", \"set\": 0, \"binding\": 4, "
+            << "\"stage_mask\": 2, \"size\": 0, "
+            << "\"d3d11\": {\"register_class\": \"t\", \"register_index\": 4}}\n"
+            << "  ]\n"
+            << "}\n";
+    }
+
+    termin::tgfx2_set_shader_artifact_root(artifact_root.string().c_str());
+    termin::tgfx2_set_shader_dev_compile_enabled(false);
+
+    std::vector<uint8_t> bytes;
+    REQUIRE(termin::tgfx2_load_or_compile_shader_artifact_for_backend(
+        shader,
+        tgfx::BackendType::D3D11,
+        tgfx::ShaderStage::Fragment,
+        bytes));
+
+    const tc_shader_resource_binding* material =
+        tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_MATERIAL);
+    REQUIRE(material != nullptr);
+    CHECK_EQ(material->kind, TC_SHADER_RESOURCE_CONSTANT_BUFFER);
+    CHECK_EQ(material->scope, TC_SHADER_RESOURCE_SCOPE_MATERIAL);
+    CHECK_EQ(material->has_d3d11_placement, 1u);
+    CHECK_EQ(material->d3d11.register_class, TC_SHADER_D3D11_REGISTER_B);
+    CHECK_EQ(material->d3d11.register_index, 1u);
+
+    const tc_shader_resource_binding* texture =
+        tc_shader_find_resource_binding(shader, "albedo_texture");
+    REQUIRE(texture != nullptr);
+    CHECK_EQ(texture->kind, TC_SHADER_RESOURCE_TEXTURE);
+    CHECK_EQ(texture->has_d3d11_placement, 1u);
+    CHECK_EQ(texture->d3d11.register_class, TC_SHADER_D3D11_REGISTER_T);
+    CHECK_EQ(texture->d3d11.register_index, 4u);
+
+    tc_shader_destroy(handle);
+}
+
 #ifndef _WIN32
 TEST_CASE("tgfx2 shader runtime loads resource layout sidecar") {
     namespace fs = std::filesystem;
