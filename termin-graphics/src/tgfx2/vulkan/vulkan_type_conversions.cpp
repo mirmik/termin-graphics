@@ -161,14 +161,31 @@ VkShaderStageFlagBits to_vk_shader_stage(ShaderStage stage) {
 
 VkFormat to_vk_vertex_format(VertexFormat fmt) {
     switch (fmt) {
-        case VertexFormat::Float:   return VK_FORMAT_R32_SFLOAT;
-        case VertexFormat::Float2:  return VK_FORMAT_R32G32_SFLOAT;
-        case VertexFormat::Float3:  return VK_FORMAT_R32G32B32_SFLOAT;
-        case VertexFormat::Float4:  return VK_FORMAT_R32G32B32A32_SFLOAT;
-        case VertexFormat::UByte4:  return VK_FORMAT_R8G8B8A8_UINT;
-        case VertexFormat::UByte4N: return VK_FORMAT_R8G8B8A8_UNORM;
+        case VertexFormat::Float:    return VK_FORMAT_R32_SFLOAT;
+        case VertexFormat::Float2:   return VK_FORMAT_R32G32_SFLOAT;
+        case VertexFormat::Float3:   return VK_FORMAT_R32G32B32_SFLOAT;
+        case VertexFormat::Float4:   return VK_FORMAT_R32G32B32A32_SFLOAT;
+        case VertexFormat::Int:      return VK_FORMAT_R32_SINT;
+        case VertexFormat::Int2:     return VK_FORMAT_R32G32_SINT;
+        case VertexFormat::Int3:     return VK_FORMAT_R32G32B32_SINT;
+        case VertexFormat::Int4:     return VK_FORMAT_R32G32B32A32_SINT;
+        case VertexFormat::UInt:     return VK_FORMAT_R32_UINT;
+        case VertexFormat::UInt2:    return VK_FORMAT_R32G32_UINT;
+        case VertexFormat::UInt3:    return VK_FORMAT_R32G32B32_UINT;
+        case VertexFormat::UInt4:    return VK_FORMAT_R32G32B32A32_UINT;
+        case VertexFormat::Short:    return VK_FORMAT_R16_SINT;
+        case VertexFormat::Short2:   return VK_FORMAT_R16G16_SINT;
+        case VertexFormat::Short3:   return VK_FORMAT_R16G16B16_SINT;
+        case VertexFormat::Short4:   return VK_FORMAT_R16G16B16A16_SINT;
+        case VertexFormat::UShort:   return VK_FORMAT_R16_UINT;
+        case VertexFormat::UShort2:  return VK_FORMAT_R16G16_UINT;
+        case VertexFormat::UShort3:  return VK_FORMAT_R16G16B16_UINT;
+        case VertexFormat::UShort4:  return VK_FORMAT_R16G16B16A16_UINT;
+        case VertexFormat::Byte4:    return VK_FORMAT_R8G8B8A8_SINT;
+        case VertexFormat::UByte4:   return VK_FORMAT_R8G8B8A8_UINT;
+        case VertexFormat::UByte4N:  return VK_FORMAT_R8G8B8A8_UNORM;
     }
-    return VK_FORMAT_R32G32B32A32_SFLOAT;
+    return VK_FORMAT_UNDEFINED;
 }
 
 VkBufferUsageFlags to_vk_buffer_usage(BufferUsage usage) {

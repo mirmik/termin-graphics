@@ -28,6 +28,7 @@ extern "C" {
 
 #ifdef TGFX2_HAS_VULKAN
 #include "tgfx2/vulkan/vulkan_render_device.hpp"
+#include "tgfx2/vulkan/vulkan_type_conversions.hpp"
 #endif
 
 static const char* vertex_src = R"(
@@ -298,12 +299,62 @@ static bool render_fsq_artifact_smoke(tgfx::IRenderDevice& device) {
     return matches_canonical_uv;
 }
 
+#ifdef TGFX2_HAS_VULKAN
+static bool verify_vertex_format_conversions() {
+    struct Case {
+        tgfx::VertexFormat source;
+        VkFormat expected;
+    };
+
+    const Case cases[] = {
+        {tgfx::VertexFormat::Float, VK_FORMAT_R32_SFLOAT},
+        {tgfx::VertexFormat::Float2, VK_FORMAT_R32G32_SFLOAT},
+        {tgfx::VertexFormat::Float3, VK_FORMAT_R32G32B32_SFLOAT},
+        {tgfx::VertexFormat::Float4, VK_FORMAT_R32G32B32A32_SFLOAT},
+        {tgfx::VertexFormat::Int, VK_FORMAT_R32_SINT},
+        {tgfx::VertexFormat::Int2, VK_FORMAT_R32G32_SINT},
+        {tgfx::VertexFormat::Int3, VK_FORMAT_R32G32B32_SINT},
+        {tgfx::VertexFormat::Int4, VK_FORMAT_R32G32B32A32_SINT},
+        {tgfx::VertexFormat::UInt, VK_FORMAT_R32_UINT},
+        {tgfx::VertexFormat::UInt2, VK_FORMAT_R32G32_UINT},
+        {tgfx::VertexFormat::UInt3, VK_FORMAT_R32G32B32_UINT},
+        {tgfx::VertexFormat::UInt4, VK_FORMAT_R32G32B32A32_UINT},
+        {tgfx::VertexFormat::Short, VK_FORMAT_R16_SINT},
+        {tgfx::VertexFormat::Short2, VK_FORMAT_R16G16_SINT},
+        {tgfx::VertexFormat::Short3, VK_FORMAT_R16G16B16_SINT},
+        {tgfx::VertexFormat::Short4, VK_FORMAT_R16G16B16A16_SINT},
+        {tgfx::VertexFormat::UShort, VK_FORMAT_R16_UINT},
+        {tgfx::VertexFormat::UShort2, VK_FORMAT_R16G16_UINT},
+        {tgfx::VertexFormat::UShort3, VK_FORMAT_R16G16B16_UINT},
+        {tgfx::VertexFormat::UShort4, VK_FORMAT_R16G16B16A16_UINT},
+        {tgfx::VertexFormat::Byte4, VK_FORMAT_R8G8B8A8_SINT},
+        {tgfx::VertexFormat::UByte4, VK_FORMAT_R8G8B8A8_UINT},
+        {tgfx::VertexFormat::UByte4N, VK_FORMAT_R8G8B8A8_UNORM},
+    };
+
+    for (const auto& c : cases) {
+        const VkFormat actual = tgfx::vk::to_vk_vertex_format(c.source);
+        if (actual != c.expected) {
+            fprintf(stderr,
+                    "Vulkan vertex format conversion mismatch: got %d, expected %d\n",
+                    static_cast<int>(actual),
+                    static_cast<int>(c.expected));
+            return false;
+        }
+    }
+    return true;
+}
+#endif
+
 int main(int argc, char** argv) {
 #ifndef TGFX2_HAS_VULKAN
     printf("Vulkan backend not compiled, skipping test\n");
     return 0;
 #else
     printf("--- tgfx2 Vulkan smoke test (offscreen) ---\n");
+    if (!verify_vertex_format_conversions()) {
+        return 1;
+    }
 
     // Create Vulkan device (no surface — offscreen only). Validation is
     // opt-in so CI runners without VK_LAYER_KHRONOS_validation still exercise
