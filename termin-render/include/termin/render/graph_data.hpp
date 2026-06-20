@@ -4,6 +4,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include <termin/render/render_export.hpp>
+
 #include <trent/trent.h>
 
 namespace tc {
@@ -46,10 +48,10 @@ struct GraphData {
     std::vector<ConnectionData> connections;
     std::vector<ViewportFrameData> viewport_frames;
 
-    NodeData* get_node(const std::string& id);
-    const NodeData* get_node(const std::string& id) const;
+    RENDER_API NodeData* get_node(const std::string& id);
+    RENDER_API const NodeData* get_node(const std::string& id) const;
 
-    static GraphData from_trent(const nos::trent& t);
+    RENDER_API static GraphData from_trent(const nos::trent& t);
 };
 
 } // namespace tc
