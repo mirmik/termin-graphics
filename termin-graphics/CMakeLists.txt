@@ -263,7 +263,9 @@ if(TGFX2_ENABLE_VULKAN)
     if(ANDROID)
         target_compile_definitions(termin_graphics2 PRIVATE VMA_VULKAN_VERSION=1000000)
     endif()
-    target_include_directories(termin_graphics2 PRIVATE "${TERMIN_VMA_DIR}/include")
+    # VMA is a vendored header-only dependency; keep its diagnostics out of
+    # repository-owned warning/lint baselines.
+    target_include_directories(termin_graphics2 SYSTEM PRIVATE "${TERMIN_VMA_DIR}/include")
 endif()
 
 if(TGFX2_ENABLE_D3D11)
