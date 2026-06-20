@@ -1543,6 +1543,44 @@ static std::optional<std::string> find_sdk_tool(const std::string& exe_name, con
     return std::nullopt;
 }
 
+#ifdef _WIN32
+static std::optional<std::string> find_windows_sdk_fxc() {
+    std::vector<std::filesystem::path> roots;
+    if (const char* program_files_x86 = std::getenv("ProgramFiles(x86)")) {
+        if (program_files_x86[0] != '\0') {
+            roots.emplace_back(
+                std::filesystem::path(program_files_x86) / "Windows Kits" / "10" / "bin");
+        }
+    }
+    roots.emplace_back("C:/Program Files (x86)/Windows Kits/10/bin");
+
+    std::vector<std::filesystem::path> candidates;
+    for (const auto& root : roots) {
+        std::error_code ec;
+        if (!std::filesystem::is_directory(root, ec)) {
+            continue;
+        }
+        for (const auto& entry : std::filesystem::directory_iterator(root, ec)) {
+            if (ec) {
+                break;
+            }
+            if (!entry.is_directory(ec)) {
+                continue;
+            }
+            const std::filesystem::path candidate = entry.path() / "x64" / "fxc.exe";
+            if (is_existing_file(candidate)) {
+                candidates.push_back(candidate);
+            }
+        }
+    }
+    if (candidates.empty()) {
+        return std::nullopt;
+    }
+    std::sort(candidates.begin(), candidates.end());
+    return candidates.back().string();
+}
+#endif
+
 static std::optional<std::string> resolve_slangc(const CompileOptions& options, const char* argv0) {
     if (!options.slangc.empty()) {
         if (!is_existing_file(options.slangc)) {
@@ -1600,10 +1638,15 @@ static std::optional<std::string> resolve_fxc(const CompileOptions& options, con
     if (auto found = find_sdk_tool("fxc", argv0)) {
         return found;
     }
+#ifdef _WIN32
+    if (auto found = find_windows_sdk_fxc()) {
+        return found;
+    }
+#endif
 
     std::cerr
         << "termin_shaderc: fxc not found. Set TERMIN_FXC, add fxc to PATH, "
-        << "or install it under TERMIN_SDK/bin.\n";
+        << "install it under TERMIN_SDK/bin, or install the Windows SDK.\n";
     return std::nullopt;
 }
 
