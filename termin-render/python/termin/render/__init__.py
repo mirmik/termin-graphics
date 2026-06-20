@@ -4,11 +4,13 @@ from termin_nanobind.runtime import preload_sdk_libs
 preload_sdk_libs("termin_render")
 
 from termin.render._render_native import (
+    GeometryDrawCall,
+    PhaseDrawCall,
     drawable_capability_id,
     install_drawable_vtable,
     is_drawable,
 )
-from termin.render.drawable import DEFAULT_GEOMETRY_ID, Drawable, GeometryDrawCall
+from termin.render.drawable import DEFAULT_GEOMETRY_ID, Drawable
 from termin.render.drawable_component import DrawableComponent
 from termin.render.immediate import ImmediateRenderer
 
@@ -16,6 +18,7 @@ __all__ = [
     "DEFAULT_GEOMETRY_ID",
     "Drawable",
     "GeometryDrawCall",
+    "PhaseDrawCall",
     "ImmediateRenderer",
     "drawable_capability_id",
     "install_drawable_vtable",

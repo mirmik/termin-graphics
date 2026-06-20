@@ -10,6 +10,10 @@ extern "C" {
 
 namespace nb = nanobind;
 
+namespace termin {
+void bind_drawable(nb::module_& m);
+}
+
 NB_MODULE(_render_native, m) {
     m.def("drawable_capability_id", []() {
         return tc_drawable_capability_id();
@@ -28,4 +32,6 @@ NB_MODULE(_render_native, m) {
         return c && tc_component_is_drawable(c);
     }, nb::arg("c_ptr"),
        "Check if component is drawable");
+
+    termin::bind_drawable(m);
 }

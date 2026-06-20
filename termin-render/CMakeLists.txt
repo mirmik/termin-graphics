@@ -250,6 +250,7 @@ if(TERMIN_BUILD_PYTHON)
     # Drawable capability bindings (install_drawable_vtable, is_drawable, etc.)
     nanobind_add_module(_render_native NB_SHARED
         python/render_native_bindings.cpp
+        python/drawable_bindings.cpp
     )
     target_link_libraries(_render_native PRIVATE termin_render)
     termin_set_rpath_python(_render_native)
