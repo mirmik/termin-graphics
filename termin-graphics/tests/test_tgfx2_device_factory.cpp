@@ -219,6 +219,76 @@ TEST_CASE("backend binding plan separates semantic resources from backend placem
     CHECK(opengl_plan.entries[0].placement.opengl.binding_point == 1u);
 }
 
+TEST_CASE("bound resource groups are preferred over flat compatibility bindings") {
+    tgfx::BackendBindingPlanEntry grouped_entry;
+    grouped_entry.resource.name = "frame_data";
+    grouped_entry.resource.kind = tgfx::ShaderResourceKind::ConstantBuffer;
+    grouped_entry.resource.scope = tgfx::ShaderResourceScope::Frame;
+    grouped_entry.stage_mask = TC_SHADER_STAGE_VERTEX;
+    grouped_entry.placement.kind = tgfx::BackendPlacementKind::OpenGLBinding;
+    grouped_entry.placement.opengl.binding_class =
+        tgfx::OpenGLBindingClass::UniformBuffer;
+    grouped_entry.placement.opengl.binding_point = 2;
+
+    tgfx::BoundResourceValue grouped_value;
+    grouped_value.kind = tgfx::BoundResourceKind::UniformBuffer;
+    grouped_value.buffer = tgfx::BufferHandle{11};
+    grouped_value.range = 64;
+
+    tgfx::BoundResourceSetDesc grouped_desc;
+    grouped_desc.resource_layout_token = 0x1234u;
+    tgfx::BoundResourceGroup frame_group;
+    frame_group.scope = tgfx::ShaderResourceScope::Frame;
+    frame_group.bindings.push_back({grouped_entry, grouped_value});
+    grouped_desc.groups.push_back(frame_group);
+
+    tgfx::BackendBindingPlanEntry clean_entry = grouped_entry;
+    clean_entry.resource.name = "material_data";
+    clean_entry.resource.scope = tgfx::ShaderResourceScope::Material;
+    clean_entry.placement.opengl.binding_point = 3;
+    tgfx::BoundResourceGroup clean_group;
+    clean_group.scope = tgfx::ShaderResourceScope::Material;
+    clean_group.dirty = false;
+    clean_group.bindings.push_back({clean_entry, grouped_value});
+    grouped_desc.groups.push_back(clean_group);
+
+    tgfx::BackendBindingPlanEntry ignored_flat_entry = grouped_entry;
+    ignored_flat_entry.resource.name = "ignored_flat";
+    ignored_flat_entry.placement.opengl.binding_point = 7;
+    grouped_desc.bindings.push_back({ignored_flat_entry, grouped_value});
+
+    tgfx::ResourceBinding legacy_numeric;
+    legacy_numeric.kind = tgfx::ResourceBinding::Kind::UniformBuffer;
+    legacy_numeric.binding = 4;
+    legacy_numeric.buffer = tgfx::BufferHandle{22};
+    legacy_numeric.range = 32;
+
+    CHECK(tgfx::bound_resource_binding_count(grouped_desc) == 2u);
+    CHECK(tgfx::dirty_bound_resource_binding_count(grouped_desc) == 1u);
+    uint32_t dirty_binding_sum = 0;
+    tgfx::for_each_dirty_bound_resource_binding(
+        grouped_desc,
+        [&](const tgfx::BoundResourceBinding& binding) {
+            dirty_binding_sum += binding.plan_entry.placement.opengl.binding_point;
+        });
+    CHECK(dirty_binding_sum == 2u);
+
+    tgfx::ResourceSetDesc legacy_desc =
+        tgfx::legacy_resource_set_desc_from_bound(
+            grouped_desc,
+            std::vector<tgfx::ResourceBinding>{legacy_numeric});
+
+    CHECK(legacy_desc.resource_layout_token == grouped_desc.resource_layout_token);
+    CHECK(legacy_desc.descriptor_set_layout == grouped_desc.resource_layout_token);
+    REQUIRE(legacy_desc.bindings.size() == 3u);
+    CHECK(legacy_desc.bindings[0].binding == 4u);
+    CHECK(legacy_desc.bindings[0].buffer == tgfx::BufferHandle{22});
+    CHECK(legacy_desc.bindings[1].binding == 2u);
+    CHECK(legacy_desc.bindings[1].buffer == tgfx::BufferHandle{11});
+    CHECK(legacy_desc.bindings[1].range == 64u);
+    CHECK(legacy_desc.bindings[2].binding == 3u);
+}
+
 TEST_CASE("backend binding plan validates D3D11 register class and stage conflicts") {
     tc_shader_resource_binding bindings[2]{};
     bindings[0] = make_plan_test_binding(
@@ -270,6 +340,50 @@ TEST_CASE("backend binding plan validates D3D11 register class and stage conflic
     CHECK(error.find("register class") != std::string::npos);
 }
 
+TEST_CASE("backend binding plan validates missing D3D11 placement and class-separated slots") {
+    tc_shader_resource_binding bindings[2]{};
+    bindings[0] = make_plan_test_binding(
+        "material",
+        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+        TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+        2,
+        TC_SHADER_STAGE_FRAGMENT);
+
+    tgfx::BackendBindingPlan plan;
+    std::string error;
+    CHECK(!tgfx::build_backend_binding_plan(
+        tgfx::BackendType::D3D11,
+        bindings,
+        1,
+        plan,
+        &error));
+    CHECK(error.find("missing D3D11 placement") != std::string::npos);
+
+    bindings[0].has_d3d11_placement = 1;
+    bindings[0].d3d11.register_class = TC_SHADER_D3D11_REGISTER_B;
+    bindings[0].d3d11.register_index = 2;
+
+    bindings[1] = make_plan_test_binding(
+        "albedo",
+        TC_SHADER_RESOURCE_TEXTURE,
+        TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+        2,
+        TC_SHADER_STAGE_FRAGMENT);
+    bindings[1].has_d3d11_placement = 1;
+    bindings[1].d3d11.register_class = TC_SHADER_D3D11_REGISTER_T;
+    bindings[1].d3d11.register_index = 2;
+
+    CHECK(tgfx::build_backend_binding_plan(
+        tgfx::BackendType::D3D11,
+        bindings,
+        2,
+        plan,
+        &error));
+    REQUIRE(plan.entries.size() == 2);
+    CHECK(plan.entries[0].placement.d3d11.register_class == tgfx::D3D11RegisterClass::B);
+    CHECK(plan.entries[1].placement.d3d11.register_class == tgfx::D3D11RegisterClass::T);
+}
+
 TEST_CASE("backend binding plan rejects unsupported Vulkan descriptor sets") {
     tc_shader_resource_binding binding = make_plan_test_binding(
         "per_frame",
@@ -288,6 +402,92 @@ TEST_CASE("backend binding plan rejects unsupported Vulkan descriptor sets") {
         plan,
         &error));
     CHECK(error.find("set 0") != std::string::npos);
+}
+
+TEST_CASE("backend binding plan validates Vulkan and OpenGL placement conflicts") {
+    tc_shader_resource_binding bindings[2]{};
+    bindings[0] = make_plan_test_binding(
+        "material",
+        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+        TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+        1,
+        TC_SHADER_STAGE_FRAGMENT);
+    bindings[1] = make_plan_test_binding(
+        "draw_data",
+        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+        TC_SHADER_RESOURCE_SCOPE_DRAW,
+        1,
+        TC_SHADER_STAGE_FRAGMENT);
+
+    tgfx::BackendBindingPlan plan;
+    std::string error;
+    CHECK(!tgfx::build_backend_binding_plan(
+        tgfx::BackendType::OpenGL,
+        bindings,
+        2,
+        plan,
+        &error));
+    CHECK(error.find("OpenGL binding plan conflict") != std::string::npos);
+
+    bindings[1] = make_plan_test_binding(
+        "normal_map",
+        TC_SHADER_RESOURCE_TEXTURE,
+        TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+        1,
+        TC_SHADER_STAGE_FRAGMENT);
+    CHECK(!tgfx::build_backend_binding_plan(
+        tgfx::BackendType::Vulkan,
+        bindings,
+        2,
+        plan,
+        &error));
+    CHECK(error.find("Vulkan binding plan conflict") != std::string::npos);
+
+    bindings[0] = make_plan_test_binding(
+        "albedo",
+        TC_SHADER_RESOURCE_TEXTURE,
+        TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+        3,
+        TC_SHADER_STAGE_FRAGMENT);
+    bindings[1] = make_plan_test_binding(
+        "normal_map",
+        TC_SHADER_RESOURCE_TEXTURE,
+        TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+        3,
+        TC_SHADER_STAGE_FRAGMENT);
+    CHECK(!tgfx::build_backend_binding_plan(
+        tgfx::BackendType::OpenGL,
+        bindings,
+        2,
+        plan,
+        &error));
+    CHECK(error.find("OpenGL binding plan conflict") != std::string::npos);
+}
+
+TEST_CASE("backend binding plan rejects incompatible duplicate semantic names") {
+    tc_shader_resource_binding bindings[2]{};
+    bindings[0] = make_plan_test_binding(
+        "material",
+        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+        TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+        1,
+        TC_SHADER_STAGE_FRAGMENT);
+    bindings[1] = make_plan_test_binding(
+        "material",
+        TC_SHADER_RESOURCE_TEXTURE,
+        TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+        2,
+        TC_SHADER_STAGE_FRAGMENT);
+
+    tgfx::BackendBindingPlan plan;
+    std::string error;
+    CHECK(!tgfx::build_backend_binding_plan(
+        tgfx::BackendType::Vulkan,
+        bindings,
+        2,
+        plan,
+        &error));
+    CHECK(error.find("semantic conflict") != std::string::npos);
 }
 
 TEST_CASE("tc_shader records language and artifact policy") {

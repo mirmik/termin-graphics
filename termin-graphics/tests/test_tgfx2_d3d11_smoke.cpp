@@ -30,6 +30,7 @@
 #include <iterator>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 extern "C" {
@@ -827,8 +828,14 @@ int main() {
         tgfx::BoundResourceSetDesc normal_resource_set_desc;
         normal_resource_set_desc.resource_layout_token =
             device->pipeline_resource_layout_token(normal_pipeline);
-        normal_resource_set_desc.bindings.push_back({per_frame_plan, per_frame_value});
-        normal_resource_set_desc.bindings.push_back({draw_data_plan, draw_data_value});
+        tgfx::BoundResourceGroup frame_group;
+        frame_group.scope = tgfx::ShaderResourceScope::Frame;
+        frame_group.bindings.push_back({per_frame_plan, per_frame_value});
+        normal_resource_set_desc.groups.push_back(std::move(frame_group));
+        tgfx::BoundResourceGroup draw_group;
+        draw_group.scope = tgfx::ShaderResourceScope::Draw;
+        draw_group.bindings.push_back({draw_data_plan, draw_data_value});
+        normal_resource_set_desc.groups.push_back(std::move(draw_group));
         auto normal_resource_set = device->create_bound_resource_set(normal_resource_set_desc);
         if (!normal_vbo || !per_frame_cb || !draw_data_cb || !normal_resource_set) {
             std::fprintf(stderr, "D3D11 smoke: normal material resources failed\n");

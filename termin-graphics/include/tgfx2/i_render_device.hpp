@@ -50,7 +50,15 @@ public:
     virtual SamplerHandle create_sampler(const SamplerDesc& desc) = 0;
     virtual ShaderHandle create_shader(const ShaderDesc& desc) = 0;
     virtual PipelineHandle create_pipeline(const PipelineDesc& desc) = 0;
+    // Low-level legacy numeric binding path. Migrated shader/material code
+    // should call create_bound_resource_set() so backend placement comes from
+    // BackendBindingPlanEntry rather than ResourceBinding::set/binding.
     virtual ResourceSetHandle create_resource_set(const ResourceSetDesc& desc) = 0;
+    // Primary backend binding boundary for migrated paths: values are separate
+    // from backend placement, and each concrete backend consumes its own
+    // BackendPlacement payload. `legacy_numeric_bindings` carries explicit
+    // low-level ResourceBinding entries that coexist with planned bindings
+    // during the migration.
     virtual ResourceSetHandle create_bound_resource_set(
         const BoundResourceSetDesc& desc,
         const std::vector<ResourceBinding>& legacy_numeric_bindings = {}) {

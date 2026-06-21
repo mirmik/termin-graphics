@@ -237,24 +237,126 @@ bool d3d11_conflicts(
         (a.stage_mask & b.stage_mask) != 0;
 }
 
+bool same_semantic_resource(
+    const BackendBindingPlanEntry& a,
+    const BackendBindingPlanEntry& b
+) {
+    return a.resource.name == b.resource.name &&
+        a.resource.kind == b.resource.kind &&
+        a.resource.scope == b.resource.scope;
+}
+
+bool semantic_conflicts(
+    const BackendBindingPlanEntry& a,
+    const BackendBindingPlanEntry& b
+) {
+    return a.resource.name == b.resource.name && !same_semantic_resource(a, b);
+}
+
+bool vulkan_conflicts(
+    const BackendBindingPlanEntry& a,
+    const BackendBindingPlanEntry& b
+) {
+    if (a.placement.kind != BackendPlacementKind::VulkanDescriptor ||
+        b.placement.kind != BackendPlacementKind::VulkanDescriptor) {
+        return false;
+    }
+    if (a.placement.vulkan.set != b.placement.vulkan.set ||
+        a.placement.vulkan.binding != b.placement.vulkan.binding) {
+        return false;
+    }
+    if (same_semantic_resource(a, b) &&
+        a.placement.vulkan.descriptor_kind == b.placement.vulkan.descriptor_kind) {
+        return false;
+    }
+    return true;
+}
+
+bool opengl_conflicts(
+    const BackendBindingPlanEntry& a,
+    const BackendBindingPlanEntry& b
+) {
+    if (a.placement.kind != BackendPlacementKind::OpenGLBinding ||
+        b.placement.kind != BackendPlacementKind::OpenGLBinding) {
+        return false;
+    }
+    if (a.placement.opengl.binding_class != b.placement.opengl.binding_class) {
+        return false;
+    }
+
+    const OpenGLBindingClass binding_class = a.placement.opengl.binding_class;
+    switch (binding_class) {
+        case OpenGLBindingClass::UniformBuffer:
+        case OpenGLBindingClass::StorageBuffer:
+        case OpenGLBindingClass::ImageUnit:
+            if (a.placement.opengl.binding_point != b.placement.opengl.binding_point) {
+                return false;
+            }
+            break;
+        case OpenGLBindingClass::TextureUnit:
+        case OpenGLBindingClass::SamplerUnit:
+            if (a.placement.opengl.texture_unit != b.placement.opengl.texture_unit) {
+                return false;
+            }
+            break;
+        case OpenGLBindingClass::None:
+        default:
+            return false;
+    }
+
+    return !same_semantic_resource(a, b);
+}
+
 bool validate_plan_conflicts(
     const BackendBindingPlan& plan,
     std::string* error
 ) {
-    if (plan.backend != BackendType::D3D11) {
-        return true;
-    }
     for (size_t i = 0; i < plan.entries.size(); ++i) {
         for (size_t j = i + 1; j < plan.entries.size(); ++j) {
-            if (!d3d11_conflicts(plan.entries[i], plan.entries[j])) {
-                continue;
+            const BackendBindingPlanEntry& a = plan.entries[i];
+            const BackendBindingPlanEntry& b = plan.entries[j];
+
+            if (semantic_conflicts(a, b)) {
+                set_error(
+                    error,
+                    "binding plan semantic conflict for resource '" +
+                    a.resource.name + "'");
+                return false;
             }
-            set_error(
-                error,
-                "D3D11 binding plan conflict between resource '" +
-                plan.entries[i].resource.name + "' and '" +
-                plan.entries[j].resource.name + "'");
-            return false;
+
+            switch (plan.backend) {
+                case BackendType::Vulkan:
+                    if (vulkan_conflicts(a, b)) {
+                        set_error(
+                            error,
+                            "Vulkan binding plan conflict between resource '" +
+                            a.resource.name + "' and '" + b.resource.name + "'");
+                        return false;
+                    }
+                    break;
+                case BackendType::D3D11:
+                    if (d3d11_conflicts(a, b)) {
+                        set_error(
+                            error,
+                            "D3D11 binding plan conflict between resource '" +
+                            a.resource.name + "' and '" + b.resource.name + "'");
+                        return false;
+                    }
+                    break;
+                case BackendType::OpenGL:
+                    if (opengl_conflicts(a, b)) {
+                        set_error(
+                            error,
+                            "OpenGL binding plan conflict between resource '" +
+                            a.resource.name + "' and '" + b.resource.name + "'");
+                        return false;
+                    }
+                    break;
+                case BackendType::Metal:
+                case BackendType::Null:
+                default:
+                    break;
+            }
         }
     }
     return true;
@@ -407,25 +509,50 @@ ResourceBinding resource_binding_from_bound(const BoundResourceBinding& binding)
     return out;
 }
 
+size_t bound_resource_binding_count(const BoundResourceSetDesc& desc) {
+    if (!desc.groups.empty()) {
+        size_t count = 0;
+        for (const BoundResourceGroup& group : desc.groups) {
+            count += group.bindings.size();
+        }
+        return count;
+    }
+    return desc.bindings.size();
+}
+
+size_t dirty_bound_resource_binding_count(const BoundResourceSetDesc& desc) {
+    if (!desc.groups.empty()) {
+        size_t count = 0;
+        for (const BoundResourceGroup& group : desc.groups) {
+            if (group.dirty) {
+                count += group.bindings.size();
+            }
+        }
+        return count;
+    }
+    return desc.bindings.size();
+}
+
 ResourceSetDesc legacy_resource_set_desc_from_bound(
     const BoundResourceSetDesc& bound_desc,
     const std::vector<ResourceBinding>& legacy_numeric_bindings
 ) {
     ResourceSetDesc legacy_desc;
     legacy_desc.resource_layout_token = bound_desc.resource_layout_token;
-    // Transitional Vulkan compatibility until ResourceSetDesc no longer
-    // exposes descriptor-set-shaped placement.
+    // Compatibility adapter for custom/unported backends that still consume
+    // ResourceSetDesc. Concrete tgfx2 backends should prefer
+    // create_bound_resource_set() and read placement from BackendBindingPlan.
     legacy_desc.descriptor_set_layout = bound_desc.resource_layout_token;
 
     legacy_desc.bindings.reserve(
-        legacy_numeric_bindings.size() + bound_desc.bindings.size());
+        legacy_numeric_bindings.size() + bound_resource_binding_count(bound_desc));
     legacy_desc.bindings.insert(
         legacy_desc.bindings.end(),
         legacy_numeric_bindings.begin(),
         legacy_numeric_bindings.end());
-    for (const BoundResourceBinding& planned : bound_desc.bindings) {
+    for_each_bound_resource_binding(bound_desc, [&](const BoundResourceBinding& planned) {
         legacy_desc.bindings.push_back(resource_binding_from_bound(planned));
-    }
+    });
     return legacy_desc;
 }
 

@@ -104,7 +104,7 @@ def test_termin_shaderc_compiles_slang_to_d3d11_cso_with_fake_tools(tmp_path: Pa
             "size": 16,
             "d3d11": {
                 "register_class": "b",
-                "register_index": 1,
+                "register_index": 0,
             },
         },
         {
@@ -117,7 +117,7 @@ def test_termin_shaderc_compiles_slang_to_d3d11_cso_with_fake_tools(tmp_path: Pa
             "size": 0,
             "d3d11": {
                 "register_class": "t",
-                "register_index": 4,
+                "register_index": 0,
             },
         },
     ]

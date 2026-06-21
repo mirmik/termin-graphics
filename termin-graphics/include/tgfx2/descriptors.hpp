@@ -90,7 +90,13 @@ struct RenderPassDesc {
     bool has_depth = false;
 };
 
-// --- Resource binding ---
+// --- Legacy numeric resource binding ---
+//
+// ResourceBinding is the low-level compatibility path for callers that already
+// know backend numeric placement. Migrated shader/material code should bind by
+// semantic resource name and let BackendBindingPlan + BoundResourceSetDesc carry
+// backend placement. Do not add new backend-specific fields here unless a
+// legacy API explicitly needs them.
 
 struct ResourceBinding {
     uint32_t set = 0;
@@ -119,9 +125,9 @@ struct ResourceSetDesc {
     // because they do not have descriptor set layout objects.
     uintptr_t resource_layout_token = 0;
 
-    // Transitional Vulkan compatibility field. New code should use
-    // resource_layout_token; Vulkan accepts either until ResourceSetDesc is
-    // split into resource values plus backend binding plan.
+    // Legacy Vulkan compatibility field. New code should use
+    // resource_layout_token plus create_bound_resource_set(); concrete tgfx2
+    // backends consume BoundResourceSetDesc directly.
     uintptr_t descriptor_set_layout = 0;
 
     uintptr_t effective_resource_layout_token() const {

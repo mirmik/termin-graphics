@@ -11,8 +11,10 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "tgfx2/backend_binding_plan.hpp"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/engine_shader_catalog.hpp"
@@ -23,6 +25,7 @@
 #include "tgfx2/tc_shader_bridge.hpp"
 
 extern "C" {
+#include "tgfx/resources/tc_shader.h"
 #include "tgfx/resources/tc_shader_registry.h"
 }
 
@@ -48,6 +51,25 @@ layout(location = 0) in vec3 vColor;
 layout(location = 0) out vec4 FragColor;
 void main() {
     FragColor = vec4(vColor, 1.0);
+}
+)";
+
+static const char* bound_resource_vertex_src = R"(
+#version 450 core
+layout(location = 0) in vec2 aPos;
+void main() {
+    gl_Position = vec4(aPos, 0.0, 1.0);
+}
+)";
+
+static const char* bound_resource_fragment_src = R"(
+#version 450 core
+layout(binding = 0) uniform ColorBlock {
+    vec4 color;
+};
+layout(location = 0) out vec4 FragColor;
+void main() {
+    FragColor = color;
 }
 )";
 
@@ -297,6 +319,168 @@ static bool render_fsq_artifact_smoke(tgfx::IRenderDevice& device) {
     device.destroy(fs);
     device.destroy(rt);
     return matches_canonical_uv;
+}
+
+static bool render_bound_resource_set_smoke(tgfx::IRenderDevice& device) {
+    constexpr uint32_t kWidth = 32;
+    constexpr uint32_t kHeight = 32;
+
+    tgfx::ShaderDesc vs_desc;
+    vs_desc.stage = tgfx::ShaderStage::Vertex;
+    vs_desc.source = bound_resource_vertex_src;
+    vs_desc.debug_name = "vulkan-bound-resource-set:vertex";
+    tgfx::ShaderHandle vs = device.create_shader(vs_desc);
+
+    tgfx::ShaderDesc fs_desc;
+    fs_desc.stage = tgfx::ShaderStage::Fragment;
+    fs_desc.source = bound_resource_fragment_src;
+    fs_desc.debug_name = "vulkan-bound-resource-set:fragment";
+    tgfx::ShaderHandle fs = device.create_shader(fs_desc);
+
+    tgfx::PipelineDesc pipeline_desc;
+    pipeline_desc.vertex_shader = vs;
+    pipeline_desc.fragment_shader = fs;
+    pipeline_desc.topology = tgfx::PrimitiveTopology::TriangleList;
+    pipeline_desc.depth_stencil.depth_test = false;
+    pipeline_desc.depth_stencil.depth_write = false;
+    pipeline_desc.depth_format = tgfx::PixelFormat::Undefined;
+    pipeline_desc.raster.cull = tgfx::CullMode::None;
+    pipeline_desc.color_formats = {tgfx::PixelFormat::RGBA8_UNorm};
+
+    tgfx::VertexBufferLayout layout;
+    layout.stride = 2 * sizeof(float);
+    layout.attributes = {{0, tgfx::VertexFormat::Float2, 0}};
+    pipeline_desc.vertex_layouts.push_back(layout);
+
+    tgfx::PipelineHandle pipeline = device.create_pipeline(pipeline_desc);
+    const uintptr_t resource_layout_token =
+        device.pipeline_resource_layout_token(pipeline);
+    if (resource_layout_token == 0) {
+        fprintf(stderr, "Vulkan bound smoke: pipeline resource layout token is null\n");
+        return false;
+    }
+
+    const float vertices[] = {
+        -1.0f, -1.0f,
+         3.0f, -1.0f,
+        -1.0f,  3.0f,
+    };
+    tgfx::BufferDesc vb_desc;
+    vb_desc.size = sizeof(vertices);
+    vb_desc.usage = tgfx::BufferUsage::Vertex | tgfx::BufferUsage::CopyDst;
+    tgfx::BufferHandle vb = device.create_buffer(vb_desc);
+    device.upload_buffer(
+        vb,
+        std::span<const uint8_t>(
+            reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)));
+
+    const float color_block[] = {0.15f, 0.65f, 0.25f, 1.0f};
+    tgfx::BufferDesc ubo_desc;
+    ubo_desc.size = sizeof(color_block);
+    ubo_desc.usage = tgfx::BufferUsage::Uniform | tgfx::BufferUsage::CopyDst;
+    tgfx::BufferHandle ubo = device.create_buffer(ubo_desc);
+    device.upload_buffer(
+        ubo,
+        std::span<const uint8_t>(
+            reinterpret_cast<const uint8_t*>(color_block), sizeof(color_block)));
+
+    tgfx::BackendBindingPlanEntry plan_entry;
+    plan_entry.resource.name = "ColorBlock";
+    plan_entry.resource.kind = tgfx::ShaderResourceKind::ConstantBuffer;
+    plan_entry.resource.scope = tgfx::ShaderResourceScope::Material;
+    plan_entry.stage_mask = TC_SHADER_STAGE_FRAGMENT;
+    plan_entry.size = sizeof(color_block);
+    plan_entry.placement.kind = tgfx::BackendPlacementKind::VulkanDescriptor;
+    plan_entry.placement.vulkan.set = 0;
+    plan_entry.placement.vulkan.binding = 0;
+    plan_entry.placement.vulkan.descriptor_kind = tgfx::BackendDescriptorKind::UniformBuffer;
+
+    tgfx::BoundResourceValue value;
+    value.kind = tgfx::BoundResourceKind::UniformBuffer;
+    value.buffer = ubo;
+    value.range = sizeof(color_block);
+
+    tgfx::BoundResourceSetDesc bound_desc;
+    bound_desc.resource_layout_token = resource_layout_token;
+    tgfx::BoundResourceGroup material_group;
+    material_group.scope = tgfx::ShaderResourceScope::Material;
+    material_group.bindings.push_back({plan_entry, value});
+    bound_desc.groups.push_back(std::move(material_group));
+    tgfx::ResourceSetHandle resource_set =
+        device.create_bound_resource_set(bound_desc);
+    if (!resource_set) {
+        fprintf(stderr, "Vulkan bound smoke: create_bound_resource_set failed\n");
+        return false;
+    }
+
+    tgfx::BoundResourceSetDesc wrong_backend_desc = bound_desc;
+    wrong_backend_desc.groups[0].bindings[0].plan_entry.placement.kind =
+        tgfx::BackendPlacementKind::OpenGLBinding;
+    if (device.create_bound_resource_set(wrong_backend_desc)) {
+        fprintf(stderr, "Vulkan bound smoke: accepted non-Vulkan placement\n");
+        return false;
+    }
+
+    tgfx::BoundResourceSetDesc wrong_descriptor_desc = bound_desc;
+    wrong_descriptor_desc.groups[0].bindings[0].plan_entry.placement.vulkan.descriptor_kind =
+        tgfx::BackendDescriptorKind::Sampler;
+    if (device.create_bound_resource_set(wrong_descriptor_desc)) {
+        fprintf(stderr, "Vulkan bound smoke: accepted wrong descriptor kind\n");
+        return false;
+    }
+
+    tgfx::TextureDesc rt_desc;
+    rt_desc.width = kWidth;
+    rt_desc.height = kHeight;
+    rt_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    rt_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
+    tgfx::TextureHandle rt = device.create_texture(rt_desc);
+
+    auto cmd = device.create_command_list();
+    cmd->begin();
+
+    tgfx::RenderPassDesc pass;
+    tgfx::ColorAttachmentDesc color_attachment;
+    color_attachment.texture = rt;
+    color_attachment.load = tgfx::LoadOp::Clear;
+    color_attachment.clear_color[0] = 0.0f;
+    color_attachment.clear_color[1] = 0.0f;
+    color_attachment.clear_color[2] = 0.0f;
+    color_attachment.clear_color[3] = 1.0f;
+    pass.colors.push_back(color_attachment);
+
+    cmd->begin_render_pass(pass);
+    cmd->set_viewport(0, 0, kWidth, kHeight);
+    cmd->bind_pipeline(pipeline);
+    cmd->bind_resource_set(resource_set);
+    cmd->bind_vertex_buffer(0, vb);
+    cmd->draw(3);
+    cmd->end_render_pass();
+    cmd->end();
+    device.submit(*cmd);
+    device.wait_idle();
+
+    float pixel[4] = {};
+    const bool read_ok = device.read_pixel_rgba8(rt, kWidth / 2, kHeight / 2, pixel);
+    printf("Vulkan bound resource set center pixel: %s (%.2f %.2f %.2f %.2f)\n",
+           read_ok ? "ok" : "failed",
+           pixel[0], pixel[1], pixel[2], pixel[3]);
+
+    const bool pass_ok =
+        read_ok &&
+        pixel[0] > 0.08f && pixel[0] < 0.30f &&
+        pixel[1] > 0.50f && pixel[1] < 0.80f &&
+        pixel[2] > 0.15f && pixel[2] < 0.40f &&
+        pixel[3] > 0.90f;
+
+    device.destroy(resource_set);
+    device.destroy(ubo);
+    device.destroy(vb);
+    device.destroy(rt);
+    device.destroy(pipeline);
+    device.destroy(vs);
+    device.destroy(fs);
+    return pass_ok;
 }
 
 #ifdef TGFX2_HAS_VULKAN
@@ -637,6 +821,11 @@ int main(int argc, char** argv) {
     bool center_drawn = (pixels[center] > 30 || pixels[center+1] > 30 || pixels[center+2] > 60);
     bool corner_is_blue = (pixels[0] < 10 && pixels[1] < 10 && pixels[2] > 40);
 
+    bool bound_resource_ok = render_bound_resource_set_smoke(*device);
+    if (!bound_resource_ok) {
+        fprintf(stderr, "Vulkan bound resource set smoke failed\n");
+    }
+
     // --- Generated Slang artifact smoke ---
     bool slang_artifact_ok = true;
     auto slangc = resolve_slangc();
@@ -851,9 +1040,9 @@ int main(int argc, char** argv) {
     device->destroy(fs);
     device.reset();
 
-    printf("\nCenter drawn: %d, Corner is blue: %d, Slang artifacts: %d\n",
-           center_drawn, corner_is_blue, slang_artifact_ok);
-    if (center_drawn && corner_is_blue && slang_artifact_ok) {
+    printf("\nCenter drawn: %d, Corner is blue: %d, Bound resources: %d, Slang artifacts: %d\n",
+           center_drawn, corner_is_blue, bound_resource_ok, slang_artifact_ok);
+    if (center_drawn && corner_is_blue && bound_resource_ok && slang_artifact_ok) {
         printf("VULKAN SMOKE TEST PASSED\n");
         return 0;
     } else {

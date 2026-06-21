@@ -4,3 +4,4 @@
 
 - [Pipeline Layout Architecture](pipeline-layout.md) — current shader-reflected pipeline layouts and the scope-first binding target.
 - [Shader Resource Contracts](shader-resource-contracts.md) — semantic ownership model for shader authors, pass code, `termin_shaderc`, runtime, and backends.
+- [tgfx2 Backend Binding Plan](backend-binding-plan.md) — live contract for semantic resources, backend placement plans, bound resource values, and legacy numeric compatibility.

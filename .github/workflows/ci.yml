@@ -91,6 +91,23 @@ jobs:
         shell: pwsh
         run: .\build-sdk.ps1 --no-wheels --no-parallel --dry-run
 
+  # ── 0d. D3D11 tgfx2 smoke ─────────────────────────────────────
+  tgfx2-d3d11-bound-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Validate D3D11 bound resource path
+        shell: pwsh
+        run: .\scripts\validate-tgfx2-d3d11-bound-path.ps1
+
   # ── 1. Build C++ libraries ───────────────────────────────────────
   build-cpp-libs:
     runs-on: ubuntu-latest

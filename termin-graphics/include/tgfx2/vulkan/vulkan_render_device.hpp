@@ -80,11 +80,26 @@ struct VkPipelineResource {
 struct VkResourceSetResource {
     VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
     ResourceSetDesc desc;
+    BoundResourceSetDesc bound_desc;
+    std::vector<ResourceBinding> legacy_numeric_bindings;
+    bool has_bound_desc = false;
     // Dynamic offsets emitted at bind time, in binding-number order.
     // Sized for the worst-case dynamic UBO count per layout.
     static constexpr uint32_t MAX_DYNAMIC_OFFSETS = 8;
     uint32_t dynamic_offsets[MAX_DYNAMIC_OFFSETS] = {};
     uint32_t dynamic_offset_count = 0;
+};
+
+struct VulkanResolvedResourceBinding {
+    uint32_t binding = 0;
+    uint32_t array_element = 0;
+    VkDescriptorType expected_descriptor_type = VK_DESCRIPTOR_TYPE_MAX_ENUM;
+    BoundResourceKind kind = BoundResourceKind::UniformBuffer;
+    BufferHandle buffer;
+    TextureHandle texture;
+    SamplerHandle sampler;
+    uint64_t offset = 0;
+    uint64_t range = 0;
 };
 
 struct VkFramebufferCacheKey {
@@ -392,6 +407,9 @@ public:
     ShaderHandle create_shader(const ShaderDesc& desc) override;
     PipelineHandle create_pipeline(const PipelineDesc& desc) override;
     ResourceSetHandle create_resource_set(const ResourceSetDesc& desc) override;
+    ResourceSetHandle create_bound_resource_set(
+        const BoundResourceSetDesc& desc,
+        const std::vector<ResourceBinding>& legacy_numeric_bindings = {}) override;
 
     void destroy(BufferHandle handle) override;
     void destroy(TextureHandle handle) override;
@@ -508,10 +526,10 @@ public:
     // and an overflow is an error we log rather than silently wrap.
     uint32_t ring_ubo_write(const void* data, uint32_t size) override;
     VkBuffer ring_ubo_buffer() const { return ring_ubo_buffer_; }
-    // The ring buffer exposed as a normal BufferHandle so that ring-backed
-    // UBO bindings route through the existing ResourceBinding path
-    // (create_resource_set treats any binding on this handle as a DYNAMIC
-    // UBO and emits the offset as a dynamic descriptor offset).
+    // The ring buffer exposed as a normal BufferHandle. Both legacy numeric
+    // bindings and BoundResourceSetDesc values can reference this handle; the
+    // descriptor-set creator recognises it and emits the offset as a dynamic
+    // descriptor offset.
     BufferHandle ring_ubo_handle() const override { return ring_ubo_handle_; }
     // minUniformBufferOffsetAlignment from VkPhysicalDeviceLimits. 256 on
     // NVIDIA desktop, 64 on AMD desktop, up to 256 on mobile. Used by the
@@ -610,6 +628,13 @@ private:
     void create_allocator();
     void create_command_pool();
     void create_descriptor_pool();
+    ResourceSetHandle create_resolved_resource_set(
+        VkDescriptorSetLayout layout,
+        const std::vector<VkDescriptorSetLayoutBinding>& layout_bindings,
+        uintptr_t resource_layout_token,
+        std::span<const VulkanResolvedResourceBinding> resolved_bindings,
+        VkResourceSetResource resource,
+        uint64_t cache_domain);
     void create_ring_ubo();
     void create_transient_vertex_ring();
 

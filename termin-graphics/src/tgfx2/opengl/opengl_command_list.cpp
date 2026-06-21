@@ -408,9 +408,9 @@ void OpenGLCommandList::bind_resource_set(ResourceSetHandle set,
         for (const ResourceBinding& b : rs->legacy_numeric_bindings) {
             bind_legacy_resource_binding(device_, b);
         }
-        for (const BoundResourceBinding& b : rs->bound_desc.bindings) {
+        for_each_dirty_bound_resource_binding(rs->bound_desc, [&](const BoundResourceBinding& b) {
             bind_bound_resource_binding(device_, b);
-        }
+        });
         return;
     }
 

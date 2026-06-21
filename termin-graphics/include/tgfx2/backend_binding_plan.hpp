@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -133,10 +134,62 @@ struct BoundResourceBinding {
     BoundResourceValue value;
 };
 
-struct BoundResourceSetDesc {
-    uintptr_t resource_layout_token = 0;
+struct BoundResourceGroup {
+    ShaderResourceScope scope = ShaderResourceScope::Unknown;
+    // True when this scope changed since the last emitted resource set for the
+    // current pass/pipeline. Backends that retain native binding state
+    // (OpenGL/D3D11) can skip clean groups; descriptor-set backends may still
+    // consume all groups to build a complete backend resource object.
+    bool dirty = true;
     std::vector<BoundResourceBinding> bindings;
 };
+
+struct BoundResourceSetDesc {
+    uintptr_t resource_layout_token = 0;
+    // Preferred representation for migrated paths. Groups preserve the shader
+    // resource scope at the backend boundary so frame/pass/material/draw
+    // bindings do not need to be inferred from names or numeric slots.
+    std::vector<BoundResourceGroup> groups;
+    // Transitional flat compatibility representation. If groups is non-empty,
+    // concrete tgfx2 backends and adapters consume groups and ignore this list.
+    std::vector<BoundResourceBinding> bindings;
+};
+
+template <typename Fn>
+void for_each_bound_resource_binding(const BoundResourceSetDesc& desc, Fn&& fn) {
+    if (!desc.groups.empty()) {
+        for (const BoundResourceGroup& group : desc.groups) {
+            for (const BoundResourceBinding& binding : group.bindings) {
+                fn(binding);
+            }
+        }
+        return;
+    }
+    for (const BoundResourceBinding& binding : desc.bindings) {
+        fn(binding);
+    }
+}
+
+template <typename Fn>
+void for_each_dirty_bound_resource_binding(const BoundResourceSetDesc& desc, Fn&& fn) {
+    if (!desc.groups.empty()) {
+        for (const BoundResourceGroup& group : desc.groups) {
+            if (!group.dirty) {
+                continue;
+            }
+            for (const BoundResourceBinding& binding : group.bindings) {
+                fn(binding);
+            }
+        }
+        return;
+    }
+    for (const BoundResourceBinding& binding : desc.bindings) {
+        fn(binding);
+    }
+}
+
+TGFX2_API size_t bound_resource_binding_count(const BoundResourceSetDesc& desc);
+TGFX2_API size_t dirty_bound_resource_binding_count(const BoundResourceSetDesc& desc);
 
 TGFX2_API bool build_backend_binding_plan(
     BackendType backend,
@@ -148,6 +201,10 @@ TGFX2_API bool build_backend_binding_plan(
 TGFX2_API ResourceBinding resource_binding_from_bound(
     const BoundResourceBinding& binding);
 
+// Compatibility adapter for custom/unported backends that still implement only
+// create_resource_set(ResourceSetDesc). Concrete tgfx2 backends should override
+// create_bound_resource_set() and consume BackendBindingPlanEntry placement
+// directly.
 TGFX2_API ResourceSetDesc legacy_resource_set_desc_from_bound(
     const BoundResourceSetDesc& bound_desc,
     const std::vector<ResourceBinding>& legacy_numeric_bindings = {});

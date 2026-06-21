@@ -3,6 +3,7 @@
 #include <exception>
 #include <memory>
 #include <span>
+#include <utility>
 
 #include <SDL.h>
 
@@ -183,7 +184,10 @@ int main() {
 
     tgfx::BoundResourceSetDesc bound_desc;
     bound_desc.resource_layout_token = resource_layout_token;
-    bound_desc.bindings.push_back({plan_entry, value});
+    tgfx::BoundResourceGroup material_group;
+    material_group.scope = tgfx::ShaderResourceScope::Material;
+    material_group.bindings.push_back({plan_entry, value});
+    bound_desc.groups.push_back(std::move(material_group));
     tgfx::ResourceSetHandle resource_set =
         device->create_bound_resource_set(bound_desc);
 

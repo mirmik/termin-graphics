@@ -97,13 +97,15 @@ private:
         std::vector<SymbolicBinding> symbolic;
     };
 
-    // Pending resource bindings grouped by update scope. The current backends
-    // still receive a flattened ResourceSetDesc; this structure prepares the
-    // RenderContext side for dirty-per-scope and future Vulkan descriptor sets.
+    // Pending resource bindings grouped by update scope. Symbolic/migrated
+    // paths are emitted as BoundResourceSetDesc so backend command lists can
+    // apply their native placement model. Numeric entries remain as an explicit
+    // legacy side channel until low-level binding APIs are retired.
     std::array<
         ResourceBindingBucket,
         static_cast<size_t>(ResourceScope::Count)
     > pending_binding_buckets_;
+    std::array<bool, static_cast<size_t>(ResourceScope::Count)> dirty_binding_scopes_{};
     bool bindings_dirty_ = true;
     ResourceSetHandle current_resource_set_;
 
@@ -114,7 +116,11 @@ private:
     bool active_backend_binding_plan_valid_ = false;
 
     static ResourceScope scope_from_shader_resource(uint32_t shader_scope);
+    static ShaderResourceScope shader_scope_from_resource_scope(ResourceScope scope);
     static ResourceScope default_numeric_scope();
+    void mark_binding_scope_dirty(ResourceScope scope);
+    void mark_all_binding_scopes_dirty();
+    void clear_dirty_binding_scopes();
     ResourceBinding* find_pending_binding(
         ResourceScope scope,
         uint32_t binding,
@@ -132,6 +138,7 @@ private:
         const BoundResourceValue& value);
     bool pending_binding_buckets_empty() const;
     void clear_pending_binding_buckets();
+    bool any_dirty_binding_scope() const;
     BoundResourceSetDesc build_pending_bound_resource_set(
         uintptr_t resource_layout_token) const;
 
@@ -236,8 +243,8 @@ public:
     // Legacy numeric uniform binding. The buffer is resolved into a
     // ResourceSet lazily at draw time; call-sites do not manage
     // ResourceSetHandle lifecycles. Migrated Slang paths should prefer
-    // bind_uniform(name). The `set` parameter is currently flattened by the
-    // Vulkan backend and kept for compatibility with future scoped layouts.
+    // bind_uniform(name). The `set` parameter is legacy numeric placement;
+    // migrated symbolic paths get backend placement from BackendBindingPlan.
     // Passing range=0 means \"bind whole buffer\" (backend uses glBindBufferBase).
     void bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
                              uint64_t offset = 0, uint64_t range = 0,
@@ -276,7 +283,7 @@ public:
     }
 
     // Write `size` bytes of `data` into the backend's shared ring UBO
-    // and bind it at `binding` in the given descriptor set. No
+    // and bind it at `binding` in the given backend resource layout. No
     // caller-managed BufferHandle, no per-draw upload_buffer, no
     // descriptor-set allocation for UBO-only differences between draws.
     // On Vulkan this becomes a dynamic descriptor offset; on OpenGL as a
@@ -284,8 +291,8 @@ public:
     // UBO block size declared by the shader.
     //
     // `binding` must be one of the layout's UNIFORM_BUFFER_DYNAMIC slots.
-    // `set` is retained for compatibility with future scoped layouts; the
-    // current Vulkan backend flattens migrated resources into set 0.
+    // `set` remains a legacy numeric placement field. Migrated symbolic
+    // resources should resolve placement through BackendBindingPlan.
     void bind_uniform_buffer_ring(uint32_t binding, const void* data, uint32_t size,
                                   uint32_t set = 0);
 

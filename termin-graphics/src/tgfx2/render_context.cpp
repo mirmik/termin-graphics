@@ -89,7 +89,6 @@ void RenderContext2::end_frame() {
         current_resource_set_ = {};
     }
     clear_pending_binding_buckets();
-    bindings_dirty_ = true;
 
     // Drain deferred-destroy lists. Pass code accumulated non-owning
     // external wrappers during the frame (e.g. material textures,
@@ -192,7 +191,6 @@ void RenderContext2::begin_pass(
     // leaking into shaders that intentionally leave a slot unbound and
     // rely on backend defaults.
     clear_pending_binding_buckets();
-    bindings_dirty_ = true;
     // Vulkan's cmd-buffer-level binds don't survive a render pass
     // boundary — reset cached state so draw() re-binds on first use.
     last_bound_vbos_.clear();
@@ -374,8 +372,39 @@ RenderContext2::ResourceScope RenderContext2::scope_from_shader_resource(
     }
 }
 
+ShaderResourceScope RenderContext2::shader_scope_from_resource_scope(
+    ResourceScope scope
+) {
+    switch (scope) {
+        case ResourceScope::Frame: return ShaderResourceScope::Frame;
+        case ResourceScope::Pass: return ShaderResourceScope::Pass;
+        case ResourceScope::Material: return ShaderResourceScope::Material;
+        case ResourceScope::Draw: return ShaderResourceScope::Draw;
+        case ResourceScope::Transient: return ShaderResourceScope::Transient;
+        case ResourceScope::Unknown:
+        case ResourceScope::Count:
+        default:
+            return ShaderResourceScope::Unknown;
+    }
+}
+
 RenderContext2::ResourceScope RenderContext2::default_numeric_scope() {
     return ResourceScope::Unknown;
+}
+
+void RenderContext2::mark_binding_scope_dirty(ResourceScope scope) {
+    dirty_binding_scopes_[static_cast<size_t>(scope)] = true;
+    bindings_dirty_ = true;
+}
+
+void RenderContext2::mark_all_binding_scopes_dirty() {
+    dirty_binding_scopes_.fill(true);
+    bindings_dirty_ = true;
+}
+
+void RenderContext2::clear_dirty_binding_scopes() {
+    dirty_binding_scopes_.fill(false);
+    bindings_dirty_ = false;
 }
 
 const BackendBindingPlanEntry* find_backend_binding_plan_entry(
@@ -388,6 +417,52 @@ const BackendBindingPlanEntry* find_backend_binding_plan_entry(
         }
     }
     return nullptr;
+}
+
+bool same_shader_resource_key(
+    const ShaderResourceKey& a,
+    const ShaderResourceKey& b
+) {
+    return a.name == b.name && a.kind == b.kind && a.scope == b.scope;
+}
+
+bool same_backend_placement(
+    const BackendPlacement& a,
+    const BackendPlacement& b
+) {
+    return a.kind == b.kind &&
+        a.vulkan.set == b.vulkan.set &&
+        a.vulkan.binding == b.vulkan.binding &&
+        a.vulkan.descriptor_kind == b.vulkan.descriptor_kind &&
+        a.d3d11.register_class == b.d3d11.register_class &&
+        a.d3d11.register_index == b.d3d11.register_index &&
+        a.opengl.binding_class == b.opengl.binding_class &&
+        a.opengl.binding_point == b.opengl.binding_point &&
+        a.opengl.texture_unit == b.opengl.texture_unit;
+}
+
+bool same_backend_plan_entry(
+    const BackendBindingPlanEntry& a,
+    const BackendBindingPlanEntry& b
+) {
+    return same_shader_resource_key(a.resource, b.resource) &&
+        a.stage_mask == b.stage_mask &&
+        a.array_count == b.array_count &&
+        a.size == b.size &&
+        same_backend_placement(a.placement, b.placement);
+}
+
+bool same_bound_resource_value(
+    const BoundResourceValue& a,
+    const BoundResourceValue& b
+) {
+    return a.kind == b.kind &&
+        a.buffer == b.buffer &&
+        a.texture == b.texture &&
+        a.sampler == b.sampler &&
+        a.offset == b.offset &&
+        a.range == b.range &&
+        a.array_element == b.array_element;
 }
 
 ResourceBinding* RenderContext2::find_pending_binding(
@@ -408,7 +483,6 @@ BoundResourceBinding* RenderContext2::find_planned_binding(
 ) {
     for (BoundResourceBinding& binding : bindings) {
         if (binding.plan_entry.resource.name == plan_entry.resource.name &&
-            binding.value.kind == value.kind &&
             binding.value.array_element == value.array_element) {
             return &binding;
         }
@@ -443,11 +517,16 @@ void RenderContext2::upsert_pending_planned_binding(
     BoundResourceBinding* existing =
         find_planned_binding(bucket.planned, plan_entry, value);
     if (existing) {
+        if (same_backend_plan_entry(existing->plan_entry, plan_entry) &&
+            same_bound_resource_value(existing->value, value)) {
+            return;
+        }
         existing->plan_entry = plan_entry;
         existing->value = value;
     } else {
         bucket.planned.push_back({plan_entry, value});
     }
+    mark_binding_scope_dirty(scope);
 }
 
 bool RenderContext2::pending_binding_buckets_empty() const {
@@ -467,6 +546,16 @@ void RenderContext2::clear_pending_binding_buckets() {
         bucket.planned.clear();
         bucket.symbolic.clear();
     }
+    mark_all_binding_scopes_dirty();
+}
+
+bool RenderContext2::any_dirty_binding_scope() const {
+    for (bool dirty : dirty_binding_scopes_) {
+        if (dirty) {
+            return true;
+        }
+    }
+    return false;
 }
 
 BoundResourceSetDesc RenderContext2::build_pending_bound_resource_set(
@@ -475,15 +564,18 @@ BoundResourceSetDesc RenderContext2::build_pending_bound_resource_set(
     BoundResourceSetDesc bound_desc;
     bound_desc.resource_layout_token = resource_layout_token;
 
-    size_t planned_count = 0;
-    for (const ResourceBindingBucket& bucket : pending_binding_buckets_) {
-        planned_count += bucket.planned.size();
-    }
-    bound_desc.bindings.reserve(planned_count);
-    for (const ResourceBindingBucket& bucket : pending_binding_buckets_) {
-        for (const BoundResourceBinding& planned : bucket.planned) {
-            bound_desc.bindings.push_back(planned);
+    bound_desc.groups.reserve(pending_binding_buckets_.size());
+    for (size_t i = 0; i < pending_binding_buckets_.size(); ++i) {
+        const ResourceBindingBucket& bucket = pending_binding_buckets_[i];
+        if (bucket.planned.empty()) {
+            continue;
         }
+        BoundResourceGroup group;
+        group.scope = shader_scope_from_resource_scope(
+            static_cast<ResourceScope>(i));
+        group.dirty = dirty_binding_scopes_[i];
+        group.bindings = bucket.planned;
+        bound_desc.groups.push_back(std::move(group));
     }
     return bound_desc;
 }
@@ -515,7 +607,7 @@ void RenderContext2::bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
         b.range = range;
         upsert_pending_binding(default_numeric_scope(), b);
     }
-    bindings_dirty_ = true;
+    mark_binding_scope_dirty(default_numeric_scope());
 }
 
 void RenderContext2::bind_storage_buffer(uint32_t binding, BufferHandle buffer,
@@ -545,7 +637,7 @@ void RenderContext2::bind_storage_buffer(uint32_t binding, BufferHandle buffer,
         b.range = range;
         upsert_pending_binding(default_numeric_scope(), b);
     }
-    bindings_dirty_ = true;
+    mark_binding_scope_dirty(default_numeric_scope());
 }
 
 void RenderContext2::bind_uniform_buffer_ring(uint32_t binding,
@@ -610,13 +702,12 @@ void RenderContext2::bind_sampled_texture_array_element(
         b.sampler = sampler;
         upsert_pending_binding(default_numeric_scope(), b);
     }
-    bindings_dirty_ = true;
+    mark_binding_scope_dirty(default_numeric_scope());
 }
 
 void RenderContext2::clear_resource_bindings() {
     if (pending_binding_buckets_empty()) return;
     clear_pending_binding_buckets();
-    bindings_dirty_ = true;
 }
 
 // ============================================================================
@@ -630,7 +721,6 @@ void RenderContext2::use_shader_resource_layout(const struct ::tc_shader* shader
         active_backend_binding_plan_valid_ = false;
         if (!pending_binding_buckets_empty()) {
             clear_pending_binding_buckets();
-            bindings_dirty_ = true;
         }
         return;
     }
@@ -658,13 +748,15 @@ void RenderContext2::use_shader_resource_layout(const struct ::tc_shader* shader
     // migrated resources should enter those buckets through symbolic layout
     // resolution after this call.
     bool cleared = false;
-    for (ResourceBindingBucket& bucket : pending_binding_buckets_) {
+    for (size_t i = 0; i < pending_binding_buckets_.size(); ++i) {
+        ResourceBindingBucket& bucket = pending_binding_buckets_[i];
         if (!bucket.symbolic.empty()) {
             bucket.symbolic.clear();
             cleared = true;
         }
         if (layout_changed && !bucket.planned.empty()) {
             bucket.planned.clear();
+            mark_binding_scope_dirty(static_cast<ResourceScope>(i));
             cleared = true;
         }
     }
@@ -675,6 +767,7 @@ void RenderContext2::use_shader_resource_layout(const struct ::tc_shader* shader
                 pending_binding_buckets_[static_cast<size_t>(scope)];
             if (!bucket.numeric.empty()) {
                 bucket.numeric.clear();
+                mark_binding_scope_dirty(scope);
                 cleared = true;
             }
         }
@@ -789,7 +882,6 @@ void RenderContext2::bind_uniform_data(std::string_view name, const void* data, 
         scope_from_shader_resource(rb->scope),
         *plan_entry,
         value);
-    bindings_dirty_ = true;
 }
 
 void RenderContext2::set_push_constants(const void* data, uint32_t size) {
@@ -891,7 +983,7 @@ void RenderContext2::flush_pipeline() {
                 current_resource_set_ = {};
             }
             last_bound_resource_layout_token_ = resource_layout_token;
-            bindings_dirty_ = true;
+            mark_all_binding_scopes_dirty();
         }
         // Vertex attribute interpretation is pipeline-local (and OpenGL
         // recreates the VAO on bind_pipeline), so force vertex buffers to
@@ -1007,6 +1099,11 @@ void RenderContext2::flush_resource_set() {
         }
     }
 
+    if (!any_dirty_binding_scope()) {
+        clear_dirty_binding_scopes();
+        return;
+    }
+
     // Defer-destroy the previous set: the command buffer we're still
     // recording into may reference it, and Vulkan forbids mutating
     // bindings that a live cmd buf holds. Drained in end_frame() after
@@ -1050,7 +1147,7 @@ void RenderContext2::flush_resource_set() {
         }
     } else {
         const size_t pending_binding_count =
-            legacy_numeric_bindings.size() + bound_desc.bindings.size();
+            legacy_numeric_bindings.size() + bound_resource_binding_count(bound_desc);
         if (pending_binding_count != 0) {
             tc_log(TC_LOG_WARN,
                    "RenderContext2: flush_resource_set skipping pipeline=%u "
@@ -1060,7 +1157,7 @@ void RenderContext2::flush_resource_set() {
         }
     }
 
-    bindings_dirty_ = false;
+    clear_dirty_binding_scopes();
 }
 
 // ============================================================================
