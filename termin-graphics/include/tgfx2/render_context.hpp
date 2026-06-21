@@ -19,9 +19,11 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "tgfx2/tgfx2_api.h"
+#include "tgfx2/backend_binding_plan.hpp"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/handles.hpp"
 #include "tgfx2/render_state.hpp"
@@ -107,6 +109,8 @@ private:
     // Shader resource layout for symbolic resolution. Set by
     // use_shader_resource_layout(), cleared when shader changes.
     const struct ::tc_shader* active_shader_layout_ = nullptr;
+    BackendBindingPlan active_backend_binding_plan_;
+    bool active_backend_binding_plan_valid_ = false;
 
     static ResourceScope scope_from_shader_resource(uint32_t shader_scope);
     static ResourceScope default_numeric_scope();

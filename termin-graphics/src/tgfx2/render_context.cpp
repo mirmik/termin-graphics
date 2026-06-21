@@ -378,17 +378,68 @@ RenderContext2::ResourceScope RenderContext2::default_numeric_scope() {
     return ResourceScope::Unknown;
 }
 
-static void apply_shader_resource_binding_metadata(
-    ResourceBinding& dst,
-    const tc_shader_resource_binding& src
+const BackendBindingPlanEntry* find_backend_binding_plan_entry(
+    const BackendBindingPlan& plan,
+    std::string_view name
 ) {
-    dst.set = src.set;
-    dst.binding = src.binding;
-    dst.stage_mask = src.stage_mask;
-    if (src.has_d3d11_placement) {
-        dst.d3d11.has_placement = true;
-        dst.d3d11.register_class = src.d3d11.register_class;
-        dst.d3d11.register_index = src.d3d11.register_index;
+    for (const BackendBindingPlanEntry& entry : plan.entries) {
+        if (entry.resource.name == name) {
+            return &entry;
+        }
+    }
+    return nullptr;
+}
+
+uint32_t d3d11_register_class_to_shader(D3D11RegisterClass register_class) {
+    switch (register_class) {
+        case D3D11RegisterClass::B:
+            return TC_SHADER_D3D11_REGISTER_B;
+        case D3D11RegisterClass::T:
+            return TC_SHADER_D3D11_REGISTER_T;
+        case D3D11RegisterClass::S:
+            return TC_SHADER_D3D11_REGISTER_S;
+        case D3D11RegisterClass::U:
+            return TC_SHADER_D3D11_REGISTER_U;
+        case D3D11RegisterClass::None:
+        default:
+            return TC_SHADER_D3D11_REGISTER_NONE;
+    }
+}
+
+void apply_backend_binding_plan_entry(
+    ResourceBinding& dst,
+    const BackendBindingPlanEntry& entry
+) {
+    dst.stage_mask = entry.stage_mask;
+    dst.d3d11 = {};
+
+    switch (entry.placement.kind) {
+        case BackendPlacementKind::VulkanDescriptor:
+            dst.set = entry.placement.vulkan.set;
+            dst.binding = entry.placement.vulkan.binding;
+            break;
+        case BackendPlacementKind::D3D11Register:
+            dst.set = 0;
+            dst.binding = entry.placement.d3d11.register_index;
+            dst.d3d11.has_placement = true;
+            dst.d3d11.register_class = d3d11_register_class_to_shader(
+                entry.placement.d3d11.register_class);
+            dst.d3d11.register_index = entry.placement.d3d11.register_index;
+            break;
+        case BackendPlacementKind::OpenGLBinding:
+            dst.set = 0;
+            if (entry.placement.opengl.binding_class == OpenGLBindingClass::TextureUnit ||
+                entry.placement.opengl.binding_class == OpenGLBindingClass::SamplerUnit) {
+                dst.binding = entry.placement.opengl.texture_unit;
+            } else {
+                dst.binding = entry.placement.opengl.binding_point;
+            }
+            break;
+        case BackendPlacementKind::None:
+        default:
+            dst.set = 0;
+            dst.binding = 0;
+            break;
     }
 }
 
@@ -591,6 +642,8 @@ void RenderContext2::clear_resource_bindings() {
 void RenderContext2::use_shader_resource_layout(const struct ::tc_shader* shader) {
     if (!shader) {
         active_shader_layout_ = nullptr;
+        active_backend_binding_plan_ = {};
+        active_backend_binding_plan_valid_ = false;
         if (!pending_binding_buckets_empty()) {
             clear_pending_binding_buckets();
             bindings_dirty_ = true;
@@ -600,6 +653,21 @@ void RenderContext2::use_shader_resource_layout(const struct ::tc_shader* shader
 
     const bool layout_changed = active_shader_layout_ != shader;
     active_shader_layout_ = shader;
+    active_backend_binding_plan_ = {};
+    std::string plan_error;
+    active_backend_binding_plan_valid_ = build_backend_binding_plan(
+        device_.backend_type(),
+        tc_shader_resource_bindings(shader),
+        tc_shader_resource_binding_count(shader),
+        active_backend_binding_plan_,
+        &plan_error);
+    if (!active_backend_binding_plan_valid_) {
+        tc_log(TC_LOG_ERROR,
+               "RenderContext2: failed to build backend binding plan for shader '%s' backend=%s: %s",
+               shader->name ? shader->name : shader->uuid,
+               render_context_backend_name(device_.backend_type()),
+               plan_error.empty() ? "unknown error" : plan_error.c_str());
+    }
     // When the layout changes, unresolved symbolic bindings and per-draw
     // numeric leftovers must not be resolved/flushed against the new shader.
     // Frame/pass/material numeric buckets are kept for legacy compatibility;
@@ -711,7 +779,21 @@ void RenderContext2::bind_uniform_data(std::string_view name, const void* data, 
     }
 
     ResourceBinding resolved;
-    apply_shader_resource_binding_metadata(resolved, *rb);
+    if (!active_backend_binding_plan_valid_) {
+        tc_log(TC_LOG_WARN,
+               "RenderContext2: bind_uniform_data('%.*s') skipped because backend binding plan is unavailable",
+               static_cast<int>(name.size()), name.data());
+        return;
+    }
+    const BackendBindingPlanEntry* plan_entry =
+        find_backend_binding_plan_entry(active_backend_binding_plan_, name);
+    if (!plan_entry) {
+        tc_log(TC_LOG_WARN,
+               "RenderContext2: bind_uniform_data('%.*s') not found in backend binding plan",
+               static_cast<int>(name.size()), name.data());
+        return;
+    }
+    apply_backend_binding_plan_entry(resolved, *plan_entry);
     resolved.kind = ResourceBinding::Kind::UniformBuffer;
     resolved.buffer = buffer;
     resolved.offset = offset;
@@ -872,7 +954,21 @@ void RenderContext2::flush_resource_set() {
                 }
 
                 ResourceBinding resolved;
-                apply_shader_resource_binding_metadata(resolved, *rb);
+                if (!active_backend_binding_plan_valid_) {
+                    tc_log(TC_LOG_WARN,
+                           "RenderContext2: symbolic binding '%.*s' skipped because backend binding plan is unavailable",
+                           static_cast<int>(sb.name.size()), sb.name.data());
+                    continue;
+                }
+                const BackendBindingPlanEntry* plan_entry =
+                    find_backend_binding_plan_entry(active_backend_binding_plan_, sb.name);
+                if (!plan_entry) {
+                    tc_log(TC_LOG_WARN,
+                           "RenderContext2: symbolic binding '%.*s' not found in backend binding plan",
+                           static_cast<int>(sb.name.size()), sb.name.data());
+                    continue;
+                }
+                apply_backend_binding_plan_entry(resolved, *plan_entry);
 
                 switch (sb.kind) {
                     case SymbolicBinding::Kind::Uniform:
