@@ -1001,6 +1001,31 @@ int main() {
             return 1;
         }
 
+        ctx.begin_frame();
+        ctx.begin_pass(color, {}, context_clear, 1.0f, false);
+        ctx.set_depth_test(true);
+        ctx.set_depth_write(true);
+        ctx.set_cull(tgfx::CullMode::None);
+        ctx.set_blend(false);
+        ctx.bind_shader(fsq_vs, render_context_fs);
+        ctx.draw_fullscreen_quad_with_bound_shader();
+        ctx.end_pass();
+        ctx.end_frame();
+
+        if (!device->read_pixel_rgba8(color, 2, 2, rgba)) {
+            std::fprintf(stderr, "D3D11 smoke: RenderContext2 color-only depth-state readback failed\n");
+            return 1;
+        }
+        if (!close_enough(rgba[0], 0.20f) ||
+            !close_enough(rgba[1], 0.70f) ||
+            !close_enough(rgba[2], 0.35f) ||
+            !close_enough(rgba[3], 1.00f)) {
+            std::fprintf(stderr,
+                         "D3D11 smoke: color-only pass with stale depth state did not draw %.3f %.3f %.3f %.3f\n",
+                         rgba[0], rgba[1], rgba[2], rgba[3]);
+            return 1;
+        }
+
         const auto push_constants_ps_path = shader_dir / "d3d11-smoke-push-constants.ps.cso";
         const char* push_constants_ps_source =
             "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"

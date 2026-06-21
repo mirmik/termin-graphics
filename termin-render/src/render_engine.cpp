@@ -616,12 +616,20 @@ void RenderEngine::render_scene_pipeline_offscreen(
             if (!handle) {
                 continue;
             }
+            const tgfx::TextureDesc desc = device->texture_desc(handle);
+            const bool depth_texture = tgfx::is_depth_format(desc.format);
 
             const char* aliases[64];
             size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
             for (size_t j = 0; j < alias_count; j++) {
-                tex2_resources[aliases[j]] = handle;
-                tex2_depth_resources[aliases[j]] = handle;
+                if (depth_texture) {
+                    tex2_depth_resources[aliases[j]] = handle;
+                    if (tex2_resources.find(aliases[j]) == tex2_resources.end()) {
+                        tex2_resources[aliases[j]] = handle;
+                    }
+                } else {
+                    tex2_resources[aliases[j]] = handle;
+                }
             }
         }
 

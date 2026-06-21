@@ -957,6 +957,10 @@ void RenderContext2::flush_pipeline() {
     key.topology = topology_;
     key.raster = raster_;
     key.depth_stencil = depth_stencil_;
+    if (depth_format_ == PixelFormat::Undefined) {
+        key.depth_stencil.depth_test = false;
+        key.depth_stencil.depth_write = false;
+    }
     key.blend = blend_;
     key.color_mask = color_mask_;
     key.color_format = color_format_;

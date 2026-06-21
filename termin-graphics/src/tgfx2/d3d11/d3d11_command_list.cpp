@@ -598,7 +598,40 @@ void D3D11CommandList::copy_texture(TextureHandle src, TextureHandle dst) {
     auto* s = device_.get_texture(src);
     auto* d = device_.get_texture(dst);
     if (!s || !d || !s->texture || !d->texture) return;
-    ctx_->CopyResource(d->texture.Get(), s->texture.Get());
+
+    const bool same_format = s->desc.format == d->desc.format;
+    const bool same_samples = s->desc.sample_count == d->desc.sample_count;
+    const bool same_extent = s->desc.width == d->desc.width &&
+                             s->desc.height == d->desc.height;
+    const bool msaa_to_single = s->desc.sample_count > 1 && d->desc.sample_count == 1;
+
+    if (msaa_to_single && same_format && same_extent &&
+        !d3d11::is_depth_format(s->desc.format)) {
+        ctx_->ResolveSubresource(
+            d->texture.Get(),
+            0,
+            s->texture.Get(),
+            0,
+            d3d11::to_dxgi_format(s->desc.format));
+        return;
+    }
+
+    if (same_samples && same_format && same_extent) {
+        ctx_->CopyResource(d->texture.Get(), s->texture.Get());
+        return;
+    }
+
+    tc::Log::error(
+        "D3D11CommandList::copy_texture: unsupported copy "
+        "src=%ux%u samples=%u format=%d dst=%ux%u samples=%u format=%d",
+        s->desc.width,
+        s->desc.height,
+        s->desc.sample_count,
+        static_cast<int>(s->desc.format),
+        d->desc.width,
+        d->desc.height,
+        d->desc.sample_count,
+        static_cast<int>(d->desc.format));
 }
 
 void D3D11CommandList::set_viewport(int x, int y, int width, int height) {

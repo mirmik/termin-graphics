@@ -58,6 +58,58 @@ void throw_if_failed(HRESULT hr, const char* what) {
     }
 }
 
+bool env_enabled(const char* name) {
+    const char* value = std::getenv(name);
+    return value != nullptr && value[0] != '\0' && value[0] != '0';
+}
+
+const char* d3d11_message_severity_name(D3D11_MESSAGE_SEVERITY severity) {
+    switch (severity) {
+        case D3D11_MESSAGE_SEVERITY_CORRUPTION: return "corruption";
+        case D3D11_MESSAGE_SEVERITY_ERROR: return "error";
+        case D3D11_MESSAGE_SEVERITY_WARNING: return "warning";
+        case D3D11_MESSAGE_SEVERITY_INFO: return "info";
+        case D3D11_MESSAGE_SEVERITY_MESSAGE: return "message";
+        default: return "unknown";
+    }
+}
+
+void log_d3d11_message(
+    const char* origin,
+    D3D11_MESSAGE_SEVERITY severity,
+    D3D11_MESSAGE_ID id,
+    const char* description
+) {
+    const char* text = description ? description : "";
+    switch (severity) {
+        case D3D11_MESSAGE_SEVERITY_CORRUPTION:
+        case D3D11_MESSAGE_SEVERITY_ERROR:
+            tc::Log::error(
+                "[D3D11Debug:%s] severity=%s id=%u %s",
+                origin,
+                d3d11_message_severity_name(severity),
+                static_cast<unsigned>(id),
+                text);
+            break;
+        case D3D11_MESSAGE_SEVERITY_WARNING:
+            tc::Log::warn(
+                "[D3D11Debug:%s] severity=%s id=%u %s",
+                origin,
+                d3d11_message_severity_name(severity),
+                static_cast<unsigned>(id),
+                text);
+            break;
+        default:
+            tc::Log::info(
+                "[D3D11Debug:%s] severity=%s id=%u %s",
+                origin,
+                d3d11_message_severity_name(severity),
+                static_cast<unsigned>(id),
+                text);
+            break;
+    }
+}
+
 UINT buffer_bind_flags(BufferUsage usage) {
     UINT flags = 0;
     if (has_flag(usage, BufferUsage::Vertex)) flags |= D3D11_BIND_VERTEX_BUFFER;
@@ -483,10 +535,10 @@ void D3D11RenderDevice::create_device() {
 #if defined(_DEBUG)
     flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
-    if (const char* debug_env = std::getenv("TERMIN_D3D11_DEBUG");
-        debug_env != nullptr && debug_env[0] != '\0' && debug_env[0] != '0') {
+    if (env_enabled("TERMIN_D3D11_DEBUG")) {
         flags |= D3D11_CREATE_DEVICE_DEBUG;
     }
+    const UINT requested_flags = flags;
 
     HRESULT hr = D3D11CreateDevice(
         nullptr,
@@ -500,8 +552,10 @@ void D3D11RenderDevice::create_device() {
         &feature_level_,
         &context_);
 
+    bool debug_retry_disabled = false;
     if (FAILED(hr)) {
         flags &= ~D3D11_CREATE_DEVICE_DEBUG;
+        debug_retry_disabled = (requested_flags & D3D11_CREATE_DEVICE_DEBUG) != 0;
         hr = D3D11CreateDevice(
             nullptr,
             D3D_DRIVER_TYPE_HARDWARE,
@@ -516,6 +570,73 @@ void D3D11RenderDevice::create_device() {
     }
 
     throw_if_failed(hr, "D3D11CreateDevice");
+    configure_debug_layer(requested_flags, debug_retry_disabled);
+}
+
+void D3D11RenderDevice::configure_debug_layer(UINT requested_flags, bool debug_retry_disabled) {
+    debug_layer_enabled_ = (requested_flags & D3D11_CREATE_DEVICE_DEBUG) != 0 && !debug_retry_disabled;
+    log_info_queue_ = env_enabled("TERMIN_D3D11_LOG_INFO_QUEUE");
+
+    if (debug_retry_disabled) {
+        tc::Log::warn(
+            "D3D11RenderDevice: debug layer was requested but D3D11CreateDevice "
+            "failed with D3D11_CREATE_DEVICE_DEBUG; continuing without it. "
+            "Install the Windows Graphics Tools optional feature to enable it.");
+        return;
+    }
+
+    if (!debug_layer_enabled_) {
+        if (log_info_queue_) {
+            tc::Log::warn(
+                "D3D11RenderDevice: TERMIN_D3D11_LOG_INFO_QUEUE=1 ignored because "
+                "the D3D11 debug layer is not enabled. Set TERMIN_D3D11_DEBUG=1.");
+        }
+        return;
+    }
+
+    HRESULT hr = device_.As(&info_queue_);
+    if (FAILED(hr) || !info_queue_) {
+        tc::Log::warn(
+            "D3D11RenderDevice: D3D11 debug layer is enabled, but ID3D11InfoQueue "
+            "is unavailable: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return;
+    }
+
+    tc::Log::info("D3D11RenderDevice: D3D11 debug layer enabled");
+    if (env_enabled("TERMIN_D3D11_BREAK_ON_ERROR")) {
+        info_queue_->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_CORRUPTION, TRUE);
+        info_queue_->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_ERROR, TRUE);
+    }
+}
+
+void D3D11RenderDevice::drain_info_queue(const char* origin) {
+    if (!log_info_queue_ || !info_queue_) {
+        return;
+    }
+
+    const UINT64 count = info_queue_->GetNumStoredMessagesAllowedByRetrievalFilter();
+    for (UINT64 i = 0; i < count; ++i) {
+        SIZE_T message_size = 0;
+        HRESULT hr = info_queue_->GetMessage(i, nullptr, &message_size);
+        if (FAILED(hr) || message_size == 0) {
+            continue;
+        }
+
+        std::vector<uint8_t> storage(message_size);
+        auto* message = reinterpret_cast<D3D11_MESSAGE*>(storage.data());
+        hr = info_queue_->GetMessage(i, message, &message_size);
+        if (FAILED(hr)) {
+            continue;
+        }
+
+        log_d3d11_message(
+            origin ? origin : "unknown",
+            message->Severity,
+            message->ID,
+            message->pDescription);
+    }
+    info_queue_->ClearStoredMessages();
 }
 
 void D3D11RenderDevice::create_default_sampler() {
@@ -721,6 +842,7 @@ void D3D11RenderDevice::wait_idle() {
             for (uint32_t i = 0; i < 10000; ++i) {
                 hr = context_->GetData(query.Get(), nullptr, 0, 0);
                 if (hr == S_OK) {
+                    drain_info_queue("wait_idle");
                     return;
                 }
                 if (FAILED(hr)) {
@@ -734,9 +856,11 @@ void D3D11RenderDevice::wait_idle() {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
             tc::Log::error("D3D11RenderDevice::wait_idle timed out waiting for GPU");
+            drain_info_queue("wait_idle");
             return;
         }
         context_->Flush();
+        drain_info_queue("wait_idle");
     }
 }
 
@@ -1140,10 +1264,12 @@ std::unique_ptr<ICommandList> D3D11RenderDevice::create_command_list(QueueType q
 
 void D3D11RenderDevice::submit(ICommandList& /*cmd*/) {
     context_->Flush();
+    drain_info_queue("submit");
 }
 
 void D3D11RenderDevice::present() {
     context_->Flush();
+    drain_info_queue("present");
 }
 
 TextureHandle D3D11RenderDevice::register_external_texture(uintptr_t native_handle, const TextureDesc& desc) {
@@ -1405,6 +1531,49 @@ Microsoft::WRL::ComPtr<ID3D11Texture2D> D3D11RenderDevice::create_staging_textur
     return staging;
 }
 
+Microsoft::WRL::ComPtr<ID3D11Texture2D> D3D11RenderDevice::resolve_texture_for_readback(
+    const D3D11Texture& src
+) {
+    if (!src.texture) {
+        return {};
+    }
+    if (src.desc.sample_count <= 1) {
+        return src.texture;
+    }
+
+    if (d3d11::is_depth_format(src.desc.format)) {
+        tc::Log::error(
+            "D3D11RenderDevice::resolve_texture_for_readback: MSAA depth readback is not supported");
+        return {};
+    }
+
+    D3D11_TEXTURE2D_DESC desc{};
+    src.texture->GetDesc(&desc);
+    desc.SampleDesc.Count = 1;
+    desc.SampleDesc.Quality = 0;
+    desc.BindFlags = 0;
+    desc.MiscFlags = 0;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.CPUAccessFlags = 0;
+
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> resolved;
+    HRESULT hr = device_->CreateTexture2D(&desc, nullptr, &resolved);
+    if (FAILED(hr) || !resolved) {
+        tc::Log::error(
+            "D3D11RenderDevice::resolve_texture_for_readback: resolve texture creation failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return {};
+    }
+
+    context_->ResolveSubresource(
+        resolved.Get(),
+        0,
+        src.texture.Get(),
+        0,
+        d3d11::to_dxgi_format(src.desc.format));
+    return resolved;
+}
+
 bool D3D11RenderDevice::read_pixel_rgba8(TextureHandle handle, int x, int y, float out_rgba[4]) {
     if (!out_rgba) return false;
     auto* tex = get_texture(handle);
@@ -1417,9 +1586,14 @@ bool D3D11RenderDevice::read_pixel_rgba8(TextureHandle handle, int x, int y, flo
         return false;
     }
 
-    auto staging = create_staging_texture(*tex);
+    D3D11Texture read_src = *tex;
+    read_src.texture = resolve_texture_for_readback(*tex);
+    read_src.desc.sample_count = 1;
+    if (!read_src.texture) return false;
+
+    auto staging = create_staging_texture(read_src);
     if (!staging) return false;
-    context_->CopyResource(staging.Get(), tex->texture.Get());
+    context_->CopyResource(staging.Get(), read_src.texture.Get());
 
     D3D11_MAPPED_SUBRESOURCE mapped{};
     HRESULT hr = context_->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped);
@@ -1458,32 +1632,9 @@ bool D3D11RenderDevice::read_texture_rgba_float(TextureHandle handle, float* out
     }
 
     D3D11Texture read_src = *tex;
-    Microsoft::WRL::ComPtr<ID3D11Texture2D> resolved;
-    if (tex->desc.sample_count > 1) {
-        D3D11_TEXTURE2D_DESC desc{};
-        tex->texture->GetDesc(&desc);
-        desc.SampleDesc.Count = 1;
-        desc.SampleDesc.Quality = 0;
-        desc.BindFlags = 0;
-        desc.MiscFlags = 0;
-        desc.Usage = D3D11_USAGE_DEFAULT;
-        desc.CPUAccessFlags = 0;
-        HRESULT hr = device_->CreateTexture2D(&desc, nullptr, &resolved);
-        if (FAILED(hr) || !resolved) {
-            tc::Log::error(
-                "D3D11RenderDevice::read_texture_rgba_float resolve texture creation failed: HRESULT=0x%08X",
-                static_cast<unsigned>(hr));
-            return false;
-        }
-        context_->ResolveSubresource(
-            resolved.Get(),
-            0,
-            tex->texture.Get(),
-            0,
-            d3d11::to_dxgi_format(tex->desc.format));
-        read_src.texture = resolved;
-        read_src.desc.sample_count = 1;
-    }
+    read_src.texture = resolve_texture_for_readback(*tex);
+    read_src.desc.sample_count = 1;
+    if (!read_src.texture) return false;
 
     auto staging = create_staging_texture(read_src);
     if (!staging) return false;
@@ -1553,11 +1704,15 @@ void D3D11RenderDevice::reset_state() {
 }
 
 void D3D11RenderDevice::flush() {
-    if (context_) context_->Flush();
+    if (context_) {
+        context_->Flush();
+        drain_info_queue("flush");
+    }
 }
 
 void D3D11RenderDevice::finish() {
     wait_idle();
+    drain_info_queue("finish");
 }
 
 bool D3D11RenderDevice::ensure_tc_shader(

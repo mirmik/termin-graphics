@@ -29,7 +29,8 @@ VertexOutput main(VertexInput input) {
     VertexOutput output;
     float4 view_dir = mul(material.u_view, float4(input.position, 0.0));
     output.dir = input.position;
-    output.position = mul(material.u_projection, float4(view_dir.xyz, 1.0));
+    float4 clip = mul(material.u_projection, float4(view_dir.xyz, 1.0));
+    output.position = clip.xyww;
     return output;
 }
 @endstage

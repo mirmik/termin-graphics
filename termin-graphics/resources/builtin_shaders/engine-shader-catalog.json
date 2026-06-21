@@ -292,9 +292,10 @@
       },
       "resources": [
         {
-          "name": "ImmediatePushBlock",
-          "logical_name": "push_constants",
-          "kind": "constant_buffer"
+          "name": "u_push",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },
@@ -2446,10 +2447,10 @@
       },
       "resources": [
         {
-          "name": "MaterialParams",
-          "logical_name": "material_params",
+          "name": "material",
+          "logical_name": "material",
           "kind": "constant_buffer",
-          "binding": 1
+          "scope": "material"
         }
       ]
     },
@@ -2674,9 +2675,10 @@
       },
       "resources": [
         {
-          "name": "SolidPushBlock",
-          "logical_name": "push_constants",
-          "kind": "constant_buffer"
+          "name": "u_push",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },

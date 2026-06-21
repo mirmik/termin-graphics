@@ -113,6 +113,23 @@ void FrameGraphCapture::capture_direct_via_ctx2(
     auto src_desc = ctx2->device().texture_desc(src_tex);
     tgfx::PixelFormat effective = src_desc.format;
     (void)format;
+    if (ctx2->device().backend_type() == tgfx::BackendType::D3D11 &&
+        tgfx::is_depth_format(effective) &&
+        src_desc.sample_count > 1) {
+        static bool logged_d3d11_msaa_depth_skip = false;
+        if (!logged_d3d11_msaa_depth_skip) {
+            tc_log(TC_LOG_WARN,
+                "[FrameGraphCapture] D3D11 MSAA depth capture is not supported; "
+                "skipping depth sidecar for texture %u (%ux%u samples=%u)",
+                src_tex.id,
+                src_desc.width,
+                src_desc.height,
+                src_desc.sample_count);
+            logged_d3d11_msaa_depth_skip = true;
+        }
+        reset_capture();
+        return;
+    }
     if (width <= 0 || height <= 0) {
         width = static_cast<int>(src_desc.width);
         height = static_cast<int>(src_desc.height);

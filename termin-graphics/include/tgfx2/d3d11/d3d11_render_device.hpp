@@ -8,6 +8,7 @@
 #endif
 
 #include <d3d11.h>
+#include <d3d11sdklayers.h>
 #include <wrl/client.h>
 
 #include <unordered_map>
@@ -178,13 +179,17 @@ public:
 private:
     TextureHandle register_external_texture(ID3D11Texture2D* texture, const TextureDesc& desc);
     void create_device();
+    void configure_debug_layer(UINT requested_flags, bool debug_retry_disabled);
+    void drain_info_queue(const char* origin);
     void create_default_sampler();
     bool ensure_blit_resources();
     void query_capabilities();
     Microsoft::WRL::ComPtr<ID3D11Texture2D> create_staging_texture(const D3D11Texture& src) const;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> resolve_texture_for_readback(const D3D11Texture& src);
 
     Microsoft::WRL::ComPtr<ID3D11Device> device_;
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
+    Microsoft::WRL::ComPtr<ID3D11InfoQueue> info_queue_;
     Microsoft::WRL::ComPtr<ID3D11SamplerState> default_sampler_;
     Microsoft::WRL::ComPtr<ID3D11VertexShader> blit_vertex_shader_;
     Microsoft::WRL::ComPtr<ID3D11PixelShader> blit_pixel_shader_;
@@ -194,6 +199,8 @@ private:
     Microsoft::WRL::ComPtr<ID3D11BlendState> blit_blend_state_;
     D3D_FEATURE_LEVEL feature_level_ = D3D_FEATURE_LEVEL_11_0;
     BackendCapabilities caps_;
+    bool debug_layer_enabled_ = false;
+    bool log_info_queue_ = false;
 
     D3D11HandlePool<D3D11Buffer> buffers_;
     D3D11HandlePool<D3D11Texture> textures_;
