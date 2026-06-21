@@ -273,6 +273,94 @@ int main() {
             return 1;
         }
 
+        device->clear_texture(color, 0.10f, 0.20f, 0.30f, 1.0f, 0, 0, 4, 4);
+        if (!device->read_pixel_rgba8(color, 2, 2, rgba)) {
+            std::fprintf(stderr, "D3D11 smoke: clear_texture readback failed\n");
+            return 1;
+        }
+        if (!close_enough(rgba[0], 0.10f) ||
+            !close_enough(rgba[1], 0.20f) ||
+            !close_enough(rgba[2], 0.30f) ||
+            !close_enough(rgba[3], 1.00f)) {
+            std::fprintf(stderr,
+                         "D3D11 smoke: unexpected clear_texture pixel %.3f %.3f %.3f %.3f\n",
+                         rgba[0], rgba[1], rgba[2], rgba[3]);
+            return 1;
+        }
+
+        tgfx::TextureDesc hdr_desc;
+        hdr_desc.width = 4;
+        hdr_desc.height = 4;
+        hdr_desc.format = tgfx::PixelFormat::RGBA16F;
+        hdr_desc.usage = tgfx::TextureUsage::ColorAttachment |
+                         tgfx::TextureUsage::Sampled |
+                         tgfx::TextureUsage::CopySrc;
+        auto hdr_color = device->create_texture(hdr_desc);
+        if (!hdr_color) {
+            std::fprintf(stderr, "D3D11 smoke: RGBA16F target creation failed\n");
+            return 1;
+        }
+        device->clear_texture(hdr_color, 1.25f, 0.50f, 0.125f, 1.0f, 0, 0, 4, 4);
+        std::vector<float> hdr_readback(4 * 4 * 4, 0.0f);
+        if (!device->read_texture_rgba_float(hdr_color, hdr_readback.data())) {
+            std::fprintf(stderr, "D3D11 smoke: RGBA16F read_texture_rgba_float failed\n");
+            device->destroy(hdr_color);
+            return 1;
+        }
+        if (!close_enough(hdr_readback[0], 1.25f) ||
+            !close_enough(hdr_readback[1], 0.50f) ||
+            !close_enough(hdr_readback[2], 0.125f) ||
+            !close_enough(hdr_readback[3], 1.00f)) {
+            std::fprintf(stderr,
+                         "D3D11 smoke: unexpected RGBA16F readback %.3f %.3f %.3f %.3f\n",
+                         hdr_readback[0],
+                         hdr_readback[1],
+                         hdr_readback[2],
+                         hdr_readback[3]);
+            device->destroy(hdr_color);
+            return 1;
+        }
+        device->destroy(hdr_color);
+
+        tgfx::TextureDesc depth_desc;
+        depth_desc.width = 4;
+        depth_desc.height = 4;
+        depth_desc.format = tgfx::PixelFormat::D32F;
+        depth_desc.usage = tgfx::TextureUsage::DepthStencilAttachment |
+                           tgfx::TextureUsage::Sampled |
+                           tgfx::TextureUsage::CopySrc;
+        auto depth_tex = device->create_texture(depth_desc);
+        if (!depth_tex) {
+            std::fprintf(stderr, "D3D11 smoke: D32F target creation failed\n");
+            return 1;
+        }
+        tgfx::RenderPassDesc depth_pass;
+        depth_pass.has_depth = true;
+        depth_pass.depth.texture = depth_tex;
+        depth_pass.depth.load = tgfx::LoadOp::Clear;
+        depth_pass.depth.clear_depth = 0.42f;
+        auto depth_cmd = device->create_command_list();
+        depth_cmd->begin();
+        depth_cmd->begin_render_pass(depth_pass);
+        depth_cmd->end_render_pass();
+        depth_cmd->end();
+        device->submit(*depth_cmd);
+
+        std::vector<float> depth_readback(4 * 4, 0.0f);
+        if (!device->read_texture_depth_float(depth_tex, depth_readback.data())) {
+            std::fprintf(stderr, "D3D11 smoke: D32F read_texture_depth_float failed\n");
+            device->destroy(depth_tex);
+            return 1;
+        }
+        if (!close_enough(depth_readback[0], 0.42f)) {
+            std::fprintf(stderr,
+                         "D3D11 smoke: unexpected D32F readback %.3f\n",
+                         depth_readback[0]);
+            device->destroy(depth_tex);
+            return 1;
+        }
+        device->destroy(depth_tex);
+
         tgfx::TextureDesc bgra_desc;
         bgra_desc.width = 4;
         bgra_desc.height = 4;
@@ -291,9 +379,9 @@ int main() {
             device->destroy(bgra_target);
             return 1;
         }
-        if (!close_enough(rgba[0], 0.25f) ||
-            !close_enough(rgba[1], 0.50f) ||
-            !close_enough(rgba[2], 0.75f) ||
+        if (!close_enough(rgba[0], 0.10f) ||
+            !close_enough(rgba[1], 0.20f) ||
+            !close_enough(rgba[2], 0.30f) ||
             !close_enough(rgba[3], 1.00f)) {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected RGBA->BGRA blit pixel %.3f %.3f %.3f %.3f\n",
@@ -536,6 +624,20 @@ int main() {
             return 1;
         }
 
+        tgfx::PipelineDesc standard_location_desc = textured_pipeline_desc;
+        standard_location_desc.vertex_layouts.clear();
+        tgfx::VertexBufferLayout standard_location_layout;
+        standard_location_layout.stride = sizeof(SmokeVertex);
+        standard_location_layout.attributes.emplace_back(
+            0,
+            tgfx::VertexFormat::Float3,
+            0);
+        standard_location_desc.vertex_layouts.push_back(standard_location_layout);
+        if (!device->create_pipeline(standard_location_desc)) {
+            std::fprintf(stderr, "D3D11 smoke: standard location input layout failed\n");
+            return 1;
+        }
+
         auto sampler = device->create_sampler(tgfx::SamplerDesc{});
         tgfx::ResourceSetDesc resource_set_desc;
         tgfx::ResourceBinding sampled_texture;
@@ -578,6 +680,225 @@ int main() {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected tc resource pixel %.3f %.3f %.3f %.3f\n",
                          rgba[0], rgba[1], rgba[2], rgba[3]);
+            return 1;
+        }
+
+        const auto normal_vs_path = shader_dir / "d3d11-smoke-normal-material.vs.cso";
+        const auto normal_ps_path = shader_dir / "d3d11-smoke-normal-material.ps.cso";
+        const char* normal_vs_source =
+            "cbuffer PerFrame : register(b0) { float4x4 view_proj; };\n"
+            "cbuffer DrawData : register(b1) { float4x4 model; };\n"
+            "struct VSIn { float3 position : POSITION; float3 normal : NORMAL; };\n"
+            "struct VSOut { float4 pos : SV_Position; float3 normal_world : NORMAL; };\n"
+            "VSOut main(VSIn input) {\n"
+            "    VSOut o;\n"
+            "    float4 world = mul(model, float4(input.position, 1.0));\n"
+            "    o.pos = mul(view_proj, world);\n"
+            "    o.normal_world = input.normal;\n"
+            "    return o;\n"
+            "}\n";
+        const char* normal_ps_source =
+            "struct VSOut { float4 pos : SV_Position; float3 normal_world : NORMAL; };\n"
+            "float4 main(VSOut input) : SV_Target0 {\n"
+            "    float3 n = normalize(input.normal_world);\n"
+            "    return float4(n * 0.5 + 0.5, 1.0);\n"
+            "}\n";
+        if (!compile_hlsl_to_file(normal_vs_source, "vs_5_0", normal_vs_path) ||
+            !compile_hlsl_to_file(normal_ps_source, "ps_5_0", normal_ps_path)) {
+            return 1;
+        }
+
+        std::vector<uint8_t> normal_vs_bytecode;
+        std::vector<uint8_t> normal_ps_bytecode;
+        if (!read_binary_file(normal_vs_path, normal_vs_bytecode) ||
+            !read_binary_file(normal_ps_path, normal_ps_bytecode)) {
+            return 1;
+        }
+        tgfx::ShaderDesc normal_vs_desc;
+        normal_vs_desc.stage = tgfx::ShaderStage::Vertex;
+        normal_vs_desc.debug_name = "D3D11 smoke normal material VS";
+        normal_vs_desc.bytecode = std::move(normal_vs_bytecode);
+        auto normal_vs = device->create_shader(normal_vs_desc);
+        tgfx::ShaderDesc normal_ps_desc;
+        normal_ps_desc.stage = tgfx::ShaderStage::Fragment;
+        normal_ps_desc.debug_name = "D3D11 smoke normal material PS";
+        normal_ps_desc.bytecode = std::move(normal_ps_bytecode);
+        auto normal_fs = device->create_shader(normal_ps_desc);
+        if (!normal_vs || !normal_fs) {
+            std::fprintf(stderr, "D3D11 smoke: normal material shader creation failed\n");
+            return 1;
+        }
+
+        struct NormalVertex {
+            float position[3];
+            float normal[3];
+        };
+        const NormalVertex normal_vertices[] = {
+            {{-1.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
+            {{-1.0f,  3.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
+            {{ 3.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
+        };
+        tgfx::BufferDesc normal_vbo_desc;
+        normal_vbo_desc.size = sizeof(normal_vertices);
+        normal_vbo_desc.usage = tgfx::BufferUsage::Vertex | tgfx::BufferUsage::CopyDst;
+        auto normal_vbo = device->create_buffer(normal_vbo_desc);
+        device->upload_buffer(
+            normal_vbo,
+            std::span<const uint8_t>(
+                reinterpret_cast<const uint8_t*>(normal_vertices),
+                sizeof(normal_vertices)));
+
+        float identity[16] = {
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f,
+        };
+        tgfx::BufferDesc normal_cb_desc;
+        normal_cb_desc.size = sizeof(identity);
+        normal_cb_desc.usage = tgfx::BufferUsage::Uniform | tgfx::BufferUsage::CopyDst;
+        auto per_frame_cb = device->create_buffer(normal_cb_desc);
+        auto draw_data_cb = device->create_buffer(normal_cb_desc);
+        device->upload_buffer(
+            per_frame_cb,
+            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(identity), sizeof(identity)));
+        device->upload_buffer(
+            draw_data_cb,
+            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(identity), sizeof(identity)));
+
+        tgfx::PipelineDesc normal_pipeline_desc;
+        normal_pipeline_desc.vertex_shader = normal_vs;
+        normal_pipeline_desc.fragment_shader = normal_fs;
+        normal_pipeline_desc.depth_format = tgfx::PixelFormat::Undefined;
+        normal_pipeline_desc.color_formats.push_back(tgfx::PixelFormat::RGBA8_UNorm);
+        normal_pipeline_desc.depth_stencil.depth_test = false;
+        normal_pipeline_desc.depth_stencil.depth_write = false;
+        normal_pipeline_desc.raster.cull = tgfx::CullMode::None;
+        tgfx::VertexBufferLayout normal_layout;
+        normal_layout.stride = sizeof(NormalVertex);
+        normal_layout.attributes.emplace_back(
+            0,
+            tgfx::VertexFormat::Float3,
+            static_cast<uint32_t>(offsetof(NormalVertex, position)),
+            "position");
+        normal_layout.attributes.emplace_back(
+            1,
+            tgfx::VertexFormat::Float3,
+            static_cast<uint32_t>(offsetof(NormalVertex, normal)),
+            "normal");
+        normal_pipeline_desc.vertex_layouts.push_back(normal_layout);
+        auto normal_pipeline = device->create_pipeline(normal_pipeline_desc);
+        if (!normal_pipeline) {
+            std::fprintf(stderr, "D3D11 smoke: normal material pipeline creation failed\n");
+            return 1;
+        }
+
+        tgfx::ResourceSetDesc normal_resource_set_desc;
+        tgfx::ResourceBinding per_frame_binding;
+        per_frame_binding.kind = tgfx::ResourceBinding::Kind::UniformBuffer;
+        per_frame_binding.binding = 0;
+        per_frame_binding.stage_mask = TC_SHADER_STAGE_VERTEX;
+        per_frame_binding.buffer = per_frame_cb;
+        normal_resource_set_desc.bindings.push_back(per_frame_binding);
+        tgfx::ResourceBinding draw_data_binding;
+        draw_data_binding.kind = tgfx::ResourceBinding::Kind::UniformBuffer;
+        draw_data_binding.binding = 1;
+        draw_data_binding.stage_mask = TC_SHADER_STAGE_VERTEX;
+        draw_data_binding.buffer = draw_data_cb;
+        normal_resource_set_desc.bindings.push_back(draw_data_binding);
+        auto normal_resource_set = device->create_resource_set(normal_resource_set_desc);
+        if (!normal_vbo || !per_frame_cb || !draw_data_cb || !normal_resource_set) {
+            std::fprintf(stderr, "D3D11 smoke: normal material resources failed\n");
+            return 1;
+        }
+
+        auto normal_cmd = device->create_command_list();
+        normal_cmd->begin();
+        normal_cmd->begin_render_pass(pass);
+        normal_cmd->bind_pipeline(normal_pipeline);
+        normal_cmd->bind_resource_set(normal_resource_set);
+        normal_cmd->bind_vertex_buffer(0, normal_vbo);
+        normal_cmd->draw(3);
+        normal_cmd->end_render_pass();
+        normal_cmd->end();
+        device->submit(*normal_cmd);
+
+        if (!device->read_pixel_rgba8(color, 2, 2, rgba)) {
+            std::fprintf(stderr, "D3D11 smoke: normal material readback failed\n");
+            return 1;
+        }
+        if (!close_enough(rgba[0], 0.5f) ||
+            !close_enough(rgba[1], 1.0f) ||
+            !close_enough(rgba[2], 0.5f) ||
+            !close_enough(rgba[3], 1.0f)) {
+            std::fprintf(stderr,
+                         "D3D11 smoke: unexpected normal material pixel %.3f %.3f %.3f %.3f\n",
+                         rgba[0], rgba[1], rgba[2], rgba[3]);
+            return 1;
+        }
+
+        tgfx::TextureDesc normal_msaa_desc;
+        normal_msaa_desc.width = 4;
+        normal_msaa_desc.height = 4;
+        normal_msaa_desc.format = tgfx::PixelFormat::RGBA16F;
+        normal_msaa_desc.sample_count = 4;
+        normal_msaa_desc.usage = tgfx::TextureUsage::ColorAttachment |
+                                 tgfx::TextureUsage::Sampled |
+                                 tgfx::TextureUsage::CopySrc;
+        auto normal_msaa_color = device->create_texture(normal_msaa_desc);
+        if (!normal_msaa_color) {
+            std::fprintf(stderr, "D3D11 smoke: normal material MSAA target creation failed\n");
+            return 1;
+        }
+
+        tgfx::PipelineDesc normal_msaa_pipeline_desc = normal_pipeline_desc;
+        normal_msaa_pipeline_desc.color_formats.clear();
+        normal_msaa_pipeline_desc.color_formats.push_back(tgfx::PixelFormat::RGBA16F);
+        normal_msaa_pipeline_desc.sample_count = 4;
+        auto normal_msaa_pipeline = device->create_pipeline(normal_msaa_pipeline_desc);
+        if (!normal_msaa_pipeline) {
+            std::fprintf(stderr, "D3D11 smoke: normal material MSAA pipeline creation failed\n");
+            return 1;
+        }
+
+        tgfx::RenderPassDesc normal_msaa_pass;
+        tgfx::ColorAttachmentDesc normal_msaa_attachment;
+        normal_msaa_attachment.texture = normal_msaa_color;
+        normal_msaa_attachment.load = tgfx::LoadOp::Clear;
+        normal_msaa_attachment.clear_color[0] = 0.0f;
+        normal_msaa_attachment.clear_color[1] = 0.0f;
+        normal_msaa_attachment.clear_color[2] = 0.0f;
+        normal_msaa_attachment.clear_color[3] = 1.0f;
+        normal_msaa_pass.colors.push_back(normal_msaa_attachment);
+
+        auto normal_msaa_cmd = device->create_command_list();
+        normal_msaa_cmd->begin();
+        normal_msaa_cmd->begin_render_pass(normal_msaa_pass);
+        normal_msaa_cmd->bind_pipeline(normal_msaa_pipeline);
+        normal_msaa_cmd->bind_resource_set(normal_resource_set);
+        normal_msaa_cmd->bind_vertex_buffer(0, normal_vbo);
+        normal_msaa_cmd->draw(3);
+        normal_msaa_cmd->end_render_pass();
+        normal_msaa_cmd->end();
+        device->submit(*normal_msaa_cmd);
+
+        std::vector<float> normal_msaa_readback(4 * 4 * 4, 0.0f);
+        if (!device->read_texture_rgba_float(
+                normal_msaa_color,
+                normal_msaa_readback.data())) {
+            std::fprintf(stderr, "D3D11 smoke: normal material MSAA readback failed\n");
+            return 1;
+        }
+        if (!close_enough(normal_msaa_readback[0], 0.5f) ||
+            !close_enough(normal_msaa_readback[1], 1.0f) ||
+            !close_enough(normal_msaa_readback[2], 0.5f) ||
+            !close_enough(normal_msaa_readback[3], 1.0f)) {
+            std::fprintf(stderr,
+                         "D3D11 smoke: unexpected normal material MSAA pixel %.3f %.3f %.3f %.3f\n",
+                         normal_msaa_readback[0],
+                         normal_msaa_readback[1],
+                         normal_msaa_readback[2],
+                         normal_msaa_readback[3]);
             return 1;
         }
 
@@ -650,6 +971,59 @@ int main() {
             return 1;
         }
 
+        const auto push_constants_ps_path = shader_dir / "d3d11-smoke-push-constants.ps.cso";
+        const char* push_constants_ps_source =
+            "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
+            "cbuffer PushConstants : register(b13) {\n"
+            "    float4 u_color;\n"
+            "};\n"
+            "float4 main(VSOut input) : SV_Target0 {\n"
+            "    return u_color;\n"
+            "}\n";
+        if (!compile_hlsl_to_file(push_constants_ps_source, "ps_5_0", push_constants_ps_path)) {
+            return 1;
+        }
+        std::vector<uint8_t> push_constants_ps_bytecode;
+        if (!read_binary_file(push_constants_ps_path, push_constants_ps_bytecode)) {
+            return 1;
+        }
+        tgfx::ShaderDesc push_constants_ps_desc;
+        push_constants_ps_desc.stage = tgfx::ShaderStage::Fragment;
+        push_constants_ps_desc.debug_name = "D3D11 smoke push constants FS";
+        push_constants_ps_desc.bytecode = std::move(push_constants_ps_bytecode);
+        auto push_constants_fs = device->create_shader(push_constants_ps_desc);
+        if (!push_constants_fs) {
+            std::fprintf(stderr, "D3D11 smoke: push constants fragment shader creation failed\n");
+            return 1;
+        }
+
+        const std::array<float, 4> push_color = {0.62f, 0.18f, 0.73f, 1.0f};
+        ctx.begin_frame();
+        ctx.begin_pass(color, {}, context_clear, 1.0f, false);
+        ctx.set_depth_test(false);
+        ctx.set_depth_write(false);
+        ctx.set_cull(tgfx::CullMode::None);
+        ctx.set_blend(false);
+        ctx.bind_shader(fsq_vs, push_constants_fs);
+        ctx.set_push_constants(push_color.data(), static_cast<uint32_t>(push_color.size() * sizeof(float)));
+        ctx.draw_fullscreen_quad_with_bound_shader();
+        ctx.end_pass();
+        ctx.end_frame();
+
+        if (!device->read_pixel_rgba8(color, 2, 2, rgba)) {
+            std::fprintf(stderr, "D3D11 smoke: push constants draw readback failed\n");
+            return 1;
+        }
+        if (!close_enough(rgba[0], push_color[0]) ||
+            !close_enough(rgba[1], push_color[1]) ||
+            !close_enough(rgba[2], push_color[2]) ||
+            !close_enough(rgba[3], push_color[3])) {
+            std::fprintf(stderr,
+                         "D3D11 smoke: unexpected push constants pixel %.3f %.3f %.3f %.3f\n",
+                         rgba[0], rgba[1], rgba[2], rgba[3]);
+            return 1;
+        }
+
         const auto reflected_input_vs_path = shader_dir / "d3d11-smoke-reflected-input.vs.cso";
         const auto reflected_input_ps_path = shader_dir / "d3d11-smoke-reflected-input.ps.cso";
         const char* reflected_input_vs_source =
@@ -689,6 +1063,41 @@ int main() {
         auto reflected_input_fs = device->create_shader(reflected_input_ps_desc);
         if (!reflected_input_vs || !reflected_input_fs) {
             std::fprintf(stderr, "D3D11 smoke: reflected input shader creation failed\n");
+            return 1;
+        }
+
+        tgfx::PipelineDesc logical_semantic_desc;
+        logical_semantic_desc.vertex_shader = reflected_input_vs;
+        logical_semantic_desc.fragment_shader = reflected_input_fs;
+        logical_semantic_desc.depth_format = tgfx::PixelFormat::Undefined;
+        logical_semantic_desc.color_formats.push_back(tgfx::PixelFormat::RGBA8_UNorm);
+        logical_semantic_desc.depth_stencil.depth_test = false;
+        logical_semantic_desc.depth_stencil.depth_write = false;
+        logical_semantic_desc.raster.cull = tgfx::CullMode::None;
+        tgfx::VertexBufferLayout logical_semantic_layout;
+        logical_semantic_layout.stride = 7 * sizeof(float);
+        logical_semantic_layout.attributes = {
+            {0, tgfx::VertexFormat::Float3, 0, "position"},
+            {1, tgfx::VertexFormat::Float4, 3 * sizeof(float), "uv"},
+        };
+        logical_semantic_desc.vertex_layouts.push_back(logical_semantic_layout);
+        if (!device->create_pipeline(logical_semantic_desc)) {
+            std::fprintf(stderr, "D3D11 smoke: logical semantic input layout failed\n");
+            return 1;
+        }
+
+        tgfx::PipelineDesc reflected_semantic_desc = logical_semantic_desc;
+        reflected_semantic_desc.vertex_layouts.clear();
+        tgfx::VertexBufferLayout reflected_semantic_layout;
+        reflected_semantic_layout.stride = 7 * sizeof(float);
+        reflected_semantic_layout.use_shader_input_locations = true;
+        reflected_semantic_layout.attributes = {
+            {0, tgfx::VertexFormat::Float3, 0, "position"},
+            {4, tgfx::VertexFormat::Float4, 3 * sizeof(float), "joints"},
+        };
+        reflected_semantic_desc.vertex_layouts.push_back(reflected_semantic_layout);
+        if (!device->create_pipeline(reflected_semantic_desc)) {
+            std::fprintf(stderr, "D3D11 smoke: reflected semantic input layout failed\n");
             return 1;
         }
 
@@ -968,6 +1377,15 @@ int main() {
         device->destroy(reflected_input_fs);
         device->destroy(reflected_input_vs);
         device->destroy(render_context_fs);
+        device->destroy(normal_msaa_pipeline);
+        device->destroy(normal_msaa_color);
+        device->destroy(normal_resource_set);
+        device->destroy(draw_data_cb);
+        device->destroy(per_frame_cb);
+        device->destroy(normal_vbo);
+        device->destroy(normal_pipeline);
+        device->destroy(normal_fs);
+        device->destroy(normal_vs);
         device->destroy(resource_set);
         device->destroy(sampler);
         device->destroy(textured_pipeline);

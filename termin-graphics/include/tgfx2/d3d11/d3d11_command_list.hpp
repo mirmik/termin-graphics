@@ -50,6 +50,8 @@ private:
     D3D11RenderDevice& device_;
     ID3D11DeviceContext* ctx_ = nullptr;
     PipelineHandle current_pipeline_;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> push_constant_buffer_;
+    uint32_t push_constant_buffer_size_ = 0;
 };
 
 } // namespace tgfx
