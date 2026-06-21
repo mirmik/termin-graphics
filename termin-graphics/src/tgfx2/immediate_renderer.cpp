@@ -1,6 +1,7 @@
 #include <tgfx2/immediate_renderer.hpp>
 
 #include <tgfx2/builtin_shader_sources.hpp>
+#include <tgfx2/clip_space.hpp>
 #include <tgfx2/render_context.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/descriptors.hpp>
@@ -545,7 +546,10 @@ void ImmediateRenderer::_flush_buffers(
     // View-projection combined on CPU: shader only needs one matrix,
     // fits comfortably in 128-byte push constants. Double→float narrow
     // happens here because Mat44 internal storage is double.
-    Mat44 vp = proj_matrix * view_matrix;
+    const Mat44 backend_proj = tgfx::adapt_projection_for_backend(
+        ctx2->device().backend_type(),
+        proj_matrix);
+    Mat44 vp = backend_proj * view_matrix;
     ImmediatePushData push{};
     for (int i = 0; i < 16; ++i) {
         push.u_vp[i] = static_cast<float>(vp.data[i]);

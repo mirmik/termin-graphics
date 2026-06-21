@@ -103,6 +103,7 @@ set(TGFX2_SOURCES
     src/tgfx2/builtin_shader_sources.cpp
     src/tgfx2/device_factory.cpp
     src/tgfx2/canvas2d_renderer.cpp
+    src/tgfx2/clip_space.cpp
     src/tgfx2/engine_shader_catalog.cpp
     src/tgfx2/font_atlas.cpp
     src/tgfx2/immediate_renderer.cpp

@@ -453,6 +453,7 @@ int main() {
         pipeline_desc.color_formats.push_back(tgfx::PixelFormat::RGBA8_UNorm);
         pipeline_desc.depth_stencil.depth_test = false;
         pipeline_desc.depth_stencil.depth_write = false;
+        pipeline_desc.raster.cull = tgfx::CullMode::None;
         auto pipeline = device->create_pipeline(pipeline_desc);
         if (!pipeline) {
             std::fprintf(stderr, "D3D11 smoke: create_pipeline failed\n");
@@ -1023,6 +1024,56 @@ int main() {
             std::fprintf(stderr,
                          "D3D11 smoke: color-only pass with stale depth state did not draw %.3f %.3f %.3f %.3f\n",
                          rgba[0], rgba[1], rgba[2], rgba[3]);
+            return 1;
+        }
+
+        const auto fsq_uv_ps_path = shader_dir / "d3d11-smoke-fsq-uv.ps.cso";
+        const char* fsq_uv_ps_source =
+            "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
+            "float4 main(VSOut input) : SV_Target0 {\n"
+            "    return float4(input.uv.x, input.uv.y, 0.0, 1.0);\n"
+            "}\n";
+        if (!compile_hlsl_to_file(fsq_uv_ps_source, "ps_5_0", fsq_uv_ps_path)) {
+            return 1;
+        }
+        std::vector<uint8_t> fsq_uv_ps_bytecode;
+        if (!read_binary_file(fsq_uv_ps_path, fsq_uv_ps_bytecode)) {
+            return 1;
+        }
+        tgfx::ShaderDesc fsq_uv_ps_desc;
+        fsq_uv_ps_desc.stage = tgfx::ShaderStage::Fragment;
+        fsq_uv_ps_desc.debug_name = "D3D11 smoke FSQ UV FS";
+        fsq_uv_ps_desc.bytecode = std::move(fsq_uv_ps_bytecode);
+        auto fsq_uv_fs = device->create_shader(fsq_uv_ps_desc);
+        if (!fsq_uv_fs) {
+            std::fprintf(stderr, "D3D11 smoke: FSQ UV fragment shader creation failed\n");
+            return 1;
+        }
+
+        ctx.begin_frame();
+        ctx.begin_pass(color, {}, context_clear, 1.0f, false);
+        ctx.set_depth_test(false);
+        ctx.set_depth_write(false);
+        ctx.set_cull(tgfx::CullMode::None);
+        ctx.set_blend(false);
+        ctx.bind_shader(fsq_vs, fsq_uv_fs);
+        ctx.draw_fullscreen_quad_with_bound_shader();
+        ctx.end_pass();
+        ctx.end_frame();
+
+        float top_rgba[4] = {};
+        float bottom_rgba[4] = {};
+        if (!device->read_pixel_rgba8(color, 2, 0, top_rgba) ||
+            !device->read_pixel_rgba8(color, 2, 3, bottom_rgba)) {
+            std::fprintf(stderr, "D3D11 smoke: FSQ UV readback failed\n");
+            return 1;
+        }
+        if (!(top_rgba[1] < 0.25f && bottom_rgba[1] > 0.75f)) {
+            std::fprintf(stderr,
+                         "D3D11 smoke: fullscreen quad UV Y is inverted "
+                         "(top=%.3f bottom=%.3f)\n",
+                         top_rgba[1],
+                         bottom_rgba[1]);
             return 1;
         }
 

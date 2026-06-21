@@ -1,6 +1,8 @@
 #include "termin/render/frame_uniforms.hpp"
 
 #include "tcbase/tc_log.hpp"
+#include "tgfx2/clip_space.hpp"
+#include "tgfx2/i_render_device.hpp"
 #include "tgfx2/render_context.hpp"
 
 #include <cstring>
@@ -56,6 +58,11 @@ EnginePerFrameStd140 make_engine_per_frame_uniforms(const ExecuteContext& ctx) {
         camera_position = ctx.camera->get_position();
         near_clip = static_cast<float>(ctx.camera->near_clip);
         far_clip = static_cast<float>(ctx.camera->far_clip);
+    }
+    if (ctx.ctx2) {
+        projection = tgfx::adapt_projection_for_backend(
+            ctx.ctx2->device().backend_type(),
+            projection);
     }
 
     return make_engine_per_frame_uniforms(
