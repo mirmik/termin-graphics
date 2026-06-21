@@ -284,7 +284,7 @@ jobs:
         env:
           TERMIN_BINDINGS_DIR: ${{ github.workspace }}/sdk-python-staging
         run: |
-          pip install nanobind numpy Pillow PyYAML pytest PyOpenGL glfw pysdl2 pysdl2-dll pyassimp scipy PyQt6
+          pip install nanobind numpy Pillow PyYAML pytest PyOpenGL glfw pysdl2 pysdl2-dll pyassimp scipy
           ./install-pip-packages.sh --editable
 
       - name: Build termin bundle
@@ -299,7 +299,6 @@ jobs:
           TERMIN_SDK: ${{ github.workspace }}/sdk
           LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
           PYTHONPATH: ${{ github.workspace }}/termin-app/install/lib/python:${{ github.workspace }}/sdk-python-staging:${{ github.workspace }}/sdk/lib/python
-          QT_QPA_PLATFORM: offscreen
         run: |
           python -c "from pathlib import Path; import termin.voxels.voxel_shader as vs; path = Path(vs.__file__).resolve(); expected = Path('${{ github.workspace }}/termin-app/install/lib/python').resolve(); print(f'termin.voxels.voxel_shader={path}'); assert expected in path.parents, f'expected termin-app install path first, got {path}'"
           python -c "from tgfx import TcShader; shader = TcShader.from_builtin_catalog('termin-engine-voxel-display'); assert shader.is_valid, 'termin-engine-voxel-display failed preflight'"
