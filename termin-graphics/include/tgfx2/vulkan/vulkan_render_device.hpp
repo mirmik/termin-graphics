@@ -386,6 +386,7 @@ public:
     TextureHandle register_external_texture(
         uintptr_t native_handle, const TextureDesc& desc) override;
     TextureDesc texture_desc(TextureHandle handle) const override;
+    uintptr_t pipeline_resource_layout_token(PipelineHandle pipeline) const override;
     uintptr_t pipeline_descriptor_set_layout(PipelineHandle pipeline) const override;
     SamplerHandle create_sampler(const SamplerDesc& desc) override;
     ShaderHandle create_shader(const ShaderDesc& desc) override;

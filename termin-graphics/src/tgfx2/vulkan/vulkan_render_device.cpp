@@ -1053,15 +1053,19 @@ TextureDesc VulkanRenderDevice::texture_desc(TextureHandle handle) const {
     return {};
 }
 
-uintptr_t VulkanRenderDevice::pipeline_descriptor_set_layout(PipelineHandle pipeline) const {
+uintptr_t VulkanRenderDevice::pipeline_resource_layout_token(PipelineHandle pipeline) const {
     auto* self = const_cast<VulkanRenderDevice*>(this);
     if (auto* p = self->pipelines_.get(pipeline.id)) {
         return reinterpret_cast<uintptr_t>(p->descriptor_set_layout);
     }
     tc_log(TC_LOG_ERROR,
-           "VulkanRenderDevice: pipeline_descriptor_set_layout pipeline=%u NOT FOUND",
+           "VulkanRenderDevice: pipeline_resource_layout_token pipeline=%u NOT FOUND",
            pipeline.id);
     return 0;
+}
+
+uintptr_t VulkanRenderDevice::pipeline_descriptor_set_layout(PipelineHandle pipeline) const {
+    return pipeline_resource_layout_token(pipeline);
 }
 
 // All `destroy(*Handle)` calls queue the handle into

@@ -912,7 +912,7 @@ ResourceSetHandle OpenGLRenderDevice::create_resource_set(const ResourceSetDesc&
     return {resource_sets_.add(std::move(rs))};
 }
 
-uintptr_t OpenGLRenderDevice::pipeline_descriptor_set_layout(PipelineHandle pipeline) const {
+uintptr_t OpenGLRenderDevice::pipeline_resource_layout_token(PipelineHandle pipeline) const {
     if (!pipelines_.get_const(pipeline.id)) {
         return 0;
     }
@@ -922,6 +922,10 @@ uintptr_t OpenGLRenderDevice::pipeline_descriptor_set_layout(PipelineHandle pipe
     // resource binding layout and when pending bind-by-name data may be
     // flushed into a ResourceSet.
     return static_cast<uintptr_t>(pipeline.id);
+}
+
+uintptr_t OpenGLRenderDevice::pipeline_descriptor_set_layout(PipelineHandle pipeline) const {
+    return pipeline_resource_layout_token(pipeline);
 }
 
 // --- Destroy ---

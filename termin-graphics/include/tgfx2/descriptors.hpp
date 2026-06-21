@@ -114,10 +114,19 @@ struct ResourceBinding {
 
 struct ResourceSetDesc {
     std::vector<ResourceBinding> bindings;
-    // Per-pipeline descriptor set layout hint.
-    // Vulkan backend: cast to VkDescriptorSetLayout; 0 means "no layout"
-    // (pipelines without descriptor bindings). OpenGL: ignored.
+    // Per-pipeline backend resource layout token. Vulkan currently maps this
+    // to a VkDescriptorSetLayout; OpenGL and D3D11 use pipeline-local tokens
+    // because they do not have descriptor set layout objects.
+    uintptr_t resource_layout_token = 0;
+
+    // Transitional Vulkan compatibility field. New code should use
+    // resource_layout_token; Vulkan accepts either until ResourceSetDesc is
+    // split into resource values plus backend binding plan.
     uintptr_t descriptor_set_layout = 0;
+
+    uintptr_t effective_resource_layout_token() const {
+        return resource_layout_token != 0 ? resource_layout_token : descriptor_set_layout;
+    }
 };
 
 } // namespace tgfx

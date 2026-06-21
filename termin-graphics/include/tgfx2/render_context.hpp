@@ -160,7 +160,7 @@ private:
     // flush_pipeline() to skip a redundant vkCmdBindPipeline when the
     // pipeline cache returned the same handle again (same state combo).
     PipelineHandle last_bound_pipeline_ = {};
-    uint64_t last_bound_resource_set_layout_ = 0;
+    uint64_t last_bound_resource_layout_token_ = 0;
 
 public:
     RenderContext2(IRenderDevice& device, PipelineCache& cache);

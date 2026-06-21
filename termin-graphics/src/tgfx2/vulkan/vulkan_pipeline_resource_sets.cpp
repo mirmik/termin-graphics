@@ -572,27 +572,28 @@ static uint64_t hash_resource_set_desc(const ResourceSetDesc& desc) {
         mix(b.texture.id);
         mix(b.sampler.id);
     }
-    // Mix in the descriptor set layout so that identical binding sets under
-    // different VkDescriptorSetLayouts don't collide in the per-pool cache.
-    mix(desc.descriptor_set_layout);
+    // Mix in the resource layout token so that identical binding sets under
+    // different backend layouts don't collide in the per-pool cache.
+    mix(desc.effective_resource_layout_token());
     return h;
 }
 
 ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc& desc) {
     VkDescriptorSetLayout layout = VK_NULL_HANDLE;
-    if (desc.descriptor_set_layout != 0) {
-        layout = reinterpret_cast<VkDescriptorSetLayout>(desc.descriptor_set_layout);
+    if (desc.effective_resource_layout_token() != 0) {
+        layout = reinterpret_cast<VkDescriptorSetLayout>(
+            desc.effective_resource_layout_token());
     }
     if (!layout) {
         tc_log(TC_LOG_ERROR,
-               "VulkanRenderDevice: create_resource_set called without descriptor_set_layout");
+               "VulkanRenderDevice: create_resource_set called without resource_layout_token");
         return {};
     }
 
     const auto layout_it = descriptor_layout_bindings_.find(layout);
     if (layout_it == descriptor_layout_bindings_.end()) {
         tc_log(TC_LOG_ERROR,
-               "VulkanRenderDevice: create_resource_set called with unknown descriptor_set_layout=%p",
+               "VulkanRenderDevice: create_resource_set called with unknown resource_layout_token=%p",
                static_cast<void*>(layout));
         return {};
     }

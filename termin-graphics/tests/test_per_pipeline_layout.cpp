@@ -120,8 +120,8 @@ int main() {
 
     tgfx::ResourceSetDesc rs_desc;
     rs_desc.bindings.push_back(rb);
-    rs_desc.descriptor_set_layout =
-        device->pipeline_descriptor_set_layout(pipeline);
+    rs_desc.resource_layout_token =
+        device->pipeline_resource_layout_token(pipeline);
 
     auto rset = device->create_resource_set(rs_desc);
     printf("Resource set: id=%u\n", rset.id);

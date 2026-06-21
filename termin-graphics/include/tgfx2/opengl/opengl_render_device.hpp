@@ -186,6 +186,7 @@ public:
     ShaderHandle create_shader(const ShaderDesc& desc) override;
     PipelineHandle create_pipeline(const PipelineDesc& desc) override;
     ResourceSetHandle create_resource_set(const ResourceSetDesc& desc) override;
+    uintptr_t pipeline_resource_layout_token(PipelineHandle pipeline) const override;
     uintptr_t pipeline_descriptor_set_layout(PipelineHandle pipeline) const override;
 
     void destroy(BufferHandle handle) override;

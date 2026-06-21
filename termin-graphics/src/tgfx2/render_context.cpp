@@ -201,7 +201,7 @@ void RenderContext2::begin_pass(
     last_bound_ibo_offset_ = 0;
     last_bound_index_type_ = IndexType::Uint32;
     last_bound_pipeline_ = {};
-    last_bound_resource_set_layout_ = 0;
+    last_bound_resource_layout_token_ = 0;
     pipeline_dirty_ = true;
 }
 
@@ -811,14 +811,14 @@ void RenderContext2::flush_pipeline() {
     if (pipeline_changed) {
         cmd_->bind_pipeline(pipeline);
         last_bound_pipeline_ = pipeline;
-        const uint64_t descriptor_set_layout =
-            device_.pipeline_descriptor_set_layout(pipeline);
-        if (descriptor_set_layout != last_bound_resource_set_layout_) {
+        const uint64_t resource_layout_token =
+            device_.pipeline_resource_layout_token(pipeline);
+        if (resource_layout_token != last_bound_resource_layout_token_) {
             if (current_resource_set_) {
                 deferred_destroy_resource_sets_.push_back(current_resource_set_);
                 current_resource_set_ = {};
             }
-            last_bound_resource_set_layout_ = descriptor_set_layout;
+            last_bound_resource_layout_token_ = resource_layout_token;
             bindings_dirty_ = true;
         }
         // Vertex attribute interpretation is pipeline-local (and OpenGL
@@ -933,15 +933,17 @@ void RenderContext2::flush_resource_set() {
 
     ResourceSetDesc desc;
     desc.bindings = flatten_pending_bindings();
-    // Pass the current pipeline's descriptor set layout so the backend
-    // allocates against the right VkDescriptorSetLayout. Vulkan needs a
-    // descriptor set bound for statically-used layouts even when this draw
-    // did not enqueue explicit bindings; backend defaults fill the slots.
+    // Pass the current pipeline's resource layout token so the backend binds
+    // values against the right native layout. Vulkan currently maps this token
+    // to a VkDescriptorSetLayout; OpenGL and D3D11 use pipeline-local tokens.
     if (last_bound_pipeline_) {
-        desc.descriptor_set_layout =
-            device_.pipeline_descriptor_set_layout(last_bound_pipeline_);
+        desc.resource_layout_token =
+            device_.pipeline_resource_layout_token(last_bound_pipeline_);
+        // Transitional Vulkan compatibility until ResourceSetDesc no longer
+        // exposes descriptor-set-shaped placement.
+        desc.descriptor_set_layout = desc.resource_layout_token;
     }
-    if (desc.descriptor_set_layout != 0) {
+    if (desc.effective_resource_layout_token() != 0) {
         current_resource_set_ = device_.create_resource_set(desc);
         if (current_resource_set_) {
             cmd_->bind_resource_set(current_resource_set_, 0);
@@ -950,7 +952,7 @@ void RenderContext2::flush_resource_set() {
         if (!desc.bindings.empty()) {
             tc_log(TC_LOG_WARN,
                    "RenderContext2: flush_resource_set skipping pipeline=%u "
-                   "(descriptor_set_layout is null) with %zu pending bindings",
+                   "(resource_layout_token is null) with %zu pending bindings",
                    last_bound_pipeline_.id, desc.bindings.size());
             clear_pending_binding_buckets();
         }

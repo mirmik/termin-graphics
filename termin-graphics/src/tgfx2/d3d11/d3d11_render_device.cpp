@@ -991,8 +991,12 @@ ResourceSetHandle D3D11RenderDevice::create_resource_set(const ResourceSetDesc& 
     return {resource_sets_.add(std::move(out))};
 }
 
-uintptr_t D3D11RenderDevice::pipeline_descriptor_set_layout(PipelineHandle pipeline) const {
+uintptr_t D3D11RenderDevice::pipeline_resource_layout_token(PipelineHandle pipeline) const {
     return pipelines_.get_const(pipeline.id) ? static_cast<uintptr_t>(pipeline.id) : 0;
+}
+
+uintptr_t D3D11RenderDevice::pipeline_descriptor_set_layout(PipelineHandle pipeline) const {
+    return pipeline_resource_layout_token(pipeline);
 }
 
 void D3D11RenderDevice::destroy(BufferHandle handle) { buffers_.remove(handle.id); }
