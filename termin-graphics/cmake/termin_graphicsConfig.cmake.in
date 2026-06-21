@@ -6,6 +6,7 @@ set(_termin_graphics_enable_opengl @PACKAGE_TGFX2_ENABLE_OPENGL@)
 if(_termin_graphics_enable_opengl)
     find_dependency(OpenGL REQUIRED)
 endif()
+set(termin_graphics_TGFX2_ENABLE_D3D11 @PACKAGE_TGFX2_ENABLE_D3D11@)
 find_dependency(termin_base REQUIRED)
 find_dependency(termin_mesh REQUIRED)
 

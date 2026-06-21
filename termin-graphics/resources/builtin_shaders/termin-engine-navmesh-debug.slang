@@ -42,6 +42,7 @@ VertexOutput vs_main(VertexInput input) {
 }
 
 struct FragmentInput {
+    float4 screen_pos : SV_Position;
     float4 color : COLOR0;
 };
 

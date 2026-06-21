@@ -48,6 +48,27 @@ bool validate_d3d11_register_class(
     return false;
 }
 
+bool validate_d3d11_slot(
+    const ResourceBinding& binding,
+    UINT slot,
+    UINT limit,
+    const char* kind_name
+) {
+    if (slot < limit) {
+        return true;
+    }
+    tc::Log::error(
+        "D3D11CommandList::bind_resource_set: %s binding at set=%u binding=%u "
+        "resolved to out-of-range D3D11 slot=%u limit=%u has_placement=%u",
+        kind_name,
+        binding.set,
+        binding.binding,
+        slot,
+        limit,
+        binding.d3d11.has_placement ? 1u : 0u);
+    return false;
+}
+
 void set_constant_buffers(
     ID3D11DeviceContext* ctx,
     uint32_t stage_mask,
@@ -99,6 +120,13 @@ void set_samplers(
     }
 }
 
+void clear_shader_resources(ID3D11DeviceContext* ctx) {
+    std::array<ID3D11ShaderResourceView*, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT> null_srvs{};
+    ctx->VSSetShaderResources(0, static_cast<UINT>(null_srvs.size()), null_srvs.data());
+    ctx->PSSetShaderResources(0, static_cast<UINT>(null_srvs.size()), null_srvs.data());
+    ctx->GSSetShaderResources(0, static_cast<UINT>(null_srvs.size()), null_srvs.data());
+}
+
 } // namespace
 
 D3D11CommandList::D3D11CommandList(D3D11RenderDevice& device)
@@ -112,6 +140,8 @@ void D3D11CommandList::end() {
 }
 
 void D3D11CommandList::begin_render_pass(const RenderPassDesc& pass) {
+    clear_shader_resources(ctx_);
+
     std::array<ID3D11RenderTargetView*, D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT> rtvs{};
     UINT rtv_count = 0;
     uint32_t width = 0;
@@ -164,6 +194,7 @@ void D3D11CommandList::begin_render_pass(const RenderPassDesc& pass) {
 void D3D11CommandList::end_render_pass() {
     std::array<ID3D11RenderTargetView*, D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT> null_rtvs{};
     ctx_->OMSetRenderTargets(static_cast<UINT>(null_rtvs.size()), null_rtvs.data(), nullptr);
+    clear_shader_resources(ctx_);
 }
 
 void D3D11CommandList::bind_pipeline(PipelineHandle pipeline) {
@@ -208,6 +239,13 @@ void D3D11CommandList::bind_resource_set(ResourceSetHandle set,
                         "uniform buffer")) {
                     break;
                 }
+                if (!validate_d3d11_slot(
+                        binding,
+                        slot,
+                        D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT,
+                        "uniform buffer")) {
+                    break;
+                }
                 auto* buf = device_.get_buffer(binding.buffer);
                 ID3D11Buffer* native = buf ? buf->buffer.Get() : nullptr;
                 set_constant_buffers(ctx_, stage_mask, slot, &native);
@@ -220,11 +258,20 @@ void D3D11CommandList::bind_resource_set(ResourceSetHandle set,
                         "sampled texture")) {
                     break;
                 }
+                if (!validate_d3d11_slot(
+                        binding,
+                        slot,
+                        D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT,
+                        "sampled texture")) {
+                    break;
+                }
                 auto* tex = device_.get_texture(binding.texture);
                 ID3D11ShaderResourceView* srv = tex ? tex->srv.Get() : nullptr;
                 set_shader_resources(ctx_, stage_mask, slot, &srv);
                 auto* sampler = device_.get_sampler(binding.sampler);
-                ID3D11SamplerState* native_sampler = sampler ? sampler->sampler.Get() : nullptr;
+                ID3D11SamplerState* native_sampler = sampler
+                    ? sampler->sampler.Get()
+                    : device_.default_sampler_state();
                 set_samplers(ctx_, stage_mask, slot, &native_sampler);
                 break;
             }
@@ -232,6 +279,13 @@ void D3D11CommandList::bind_resource_set(ResourceSetHandle set,
                 if (!validate_d3d11_register_class(
                         binding,
                         TC_SHADER_D3D11_REGISTER_S,
+                        "sampler")) {
+                    break;
+                }
+                if (!validate_d3d11_slot(
+                        binding,
+                        slot,
+                        D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT,
                         "sampler")) {
                     break;
                 }

@@ -121,6 +121,17 @@ public:
     std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) override;
     void submit(ICommandList& cmd) override;
     void present() override;
+    TextureHandle register_external_texture(uintptr_t native_handle, const TextureDesc& desc) override;
+    void blit_to_texture(TextureHandle dst,
+                         TextureHandle src,
+                         int src_x,
+                         int src_y,
+                         int src_w,
+                         int src_h,
+                         int dst_x,
+                         int dst_y,
+                         int dst_w,
+                         int dst_h) override;
 
     bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]) override;
     bool read_texture_rgba_float(TextureHandle tex, float* out) override;
@@ -138,6 +149,7 @@ public:
 
     ID3D11Device* native_device() const { return device_.Get(); }
     ID3D11DeviceContext* immediate_context() const { return context_.Get(); }
+    ID3D11SamplerState* default_sampler_state() const { return default_sampler_.Get(); }
 
     D3D11Buffer* get_buffer(BufferHandle h) { return buffers_.get(h.id); }
     D3D11Texture* get_texture(TextureHandle h) { return textures_.get(h.id); }
@@ -147,12 +159,22 @@ public:
     D3D11ResourceSet* get_resource_set(ResourceSetHandle h) { return resource_sets_.get(h.id); }
 
 private:
+    TextureHandle register_external_texture(ID3D11Texture2D* texture, const TextureDesc& desc);
     void create_device();
+    void create_default_sampler();
+    bool ensure_blit_resources();
     void query_capabilities();
     Microsoft::WRL::ComPtr<ID3D11Texture2D> create_staging_texture(const D3D11Texture& src) const;
 
     Microsoft::WRL::ComPtr<ID3D11Device> device_;
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
+    Microsoft::WRL::ComPtr<ID3D11SamplerState> default_sampler_;
+    Microsoft::WRL::ComPtr<ID3D11VertexShader> blit_vertex_shader_;
+    Microsoft::WRL::ComPtr<ID3D11PixelShader> blit_pixel_shader_;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> blit_constant_buffer_;
+    Microsoft::WRL::ComPtr<ID3D11RasterizerState> blit_raster_state_;
+    Microsoft::WRL::ComPtr<ID3D11DepthStencilState> blit_depth_stencil_state_;
+    Microsoft::WRL::ComPtr<ID3D11BlendState> blit_blend_state_;
     D3D_FEATURE_LEVEL feature_level_ = D3D_FEATURE_LEVEL_11_0;
     BackendCapabilities caps_;
 

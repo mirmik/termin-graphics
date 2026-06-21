@@ -68,18 +68,26 @@ static_assert(sizeof(Text2DSdfPushData) == 96,
 //
 // The matrix is written in math (row-major) notation but stored in the
 // push-constant layout expected by the shader.
-void build_ortho_pixel_to_ndc(float w, float h, float out[16]) {
+void build_ortho_pixel_to_ndc(float w, float h, bool d3d11_clip_space, float out[16]) {
     if (w <= 0.0f || h <= 0.0f) {
         std::memset(out, 0, 16 * sizeof(float));
         out[0] = out[5] = out[10] = out[15] = 1.0f;
         return;
     }
-    float m[16] = {
-        2.0f / w,  0.0f,      0.0f, -1.0f,
-        0.0f,      2.0f / h,  0.0f, -1.0f,
-        0.0f,      0.0f,      1.0f,  0.0f,
-        0.0f,      0.0f,      0.0f,  1.0f,
-    };
+    float m[16]{};
+    m[0] = 2.0f / w;
+    m[3] = -1.0f;
+    if (d3d11_clip_space) {
+        // D3D viewport transform maps clip-space y=+1 to the top edge.
+        // Vulkan and OpenGL-with-upper-left clip control map y=-1 there.
+        m[5] = -2.0f / h;
+        m[7] = 1.0f;
+    } else {
+        m[5] = 2.0f / h;
+        m[7] = -1.0f;
+    }
+    m[10] = 1.0f;
+    m[15] = 1.0f;
     std::memcpy(out, m, sizeof(m));
 }
 
@@ -172,6 +180,7 @@ void Text2DRenderer::begin(RenderContext2* ctx,
     build_ortho_pixel_to_ndc(
         static_cast<float>(viewport_w),
         static_cast<float>(viewport_h),
+        ctx_ != nullptr && ctx_->device().backend_type() == BackendType::D3D11,
         proj_);
 }
 

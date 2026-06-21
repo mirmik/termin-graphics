@@ -304,29 +304,18 @@ bool FontAtlas::ensure_bitmap_glyph_(uint32_t codepoint, float display_px) {
         uint8_t* dst = atlas_.data()
                        + static_cast<size_t>(dst_row0_clamped) * atlas_w_
                        + cell.x;
-        if (clip_top == 0) {
-            stbtt_MakeGlyphBitmapSubpixel(&impl_->font,
-                                          dst,
-                                          gw_over, rows_to_write,
-                                          atlas_w_,
-                                          sm.scale * kOversampleX,
-                                          sm.scale,
-                                          0.0f, 0.0f,
-                                          glyph_idx);
-        } else {
-            std::vector<uint8_t> scratch(static_cast<size_t>(gw_over) * gbh, 0);
-            stbtt_MakeGlyphBitmapSubpixel(&impl_->font,
-                                          scratch.data(),
-                                          gw_over, gbh, gw_over,
-                                          sm.scale * kOversampleX,
-                                          sm.scale,
-                                          0.0f, 0.0f,
-                                          glyph_idx);
-            for (int r = 0; r < rows_to_write; ++r) {
-                std::memcpy(dst + static_cast<size_t>(r) * atlas_w_,
-                            scratch.data() + static_cast<size_t>(r + clip_top) * gw_over,
-                            static_cast<size_t>(gw_over));
-            }
+        std::vector<uint8_t> scratch(static_cast<size_t>(gw_over) * gbh, 0);
+        stbtt_MakeGlyphBitmapSubpixel(&impl_->font,
+                                      scratch.data(),
+                                      gw_over, gbh, gw_over,
+                                      sm.scale * kOversampleX,
+                                      sm.scale,
+                                      0.0f, 0.0f,
+                                      glyph_idx);
+        for (int r = 0; r < rows_to_write; ++r) {
+            std::memcpy(dst + static_cast<size_t>(r) * atlas_w_,
+                        scratch.data() + static_cast<size_t>(r + clip_top) * gw_over,
+                        static_cast<size_t>(gw_over));
         }
 
         if (kOversampleX > 1) {

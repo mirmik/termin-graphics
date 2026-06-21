@@ -1,6 +1,8 @@
 #include "termin_shaderc/cli.hpp"
 
+#ifdef TERMIN_SHADERC_HAS_SHADERC
 #include <shaderc/shaderc.hpp>
+#endif
 #include <tcbase/trent/json.h>
 #include <tgfx/resources/tc_shader.h>
 #include <tgfx2/internal/process_runner.hpp>
@@ -49,13 +51,6 @@ struct ShaderResourceBinding {
     std::vector<Field> fields;
 };
 
-static shaderc_shader_kind shader_kind_for_stage(const std::string& stage) {
-    if (stage == "vertex") return shaderc_vertex_shader;
-    if (stage == "fragment") return shaderc_fragment_shader;
-    if (stage == "geometry") return shaderc_geometry_shader;
-    return shaderc_glsl_infer_from_source;
-}
-
 static std::string slang_stage_for_stage(const std::string& stage) {
     if (stage == "vertex") return "vertex";
     if (stage == "fragment") return "fragment";
@@ -63,6 +58,15 @@ static std::string slang_stage_for_stage(const std::string& stage) {
     if (stage == "compute") return "compute";
     return "";
 }
+
+#ifdef TERMIN_SHADERC_HAS_SHADERC
+static shaderc_shader_kind shader_kind_for_stage(const std::string& stage) {
+    if (stage == "vertex") return shaderc_vertex_shader;
+    if (stage == "fragment") return shaderc_fragment_shader;
+    if (stage == "geometry") return shaderc_geometry_shader;
+    return shaderc_glsl_infer_from_source;
+}
+#endif
 
 static std::optional<std::string> slang_matrix_layout_arg(const std::string& layout) {
     if (layout == "column" || layout == "col" || layout == "column-major" || layout == "col-major") {
@@ -133,9 +137,22 @@ static std::string d3d11_register_class_for_kind(const std::string& kind) {
 }
 
 static void assign_d3d11_register_placement(std::vector<ShaderResourceBinding>& resources) {
+    uint32_t next_constant_buffer = 0;
+    uint32_t next_texture = 0;
+    uint32_t next_sampler = 0;
+    uint32_t next_unordered_access = 0;
+
     for (ShaderResourceBinding& resource : resources) {
         resource.d3d11_register_class = d3d11_register_class_for_kind(resource.kind);
-        resource.d3d11_register_index = resource.binding;
+        if (resource.d3d11_register_class == "b") {
+            resource.d3d11_register_index = next_constant_buffer++;
+        } else if (resource.d3d11_register_class == "t") {
+            resource.d3d11_register_index = next_texture++;
+        } else if (resource.d3d11_register_class == "s") {
+            resource.d3d11_register_index = next_sampler++;
+        } else if (resource.d3d11_register_class == "u") {
+            resource.d3d11_register_index = next_unordered_access++;
+        }
     }
 }
 
@@ -304,6 +321,141 @@ static void append_unique_resource(
         }
     }
     resources.push_back(std::move(binding));
+}
+
+static bool has_resource_named(
+    const std::vector<ShaderResourceBinding>& resources,
+    const std::string& name
+) {
+    return std::any_of(
+        resources.begin(),
+        resources.end(),
+        [&](const ShaderResourceBinding& resource) {
+            return resource.name == name;
+        });
+}
+
+static void append_missing_resources(
+    std::vector<ShaderResourceBinding>& resources,
+    std::vector<ShaderResourceBinding> candidates
+) {
+    for (ShaderResourceBinding& candidate : candidates) {
+        if (!has_resource_named(resources, candidate.name)) {
+            resources.push_back(std::move(candidate));
+        }
+    }
+}
+
+static bool is_identifier_char(char ch) {
+    return (ch >= 'A' && ch <= 'Z') ||
+           (ch >= 'a' && ch <= 'z') ||
+           (ch >= '0' && ch <= '9') ||
+           ch == '_';
+}
+
+static std::optional<std::string_view> entry_function_body(
+    const std::string& source,
+    const std::string& entry
+) {
+    if (entry.empty()) {
+        return std::nullopt;
+    }
+
+    size_t search_from = 0;
+    while (true) {
+        const size_t name_pos = source.find(entry, search_from);
+        if (name_pos == std::string::npos) {
+            return std::nullopt;
+        }
+        const bool left_ok =
+            name_pos == 0 ||
+            !is_identifier_char(source[name_pos - 1]);
+        const size_t name_end = name_pos + entry.size();
+        const bool right_ok =
+            name_end >= source.size() ||
+            !is_identifier_char(source[name_end]);
+        if (!left_ok || !right_ok) {
+            search_from = name_end;
+            continue;
+        }
+
+        const size_t params_pos = source.find('(', name_end);
+        const size_t body_pos = source.find('{', name_end);
+        if (body_pos == std::string::npos) {
+            return std::nullopt;
+        }
+        if (params_pos == std::string::npos || params_pos > body_pos) {
+            search_from = name_end;
+            continue;
+        }
+
+        uint32_t depth = 0;
+        for (size_t i = body_pos; i < source.size(); ++i) {
+            if (source[i] == '{') {
+                ++depth;
+            } else if (source[i] == '}') {
+                if (depth == 0) {
+                    return std::nullopt;
+                }
+                --depth;
+                if (depth == 0) {
+                    return std::string_view(source).substr(
+                        body_pos + 1,
+                        i - body_pos - 1);
+                }
+            }
+        }
+        return std::nullopt;
+    }
+}
+
+static bool entry_body_references_resource(
+    std::string_view body,
+    const std::string& name
+) {
+    if (name.empty()) {
+        return false;
+    }
+
+    size_t search_from = 0;
+    while (true) {
+        const size_t pos = body.find(name, search_from);
+        if (pos == std::string_view::npos) {
+            return false;
+        }
+        const bool left_ok =
+            pos == 0 ||
+            !is_identifier_char(body[pos - 1]);
+        const size_t end = pos + name.size();
+        const bool right_ok =
+            end >= body.size() ||
+            !is_identifier_char(body[end]);
+        if (left_ok && right_ok) {
+            return true;
+        }
+        search_from = end;
+    }
+}
+
+static void append_missing_resources_used_by_entry(
+    std::vector<ShaderResourceBinding>& resources,
+    std::vector<ShaderResourceBinding> candidates,
+    const std::string& source,
+    const std::string& entry
+) {
+    const std::optional<std::string_view> body =
+        entry_function_body(source, entry);
+    if (!body) {
+        append_missing_resources(resources, std::move(candidates));
+        return;
+    }
+
+    for (ShaderResourceBinding& candidate : candidates) {
+        if (!has_resource_named(resources, candidate.name) &&
+            entry_body_references_resource(*body, candidate.name)) {
+            resources.push_back(std::move(candidate));
+        }
+    }
 }
 
 static const nos::trent* trent_dict_get(const nos::trent& value, const char* key) {
@@ -779,6 +931,33 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
             binding.stage_mask = stage_mask;
             append_unique_resource(resources, std::move(binding));
         }
+        static const std::regex bare_resource_re(
+            R"REGEX((?:\[\[\s*(?:TerminScope|Scope)\s*\(\s*"([^"]+)"\s*\)\s*\]\]\s*)?(Sampler[0-9A-Za-z_]*|Texture[A-Za-z0-9_<>, \t]*|RWTexture[A-Za-z0-9_<>, \t]*|SamplerState|SamplerComparisonState)\s+([A-Za-z_][A-Za-z0-9_]*)\s*;)REGEX");
+        for (std::sregex_iterator it(source.begin(), source.end(), bare_resource_re), end;
+             it != end;
+             ++it) {
+            const std::smatch& match = *it;
+            ShaderResourceBinding binding;
+            const std::string scope = match[1].str();
+            const std::string type = match[2].str();
+            binding.name = match[3].str();
+            if (!scope.empty() && is_valid_explicit_resource_scope(scope)) {
+                binding.scope = scope;
+            }
+            if (type == "SamplerState" || type == "SamplerComparisonState") {
+                binding.kind = "sampler";
+                binding.slang_separate_sampler = true;
+            } else if (type.rfind("RWTexture", 0) == 0) {
+                binding.kind = "storage_texture";
+                binding.slang_storage_texture = true;
+            } else {
+                binding.kind = "texture";
+                binding.slang_combined_texture = type.rfind("Sampler", 0) == 0;
+                binding.slang_split_texture = !binding.slang_combined_texture;
+            }
+            binding.stage_mask = stage_mask;
+            append_unique_resource(resources, std::move(binding));
+        }
         static const std::regex sampler_register_re(
             R"((SamplerState|SamplerComparisonState)\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*s([0-9]+)\s*,\s*space([0-9]+)\s*\))");
         for (std::sregex_iterator it(source.begin(), source.end(), sampler_register_re), end;
@@ -860,6 +1039,12 @@ static bool collect_resource_bindings(
     }
     if (resources.empty()) {
         resources = infer_resource_bindings(source, options);
+    } else {
+        append_missing_resources_used_by_entry(
+            resources,
+            infer_resource_bindings(source, options),
+            source,
+            options.entry);
     }
     assign_missing_resource_scopes(resources);
     apply_default_resource_scope(resources, options.default_scope);
@@ -1230,6 +1415,184 @@ static bool write_text_file(
     return static_cast<bool>(out);
 }
 
+static bool patch_slang_d3d11_hlsl_symbol_register(
+    std::string& hlsl,
+    const std::string& symbol,
+    char register_class,
+    uint32_t register_index,
+    bool& changed,
+    bool& found
+) {
+    size_t search_from = 0;
+    while (true) {
+        const size_t symbol_pos = hlsl.find(symbol, search_from);
+        if (symbol_pos == std::string::npos) {
+            return true;
+        }
+        const bool left_ok =
+            symbol_pos == 0 ||
+            !is_identifier_char(hlsl[symbol_pos - 1]);
+        const size_t symbol_end = symbol_pos + symbol.size();
+        const bool right_ok =
+            symbol_end >= hlsl.size() ||
+            !is_identifier_char(hlsl[symbol_end]);
+        if (!left_ok || !right_ok) {
+            search_from = symbol_end;
+            continue;
+        }
+
+        const size_t line_end = hlsl.find_first_of("\r\n;", symbol_end);
+        const size_t search_limit =
+            line_end == std::string::npos ? hlsl.size() : line_end;
+        const size_t register_pos = hlsl.find("register", symbol_end);
+        if (register_pos == std::string::npos || register_pos >= search_limit) {
+            search_from = symbol_end;
+            continue;
+        }
+        const size_t open_paren = hlsl.find('(', register_pos);
+        if (open_paren == std::string::npos || open_paren >= search_limit) {
+            search_from = symbol_end;
+            continue;
+        }
+        size_t class_pos = open_paren + 1;
+        while (class_pos < search_limit &&
+               (hlsl[class_pos] == ' ' || hlsl[class_pos] == '\t')) {
+            ++class_pos;
+        }
+        if (class_pos >= search_limit || hlsl[class_pos] != register_class) {
+            search_from = symbol_end;
+            continue;
+        }
+        size_t value_begin = class_pos + 1;
+        while (value_begin < search_limit &&
+               (hlsl[value_begin] == ' ' || hlsl[value_begin] == '\t')) {
+            ++value_begin;
+        }
+        size_t value_end = value_begin;
+        while (value_end < search_limit &&
+               hlsl[value_end] >= '0' &&
+               hlsl[value_end] <= '9') {
+            ++value_end;
+        }
+        if (value_begin == value_end) {
+            search_from = symbol_end;
+            continue;
+        }
+
+        found = true;
+        const std::string normalized_register = std::to_string(register_index);
+        if (hlsl.compare(
+                value_begin,
+                value_end - value_begin,
+                normalized_register) == 0) {
+            return true;
+        }
+        hlsl.replace(value_begin, value_end - value_begin, normalized_register);
+        changed = true;
+        return true;
+    }
+}
+
+static bool patch_slang_d3d11_hlsl_resource(
+    std::string& hlsl,
+    const ShaderResourceBinding& resource,
+    bool& changed
+) {
+    if (resource.d3d11_register_class.size() != 1) {
+        return true;
+    }
+    const char register_class = resource.d3d11_register_class[0];
+    const uint32_t register_index = resource.d3d11_register_index;
+
+    auto patch_any_symbol =
+        [&](const std::vector<std::string>& symbols,
+            char cls,
+            bool required) -> bool {
+        bool any_found = false;
+        for (const std::string& symbol : symbols) {
+            bool found = false;
+            if (!patch_slang_d3d11_hlsl_symbol_register(
+                    hlsl,
+                    symbol,
+                    cls,
+                    register_index,
+                    changed,
+                    found)) {
+                return false;
+            }
+            any_found = any_found || found;
+        }
+        if (!any_found && required) {
+            std::cerr
+                << "termin_shaderc: D3D11 HLSL is missing register declaration "
+                << "for reflected resource '" << resource.name << "'\n";
+            return false;
+        }
+        return true;
+    };
+
+    if (resource.kind == "texture") {
+        const bool texture_found_in_hlsl =
+            hlsl.find(resource.name + "_texture_0") != std::string::npos ||
+            hlsl.find(resource.name + "_0") != std::string::npos ||
+            hlsl.find(resource.name) != std::string::npos;
+        if (!patch_any_symbol(
+                {resource.name + "_texture_0", resource.name + "_0"},
+                register_class,
+                texture_found_in_hlsl)) {
+            return false;
+        }
+        if (resource.slang_combined_texture) {
+            const bool sampler_found_in_hlsl =
+                hlsl.find(resource.name + "_sampler_0") != std::string::npos;
+            if (!patch_any_symbol(
+                    {resource.name + "_sampler_0"},
+                    's',
+                    sampler_found_in_hlsl)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    return patch_any_symbol(
+        {resource.name + "_0", resource.name},
+        register_class,
+        hlsl.find(resource.name) != std::string::npos);
+}
+
+static bool patch_slang_d3d11_hlsl_resource_bindings(
+    const std::filesystem::path& hlsl_path,
+    const std::vector<ShaderResourceBinding>& resources
+) {
+    std::string hlsl;
+    if (!read_file(hlsl_path.string(), hlsl)) {
+        return false;
+    }
+
+    if (std::getenv("TERMIN_SHADERC_DEBUG_LAYOUT")) {
+        for (const ShaderResourceBinding& resource : resources) {
+            std::cerr
+                << "termin_shaderc: D3D11 layout resource '"
+                << resource.name << "' kind=" << resource.kind
+                << " binding=" << resource.binding
+                << " register=" << resource.d3d11_register_class
+                << resource.d3d11_register_index << "\n";
+        }
+    }
+
+    bool changed = false;
+    for (const ShaderResourceBinding& resource : resources) {
+        if (!patch_slang_d3d11_hlsl_resource(hlsl, resource, changed)) {
+            return false;
+        }
+    }
+    if (!changed) {
+        return true;
+    }
+    return write_text_file(hlsl_path.string(), hlsl);
+}
+
 static bool legalize_slang_opengl_glsl_builtins(
     const CompileOptions& options
 ) {
@@ -1543,6 +1906,44 @@ static std::optional<std::string> find_sdk_tool(const std::string& exe_name, con
     return std::nullopt;
 }
 
+#ifdef _WIN32
+static std::optional<std::string> find_windows_sdk_fxc() {
+    std::vector<std::filesystem::path> roots;
+    if (const char* program_files_x86 = std::getenv("ProgramFiles(x86)")) {
+        if (program_files_x86[0] != '\0') {
+            roots.emplace_back(
+                std::filesystem::path(program_files_x86) / "Windows Kits" / "10" / "bin");
+        }
+    }
+    roots.emplace_back("C:/Program Files (x86)/Windows Kits/10/bin");
+
+    std::vector<std::filesystem::path> candidates;
+    for (const auto& root : roots) {
+        std::error_code ec;
+        if (!std::filesystem::is_directory(root, ec)) {
+            continue;
+        }
+        for (const auto& entry : std::filesystem::directory_iterator(root, ec)) {
+            if (ec) {
+                break;
+            }
+            if (!entry.is_directory(ec)) {
+                continue;
+            }
+            const std::filesystem::path candidate = entry.path() / "x64" / "fxc.exe";
+            if (is_existing_file(candidate)) {
+                candidates.push_back(candidate);
+            }
+        }
+    }
+    if (candidates.empty()) {
+        return std::nullopt;
+    }
+    std::sort(candidates.begin(), candidates.end());
+    return candidates.back().string();
+}
+#endif
+
 static std::optional<std::string> resolve_slangc(const CompileOptions& options, const char* argv0) {
     if (!options.slangc.empty()) {
         if (!is_existing_file(options.slangc)) {
@@ -1600,10 +2001,15 @@ static std::optional<std::string> resolve_fxc(const CompileOptions& options, con
     if (auto found = find_sdk_tool("fxc", argv0)) {
         return found;
     }
+#ifdef _WIN32
+    if (auto found = find_windows_sdk_fxc()) {
+        return found;
+    }
+#endif
 
     std::cerr
         << "termin_shaderc: fxc not found. Set TERMIN_FXC, add fxc to PATH, "
-        << "or install it under TERMIN_SDK/bin.\n";
+        << "install it under TERMIN_SDK/bin, or install the Windows SDK.\n";
     return std::nullopt;
 }
 
@@ -1683,6 +2089,13 @@ static int run_command(const std::vector<std::string>& args) {
 }
 
 static bool compile_glsl_to_vulkan(const CompileOptions& options) {
+#ifndef TERMIN_SHADERC_HAS_SHADERC
+    (void)options;
+    std::cerr
+        << "termin_shaderc: GLSL to Vulkan compilation requires shaderc support, "
+        << "but this termin_shaderc was built without shaderc\n";
+    return false;
+#else
     if (options.target != "vulkan") {
         std::cerr << "termin_shaderc: GLSL input currently supports only --target vulkan\n";
         return false;
@@ -1730,6 +2143,7 @@ static bool compile_glsl_to_vulkan(const CompileOptions& options) {
     }
 
     return write_resource_layout_sidecar(options, source);
+#endif
 }
 
 static bool compile_slang(const CompileOptions& options, const char* argv0) {
@@ -1830,6 +2244,18 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         return false;
     }
     if (is_d3d11) {
+        if (!patch_slang_d3d11_hlsl_resource_bindings(
+                slang_output_path,
+                resources)) {
+            std::error_code ec;
+            std::filesystem::remove(options.output, ec);
+            std::filesystem::remove(options.output + ".layout.json", ec);
+            if (!std::getenv("TERMIN_SHADERC_KEEP_INTERMEDIATE")) {
+                std::filesystem::remove(slang_output_path, ec);
+            }
+            std::filesystem::remove(reflection_path, ec);
+            return false;
+        }
         std::vector<std::string> fxc_args = {
             *fxc,
             "/nologo",

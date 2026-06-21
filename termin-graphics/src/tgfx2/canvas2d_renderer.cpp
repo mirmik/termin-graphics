@@ -49,7 +49,14 @@ tc_shader_handle texture_shader_handle() {
     return handle;
 }
 
-void build_ortho_pixel_to_ndc(float x, float y, float w, float h, float out[16]) {
+void build_ortho_pixel_to_ndc(
+    float x,
+    float y,
+    float w,
+    float h,
+    bool d3d11_clip_space,
+    float out[16])
+{
     if (w <= 0.0f || h <= 0.0f) {
         std::memset(out, 0, 16 * sizeof(float));
         out[0] = out[5] = out[10] = out[15] = 1.0f;
@@ -59,12 +66,20 @@ void build_ortho_pixel_to_ndc(float x, float y, float w, float h, float out[16])
     // Row-major math matrix, then transposed to column-major storage
     // for push constants. Pixel coords are absolute in the current
     // render target; viewport origin is accounted for by the constant.
-    const float rm[16] = {
-        2.0f / w, 0.0f,     0.0f, -1.0f - 2.0f * x / w,
-        0.0f,     2.0f / h, 0.0f, -1.0f - 2.0f * y / h,
-        0.0f,     0.0f,     1.0f,  0.0f,
-        0.0f,     0.0f,     0.0f,  1.0f,
-    };
+    float rm[16]{};
+    rm[0] = 2.0f / w;
+    rm[3] = -1.0f - 2.0f * x / w;
+    if (d3d11_clip_space) {
+        // D3D viewport transform maps clip-space y=+1 to the top edge.
+        // Vulkan and OpenGL-with-upper-left clip control map y=-1 there.
+        rm[5] = -2.0f / h;
+        rm[7] = 1.0f + 2.0f * y / h;
+    } else {
+        rm[5] = 2.0f / h;
+        rm[7] = -1.0f - 2.0f * y / h;
+    }
+    rm[10] = 1.0f;
+    rm[15] = 1.0f;
     for (int row = 0; row < 4; ++row) {
         for (int col = 0; col < 4; ++col) {
             out[col * 4 + row] = rm[row * 4 + col];
@@ -360,17 +375,24 @@ void Canvas2DRenderer::build_projection_() {
                              static_cast<float>(viewport_y_),
                              static_cast<float>(viewport_w_),
                              static_cast<float>(viewport_h_),
+                             ctx_ != nullptr &&
+                                 ctx_->device().backend_type() == BackendType::D3D11,
                              projection_);
 }
 
 void Canvas2DRenderer::flush_() {
     if (ctx_ == nullptr || batch_vertices_.empty()) return;
 
+    bool bound = false;
     if (batch_mode_ == BatchMode::Solid) {
-        bind_solid_(batch_color_);
+        bound = bind_solid_(batch_color_);
     } else if (batch_mode_ == BatchMode::Texture) {
-        bind_texture_(batch_color_, batch_texture_);
+        bound = bind_texture_(batch_color_, batch_texture_);
     } else {
+        batch_vertices_.clear();
+        return;
+    }
+    if (!bound) {
         batch_vertices_.clear();
         return;
     }
@@ -381,7 +403,12 @@ void Canvas2DRenderer::flush_() {
     batch_vertices_.clear();
 }
 
-void Canvas2DRenderer::bind_solid_(CanvasColor color) {
+bool Canvas2DRenderer::bind_solid_(CanvasColor color) {
+    if (solid_vs_.id == 0 || solid_fs_.id == 0) {
+        tc::Log::error("[Canvas2DRenderer] solid shader is unavailable; skipping batch");
+        return false;
+    }
+
     CanvasPushData push;
     std::memcpy(push.projection, projection_, sizeof(projection_));
     push.color[0] = color.r;
@@ -393,9 +420,19 @@ void Canvas2DRenderer::bind_solid_(CanvasColor color) {
     tc_shader* raw = tc_shader_get(solid_shader_handle());
     ctx_->use_shader_resource_layout(raw);
     ctx_->bind_uniform_data("canvas_draw", &push, static_cast<uint32_t>(sizeof(push)));
+    return true;
 }
 
-void Canvas2DRenderer::bind_texture_(CanvasColor tint, TextureHandle texture) {
+bool Canvas2DRenderer::bind_texture_(CanvasColor tint, TextureHandle texture) {
+    if (texture_vs_.id == 0 || texture_fs_.id == 0) {
+        tc::Log::error("[Canvas2DRenderer] texture shader is unavailable; skipping batch");
+        return false;
+    }
+    if (texture.id == 0) {
+        tc::Log::error("[Canvas2DRenderer] texture batch has no texture; skipping batch");
+        return false;
+    }
+
     CanvasPushData push;
     std::memcpy(push.projection, projection_, sizeof(projection_));
     push.color[0] = tint.r;
@@ -408,6 +445,7 @@ void Canvas2DRenderer::bind_texture_(CanvasColor tint, TextureHandle texture) {
     ctx_->use_shader_resource_layout(raw);
     ctx_->bind_uniform_data("canvas_draw", &push, static_cast<uint32_t>(sizeof(push)));
     ctx_->bind_texture("u_texture", texture);
+    return true;
 }
 
 void Canvas2DRenderer::push_quad_(float x0, float y0, float x1, float y1,

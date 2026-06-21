@@ -6,12 +6,17 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
+#include <chrono>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
+#include <d3dcompiler.h>
 #include <tcbase/tc_log.hpp>
 
 extern "C" {
@@ -78,11 +83,89 @@ UINT buffer_cpu_access(const BufferDesc& desc) {
     return desc.cpu_visible ? D3D11_CPU_ACCESS_WRITE : 0;
 }
 
-std::string semantic_name_for_attribute(const VertexAttribute& attr) {
-    if (!attr.semantic.empty()) {
-        return attr.semantic;
+struct D3D11InputSemantic {
+    std::string name;
+    UINT index = 0;
+};
+
+std::string uppercase_ascii(std::string value) {
+    for (char& ch : value) {
+        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
     }
-    return "TEXCOORD";
+    return value;
+}
+
+D3D11InputSemantic parse_d3d11_semantic(std::string semantic) {
+    if (semantic.empty()) {
+        return {"TEXCOORD", 0};
+    }
+
+    semantic = uppercase_ascii(std::move(semantic));
+    size_t suffix_start = semantic.size();
+    while (suffix_start > 0 &&
+           std::isdigit(static_cast<unsigned char>(semantic[suffix_start - 1]))) {
+        --suffix_start;
+    }
+    if (suffix_start == semantic.size()) {
+        return {std::move(semantic), 0};
+    }
+
+    const std::string suffix = semantic.substr(suffix_start);
+    semantic.resize(suffix_start);
+    if (semantic.empty()) {
+        return {"TEXCOORD", static_cast<UINT>(std::stoul(suffix))};
+    }
+    return {std::move(semantic), static_cast<UINT>(std::stoul(suffix))};
+}
+
+D3D11InputSemantic semantic_for_attribute(const VertexAttribute& attr) {
+    if (!attr.semantic.empty()) {
+        return parse_d3d11_semantic(attr.semantic);
+    }
+    return {"TEXCOORD", attr.location};
+}
+
+std::vector<D3D11InputSemantic> reflect_d3d11_vertex_inputs(const D3D11ShaderModule& vs) {
+    std::vector<D3D11InputSemantic> out;
+    if (vs.bytecode.empty()) {
+        return out;
+    }
+
+    Microsoft::WRL::ComPtr<ID3D11ShaderReflection> reflection;
+    HRESULT hr = D3DReflect(
+        vs.bytecode.data(),
+        vs.bytecode.size(),
+        __uuidof(ID3D11ShaderReflection),
+        reinterpret_cast<void**>(reflection.GetAddressOf()));
+    if (FAILED(hr) || !reflection) {
+        tc::Log::error(
+            "D3D11RenderDevice::create_pipeline: D3DReflect failed for vertex shader: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return out;
+    }
+
+    D3D11_SHADER_DESC shader_desc{};
+    hr = reflection->GetDesc(&shader_desc);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::create_pipeline: shader reflection GetDesc failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return out;
+    }
+
+    out.reserve(shader_desc.InputParameters);
+    for (UINT i = 0; i < shader_desc.InputParameters; ++i) {
+        D3D11_SIGNATURE_PARAMETER_DESC param{};
+        hr = reflection->GetInputParameterDesc(i, &param);
+        if (FAILED(hr) || !param.SemanticName) {
+            continue;
+        }
+        if (param.SystemValueType != D3D_NAME_UNDEFINED) {
+            continue;
+        }
+        out.push_back({param.SemanticName, param.SemanticIndex});
+    }
+    return out;
 }
 
 PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
@@ -157,6 +240,7 @@ std::vector<uint8_t> normalize_tc_texture_pixels(const tc_texture* tex, PixelFor
 
 D3D11RenderDevice::D3D11RenderDevice() {
     create_device();
+    create_default_sampler();
     query_capabilities();
     tc_shader_registry_add_destroy_hook(&d3d11_invalidate_tc_shader_trampoline, this);
     tc_texture_registry_add_destroy_hook(&d3d11_invalidate_tc_texture_trampoline, this);
@@ -167,6 +251,9 @@ D3D11RenderDevice::~D3D11RenderDevice() {
     tc_mesh_registry_remove_destroy_hook(&d3d11_invalidate_tc_mesh_trampoline, this);
     tc_texture_registry_remove_destroy_hook(&d3d11_invalidate_tc_texture_trampoline, this);
     tc_shader_registry_remove_destroy_hook(&d3d11_invalidate_tc_shader_trampoline, this);
+
+    reset_state();
+    wait_idle();
 
     for (auto& pair : tc_mesh_cache_) {
         if (pair.second.vbo) destroy(pair.second.vbo);
@@ -182,6 +269,7 @@ D3D11RenderDevice::~D3D11RenderDevice() {
         if (pair.second.fs) destroy(pair.second.fs);
     }
     tc_shader_cache_.clear();
+    reset_state();
     wait_idle();
 }
 
@@ -196,6 +284,10 @@ void D3D11RenderDevice::create_device() {
 #if defined(_DEBUG)
     flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
+    if (const char* debug_env = std::getenv("TERMIN_D3D11_DEBUG");
+        debug_env != nullptr && debug_env[0] != '\0' && debug_env[0] != '0') {
+        flags |= D3D11_CREATE_DEVICE_DEBUG;
+    }
 
     HRESULT hr = D3D11CreateDevice(
         nullptr,
@@ -209,7 +301,6 @@ void D3D11RenderDevice::create_device() {
         &feature_level_,
         &context_);
 
-#if defined(_DEBUG)
     if (FAILED(hr)) {
         flags &= ~D3D11_CREATE_DEVICE_DEBUG;
         hr = D3D11CreateDevice(
@@ -224,9 +315,187 @@ void D3D11RenderDevice::create_device() {
             &feature_level_,
             &context_);
     }
-#endif
 
     throw_if_failed(hr, "D3D11CreateDevice");
+}
+
+void D3D11RenderDevice::create_default_sampler() {
+    D3D11_SAMPLER_DESC sd{};
+    sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    sd.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sd.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sd.MipLODBias = 0.0f;
+    sd.MaxAnisotropy = 1;
+    sd.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    sd.BorderColor[0] = 0.0f;
+    sd.BorderColor[1] = 0.0f;
+    sd.BorderColor[2] = 0.0f;
+    sd.BorderColor[3] = 1.0f;
+    sd.MinLOD = 0.0f;
+    sd.MaxLOD = D3D11_FLOAT32_MAX;
+    HRESULT hr = device_->CreateSamplerState(&sd, &default_sampler_);
+    throw_if_failed(hr, "ID3D11Device::CreateSamplerState(default)");
+}
+
+bool D3D11RenderDevice::ensure_blit_resources() {
+    if (blit_vertex_shader_ && blit_pixel_shader_ && blit_constant_buffer_ &&
+        blit_raster_state_ && blit_depth_stencil_state_ && blit_blend_state_) {
+        return true;
+    }
+
+    static constexpr const char* kBlitVs = R"(
+cbuffer BlitConstants : register(b0) {
+    float2 src_uv_min;
+    float2 src_uv_size;
+};
+
+struct VSOut {
+    float4 position : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+VSOut main(uint vertex_id : SV_VertexID) {
+    float2 base_uv = float2((vertex_id << 1) & 2, vertex_id & 2);
+    VSOut output;
+    output.position = float4(base_uv * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
+    output.uv = src_uv_min + base_uv * src_uv_size;
+    return output;
+}
+)";
+
+    static constexpr const char* kBlitPs = R"(
+Texture2D src_texture : register(t0);
+SamplerState src_sampler : register(s0);
+
+struct VSOut {
+    float4 position : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+float4 main(VSOut input) : SV_Target {
+    return src_texture.Sample(src_sampler, input.uv);
+}
+)";
+
+    UINT compile_flags = D3DCOMPILE_ENABLE_STRICTNESS;
+#if defined(_DEBUG)
+    compile_flags |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+#endif
+
+    auto compile_stage = [&](const char* source,
+                             const char* profile,
+                             Microsoft::WRL::ComPtr<ID3DBlob>& out) -> bool {
+        Microsoft::WRL::ComPtr<ID3DBlob> errors;
+        HRESULT hr = D3DCompile(
+            source,
+            std::strlen(source),
+            nullptr,
+            nullptr,
+            nullptr,
+            "main",
+            profile,
+            compile_flags,
+            0,
+            &out,
+            &errors);
+        if (FAILED(hr)) {
+            const char* message = errors
+                ? static_cast<const char*>(errors->GetBufferPointer())
+                : "";
+            tc::Log::error(
+                "D3D11RenderDevice::ensure_blit_resources: D3DCompile(%s) failed: "
+                "HRESULT=0x%08X %s",
+                profile,
+                static_cast<unsigned>(hr),
+                message);
+            return false;
+        }
+        return true;
+    };
+
+    const char* vs_profile = feature_level_ >= D3D_FEATURE_LEVEL_11_0 ? "vs_5_0" : "vs_4_0";
+    const char* ps_profile = feature_level_ >= D3D_FEATURE_LEVEL_11_0 ? "ps_5_0" : "ps_4_0";
+    Microsoft::WRL::ComPtr<ID3DBlob> vs_blob;
+    Microsoft::WRL::ComPtr<ID3DBlob> ps_blob;
+    if (!compile_stage(kBlitVs, vs_profile, vs_blob) ||
+        !compile_stage(kBlitPs, ps_profile, ps_blob)) {
+        return false;
+    }
+
+    HRESULT hr = device_->CreateVertexShader(
+        vs_blob->GetBufferPointer(),
+        vs_blob->GetBufferSize(),
+        nullptr,
+        &blit_vertex_shader_);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::ensure_blit_resources: CreateVertexShader failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return false;
+    }
+
+    hr = device_->CreatePixelShader(
+        ps_blob->GetBufferPointer(),
+        ps_blob->GetBufferSize(),
+        nullptr,
+        &blit_pixel_shader_);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::ensure_blit_resources: CreatePixelShader failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return false;
+    }
+
+    D3D11_BUFFER_DESC cb_desc{};
+    cb_desc.ByteWidth = 16;
+    cb_desc.Usage = D3D11_USAGE_DEFAULT;
+    cb_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    hr = device_->CreateBuffer(&cb_desc, nullptr, &blit_constant_buffer_);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::ensure_blit_resources: CreateBuffer(constants) failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return false;
+    }
+
+    D3D11_RASTERIZER_DESC rs_desc{};
+    rs_desc.FillMode = D3D11_FILL_SOLID;
+    rs_desc.CullMode = D3D11_CULL_NONE;
+    rs_desc.DepthClipEnable = TRUE;
+    hr = device_->CreateRasterizerState(&rs_desc, &blit_raster_state_);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::ensure_blit_resources: CreateRasterizerState failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return false;
+    }
+
+    D3D11_DEPTH_STENCIL_DESC ds_desc{};
+    ds_desc.DepthEnable = FALSE;
+    ds_desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+    ds_desc.DepthFunc = D3D11_COMPARISON_ALWAYS;
+    ds_desc.StencilEnable = FALSE;
+    hr = device_->CreateDepthStencilState(&ds_desc, &blit_depth_stencil_state_);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::ensure_blit_resources: CreateDepthStencilState failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return false;
+    }
+
+    D3D11_BLEND_DESC blend_desc{};
+    blend_desc.RenderTarget[0].BlendEnable = FALSE;
+    blend_desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    hr = device_->CreateBlendState(&blend_desc, &blit_blend_state_);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::ensure_blit_resources: CreateBlendState failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return false;
+    }
+
+    return true;
 }
 
 void D3D11RenderDevice::query_capabilities() {
@@ -243,6 +512,31 @@ void D3D11RenderDevice::query_capabilities() {
 
 void D3D11RenderDevice::wait_idle() {
     if (context_) {
+        Microsoft::WRL::ComPtr<ID3D11Query> query;
+        D3D11_QUERY_DESC desc{};
+        desc.Query = D3D11_QUERY_EVENT;
+        HRESULT hr = device_->CreateQuery(&desc, &query);
+        if (SUCCEEDED(hr) && query) {
+            context_->End(query.Get());
+            context_->Flush();
+            for (uint32_t i = 0; i < 10000; ++i) {
+                hr = context_->GetData(query.Get(), nullptr, 0, 0);
+                if (hr == S_OK) {
+                    return;
+                }
+                if (FAILED(hr)) {
+                    tc::Log::error(
+                        "D3D11RenderDevice::wait_idle GetData failed: "
+                        "HRESULT=0x%08X device_removed_reason=0x%08X",
+                        static_cast<unsigned>(hr),
+                        static_cast<unsigned>(device_->GetDeviceRemovedReason()));
+                    return;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            tc::Log::error("D3D11RenderDevice::wait_idle timed out waiting for GPU");
+            return;
+        }
         context_->Flush();
     }
 }
@@ -402,19 +696,30 @@ PipelineHandle D3D11RenderDevice::create_pipeline(const PipelineDesc& desc) {
 
     std::vector<std::string> semantic_names;
     std::vector<D3D11_INPUT_ELEMENT_DESC> input_elements;
+    const auto reflected_inputs = reflect_d3d11_vertex_inputs(*vs);
     size_t input_element_count = 0;
     for (const auto& layout : desc.vertex_layouts) {
         input_element_count += layout.attributes.size();
     }
     semantic_names.reserve(input_element_count);
     input_elements.reserve(input_element_count);
+    size_t reflected_input_index = 0;
     for (uint32_t slot = 0; slot < desc.vertex_layouts.size(); ++slot) {
         const auto& layout = desc.vertex_layouts[slot];
         for (const auto& attr : layout.attributes) {
-            semantic_names.push_back(semantic_name_for_attribute(attr));
+            D3D11InputSemantic semantic = semantic_for_attribute(attr);
+            if (layout.use_shader_input_locations && attr.semantic.empty()) {
+                if (reflected_input_index >= reflected_inputs.size()) {
+                    throw std::runtime_error(
+                        "D3D11RenderDevice::create_pipeline: vertex layout requests shader input "
+                        "reflection but the vertex shader has fewer reflected inputs");
+                }
+                semantic = reflected_inputs[reflected_input_index++];
+            }
+            semantic_names.push_back(semantic.name);
             D3D11_INPUT_ELEMENT_DESC element{};
             element.SemanticName = semantic_names.back().c_str();
-            element.SemanticIndex = attr.semantic.empty() ? attr.location : 0;
+            element.SemanticIndex = semantic.index;
             element.Format = d3d11::to_dxgi_vertex_format(attr.format);
             element.InputSlot = slot;
             element.AlignedByteOffset = attr.offset;
@@ -594,6 +899,194 @@ void D3D11RenderDevice::present() {
     context_->Flush();
 }
 
+TextureHandle D3D11RenderDevice::register_external_texture(uintptr_t native_handle, const TextureDesc& desc) {
+    return register_external_texture(reinterpret_cast<ID3D11Texture2D*>(native_handle), desc);
+}
+
+TextureHandle D3D11RenderDevice::register_external_texture(ID3D11Texture2D* texture, const TextureDesc& desc) {
+    if (!texture) {
+        tc::Log::error("D3D11RenderDevice::register_external_texture: null native texture");
+        return {};
+    }
+
+    D3D11Texture out;
+    out.texture = texture;
+    out.desc = desc;
+
+    if (has_flag(desc.usage, TextureUsage::Sampled)) {
+        D3D11_SHADER_RESOURCE_VIEW_DESC sv{};
+        sv.Format = d3d11::to_dxgi_srv_format(desc.format);
+        sv.ViewDimension = desc.sample_count > 1 ? D3D11_SRV_DIMENSION_TEXTURE2DMS : D3D11_SRV_DIMENSION_TEXTURE2D;
+        if (sv.ViewDimension == D3D11_SRV_DIMENSION_TEXTURE2D) {
+            sv.Texture2D.MipLevels = std::max(1u, desc.mip_levels);
+        }
+        HRESULT hr = device_->CreateShaderResourceView(out.texture.Get(), &sv, &out.srv);
+        if (FAILED(hr)) {
+            tc::Log::error(
+                "D3D11RenderDevice::register_external_texture SRV failed: HRESULT=0x%08X",
+                static_cast<unsigned>(hr));
+        }
+    }
+
+    if (has_flag(desc.usage, TextureUsage::ColorAttachment)) {
+        HRESULT hr = device_->CreateRenderTargetView(out.texture.Get(), nullptr, &out.rtv);
+        if (FAILED(hr)) {
+            tc::Log::error(
+                "D3D11RenderDevice::register_external_texture RTV failed: HRESULT=0x%08X",
+                static_cast<unsigned>(hr));
+        }
+    }
+
+    if (has_flag(desc.usage, TextureUsage::DepthStencilAttachment) || d3d11::is_depth_format(desc.format)) {
+        D3D11_DEPTH_STENCIL_VIEW_DESC dv{};
+        dv.Format = d3d11::to_dxgi_dsv_format(desc.format);
+        dv.ViewDimension = desc.sample_count > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMS : D3D11_DSV_DIMENSION_TEXTURE2D;
+        HRESULT hr = device_->CreateDepthStencilView(out.texture.Get(), &dv, &out.dsv);
+        if (FAILED(hr)) {
+            tc::Log::error(
+                "D3D11RenderDevice::register_external_texture DSV failed: HRESULT=0x%08X",
+                static_cast<unsigned>(hr));
+        }
+    }
+
+    return {textures_.add(std::move(out))};
+}
+
+void D3D11RenderDevice::blit_to_texture(TextureHandle dst,
+                                        TextureHandle src,
+                                        int src_x,
+                                        int src_y,
+                                        int src_w,
+                                        int src_h,
+                                        int dst_x,
+                                        int dst_y,
+                                        int dst_w,
+                                        int dst_h) {
+    auto* src_tex = get_texture(src);
+    auto* dst_tex = get_texture(dst);
+    if (!src_tex || !src_tex->texture || !dst_tex || !dst_tex->texture) {
+        tc::Log::error(
+            "D3D11RenderDevice::blit_to_texture: invalid texture handle src=%u dst=%u",
+            src.id,
+            dst.id);
+        return;
+    }
+
+    if (src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) {
+        tc::Log::error("D3D11RenderDevice::blit_to_texture: invalid empty region");
+        return;
+    }
+    if (src_x < 0 || src_y < 0 || dst_x < 0 || dst_y < 0 ||
+        src_x + src_w > static_cast<int>(src_tex->desc.width) ||
+        src_y + src_h > static_cast<int>(src_tex->desc.height) ||
+        dst_x + dst_w > static_cast<int>(dst_tex->desc.width) ||
+        dst_y + dst_h > static_cast<int>(dst_tex->desc.height)) {
+        tc::Log::error("D3D11RenderDevice::blit_to_texture: region outside texture bounds");
+        return;
+    }
+
+    if (src.id == dst.id) {
+        tc::Log::error("D3D11RenderDevice::blit_to_texture: self-blit is not supported");
+        return;
+    }
+
+    const bool can_raw_copy = src_tex->desc.format == dst_tex->desc.format &&
+                              src_w == dst_w &&
+                              src_h == dst_h &&
+                              src_tex->desc.sample_count == dst_tex->desc.sample_count;
+    if (can_raw_copy) {
+        D3D11_BOX src_box{};
+        src_box.left = static_cast<UINT>(src_x);
+        src_box.top = static_cast<UINT>(src_y);
+        src_box.front = 0;
+        src_box.right = static_cast<UINT>(src_x + src_w);
+        src_box.bottom = static_cast<UINT>(src_y + src_h);
+        src_box.back = 1;
+        context_->CopySubresourceRegion(
+            dst_tex->texture.Get(),
+            0,
+            static_cast<UINT>(dst_x),
+            static_cast<UINT>(dst_y),
+            0,
+            src_tex->texture.Get(),
+            0,
+            &src_box);
+        return;
+    }
+
+    if (src_tex->desc.sample_count != 1 || dst_tex->desc.sample_count != 1) {
+        tc::Log::error(
+            "D3D11RenderDevice::blit_to_texture: shader blit requires single-sample textures "
+            "(src_samples=%u dst_samples=%u)",
+            src_tex->desc.sample_count,
+            dst_tex->desc.sample_count);
+        return;
+    }
+    if (!src_tex->srv || !dst_tex->rtv) {
+        tc::Log::error(
+            "D3D11RenderDevice::blit_to_texture: shader blit requires src SRV and dst RTV "
+            "(src=%u srv=%d dst=%u rtv=%d)",
+            src.id,
+            src_tex->srv ? 1 : 0,
+            dst.id,
+            dst_tex->rtv ? 1 : 0);
+        return;
+    }
+    if (!ensure_blit_resources()) {
+        return;
+    }
+
+    struct BlitConstants {
+        float src_uv_min[2];
+        float src_uv_size[2];
+    };
+    const BlitConstants constants{
+        {
+            static_cast<float>(src_x) / static_cast<float>(src_tex->desc.width),
+            static_cast<float>(src_y) / static_cast<float>(src_tex->desc.height),
+        },
+        {
+            static_cast<float>(src_w) / static_cast<float>(src_tex->desc.width),
+            static_cast<float>(src_h) / static_cast<float>(src_tex->desc.height),
+        },
+    };
+    context_->UpdateSubresource(blit_constant_buffer_.Get(), 0, nullptr, &constants, 0, 0);
+
+    D3D11_VIEWPORT viewport{};
+    viewport.TopLeftX = static_cast<float>(dst_x);
+    viewport.TopLeftY = static_cast<float>(dst_y);
+    viewport.Width = static_cast<float>(dst_w);
+    viewport.Height = static_cast<float>(dst_h);
+    viewport.MinDepth = 0.0f;
+    viewport.MaxDepth = 1.0f;
+
+    ID3D11RenderTargetView* rtv = dst_tex->rtv.Get();
+    ID3D11ShaderResourceView* srv = src_tex->srv.Get();
+    ID3D11SamplerState* sampler = default_sampler_state();
+    ID3D11Buffer* constant_buffer = blit_constant_buffer_.Get();
+    const float blend_factor[4] = {0, 0, 0, 0};
+
+    context_->OMSetRenderTargets(1, &rtv, nullptr);
+    context_->RSSetViewports(1, &viewport);
+    context_->RSSetState(blit_raster_state_.Get());
+    context_->OMSetDepthStencilState(blit_depth_stencil_state_.Get(), 0);
+    context_->OMSetBlendState(blit_blend_state_.Get(), blend_factor, 0xffffffffu);
+    context_->IASetInputLayout(nullptr);
+    context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    context_->VSSetShader(blit_vertex_shader_.Get(), nullptr, 0);
+    context_->VSSetConstantBuffers(0, 1, &constant_buffer);
+    context_->PSSetShader(blit_pixel_shader_.Get(), nullptr, 0);
+    context_->PSSetShaderResources(0, 1, &srv);
+    context_->PSSetSamplers(0, 1, &sampler);
+    context_->GSSetShader(nullptr, nullptr, 0);
+    context_->Draw(3, 0);
+
+    ID3D11ShaderResourceView* null_srv = nullptr;
+    ID3D11RenderTargetView* null_rtv = nullptr;
+    context_->PSSetShaderResources(0, 1, &null_srv);
+    context_->OMSetRenderTargets(1, &null_rtv, nullptr);
+}
+
 Microsoft::WRL::ComPtr<ID3D11Texture2D> D3D11RenderDevice::create_staging_texture(const D3D11Texture& src) const {
     D3D11_TEXTURE2D_DESC desc{};
     src.texture->GetDesc(&desc);
@@ -665,7 +1158,11 @@ bool D3D11RenderDevice::read_texture_rgba_float(TextureHandle handle, float* out
     D3D11_MAPPED_SUBRESOURCE mapped{};
     HRESULT hr = context_->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped);
     if (FAILED(hr)) {
-        tc::Log::error("D3D11RenderDevice::read_texture_rgba_float Map failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
+        tc::Log::error(
+            "D3D11RenderDevice::read_texture_rgba_float Map failed: "
+            "HRESULT=0x%08X device_removed_reason=0x%08X",
+            static_cast<unsigned>(hr),
+            static_cast<unsigned>(device_->GetDeviceRemovedReason()));
         return false;
     }
     for (uint32_t y = 0; y < tex->desc.height; ++y) {

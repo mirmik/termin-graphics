@@ -22,6 +22,7 @@ struct HighlightPushData {
 ConstantBuffer<HighlightPushData> u_params;
 
 struct FragmentInput {
+    float4 screen_pos : SV_Position;
     float2 uv : TEXCOORD0;
 };
 
