@@ -971,6 +971,59 @@ int main() {
             return 1;
         }
 
+        const auto push_constants_ps_path = shader_dir / "d3d11-smoke-push-constants.ps.cso";
+        const char* push_constants_ps_source =
+            "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
+            "cbuffer PushConstants : register(b13) {\n"
+            "    float4 u_color;\n"
+            "};\n"
+            "float4 main(VSOut input) : SV_Target0 {\n"
+            "    return u_color;\n"
+            "}\n";
+        if (!compile_hlsl_to_file(push_constants_ps_source, "ps_5_0", push_constants_ps_path)) {
+            return 1;
+        }
+        std::vector<uint8_t> push_constants_ps_bytecode;
+        if (!read_binary_file(push_constants_ps_path, push_constants_ps_bytecode)) {
+            return 1;
+        }
+        tgfx::ShaderDesc push_constants_ps_desc;
+        push_constants_ps_desc.stage = tgfx::ShaderStage::Fragment;
+        push_constants_ps_desc.debug_name = "D3D11 smoke push constants FS";
+        push_constants_ps_desc.bytecode = std::move(push_constants_ps_bytecode);
+        auto push_constants_fs = device->create_shader(push_constants_ps_desc);
+        if (!push_constants_fs) {
+            std::fprintf(stderr, "D3D11 smoke: push constants fragment shader creation failed\n");
+            return 1;
+        }
+
+        const std::array<float, 4> push_color = {0.62f, 0.18f, 0.73f, 1.0f};
+        ctx.begin_frame();
+        ctx.begin_pass(color, {}, context_clear, 1.0f, false);
+        ctx.set_depth_test(false);
+        ctx.set_depth_write(false);
+        ctx.set_cull(tgfx::CullMode::None);
+        ctx.set_blend(false);
+        ctx.bind_shader(fsq_vs, push_constants_fs);
+        ctx.set_push_constants(push_color.data(), static_cast<uint32_t>(push_color.size() * sizeof(float)));
+        ctx.draw_fullscreen_quad_with_bound_shader();
+        ctx.end_pass();
+        ctx.end_frame();
+
+        if (!device->read_pixel_rgba8(color, 2, 2, rgba)) {
+            std::fprintf(stderr, "D3D11 smoke: push constants draw readback failed\n");
+            return 1;
+        }
+        if (!close_enough(rgba[0], push_color[0]) ||
+            !close_enough(rgba[1], push_color[1]) ||
+            !close_enough(rgba[2], push_color[2]) ||
+            !close_enough(rgba[3], push_color[3])) {
+            std::fprintf(stderr,
+                         "D3D11 smoke: unexpected push constants pixel %.3f %.3f %.3f %.3f\n",
+                         rgba[0], rgba[1], rgba[2], rgba[3]);
+            return 1;
+        }
+
         const auto reflected_input_vs_path = shader_dir / "d3d11-smoke-reflected-input.vs.cso";
         const auto reflected_input_ps_path = shader_dir / "d3d11-smoke-reflected-input.ps.cso";
         const char* reflected_input_vs_source =

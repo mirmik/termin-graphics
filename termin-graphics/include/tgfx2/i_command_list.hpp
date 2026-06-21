@@ -8,8 +8,8 @@
 namespace tgfx {
 
 // Reserved UBO binding slot used by the OpenGL backend to emulate
-// push constants. Shaders that consume push constants must declare
-// the block at this slot:
+// push constants. OpenGL shaders that consume push constants must
+// declare the block at this slot:
 //
 //   layout(std140, binding = 14) uniform PushConstants {
 //       mat4 u_model;  // example per-object payload
@@ -26,6 +26,10 @@ namespace tgfx {
 // (VkPhysicalDeviceLimits::maxPushConstantsSize == 128 on many
 // mobile GPUs). Pass code must not exceed this.
 constexpr uint32_t TGFX2_PUSH_CONSTANTS_BINDING = 14;
+// D3D11 exposes 14 constant-buffer slots per graphics stage, so valid
+// registers are b0..b13. The D3D11 backend uses the last slot for the
+// same API-level push-constant payload.
+constexpr uint32_t TGFX2_D3D11_PUSH_CONSTANTS_BINDING = 13;
 constexpr uint32_t TGFX2_PUSH_CONSTANTS_MAX_BYTES = 128;
 
 class ICommandList {
@@ -55,8 +59,9 @@ public:
     //
     // Upload a small per-draw byte payload that can be read from
     // shaders via a push-constant block. On OpenGL this is backed by
-    // a ring UBO at TGFX2_PUSH_CONSTANTS_BINDING; on Vulkan it maps
-    // to vkCmdPushConstants.
+    // a ring UBO at TGFX2_PUSH_CONSTANTS_BINDING, on D3D11 by a
+    // constant buffer at TGFX2_D3D11_PUSH_CONSTANTS_BINDING, and on
+    // Vulkan it maps to vkCmdPushConstants.
     //
     // The payload is consumed by the *next* draw call — each draw
     // reads the most recently set push constants. Calling

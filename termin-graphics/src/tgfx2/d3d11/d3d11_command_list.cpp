@@ -2,7 +2,9 @@
 
 #include "tgfx2/d3d11/d3d11_type_conversions.hpp"
 
+#include <algorithm>
 #include <array>
+#include <cstring>
 
 #include <tcbase/tc_log.hpp>
 extern "C" {
@@ -306,10 +308,64 @@ void D3D11CommandList::bind_resource_set(ResourceSetHandle set,
     }
 }
 
-void D3D11CommandList::set_push_constants(const void* /*data*/, uint32_t size) {
-    if (size != 0) {
-        tc::Log::error("D3D11CommandList::set_push_constants: not implemented");
+void D3D11CommandList::set_push_constants(const void* data, uint32_t size) {
+    if (size == 0) {
+        ID3D11Buffer* null_buffer = nullptr;
+        ctx_->VSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &null_buffer);
+        ctx_->PSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &null_buffer);
+        ctx_->GSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &null_buffer);
+        return;
     }
+    if (data == nullptr) {
+        tc::Log::error("D3D11CommandList::set_push_constants: data is null for size=%u", size);
+        return;
+    }
+    if (size > TGFX2_PUSH_CONSTANTS_MAX_BYTES) {
+        tc::Log::error(
+            "D3D11CommandList::set_push_constants: size=%u exceeds max=%u",
+            size,
+            TGFX2_PUSH_CONSTANTS_MAX_BYTES);
+        return;
+    }
+
+    const uint32_t padded_size = std::max(16u, (size + 15u) & ~15u);
+    if (!push_constant_buffer_ || push_constant_buffer_size_ < padded_size) {
+        D3D11_BUFFER_DESC desc{};
+        desc.ByteWidth = padded_size;
+        desc.Usage = D3D11_USAGE_DYNAMIC;
+        desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+        Microsoft::WRL::ComPtr<ID3D11Buffer> buffer;
+        HRESULT hr = device_.native_device()->CreateBuffer(&desc, nullptr, buffer.GetAddressOf());
+        if (FAILED(hr)) {
+            tc::Log::error(
+                "D3D11CommandList::set_push_constants: CreateBuffer failed HRESULT=0x%08X size=%u",
+                static_cast<unsigned>(hr),
+                padded_size);
+            return;
+        }
+        push_constant_buffer_ = std::move(buffer);
+        push_constant_buffer_size_ = padded_size;
+    }
+
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    HRESULT hr = ctx_->Map(push_constant_buffer_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11CommandList::set_push_constants: Map failed HRESULT=0x%08X size=%u",
+            static_cast<unsigned>(hr),
+            size);
+        return;
+    }
+    std::memset(mapped.pData, 0, push_constant_buffer_size_);
+    std::memcpy(mapped.pData, data, size);
+    ctx_->Unmap(push_constant_buffer_.Get(), 0);
+
+    ID3D11Buffer* native = push_constant_buffer_.Get();
+    ctx_->VSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &native);
+    ctx_->PSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &native);
+    ctx_->GSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &native);
 }
 
 void D3D11CommandList::bind_vertex_buffer(uint32_t slot, BufferHandle buffer, uint64_t offset) {
