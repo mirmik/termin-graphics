@@ -1195,8 +1195,19 @@ static bool tc_shader_upsert_resource_binding(
 
     int existing = tc_shader_find_resource_binding_index(shader, binding->name);
     if (existing >= 0) {
+        tc_shader_resource_binding previous = shader->resource_bindings[existing];
         shader->resource_bindings[existing] = *binding;
         shader->resource_bindings[existing].name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+        if (!binding->has_d3d11_placement && previous.has_d3d11_placement) {
+            shader->resource_bindings[existing].has_d3d11_placement = 1;
+            shader->resource_bindings[existing].d3d11 = previous.d3d11;
+        }
+        if (binding->fields == NULL && previous.fields != NULL) {
+            shader->resource_bindings[existing].fields = previous.fields;
+            shader->resource_bindings[existing].field_count = previous.field_count;
+        } else if (previous.fields != NULL && previous.fields != binding->fields) {
+            free(previous.fields);
+        }
         return true;
     }
 

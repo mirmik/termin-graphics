@@ -76,6 +76,48 @@ TEST_CASE("shader resource layout preserves D3D11 register placement") {
     tc_shader_shutdown();
 }
 
+TEST_CASE("material UBO layout update preserves D3D11 register placement") {
+    tc_shader_init();
+
+    tc_shader_handle handle = tc_shader_create("material-layout-d3d11-placement-test");
+    REQUIRE(!tc_shader_handle_is_invalid(handle));
+
+    tc_shader* shader = tc_shader_get(handle);
+    REQUIRE(shader != nullptr);
+
+    tc_shader_resource_binding binding{};
+    std::snprintf(binding.name, sizeof(binding.name), "%s", "material");
+    binding.kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    binding.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    binding.set = 0;
+    binding.binding = 1;
+    binding.stage_mask = TC_SHADER_STAGE_ALL_GRAPHICS;
+    binding.size = 192;
+    binding.has_d3d11_placement = 1;
+    binding.d3d11.register_class = TC_SHADER_D3D11_REGISTER_B;
+    binding.d3d11.register_index = 0;
+
+    tc_shader_set_resource_layout(shader, &binding, 1);
+
+    tc_material_ubo_entry entry{};
+    std::snprintf(entry.name, sizeof(entry.name), "%s", "u_skybox_type");
+    std::snprintf(entry.property_type, sizeof(entry.property_type), "%s", "Int");
+    entry.offset = 128;
+    entry.size = 4;
+    tc_shader_set_material_ubo_layout(shader, &entry, 1, 192);
+
+    const tc_shader_resource_binding* stored =
+        tc_shader_find_resource_binding(shader, "material");
+    REQUIRE(stored != nullptr);
+    CHECK_EQ(stored->has_d3d11_placement, 1u);
+    CHECK_EQ(stored->d3d11.register_class, TC_SHADER_D3D11_REGISTER_B);
+    CHECK_EQ(stored->d3d11.register_index, 0u);
+    CHECK_EQ(stored->size, 192u);
+
+    tc_shader_destroy(handle);
+    tc_shader_shutdown();
+}
+
 TEST_CASE("shader resource layout rejects overlapping D3D11 register placement") {
     tc_shader_init();
 
