@@ -83,6 +83,25 @@ UINT d3d11_slot(const BoundResourceBinding& binding) {
         binding.value.array_element);
 }
 
+bool uses_scalar_d3d11_sampler_for_texture_array(const std::string& resource_name) {
+    // termin_shaderc legalizes Slang's D3D11 shadow-map sampler array into a
+    // single SamplerComparisonState. Textures remain arrayed at tN+i, but every
+    // element samples through the same sN sampler.
+    return resource_name == "shadow_maps" ||
+        resource_name == "u_shadow_map" ||
+        resource_name == "u_shadow_maps";
+}
+
+UINT d3d11_sampler_slot_for_sampled_texture(const BoundResourceBinding& binding) {
+    const UINT base = static_cast<UINT>(
+        binding.plan_entry.placement.d3d11.register_index);
+    if (uses_scalar_d3d11_sampler_for_texture_array(
+            binding.plan_entry.resource.name)) {
+        return base;
+    }
+    return static_cast<UINT>(base + binding.value.array_element);
+}
+
 bool validate_d3d11_placement(
     const BoundResourceBinding& binding,
     D3D11RegisterClass expected,
@@ -232,6 +251,13 @@ void bind_legacy_resource_binding(
             auto* tex = device.get_texture(binding.texture);
             ID3D11ShaderResourceView* srv = tex ? tex->srv.Get() : nullptr;
             set_shader_resources(ctx, stage_mask, slot, &srv);
+            if (!validate_d3d11_slot(
+                    binding,
+                    slot,
+                    D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT,
+                    "sampled texture sampler")) {
+                break;
+            }
             auto* sampler = device.get_sampler(binding.sampler);
             ID3D11SamplerState* native_sampler = sampler
                 ? sampler->sampler.Get()
@@ -322,11 +348,20 @@ void bind_bound_resource_binding(
             auto* tex = device.get_texture(binding.value.texture);
             ID3D11ShaderResourceView* srv = tex ? tex->srv.Get() : nullptr;
             set_shader_resources(ctx, stage_mask, slot, &srv);
+            const UINT sampler_slot =
+                d3d11_sampler_slot_for_sampled_texture(binding);
+            if (!validate_d3d11_slot(
+                    binding,
+                    sampler_slot,
+                    D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT,
+                    "sampled texture sampler")) {
+                break;
+            }
             auto* sampler = device.get_sampler(binding.value.sampler);
             ID3D11SamplerState* native_sampler = sampler
                 ? sampler->sampler.Get()
                 : device.default_sampler_state();
-            set_samplers(ctx, stage_mask, slot, &native_sampler);
+            set_samplers(ctx, stage_mask, sampler_slot, &native_sampler);
             break;
         }
         case BoundResourceKind::Sampler: {

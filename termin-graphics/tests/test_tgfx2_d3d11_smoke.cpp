@@ -868,6 +868,44 @@ int main() {
             return 1;
         }
 
+        tgfx::BackendBindingPlanEntry shadow_maps_plan;
+        shadow_maps_plan.resource.name = "shadow_maps";
+        shadow_maps_plan.resource.kind = tgfx::ShaderResourceKind::Texture;
+        shadow_maps_plan.resource.scope = tgfx::ShaderResourceScope::Pass;
+        shadow_maps_plan.stage_mask = TC_SHADER_STAGE_FRAGMENT;
+        shadow_maps_plan.placement.kind = tgfx::BackendPlacementKind::D3D11Register;
+        shadow_maps_plan.placement.d3d11.register_class = tgfx::D3D11RegisterClass::T;
+        shadow_maps_plan.placement.d3d11.register_index = 5;
+
+        tgfx::BoundResourceValue shadow_maps_value;
+        shadow_maps_value.kind = tgfx::BoundResourceKind::SampledTexture;
+        shadow_maps_value.texture = texture_gpu;
+        shadow_maps_value.sampler = sampler;
+        shadow_maps_value.array_element = 15;
+
+        tgfx::BoundResourceSetDesc shadow_maps_resource_set_desc;
+        shadow_maps_resource_set_desc.resource_layout_token =
+            device->pipeline_resource_layout_token(normal_pipeline);
+        tgfx::BoundResourceGroup shadow_maps_group;
+        shadow_maps_group.scope = tgfx::ShaderResourceScope::Pass;
+        shadow_maps_group.bindings.push_back({shadow_maps_plan, shadow_maps_value});
+        shadow_maps_resource_set_desc.groups.push_back(std::move(shadow_maps_group));
+        auto shadow_maps_resource_set =
+            device->create_bound_resource_set(shadow_maps_resource_set_desc);
+        if (!shadow_maps_resource_set) {
+            std::fprintf(stderr, "D3D11 smoke: shadow_maps resource set failed\n");
+            return 1;
+        }
+
+        auto shadow_maps_cmd = device->create_command_list();
+        shadow_maps_cmd->begin();
+        shadow_maps_cmd->begin_render_pass(pass);
+        shadow_maps_cmd->bind_pipeline(normal_pipeline);
+        shadow_maps_cmd->bind_resource_set(shadow_maps_resource_set);
+        shadow_maps_cmd->end_render_pass();
+        shadow_maps_cmd->end();
+        device->submit(*shadow_maps_cmd);
+
         tgfx::TextureDesc normal_msaa_desc;
         normal_msaa_desc.width = 4;
         normal_msaa_desc.height = 4;
