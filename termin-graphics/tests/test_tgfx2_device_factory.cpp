@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "tgfx2/backend_binding_plan.hpp"
 #include "tgfx2/device_factory.hpp"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/engine_shader_catalog.hpp"
@@ -49,6 +50,24 @@ struct ShaderRuntimeTestGuard {
         }
     }
 };
+
+static tc_shader_resource_binding make_plan_test_binding(
+    const char* name,
+    uint32_t kind,
+    uint32_t scope,
+    uint32_t binding,
+    uint32_t stage_mask
+) {
+    tc_shader_resource_binding out{};
+    std::snprintf(out.name, sizeof(out.name), "%s", name);
+    out.kind = kind;
+    out.scope = scope;
+    out.set = 0;
+    out.binding = binding;
+    out.stage_mask = stage_mask;
+    out.size = kind == TC_SHADER_RESOURCE_CONSTANT_BUFFER ? 64u : 0u;
+    return out;
+}
 
 TEST_CASE("tgfx2 device factory parses TERMIN_BACKEND aliases") {
     set_backend_env(nullptr);
@@ -142,6 +161,133 @@ TEST_CASE("tgfx2 shader artifact paths are backend aware") {
 
     termin::tgfx2_set_shader_artifact_root("");
     fs::remove_all(root);
+}
+
+TEST_CASE("backend binding plan separates semantic resources from backend placement") {
+    tc_shader_resource_binding binding = make_plan_test_binding(
+        "material",
+        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+        TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+        1,
+        TC_SHADER_STAGE_FRAGMENT);
+    binding.has_d3d11_placement = 1;
+    binding.d3d11.register_class = TC_SHADER_D3D11_REGISTER_B;
+    binding.d3d11.register_index = 3;
+
+    tgfx::BackendBindingPlan vulkan_plan;
+    std::string error;
+    REQUIRE(tgfx::build_backend_binding_plan(
+        tgfx::BackendType::Vulkan,
+        &binding,
+        1,
+        vulkan_plan,
+        &error));
+    REQUIRE(vulkan_plan.entries.size() == 1);
+    CHECK(vulkan_plan.entries[0].resource.name == "material");
+    CHECK(vulkan_plan.entries[0].resource.kind == tgfx::ShaderResourceKind::ConstantBuffer);
+    CHECK(vulkan_plan.entries[0].placement.kind == tgfx::BackendPlacementKind::VulkanDescriptor);
+    CHECK(vulkan_plan.entries[0].placement.vulkan.set == 0u);
+    CHECK(vulkan_plan.entries[0].placement.vulkan.binding == 1u);
+    CHECK(vulkan_plan.entries[0].placement.vulkan.descriptor_kind ==
+          tgfx::BackendDescriptorKind::UniformBuffer);
+
+    tgfx::BackendBindingPlan d3d11_plan;
+    REQUIRE(tgfx::build_backend_binding_plan(
+        tgfx::BackendType::D3D11,
+        &binding,
+        1,
+        d3d11_plan,
+        &error));
+    REQUIRE(d3d11_plan.entries.size() == 1);
+    CHECK(d3d11_plan.entries[0].resource.name == "material");
+    CHECK(d3d11_plan.entries[0].placement.kind == tgfx::BackendPlacementKind::D3D11Register);
+    CHECK(d3d11_plan.entries[0].placement.d3d11.register_class == tgfx::D3D11RegisterClass::B);
+    CHECK(d3d11_plan.entries[0].placement.d3d11.register_index == 3u);
+
+    tgfx::BackendBindingPlan opengl_plan;
+    REQUIRE(tgfx::build_backend_binding_plan(
+        tgfx::BackendType::OpenGL,
+        &binding,
+        1,
+        opengl_plan,
+        &error));
+    REQUIRE(opengl_plan.entries.size() == 1);
+    CHECK(opengl_plan.entries[0].resource.name == "material");
+    CHECK(opengl_plan.entries[0].placement.kind == tgfx::BackendPlacementKind::OpenGLBinding);
+    CHECK(opengl_plan.entries[0].placement.opengl.binding_class ==
+          tgfx::OpenGLBindingClass::UniformBuffer);
+    CHECK(opengl_plan.entries[0].placement.opengl.binding_point == 1u);
+}
+
+TEST_CASE("backend binding plan validates D3D11 register class and stage conflicts") {
+    tc_shader_resource_binding bindings[2]{};
+    bindings[0] = make_plan_test_binding(
+        "material",
+        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+        TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+        1,
+        TC_SHADER_STAGE_FRAGMENT);
+    bindings[0].has_d3d11_placement = 1;
+    bindings[0].d3d11.register_class = TC_SHADER_D3D11_REGISTER_B;
+    bindings[0].d3d11.register_index = 1;
+
+    bindings[1] = make_plan_test_binding(
+        "draw_data",
+        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+        TC_SHADER_RESOURCE_SCOPE_DRAW,
+        2,
+        TC_SHADER_STAGE_FRAGMENT);
+    bindings[1].has_d3d11_placement = 1;
+    bindings[1].d3d11.register_class = TC_SHADER_D3D11_REGISTER_B;
+    bindings[1].d3d11.register_index = 1;
+
+    tgfx::BackendBindingPlan plan;
+    std::string error;
+    CHECK(!tgfx::build_backend_binding_plan(
+        tgfx::BackendType::D3D11,
+        bindings,
+        2,
+        plan,
+        &error));
+    CHECK(error.find("conflict") != std::string::npos);
+
+    bindings[1].stage_mask = TC_SHADER_STAGE_VERTEX;
+    CHECK(tgfx::build_backend_binding_plan(
+        tgfx::BackendType::D3D11,
+        bindings,
+        2,
+        plan,
+        &error));
+    CHECK(plan.entries.size() == 2);
+
+    bindings[1].d3d11.register_class = TC_SHADER_D3D11_REGISTER_T;
+    CHECK(!tgfx::build_backend_binding_plan(
+        tgfx::BackendType::D3D11,
+        bindings,
+        2,
+        plan,
+        &error));
+    CHECK(error.find("register class") != std::string::npos);
+}
+
+TEST_CASE("backend binding plan rejects unsupported Vulkan descriptor sets") {
+    tc_shader_resource_binding binding = make_plan_test_binding(
+        "per_frame",
+        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+        TC_SHADER_RESOURCE_SCOPE_FRAME,
+        2,
+        TC_SHADER_STAGE_VERTEX);
+    binding.set = 1;
+
+    tgfx::BackendBindingPlan plan;
+    std::string error;
+    CHECK(!tgfx::build_backend_binding_plan(
+        tgfx::BackendType::Vulkan,
+        &binding,
+        1,
+        plan,
+        &error));
+    CHECK(error.find("set 0") != std::string::npos);
 }
 
 TEST_CASE("tc_shader records language and artifact policy") {

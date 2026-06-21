@@ -80,15 +80,17 @@ public:
     // Vulkan maps this to descriptor layout internals. OpenGL and D3D11 use a
     // stable pipeline-local token because their native binding models are not
     // descriptor-set based.
-    virtual uintptr_t pipeline_resource_layout_token(PipelineHandle pipeline) const {
-        return pipeline_descriptor_set_layout(pipeline);
-    }
-
-    // Deprecated compatibility name. New code should call
-    // pipeline_resource_layout_token().
+    // Deprecated compatibility name. New code should call the neutral
+    // pipeline_resource_layout_token() below. Keep this virtual before the new
+    // one so existing binaries compiled against the older interface keep the
+    // same vtable slot until the SDK is rebuilt.
     virtual uintptr_t pipeline_descriptor_set_layout(PipelineHandle pipeline) const {
         (void)pipeline;
         return 0;
+    }
+
+    virtual uintptr_t pipeline_resource_layout_token(PipelineHandle pipeline) const {
+        return pipeline_descriptor_set_layout(pipeline);
     }
 
     // --- Introspection ---

@@ -99,6 +99,7 @@ termin_set_rpath_lib(termin_graphics)
 
 # --- termin_graphics2 (new backend-neutral API) ---
 set(TGFX2_SOURCES
+    src/tgfx2/backend_binding_plan.cpp
     src/tgfx2/builtin_shader_sources.cpp
     src/tgfx2/device_factory.cpp
     src/tgfx2/canvas2d_renderer.cpp
