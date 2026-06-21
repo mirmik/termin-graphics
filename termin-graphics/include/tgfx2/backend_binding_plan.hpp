@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "tgfx2/enums.hpp"
+#include "tgfx2/handles.hpp"
 #include "tgfx2/tgfx2_api.h"
 
 extern "C" {
@@ -106,6 +107,33 @@ struct BackendBindingPlanEntry {
 struct BackendBindingPlan {
     BackendType backend = BackendType::Null;
     std::vector<BackendBindingPlanEntry> entries;
+};
+
+enum class BoundResourceKind : uint32_t {
+    UniformBuffer = 0,
+    StorageBuffer,
+    SampledTexture,
+    Sampler,
+};
+
+struct BoundResourceValue {
+    BoundResourceKind kind = BoundResourceKind::UniformBuffer;
+    BufferHandle buffer;
+    TextureHandle texture;
+    SamplerHandle sampler;
+    uint64_t offset = 0;
+    uint64_t range = 0;
+    uint32_t array_element = 0;
+};
+
+struct BoundResourceBinding {
+    BackendBindingPlanEntry plan_entry;
+    BoundResourceValue value;
+};
+
+struct BoundResourceSetDesc {
+    uintptr_t resource_layout_token = 0;
+    std::vector<BoundResourceBinding> bindings;
 };
 
 TGFX2_API bool build_backend_binding_plan(

@@ -81,22 +81,6 @@ private:
         uint64_t range = 0;
     };
 
-    struct BoundResourceValue {
-        enum class Kind { UniformBuffer, StorageBuffer, SampledTexture, Sampler }
-            kind = Kind::UniformBuffer;
-        BufferHandle buffer;
-        TextureHandle texture;
-        SamplerHandle sampler;
-        uint64_t offset = 0;
-        uint64_t range = 0;
-        uint32_t array_element = 0;
-    };
-
-    struct PlannedResourceBinding {
-        BackendBindingPlanEntry plan_entry;
-        BoundResourceValue value;
-    };
-
     enum class ResourceScope : uint8_t {
         Unknown = 0,
         Frame,
@@ -109,7 +93,7 @@ private:
 
     struct ResourceBindingBucket {
         std::vector<ResourceBinding> numeric;
-        std::vector<PlannedResourceBinding> planned;
+        std::vector<BoundResourceBinding> planned;
         std::vector<SymbolicBinding> symbolic;
     };
 
@@ -137,12 +121,12 @@ private:
         ResourceBinding::Kind kind,
         uint32_t set = 0,
         uint32_t array_element = 0);
-    static ResourceBinding::Kind resource_binding_kind_from_value(
-        BoundResourceValue::Kind kind);
+    static ResourceBinding::Kind resource_binding_kind_from_bound(
+        BoundResourceKind kind);
     static ResourceBinding resource_binding_from_planned(
-        const PlannedResourceBinding& planned);
-    static PlannedResourceBinding* find_planned_binding(
-        std::vector<PlannedResourceBinding>& bindings,
+        const BoundResourceBinding& planned);
+    static BoundResourceBinding* find_planned_binding(
+        std::vector<BoundResourceBinding>& bindings,
         const BackendBindingPlanEntry& plan_entry,
         const BoundResourceValue& value);
     void upsert_pending_binding(ResourceScope scope, const ResourceBinding& binding);
@@ -152,7 +136,11 @@ private:
         const BoundResourceValue& value);
     bool pending_binding_buckets_empty() const;
     void clear_pending_binding_buckets();
-    std::vector<ResourceBinding> flatten_pending_bindings() const;
+    BoundResourceSetDesc build_pending_bound_resource_set(
+        uintptr_t resource_layout_token) const;
+    static ResourceSetDesc legacy_resource_set_desc_from_bound(
+        const BoundResourceSetDesc& bound_desc,
+        const std::vector<ResourceBinding>& legacy_numeric_bindings);
 
     // Queued push-constant bytes. Re-emitted after every flush_pipeline
     // so the data lands on the freshly-bound VkPipelineLayout (Vulkan)

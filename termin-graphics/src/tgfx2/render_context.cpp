@@ -443,28 +443,28 @@ void apply_backend_binding_plan_entry(
     }
 }
 
-ResourceBinding::Kind RenderContext2::resource_binding_kind_from_value(
-    RenderContext2::BoundResourceValue::Kind kind
+ResourceBinding::Kind RenderContext2::resource_binding_kind_from_bound(
+    BoundResourceKind kind
 ) {
     switch (kind) {
-        case RenderContext2::BoundResourceValue::Kind::UniformBuffer:
+        case BoundResourceKind::UniformBuffer:
             return ResourceBinding::Kind::UniformBuffer;
-        case RenderContext2::BoundResourceValue::Kind::StorageBuffer:
+        case BoundResourceKind::StorageBuffer:
             return ResourceBinding::Kind::StorageBuffer;
-        case RenderContext2::BoundResourceValue::Kind::SampledTexture:
+        case BoundResourceKind::SampledTexture:
             return ResourceBinding::Kind::SampledTexture;
-        case RenderContext2::BoundResourceValue::Kind::Sampler:
+        case BoundResourceKind::Sampler:
             return ResourceBinding::Kind::Sampler;
     }
     return ResourceBinding::Kind::UniformBuffer;
 }
 
 ResourceBinding RenderContext2::resource_binding_from_planned(
-    const RenderContext2::PlannedResourceBinding& planned
+    const BoundResourceBinding& planned
 ) {
     ResourceBinding out;
     apply_backend_binding_plan_entry(out, planned.plan_entry);
-    out.kind = resource_binding_kind_from_value(planned.value.kind);
+    out.kind = resource_binding_kind_from_bound(planned.value.kind);
     out.buffer = planned.value.buffer;
     out.texture = planned.value.texture;
     out.sampler = planned.value.sampler;
@@ -485,12 +485,12 @@ ResourceBinding* RenderContext2::find_pending_binding(
     return find_binding(bucket.numeric, binding, kind, set, array_element);
 }
 
-RenderContext2::PlannedResourceBinding* RenderContext2::find_planned_binding(
-    std::vector<RenderContext2::PlannedResourceBinding>& bindings,
+BoundResourceBinding* RenderContext2::find_planned_binding(
+    std::vector<BoundResourceBinding>& bindings,
     const BackendBindingPlanEntry& plan_entry,
-    const RenderContext2::BoundResourceValue& value
+    const BoundResourceValue& value
 ) {
-    for (RenderContext2::PlannedResourceBinding& binding : bindings) {
+    for (BoundResourceBinding& binding : bindings) {
         if (binding.plan_entry.resource.name == plan_entry.resource.name &&
             binding.value.kind == value.kind &&
             binding.value.array_element == value.array_element) {
@@ -524,7 +524,7 @@ void RenderContext2::upsert_pending_planned_binding(
     const BoundResourceValue& value
 ) {
     auto& bucket = pending_binding_buckets_[static_cast<size_t>(scope)];
-    PlannedResourceBinding* existing =
+    BoundResourceBinding* existing =
         find_planned_binding(bucket.planned, plan_entry, value);
     if (existing) {
         existing->plan_entry = plan_entry;
@@ -553,24 +553,45 @@ void RenderContext2::clear_pending_binding_buckets() {
     }
 }
 
-std::vector<ResourceBinding> RenderContext2::flatten_pending_bindings() const {
-    std::vector<ResourceBinding> flattened;
-    size_t count = 0;
+BoundResourceSetDesc RenderContext2::build_pending_bound_resource_set(
+    uintptr_t resource_layout_token
+) const {
+    BoundResourceSetDesc bound_desc;
+    bound_desc.resource_layout_token = resource_layout_token;
+
+    size_t planned_count = 0;
     for (const ResourceBindingBucket& bucket : pending_binding_buckets_) {
-        count += bucket.numeric.size();
-        count += bucket.planned.size();
+        planned_count += bucket.planned.size();
     }
-    flattened.reserve(count);
+    bound_desc.bindings.reserve(planned_count);
     for (const ResourceBindingBucket& bucket : pending_binding_buckets_) {
-        flattened.insert(
-            flattened.end(),
-            bucket.numeric.begin(),
-            bucket.numeric.end());
-        for (const PlannedResourceBinding& planned : bucket.planned) {
-            flattened.push_back(resource_binding_from_planned(planned));
+        for (const BoundResourceBinding& planned : bucket.planned) {
+            bound_desc.bindings.push_back(planned);
         }
     }
-    return flattened;
+    return bound_desc;
+}
+
+ResourceSetDesc RenderContext2::legacy_resource_set_desc_from_bound(
+    const BoundResourceSetDesc& bound_desc,
+    const std::vector<ResourceBinding>& legacy_numeric_bindings
+) {
+    ResourceSetDesc legacy_desc;
+    legacy_desc.resource_layout_token = bound_desc.resource_layout_token;
+    // Transitional Vulkan compatibility until ResourceSetDesc no longer
+    // exposes descriptor-set-shaped placement.
+    legacy_desc.descriptor_set_layout = bound_desc.resource_layout_token;
+
+    legacy_desc.bindings.reserve(
+        legacy_numeric_bindings.size() + bound_desc.bindings.size());
+    legacy_desc.bindings.insert(
+        legacy_desc.bindings.end(),
+        legacy_numeric_bindings.begin(),
+        legacy_numeric_bindings.end());
+    for (const BoundResourceBinding& planned : bound_desc.bindings) {
+        legacy_desc.bindings.push_back(resource_binding_from_planned(planned));
+    }
+    return legacy_desc;
 }
 
 void RenderContext2::bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
@@ -866,7 +887,7 @@ void RenderContext2::bind_uniform_data(std::string_view name, const void* data, 
     }
 
     BoundResourceValue value;
-    value.kind = BoundResourceValue::Kind::UniformBuffer;
+    value.kind = BoundResourceKind::UniformBuffer;
     value.buffer = buffer;
     value.offset = offset;
     value.range = size;
@@ -1052,7 +1073,7 @@ void RenderContext2::flush_resource_set() {
                                    static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
                             continue;
                         }
-                        value.kind = BoundResourceValue::Kind::UniformBuffer;
+                        value.kind = BoundResourceKind::UniformBuffer;
                         value.buffer = sb.buffer;
                         value.offset = sb.offset;
                         value.range = sb.range;
@@ -1064,7 +1085,7 @@ void RenderContext2::flush_resource_set() {
                                    static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
                             continue;
                         }
-                        value.kind = BoundResourceValue::Kind::StorageBuffer;
+                        value.kind = BoundResourceKind::StorageBuffer;
                         value.buffer = sb.buffer;
                         value.offset = sb.offset;
                         value.range = sb.range;
@@ -1076,7 +1097,7 @@ void RenderContext2::flush_resource_set() {
                                    static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
                             continue;
                         }
-                        value.kind = BoundResourceValue::Kind::SampledTexture;
+                        value.kind = BoundResourceKind::SampledTexture;
                         value.texture = sb.texture;
                         value.sampler = sb.sampler;
                         value.array_element = static_cast<uint32_t>(sb.offset);
@@ -1102,18 +1123,32 @@ void RenderContext2::flush_resource_set() {
         current_resource_set_ = {};
     }
 
-    ResourceSetDesc desc;
-    desc.bindings = flatten_pending_bindings();
     // Pass the current pipeline's resource layout token so the backend binds
     // values against the right native layout. Vulkan currently maps this token
     // to a VkDescriptorSetLayout; OpenGL and D3D11 use pipeline-local tokens.
+    uintptr_t resource_layout_token = 0;
     if (last_bound_pipeline_) {
-        desc.resource_layout_token =
+        resource_layout_token =
             device_.pipeline_resource_layout_token(last_bound_pipeline_);
-        // Transitional Vulkan compatibility until ResourceSetDesc no longer
-        // exposes descriptor-set-shaped placement.
-        desc.descriptor_set_layout = desc.resource_layout_token;
     }
+
+    std::vector<ResourceBinding> legacy_numeric_bindings;
+    size_t numeric_count = 0;
+    for (const ResourceBindingBucket& bucket : pending_binding_buckets_) {
+        numeric_count += bucket.numeric.size();
+    }
+    legacy_numeric_bindings.reserve(numeric_count);
+    for (const ResourceBindingBucket& bucket : pending_binding_buckets_) {
+        legacy_numeric_bindings.insert(
+            legacy_numeric_bindings.end(),
+            bucket.numeric.begin(),
+            bucket.numeric.end());
+    }
+
+    BoundResourceSetDesc bound_desc =
+        build_pending_bound_resource_set(resource_layout_token);
+    ResourceSetDesc desc =
+        legacy_resource_set_desc_from_bound(bound_desc, legacy_numeric_bindings);
     if (desc.effective_resource_layout_token() != 0) {
         current_resource_set_ = device_.create_resource_set(desc);
         if (current_resource_set_) {
