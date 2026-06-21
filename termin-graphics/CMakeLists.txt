@@ -441,6 +441,32 @@ if(BUILD_TGFX2_TESTS)
     termin_set_rpath_test(tgfx2_device_factory_test)
     add_test(NAME tgfx2_device_factory_test COMMAND tgfx2_device_factory_test)
 
+    if(TGFX2_ENABLE_OPENGL)
+        set(SDL2_OPENGL_SMOKE_FOUND FALSE)
+        find_path(SDL2_OPENGL_SMOKE_INCLUDE_DIR SDL.h PATH_SUFFIXES SDL2)
+        find_library(SDL2_OPENGL_SMOKE_LIBRARY SDL2)
+        if(SDL2_OPENGL_SMOKE_INCLUDE_DIR AND SDL2_OPENGL_SMOKE_LIBRARY)
+            set(SDL2_OPENGL_SMOKE_FOUND TRUE)
+            message(STATUS "tgfx2 OpenGL bound resource set smoke: SDL2 at ${SDL2_OPENGL_SMOKE_LIBRARY}")
+        else()
+            message(STATUS "tgfx2 OpenGL bound resource set smoke: SDL2 not found; skipping")
+        endif()
+        if(SDL2_OPENGL_SMOKE_FOUND)
+            add_executable(tgfx2_opengl_bound_resource_set
+                tests/test_tgfx2_opengl_bound_resource_set.cpp)
+            target_include_directories(tgfx2_opengl_bound_resource_set
+                PRIVATE ${SDL2_OPENGL_SMOKE_INCLUDE_DIR})
+            target_link_libraries(tgfx2_opengl_bound_resource_set
+                PRIVATE termin_graphics2 ${SDL2_OPENGL_SMOKE_LIBRARY})
+            termin_set_rpath_test(tgfx2_opengl_bound_resource_set)
+            add_test(NAME tgfx2_opengl_bound_resource_set
+                COMMAND tgfx2_opengl_bound_resource_set)
+            set_tests_properties(tgfx2_opengl_bound_resource_set PROPERTIES
+                TIMEOUT 10
+                SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
+        endif()
+    endif()
+
     # Vulkan smoke test (no GLFW needed — offscreen)
     if(TGFX2_ENABLE_VULKAN)
         add_executable(tgfx2_vulkan_smoke tests/test_tgfx2_vulkan_smoke.cpp)
