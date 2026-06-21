@@ -912,6 +912,17 @@ ResourceSetHandle OpenGLRenderDevice::create_resource_set(const ResourceSetDesc&
     return {resource_sets_.add(std::move(rs))};
 }
 
+ResourceSetHandle OpenGLRenderDevice::create_bound_resource_set(
+    const BoundResourceSetDesc& desc,
+    const std::vector<ResourceBinding>& legacy_numeric_bindings
+) {
+    GLResourceSet rs;
+    rs.bound_desc = desc;
+    rs.legacy_numeric_bindings = legacy_numeric_bindings;
+    rs.has_bound_desc = true;
+    return {resource_sets_.add(std::move(rs))};
+}
+
 uintptr_t OpenGLRenderDevice::pipeline_resource_layout_token(PipelineHandle pipeline) const {
     if (!pipelines_.get_const(pipeline.id)) {
         return 0;

@@ -76,6 +76,9 @@ struct GLProgramKeyHash {
 
 struct GLResourceSet {
     ResourceSetDesc desc;
+    BoundResourceSetDesc bound_desc;
+    std::vector<ResourceBinding> legacy_numeric_bindings;
+    bool has_bound_desc = false;
 };
 
 // Handle pool: maps uint32_t id -> T
@@ -186,6 +189,9 @@ public:
     ShaderHandle create_shader(const ShaderDesc& desc) override;
     PipelineHandle create_pipeline(const PipelineDesc& desc) override;
     ResourceSetHandle create_resource_set(const ResourceSetDesc& desc) override;
+    ResourceSetHandle create_bound_resource_set(
+        const BoundResourceSetDesc& desc,
+        const std::vector<ResourceBinding>& legacy_numeric_bindings = {}) override;
     uintptr_t pipeline_resource_layout_token(PipelineHandle pipeline) const override;
     uintptr_t pipeline_descriptor_set_layout(PipelineHandle pipeline) const override;
 

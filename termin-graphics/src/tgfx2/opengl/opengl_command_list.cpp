@@ -271,6 +271,127 @@ void OpenGLCommandList::apply_pending_push_constants() {
 
 // --- Resource binding ---
 
+void bind_legacy_resource_binding(OpenGLRenderDevice& device, const ResourceBinding& b) {
+    switch (b.kind) {
+        case ResourceBinding::Kind::UniformBuffer: {
+            auto* buf = device.get_buffer(b.buffer);
+            if (buf) {
+                if (b.range > 0) {
+                    glBindBufferRange(GL_UNIFORM_BUFFER, b.binding, buf->gl_id,
+                                      static_cast<GLintptr>(b.offset),
+                                      static_cast<GLsizeiptr>(b.range));
+                } else {
+                    glBindBufferBase(GL_UNIFORM_BUFFER, b.binding, buf->gl_id);
+                }
+            }
+            break;
+        }
+        case ResourceBinding::Kind::StorageBuffer: {
+            auto* buf = device.get_buffer(b.buffer);
+            if (buf) {
+                if (b.range > 0) {
+                    glBindBufferRange(0x90D2 /*GL_SHADER_STORAGE_BUFFER*/, b.binding, buf->gl_id,
+                                      static_cast<GLintptr>(b.offset),
+                                      static_cast<GLsizeiptr>(b.range));
+                } else {
+                    glBindBufferBase(0x90D2 /*GL_SHADER_STORAGE_BUFFER*/, b.binding, buf->gl_id);
+                }
+            }
+            break;
+        }
+        case ResourceBinding::Kind::SampledTexture: {
+            auto* tex = device.get_texture(b.texture);
+            if (tex) {
+                const GLuint unit = b.binding + b.array_element;
+                glActiveTexture(GL_TEXTURE0 + unit);
+                glBindTexture(tex->target, tex->gl_id);
+                auto* samp = device.get_sampler(b.sampler);
+                glBindSampler(unit, samp ? samp->gl_id : 0);
+            }
+            break;
+        }
+        case ResourceBinding::Kind::Sampler: {
+            auto* samp = device.get_sampler(b.sampler);
+            if (samp) {
+                glBindSampler(b.binding, samp->gl_id);
+            }
+            break;
+        }
+    }
+}
+
+void bind_bound_resource_binding(
+    OpenGLRenderDevice& device,
+    const BoundResourceBinding& binding
+) {
+    const OpenGLBindingPlacement& placement = binding.plan_entry.placement.opengl;
+    switch (placement.binding_class) {
+        case OpenGLBindingClass::UniformBuffer: {
+            auto* buf = device.get_buffer(binding.value.buffer);
+            if (buf) {
+                if (binding.value.range > 0) {
+                    glBindBufferRange(
+                        GL_UNIFORM_BUFFER,
+                        placement.binding_point,
+                        buf->gl_id,
+                        static_cast<GLintptr>(binding.value.offset),
+                        static_cast<GLsizeiptr>(binding.value.range));
+                } else {
+                    glBindBufferBase(GL_UNIFORM_BUFFER, placement.binding_point, buf->gl_id);
+                }
+            }
+            break;
+        }
+        case OpenGLBindingClass::StorageBuffer: {
+            auto* buf = device.get_buffer(binding.value.buffer);
+            if (buf) {
+                if (binding.value.range > 0) {
+                    glBindBufferRange(
+                        0x90D2 /*GL_SHADER_STORAGE_BUFFER*/,
+                        placement.binding_point,
+                        buf->gl_id,
+                        static_cast<GLintptr>(binding.value.offset),
+                        static_cast<GLsizeiptr>(binding.value.range));
+                } else {
+                    glBindBufferBase(
+                        0x90D2 /*GL_SHADER_STORAGE_BUFFER*/,
+                        placement.binding_point,
+                        buf->gl_id);
+                }
+            }
+            break;
+        }
+        case OpenGLBindingClass::TextureUnit: {
+            auto* tex = device.get_texture(binding.value.texture);
+            if (tex) {
+                const GLuint unit = placement.texture_unit + binding.value.array_element;
+                glActiveTexture(GL_TEXTURE0 + unit);
+                glBindTexture(tex->target, tex->gl_id);
+                auto* samp = device.get_sampler(binding.value.sampler);
+                glBindSampler(unit, samp ? samp->gl_id : 0);
+            }
+            break;
+        }
+        case OpenGLBindingClass::SamplerUnit: {
+            auto* samp = device.get_sampler(binding.value.sampler);
+            if (samp) {
+                glBindSampler(placement.texture_unit, samp->gl_id);
+            }
+            break;
+        }
+        case OpenGLBindingClass::ImageUnit:
+            tc::Log::error(
+                "OpenGLCommandList::bind_resource_set: image bindings are not implemented");
+            break;
+        case OpenGLBindingClass::None:
+        default:
+            tc::Log::error(
+                "OpenGLCommandList::bind_resource_set: missing OpenGL placement for resource '%s'",
+                binding.plan_entry.resource.name.c_str());
+            break;
+    }
+}
+
 void OpenGLCommandList::bind_resource_set(ResourceSetHandle set,
                                            uint32_t /*set_index*/,
                                            const uint32_t* /*dynamic_offsets*/,
@@ -283,53 +404,18 @@ void OpenGLCommandList::bind_resource_set(ResourceSetHandle set,
     // ResourceBinding::offset. The Vulkan-only `dynamic_offsets` argument
     // is ignored here.
 
-    for (const auto& b : rs->desc.bindings) {
-        switch (b.kind) {
-            case ResourceBinding::Kind::UniformBuffer: {
-                auto* buf = device_.get_buffer(b.buffer);
-                if (buf) {
-                    if (b.range > 0) {
-                        glBindBufferRange(GL_UNIFORM_BUFFER, b.binding, buf->gl_id,
-                                          static_cast<GLintptr>(b.offset),
-                                          static_cast<GLsizeiptr>(b.range));
-                    } else {
-                        glBindBufferBase(GL_UNIFORM_BUFFER, b.binding, buf->gl_id);
-                    }
-                }
-                break;
-            }
-            case ResourceBinding::Kind::StorageBuffer: {
-                auto* buf = device_.get_buffer(b.buffer);
-                if (buf) {
-                    if (b.range > 0) {
-                        glBindBufferRange(0x90D2 /*GL_SHADER_STORAGE_BUFFER*/, b.binding, buf->gl_id,
-                                          static_cast<GLintptr>(b.offset),
-                                          static_cast<GLsizeiptr>(b.range));
-                    } else {
-                        glBindBufferBase(0x90D2 /*GL_SHADER_STORAGE_BUFFER*/, b.binding, buf->gl_id);
-                    }
-                }
-                break;
-            }
-            case ResourceBinding::Kind::SampledTexture: {
-                auto* tex = device_.get_texture(b.texture);
-                if (tex) {
-                    const GLuint unit = b.binding + b.array_element;
-                    glActiveTexture(GL_TEXTURE0 + unit);
-                    glBindTexture(tex->target, tex->gl_id);
-                    auto* samp = device_.get_sampler(b.sampler);
-                    glBindSampler(unit, samp ? samp->gl_id : 0);
-                }
-                break;
-            }
-            case ResourceBinding::Kind::Sampler: {
-                auto* samp = device_.get_sampler(b.sampler);
-                if (samp) {
-                    glBindSampler(b.binding, samp->gl_id);
-                }
-                break;
-            }
+    if (rs->has_bound_desc) {
+        for (const ResourceBinding& b : rs->legacy_numeric_bindings) {
+            bind_legacy_resource_binding(device_, b);
         }
+        for (const BoundResourceBinding& b : rs->bound_desc.bindings) {
+            bind_bound_resource_binding(device_, b);
+        }
+        return;
+    }
+
+    for (const ResourceBinding& b : rs->desc.bindings) {
+        bind_legacy_resource_binding(device_, b);
     }
 }
 
