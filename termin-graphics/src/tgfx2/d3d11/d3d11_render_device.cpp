@@ -991,6 +991,17 @@ ResourceSetHandle D3D11RenderDevice::create_resource_set(const ResourceSetDesc& 
     return {resource_sets_.add(std::move(out))};
 }
 
+ResourceSetHandle D3D11RenderDevice::create_bound_resource_set(
+    const BoundResourceSetDesc& desc,
+    const std::vector<ResourceBinding>& legacy_numeric_bindings
+) {
+    D3D11ResourceSet out;
+    out.bound_desc = desc;
+    out.legacy_numeric_bindings = legacy_numeric_bindings;
+    out.has_bound_desc = true;
+    return {resource_sets_.add(std::move(out))};
+}
+
 uintptr_t D3D11RenderDevice::pipeline_resource_layout_token(PipelineHandle pipeline) const {
     return pipelines_.get_const(pipeline.id) ? static_cast<uintptr_t>(pipeline.id) : 0;
 }

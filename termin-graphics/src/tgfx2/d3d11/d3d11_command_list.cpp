@@ -71,6 +71,65 @@ bool validate_d3d11_slot(
     return false;
 }
 
+uint32_t effective_stage_mask(const BoundResourceBinding& binding) {
+    return binding.plan_entry.stage_mask == TC_SHADER_STAGE_NONE
+        ? TC_SHADER_STAGE_ALL_GRAPHICS
+        : binding.plan_entry.stage_mask;
+}
+
+UINT d3d11_slot(const BoundResourceBinding& binding) {
+    return static_cast<UINT>(
+        binding.plan_entry.placement.d3d11.register_index +
+        binding.value.array_element);
+}
+
+bool validate_d3d11_placement(
+    const BoundResourceBinding& binding,
+    D3D11RegisterClass expected,
+    const char* kind_name
+) {
+    const BackendBindingPlanEntry& entry = binding.plan_entry;
+    if (entry.placement.kind != BackendPlacementKind::D3D11Register) {
+        tc::Log::error(
+            "D3D11CommandList::bind_resource_set: %s resource '%s' has "
+            "non-D3D11 placement kind=%u",
+            kind_name,
+            entry.resource.name.c_str(),
+            static_cast<unsigned>(entry.placement.kind));
+        return false;
+    }
+    if (entry.placement.d3d11.register_class == expected) {
+        return true;
+    }
+    tc::Log::error(
+        "D3D11CommandList::bind_resource_set: %s resource '%s' has "
+        "D3D11 class=%u, expected class=%u",
+        kind_name,
+        entry.resource.name.c_str(),
+        static_cast<unsigned>(entry.placement.d3d11.register_class),
+        static_cast<unsigned>(expected));
+    return false;
+}
+
+bool validate_d3d11_slot(
+    const BoundResourceBinding& binding,
+    UINT slot,
+    UINT limit,
+    const char* kind_name
+) {
+    if (slot < limit) {
+        return true;
+    }
+    tc::Log::error(
+        "D3D11CommandList::bind_resource_set: %s resource '%s' resolved to "
+        "out-of-range D3D11 slot=%u limit=%u",
+        kind_name,
+        binding.plan_entry.resource.name.c_str(),
+        slot,
+        limit);
+    return false;
+}
+
 void set_constant_buffers(
     ID3D11DeviceContext* ctx,
     uint32_t stage_mask,
@@ -127,6 +186,178 @@ void clear_shader_resources(ID3D11DeviceContext* ctx) {
     ctx->VSSetShaderResources(0, static_cast<UINT>(null_srvs.size()), null_srvs.data());
     ctx->PSSetShaderResources(0, static_cast<UINT>(null_srvs.size()), null_srvs.data());
     ctx->GSSetShaderResources(0, static_cast<UINT>(null_srvs.size()), null_srvs.data());
+}
+
+void bind_legacy_resource_binding(
+    D3D11RenderDevice& device,
+    ID3D11DeviceContext* ctx,
+    const ResourceBinding& binding
+) {
+    const UINT slot = d3d11_slot(binding);
+    const uint32_t stage_mask = effective_stage_mask(binding);
+    switch (binding.kind) {
+        case ResourceBinding::Kind::UniformBuffer: {
+            if (!validate_d3d11_register_class(
+                    binding,
+                    TC_SHADER_D3D11_REGISTER_B,
+                    "uniform buffer")) {
+                break;
+            }
+            if (!validate_d3d11_slot(
+                    binding,
+                    slot,
+                    D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT,
+                    "uniform buffer")) {
+                break;
+            }
+            auto* buf = device.get_buffer(binding.buffer);
+            ID3D11Buffer* native = buf ? buf->buffer.Get() : nullptr;
+            set_constant_buffers(ctx, stage_mask, slot, &native);
+            break;
+        }
+        case ResourceBinding::Kind::SampledTexture: {
+            if (!validate_d3d11_register_class(
+                    binding,
+                    TC_SHADER_D3D11_REGISTER_T,
+                    "sampled texture")) {
+                break;
+            }
+            if (!validate_d3d11_slot(
+                    binding,
+                    slot,
+                    D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT,
+                    "sampled texture")) {
+                break;
+            }
+            auto* tex = device.get_texture(binding.texture);
+            ID3D11ShaderResourceView* srv = tex ? tex->srv.Get() : nullptr;
+            set_shader_resources(ctx, stage_mask, slot, &srv);
+            auto* sampler = device.get_sampler(binding.sampler);
+            ID3D11SamplerState* native_sampler = sampler
+                ? sampler->sampler.Get()
+                : device.default_sampler_state();
+            set_samplers(ctx, stage_mask, slot, &native_sampler);
+            break;
+        }
+        case ResourceBinding::Kind::Sampler: {
+            if (!validate_d3d11_register_class(
+                    binding,
+                    TC_SHADER_D3D11_REGISTER_S,
+                    "sampler")) {
+                break;
+            }
+            if (!validate_d3d11_slot(
+                    binding,
+                    slot,
+                    D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT,
+                    "sampler")) {
+                break;
+            }
+            auto* sampler = device.get_sampler(binding.sampler);
+            ID3D11SamplerState* native = sampler ? sampler->sampler.Get() : nullptr;
+            set_samplers(ctx, stage_mask, slot, &native);
+            break;
+        }
+        case ResourceBinding::Kind::StorageBuffer:
+            if (validate_d3d11_register_class(
+                    binding,
+                    TC_SHADER_D3D11_REGISTER_U,
+                    "storage buffer")) {
+                tc::Log::error(
+                    "D3D11CommandList::bind_resource_set: storage buffers are not implemented");
+            }
+            break;
+    }
+}
+
+void bind_bound_resource_binding(
+    D3D11RenderDevice& device,
+    ID3D11DeviceContext* ctx,
+    const BoundResourceBinding& binding
+) {
+    const UINT slot = d3d11_slot(binding);
+    const uint32_t stage_mask = effective_stage_mask(binding);
+    switch (binding.value.kind) {
+        case BoundResourceKind::UniformBuffer: {
+            if (!validate_d3d11_placement(
+                    binding,
+                    D3D11RegisterClass::B,
+                    "uniform buffer")) {
+                break;
+            }
+            if (!validate_d3d11_slot(
+                    binding,
+                    slot,
+                    D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT,
+                    "uniform buffer")) {
+                break;
+            }
+            if (binding.value.offset != 0) {
+                tc::Log::error(
+                    "D3D11CommandList::bind_resource_set: uniform buffer "
+                    "resource '%s' has unsupported offset=%llu",
+                    binding.plan_entry.resource.name.c_str(),
+                    static_cast<unsigned long long>(binding.value.offset));
+                break;
+            }
+            auto* buf = device.get_buffer(binding.value.buffer);
+            ID3D11Buffer* native = buf ? buf->buffer.Get() : nullptr;
+            set_constant_buffers(ctx, stage_mask, slot, &native);
+            break;
+        }
+        case BoundResourceKind::SampledTexture: {
+            if (!validate_d3d11_placement(
+                    binding,
+                    D3D11RegisterClass::T,
+                    "sampled texture")) {
+                break;
+            }
+            if (!validate_d3d11_slot(
+                    binding,
+                    slot,
+                    D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT,
+                    "sampled texture")) {
+                break;
+            }
+            auto* tex = device.get_texture(binding.value.texture);
+            ID3D11ShaderResourceView* srv = tex ? tex->srv.Get() : nullptr;
+            set_shader_resources(ctx, stage_mask, slot, &srv);
+            auto* sampler = device.get_sampler(binding.value.sampler);
+            ID3D11SamplerState* native_sampler = sampler
+                ? sampler->sampler.Get()
+                : device.default_sampler_state();
+            set_samplers(ctx, stage_mask, slot, &native_sampler);
+            break;
+        }
+        case BoundResourceKind::Sampler: {
+            if (!validate_d3d11_placement(
+                    binding,
+                    D3D11RegisterClass::S,
+                    "sampler")) {
+                break;
+            }
+            if (!validate_d3d11_slot(
+                    binding,
+                    slot,
+                    D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT,
+                    "sampler")) {
+                break;
+            }
+            auto* sampler = device.get_sampler(binding.value.sampler);
+            ID3D11SamplerState* native = sampler ? sampler->sampler.Get() : nullptr;
+            set_samplers(ctx, stage_mask, slot, &native);
+            break;
+        }
+        case BoundResourceKind::StorageBuffer:
+            if (validate_d3d11_placement(
+                    binding,
+                    D3D11RegisterClass::U,
+                    "storage buffer")) {
+                tc::Log::error(
+                    "D3D11CommandList::bind_resource_set: storage buffers are not implemented");
+            }
+            break;
+    }
 }
 
 } // namespace
@@ -230,81 +461,18 @@ void D3D11CommandList::bind_resource_set(ResourceSetHandle set,
     auto* rs = device_.get_resource_set(set);
     if (!rs) return;
 
-    for (const auto& binding : rs->desc.bindings) {
-        const UINT slot = d3d11_slot(binding);
-        const uint32_t stage_mask = effective_stage_mask(binding);
-        switch (binding.kind) {
-            case ResourceBinding::Kind::UniformBuffer: {
-                if (!validate_d3d11_register_class(
-                        binding,
-                        TC_SHADER_D3D11_REGISTER_B,
-                        "uniform buffer")) {
-                    break;
-                }
-                if (!validate_d3d11_slot(
-                        binding,
-                        slot,
-                        D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT,
-                        "uniform buffer")) {
-                    break;
-                }
-                auto* buf = device_.get_buffer(binding.buffer);
-                ID3D11Buffer* native = buf ? buf->buffer.Get() : nullptr;
-                set_constant_buffers(ctx_, stage_mask, slot, &native);
-                break;
-            }
-            case ResourceBinding::Kind::SampledTexture: {
-                if (!validate_d3d11_register_class(
-                        binding,
-                        TC_SHADER_D3D11_REGISTER_T,
-                        "sampled texture")) {
-                    break;
-                }
-                if (!validate_d3d11_slot(
-                        binding,
-                        slot,
-                        D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT,
-                        "sampled texture")) {
-                    break;
-                }
-                auto* tex = device_.get_texture(binding.texture);
-                ID3D11ShaderResourceView* srv = tex ? tex->srv.Get() : nullptr;
-                set_shader_resources(ctx_, stage_mask, slot, &srv);
-                auto* sampler = device_.get_sampler(binding.sampler);
-                ID3D11SamplerState* native_sampler = sampler
-                    ? sampler->sampler.Get()
-                    : device_.default_sampler_state();
-                set_samplers(ctx_, stage_mask, slot, &native_sampler);
-                break;
-            }
-            case ResourceBinding::Kind::Sampler: {
-                if (!validate_d3d11_register_class(
-                        binding,
-                        TC_SHADER_D3D11_REGISTER_S,
-                        "sampler")) {
-                    break;
-                }
-                if (!validate_d3d11_slot(
-                        binding,
-                        slot,
-                        D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT,
-                        "sampler")) {
-                    break;
-                }
-                auto* sampler = device_.get_sampler(binding.sampler);
-                ID3D11SamplerState* native = sampler ? sampler->sampler.Get() : nullptr;
-                set_samplers(ctx_, stage_mask, slot, &native);
-                break;
-            }
-            case ResourceBinding::Kind::StorageBuffer:
-                if (validate_d3d11_register_class(
-                        binding,
-                        TC_SHADER_D3D11_REGISTER_U,
-                        "storage buffer")) {
-                    tc::Log::error("D3D11CommandList::bind_resource_set: storage buffers are not implemented");
-                }
-                break;
+    if (rs->has_bound_desc) {
+        for (const ResourceBinding& binding : rs->legacy_numeric_bindings) {
+            bind_legacy_resource_binding(device_, ctx_, binding);
         }
+        for (const BoundResourceBinding& binding : rs->bound_desc.bindings) {
+            bind_bound_resource_binding(device_, ctx_, binding);
+        }
+        return;
+    }
+
+    for (const auto& binding : rs->desc.bindings) {
+        bind_legacy_resource_binding(device_, ctx_, binding);
     }
 }
 

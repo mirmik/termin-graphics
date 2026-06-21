@@ -1,3 +1,4 @@
+#include "tgfx2/backend_binding_plan.hpp"
 #include "tgfx2/canvas2d_renderer.hpp"
 #include "tgfx2/device_factory.hpp"
 #include "tgfx2/engine_shader_catalog.hpp"
@@ -793,20 +794,42 @@ int main() {
             return 1;
         }
 
-        tgfx::ResourceSetDesc normal_resource_set_desc;
-        tgfx::ResourceBinding per_frame_binding;
-        per_frame_binding.kind = tgfx::ResourceBinding::Kind::UniformBuffer;
-        per_frame_binding.binding = 0;
-        per_frame_binding.stage_mask = TC_SHADER_STAGE_VERTEX;
-        per_frame_binding.buffer = per_frame_cb;
-        normal_resource_set_desc.bindings.push_back(per_frame_binding);
-        tgfx::ResourceBinding draw_data_binding;
-        draw_data_binding.kind = tgfx::ResourceBinding::Kind::UniformBuffer;
-        draw_data_binding.binding = 1;
-        draw_data_binding.stage_mask = TC_SHADER_STAGE_VERTEX;
-        draw_data_binding.buffer = draw_data_cb;
-        normal_resource_set_desc.bindings.push_back(draw_data_binding);
-        auto normal_resource_set = device->create_resource_set(normal_resource_set_desc);
+        tgfx::BackendBindingPlanEntry per_frame_plan;
+        per_frame_plan.resource.name = "PerFrame";
+        per_frame_plan.resource.kind = tgfx::ShaderResourceKind::ConstantBuffer;
+        per_frame_plan.resource.scope = tgfx::ShaderResourceScope::Frame;
+        per_frame_plan.stage_mask = TC_SHADER_STAGE_VERTEX;
+        per_frame_plan.size = sizeof(identity);
+        per_frame_plan.placement.kind = tgfx::BackendPlacementKind::D3D11Register;
+        per_frame_plan.placement.d3d11.register_class = tgfx::D3D11RegisterClass::B;
+        per_frame_plan.placement.d3d11.register_index = 0;
+
+        tgfx::BoundResourceValue per_frame_value;
+        per_frame_value.kind = tgfx::BoundResourceKind::UniformBuffer;
+        per_frame_value.buffer = per_frame_cb;
+        per_frame_value.range = sizeof(identity);
+
+        tgfx::BackendBindingPlanEntry draw_data_plan;
+        draw_data_plan.resource.name = "DrawData";
+        draw_data_plan.resource.kind = tgfx::ShaderResourceKind::ConstantBuffer;
+        draw_data_plan.resource.scope = tgfx::ShaderResourceScope::Draw;
+        draw_data_plan.stage_mask = TC_SHADER_STAGE_VERTEX;
+        draw_data_plan.size = sizeof(identity);
+        draw_data_plan.placement.kind = tgfx::BackendPlacementKind::D3D11Register;
+        draw_data_plan.placement.d3d11.register_class = tgfx::D3D11RegisterClass::B;
+        draw_data_plan.placement.d3d11.register_index = 1;
+
+        tgfx::BoundResourceValue draw_data_value;
+        draw_data_value.kind = tgfx::BoundResourceKind::UniformBuffer;
+        draw_data_value.buffer = draw_data_cb;
+        draw_data_value.range = sizeof(identity);
+
+        tgfx::BoundResourceSetDesc normal_resource_set_desc;
+        normal_resource_set_desc.resource_layout_token =
+            device->pipeline_resource_layout_token(normal_pipeline);
+        normal_resource_set_desc.bindings.push_back({per_frame_plan, per_frame_value});
+        normal_resource_set_desc.bindings.push_back({draw_data_plan, draw_data_value});
+        auto normal_resource_set = device->create_bound_resource_set(normal_resource_set_desc);
         if (!normal_vbo || !per_frame_cb || !draw_data_cb || !normal_resource_set) {
             std::fprintf(stderr, "D3D11 smoke: normal material resources failed\n");
             return 1;
