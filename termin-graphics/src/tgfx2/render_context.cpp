@@ -443,6 +443,37 @@ void apply_backend_binding_plan_entry(
     }
 }
 
+ResourceBinding::Kind RenderContext2::resource_binding_kind_from_value(
+    RenderContext2::BoundResourceValue::Kind kind
+) {
+    switch (kind) {
+        case RenderContext2::BoundResourceValue::Kind::UniformBuffer:
+            return ResourceBinding::Kind::UniformBuffer;
+        case RenderContext2::BoundResourceValue::Kind::StorageBuffer:
+            return ResourceBinding::Kind::StorageBuffer;
+        case RenderContext2::BoundResourceValue::Kind::SampledTexture:
+            return ResourceBinding::Kind::SampledTexture;
+        case RenderContext2::BoundResourceValue::Kind::Sampler:
+            return ResourceBinding::Kind::Sampler;
+    }
+    return ResourceBinding::Kind::UniformBuffer;
+}
+
+ResourceBinding RenderContext2::resource_binding_from_planned(
+    const RenderContext2::PlannedResourceBinding& planned
+) {
+    ResourceBinding out;
+    apply_backend_binding_plan_entry(out, planned.plan_entry);
+    out.kind = resource_binding_kind_from_value(planned.value.kind);
+    out.buffer = planned.value.buffer;
+    out.texture = planned.value.texture;
+    out.sampler = planned.value.sampler;
+    out.offset = planned.value.offset;
+    out.range = planned.value.range;
+    out.array_element = planned.value.array_element;
+    return out;
+}
+
 ResourceBinding* RenderContext2::find_pending_binding(
     ResourceScope scope,
     uint32_t binding,
@@ -452,6 +483,21 @@ ResourceBinding* RenderContext2::find_pending_binding(
 ) {
     auto& bucket = pending_binding_buckets_[static_cast<size_t>(scope)];
     return find_binding(bucket.numeric, binding, kind, set, array_element);
+}
+
+RenderContext2::PlannedResourceBinding* RenderContext2::find_planned_binding(
+    std::vector<RenderContext2::PlannedResourceBinding>& bindings,
+    const BackendBindingPlanEntry& plan_entry,
+    const RenderContext2::BoundResourceValue& value
+) {
+    for (RenderContext2::PlannedResourceBinding& binding : bindings) {
+        if (binding.plan_entry.resource.name == plan_entry.resource.name &&
+            binding.value.kind == value.kind &&
+            binding.value.array_element == value.array_element) {
+            return &binding;
+        }
+    }
+    return nullptr;
 }
 
 void RenderContext2::upsert_pending_binding(
@@ -472,9 +518,27 @@ void RenderContext2::upsert_pending_binding(
     }
 }
 
+void RenderContext2::upsert_pending_planned_binding(
+    ResourceScope scope,
+    const BackendBindingPlanEntry& plan_entry,
+    const BoundResourceValue& value
+) {
+    auto& bucket = pending_binding_buckets_[static_cast<size_t>(scope)];
+    PlannedResourceBinding* existing =
+        find_planned_binding(bucket.planned, plan_entry, value);
+    if (existing) {
+        existing->plan_entry = plan_entry;
+        existing->value = value;
+    } else {
+        bucket.planned.push_back({plan_entry, value});
+    }
+}
+
 bool RenderContext2::pending_binding_buckets_empty() const {
     for (const ResourceBindingBucket& bucket : pending_binding_buckets_) {
-        if (!bucket.numeric.empty() || !bucket.symbolic.empty()) {
+        if (!bucket.numeric.empty() ||
+            !bucket.planned.empty() ||
+            !bucket.symbolic.empty()) {
             return false;
         }
     }
@@ -484,6 +548,7 @@ bool RenderContext2::pending_binding_buckets_empty() const {
 void RenderContext2::clear_pending_binding_buckets() {
     for (ResourceBindingBucket& bucket : pending_binding_buckets_) {
         bucket.numeric.clear();
+        bucket.planned.clear();
         bucket.symbolic.clear();
     }
 }
@@ -493,6 +558,7 @@ std::vector<ResourceBinding> RenderContext2::flatten_pending_bindings() const {
     size_t count = 0;
     for (const ResourceBindingBucket& bucket : pending_binding_buckets_) {
         count += bucket.numeric.size();
+        count += bucket.planned.size();
     }
     flattened.reserve(count);
     for (const ResourceBindingBucket& bucket : pending_binding_buckets_) {
@@ -500,6 +566,9 @@ std::vector<ResourceBinding> RenderContext2::flatten_pending_bindings() const {
             flattened.end(),
             bucket.numeric.begin(),
             bucket.numeric.end());
+        for (const PlannedResourceBinding& planned : bucket.planned) {
+            flattened.push_back(resource_binding_from_planned(planned));
+        }
     }
     return flattened;
 }
@@ -679,6 +748,10 @@ void RenderContext2::use_shader_resource_layout(const struct ::tc_shader* shader
             bucket.symbolic.clear();
             cleared = true;
         }
+        if (layout_changed && !bucket.planned.empty()) {
+            bucket.planned.clear();
+            cleared = true;
+        }
     }
     if (layout_changed) {
         for (ResourceScope scope :
@@ -763,6 +836,20 @@ void RenderContext2::bind_uniform_data(std::string_view name, const void* data, 
                static_cast<int>(name.size()), name.data(), rb->kind);
         return;
     }
+    if (!active_backend_binding_plan_valid_) {
+        tc_log(TC_LOG_WARN,
+               "RenderContext2: bind_uniform_data('%.*s') skipped because backend binding plan is unavailable",
+               static_cast<int>(name.size()), name.data());
+        return;
+    }
+    const BackendBindingPlanEntry* plan_entry =
+        find_backend_binding_plan_entry(active_backend_binding_plan_, name);
+    if (!plan_entry) {
+        tc_log(TC_LOG_WARN,
+               "RenderContext2: bind_uniform_data('%.*s') not found in backend binding plan",
+               static_cast<int>(name.size()), name.data());
+        return;
+    }
 
     BufferHandle buffer = device_.ring_ubo_handle();
     uint64_t offset = 0;
@@ -778,27 +865,15 @@ void RenderContext2::bind_uniform_data(std::string_view name, const void* data, 
         defer_destroy(buffer);
     }
 
-    ResourceBinding resolved;
-    if (!active_backend_binding_plan_valid_) {
-        tc_log(TC_LOG_WARN,
-               "RenderContext2: bind_uniform_data('%.*s') skipped because backend binding plan is unavailable",
-               static_cast<int>(name.size()), name.data());
-        return;
-    }
-    const BackendBindingPlanEntry* plan_entry =
-        find_backend_binding_plan_entry(active_backend_binding_plan_, name);
-    if (!plan_entry) {
-        tc_log(TC_LOG_WARN,
-               "RenderContext2: bind_uniform_data('%.*s') not found in backend binding plan",
-               static_cast<int>(name.size()), name.data());
-        return;
-    }
-    apply_backend_binding_plan_entry(resolved, *plan_entry);
-    resolved.kind = ResourceBinding::Kind::UniformBuffer;
-    resolved.buffer = buffer;
-    resolved.offset = offset;
-    resolved.range = size;
-    upsert_pending_binding(scope_from_shader_resource(rb->scope), resolved);
+    BoundResourceValue value;
+    value.kind = BoundResourceValue::Kind::UniformBuffer;
+    value.buffer = buffer;
+    value.offset = offset;
+    value.range = size;
+    upsert_pending_planned_binding(
+        scope_from_shader_resource(rb->scope),
+        *plan_entry,
+        value);
     bindings_dirty_ = true;
 }
 
@@ -953,7 +1028,6 @@ void RenderContext2::flush_resource_set() {
                     continue;
                 }
 
-                ResourceBinding resolved;
                 if (!active_backend_binding_plan_valid_) {
                     tc_log(TC_LOG_WARN,
                            "RenderContext2: symbolic binding '%.*s' skipped because backend binding plan is unavailable",
@@ -968,8 +1042,8 @@ void RenderContext2::flush_resource_set() {
                            static_cast<int>(sb.name.size()), sb.name.data());
                     continue;
                 }
-                apply_backend_binding_plan_entry(resolved, *plan_entry);
 
+                BoundResourceValue value;
                 switch (sb.kind) {
                     case SymbolicBinding::Kind::Uniform:
                         if (rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
@@ -978,10 +1052,10 @@ void RenderContext2::flush_resource_set() {
                                    static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
                             continue;
                         }
-                        resolved.kind = ResourceBinding::Kind::UniformBuffer;
-                        resolved.buffer = sb.buffer;
-                        resolved.offset = sb.offset;
-                        resolved.range = sb.range;
+                        value.kind = BoundResourceValue::Kind::UniformBuffer;
+                        value.buffer = sb.buffer;
+                        value.offset = sb.offset;
+                        value.range = sb.range;
                         break;
                     case SymbolicBinding::Kind::StorageBuffer:
                         if (rb->kind != TC_SHADER_RESOURCE_STORAGE_BUFFER) {
@@ -990,10 +1064,10 @@ void RenderContext2::flush_resource_set() {
                                    static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
                             continue;
                         }
-                        resolved.kind = ResourceBinding::Kind::StorageBuffer;
-                        resolved.buffer = sb.buffer;
-                        resolved.offset = sb.offset;
-                        resolved.range = sb.range;
+                        value.kind = BoundResourceValue::Kind::StorageBuffer;
+                        value.buffer = sb.buffer;
+                        value.offset = sb.offset;
+                        value.range = sb.range;
                         break;
                     case SymbolicBinding::Kind::Texture:
                         if (rb->kind != TC_SHADER_RESOURCE_TEXTURE) {
@@ -1002,16 +1076,17 @@ void RenderContext2::flush_resource_set() {
                                    static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
                             continue;
                         }
-                        resolved.kind = ResourceBinding::Kind::SampledTexture;
-                        resolved.texture = sb.texture;
-                        resolved.sampler = sb.sampler;
-                        resolved.array_element = static_cast<uint32_t>(sb.offset);
+                        value.kind = BoundResourceValue::Kind::SampledTexture;
+                        value.texture = sb.texture;
+                        value.sampler = sb.sampler;
+                        value.array_element = static_cast<uint32_t>(sb.offset);
                         break;
                 }
 
-                upsert_pending_binding(
+                upsert_pending_planned_binding(
                     scope_from_shader_resource(rb->scope),
-                    resolved);
+                    *plan_entry,
+                    value);
             }
             bucket.symbolic.clear();
         }
