@@ -11,6 +11,7 @@
 #include <d3d11sdklayers.h>
 #include <wrl/client.h>
 
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -42,6 +43,7 @@ struct D3D11ShaderModule {
     Microsoft::WRL::ComPtr<ID3D11GeometryShader> geometry_shader;
     Microsoft::WRL::ComPtr<ID3D11ComputeShader> compute_shader;
     ShaderStage stage = ShaderStage::Vertex;
+    std::string debug_name;
     std::vector<uint8_t> bytecode;
 };
 

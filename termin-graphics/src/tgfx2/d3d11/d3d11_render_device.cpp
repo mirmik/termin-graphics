@@ -143,6 +143,14 @@ struct D3D11InputSemantic {
     UINT index = 0;
 };
 
+struct D3D11SignatureParam {
+    std::string semantic;
+    UINT semantic_index = 0;
+    UINT register_index = 0;
+    BYTE mask = 0;
+    D3D_NAME system_value = D3D_NAME_UNDEFINED;
+};
+
 std::string uppercase_ascii(std::string value) {
     for (char& ch : value) {
         ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
@@ -258,6 +266,133 @@ std::vector<D3D11InputSemantic> reflect_d3d11_vertex_inputs(const D3D11ShaderMod
         out.push_back({param.SemanticName, param.SemanticIndex});
     }
     return out;
+}
+
+std::vector<D3D11SignatureParam> reflect_d3d11_signature(
+    const D3D11ShaderModule& shader,
+    bool output_signature)
+{
+    std::vector<D3D11SignatureParam> out;
+    if (shader.bytecode.empty()) {
+        return out;
+    }
+
+    Microsoft::WRL::ComPtr<ID3D11ShaderReflection> reflection;
+    HRESULT hr = D3DReflect(
+        shader.bytecode.data(),
+        shader.bytecode.size(),
+        __uuidof(ID3D11ShaderReflection),
+        reinterpret_cast<void**>(reflection.GetAddressOf()));
+    if (FAILED(hr) || !reflection) {
+        tc::Log::error(
+            "D3D11RenderDevice::create_pipeline: D3DReflect failed for shader '%s': HRESULT=0x%08X",
+            shader.debug_name.c_str(),
+            static_cast<unsigned>(hr));
+        return out;
+    }
+
+    D3D11_SHADER_DESC shader_desc{};
+    hr = reflection->GetDesc(&shader_desc);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::create_pipeline: shader reflection GetDesc failed for '%s': HRESULT=0x%08X",
+            shader.debug_name.c_str(),
+            static_cast<unsigned>(hr));
+        return out;
+    }
+
+    const UINT count = output_signature
+        ? shader_desc.OutputParameters
+        : shader_desc.InputParameters;
+    out.reserve(count);
+    for (UINT i = 0; i < count; ++i) {
+        D3D11_SIGNATURE_PARAMETER_DESC param{};
+        hr = output_signature
+            ? reflection->GetOutputParameterDesc(i, &param)
+            : reflection->GetInputParameterDesc(i, &param);
+        if (FAILED(hr) || !param.SemanticName) {
+            continue;
+        }
+        out.push_back({
+            param.SemanticName,
+            param.SemanticIndex,
+            param.Register,
+            param.Mask,
+            param.SystemValueType,
+        });
+    }
+    return out;
+}
+
+const D3D11SignatureParam* find_signature_param(
+    const std::vector<D3D11SignatureParam>& params,
+    const D3D11SignatureParam& needle)
+{
+    for (const D3D11SignatureParam& param : params) {
+        if (uppercase_ascii(param.semantic) == uppercase_ascii(needle.semantic) &&
+            param.semantic_index == needle.semantic_index) {
+            return &param;
+        }
+    }
+    return nullptr;
+}
+
+bool signatures_have_link_mismatch(
+    const std::vector<D3D11SignatureParam>& vs_outputs,
+    const std::vector<D3D11SignatureParam>& ps_inputs)
+{
+    bool mismatch = false;
+    for (const D3D11SignatureParam& ps_input : ps_inputs) {
+        if (ps_input.system_value != D3D_NAME_UNDEFINED) {
+            continue;
+        }
+        const D3D11SignatureParam* vs_output = find_signature_param(vs_outputs, ps_input);
+        if (!vs_output) {
+            mismatch = true;
+            continue;
+        }
+        if (vs_output->register_index != ps_input.register_index ||
+            vs_output->mask != ps_input.mask) {
+            mismatch = true;
+        }
+    }
+    return mismatch;
+}
+
+void log_d3d11_shader_signatures(
+    const char* reason,
+    const D3D11ShaderModule& vs,
+    const D3D11ShaderModule& ps,
+    const std::vector<D3D11SignatureParam>& vs_outputs,
+    const std::vector<D3D11SignatureParam>& ps_inputs)
+{
+    tc::Log::warn(
+        "D3D11RenderDevice::create_pipeline: shader signature diagnostic (%s): vs='%s' ps='%s'",
+        reason,
+        vs.debug_name.c_str(),
+        ps.debug_name.c_str());
+    for (size_t i = 0; i < vs_outputs.size(); ++i) {
+        const D3D11SignatureParam& p = vs_outputs[i];
+        tc::Log::warn(
+            "  vs_out[%zu]: %s%u reg=%u mask=0x%02X sys=%u",
+            i,
+            p.semantic.c_str(),
+            p.semantic_index,
+            p.register_index,
+            static_cast<unsigned>(p.mask),
+            static_cast<unsigned>(p.system_value));
+    }
+    for (size_t i = 0; i < ps_inputs.size(); ++i) {
+        const D3D11SignatureParam& p = ps_inputs[i];
+        tc::Log::warn(
+            "  ps_in[%zu]: %s%u reg=%u mask=0x%02X sys=%u",
+            i,
+            p.semantic.c_str(),
+            p.semantic_index,
+            p.register_index,
+            static_cast<unsigned>(p.mask),
+            static_cast<unsigned>(p.system_value));
+    }
 }
 
 void log_d3d11_input_layout_failure(
@@ -981,6 +1116,7 @@ ShaderHandle D3D11RenderDevice::create_shader(const ShaderDesc& desc) {
 
     D3D11ShaderModule out;
     out.stage = desc.stage;
+    out.debug_name = desc.debug_name.empty() ? "<unnamed>" : desc.debug_name;
     out.bytecode = desc.bytecode;
     const void* bytes = out.bytecode.data();
     const SIZE_T size = out.bytecode.size();
@@ -1016,6 +1152,21 @@ PipelineHandle D3D11RenderDevice::create_pipeline(const PipelineDesc& desc) {
 
     D3D11Pipeline out;
     out.desc = desc;
+
+    const std::vector<D3D11SignatureParam> vs_outputs =
+        reflect_d3d11_signature(*vs, true);
+    const std::vector<D3D11SignatureParam> ps_inputs =
+        reflect_d3d11_signature(*fs, false);
+    const bool signature_mismatch =
+        signatures_have_link_mismatch(vs_outputs, ps_inputs);
+    if (signature_mismatch || env_enabled("TERMIN_D3D11_LOG_SIGNATURES")) {
+        log_d3d11_shader_signatures(
+            signature_mismatch ? "mismatch" : "requested",
+            *vs,
+            *fs,
+            vs_outputs,
+            ps_inputs);
+    }
 
     std::vector<std::string> semantic_names;
     std::vector<D3D11_INPUT_ELEMENT_DESC> input_elements;
