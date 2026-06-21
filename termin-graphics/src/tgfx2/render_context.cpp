@@ -390,90 +390,6 @@ const BackendBindingPlanEntry* find_backend_binding_plan_entry(
     return nullptr;
 }
 
-uint32_t d3d11_register_class_to_shader(D3D11RegisterClass register_class) {
-    switch (register_class) {
-        case D3D11RegisterClass::B:
-            return TC_SHADER_D3D11_REGISTER_B;
-        case D3D11RegisterClass::T:
-            return TC_SHADER_D3D11_REGISTER_T;
-        case D3D11RegisterClass::S:
-            return TC_SHADER_D3D11_REGISTER_S;
-        case D3D11RegisterClass::U:
-            return TC_SHADER_D3D11_REGISTER_U;
-        case D3D11RegisterClass::None:
-        default:
-            return TC_SHADER_D3D11_REGISTER_NONE;
-    }
-}
-
-void apply_backend_binding_plan_entry(
-    ResourceBinding& dst,
-    const BackendBindingPlanEntry& entry
-) {
-    dst.stage_mask = entry.stage_mask;
-    dst.d3d11 = {};
-
-    switch (entry.placement.kind) {
-        case BackendPlacementKind::VulkanDescriptor:
-            dst.set = entry.placement.vulkan.set;
-            dst.binding = entry.placement.vulkan.binding;
-            break;
-        case BackendPlacementKind::D3D11Register:
-            dst.set = 0;
-            dst.binding = entry.placement.d3d11.register_index;
-            dst.d3d11.has_placement = true;
-            dst.d3d11.register_class = d3d11_register_class_to_shader(
-                entry.placement.d3d11.register_class);
-            dst.d3d11.register_index = entry.placement.d3d11.register_index;
-            break;
-        case BackendPlacementKind::OpenGLBinding:
-            dst.set = 0;
-            if (entry.placement.opengl.binding_class == OpenGLBindingClass::TextureUnit ||
-                entry.placement.opengl.binding_class == OpenGLBindingClass::SamplerUnit) {
-                dst.binding = entry.placement.opengl.texture_unit;
-            } else {
-                dst.binding = entry.placement.opengl.binding_point;
-            }
-            break;
-        case BackendPlacementKind::None:
-        default:
-            dst.set = 0;
-            dst.binding = 0;
-            break;
-    }
-}
-
-ResourceBinding::Kind RenderContext2::resource_binding_kind_from_bound(
-    BoundResourceKind kind
-) {
-    switch (kind) {
-        case BoundResourceKind::UniformBuffer:
-            return ResourceBinding::Kind::UniformBuffer;
-        case BoundResourceKind::StorageBuffer:
-            return ResourceBinding::Kind::StorageBuffer;
-        case BoundResourceKind::SampledTexture:
-            return ResourceBinding::Kind::SampledTexture;
-        case BoundResourceKind::Sampler:
-            return ResourceBinding::Kind::Sampler;
-    }
-    return ResourceBinding::Kind::UniformBuffer;
-}
-
-ResourceBinding RenderContext2::resource_binding_from_planned(
-    const BoundResourceBinding& planned
-) {
-    ResourceBinding out;
-    apply_backend_binding_plan_entry(out, planned.plan_entry);
-    out.kind = resource_binding_kind_from_bound(planned.value.kind);
-    out.buffer = planned.value.buffer;
-    out.texture = planned.value.texture;
-    out.sampler = planned.value.sampler;
-    out.offset = planned.value.offset;
-    out.range = planned.value.range;
-    out.array_element = planned.value.array_element;
-    return out;
-}
-
 ResourceBinding* RenderContext2::find_pending_binding(
     ResourceScope scope,
     uint32_t binding,
@@ -570,28 +486,6 @@ BoundResourceSetDesc RenderContext2::build_pending_bound_resource_set(
         }
     }
     return bound_desc;
-}
-
-ResourceSetDesc RenderContext2::legacy_resource_set_desc_from_bound(
-    const BoundResourceSetDesc& bound_desc,
-    const std::vector<ResourceBinding>& legacy_numeric_bindings
-) {
-    ResourceSetDesc legacy_desc;
-    legacy_desc.resource_layout_token = bound_desc.resource_layout_token;
-    // Transitional Vulkan compatibility until ResourceSetDesc no longer
-    // exposes descriptor-set-shaped placement.
-    legacy_desc.descriptor_set_layout = bound_desc.resource_layout_token;
-
-    legacy_desc.bindings.reserve(
-        legacy_numeric_bindings.size() + bound_desc.bindings.size());
-    legacy_desc.bindings.insert(
-        legacy_desc.bindings.end(),
-        legacy_numeric_bindings.begin(),
-        legacy_numeric_bindings.end());
-    for (const BoundResourceBinding& planned : bound_desc.bindings) {
-        legacy_desc.bindings.push_back(resource_binding_from_planned(planned));
-    }
-    return legacy_desc;
 }
 
 void RenderContext2::bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
@@ -1147,19 +1041,21 @@ void RenderContext2::flush_resource_set() {
 
     BoundResourceSetDesc bound_desc =
         build_pending_bound_resource_set(resource_layout_token);
-    ResourceSetDesc desc =
-        legacy_resource_set_desc_from_bound(bound_desc, legacy_numeric_bindings);
-    if (desc.effective_resource_layout_token() != 0) {
-        current_resource_set_ = device_.create_resource_set(desc);
+    if (bound_desc.resource_layout_token != 0) {
+        current_resource_set_ = device_.create_bound_resource_set(
+            bound_desc,
+            legacy_numeric_bindings);
         if (current_resource_set_) {
             cmd_->bind_resource_set(current_resource_set_, 0);
         }
     } else {
-        if (!desc.bindings.empty()) {
+        const size_t pending_binding_count =
+            legacy_numeric_bindings.size() + bound_desc.bindings.size();
+        if (pending_binding_count != 0) {
             tc_log(TC_LOG_WARN,
                    "RenderContext2: flush_resource_set skipping pipeline=%u "
                    "(resource_layout_token is null) with %zu pending bindings",
-                   last_bound_pipeline_.id, desc.bindings.size());
+                   last_bound_pipeline_.id, pending_binding_count);
             clear_pending_binding_buckets();
         }
     }

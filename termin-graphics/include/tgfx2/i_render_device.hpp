@@ -9,6 +9,7 @@
 #include "tgfx2/tgfx2_api.h"
 #include "tgfx2/handles.hpp"
 #include "tgfx2/descriptors.hpp"
+#include "tgfx2/backend_binding_plan.hpp"
 #include "tgfx2/capabilities.hpp"
 #include "tgfx2/i_command_list.hpp"
 
@@ -50,6 +51,12 @@ public:
     virtual ShaderHandle create_shader(const ShaderDesc& desc) = 0;
     virtual PipelineHandle create_pipeline(const PipelineDesc& desc) = 0;
     virtual ResourceSetHandle create_resource_set(const ResourceSetDesc& desc) = 0;
+    virtual ResourceSetHandle create_bound_resource_set(
+        const BoundResourceSetDesc& desc,
+        const std::vector<ResourceBinding>& legacy_numeric_bindings = {}) {
+        return create_resource_set(
+            legacy_resource_set_desc_from_bound(desc, legacy_numeric_bindings));
+    }
 
     // --- Resource destruction ---
     virtual void destroy(BufferHandle handle) = 0;

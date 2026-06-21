@@ -121,10 +121,6 @@ private:
         ResourceBinding::Kind kind,
         uint32_t set = 0,
         uint32_t array_element = 0);
-    static ResourceBinding::Kind resource_binding_kind_from_bound(
-        BoundResourceKind kind);
-    static ResourceBinding resource_binding_from_planned(
-        const BoundResourceBinding& planned);
     static BoundResourceBinding* find_planned_binding(
         std::vector<BoundResourceBinding>& bindings,
         const BackendBindingPlanEntry& plan_entry,
@@ -138,9 +134,6 @@ private:
     void clear_pending_binding_buckets();
     BoundResourceSetDesc build_pending_bound_resource_set(
         uintptr_t resource_layout_token) const;
-    static ResourceSetDesc legacy_resource_set_desc_from_bound(
-        const BoundResourceSetDesc& bound_desc,
-        const std::vector<ResourceBinding>& legacy_numeric_bindings);
 
     // Queued push-constant bytes. Re-emitted after every flush_pipeline
     // so the data lands on the freshly-bound VkPipelineLayout (Vulkan)

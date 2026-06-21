@@ -8,6 +8,8 @@
 #include "tgfx2/handles.hpp"
 #include "tgfx2/tgfx2_api.h"
 
+#include "tgfx2/descriptors.hpp"
+
 extern "C" {
 struct tc_shader_resource_binding;
 }
@@ -142,5 +144,12 @@ TGFX2_API bool build_backend_binding_plan(
     uint32_t binding_count,
     BackendBindingPlan& out_plan,
     std::string* error = nullptr);
+
+TGFX2_API ResourceBinding resource_binding_from_bound(
+    const BoundResourceBinding& binding);
+
+TGFX2_API ResourceSetDesc legacy_resource_set_desc_from_bound(
+    const BoundResourceSetDesc& bound_desc,
+    const std::vector<ResourceBinding>& legacy_numeric_bindings = {});
 
 } // namespace tgfx
