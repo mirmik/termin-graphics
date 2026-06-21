@@ -241,6 +241,132 @@ void log_d3d11_input_layout_failure(
     }
 }
 
+float half_to_float(uint16_t h) {
+    const uint32_t sign = static_cast<uint32_t>(h & 0x8000u) << 16u;
+    uint32_t exp = (h >> 10u) & 0x1fu;
+    uint32_t mant = h & 0x03ffu;
+
+    uint32_t bits = 0;
+    if (exp == 0) {
+        if (mant == 0) {
+            bits = sign;
+        } else {
+            exp = 1;
+            while ((mant & 0x0400u) == 0) {
+                mant <<= 1u;
+                --exp;
+            }
+            mant &= 0x03ffu;
+            bits = sign | ((exp + 112u) << 23u) | (mant << 13u);
+        }
+    } else if (exp == 31) {
+        bits = sign | 0x7f800000u | (mant << 13u);
+    } else {
+        bits = sign | ((exp + 112u) << 23u) | (mant << 13u);
+    }
+
+    float out = 0.0f;
+    std::memcpy(&out, &bits, sizeof(out));
+    return out;
+}
+
+bool unpack_rgba_float_pixel(PixelFormat format, const uint8_t* src, float* dst) {
+    switch (format) {
+        case PixelFormat::R8_UNorm:
+            dst[0] = src[0] / 255.0f;
+            dst[1] = 0.0f;
+            dst[2] = 0.0f;
+            dst[3] = 1.0f;
+            return true;
+        case PixelFormat::RG8_UNorm:
+            dst[0] = src[0] / 255.0f;
+            dst[1] = src[1] / 255.0f;
+            dst[2] = 0.0f;
+            dst[3] = 1.0f;
+            return true;
+        case PixelFormat::RGB8_UNorm:
+            dst[0] = src[0] / 255.0f;
+            dst[1] = src[1] / 255.0f;
+            dst[2] = src[2] / 255.0f;
+            dst[3] = 1.0f;
+            return true;
+        case PixelFormat::RGBA8_UNorm:
+            dst[0] = src[0] / 255.0f;
+            dst[1] = src[1] / 255.0f;
+            dst[2] = src[2] / 255.0f;
+            dst[3] = src[3] / 255.0f;
+            return true;
+        case PixelFormat::BGRA8_UNorm:
+            dst[0] = src[2] / 255.0f;
+            dst[1] = src[1] / 255.0f;
+            dst[2] = src[0] / 255.0f;
+            dst[3] = src[3] / 255.0f;
+            return true;
+        case PixelFormat::R16F: {
+            uint16_t r = 0;
+            std::memcpy(&r, src, sizeof(r));
+            dst[0] = half_to_float(r);
+            dst[1] = 0.0f;
+            dst[2] = 0.0f;
+            dst[3] = 1.0f;
+            return true;
+        }
+        case PixelFormat::RG16F: {
+            uint16_t rg[2] = {};
+            std::memcpy(rg, src, sizeof(rg));
+            dst[0] = half_to_float(rg[0]);
+            dst[1] = half_to_float(rg[1]);
+            dst[2] = 0.0f;
+            dst[3] = 1.0f;
+            return true;
+        }
+        case PixelFormat::RGBA16F: {
+            uint16_t rgba[4] = {};
+            std::memcpy(rgba, src, sizeof(rgba));
+            dst[0] = half_to_float(rgba[0]);
+            dst[1] = half_to_float(rgba[1]);
+            dst[2] = half_to_float(rgba[2]);
+            dst[3] = half_to_float(rgba[3]);
+            return true;
+        }
+        case PixelFormat::R32F:
+            std::memcpy(&dst[0], src, sizeof(float));
+            dst[1] = 0.0f;
+            dst[2] = 0.0f;
+            dst[3] = 1.0f;
+            return true;
+        case PixelFormat::RG32F:
+            std::memcpy(dst, src, sizeof(float) * 2u);
+            dst[2] = 0.0f;
+            dst[3] = 1.0f;
+            return true;
+        case PixelFormat::RGBA32F:
+            std::memcpy(dst, src, sizeof(float) * 4u);
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool supports_rgba_float_readback(PixelFormat format) {
+    switch (format) {
+        case PixelFormat::R8_UNorm:
+        case PixelFormat::RG8_UNorm:
+        case PixelFormat::RGB8_UNorm:
+        case PixelFormat::RGBA8_UNorm:
+        case PixelFormat::BGRA8_UNorm:
+        case PixelFormat::R16F:
+        case PixelFormat::RG16F:
+        case PixelFormat::RGBA16F:
+        case PixelFormat::R32F:
+        case PixelFormat::RG32F:
+        case PixelFormat::RGBA32F:
+            return true;
+        default:
+            return false;
+    }
+}
+
 PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
     switch (fmt) {
         case TC_TEXTURE_RGBA8: return PixelFormat::RGBA8_UNorm;
@@ -890,6 +1016,37 @@ void D3D11RenderDevice::upload_buffer(BufferHandle dst, std::span<const uint8_t>
         context_->Unmap(buf->buffer.Get(), 0);
         return;
     }
+
+    D3D11_BUFFER_DESC native_desc{};
+    buf->buffer->GetDesc(&native_desc);
+    if (offset + data.size() > native_desc.ByteWidth) {
+        tc::Log::error(
+            "D3D11RenderDevice::upload_buffer: upload range [%llu, %llu) exceeds buffer size %u",
+            static_cast<unsigned long long>(offset),
+            static_cast<unsigned long long>(offset + data.size()),
+            native_desc.ByteWidth);
+        return;
+    }
+
+    if ((native_desc.BindFlags & D3D11_BIND_CONSTANT_BUFFER) != 0) {
+        if (offset != 0) {
+            tc::Log::error(
+                "D3D11RenderDevice::upload_buffer: partial constant-buffer uploads are not supported by D3D11 "
+                "(offset=%llu size=%zu)",
+                static_cast<unsigned long long>(offset),
+                data.size());
+            return;
+        }
+        if (data.size() == native_desc.ByteWidth) {
+            context_->UpdateSubresource(buf->buffer.Get(), 0, nullptr, data.data(), 0, 0);
+            return;
+        }
+        std::vector<uint8_t> padded(native_desc.ByteWidth, 0u);
+        std::memcpy(padded.data(), data.data(), data.size());
+        context_->UpdateSubresource(buf->buffer.Get(), 0, nullptr, padded.data(), 0, 0);
+        return;
+    }
+
     D3D11_BOX box{};
     box.left = static_cast<UINT>(offset);
     box.right = static_cast<UINT>(offset + data.size());
@@ -1275,13 +1432,47 @@ bool D3D11RenderDevice::read_pixel_rgba8(TextureHandle handle, int x, int y, flo
 bool D3D11RenderDevice::read_texture_rgba_float(TextureHandle handle, float* out) {
     auto* tex = get_texture(handle);
     if (!tex || !tex->texture || !out) return false;
-    if (tex->desc.format != PixelFormat::RGBA8_UNorm && tex->desc.format != PixelFormat::BGRA8_UNorm) {
+    if (d3d11::is_depth_format(tex->desc.format)) {
+        tc::Log::error("D3D11RenderDevice::read_texture_rgba_float: texture is a depth format");
+        return false;
+    }
+    const uint32_t bytes_per_pixel = d3d11::pixel_format_bytes(tex->desc.format);
+    if (bytes_per_pixel == 0 || !supports_rgba_float_readback(tex->desc.format)) {
         tc::Log::error("D3D11RenderDevice::read_texture_rgba_float: unsupported format");
         return false;
     }
-    auto staging = create_staging_texture(*tex);
+
+    D3D11Texture read_src = *tex;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> resolved;
+    if (tex->desc.sample_count > 1) {
+        D3D11_TEXTURE2D_DESC desc{};
+        tex->texture->GetDesc(&desc);
+        desc.SampleDesc.Count = 1;
+        desc.SampleDesc.Quality = 0;
+        desc.BindFlags = 0;
+        desc.MiscFlags = 0;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.CPUAccessFlags = 0;
+        HRESULT hr = device_->CreateTexture2D(&desc, nullptr, &resolved);
+        if (FAILED(hr) || !resolved) {
+            tc::Log::error(
+                "D3D11RenderDevice::read_texture_rgba_float resolve texture creation failed: HRESULT=0x%08X",
+                static_cast<unsigned>(hr));
+            return false;
+        }
+        context_->ResolveSubresource(
+            resolved.Get(),
+            0,
+            tex->texture.Get(),
+            0,
+            d3d11::to_dxgi_format(tex->desc.format));
+        read_src.texture = resolved;
+        read_src.desc.sample_count = 1;
+    }
+
+    auto staging = create_staging_texture(read_src);
     if (!staging) return false;
-    context_->CopyResource(staging.Get(), tex->texture.Get());
+    context_->CopyResource(staging.Get(), read_src.texture.Get());
 
     D3D11_MAPPED_SUBRESOURCE mapped{};
     HRESULT hr = context_->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped);
@@ -1296,20 +1487,45 @@ bool D3D11RenderDevice::read_texture_rgba_float(TextureHandle handle, float* out
     for (uint32_t y = 0; y < tex->desc.height; ++y) {
         const auto* row = static_cast<const uint8_t*>(mapped.pData) + static_cast<size_t>(y) * mapped.RowPitch;
         for (uint32_t x = 0; x < tex->desc.width; ++x) {
-            const auto* p = row + static_cast<size_t>(x) * 4u;
+            const auto* p = row + static_cast<size_t>(x) * bytes_per_pixel;
             float* dst = out + (static_cast<size_t>(y) * tex->desc.width + x) * 4u;
-            if (tex->desc.format == PixelFormat::BGRA8_UNorm) {
-                dst[0] = p[2] / 255.0f;
-                dst[1] = p[1] / 255.0f;
-                dst[2] = p[0] / 255.0f;
-                dst[3] = p[3] / 255.0f;
-            } else {
-                dst[0] = p[0] / 255.0f;
-                dst[1] = p[1] / 255.0f;
-                dst[2] = p[2] / 255.0f;
-                dst[3] = p[3] / 255.0f;
-            }
+            unpack_rgba_float_pixel(tex->desc.format, p, dst);
         }
+    }
+    context_->Unmap(staging.Get(), 0);
+    return true;
+}
+
+bool D3D11RenderDevice::read_texture_depth_float(TextureHandle handle, float* out) {
+    auto* tex = get_texture(handle);
+    if (!tex || !tex->texture || !out) return false;
+    if (tex->desc.format != PixelFormat::D32F) {
+        tc::Log::error("D3D11RenderDevice::read_texture_depth_float: unsupported format");
+        return false;
+    }
+    if (tex->desc.sample_count > 1) {
+        tc::Log::error("D3D11RenderDevice::read_texture_depth_float: MSAA depth readback is not supported");
+        return false;
+    }
+
+    auto staging = create_staging_texture(*tex);
+    if (!staging) return false;
+    context_->CopyResource(staging.Get(), tex->texture.Get());
+
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    HRESULT hr = context_->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::read_texture_depth_float Map failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return false;
+    }
+    for (uint32_t y = 0; y < tex->desc.height; ++y) {
+        const auto* row = static_cast<const uint8_t*>(mapped.pData) + static_cast<size_t>(y) * mapped.RowPitch;
+        std::memcpy(
+            out + static_cast<size_t>(y) * tex->desc.width,
+            row,
+            static_cast<size_t>(tex->desc.width) * sizeof(float));
     }
     context_->Unmap(staging.Get(), 0);
     return true;
