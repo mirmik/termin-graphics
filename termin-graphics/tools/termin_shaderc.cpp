@@ -317,6 +317,14 @@ static void append_unique_resource(
             if (!binding.slang_glsl_symbol.empty()) {
                 existing.slang_glsl_symbol = std::move(binding.slang_glsl_symbol);
             }
+            existing.slang_combined_texture =
+                existing.slang_combined_texture || binding.slang_combined_texture;
+            existing.slang_split_texture =
+                existing.slang_split_texture || binding.slang_split_texture;
+            existing.slang_separate_sampler =
+                existing.slang_separate_sampler || binding.slang_separate_sampler;
+            existing.slang_storage_texture =
+                existing.slang_storage_texture || binding.slang_storage_texture;
             return;
         }
     }
@@ -1037,14 +1045,23 @@ static bool collect_resource_bindings(
             }
         }
     }
+    std::vector<ShaderResourceBinding> source_resources =
+        infer_resource_bindings(source, options);
     if (resources.empty()) {
-        resources = infer_resource_bindings(source, options);
+        resources = std::move(source_resources);
     } else {
-        append_missing_resources_used_by_entry(
-            resources,
-            infer_resource_bindings(source, options),
-            source,
-            options.entry);
+        if (options.target == "d3d11") {
+            // fxc validates every resource declaration emitted by Slang, even
+            // declarations used only through helper functions. Keep all source
+            // resources for D3D11 instead of filtering by direct main() usage.
+            append_missing_resources(resources, std::move(source_resources));
+        } else {
+            append_missing_resources_used_by_entry(
+                resources,
+                std::move(source_resources),
+                source,
+                options.entry);
+        }
     }
     assign_missing_resource_scopes(resources);
     apply_default_resource_scope(resources, options.default_scope);
@@ -1534,8 +1551,7 @@ static bool patch_slang_d3d11_hlsl_resource(
     if (resource.kind == "texture") {
         const bool texture_found_in_hlsl =
             hlsl.find(resource.name + "_texture_0") != std::string::npos ||
-            hlsl.find(resource.name + "_0") != std::string::npos ||
-            hlsl.find(resource.name) != std::string::npos;
+            hlsl.find(resource.name + "_0") != std::string::npos;
         if (!patch_any_symbol(
                 {resource.name + "_texture_0", resource.name + "_0"},
                 register_class,
@@ -1558,7 +1574,266 @@ static bool patch_slang_d3d11_hlsl_resource(
     return patch_any_symbol(
         {resource.name + "_0", resource.name},
         register_class,
-        hlsl.find(resource.name) != std::string::npos);
+        false);
+}
+
+struct D3D11HlslResourceDecl {
+    std::string symbol;
+    std::string resource_name;
+    std::string kind;
+    char register_class = 0;
+    uint32_t register_index = 0;
+    bool is_sampler = false;
+    bool is_texture = false;
+    bool is_storage_texture = false;
+};
+
+static std::string trim_copy(std::string text) {
+    const char* whitespace = " \t\r\n";
+    const size_t begin = text.find_first_not_of(whitespace);
+    if (begin == std::string::npos) {
+        return {};
+    }
+    const size_t end = text.find_last_not_of(whitespace);
+    return text.substr(begin, end - begin + 1);
+}
+
+static bool string_ends_with(const std::string& value, const std::string& suffix) {
+    return value.size() >= suffix.size() &&
+           value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+static std::string d3d11_hlsl_resource_name_from_symbol(
+    const std::string& symbol
+) {
+    if (string_ends_with(symbol, "_texture_0")) {
+        return symbol.substr(0, symbol.size() - 10);
+    }
+    if (string_ends_with(symbol, "_sampler_0")) {
+        return symbol.substr(0, symbol.size() - 10);
+    }
+    if (string_ends_with(symbol, "_0")) {
+        return symbol.substr(0, symbol.size() - 2);
+    }
+    return symbol;
+}
+
+static std::optional<D3D11HlslResourceDecl> parse_d3d11_hlsl_resource_decl(
+    const std::string& line
+) {
+    const size_t register_pos = line.find("register");
+    if (register_pos == std::string::npos) {
+        return std::nullopt;
+    }
+    const size_t colon_pos = line.rfind(':', register_pos);
+    if (colon_pos == std::string::npos) {
+        return std::nullopt;
+    }
+    const size_t open_paren = line.find('(', register_pos);
+    if (open_paren == std::string::npos) {
+        return std::nullopt;
+    }
+    size_t class_pos = open_paren + 1;
+    while (class_pos < line.size() &&
+           (line[class_pos] == ' ' || line[class_pos] == '\t')) {
+        ++class_pos;
+    }
+    if (class_pos >= line.size()) {
+        return std::nullopt;
+    }
+    const char register_class = line[class_pos];
+    if (register_class != 'b' &&
+        register_class != 't' &&
+        register_class != 's' &&
+        register_class != 'u') {
+        return std::nullopt;
+    }
+    size_t value_begin = class_pos + 1;
+    while (value_begin < line.size() &&
+           (line[value_begin] == ' ' || line[value_begin] == '\t')) {
+        ++value_begin;
+    }
+    size_t value_end = value_begin;
+    while (value_end < line.size() &&
+           line[value_end] >= '0' &&
+           line[value_end] <= '9') {
+        ++value_end;
+    }
+    if (value_begin == value_end) {
+        return std::nullopt;
+    }
+
+    std::string prefix = trim_copy(line.substr(0, colon_pos));
+    if (prefix.empty()) {
+        return std::nullopt;
+    }
+    const size_t array_pos = prefix.rfind('[');
+    if (array_pos != std::string::npos) {
+        prefix = trim_copy(prefix.substr(0, array_pos));
+    }
+    const size_t symbol_begin = prefix.find_last_of(" \t");
+    if (symbol_begin == std::string::npos || symbol_begin + 1 >= prefix.size()) {
+        return std::nullopt;
+    }
+    const std::string symbol = prefix.substr(symbol_begin + 1);
+
+    D3D11HlslResourceDecl decl;
+    decl.symbol = symbol;
+    decl.resource_name = d3d11_hlsl_resource_name_from_symbol(symbol);
+    decl.register_class = register_class;
+    decl.register_index = static_cast<uint32_t>(
+        std::stoul(line.substr(value_begin, value_end - value_begin)));
+    decl.is_sampler =
+        prefix.find("SamplerState") != std::string::npos ||
+        prefix.find("SamplerComparisonState") != std::string::npos;
+    decl.is_texture = prefix.find("Texture") != std::string::npos;
+    decl.is_storage_texture = prefix.find("RWTexture") != std::string::npos;
+    if (prefix.rfind("cbuffer ", 0) == 0) {
+        decl.kind = "constant_buffer";
+    } else if (decl.is_sampler) {
+        decl.kind = "sampler";
+    } else if (decl.is_storage_texture || register_class == 'u') {
+        decl.kind = "storage_texture";
+    } else if (decl.is_texture) {
+        decl.kind = "texture";
+    } else {
+        return std::nullopt;
+    }
+    return decl;
+}
+
+static std::vector<D3D11HlslResourceDecl> collect_d3d11_hlsl_resource_decls(
+    const std::string& hlsl
+) {
+    std::vector<D3D11HlslResourceDecl> decls;
+    std::istringstream stream(hlsl);
+    std::string line;
+    while (std::getline(stream, line)) {
+        std::optional<D3D11HlslResourceDecl> decl =
+            parse_d3d11_hlsl_resource_decl(line);
+        if (decl) {
+            decls.push_back(std::move(*decl));
+        }
+    }
+    return decls;
+}
+
+static bool d3d11_hlsl_has_decl_for_resource(
+    const std::vector<D3D11HlslResourceDecl>& decls,
+    const std::string& resource_name,
+    bool sampler
+) {
+    return std::any_of(
+        decls.begin(),
+        decls.end(),
+        [&](const D3D11HlslResourceDecl& decl) {
+            return decl.resource_name == resource_name &&
+                   decl.is_sampler == sampler;
+        });
+}
+
+static std::string infer_d3d11_hlsl_resource_scope(
+    const std::string& name,
+    const std::string& kind
+) {
+    if (name == "lighting" ||
+        name == "shadow_block" ||
+        name == "shadow_maps" ||
+        name == "u_shadow_map" ||
+        name == "u_shadow_maps") {
+        return "pass";
+    }
+    if (kind == "constant_buffer" && name == "material") {
+        return "material";
+    }
+    return "unscoped";
+}
+
+static void append_missing_d3d11_hlsl_resources(
+    std::vector<ShaderResourceBinding>& resources,
+    const std::string& hlsl,
+    uint32_t stage_mask
+) {
+    const std::vector<D3D11HlslResourceDecl> decls =
+        collect_d3d11_hlsl_resource_decls(hlsl);
+    for (const D3D11HlslResourceDecl& decl : decls) {
+        if (decl.is_sampler &&
+            d3d11_hlsl_has_decl_for_resource(
+                decls,
+                decl.resource_name,
+                false)) {
+            continue;
+        }
+        if (has_resource_named(resources, decl.resource_name)) {
+            continue;
+        }
+
+        ShaderResourceBinding binding;
+        binding.name = decl.resource_name;
+        binding.kind = decl.kind;
+        binding.scope =
+            infer_d3d11_hlsl_resource_scope(binding.name, binding.kind);
+        binding.stage_mask = stage_mask;
+        binding.binding = decl.register_index;
+        binding.set = 0;
+        binding.slang_combined_texture =
+            decl.kind == "texture" &&
+            d3d11_hlsl_has_decl_for_resource(
+                decls,
+                decl.resource_name,
+                true);
+        binding.slang_split_texture =
+            decl.kind == "texture" && !binding.slang_combined_texture;
+        binding.slang_separate_sampler = decl.kind == "sampler";
+        binding.slang_storage_texture = decl.kind == "storage_texture";
+        resources.push_back(std::move(binding));
+    }
+}
+
+static bool augment_d3d11_resource_bindings_from_hlsl(
+    const CompileOptions& options,
+    const std::filesystem::path& hlsl_path,
+    std::vector<ShaderResourceBinding>& resources
+) {
+    std::string hlsl;
+    if (!read_file(hlsl_path.string(), hlsl)) {
+        return false;
+    }
+
+    append_missing_d3d11_hlsl_resources(
+        resources,
+        hlsl,
+        stage_mask_for_stage(options.stage));
+    assign_missing_resource_scopes(resources);
+    apply_default_resource_scope(resources, options.default_scope);
+    normalize_scope_first_binding_slots(
+        resources,
+        options.language == "slang");
+    assign_d3d11_register_placement(resources);
+    return true;
+}
+
+static bool legalize_slang_d3d11_shadow_sampler_arrays(
+    std::string& hlsl,
+    bool& changed
+) {
+    static const std::regex shadow_sampler_decl_re(
+        R"((SamplerComparisonState\s+)shadow_maps_sampler_0\s*\[[^\]]+\])");
+    static const std::regex shadow_sampler_use_re(
+        R"(shadow_maps_sampler_0\s*\[\s*int\s*\(\s*[0-9]+\s*\)\s*\])");
+    const std::string before = hlsl;
+    hlsl = std::regex_replace(
+        hlsl,
+        shadow_sampler_decl_re,
+        "$1shadow_maps_sampler_0");
+    hlsl = std::regex_replace(
+        hlsl,
+        shadow_sampler_use_re,
+        "shadow_maps_sampler_0");
+    if (hlsl != before) {
+        changed = true;
+    }
+    return true;
 }
 
 static bool patch_slang_d3d11_hlsl_resource_bindings(
@@ -1582,6 +1857,9 @@ static bool patch_slang_d3d11_hlsl_resource_bindings(
     }
 
     bool changed = false;
+    if (!legalize_slang_d3d11_shadow_sampler_arrays(hlsl, changed)) {
+        return false;
+    }
     for (const ShaderResourceBinding& resource : resources) {
         if (!patch_slang_d3d11_hlsl_resource(hlsl, resource, changed)) {
             return false;
@@ -2244,6 +2522,19 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         return false;
     }
     if (is_d3d11) {
+        if (!augment_d3d11_resource_bindings_from_hlsl(
+                options,
+                slang_output_path,
+                resources)) {
+            std::error_code ec;
+            std::filesystem::remove(options.output, ec);
+            std::filesystem::remove(options.output + ".layout.json", ec);
+            if (!std::getenv("TERMIN_SHADERC_KEEP_INTERMEDIATE")) {
+                std::filesystem::remove(slang_output_path, ec);
+            }
+            std::filesystem::remove(reflection_path, ec);
+            return false;
+        }
         if (!patch_slang_d3d11_hlsl_resource_bindings(
                 slang_output_path,
                 resources)) {

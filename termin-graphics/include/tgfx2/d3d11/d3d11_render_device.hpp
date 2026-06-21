@@ -132,6 +132,15 @@ public:
                          int dst_y,
                          int dst_w,
                          int dst_h) override;
+    void clear_texture(TextureHandle dst,
+                       float r,
+                       float g,
+                       float b,
+                       float a,
+                       int viewport_x,
+                       int viewport_y,
+                       int viewport_w,
+                       int viewport_h) override;
 
     bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]) override;
     bool read_texture_rgba_float(TextureHandle tex, float* out) override;

@@ -2144,16 +2144,6 @@
               "name": "position",
               "semantic": "POSITION",
               "location": 0
-            },
-            {
-              "name": "normal",
-              "semantic": "NORMAL",
-              "location": 1
-            },
-            {
-              "name": "uv",
-              "semantic": "TEXCOORD0",
-              "location": 2
             }
           ],
           "outputs": [
@@ -2178,14 +2168,16 @@
       },
       "resources": [
         {
-          "name": "PerFrame",
+          "name": "u_per_frame",
           "logical_name": "per_frame",
-          "kind": "constant_buffer"
+          "kind": "constant_buffer",
+          "scope": "frame"
         },
         {
-          "name": "IdPushBlock",
-          "logical_name": "push",
-          "kind": "constant_buffer"
+          "name": "u_push",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
         }
       ]
     },

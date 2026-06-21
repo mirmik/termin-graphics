@@ -273,6 +273,21 @@ int main() {
             return 1;
         }
 
+        device->clear_texture(color, 0.10f, 0.20f, 0.30f, 1.0f, 0, 0, 4, 4);
+        if (!device->read_pixel_rgba8(color, 2, 2, rgba)) {
+            std::fprintf(stderr, "D3D11 smoke: clear_texture readback failed\n");
+            return 1;
+        }
+        if (!close_enough(rgba[0], 0.10f) ||
+            !close_enough(rgba[1], 0.20f) ||
+            !close_enough(rgba[2], 0.30f) ||
+            !close_enough(rgba[3], 1.00f)) {
+            std::fprintf(stderr,
+                         "D3D11 smoke: unexpected clear_texture pixel %.3f %.3f %.3f %.3f\n",
+                         rgba[0], rgba[1], rgba[2], rgba[3]);
+            return 1;
+        }
+
         tgfx::TextureDesc bgra_desc;
         bgra_desc.width = 4;
         bgra_desc.height = 4;
@@ -291,9 +306,9 @@ int main() {
             device->destroy(bgra_target);
             return 1;
         }
-        if (!close_enough(rgba[0], 0.25f) ||
-            !close_enough(rgba[1], 0.50f) ||
-            !close_enough(rgba[2], 0.75f) ||
+        if (!close_enough(rgba[0], 0.10f) ||
+            !close_enough(rgba[1], 0.20f) ||
+            !close_enough(rgba[2], 0.30f) ||
             !close_enough(rgba[3], 1.00f)) {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected RGBA->BGRA blit pixel %.3f %.3f %.3f %.3f\n",
@@ -536,6 +551,20 @@ int main() {
             return 1;
         }
 
+        tgfx::PipelineDesc standard_location_desc = textured_pipeline_desc;
+        standard_location_desc.vertex_layouts.clear();
+        tgfx::VertexBufferLayout standard_location_layout;
+        standard_location_layout.stride = sizeof(SmokeVertex);
+        standard_location_layout.attributes.emplace_back(
+            0,
+            tgfx::VertexFormat::Float3,
+            0);
+        standard_location_desc.vertex_layouts.push_back(standard_location_layout);
+        if (!device->create_pipeline(standard_location_desc)) {
+            std::fprintf(stderr, "D3D11 smoke: standard location input layout failed\n");
+            return 1;
+        }
+
         auto sampler = device->create_sampler(tgfx::SamplerDesc{});
         tgfx::ResourceSetDesc resource_set_desc;
         tgfx::ResourceBinding sampled_texture;
@@ -689,6 +718,41 @@ int main() {
         auto reflected_input_fs = device->create_shader(reflected_input_ps_desc);
         if (!reflected_input_vs || !reflected_input_fs) {
             std::fprintf(stderr, "D3D11 smoke: reflected input shader creation failed\n");
+            return 1;
+        }
+
+        tgfx::PipelineDesc logical_semantic_desc;
+        logical_semantic_desc.vertex_shader = reflected_input_vs;
+        logical_semantic_desc.fragment_shader = reflected_input_fs;
+        logical_semantic_desc.depth_format = tgfx::PixelFormat::Undefined;
+        logical_semantic_desc.color_formats.push_back(tgfx::PixelFormat::RGBA8_UNorm);
+        logical_semantic_desc.depth_stencil.depth_test = false;
+        logical_semantic_desc.depth_stencil.depth_write = false;
+        logical_semantic_desc.raster.cull = tgfx::CullMode::None;
+        tgfx::VertexBufferLayout logical_semantic_layout;
+        logical_semantic_layout.stride = 7 * sizeof(float);
+        logical_semantic_layout.attributes = {
+            {0, tgfx::VertexFormat::Float3, 0, "position"},
+            {1, tgfx::VertexFormat::Float4, 3 * sizeof(float), "uv"},
+        };
+        logical_semantic_desc.vertex_layouts.push_back(logical_semantic_layout);
+        if (!device->create_pipeline(logical_semantic_desc)) {
+            std::fprintf(stderr, "D3D11 smoke: logical semantic input layout failed\n");
+            return 1;
+        }
+
+        tgfx::PipelineDesc reflected_semantic_desc = logical_semantic_desc;
+        reflected_semantic_desc.vertex_layouts.clear();
+        tgfx::VertexBufferLayout reflected_semantic_layout;
+        reflected_semantic_layout.stride = 7 * sizeof(float);
+        reflected_semantic_layout.use_shader_input_locations = true;
+        reflected_semantic_layout.attributes = {
+            {0, tgfx::VertexFormat::Float3, 0, "position"},
+            {4, tgfx::VertexFormat::Float4, 3 * sizeof(float), "joints"},
+        };
+        reflected_semantic_desc.vertex_layouts.push_back(reflected_semantic_layout);
+        if (!device->create_pipeline(reflected_semantic_desc)) {
+            std::fprintf(stderr, "D3D11 smoke: reflected semantic input layout failed\n");
             return 1;
         }
 

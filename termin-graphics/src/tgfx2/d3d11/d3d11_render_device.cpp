@@ -2,6 +2,7 @@
 
 #include "tgfx2/d3d11/d3d11_command_list.hpp"
 #include "tgfx2/d3d11/d3d11_type_conversions.hpp"
+#include "tgfx2/tc_mesh_bridge.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
 
 #include <algorithm>
@@ -13,10 +14,12 @@
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
 #include <d3dcompiler.h>
+#include <d3d11_1.h>
 #include <tcbase/tc_log.hpp>
 
 extern "C" {
@@ -118,9 +121,46 @@ D3D11InputSemantic parse_d3d11_semantic(std::string semantic) {
     return {std::move(semantic), static_cast<UINT>(std::stoul(suffix))};
 }
 
+D3D11InputSemantic d3d11_semantic_for_logical_attribute(std::string semantic) {
+    D3D11InputSemantic parsed = parse_d3d11_semantic(std::move(semantic));
+    if (parsed.name == "UV" || parsed.name == "TEXCOORD") {
+        parsed.name = "TEXCOORD";
+        return parsed;
+    }
+    if (parsed.name == "COLOR" || parsed.name == "COLOUR") {
+        parsed.name = "COLOR";
+        return parsed;
+    }
+    if (parsed.name == "POSITION" || parsed.name == "POS") {
+        parsed.name = "POSITION";
+        return parsed;
+    }
+    if (parsed.name == "NORMAL") {
+        parsed.name = "NORMAL";
+        return parsed;
+    }
+    if (parsed.name == "TANGENT") {
+        parsed.name = "TANGENT";
+        return parsed;
+    }
+    if (parsed.name == "JOINT" || parsed.name == "JOINTS") {
+        parsed.name = "BLENDINDICES";
+        return parsed;
+    }
+    if (parsed.name == "WEIGHT" || parsed.name == "WEIGHTS") {
+        parsed.name = "BLENDWEIGHT";
+        return parsed;
+    }
+    return parsed;
+}
+
 D3D11InputSemantic semantic_for_attribute(const VertexAttribute& attr) {
     if (!attr.semantic.empty()) {
-        return parse_d3d11_semantic(attr.semantic);
+        return d3d11_semantic_for_logical_attribute(attr.semantic);
+    }
+    std::string_view standard_semantic = standard_vertex_semantic_for_location(attr.location);
+    if (!standard_semantic.empty()) {
+        return d3d11_semantic_for_logical_attribute(std::string(standard_semantic));
     }
     return {"TEXCOORD", attr.location};
 }
@@ -166,6 +206,39 @@ std::vector<D3D11InputSemantic> reflect_d3d11_vertex_inputs(const D3D11ShaderMod
         out.push_back({param.SemanticName, param.SemanticIndex});
     }
     return out;
+}
+
+void log_d3d11_input_layout_failure(
+    HRESULT hr,
+    const std::vector<D3D11_INPUT_ELEMENT_DESC>& input_elements,
+    const std::vector<D3D11InputSemantic>& reflected_inputs
+) {
+    tc::Log::error(
+        "D3D11RenderDevice::create_pipeline: CreateInputLayout failed: HRESULT=0x%08X "
+        "elements=%zu reflected_inputs=%zu",
+        static_cast<unsigned>(hr),
+        input_elements.size(),
+        reflected_inputs.size());
+    for (size_t i = 0; i < input_elements.size(); ++i) {
+        const D3D11_INPUT_ELEMENT_DESC& element = input_elements[i];
+        tc::Log::error(
+            "  layout[%zu]: semantic=%s%u format=%u slot=%u offset=%u class=%u step=%u",
+            i,
+            element.SemanticName ? element.SemanticName : "<null>",
+            element.SemanticIndex,
+            static_cast<unsigned>(element.Format),
+            element.InputSlot,
+            element.AlignedByteOffset,
+            static_cast<unsigned>(element.InputSlotClass),
+            element.InstanceDataStepRate);
+    }
+    for (size_t i = 0; i < reflected_inputs.size(); ++i) {
+        tc::Log::error(
+            "  vs_input[%zu]: semantic=%s%u",
+            i,
+            reflected_inputs[i].name.c_str(),
+            reflected_inputs[i].index);
+    }
 }
 
 PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
@@ -708,7 +781,7 @@ PipelineHandle D3D11RenderDevice::create_pipeline(const PipelineDesc& desc) {
         const auto& layout = desc.vertex_layouts[slot];
         for (const auto& attr : layout.attributes) {
             D3D11InputSemantic semantic = semantic_for_attribute(attr);
-            if (layout.use_shader_input_locations && attr.semantic.empty()) {
+            if (layout.use_shader_input_locations) {
                 if (reflected_input_index >= reflected_inputs.size()) {
                     throw std::runtime_error(
                         "D3D11RenderDevice::create_pipeline: vertex layout requests shader input "
@@ -731,14 +804,16 @@ PipelineHandle D3D11RenderDevice::create_pipeline(const PipelineDesc& desc) {
         }
     }
     if (!input_elements.empty()) {
-        throw_if_failed(
-            device_->CreateInputLayout(
-                input_elements.data(),
-                static_cast<UINT>(input_elements.size()),
-                vs->bytecode.data(),
-                vs->bytecode.size(),
-                &out.input_layout),
-            "ID3D11Device::CreateInputLayout");
+        HRESULT hr = device_->CreateInputLayout(
+            input_elements.data(),
+            static_cast<UINT>(input_elements.size()),
+            vs->bytecode.data(),
+            vs->bytecode.size(),
+            &out.input_layout);
+        if (FAILED(hr)) {
+            log_d3d11_input_layout_failure(hr, input_elements, reflected_inputs);
+            throw_if_failed(hr, "ID3D11Device::CreateInputLayout");
+        }
     }
 
     D3D11_RASTERIZER_DESC rd{};
@@ -1085,6 +1160,59 @@ void D3D11RenderDevice::blit_to_texture(TextureHandle dst,
     ID3D11RenderTargetView* null_rtv = nullptr;
     context_->PSSetShaderResources(0, 1, &null_srv);
     context_->OMSetRenderTargets(1, &null_rtv, nullptr);
+}
+
+void D3D11RenderDevice::clear_texture(
+    TextureHandle dst_handle,
+    float r, float g, float b, float a,
+    int viewport_x,
+    int viewport_y,
+    int viewport_w,
+    int viewport_h)
+{
+    auto* dst = get_texture(dst_handle);
+    if (!dst || !dst->texture || !dst->rtv) {
+        tc::Log::error(
+            "D3D11RenderDevice::clear_texture: invalid color texture handle=%u",
+            dst_handle.id);
+        return;
+    }
+    if (viewport_w <= 0 || viewport_h <= 0) {
+        tc::Log::error("D3D11RenderDevice::clear_texture: invalid empty viewport");
+        return;
+    }
+
+    const int tex_w = static_cast<int>(dst->desc.width);
+    const int tex_h = static_cast<int>(dst->desc.height);
+    const int x0 = std::clamp(viewport_x, 0, tex_w);
+    const int y0 = std::clamp(viewport_y, 0, tex_h);
+    const int x1 = std::clamp(viewport_x + viewport_w, 0, tex_w);
+    const int y1 = std::clamp(viewport_y + viewport_h, 0, tex_h);
+    if (x1 <= x0 || y1 <= y0) {
+        return;
+    }
+
+    const float color[4] = {r, g, b, a};
+    if (x0 == 0 && y0 == 0 && x1 == tex_w && y1 == tex_h) {
+        context_->ClearRenderTargetView(dst->rtv.Get(), color);
+        return;
+    }
+
+    Microsoft::WRL::ComPtr<ID3D11DeviceContext1> context1;
+    HRESULT hr = context_.As(&context1);
+    if (FAILED(hr) || !context1) {
+        tc::Log::error(
+            "D3D11RenderDevice::clear_texture: partial rect clear requires "
+            "ID3D11DeviceContext1 ClearView support");
+        return;
+    }
+
+    D3D11_RECT rect{};
+    rect.left = static_cast<LONG>(x0);
+    rect.top = static_cast<LONG>(y0);
+    rect.right = static_cast<LONG>(x1);
+    rect.bottom = static_cast<LONG>(y1);
+    context1->ClearView(dst->rtv.Get(), color, &rect, 1);
 }
 
 Microsoft::WRL::ComPtr<ID3D11Texture2D> D3D11RenderDevice::create_staging_texture(const D3D11Texture& src) const {
