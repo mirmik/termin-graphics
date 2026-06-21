@@ -5,6 +5,9 @@
 #include <span>
 #include <utility>
 
+#ifndef SDL_MAIN_HANDLED
+#define SDL_MAIN_HANDLED
+#endif
 #include <SDL.h>
 
 #include "tgfx2/backend_binding_plan.hpp"
@@ -58,6 +61,7 @@ struct SDLGLContext {
 };
 
 static bool create_context(SDLGLContext& out) {
+    SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         std::fprintf(stderr, "Window creation failed: SDL_Init: %s\n", SDL_GetError());
         return false;
