@@ -5,6 +5,9 @@
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $ScriptDir "scripts\Normalize-WindowsBuildEnvironment.ps1")
+Normalize-WindowsBuildEnvironment
+
 $SdkPrefix = if ($env:SDK_PREFIX) { $env:SDK_PREFIX } else { Join-Path $ScriptDir "sdk" }
 $BuildDirEnv = if ($env:BUILD_DIR) { $env:BUILD_DIR } else { $null }
 
