@@ -17,6 +17,24 @@ class FramePassRegistry:
 
     def register(self, name: str, cls: type) -> None:
         self.classes[name] = cls
+        try:
+            from termin_modules.module_context import record_frame_pass
+        except ModuleNotFoundError as exc:
+            if exc.name not in ("termin_modules", "termin_modules.module_context"):
+                log.error("Failed to load module ownership context", exc_info=True)
+            return
+        except Exception:
+            log.error("Failed to load module ownership context", exc_info=True)
+            return
+
+        try:
+            record_frame_pass(name)
+        except Exception:
+            log.error(f"Failed to record module ownership for frame pass class {name}", exc_info=True)
+
+    def unregister(self, name: str) -> None:
+        if name in self.classes:
+            del self.classes[name]
 
     def get(self, name: str) -> type | None:
         return self.classes.get(name)
@@ -36,7 +54,7 @@ class FramePassRegistry:
                 module = importlib.import_module(module_name)
                 cls = getattr(module, class_name, None)
                 if cls is not None:
-                    self.classes[class_name] = cls
+                    self.register(class_name, cls)
                     registered.append(class_name)
             except Exception as e:
                 log.warning(f"Failed to register frame pass {class_name} from {module_name}: {e}")
