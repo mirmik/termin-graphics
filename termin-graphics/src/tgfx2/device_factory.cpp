@@ -23,7 +23,9 @@ namespace tgfx {
 namespace {
 
 BackendType default_compiled_backend() {
-#ifdef TGFX2_HAS_VULKAN
+#if defined(_WIN32) && defined(TGFX2_HAS_D3D11)
+    return BackendType::D3D11;
+#elif defined(TGFX2_HAS_VULKAN)
     return BackendType::Vulkan;
 #elif defined(TGFX2_HAS_OPENGL)
     return BackendType::OpenGL;
