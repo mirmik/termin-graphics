@@ -182,7 +182,7 @@ void Text3DRenderer::draw(std::string_view text_utf8,
     size_t i = 0;
     while (i < text_utf8.size()) {
         uint32_t cp = internal::utf8_decode(text_utf8, i);
-        const FontAtlas::GlyphInfo* gi = font_->get_glyph(cp, kText3DRasterPx);
+        auto gi = font_->get_glyph(cp, kText3DRasterPx);
         if (!gi) continue;
 
         const float char_w = gi->width_px * world_scale;

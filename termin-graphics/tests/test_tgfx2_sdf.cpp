@@ -91,7 +91,7 @@ int main() {
     uint32_t test_cps[] = {'A', 'a', '0', '@', 'g', 'W', 0};
     for (int i = 0; test_cps[i]; ++i) {
         for (float sz : {14.0f, 24.0f}) {
-            const auto* gi = font.get_glyph(test_cps[i], sz);
+            auto gi = font.get_glyph(test_cps[i], sz);
             if (gi) {
                 printf("  U+%04X size=%.0f sdf=%d uv=(%.3f,%.3f)-(%.3f,%.3f) "
                        "size=(%.1f,%.1f) adv=%.1f\n",

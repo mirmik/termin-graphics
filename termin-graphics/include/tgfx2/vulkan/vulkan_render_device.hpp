@@ -10,6 +10,7 @@ VK_DEFINE_HANDLE(VmaAllocation)
 
 #include <atomic>
 #include <array>
+#include <chrono>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -360,6 +361,7 @@ private:
     // removes ~1 function call × hundreds of writes/frame from the hot
     // path. Queried once in create_ring_ubo().
     bool ring_ubo_coherent_ = false;
+    bool ring_ubo_overflow_warned_ = false;
 
     // Transient vertex ring for immediate draws. Same frame-slot lifetime
     // model as ring_ubo_: frame N records into one half while the other
@@ -373,6 +375,15 @@ private:
     uint32_t transient_vb_slot_idx_ = 0;
     BufferHandle transient_vb_handle_ = {};
     bool transient_vb_coherent_ = false;
+    bool transient_vb_overflow_warned_ = false;
+
+    struct SubmitStats {
+        uint64_t submits = 0;
+        std::chrono::steady_clock::time_point window_start =
+            std::chrono::steady_clock::now();
+        double last_fence_wait_us = 0.0;
+    };
+    SubmitStats submit_stats_;
 
     // tc_texture / tc_mesh per-device resource caches. Keyed by
     // tc_resource_header::pool_index. Replace the former file-scope

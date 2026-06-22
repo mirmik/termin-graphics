@@ -9,8 +9,9 @@
 #ifdef TGFX2_HAS_VULKAN
 
 #include <vulkan/vulkan.h>
-#include <vector>
+#include <chrono>
 #include <cstdint>
+#include <vector>
 
 #include "tgfx2/tgfx2_api.h"
 #include "tgfx2/handles.hpp"
@@ -52,6 +53,19 @@ private:
     std::vector<VkCommandBuffer> compose_command_buffers_;
 
     uint32_t current_frame_ = 0;
+
+    struct ComposeStats {
+        std::chrono::steady_clock::time_point window_start =
+            std::chrono::steady_clock::now();
+        uint64_t frames = 0;
+        double wait_us = 0.0;
+        double acquire_us = 0.0;
+        double record_us = 0.0;
+        double submit_us = 0.0;
+        double present_us = 0.0;
+        double total_us = 0.0;
+    };
+    ComposeStats compose_stats_;
 
 public:
     VulkanSwapchain(VulkanRenderDevice& dev,

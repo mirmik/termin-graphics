@@ -901,7 +901,7 @@ void bind_tgfx2(nb::module_& m) {
              [](const tgfx::FontAtlas& self,
                 uint32_t codepoint,
                 float size) -> nb::object {
-                 const auto* g = self.get_glyph(codepoint, size);
+                 auto g = self.get_glyph(codepoint, size);
                  if (!g) return nb::none();
                  return nb::make_tuple(g->u0, g->v0, g->u1, g->v1,
                                        g->width_px, g->height_px);

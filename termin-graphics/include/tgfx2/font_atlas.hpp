@@ -30,6 +30,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -202,8 +203,8 @@ public:
     void release_gpu();
 
     // Look up a glyph's atlas entry at the requested display size.
-    // Returns nullptr if not rasterised at this size.
-    const GlyphInfo* get_glyph(uint32_t codepoint, float display_px) const;
+    // Returns std::nullopt if not rasterised at this size.
+    std::optional<GlyphInfo> get_glyph(uint32_t codepoint, float display_px) const;
 
     // --- Size-aware metrics ---
     // All return values are in display pixels at the requested size.

@@ -706,13 +706,12 @@ uint32_t VulkanRenderDevice::ring_ubo_write(const void* data, uint32_t size) {
         // Log once so it's obvious in a profile run; return the slot base
         // so the caller still gets a legal (but stale) offset instead of
         // crashing. A real fix either raises ring_ubo_size_ or trims a pass.
-        static thread_local bool s_warned = false;
-        if (!s_warned) {
+        if (!ring_ubo_overflow_warned_) {
             tc_log(TC_LOG_ERROR,
                    "[RingUBO] slot %u overflow: head=%llu size=%u slot_cap=%llu — raise ring_ubo_size_",
                    slot, (unsigned long long)offset_in_slot, size,
                    (unsigned long long)ring_ubo_slot_size_);
-            s_warned = true;
+            ring_ubo_overflow_warned_ = true;
         }
         return static_cast<uint32_t>(base);
     }
@@ -786,13 +785,12 @@ uint64_t VulkanRenderDevice::transient_vertex_write(const void* data, uint32_t s
         transient_vb_heads_[slot].fetch_add(padded, std::memory_order_relaxed);
 
     if (offset_in_slot + padded > transient_vb_slot_size_) {
-        static thread_local bool s_warned = false;
-        if (!s_warned) {
+        if (!transient_vb_overflow_warned_) {
             tc_log(TC_LOG_ERROR,
                    "[TransientVB] slot %u overflow: head=%llu size=%u slot_cap=%llu",
                    slot, (unsigned long long)offset_in_slot, size,
                    (unsigned long long)transient_vb_slot_size_);
-            s_warned = true;
+            transient_vb_overflow_warned_ = true;
         }
         return UINT64_MAX;
     }
@@ -1199,10 +1197,6 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     // allocations, and pipeline creations. Pipelines should drop to ~0
     // after startup if the PipelineCache is doing its job; resource
     // sets should scale with draws (one per pipeline-state change).
-    static thread_local uint64_t s_submits = 0;
-    static thread_local auto     s_window_start = std::chrono::steady_clock::now();
-    static thread_local uint64_t s_last_fence_wait_us = 0;
-
     const uint32_t submitted_slot = current_pool_idx_;
     PendingDestroyQueue submitted_destroy = std::move(pending_destroy_current_);
     pending_destroy_current_ = {};
@@ -1260,17 +1254,17 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     auto t_wait0 = std::chrono::steady_clock::now();
     prepare_frame_slot(next_slot);
     auto t_wait1 = std::chrono::steady_clock::now();
-    s_last_fence_wait_us +=
+    submit_stats_.last_fence_wait_us +=
         std::chrono::duration<double, std::micro>(t_wait1 - t_wait0).count();
 
     current_pool_idx_ = next_slot;
     ring_ubo_slot_idx_ = next_slot;
     transient_vb_slot_idx_ = next_slot;
 
-    ++s_submits;
+    ++submit_stats_.submits;
 
     auto now = std::chrono::steady_clock::now();
-    if (std::chrono::duration<double>(now - s_window_start).count() >= 1.0) {
+    if (std::chrono::duration<double>(now - submit_stats_.window_start).count() >= 1.0) {
         uint64_t draws    = g_draw_count.exchange(0, std::memory_order_relaxed);
         uint64_t rsets    = g_resource_set_count.exchange(0, std::memory_order_relaxed);
         uint64_t pipes    = g_pipeline_count.exchange(0, std::memory_order_relaxed);
@@ -1299,7 +1293,7 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
                    "new_vertex_layouts=%llu resource_sets=%llu bind_pipeline=%llu "
                    "bind_rset=%llu bind_vbo=%llu bind_ibo=%llu push_constants=%llu "
                    "record_ms=%.3f submit_ms=%.3f fence_wait_ms=%.3f",
-                   static_cast<unsigned long long>(s_submits),
+                   static_cast<unsigned long long>(submit_stats_.submits),
                    static_cast<unsigned long long>(draws),
                    static_cast<unsigned long long>(pipes),
                    static_cast<unsigned long long>(pipe_hits),
@@ -1313,7 +1307,7 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
                    static_cast<unsigned long long>(bpc),
                    static_cast<double>(rec_us) / 1000.0,
                    static_cast<double>(subm_us) / 1000.0,
-                   s_last_fence_wait_us / 1000.0);
+                   submit_stats_.last_fence_wait_us / 1000.0);
             if (shaders != 0 || pipes != 0) {
                 tc_log(TC_LOG_INFO,
                        "[tgfx2-vulkan] cold stats: shaders=%llu shader_preprocess_ms=%.3f "
@@ -1328,9 +1322,9 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
                        static_cast<double>(pipe_create_us) / 1000.0);
             }
         }
-        s_submits = 0;
-        s_last_fence_wait_us = 0;
-        s_window_start = now;
+        submit_stats_.submits = 0;
+        submit_stats_.last_fence_wait_us = 0.0;
+        submit_stats_.window_start = now;
     }
 }
 

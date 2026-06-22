@@ -308,7 +308,7 @@ void Text2DRenderer::draw(std::string_view text_utf8,
     size_t i = 0;
     while (i < text_utf8.size()) {
         uint32_t cp = internal::utf8_decode(text_utf8, i);
-        const FontAtlas::GlyphInfo* gi = font_->get_glyph(cp, size);
+        auto gi = font_->get_glyph(cp, size);
         if (!gi) continue;
 
         // Metrics are already in display pixels at this size — no

@@ -303,15 +303,6 @@ void VulkanSwapchain::recreate(uint32_t width, uint32_t height) {
 // ---------------------------------------------------------------------------
 
 bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
-    static thread_local auto s_window_start = std::chrono::steady_clock::now();
-    static thread_local uint64_t s_frames = 0;
-    static thread_local double s_wait_us = 0.0;
-    static thread_local double s_acquire_us = 0.0;
-    static thread_local double s_record_us = 0.0;
-    static thread_local double s_submit_us = 0.0;
-    static thread_local double s_present_us = 0.0;
-    static thread_local double s_total_us = 0.0;
-
     const auto total0 = std::chrono::steady_clock::now();
 
     // 1. Wait until the command buffer + sync objects for this slot
@@ -477,38 +468,39 @@ bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
     advance_frame();
     const auto total1 = std::chrono::steady_clock::now();
 
-    ++s_frames;
-    s_wait_us += us_between(wait0, wait1);
-    s_acquire_us += us_between(acquire0, acquire1);
-    s_record_us += us_between(record0, record1);
-    s_submit_us += us_between(submit0, submit1);
-    s_present_us += us_between(present0, present1);
-    s_total_us += us_between(total0, total1);
+    auto& stats = compose_stats_;
+    ++stats.frames;
+    stats.wait_us += us_between(wait0, wait1);
+    stats.acquire_us += us_between(acquire0, acquire1);
+    stats.record_us += us_between(record0, record1);
+    stats.submit_us += us_between(submit0, submit1);
+    stats.present_us += us_between(present0, present1);
+    stats.total_us += us_between(total0, total1);
 
     auto now = std::chrono::steady_clock::now();
-    if (std::chrono::duration<double>(now - s_window_start).count() >= 1.0) {
+    if (std::chrono::duration<double>(now - stats.window_start).count() >= 1.0) {
         if (vulkan_swapchain_stats_enabled()) {
-            const double denom = s_frames > 0 ? static_cast<double>(s_frames) : 1.0;
+            const double denom = stats.frames > 0 ? static_cast<double>(stats.frames) : 1.0;
             tc_log(TC_LOG_INFO,
                    "[tgfx2-vulkan] swapchain stats: frames=%llu "
                    "avg_total_ms=%.3f avg_wait_ms=%.3f avg_acquire_ms=%.3f "
                    "avg_record_ms=%.3f avg_submit_ms=%.3f avg_present_ms=%.3f",
-                   static_cast<unsigned long long>(s_frames),
-                   (s_total_us / denom) / 1000.0,
-                   (s_wait_us / denom) / 1000.0,
-                   (s_acquire_us / denom) / 1000.0,
-                   (s_record_us / denom) / 1000.0,
-                   (s_submit_us / denom) / 1000.0,
-                   (s_present_us / denom) / 1000.0);
+                   static_cast<unsigned long long>(stats.frames),
+                   (stats.total_us / denom) / 1000.0,
+                   (stats.wait_us / denom) / 1000.0,
+                   (stats.acquire_us / denom) / 1000.0,
+                   (stats.record_us / denom) / 1000.0,
+                   (stats.submit_us / denom) / 1000.0,
+                   (stats.present_us / denom) / 1000.0);
         }
-        s_window_start = now;
-        s_frames = 0;
-        s_wait_us = 0.0;
-        s_acquire_us = 0.0;
-        s_record_us = 0.0;
-        s_submit_us = 0.0;
-        s_present_us = 0.0;
-        s_total_us = 0.0;
+        stats.window_start = now;
+        stats.frames = 0;
+        stats.wait_us = 0.0;
+        stats.acquire_us = 0.0;
+        stats.record_us = 0.0;
+        stats.submit_us = 0.0;
+        stats.present_us = 0.0;
+        stats.total_us = 0.0;
     }
     return should_recreate;
 }

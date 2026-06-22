@@ -676,15 +676,15 @@ FontAtlas::Size2f FontAtlas::measure_text(std::string_view text_utf8,
     return out;
 }
 
-const FontAtlas::GlyphInfo* FontAtlas::get_glyph(uint32_t codepoint,
-                                                 float display_px) const {
+std::optional<FontAtlas::GlyphInfo> FontAtlas::get_glyph(uint32_t codepoint,
+                                                         float display_px) const {
     if (is_sdf_size(display_px)) {
         auto it = sdf_glyphs_.find(codepoint);
-        if (it == sdf_glyphs_.end()) return nullptr;
+        if (it == sdf_glyphs_.end()) return std::nullopt;
 
         // SDF glyphs are stored with reference-size metrics. Scale to
         // display pixels on return. The caller must NOT further scale.
-        thread_local GlyphInfo scaled;
+        GlyphInfo scaled;
         const float s = display_px / static_cast<float>(sdf_reference_px_);
         const auto& g = it->second;
         scaled.u0 = g.u0;
@@ -694,12 +694,13 @@ const FontAtlas::GlyphInfo* FontAtlas::get_glyph(uint32_t codepoint,
         scaled.width_px = g.width_px * s;
         scaled.height_px = g.height_px * s;
         scaled.advance_px = g.advance_px * s;
-        return &scaled;
+        return scaled;
     }
 
     const int px_size = quantise_size_(display_px);
     auto it = glyphs_.find(make_key_(codepoint, px_size));
-    return (it != glyphs_.end()) ? &it->second : nullptr;
+    if (it == glyphs_.end()) return std::nullopt;
+    return it->second;
 }
 
 // ---------------------------------------------------------------------------
