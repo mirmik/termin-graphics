@@ -240,6 +240,13 @@
       ]
     },
     {
+      "path": "termin-bootstrap",
+      "distribution": "termin-bootstrap",
+      "native_extensions": [
+        {"extension": "termin.bootstrap._bootstrap_native", "target": "_bootstrap_native"}
+      ]
+    },
+    {
       "path": "termin-glb",
       "distribution": "termin-glb"
     },

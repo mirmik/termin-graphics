@@ -151,6 +151,9 @@ run_suite "termin-nodegraph python" \
 run_suite "termin-voxels python" \
     "${PYTHON_BIN}" -m pytest termin-voxels/tests/ -v
 
+run_suite "termin-bootstrap python" \
+    "${PYTHON_BIN}" -m pytest termin-bootstrap/tests/ -v
+
 run_suite "termin-qopt python" \
     "${PYTHON_BIN}" -m pytest termin-qopt/tests/ -v
 

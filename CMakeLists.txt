@@ -193,6 +193,12 @@ add_subdirectory(termin-navmesh)
 add_subdirectory(termin-components/termin-components-foliage)
 add_subdirectory(termin-render-passes)
 add_subdirectory(termin-engine)
+
+if(NOT TERMIN_PLATFORM_ANDROID)
+    add_subdirectory(termin-animation)
+endif()
+
+add_subdirectory(termin-bootstrap)
 add_subdirectory(termin-runtime)
 
 if(TERMIN_PLATFORM_ANDROID)
@@ -201,7 +207,6 @@ if(TERMIN_PLATFORM_ANDROID)
 endif()
 
 if(NOT TERMIN_PLATFORM_ANDROID)
-    add_subdirectory(termin-animation)
     add_subdirectory(termin-app/cpp)
     add_subdirectory(termin-components/termin-components-animation)
     add_subdirectory(tcplot)
