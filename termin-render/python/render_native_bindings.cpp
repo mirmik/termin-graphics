@@ -13,6 +13,7 @@ namespace nb = nanobind;
 namespace termin {
 void bind_drawable(nb::module_& m);
 void bind_render_configs(nb::module_& m);
+void bind_scene_render_extensions(nb::module_& m);
 }
 
 NB_MODULE(_render_native, m) {
@@ -36,4 +37,5 @@ NB_MODULE(_render_native, m) {
 
     termin::bind_drawable(m);
     termin::bind_render_configs(m);
+    termin::bind_scene_render_extensions(m);
 }

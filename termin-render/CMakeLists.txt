@@ -251,6 +251,7 @@ if(TERMIN_BUILD_PYTHON)
         python/render_native_bindings.cpp
         python/drawable_bindings.cpp
         python/render_config_bindings.cpp
+        python/scene_render_extension_bindings.cpp
     )
     target_link_libraries(_render_native PRIVATE termin_render)
     termin_set_rpath_python(_render_native)

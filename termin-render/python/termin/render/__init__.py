@@ -7,10 +7,16 @@ from termin.render._render_native import (
     GeometryDrawCall,
     PhaseDrawCall,
     RenderTargetConfig,
+    SCENE_EXT_TYPE_RENDER_MOUNT,
+    SCENE_EXT_TYPE_RENDER_STATE,
+    SceneRenderMount,
+    SceneRenderState,
     ViewportConfig,
     drawable_capability_id,
     install_drawable_vtable,
     is_drawable,
+    scene_render_mount,
+    scene_render_state,
 )
 from termin.render.drawable import DEFAULT_GEOMETRY_ID, Drawable
 from termin.render.drawable_component import DrawableComponent
@@ -31,6 +37,10 @@ __all__ = [
     "PhaseDrawCall",
     "ImmediateRenderer",
     "RenderTargetConfig",
+    "SCENE_EXT_TYPE_RENDER_MOUNT",
+    "SCENE_EXT_TYPE_RENDER_STATE",
+    "SceneRenderMount",
+    "SceneRenderState",
     "ViewportConfig",
     "serialize_render_target_config",
     "deserialize_render_target_config",
@@ -39,5 +49,7 @@ __all__ = [
     "drawable_capability_id",
     "install_drawable_vtable",
     "is_drawable",
+    "scene_render_mount",
+    "scene_render_state",
     "DrawableComponent",
 ]
