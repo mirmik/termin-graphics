@@ -14,6 +14,7 @@
 extern "C" {
 #include "core/tc_scene_extension.h"
 #include "core/tc_scene_extension_ids.h"
+#include "core/tc_scene_lighting.h"
 #include "core/tc_scene_render_mount.h"
 #include "core/tc_scene_render_state.h"
 }
@@ -48,6 +49,56 @@ private:
     tc_scene_handle h_;
 };
 
+class TcSceneLighting {
+public:
+    explicit TcSceneLighting(uintptr_t ptr)
+        : ptr_(reinterpret_cast<tc_scene_lighting*>(ptr)) {}
+
+    explicit TcSceneLighting(tc_scene_lighting* ptr)
+        : ptr_(ptr) {}
+
+    bool valid() const {
+        return ptr_ != nullptr;
+    }
+
+    std::tuple<float, float, float> ambient_color() const {
+        if (!ptr_) return {1.0f, 1.0f, 1.0f};
+        return {ptr_->ambient_color[0], ptr_->ambient_color[1], ptr_->ambient_color[2]};
+    }
+
+    void set_ambient_color(float r, float g, float b) {
+        if (!ptr_) return;
+        ptr_->ambient_color[0] = r;
+        ptr_->ambient_color[1] = g;
+        ptr_->ambient_color[2] = b;
+    }
+
+    float ambient_intensity() const {
+        return ptr_ ? ptr_->ambient_intensity : 0.1f;
+    }
+
+    void set_ambient_intensity(float intensity) {
+        if (ptr_) ptr_->ambient_intensity = intensity;
+    }
+
+    nb::object shadow_settings() const {
+        if (!ptr_) return nb::none();
+        nb::module_ lighting_module = nb::module_::import_("termin.lighting._lighting_native");
+        nb::object cls = lighting_module.attr("ShadowSettings");
+        return cls(ptr_->shadow_method, ptr_->shadow_softness, ptr_->shadow_bias);
+    }
+
+    void set_shadow_settings(nb::object value) {
+        if (!ptr_) return;
+        ptr_->shadow_method = nb::cast<int>(value.attr("method"));
+        ptr_->shadow_softness = static_cast<float>(nb::cast<double>(value.attr("softness")));
+        ptr_->shadow_bias = static_cast<float>(nb::cast<double>(value.attr("bias")));
+    }
+
+private:
+    tc_scene_lighting* ptr_ = nullptr;
+};
+
 nb::object scene_to_python(tc_scene_handle h) {
     nb::module_ scene_module = nb::module_::import_("termin.scene._scene_native");
     nb::object scene_cls = scene_module.attr("TcScene");
@@ -67,6 +118,26 @@ void bind_scene_render_extensions(nb::module_& m) {
     nb::module_::import_("termin.materials._materials_native");
     nb::module_::import_("termin.lighting._lighting_native");
     nb::module_::import_("termin.render_framework._render_framework_native");
+
+    nb::class_<TcSceneLighting>(m, "TcSceneLighting",
+        "View on scene lighting properties (ambient, shadows)")
+        .def(nb::init<uintptr_t>(), nb::arg("ptr"))
+        .def_prop_rw("ambient_color",
+            [](TcSceneLighting& self) { return self.ambient_color(); },
+            [](TcSceneLighting& self, std::tuple<float, float, float> color) {
+                self.set_ambient_color(std::get<0>(color), std::get<1>(color), std::get<2>(color));
+            },
+            "Ambient light color (r, g, b)")
+        .def_prop_rw("ambient_intensity",
+            &TcSceneLighting::ambient_intensity,
+            &TcSceneLighting::set_ambient_intensity,
+            "Ambient light intensity")
+        .def_prop_rw("shadow_settings",
+            &TcSceneLighting::shadow_settings,
+            &TcSceneLighting::set_shadow_settings,
+            "Shadow rendering settings")
+        .def("valid", &TcSceneLighting::valid,
+            "Check if this lighting view is valid");
 
     nb::class_<SceneRenderState>(m, "SceneRenderState")
         .def_prop_rw("background_color",
@@ -178,8 +249,7 @@ void bind_scene_render_extensions(nb::module_& m) {
         .def("lighting", [](const SceneRenderState& self) -> nb::object {
             uintptr_t ptr = reinterpret_cast<uintptr_t>(scene_lighting(TcSceneRef(self.handle())));
             if (ptr == 0) return nb::none();
-            nb::module_ lighting = nb::module_::import_("termin.lighting._lighting_native");
-            return lighting.attr("TcSceneLighting")(ptr);
+            return nb::cast(TcSceneLighting(ptr));
         })
         .def_prop_rw("shadow_settings",
             [](const SceneRenderState& self) -> nb::object {
