@@ -183,8 +183,16 @@ void bind_tc_animation_clip(nb::module_& m) {
 }
 
 void register_animation_kind_handlers() {
+    static bool registered = false;
+    if (registered) {
+        return;
+    }
+
     // C++ handler for C++ fields
     tc::register_cpp_handle_kind<TcAnimationClip>("tc_animation_clip");
+
+    nb::module_ animation_module = nb::module_::import_("termin.animation._animation_native");
+    tc::KindRegistry::instance().register_type(animation_module.attr("TcAnimationClip"), "tc_animation_clip");
 
     // Python handler for Python fields
     tc::KindRegistry::instance().register_python(
@@ -219,6 +227,8 @@ void register_animation_kind_handlers() {
             return nb::cast(TcAnimationClip());
         })
     );
+
+    registered = true;
 }
 
 NB_MODULE(_animation_native, m) {
@@ -226,6 +236,6 @@ NB_MODULE(_animation_native, m) {
 
     bind_tc_animation_clip(m);
 
-    // Register kind handlers for serialization
-    register_animation_kind_handlers();
+    m.def("register_animation_kind_handlers", &register_animation_kind_handlers,
+        "Register tc_animation_clip kind handlers explicitly.");
 }

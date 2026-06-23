@@ -205,6 +205,11 @@ void bind_tc_skeleton(nb::module_& m) {
 }
 
 void register_tc_skeleton_kind() {
+    static bool registered = false;
+    if (registered) {
+        return;
+    }
+
     // C++ handler for tc_skeleton kind
     tc::KindRegistry::instance().register_cpp("tc_skeleton",
         // serialize: std::any(TcSkeleton) → tc_value
@@ -238,6 +243,9 @@ void register_tc_skeleton_kind() {
         }
     );
 
+    nb::module_ skeleton_module = nb::module_::import_("termin.skeleton._skeleton_native");
+    tc::KindRegistry::instance().register_type(skeleton_module.attr("TcSkeleton"), "tc_skeleton");
+
     // Python handler for tc_skeleton kind
     tc::KindRegistry::instance().register_python(
         "tc_skeleton",
@@ -264,6 +272,8 @@ void register_tc_skeleton_kind() {
             return nb::cast(termin::TcSkeleton::from_uuid(uuid));
         })
     );
+
+    registered = true;
 }
 
 void bind_skeleton_instance(nb::module_& m) {
@@ -434,8 +444,8 @@ NB_MODULE(_skeleton_native, m) {
     bind_tc_skeleton(m);
     bind_skeleton_instance(m);
 
-    // Register tc_skeleton kind handler for InspectRegistry
-    register_tc_skeleton_kind();
+    m.def("register_tc_skeleton_kind", &register_tc_skeleton_kind,
+        "Register tc_skeleton kind handlers explicitly.");
 
     // Lazy loading API
     m.def("tc_skeleton_declare", [](const std::string& uuid, const std::string& name) {
