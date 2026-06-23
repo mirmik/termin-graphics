@@ -194,6 +194,10 @@
       "distribution": "termin-qopt"
     },
     {
+      "path": "termin-physics-fem",
+      "distribution": "termin-physics-fem"
+    },
+    {
       "path": "termin-pga",
       "distribution": "termin-pga"
     },
