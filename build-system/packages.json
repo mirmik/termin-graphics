@@ -251,7 +251,8 @@
       "path": "termin-app",
       "distribution": "termin-app",
       "native_extensions": [
-        {"extension": "termin._native", "target": "_native"}
+        {"extension": "termin._native", "target": "_native"},
+        {"extension": "termin.editor._editor_native", "target": "_editor_native"}
       ]
     },
     {
