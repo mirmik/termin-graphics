@@ -229,6 +229,16 @@ size_t tc_material_count(void) {
     return tc_pool_count(&g_material_pool);
 }
 
+const char* tc_material_get_uuid_str(tc_material_handle h) {
+    tc_material* mat = tc_material_get(h);
+    return mat ? mat->header.uuid : NULL;
+}
+
+const char* tc_material_get_name_str(tc_material_handle h) {
+    tc_material* mat = tc_material_get(h);
+    return mat ? mat->header.name : NULL;
+}
+
 // ============================================================================
 // Reference counting
 // ============================================================================

@@ -38,6 +38,8 @@ TGFX_API bool tc_material_is_valid(tc_material_handle h);
 TGFX_API bool tc_material_destroy(tc_material_handle h);
 TGFX_API bool tc_material_contains(const char* uuid);
 TGFX_API size_t tc_material_count(void);
+TGFX_API const char* tc_material_get_uuid_str(tc_material_handle h);
+TGFX_API const char* tc_material_get_name_str(tc_material_handle h);
 
 // ============================================================================
 // Phase operations
