@@ -208,6 +208,7 @@ if(TGFX2_ENABLE_D3D11)
     endif()
     list(APPEND TGFX2_SOURCES
         src/tgfx2/d3d11/d3d11_render_device.cpp
+        src/tgfx2/d3d11/d3d11_shader_reflection.cpp
         src/tgfx2/d3d11/d3d11_command_list.cpp
         src/tgfx2/d3d11/d3d11_swapchain.cpp
         src/tgfx2/d3d11/d3d11_type_conversions.cpp
@@ -317,6 +318,7 @@ termin_set_rpath_lib(termin_graphics2)
 if((TGFX2_ENABLE_D3D11 OR (TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC)) AND NOT ANDROID)
     add_executable(termin_shaderc
         tools/termin_shaderc.cpp
+        tools/termin_shaderc/backend_patchers.cpp
         tools/termin_shaderc/cli.cpp
     )
     target_compile_features(termin_shaderc PRIVATE cxx_std_20)
