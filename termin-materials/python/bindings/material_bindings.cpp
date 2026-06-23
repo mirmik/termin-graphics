@@ -63,7 +63,7 @@ TcTexture require_tc_texture(nb::object value, const std::string& context) {
     if (nb::isinstance<TcTexture>(value)) {
         return nb::cast<TcTexture>(value);
     }
-    tc::Log::error("%s expects TcTexture; TextureHandle must be resolved by the app layer", context.c_str());
+    tc::Log::error("%s expects TcTexture; asset-layer lookups must resolve to TcTexture", context.c_str());
     throw std::runtime_error(context + " expects TcTexture");
 }
 

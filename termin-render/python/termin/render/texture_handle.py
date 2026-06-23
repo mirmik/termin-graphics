@@ -1,31 +1,48 @@
-"""TextureHandle - re-export from C++."""
-from termin._native.assets import TextureHandle
+"""Compatibility helpers for default TcTexture instances.
+
+The historical ``TextureHandle`` wrapper stored Python TextureAsset objects.
+Runtime texture APIs now use ``tgfx.TcTexture`` directly, backed by the C
+``tc_texture`` pool.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+from tgfx import TcTexture
 
 # Singleton for white texture handle
-_white_texture_handle: TextureHandle | None = None
+_white_texture_handle: TcTexture | None = None
 
 # Singleton for normal texture handle
-_normal_texture_handle: TextureHandle | None = None
+_normal_texture_handle: TcTexture | None = None
 
 
-def get_white_texture_handle() -> TextureHandle:
-    """Return a TextureHandle for the white 1x1 texture singleton."""
+def get_white_texture_handle() -> TcTexture:
+    """Return the white 1x1 texture singleton."""
     global _white_texture_handle
     if _white_texture_handle is None:
-        from termin.render.texture import get_white_texture
-        white_tex = get_white_texture()
-        _white_texture_handle = white_tex._handle
+        _white_texture_handle = TcTexture.white_1x1()
     return _white_texture_handle
 
 
-def get_normal_texture_handle() -> TextureHandle:
-    """Return a TextureHandle for the flat normal 1x1 texture singleton."""
+def get_normal_texture_handle() -> TcTexture:
+    """Return the flat normal 1x1 texture singleton."""
     global _normal_texture_handle
     if _normal_texture_handle is None:
-        from termin.render.texture import get_normal_texture
-        normal_tex = get_normal_texture()
-        _normal_texture_handle = normal_tex._handle
+        data = np.array([[[128, 128, 255, 255]]], dtype=np.uint8)
+        _normal_texture_handle = TcTexture.from_data(
+            data=data,
+            width=1,
+            height=1,
+            channels=4,
+            flip_x=False,
+            flip_y=False,
+            transpose=False,
+            name="__normal_1x1__",
+            source_path="",
+            uuid="__normal_1x1__",
+        )
     return _normal_texture_handle
 
 
-__all__ = ["TextureHandle", "get_white_texture_handle", "get_normal_texture_handle"]
+__all__ = ["get_white_texture_handle", "get_normal_texture_handle"]

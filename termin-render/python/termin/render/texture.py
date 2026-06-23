@@ -3,68 +3,67 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 import numpy as np
 
 from termin.render.texture_asset import TextureAsset
-from termin.render.texture_handle import TextureHandle
+from tgfx import TcTexture
 
-if TYPE_CHECKING:
-    from tgfx import TcTexture
 
 class Texture:
     """
     Loads an image via Pillow and uploads it as ``GL_TEXTURE_2D``.
 
-    This is a wrapper over TextureHandle with TcTexture GPU binding.
+    This is a small Python wrapper over a ``TcTexture`` pool handle.
     """
 
     def __init__(self, path: Optional[str | Path] = None):
-        self._handle: TextureHandle = TextureHandle()
+        self._asset: TextureAsset | None = None
+        self._texture_data: TcTexture = TcTexture()
         if path is not None:
             self.load(path)
 
     @property
     def asset(self) -> TextureAsset | None:
         """Get underlying TextureAsset."""
-        return self._handle.get_asset()
+        return self._asset
 
     @property
     def texture_data(self) -> TcTexture | None:
         """Get underlying TcTexture."""
-        return self._handle.get()
+        return self._texture_data if self._texture_data.is_valid else None
 
     @property
     def source_path(self) -> str | None:
         """Source path of the texture."""
-        asset = self._handle.get_asset()
-        if asset is not None and asset.source_path is not None:
-            return str(asset.source_path)
-        return None
+        if self._asset is not None and self._asset.source_path is not None:
+            return str(self._asset.source_path)
+        source_path = self._texture_data.source_path
+        return source_path or None
 
     @property
     def flip_x(self) -> bool:
         """Texture horizontal flip import flag."""
-        td = self._handle.get()
+        td = self.texture_data
         return bool(td.flip_x) if td is not None else False
 
     @property
     def flip_y(self) -> bool:
         """Texture vertical flip import flag."""
-        td = self._handle.get()
+        td = self.texture_data
         return bool(td.flip_y) if td is not None else True
 
     @property
     def transpose(self) -> bool:
         """Texture transpose import flag."""
-        td = self._handle.get()
+        td = self.texture_data
         return bool(td.transpose) if td is not None else False
 
     @property
     def _size(self) -> tuple[int, int] | None:
         """Size of the texture (width, height)."""
-        td = self._handle.get()
+        td = self.texture_data
         if td is not None:
             return (td.width, td.height)
         return None
@@ -72,7 +71,7 @@ class Texture:
     @property
     def _image_data(self) -> np.ndarray | None:
         """Raw image data (for preview)."""
-        td = self._handle.get()
+        td = self.texture_data
         if td is not None:
             data = td.data
             if data is None:
@@ -84,7 +83,8 @@ class Texture:
     def load(self, path: str | Path) -> None:
         """Load texture from file."""
         asset = TextureAsset.from_file(path)
-        self._handle = TextureHandle.from_asset(asset)
+        self._asset = asset
+        self._texture_data = asset.texture_data or TcTexture()
 
     def invalidate(self) -> None:
         """
@@ -92,9 +92,8 @@ class Texture:
 
         If source_path is set, reloads the texture from disk.
         """
-        asset = self._handle.get_asset()
-        if asset is not None:
-            asset.reload()
+        if self._asset is not None and self._asset.reload():
+            self._texture_data = self._asset.texture_data or TcTexture()
 
     def bind(self, unit: int = 0) -> None:
         """Legacy immediate-GL bind hook. Rendering now binds through tgfx2."""
@@ -111,7 +110,11 @@ class Texture:
     def from_asset(cls, asset: TextureAsset) -> "Texture":
         """Create texture from existing TextureAsset."""
         tex = cls()
-        tex._handle = TextureHandle.from_asset(asset)
+        tex._asset = asset
+        pool_texture = TcTexture.from_uuid(asset.uuid)
+        tex._texture_data = (
+            pool_texture if pool_texture.is_valid else (asset.texture_data or TcTexture())
+        )
         return tex
 
     @classmethod
@@ -134,8 +137,6 @@ class Texture:
         Returns:
             Texture instance with the provided data.
         """
-        from tgfx import TcTexture
-
         texture_data = TcTexture.from_data(
             data=data,
             width=width,
@@ -151,9 +152,11 @@ class Texture:
             texture_data=texture_data,
             name=source_path or "texture",
             source_path=source_path,
+            uuid=texture_data.uuid,
         )
         tex = cls()
-        tex._handle = TextureHandle.from_asset(asset)
+        tex._asset = asset
+        tex._texture_data = texture_data
         return tex
 
 
@@ -172,9 +175,19 @@ def get_white_texture() -> Texture:
     global _white_texture
 
     if _white_texture is None:
-        # Create 1x1 white pixel (RGBA = 255, 255, 255, 255)
-        data = np.array([[[255, 255, 255, 255]]], dtype=np.uint8)
-        _white_texture = Texture.from_data(data, width=1, height=1, source_path="__white_1x1__")
+        from termin.render.texture_handle import get_white_texture_handle
+
+        texture_data = get_white_texture_handle()
+        asset = TextureAsset(
+            texture_data=texture_data,
+            name="__white_1x1__",
+            source_path="__white_1x1__",
+            uuid=texture_data.uuid,
+        )
+        texture = Texture()
+        texture._asset = asset
+        texture._texture_data = texture_data
+        _white_texture = texture
 
     return _white_texture
 
@@ -195,15 +208,25 @@ def get_normal_texture() -> Texture:
     global _normal_texture
 
     if _normal_texture is None:
-        # Create 1x1 flat normal (pointing up in tangent space)
-        # RGB = (128, 128, 255) → normalized = (0, 0, 1)
-        data = np.array([[[128, 128, 255, 255]]], dtype=np.uint8)
-        _normal_texture = Texture.from_data(data, width=1, height=1, source_path="__normal_1x1__")
+        from termin.render.texture_handle import get_normal_texture_handle
+
+        texture_data = get_normal_texture_handle()
+        asset = TextureAsset(
+            texture_data=texture_data,
+            name="__normal_1x1__",
+            source_path="__normal_1x1__",
+            uuid=texture_data.uuid,
+        )
+        texture = Texture()
+        texture._asset = asset
+        texture._texture_data = texture_data
+        _normal_texture = texture
 
     return _normal_texture
 
 
 # --- Dummy Shadow Texture (for sampler2DShadow) ---
+
 
 class _DummyShadowTexture:
     """
