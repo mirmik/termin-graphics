@@ -6,6 +6,7 @@ extern "C" {
 #include "core/tc_drawable_protocol.h"
 #include "tc_component_python_drawable.h"
 #include "core/tc_component.h"
+#include "tc_project_settings.h"
 }
 
 namespace nb = nanobind;
@@ -17,6 +18,19 @@ void bind_scene_render_extensions(nb::module_& m);
 }
 
 NB_MODULE(_render_native, m) {
+    nb::enum_<tc_render_sync_mode>(m, "RenderSyncMode")
+        .value("NONE", TC_RENDER_SYNC_NONE)
+        .value("FLUSH", TC_RENDER_SYNC_FLUSH)
+        .value("FINISH", TC_RENDER_SYNC_FINISH);
+
+    m.def("get_render_sync_mode", []() {
+        return tc_project_settings_get_render_sync_mode();
+    }, "Get render sync mode between passes");
+
+    m.def("set_render_sync_mode", [](tc_render_sync_mode mode) {
+        tc_project_settings_set_render_sync_mode(mode);
+    }, nb::arg("mode"), "Set render sync mode between passes");
+
     m.def("drawable_capability_id", []() {
         return tc_drawable_capability_id();
     }, "Get the drawable capability ID");
