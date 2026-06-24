@@ -676,7 +676,7 @@ float4 main(VSOut input) : SV_Target {
 void D3D11RenderDevice::query_capabilities() {
     caps_.backend = BackendType::D3D11;
     caps_.texture_origin_top_left = true;
-    caps_.supports_compute = feature_level_ >= D3D_FEATURE_LEVEL_11_0;
+    caps_.supports_compute = false;
     caps_.supports_geometry_shaders = true;
     caps_.supports_timestamp_queries = true;
     caps_.supports_multisample_resolve = true;
@@ -1567,6 +1567,43 @@ bool D3D11RenderDevice::read_texture_depth_float(TextureHandle handle, float* ou
             row,
             static_cast<size_t>(tex->desc.width) * sizeof(float));
     }
+    context_->Unmap(staging.Get(), 0);
+    return true;
+}
+
+bool D3D11RenderDevice::read_pixel_depth_float(TextureHandle handle, int x, int y, float* out_depth) {
+    auto* tex = get_texture(handle);
+    if (!tex || !tex->texture || !out_depth) return false;
+    if (tex->desc.format != PixelFormat::D32F) {
+        tc::Log::error("D3D11RenderDevice::read_pixel_depth_float: unsupported format");
+        return false;
+    }
+    if (tex->desc.sample_count > 1) {
+        tc::Log::error("D3D11RenderDevice::read_pixel_depth_float: MSAA depth readback is not supported");
+        return false;
+    }
+    if (x < 0 || y < 0 ||
+        static_cast<uint32_t>(x) >= tex->desc.width ||
+        static_cast<uint32_t>(y) >= tex->desc.height) {
+        tc::Log::error("D3D11RenderDevice::read_pixel_depth_float: coordinates out of bounds");
+        return false;
+    }
+
+    auto staging = create_staging_texture(*tex);
+    if (!staging) return false;
+    context_->CopyResource(staging.Get(), tex->texture.Get());
+
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    HRESULT hr = context_->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::read_pixel_depth_float Map failed: HRESULT=0x%08X",
+            static_cast<unsigned>(hr));
+        return false;
+    }
+
+    const auto* row = static_cast<const uint8_t*>(mapped.pData) + static_cast<size_t>(y) * mapped.RowPitch;
+    std::memcpy(out_depth, row + static_cast<size_t>(x) * sizeof(float), sizeof(float));
     context_->Unmap(staging.Get(), 0);
     return true;
 }

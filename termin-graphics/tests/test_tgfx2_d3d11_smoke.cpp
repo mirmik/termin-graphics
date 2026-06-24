@@ -225,6 +225,11 @@ std::filesystem::path find_text_smoke_font() {
 int main() {
     try {
         auto device = tgfx::create_device(tgfx::BackendType::D3D11);
+        const auto caps = device->capabilities();
+        if (caps.supports_compute) {
+            std::fprintf(stderr, "D3D11 smoke: supports_compute advertised without a compute command path\n");
+            return 1;
+        }
 
         tgfx::TextureDesc color_desc;
         color_desc.width = 4;
@@ -358,6 +363,19 @@ int main() {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected D32F readback %.3f\n",
                          depth_readback[0]);
+            device->destroy(depth_tex);
+            return 1;
+        }
+        float depth_pixel = 0.0f;
+        if (!device->read_pixel_depth_float(depth_tex, 0, 0, &depth_pixel)) {
+            std::fprintf(stderr, "D3D11 smoke: D32F read_pixel_depth_float failed\n");
+            device->destroy(depth_tex);
+            return 1;
+        }
+        if (!close_enough(depth_pixel, 0.42f)) {
+            std::fprintf(stderr,
+                         "D3D11 smoke: unexpected D32F single-pixel readback %.3f\n",
+                         depth_pixel);
             device->destroy(depth_tex);
             return 1;
         }
