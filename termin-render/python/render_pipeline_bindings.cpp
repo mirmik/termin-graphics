@@ -201,7 +201,7 @@ void bind_render_pipeline(nb::module_& m) {
         })
         .def_prop_ro("pipeline_specs", [](RenderPipeline& self) { return self.specs(); })
 
-        .def("destroy", [](RenderPipeline&) {})
+        .def("destroy", &RenderPipeline::destroy)
 
         .def("get_fbo_keys", [](RenderPipeline& self) { return self.fbo_pool().keys(); })
         .def("clear_fbo_pool", [](RenderPipeline& self) { self.fbo_pool().clear(); })
