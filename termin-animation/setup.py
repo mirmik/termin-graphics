@@ -20,10 +20,11 @@ setup(
     author="mirmik",
     author_email="mirmikns@yandex.ru",
     python_requires=">=3.8",
-    packages=["termin.animation", "termin.animation_components"],
+    packages=["termin.animation", "termin.animation_components", "termin_animation_component_specs"],
     package_dir={
         "termin.animation": "python/termin/animation",
         "termin.animation_components": "python/termin/animation_components",
+        "termin_animation_component_specs": "python/termin_animation_component_specs",
     },
     install_requires=[
         "termin-nanobind",

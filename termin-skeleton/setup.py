@@ -20,10 +20,11 @@ setup(
     author="mirmik",
     author_email="mirmikns@yandex.ru",
     python_requires=">=3.8",
-    packages=["termin.skeleton", "termin.skeleton_components"],
+    packages=["termin.skeleton", "termin.skeleton_components", "termin_skeleton_component_specs"],
     package_dir={
         "termin.skeleton": "python/termin/skeleton",
         "termin.skeleton_components": "python/termin/skeleton_components",
+        "termin_skeleton_component_specs": "python/termin_skeleton_component_specs",
     },
     install_requires=[
         "termin-nanobind",
