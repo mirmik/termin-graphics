@@ -1,9 +1,5 @@
-"""Builtin frame-pass specs owned by termin-render-framework."""
+"""Compatibility re-export for render-framework builtin specs."""
 
-from __future__ import annotations
-
-FRAME_PASS_SPECS: list[tuple[str, str]] = [
-    ("termin.render_framework", "GraphAliasPass"),
-]
+from termin_render_framework_specs import FRAME_PASS_SPECS
 
 __all__ = ["FRAME_PASS_SPECS"]

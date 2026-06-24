@@ -20,10 +20,11 @@ setup(
     author="mirmik",
     author_email="mirmikns@yandex.ru",
     python_requires=">=3.8",
-    packages=["termin.render", "termin.render_framework"],
+    packages=["termin.render", "termin.render_framework", "termin_render_framework_specs"],
     package_dir={
         "termin.render": "python/termin/render",
         "termin.render_framework": "python/termin/render_framework",
+        "termin_render_framework_specs": "python/termin_render_framework_specs",
     },
     install_requires=[
         "termin-nanobind",
