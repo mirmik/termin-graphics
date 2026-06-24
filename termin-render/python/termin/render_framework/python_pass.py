@@ -6,6 +6,7 @@ from termin.render_framework._render_framework_native import (
     TcPass,
     TcPassRef,
     tc_pass_registry_has,
+    tc_pass_registry_is_native,
     tc_pass_registry_register_python,
 )
 
@@ -150,10 +151,14 @@ class PythonFramePass:
         if cls.__name__ in ("PythonFramePass", "FramePass", "RenderFramePass"):
             return
 
+        registered_native = tc_pass_registry_is_native(cls.__name__)
         if not tc_pass_registry_has(cls.__name__):
             tc_pass_registry_register_python(cls.__name__, cls)
 
         registry = _inspect_registry()
+
+        if registered_native:
+            return
 
         own_fields = cls.__dict__.get("inspect_fields", {})
         if own_fields:

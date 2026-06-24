@@ -1025,6 +1025,13 @@ void bind_tc_pass_runtime(nb::module_& m) {
     m.def("tc_pass_registry_has", [](const std::string& type_name) {
         return tc_pass_registry_has(type_name.c_str());
     });
+
+    m.def("tc_pass_registry_is_native", [](const std::string& type_name) {
+        if (!tc_pass_registry_has(type_name.c_str())) {
+            return false;
+        }
+        return tc_pass_registry_get_kind(type_name.c_str()) == TC_NATIVE_PASS;
+    });
 }
 
 } // namespace termin
