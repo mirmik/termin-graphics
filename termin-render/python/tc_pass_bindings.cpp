@@ -667,6 +667,9 @@ void bind_tc_pass_runtime(nb::module_& m) {
         .def("__init__", [](TcPass* self, nb::object py_self, const std::string& type_name) {
             ensure_py_callbacks_registered();
             tc_pass* c = tc_pass_new_external(py_self.ptr(), type_name.c_str(), &g_py_pass_ref_vtable);
+            if (c) {
+                c->native_language = TC_LANGUAGE_PYTHON;
+            }
             new (self) TcPass(c);
         }, nb::arg("py_self"), nb::arg("type_name"))
         .def("ref", &TcPass::ref)
