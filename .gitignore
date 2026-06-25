@@ -105,6 +105,7 @@ termin-csharp/**/bin/
 termin-csharp/**/obj/
 termin-csharp/Termin.Native/runtimes/
 termin-csharp/Termin.Native/Generated/
+termin-csharp/Termin.Native/share/
 
 # ── Cache / generated data ─────────────────────────────────────
 **/Cache/
