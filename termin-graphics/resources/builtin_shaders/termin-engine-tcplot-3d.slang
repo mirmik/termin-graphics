@@ -139,7 +139,7 @@ float grid_line_mask(float coord, float step, float max_coord, float width_px) {
 [shader("vertex")]
 VertexOutput vs_main(VertexInput input) {
     VertexOutput output;
-    output.position = mul(tcplot3d_draw.u_mvp, float4(input.position, 1.0));
+    output.position = termin_to_native_clip(mul(tcplot3d_draw.u_mvp, float4(input.position, 1.0)));
     output.color = input.color;
     output.scaled_pos = input.position * tcplot3d_draw.u_axis_shading.xyz;
     output.surface_grid = input.surface_grid;

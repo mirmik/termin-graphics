@@ -30,7 +30,7 @@ VertexOutput vs_main(VertexInput input) {
         input.world_pos +
         text3d_draw.u_cam_right.xyz * input.offset_uv.x +
         text3d_draw.u_cam_up.xyz * input.offset_uv.y;
-    output.pos = mul(text3d_draw.u_mvp, float4(pos, 1.0));
+    output.pos = termin_to_native_clip(mul(text3d_draw.u_mvp, float4(pos, 1.0)));
     output.uv = input.offset_uv.zw;
     return output;
 }

@@ -90,7 +90,7 @@ LineOutput vs_main(SegmentInput input) {
     clip.xy = expanded_ndc * clip.w;
 
     LineOutput output;
-    output.position = clip;
+    output.position = termin_to_native_clip(clip);
     output.color = input.color;
     return output;
 }
@@ -122,7 +122,7 @@ LineOutput vs_cap_main(CapInput input) {
     clip.xy = expanded_ndc * clip.w;
 
     LineOutput output;
-    output.position = clip;
+    output.position = termin_to_native_clip(clip);
     output.color = input.color;
     return output;
 }
@@ -145,7 +145,7 @@ LineOutput vs_join_main(JoinInput input) {
     LineOutput output;
     output.color = input.color;
     if (len0 < 1.0e-5 || len1 < 1.0e-5) {
-        output.position = cc;
+        output.position = termin_to_native_clip(cc);
         return output;
     }
     d0 /= len0;
@@ -169,7 +169,7 @@ LineOutput vs_join_main(JoinInput input) {
     float2 ndc = p / viewport * 2.0 - 1.0;
     float4 clip = cc;
     clip.xy = ndc * clip.w;
-    output.position = clip;
+    output.position = termin_to_native_clip(clip);
     return output;
 }
 
@@ -186,7 +186,7 @@ LineOutput vs_round_join_main(CapInput input) {
     clip.xy = expanded_ndc * clip.w;
 
     LineOutput output;
-    output.position = clip;
+    output.position = termin_to_native_clip(clip);
     output.color = input.color;
     return output;
 }
