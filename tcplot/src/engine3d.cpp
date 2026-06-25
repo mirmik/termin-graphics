@@ -22,6 +22,7 @@
 #include <utility>
 
 #include <tgfx2/builtin_shader_sources.hpp>
+#include <tgfx2/clip_space.hpp>
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/enums.hpp>
 #include <tgfx2/font_atlas.hpp>
@@ -670,20 +671,25 @@ void PlotEngine3D::build_surface_mesh_(tgfx::IRenderDevice& device,
 // MVP / rendering
 // ---------------------------------------------------------------------------
 
-void PlotEngine3D::compute_mvp_(float aspect, float out16[16]) const {
-    float mvp[16];
-    camera.mvp(aspect, mvp);
+void PlotEngine3D::compute_mvp_(tgfx::BackendType backend,
+                                float aspect,
+                                float out16[16],
+                                bool apply_axis_scale) const {
+    const termin::Mat44f projection = tgfx::adapt_projection_for_backend(
+        backend,
+        camera.projection_matrix(aspect));
+    const termin::Mat44f mvp = projection * camera.view_matrix();
 
-    if (std::abs(x_scale - 1.0f) < 1e-6f &&
-        std::abs(y_scale - 1.0f) < 1e-6f &&
-        std::abs(z_scale - 1.0f) < 1e-6f) {
-        std::memcpy(out16, mvp, sizeof(mvp));
+    std::memcpy(out16, mvp.data, sizeof(mvp.data));
+    if (!apply_axis_scale ||
+        (std::abs(x_scale - 1.0f) < 1e-6f &&
+         std::abs(y_scale - 1.0f) < 1e-6f &&
+         std::abs(z_scale - 1.0f) < 1e-6f)) {
         return;
     }
 
     // Post-multiply by diag(x_scale, y_scale, z_scale, 1). Data stays
     // in original units; only the view transform changes.
-    std::memcpy(out16, mvp, sizeof(mvp));
     for (int r = 0; r < 4; ++r) {
         out16[0 * 4 + r] *= x_scale;
         out16[1 * 4 + r] *= y_scale;
@@ -703,6 +709,7 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         dirty_ = true;
     }
     if (dirty_) rebuild_meshes_(ctx->device());
+    last_render_backend_ = ctx->device().backend_type();
 
     // RenderContext2 is shared by hosts that may draw 2D tcplot panels
     // immediately before this 3D view. Canvas2DRenderer intentionally
@@ -717,7 +724,7 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
 
     const float aspect = vw_ / std::max(vh_, 1.0f);
     float mvp[16];
-    compute_mvp_(aspect, mvp);
+    compute_mvp_(last_render_backend_, aspect, mvp, true);
 
     tgfx::ShaderHandle vs; vs.id = shader_vs_id_;
     tgfx::ShaderHandle fs; fs.id = shader_fs_id_;
@@ -823,7 +830,7 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         // through u_cam_up / u_cam_right would get stretched by z_scale
         // whenever cam_up has any world-Z component.
         float label_mvp[16];
-        camera.mvp(aspect, label_mvp);
+        compute_mvp_(last_render_backend_, aspect, label_mvp, false);
 
         // Tick labels on axes.
         ctx->set_depth_test(true);
@@ -935,7 +942,7 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
 std::optional<PickResult3D> PlotEngine3D::pick(float mx, float my) const {
     const float aspect = vw_ / std::max(vh_, 1.0f);
     float mvp[16];
-    compute_mvp_(aspect, mvp);
+    compute_mvp_(last_render_backend_, aspect, mvp, true);
 
     // Collect all data points (lines + scatter + surface grid) into one
     // flat buffer — allocate once then iterate.

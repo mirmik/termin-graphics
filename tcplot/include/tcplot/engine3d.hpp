@@ -134,8 +134,11 @@ private:
         tgfx::PrimitiveTopology topology = tgfx::PrimitiveTopology::TriangleList;
     };
 
-    // Build a (4x4) MVP from camera state + nonuniform axis scale into `out16`.
-    void compute_mvp_(float aspect, float out16[16]) const;
+    // Build a (4x4) backend-native MVP from camera state into `out16`.
+    void compute_mvp_(tgfx::BackendType backend,
+                      float aspect,
+                      float out16[16],
+                      bool apply_axis_scale) const;
 
     static std::optional<MeshGpu> make_mesh_(
         tgfx::IRenderDevice& device,
@@ -182,6 +185,7 @@ private:
     std::unique_ptr<tgfx::Text3DRenderer> text3d_;
 
     bool dirty_ = true;
+    tgfx::BackendType last_render_backend_ = tgfx::BackendType::Vulkan;
 
     // --- Interaction ---
     bool dragging_ = false;
