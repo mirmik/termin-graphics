@@ -20,9 +20,7 @@
 
 namespace tgfx {
 
-namespace {
-
-BackendType default_compiled_backend() {
+BackendType compiled_default_backend() {
 #if defined(_WIN32) && defined(TGFX2_HAS_D3D11)
     return BackendType::D3D11;
 #elif defined(TGFX2_HAS_VULKAN)
@@ -36,11 +34,10 @@ BackendType default_compiled_backend() {
 #endif
 }
 
-} // namespace
 
 BackendType default_backend_from_env() {
     const char* env = std::getenv("TERMIN_BACKEND");
-    if (!env || !env[0]) return default_compiled_backend();
+    if (!env || !env[0]) return compiled_default_backend();
 
     std::string s(env);
     for (auto& c : s) c = static_cast<char>(std::tolower(c));
@@ -54,7 +51,7 @@ BackendType default_backend_from_env() {
     std::fprintf(stderr,
                  "[tgfx2] Unknown TERMIN_BACKEND='%s'; using compiled default backend\n",
                  env);
-    return default_compiled_backend();
+    return compiled_default_backend();
 }
 
 std::unique_ptr<IRenderDevice> create_device(BackendType type) {

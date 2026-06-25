@@ -9,11 +9,16 @@ namespace tgfx {
 
 TGFX2_API std::unique_ptr<IRenderDevice> create_device(BackendType type);
 
+// Return the platform-preferred backend among the compiled backends.
+// Windows prefers D3D11 when it is available; otherwise Vulkan is preferred
+// over OpenGL, then D3D11 on non-Windows builds, then Null.
+TGFX2_API BackendType compiled_default_backend();
+
 // Return the backend selected by the TERMIN_BACKEND env-var.
-// Accepts case-insensitive "opengl"/"gl", "vulkan"/"vk". Anything else
-// (or unset) falls back to the first compiled backend, preferring Vulkan
-// when available. This is the single point where env-driven backend
-// selection is resolved; hosting code should call
+// Accepts case-insensitive "opengl"/"gl", "vulkan"/"vk", "d3d11"/"dx11",
+// "metal", and "null". Anything else (or unset) falls back to
+// compiled_default_backend(). This is the single point where env-driven
+// backend selection is resolved; hosting code should call
 // `create_device(default_backend_from_env())` instead of hard-coding
 // the backend.
 TGFX2_API BackendType default_backend_from_env();
