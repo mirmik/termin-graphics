@@ -84,7 +84,7 @@ TubeOutput vs_main(TubeSegmentInput input) {
     float3 expanded = base + tube_offset(dir, input.corner.y, input.corner.z, input.width * 0.5);
 
     TubeOutput output;
-    output.position = mul(tube_line_draw.u_view_projection, float4(expanded, 1.0));
+    output.position = termin_to_native_clip(mul(tube_line_draw.u_view_projection, float4(expanded, 1.0)));
     output.world_pos = expanded;
     output.normal_world = tube_normal(dir, input.corner.y, input.corner.z);
     output.uv = float2(input.corner.x, atan2(input.corner.z, input.corner.y) / 6.28318530718 + 0.5);
@@ -104,7 +104,7 @@ TubeOutput vs_cap_main(TubeCapInput input) {
     }
 
     TubeOutput output;
-    output.position = mul(tube_line_draw.u_view_projection, float4(expanded, 1.0));
+    output.position = termin_to_native_clip(mul(tube_line_draw.u_view_projection, float4(expanded, 1.0)));
     output.world_pos = expanded;
     output.normal_world = input.corner.x < 0.5
         ? tube_normal(dir, input.corner.y, input.corner.z)

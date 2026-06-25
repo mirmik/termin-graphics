@@ -98,7 +98,7 @@ LineOutput vs_main(SegmentInput input) {
     float3 expanded = base + side * side_sign * (input.width * 0.5);
 
     LineOutput output;
-    output.position = mul(world_line_draw.u_view_projection, float4(expanded, 1.0));
+    output.position = termin_to_native_clip(mul(world_line_draw.u_view_projection, float4(expanded, 1.0)));
     output.world_pos = expanded;
     output.normal = safe_normalize(
         world_line_draw.u_camera_position.xyz - mid,
@@ -117,7 +117,7 @@ LineOutput vs_cap_main(CapInput input) {
         + side * input.local.y * (input.width * 0.5);
 
     LineOutput output;
-    output.position = mul(world_line_draw.u_view_projection, float4(expanded, 1.0));
+    output.position = termin_to_native_clip(mul(world_line_draw.u_view_projection, float4(expanded, 1.0)));
     output.world_pos = expanded;
     output.normal = safe_normalize(
         world_line_draw.u_camera_position.xyz - input.center,
@@ -149,7 +149,7 @@ LineOutput vs_join_main(JoinInput input) {
     }
 
     LineOutput output;
-    output.position = mul(world_line_draw.u_view_projection, float4(p, 1.0));
+    output.position = termin_to_native_clip(mul(world_line_draw.u_view_projection, float4(p, 1.0)));
     output.world_pos = p;
     output.normal = to_eye;
     output.uv = float2(input.corner * 0.5, side_sign * 0.5 + 0.5);
@@ -170,7 +170,7 @@ LineOutput vs_round_join_main(CapInput input) {
         + axis1 * input.local.y * (input.width * 0.5);
 
     LineOutput output;
-    output.position = mul(world_line_draw.u_view_projection, float4(expanded, 1.0));
+    output.position = termin_to_native_clip(mul(world_line_draw.u_view_projection, float4(expanded, 1.0)));
     output.world_pos = expanded;
     output.normal = to_eye;
     output.uv = input.local * 0.5 + 0.5;
