@@ -83,7 +83,7 @@ VertexOutput vs_main(VertexInput input) {
 
     float2 px = pcurr + normal * input.meta.x * tcplot2d_styled_line_draw.u_params.x * 0.5;
     float2 ndc = px / tcplot2d_styled_line_draw.u_viewport.xy * 2.0 - 1.0;
-    output.position = float4(ndc * cc.w, cc.z, cc.w);
+    output.position = termin_to_native_clip(float4(ndc * cc.w, cc.z, cc.w));
 
     output.color = tcplot2d_styled_line_draw.u_color;
     output.meta = float4(input.meta.z * tcplot2d_styled_line_draw.u_range.z,

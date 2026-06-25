@@ -19,7 +19,7 @@ struct VertexOutput {
 [shader("vertex")]
 VertexOutput vs_main(VertexInput input) {
     VertexOutput output;
-    output.position = mul(tcplot2d_line_draw.u_matrix, float4(input.data_pos, 0.0, 1.0));
+    output.position = termin_to_native_clip(mul(tcplot2d_line_draw.u_matrix, float4(input.data_pos, 0.0, 1.0)));
     return output;
 }
 

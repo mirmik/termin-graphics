@@ -54,7 +54,6 @@ void build_ortho_pixel_to_ndc(
     float y,
     float w,
     float h,
-    bool d3d11_clip_space,
     float out[16])
 {
     if (w <= 0.0f || h <= 0.0f) {
@@ -66,18 +65,12 @@ void build_ortho_pixel_to_ndc(
     // Row-major math matrix, then transposed to column-major storage
     // for push constants. Pixel coords are absolute in the current
     // render target; viewport origin is accounted for by the constant.
+    // This builds canonical TerminClip: pixel top-left maps to (-1, -1).
     float rm[16]{};
     rm[0] = 2.0f / w;
     rm[3] = -1.0f - 2.0f * x / w;
-    if (d3d11_clip_space) {
-        // D3D viewport transform maps clip-space y=+1 to the top edge.
-        // Vulkan and OpenGL-with-upper-left clip control map y=-1 there.
-        rm[5] = -2.0f / h;
-        rm[7] = 1.0f + 2.0f * y / h;
-    } else {
-        rm[5] = 2.0f / h;
-        rm[7] = -1.0f - 2.0f * y / h;
-    }
+    rm[5] = 2.0f / h;
+    rm[7] = -1.0f - 2.0f * y / h;
     rm[10] = 1.0f;
     rm[15] = 1.0f;
     for (int row = 0; row < 4; ++row) {
@@ -375,8 +368,6 @@ void Canvas2DRenderer::build_projection_() {
                              static_cast<float>(viewport_y_),
                              static_cast<float>(viewport_w_),
                              static_cast<float>(viewport_h_),
-                             ctx_ != nullptr &&
-                                 ctx_->device().backend_type() == BackendType::D3D11,
                              projection_);
 }
 

@@ -24,7 +24,7 @@ struct VertexOutput {
 [shader("vertex")]
 VertexOutput vs_main(VertexInput input) {
     VertexOutput output;
-    output.pos = mul(text2d_draw.u_projection, float4(input.pos.xy, 0.0, 1.0));
+    output.pos = termin_to_native_clip(mul(text2d_draw.u_projection, float4(input.pos.xy, 0.0, 1.0)));
     output.uv = input.uv_pad.xy;
     return output;
 }
