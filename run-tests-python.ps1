@@ -1,32 +1,30 @@
 #!/usr/bin/env pwsh
 # Run Python test suites across projects.
 #
-# By default, auto-activates .venv/ if present and auto-detects TERMIN_SDK,
-# so no manual setup is needed after setting up the editable test environment.
+# Auto-activates .venv/ and auto-detects TERMIN_SDK, so no manual setup is
+# needed after setting up the editable test environment.
 #
 # Usage:
 #   .\run-tests-python.ps1
-#   .\run-tests-python.ps1 --no-venv
 #   .\run-tests-python.ps1 termin-app/tests/test_project_file_watcher.py -q
 
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$NoVenv = $false
 $PytestTargets = New-Object System.Collections.Generic.List[string]
 
 function Show-Help {
-    Write-Host "Usage: .\run-tests-python.ps1 [--no-venv] [pytest-target ...]"
+    Write-Host "Usage: .\run-tests-python.ps1 [pytest-target ...]"
     Write-Host ""
-    Write-Host "  (no flags)  Auto-activate .venv/ if present, auto-detect TERMIN_SDK"
-    Write-Host "  --no-venv   Skip auto-activation; use PYTHON_BIN or system Python"
+    Write-Host "  (no flags)  Activate .venv/ and auto-detect TERMIN_SDK"
     Write-Host "  pytest-target"
     Write-Host "              Run only selected pytest target(s), e.g. termin-app/tests/test_game_mode_model.py"
 }
 
 foreach ($arg in $args) {
     if ($arg -eq "--no-venv") {
-        $NoVenv = $true
+        Write-Error "--no-venv is no longer supported; run .\setup-test-venv.ps1 first."
+        exit 1
     } elseif ($arg -eq "--help" -or $arg -eq "-h") {
         Show-Help
         exit 0
@@ -38,18 +36,22 @@ foreach ($arg in $args) {
     }
 }
 
-if (-not $NoVenv) {
-    $venvActivateCandidates = @(
-        (Join-Path $ScriptDir ".venv\Scripts\Activate.ps1"),
-        (Join-Path $ScriptDir ".venv\bin\Activate.ps1")
-    )
-    foreach ($activatePath in $venvActivateCandidates) {
-        if (Test-Path $activatePath) {
-            Write-Host "Activating venv: $(Join-Path $ScriptDir '.venv')"
-            . $activatePath
-            break
-        }
+$venvActivateCandidates = @(
+    (Join-Path $ScriptDir ".venv\Scripts\Activate.ps1"),
+    (Join-Path $ScriptDir ".venv\bin\Activate.ps1")
+)
+$ActivatedVenv = $false
+foreach ($activatePath in $venvActivateCandidates) {
+    if (Test-Path $activatePath) {
+        Write-Host "Activating venv: $(Join-Path $ScriptDir '.venv')"
+        . $activatePath
+        $ActivatedVenv = $true
+        break
     }
+}
+if (-not $ActivatedVenv) {
+    Write-Error "test .venv is missing. Run .\setup-test-venv.ps1 before .\run-tests-python.ps1."
+    exit 1
 }
 
 if ($env:PYTHON_BIN) {
@@ -101,32 +103,10 @@ if ($env:LD_LIBRARY_PATH) {
     $env:LD_LIBRARY_PATH = $sdkLib
 }
 
-$pythonPathEntries = New-Object System.Collections.Generic.List[string]
-if ($NoVenv -or -not (Test-Path (Join-Path $ScriptDir ".venv"))) {
-    $bundledSitePackages = $null
-    $windowsSitePackages = Join-Path $SdkPrefix "Lib\site-packages"
-    if (Test-Path $windowsSitePackages) {
-        $bundledSitePackages = $windowsSitePackages
-    } else {
-        $libDir = Join-Path $SdkPrefix "lib"
-        $pyDir = Get-ChildItem -Path $libDir -Directory -Filter "python3.*" -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($pyDir) {
-            $candidate = Join-Path $pyDir.FullName "site-packages"
-            if (Test-Path $candidate) {
-                $bundledSitePackages = $candidate
-            }
-        }
-    }
-
-    if ($bundledSitePackages) {
-        $pythonPathEntries.Add($bundledSitePackages)
-    }
-    $pythonPathEntries.Add((Join-Path $ScriptDir "termin-app\install\lib\python"))
-}
-if ($env:PYTHONPATH) {
-    $pythonPathEntries.Add($env:PYTHONPATH)
-}
-$env:PYTHONPATH = ($pythonPathEntries -join [IO.Path]::PathSeparator)
+# Editable installs in .venv are the source of truth for Python tests. Do not
+# prepend SDK site-packages here: stale installed SDK packages can shadow the
+# checkout and hide source changes.
+$env:PYTHONPATH = if ($env:PYTHONPATH) { $env:PYTHONPATH } else { "" }
 
 Write-Host ""
 Write-Host "========================================"

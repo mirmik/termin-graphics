@@ -1,28 +1,28 @@
 #!/bin/bash
 # Run Python test suites across projects.
 #
-# By default, auto-activates .venv/ (if present) and auto-detects TERMIN_SDK,
-# so no manual setup is needed after ./setup-test-venv.sh.
+# Auto-activates .venv/ and auto-detects TERMIN_SDK, so no manual setup is
+# needed after ./setup-test-venv.sh.
 #
 # Flags:
-#   --no-venv    Don't auto-activate .venv; use PYTHON_BIN / system Python as-is
 #   test paths   Run only selected pytest targets after environment setup
 #   --help, -h   Show this help
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NO_VENV=0
 PYTEST_TARGETS=()
 
 for arg in "$@"; do
     case "$arg" in
-        --no-venv) NO_VENV=1 ;;
+        --no-venv)
+            echo "--no-venv is no longer supported; run ./setup-test-venv.sh first." >&2
+            exit 1
+            ;;
         --help|-h)
-            echo "Usage: $0 [--no-venv] [pytest-target ...]"
+            echo "Usage: $0 [pytest-target ...]"
             echo ""
-            echo "  (no flags)  Auto-activate .venv/ if present, auto-detect TERMIN_SDK"
-            echo "  --no-venv   Skip auto-activation; use PYTHON_BIN or system Python"
+            echo "  (no flags)  Activate .venv/ and auto-detect TERMIN_SDK"
             echo "  pytest-target"
             echo "              Run only selected pytest target(s), e.g. termin-app/tests/test_game_mode_model.py"
             exit 0
@@ -32,11 +32,14 @@ for arg in "$@"; do
     esac
 done
 
-# --- Auto-activate venv ---
-if [[ $NO_VENV -eq 0 && -f "$SCRIPT_DIR/.venv/bin/activate" ]]; then
-    echo "Activating venv: $SCRIPT_DIR/.venv"
-    source "$SCRIPT_DIR/.venv/bin/activate"
+# --- Activate venv ---
+if [[ ! -f "$SCRIPT_DIR/.venv/bin/activate" ]]; then
+    echo "ERROR: test .venv is missing." >&2
+    echo "Run ./setup-test-venv.sh before ./run-tests-python.sh." >&2
+    exit 1
 fi
+echo "Activating venv: $SCRIPT_DIR/.venv"
+source "$SCRIPT_DIR/.venv/bin/activate"
 
 # --- Python binary ---
 if [[ -z "${PYTHON_BIN:-}" ]]; then
@@ -65,24 +68,10 @@ SDK_PREFIX="${SDK_PREFIX:-$SCRIPT_DIR/sdk}"
 export LD_LIBRARY_PATH="${SDK_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 # --- PYTHONPATH ---
-# With venv + editable installs, all termin packages are already importable.
-# Adding SDK package paths would override them with bundled SDK copies.
-if [[ $NO_VENV -eq 0 && -d "$SCRIPT_DIR/.venv" ]]; then
-    export PYTHONPATH="${PYTHONPATH:-}"
-else
-    BUNDLED_SITE_PACKAGES=""
-    for site_dir in "$SDK_PREFIX"/lib/python3.*/site-packages; do
-        if [[ -d "$site_dir" ]]; then
-            BUNDLED_SITE_PACKAGES="$site_dir"
-            break
-        fi
-    done
-    if [[ -n "$BUNDLED_SITE_PACKAGES" ]]; then
-        export PYTHONPATH="${BUNDLED_SITE_PACKAGES}:${SCRIPT_DIR}/termin-app/install/lib/python${PYTHONPATH:+:$PYTHONPATH}"
-    else
-        export PYTHONPATH="${SCRIPT_DIR}/termin-app/install/lib/python${PYTHONPATH:+:$PYTHONPATH}"
-    fi
-fi
+# Editable installs in .venv are the source of truth for Python tests. Do not
+# prepend SDK site-packages here: stale installed SDK packages can shadow the
+# checkout and hide source changes.
+export PYTHONPATH="${PYTHONPATH:-}"
 
 # --- Run tests ---
 echo ""
