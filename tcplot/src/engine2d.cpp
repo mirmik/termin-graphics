@@ -13,6 +13,7 @@
 #include <cstring>
 #include <vector>
 
+#include <tgfx2/builtin_shader_sources.hpp>
 #include <tgfx2/canvas2d_renderer.hpp>
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/enums.hpp>
@@ -20,8 +21,15 @@
 #include <tgfx2/handles.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/render_context.hpp>
+#include <tgfx2/tc_shader_bridge.hpp>
 
 #include "tcplot/axes.hpp"
+
+extern "C" {
+#include <tgfx/resources/tc_shader.h>
+}
+
+#include <tcbase/tc_log.hpp>
 
 namespace tcplot {
 
@@ -35,40 +43,7 @@ struct Plot2DPushData {
     float color[4];
 };
 static_assert(sizeof(Plot2DPushData) == 80,
-              "Plot2DPushData layout drift — shader + C++ disagree");
-
-// Shared push-constant block. On Vulkan the shader compiler defines
-// `VULKAN=1`; on OpenGL we fall back to a std140 UBO at binding 14,
-// which is the slot tgfx2 uses for its push-constants ring buffer.
-constexpr const char* kPlot2DPushConstants = R"(
-struct Plot2DPC { mat4 u_matrix; vec4 u_color; };
-#ifdef VULKAN
-layout(push_constant) uniform PCBlock { Plot2DPC pc; };
-#else
-layout(std140, binding = 14) uniform PCBlock { Plot2DPC pc; };
-#endif
-)";
-
-// --- Persistent-VBO line series shader ---
-//
-// Vertex input is a raw data-space vec2. pc.u_matrix converts directly
-// to clip space; panning/zooming only changes this push-constant, the
-// VBO never needs re-upload. Colour is per-series via pc.u_color.
-static std::string make_line_vert() {
-    return std::string("#version 450 core\n") + kPlot2DPushConstants + R"(
-layout(location=0) in vec2 a_data_pos;
-void main() {
-    gl_Position = pc.u_matrix * vec4(a_data_pos, 0.0, 1.0);
-}
-)";
-}
-
-static std::string make_line_frag() {
-    return std::string("#version 450 core\n") + kPlot2DPushConstants + R"(
-layout(location=0) out vec4 frag_color;
-void main() { frag_color = pc.u_color; }
-)";
-}
+              "Plot2DPushData layout drift - shader + C++ disagree");
 
 struct StyledLinePushData {
     float matrix[16];
@@ -78,134 +53,26 @@ struct StyledLinePushData {
     float viewport[4];  // width, height, dash_px, gap_px
 };
 static_assert(sizeof(StyledLinePushData) == 128,
-              "StyledLinePushData must fit tgfx2 push constants");
+              "StyledLinePushData layout drift - shader + C++ disagree");
 
-static std::string make_styled_line_vert() {
-    return std::string("#version 450 core\n") + R"(
-struct StyledLinePC {
-    mat4 u_matrix;
-    vec4 u_color;
-    vec4 u_params;
-    vec4 u_range;
-    vec4 u_viewport;
-};
-#ifdef VULKAN
-layout(push_constant) uniform PCBlock { StyledLinePC pc; };
-#else
-layout(std140, binding = 14) uniform PCBlock { StyledLinePC pc; };
-#endif
+constexpr const char* TCPLOT_2D_LINE_SHADER_UUID = "termin-engine-tcplot-2d-line";
+constexpr const char* TCPLOT_2D_STYLED_LINE_SHADER_UUID = "termin-engine-tcplot-2d-styled-line";
 
-layout(location=0) in vec2 a_prev;
-layout(location=1) in vec2 a_curr;
-layout(location=2) in vec2 a_next;
-layout(location=3) in vec4 a_meta; // side, scalar, cumulative_length, unused
-
-layout(location=0) out vec4 v_color;
-layout(location=1) out vec4 v_meta; // cumulative_length, style_id, dash_px, gap_px
-
-vec2 clip_to_px(vec4 c) {
-    vec2 ndc = c.xy / c.w;
-    return (ndc * 0.5 + 0.5) * pc.u_viewport.xy;
-}
-
-void main() {
-    vec4 cp = pc.u_matrix * vec4(a_prev, 0.0, 1.0);
-    vec4 cc = pc.u_matrix * vec4(a_curr, 0.0, 1.0);
-    vec4 cn = pc.u_matrix * vec4(a_next, 0.0, 1.0);
-
-    vec2 pp = clip_to_px(cp);
-    vec2 pcurr = clip_to_px(cc);
-    vec2 pn = clip_to_px(cn);
-    vec2 dir = pn - pp;
-    float len = length(dir);
-    if (len < 0.001) dir = vec2(1.0, 0.0);
-    else dir /= len;
-    vec2 normal = vec2(-dir.y, dir.x);
-
-    vec2 px = pcurr + normal * a_meta.x * pc.u_params.x * 0.5;
-    vec2 ndc = px / pc.u_viewport.xy * 2.0 - 1.0;
-    gl_Position = vec4(ndc * cc.w, cc.z, cc.w);
-
-    v_color = pc.u_color;
-    v_meta = vec4(a_meta.z * pc.u_range.z, pc.u_params.y,
-                  pc.u_viewport.z, pc.u_viewport.w);
-    v_meta.x = max(v_meta.x, 0.0);
-    v_color.a *= pc.u_params.w;
-    v_color.r = a_meta.y;
-}
-)";
-}
-
-static std::string make_styled_line_frag() {
-    return std::string("#version 450 core\n") + R"(
-struct StyledLinePC {
-    mat4 u_matrix;
-    vec4 u_color;
-    vec4 u_params;
-    vec4 u_range;
-    vec4 u_viewport;
-};
-#ifdef VULKAN
-layout(push_constant) uniform PCBlock { StyledLinePC pc; };
-#else
-layout(std140, binding = 14) uniform PCBlock { StyledLinePC pc; };
-#endif
-
-layout(location=0) in vec4 v_color;
-layout(location=1) in vec4 v_meta;
-layout(location=0) out vec4 frag_color;
-
-vec3 jet(float t) {
-    t = clamp(t, 0.0, 1.0);
-    float r = clamp(1.5 - abs(4.0 * t - 3.0), 0.0, 1.0);
-    float g = clamp(1.5 - abs(4.0 * t - 2.0), 0.0, 1.0);
-    float b = clamp(1.5 - abs(4.0 * t - 1.0), 0.0, 1.0);
-    return vec3(r, g, b);
-}
-vec3 viridis(float t) {
-    vec3 c0 = vec3(0.277, 0.005, 0.334);
-    vec3 c1 = vec3(0.128, 0.567, 0.551);
-    vec3 c2 = vec3(0.741, 0.873, 0.150);
-    return t < 0.5 ? mix(c0, c1, t * 2.0) : mix(c1, c2, (t - 0.5) * 2.0);
-}
-vec3 plasma(float t) {
-    vec3 c0 = vec3(0.050, 0.030, 0.528);
-    vec3 c1 = vec3(0.798, 0.280, 0.470);
-    vec3 c2 = vec3(0.940, 0.975, 0.131);
-    return t < 0.5 ? mix(c0, c1, t * 2.0) : mix(c1, c2, (t - 0.5) * 2.0);
-}
-vec3 colormap(float id, float t) {
-    if (id < 0.5) return jet(t);
-    if (id < 1.5) return viridis(t);
-    if (id < 2.5) return plasma(t);
-    if (id < 3.5) return vec3(t);
-    if (id < 4.5) return vec3(t, 0.25 + 0.5 * (1.0 - abs(2.0 * t - 1.0)), 1.0 - t);
-    return v_color.rgb;
-}
-
-void main() {
-    float style_id = v_meta.y;
-    if (style_id > 0.5) {
-        float dash_px = max(v_meta.z, 1.0);
-        float gap_px = max(v_meta.w, 1.0);
-        float period = dash_px + gap_px;
-        float p = mod(v_meta.x, period);
-        if (p > dash_px) discard;
-        if (style_id > 1.5 && p > min(dash_px, pc.u_params.x)) discard;
+tc_shader_handle tcplot2d_line_shader_handle() {
+    static tc_shader_handle handle = tc_shader_handle_invalid();
+    if (tc_shader_handle_is_invalid(handle)) {
+        handle = tgfx::register_builtin_shader_from_catalog(TCPLOT_2D_LINE_SHADER_UUID);
     }
+    return handle;
+}
 
-    vec4 c = pc.u_color;
-    if (pc.u_params.z < 5.5) {
-        float denom = max(pc.u_range.y - pc.u_range.x, 1e-12);
-        float t = clamp((v_color.r - pc.u_range.x) / denom, 0.0, 1.0);
-        if (pc.u_params.w != 0.0) t = 1.0 - t;
-        c.rgb = colormap(pc.u_params.z, t);
+tc_shader_handle tcplot2d_styled_line_shader_handle() {
+    static tc_shader_handle handle = tc_shader_handle_invalid();
+    if (tc_shader_handle_is_invalid(handle)) {
+        handle = tgfx::register_builtin_shader_from_catalog(TCPLOT_2D_STYLED_LINE_SHADER_UUID);
     }
-    frag_color = c;
+    return handle;
 }
-)";
-}
-
 tgfx::CanvasColor canvas_color(const Color4& c) {
     return tgfx::CanvasColor{c.r, c.g, c.b, c.a};
 }
@@ -366,27 +233,11 @@ void PlotEngine2D::pixel_to_data_(float wx, float wy,
 
 void PlotEngine2D::release_gpu_resources() {
     if (line_shader_device_) {
-        if (line_shader_vs_id_ != 0) {
-            tgfx::ShaderHandle h; h.id = line_shader_vs_id_;
-            line_shader_device_->destroy(h);
-        }
-        if (line_shader_fs_id_ != 0) {
-            tgfx::ShaderHandle h; h.id = line_shader_fs_id_;
-            line_shader_device_->destroy(h);
-        }
         for (auto& gs : line_gpu_) {
             if (gs.vbo.id != 0) line_shader_device_->destroy(gs.vbo);
         }
     }
     if (styled_line_shader_device_) {
-        if (styled_line_shader_vs_id_ != 0) {
-            tgfx::ShaderHandle h; h.id = styled_line_shader_vs_id_;
-            styled_line_shader_device_->destroy(h);
-        }
-        if (styled_line_shader_fs_id_ != 0) {
-            tgfx::ShaderHandle h; h.id = styled_line_shader_fs_id_;
-            styled_line_shader_device_->destroy(h);
-        }
         for (auto& gs : styled_line_gpu_) {
             if (gs.vbo.id != 0) styled_line_shader_device_->destroy(gs.vbo);
         }
@@ -413,31 +264,25 @@ void PlotEngine2D::ensure_line_shader_(tgfx::IRenderDevice& device) {
         return;
     }
     if (line_shader_device_) {
-        if (line_shader_vs_id_ != 0) {
-            tgfx::ShaderHandle h; h.id = line_shader_vs_id_;
-            line_shader_device_->destroy(h);
-        }
-        if (line_shader_fs_id_ != 0) {
-            tgfx::ShaderHandle h; h.id = line_shader_fs_id_;
-            line_shader_device_->destroy(h);
-        }
-        // Device change invalidates all VBOs too.
         for (auto& gs : line_gpu_) {
             if (gs.vbo.id != 0) line_shader_device_->destroy(gs.vbo);
             gs = LineGpuState{};
         }
     }
 
-    tgfx::ShaderDesc vd;
-    vd.stage = tgfx::ShaderStage::Vertex;
-    vd.source = make_line_vert();
-    line_shader_vs_id_ = device.create_shader(vd).id;
+    tgfx::ShaderHandle vs{};
+    tgfx::ShaderHandle fs{};
+    tc_shader* raw = tc_shader_get(tcplot2d_line_shader_handle());
+    if (!raw || !termin::tc_shader_ensure_tgfx2(raw, &device, &vs, &fs)) {
+        tc::Log::error("PlotEngine2D: failed to prepare builtin shader %s", TCPLOT_2D_LINE_SHADER_UUID);
+        line_shader_vs_id_ = 0;
+        line_shader_fs_id_ = 0;
+        line_shader_device_ = nullptr;
+        return;
+    }
 
-    tgfx::ShaderDesc fd;
-    fd.stage = tgfx::ShaderStage::Fragment;
-    fd.source = make_line_frag();
-    line_shader_fs_id_ = device.create_shader(fd).id;
-
+    line_shader_vs_id_ = vs.id;
+    line_shader_fs_id_ = fs.id;
     line_shader_device_ = &device;
 }
 
@@ -447,30 +292,25 @@ void PlotEngine2D::ensure_styled_line_shader_(tgfx::IRenderDevice& device) {
         return;
     }
     if (styled_line_shader_device_) {
-        if (styled_line_shader_vs_id_ != 0) {
-            tgfx::ShaderHandle h; h.id = styled_line_shader_vs_id_;
-            styled_line_shader_device_->destroy(h);
-        }
-        if (styled_line_shader_fs_id_ != 0) {
-            tgfx::ShaderHandle h; h.id = styled_line_shader_fs_id_;
-            styled_line_shader_device_->destroy(h);
-        }
         for (auto& gs : styled_line_gpu_) {
             if (gs.vbo.id != 0) styled_line_shader_device_->destroy(gs.vbo);
             gs = StyledLineGpuState{};
         }
     }
 
-    tgfx::ShaderDesc vd;
-    vd.stage = tgfx::ShaderStage::Vertex;
-    vd.source = make_styled_line_vert();
-    styled_line_shader_vs_id_ = device.create_shader(vd).id;
+    tgfx::ShaderHandle vs{};
+    tgfx::ShaderHandle fs{};
+    tc_shader* raw = tc_shader_get(tcplot2d_styled_line_shader_handle());
+    if (!raw || !termin::tc_shader_ensure_tgfx2(raw, &device, &vs, &fs)) {
+        tc::Log::error("PlotEngine2D: failed to prepare builtin shader %s", TCPLOT_2D_STYLED_LINE_SHADER_UUID);
+        styled_line_shader_vs_id_ = 0;
+        styled_line_shader_fs_id_ = 0;
+        styled_line_shader_device_ = nullptr;
+        return;
+    }
 
-    tgfx::ShaderDesc fd;
-    fd.stage = tgfx::ShaderStage::Fragment;
-    fd.source = make_styled_line_frag();
-    styled_line_shader_fs_id_ = device.create_shader(fd).id;
-
+    styled_line_shader_vs_id_ = vs.id;
+    styled_line_shader_fs_id_ = fs.id;
     styled_line_shader_device_ = &device;
 }
 
@@ -764,11 +604,16 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         ctx->set_cull(tgfx::CullMode::None);
 
         ensure_line_shader_(ctx->device());
+        if (line_shader_vs_id_ == 0 || line_shader_fs_id_ == 0) {
+            return;
+        }
         line_gpu_.resize(data.lines.size());
 
         tgfx::ShaderHandle lvs; lvs.id = line_shader_vs_id_;
         tgfx::ShaderHandle lfs; lfs.id = line_shader_fs_id_;
+        tc_shader* line_raw = tc_shader_get(tcplot2d_line_shader_handle());
         ctx->bind_shader(lvs, lfs);
+        ctx->use_shader_resource_layout(line_raw);
 
         Plot2DPushData pc_line{};
         compute_data_to_clip_(pc_line.matrix);  // already column-major
@@ -780,6 +625,7 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
             a.location = 0;
             a.format = tgfx::VertexFormat::Float2;
             a.offset = 0;
+            a.semantic = "POSITION";
             line_layout.attributes.push_back(a);
         }
         ctx->set_vertex_layout(line_layout);
@@ -800,8 +646,8 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
             pc_line.color[1] = c.g;
             pc_line.color[2] = c.b;
             pc_line.color[3] = c.a;
-            ctx->set_push_constants(&pc_line,
-                                    static_cast<uint32_t>(sizeof(pc_line)));
+            ctx->bind_uniform_data("tcplot2d_line_draw", &pc_line,
+                                   static_cast<uint32_t>(sizeof(pc_line)));
 
             ctx->draw_arrays(gs.vbo, gs.gpu_count);
         }
@@ -822,17 +668,22 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         ctx->set_cull(tgfx::CullMode::None);
 
         ensure_styled_line_shader_(ctx->device());
+        if (styled_line_shader_vs_id_ == 0 || styled_line_shader_fs_id_ == 0) {
+            return;
+        }
 
         tgfx::ShaderHandle slvs; slvs.id = styled_line_shader_vs_id_;
         tgfx::ShaderHandle slfs; slfs.id = styled_line_shader_fs_id_;
+        tc_shader* styled_raw = tc_shader_get(tcplot2d_styled_line_shader_handle());
         ctx->bind_shader(slvs, slfs);
+        ctx->use_shader_resource_layout(styled_raw);
 
         tgfx::VertexBufferLayout layout;
         layout.stride = 10 * sizeof(float);
-        layout.attributes.push_back({0, tgfx::VertexFormat::Float2, 0});
-        layout.attributes.push_back({1, tgfx::VertexFormat::Float2, 2 * sizeof(float)});
-        layout.attributes.push_back({2, tgfx::VertexFormat::Float2, 4 * sizeof(float)});
-        layout.attributes.push_back({3, tgfx::VertexFormat::Float4, 6 * sizeof(float)});
+        layout.attributes.push_back({0, tgfx::VertexFormat::Float2, 0, "LINEPREV"});
+        layout.attributes.push_back({1, tgfx::VertexFormat::Float2, 2 * sizeof(float), "LINECURR"});
+        layout.attributes.push_back({2, tgfx::VertexFormat::Float2, 4 * sizeof(float), "LINENEXT"});
+        layout.attributes.push_back({3, tgfx::VertexFormat::Float4, 6 * sizeof(float), "LINEMETA"});
         ctx->set_vertex_layout(layout);
         ctx->set_topology(tgfx::PrimitiveTopology::TriangleStrip);
 
@@ -872,7 +723,8 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
                 ? pc.params[0]
                 : std::max(1.0f, s.dash_px);
             pc.viewport[3] = std::max(1.0f, s.gap_px);
-            ctx->set_push_constants(&pc, static_cast<uint32_t>(sizeof(pc)));
+            ctx->bind_uniform_data("tcplot2d_styled_line_draw", &pc,
+                                   static_cast<uint32_t>(sizeof(pc)));
             ctx->draw_arrays(gs.vbo, gs.gpu_count);
         }
     }

@@ -300,6 +300,130 @@
       ]
     },
     {
+      "uuid": "termin-engine-tcplot-3d",
+      "name": "Tcplot3DVSFS",
+      "language": "slang",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-tcplot-3d.slang",
+          "entry": "vs_main",
+          "inputs": [
+            { "name": "position", "semantic": "POSITION", "location": 0 },
+            { "name": "color", "semantic": "COLOR0", "location": 1 },
+            { "name": "surface_grid", "semantic": "SURFGRID", "location": 2 },
+            { "name": "surface_grid_color", "semantic": "SURFGRIDCOLOR", "location": 3 },
+            { "name": "surface_grid_opts", "semantic": "SURFGRIDOPTS", "location": 4 }
+          ],
+          "outputs": [
+            { "name": "position", "semantic": "SV_Position" },
+            { "name": "color", "semantic": "COLOR0", "location": 0 },
+            { "name": "z_norm", "semantic": "TEXCOORD0", "location": 1 },
+            { "name": "scaled_pos", "semantic": "TEXCOORD1", "location": 2 },
+            { "name": "surface_grid", "semantic": "TEXCOORD2", "location": 3 },
+            { "name": "surface_grid_color", "semantic": "TEXCOORD3", "location": 4 },
+            { "name": "surface_grid_opts", "semantic": "TEXCOORD4", "location": 5 }
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-tcplot-3d.slang",
+          "entry": "fs_main",
+          "inputs": [
+            { "name": "color", "semantic": "COLOR0", "location": 0 },
+            { "name": "z_norm", "semantic": "TEXCOORD0", "location": 1 },
+            { "name": "scaled_pos", "semantic": "TEXCOORD1", "location": 2 },
+            { "name": "surface_grid", "semantic": "TEXCOORD2", "location": 3 },
+            { "name": "surface_grid_color", "semantic": "TEXCOORD3", "location": 4 },
+            { "name": "surface_grid_opts", "semantic": "TEXCOORD4", "location": 5 }
+          ],
+          "outputs": [
+            { "name": "color", "semantic": "SV_Target0", "location": 0 }
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "tcplot3d_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-tcplot-2d-line",
+      "name": "Tcplot2DLineVSFS",
+      "language": "slang",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-tcplot-2d-line.slang",
+          "entry": "vs_main",
+          "inputs": [
+            { "name": "data_pos", "semantic": "POSITION", "location": 0 }
+          ],
+          "outputs": [
+            { "name": "position", "semantic": "SV_Position" }
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-tcplot-2d-line.slang",
+          "entry": "fs_main",
+          "inputs": [],
+          "outputs": [
+            { "name": "color", "semantic": "SV_Target0", "location": 0 }
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "tcplot2d_line_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
+        }
+      ]
+    },
+    {
+      "uuid": "termin-engine-tcplot-2d-styled-line",
+      "name": "Tcplot2DStyledLineVSFS",
+      "language": "slang",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-tcplot-2d-styled-line.slang",
+          "entry": "vs_main",
+          "inputs": [
+            { "name": "prev", "semantic": "LINEPREV", "location": 0 },
+            { "name": "curr", "semantic": "LINECURR", "location": 1 },
+            { "name": "next", "semantic": "LINENEXT", "location": 2 },
+            { "name": "meta", "semantic": "LINEMETA", "location": 3 }
+          ],
+          "outputs": [
+            { "name": "position", "semantic": "SV_Position" },
+            { "name": "color", "semantic": "COLOR0", "location": 0 },
+            { "name": "meta", "semantic": "TEXCOORD0", "location": 1 }
+          ]
+        },
+        "fragment": {
+          "path": "termin-engine-tcplot-2d-styled-line.slang",
+          "entry": "fs_main",
+          "inputs": [
+            { "name": "color", "semantic": "COLOR0", "location": 0 },
+            { "name": "meta", "semantic": "TEXCOORD0", "location": 1 }
+          ],
+          "outputs": [
+            { "name": "color", "semantic": "SV_Target0", "location": 0 }
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "tcplot2d_styled_line_draw",
+          "logical_name": "draw",
+          "kind": "constant_buffer",
+          "scope": "draw"
+        }
+      ]
+    },
+    {
       "uuid": "termin-engine-canvas2d-solid",
       "name": "Canvas2DSolidVSFS",
       "language": "slang",
