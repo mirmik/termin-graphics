@@ -121,6 +121,9 @@ run_suite "termin-base python" \
 run_suite "termin-assets python" \
     "${PYTHON_BIN}" -m pytest termin-assets/tests/ -v
 
+run_suite "termin-inspect python" \
+    "${PYTHON_BIN}" -m pytest termin-inspect/tests/ -v
+
 run_suite "termin-modules import smoke" \
     "${PYTHON_BIN}" -c "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())"
 
