@@ -997,7 +997,7 @@ int main() {
             "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
             "VSOut main(VSIn input) {\n"
             "    VSOut o;\n"
-            "    o.pos = float4(input.position, 0.0, 1.0);\n"
+            "    o.pos = float4(input.position.x, -input.position.y, 0.0, 1.0);\n"
             "    o.uv = input.uv;\n"
             "    return o;\n"
             "}\n";

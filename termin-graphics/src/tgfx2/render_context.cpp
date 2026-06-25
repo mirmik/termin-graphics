@@ -46,12 +46,6 @@ static const float FSQ_VERTICES[] = {
     -1.f,  1.f,  0.f, 1.f,
 };
 
-static const float FSQ_VERTICES_D3D[] = {
-    -1.f,  1.f,  0.f, 0.f,
-     1.f,  1.f,  1.f, 0.f,
-     1.f, -1.f,  1.f, 1.f,
-    -1.f, -1.f,  0.f, 1.f,
-};
 
 static const uint32_t FSQ_INDICES[] = { 0, 1, 2, 0, 2, 3 };
 
@@ -1178,18 +1172,15 @@ void RenderContext2::flush_resource_set() {
 void RenderContext2::ensure_fsq_resources() {
     if (fsq_vbo_) return;
 
-    // Create VBO
+    // Create VBO. Vertices are canonical TerminClip; backend-native Y
+    // conversion happens in termin-engine-fsq.vert.slang.
     BufferDesc vbo_desc;
-    const bool d3d_clip_space = device_.backend_type() == BackendType::D3D11;
-    const float* fsq_vertices = d3d_clip_space ? FSQ_VERTICES_D3D : FSQ_VERTICES;
-    const size_t fsq_vertices_size = d3d_clip_space ? sizeof(FSQ_VERTICES_D3D) : sizeof(FSQ_VERTICES);
-
-    vbo_desc.size = static_cast<uint64_t>(fsq_vertices_size);
+    vbo_desc.size = static_cast<uint64_t>(sizeof(FSQ_VERTICES));
     vbo_desc.usage = BufferUsage::Vertex;
     fsq_vbo_ = device_.create_buffer(vbo_desc);
     device_.upload_buffer(fsq_vbo_, {
-        reinterpret_cast<const uint8_t*>(fsq_vertices),
-        fsq_vertices_size
+        reinterpret_cast<const uint8_t*>(FSQ_VERTICES),
+        sizeof(FSQ_VERTICES)
     });
 
     // Create IBO
