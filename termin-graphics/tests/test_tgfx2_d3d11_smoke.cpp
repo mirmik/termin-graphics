@@ -1307,8 +1307,8 @@ int main() {
             termin::tgfx2_set_shader_dev_compile_enabled(true);
 
             tgfx::TextureDesc canvas_texture_desc;
-            canvas_texture_desc.width = 2;
-            canvas_texture_desc.height = 2;
+            canvas_texture_desc.width = 4;
+            canvas_texture_desc.height = 4;
             canvas_texture_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
             canvas_texture_desc.usage = tgfx::TextureUsage::Sampled |
                                         tgfx::TextureUsage::CopyDst |
@@ -1319,8 +1319,25 @@ int main() {
                 return 1;
             }
             const uint8_t canvas_pixels[] = {
-                51, 153, 204, 255, 51, 153, 204, 255,
-                51, 153, 204, 255, 51, 153, 204, 255,
+                230,  26,  26, 255,
+                230,  26,  26, 255,
+                230,  26,  26, 255,
+                230,  26,  26, 255,
+
+                230,  26,  26, 255,
+                230,  26,  26, 255,
+                230,  26,  26, 255,
+                230,  26,  26, 255,
+
+                 26,  77, 230, 255,
+                 26,  77, 230, 255,
+                 26,  77, 230, 255,
+                 26,  77, 230, 255,
+
+                 26,  77, 230, 255,
+                 26,  77, 230, 255,
+                 26,  77, 230, 255,
+                 26,  77, 230, 255,
             };
             device->upload_texture(
                 canvas_texture,
@@ -1336,20 +1353,57 @@ int main() {
             ctx.end_pass();
             ctx.end_frame();
 
-            if (!device->read_pixel_rgba8(color, 2, 2, rgba)) {
-                std::fprintf(stderr, "D3D11 smoke: Canvas2D readback failed\n");
+            float canvas_top[4] = {};
+            float canvas_bottom[4] = {};
+            if (!device->read_pixel_rgba8(color, 2, 0, canvas_top) ||
+                !device->read_pixel_rgba8(color, 2, 3, canvas_bottom)) {
+                std::fprintf(stderr, "D3D11 smoke: Canvas2D texture orientation readback failed\n");
                 return 1;
             }
-            if (!close_enough(rgba[0], 51.0f / 255.0f) ||
-                !close_enough(rgba[1], 153.0f / 255.0f) ||
-                !close_enough(rgba[2], 204.0f / 255.0f) ||
-                !close_enough(rgba[3], 1.00f)) {
+            auto looks_red = [](const float* pixel) {
+                return pixel[0] > 0.75f && pixel[1] < 0.25f && pixel[2] < 0.25f;
+            };
+            auto looks_blue = [](const float* pixel) {
+                return pixel[0] < 0.25f && pixel[1] < 0.40f && pixel[2] > 0.75f;
+            };
+            if (!looks_red(canvas_top) || !looks_blue(canvas_bottom)) {
                 std::fprintf(stderr,
-                             "D3D11 smoke: unexpected Canvas2D pixel %.3f %.3f %.3f %.3f\n",
-                             rgba[0], rgba[1], rgba[2], rgba[3]);
+                             "D3D11 smoke: Canvas2D texture Y orientation is wrong "
+                             "(top=%.3f %.3f %.3f %.3f bottom=%.3f %.3f %.3f %.3f)\n",
+                             canvas_top[0], canvas_top[1], canvas_top[2], canvas_top[3],
+                             canvas_bottom[0], canvas_bottom[1], canvas_bottom[2], canvas_bottom[3]);
                 return 1;
             }
             device->destroy(canvas_texture);
+
+            ctx.begin_frame();
+            ctx.begin_pass(color, {}, canvas_clear, 1.0f, false);
+            tgfx::Canvas2DRenderer solid_canvas;
+            solid_canvas.begin(ctx, 4, 4);
+            solid_canvas.draw_rect(0.0f, 0.0f, 2.0f, 2.0f,
+                                   tgfx::CanvasColor{0.90f, 0.10f, 0.10f, 1.0f});
+            solid_canvas.draw_rect(2.0f, 2.0f, 2.0f, 2.0f,
+                                   tgfx::CanvasColor{0.10f, 0.20f, 0.90f, 1.0f});
+            solid_canvas.end();
+            ctx.end_pass();
+            ctx.end_frame();
+
+            float solid_top_left[4] = {};
+            float solid_bottom_right[4] = {};
+            if (!device->read_pixel_rgba8(color, 0, 0, solid_top_left) ||
+                !device->read_pixel_rgba8(color, 3, 3, solid_bottom_right)) {
+                std::fprintf(stderr, "D3D11 smoke: Canvas2D solid orientation readback failed\n");
+                return 1;
+            }
+            if (!looks_red(solid_top_left) || !looks_blue(solid_bottom_right)) {
+                std::fprintf(stderr,
+                             "D3D11 smoke: Canvas2D solid Y orientation is wrong "
+                             "(top-left=%.3f %.3f %.3f %.3f bottom-right=%.3f %.3f %.3f %.3f)\n",
+                             solid_top_left[0], solid_top_left[1], solid_top_left[2], solid_top_left[3],
+                             solid_bottom_right[0], solid_bottom_right[1],
+                             solid_bottom_right[2], solid_bottom_right[3]);
+                return 1;
+            }
 
             const std::filesystem::path font_path = find_text_smoke_font();
             if (!font_path.empty()) {

@@ -306,14 +306,23 @@ static bool render_fsq_artifact_smoke(tgfx::IRenderDevice& device) {
     device.wait_idle();
 
     float center_pixel[4] = {};
-    bool read_ok = device.read_pixel_rgba8(rt, kWidth / 2, kHeight / 2, center_pixel);
-    printf("FSQ Slang artifact center pixel: (%.2f %.2f %.2f %.2f)\n",
-           center_pixel[0], center_pixel[1], center_pixel[2], center_pixel[3]);
+    float top_pixel[4] = {};
+    float bottom_pixel[4] = {};
+    bool read_ok = device.read_pixel_rgba8(rt, kWidth / 2, kHeight / 2, center_pixel) &&
+                   device.read_pixel_rgba8(rt, kWidth / 2, 0, top_pixel) &&
+                   device.read_pixel_rgba8(rt, kWidth / 2, kHeight - 1, bottom_pixel);
+    printf("FSQ Slang artifact center pixel: (%.2f %.2f %.2f %.2f), "
+           "top: (%.2f %.2f %.2f %.2f), bottom: (%.2f %.2f %.2f %.2f)\n",
+           center_pixel[0], center_pixel[1], center_pixel[2], center_pixel[3],
+           top_pixel[0], top_pixel[1], top_pixel[2], top_pixel[3],
+           bottom_pixel[0], bottom_pixel[1], bottom_pixel[2], bottom_pixel[3]);
 
     const bool matches_canonical_uv =
         read_ok &&
         center_pixel[0] > 0.40f && center_pixel[0] < 0.60f &&
         center_pixel[1] > 0.40f && center_pixel[1] < 0.60f &&
+        top_pixel[1] < 0.20f &&
+        bottom_pixel[1] > 0.80f &&
         center_pixel[2] < 0.10f;
 
     device.destroy(fs);
