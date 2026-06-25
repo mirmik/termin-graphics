@@ -41,7 +41,7 @@ VertexOutput vs_main(VertexInput input) {
     float4 clip_pos = mul(per_frame.u_projection, view_pos);
     float ndc_depth = clip_pos.z / max(abs(clip_pos.w), 1.0e-6);
 
-    output.position = clip_pos;
+    output.position = termin_to_native_clip(clip_pos);
     output.linear_depth = depth;
     output.perspective_depth = ndc_depth;
     output.log_depth =

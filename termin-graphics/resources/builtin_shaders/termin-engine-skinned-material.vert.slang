@@ -60,6 +60,6 @@ VertexOutput vs_main(TerminSkinnedVertexInput input) {
         output.tbn_valid = 1.0;
     }
 
-    output.position = mul(per_frame.u_view_projection, float4(world.position, 1.0));
+    output.position = termin_to_native_clip(mul(per_frame.u_view_projection, float4(world.position, 1.0)));
     return output;
 }

@@ -53,7 +53,7 @@ VertexOutput vs_main(VertexInput input) {
     VertexOutput output;
     float4 world = mul(draw_data.model, float4(input.position, 1.0));
 
-    output.position = mul(per_frame.u_view_projection, world);
+    output.position = termin_to_native_clip(mul(per_frame.u_view_projection, world));
     output.world_pos = world.xyz;
     output.normal = mul((float3x3)draw_data.model, input.normal);
     output.uv = input.uv;

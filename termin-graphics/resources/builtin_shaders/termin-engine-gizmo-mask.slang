@@ -19,7 +19,7 @@ struct VertexOutput {
 [shader("vertex")]
 VertexOutput vs_main(VertexInput input) {
     VertexOutput output;
-    output.pos = mul(gizmo_push.u_mvp, float4(input.pos, 1.0));
+    output.pos = termin_to_native_clip(mul(gizmo_push.u_mvp, float4(input.pos, 1.0)));
     return output;
 }
 

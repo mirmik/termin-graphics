@@ -65,6 +65,6 @@ VertexOutput vs_main(VertexInput input, uint instance_id : SV_InstanceID) {
     float3 world_pos =
         mul(foliage_draw.u_position_model, float4(instance.position, 1.0)).xyz +
         mul(foliage_draw.u_vector_model, float4(local_offset, 0.0)).xyz;
-    output.position = mul(per_frame.u_view_projection, float4(world_pos, 1.0));
+    output.position = termin_to_native_clip(mul(per_frame.u_view_projection, float4(world_pos, 1.0)));
     return output;
 }

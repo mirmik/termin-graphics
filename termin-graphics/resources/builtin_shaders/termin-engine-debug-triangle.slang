@@ -1,10 +1,12 @@
 // Debug triangle — solid-color wireframe triangles for editor gizmos.
 // No resources — pure passthrough.
 
+import termin_prelude;
+
 // --- vertex ---
 struct VIn  { float3 pos : POSITION; float4 col : COLOR0; };
 struct VOut { float4 pos : SV_Position;  float4 col : COLOR0; };
-[shader("vertex")] VOut vs_main(VIn i) { VOut o; o.pos = float4(i.pos, 1); o.col = i.col; return o; }
+[shader("vertex")] VOut vs_main(VIn i) { VOut o; o.pos = termin_to_native_clip(float4(i.pos, 1)); o.col = i.col; return o; }
 
 // --- fragment ---
 struct FIn  { float4 col : COLOR0; };

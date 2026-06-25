@@ -27,7 +27,7 @@ struct VertexOutput {
 VertexOutput vs_main(VertexInput input) {
     VertexOutput output;
     float4 world_pos = mul(shadow_draw.u_model, float4(input.position, 1.0));
-    output.position = mul(per_frame.u_projection, mul(per_frame.u_view, world_pos));
+    output.position = termin_to_native_clip(mul(per_frame.u_projection, mul(per_frame.u_view, world_pos)));
     return output;
 }
 

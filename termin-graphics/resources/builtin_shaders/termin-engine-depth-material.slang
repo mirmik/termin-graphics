@@ -50,7 +50,7 @@ VertexOutput vs_main(VertexInput input) {
 
     float denom = max(material.u_far - material.u_near, 1.0e-6);
     output.linear_depth = (view_pos.y - material.u_near) / denom;
-    output.position = mul(per_frame.u_projection, view_pos);
+    output.position = termin_to_native_clip(mul(per_frame.u_projection, view_pos));
     return output;
 }
 

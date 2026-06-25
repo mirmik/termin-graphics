@@ -33,8 +33,8 @@ struct VertexOutput {
 [shader("vertex")]
 VertexOutput vs_main(VertexInput input) {
     VertexOutput output;
-    output.position = mul(per_frame.u_view_projection,
-                          mul(draw_data.model, float4(input.position, 1.0)));
+    output.position = termin_to_native_clip(mul(per_frame.u_view_projection,
+                          mul(draw_data.model, float4(input.position, 1.0))));
     return output;
 }
 

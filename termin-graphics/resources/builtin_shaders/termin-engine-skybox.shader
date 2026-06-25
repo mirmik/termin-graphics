@@ -15,6 +15,8 @@
 @property Color u_skybox_bottom_color = Color(0.1, 0.1, 0.3, 1.0)
 
 @stage vertex
+import termin_prelude;
+
 struct VertexInput {
     float3 position : POSITION;
 };
@@ -30,7 +32,7 @@ VertexOutput main(VertexInput input) {
     float4 view_dir = mul(material.u_view, float4(input.position, 0.0));
     output.dir = input.position;
     float4 clip = mul(material.u_projection, float4(view_dir.xyz, 1.0));
-    output.position = clip.xyww;
+    output.position = termin_to_native_clip(clip.xyww);
     return output;
 }
 @endstage

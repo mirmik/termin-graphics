@@ -31,7 +31,7 @@ VertexOutput vs_main(VertexInput input) {
     VertexOutput output;
     output.near_point = unproject(input.position, 0.0);
     output.far_point = unproject(input.position, 1.0);
-    output.position = float4(input.position, 0.0, 1.0);
+    output.position = termin_to_native_clip(float4(input.position, 0.0, 1.0));
     return output;
 }
 

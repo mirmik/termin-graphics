@@ -35,6 +35,6 @@ VertexOutput vs_main(VertexInput input) {
     float3 local_pos =
         termin_skinned_position(input.position, input.joints, input.weights, bone_block);
     float4 world_pos = mul(shadow_draw.u_model, float4(local_pos, 1.0));
-    output.position = mul(per_frame.u_projection, mul(per_frame.u_view, world_pos));
+    output.position = termin_to_native_clip(mul(per_frame.u_projection, mul(per_frame.u_view, world_pos)));
     return output;
 }
