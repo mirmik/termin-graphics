@@ -93,7 +93,6 @@ static tc_mesh_handle create_primitive_in_registry(const char* name, tc_mesh* te
     );
     mesh->draw_mode = temp_mesh->draw_mode;
 
-    tc_mesh_upload_gpu(mesh);
     tc_mesh_add_ref(mesh);
     free_temp_mesh(temp_mesh);
 

@@ -363,9 +363,6 @@ void bind_mesh(nb::module_& m) {
             return nb::cast(nb::ndarray<nb::numpy, float>(buf, 2, shape, owner));
         })
         .def("bump_version", &TcMesh::bump_version)
-        .def("draw_gpu", &TcMesh::draw_gpu)
-        .def("upload_gpu", &TcMesh::upload_gpu)
-        .def("delete_gpu", &TcMesh::delete_gpu)
         .def("set_from_mesh3", [](TcMesh& h, const Mesh3& mesh) {
             return h.set_from_mesh3(mesh);
         }, nb::arg("mesh"))

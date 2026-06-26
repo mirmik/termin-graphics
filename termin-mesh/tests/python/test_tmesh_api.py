@@ -45,6 +45,14 @@ def test_skinned_layout_matches_gpu_contract():
     assert weights["location"] == 5
 
 
+def test_tc_mesh_does_not_expose_legacy_gpu_ops():
+    handle = tmesh.TcMesh()
+
+    assert not hasattr(handle, "draw_gpu")
+    assert not hasattr(handle, "upload_gpu")
+    assert not hasattr(handle, "delete_gpu")
+
+
 def test_mesh3_from_numpy_arrays():
     vertices = np.array(
         [

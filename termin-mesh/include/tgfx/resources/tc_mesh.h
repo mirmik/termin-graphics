@@ -131,24 +131,6 @@ static inline size_t tc_mesh_triangle_count(const tc_mesh* mesh) {
 #define tc_vertex_layout_skinned            tgfx_vertex_layout_skinned
 
 // ============================================================================
-// GPU operations callback vtable
-// ============================================================================
-
-typedef struct tc_mesh_gpu_ops {
-    void     (*draw)(tc_mesh* mesh);
-    uint32_t (*upload)(tc_mesh* mesh);
-    void     (*delete_gpu)(tc_mesh* mesh);
-} tc_mesh_gpu_ops;
-
-TGFX_API void tc_mesh_set_gpu_ops(const tc_mesh_gpu_ops* ops);
-TGFX_API const tc_mesh_gpu_ops* tc_mesh_get_gpu_ops(void);
-
-// Convenience wrappers that dispatch through the vtable
-TGFX_API void     tc_mesh_draw_gpu(tc_mesh* mesh);
-TGFX_API uint32_t tc_mesh_upload_gpu(tc_mesh* mesh);
-TGFX_API void     tc_mesh_delete_gpu(tc_mesh* mesh);
-
-// ============================================================================
 // Reference counting
 // ============================================================================
 

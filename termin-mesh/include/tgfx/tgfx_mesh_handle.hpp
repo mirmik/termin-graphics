@@ -154,20 +154,6 @@ public:
         return tc_mesh_ensure_loaded(handle);
     }
 
-    // GPU operations (dispatch through global callback vtable)
-    void draw_gpu() {
-        if (tc_mesh* m = get()) tc_mesh_draw_gpu(m);
-    }
-
-    uint32_t upload_gpu() {
-        tc_mesh* m = get();
-        return m ? tc_mesh_upload_gpu(m) : 0;
-    }
-
-    void delete_gpu() {
-        if (tc_mesh* m = get()) tc_mesh_delete_gpu(m);
-    }
-
     tc_value serialize_to_value() const {
         tc_value d = tc_value_dict_new();
         if (!is_valid()) {

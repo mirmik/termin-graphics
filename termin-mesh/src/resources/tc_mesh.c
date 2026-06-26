@@ -10,39 +10,6 @@
 #include <stdint.h>
 
 // ============================================================================
-// GPU operations callback vtable
-// ============================================================================
-
-static const tc_mesh_gpu_ops* g_mesh_gpu_ops = NULL;
-
-void tc_mesh_set_gpu_ops(const tc_mesh_gpu_ops* ops) {
-    g_mesh_gpu_ops = ops;
-}
-
-const tc_mesh_gpu_ops* tc_mesh_get_gpu_ops(void) {
-    return g_mesh_gpu_ops;
-}
-
-void tc_mesh_draw_gpu(tc_mesh* mesh) {
-    if (mesh && g_mesh_gpu_ops && g_mesh_gpu_ops->draw) {
-        g_mesh_gpu_ops->draw(mesh);
-    }
-}
-
-uint32_t tc_mesh_upload_gpu(tc_mesh* mesh) {
-    if (mesh && g_mesh_gpu_ops && g_mesh_gpu_ops->upload) {
-        return g_mesh_gpu_ops->upload(mesh);
-    }
-    return 0;
-}
-
-void tc_mesh_delete_gpu(tc_mesh* mesh) {
-    if (mesh && g_mesh_gpu_ops && g_mesh_gpu_ops->delete_gpu) {
-        g_mesh_gpu_ops->delete_gpu(mesh);
-    }
-}
-
-// ============================================================================
 // Reference counting
 // ============================================================================
 
