@@ -69,7 +69,24 @@ from termin.render_framework._render_framework_native import (
 )
 from termin.render_framework.frame_graph_view import PipelineFrameGraphView
 from termin.render_framework.frame_pass_registry import FramePassRegistry
-from termin.render_framework.python_pass import PythonFramePass, deserialize_pass
+from termin.render_framework.python_pass import PythonFramePass, deserialize_pass, shutdown_python_passes
+
+
+def shutdown_render_pipelines() -> None:
+    """Destroy all live process-global render pipelines."""
+    from tcbase import log
+
+    try:
+        pipeline_infos = list(tc_pipeline_registry_get_all_info())
+    except Exception as exc:
+        log.error(f"[RenderFramework] failed to list render pipelines during shutdown: {exc}")
+        return
+
+    for info in pipeline_infos:
+        try:
+            tc_pipeline_destroy(info["handle"])
+        except Exception as exc:
+            log.error(f"[RenderFramework] failed to destroy render pipeline during shutdown: {exc}")
 
 __all__ = [
     "RenderPipeline",
@@ -139,4 +156,6 @@ __all__ = [
     "FramePassRegistry",
     "PythonFramePass",
     "deserialize_pass",
+    "shutdown_python_passes",
+    "shutdown_render_pipelines",
 ]

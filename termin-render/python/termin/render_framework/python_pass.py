@@ -31,7 +31,8 @@ def _register_python_pass_type(type_name: str, cls: type) -> bool:
     return True
 
 
-def _cleanup_python_pass_types() -> None:
+def shutdown_python_passes() -> None:
+    """Unregister Python-authored pass classes from the process registry."""
     for type_name in list(_registered_python_pass_types):
         try:
             tc_pass_registry_unregister_python(type_name)
@@ -40,7 +41,7 @@ def _cleanup_python_pass_types() -> None:
     _registered_python_pass_types.clear()
 
 
-atexit.register(_cleanup_python_pass_types)
+atexit.register(shutdown_python_passes)
 
 
 def _collect_graph_socket_metadata(cls: type) -> dict:
