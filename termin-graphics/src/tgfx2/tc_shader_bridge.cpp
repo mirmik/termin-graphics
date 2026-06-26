@@ -789,11 +789,28 @@ static bool apply_shader_resource_layout_sidecar(
         return true;
     }
 
+    auto incoming_has_name = [&](const char* name) {
+        for (const tc_shader_resource_binding& binding : incoming) {
+            if (std::strcmp(binding.name, name) == 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     std::vector<tc_shader_resource_binding> merged;
     const uint32_t existing_count = tc_shader_resource_binding_count(shader);
     const tc_shader_resource_binding* existing = tc_shader_resource_bindings(shader);
     if (existing && existing_count > 0) {
         for (uint32_t i = 0; i < existing_count; ++i) {
+            // Built-in catalog layouts are target-agnostic fallback metadata.
+            // Target-specific sidecars are authoritative for resources they
+            // describe, while prior sidecar data from other stages must still
+            // be merged to preserve stage masks.
+            if (existing[i].stage_mask == TC_SHADER_STAGE_ALL_GRAPHICS &&
+                incoming_has_name(existing[i].name)) {
+                continue;
+            }
             merge_shader_resource_binding(merged, existing[i]);
         }
     }

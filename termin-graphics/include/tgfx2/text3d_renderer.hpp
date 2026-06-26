@@ -1,10 +1,10 @@
-// text3d_renderer.hpp - World-space plane text renderer for tgfx2.
+// text3d_renderer.hpp - 3D-anchored text renderer for tgfx2.
 //
-// Draws text attached to a 3D world position. The caller supplies the two
-// world-space basis vectors used by the text plane, so this renderer supports
-// both camera-facing billboards and fixed-orientation world labels.
-// The shader expands each glyph quad by (offset_x * cam_right +
-// offset_y * cam_up).
+// Draws text attached to a 3D world position. WorldPlane expands glyph quads
+// in world space using caller-provided basis vectors, which supports fixed
+// world labels. ScreenAligned projects only the world anchor and expands the
+// glyph quad in clip space, which is the preferred mode for annotations such
+// as plot axis labels.
 //
 // Usage:
 //   Text3DRenderer t3d(font);
@@ -13,9 +13,9 @@
 //   t3d.end();
 //
 // The caller supplies the text plane basis directly:
-//   - mvp:      4x4 column-major (projection * view * model). 16 floats.
-//   - cam_right: 3 floats — world-space text-right basis.
-//   - cam_up:    3 floats — world-space text-up basis.
+//   - mvp:       4x4 column-major (projection * view * model). 16 floats.
+//   - cam_right: 3 floats - world-space text-right basis.
+//   - cam_up:    3 floats - world-space text-up basis.
 #pragma once
 
 #include <cstdint>
@@ -36,6 +36,7 @@ class FontAtlas;
 class TGFX2_TYPE_API Text3DRenderer {
 public:
     enum class Anchor : uint8_t { Left, Center, Right };
+    enum class ExpansionMode : uint8_t { WorldPlane, ScreenAligned };
 
 private:
     IRenderDevice* compiled_on_ = nullptr;
@@ -48,6 +49,7 @@ private:
     float mvp_[16]{};
     float cam_right_[3]{};
     float cam_up_[3]{};
+    ExpansionMode expansion_mode_ = ExpansionMode::WorldPlane;
 
 public:
     explicit Text3DRenderer(FontAtlas* font = nullptr);
@@ -65,9 +67,9 @@ public:
                const float cam_up[3],
                FontAtlas* font = nullptr);
 
-    // Draw a UTF-8 string at world-space `position`. `size` is the
-    // world-space height of a glyph (scaled from the atlas rasterise
-    // size). Color in [0, 1].
+    // Draw a UTF-8 string at world-space `position`. `size` is the text
+    // height in expansion units: world units for WorldPlane, clip/NDC
+    // units for ScreenAligned. Color in [0, 1].
     void draw(std::string_view text_utf8,
               const float position[3],
               float r, float g, float b, float a,
@@ -76,6 +78,9 @@ public:
 
     void end();
     void release_gpu();
+
+    void set_expansion_mode(ExpansionMode mode) { expansion_mode_ = mode; }
+    ExpansionMode expansion_mode() const { return expansion_mode_; }
 
     FontAtlas* font() const { return font_; }
 

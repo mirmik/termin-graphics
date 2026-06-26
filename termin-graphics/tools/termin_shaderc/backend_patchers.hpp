@@ -47,7 +47,8 @@ void apply_default_resource_scope(
     const std::string& default_scope);
 void normalize_scope_first_binding_slots(
     std::vector<ShaderResourceBinding>& resources,
-    bool normalize_transient_resources);
+    bool normalize_transient_resources,
+    const std::string& target = {});
 bool has_resource_named(
     const std::vector<ShaderResourceBinding>& resources,
     const std::string& name);

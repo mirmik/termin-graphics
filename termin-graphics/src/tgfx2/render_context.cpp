@@ -14,6 +14,7 @@ extern "C" {
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <span>
 #include <utility>
 
 namespace tgfx {
@@ -1376,16 +1377,22 @@ void RenderContext2::draw_indexed_instanced(
 }
 
 void RenderContext2::draw_arrays(BufferHandle vbo, uint32_t vertex_count) {
+    draw_arrays(vbo, 0, vertex_count);
+}
+
+void RenderContext2::draw_arrays(BufferHandle vbo,
+                                 uint64_t vertex_offset,
+                                 uint32_t vertex_count) {
     flush_pipeline();
     flush_resource_set();
     if (last_bound_vbos_.size() <= 0) {
         last_bound_vbos_.resize(1);
         last_bound_vbo_offsets_.resize(1);
     }
-    if (vbo != last_bound_vbos_[0] || last_bound_vbo_offsets_[0] != 0) {
-        cmd_->bind_vertex_buffer(0, vbo);
+    if (vbo != last_bound_vbos_[0] || last_bound_vbo_offsets_[0] != vertex_offset) {
+        cmd_->bind_vertex_buffer(0, vbo, vertex_offset);
         last_bound_vbos_[0] = vbo;
-        last_bound_vbo_offsets_[0] = 0;
+        last_bound_vbo_offsets_[0] = vertex_offset;
     }
     cmd_->draw(vertex_count);
 }
@@ -1460,23 +1467,23 @@ void RenderContext2::draw_arrays_instanced(BufferHandle vertex_vbo,
 // Immediate vertex draw scaffold shared by draw_immediate_lines/_triangles.
 // Tries the device's transient vertex ring (persistent VBO with sub-upload)
 // first; falls back to create_buffer + upload_buffer + deferred destroy if
-// the backend doesn't provide a ring. This keeps small UI/debug streams off
-// the per-draw allocation path on both OpenGL and Vulkan.
-void RenderContext2::draw_immediate_generic(const float* data,
-                                            uint32_t vertex_count,
-                                            PrimitiveTopology topo) {
-    if (vertex_count == 0) return;
+// the backend doesn't provide a ring. This keeps small renderer-owned streams
+// off the per-draw allocation path on both OpenGL and Vulkan.
+void RenderContext2::draw_transient_arrays(const void* data,
+                                           uint32_t byte_size,
+                                           uint32_t vertex_count,
+                                           const VertexBufferLayout& layout,
+                                           PrimitiveTopology topology) {
+    if (!data || byte_size == 0 || vertex_count == 0) return;
 
-    const size_t byte_size = vertex_count * 7 * sizeof(float);
     const bool profile = tc_profiler_enabled();
 
     BufferHandle buf;
     uint64_t vb_offset = 0;
     bool used_ring = false;
 
-    if (profile) tc_profiler_begin_section("immediate.upload");
-    const uint64_t ring_offset = device_.transient_vertex_write(
-        data, static_cast<uint32_t>(byte_size));
+    if (profile) tc_profiler_begin_section("transient.upload");
+    const uint64_t ring_offset = device_.transient_vertex_write(data, byte_size);
     if (ring_offset != UINT64_MAX) {
         buf = device_.transient_vertex_buffer();
         vb_offset = ring_offset;
@@ -1484,31 +1491,20 @@ void RenderContext2::draw_immediate_generic(const float* data,
     } else {
         BufferDesc desc;
         desc.size = byte_size;
-        desc.usage = BufferUsage::Vertex;
+        desc.usage = BufferUsage::Vertex | BufferUsage::CopyDst;
         buf = device_.create_buffer(desc);
-        device_.upload_buffer(buf,
-            {reinterpret_cast<const uint8_t*>(data), byte_size});
+        device_.upload_buffer(
+            buf,
+            std::span<const uint8_t>(
+                reinterpret_cast<const uint8_t*>(data),
+                byte_size));
     }
     if (profile) tc_profiler_end_section();
 
-    if (profile) tc_profiler_begin_section("immediate.pipeline");
-    VertexBufferLayout layout;
-    layout.stride = 7 * sizeof(float);
-    layout.use_shader_input_locations = true;
-    layout.attributes = {
-        {0, VertexFormat::Float3, 0},
-        {1, VertexFormat::Float4, 3 * sizeof(float)},
-    };
+    if (profile) tc_profiler_begin_section("transient.draw");
     set_vertex_layout(layout);
-    set_topology(topo);
-
-    flush_pipeline();
-    flush_resource_set();
-    if (profile) tc_profiler_end_section();
-
-    if (profile) tc_profiler_begin_section("immediate.draw");
-    cmd_->bind_vertex_buffer(0, buf, vb_offset);
-    cmd_->draw(vertex_count);
+    set_topology(topology);
+    draw_arrays(buf, vb_offset, vertex_count);
     if (profile) tc_profiler_end_section();
 
     // Ring buffers are process-lifetime; only the fallback path queues
@@ -1517,6 +1513,24 @@ void RenderContext2::draw_immediate_generic(const float* data,
     if (!used_ring) {
         deferred_destroy_buffers_.push_back(buf);
     }
+}
+
+void RenderContext2::draw_immediate_generic(const float* data,
+                                            uint32_t vertex_count,
+                                            PrimitiveTopology topo) {
+    VertexBufferLayout layout;
+    layout.stride = 7 * sizeof(float);
+    layout.use_shader_input_locations = true;
+    layout.attributes = {
+        {0, VertexFormat::Float3, 0},
+        {1, VertexFormat::Float4, 3 * sizeof(float)},
+    };
+    draw_transient_arrays(
+        data,
+        vertex_count * 7 * static_cast<uint32_t>(sizeof(float)),
+        vertex_count,
+        layout,
+        topo);
 }
 
 void RenderContext2::draw_immediate_lines(const float* data, uint32_t vertex_count) {

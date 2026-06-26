@@ -364,6 +364,7 @@ public:
 
     // Draw non-indexed.
     void draw_arrays(BufferHandle vbo, uint32_t vertex_count);
+    void draw_arrays(BufferHandle vbo, uint64_t vertex_offset, uint32_t vertex_count);
     void draw_arrays_instanced(BufferHandle vbo,
                                uint32_t vertex_count,
                                uint32_t instance_count);
@@ -377,6 +378,15 @@ public:
                                uint64_t instance_offset,
                                uint32_t vertex_count,
                                uint32_t instance_count);
+
+    // Draw a caller-owned transient vertex stream with an explicit vertex
+    // layout. This is for renderer-owned streams whose vertex contract is not
+    // the legacy immediate [pos,color] shape, e.g. billboard text.
+    void draw_transient_arrays(const void* data,
+                               uint32_t byte_size,
+                               uint32_t vertex_count,
+                               const VertexBufferLayout& layout,
+                               PrimitiveTopology topology);
 
     // --- Immediate drawing ---
     // Fast-path for transient UI/debug streams: hands vertices to the

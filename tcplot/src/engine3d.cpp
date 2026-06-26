@@ -826,16 +826,18 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         float label_mvp[16];
         compute_mvp_(aspect, label_mvp, false);
 
-        // Tick labels on axes.
-        ctx->set_depth_test(true);
+        // Tick/axis labels are an annotation layer, not plot geometry.
+        // Keep them readable even when surfaces have already populated depth.
+        text3d_->set_expansion_mode(tgfx::Text3DRenderer::ExpansionMode::ScreenAligned);
+        ctx->set_depth_test(false);
         ctx->set_blend(true);
         text3d_->begin(ctx, label_mvp, cr, cu, font);
 
         const Color4 label_color{0.8f, 0.8f, 0.8f, 1.0f};
-        const double data_size = std::sqrt(
-            (hi[0] - lo[0]) * (hi[0] - lo[0]) +
-            (hi[1] - lo[1]) * (hi[1] - lo[1]) +
-            (hi[2] - lo[2]) * (hi[2] - lo[2]));
+        const double dx = (hi[0] - lo[0]) * x_scale;
+        const double dy = (hi[1] - lo[1]) * y_scale;
+        const double dz = (hi[2] - lo[2]) * z_scale;
+        const double data_size = std::sqrt(dx * dx + dy * dy + dz * dz);
         const float text_size = (float)(data_size * 0.02);
         const double offset = data_size * 0.03;
 

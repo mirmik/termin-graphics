@@ -5,6 +5,8 @@ struct Text3DPush {
     float4 u_color;
     float4 u_cam_right;
     float4 u_cam_up;
+    // x: screen-aligned expansion flag.
+    float4 u_flags;
 };
 
 [[TerminScope("draw")]]
@@ -26,6 +28,14 @@ struct VertexOutput {
 [shader("vertex")]
 VertexOutput vs_main(VertexInput input) {
     VertexOutput output;
+    if (text3d_draw.u_flags.x != 0.0) {
+        float4 clip = mul(text3d_draw.u_mvp, float4(input.world_pos, 1.0));
+        clip.x += input.offset_uv.x * clip.w;
+        clip.y -= input.offset_uv.y * clip.w;
+        output.pos = termin_to_native_clip(clip);
+        output.uv = input.offset_uv.zw;
+        return output;
+    }
     float3 pos =
         input.world_pos +
         text3d_draw.u_cam_right.xyz * input.offset_uv.x +
