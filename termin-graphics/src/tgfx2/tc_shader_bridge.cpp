@@ -697,6 +697,8 @@ static void merge_shader_resource_binding(
             const uint32_t previous_size = existing.size;
             const uint32_t previous_stage_mask = existing.stage_mask;
             const uint32_t previous_scope = existing.scope;
+            const uint32_t previous_field_count = existing.field_count;
+            tc_shader_resource_field* previous_fields = existing.fields;
             const uint8_t previous_has_d3d11_placement =
                 existing.has_d3d11_placement;
             const tc_shader_d3d11_placement previous_d3d11 = existing.d3d11;
@@ -715,10 +717,8 @@ static void merge_shader_resource_binding(
                        existing.stage_mask,
                        incoming.stage_mask);
             }
-            // Free old fields if they exist before overwriting.
-            if (existing.fields) {
-                std::free(existing.fields);
-            }
+            existing.fields = nullptr;
+            existing.field_count = 0;
             existing = clone_binding(incoming);
             existing.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
             existing.stage_mask |= previous_stage_mask;
@@ -734,6 +734,15 @@ static void merge_shader_resource_binding(
             }
             if (incoming.size == 0 && previous_size != 0) {
                 existing.size = previous_size;
+            }
+            if (incoming.field_count == 0 && previous_field_count != 0 &&
+                previous_fields) {
+                existing.fields = previous_fields;
+                existing.field_count = previous_field_count;
+                previous_fields = nullptr;
+            }
+            if (previous_fields) {
+                std::free(previous_fields);
             }
             return;
         }
@@ -803,12 +812,18 @@ static bool apply_shader_resource_layout_sidecar(
     const tc_shader_resource_binding* existing = tc_shader_resource_bindings(shader);
     if (existing && existing_count > 0) {
         for (uint32_t i = 0; i < existing_count; ++i) {
+            const bool catalog_fallback_resource =
+                existing[i].stage_mask == TC_SHADER_STAGE_ALL_GRAPHICS &&
+                existing[i].size == 0 &&
+                existing[i].field_count == 0 &&
+                existing[i].has_d3d11_placement == 0;
             // Built-in catalog layouts are target-agnostic fallback metadata.
             // Target-specific sidecars are authoritative for resources they
             // describe, while prior sidecar data from other stages must still
-            // be merged to preserve stage masks.
-            if (existing[i].stage_mask == TC_SHADER_STAGE_ALL_GRAPHICS &&
-                incoming_has_name(existing[i].name)) {
+            // be merged to preserve stage masks. Parser-owned semantic
+            // metadata such as material UBO size/fields is also preserved when
+            // the sidecar leaves those fields unknown.
+            if (catalog_fallback_resource && incoming_has_name(existing[i].name)) {
                 continue;
             }
             merge_shader_resource_binding(merged, existing[i]);
