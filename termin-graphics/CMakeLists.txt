@@ -64,6 +64,9 @@ set(TGFX_C_SOURCES
 set(TGFX_CXX_SOURCES
     src/tgfx_texture_handle.cpp
 )
+if(TGFX2_ENABLE_OPENGL)
+    list(APPEND TGFX_CXX_SOURCES src/tgfx_opengl_c_api.cpp)
+endif()
 
 add_library(termin_graphics SHARED ${TGFX_C_SOURCES} ${TGFX_CXX_SOURCES})
 if(COMMAND termin_add_alias_if_missing)

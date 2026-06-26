@@ -18,7 +18,7 @@ namespace tgfx {
 class IRenderDevice;
 class RenderContext2;
 
-// Backend-neutral bridge from the canonical core_c tc_mesh resource to tgfx2
+// Backend-neutral bridge from the canonical Termin C mesh resource to tgfx2
 // draw handles. The mesh remains the source of layout/index/topology data;
 // this layer only materializes or reuses backend buffers for the active device.
 struct Tgfx2MeshBinding {

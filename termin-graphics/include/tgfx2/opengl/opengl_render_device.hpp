@@ -28,7 +28,7 @@ struct GLTexture {
     TextureDesc desc;
     GLenum target = GL_TEXTURE_2D;
     // When true the GL texture object is owned externally (for example by
-    // the core_c tc_texture share-group cache) and must NOT be glDeleteTextures'd when this handle is
+    // the Termin C texture share-group cache) and must NOT be glDeleteTextures'd when this handle is
     // destroyed. Used by register_external_texture() to wrap existing GL
     // textures as tgfx2 handles for interop during the Phase 2 migration.
     bool external = false;

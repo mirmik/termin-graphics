@@ -795,7 +795,7 @@ void bind_tgfx2(nb::module_& m) {
             nb::arg("format") = tgfx::PixelFormat::D24_UNorm,
             nb::arg("samples") = 1);
 
-    // --- Helpers: bridge core_c resources to tgfx2 handles ---
+    // --- Helpers: bridge Termin C resources to tgfx2 handles ---
     // Compile a TcShader's GLSL sources into a tgfx2 VS/FS pair.
     // Uses the same tc_shader_ensure_tgfx2 bridge that C++ passes use,
     // so the result is cached on the render device and shared across
