@@ -2,6 +2,7 @@
 // Creates a Vulkan device, a simple shader with one UBO, and checks the
 // reflected bindings.
 #include <array>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <span>
@@ -111,6 +112,15 @@ int main() {
     ubo_desc.usage = tgfx::BufferUsage::Uniform;
     ubo_desc.cpu_visible = true;
     auto ubo = device->create_buffer(ubo_desc);
+    const std::array<float, 16> identity_mvp = {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f,
+    };
+    device->upload_buffer(ubo, std::span<const uint8_t>(
+        reinterpret_cast<const uint8_t*>(identity_mvp.data()),
+        sizeof(float) * identity_mvp.size()));
 
     tgfx::ResourceBinding rb;
     rb.kind = tgfx::ResourceBinding::Kind::UniformBuffer;
@@ -170,7 +180,7 @@ int main() {
     printf("Center pixel read: %s (%.2f %.2f %.2f %.2f)\n",
            ok ? "ok" : "fail", pixel[0], pixel[1], pixel[2], pixel[3]);
 
-    bool pass = ok && pixel[0] > 0.5f && pixel[1] < 0.2f;  // red
+    bool test_passed = ok && pixel[0] > 0.5f && pixel[1] < 0.2f;  // red
 
     // Cleanup
     device->destroy(rset);
@@ -182,8 +192,8 @@ int main() {
     device->destroy(vb);
     device.reset();
 
-    printf("\n%s\n", pass ? "PER-PIPELINE LAYOUT SMOKE: PASSED" : "PER-PIPELINE LAYOUT SMOKE: FAILED");
-    return pass ? 0 : 1;
+    printf("\n%s\n", test_passed ? "PER-PIPELINE LAYOUT SMOKE: PASSED" : "PER-PIPELINE LAYOUT SMOKE: FAILED");
+    return test_passed ? 0 : 1;
 #else
     printf("Vulkan not compiled — skipping\n");
     return 0;
