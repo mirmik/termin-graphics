@@ -168,9 +168,23 @@ void RenderContext2::begin_pass(
         pipeline_dirty_ = true;
     }
 
+    // Keep RenderContext2's high-level viewport cache in sync with the
+    // render target selected by this pass. Some backends set the native
+    // viewport inside begin_render_pass(), but renderers such as Text3D
+    // also need the size on the CPU side for pixel-space expansion.
+    if (color) {
+        const TextureDesc desc = device_.texture_desc(color);
+        viewport_w_ = std::max(1, static_cast<int>(desc.width));
+        viewport_h_ = std::max(1, static_cast<int>(desc.height));
+    } else if (depth) {
+        const TextureDesc desc = device_.texture_desc(depth);
+        viewport_w_ = std::max(1, static_cast<int>(desc.width));
+        viewport_h_ = std::max(1, static_cast<int>(desc.height));
+    }
+
     // Sync the pipeline's multisample state with the attachment's actual
     // sample count. FBOPool may allocate MSAA textures (e.g. scene color
-    // at 4x) while the pipeline cache key defaults to sample_count=1 —
+    // at 4x) while the pipeline cache key defaults to sample_count=1 -
     // Vulkan then refuses vkCreateFramebuffer with SAMPLE_COUNT_4 vs
     // SAMPLE_COUNT_1 mismatch. Pick the attachment that's present; if
     // both are, trust the color (depth should match by construction).
