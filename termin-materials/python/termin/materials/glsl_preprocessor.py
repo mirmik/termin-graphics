@@ -2,6 +2,7 @@ from . import (
     GlslPreprocessor,
     glsl_preprocessor,
     register_glsl_preprocessor,
+    unregister_glsl_preprocessor,
 )
 
 
@@ -24,4 +25,5 @@ __all__ = [
     "has_includes",
     "preprocess_glsl",
     "register_glsl_preprocessor",
+    "unregister_glsl_preprocessor",
 ]

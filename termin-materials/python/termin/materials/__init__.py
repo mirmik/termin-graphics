@@ -23,6 +23,7 @@ from ._materials_native import (
     register_glsl_preprocessor,
     tc_material_count,
     tc_material_get_all_info,
+    unregister_glsl_preprocessor,
 )
 from termin.materials.unknown_material import UnknownMaterial, create_unknown_material
 
@@ -49,4 +50,5 @@ __all__ = [
     "register_glsl_preprocessor",
     "tc_material_count",
     "tc_material_get_all_info",
+    "unregister_glsl_preprocessor",
 ]
