@@ -1,4 +1,4 @@
-// tgfx2_bridge.hpp - Interop helpers between core_c tc_mesh / tc_texture and tgfx2
+// tgfx2_bridge.hpp - Interop helpers between Termin C resources and tgfx2
 #pragma once
 
 #include <cstdint>
@@ -25,7 +25,7 @@ class RenderContext2;
 
 namespace termin {
 
-// Wrap a core_c tc_texture as a tgfx2 TextureHandle. The active
+// Wrap a Termin C texture as a tgfx2 TextureHandle. The active
 // IRenderDevice owns the bridge cache keyed by pool_index + version.
 // OpenGL and Vulkan both create real tgfx2 texture handles through
 // IRenderDevice::ensure_tc_texture().

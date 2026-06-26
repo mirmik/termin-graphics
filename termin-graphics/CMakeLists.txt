@@ -64,6 +64,9 @@ set(TGFX_C_SOURCES
 set(TGFX_CXX_SOURCES
     src/tgfx_texture_handle.cpp
 )
+if(TGFX2_ENABLE_OPENGL)
+    list(APPEND TGFX_CXX_SOURCES src/tgfx_opengl_c_api.cpp)
+endif()
 
 add_library(termin_graphics SHARED ${TGFX_C_SOURCES} ${TGFX_CXX_SOURCES})
 if(COMMAND termin_add_alias_if_missing)
@@ -471,6 +474,15 @@ if(BUILD_TGFX2_TESTS)
 
     # Vulkan smoke test (no GLFW needed — offscreen)
     if(TGFX2_ENABLE_VULKAN)
+        add_executable(tgfx2_per_pipeline_layout_test tests/test_per_pipeline_layout.cpp)
+        target_compile_definitions(tgfx2_per_pipeline_layout_test PRIVATE TGFX2_HAS_VULKAN)
+        target_link_libraries(tgfx2_per_pipeline_layout_test PRIVATE termin_graphics2 Vulkan::Vulkan)
+        termin_set_rpath_test(tgfx2_per_pipeline_layout_test)
+        add_test(NAME tgfx2_per_pipeline_layout_test COMMAND tgfx2_per_pipeline_layout_test)
+        set_tests_properties(tgfx2_per_pipeline_layout_test PROPERTIES
+            TIMEOUT 20
+            SKIP_REGULAR_EXPRESSION "${TGFX2_VULKAN_RUNTIME_SKIP_RE}")
+
         add_executable(tgfx2_vulkan_smoke tests/test_tgfx2_vulkan_smoke.cpp)
         target_compile_definitions(tgfx2_vulkan_smoke
             PRIVATE

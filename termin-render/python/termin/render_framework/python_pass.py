@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 from typing import Any, Callable
 
 from termin.render_framework._render_framework_native import (
@@ -8,7 +9,39 @@ from termin.render_framework._render_framework_native import (
     tc_pass_registry_has,
     tc_pass_registry_is_native,
     tc_pass_registry_register_python,
+    tc_pass_registry_unregister_python,
 )
+
+
+_registered_python_pass_types: set[str] = set()
+
+
+def _log_cleanup_error(message: str) -> None:
+    from tcbase import log
+
+    log.error(message)
+
+
+def _register_python_pass_type(type_name: str, cls: type) -> bool:
+    if tc_pass_registry_is_native(type_name):
+        return False
+    if not tc_pass_registry_has(type_name):
+        tc_pass_registry_register_python(type_name, cls)
+    _registered_python_pass_types.add(type_name)
+    return True
+
+
+def shutdown_python_passes() -> None:
+    """Unregister Python-authored pass classes from the process registry."""
+    for type_name in list(_registered_python_pass_types):
+        try:
+            tc_pass_registry_unregister_python(type_name)
+        except Exception as exc:
+            _log_cleanup_error(f"[PythonFramePass] failed to unregister pass type '{type_name}': {exc}")
+    _registered_python_pass_types.clear()
+
+
+atexit.register(shutdown_python_passes)
 
 
 def _collect_graph_socket_metadata(cls: type) -> dict:
@@ -151,13 +184,11 @@ class PythonFramePass:
         if cls.__name__ in ("PythonFramePass", "FramePass", "RenderFramePass"):
             return
 
-        registered_native = tc_pass_registry_is_native(cls.__name__)
-        if not tc_pass_registry_has(cls.__name__):
-            tc_pass_registry_register_python(cls.__name__, cls)
+        registered_python = _register_python_pass_type(cls.__name__, cls)
 
         registry = _inspect_registry()
 
-        if registered_native:
+        if not registered_python:
             return
 
         own_fields = cls.__dict__.get("inspect_fields", {})
@@ -264,8 +295,7 @@ def deserialize_pass(data: dict, resource_manager=None):
 FramePass = PythonFramePass
 RenderFramePass = PythonFramePass
 
-if not tc_pass_registry_has("PythonFramePass"):
-    tc_pass_registry_register_python("PythonFramePass", PythonFramePass)
+_register_python_pass_type("PythonFramePass", PythonFramePass)
 
 __all__ = [
     "PythonFramePass",

@@ -75,7 +75,6 @@ void tc_pipeline_pool_init(void) {
 
 void tc_pipeline_pool_shutdown(void) {
     if (!g_pipeline_pool) {
-        tc_log_warn("[tc_pipeline_pool] not initialized");
         return;
     }
 

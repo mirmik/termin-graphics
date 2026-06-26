@@ -87,6 +87,11 @@ void bind_shader_parser(nb::module_& m) {
         tgfx_gpu_set_shader_preprocess(glsl_preprocess_callback);
     }, "Register GLSL preprocessor with shader compilation system");
 
+    m.def("unregister_glsl_preprocessor", []() {
+        tgfx_gpu_set_shader_preprocess(nullptr);
+        glsl_preprocessor().set_fallback_loader(nullptr);
+    }, "Unregister the GLSL preprocessor and release Python fallback callbacks");
+
     // --- MaterialProperty (UniformProperty) ---
     nb::class_<MaterialProperty>(m, "MaterialProperty")
         .def(nb::init<>())

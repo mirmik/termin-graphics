@@ -56,6 +56,7 @@ static tc_pass* python_pass_factory(void* userdata) {
                 tc_pass* p = ref.ptr();
                 if (p) {
                     Py_INCREF(py_obj.ptr());
+                    p->bindings[TC_LANGUAGE_PYTHON] = py_obj.ptr();
                     return p;
                 }
             }
@@ -342,7 +343,14 @@ static void py_pass_ref_retain(tc_pass* p) {
 static void py_pass_ref_release(tc_pass* p) {
     if (p && p->body) {
         nb::gil_scoped_acquire gil;
-        Py_DECREF(reinterpret_cast<PyObject*>(p->body));
+        PyObject* body = reinterpret_cast<PyObject*>(p->body);
+        bool factory_owned =
+            p->bindings[TC_LANGUAGE_PYTHON] == body &&
+            !tc_pipeline_handle_valid(p->owner_pipeline);
+        Py_DECREF(body);
+        if (factory_owned) {
+            Py_DECREF(body);
+        }
     }
 }
 
@@ -1023,6 +1031,30 @@ void bind_tc_pass_runtime(nb::module_& m) {
         python_pass_classes()[type_name] = cls_ptr;
         char* stable_name = strdup(type_name.c_str());
         tc_pass_registry_register(type_name.c_str(), python_pass_factory, stable_name, TC_EXTERNAL_PASS);
+    });
+
+    m.def("tc_pass_registry_unregister_python", [](const std::string& type_name) {
+        if (tc_pass_registry_has(type_name.c_str()) &&
+            tc_pass_registry_get_kind(type_name.c_str()) == TC_EXTERNAL_PASS) {
+            tc_pass_registry_unregister(type_name.c_str());
+        }
+        python_pass_classes().erase(type_name);
+    });
+
+    m.def("tc_pass_registry_clear_python", []() {
+        std::vector<std::string> type_names;
+        type_names.reserve(python_pass_classes().size());
+        for (const auto& item : python_pass_classes()) {
+            type_names.push_back(item.first);
+        }
+
+        for (const auto& type_name : type_names) {
+            if (tc_pass_registry_has(type_name.c_str()) &&
+                tc_pass_registry_get_kind(type_name.c_str()) == TC_EXTERNAL_PASS) {
+                tc_pass_registry_unregister(type_name.c_str());
+            }
+        }
+        python_pass_classes().clear();
     });
 
     m.def("tc_pass_registry_has", [](const std::string& type_name) {
