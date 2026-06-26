@@ -838,7 +838,9 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         const double dy = (hi[1] - lo[1]) * y_scale;
         const double dz = (hi[2] - lo[2]) * z_scale;
         const double data_size = std::sqrt(dx * dx + dy * dy + dz * dz);
-        const float text_size = (float)(data_size * 0.02);
+        const float tick_text_size_px = 14.0f;
+        const float axis_label_size_px = 16.0f;
+        const float marker_text_size_px = 14.0f;
         const double offset = data_size * 0.03;
 
         for (int axis = 0; axis < 3; ++axis) {
@@ -866,7 +868,7 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
                 text3d_->draw(axes::format_tick(t), pos,
                               label_color.r, label_color.g,
                               label_color.b, label_color.a,
-                              text_size,
+                              tick_text_size_px,
                               tgfx::Text3DRenderer::Anchor::Center);
             }
         }
@@ -876,7 +878,7 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
             &data.y_label,
             &data.z_label,
         };
-        const float label_size = text_size * 1.12f;
+        const float label_size = axis_label_size_px;
         for (int axis = 0; axis < 3; ++axis) {
             if (axis_labels[axis]->empty()) continue;
 
@@ -907,6 +909,7 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         // Marker value label (always on top).
         if (has_marker_ && marker_mode) {
             ctx->set_depth_test(false);
+            text3d_->set_expansion_mode(tgfx::Text3DRenderer::ExpansionMode::ScreenAligned);
             text3d_->begin(ctx, label_mvp, cr, cu, font);
             char label_buf[64];
             std::snprintf(label_buf, sizeof(label_buf),
@@ -919,7 +922,7 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
             };
             text3d_->draw(label_buf, pos,
                           1.0f, 1.0f, 0.0f, 1.0f,
-                          (float)(data_size * 0.015),
+                          marker_text_size_px,
                           tgfx::Text3DRenderer::Anchor::Center);
             text3d_->end();
             ctx->set_depth_test(true);

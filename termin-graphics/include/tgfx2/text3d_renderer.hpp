@@ -68,8 +68,8 @@ public:
                FontAtlas* font = nullptr);
 
     // Draw a UTF-8 string at world-space `position`. `size` is the text
-    // height in expansion units: world units for WorldPlane, clip/NDC
-    // units for ScreenAligned. Color in [0, 1].
+    // height in renderer units: world units for WorldPlane, display pixels
+    // for ScreenAligned. Color in [0, 1].
     void draw(std::string_view text_utf8,
               const float position[3],
               float r, float g, float b, float a,

@@ -11,6 +11,7 @@ extern "C" {
 #include "tc_profiler.h"
 }
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 #include <string_view>
@@ -919,6 +920,8 @@ void RenderContext2::defer_destroy(BufferHandle handle) {
 // ============================================================================
 
 void RenderContext2::set_viewport(int x, int y, int w, int h) {
+    viewport_w_ = std::max(1, w);
+    viewport_h_ = std::max(1, h);
     cmd_->set_viewport((float)x, (float)y, (float)w, (float)h);
 }
 

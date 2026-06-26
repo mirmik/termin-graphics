@@ -5,7 +5,7 @@ struct Text3DPush {
     float4 u_color;
     float4 u_cam_right;
     float4 u_cam_up;
-    // x: screen-aligned expansion flag.
+    // x: screen-aligned expansion flag, yz: pixel-to-clip scale, w: SDF smoothing.
     float4 u_flags;
 };
 
@@ -30,8 +30,8 @@ VertexOutput vs_main(VertexInput input) {
     VertexOutput output;
     if (text3d_draw.u_flags.x != 0.0) {
         float4 clip = mul(text3d_draw.u_mvp, float4(input.world_pos, 1.0));
-        clip.x += input.offset_uv.x * clip.w;
-        clip.y -= input.offset_uv.y * clip.w;
+        clip.x += input.offset_uv.x * text3d_draw.u_flags.y * clip.w;
+        clip.y -= input.offset_uv.y * text3d_draw.u_flags.z * clip.w;
         output.pos = termin_to_native_clip(clip);
         output.uv = input.offset_uv.zw;
         return output;
@@ -57,7 +57,14 @@ struct FragmentOutput {
 [shader("fragment")]
 FragmentOutput fs_main(FragmentInput input) {
     FragmentOutput output;
-    float a = u_font_atlas.Sample(input.uv).r * text3d_draw.u_color.a;
+    float sample = u_font_atlas.Sample(input.uv).r;
+    float glyph_alpha = sample;
+    if (text3d_draw.u_flags.w != 0.0) {
+        glyph_alpha = smoothstep(0.5 - text3d_draw.u_flags.w,
+                                 0.5 + text3d_draw.u_flags.w,
+                                 sample);
+    }
+    float a = glyph_alpha * text3d_draw.u_color.a;
     if (a < (1.0 / 255.0)) {
         discard;
     }

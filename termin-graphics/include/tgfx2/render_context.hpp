@@ -70,6 +70,9 @@ private:
     bool in_pass_ = false;
     bool pipeline_dirty_ = true;
 
+    int viewport_w_ = 1;
+    int viewport_h_ = 1;
+
     // Symbolic binding support — resolved in flush_resource_set().
     struct SymbolicBinding {
         std::string name;
@@ -333,6 +336,8 @@ public:
 
     // --- Viewport / Scissor ---
     void set_viewport(int x, int y, int w, int h);
+    int viewport_width() const { return viewport_w_; }
+    int viewport_height() const { return viewport_h_; }
     void set_scissor(int x, int y, int w, int h);
     void clear_scissor();
 

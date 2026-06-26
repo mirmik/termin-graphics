@@ -142,17 +142,18 @@ void Text3DRenderer::draw(std::string_view text_utf8,
     if (text_utf8.empty() || font_ == nullptr || ctx_ == nullptr) return;
     const bool screen_aligned = expansion_mode_ == ExpansionMode::ScreenAligned;
 
-    // `size` is the text height in the renderer's expansion units:
-    // world units for WorldPlane, clip/NDC units for ScreenAligned.
-    font_->ensure_glyphs(text_utf8, kText3DRasterPx, ctx_);
+    // `size` is world units for WorldPlane and display pixels for ScreenAligned.
+    const float metrics_size = screen_aligned ? size : kText3DRasterPx;
+    const bool use_sdf = screen_aligned && font_->is_sdf_size(metrics_size);
+    font_->ensure_glyphs(text_utf8, metrics_size, ctx_);
 
-    const float raster_line_h =
-        std::max(1.0f, static_cast<float>(font_->line_height_px(kText3DRasterPx)));
-    const float glyph_scale = size / raster_line_h;
-    const float ascent = static_cast<float>(font_->ascent_px(kText3DRasterPx))
+    const float glyph_scale = screen_aligned
+        ? 1.0f
+        : size / std::max(1.0f, static_cast<float>(font_->line_height_px(kText3DRasterPx)));
+    const float ascent = static_cast<float>(font_->ascent_px(metrics_size))
                        * glyph_scale;
 
-    const float total_w = font_->measure_text(text_utf8, kText3DRasterPx).width
+    const float total_w = font_->measure_text(text_utf8, metrics_size).width
                         * glyph_scale;
 
     float start_x = 0.0f;
@@ -182,9 +183,15 @@ void Text3DRenderer::draw(std::string_view text_utf8,
     push.cam_up[1] = cam_up_[1];
     push.cam_up[2] = cam_up_[2];
     push.flags[0] = screen_aligned ? 1.0f : 0.0f;
+    push.flags[1] = screen_aligned ? 2.0f / static_cast<float>(ctx.viewport_width()) : 1.0f;
+    push.flags[2] = screen_aligned ? 2.0f / static_cast<float>(ctx.viewport_height()) : 1.0f;
+    push.flags[3] = use_sdf
+        ? 1.0f / (2.0f * static_cast<float>(font_->sdf_spread()))
+        : 0.0f;
     ctx.bind_uniform_data("text3d_draw", &push, static_cast<uint32_t>(sizeof(push)));
 
-    TextureHandle atlas = font_->ensure_texture(&ctx);
+    TextureHandle atlas = use_sdf ? font_->sdf_atlas_texture(&ctx)
+                                  : font_->ensure_texture(&ctx);
     ctx.bind_texture("u_font_atlas", atlas);
 
     std::vector<Text3DVertex> verts;
@@ -198,7 +205,7 @@ void Text3DRenderer::draw(std::string_view text_utf8,
     size_t i = 0;
     while (i < text_utf8.size()) {
         uint32_t cp = internal::utf8_decode(text_utf8, i);
-        auto gi = font_->get_glyph(cp, kText3DRasterPx);
+        auto gi = font_->get_glyph(cp, metrics_size);
         if (!gi) continue;
 
         const float char_w = gi->width_px * glyph_scale;
