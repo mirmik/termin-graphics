@@ -221,10 +221,15 @@ void apply_default_resource_scope(
 
 void normalize_scope_first_binding_slots(
     std::vector<ShaderResourceBinding>& resources,
-    bool normalize_transient_resources
+    bool normalize_transient_resources,
+    const std::string& target
 ) {
     uint32_t next_material_texture_binding = 4;
-    uint32_t next_transient_resource_binding = 32;
+    // Scope-first descriptor ranges use 32+ for transient resources on
+    // descriptor-based backends. OpenGL binding numbers for samplers are
+    // physical texture units, so keep them in a low, portable range.
+    uint32_t next_transient_resource_binding =
+        target == "opengl" ? 9u : 32u;
     for (ShaderResourceBinding& resource : resources) {
         resource.set = 0;
         if (resource.kind == "constant_buffer" || resource.kind == "uniform_buffer") {
@@ -1041,7 +1046,8 @@ static bool collect_resource_bindings(
     apply_default_resource_scope(resources, options.default_scope);
     normalize_scope_first_binding_slots(
         resources,
-        options.language == "slang");
+        options.language == "slang",
+        options.target);
     if (options.target == "d3d11") {
         assign_d3d11_register_placement(resources);
     }

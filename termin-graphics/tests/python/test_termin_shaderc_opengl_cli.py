@@ -109,6 +109,66 @@ def test_termin_shaderc_patches_opengl_slang_constant_buffer_bindings(tmp_path: 
     ]
 
 
+def test_termin_shaderc_patches_opengl_slang_transient_texture_bindings(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "[[TerminScope(\"transient\")]] Sampler2D u_font_atlas;\n"
+        "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
+        "    return u_font_atlas.Sample(uv);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.frag.glsl"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_text(\n"
+        "    'layout(binding = 0) uniform sampler2D u_font_atlas_0;\\n',\n"
+        "    encoding='utf-8')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {\n"
+        "            'name': 'u_font_atlas',\n"
+        "            'userAttribs': [{'name': 'TerminScope', 'arguments': ['transient']}],\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 0},\n"
+        "            'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True},\n"
+        "        },\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc([
+        "compile",
+        "--language",
+        "slang",
+        "--target",
+        "opengl",
+        "--stage",
+        "fragment",
+        "--entry",
+        "main",
+        "--input",
+        str(shader),
+        "--output",
+        str(output),
+        "--slangc",
+        str(fake_slangc),
+    ])
+
+    assert result.returncode == 0, result.stderr
+    glsl = output.read_text(encoding="utf-8")
+    assert "layout(binding = 9) uniform sampler2D u_font_atlas_0" in glsl
+    layout = json.loads((tmp_path / "out.frag.glsl.layout.json").read_text(encoding="utf-8"))
+    assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
+        ("u_font_atlas", "transient", 9),
+    ]
+
 def test_termin_shaderc_patches_opengl_slang_material_texture_bindings(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
