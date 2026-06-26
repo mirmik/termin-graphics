@@ -14,6 +14,7 @@
 #include "tgfx2/device_factory.hpp"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/pixel_format_utils.hpp"
+#include "tgfx2/pipeline_cache.hpp"
 #include "tgfx2/render_context.hpp"
 #include "tgfx2/render_runtime.hpp"
 #include "tgfx/tgfx2_interop.h"
@@ -231,6 +232,23 @@ tgfx::RenderContext2* RenderEngine::tgfx2_ctx() {
 
 tgfx::IRenderDevice* RenderEngine::tgfx2_device() {
     return tgfx2_runtime_ ? &tgfx2_runtime_->device() : nullptr;
+}
+
+RenderPipelineCacheStats RenderEngine::pipeline_cache_stats() const {
+    if (!tgfx2_runtime_) {
+        return {};
+    }
+
+    const tgfx::PipelineCacheStats cache_stats = tgfx2_runtime_->cache_stats();
+    RenderPipelineCacheStats out;
+    out.hit_count = cache_stats.hit_count;
+    out.miss_count = cache_stats.miss_count;
+    out.create_pipeline_count = cache_stats.create_pipeline_count;
+    out.unique_vertex_layout_signature_count =
+        cache_stats.unique_vertex_layout_signature_count;
+    out.cached_pipeline_count = cache_stats.cached_pipeline_count;
+    out.vertex_layout_signature_hashes = cache_stats.vertex_layout_signature_hashes;
+    return out;
 }
 
 void RenderEngine::ensure_tgfx2() {

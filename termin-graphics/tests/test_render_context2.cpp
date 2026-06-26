@@ -295,6 +295,7 @@ static void test_pipeline_cache_reuse(tgfx::IRenderDevice& device, tgfx::Pipelin
     printf("\n--- Pipeline Cache Reuse ---\n");
 
     size_t before = cache.size();
+    tgfx::PipelineCacheStats stats_before = cache.stats();
 
     // Create same shaders and draw twice — should reuse pipeline
     tgfx::ShaderDesc vs_desc;
@@ -312,10 +313,23 @@ static void test_pipeline_cache_reuse(tgfx::IRenderDevice& device, tgfx::Pipelin
     key.vertex_shader = vs;
     key.fragment_shader = fs;
     auto p1 = cache.get(key);
+    tgfx::PipelineCacheStats stats_after_first = cache.stats();
+    CHECK(stats_after_first.miss_count == stats_before.miss_count + 1,
+          "first lookup records pipeline cache miss");
+    CHECK(stats_after_first.create_pipeline_count == stats_before.create_pipeline_count + 1,
+          "first lookup records create_pipeline");
+    CHECK(stats_after_first.unique_vertex_layout_signature_count ==
+              stats_before.unique_vertex_layout_signature_count + 1,
+          "first lookup records new vertex layout signature");
 
     // Same key — should return same handle
     auto p2 = cache.get(key);
     CHECK(p1 == p2, "same key returns same pipeline handle");
+    tgfx::PipelineCacheStats stats_after_hit = cache.stats();
+    CHECK(stats_after_hit.hit_count == stats_before.hit_count + 1,
+          "second lookup records pipeline cache hit");
+    CHECK(stats_after_hit.create_pipeline_count == stats_after_first.create_pipeline_count,
+          "cache hit does not create a pipeline");
 
     // Different state — should create new pipeline
     key.depth_stencil.depth_test = false;
@@ -323,6 +337,15 @@ static void test_pipeline_cache_reuse(tgfx::IRenderDevice& device, tgfx::Pipelin
     CHECK(p3 != p1, "different state creates different pipeline");
 
     CHECK(cache.size() == before + 2, "exactly 2 new pipelines cached");
+    tgfx::PipelineCacheStats stats_after_second_miss = cache.stats();
+    CHECK(stats_after_second_miss.miss_count == stats_before.miss_count + 2,
+          "different state records second pipeline cache miss");
+    CHECK(stats_after_second_miss.create_pipeline_count == stats_before.create_pipeline_count + 2,
+          "different state records second create_pipeline");
+    CHECK(stats_after_second_miss.cached_pipeline_count == before + 2,
+          "stats report cached pipeline count");
+    CHECK(!stats_after_second_miss.vertex_layout_signature_hashes.empty(),
+          "stats expose vertex layout signature hashes");
 
     device.destroy(vs);
     device.destroy(fs);

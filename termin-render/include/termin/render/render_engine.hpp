@@ -33,6 +33,15 @@ class RenderRuntime;
 
 namespace termin {
 
+struct RenderPipelineCacheStats {
+    uint64_t hit_count = 0;
+    uint64_t miss_count = 0;
+    uint64_t create_pipeline_count = 0;
+    uint64_t unique_vertex_layout_signature_count = 0;
+    size_t cached_pipeline_count = 0;
+    std::vector<size_t> vertex_layout_signature_hashes;
+};
+
 struct RenderTargetContext {
 public:
     std::string name;
@@ -78,6 +87,8 @@ public:
     // Access the tgfx2 render device that owns all texture/buffer
     // handles used by the engine. Lifetime-tied to the RenderEngine.
     tgfx::IRenderDevice* tgfx2_device();
+
+    RenderPipelineCacheStats pipeline_cache_stats() const;
 
 public:
     RenderEngine();

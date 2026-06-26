@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "tgfx2/tgfx2_api.h"
 #include "tgfx2/enums.hpp"
@@ -52,11 +53,23 @@ struct PipelineCacheKeyHash {
     size_t operator()(const PipelineCacheKey& k) const;
 };
 
+struct PipelineCacheStats {
+    uint64_t hit_count = 0;
+    uint64_t miss_count = 0;
+    uint64_t create_pipeline_count = 0;
+    uint64_t unique_vertex_layout_signature_count = 0;
+    size_t cached_pipeline_count = 0;
+    std::vector<size_t> vertex_layout_signature_hashes;
+};
+
 class TGFX2_TYPE_API PipelineCache {
 private:
     IRenderDevice& device_;
     std::unordered_map<PipelineCacheKey, PipelineHandle, PipelineCacheKeyHash> cache_;
     std::unordered_set<size_t> observed_vertex_layout_hashes_;
+    uint64_t hit_count_ = 0;
+    uint64_t miss_count_ = 0;
+    uint64_t create_pipeline_count_ = 0;
 
 public:
     explicit PipelineCache(IRenderDevice& device);
@@ -67,6 +80,8 @@ public:
 
     // Clear all cached pipelines (e.g. on device lost).
     void clear();
+
+    PipelineCacheStats stats() const;
 
     // Number of cached pipelines.
     size_t size() const { return cache_.size(); }

@@ -65,6 +65,13 @@ PipelineCache& RenderRuntime::cache() {
     return *owned_cache_;
 }
 
+PipelineCacheStats RenderRuntime::cache_stats() const {
+    if (!owned_cache_) {
+        return {};
+    }
+    return owned_cache_->stats();
+}
+
 RenderContext2& RenderRuntime::context() {
     if (borrowed_ctx_) {
         return *borrowed_ctx_;

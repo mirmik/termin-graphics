@@ -433,6 +433,7 @@ if(BUILD_TGFX2_TESTS)
         tests/main.cpp
         tests/test_tgfx2_device_factory.cpp
         tests/test_tgfx2_line_mesh_builder.cpp
+        tests/test_tgfx2_pipeline_cache_stats.cpp
         tests/test_tgfx2_tc_mesh_bridge.cpp
     )
     target_include_directories(tgfx2_device_factory_test PRIVATE

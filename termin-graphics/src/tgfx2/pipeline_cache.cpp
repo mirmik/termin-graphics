@@ -6,6 +6,7 @@
 #include "vulkan/vulkan_stats.hpp"
 #endif
 
+#include <algorithm>
 #include <functional>
 
 namespace tgfx {
@@ -130,15 +131,19 @@ PipelineCache::~PipelineCache() {
 PipelineHandle PipelineCache::get(const PipelineCacheKey& key) {
     auto it = cache_.find(key);
     if (it != cache_.end()) {
+        ++hit_count_;
 #ifdef TGFX2_HAS_VULKAN
         g_pipeline_cache_hit_count.fetch_add(1, std::memory_order_relaxed);
 #endif
         return it->second;
     }
 
+    ++miss_count_;
+    const bool new_vertex_layout_signature =
+        observed_vertex_layout_hashes_.insert(key.vertex_layouts_hash).second;
 #ifdef TGFX2_HAS_VULKAN
     g_pipeline_cache_miss_count.fetch_add(1, std::memory_order_relaxed);
-    if (observed_vertex_layout_hashes_.insert(key.vertex_layouts_hash).second) {
+    if (new_vertex_layout_signature) {
         g_pipeline_cache_unique_vertex_layout_count.fetch_add(1, std::memory_order_relaxed);
     }
 #endif
@@ -165,6 +170,7 @@ PipelineHandle PipelineCache::get(const PipelineCacheKey& key) {
     desc.sample_count = key.sample_count;
 
     auto handle = device_.create_pipeline(desc);
+    ++create_pipeline_count_;
     cache_[key] = handle;
     return handle;
 }
@@ -175,6 +181,22 @@ void PipelineCache::clear() {
     }
     cache_.clear();
     observed_vertex_layout_hashes_.clear();
+}
+
+PipelineCacheStats PipelineCache::stats() const {
+    PipelineCacheStats out;
+    out.hit_count = hit_count_;
+    out.miss_count = miss_count_;
+    out.create_pipeline_count = create_pipeline_count_;
+    out.cached_pipeline_count = cache_.size();
+    out.unique_vertex_layout_signature_count =
+        static_cast<uint64_t>(observed_vertex_layout_hashes_.size());
+    out.vertex_layout_signature_hashes.assign(
+        observed_vertex_layout_hashes_.begin(),
+        observed_vertex_layout_hashes_.end());
+    std::sort(out.vertex_layout_signature_hashes.begin(),
+              out.vertex_layout_signature_hashes.end());
+    return out;
 }
 
 } // namespace tgfx

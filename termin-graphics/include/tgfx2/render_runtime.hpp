@@ -10,6 +10,7 @@ namespace tgfx {
 
 class IRenderDevice;
 class PipelineCache;
+struct PipelineCacheStats;
 class RenderContext2;
 
 class TGFX2_TYPE_API RenderRuntime {
@@ -29,6 +30,7 @@ public:
     const IRenderDevice& device() const;
 
     PipelineCache& cache();
+    PipelineCacheStats cache_stats() const;
     RenderContext2& context();
 
     bool owns_device() const { return static_cast<bool>(owned_device_); }
