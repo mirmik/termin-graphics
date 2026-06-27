@@ -8,6 +8,7 @@
 #include "tgfx/render_state.hpp"
 #include <tgfx/tgfx_shader_handle.hpp>
 #include <tcbase/tc_log.hpp>
+#include <cstring>
 #include <initializer_list>
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
@@ -199,6 +200,32 @@ std::vector<tc_shader_contract_vertex_input> infer_material_vertex_contract(
     return inputs;
 }
 
+std::vector<tc_shader_resource_requirement> collect_shader_resource_requirements(
+    const tc_shader* shader)
+{
+    std::vector<tc_shader_resource_requirement> out;
+    if (!shader) {
+        return out;
+    }
+    const uint32_t count = tc_shader_resource_binding_count(shader);
+    const tc_shader_resource_binding* bindings = tc_shader_resource_bindings(shader);
+    out.reserve(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        tc_shader_resource_requirement requirement{};
+        std::strncpy(requirement.name, bindings[i].name, TC_SHADER_RESOURCE_NAME_MAX - 1);
+        requirement.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+        requirement.kind = bindings[i].kind;
+        requirement.scope = bindings[i].scope;
+        requirement.stage_mask = bindings[i].stage_mask;
+        requirement.size = bindings[i].size;
+        requirement.element_stride = 0;
+        requirement.fields = bindings[i].fields;
+        requirement.field_count = bindings[i].field_count;
+        out.push_back(requirement);
+    }
+    return out;
+}
+
 void apply_parser_shader_contract(
     tc_shader* shader,
     const ShaderPhase& shader_phase)
@@ -210,17 +237,18 @@ void apply_parser_shader_contract(
 
     std::vector<tc_shader_contract_vertex_input> vertex_inputs =
         infer_material_vertex_contract(shader_phase);
+    std::vector<tc_shader_resource_requirement> resources =
+        collect_shader_resource_requirements(shader);
 
     tc_shader_contract_desc desc{};
     desc.schema_version = TC_SHADER_CONTRACT_SCHEMA_VERSION;
-    desc.producer_kind = TC_SHADER_CONTRACT_PRODUCER_SHADER_PARSER;
-    desc.draw_kind = TC_SHADER_CONTRACT_DRAW_MESH;
+    desc.source_kind = TC_SHADER_CONTRACT_SOURCE_DECLARED;
     desc.vertex_inputs = vertex_inputs.empty() ? nullptr : vertex_inputs.data();
     desc.vertex_input_count = static_cast<uint32_t>(vertex_inputs.size());
-    desc.resources = tc_shader_resource_bindings(shader);
-    desc.resource_count = tc_shader_resource_binding_count(shader);
+    desc.resources = resources.empty() ? nullptr : resources.data();
+    desc.resource_count = static_cast<uint32_t>(resources.size());
     desc.debug_name = shader->name ? shader->name : shader->uuid;
-    desc.producer_debug_name = "termin-materials shader parser";
+    desc.source_debug_name = "termin-materials shader parser";
 
     if (!tc_shader_set_contract(shader, &desc)) {
         tc::Log::error(

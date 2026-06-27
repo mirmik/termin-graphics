@@ -265,31 +265,6 @@ uint32_t binding_slot_for_catalog_resource(
     return 0;
 }
 
-bool catalog_has_stage(const nos::trent& entry, const char* stage_name) {
-    const nos::trent* stages = dict_get(entry, "stages");
-    if (!stages || stages->get_type() != nos::trent_type::dict) {
-        return false;
-    }
-    return dict_get(*stages, stage_name) != nullptr;
-}
-
-uint32_t default_contract_draw_kind_for_catalog_entry(const nos::trent& entry) {
-    const bool has_vertex = catalog_has_stage(entry, "vertex");
-    const bool has_fragment = catalog_has_stage(entry, "fragment");
-    if (!has_vertex && has_fragment) {
-        return TC_SHADER_CONTRACT_DRAW_FULLSCREEN;
-    }
-    return TC_SHADER_CONTRACT_DRAW_MESH;
-}
-
-bool contract_draw_kind_from_catalog(const nos::trent& entry, uint32_t* out) {
-    if (!out) {
-        return false;
-    }
-    *out = default_contract_draw_kind_for_catalog_entry(entry);
-    return true;
-}
-
 std::string canonical_vertex_semantic(const nos::trent& input) {
     const std::string semantic = ascii_upper(string_field(input, "semantic"));
     if (semantic == "POSITION") {
@@ -388,29 +363,54 @@ void collect_catalog_vertex_inputs(
     }
 }
 
+std::vector<tc_shader_resource_requirement> collect_shader_resource_requirements(
+    const tc_shader* shader)
+{
+    std::vector<tc_shader_resource_requirement> out;
+    if (!shader) {
+        return out;
+    }
+    const uint32_t count = tc_shader_resource_binding_count(shader);
+    const tc_shader_resource_binding* bindings = tc_shader_resource_bindings(shader);
+    out.reserve(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        tc_shader_resource_requirement requirement{};
+        std::strncpy(
+            requirement.name,
+            bindings[i].name,
+            TC_SHADER_RESOURCE_NAME_MAX - 1);
+        requirement.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+        requirement.kind = bindings[i].kind;
+        requirement.scope = bindings[i].scope;
+        requirement.stage_mask = bindings[i].stage_mask;
+        requirement.size = bindings[i].size;
+        requirement.element_stride = 0;
+        requirement.fields = bindings[i].fields;
+        requirement.field_count = bindings[i].field_count;
+        out.push_back(requirement);
+    }
+    return out;
+}
+
 bool apply_catalog_shader_contract(tc_shader* shader, const nos::trent& entry) {
     if (!shader) {
         return false;
     }
 
-    uint32_t draw_kind = TC_SHADER_CONTRACT_DRAW_MESH;
-    if (!contract_draw_kind_from_catalog(entry, &draw_kind)) {
-        return false;
-    }
-
     std::vector<tc_shader_contract_vertex_input> vertex_inputs;
     collect_catalog_vertex_inputs(entry, vertex_inputs);
+    std::vector<tc_shader_resource_requirement> resources =
+        collect_shader_resource_requirements(shader);
 
     tc_shader_contract_desc desc{};
     desc.schema_version = TC_SHADER_CONTRACT_SCHEMA_VERSION;
-    desc.producer_kind = TC_SHADER_CONTRACT_PRODUCER_ENGINE_GENERATED;
-    desc.draw_kind = draw_kind;
+    desc.source_kind = TC_SHADER_CONTRACT_SOURCE_GENERATED;
     desc.vertex_inputs = vertex_inputs.empty() ? nullptr : vertex_inputs.data();
     desc.vertex_input_count = static_cast<uint32_t>(vertex_inputs.size());
-    desc.resources = tc_shader_resource_bindings(shader);
-    desc.resource_count = tc_shader_resource_binding_count(shader);
+    desc.resources = resources.empty() ? nullptr : resources.data();
+    desc.resource_count = static_cast<uint32_t>(resources.size());
     desc.debug_name = shader->name ? shader->name : shader->uuid;
-    desc.producer_debug_name = "builtin shader catalog";
+    desc.source_debug_name = "builtin shader catalog";
 
     if (!tc_shader_set_contract(shader, &desc)) {
         tc::Log::error(

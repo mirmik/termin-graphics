@@ -71,6 +71,33 @@ nb::dict shader_resource_binding_to_dict(const tc_shader_resource_binding& bindi
     return result;
 }
 
+nb::dict shader_resource_requirement_to_dict(
+    const tc_shader_resource_requirement& requirement)
+{
+    nb::dict result;
+    result["name"] = std::string(requirement.name);
+    result["kind"] = requirement.kind;
+    result["kind_name"] = shader_resource_kind_name(requirement.kind);
+    result["scope"] = requirement.scope;
+    result["scope_name"] = shader_resource_scope_name(requirement.scope);
+    result["stage_mask"] = requirement.stage_mask;
+    result["size"] = requirement.size;
+    result["element_stride"] = requirement.element_stride;
+    if (requirement.fields && requirement.field_count > 0) {
+        nb::list fields;
+        for (uint32_t i = 0; i < requirement.field_count; ++i) {
+            nb::dict fd;
+            fd["name"] = std::string(requirement.fields[i].name);
+            fd["type"] = std::string(requirement.fields[i].type);
+            fd["offset"] = requirement.fields[i].offset;
+            fd["size"] = requirement.fields[i].size;
+            fields.append(fd);
+        }
+        result["fields"] = fields;
+    }
+    return result;
+}
+
 } // namespace
 
 void bind_shader(nb::module_& m) {
@@ -172,13 +199,12 @@ void bind_shader(nb::module_& m) {
 
             nb::dict result;
             result["schema_version"] = view.schema_version;
-            result["producer_kind"] = view.producer_kind;
-            result["draw_kind"] = view.draw_kind;
+            result["source_kind"] = view.source_kind;
             result["debug_name"] =
                 view.debug_name ? std::string(view.debug_name) : std::string();
-            result["producer_debug_name"] =
-                view.producer_debug_name
-                    ? std::string(view.producer_debug_name)
+            result["source_debug_name"] =
+                view.source_debug_name
+                    ? std::string(view.source_debug_name)
                     : std::string();
 
             nb::list vertex_inputs;
@@ -191,18 +217,9 @@ void bind_shader(nb::module_& m) {
             }
             result["vertex_inputs"] = vertex_inputs;
 
-            nb::list storage_buffers;
-            for (uint32_t i = 0; i < view.storage_buffer_count; ++i) {
-                nb::dict buffer;
-                buffer["resource_name"] = std::string(view.storage_buffers[i].resource_name);
-                buffer["stride"] = view.storage_buffers[i].stride;
-                storage_buffers.append(buffer);
-            }
-            result["storage_buffers"] = storage_buffers;
-
             nb::list resources;
             for (uint32_t i = 0; i < view.resource_count; ++i) {
-                resources.append(shader_resource_binding_to_dict(view.resources[i]));
+                resources.append(shader_resource_requirement_to_dict(view.resources[i]));
             }
             result["resources"] = resources;
             return result;

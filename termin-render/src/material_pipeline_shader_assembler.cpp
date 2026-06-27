@@ -37,13 +37,6 @@ uint32_t contract_value_type(MaterialPipelineValueType type)
     return TC_SHADER_CONTRACT_VALUE_UNKNOWN;
 }
 
-uint32_t contract_draw_kind(const VertexTransformContract& contract)
-{
-    return contract.instance_streams.empty()
-        ? TC_SHADER_CONTRACT_DRAW_MESH
-        : TC_SHADER_CONTRACT_DRAW_INSTANCED_MESH;
-}
-
 MaterialPipelineResourceDecl resource_decl_from_binding(
     const tc_shader_resource_binding& binding,
     MaterialPipelineResourceOwner owner)
@@ -77,6 +70,23 @@ tc_shader_resource_binding resource_binding_from_decl(
     binding.stage_mask = decl.requirement.stage_mask;
     binding.size = decl.requirement.size;
     return binding;
+}
+
+tc_shader_resource_requirement resource_requirement_from_decl(
+    const MaterialPipelineResourceDecl& decl)
+{
+    tc_shader_resource_requirement requirement{};
+    std::snprintf(
+        requirement.name,
+        sizeof(requirement.name),
+        "%s",
+        decl.requirement.name.c_str());
+    requirement.kind = decl.requirement.kind;
+    requirement.scope = decl.requirement.scope;
+    requirement.stage_mask = decl.requirement.stage_mask;
+    requirement.size = decl.requirement.size;
+    requirement.element_stride = 0;
+    return requirement;
 }
 
 void append_resources(
@@ -129,20 +139,19 @@ bool append_contract_inputs(
     return true;
 }
 
-void append_contract_storage_buffers(
+void apply_instance_stream_strides(
     const VertexTransformContract& vertex_transform,
-    std::vector<tc_shader_contract_storage_buffer>& out)
+    std::vector<tc_shader_resource_requirement>& resources)
 {
-    out.reserve(vertex_transform.instance_streams.size());
     for (const InstanceStreamDecl& stream : vertex_transform.instance_streams) {
-        tc_shader_contract_storage_buffer storage{};
-        std::snprintf(
-            storage.resource_name,
-            sizeof(storage.resource_name),
-            "%s",
-            stream.name.c_str());
-        storage.stride = stream.stride;
-        out.push_back(storage);
+        for (tc_shader_resource_requirement& resource : resources) {
+            if (std::strncmp(
+                    resource.name,
+                    stream.name.c_str(),
+                    TC_SHADER_RESOURCE_NAME_MAX) == 0) {
+                resource.element_stride = stream.stride;
+            }
+        }
     }
 }
 
@@ -274,15 +283,16 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
 
     std::vector<tc_shader_resource_binding> bindings;
     bindings.reserve(merged.resources.size());
+    std::vector<tc_shader_resource_requirement> requirements;
+    requirements.reserve(merged.resources.size());
     for (const MaterialPipelineResourceDecl& resource : merged.resources) {
         bindings.push_back(resource_binding_from_decl(resource));
+        requirements.push_back(resource_requirement_from_decl(resource));
     }
+    apply_instance_stream_strides(request.vertex_transform, requirements);
 
     std::vector<tc_shader_contract_vertex_input> vertex_inputs;
     append_contract_inputs(request.vertex_transform, vertex_inputs);
-
-    std::vector<tc_shader_contract_storage_buffer> storage_buffers;
-    append_contract_storage_buffers(request.vertex_transform, storage_buffers);
 
     const std::string shader_name = default_shader_name(request);
     const std::string fragment_source = request.pass.uses_material_fragment
@@ -343,16 +353,13 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
 
     tc_shader_contract_desc contract_desc{};
     contract_desc.schema_version = TC_SHADER_CONTRACT_SCHEMA_VERSION;
-    contract_desc.producer_kind = TC_SHADER_CONTRACT_PRODUCER_MATERIAL_PIPELINE;
-    contract_desc.draw_kind = contract_draw_kind(request.vertex_transform);
+    contract_desc.source_kind = TC_SHADER_CONTRACT_SOURCE_ASSEMBLED;
     contract_desc.vertex_inputs = vertex_inputs.empty() ? nullptr : vertex_inputs.data();
     contract_desc.vertex_input_count = static_cast<uint32_t>(vertex_inputs.size());
-    contract_desc.storage_buffers = storage_buffers.empty() ? nullptr : storage_buffers.data();
-    contract_desc.storage_buffer_count = static_cast<uint32_t>(storage_buffers.size());
-    contract_desc.resources = bindings.empty() ? nullptr : bindings.data();
-    contract_desc.resource_count = static_cast<uint32_t>(bindings.size());
+    contract_desc.resources = requirements.empty() ? nullptr : requirements.data();
+    contract_desc.resource_count = static_cast<uint32_t>(requirements.size());
     contract_desc.debug_name = shader_name.c_str();
-    contract_desc.producer_debug_name = "material_pipeline";
+    contract_desc.source_debug_name = "material_pipeline_assembler";
     if (!tc_shader_set_contract(shader, &contract_desc)) {
         result.diagnostics.push_back(diagnostic(
             MaterialPipelineDiagnosticCode::ShaderCreationFailed,

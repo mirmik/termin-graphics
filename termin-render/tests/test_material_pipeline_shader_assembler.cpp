@@ -44,7 +44,7 @@ bool contract_has_vertex_input(
     return false;
 }
 
-const tc_shader_resource_binding* contract_resource(
+const tc_shader_resource_requirement* contract_resource(
     const tc_shader_contract_view& view,
     const char* name)
 {
@@ -117,17 +117,19 @@ TEST_CASE("material pipeline assembler attaches skinned shader contract") {
     REQUIRE(result.ok());
     tc_shader_contract_view view{};
     REQUIRE(tc_shader_get_contract_view(result.shader.get(), &view));
-    CHECK_EQ(view.producer_kind, TC_SHADER_CONTRACT_PRODUCER_MATERIAL_PIPELINE);
-    CHECK_EQ(view.draw_kind, TC_SHADER_CONTRACT_DRAW_MESH);
+    CHECK_EQ(view.source_kind, TC_SHADER_CONTRACT_SOURCE_ASSEMBLED);
     CHECK(contract_has_vertex_input(view, "position"));
     CHECK(contract_has_vertex_input(view, "joints"));
     CHECK(contract_has_vertex_input(view, "weights"));
 
-    const tc_shader_resource_binding* bone =
+    const tc_shader_resource_requirement* bone =
         contract_resource(view, TC_SHADER_RESOURCE_BONE_BLOCK);
     REQUIRE(bone != nullptr);
     CHECK_EQ(bone->scope, TC_SHADER_RESOURCE_SCOPE_DRAW);
-    CHECK_EQ(bone->binding, 16u);
+    const tc_shader_resource_binding* bone_layout =
+        tc_shader_find_resource_binding(result.shader.get(), TC_SHADER_RESOURCE_BONE_BLOCK);
+    REQUIRE(bone_layout != nullptr);
+    CHECK_EQ(bone_layout->binding, 16u);
 
     tc_shader_destroy(result.shader.handle);
     tc_shader_shutdown();
@@ -154,20 +156,19 @@ TEST_CASE("material pipeline assembler attaches foliage instance contract") {
     REQUIRE(result.ok());
     tc_shader_contract_view view{};
     REQUIRE(tc_shader_get_contract_view(result.shader.get(), &view));
-    CHECK_EQ(view.draw_kind, TC_SHADER_CONTRACT_DRAW_INSTANCED_MESH);
     CHECK(contract_has_vertex_input(view, "position"));
     CHECK(contract_has_vertex_input(view, "normal"));
     CHECK(contract_has_vertex_input(view, "uv"));
 
-    REQUIRE_EQ(view.storage_buffer_count, 1u);
-    CHECK(std::strcmp(view.storage_buffers[0].resource_name, "foliage_instances") == 0);
-    CHECK_EQ(view.storage_buffers[0].stride, 32u);
-
-    const tc_shader_resource_binding* instances =
+    const tc_shader_resource_requirement* instances =
         contract_resource(view, "foliage_instances");
     REQUIRE(instances != nullptr);
     CHECK_EQ(instances->kind, TC_SHADER_RESOURCE_STORAGE_BUFFER);
-    CHECK_EQ(instances->binding, 25u);
+    CHECK_EQ(instances->element_stride, 32u);
+    const tc_shader_resource_binding* instance_layout =
+        tc_shader_find_resource_binding(result.shader.get(), "foliage_instances");
+    REQUIRE(instance_layout != nullptr);
+    CHECK_EQ(instance_layout->binding, 25u);
 
     tc_shader_destroy(result.shader.handle);
     tc_shader_shutdown();
