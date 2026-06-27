@@ -49,14 +49,14 @@ MaterialPipelineResourceDecl resource_decl_from_binding(
     MaterialPipelineResourceOwner owner)
 {
     MaterialPipelineResourceDecl result{};
-    result.name = binding.name;
-    result.kind = binding.kind;
-    result.scope = binding.scope;
-    result.set = binding.set;
-    result.binding = binding.binding;
-    result.has_placement = true;
-    result.stage_mask = binding.stage_mask;
-    result.size = binding.size;
+    result.requirement.name = binding.name;
+    result.requirement.kind = binding.kind;
+    result.requirement.scope = binding.scope;
+    result.requirement.stage_mask = binding.stage_mask;
+    result.requirement.size = binding.size;
+    result.placement.set = binding.set;
+    result.placement.binding = binding.binding;
+    result.placement.resolved = true;
     result.owner = owner;
     return result;
 }
@@ -69,13 +69,13 @@ tc_shader_resource_binding resource_binding_from_decl(
         binding.name,
         sizeof(binding.name),
         "%s",
-        decl.name.c_str());
-    binding.kind = decl.kind;
-    binding.scope = decl.scope;
-    binding.set = decl.set;
-    binding.binding = decl.binding;
-    binding.stage_mask = decl.stage_mask;
-    binding.size = decl.size;
+        decl.requirement.name.c_str());
+    binding.kind = decl.requirement.kind;
+    binding.scope = decl.requirement.scope;
+    binding.set = decl.placement.set;
+    binding.binding = decl.placement.binding;
+    binding.stage_mask = decl.requirement.stage_mask;
+    binding.size = decl.requirement.size;
     return binding;
 }
 
@@ -254,10 +254,10 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
     append_resources(resource_decls, request.pass.resources);
 
     for (const MaterialPipelineResourceDecl& resource : resource_decls) {
-        if (!resource.has_placement) {
+        if (!resource.placement.resolved) {
             result.diagnostics.push_back(diagnostic(
                 MaterialPipelineDiagnosticCode::MissingResourcePlacement,
-                "resource '" + resource.name +
+                "resource '" + resource.requirement.name +
                     "' has no resolved backend placement"));
         }
     }

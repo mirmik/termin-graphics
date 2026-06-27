@@ -30,7 +30,7 @@ const termin::MaterialPipelineResourceDecl* find_resource(
         contract.resources.begin(),
         contract.resources.end(),
         [&](const termin::MaterialPipelineResourceDecl& resource) {
-            return resource.name == name;
+            return resource.requirement.name == name;
         });
     return it == contract.resources.end() ? nullptr : &(*it);
 }
@@ -57,7 +57,7 @@ TEST_CASE("Skinned material transform declares template, inputs, and bone block"
     const termin::MaterialPipelineResourceDecl* bone_block =
         find_resource(contract, TC_SHADER_RESOURCE_BONE_BLOCK);
     REQUIRE(bone_block != nullptr);
-    CHECK_EQ(bone_block->scope, static_cast<uint32_t>(TC_SHADER_RESOURCE_SCOPE_DRAW));
+    CHECK_EQ(bone_block->requirement.scope, static_cast<uint32_t>(TC_SHADER_RESOURCE_SCOPE_DRAW));
     CHECK(bone_block->owner == termin::MaterialPipelineResourceOwner::VertexTransform);
 
     CHECK(termin::material_pipeline_interface_produces(
@@ -96,14 +96,14 @@ TEST_CASE("Foliage material transform declares instanced resources") {
     const termin::MaterialPipelineResourceDecl* foliage_draw =
         find_resource(contract, "foliage_draw");
     REQUIRE(foliage_draw != nullptr);
-    CHECK_EQ(foliage_draw->scope, static_cast<uint32_t>(TC_SHADER_RESOURCE_SCOPE_DRAW));
-    CHECK_EQ(foliage_draw->kind, static_cast<uint32_t>(TC_SHADER_RESOURCE_CONSTANT_BUFFER));
+    CHECK_EQ(foliage_draw->requirement.scope, static_cast<uint32_t>(TC_SHADER_RESOURCE_SCOPE_DRAW));
+    CHECK_EQ(foliage_draw->requirement.kind, static_cast<uint32_t>(TC_SHADER_RESOURCE_CONSTANT_BUFFER));
     CHECK(foliage_draw->owner == termin::MaterialPipelineResourceOwner::VertexTransform);
 
     const termin::MaterialPipelineResourceDecl* foliage_instances =
         find_resource(contract, "foliage_instances");
     REQUIRE(foliage_instances != nullptr);
-    CHECK_EQ(foliage_instances->kind, static_cast<uint32_t>(TC_SHADER_RESOURCE_STORAGE_BUFFER));
+    CHECK_EQ(foliage_instances->requirement.kind, static_cast<uint32_t>(TC_SHADER_RESOURCE_STORAGE_BUFFER));
     CHECK(foliage_instances->owner == termin::MaterialPipelineResourceOwner::VertexTransform);
 
     REQUIRE_EQ(contract.instance_streams.size(), 1u);

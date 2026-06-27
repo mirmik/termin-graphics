@@ -32,15 +32,23 @@ enum class MaterialPipelineDiagnosticCode : uint8_t {
     ShaderCreationFailed,
 };
 
-struct MaterialPipelineResourceDecl {
+struct MaterialPipelineResourceRequirement {
     std::string name;
     uint32_t kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
     uint32_t scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
-    uint32_t set = TC_SHADER_RESOURCE_SET_DEFAULT;
-    uint32_t binding = 0;
-    bool has_placement = true;
     uint32_t stage_mask = 0;
     uint32_t size = 0;
+};
+
+struct MaterialPipelineResourcePlacement {
+    uint32_t set = TC_SHADER_RESOURCE_SET_DEFAULT;
+    uint32_t binding = 0;
+    bool resolved = false;
+};
+
+struct MaterialPipelineResourceDecl {
+    MaterialPipelineResourceRequirement requirement;
+    MaterialPipelineResourcePlacement placement;
     MaterialPipelineResourceOwner owner = MaterialPipelineResourceOwner::Material;
 };
 

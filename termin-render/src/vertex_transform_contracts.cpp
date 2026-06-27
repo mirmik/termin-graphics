@@ -22,14 +22,14 @@ MaterialPipelineResourceDecl resource(
     uint32_t size = 0)
 {
     MaterialPipelineResourceDecl result{};
-    result.name = std::move(name);
-    result.kind = kind;
-    result.scope = scope;
-    result.set = TC_SHADER_RESOURCE_SET_DEFAULT;
-    result.binding = binding;
-    result.has_placement = true;
-    result.stage_mask = stage_mask;
-    result.size = size;
+    result.requirement.name = std::move(name);
+    result.requirement.kind = kind;
+    result.requirement.scope = scope;
+    result.requirement.stage_mask = stage_mask;
+    result.requirement.size = size;
+    result.placement.set = TC_SHADER_RESOURCE_SET_DEFAULT;
+    result.placement.binding = binding;
+    result.placement.resolved = true;
     result.owner = MaterialPipelineResourceOwner::VertexTransform;
     return result;
 }
