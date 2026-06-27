@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 
 from shaderc_test_helpers import (
+    _expected_scoped_binding,
+    _expected_scoped_bindings,
     _run_shaderc,
     _spirv_decoration_value,
     _write_fake_fxc,
@@ -333,8 +335,9 @@ def test_termin_shaderc_drops_dead_slang_reflection_resources(tmp_path: Path) ->
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
     assert [resource["name"] for resource in layout["resources"]] == ["u_push"]
     assert layout["resources"][0]["scope"] == "draw"
-    assert layout["resources"][0]["binding"] == 24
-    assert _spirv_decoration_value(output, 17, 33) == 24
+    u_push_binding = _expected_scoped_binding("u_push", "constant_buffer", "draw")
+    assert layout["resources"][0]["binding"] == u_push_binding
+    assert _spirv_decoration_value(output, 17, 33) == u_push_binding
     assert _spirv_decoration_value(output, 17, 34) == 0
 
 
@@ -426,13 +429,19 @@ def test_termin_shaderc_reads_slang_scope_user_attributes(tmp_path: Path) -> Non
 
     assert result.returncode == 0, result.stderr
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    expected_bindings = _expected_scoped_bindings(
+        [
+            ("albedo_texture", "texture", "transient"),
+            ("custom_params", "constant_buffer", "material"),
+        ]
+    )
     assert layout["resources"] == [
         {
             "name": "albedo_texture",
             "kind": "texture",
             "scope": "transient",
             "set": 0,
-            "binding": 32,
+            "binding": expected_bindings["albedo_texture"],
             "stage_mask": 2,
             "size": 0,
         },
@@ -441,7 +450,7 @@ def test_termin_shaderc_reads_slang_scope_user_attributes(tmp_path: Path) -> Non
             "kind": "constant_buffer",
             "scope": "material",
             "set": 0,
-            "binding": 4,
+            "binding": expected_bindings["custom_params"],
             "stage_mask": 2,
             "size": 16,
         },
@@ -578,9 +587,15 @@ def test_termin_shaderc_default_scope_material_resolves_unscoped_resources(tmp_p
     assert result.returncode == 0, result.stderr
     assert "has no scope" not in result.stderr
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    expected_bindings = _expected_scoped_bindings(
+        [
+            ("material", "constant_buffer", "material"),
+            ("albedo_texture", "texture", "material"),
+        ]
+    )
     assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
-        ("material", "material", 1),
-        ("albedo_texture", "material", 4),
+        ("material", "material", expected_bindings["material"]),
+        ("albedo_texture", "material", expected_bindings["albedo_texture"]),
     ]
 
 
@@ -716,13 +731,19 @@ def test_termin_shaderc_normalizes_slang_engine_constant_buffer_reflection_place
 
     assert result.returncode == 0, result.stderr
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    expected_bindings = _expected_scoped_bindings(
+        [
+            ("per_frame", "constant_buffer", "frame"),
+            ("draw_data", "constant_buffer", "draw"),
+        ]
+    )
     assert layout["resources"] == [
         {
             "name": "per_frame",
             "kind": "constant_buffer",
             "scope": "frame",
             "set": 0,
-            "binding": 2,
+            "binding": expected_bindings["per_frame"],
             "stage_mask": 1,
             "size": 64,
         },
@@ -731,7 +752,7 @@ def test_termin_shaderc_normalizes_slang_engine_constant_buffer_reflection_place
             "kind": "constant_buffer",
             "scope": "draw",
             "set": 0,
-            "binding": 24,
+            "binding": expected_bindings["draw_data"],
             "stage_mask": 1,
             "size": 64,
         },
@@ -865,11 +886,19 @@ def test_termin_shaderc_default_scope_transient_resolves_framebuffer_inputs(tmp_
 
     assert result.returncode == 0, result.stderr
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    expected_bindings = _expected_scoped_bindings(
+        [
+            ("u_input_tex", "texture", "transient"),
+            ("u_depth_texture", "texture", "transient"),
+            ("u_fov", "texture", "transient"),
+            ("u_normal_texture", "texture", "transient"),
+        ]
+    )
     assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
-        ("u_input_tex", "transient", 32),
-        ("u_depth_texture", "transient", 33),
-        ("u_fov", "transient", 34),
-        ("u_normal_texture", "transient", 35),
+        ("u_input_tex", "transient", expected_bindings["u_input_tex"]),
+        ("u_depth_texture", "transient", expected_bindings["u_depth_texture"]),
+        ("u_fov", "transient", expected_bindings["u_fov"]),
+        ("u_normal_texture", "transient", expected_bindings["u_normal_texture"]),
     ]
 
 
@@ -994,9 +1023,15 @@ def test_termin_shaderc_separates_slang_transient_textures_from_material_ubo(tmp
 
     assert result.returncode == 0, result.stderr
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    expected_bindings = _expected_scoped_bindings(
+        [
+            ("material", "constant_buffer", "material"),
+            ("u_input_tex", "texture", "transient"),
+        ]
+    )
     assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
-        ("material", "material", 1),
-        ("u_input_tex", "transient", 32),
+        ("material", "material", expected_bindings["material"]),
+        ("u_input_tex", "transient", expected_bindings["u_input_tex"]),
     ]
 
 
@@ -1053,7 +1088,11 @@ def test_termin_shaderc_keeps_standalone_normal_texture_material_scoped(tmp_path
     assert result.returncode == 0, result.stderr
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
     assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
-        ("u_normal_texture", "material", 4),
+        (
+            "u_normal_texture",
+            "material",
+            _expected_scoped_binding("u_normal_texture", "texture", "material"),
+        ),
     ]
 
 
@@ -1134,7 +1173,7 @@ def test_termin_shaderc_preserves_slang_draw_storage_buffer_reflection_placement
             "kind": "storage_buffer",
             "scope": "draw",
             "set": 0,
-            "binding": 25,
+            "binding": _expected_scoped_binding("foliage_instances", "storage_buffer", "draw"),
             "stage_mask": 1,
             "size": 0,
         }
@@ -1226,13 +1265,19 @@ def test_termin_shaderc_normalizes_slang_draw_scope_reflection_placement(tmp_pat
 
     assert result.returncode == 0, result.stderr
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    expected_bindings = _expected_scoped_bindings(
+        [
+            ("draw_data", "constant_buffer", "draw"),
+            ("bone_block", "constant_buffer", "draw"),
+        ]
+    )
     assert layout["resources"] == [
         {
             "name": "draw_data",
             "kind": "constant_buffer",
             "scope": "draw",
             "set": 0,
-            "binding": 24,
+            "binding": expected_bindings["draw_data"],
             "stage_mask": 1,
             "size": 64,
         },
@@ -1241,7 +1286,7 @@ def test_termin_shaderc_normalizes_slang_draw_scope_reflection_placement(tmp_pat
             "kind": "constant_buffer",
             "scope": "draw",
             "set": 0,
-            "binding": 16,
+            "binding": expected_bindings["bone_block"],
             "stage_mask": 1,
             "size": 8208,
         },
@@ -1314,9 +1359,17 @@ def test_termin_shaderc_normalizes_slang_material_texture_reflection_placement(t
     assert result.returncode == 0, result.stderr
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
     assert layout["resources"][0]["name"] == "material"
-    assert layout["resources"][0]["binding"] == 1
+    assert layout["resources"][0]["binding"] == _expected_scoped_binding(
+        "material",
+        "constant_buffer",
+        "material",
+    )
     assert layout["resources"][1]["name"] == "albedo_texture"
-    assert layout["resources"][1]["binding"] == 4
+    assert layout["resources"][1]["binding"] == _expected_scoped_binding(
+        "albedo_texture",
+        "texture",
+        "material",
+    )
 
 
 def test_termin_shaderc_normalizes_slang_pass_shadow_texture_reflection_placement(tmp_path: Path) -> None:
@@ -1382,7 +1435,7 @@ def test_termin_shaderc_normalizes_slang_pass_shadow_texture_reflection_placemen
             "kind": "texture",
             "scope": "pass",
             "set": 0,
-            "binding": 8,
+            "binding": _expected_scoped_binding("shadow_maps", "texture", "pass"),
             "stage_mask": 2,
             "size": 0,
         },

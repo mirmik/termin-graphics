@@ -1,7 +1,12 @@
 import json
 from pathlib import Path
 
-from shaderc_test_helpers import _run_shaderc, _write_fake_fxc, _write_fake_slangc
+from shaderc_test_helpers import (
+    _expected_scoped_binding,
+    _run_shaderc,
+    _write_fake_fxc,
+    _write_fake_slangc,
+)
 
 def test_termin_shaderc_compiles_slang_to_d3d11_cso_with_fake_tools(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
@@ -100,7 +105,12 @@ def test_termin_shaderc_compiles_slang_to_d3d11_cso_with_fake_tools(tmp_path: Pa
             "kind": "constant_buffer",
             "scope": "material",
             "set": 0,
-            "binding": 1,
+            "binding": _expected_scoped_binding(
+                "material",
+                "constant_buffer",
+                "material",
+                target="d3d11",
+            ),
             "stage_mask": 2,
             "size": 16,
             "d3d11": {
@@ -113,7 +123,12 @@ def test_termin_shaderc_compiles_slang_to_d3d11_cso_with_fake_tools(tmp_path: Pa
             "kind": "texture",
             "scope": "material",
             "set": 0,
-            "binding": 4,
+            "binding": _expected_scoped_binding(
+                "albedo_texture",
+                "texture",
+                "material",
+                target="d3d11",
+            ),
             "stage_mask": 2,
             "size": 0,
             "d3d11": {
@@ -263,8 +278,20 @@ def test_termin_shaderc_merges_bare_slang_sampler2d_when_reflection_is_partial(t
         (resource["name"], resource["kind"], resource["scope"], resource["binding"], resource["d3d11"])
         for resource in layout["resources"]
     ] == [
-        ("canvas_draw", "constant_buffer", "draw", 24, {"register_class": "b", "register_index": 0}),
-        ("u_texture", "texture", "transient", 32, {"register_class": "t", "register_index": 0}),
+        (
+            "canvas_draw",
+            "constant_buffer",
+            "draw",
+            _expected_scoped_binding("canvas_draw", "constant_buffer", "draw", target="d3d11"),
+            {"register_class": "b", "register_index": 0},
+        ),
+        (
+            "u_texture",
+            "texture",
+            "transient",
+            _expected_scoped_binding("u_texture", "texture", "transient", target="d3d11"),
+            {"register_class": "t", "register_index": 0},
+        ),
     ]
 
 

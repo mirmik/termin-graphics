@@ -219,54 +219,153 @@ void apply_default_resource_scope(
     }
 }
 
+static bool is_scoped_resource_scope(const std::string& scope) {
+    return scope == "frame" ||
+           scope == "pass" ||
+           scope == "material" ||
+           scope == "draw" ||
+           scope == "transient";
+}
+
+static bool is_constant_buffer_kind(const std::string& kind) {
+    return kind == "constant_buffer" || kind == "uniform_buffer";
+}
+
+static bool is_texture_like_kind(const std::string& kind) {
+    return kind == "texture" ||
+           kind == "storage_texture" ||
+           kind == "sampler";
+}
+
+static uint32_t stable_resource_name_hash(const std::string& value) {
+    uint32_t hash = 2166136261u;
+    for (unsigned char ch : value) {
+        hash ^= static_cast<uint32_t>(ch);
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+struct BindingRange {
+    uint32_t base = 0;
+    uint32_t size = 0;
+};
+
+static BindingRange scoped_binding_range(
+    const ShaderResourceBinding& resource,
+    const std::string& target
+) {
+    if (is_constant_buffer_kind(resource.kind)) {
+        if (resource.scope == "frame") return {0, 4};
+        if (resource.scope == "pass") return {4, 4};
+        if (resource.scope == "material") return {8, 8};
+        if (resource.scope == "draw") return {16, 16};
+        if (resource.scope == "transient") return {32, 8};
+    }
+
+    if (resource.kind == "storage_buffer") {
+        if (resource.scope == "draw") return {40, 16};
+        if (resource.scope == "pass") return {56, 8};
+        if (resource.scope == "material") return {64, 8};
+        if (resource.scope == "frame") return {72, 4};
+        if (resource.scope == "transient") return {76, 8};
+    }
+
+    if (is_texture_like_kind(resource.kind)) {
+        if (target == "opengl") {
+            if (resource.scope == "material") return {4, 4};
+            if (resource.scope == "pass") return {8, 4};
+            if (resource.scope == "draw") return {12, 4};
+            if (resource.scope == "transient") return {16, 16};
+            if (resource.scope == "frame") return {0, 4};
+        }
+        if (resource.scope == "material") return {80, 32};
+        if (resource.scope == "pass") return {112, 16};
+        if (resource.scope == "draw") return {128, 16};
+        if (resource.scope == "transient") return {144, 48};
+        if (resource.scope == "frame") return {192, 8};
+    }
+
+    return {};
+}
+
+static std::string binding_conflict_class(
+    const ShaderResourceBinding& resource,
+    const std::string& target
+) {
+    if (target != "opengl") {
+        return "descriptor";
+    }
+    if (is_constant_buffer_kind(resource.kind)) {
+        return "constant_buffer";
+    }
+    if (resource.kind == "storage_buffer") {
+        return "storage_buffer";
+    }
+    if (resource.kind == "storage_texture") {
+        return "storage_texture";
+    }
+    if (resource.kind == "sampler") {
+        return "sampler";
+    }
+    if (resource.kind == "texture") {
+        return "texture";
+    }
+    return resource.kind;
+}
+
+static bool resource_binding_conflicts(
+    const ShaderResourceBinding& a,
+    const ShaderResourceBinding& b,
+    const std::string& target
+) {
+    if (a.set != b.set || a.binding != b.binding) {
+        return false;
+    }
+    if (binding_conflict_class(a, target) != binding_conflict_class(b, target)) {
+        return false;
+    }
+    return a.name != b.name || a.kind != b.kind || a.scope != b.scope;
+}
+
 void normalize_scope_first_binding_slots(
     std::vector<ShaderResourceBinding>& resources,
     bool normalize_transient_resources,
     const std::string& target
 ) {
-    uint32_t next_material_texture_binding = 4;
-    // Scope-first descriptor ranges use 32+ for transient resources on
-    // descriptor-based backends. OpenGL binding numbers for samplers are
-    // physical texture units, so keep them in a low, portable range.
-    uint32_t next_transient_resource_binding =
-        target == "opengl" ? 9u : 32u;
-    for (ShaderResourceBinding& resource : resources) {
+    for (size_t index = 0; index < resources.size(); ++index) {
+        ShaderResourceBinding& resource = resources[index];
         resource.set = 0;
-        if (resource.kind == "constant_buffer" || resource.kind == "uniform_buffer") {
-            if (resource.scope == "frame" &&
-                (resource.name == "per_frame" || resource.name == "u_per_frame")) {
-                resource.binding = 2;
-            } else if (resource.scope == "pass" && resource.name == "lighting") {
-                resource.binding = 0;
-            } else if (resource.scope == "pass" && resource.name == "shadow_block") {
-                resource.binding = 3;
-            } else if (resource.scope == "material" && resource.name == "material") {
-                resource.binding = 1;
-            } else if (resource.scope == "draw" &&
-                       (resource.name == "bone_block" ||
-                        resource.name == "BoneBlock")) {
-                resource.binding = 16;
-            } else if (resource.scope == "draw") {
-                resource.binding = 24;
+        if (!is_scoped_resource_scope(resource.scope)) {
+            continue;
+        }
+        if (!normalize_transient_resources && resource.scope == "transient") {
+            continue;
+        }
+
+        const BindingRange range = scoped_binding_range(resource, target);
+        if (range.size == 0) {
+            continue;
+        }
+
+        const uint32_t hash = stable_resource_name_hash(resource.name);
+        uint32_t candidate = range.base + (hash % range.size);
+        for (uint32_t attempt = 0; attempt < range.size; ++attempt) {
+            resource.binding = candidate;
+            bool conflict = false;
+            for (size_t previous = 0; previous < index; ++previous) {
+                if (resource_binding_conflicts(
+                        resource,
+                        resources[previous],
+                        target)) {
+                    conflict = true;
+                    break;
+                }
             }
-        } else if (resource.kind == "texture" && resource.scope == "pass" &&
-                   (resource.name == "shadow_maps" ||
-                    resource.name == "u_shadow_map" ||
-                    resource.name == "u_shadow_maps")) {
-            resource.binding = 8;
-        } else if (resource.kind == "texture" && resource.scope == "material") {
-            if (next_material_texture_binding == 8) {
-                ++next_material_texture_binding;
+            if (!conflict) {
+                break;
             }
-            resource.binding = next_material_texture_binding++;
-        } else if (normalize_transient_resources &&
-                   (resource.kind == "texture" ||
-                    resource.kind == "storage_texture" ||
-                    resource.kind == "sampler") &&
-                   resource.scope == "transient") {
-            resource.binding = next_transient_resource_binding++;
-        } else if (resource.kind == "storage_buffer" && resource.scope == "draw") {
-            resource.binding = 25;
+            candidate = range.base + ((candidate - range.base + 1) % range.size);
         }
     }
 }
@@ -1140,18 +1239,16 @@ static bool write_resource_layout_sidecar(
             for (size_t j = i + 1; j < resources.size(); ++j) {
                 const ShaderResourceBinding& a = resources[i];
                 const ShaderResourceBinding& b = resources[j];
-                if (a.set != b.set || a.binding != b.binding) {
+                if (!resource_binding_conflicts(a, b, options.target)) {
                     continue;
                 }
-                if (a.name != b.name || a.kind != b.kind || a.scope != b.scope) {
-                    std::cerr
-                        << "termin_shaderc: conflicting resources at set="
-                        << a.set << " binding=" << a.binding << ": '"
-                        << a.name << "' (" << a.kind << ", " << a.scope
-                        << ") vs '" << b.name << "' (" << b.kind << ", "
-                        << b.scope << ")\n";
-                    return false;
-                }
+                std::cerr
+                    << "termin_shaderc: conflicting resources at set="
+                    << a.set << " binding=" << a.binding << ": '"
+                    << a.name << "' (" << a.kind << ", " << a.scope
+                    << ") vs '" << b.name << "' (" << b.kind << ", "
+                    << b.scope << ")\n";
+                return false;
             }
         }
     }

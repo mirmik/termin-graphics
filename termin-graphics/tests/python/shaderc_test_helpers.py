@@ -86,6 +86,92 @@ def _run_shaderc(args: list[str], *, env: dict[str, str] | None = None) -> subpr
     )
 
 
+def _stable_resource_name_hash(value: str) -> int:
+    result = 2166136261
+    for byte in value.encode("utf-8"):
+        result ^= byte
+        result = (result * 16777619) & 0xFFFFFFFF
+    return result
+
+
+def _resource_binding_class(kind: str, target: str) -> str:
+    if target != "opengl":
+        return "descriptor"
+    if kind in {"constant_buffer", "uniform_buffer"}:
+        return "constant_buffer"
+    if kind in {"storage_buffer", "storage_texture", "sampler", "texture"}:
+        return kind
+    return kind
+
+
+def _scoped_binding_range(kind: str, scope: str, target: str = "vulkan") -> tuple[int, int]:
+    if kind in {"constant_buffer", "uniform_buffer"}:
+        return {
+            "frame": (0, 4),
+            "pass": (4, 4),
+            "material": (8, 8),
+            "draw": (16, 16),
+            "transient": (32, 8),
+        }.get(scope, (0, 0))
+    if kind == "storage_buffer":
+        return {
+            "draw": (40, 16),
+            "pass": (56, 8),
+            "material": (64, 8),
+            "frame": (72, 4),
+            "transient": (76, 8),
+        }.get(scope, (0, 0))
+    if kind in {"texture", "storage_texture", "sampler"}:
+        if target == "opengl":
+            return {
+                "frame": (0, 4),
+                "material": (4, 4),
+                "pass": (8, 4),
+                "draw": (12, 4),
+                "transient": (16, 16),
+            }.get(scope, (0, 0))
+        return {
+            "material": (80, 32),
+            "pass": (112, 16),
+            "draw": (128, 16),
+            "transient": (144, 48),
+            "frame": (192, 8),
+        }.get(scope, (0, 0))
+    return (0, 0)
+
+
+def _expected_scoped_bindings(
+    resources: list[tuple[str, str, str]],
+    *,
+    target: str = "vulkan",
+) -> dict[str, int]:
+    result: dict[str, int] = {}
+    occupied: set[tuple[int, int, str]] = set()
+    for name, kind, scope in resources:
+        base, size = _scoped_binding_range(kind, scope, target)
+        assert size > 0, (name, kind, scope, target)
+        binding = base + (_stable_resource_name_hash(name) % size)
+        binding_class = _resource_binding_class(kind, target)
+        for _ in range(size):
+            key = (0, binding, binding_class)
+            if key not in occupied:
+                break
+            binding = base + ((binding - base + 1) % size)
+        result[name] = binding
+        occupied.add((0, binding, binding_class))
+    return result
+
+
+def _expected_scoped_binding(
+    name: str,
+    kind: str,
+    scope: str,
+    *,
+    target: str = "vulkan",
+) -> int:
+    return _expected_scoped_bindings([(name, kind, scope)], target=target)[name]
+
+
 def _spirv_decoration_value(path: Path, resource_id: int, decoration: int) -> int | None:
     data = path.read_bytes()
     if len(data) % 4 != 0:
