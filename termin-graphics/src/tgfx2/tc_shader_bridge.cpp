@@ -763,6 +763,63 @@ static void free_shader_resource_binding_fields(
     }
 }
 
+static bool attach_shader_contract_from_resource_layout(
+    tc_shader* shader,
+    const char* source_debug_name)
+{
+    if (!shader || tc_shader_has_contract(shader)) {
+        return true;
+    }
+    if (!tc_shader_has_resource_layout(shader)) {
+        return true;
+    }
+
+    const uint32_t binding_count = tc_shader_resource_binding_count(shader);
+    const tc_shader_resource_binding* bindings = tc_shader_resource_bindings(shader);
+
+    std::vector<tc_shader_resource_requirement> requirements;
+    requirements.reserve(binding_count);
+    for (uint32_t i = 0; i < binding_count; ++i) {
+        const tc_shader_resource_binding& binding = bindings[i];
+        if (binding.name[0] == '\0' ||
+            binding.kind == TC_SHADER_RESOURCE_NONE ||
+            binding.stage_mask == TC_SHADER_STAGE_NONE) {
+            continue;
+        }
+
+        tc_shader_resource_requirement requirement{};
+        std::snprintf(
+            requirement.name,
+            sizeof(requirement.name),
+            "%s",
+            binding.name);
+        requirement.kind = binding.kind;
+        requirement.scope = binding.scope;
+        requirement.stage_mask = binding.stage_mask;
+        requirement.size = binding.size;
+        requirement.fields = binding.fields;
+        requirement.field_count = binding.field_count;
+        requirements.push_back(requirement);
+    }
+
+    tc_shader_contract_desc desc{};
+    desc.schema_version = TC_SHADER_CONTRACT_SCHEMA_VERSION;
+    desc.source_kind = TC_SHADER_CONTRACT_SOURCE_REFLECTION;
+    desc.resources = requirements.empty() ? nullptr : requirements.data();
+    desc.resource_count = static_cast<uint32_t>(requirements.size());
+    desc.debug_name = shader->name ? shader->name : shader->uuid;
+    desc.source_debug_name = source_debug_name;
+
+    if (!tc_shader_set_contract(shader, &desc)) {
+        tc_log(
+            TC_LOG_ERROR,
+            "tgfx2 shader contract: failed to attach reflected contract for '%s'",
+            shader->uuid);
+        return false;
+    }
+    return true;
+}
+
 static bool apply_shader_resource_layout_sidecar(
     tc_shader* shader,
     const std::filesystem::path& artifact_path
@@ -795,7 +852,9 @@ static bool apply_shader_resource_layout_sidecar(
     }
     if (incoming.empty()) {
         tc_shader_mark_resource_layout_known(shader);
-        return true;
+        return attach_shader_contract_from_resource_layout(
+            shader,
+            "shader resource layout sidecar");
     }
 
     auto incoming_has_name = [&](const char* name) {
@@ -836,6 +895,9 @@ static bool apply_shader_resource_layout_sidecar(
         shader,
         merged.data(),
         static_cast<uint32_t>(merged.size()));
+    const bool contract_attached = attach_shader_contract_from_resource_layout(
+        shader,
+        "shader resource layout sidecar");
     free_shader_resource_binding_fields(merged);
     free_shader_resource_binding_fields(incoming);
     if (tgfx::internal::shader_verbose_logging_enabled()) {
@@ -844,7 +906,7 @@ static bool apply_shader_resource_layout_sidecar(
                incoming.size(),
                sidecar.string().c_str());
     }
-    return true;
+    return contract_attached;
 }
 
 static std::vector<std::string> split_paths(const char* value) {

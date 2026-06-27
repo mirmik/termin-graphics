@@ -1,21 +1,10 @@
 #include "tgfx2/engine_shader_catalog.hpp"
 
 #include <cstring>
-#include <iterator>
 
 namespace tgfx {
 
 namespace {
-
-constexpr EngineShaderStageIo kFullscreenQuadInputs[] = {
-    {"position", "POSITION", 0},
-    {"uv", "TEXCOORD0", 1},
-};
-
-constexpr EngineShaderStageIo kFullscreenQuadOutputs[] = {
-    {"position", "SV_Position", -1},
-    {"uv", "TEXCOORD0", 0},
-};
 
 const EngineShaderStageSource kFullscreenQuadVertexShader{
     "termin-engine-fsq",
@@ -24,16 +13,6 @@ const EngineShaderStageSource kFullscreenQuadVertexShader{
     "slang",
     "builtin_shaders/termin-engine-fsq.vert.slang",
     "vs_main",
-    kFullscreenQuadInputs,
-    std::size(kFullscreenQuadInputs),
-    kFullscreenQuadOutputs,
-    std::size(kFullscreenQuadOutputs),
-    nullptr,
-    0,
-};
-
-constexpr EngineShaderStageIo kShadowInputs[] = {
-    {"a_position", "POSITION", 0},
 };
 
 const EngineShaderStageSource kShadowVertexShader{
@@ -43,12 +22,6 @@ const EngineShaderStageSource kShadowVertexShader{
     "slang",
     "builtin_shaders/termin-engine-shadow.slang",
     "vs_main",
-    kShadowInputs,
-    std::size(kShadowInputs),
-    nullptr,
-    0,
-    nullptr,
-    0,
 };
 
 const EngineShaderStageSource kShadowFragmentShader{
@@ -58,25 +31,6 @@ const EngineShaderStageSource kShadowFragmentShader{
     "slang",
     "builtin_shaders/termin-engine-shadow.slang",
     "fs_main",
-    nullptr,
-    0,
-    nullptr,
-    0,
-    nullptr,
-    0,
-};
-
-constexpr EngineShaderResourceDecl kShadowResources[] = {
-    {"per_frame", "per_frame", "constant_buffer", "frame", 0, 0},
-    {"shadow_draw", "draw", "constant_buffer", "draw", 0, 0},
-};
-
-constexpr EngineShaderStageIo kTonemapFragmentInputs[] = {
-    {"uv", "TEXCOORD0", 0},
-};
-
-constexpr EngineShaderStageIo kTonemapFragmentOutputs[] = {
-    {"color", "SV_Target0", 0},
 };
 
 const EngineShaderStageSource kTonemapFragmentShader{
@@ -86,17 +40,6 @@ const EngineShaderStageSource kTonemapFragmentShader{
     "slang",
     "builtin_shaders/termin-engine-tonemap.frag.slang",
     "fs_main",
-    kTonemapFragmentInputs,
-    std::size(kTonemapFragmentInputs),
-    kTonemapFragmentOutputs,
-    std::size(kTonemapFragmentOutputs),
-    nullptr,
-    0,
-};
-
-constexpr EngineShaderResourceDecl kTonemapResources[] = {
-    {"u_params", "params", "constant_buffer", "transient", 0, 0},
-    {"u_input", "input_texture", "combined_sampler2d", "transient", 0, 0},
 };
 
 const EngineShaderStageSource* const kEngineShaderStages[] = {
@@ -113,8 +56,6 @@ constexpr EngineShaderProgramSource kEngineShaderPrograms[] = {
         "slang",
         &kShadowVertexShader,
         &kShadowFragmentShader,
-        kShadowResources,
-        std::size(kShadowResources),
     },
     {
         "termin-engine-tonemap",
@@ -122,8 +63,6 @@ constexpr EngineShaderProgramSource kEngineShaderPrograms[] = {
         "slang",
         nullptr,
         &kTonemapFragmentShader,
-        kTonemapResources,
-        std::size(kTonemapResources),
     },
 };
 
