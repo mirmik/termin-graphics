@@ -62,7 +62,7 @@ class Drawable(Protocol):
 
     phase_marks: Set[str]
 
-    def draw_geometry(self, context: "RenderContext", geometry_id: int = DEFAULT_GEOMETRY_ID) -> None:
+    def draw_geometry(self, context: "RenderContext", _geometry_id: int = DEFAULT_GEOMETRY_ID) -> None:
         """
         Рисует геометрию.
 

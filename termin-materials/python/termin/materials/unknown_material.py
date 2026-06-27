@@ -83,7 +83,6 @@ class UnknownMaterial(TcMaterial):
         cls,
         original_shader: str | None = None,
         original_material: str | None = None,
-        original_data: dict | None = None,
         error_message: str | None = None,
     ) -> TcMaterial:
         msg = error_message
@@ -103,7 +102,6 @@ class UnknownMaterial(TcMaterial):
     def for_missing_material(
         cls,
         material_name: str,
-        original_data: dict | None = None,
     ) -> TcMaterial:
         """Create an UnknownMaterial for a missing material."""
         return create_unknown_material(error_message=f"Missing material: {material_name}")
@@ -112,7 +110,6 @@ class UnknownMaterial(TcMaterial):
     def for_error(
         cls,
         error: Exception,
-        original_data: dict | None = None,
     ) -> TcMaterial:
         """Create an UnknownMaterial for a material loading error."""
         return create_unknown_material(error_message=str(error))
