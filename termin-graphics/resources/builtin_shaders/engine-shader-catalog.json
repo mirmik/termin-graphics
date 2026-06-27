@@ -8,33 +8,9 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-fsq.vert.slang",
-          "inputs": [
-            {
-              "name": "position",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "uv",
-              "semantic": "TEXCOORD0",
-              "location": 1
-            }
-          ],
-          "outputs": [
-            {
-              "name": "position",
-              "semantic": "SV_Position"
-            },
-            {
-              "name": "uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ],
           "entry": "vs_main"
         }
-      },
-      "resources": []
+      }
     },
     {
       "uuid": "termin-runtime-default-color",
@@ -43,60 +19,13 @@
       "stages": {
         "vertex": {
           "path": "termin-runtime-default-color.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "in_position",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "in_color",
-              "semantic": "COLOR0",
-              "location": 1
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 0
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-runtime-default-color.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "out_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "per_frame",
-          "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "scope": "frame"
-        },
-        {
-          "name": "draw_data",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-shadow",
@@ -105,37 +34,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-shadow.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "a_position",
-              "semantic": "POSITION",
-              "location": 0
-            }
-          ],
-          "outputs": []
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-shadow.slang",
-          "entry": "fs_main",
-          "inputs": [],
-          "outputs": []
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "per_frame",
-          "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "scope": "frame"
-        },
-        {
-          "name": "shadow_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-debug-triangle",
@@ -144,46 +49,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-debug-triangle.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "position",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "color",
-              "semantic": "COLOR0",
-              "location": 5
-            }
-          ],
-          "outputs": [
-            {
-              "name": "position",
-              "semantic": "SV_Position"
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-debug-triangle.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "color",
-              "semantic": "COLOR0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": []
+      }
     },
     {
       "uuid": "termin-engine-present-blit",
@@ -192,52 +64,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-present-blit.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "position",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "uv",
-              "semantic": "TEXCOORD0",
-              "location": 1
-            }
-          ],
-          "outputs": [
-            {
-              "name": "position",
-              "semantic": "SV_Position"
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-present-blit.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "u_tex",
-          "logical_name": "input_texture",
-          "kind": "combined_sampler2d"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-immediate",
@@ -246,58 +79,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-immediate.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "position",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "color",
-              "semantic": "COLOR0",
-              "location": 1
-            }
-          ],
-          "outputs": [
-            {
-              "name": "position",
-              "semantic": "SV_Position"
-            },
-            {
-              "name": "color",
-              "semantic": "COLOR0",
-              "location": 0
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-immediate.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "color",
-              "semantic": "COLOR0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "u_push",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-tcplot-3d",
@@ -306,48 +94,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-tcplot-3d.slang",
-          "entry": "vs_main",
-          "inputs": [
-            { "name": "position", "semantic": "POSITION", "location": 0 },
-            { "name": "color", "semantic": "COLOR0", "location": 1 },
-            { "name": "surface_grid", "semantic": "SURFGRID", "location": 2 },
-            { "name": "surface_grid_color", "semantic": "SURFGRIDCOLOR", "location": 3 },
-            { "name": "surface_grid_opts", "semantic": "SURFGRIDOPTS", "location": 4 }
-          ],
-          "outputs": [
-            { "name": "position", "semantic": "SV_Position" },
-            { "name": "color", "semantic": "COLOR0", "location": 0 },
-            { "name": "z_norm", "semantic": "TEXCOORD0", "location": 1 },
-            { "name": "scaled_pos", "semantic": "TEXCOORD1", "location": 2 },
-            { "name": "surface_grid", "semantic": "TEXCOORD2", "location": 3 },
-            { "name": "surface_grid_color", "semantic": "TEXCOORD3", "location": 4 },
-            { "name": "surface_grid_opts", "semantic": "TEXCOORD4", "location": 5 }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-tcplot-3d.slang",
-          "entry": "fs_main",
-          "inputs": [
-            { "name": "color", "semantic": "COLOR0", "location": 0 },
-            { "name": "z_norm", "semantic": "TEXCOORD0", "location": 1 },
-            { "name": "scaled_pos", "semantic": "TEXCOORD1", "location": 2 },
-            { "name": "surface_grid", "semantic": "TEXCOORD2", "location": 3 },
-            { "name": "surface_grid_color", "semantic": "TEXCOORD3", "location": 4 },
-            { "name": "surface_grid_opts", "semantic": "TEXCOORD4", "location": 5 }
-          ],
-          "outputs": [
-            { "name": "color", "semantic": "SV_Target0", "location": 0 }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "tcplot3d_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-tcplot-2d-line",
@@ -356,31 +109,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-tcplot-2d-line.slang",
-          "entry": "vs_main",
-          "inputs": [
-            { "name": "data_pos", "semantic": "POSITION", "location": 0 }
-          ],
-          "outputs": [
-            { "name": "position", "semantic": "SV_Position" }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-tcplot-2d-line.slang",
-          "entry": "fs_main",
-          "inputs": [],
-          "outputs": [
-            { "name": "color", "semantic": "SV_Target0", "location": 0 }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "tcplot2d_line_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-tcplot-2d-styled-line",
@@ -389,39 +124,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-tcplot-2d-styled-line.slang",
-          "entry": "vs_main",
-          "inputs": [
-            { "name": "prev", "semantic": "LINEPREV", "location": 0 },
-            { "name": "curr", "semantic": "LINECURR", "location": 1 },
-            { "name": "next", "semantic": "LINENEXT", "location": 2 },
-            { "name": "meta", "semantic": "LINEMETA", "location": 3 }
-          ],
-          "outputs": [
-            { "name": "position", "semantic": "SV_Position" },
-            { "name": "color", "semantic": "COLOR0", "location": 0 },
-            { "name": "meta", "semantic": "TEXCOORD0", "location": 1 }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-tcplot-2d-styled-line.slang",
-          "entry": "fs_main",
-          "inputs": [
-            { "name": "color", "semantic": "COLOR0", "location": 0 },
-            { "name": "meta", "semantic": "TEXCOORD0", "location": 1 }
-          ],
-          "outputs": [
-            { "name": "color", "semantic": "SV_Target0", "location": 0 }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "tcplot2d_styled_line_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-canvas2d-solid",
@@ -430,48 +139,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-canvas2d-solid.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "a_pos",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "a_uv_pad",
-              "semantic": "TEXCOORD0",
-              "location": 1
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-canvas2d-solid.slang",
-          "entry": "fs_main",
-          "inputs": [],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "canvas_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-canvas2d-texture",
@@ -480,60 +154,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-canvas2d-texture.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "a_pos",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "a_uv_pad",
-              "semantic": "TEXCOORD0",
-              "location": 1
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-canvas2d-texture.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "canvas_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        },
-        {
-          "name": "u_texture",
-          "logical_name": "input_texture",
-          "kind": "texture",
-          "scope": "transient"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-text2d",
@@ -542,60 +169,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-text2d.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "a_pos",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "a_uv_pad",
-              "semantic": "TEXCOORD0",
-              "location": 1
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-text2d.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "text2d_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        },
-        {
-          "name": "u_font_atlas",
-          "logical_name": "font_atlas",
-          "kind": "texture",
-          "scope": "transient"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-text2d-sdf",
@@ -604,60 +184,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-text2d-sdf.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "a_pos",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "a_uv_pad",
-              "semantic": "TEXCOORD0",
-              "location": 1
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-text2d-sdf.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "text2d_sdf_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        },
-        {
-          "name": "u_font_atlas",
-          "logical_name": "font_atlas",
-          "kind": "texture",
-          "scope": "transient"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-text3d",
@@ -666,60 +199,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-text3d.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "a_world_pos",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "a_offset_uv",
-              "semantic": "TEXCOORD0",
-              "location": 1
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-text3d.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "text3d_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        },
-        {
-          "name": "u_font_atlas",
-          "logical_name": "font_atlas",
-          "kind": "texture",
-          "scope": "transient"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-screen-line",
@@ -728,74 +214,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-screen-line.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "a_corner",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            },
-            {
-              "name": "a_p0",
-              "semantic": "POSITION0",
-              "location": 1
-            },
-            {
-              "name": "a_width_px",
-              "semantic": "TEXCOORD1",
-              "location": 2
-            },
-            {
-              "name": "a_p1",
-              "semantic": "POSITION1",
-              "location": 3
-            },
-            {
-              "name": "a_flags",
-              "semantic": "TEXCOORD2",
-              "location": 4
-            },
-            {
-              "name": "a_color",
-              "semantic": "COLOR0",
-              "location": 5
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 0
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-screen-line.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "screen_line_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-screen-line-cap",
@@ -804,74 +229,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-screen-line.slang",
-          "entry": "vs_cap_main",
-          "inputs": [
-            {
-              "name": "a_local",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            },
-            {
-              "name": "a_center",
-              "semantic": "POSITION0",
-              "location": 1
-            },
-            {
-              "name": "a_width_px",
-              "semantic": "TEXCOORD1",
-              "location": 2
-            },
-            {
-              "name": "a_neighbor",
-              "semantic": "POSITION1",
-              "location": 3
-            },
-            {
-              "name": "a_flags",
-              "semantic": "TEXCOORD2",
-              "location": 4
-            },
-            {
-              "name": "a_color",
-              "semantic": "COLOR0",
-              "location": 5
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 0
-            }
-          ]
+          "entry": "vs_cap_main"
         },
         "fragment": {
           "path": "termin-engine-screen-line.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "screen_line_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-screen-line-join",
@@ -880,79 +244,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-screen-line.slang",
-          "entry": "vs_join_main",
-          "inputs": [
-            {
-              "name": "a_corner",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            },
-            {
-              "name": "a_prev",
-              "semantic": "POSITION0",
-              "location": 1
-            },
-            {
-              "name": "a_width_px",
-              "semantic": "TEXCOORD1",
-              "location": 2
-            },
-            {
-              "name": "a_center",
-              "semantic": "POSITION1",
-              "location": 3
-            },
-            {
-              "name": "a_flags",
-              "semantic": "TEXCOORD2",
-              "location": 4
-            },
-            {
-              "name": "a_next",
-              "semantic": "POSITION2",
-              "location": 5
-            },
-            {
-              "name": "a_color",
-              "semantic": "COLOR0",
-              "location": 6
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 0
-            }
-          ]
+          "entry": "vs_join_main"
         },
         "fragment": {
           "path": "termin-engine-screen-line.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "screen_line_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-screen-line-round-join",
@@ -961,74 +259,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-screen-line.slang",
-          "entry": "vs_round_join_main",
-          "inputs": [
-            {
-              "name": "a_local",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            },
-            {
-              "name": "a_center",
-              "semantic": "POSITION0",
-              "location": 1
-            },
-            {
-              "name": "a_width_px",
-              "semantic": "TEXCOORD1",
-              "location": 2
-            },
-            {
-              "name": "a_neighbor",
-              "semantic": "POSITION1",
-              "location": 3
-            },
-            {
-              "name": "a_flags",
-              "semantic": "TEXCOORD2",
-              "location": 4
-            },
-            {
-              "name": "a_color",
-              "semantic": "COLOR0",
-              "location": 5
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 0
-            }
-          ]
+          "entry": "vs_round_join_main"
         },
         "fragment": {
           "path": "termin-engine-screen-line.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "screen_line_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-world-line",
@@ -1037,89 +274,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-world-line.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "a_corner",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            },
-            {
-              "name": "a_p0",
-              "semantic": "POSITION0",
-              "location": 1
-            },
-            {
-              "name": "a_width",
-              "semantic": "TEXCOORD1",
-              "location": 2
-            },
-            {
-              "name": "a_p1",
-              "semantic": "POSITION1",
-              "location": 3
-            },
-            {
-              "name": "a_flags",
-              "semantic": "TEXCOORD2",
-              "location": 4
-            },
-            {
-              "name": "a_color",
-              "semantic": "COLOR0",
-              "location": 5
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_world_pos",
-              "semantic": "POSITION1",
-              "location": 0
-            },
-            {
-              "name": "v_normal",
-              "semantic": "NORMAL",
-              "location": 1
-            },
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0",
-              "location": 2
-            },
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 3
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-world-line.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 3
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "world_line_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-world-line-cap",
@@ -1128,89 +289,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-world-line.slang",
-          "entry": "vs_cap_main",
-          "inputs": [
-            {
-              "name": "a_local",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            },
-            {
-              "name": "a_center",
-              "semantic": "POSITION0",
-              "location": 1
-            },
-            {
-              "name": "a_width",
-              "semantic": "TEXCOORD1",
-              "location": 2
-            },
-            {
-              "name": "a_neighbor",
-              "semantic": "POSITION1",
-              "location": 3
-            },
-            {
-              "name": "a_flags",
-              "semantic": "TEXCOORD2",
-              "location": 4
-            },
-            {
-              "name": "a_color",
-              "semantic": "COLOR0",
-              "location": 5
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_world_pos",
-              "semantic": "POSITION1",
-              "location": 0
-            },
-            {
-              "name": "v_normal",
-              "semantic": "NORMAL",
-              "location": 1
-            },
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0",
-              "location": 2
-            },
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 3
-            }
-          ]
+          "entry": "vs_cap_main"
         },
         "fragment": {
           "path": "termin-engine-world-line.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 3
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "world_line_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-world-line-join",
@@ -1219,94 +304,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-world-line.slang",
-          "entry": "vs_join_main",
-          "inputs": [
-            {
-              "name": "a_corner",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            },
-            {
-              "name": "a_prev",
-              "semantic": "POSITION0",
-              "location": 1
-            },
-            {
-              "name": "a_width",
-              "semantic": "TEXCOORD1",
-              "location": 2
-            },
-            {
-              "name": "a_center",
-              "semantic": "POSITION1",
-              "location": 3
-            },
-            {
-              "name": "a_flags",
-              "semantic": "TEXCOORD2",
-              "location": 4
-            },
-            {
-              "name": "a_next",
-              "semantic": "POSITION2",
-              "location": 5
-            },
-            {
-              "name": "a_color",
-              "semantic": "COLOR0",
-              "location": 6
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_world_pos",
-              "semantic": "POSITION1",
-              "location": 0
-            },
-            {
-              "name": "v_normal",
-              "semantic": "NORMAL",
-              "location": 1
-            },
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0",
-              "location": 2
-            },
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 3
-            }
-          ]
+          "entry": "vs_join_main"
         },
         "fragment": {
           "path": "termin-engine-world-line.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 3
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "world_line_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-world-line-round-join",
@@ -1315,89 +319,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-world-line.slang",
-          "entry": "vs_round_join_main",
-          "inputs": [
-            {
-              "name": "a_local",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            },
-            {
-              "name": "a_center",
-              "semantic": "POSITION0",
-              "location": 1
-            },
-            {
-              "name": "a_width",
-              "semantic": "TEXCOORD1",
-              "location": 2
-            },
-            {
-              "name": "a_neighbor",
-              "semantic": "POSITION1",
-              "location": 3
-            },
-            {
-              "name": "a_flags",
-              "semantic": "TEXCOORD2",
-              "location": 4
-            },
-            {
-              "name": "a_color",
-              "semantic": "COLOR0",
-              "location": 5
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_world_pos",
-              "semantic": "POSITION1",
-              "location": 0
-            },
-            {
-              "name": "v_normal",
-              "semantic": "NORMAL",
-              "location": 1
-            },
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0",
-              "location": 2
-            },
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 3
-            }
-          ]
+          "entry": "vs_round_join_main"
         },
         "fragment": {
           "path": "termin-engine-world-line.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 3
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "world_line_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-world-line-lit",
@@ -1406,41 +334,9 @@
       "stages": {
         "fragment": {
           "path": "termin-engine-world-line.slang",
-          "entry": "fs_lit_main",
-          "inputs": [
-            {
-              "name": "v_world_pos",
-              "semantic": "POSITION1",
-              "location": 0
-            },
-            {
-              "name": "v_normal",
-              "semantic": "NORMAL",
-              "location": 1
-            },
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 3
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_lit_main"
         }
-      },
-      "resources": [
-        {
-          "name": "lighting",
-          "logical_name": "lighting",
-          "kind": "constant_buffer",
-          "scope": "pass"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-world-tube-line",
@@ -1449,84 +345,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-world-tube-line.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "a_corner",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            },
-            {
-              "name": "a_p0",
-              "semantic": "POSITION0",
-              "location": 1
-            },
-            {
-              "name": "a_width",
-              "semantic": "TEXCOORD1",
-              "location": 2
-            },
-            {
-              "name": "a_p1",
-              "semantic": "POSITION1",
-              "location": 3
-            },
-            {
-              "name": "a_color",
-              "semantic": "COLOR0",
-              "location": 4
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_world_pos",
-              "semantic": "POSITION1",
-              "location": 0
-            },
-            {
-              "name": "v_normal",
-              "semantic": "NORMAL",
-              "location": 1
-            },
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0",
-              "location": 2
-            },
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 3
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-world-tube-line.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 3
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "tube_line_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-world-tube-line-cap",
@@ -1535,84 +360,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-world-tube-line.slang",
-          "entry": "vs_cap_main",
-          "inputs": [
-            {
-              "name": "a_corner",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            },
-            {
-              "name": "a_center",
-              "semantic": "POSITION0",
-              "location": 1
-            },
-            {
-              "name": "a_width",
-              "semantic": "TEXCOORD1",
-              "location": 2
-            },
-            {
-              "name": "a_neighbor",
-              "semantic": "POSITION1",
-              "location": 3
-            },
-            {
-              "name": "a_color",
-              "semantic": "COLOR0",
-              "location": 4
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_world_pos",
-              "semantic": "POSITION1",
-              "location": 0
-            },
-            {
-              "name": "v_normal",
-              "semantic": "NORMAL",
-              "location": 1
-            },
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0",
-              "location": 2
-            },
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 3
-            }
-          ]
+          "entry": "vs_cap_main"
         },
         "fragment": {
           "path": "termin-engine-world-tube-line.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 3
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "tube_line_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-world-tube-line-lit",
@@ -1621,41 +375,9 @@
       "stages": {
         "fragment": {
           "path": "termin-engine-world-tube-line.slang",
-          "entry": "fs_lit_main",
-          "inputs": [
-            {
-              "name": "v_world_pos",
-              "semantic": "POSITION1",
-              "location": 0
-            },
-            {
-              "name": "v_normal",
-              "semantic": "NORMAL",
-              "location": 1
-            },
-            {
-              "name": "v_color",
-              "semantic": "COLOR0",
-              "location": 3
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_lit_main"
         }
-      },
-      "resources": [
-        {
-          "name": "lighting",
-          "logical_name": "lighting",
-          "kind": "constant_buffer",
-          "scope": "pass"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-line-default",
@@ -1664,48 +386,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-line-default.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "a_position",
-              "semantic": "POSITION",
-              "location": 0
-            }
-          ],
-          "outputs": []
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-line-default.slang",
-          "entry": "fs_main",
-          "inputs": [],
-          "outputs": [
-            {
-              "name": "FragColor",
-              "semantic": "SV_Target0"
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "per_frame",
-          "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "scope": "frame"
-        },
-        {
-          "name": "draw_data",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        },
-        {
-          "name": "material",
-          "logical_name": "material",
-          "kind": "constant_buffer",
-          "scope": "material"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-foliage-instanced",
@@ -1714,78 +401,9 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-foliage-instanced.vert.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "a_position",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "a_normal",
-              "semantic": "NORMAL",
-              "location": 1
-            },
-            {
-              "name": "a_uv",
-              "semantic": "TEXCOORD0",
-              "location": 2
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_world_pos",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            },
-            {
-              "name": "v_normal",
-              "semantic": "TEXCOORD1",
-              "location": 1
-            },
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD2",
-              "location": 2
-            },
-            {
-              "name": "v_tangent",
-              "semantic": "TEXCOORD3",
-              "location": 3
-            },
-            {
-              "name": "v_bitangent",
-              "semantic": "TEXCOORD4",
-              "location": 4
-            },
-            {
-              "name": "v_tbn_valid",
-              "semantic": "TEXCOORD5",
-              "location": 5
-            }
-          ]
+          "entry": "vs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "PerFrame",
-          "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "scope": "frame"
-        },
-        {
-          "name": "foliage_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        },
-        {
-          "name": "foliage_instances",
-          "logical_name": "draw",
-          "kind": "storage_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-navmesh-debug",
@@ -1794,57 +412,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-navmesh-debug.slang",
-          "inputs": [
-            {
-              "name": "a_position",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "a_color",
-              "semantic": "COLOR0",
-              "location": 5
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0"
-            }
-          ],
           "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-navmesh-debug.slang",
-          "inputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0"
-            }
-          ],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0"
-            }
-          ],
           "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "per_frame",
-          "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "scope": "frame"
-        },
-        {
-          "name": "draw_data",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-off-mesh-link-debug",
@@ -1853,42 +427,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-off-mesh-link-debug.slang",
-          "inputs": [
-            {
-              "name": "a_position",
-              "semantic": "POSITION",
-              "location": 0
-            }
-          ],
-          "outputs": [],
           "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-off-mesh-link-debug.slang",
-          "inputs": [],
-          "outputs": [
-            {
-              "name": "frag_color",
-              "semantic": "SV_Target0"
-            }
-          ],
           "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "per_frame",
-          "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "scope": "frame"
-        },
-        {
-          "name": "draw_data",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-voxel-display",
@@ -1897,97 +442,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-voxel-display.slang",
-          "inputs": [
-            {
-              "name": "a_position",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "a_normal",
-              "semantic": "NORMAL",
-              "location": 1
-            },
-            {
-              "name": "a_uv",
-              "semantic": "TEXCOORD0",
-              "location": 2
-            },
-            {
-              "name": "a_color",
-              "semantic": "COLOR0",
-              "location": 5
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_world_pos",
-              "semantic": "POSITION1"
-            },
-            {
-              "name": "v_normal",
-              "semantic": "NORMAL"
-            },
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0"
-            },
-            {
-              "name": "v_color",
-              "semantic": "COLOR0"
-            }
-          ],
           "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-voxel-display.slang",
-          "inputs": [
-            {
-              "name": "v_world_pos",
-              "semantic": "POSITION1"
-            },
-            {
-              "name": "v_normal",
-              "semantic": "NORMAL"
-            },
-            {
-              "name": "v_uv",
-              "semantic": "TEXCOORD0"
-            },
-            {
-              "name": "v_color",
-              "semantic": "COLOR0"
-            }
-          ],
-          "outputs": [
-            {
-              "name": "FragColor",
-              "semantic": "SV_Target0"
-            }
-          ],
           "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "per_frame",
-          "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "scope": "frame"
-        },
-        {
-          "name": "draw_data",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        },
-        {
-          "name": "material",
-          "logical_name": "material",
-          "kind": "constant_buffer",
-          "scope": "material"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-voxelizer-line",
@@ -1996,57 +457,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-voxelizer-line.slang",
-          "inputs": [
-            {
-              "name": "a_position",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "a_color",
-              "semantic": "COLOR0",
-              "location": 5
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0"
-            }
-          ],
           "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-voxelizer-line.slang",
-          "inputs": [
-            {
-              "name": "v_color",
-              "semantic": "COLOR0"
-            }
-          ],
-          "outputs": [
-            {
-              "name": "FragColor",
-              "semantic": "SV_Target0"
-            }
-          ],
           "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "per_frame",
-          "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "scope": "frame"
-        },
-        {
-          "name": "draw_data",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-pick-material",
@@ -2055,58 +472,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-pick-material.slang",
-          "inputs": [
-            {
-              "name": "a_position",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "a_normal",
-              "semantic": "NORMAL",
-              "location": 1
-            },
-            {
-              "name": "a_texcoord",
-              "semantic": "TEXCOORD0",
-              "location": 2
-            }
-          ],
-          "outputs": [],
           "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-pick-material.slang",
-          "inputs": [],
-          "outputs": [
-            {
-              "name": "fragColor",
-              "semantic": "SV_Target0"
-            }
-          ],
           "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "per_frame",
-          "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "scope": "frame"
-        },
-        {
-          "name": "draw_data",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        },
-        {
-          "name": "material",
-          "logical_name": "material",
-          "kind": "constant_buffer",
-          "scope": "material"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-shadow-material",
@@ -2115,37 +487,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-shadow-material.slang",
-          "inputs": [
-            {
-              "name": "a_position",
-              "semantic": "POSITION",
-              "location": 0
-            }
-          ],
-          "outputs": [],
           "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-shadow-material.slang",
-          "inputs": [],
-          "outputs": [],
           "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "per_frame",
-          "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "scope": "frame"
-        },
-        {
-          "name": "shadow_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-depth-material",
@@ -2154,68 +502,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-depth-material.slang",
-          "inputs": [
-            {
-              "name": "a_position",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "a_normal",
-              "semantic": "NORMAL",
-              "location": 1
-            },
-            {
-              "name": "a_texcoord",
-              "semantic": "TEXCOORD0",
-              "location": 2
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_linear_depth",
-              "semantic": "TEXCOORD0"
-            }
-          ],
           "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-depth-material.slang",
-          "inputs": [
-            {
-              "name": "v_linear_depth",
-              "semantic": "TEXCOORD0"
-            }
-          ],
-          "outputs": [
-            {
-              "name": "FragColor",
-              "semantic": "SV_Target0"
-            }
-          ],
           "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "per_frame",
-          "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "scope": "frame"
-        },
-        {
-          "name": "draw_data",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        },
-        {
-          "name": "material",
-          "logical_name": "material",
-          "kind": "constant_buffer",
-          "scope": "material"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-foliage-shadow",
@@ -2224,37 +517,9 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-foliage-shadow.vert.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "a_position",
-              "semantic": "POSITION",
-              "location": 0
-            }
-          ],
-          "outputs": []
+          "entry": "vs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "PerFrame",
-          "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "scope": "frame"
-        },
-        {
-          "name": "foliage_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        },
-        {
-          "name": "foliage_instances",
-          "logical_name": "draw",
-          "kind": "storage_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-id",
@@ -2263,48 +528,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-id.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "position",
-              "semantic": "POSITION",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "position",
-              "semantic": "SV_Position"
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-id.slang",
-          "entry": "fs_main",
-          "inputs": [],
-          "outputs": [
-            {
-              "name": "color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "u_per_frame",
-          "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "scope": "frame"
-        },
-        {
-          "name": "u_push",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-normal",
@@ -2313,60 +543,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-normal.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "a_position",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "a_normal",
-              "semantic": "NORMAL",
-              "location": 1
-            }
-          ],
-          "outputs": [
-            {
-              "name": "world_normal",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-normal.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "world_normal",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "FragColor",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "per_frame",
-          "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "scope": "frame"
-        },
-        {
-          "name": "normal_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-depth",
@@ -2375,85 +558,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-depth.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "a_position",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "a_normal",
-              "semantic": "NORMAL",
-              "location": 1
-            },
-            {
-              "name": "a_texcoord",
-              "semantic": "TEXCOORD0",
-              "location": 2
-            }
-          ],
-          "outputs": [
-            {
-              "name": "linear_depth",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            },
-            {
-              "name": "perspective_depth",
-              "semantic": "TEXCOORD1",
-              "location": 1
-            },
-            {
-              "name": "log_depth",
-              "semantic": "TEXCOORD2",
-              "location": 2
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-depth.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "linear_depth",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            },
-            {
-              "name": "perspective_depth",
-              "semantic": "TEXCOORD1",
-              "location": 1
-            },
-            {
-              "name": "log_depth",
-              "semantic": "TEXCOORD2",
-              "location": 2
-            }
-          ],
-          "outputs": [
-            {
-              "name": "FragColor",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "per_frame",
-          "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "scope": "frame"
-        },
-        {
-          "name": "depth_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-depth-only",
@@ -2462,47 +573,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-depth-only.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "a_position",
-              "semantic": "POSITION",
-              "location": 0
-            },
-            {
-              "name": "a_normal",
-              "semantic": "NORMAL",
-              "location": 1
-            },
-            {
-              "name": "a_texcoord",
-              "semantic": "TEXCOORD0",
-              "location": 2
-            }
-          ],
-          "outputs": []
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-depth-only.slang",
-          "entry": "fs_main",
-          "inputs": [],
-          "outputs": []
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "per_frame",
-          "logical_name": "per_frame",
-          "kind": "constant_buffer",
-          "scope": "frame"
-        },
-        {
-          "name": "depth_draw",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-depth-to-color",
@@ -2511,30 +588,9 @@
       "stages": {
         "fragment": {
           "path": "termin-engine-depth-to-color.frag.slang",
-          "inputs": [
-            {
-              "name": "uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ],
           "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "u_depth_tex",
-          "logical_name": "depth_texture",
-          "kind": "combined_sampler2d"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-color-to-depth",
@@ -2543,24 +599,9 @@
       "stages": {
         "fragment": {
           "path": "termin-engine-color-to-depth.frag.slang",
-          "inputs": [
-            {
-              "name": "uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ],
-          "outputs": [],
           "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "u_color_tex",
-          "logical_name": "color_texture",
-          "kind": "combined_sampler2d"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-skybox",
@@ -2568,15 +609,7 @@
       "language": "shader",
       "program": {
         "path": "termin-engine-skybox.shader"
-      },
-      "resources": [
-        {
-          "name": "material",
-          "logical_name": "material",
-          "kind": "constant_buffer",
-          "scope": "material"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-bloom-bright",
@@ -2585,35 +618,9 @@
       "stages": {
         "fragment": {
           "path": "termin-engine-bloom-bright.frag.slang",
-          "inputs": [
-            {
-              "name": "uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ],
           "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "u_params",
-          "logical_name": "params",
-          "kind": "constant_buffer"
-        },
-        {
-          "name": "u_texture",
-          "logical_name": "input_texture",
-          "kind": "combined_sampler2d"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-highlight",
@@ -2622,40 +629,9 @@
       "stages": {
         "fragment": {
           "path": "termin-engine-highlight.frag.slang",
-          "inputs": [
-            {
-              "name": "uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ],
           "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "u_params",
-          "logical_name": "params",
-          "kind": "constant_buffer"
-        },
-        {
-          "name": "u_color",
-          "logical_name": "color_texture",
-          "kind": "combined_sampler2d"
-        },
-        {
-          "name": "u_id",
-          "logical_name": "id_texture",
-          "kind": "combined_sampler2d"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-gizmo-mask",
@@ -2664,42 +640,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-gizmo-mask.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "pos",
-              "semantic": "POSITION",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "pos",
-              "semantic": "SV_Position"
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-gizmo-mask.slang",
-          "entry": "fs_main",
-          "inputs": [],
-          "outputs": [
-            {
-              "name": "color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "gizmo_push",
-          "logical_name": "push_constants",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-ground-grid",
@@ -2708,59 +655,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-ground-grid.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "position",
-              "semantic": "POSITION",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "v_near_point",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            },
-            {
-              "name": "v_far_point",
-              "semantic": "TEXCOORD1",
-              "location": 1
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-ground-grid.slang",
-          "entry": "fs_main",
-          "inputs": [
-            {
-              "name": "near_point",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            },
-            {
-              "name": "far_point",
-              "semantic": "TEXCOORD1",
-              "location": 1
-            }
-          ],
-          "outputs": [
-            {
-              "name": "fragColor",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "GridParams",
-          "logical_name": "grid_params",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-solid-primitive",
@@ -2769,42 +670,13 @@
       "stages": {
         "vertex": {
           "path": "termin-engine-solid-primitive.slang",
-          "entry": "vs_main",
-          "inputs": [
-            {
-              "name": "position",
-              "semantic": "POSITION",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "position",
-              "semantic": "SV_Position"
-            }
-          ]
+          "entry": "vs_main"
         },
         "fragment": {
           "path": "termin-engine-solid-primitive.slang",
-          "entry": "fs_main",
-          "inputs": [],
-          "outputs": [
-            {
-              "name": "color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ]
+          "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "u_push",
-          "logical_name": "draw",
-          "kind": "constant_buffer",
-          "scope": "draw"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-grayscale",
@@ -2813,35 +685,9 @@
       "stages": {
         "fragment": {
           "path": "termin-engine-grayscale.frag.slang",
-          "inputs": [
-            {
-              "name": "uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ],
           "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "u_params",
-          "logical_name": "params",
-          "kind": "constant_buffer"
-        },
-        {
-          "name": "u_input",
-          "logical_name": "input_texture",
-          "kind": "combined_sampler2d"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-bloom-downsample",
@@ -2850,35 +696,9 @@
       "stages": {
         "fragment": {
           "path": "termin-engine-bloom-downsample.frag.slang",
-          "inputs": [
-            {
-              "name": "uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ],
           "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "u_params",
-          "logical_name": "params",
-          "kind": "constant_buffer"
-        },
-        {
-          "name": "u_texture",
-          "logical_name": "input_texture",
-          "kind": "combined_sampler2d"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-bloom-upsample",
@@ -2887,35 +707,9 @@
       "stages": {
         "fragment": {
           "path": "termin-engine-bloom-upsample.frag.slang",
-          "inputs": [
-            {
-              "name": "uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ],
           "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "u_params",
-          "logical_name": "params",
-          "kind": "constant_buffer"
-        },
-        {
-          "name": "u_texture",
-          "logical_name": "input_texture",
-          "kind": "combined_sampler2d"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-bloom-composite",
@@ -2924,40 +718,9 @@
       "stages": {
         "fragment": {
           "path": "termin-engine-bloom-composite.frag.slang",
-          "inputs": [
-            {
-              "name": "uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ],
           "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "u_params",
-          "logical_name": "params",
-          "kind": "constant_buffer"
-        },
-        {
-          "name": "u_original",
-          "logical_name": "original_texture",
-          "kind": "combined_sampler2d"
-        },
-        {
-          "name": "u_bloom",
-          "logical_name": "bloom_texture",
-          "kind": "combined_sampler2d"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-tonemap",
@@ -2966,35 +729,9 @@
       "stages": {
         "fragment": {
           "path": "termin-engine-tonemap.frag.slang",
-          "inputs": [
-            {
-              "name": "uv",
-              "semantic": "TEXCOORD0",
-              "location": 0
-            }
-          ],
-          "outputs": [
-            {
-              "name": "color",
-              "semantic": "SV_Target0",
-              "location": 0
-            }
-          ],
           "entry": "fs_main"
         }
-      },
-      "resources": [
-        {
-          "name": "u_params",
-          "logical_name": "params",
-          "kind": "constant_buffer"
-        },
-        {
-          "name": "u_input",
-          "logical_name": "input_texture",
-          "kind": "combined_sampler2d"
-        }
-      ]
+      }
     },
     {
       "uuid": "termin-engine-skinned-material",
@@ -3005,12 +742,7 @@
           "path": "termin-engine-skinned-material.vert.slang",
           "entry": "vs_main"
         }
-      },
-      "resources": [
-        {"name": "per_frame", "logical_name": "per_frame", "kind": "constant_buffer", "scope": "frame"},
-        {"name": "draw_data", "logical_name": "draw", "kind": "constant_buffer", "scope": "draw"},
-        {"name": "bone_block", "logical_name": "bone_block", "kind": "constant_buffer", "scope": "draw"}
-      ]
+      }
     },
     {
       "uuid": "termin-engine-skinned-shadow",
@@ -3021,12 +753,7 @@
           "path": "termin-engine-skinned-shadow.vert.slang",
           "entry": "vs_main"
         }
-      },
-      "resources": [
-        {"name": "per_frame", "logical_name": "per_frame", "kind": "constant_buffer", "scope": "frame"},
-        {"name": "shadow_draw", "logical_name": "draw", "kind": "constant_buffer", "scope": "draw"},
-        {"name": "bone_block", "logical_name": "bone_block", "kind": "constant_buffer", "scope": "draw"}
-      ]
+      }
     },
     {
       "uuid": "termin-engine-skinned-depth",
@@ -3037,12 +764,7 @@
           "path": "termin-engine-skinned-depth.vert.slang",
           "entry": "vs_main"
         }
-      },
-      "resources": [
-        {"name": "per_frame", "logical_name": "per_frame", "kind": "constant_buffer", "scope": "frame"},
-        {"name": "depth_draw", "logical_name": "draw", "kind": "constant_buffer", "scope": "draw"},
-        {"name": "bone_block", "logical_name": "bone_block", "kind": "constant_buffer", "scope": "draw"}
-      ]
+      }
     },
     {
       "uuid": "termin-engine-skinned-id",
@@ -3053,12 +775,7 @@
           "path": "termin-engine-skinned-id.vert.slang",
           "entry": "vs_main"
         }
-      },
-      "resources": [
-        {"name": "u_per_frame", "logical_name": "per_frame", "kind": "constant_buffer", "scope": "frame"},
-        {"name": "u_push", "logical_name": "draw", "kind": "constant_buffer", "scope": "draw"},
-        {"name": "bone_block", "logical_name": "bone_block", "kind": "constant_buffer", "scope": "draw"}
-      ]
+      }
     },
     {
       "uuid": "termin-engine-skinned-normal",
@@ -3069,12 +786,7 @@
           "path": "termin-engine-skinned-normal.vert.slang",
           "entry": "vs_main"
         }
-      },
-      "resources": [
-        {"name": "per_frame", "logical_name": "per_frame", "kind": "constant_buffer", "scope": "frame"},
-        {"name": "normal_draw", "logical_name": "draw", "kind": "constant_buffer", "scope": "draw"},
-        {"name": "bone_block", "logical_name": "bone_block", "kind": "constant_buffer", "scope": "draw"}
-      ]
+      }
     }
   ]
 }
