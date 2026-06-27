@@ -49,13 +49,7 @@ struct MaterialPipelineResourceContext {
 struct MaterialVertexVariantRequest {
     TcShader original_shader;
     tc_shader_variant_op variant_op = TC_SHADER_VARIANT_NONE;
-    const char* vertex_template_uuid = nullptr;
-    const char* variant_name_suffix = nullptr;
     const char* debug_context = nullptr;
-    const char* vertex_entry = "vs_main";
-    const char* fragment_source_override = nullptr;
-    const char* fragment_entry_override = nullptr;
-    bool require_slang_original = true;
 };
 
 RENDER_API TcShader get_material_vertex_variant(const MaterialVertexVariantRequest& request);
