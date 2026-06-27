@@ -76,6 +76,7 @@ set(TERMIN_RENDER_SOURCES
     src/graph_node_def.cpp
     src/material_pipeline.cpp
     src/material_pipeline_contracts.cpp
+    src/material_pipeline_shader_assembler.cpp
     src/material_ubo_apply.cpp
     src/render_pipeline.cpp
     src/render_engine.cpp
@@ -129,6 +130,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/graph_node_def.hpp
     include/termin/render/material_pipeline.hpp
     include/termin/render/material_pipeline_contracts.hpp
+    include/termin/render/material_pipeline_shader_assembler.hpp
     include/termin/render/material_ubo_apply.hpp
     include/termin/render/resource_aliases.hpp
     include/termin/render/render_pipeline.hpp
@@ -231,11 +233,19 @@ if(TERMIN_RENDER_BUILD_TESTS)
     target_link_libraries(termin_render_vertex_transform_contracts_test PRIVATE termin_render)
     add_test(NAME termin_render_vertex_transform_contracts_test COMMAND termin_render_vertex_transform_contracts_test)
 
+    add_executable(termin_render_material_pipeline_shader_assembler_test tests/test_material_pipeline_shader_assembler.cpp)
+    target_include_directories(termin_render_material_pipeline_shader_assembler_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_render_material_pipeline_shader_assembler_test PRIVATE termin_render)
+    add_test(NAME termin_render_material_pipeline_shader_assembler_test COMMAND termin_render_material_pipeline_shader_assembler_test)
+
     set_target_properties(
         termin_render_drawable_test
         termin_render_drawable_phase_ref_test
         termin_render_material_pipeline_contracts_test
         termin_render_vertex_transform_contracts_test
+        termin_render_material_pipeline_shader_assembler_test
         PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
 endif()

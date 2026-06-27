@@ -76,6 +76,176 @@ TEST_CASE("shader resource layout preserves D3D11 register placement") {
     tc_shader_shutdown();
 }
 
+TEST_CASE("shader contract attaches deep-copied draw contract") {
+    tc_shader_init();
+
+    tc_shader_handle handle = tc_shader_create("shader-contract-attach-test");
+    REQUIRE(!tc_shader_handle_is_invalid(handle));
+
+    tc_shader* shader = tc_shader_get(handle);
+    REQUIRE(shader != nullptr);
+    CHECK(!tc_shader_has_contract(shader));
+
+    tc_shader_contract_vertex_input vertex_inputs[2]{};
+    std::snprintf(vertex_inputs[0].semantic, sizeof(vertex_inputs[0].semantic), "%s", "position");
+    vertex_inputs[0].type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
+    vertex_inputs[0].required = 1;
+    std::snprintf(vertex_inputs[1].semantic, sizeof(vertex_inputs[1].semantic), "%s", "normal");
+    vertex_inputs[1].type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
+    vertex_inputs[1].required = 1;
+
+    tc_shader_contract_storage_buffer storage{};
+    std::snprintf(storage.resource_name, sizeof(storage.resource_name), "%s", "foliage_instances");
+    storage.stride = 32;
+
+    tc_shader_resource_binding resources[2]{};
+    std::snprintf(resources[0].name, sizeof(resources[0].name), "%s", "per_frame");
+    resources[0].kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    resources[0].scope = TC_SHADER_RESOURCE_SCOPE_FRAME;
+    resources[0].set = 0;
+    resources[0].binding = 2;
+    resources[0].stage_mask = TC_SHADER_STAGE_VERTEX;
+    std::snprintf(resources[1].name, sizeof(resources[1].name), "%s", "foliage_instances");
+    resources[1].kind = TC_SHADER_RESOURCE_STORAGE_BUFFER;
+    resources[1].scope = TC_SHADER_RESOURCE_SCOPE_DRAW;
+    resources[1].set = 0;
+    resources[1].binding = 25;
+    resources[1].stage_mask = TC_SHADER_STAGE_VERTEX;
+
+    tc_shader_contract_desc desc{};
+    desc.schema_version = TC_SHADER_CONTRACT_SCHEMA_VERSION;
+    desc.producer_kind = TC_SHADER_CONTRACT_PRODUCER_MATERIAL_PIPELINE;
+    desc.draw_kind = TC_SHADER_CONTRACT_DRAW_INSTANCED_MESH;
+    desc.vertex_inputs = vertex_inputs;
+    desc.vertex_input_count = 2;
+    desc.storage_buffers = &storage;
+    desc.storage_buffer_count = 1;
+    desc.resources = resources;
+    desc.resource_count = 2;
+    desc.debug_name = "foliage material shader";
+    desc.producer_debug_name = "material pipeline";
+
+    REQUIRE(tc_shader_set_contract(shader, &desc));
+    CHECK(tc_shader_has_contract(shader));
+
+    std::snprintf(vertex_inputs[0].semantic, sizeof(vertex_inputs[0].semantic), "%s", "mutated");
+    std::snprintf(resources[0].name, sizeof(resources[0].name), "%s", "mutated_resource");
+
+    tc_shader_contract_view view{};
+    REQUIRE(tc_shader_get_contract_view(shader, &view));
+    CHECK_EQ(view.schema_version, TC_SHADER_CONTRACT_SCHEMA_VERSION);
+    CHECK_EQ(view.producer_kind, TC_SHADER_CONTRACT_PRODUCER_MATERIAL_PIPELINE);
+    CHECK_EQ(view.draw_kind, TC_SHADER_CONTRACT_DRAW_INSTANCED_MESH);
+    CHECK_EQ(view.shader.index, handle.index);
+    CHECK_EQ(view.shader.generation, handle.generation);
+    REQUIRE_EQ(view.vertex_input_count, 2u);
+    CHECK(std::strcmp(view.vertex_inputs[0].semantic, "position") == 0);
+    CHECK_EQ(view.vertex_inputs[0].type, TC_SHADER_CONTRACT_VALUE_FLOAT3);
+    CHECK_EQ(view.storage_buffer_count, 1u);
+    CHECK(std::strcmp(view.storage_buffers[0].resource_name, "foliage_instances") == 0);
+    CHECK_EQ(view.storage_buffers[0].stride, 32u);
+    REQUIRE_EQ(view.resource_count, 2u);
+    bool has_per_frame = false;
+    for (uint32_t i = 0; i < view.resource_count; ++i) {
+        if (std::strcmp(view.resources[i].name, "per_frame") == 0) {
+            has_per_frame = true;
+        }
+    }
+    CHECK(has_per_frame);
+    CHECK(std::strcmp(view.debug_name, "foliage material shader") == 0);
+    CHECK(std::strcmp(view.producer_debug_name, "material pipeline") == 0);
+
+    tc_shader_clear_contract(shader);
+    CHECK(!tc_shader_has_contract(shader));
+    CHECK(!tc_shader_get_contract_view(shader, &view));
+
+    tc_shader_destroy(handle);
+    tc_shader_shutdown();
+}
+
+TEST_CASE("shader contract clears when shader sources change") {
+    tc_shader_init();
+
+    tc_shader_handle handle = tc_shader_create("shader-contract-source-reset-test");
+    REQUIRE(!tc_shader_handle_is_invalid(handle));
+
+    tc_shader* shader = tc_shader_get(handle);
+    REQUIRE(shader != nullptr);
+
+    tc_shader_contract_vertex_input vertex_input{};
+    std::snprintf(vertex_input.semantic, sizeof(vertex_input.semantic), "%s", "position");
+    vertex_input.type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
+    vertex_input.required = 1;
+
+    tc_shader_contract_desc desc{};
+    desc.producer_kind = TC_SHADER_CONTRACT_PRODUCER_ENGINE_GENERATED;
+    desc.draw_kind = TC_SHADER_CONTRACT_DRAW_MESH;
+    desc.vertex_inputs = &vertex_input;
+    desc.vertex_input_count = 1;
+    REQUIRE(tc_shader_set_contract(shader, &desc));
+    CHECK(tc_shader_has_contract(shader));
+
+    REQUIRE(tc_shader_set_sources(
+        shader,
+        "void main() {}",
+        "void main() {}",
+        nullptr,
+        "contract reset shader",
+        nullptr));
+    CHECK(!tc_shader_has_contract(shader));
+
+    tc_shader_destroy(handle);
+    tc_shader_shutdown();
+}
+
+TEST_CASE("shader contract resources follow shader resource layout updates") {
+    tc_shader_init();
+
+    tc_shader_handle handle = tc_shader_create("shader-contract-resource-sync-test");
+    REQUIRE(!tc_shader_handle_is_invalid(handle));
+
+    tc_shader* shader = tc_shader_get(handle);
+    REQUIRE(shader != nullptr);
+
+    tc_shader_contract_vertex_input vertex_input{};
+    std::snprintf(vertex_input.semantic, sizeof(vertex_input.semantic), "%s", "position");
+    vertex_input.type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
+    vertex_input.required = 1;
+
+    tc_shader_contract_desc desc{};
+    desc.producer_kind = TC_SHADER_CONTRACT_PRODUCER_SHADER_PARSER;
+    desc.draw_kind = TC_SHADER_CONTRACT_DRAW_MESH;
+    desc.vertex_inputs = &vertex_input;
+    desc.vertex_input_count = 1;
+    REQUIRE(tc_shader_set_contract(shader, &desc));
+
+    tc_shader_contract_view view{};
+    REQUIRE(tc_shader_get_contract_view(shader, &view));
+    CHECK_EQ(view.resource_count, 0u);
+
+    tc_shader_resource_binding resource{};
+    std::snprintf(resource.name, sizeof(resource.name), "%s", "material");
+    resource.kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    resource.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    resource.set = 0;
+    resource.binding = 1;
+    resource.stage_mask = TC_SHADER_STAGE_FRAGMENT;
+    resource.size = 64;
+    tc_shader_set_resource_layout(shader, &resource, 1);
+
+    REQUIRE(tc_shader_get_contract_view(shader, &view));
+    REQUIRE_EQ(view.resource_count, 1u);
+    CHECK(std::strcmp(view.resources[0].name, "material") == 0);
+    CHECK_EQ(view.resources[0].binding, 1u);
+
+    tc_shader_set_resource_layout(shader, nullptr, 0);
+    REQUIRE(tc_shader_get_contract_view(shader, &view));
+    CHECK_EQ(view.resource_count, 0u);
+
+    tc_shader_destroy(handle);
+    tc_shader_shutdown();
+}
+
 TEST_CASE("material UBO layout update preserves D3D11 register placement") {
     tc_shader_init();
 

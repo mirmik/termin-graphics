@@ -107,6 +107,8 @@ const char* material_pipeline_diagnostic_code_name(
         return "missing_vertex_transform_template";
     case MaterialPipelineDiagnosticCode::MissingFragmentSource:
         return "missing_fragment_source";
+    case MaterialPipelineDiagnosticCode::MissingResourcePlacement:
+        return "missing_resource_placement";
     case MaterialPipelineDiagnosticCode::ShaderCreationFailed:
         return "shader_creation_failed";
     }

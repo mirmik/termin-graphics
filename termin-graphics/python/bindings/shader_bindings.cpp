@@ -45,6 +45,32 @@ const char* shader_resource_scope_name(uint32_t scope) {
     }
 }
 
+nb::dict shader_resource_binding_to_dict(const tc_shader_resource_binding& binding) {
+    nb::dict result;
+    result["name"] = std::string(binding.name);
+    result["kind"] = binding.kind;
+    result["kind_name"] = shader_resource_kind_name(binding.kind);
+    result["scope"] = binding.scope;
+    result["scope_name"] = shader_resource_scope_name(binding.scope);
+    result["set"] = binding.set;
+    result["binding"] = binding.binding;
+    result["stage_mask"] = binding.stage_mask;
+    result["size"] = binding.size;
+    if (binding.fields && binding.field_count > 0) {
+        nb::list fields;
+        for (uint32_t i = 0; i < binding.field_count; ++i) {
+            nb::dict fd;
+            fd["name"] = std::string(binding.fields[i].name);
+            fd["type"] = std::string(binding.fields[i].type);
+            fd["offset"] = binding.fields[i].offset;
+            fd["size"] = binding.fields[i].size;
+            fields.append(fd);
+        }
+        result["fields"] = fields;
+    }
+    return result;
+}
+
 } // namespace
 
 void bind_shader(nb::module_& m) {
@@ -135,6 +161,52 @@ void bind_shader(nb::module_& m) {
         .def_prop_ro("language", &TcShader::language)
         .def_prop_ro("artifact_policy", &TcShader::artifact_policy)
         .def_prop_ro("requires_artifacts", &TcShader::requires_artifacts)
+        .def_prop_ro("has_contract", [](const TcShader& s) {
+            return tc_shader_has_contract(s.shader_ptr());
+        })
+        .def_prop_ro("contract", [](const TcShader& s) -> nb::object {
+            tc_shader_contract_view view{};
+            if (!tc_shader_get_contract_view(s.shader_ptr(), &view)) {
+                return nb::none();
+            }
+
+            nb::dict result;
+            result["schema_version"] = view.schema_version;
+            result["producer_kind"] = view.producer_kind;
+            result["draw_kind"] = view.draw_kind;
+            result["debug_name"] =
+                view.debug_name ? std::string(view.debug_name) : std::string();
+            result["producer_debug_name"] =
+                view.producer_debug_name
+                    ? std::string(view.producer_debug_name)
+                    : std::string();
+
+            nb::list vertex_inputs;
+            for (uint32_t i = 0; i < view.vertex_input_count; ++i) {
+                nb::dict input;
+                input["semantic"] = std::string(view.vertex_inputs[i].semantic);
+                input["type"] = view.vertex_inputs[i].type;
+                input["required"] = view.vertex_inputs[i].required != 0;
+                vertex_inputs.append(input);
+            }
+            result["vertex_inputs"] = vertex_inputs;
+
+            nb::list storage_buffers;
+            for (uint32_t i = 0; i < view.storage_buffer_count; ++i) {
+                nb::dict buffer;
+                buffer["resource_name"] = std::string(view.storage_buffers[i].resource_name);
+                buffer["stride"] = view.storage_buffers[i].stride;
+                storage_buffers.append(buffer);
+            }
+            result["storage_buffers"] = storage_buffers;
+
+            nb::list resources;
+            for (uint32_t i = 0; i < view.resource_count; ++i) {
+                resources.append(shader_resource_binding_to_dict(view.resources[i]));
+            }
+            result["resources"] = resources;
+            return result;
+        })
         .def_prop_ro("_raw_ptr", [](const TcShader& s) -> const ::tc_shader* {
             return s.shader_ptr();
         })
@@ -144,29 +216,7 @@ void bind_shader(nb::module_& m) {
                 const tc_shader_resource_binding* binding =
                     self.find_resource_binding(name.c_str());
                 if (!binding) return nb::none();
-                nb::dict result;
-                result["name"] = std::string(binding->name);
-                result["kind"] = binding->kind;
-                result["kind_name"] = shader_resource_kind_name(binding->kind);
-                result["scope"] = binding->scope;
-                result["scope_name"] = shader_resource_scope_name(binding->scope);
-                result["set"] = binding->set;
-                result["binding"] = binding->binding;
-                result["stage_mask"] = binding->stage_mask;
-                result["size"] = binding->size;
-                if (binding->fields && binding->field_count > 0) {
-                    nb::list fields;
-                    for (uint32_t i = 0; i < binding->field_count; ++i) {
-                        nb::dict fd;
-                        fd["name"] = std::string(binding->fields[i].name);
-                        fd["type"] = std::string(binding->fields[i].type);
-                        fd["offset"] = binding->fields[i].offset;
-                        fd["size"] = binding->fields[i].size;
-                        fields.append(fd);
-                    }
-                    result["fields"] = fields;
-                }
-                return result;
+                return shader_resource_binding_to_dict(*binding);
             },
             nb::arg("name"),
             "Return resource layout entry by shader resource name, or None")

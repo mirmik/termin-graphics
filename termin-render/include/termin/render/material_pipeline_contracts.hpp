@@ -28,6 +28,7 @@ enum class MaterialPipelineDiagnosticCode : uint8_t {
     MissingVertexOutputSemantic,
     MissingVertexTransformTemplate,
     MissingFragmentSource,
+    MissingResourcePlacement,
     ShaderCreationFailed,
 };
 

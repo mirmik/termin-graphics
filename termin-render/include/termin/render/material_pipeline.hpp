@@ -5,6 +5,7 @@
 #include <span>
 
 #include "termin/render/frame_uniforms.hpp"
+#include "termin/render/vertex_transform_contracts.hpp"
 #include "termin/render/render_export.hpp"
 #include "tgfx/tgfx_shader_handle.hpp"
 #include "tgfx2/handles.hpp"
@@ -46,13 +47,15 @@ struct MaterialPipelineResourceContext {
     size_t max_shadow_maps = 0;
 };
 
-struct MaterialVertexVariantRequest {
+struct MaterialShaderOverrideRequest {
     TcShader original_shader;
-    tc_shader_variant_op variant_op = TC_SHADER_VARIANT_NONE;
+    VertexTransformKind vertex_transform_kind = VertexTransformKind::StaticMesh;
+    MaterialPipelinePassKind pass_kind = MaterialPipelinePassKind::Color;
+    tc_shader_variant_op shader_variant_op = TC_SHADER_VARIANT_NONE;
     const char* debug_context = nullptr;
 };
 
-RENDER_API TcShader get_material_vertex_variant(const MaterialVertexVariantRequest& request);
+RENDER_API TcShader assemble_material_shader_override(const MaterialShaderOverrideRequest& request);
 
 enum class MaterialMeshVertexInput {
     FullMaterial,

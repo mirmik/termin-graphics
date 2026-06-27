@@ -149,6 +149,105 @@ typedef struct tc_shader_resource_binding {
     uint32_t field_count;
 } tc_shader_resource_binding;
 
+// ============================================================================
+// Generic shader draw contract
+// ============================================================================
+
+#define TC_SHADER_CONTRACT_SCHEMA_VERSION 1u
+
+typedef enum tc_shader_contract_producer_kind {
+    TC_SHADER_CONTRACT_PRODUCER_UNKNOWN = 0,
+    TC_SHADER_CONTRACT_PRODUCER_SHADERC_REFLECTION = 1,
+    TC_SHADER_CONTRACT_PRODUCER_MATERIAL_PIPELINE = 2,
+    TC_SHADER_CONTRACT_PRODUCER_ENGINE_GENERATED = 3,
+    TC_SHADER_CONTRACT_PRODUCER_LEGACY = 4,
+    TC_SHADER_CONTRACT_PRODUCER_SHADER_PARSER = 5,
+} tc_shader_contract_producer_kind;
+
+typedef enum tc_shader_contract_draw_kind {
+    TC_SHADER_CONTRACT_DRAW_MESH = 0,
+    TC_SHADER_CONTRACT_DRAW_INSTANCED_MESH = 1,
+    TC_SHADER_CONTRACT_DRAW_DIRECT = 2,
+    TC_SHADER_CONTRACT_DRAW_FULLSCREEN = 3,
+    TC_SHADER_CONTRACT_DRAW_COMPUTE = 4,
+} tc_shader_contract_draw_kind;
+
+typedef enum tc_shader_contract_value_type {
+    TC_SHADER_CONTRACT_VALUE_UNKNOWN = 0,
+    TC_SHADER_CONTRACT_VALUE_FLOAT = 1,
+    TC_SHADER_CONTRACT_VALUE_FLOAT2 = 2,
+    TC_SHADER_CONTRACT_VALUE_FLOAT3 = 3,
+    TC_SHADER_CONTRACT_VALUE_FLOAT4 = 4,
+    TC_SHADER_CONTRACT_VALUE_MATRIX4 = 5,
+} tc_shader_contract_value_type;
+
+typedef struct tc_shader_contract_vertex_input {
+    char semantic[TC_SHADER_RESOURCE_NAME_MAX];
+    uint32_t type;      // tc_shader_contract_value_type
+    uint32_t required;  // non-zero when the draw path must provide it
+} tc_shader_contract_vertex_input;
+
+typedef struct tc_shader_contract_storage_buffer {
+    char resource_name[TC_SHADER_RESOURCE_NAME_MAX];
+    uint32_t stride;
+} tc_shader_contract_storage_buffer;
+
+typedef struct tc_shader_contract_desc {
+    uint32_t schema_version;
+    uint32_t producer_kind; // tc_shader_contract_producer_kind
+    uint32_t draw_kind;     // tc_shader_contract_draw_kind
+
+    const tc_shader_contract_vertex_input* vertex_inputs;
+    uint32_t vertex_input_count;
+
+    const tc_shader_contract_storage_buffer* storage_buffers;
+    uint32_t storage_buffer_count;
+
+    const tc_shader_resource_binding* resources;
+    uint32_t resource_count;
+
+    const char* debug_name;
+    const char* producer_debug_name;
+} tc_shader_contract_desc;
+
+typedef struct tc_shader_contract_view {
+    uint32_t schema_version;
+    uint32_t producer_kind; // tc_shader_contract_producer_kind
+    uint32_t draw_kind;     // tc_shader_contract_draw_kind
+    tc_shader_handle shader;
+
+    const tc_shader_contract_vertex_input* vertex_inputs;
+    uint32_t vertex_input_count;
+
+    const tc_shader_contract_storage_buffer* storage_buffers;
+    uint32_t storage_buffer_count;
+
+    const tc_shader_resource_binding* resources;
+    uint32_t resource_count;
+
+    const char* debug_name;
+    const char* producer_debug_name;
+} tc_shader_contract_view;
+
+typedef struct tc_shader_contract {
+    uint32_t schema_version;
+    uint32_t producer_kind;
+    uint32_t draw_kind;
+    tc_shader_handle shader;
+
+    tc_shader_contract_vertex_input* vertex_inputs;
+    uint32_t vertex_input_count;
+
+    tc_shader_contract_storage_buffer* storage_buffers;
+    uint32_t storage_buffer_count;
+
+    tc_shader_resource_binding* resources;
+    uint32_t resource_count;
+
+    char* debug_name;
+    char* producer_debug_name;
+} tc_shader_contract;
+
 // One field inside a shader's generated std140 material UBO block.
 // Populated by the shader parser (see termin-app/cpp/termin/render/shader_parser.cpp)
 // and pushed onto the shader via tc_shader_set_material_ubo_layout() so that
@@ -200,6 +299,13 @@ typedef struct tc_shader {
     // artifact/reflection fills set/binding metadata, runtime binds by name.
     tc_shader_resource_binding* resource_bindings;
     uint32_t resource_binding_count;
+
+    // Optional generic draw contract for the final shader program. This is
+    // the runtime-facing contract used by migrated render passes; it describes
+    // shader requirements, not material pipeline provenance.
+    uint8_t has_contract;
+    uint8_t _contract_reserved[3];
+    tc_shader_contract contract;
 } tc_shader;
 
 // ============================================================================
@@ -313,6 +419,24 @@ TGFX_API const tc_shader_resource_binding* tc_shader_find_resource_binding(
 );
 TGFX_API bool tc_shader_has_resource_layout(const tc_shader* shader);
 TGFX_API void tc_shader_mark_resource_layout_known(tc_shader* shader);
+
+// ============================================================================
+// Shader draw contract
+// ============================================================================
+
+// Replace the shader's generic draw contract. A deep copy of all arrays is
+// made; caller retains ownership. Passing NULL clears the contract.
+TGFX_API bool tc_shader_set_contract(
+    tc_shader* shader,
+    const tc_shader_contract_desc* desc
+);
+
+TGFX_API void tc_shader_clear_contract(tc_shader* shader);
+TGFX_API bool tc_shader_has_contract(const tc_shader* shader);
+TGFX_API bool tc_shader_get_contract_view(
+    const tc_shader* shader,
+    tc_shader_contract_view* out
+);
 
 #ifdef __cplusplus
 }
