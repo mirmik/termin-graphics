@@ -1412,12 +1412,6 @@ static bool tc_shader_validate_resource_layout(
     return true;
 }
 
-static bool tc_shader_contract_replace_resources(
-    tc_shader* shader,
-    const tc_shader_resource_binding* layout,
-    uint32_t count
-);
-
 void tc_shader_set_resource_layout(
     tc_shader* shader,
     const tc_shader_resource_binding* bindings,
@@ -1437,7 +1431,6 @@ void tc_shader_set_resource_layout(
         }
         shader->resource_binding_count = 0;
         shader->has_resource_layout = 0;
-        tc_shader_contract_replace_resources(shader, NULL, 0);
         return;
     }
 
@@ -1496,12 +1489,6 @@ void tc_shader_set_resource_layout(
     shader->resource_bindings = copy;
     shader->resource_binding_count = count;
     shader->has_resource_layout = 1;
-    if (!tc_shader_contract_replace_resources(shader, copy, count)) {
-        tc_log(
-            TC_LOG_ERROR,
-            "tc_shader_set_resource_layout: failed to refresh contract resources for '%s'",
-            shader->name ? shader->name : shader->uuid);
-    }
 }
 
 uint32_t tc_shader_resource_binding_count(const tc_shader* shader) {
@@ -1648,69 +1635,6 @@ static bool tc_shader_contract_copy_resources(
     }
 
     *out = copy;
-    return true;
-}
-
-static tc_shader_resource_requirement tc_shader_resource_requirement_from_binding(
-    const tc_shader_resource_binding* binding)
-{
-    tc_shader_resource_requirement requirement;
-    memset(&requirement, 0, sizeof(requirement));
-    if (!binding) {
-        return requirement;
-    }
-    strncpy(requirement.name, binding->name, TC_SHADER_RESOURCE_NAME_MAX - 1);
-    requirement.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
-    requirement.kind = binding->kind;
-    requirement.scope = binding->scope;
-    requirement.stage_mask = binding->stage_mask;
-    requirement.size = binding->size;
-    requirement.element_stride = 0;
-    requirement.fields = binding->fields;
-    requirement.field_count = binding->field_count;
-    return requirement;
-}
-
-static bool tc_shader_contract_replace_resources(
-    tc_shader* shader,
-    const tc_shader_resource_binding* layout,
-    uint32_t count)
-{
-    if (!shader || !tc_shader_has_contract(shader)) {
-        return true;
-    }
-
-    tc_shader_resource_requirement* requirements = NULL;
-    if (count > 0) {
-        requirements = (tc_shader_resource_requirement*)calloc(
-            count,
-            sizeof(tc_shader_resource_requirement));
-        if (!requirements) {
-            tc_log(
-                TC_LOG_ERROR,
-                "tc_shader_contract_replace_resources: allocation failed (%u entries)",
-                count);
-            return false;
-        }
-        for (uint32_t i = 0; i < count; ++i) {
-            requirements[i] = tc_shader_resource_requirement_from_binding(&layout[i]);
-        }
-    }
-
-    tc_shader_resource_requirement* next = NULL;
-    if (!tc_shader_contract_copy_resources(&next, requirements, count)) {
-        free(requirements);
-        return false;
-    }
-    free(requirements);
-
-    if (shader->contract.resources) {
-        tc_shader_free_resource_requirement_array(
-            shader->contract.resources,
-            shader->contract.resource_count);
-    }
-    shader->contract.resources = next;
-    shader->contract.resource_count = count;
     return true;
 }
 

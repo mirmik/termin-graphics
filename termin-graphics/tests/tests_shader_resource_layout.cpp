@@ -189,10 +189,10 @@ TEST_CASE("shader contract clears when shader sources change") {
     tc_shader_shutdown();
 }
 
-TEST_CASE("shader contract resources follow shader resource layout updates") {
+TEST_CASE("shader contract resources are independent from shader resource layout updates") {
     tc_shader_init();
 
-    tc_shader_handle handle = tc_shader_create("shader-contract-resource-sync-test");
+    tc_shader_handle handle = tc_shader_create("shader-contract-resource-independence-test");
     REQUIRE(!tc_shader_handle_is_invalid(handle));
 
     tc_shader* shader = tc_shader_get(handle);
@@ -207,11 +207,21 @@ TEST_CASE("shader contract resources follow shader resource layout updates") {
     desc.source_kind = TC_SHADER_CONTRACT_SOURCE_DECLARED;
     desc.vertex_inputs = &vertex_input;
     desc.vertex_input_count = 1;
+    tc_shader_resource_requirement requirement{};
+    std::snprintf(requirement.name, sizeof(requirement.name), "%s", "declared_material");
+    requirement.kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    requirement.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    requirement.stage_mask = TC_SHADER_STAGE_FRAGMENT;
+    requirement.size = 32;
+    desc.resources = &requirement;
+    desc.resource_count = 1;
     REQUIRE(tc_shader_set_contract(shader, &desc));
 
     tc_shader_contract_view view{};
     REQUIRE(tc_shader_get_contract_view(shader, &view));
-    CHECK_EQ(view.resource_count, 0u);
+    REQUIRE_EQ(view.resource_count, 1u);
+    CHECK(std::strcmp(view.resources[0].name, "declared_material") == 0);
+    CHECK_EQ(view.resources[0].size, 32u);
 
     tc_shader_resource_binding resource{};
     std::snprintf(resource.name, sizeof(resource.name), "%s", "material");
@@ -225,13 +235,16 @@ TEST_CASE("shader contract resources follow shader resource layout updates") {
 
     REQUIRE(tc_shader_get_contract_view(shader, &view));
     REQUIRE_EQ(view.resource_count, 1u);
-    CHECK(std::strcmp(view.resources[0].name, "material") == 0);
+    CHECK(std::strcmp(view.resources[0].name, "declared_material") == 0);
     CHECK_EQ(view.resources[0].kind, TC_SHADER_RESOURCE_CONSTANT_BUFFER);
     CHECK_EQ(view.resources[0].scope, TC_SHADER_RESOURCE_SCOPE_MATERIAL);
+    CHECK_EQ(view.resources[0].size, 32u);
 
     tc_shader_set_resource_layout(shader, nullptr, 0);
     REQUIRE(tc_shader_get_contract_view(shader, &view));
-    CHECK_EQ(view.resource_count, 0u);
+    REQUIRE_EQ(view.resource_count, 1u);
+    CHECK(std::strcmp(view.resources[0].name, "declared_material") == 0);
+    CHECK_EQ(view.resources[0].size, 32u);
 
     tc_shader_destroy(handle);
     tc_shader_shutdown();
