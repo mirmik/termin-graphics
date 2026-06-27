@@ -143,6 +143,12 @@ FragmentOutput fs_main(FragmentInput input) {
     assert shader.fragment_entry == "fs_main"
 
 
+def test_tc_material_does_not_expose_legacy_from_parsed_forwarder():
+    from termin.materials import TcMaterial
+
+    assert not hasattr(TcMaterial, "from_parsed")
+
+
 def test_slang_material_add_phase_accepts_explicit_stage_entries():
     from termin.materials import TcMaterial
 

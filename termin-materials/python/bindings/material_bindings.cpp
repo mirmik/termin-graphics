@@ -961,18 +961,7 @@ void bind_tc_material(nb::module_& m) {
             d["name"] = self.name();
             d["type"] = "uuid";
             return d;
-        })
-        // Legacy class entry point. Prefer module-level create_material_from_parsed().
-        .def_static("from_parsed", &create_material_from_parsed,
-            nb::arg("program"),
-            nb::arg("color") = nb::none(),
-            nb::arg("textures") = nb::none(),
-            nb::arg("uniforms") = nb::none(),
-            nb::arg("name") = nb::none(),
-            nb::arg("source_path") = nb::none(),
-            nb::arg("shader_uuid") = "",
-            nb::arg("default_white_texture") = nb::none(),
-            nb::arg("default_normal_texture") = nb::none());
+        });
 
     m.def("create_material_from_parsed", &create_material_from_parsed,
         nb::arg("program"),

@@ -10,12 +10,6 @@ __path__ = extend_path(__path__, __name__)
 
 
 def __getattr__(name: str):
-    if name == "MeshAsset":
-        from termin.default_assets.mesh.asset import MeshAsset
-
-        globals()["MeshAsset"] = MeshAsset
-        return MeshAsset
-
     if name in (
         "MeshComponent",
         "ProceduralMeshComponent",

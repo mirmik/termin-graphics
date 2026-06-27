@@ -18,6 +18,7 @@ from termin.animation_components import AnimationPlayer
 from termin.skeleton import SkeletonInstance, TcSkeleton
 from termin.skeleton_components import SkeletonController
 from termin.scene import Entity
+from termin.mesh import MeshComponent
 from tmesh import TcMesh
 from termin.render_components import MeshRenderer
 from termin.render_components.skinned_mesh_renderer import SkinnedMeshRenderer
@@ -35,6 +36,12 @@ class SceneLike(Protocol):
 
     def create_entity(self, name: str) -> Entity:
         ...
+
+
+def _add_mesh_component(entity: Entity, mesh: TcMesh) -> None:
+    mesh_component = MeshComponent()
+    mesh_component.mesh = mesh
+    entity.add_component(mesh_component)
 
 
 def _compute_vertex_normals(vertices: np.ndarray, indices: np.ndarray) -> np.ndarray:
@@ -744,7 +751,8 @@ def _create_entity_from_node(
                 log.info(f"[glb_instantiator] pending skinned mesh={glb_mesh.name} tc_mesh.is_valid={tc_mesh.is_valid} uuid={tc_mesh.uuid}")
                 pending_skinned.append(_PendingSkinnedMesh(entity, tc_mesh, glb_mesh))
             else:
-                renderer = MeshRenderer(mesh=tc_mesh, material=base_material)
+                _add_mesh_component(entity, tc_mesh)
+                renderer = MeshRenderer(material=base_material)
                 _apply_glb_material_override_if_present(renderer, glb_mesh, scene_data, texture_lookup)
                 entity.add_component(renderer)
 
@@ -894,7 +902,8 @@ def instantiate_glb(
 
             meshes[i] = tc_mesh
             mesh_entity = create_entity(glb_mesh.name)
-            renderer = MeshRenderer(mesh=tc_mesh, material=base_material)
+            _add_mesh_component(mesh_entity, tc_mesh)
+            renderer = MeshRenderer(material=base_material)
             _apply_glb_material_override_if_present(renderer, glb_mesh, scene_data, texture_lookup)
             mesh_entity.add_component(renderer)
             root_entity.transform.add_child(mesh_entity.transform)
@@ -936,8 +945,8 @@ def instantiate_glb(
     for pending in pending_skinned:
         if skeleton_controller is not None:
             log.info(f"[glb_instantiator] creating SkinnedMeshRenderer mesh.is_valid={pending.mesh.is_valid} uuid={pending.mesh.uuid} name={pending.mesh.name}")
+            _add_mesh_component(pending.entity, pending.mesh)
             renderer = SkinnedMeshRenderer(
-                mesh=pending.mesh,
                 material=base_material,
                 skeleton_controller=skeleton_controller,
             )

@@ -16,8 +16,8 @@
 - Реализация resource containers в `src/resources/`.
 - Python bindings в `python/bindings/`.
 - Python пакет `tmesh` в `python/tmesh/`.
-- Compatibility re-exports в `python/termin/mesh/` для старых asset import
-  paths. Канонические `MeshAsset`, `MeshSpec`, OBJ/STL loaders и mesh
+- Python package `termin.mesh` for mesh runtime handles and scene mesh
+  components. Канонические `MeshAsset`, `MeshSpec`, OBJ/STL loaders и mesh
   import/runtime plugins находятся в `termin.default_assets.mesh`.
 - Tests в `tests/`.
 
@@ -36,9 +36,11 @@ C/C++ API публикуется через installed headers из `include/`.
 `tc_mesh` и `tc_texture` считаются canonical engine resources. Renderer/device-specific upload и handle adapters должны оставаться отдельным слоем поверх этих типов.
 
 Compatibility status:
-- `termin.mesh.asset`, `termin.mesh.mesh_asset`, `termin.mesh.mesh_spec`,
-  `termin.mesh.obj_loader`, and `termin.mesh.stl_loader` remain temporary
-  domain compatibility re-exports during migration.
+- Domain compatibility re-exports `termin.mesh.asset`,
+  `termin.mesh.mesh_asset`, `termin.mesh.asset_plugin`,
+  `termin.mesh.mesh_plugin`, `termin.mesh.mesh_spec`,
+  `termin.mesh.obj_loader`, and `termin.mesh.stl_loader` were removed. Use
+  `termin.default_assets.mesh.*` directly.
 - App compatibility modules `termin.assets.mesh_asset`,
   `termin.assets.mesh_plugin`, `termin.loaders.mesh_spec`,
   `termin.loaders.obj_loader`, and `termin.loaders.stl_loader` were removed on
