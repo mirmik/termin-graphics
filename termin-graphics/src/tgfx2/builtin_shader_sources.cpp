@@ -265,33 +265,6 @@ uint32_t binding_slot_for_catalog_resource(
     return 0;
 }
 
-bool parse_contract_draw_kind(const std::string& text, uint32_t* out) {
-    if (!out) {
-        return false;
-    }
-    if (text == "mesh") {
-        *out = TC_SHADER_CONTRACT_DRAW_MESH;
-        return true;
-    }
-    if (text == "instanced_mesh") {
-        *out = TC_SHADER_CONTRACT_DRAW_INSTANCED_MESH;
-        return true;
-    }
-    if (text == "direct") {
-        *out = TC_SHADER_CONTRACT_DRAW_DIRECT;
-        return true;
-    }
-    if (text == "fullscreen") {
-        *out = TC_SHADER_CONTRACT_DRAW_FULLSCREEN;
-        return true;
-    }
-    if (text == "compute") {
-        *out = TC_SHADER_CONTRACT_DRAW_COMPUTE;
-        return true;
-    }
-    return false;
-}
-
 bool catalog_has_stage(const nos::trent& entry, const char* stage_name) {
     const nos::trent* stages = dict_get(entry, "stages");
     if (!stages || stages->get_type() != nos::trent_type::dict) {
@@ -313,34 +286,6 @@ bool contract_draw_kind_from_catalog(const nos::trent& entry, uint32_t* out) {
     if (!out) {
         return false;
     }
-
-    const nos::trent* contract = dict_get(entry, "contract");
-    if (contract && contract->get_type() == nos::trent_type::dict) {
-        const std::string draw_kind = string_field(*contract, "draw_kind");
-        if (!draw_kind.empty()) {
-            if (parse_contract_draw_kind(draw_kind, out)) {
-                return true;
-            }
-            tc::Log::error(
-                "[BuiltInShaderCatalog] Shader '%s' has unsupported contract.draw_kind='%s'",
-                string_field(entry, "uuid").c_str(),
-                draw_kind.c_str());
-            return false;
-        }
-    }
-
-    const std::string draw_kind = string_field(entry, "draw_kind");
-    if (!draw_kind.empty()) {
-        if (parse_contract_draw_kind(draw_kind, out)) {
-            return true;
-        }
-        tc::Log::error(
-            "[BuiltInShaderCatalog] Shader '%s' has unsupported draw_kind='%s'",
-            string_field(entry, "uuid").c_str(),
-            draw_kind.c_str());
-        return false;
-    }
-
     *out = default_contract_draw_kind_for_catalog_entry(entry);
     return true;
 }
