@@ -200,35 +200,103 @@ std::vector<tc_shader_contract_vertex_input> infer_material_vertex_contract(
     return inputs;
 }
 
-std::vector<tc_shader_resource_requirement> collect_shader_resource_requirements(
-    const tc_shader* shader)
+void append_resource_requirement(
+    std::vector<tc_shader_resource_requirement>& requirements,
+    const std::string& name,
+    uint32_t kind,
+    uint32_t scope,
+    uint32_t stage_mask,
+    uint32_t size = 0,
+    const tc_shader_resource_field* fields = nullptr,
+    uint32_t field_count = 0)
 {
-    std::vector<tc_shader_resource_requirement> out;
-    if (!shader) {
-        return out;
+    tc_shader_resource_requirement requirement{};
+    std::strncpy(requirement.name, name.c_str(), TC_SHADER_RESOURCE_NAME_MAX - 1);
+    requirement.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+    requirement.kind = kind;
+    requirement.scope = scope;
+    requirement.stage_mask = stage_mask;
+    requirement.size = size;
+    requirement.element_stride = 0;
+    requirement.fields = const_cast<tc_shader_resource_field*>(fields);
+    requirement.field_count = field_count;
+    requirements.push_back(requirement);
+}
+
+std::vector<tc_shader_resource_field> material_fields_from_layout(
+    const MaterialUboLayout& layout)
+{
+    std::vector<tc_shader_resource_field> fields;
+    fields.reserve(layout.entries.size());
+    for (const MaterialUboEntry& entry : layout.entries) {
+        tc_shader_resource_field field{};
+        std::strncpy(field.name, entry.name.c_str(), TC_SHADER_RESOURCE_NAME_MAX - 1);
+        field.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+        std::strncpy(field.type, entry.property_type.c_str(), TC_MATERIAL_UBO_TYPE_MAX - 1);
+        field.type[TC_MATERIAL_UBO_TYPE_MAX - 1] = '\0';
+        field.offset = entry.offset;
+        field.size = entry.size;
+        fields.push_back(field);
     }
-    const uint32_t count = tc_shader_resource_binding_count(shader);
-    const tc_shader_resource_binding* bindings = tc_shader_resource_bindings(shader);
-    out.reserve(count);
-    for (uint32_t i = 0; i < count; ++i) {
-        tc_shader_resource_requirement requirement{};
-        std::strncpy(requirement.name, bindings[i].name, TC_SHADER_RESOURCE_NAME_MAX - 1);
-        requirement.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
-        requirement.kind = bindings[i].kind;
-        requirement.scope = bindings[i].scope;
-        requirement.stage_mask = bindings[i].stage_mask;
-        requirement.size = bindings[i].size;
-        requirement.element_stride = 0;
-        requirement.fields = bindings[i].fields;
-        requirement.field_count = bindings[i].field_count;
-        out.push_back(requirement);
+    return fields;
+}
+
+std::vector<tc_shader_resource_requirement> parser_shader_resource_requirements(
+    const ShaderPhase& shader_phase,
+    const MaterialUboLayout& layout,
+    const std::vector<tc_shader_resource_field>& material_fields)
+{
+    std::vector<tc_shader_resource_requirement> requirements;
+    requirements.reserve(
+        (layout.empty() ? 0u : 1u) +
+        (shader_phase.uses_engine_per_frame ? 1u : 0u) +
+        (shader_phase.uses_engine_draw_data ? 1u : 0u) +
+        shader_phase.material_texture_resources.size());
+
+    if (!layout.empty()) {
+        append_resource_requirement(
+            requirements,
+            TC_SHADER_RESOURCE_MATERIAL,
+            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+            TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+            STAGE_ALL_GRAPHICS,
+            layout.block_size,
+            material_fields.empty() ? nullptr : material_fields.data(),
+            static_cast<uint32_t>(material_fields.size()));
     }
-    return out;
+    if (shader_phase.uses_engine_per_frame) {
+        append_resource_requirement(
+            requirements,
+            TC_SHADER_RESOURCE_PER_FRAME,
+            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+            TC_SHADER_RESOURCE_SCOPE_FRAME,
+            STAGE_ALL_GRAPHICS);
+    }
+    if (shader_phase.uses_engine_draw_data) {
+        append_resource_requirement(
+            requirements,
+            TC_SHADER_RESOURCE_DRAW,
+            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+            TC_SHADER_RESOURCE_SCOPE_DRAW,
+            STAGE_ALL_GRAPHICS,
+            64);
+    }
+    for (const std::string& texture_name : shader_phase.material_texture_resources) {
+        append_resource_requirement(
+            requirements,
+            texture_name,
+            TC_SHADER_RESOURCE_TEXTURE,
+            TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+            STAGE_ALL_GRAPHICS);
+    }
+
+    return requirements;
 }
 
 void apply_parser_shader_contract(
     tc_shader* shader,
-    const ShaderPhase& shader_phase)
+    const ShaderPhase& shader_phase,
+    const MaterialUboLayout& layout)
 {
     if (!shader) {
         tc::Log::error("apply_parser_shader_contract called with null shader");
@@ -237,8 +305,13 @@ void apply_parser_shader_contract(
 
     std::vector<tc_shader_contract_vertex_input> vertex_inputs =
         infer_material_vertex_contract(shader_phase);
+    std::vector<tc_shader_resource_field> material_fields =
+        material_fields_from_layout(layout);
     std::vector<tc_shader_resource_requirement> resources =
-        collect_shader_resource_requirements(shader);
+        parser_shader_resource_requirements(
+            shader_phase,
+            layout,
+            material_fields);
 
     tc_shader_contract_desc desc{};
     desc.schema_version = TC_SHADER_CONTRACT_SCHEMA_VERSION;
@@ -332,7 +405,7 @@ void apply_parser_resource_layout(
             bindings.empty() ? nullptr : bindings.data(),
             static_cast<uint32_t>(bindings.size()));
     }
-    apply_parser_shader_contract(shader, shader_phase);
+    apply_parser_shader_contract(shader, shader_phase, layout);
 }
 
 } // namespace

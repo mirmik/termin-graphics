@@ -311,16 +311,6 @@ bool ensure_material_pipeline_shader(
             shader_handle.generation);
         return false;
     }
-    const bool requires_contract = shader_requires_material_pipeline_contract(shader);
-    if (!validate_shader_contract(
-            shader,
-            ShaderContractValidationOptions{
-                debug_context ? debug_context : "MaterialPipeline",
-                requires_contract,
-                true})) {
-        return false;
-    }
-
     tgfx::ShaderHandle vs;
     tgfx::ShaderHandle fs;
     if (!tc_shader_ensure_tgfx2(shader, &device, &vs, &fs)) {
@@ -328,6 +318,15 @@ bool ensure_material_pipeline_shader(
             "[MaterialPipeline] %s tc_shader_ensure_tgfx2 failed for '%s'",
             debug_context ? debug_context : "material",
             shader->name ? shader->name : shader->uuid);
+        return false;
+    }
+    const bool requires_contract = shader_requires_material_pipeline_contract(shader);
+    if (!validate_shader_contract(
+            shader,
+            ShaderContractValidationOptions{
+                debug_context ? debug_context : "MaterialPipeline",
+                requires_contract,
+                true})) {
         return false;
     }
 
