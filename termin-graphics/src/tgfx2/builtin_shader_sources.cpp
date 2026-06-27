@@ -1,4 +1,5 @@
 #include "tgfx2/builtin_shader_sources.hpp"
+#include "tgfx2/engine_shader_catalog.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -179,6 +180,18 @@ std::string ascii_upper(std::string value) {
     return value;
 }
 
+std::string builtin_source_filename(const char* source_resource_path) {
+    if (!source_resource_path || source_resource_path[0] == '\0') {
+        return {};
+    }
+    std::string path(source_resource_path);
+    constexpr const char* kPrefix = "builtin_shaders/";
+    if (path.rfind(kPrefix, 0) == 0) {
+        path.erase(0, std::strlen(kPrefix));
+    }
+    return path;
+}
+
 uint32_t resource_kind_from_catalog(const std::string& kind) {
     if (kind == "constant_buffer" || kind == "uniform_buffer") {
         return TC_SHADER_RESOURCE_CONSTANT_BUFFER;
@@ -311,6 +324,36 @@ std::string canonical_vertex_semantic(const nos::trent& input) {
     return ascii_lower(semantic);
 }
 
+std::string canonical_vertex_semantic(const EngineShaderStageIo& input) {
+    const std::string semantic = ascii_upper(input.semantic ? input.semantic : "");
+    if (semantic == "POSITION") {
+        return "position";
+    }
+    if (semantic == "NORMAL") {
+        return "normal";
+    }
+    if (semantic == "TEXCOORD" || semantic == "TEXCOORD0") {
+        return "uv";
+    }
+    if (semantic == "TANGENT") {
+        return "tangent";
+    }
+    if (semantic == "BLENDINDICES") {
+        return "joints";
+    }
+    if (semantic == "BLENDWEIGHT") {
+        return "weights";
+    }
+    if (semantic == "COLOR" || semantic == "COLOR0") {
+        return "color";
+    }
+
+    if (input.name && input.name[0] != '\0') {
+        return ascii_lower(input.name);
+    }
+    return ascii_lower(semantic);
+}
+
 uint32_t vertex_input_value_type(const std::string& semantic) {
     if (semantic == "uv") {
         return TC_SHADER_CONTRACT_VALUE_FLOAT2;
@@ -378,6 +421,49 @@ void collect_catalog_vertex_inputs(
     }
 }
 
+void append_vertex_inputs_from_engine_stage(
+    const EngineShaderStageSource* stage,
+    std::vector<tc_shader_contract_vertex_input>& out)
+{
+    if (!stage || !stage->inputs || stage->input_count == 0) {
+        return;
+    }
+
+    for (std::size_t i = 0; i < stage->input_count; ++i) {
+        const std::string semantic = canonical_vertex_semantic(stage->inputs[i]);
+        if (semantic.empty()) {
+            continue;
+        }
+
+        const auto existing = std::find_if(
+            out.begin(),
+            out.end(),
+            [&](const tc_shader_contract_vertex_input& input) {
+                return std::strncmp(
+                    input.semantic,
+                    semantic.c_str(),
+                    TC_SHADER_RESOURCE_NAME_MAX) == 0;
+            });
+        if (existing != out.end()) {
+            continue;
+        }
+
+        tc_shader_contract_vertex_input input{};
+        std::strncpy(input.semantic, semantic.c_str(), TC_SHADER_RESOURCE_NAME_MAX - 1);
+        input.semantic[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+        input.type = vertex_input_value_type(semantic);
+        input.required = 1;
+        out.push_back(input);
+    }
+}
+
+void collect_engine_program_vertex_inputs(
+    const EngineShaderProgramSource& program,
+    std::vector<tc_shader_contract_vertex_input>& out)
+{
+    append_vertex_inputs_from_engine_stage(program.vertex_stage, out);
+}
+
 std::vector<tc_shader_resource_requirement> collect_catalog_resource_requirements(
     const nos::trent& entry)
 {
@@ -419,6 +505,43 @@ std::vector<tc_shader_resource_requirement> collect_catalog_resource_requirement
     return out;
 }
 
+std::vector<tc_shader_resource_requirement> collect_engine_program_resource_requirements(
+    const EngineShaderProgramSource& program)
+{
+    std::vector<tc_shader_resource_requirement> out;
+    if (!program.resources || program.resource_count == 0) {
+        return out;
+    }
+
+    out.reserve(program.resource_count);
+    for (std::size_t i = 0; i < program.resource_count; ++i) {
+        const EngineShaderResourceDecl& resource = program.resources[i];
+        const uint32_t kind = resource_kind_from_catalog(resource.kind ? resource.kind : "");
+        uint32_t scope = resource_scope_from_catalog(resource.scope ? resource.scope : "");
+        if (scope == TC_SHADER_RESOURCE_SCOPE_UNKNOWN) {
+            scope = TC_SHADER_RESOURCE_SCOPE_TRANSIENT;
+        }
+        if (!resource.name || resource.name[0] == '\0' ||
+            kind == TC_SHADER_RESOURCE_NONE) {
+            continue;
+        }
+
+        tc_shader_resource_requirement requirement{};
+        std::strncpy(
+            requirement.name,
+            resource.name,
+            TC_SHADER_RESOURCE_NAME_MAX - 1);
+        requirement.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+        requirement.kind = kind;
+        requirement.scope = scope;
+        requirement.stage_mask = TC_SHADER_STAGE_ALL_GRAPHICS;
+        requirement.size = resource.size;
+        requirement.element_stride = resource.element_stride;
+        out.push_back(requirement);
+    }
+    return out;
+}
+
 bool apply_catalog_shader_contract(tc_shader* shader, const nos::trent& entry) {
     if (!shader) {
         return false;
@@ -442,6 +565,38 @@ bool apply_catalog_shader_contract(tc_shader* shader, const nos::trent& entry) {
     if (!tc_shader_set_contract(shader, &desc)) {
         tc::Log::error(
             "[BuiltInShaderCatalog] Failed to attach shader contract for '%s'",
+            shader->uuid);
+        return false;
+    }
+    return true;
+}
+
+bool apply_engine_program_shader_contract(
+    tc_shader* shader,
+    const EngineShaderProgramSource& program)
+{
+    if (!shader) {
+        return false;
+    }
+
+    std::vector<tc_shader_contract_vertex_input> vertex_inputs;
+    collect_engine_program_vertex_inputs(program, vertex_inputs);
+    std::vector<tc_shader_resource_requirement> resources =
+        collect_engine_program_resource_requirements(program);
+
+    tc_shader_contract_desc desc{};
+    desc.schema_version = TC_SHADER_CONTRACT_SCHEMA_VERSION;
+    desc.source_kind = TC_SHADER_CONTRACT_SOURCE_GENERATED;
+    desc.vertex_inputs = vertex_inputs.empty() ? nullptr : vertex_inputs.data();
+    desc.vertex_input_count = static_cast<uint32_t>(vertex_inputs.size());
+    desc.resources = resources.empty() ? nullptr : resources.data();
+    desc.resource_count = static_cast<uint32_t>(resources.size());
+    desc.debug_name = shader->name ? shader->name : shader->uuid;
+    desc.source_debug_name = "typed engine shader descriptor";
+
+    if (!tc_shader_set_contract(shader, &desc)) {
+        tc::Log::error(
+            "[BuiltInShaderCatalog] Failed to attach typed shader contract for '%s'",
             shader->uuid);
         return false;
     }
@@ -538,6 +693,67 @@ void apply_catalog_resource_layout(tc_shader* shader, const nos::trent& entry) {
         static_cast<uint32_t>(bindings.size()));
 }
 
+void apply_engine_program_resource_layout(
+    tc_shader* shader,
+    const EngineShaderProgramSource& program)
+{
+    if (!shader) {
+        return;
+    }
+    if (!program.resources || program.resource_count == 0) {
+        tc_shader_mark_resource_layout_known(shader);
+        return;
+    }
+
+    std::vector<tc_shader_resource_binding> bindings;
+    bindings.reserve(program.resource_count);
+    uint32_t next_material_texture_binding = 4;
+    uint32_t next_transient_resource_binding = 32;
+
+    for (std::size_t i = 0; i < program.resource_count; ++i) {
+        const EngineShaderResourceDecl& resource = program.resources[i];
+        const uint32_t kind = resource_kind_from_catalog(resource.kind ? resource.kind : "");
+        uint32_t scope = resource_scope_from_catalog(resource.scope ? resource.scope : "");
+        if (scope == TC_SHADER_RESOURCE_SCOPE_UNKNOWN) {
+            scope = TC_SHADER_RESOURCE_SCOPE_TRANSIENT;
+        }
+        if (!resource.name || resource.name[0] == '\0' ||
+            kind == TC_SHADER_RESOURCE_NONE) {
+            tc::Log::warn(
+                "[BuiltInShaderCatalog] Typed shader '%s' has invalid resource entry name='%s'",
+                program.uuid ? program.uuid : "<null>",
+                resource.name ? resource.name : "");
+            continue;
+        }
+
+        tc_shader_resource_binding binding{};
+        std::strncpy(binding.name, resource.name, TC_SHADER_RESOURCE_NAME_MAX - 1);
+        binding.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+        binding.kind = kind;
+        binding.scope = scope;
+        binding.set = TC_SHADER_RESOURCE_SET_DEFAULT;
+        binding.binding = binding_slot_for_catalog_resource(
+            resource.name,
+            kind,
+            scope,
+            next_material_texture_binding,
+            next_transient_resource_binding);
+        binding.stage_mask = TC_SHADER_STAGE_ALL_GRAPHICS;
+        binding.size = resource.size;
+        bindings.push_back(binding);
+    }
+
+    if (bindings.empty()) {
+        tc_shader_mark_resource_layout_known(shader);
+        return;
+    }
+
+    tc_shader_set_resource_layout(
+        shader,
+        bindings.data(),
+        static_cast<uint32_t>(bindings.size()));
+}
+
 std::optional<nos::trent> load_builtin_shader_catalog() {
     const std::string catalog_text =
         load_builtin_shader_source("engine-shader-catalog.json", "engine-shader-catalog");
@@ -596,6 +812,144 @@ std::string stage_path(const nos::trent& entry, const char* stage_name) {
         return {};
     }
     return string_field(*stage, "path");
+}
+
+const EngineShaderStageSource* engine_program_stage(
+    const EngineShaderProgramSource& program,
+    const char* stage_name)
+{
+    if (!stage_name || stage_name[0] == '\0') {
+        return nullptr;
+    }
+    if (std::strcmp(stage_name, "vertex") == 0) {
+        return program.vertex_stage;
+    }
+    if (std::strcmp(stage_name, "fragment") == 0) {
+        return program.fragment_stage;
+    }
+    return nullptr;
+}
+
+const EngineShaderStageSource* standalone_engine_stage(
+    const char* uuid,
+    const char* stage_name)
+{
+    if (!stage_name || stage_name[0] == '\0') {
+        return nullptr;
+    }
+    if (std::strcmp(stage_name, "vertex") == 0) {
+        return find_engine_shader_stage(uuid, ShaderStage::Vertex);
+    }
+    if (std::strcmp(stage_name, "fragment") == 0) {
+        return find_engine_shader_stage(uuid, ShaderStage::Fragment);
+    }
+    return nullptr;
+}
+
+std::string load_engine_program_stage_source(
+    const EngineShaderProgramSource& program,
+    const EngineShaderStageSource& stage)
+{
+    const std::string filename = builtin_source_filename(stage.source_resource_path);
+    if (filename.empty()) {
+        tc::Log::error(
+            "[BuiltInShaderCatalog] Typed shader '%s' stage has no source path",
+            program.uuid ? program.uuid : "<null>");
+        return {};
+    }
+    return load_builtin_shader_source(filename.c_str(), program.name);
+}
+
+tc_shader_handle register_engine_shader_program(
+    const EngineShaderProgramSource& program)
+{
+    const bool is_glsl = program.language && std::strcmp(program.language, "glsl") == 0;
+    const bool is_slang = program.language && std::strcmp(program.language, "slang") == 0;
+    if (!is_glsl && !is_slang) {
+        tc::Log::error(
+            "[BuiltInShaderCatalog] Typed shader '%s' has unsupported language '%s'",
+            program.uuid ? program.uuid : "<null>",
+            program.language ? program.language : "<null>");
+        return tc_shader_handle_invalid();
+    }
+
+    if (!program.name || program.name[0] == '\0') {
+        tc::Log::error(
+            "[BuiltInShaderCatalog] Typed shader '%s' has no name",
+            program.uuid ? program.uuid : "<null>");
+        return tc_shader_handle_invalid();
+    }
+
+    if (!program.vertex_stage && !program.fragment_stage) {
+        tc::Log::error(
+            "[BuiltInShaderCatalog] Typed shader '%s' has no live vertex/fragment stage",
+            program.uuid ? program.uuid : "<null>");
+        return tc_shader_handle_invalid();
+    }
+
+    std::string vertex_source;
+    if (program.vertex_stage) {
+        vertex_source = load_engine_program_stage_source(program, *program.vertex_stage);
+        if (vertex_source.empty()) {
+            return tc_shader_handle_invalid();
+        }
+    }
+
+    std::string fragment_source;
+    if (program.fragment_stage) {
+        fragment_source = load_engine_program_stage_source(program, *program.fragment_stage);
+        if (fragment_source.empty()) {
+            return tc_shader_handle_invalid();
+        }
+    }
+
+    const tc_shader_language shader_language =
+        is_slang ? TC_SHADER_LANGUAGE_SLANG : TC_SHADER_LANGUAGE_GLSL;
+    const tc_shader_artifact_policy artifact_policy =
+        is_slang ? TC_SHADER_ARTIFACT_REQUIRED : TC_SHADER_ARTIFACT_OPTIONAL;
+
+    tc_shader_handle handle = tc_shader_from_sources_with_entries_ex(
+        vertex_source.empty() ? nullptr : vertex_source.c_str(),
+        fragment_source.empty() ? nullptr : fragment_source.c_str(),
+        nullptr,
+        program.name,
+        /*source_path=*/nullptr,
+        program.uuid,
+        shader_language,
+        artifact_policy,
+        program.vertex_stage && program.vertex_stage->entry_point
+            ? program.vertex_stage->entry_point
+            : nullptr,
+        program.fragment_stage && program.fragment_stage->entry_point
+            ? program.fragment_stage->entry_point
+            : nullptr,
+        nullptr);
+
+    if (tc_shader_handle_is_invalid(handle)) {
+        tc::Log::error(
+            "[BuiltInShaderCatalog] Failed to register typed shader '%s'",
+            program.uuid ? program.uuid : "<null>");
+        return handle;
+    }
+
+    tc_shader* shader = tc_shader_get(handle);
+    if (!shader) {
+        tc::Log::error(
+            "[BuiltInShaderCatalog] Registered typed shader '%s' but registry lookup returned null",
+            program.uuid ? program.uuid : "<null>");
+        return tc_shader_handle_invalid();
+    }
+
+    if (!shader->is_static) {
+        shader->is_static = 1;
+        tc_shader_add_ref(shader);
+    }
+    apply_engine_program_resource_layout(shader, program);
+    if (!apply_engine_program_shader_contract(shader, program)) {
+        return tc_shader_handle_invalid();
+    }
+
+    return handle;
 }
 
 } // namespace
@@ -667,6 +1021,23 @@ std::string load_builtin_shader_stage_source_from_catalog(
         return {};
     }
 
+    if (const EngineShaderProgramSource* program = find_engine_shader_program(uuid)) {
+        const EngineShaderStageSource* stage = engine_program_stage(*program, stage_name);
+        if (!stage) {
+            tc::Log::error(
+                "[BuiltInShaderCatalog] Typed shader '%s' has no '%s' stage",
+                uuid ? uuid : "<null>",
+                stage_name);
+            return {};
+        }
+        return load_engine_program_stage_source(*program, *stage);
+    }
+    if (const EngineShaderStageSource* stage = standalone_engine_stage(uuid, stage_name)) {
+        return load_builtin_shader_source(
+            builtin_source_filename(stage->source_resource_path).c_str(),
+            stage->name);
+    }
+
     std::optional<nos::trent> entry = find_builtin_shader_catalog_entry(uuid);
     if (!entry) {
         return {};
@@ -700,6 +1071,10 @@ std::string load_builtin_shader_stage_source_from_catalog(
 }
 
 tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
+    if (const EngineShaderProgramSource* program = find_engine_shader_program(uuid)) {
+        return register_engine_shader_program(*program);
+    }
+
     std::optional<nos::trent> entry = find_builtin_shader_catalog_entry(uuid);
     if (!entry) {
         return tc_shader_handle_invalid();
