@@ -101,6 +101,8 @@ const char* material_pipeline_diagnostic_code_name(
         return "resource_name_conflict";
     case MaterialPipelineDiagnosticCode::ResourcePlacementConflict:
         return "resource_placement_conflict";
+    case MaterialPipelineDiagnosticCode::MissingVertexOutputSemantic:
+        return "missing_vertex_output_semantic";
     }
     return "unknown";
 }

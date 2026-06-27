@@ -25,6 +25,7 @@ enum class MaterialPipelineDiagnosticCode : uint8_t {
     None,
     ResourceNameConflict,
     ResourcePlacementConflict,
+    MissingVertexOutputSemantic,
 };
 
 struct MaterialPipelineResourceDecl {

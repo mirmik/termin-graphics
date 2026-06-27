@@ -76,12 +76,14 @@ set(TERMIN_RENDER_SOURCES
     src/graph_node_def.cpp
     src/material_pipeline.cpp
     src/material_pipeline_contracts.cpp
+    src/material_pipeline_variant.cpp
     src/material_ubo_apply.cpp
     src/render_pipeline.cpp
     src/render_engine.cpp
     src/shader_usage_collector.cpp
     src/shader_resource_apply.cpp
     src/tgfx2_bridge.cpp
+    src/vertex_transform_contracts.cpp
     src/scene_pipeline_template.cpp
     src/shadow.cpp
     src/tc_project_settings.c
@@ -128,6 +130,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/graph_node_def.hpp
     include/termin/render/material_pipeline.hpp
     include/termin/render/material_pipeline_contracts.hpp
+    include/termin/render/material_pipeline_variant.hpp
     include/termin/render/material_ubo_apply.hpp
     include/termin/render/resource_aliases.hpp
     include/termin/render/render_pipeline.hpp
@@ -137,6 +140,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/shader_usage_collector.hpp
     include/termin/render/tc_scene_render_ext.hpp
     include/termin/viewport_config.hpp
+    include/termin/render/vertex_transform_contracts.hpp
     include/termin/render_target_config.hpp
     include/termin/lighting/shadow.hpp
     include/tc_project_settings.h
@@ -222,10 +226,26 @@ if(TERMIN_RENDER_BUILD_TESTS)
     target_link_libraries(termin_render_material_pipeline_contracts_test PRIVATE termin_render)
     add_test(NAME termin_render_material_pipeline_contracts_test COMMAND termin_render_material_pipeline_contracts_test)
 
+    add_executable(termin_render_vertex_transform_contracts_test tests/test_vertex_transform_contracts.cpp)
+    target_include_directories(termin_render_vertex_transform_contracts_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_render_vertex_transform_contracts_test PRIVATE termin_render)
+    add_test(NAME termin_render_vertex_transform_contracts_test COMMAND termin_render_vertex_transform_contracts_test)
+
+    add_executable(termin_render_material_pipeline_variant_test tests/test_material_pipeline_variant.cpp)
+    target_include_directories(termin_render_material_pipeline_variant_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_render_material_pipeline_variant_test PRIVATE termin_render)
+    add_test(NAME termin_render_material_pipeline_variant_test COMMAND termin_render_material_pipeline_variant_test)
+
     set_target_properties(
         termin_render_drawable_test
         termin_render_drawable_phase_ref_test
         termin_render_material_pipeline_contracts_test
+        termin_render_vertex_transform_contracts_test
+        termin_render_material_pipeline_variant_test
         PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
 endif()
