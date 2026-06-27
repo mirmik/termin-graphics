@@ -6,6 +6,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -144,6 +145,20 @@ std::string string_field(const nos::trent& value, const char* key) {
         return {};
     }
     return field->as_string();
+}
+
+bool uint_field(const nos::trent& value, const char* key, uint32_t& out) {
+    const nos::trent* field = dict_get(value, key);
+    if (!field || !field->is_numer()) {
+        return false;
+    }
+    const int64_t number = field->as_integer();
+    if (number < 0 ||
+        number > static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
+        return false;
+    }
+    out = static_cast<uint32_t>(number);
+    return true;
 }
 
 std::string ascii_lower(std::string value) {
@@ -363,30 +378,42 @@ void collect_catalog_vertex_inputs(
     }
 }
 
-std::vector<tc_shader_resource_requirement> collect_shader_resource_requirements(
-    const tc_shader* shader)
+std::vector<tc_shader_resource_requirement> collect_catalog_resource_requirements(
+    const nos::trent& entry)
 {
     std::vector<tc_shader_resource_requirement> out;
-    if (!shader) {
+    const nos::trent* resources = dict_get(entry, "resources");
+    if (!resources || resources->get_type() != nos::trent_type::list) {
         return out;
     }
-    const uint32_t count = tc_shader_resource_binding_count(shader);
-    const tc_shader_resource_binding* bindings = tc_shader_resource_bindings(shader);
-    out.reserve(count);
-    for (uint32_t i = 0; i < count; ++i) {
+
+    out.reserve(resources->as_list().size());
+    for (const nos::trent& resource_data : resources->as_list()) {
+        if (resource_data.get_type() != nos::trent_type::dict) {
+            continue;
+        }
+
+        const std::string name = string_field(resource_data, "name");
+        const uint32_t kind = resource_kind_from_catalog(string_field(resource_data, "kind"));
+        uint32_t scope = resource_scope_from_catalog(string_field(resource_data, "scope"));
+        if (scope == TC_SHADER_RESOURCE_SCOPE_UNKNOWN) {
+            scope = TC_SHADER_RESOURCE_SCOPE_TRANSIENT;
+        }
+        if (name.empty() || kind == TC_SHADER_RESOURCE_NONE) {
+            continue;
+        }
+
         tc_shader_resource_requirement requirement{};
         std::strncpy(
             requirement.name,
-            bindings[i].name,
+            name.c_str(),
             TC_SHADER_RESOURCE_NAME_MAX - 1);
         requirement.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
-        requirement.kind = bindings[i].kind;
-        requirement.scope = bindings[i].scope;
-        requirement.stage_mask = bindings[i].stage_mask;
-        requirement.size = bindings[i].size;
-        requirement.element_stride = 0;
-        requirement.fields = bindings[i].fields;
-        requirement.field_count = bindings[i].field_count;
+        requirement.kind = kind;
+        requirement.scope = scope;
+        requirement.stage_mask = TC_SHADER_STAGE_ALL_GRAPHICS;
+        uint_field(resource_data, "size", requirement.size);
+        uint_field(resource_data, "element_stride", requirement.element_stride);
         out.push_back(requirement);
     }
     return out;
@@ -400,7 +427,7 @@ bool apply_catalog_shader_contract(tc_shader* shader, const nos::trent& entry) {
     std::vector<tc_shader_contract_vertex_input> vertex_inputs;
     collect_catalog_vertex_inputs(entry, vertex_inputs);
     std::vector<tc_shader_resource_requirement> resources =
-        collect_shader_resource_requirements(shader);
+        collect_catalog_resource_requirements(entry);
 
     tc_shader_contract_desc desc{};
     desc.schema_version = TC_SHADER_CONTRACT_SCHEMA_VERSION;
