@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.18)
 project(termin_monorepo VERSION 0.1.0 LANGUAGES C CXX)
 
+include(CMakePackageConfigHelpers)
+
 option(TERMIN_BUILD_MONOREPO "Build Termin as one CMake target graph" ON)
 option(TERMIN_PLATFORM_ANDROID "Build Termin native runtime for Android" OFF)
 option(TERMIN_ENABLE_OPENGL "Enable desktop OpenGL-dependent graphics/render targets" ON)
@@ -212,3 +214,22 @@ if(NOT TERMIN_PLATFORM_ANDROID)
     add_subdirectory(termin-components/termin-components-animation)
     add_subdirectory(tcplot)
 endif()
+
+configure_package_config_file(
+    ${CMAKE_CURRENT_LIST_DIR}/cmake/terminConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/terminConfig.cmake
+    INSTALL_DESTINATION lib/cmake/termin
+)
+
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/terminConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+install(
+    FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/terminConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/terminConfigVersion.cmake
+    DESTINATION lib/cmake/termin
+)
