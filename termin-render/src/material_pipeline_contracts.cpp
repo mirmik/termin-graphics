@@ -103,6 +103,12 @@ const char* material_pipeline_diagnostic_code_name(
         return "resource_placement_conflict";
     case MaterialPipelineDiagnosticCode::MissingVertexOutputSemantic:
         return "missing_vertex_output_semantic";
+    case MaterialPipelineDiagnosticCode::MissingVertexTransformTemplate:
+        return "missing_vertex_transform_template";
+    case MaterialPipelineDiagnosticCode::MissingFragmentSource:
+        return "missing_fragment_source";
+    case MaterialPipelineDiagnosticCode::ShaderCreationFailed:
+        return "shader_creation_failed";
     }
     return "unknown";
 }

@@ -26,6 +26,9 @@ enum class MaterialPipelineDiagnosticCode : uint8_t {
     ResourceNameConflict,
     ResourcePlacementConflict,
     MissingVertexOutputSemantic,
+    MissingVertexTransformTemplate,
+    MissingFragmentSource,
+    ShaderCreationFailed,
 };
 
 struct MaterialPipelineResourceDecl {

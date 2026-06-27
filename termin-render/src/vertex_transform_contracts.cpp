@@ -34,7 +34,7 @@ MaterialPipelineResourceDecl resource(
     return result;
 }
 
-MaterialFragmentInterface standard_material_fragment_interface()
+MaterialFragmentInterface make_standard_material_fragment_interface()
 {
     MaterialFragmentInterface interface;
     interface.semantics = {
@@ -174,7 +174,8 @@ VertexTransformContract static_contract(MaterialPipelinePassKind pass_kind)
     contract.pass_kind = pass_kind;
     contract.debug_name = "static";
     contract.vertex_entry = "vs_main";
-    contract.produced_fragment_input = standard_material_fragment_interface();
+    contract.produced_fragment_input =
+        make_standard_material_fragment_interface();
 
     switch (pass_kind) {
     case MaterialPipelinePassKind::Shadow:
@@ -256,7 +257,8 @@ VertexTransformContract foliage_contract(MaterialPipelinePassKind pass_kind)
         ? "termin-engine-foliage-shadow"
         : "termin-engine-foliage-instanced";
     contract.vertex_entry = "vs_main";
-    contract.produced_fragment_input = standard_material_fragment_interface();
+    contract.produced_fragment_input =
+        make_standard_material_fragment_interface();
 
     if (pass_kind == MaterialPipelinePassKind::Shadow) {
         contract.vertex_inputs = position_mesh_input();
@@ -320,6 +322,11 @@ const char* material_pipeline_value_type_name(MaterialPipelineValueType type)
         return "matrix4";
     }
     return "unknown";
+}
+
+MaterialFragmentInterface material_pipeline_standard_material_fragment_interface()
+{
+    return make_standard_material_fragment_interface();
 }
 
 VertexTransformContract material_pipeline_builtin_vertex_transform_contract(

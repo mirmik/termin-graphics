@@ -69,6 +69,8 @@ RENDER_API const char* vertex_transform_kind_name(VertexTransformKind kind);
 RENDER_API const char* material_pipeline_pass_kind_name(MaterialPipelinePassKind kind);
 RENDER_API const char* material_pipeline_value_type_name(MaterialPipelineValueType type);
 
+RENDER_API MaterialFragmentInterface material_pipeline_standard_material_fragment_interface();
+
 RENDER_API VertexTransformContract material_pipeline_builtin_vertex_transform_contract(
     VertexTransformKind kind,
     MaterialPipelinePassKind pass_kind);
