@@ -82,6 +82,7 @@ set(TERMIN_RENDER_SOURCES
     src/render_engine.cpp
     src/shader_usage_collector.cpp
     src/shader_resource_apply.cpp
+    src/shader_contract.cpp
     src/tgfx2_bridge.cpp
     src/vertex_transform_contracts.cpp
     src/scene_pipeline_template.cpp
@@ -137,6 +138,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/render_engine.hpp
     include/termin/render/scene_pipeline_template.hpp
     include/termin/render/shader_resource_apply.hpp
+    include/termin/render/shader_contract.hpp
     include/termin/render/shader_usage_collector.hpp
     include/termin/render/tc_scene_render_ext.hpp
     include/termin/viewport_config.hpp
@@ -240,12 +242,20 @@ if(TERMIN_RENDER_BUILD_TESTS)
     target_link_libraries(termin_render_material_pipeline_shader_assembler_test PRIVATE termin_render)
     add_test(NAME termin_render_material_pipeline_shader_assembler_test COMMAND termin_render_material_pipeline_shader_assembler_test)
 
+    add_executable(termin_render_shader_contract_test tests/test_shader_contract.cpp)
+    target_include_directories(termin_render_shader_contract_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_render_shader_contract_test PRIVATE termin_render)
+    add_test(NAME termin_render_shader_contract_test COMMAND termin_render_shader_contract_test)
+
     set_target_properties(
         termin_render_drawable_test
         termin_render_drawable_phase_ref_test
         termin_render_material_pipeline_contracts_test
         termin_render_vertex_transform_contracts_test
         termin_render_material_pipeline_shader_assembler_test
+        termin_render_shader_contract_test
         PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
 endif()

@@ -2,6 +2,7 @@
 
 #include "termin/render/material_ubo_apply.hpp"
 #include "termin/render/material_pipeline_shader_assembler.hpp"
+#include "termin/render/shader_contract.hpp"
 #include "termin/render/shader_resource_apply.hpp"
 #include "termin/render/tgfx2_bridge.hpp"
 #include "tgfx2/render_context.hpp"
@@ -310,13 +311,13 @@ bool ensure_material_pipeline_shader(
             shader_handle.generation);
         return false;
     }
-    if (shader_requires_material_pipeline_contract(shader) &&
-        !tc_shader_has_contract(shader)) {
-        tc::Log::error(
-            "[MaterialPipeline] %s shader '%s' is a migrated material-pipeline "
-            "shader but has no tc_shader_contract",
-            debug_context ? debug_context : "material",
-            shader->name ? shader->name : shader->uuid);
+    const bool requires_contract = shader_requires_material_pipeline_contract(shader);
+    if (!validate_shader_contract(
+            shader,
+            ShaderContractValidationOptions{
+                debug_context ? debug_context : "MaterialPipeline",
+                requires_contract,
+                true})) {
         return false;
     }
 
