@@ -7,6 +7,7 @@ struct BloomDownsampleParams {
     float2 texel_size;
 };
 
+[[TerminScope("pass")]]
 ConstantBuffer<BloomDownsampleParams> u_params;
 
 [[TerminScope("transient")]]

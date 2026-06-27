@@ -1362,25 +1362,6 @@ static bool tc_shader_validate_resource_layout(
         for (uint32_t j = i + 1u; j < count; ++j) {
             const tc_shader_resource_binding* a = &bindings[i];
             const tc_shader_resource_binding* b = &bindings[j];
-            if (a->set == b->set && a->binding == b->binding) {
-                if (strncmp(a->name, b->name, TC_SHADER_RESOURCE_NAME_MAX) != 0 ||
-                    a->kind != b->kind ||
-                    a->scope != b->scope) {
-                    tc_log(
-                        TC_LOG_ERROR,
-                        "tc_shader_set_resource_layout: conflicting resources at set=%u binding=%u: '%s' kind=%u scope=%u vs '%s' kind=%u scope=%u",
-                        a->set,
-                        a->binding,
-                        a->name,
-                        a->kind,
-                        a->scope,
-                        b->name,
-                        b->kind,
-                        b->scope);
-                    return false;
-                }
-            }
-
             if (!a->has_d3d11_placement || !b->has_d3d11_placement) {
                 continue;
             }

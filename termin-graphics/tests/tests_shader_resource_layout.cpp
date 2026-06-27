@@ -76,6 +76,41 @@ TEST_CASE("shader resource layout preserves D3D11 register placement") {
     tc_shader_shutdown();
 }
 
+TEST_CASE("shader resource layout stores backend-dependent set binding overlaps") {
+    tc_shader_init();
+
+    tc_shader_handle handle = tc_shader_create("resource-layout-backend-dependent-overlap-test");
+    REQUIRE(!tc_shader_handle_is_invalid(handle));
+
+    tc_shader* shader = tc_shader_get(handle);
+    REQUIRE(shader != nullptr);
+
+    tc_shader_resource_binding bindings[2]{};
+    std::snprintf(bindings[0].name, sizeof(bindings[0].name), "%s", "material");
+    bindings[0].kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    bindings[0].scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    bindings[0].set = 0;
+    bindings[0].binding = 4;
+    bindings[0].stage_mask = TC_SHADER_STAGE_FRAGMENT;
+
+    std::snprintf(bindings[1].name, sizeof(bindings[1].name), "%s", "albedo_texture");
+    bindings[1].kind = TC_SHADER_RESOURCE_TEXTURE;
+    bindings[1].scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    bindings[1].set = 0;
+    bindings[1].binding = 4;
+    bindings[1].stage_mask = TC_SHADER_STAGE_FRAGMENT;
+
+    tc_shader_set_resource_layout(shader, bindings, 2);
+
+    CHECK(tc_shader_has_resource_layout(shader));
+    CHECK_EQ(tc_shader_resource_binding_count(shader), 2u);
+    CHECK(tc_shader_find_resource_binding(shader, "material") != nullptr);
+    CHECK(tc_shader_find_resource_binding(shader, "albedo_texture") != nullptr);
+
+    tc_shader_destroy(handle);
+    tc_shader_shutdown();
+}
+
 TEST_CASE("shader contract attaches deep-copied interface contract") {
     tc_shader_init();
 
