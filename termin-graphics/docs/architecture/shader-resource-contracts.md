@@ -146,8 +146,9 @@ into a shader contract/layout. It should:
 - while target compiler outputs still require numeric decoration/register
   patching, use only a transitional placement allocator based on generic
   contract data (`scope`, resource kind, stable logical name). This allocator is
-  compatibility glue, not the target architecture, and must not grow
-  per-resource special cases such as `shadow_maps -> binding 8`;
+  shared with the backend binding-plan layer, is compatibility glue rather than
+  target architecture, and must not grow per-resource special cases such as
+  `shadow_maps -> binding 8`;
 - patch/emit artifacts so backend bytecode and sidecar metadata agree;
 - write layout sidecars containing at least `name`, `kind`, `scope`, stage
   mask, size/fields for constant buffers, and backend placement;

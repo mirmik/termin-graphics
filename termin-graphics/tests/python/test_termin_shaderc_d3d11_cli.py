@@ -398,5 +398,5 @@ def test_termin_shaderc_d3d11_patches_helper_and_imported_hlsl_resources(tmp_pat
         ("material", "constant_buffer", "material", {"register_class": "b", "register_index": 0}),
         ("albedo_texture", "texture", "material", {"register_class": "t", "register_index": 0}),
         ("normal_texture", "texture", "material", {"register_class": "t", "register_index": 1}),
-        ("shadow_maps", "texture", "pass", {"register_class": "t", "register_index": 2}),
+        ("shadow_maps", "texture", "unscoped", {"register_class": "t", "register_index": 2}),
     ]

@@ -6,6 +6,7 @@
 #endif
 #include <tcbase/trent/json.h>
 #include <tgfx/resources/tc_shader.h>
+#include <tgfx2/backend_binding_plan.hpp>
 #include <tgfx2/internal/process_runner.hpp>
 
 #include <algorithm>
@@ -219,99 +220,37 @@ void apply_default_resource_scope(
     }
 }
 
-static bool is_scoped_resource_scope(const std::string& scope) {
-    return scope == "frame" ||
-           scope == "pass" ||
-           scope == "material" ||
-           scope == "draw" ||
-           scope == "transient";
+static tgfx::BackendType backend_type_for_target(const std::string& target) {
+    if (target == "opengl") return tgfx::BackendType::OpenGL;
+    if (target == "d3d11") return tgfx::BackendType::D3D11;
+    if (target == "metal") return tgfx::BackendType::Metal;
+    if (target == "vulkan" || target.empty()) return tgfx::BackendType::Vulkan;
+    return tgfx::BackendType::Null;
 }
 
-static bool is_constant_buffer_kind(const std::string& kind) {
-    return kind == "constant_buffer" || kind == "uniform_buffer";
-}
-
-static bool is_texture_like_kind(const std::string& kind) {
-    return kind == "texture" ||
-           kind == "storage_texture" ||
-           kind == "sampler";
-}
-
-static uint32_t stable_resource_name_hash(const std::string& value) {
-    uint32_t hash = 2166136261u;
-    for (unsigned char ch : value) {
-        hash ^= static_cast<uint32_t>(ch);
-        hash *= 16777619u;
-    }
-    return hash;
-}
-
-struct BindingRange {
-    uint32_t base = 0;
-    uint32_t size = 0;
-};
-
-static BindingRange scoped_binding_range(
-    const ShaderResourceBinding& resource,
-    const std::string& target
+static tgfx::ShaderResourceKind shader_resource_kind_for_layout(
+    const std::string& kind
 ) {
-    if (is_constant_buffer_kind(resource.kind)) {
-        if (resource.scope == "frame") return {0, 4};
-        if (resource.scope == "pass") return {4, 4};
-        if (resource.scope == "material") return {8, 8};
-        if (resource.scope == "draw") return {16, 16};
-        if (resource.scope == "transient") return {32, 8};
+    if (kind == "constant_buffer" || kind == "uniform_buffer") {
+        return tgfx::ShaderResourceKind::ConstantBuffer;
     }
-
-    if (resource.kind == "storage_buffer") {
-        if (resource.scope == "draw") return {40, 16};
-        if (resource.scope == "pass") return {56, 8};
-        if (resource.scope == "material") return {64, 8};
-        if (resource.scope == "frame") return {72, 4};
-        if (resource.scope == "transient") return {76, 8};
-    }
-
-    if (is_texture_like_kind(resource.kind)) {
-        if (target == "opengl") {
-            if (resource.scope == "material") return {4, 4};
-            if (resource.scope == "pass") return {8, 4};
-            if (resource.scope == "draw") return {12, 4};
-            if (resource.scope == "transient") return {16, 16};
-            if (resource.scope == "frame") return {0, 4};
-        }
-        if (resource.scope == "material") return {80, 32};
-        if (resource.scope == "pass") return {112, 16};
-        if (resource.scope == "draw") return {128, 16};
-        if (resource.scope == "transient") return {144, 48};
-        if (resource.scope == "frame") return {192, 8};
-    }
-
-    return {};
+    if (kind == "texture") return tgfx::ShaderResourceKind::Texture;
+    if (kind == "sampler") return tgfx::ShaderResourceKind::Sampler;
+    if (kind == "storage_buffer") return tgfx::ShaderResourceKind::StorageBuffer;
+    if (kind == "storage_texture") return tgfx::ShaderResourceKind::StorageTexture;
+    return tgfx::ShaderResourceKind::None;
 }
 
-static std::string binding_conflict_class(
-    const ShaderResourceBinding& resource,
-    const std::string& target
+static tgfx::ShaderResourceScope shader_resource_scope_for_layout(
+    const std::string& scope
 ) {
-    if (target != "opengl") {
-        return "descriptor";
-    }
-    if (is_constant_buffer_kind(resource.kind)) {
-        return "constant_buffer";
-    }
-    if (resource.kind == "storage_buffer") {
-        return "storage_buffer";
-    }
-    if (resource.kind == "storage_texture") {
-        return "storage_texture";
-    }
-    if (resource.kind == "sampler") {
-        return "sampler";
-    }
-    if (resource.kind == "texture") {
-        return "texture";
-    }
-    return resource.kind;
+    if (scope == "frame") return tgfx::ShaderResourceScope::Frame;
+    if (scope == "pass") return tgfx::ShaderResourceScope::Pass;
+    if (scope == "material") return tgfx::ShaderResourceScope::Material;
+    if (scope == "draw") return tgfx::ShaderResourceScope::Draw;
+    if (scope == "transient") return tgfx::ShaderResourceScope::Transient;
+    if (scope == "unscoped") return tgfx::ShaderResourceScope::Unscoped;
+    return tgfx::ShaderResourceScope::Unknown;
 }
 
 static bool resource_binding_conflicts(
@@ -322,7 +261,16 @@ static bool resource_binding_conflicts(
     if (a.set != b.set || a.binding != b.binding) {
         return false;
     }
-    if (binding_conflict_class(a, target) != binding_conflict_class(b, target)) {
+    const tgfx::BackendType backend = backend_type_for_target(target);
+    const tgfx::BackendBindingConflictClass a_class =
+        tgfx::backend_binding_conflict_class(
+            backend,
+            shader_resource_kind_for_layout(a.kind));
+    const tgfx::BackendBindingConflictClass b_class =
+        tgfx::backend_binding_conflict_class(
+            backend,
+            shader_resource_kind_for_layout(b.kind));
+    if (a_class != b_class) {
         return false;
     }
     return a.name != b.name || a.kind != b.kind || a.scope != b.scope;
@@ -333,22 +281,28 @@ void normalize_scope_first_binding_slots(
     bool normalize_transient_resources,
     const std::string& target
 ) {
+    const tgfx::BackendType backend = backend_type_for_target(target);
     for (size_t index = 0; index < resources.size(); ++index) {
         ShaderResourceBinding& resource = resources[index];
         resource.set = 0;
-        if (!is_scoped_resource_scope(resource.scope)) {
+        const tgfx::ShaderResourceKind kind =
+            shader_resource_kind_for_layout(resource.kind);
+        const tgfx::ShaderResourceScope scope =
+            shader_resource_scope_for_layout(resource.scope);
+        if (!tgfx::shader_resource_scope_has_transitional_binding_range(scope)) {
             continue;
         }
         if (!normalize_transient_resources && resource.scope == "transient") {
             continue;
         }
 
-        const BindingRange range = scoped_binding_range(resource, target);
+        const tgfx::BackendBindingRange range =
+            tgfx::transitional_backend_binding_range(backend, kind, scope);
         if (range.size == 0) {
             continue;
         }
 
-        const uint32_t hash = stable_resource_name_hash(resource.name);
+        const uint32_t hash = tgfx::stable_shader_resource_name_hash(resource.name);
         uint32_t candidate = range.base + (hash % range.size);
         for (uint32_t attempt = 0; attempt < range.size; ++attempt) {
             resource.binding = candidate;

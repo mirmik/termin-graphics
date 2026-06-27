@@ -506,16 +506,8 @@ static std::string infer_d3d11_hlsl_resource_scope(
     const std::string& name,
     const std::string& kind
 ) {
-    if (name == "lighting" ||
-        name == "shadow_block" ||
-        name == "shadow_maps" ||
-        name == "u_shadow_map" ||
-        name == "u_shadow_maps") {
-        return "pass";
-    }
-    if (kind == "constant_buffer" && name == "material") {
-        return "material";
-    }
+    (void)name;
+    (void)kind;
     return "unscoped";
 }
 
@@ -578,7 +570,8 @@ bool augment_d3d11_resource_bindings_from_hlsl(
     apply_default_resource_scope(resources, options.default_scope);
     normalize_scope_first_binding_slots(
         resources,
-        options.language == "slang");
+        options.language == "slang",
+        options.target);
     assign_d3d11_register_placement(resources);
     return true;
 }
