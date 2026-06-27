@@ -1,5 +1,7 @@
 #include "tgfx2/builtin_shader_sources.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -144,6 +146,24 @@ std::string string_field(const nos::trent& value, const char* key) {
     return field->as_string();
 }
 
+std::string ascii_lower(std::string value) {
+    std::transform(
+        value.begin(),
+        value.end(),
+        value.begin(),
+        [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return value;
+}
+
+std::string ascii_upper(std::string value) {
+    std::transform(
+        value.begin(),
+        value.end(),
+        value.begin(),
+        [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+    return value;
+}
+
 uint32_t resource_kind_from_catalog(const std::string& kind) {
     if (kind == "constant_buffer" || kind == "uniform_buffer") {
         return TC_SHADER_RESOURCE_CONSTANT_BUFFER;
@@ -243,6 +263,217 @@ uint32_t binding_slot_for_catalog_resource(
         return 25;
     }
     return 0;
+}
+
+bool parse_contract_draw_kind(const std::string& text, uint32_t* out) {
+    if (!out) {
+        return false;
+    }
+    if (text == "mesh") {
+        *out = TC_SHADER_CONTRACT_DRAW_MESH;
+        return true;
+    }
+    if (text == "instanced_mesh") {
+        *out = TC_SHADER_CONTRACT_DRAW_INSTANCED_MESH;
+        return true;
+    }
+    if (text == "direct") {
+        *out = TC_SHADER_CONTRACT_DRAW_DIRECT;
+        return true;
+    }
+    if (text == "fullscreen") {
+        *out = TC_SHADER_CONTRACT_DRAW_FULLSCREEN;
+        return true;
+    }
+    if (text == "compute") {
+        *out = TC_SHADER_CONTRACT_DRAW_COMPUTE;
+        return true;
+    }
+    return false;
+}
+
+bool catalog_has_stage(const nos::trent& entry, const char* stage_name) {
+    const nos::trent* stages = dict_get(entry, "stages");
+    if (!stages || stages->get_type() != nos::trent_type::dict) {
+        return false;
+    }
+    return dict_get(*stages, stage_name) != nullptr;
+}
+
+uint32_t default_contract_draw_kind_for_catalog_entry(const nos::trent& entry) {
+    const bool has_vertex = catalog_has_stage(entry, "vertex");
+    const bool has_fragment = catalog_has_stage(entry, "fragment");
+    if (!has_vertex && has_fragment) {
+        return TC_SHADER_CONTRACT_DRAW_FULLSCREEN;
+    }
+    return TC_SHADER_CONTRACT_DRAW_MESH;
+}
+
+bool contract_draw_kind_from_catalog(const nos::trent& entry, uint32_t* out) {
+    if (!out) {
+        return false;
+    }
+
+    const nos::trent* contract = dict_get(entry, "contract");
+    if (contract && contract->get_type() == nos::trent_type::dict) {
+        const std::string draw_kind = string_field(*contract, "draw_kind");
+        if (!draw_kind.empty()) {
+            if (parse_contract_draw_kind(draw_kind, out)) {
+                return true;
+            }
+            tc::Log::error(
+                "[BuiltInShaderCatalog] Shader '%s' has unsupported contract.draw_kind='%s'",
+                string_field(entry, "uuid").c_str(),
+                draw_kind.c_str());
+            return false;
+        }
+    }
+
+    const std::string draw_kind = string_field(entry, "draw_kind");
+    if (!draw_kind.empty()) {
+        if (parse_contract_draw_kind(draw_kind, out)) {
+            return true;
+        }
+        tc::Log::error(
+            "[BuiltInShaderCatalog] Shader '%s' has unsupported draw_kind='%s'",
+            string_field(entry, "uuid").c_str(),
+            draw_kind.c_str());
+        return false;
+    }
+
+    *out = default_contract_draw_kind_for_catalog_entry(entry);
+    return true;
+}
+
+std::string canonical_vertex_semantic(const nos::trent& input) {
+    const std::string semantic = ascii_upper(string_field(input, "semantic"));
+    if (semantic == "POSITION") {
+        return "position";
+    }
+    if (semantic == "NORMAL") {
+        return "normal";
+    }
+    if (semantic == "TEXCOORD" || semantic == "TEXCOORD0") {
+        return "uv";
+    }
+    if (semantic == "TANGENT") {
+        return "tangent";
+    }
+    if (semantic == "BLENDINDICES") {
+        return "joints";
+    }
+    if (semantic == "BLENDWEIGHT") {
+        return "weights";
+    }
+    if (semantic == "COLOR" || semantic == "COLOR0") {
+        return "color";
+    }
+
+    const std::string name = string_field(input, "name");
+    if (!name.empty()) {
+        return ascii_lower(name);
+    }
+    return ascii_lower(semantic);
+}
+
+uint32_t vertex_input_value_type(const std::string& semantic) {
+    if (semantic == "uv") {
+        return TC_SHADER_CONTRACT_VALUE_FLOAT2;
+    }
+    if (semantic == "position" || semantic == "normal") {
+        return TC_SHADER_CONTRACT_VALUE_FLOAT3;
+    }
+    if (semantic == "tangent" ||
+        semantic == "color" ||
+        semantic == "joints" ||
+        semantic == "weights") {
+        return TC_SHADER_CONTRACT_VALUE_FLOAT4;
+    }
+    return TC_SHADER_CONTRACT_VALUE_UNKNOWN;
+}
+
+void collect_catalog_vertex_inputs(
+    const nos::trent& entry,
+    std::vector<tc_shader_contract_vertex_input>& out)
+{
+    const nos::trent* stages = dict_get(entry, "stages");
+    if (!stages || stages->get_type() != nos::trent_type::dict) {
+        return;
+    }
+
+    const nos::trent* vertex = dict_get(*stages, "vertex");
+    if (!vertex || vertex->get_type() != nos::trent_type::dict) {
+        return;
+    }
+
+    const nos::trent* inputs = dict_get(*vertex, "inputs");
+    if (!inputs || inputs->get_type() != nos::trent_type::list) {
+        return;
+    }
+
+    for (const nos::trent& input_data : inputs->as_list()) {
+        if (input_data.get_type() != nos::trent_type::dict) {
+            continue;
+        }
+
+        const std::string semantic = canonical_vertex_semantic(input_data);
+        if (semantic.empty()) {
+            continue;
+        }
+
+        const auto existing = std::find_if(
+            out.begin(),
+            out.end(),
+            [&](const tc_shader_contract_vertex_input& input) {
+                return std::strncmp(
+                    input.semantic,
+                    semantic.c_str(),
+                    TC_SHADER_RESOURCE_NAME_MAX) == 0;
+            });
+        if (existing != out.end()) {
+            continue;
+        }
+
+        tc_shader_contract_vertex_input input{};
+        std::strncpy(input.semantic, semantic.c_str(), TC_SHADER_RESOURCE_NAME_MAX - 1);
+        input.semantic[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+        input.type = vertex_input_value_type(semantic);
+        input.required = 1;
+        out.push_back(input);
+    }
+}
+
+bool apply_catalog_shader_contract(tc_shader* shader, const nos::trent& entry) {
+    if (!shader) {
+        return false;
+    }
+
+    uint32_t draw_kind = TC_SHADER_CONTRACT_DRAW_MESH;
+    if (!contract_draw_kind_from_catalog(entry, &draw_kind)) {
+        return false;
+    }
+
+    std::vector<tc_shader_contract_vertex_input> vertex_inputs;
+    collect_catalog_vertex_inputs(entry, vertex_inputs);
+
+    tc_shader_contract_desc desc{};
+    desc.schema_version = TC_SHADER_CONTRACT_SCHEMA_VERSION;
+    desc.producer_kind = TC_SHADER_CONTRACT_PRODUCER_ENGINE_GENERATED;
+    desc.draw_kind = draw_kind;
+    desc.vertex_inputs = vertex_inputs.empty() ? nullptr : vertex_inputs.data();
+    desc.vertex_input_count = static_cast<uint32_t>(vertex_inputs.size());
+    desc.resources = tc_shader_resource_bindings(shader);
+    desc.resource_count = tc_shader_resource_binding_count(shader);
+    desc.debug_name = shader->name ? shader->name : shader->uuid;
+    desc.producer_debug_name = "builtin shader catalog";
+
+    if (!tc_shader_set_contract(shader, &desc)) {
+        tc::Log::error(
+            "[BuiltInShaderCatalog] Failed to attach shader contract for '%s'",
+            shader->uuid);
+        return false;
+    }
+    return true;
 }
 
 void apply_catalog_resource_layout(tc_shader* shader, const nos::trent& entry) {
@@ -621,6 +852,9 @@ tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
             tc_shader_add_ref(shader);
         }
         apply_catalog_resource_layout(shader, *entry);
+        if (!apply_catalog_shader_contract(shader, *entry)) {
+            return tc_shader_handle_invalid();
+        }
     }
 
     return handle;

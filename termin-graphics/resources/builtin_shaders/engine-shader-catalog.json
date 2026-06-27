@@ -5,6 +5,9 @@
       "uuid": "termin-engine-fsq",
       "name": "FullscreenQuadEngineVS",
       "language": "slang",
+      "contract": {
+        "draw_kind": "fullscreen"
+      },
       "stages": {
         "vertex": {
           "path": "termin-engine-fsq.vert.slang",
@@ -40,6 +43,9 @@
       "uuid": "termin-runtime-default-color",
       "name": "TerminRuntimeDefaultColor",
       "language": "slang",
+      "contract": {
+        "draw_kind": "mesh"
+      },
       "stages": {
         "vertex": {
           "path": "termin-runtime-default-color.slang",
@@ -102,6 +108,9 @@
       "uuid": "termin-engine-shadow",
       "name": "ShadowEngineVSFS",
       "language": "slang",
+      "contract": {
+        "draw_kind": "mesh"
+      },
       "stages": {
         "vertex": {
           "path": "termin-engine-shadow.slang",
@@ -2508,6 +2517,9 @@
       "uuid": "termin-engine-depth-to-color",
       "name": "DepthToColorFS",
       "language": "slang",
+      "contract": {
+        "draw_kind": "fullscreen"
+      },
       "stages": {
         "fragment": {
           "path": "termin-engine-depth-to-color.frag.slang",
@@ -2540,6 +2552,9 @@
       "uuid": "termin-engine-color-to-depth",
       "name": "ColorToDepthFS",
       "language": "slang",
+      "contract": {
+        "draw_kind": "fullscreen"
+      },
       "stages": {
         "fragment": {
           "path": "termin-engine-color-to-depth.frag.slang",
@@ -2582,6 +2597,9 @@
       "uuid": "termin-engine-bloom-bright",
       "name": "BloomBrightFS",
       "language": "slang",
+      "contract": {
+        "draw_kind": "fullscreen"
+      },
       "stages": {
         "fragment": {
           "path": "termin-engine-bloom-bright.frag.slang",
@@ -2619,6 +2637,9 @@
       "uuid": "termin-engine-highlight",
       "name": "HighlightEngineFS",
       "language": "slang",
+      "contract": {
+        "draw_kind": "fullscreen"
+      },
       "stages": {
         "fragment": {
           "path": "termin-engine-highlight.frag.slang",
@@ -2810,6 +2831,9 @@
       "uuid": "termin-engine-grayscale",
       "name": "GrayscaleEngineFS",
       "language": "slang",
+      "contract": {
+        "draw_kind": "fullscreen"
+      },
       "stages": {
         "fragment": {
           "path": "termin-engine-grayscale.frag.slang",
@@ -2847,6 +2871,9 @@
       "uuid": "termin-engine-bloom-downsample",
       "name": "BloomDownsampleFS",
       "language": "slang",
+      "contract": {
+        "draw_kind": "fullscreen"
+      },
       "stages": {
         "fragment": {
           "path": "termin-engine-bloom-downsample.frag.slang",
@@ -2884,6 +2911,9 @@
       "uuid": "termin-engine-bloom-upsample",
       "name": "BloomUpsampleFS",
       "language": "slang",
+      "contract": {
+        "draw_kind": "fullscreen"
+      },
       "stages": {
         "fragment": {
           "path": "termin-engine-bloom-upsample.frag.slang",
@@ -2921,6 +2951,9 @@
       "uuid": "termin-engine-bloom-composite",
       "name": "BloomCompositeFS",
       "language": "slang",
+      "contract": {
+        "draw_kind": "fullscreen"
+      },
       "stages": {
         "fragment": {
           "path": "termin-engine-bloom-composite.frag.slang",
@@ -2963,6 +2996,9 @@
       "uuid": "termin-engine-tonemap",
       "name": "TonemapEngineFS",
       "language": "slang",
+      "contract": {
+        "draw_kind": "fullscreen"
+      },
       "stages": {
         "fragment": {
           "path": "termin-engine-tonemap.frag.slang",
