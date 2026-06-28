@@ -24,11 +24,9 @@ enum class MaterialPipelineResourceOwner : uint8_t {
 enum class MaterialPipelineDiagnosticCode : uint8_t {
     None,
     ResourceNameConflict,
-    ResourcePlacementConflict,
     MissingVertexOutputSemantic,
     MissingVertexTransformTemplate,
     MissingFragmentSource,
-    MissingResourcePlacement,
     ShaderCreationFailed,
 };
 
@@ -40,15 +38,8 @@ struct MaterialPipelineResourceRequirement {
     uint32_t size = 0;
 };
 
-struct MaterialPipelineResourcePlacement {
-    uint32_t set = TC_SHADER_RESOURCE_SET_DEFAULT;
-    uint32_t binding = 0;
-    bool resolved = false;
-};
-
 struct MaterialPipelineResourceDecl {
     MaterialPipelineResourceRequirement requirement;
-    MaterialPipelineResourcePlacement placement;
     MaterialPipelineResourceOwner owner = MaterialPipelineResourceOwner::Material;
 };
 

@@ -17,7 +17,6 @@ MaterialPipelineResourceDecl resource(
     std::string name,
     uint32_t kind,
     uint32_t scope,
-    uint32_t binding,
     uint32_t stage_mask,
     uint32_t size = 0)
 {
@@ -27,9 +26,6 @@ MaterialPipelineResourceDecl resource(
     result.requirement.scope = scope;
     result.requirement.stage_mask = stage_mask;
     result.requirement.size = size;
-    result.placement.set = TC_SHADER_RESOURCE_SET_DEFAULT;
-    result.placement.binding = binding;
-    result.placement.resolved = true;
     result.owner = MaterialPipelineResourceOwner::VertexTransform;
     return result;
 }
@@ -124,7 +120,6 @@ void add_engine_per_frame(VertexTransformContract& contract)
         TC_SHADER_RESOURCE_PER_FRAME,
         TC_SHADER_RESOURCE_CONSTANT_BUFFER,
         TC_SHADER_RESOURCE_SCOPE_FRAME,
-        2u,
         TC_SHADER_STAGE_VERTEX));
 }
 
@@ -134,7 +129,6 @@ void add_static_draw_data(VertexTransformContract& contract, const char* name)
         name,
         TC_SHADER_RESOURCE_CONSTANT_BUFFER,
         TC_SHADER_RESOURCE_SCOPE_DRAW,
-        24u,
         TC_SHADER_STAGE_VERTEX,
         64u));
 }
@@ -145,7 +139,6 @@ void add_bone_block(VertexTransformContract& contract)
         TC_SHADER_RESOURCE_BONE_BLOCK,
         TC_SHADER_RESOURCE_CONSTANT_BUFFER,
         TC_SHADER_RESOURCE_SCOPE_DRAW,
-        16u,
         TC_SHADER_STAGE_VERTEX));
 }
 
@@ -155,14 +148,12 @@ void add_foliage_resources(VertexTransformContract& contract)
         "foliage_draw",
         TC_SHADER_RESOURCE_CONSTANT_BUFFER,
         TC_SHADER_RESOURCE_SCOPE_DRAW,
-        24u,
         TC_SHADER_STAGE_VERTEX,
         128u));
     contract.resources.push_back(resource(
         "foliage_instances",
         TC_SHADER_RESOURCE_STORAGE_BUFFER,
         TC_SHADER_RESOURCE_SCOPE_DRAW,
-        25u,
         TC_SHADER_STAGE_VERTEX));
     contract.instance_streams.push_back({"foliage_instances", 32u});
 }

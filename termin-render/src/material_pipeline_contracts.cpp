@@ -11,11 +11,7 @@ bool same_resource_identity(
 {
     return a.requirement.name == b.requirement.name &&
            a.requirement.kind == b.requirement.kind &&
-           a.requirement.scope == b.requirement.scope &&
-           (!a.placement.resolved ||
-            !b.placement.resolved ||
-            (a.placement.set == b.placement.set &&
-             a.placement.binding == b.placement.binding));
+           a.requirement.scope == b.requirement.scope;
 }
 
 bool same_resource_name_different_contract(
@@ -27,42 +23,17 @@ bool same_resource_name_different_contract(
             a.requirement.scope != b.requirement.scope);
 }
 
-bool same_resource_name_different_placement(
-    const MaterialPipelineResourceDecl& a,
-    const MaterialPipelineResourceDecl& b)
-{
-    return a.requirement.name == b.requirement.name &&
-           a.placement.resolved &&
-           b.placement.resolved &&
-           (a.placement.set != b.placement.set ||
-            a.placement.binding != b.placement.binding);
-}
-
-bool same_resource_placement_different_name(
-    const MaterialPipelineResourceDecl& a,
-    const MaterialPipelineResourceDecl& b)
-{
-    return a.placement.resolved &&
-           b.placement.resolved &&
-           a.placement.set == b.placement.set &&
-           a.placement.binding == b.placement.binding &&
-           a.requirement.name != b.requirement.name;
-}
-
 std::string resource_label(const MaterialPipelineResourceDecl& resource)
 {
     char buffer[256];
     std::snprintf(
         buffer,
         sizeof(buffer),
-        "'%s' owner=%s kind=%u scope=%u placement=%s set=%u binding=%u",
+        "'%s' owner=%s kind=%u scope=%u",
         resource.requirement.name.c_str(),
         material_pipeline_resource_owner_name(resource.owner),
         resource.requirement.kind,
-        resource.requirement.scope,
-        resource.placement.resolved ? "resolved" : "unresolved",
-        resource.placement.set,
-        resource.placement.binding);
+        resource.requirement.scope);
     return std::string(buffer);
 }
 
@@ -110,16 +81,12 @@ const char* material_pipeline_diagnostic_code_name(
         return "none";
     case MaterialPipelineDiagnosticCode::ResourceNameConflict:
         return "resource_name_conflict";
-    case MaterialPipelineDiagnosticCode::ResourcePlacementConflict:
-        return "resource_placement_conflict";
     case MaterialPipelineDiagnosticCode::MissingVertexOutputSemantic:
         return "missing_vertex_output_semantic";
     case MaterialPipelineDiagnosticCode::MissingVertexTransformTemplate:
         return "missing_vertex_transform_template";
     case MaterialPipelineDiagnosticCode::MissingFragmentSource:
         return "missing_fragment_source";
-    case MaterialPipelineDiagnosticCode::MissingResourcePlacement:
-        return "missing_resource_placement";
     case MaterialPipelineDiagnosticCode::ShaderCreationFailed:
         return "shader_creation_failed";
     }
@@ -137,9 +104,6 @@ bool material_pipeline_merge_resource(
             if (incoming.requirement.size > existing.requirement.size) {
                 existing.requirement.size = incoming.requirement.size;
             }
-            if (!existing.placement.resolved && incoming.placement.resolved) {
-                existing.placement = incoming.placement;
-            }
             return true;
         }
 
@@ -153,25 +117,6 @@ bool material_pipeline_merge_resource(
             return false;
         }
 
-        if (same_resource_name_different_placement(existing, incoming)) {
-            add_diagnostic(
-                diagnostics,
-                MaterialPipelineDiagnosticCode::ResourcePlacementConflict,
-                existing,
-                incoming,
-                "resource name is assigned incompatible backend placement");
-            return false;
-        }
-
-        if (same_resource_placement_different_name(existing, incoming)) {
-            add_diagnostic(
-                diagnostics,
-                MaterialPipelineDiagnosticCode::ResourcePlacementConflict,
-                existing,
-                incoming,
-                "resource placement is claimed by different names");
-            return false;
-        }
     }
 
     resources.push_back(incoming);

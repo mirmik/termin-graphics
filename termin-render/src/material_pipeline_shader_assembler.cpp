@@ -47,9 +47,6 @@ MaterialPipelineResourceDecl resource_decl_from_binding(
     result.requirement.scope = binding.scope;
     result.requirement.stage_mask = binding.stage_mask;
     result.requirement.size = binding.size;
-    result.placement.set = binding.set;
-    result.placement.binding = binding.binding;
-    result.placement.resolved = true;
     result.owner = owner;
     return result;
 }
