@@ -6,6 +6,7 @@
 #include <core/tc_entity_pool.h>
 #include <core/tc_scene_pool.h>
 #include <core/tc_dlist.h>
+#include <inspect/tc_runtime_type_registry.h>
 #include <render/tc_pipeline_pool.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -76,6 +77,8 @@ struct tc_pass {
     tc_pipeline_handle owner_pipeline;
     tc_type_entry* type_entry;
     uint32_t type_version;
+    tc_runtime_type_instance_link runtime_type_link;
+    // TODO: remove after old tc_type_entry instance tracking is fully retired.
     tc_dlist_node registry_node;
 };
 
@@ -97,6 +100,7 @@ static inline void tc_pass_init(tc_pass* p, const tc_pass_vtable* vtable) {
     p->owner_pipeline = TC_PIPELINE_HANDLE_INVALID;
     p->type_entry = NULL;
     p->type_version = 0;
+    tc_runtime_type_instance_link_init(&p->runtime_type_link);
     tc_dlist_init_node(&p->registry_node);
 }
 
@@ -122,6 +126,9 @@ static inline void tc_pass_execute(tc_pass* p, void* ctx) {
 }
 
 static inline const char* tc_pass_type_name(const tc_pass* p) {
+    if (p && p->runtime_type_link.type_name) {
+        return p->runtime_type_link.type_name;
+    }
     if (p && p->type_entry && p->type_entry->type_name) {
         return p->type_entry->type_name;
     }
@@ -214,11 +221,12 @@ TC_API const char* tc_pass_registry_type_at(size_t index);
 TC_API tc_pass_kind tc_pass_registry_get_kind(const char* type_name);
 TC_API tc_type_entry* tc_pass_registry_get_entry(const char* type_name);
 TC_API size_t tc_pass_registry_instance_count(const char* type_name);
+TC_API bool tc_pass_link_registered_type(tc_pass* p, const char* type_name);
 TC_API void tc_pass_unlink_from_registry(tc_pass* p);
 
 static inline bool tc_pass_type_is_current(const tc_pass* p) {
-    if (!p || !p->type_entry) return true;
-    return tc_type_version_is_current(p->type_entry, p->type_version);
+    if (!p || (!p->type_entry && !p->runtime_type_link.type_name)) return true;
+    return tc_runtime_type_registry_instance_is_current(&p->runtime_type_link);
 }
 
 typedef struct {

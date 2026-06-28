@@ -140,11 +140,7 @@ public:
         if (!tc_pass_registry_has(type_name)) {
             tc_pass_registry_register(type_name, nullptr, nullptr, TC_NATIVE_PASS);
         }
-        tc_type_entry* entry = tc_pass_registry_get_entry(type_name);
-        if (entry) {
-            _c.type_entry = entry;
-            _c.type_version = entry->version;
-        }
+        tc_pass_link_registered_type(&_c, type_name);
     }
 
     void set_owner_ref(void* owner, const tc_pass_ref_vtable* ref_vt) {
@@ -288,11 +284,7 @@ private:
         auto* pass = new PassClass();                                        \
         pass->retain();                                                      \
         tc_pass* c = pass->tc_pass_ptr();                                    \
-        tc_type_entry* entry = tc_pass_registry_get_entry(#PassClass);       \
-        if (entry) {                                                         \
-            c->type_entry = entry;                                           \
-            c->type_version = entry->version;                                \
-        }                                                                    \
+        tc_pass_link_registered_type(c, #PassClass);                         \
         return c;                                                            \
     }                                                                        \
     static struct _reg_##PassClass {                                         \
@@ -307,11 +299,7 @@ private:
         auto* pass = new PassClass();                                        \
         pass->retain();                                                      \
         tc_pass* c = pass->tc_pass_ptr();                                    \
-        tc_type_entry* entry = tc_pass_registry_get_entry(#PassClass);       \
-        if (entry) {                                                         \
-            c->type_entry = entry;                                           \
-            c->type_version = entry->version;                                \
-        }                                                                    \
+        tc_pass_link_registered_type(c, #PassClass);                         \
         return c;                                                            \
     }                                                                        \
     static struct _reg_##PassClass {                                         \

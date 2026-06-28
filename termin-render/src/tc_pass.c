@@ -16,7 +16,6 @@
 
 static tc_type_registry* g_pass_registry = NULL;
 
-#define PASS_REGISTRY_NODE_OFFSET offsetof(tc_pass, registry_node)
 #define TC_RUNTIME_TYPE_FACET_FRAME_PASS "termin.render.frame_pass"
 
 static void ensure_pass_registry_initialized(void) {
@@ -31,6 +30,47 @@ static void destroy_pass_facet(void* payload) {
         return;
     }
     tc_type_registry_unregister(g_pass_registry, entry->type_name);
+}
+
+bool tc_pass_link_registered_type(tc_pass* p, const char* type_name) {
+    if (!p || !type_name) {
+        return false;
+    }
+    if (!g_pass_registry) {
+        tc_log(
+            TC_LOG_ERROR,
+            "[tc_pass] cannot link pass instance to type '%s': registry is not initialized",
+            type_name
+        );
+        return false;
+    }
+
+    tc_type_entry* entry = tc_type_registry_get(g_pass_registry, type_name);
+    if (!entry || !entry->registered) {
+        tc_log(
+            TC_LOG_ERROR,
+            "[tc_pass] cannot link pass instance to unregistered type '%s'",
+            type_name
+        );
+        return false;
+    }
+
+    if (!tc_runtime_type_registry_link_instance(
+            type_name,
+            &p->runtime_type_link,
+            p
+        )) {
+        tc_log(
+            TC_LOG_ERROR,
+            "[tc_pass] failed to link pass instance to runtime type '%s'",
+            type_name
+        );
+        return false;
+    }
+
+    p->type_entry = entry;
+    p->type_version = entry->version;
+    return true;
 }
 
 void tc_pass_set_name(tc_pass* p, const char* name) {
@@ -97,9 +137,7 @@ tc_pass* tc_pass_registry_create(const char* type_name) {
     tc_pass* p = (tc_pass*)tc_type_entry_create(entry);
     if (p) {
         p->kind = (tc_pass_kind)entry->kind;
-        p->type_entry = entry;
-        p->type_version = entry->version;
-        tc_type_entry_link_instance(entry, p, PASS_REGISTRY_NODE_OFFSET);
+        tc_pass_link_registered_type(p, type_name);
     }
     return p;
 }
@@ -126,14 +164,13 @@ tc_type_entry* tc_pass_registry_get_entry(const char* type_name) {
 }
 
 size_t tc_pass_registry_instance_count(const char* type_name) {
-    if (!type_name || !g_pass_registry) return 0;
-    tc_type_entry* entry = tc_type_registry_get(g_pass_registry, type_name);
-    return tc_type_entry_instance_count(entry);
+    if (!type_name) return 0;
+    return tc_runtime_type_registry_instance_count(type_name);
 }
 
 void tc_pass_unlink_from_registry(tc_pass* p) {
-    if (!p || !p->type_entry) return;
-    tc_type_entry_unlink_instance(p->type_entry, p, PASS_REGISTRY_NODE_OFFSET);
+    if (!p) return;
+    tc_runtime_type_registry_unlink_instance(&p->runtime_type_link);
     p->type_entry = NULL;
     p->type_version = 0;
 }
@@ -235,9 +272,7 @@ tc_pass* tc_pass_new_external(void* body, const char* type_name, const tc_pass_r
         return NULL;
     }
 
-    p->type_entry = entry;
-    p->type_version = entry->version;
-    tc_type_entry_link_instance(entry, p, PASS_REGISTRY_NODE_OFFSET);
+    tc_pass_link_registered_type(p, type_name);
 
     return p;
 }
