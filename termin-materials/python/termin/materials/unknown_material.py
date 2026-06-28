@@ -113,3 +113,10 @@ class UnknownMaterial(TcMaterial):
     ) -> TcMaterial:
         """Create an UnknownMaterial for a material loading error."""
         return create_unknown_material(error_message=str(error))
+
+
+def material_or_unknown(material: TcMaterial | None, material_name: str) -> TcMaterial:
+    """Return a material or a visible fallback for missing material references."""
+    if material is not None:
+        return material
+    return UnknownMaterial.for_missing_material(material_name)

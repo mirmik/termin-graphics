@@ -25,7 +25,11 @@ from ._materials_native import (
     tc_material_get_all_info,
     unregister_glsl_preprocessor,
 )
-from termin.materials.unknown_material import UnknownMaterial, create_unknown_material
+from termin.materials.unknown_material import (
+    UnknownMaterial,
+    create_unknown_material,
+    material_or_unknown,
+)
 
 __all__ = [
     "GlslPreprocessor",
@@ -45,6 +49,7 @@ __all__ = [
     "create_material_from_parsed",
     "create_unknown_material",
     "glsl_preprocessor",
+    "material_or_unknown",
     "parse_property_directive",
     "parse_shader_text",
     "register_glsl_preprocessor",

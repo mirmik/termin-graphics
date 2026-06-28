@@ -18,6 +18,7 @@ setup(
     package_dir={"": "."},
     install_requires=[
         "tcbase",
+        "termin-assets",
         "termin-materials",
         "tgfx",
     ],

@@ -19,10 +19,6 @@
       ]
     },
     {
-      "path": "termin-mcp",
-      "distribution": "termin-mcp"
-    },
-    {
       "path": "termin-assets",
       "distribution": "termin-assets"
     },
@@ -83,6 +79,10 @@
       "native_extensions": [
         {"extension": "termin.scene._scene_native", "target": "_scene_native"}
       ]
+    },
+    {
+      "path": "termin-mcp",
+      "distribution": "termin-mcp"
     },
     {
       "path": "termin-prefab",
