@@ -1,334 +1,182 @@
 #include "termin/render/material_pipeline.hpp"
 
 #include "termin/render/material_ubo_apply.hpp"
+#include "termin/render/material_pipeline_shader_assembler.hpp"
+#include "termin/render/shader_contract.hpp"
 #include "termin/render/shader_resource_apply.hpp"
 #include "termin/render/tgfx2_bridge.hpp"
-#include "tgfx2/builtin_shader_sources.hpp"
 #include "tgfx2/render_context.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
 #include "tcbase/tc_log.hpp"
 
 #include <cstring>
 #include <string>
-#include <unordered_map>
 #include <unordered_set>
-#include <vector>
-
-extern "C" {
-#include "tgfx/resources/tc_shader_registry.h"
-}
 
 namespace termin {
 namespace {
 
-struct MaterialVertexVariantKey {
-    uint32_t shader_index = 0;
-    uint32_t shader_generation = 0;
-    uint8_t variant_op = TC_SHADER_VARIANT_NONE;
-    std::string vertex_template_uuid;
-    std::string vertex_entry;
-    std::string fragment_source_override;
-    std::string fragment_entry_override;
-};
-
-struct MaterialVertexVariantKeyHash {
-    size_t operator()(const MaterialVertexVariantKey& key) const {
-        size_t h = std::hash<uint32_t>()(key.shader_index);
-        h ^= std::hash<uint32_t>()(key.shader_generation) << 1;
-        h ^= std::hash<uint8_t>()(key.variant_op) << 2;
-        h ^= std::hash<std::string>()(key.vertex_template_uuid) << 3;
-        h ^= std::hash<std::string>()(key.vertex_entry) << 4;
-        h ^= std::hash<std::string>()(key.fragment_source_override) << 5;
-        h ^= std::hash<std::string>()(key.fragment_entry_override) << 6;
-        return h;
-    }
-};
-
-struct MaterialVertexVariantKeyEqual {
-    bool operator()(const MaterialVertexVariantKey& a, const MaterialVertexVariantKey& b) const {
-        return a.shader_index == b.shader_index
-            && a.shader_generation == b.shader_generation
-            && a.variant_op == b.variant_op
-            && a.vertex_template_uuid == b.vertex_template_uuid
-            && a.vertex_entry == b.vertex_entry
-            && a.fragment_source_override == b.fragment_source_override
-            && a.fragment_entry_override == b.fragment_entry_override;
-    }
-};
-
-std::unordered_map<
-    MaterialVertexVariantKey,
-    TcShader,
-    MaterialVertexVariantKeyHash,
-    MaterialVertexVariantKeyEqual>& material_vertex_variant_cache()
-{
-    static std::unordered_map<
-        MaterialVertexVariantKey,
-        TcShader,
-        MaterialVertexVariantKeyHash,
-        MaterialVertexVariantKeyEqual> cache;
-    return cache;
-}
-
-bool should_log_material_vertex_variant_error(
-    const MaterialVertexVariantRequest& request,
+bool should_log_material_shader_override_error(
+    const MaterialShaderOverrideRequest& request,
     const char* reason)
 {
     static std::unordered_set<std::string> logged_keys;
-    std::string key = request.debug_context ? request.debug_context : "MaterialVertexVariant";
+    std::string key = request.debug_context ? request.debug_context : "MaterialShaderOverride";
     key += '|';
     key += request.original_shader.uuid();
     key += '|';
-    key += std::to_string(static_cast<unsigned>(request.variant_op));
+    key += std::to_string(static_cast<unsigned>(request.vertex_transform_kind));
     key += '|';
-    key += request.vertex_template_uuid ? request.vertex_template_uuid : "";
+    key += std::to_string(static_cast<unsigned>(request.pass_kind));
+    key += '|';
+    key += std::to_string(static_cast<unsigned>(request.shader_variant_op));
     key += '|';
     key += reason ? reason : "";
     return logged_keys.insert(key).second;
 }
 
-const char* material_vertex_variant_context(const MaterialVertexVariantRequest& request) {
-    return request.debug_context ? request.debug_context : "MaterialVertexVariant";
+const char* material_shader_override_context(const MaterialShaderOverrideRequest& request) {
+    return request.debug_context ? request.debug_context : "MaterialShaderOverride";
 }
 
-bool same_shader_resource_identity(
-    const tc_shader_resource_binding& a,
-    const tc_shader_resource_binding& b)
+bool material_shader_override_supported(VertexTransformKind kind)
 {
-    return std::strncmp(a.name, b.name, TC_SHADER_RESOURCE_NAME_MAX) == 0 &&
-           a.kind == b.kind &&
-           a.scope == b.scope &&
-           a.set == b.set &&
-           a.binding == b.binding;
-}
-
-void merge_seed_resource_binding(
-    std::vector<tc_shader_resource_binding>& bindings,
-    const tc_shader_resource_binding& incoming,
-    const char* context)
-{
-    for (tc_shader_resource_binding& existing : bindings) {
-        if (same_shader_resource_identity(existing, incoming)) {
-            existing.stage_mask |= incoming.stage_mask;
-            if (incoming.size > existing.size) {
-                existing.size = incoming.size;
-            }
-            return;
-        }
-        if (existing.set == incoming.set && existing.binding == incoming.binding &&
-            (std::strncmp(existing.name, incoming.name, TC_SHADER_RESOURCE_NAME_MAX) != 0 ||
-             existing.kind != incoming.kind ||
-             existing.scope != incoming.scope)) {
-            tc::Log::error(
-                "[%s] material vertex variant seed has conflicting resources at set=%u binding=%u: "
-                "'%s' kind=%u scope=%u vs '%s' kind=%u scope=%u",
-                context,
-                incoming.set,
-                incoming.binding,
-                existing.name,
-                existing.kind,
-                existing.scope,
-                incoming.name,
-                incoming.kind,
-                incoming.scope);
-            return;
-        }
+    switch (kind) {
+    case VertexTransformKind::SkinnedMesh:
+    case VertexTransformKind::Foliage:
+    case VertexTransformKind::FoliageShadow:
+        return true;
+    case VertexTransformKind::StaticMesh:
+        return false;
     }
-    bindings.push_back(incoming);
+    return false;
 }
 
-void append_seed_resource_binding(
-    std::vector<tc_shader_resource_binding>& bindings,
-    const char* name,
-    uint32_t kind,
-    uint32_t scope,
-    uint32_t binding,
-    uint32_t stage_mask,
-    uint32_t size,
-    const char* context)
+tc_shader_variant_op default_shader_variant_op_for_transform(VertexTransformKind kind)
 {
-    tc_shader_resource_binding resource{};
-    std::strncpy(resource.name, name, TC_SHADER_RESOURCE_NAME_MAX - 1);
-    resource.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
-    resource.kind = kind;
-    resource.scope = scope;
-    resource.set = TC_SHADER_RESOURCE_SET_DEFAULT;
-    resource.binding = binding;
-    resource.stage_mask = stage_mask;
-    resource.size = size;
-    merge_seed_resource_binding(bindings, resource, context);
+    switch (kind) {
+    case VertexTransformKind::SkinnedMesh:
+        return TC_SHADER_VARIANT_SKINNING;
+    case VertexTransformKind::Foliage:
+        return TC_SHADER_VARIANT_FOLIAGE;
+    case VertexTransformKind::FoliageShadow:
+        return TC_SHADER_VARIANT_FOLIAGE_SHADOW;
+    case VertexTransformKind::StaticMesh:
+        return TC_SHADER_VARIANT_NONE;
+    }
+    return TC_SHADER_VARIANT_NONE;
 }
 
-void seed_material_vertex_variant_resource_layout(
-    tc_shader* variant,
-    const tc_shader* original,
-    const MaterialVertexVariantRequest& request)
+const char* shader_override_suffix(VertexTransformKind kind)
 {
-    if (!variant) {
-        return;
-    }
-
-    const char* context = material_vertex_variant_context(request);
-    std::vector<tc_shader_resource_binding> bindings;
-    if (original) {
-        const tc_shader_resource_binding* original_bindings = tc_shader_resource_bindings(original);
-        const uint32_t original_count = tc_shader_resource_binding_count(original);
-        bindings.reserve(original_count + 4u);
-        for (uint32_t i = 0; i < original_count; ++i) {
-            merge_seed_resource_binding(bindings, original_bindings[i], context);
-        }
-    }
-
-    switch (request.variant_op) {
-    case TC_SHADER_VARIANT_SKINNING:
-        append_seed_resource_binding(
-            bindings,
-            "bone_block",
-            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-            TC_SHADER_RESOURCE_SCOPE_DRAW,
-            16u,
-            TC_SHADER_STAGE_VERTEX,
-            0u,
-            context);
-        break;
-    case TC_SHADER_VARIANT_FOLIAGE:
-    case TC_SHADER_VARIANT_FOLIAGE_SHADOW:
-        append_seed_resource_binding(
-            bindings,
-            TC_SHADER_RESOURCE_PER_FRAME,
-            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-            TC_SHADER_RESOURCE_SCOPE_FRAME,
-            2u,
-            TC_SHADER_STAGE_VERTEX,
-            0u,
-            context);
-        append_seed_resource_binding(
-            bindings,
-            "foliage_draw",
-            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-            TC_SHADER_RESOURCE_SCOPE_DRAW,
-            24u,
-            TC_SHADER_STAGE_VERTEX,
-            128u,
-            context);
-        append_seed_resource_binding(
-            bindings,
-            "foliage_instances",
-            TC_SHADER_RESOURCE_STORAGE_BUFFER,
-            TC_SHADER_RESOURCE_SCOPE_DRAW,
-            25u,
-            TC_SHADER_STAGE_VERTEX,
-            0u,
-            context);
-        break;
+    switch (kind) {
+    case VertexTransformKind::SkinnedMesh:
+        return "_Skinned";
+    case VertexTransformKind::Foliage:
+        return "_Foliage";
+    case VertexTransformKind::FoliageShadow:
+        return "_FoliageShadow";
+    case VertexTransformKind::StaticMesh:
+        return "_MaterialPipeline";
     default:
-        break;
+        return "_MaterialPipeline";
     }
+}
 
-    if (!bindings.empty()) {
-        tc_shader_set_resource_layout(
-            variant,
-            bindings.data(),
-            static_cast<uint32_t>(bindings.size()));
+MaterialFragmentInterface required_fragment_interface_for_pass(
+    MaterialPipelinePassKind pass_kind)
+{
+    if (pass_kind == MaterialPipelinePassKind::Color) {
+        return material_pipeline_standard_material_fragment_interface();
     }
+    return {};
+}
+
+std::string shader_override_name_for_request(
+    TcShader original_shader,
+    const MaterialShaderOverrideRequest& request)
+{
+    std::string name = original_shader.name();
+    if (name.empty()) {
+        name = original_shader.uuid();
+    }
+    name += shader_override_suffix(request.vertex_transform_kind);
+    const char* pass_name = material_pipeline_pass_kind_name(request.pass_kind);
+    if (pass_name && pass_name[0] != '\0') {
+        name += "_";
+        name += pass_name;
+    }
+    return name;
+}
+
+void log_material_pipeline_assembly_diagnostics(
+    const MaterialShaderOverrideRequest& request,
+    const MaterialPipelineShaderAssemblyResult& assembly)
+{
+    const char* context = material_shader_override_context(request);
+    for (const MaterialPipelineDiagnostic& diagnostic : assembly.diagnostics) {
+        tc::Log::error(
+            "[%s] shader contract assembly failed: %s: %s",
+            context,
+            material_pipeline_diagnostic_code_name(diagnostic.code),
+            diagnostic.message.c_str());
+    }
+}
+
+bool contract_has_vertex_input(
+    const tc_shader_contract_view& contract,
+    const char* semantic)
+{
+    if (!semantic || semantic[0] == '\0') {
+        return false;
+    }
+    for (uint32_t i = 0; i < contract.vertex_input_count; ++i) {
+        if (std::strncmp(
+                contract.vertex_inputs[i].semantic,
+                semantic,
+                TC_SHADER_RESOURCE_NAME_MAX) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool shader_requires_material_pipeline_contract(const tc_shader* shader)
+{
+    if (!shader || !shader->is_variant) {
+        return false;
+    }
+    return shader->variant_op == TC_SHADER_VARIANT_SKINNING ||
+           shader->variant_op == TC_SHADER_VARIANT_FOLIAGE ||
+           shader->variant_op == TC_SHADER_VARIANT_FOLIAGE_SHADOW;
 }
 
 } // namespace
 
-TcShader get_material_vertex_variant(const MaterialVertexVariantRequest& request) {
-    const char* context = material_vertex_variant_context(request);
+TcShader assemble_material_shader_override(const MaterialShaderOverrideRequest& request) {
+    const char* context = material_shader_override_context(request);
     TcShader original_shader = request.original_shader;
     if (!original_shader.is_valid()) {
         return TcShader();
     }
-    if (request.variant_op == TC_SHADER_VARIANT_NONE) {
-        if (should_log_material_vertex_variant_error(request, "missing_variant_op")) {
-            tc::Log::error("[%s] cannot create material vertex variant: variant op is NONE", context);
-        }
-        return TcShader();
-    }
-    if (!request.vertex_template_uuid || request.vertex_template_uuid[0] == '\0') {
-        if (should_log_material_vertex_variant_error(request, "missing_vertex_template")) {
-            tc::Log::error("[%s] cannot create material vertex variant: vertex template uuid is empty", context);
-        }
-        return TcShader();
-    }
-    if (original_shader.variant_op() == request.variant_op) {
+    const tc_shader_variant_op shader_variant_op =
+        request.shader_variant_op != TC_SHADER_VARIANT_NONE
+            ? request.shader_variant_op
+            : default_shader_variant_op_for_transform(request.vertex_transform_kind);
+    if (shader_variant_op != TC_SHADER_VARIANT_NONE &&
+        original_shader.variant_op() == shader_variant_op) {
         return original_shader;
     }
-    if (request.require_slang_original && original_shader.language() != TC_SHADER_LANGUAGE_SLANG) {
-        if (should_log_material_vertex_variant_error(request, "unsupported_language")) {
+
+    if (!material_shader_override_supported(request.vertex_transform_kind)) {
+        if (should_log_material_shader_override_error(request, "unsupported_transform_kind")) {
             tc::Log::error(
-                "[%s] cannot create material vertex variant for '%s': "
-                "variant requires Slang material shaders, got language=%u",
+                "[%s] cannot create material shader override for '%s': unsupported transform kind %u",
                 context,
                 original_shader.name(),
-                static_cast<unsigned>(original_shader.language()));
+                static_cast<unsigned>(request.vertex_transform_kind));
         }
         return TcShader();
-    }
-
-    MaterialVertexVariantKey key{};
-    key.shader_index = original_shader.handle.index;
-    key.shader_generation = original_shader.handle.generation;
-    key.variant_op = static_cast<uint8_t>(request.variant_op);
-    key.vertex_template_uuid = request.vertex_template_uuid;
-    key.vertex_entry = request.vertex_entry ? request.vertex_entry : "";
-    key.fragment_source_override = request.fragment_source_override ? request.fragment_source_override : "";
-    key.fragment_entry_override = request.fragment_entry_override ? request.fragment_entry_override : "";
-
-    auto& cache = material_vertex_variant_cache();
-    auto it = cache.find(key);
-    if (it != cache.end()) {
-        TcShader& cached = it->second;
-        if (!cached.variant_is_stale()) {
-            return cached;
-        }
-        cache.erase(it);
-    }
-
-    const std::string vertex_source =
-        tgfx::load_builtin_shader_stage_source_from_catalog(request.vertex_template_uuid, "vertex");
-    if (vertex_source.empty()) {
-        if (should_log_material_vertex_variant_error(request, "missing_vertex_template_source")) {
-            tc::Log::error(
-                "[%s] failed to load material vertex variant template '%s'",
-                context,
-                request.vertex_template_uuid);
-        }
-        return TcShader();
-    }
-
-    const char* fragment_source = request.fragment_source_override
-        ? request.fragment_source_override
-        : original_shader.fragment_source();
-    if (!fragment_source || fragment_source[0] == '\0') {
-        if (should_log_material_vertex_variant_error(request, "missing_fragment_source")) {
-            tc::Log::error(
-                "[%s] cannot create material vertex variant for '%s': fragment source is empty",
-                context,
-                original_shader.name());
-        }
-        return TcShader();
-    }
-
-    const char* geometry_source = original_shader.geometry_source();
-    if (geometry_source && geometry_source[0] != '\0') {
-        if (should_log_material_vertex_variant_error(request, "geometry_unsupported")) {
-            tc::Log::error(
-                "[%s] cannot create material vertex variant for '%s': geometry shaders are not supported",
-                context,
-                original_shader.name());
-        }
-        return TcShader();
-    }
-
-    std::string variant_name = original_shader.name();
-    if (variant_name.empty()) {
-        variant_name = std::string("Variant_") + original_shader.uuid();
-    }
-    if (request.variant_name_suffix && request.variant_name_suffix[0] != '\0') {
-        variant_name += request.variant_name_suffix;
     }
 
     char variant_uuid[40];
@@ -336,56 +184,42 @@ TcShader get_material_vertex_variant(const MaterialVertexVariantRequest& request
         variant_uuid,
         sizeof(variant_uuid),
         original_shader.uuid(),
-        request.variant_op);
+        shader_variant_op);
 
-    const char* vertex_entry = request.vertex_entry && request.vertex_entry[0] != '\0'
-        ? request.vertex_entry
-        : "vs_main";
-    tc_shader* original_raw = original_shader.get();
-    const char* fragment_entry = request.fragment_entry_override
-        ? request.fragment_entry_override
-        : (original_raw ? original_raw->fragment_entry : nullptr);
-    if (!fragment_entry || fragment_entry[0] == '\0') {
-        fragment_entry = "main";
+    MaterialPipelineShaderAssemblyRequest assembly_request{};
+    assembly_request.material = material_pipeline_material_contract_from_shader(
+        original_shader,
+        required_fragment_interface_for_pass(request.pass_kind));
+    assembly_request.vertex_transform =
+        material_pipeline_builtin_vertex_transform_contract(
+            request.vertex_transform_kind,
+            request.pass_kind);
+    assembly_request.pass = material_pipeline_builtin_pass_contract(request.pass_kind);
+    assembly_request.shader_name = shader_override_name_for_request(original_shader, request);
+    assembly_request.shader_uuid = variant_uuid;
+    assembly_request.language = original_shader.language();
+    assembly_request.artifact_policy = original_shader.artifact_policy();
+
+    MaterialPipelineShaderAssemblyResult assembly =
+        material_pipeline_assemble_shader(assembly_request);
+    if (!assembly.ok()) {
+        if (should_log_material_shader_override_error(request, "shader_contract_assembler_failed")) {
+            log_material_pipeline_assembly_diagnostics(request, assembly);
+        }
+        return TcShader();
     }
 
-    tc_shader_handle handle = tc_shader_from_sources_with_entries_ex(
-        vertex_source.c_str(),
-        fragment_source,
-        nullptr,
-        variant_name.c_str(),
-        original_shader.source_path(),
-        variant_uuid,
-        TC_SHADER_LANGUAGE_SLANG,
-        TC_SHADER_ARTIFACT_REQUIRED,
-        vertex_entry,
-        fragment_entry,
-        nullptr);
-    if (tc_shader_handle_is_invalid(handle)) {
+    if (shader_variant_op != TC_SHADER_VARIANT_NONE) {
+        assembly.shader.set_variant_info(original_shader, shader_variant_op);
+    }
+    if (!tc_shader_has_contract(assembly.shader.get())) {
         tc::Log::error(
-            "[%s] failed to create material vertex variant for '%s'",
+            "[%s] material shader override for '%s' was created without tc_shader_contract",
             context,
             original_shader.name());
         return TcShader();
     }
-
-    TcShader variant(handle);
-    variant.set_features(original_shader.features());
-    variant.set_language(TC_SHADER_LANGUAGE_SLANG);
-    variant.set_artifact_policy(TC_SHADER_ARTIFACT_REQUIRED);
-
-    tc_shader* variant_raw = variant.get();
-    if (original_raw && variant_raw) {
-        // Material vertex variants must get field/resource metadata from
-        // shaderc sidecar reflection. Parser-authored legacy material UBO
-        // entries would create a second source of truth.
-        tc_shader_set_material_ubo_layout(variant_raw, nullptr, 0, 0);
-        seed_material_vertex_variant_resource_layout(variant_raw, original_raw, request);
-    }
-
-    variant.set_variant_info(original_shader, request.variant_op);
-    cache[key] = variant;
-    return variant;
+    return assembly.shader;
 }
 
 MaterialMeshVertexInput material_mesh_vertex_input_for_shader(
@@ -396,21 +230,39 @@ MaterialMeshVertexInput material_mesh_vertex_input_for_shader(
         return static_input;
     }
 
-    if (shader->variant_op != TC_SHADER_VARIANT_SKINNING) {
+    tc_shader_contract_view contract{};
+    if (!tc_shader_get_contract_view(shader, &contract)) {
         return static_input;
     }
 
-    switch (static_input) {
-        case MaterialMeshVertexInput::Position:
-            return MaterialMeshVertexInput::SkinnedPositionJointsWeights;
-        case MaterialMeshVertexInput::PositionNormal:
-            return MaterialMeshVertexInput::SkinnedPositionNormalJointsWeights;
-        case MaterialMeshVertexInput::FullMaterial:
-        case MaterialMeshVertexInput::SkinnedPositionJointsWeights:
-        case MaterialMeshVertexInput::SkinnedPositionNormalJointsWeights:
-            return static_input;
+    const bool has_position = contract_has_vertex_input(contract, "position");
+    const bool has_normal = contract_has_vertex_input(contract, "normal");
+    const bool has_uv = contract_has_vertex_input(contract, "uv");
+    const bool has_tangent = contract_has_vertex_input(contract, "tangent");
+    const bool has_joints = contract_has_vertex_input(contract, "joints");
+    const bool has_weights = contract_has_vertex_input(contract, "weights");
+
+    if (!has_position) {
+        return static_input;
     }
-    return static_input;
+
+    if (has_joints && has_weights) {
+        if (has_uv || has_tangent) {
+            return MaterialMeshVertexInput::FullMaterial;
+        }
+        if (has_normal) {
+            return MaterialMeshVertexInput::SkinnedPositionNormalJointsWeights;
+        }
+        return MaterialMeshVertexInput::SkinnedPositionJointsWeights;
+    }
+
+    if (has_uv || has_tangent) {
+        return MaterialMeshVertexInput::FullMaterial;
+    }
+    if (has_normal) {
+        return MaterialMeshVertexInput::PositionNormal;
+    }
+    return MaterialMeshVertexInput::Position;
 }
 
 bool draw_material_pipeline_mesh(
@@ -459,7 +311,6 @@ bool ensure_material_pipeline_shader(
             shader_handle.generation);
         return false;
     }
-
     tgfx::ShaderHandle vs;
     tgfx::ShaderHandle fs;
     if (!tc_shader_ensure_tgfx2(shader, &device, &vs, &fs)) {
@@ -467,6 +318,15 @@ bool ensure_material_pipeline_shader(
             "[MaterialPipeline] %s tc_shader_ensure_tgfx2 failed for '%s'",
             debug_context ? debug_context : "material",
             shader->name ? shader->name : shader->uuid);
+        return false;
+    }
+    const bool requires_contract = shader_requires_material_pipeline_contract(shader);
+    if (!validate_shader_contract(
+            shader,
+            ShaderContractValidationOptions{
+                debug_context ? debug_context : "MaterialPipeline",
+                requires_contract,
+                true})) {
         return false;
     }
 
@@ -513,8 +373,7 @@ bool prepare_material_pipeline_resources(
             resources.shadow_block_size);
     }
 
-    if (resources.lighting_ubo &&
-        tc_shader_has_feature(shader, TC_SHADER_FEATURE_LIGHTING_UBO)) {
+    if (resources.lighting_ubo) {
         bound_any |= bind_lighting_ubo_for_shader(
             ctx,
             shader,

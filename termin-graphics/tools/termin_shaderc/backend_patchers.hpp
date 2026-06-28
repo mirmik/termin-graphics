@@ -25,6 +25,7 @@ struct ShaderResourceBinding {
     bool slang_split_texture = false;
     bool slang_separate_sampler = false;
     bool slang_storage_texture = false;
+    bool d3d11_scalar_sampler_for_texture_array = false;
 
     struct Field {
         std::string name;

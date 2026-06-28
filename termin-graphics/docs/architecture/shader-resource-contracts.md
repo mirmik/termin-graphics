@@ -10,9 +10,10 @@ second.
 ```text
 Shader source owns semantic resource declarations.
 Pass and termin_graphics code own semantic resource production and binding.
-termin_shaderc owns backend placement.
-Runtime resolves names through the active shader layout.
-Backends consume resolved placement.
+termin_shaderc reflects declarations and emits compiler-side metadata.
+Runtime resolves names through the active shader contract/layout.
+Backend binding planners own concrete backend placement.
+Backends consume resolved binding plans.
 ```
 
 Normal shader authors and render-pass authors must not have to know Vulkan
@@ -25,18 +26,20 @@ details belong to generated artifacts and layout sidecars.
 |---|---|---|
 | Slang shader source | Resource names, kinds, scopes, entry points, stage IO semantics | Backend `set`/`binding`, `register(...)`, `[[vk::...]]` placement |
 | Pass / renderer code | Which logical resources are produced and bound for a draw/pass | Numeric backend slots |
-| `termin_shaderc` | Backend placement allocation, validation, artifact sidecars | Runtime resource values |
-| Runtime context | Name/scope/kind resolution against the active shader layout | Guessing missing numeric fallbacks |
-| Backend | Applying already resolved placement to API objects | Reinterpreting Termin semantic contracts |
+| `termin_shaderc` | Reflection, artifact patching required by the target compiler, layout sidecars | Runtime resource values, semantic ownership inference from names |
+| Runtime context | Name/scope/kind resolution against the active shader contract/layout | Guessing missing numeric fallbacks |
+| Backend binding planner | Concrete backend placement and conflict validation | Semantic ownership policy |
+| Backend | Applying already resolved binding plans to API objects | Reinterpreting Termin semantic contracts |
 
 The public model is:
 
 ```text
 source resource declaration
-  -> termin_shaderc reflection and placement policy
-  -> artifact + layout sidecar
+  -> termin_shaderc reflection and compiler metadata
+  -> shader contract + layout metadata
+  -> backend binding plan
   -> runtime bind-by-name
-  -> backend descriptor/register binding
+  -> backend descriptor/register/binding-point application
 ```
 
 ## Resource Scopes
@@ -130,15 +133,22 @@ logic.
 
 ## Compiler Contract
 
-`termin_shaderc` is the owner of backend placement for migrated production
-artifacts. It should:
+`termin_shaderc` is not the long-term owner of Termin backend placement policy.
+It is responsible for producing artifacts and metadata that the runtime can turn
+into a shader contract/layout. It should:
 
 - read Slang reflection and Termin scope metadata;
 - preserve missing scope metadata as `unscoped` until a policy resolves it;
 - apply `--default-scope <frame|pass|material|draw|transient>` only to
   unscoped resources, without overriding explicit `TerminScope` metadata;
 - reject invalid scope metadata for artifact-required migrated resources;
-- assign backend placement according to Termin policy;
+- avoid semantic ownership inference from resource names;
+- while target compiler outputs still require numeric decoration/register
+  patching, use only a transitional placement allocator based on generic
+  contract data (`scope`, resource kind, stable logical name). This allocator is
+  shared with the backend binding-plan layer, is compatibility glue rather than
+  target architecture, and must not grow per-resource special cases such as
+  `shadow_maps -> binding 8`;
 - patch/emit artifacts so backend bytecode and sidecar metadata agree;
 - write layout sidecars containing at least `name`, `kind`, `scope`, stage
   mask, size/fields for constant buffers, and backend placement;
@@ -192,6 +202,12 @@ Backends consume layout metadata after runtime resolution.
 Backend code should not infer Termin resource meaning from fixed slots. It
 should receive explicit resolved placement from shader layouts and resource set
 descriptions.
+
+Backend placement policy belongs in the backend binding planner. For migrated
+paths the planner consumes shader contract/layout metadata and produces a
+backend-specific binding plan. The compiler-side `set/binding` values in current
+sidecars are transitional compatibility data until artifact generation can be
+driven directly by that plan.
 
 ## Adding A Resource
 

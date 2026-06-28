@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from shaderc_test_helpers import _run_shaderc, _write_fake_slangc
+from shaderc_test_helpers import _expected_scoped_binding, _run_shaderc, _write_fake_slangc
 
 def test_termin_shaderc_invokes_fake_slangc_for_opengl(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
@@ -100,12 +100,18 @@ def test_termin_shaderc_patches_opengl_slang_constant_buffer_bindings(tmp_path: 
 
     assert result.returncode == 0, result.stderr
     glsl = output.read_text(encoding="utf-8")
-    assert "layout(binding = 2)\nlayout(std140) uniform block_PerFrame_0" in glsl
-    assert "layout(binding = 24)\nlayout(std140) uniform block_DrawData_0" in glsl
+    per_frame_binding = _expected_scoped_binding(
+        "per_frame", "constant_buffer", "frame", target="opengl"
+    )
+    draw_data_binding = _expected_scoped_binding(
+        "draw_data", "constant_buffer", "draw", target="opengl"
+    )
+    assert f"layout(binding = {per_frame_binding})\nlayout(std140) uniform block_PerFrame_0" in glsl
+    assert f"layout(binding = {draw_data_binding})\nlayout(std140) uniform block_DrawData_0" in glsl
     layout = json.loads((tmp_path / "out.vert.glsl.layout.json").read_text(encoding="utf-8"))
     assert [(r["name"], r["binding"]) for r in layout["resources"]] == [
-        ("per_frame", 2),
-        ("draw_data", 24),
+        ("per_frame", per_frame_binding),
+        ("draw_data", draw_data_binding),
     ]
 
 
@@ -163,10 +169,11 @@ def test_termin_shaderc_patches_opengl_slang_transient_texture_bindings(tmp_path
 
     assert result.returncode == 0, result.stderr
     glsl = output.read_text(encoding="utf-8")
-    assert "layout(binding = 9) uniform sampler2D u_font_atlas_0" in glsl
+    font_binding = _expected_scoped_binding("u_font_atlas", "texture", "transient", target="opengl")
+    assert f"layout(binding = {font_binding}) uniform sampler2D u_font_atlas_0" in glsl
     layout = json.loads((tmp_path / "out.frag.glsl.layout.json").read_text(encoding="utf-8"))
     assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
-        ("u_font_atlas", "transient", 9),
+        ("u_font_atlas", "transient", font_binding),
     ]
 
 def test_termin_shaderc_patches_opengl_slang_material_texture_bindings(tmp_path: Path) -> None:
@@ -233,12 +240,18 @@ def test_termin_shaderc_patches_opengl_slang_material_texture_bindings(tmp_path:
 
     assert result.returncode == 0, result.stderr
     glsl = output.read_text(encoding="utf-8")
-    assert "layout(binding = 1)\nlayout(std140) uniform block_MaterialParams_0" in glsl
-    assert "layout(binding = 4) uniform sampler2D albedo_texture_0" in glsl
+    material_binding = _expected_scoped_binding(
+        "material", "constant_buffer", "material", target="opengl"
+    )
+    albedo_binding = _expected_scoped_binding(
+        "albedo_texture", "texture", "material", target="opengl"
+    )
+    assert f"layout(binding = {material_binding})\nlayout(std140) uniform block_MaterialParams_0" in glsl
+    assert f"layout(binding = {albedo_binding}) uniform sampler2D albedo_texture_0" in glsl
     layout = json.loads((tmp_path / "out.frag.glsl.layout.json").read_text(encoding="utf-8"))
     assert [(r["name"], r["binding"]) for r in layout["resources"]] == [
-        ("material", 1),
-        ("albedo_texture", 4),
+        ("material", material_binding),
+        ("albedo_texture", albedo_binding),
     ]
 
 
@@ -349,9 +362,14 @@ def test_termin_shaderc_patches_imported_opengl_slang_constant_buffer_by_instanc
 
     assert result.returncode == 0, result.stderr
     glsl = output.read_text(encoding="utf-8")
-    assert "layout(binding = 0)\nlayout(std140) uniform block_LightingBlock_0" in glsl
+    lighting_binding = _expected_scoped_binding(
+        "lighting", "constant_buffer", "pass", target="opengl"
+    )
+    assert f"layout(binding = {lighting_binding})\nlayout(std140) uniform block_LightingBlock_0" in glsl
     layout = json.loads((tmp_path / "out.frag.glsl.layout.json").read_text(encoding="utf-8"))
-    assert [(r["name"], r["binding"]) for r in layout["resources"]] == [("lighting", 0)]
+    assert [(r["name"], r["binding"]) for r in layout["resources"]] == [
+        ("lighting", lighting_binding)
+    ]
 
 
 def test_termin_shaderc_legalizes_opengl_slang_instance_index_builtin(tmp_path: Path) -> None:
@@ -461,10 +479,12 @@ def test_termin_shaderc_patches_opengl_slang_storage_buffer_bindings(tmp_path: P
 
     assert result.returncode == 0, result.stderr
     glsl = output.read_text(encoding="utf-8")
-    assert "layout(std430, binding = 25) readonly buffer" in glsl
+    foliage_binding = _expected_scoped_binding(
+        "foliage_instances", "storage_buffer", "draw", target="opengl"
+    )
+    assert f"layout(std430, binding = {foliage_binding}) readonly buffer" in glsl
     layout = json.loads((tmp_path / "out.vert.glsl.layout.json").read_text(encoding="utf-8"))
     assert [(r["name"], r["binding"]) for r in layout["resources"]] == [
-        ("foliage_instances", 25),
+        ("foliage_instances", foliage_binding),
     ]
-
 

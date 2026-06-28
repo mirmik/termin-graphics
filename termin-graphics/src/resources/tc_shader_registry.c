@@ -121,6 +121,7 @@ static void infer_raw_glsl_engine_resource_layout(tc_shader* shader) {
 // Free shader internal data (sources)
 static void shader_free_data(tc_shader* shader) {
     if (!shader) return;
+    tc_shader_clear_contract(shader);
     if (shader->vertex_source) {
         free(shader->vertex_source);
         shader->vertex_source = NULL;
@@ -1151,6 +1152,12 @@ static int tc_shader_resource_binding_compare(const void* a, const void* b) {
     return strcmp(ra->name, rb->name);
 }
 
+static int tc_shader_resource_requirement_compare(const void* a, const void* b) {
+    const tc_shader_resource_requirement* ra = (const tc_shader_resource_requirement*)a;
+    const tc_shader_resource_requirement* rb = (const tc_shader_resource_requirement*)b;
+    return strcmp(ra->name, rb->name);
+}
+
 static int tc_shader_find_resource_binding_index(
     const tc_shader* shader,
     const char* name
@@ -1229,29 +1236,6 @@ static bool tc_shader_upsert_resource_binding(
     return true;
 }
 
-static void tc_shader_remove_resource_binding(tc_shader* shader, const char* name) {
-    int index = tc_shader_find_resource_binding_index(shader, name);
-    if (index < 0) return;
-
-    uint32_t last = shader->resource_binding_count - 1u;
-    if ((uint32_t)index != last) {
-        shader->resource_bindings[index] = shader->resource_bindings[last];
-    }
-    shader->resource_binding_count = last;
-    if (last == 0) {
-        free(shader->resource_bindings);
-        shader->resource_bindings = NULL;
-        return;
-    }
-
-    size_t bytes = (size_t)last * sizeof(tc_shader_resource_binding);
-    tc_shader_resource_binding* copy =
-        (tc_shader_resource_binding*)realloc(shader->resource_bindings, bytes);
-    if (copy) {
-        shader->resource_bindings = copy;
-    }
-}
-
 void tc_shader_set_material_ubo_layout(
     tc_shader* shader,
     const tc_material_ubo_entry* entries,
@@ -1272,7 +1256,6 @@ void tc_shader_set_material_ubo_layout(
     shader->material_ubo_block_size = 0;
 
     if (count == 0 || !entries) {
-        tc_shader_remove_resource_binding(shader, TC_SHADER_RESOURCE_MATERIAL);
         return;
     }
 
@@ -1287,21 +1270,6 @@ void tc_shader_set_material_ubo_layout(
     shader->material_ubo_entries = copy;
     shader->material_ubo_entry_count = count;
     shader->material_ubo_block_size = block_size;
-
-    tc_shader_resource_binding material_binding;
-    memset(&material_binding, 0, sizeof(material_binding));
-    strncpy(
-        material_binding.name,
-        TC_SHADER_RESOURCE_MATERIAL,
-        TC_SHADER_RESOURCE_NAME_MAX - 1);
-    material_binding.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
-    material_binding.kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
-    material_binding.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
-    material_binding.set = TC_SHADER_RESOURCE_SET_DEFAULT;
-    material_binding.binding = 1u;
-    material_binding.stage_mask = TC_SHADER_STAGE_ALL_GRAPHICS;
-    material_binding.size = block_size;
-    tc_shader_upsert_resource_binding(shader, &material_binding);
 }
 
 uint32_t tc_shader_material_ubo_entry_count(const tc_shader* shader) {
@@ -1333,6 +1301,19 @@ static void tc_shader_free_resource_binding_array(
     free(bindings);
 }
 
+static void tc_shader_free_resource_requirement_array(
+    tc_shader_resource_requirement* requirements,
+    uint32_t count
+) {
+    if (!requirements) return;
+    for (uint32_t i = 0; i < count; ++i) {
+        free(requirements[i].fields);
+        requirements[i].fields = NULL;
+        requirements[i].field_count = 0;
+    }
+    free(requirements);
+}
+
 static bool tc_shader_validate_resource_layout(
     const tc_shader_resource_binding* bindings,
     uint32_t count
@@ -1342,25 +1323,6 @@ static bool tc_shader_validate_resource_layout(
         for (uint32_t j = i + 1u; j < count; ++j) {
             const tc_shader_resource_binding* a = &bindings[i];
             const tc_shader_resource_binding* b = &bindings[j];
-            if (a->set == b->set && a->binding == b->binding) {
-                if (strncmp(a->name, b->name, TC_SHADER_RESOURCE_NAME_MAX) != 0 ||
-                    a->kind != b->kind ||
-                    a->scope != b->scope) {
-                    tc_log(
-                        TC_LOG_ERROR,
-                        "tc_shader_set_resource_layout: conflicting resources at set=%u binding=%u: '%s' kind=%u scope=%u vs '%s' kind=%u scope=%u",
-                        a->set,
-                        a->binding,
-                        a->name,
-                        a->kind,
-                        a->scope,
-                        b->name,
-                        b->kind,
-                        b->scope);
-                    return false;
-                }
-            }
-
             if (!a->has_d3d11_placement || !b->has_d3d11_placement) {
                 continue;
             }
@@ -1496,4 +1458,240 @@ void tc_shader_mark_resource_layout_known(tc_shader* shader) {
     if (shader) {
         shader->has_resource_layout = 1;
     }
+}
+
+// ============================================================================
+// Shader interface contract
+// ============================================================================
+
+static void tc_shader_contract_free_contents(tc_shader_contract* contract) {
+    if (!contract) return;
+
+    free(contract->vertex_inputs);
+    contract->vertex_inputs = NULL;
+    contract->vertex_input_count = 0;
+
+    if (contract->resources) {
+        tc_shader_free_resource_requirement_array(
+            contract->resources,
+            contract->resource_count);
+        contract->resources = NULL;
+    }
+    contract->resource_count = 0;
+
+    free(contract->debug_name);
+    contract->debug_name = NULL;
+    free(contract->source_debug_name);
+    contract->source_debug_name = NULL;
+
+    contract->schema_version = 0;
+    contract->source_kind = TC_SHADER_CONTRACT_SOURCE_UNKNOWN;
+    contract->shader = tc_shader_handle_invalid();
+}
+
+void tc_shader_clear_contract(tc_shader* shader) {
+    if (!shader) return;
+
+    tc_shader_contract_free_contents(&shader->contract);
+    shader->has_contract = 0;
+}
+
+static bool tc_shader_contract_copy_resources(
+    tc_shader_resource_requirement** out,
+    const tc_shader_resource_requirement* resources,
+    uint32_t count)
+{
+    *out = NULL;
+    if (count == 0) {
+        return true;
+    }
+    if (!resources) {
+        tc_log(
+            TC_LOG_ERROR,
+            "tc_shader_set_contract: resource_count=%u but resources is NULL",
+            count);
+        return false;
+    }
+
+    tc_shader_resource_requirement* copy =
+        (tc_shader_resource_requirement*)calloc(count, sizeof(tc_shader_resource_requirement));
+    if (!copy) {
+        tc_log(
+            TC_LOG_ERROR,
+            "tc_shader_set_contract: resource allocation failed (%u entries)",
+            count);
+        return false;
+    }
+
+    for (uint32_t i = 0; i < count; ++i) {
+        copy[i] = resources[i];
+        copy[i].name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+        copy[i].fields = NULL;
+        if (resources[i].field_count > 0 && resources[i].fields) {
+            const size_t field_bytes =
+                (size_t)resources[i].field_count * sizeof(tc_shader_resource_field);
+            copy[i].fields = (tc_shader_resource_field*)malloc(field_bytes);
+            if (!copy[i].fields) {
+                tc_log(
+                    TC_LOG_ERROR,
+                    "tc_shader_set_contract: field allocation failed for '%s' (%u fields)",
+                    copy[i].name,
+                    resources[i].field_count);
+                tc_shader_free_resource_requirement_array(copy, count);
+                return false;
+            }
+            memcpy(copy[i].fields, resources[i].fields, field_bytes);
+            for (uint32_t f = 0; f < resources[i].field_count; ++f) {
+                copy[i].fields[f].name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+                copy[i].fields[f].type[TC_MATERIAL_UBO_TYPE_MAX - 1] = '\0';
+            }
+        } else {
+            copy[i].field_count = 0;
+        }
+    }
+
+    for (uint32_t i = 0; i < count; ++i) {
+        for (uint32_t j = i + 1u; j < count; ++j) {
+            const tc_shader_resource_requirement* a = &copy[i];
+            const tc_shader_resource_requirement* b = &copy[j];
+            if (strncmp(a->name, b->name, TC_SHADER_RESOURCE_NAME_MAX) == 0) {
+                if (a->kind != b->kind ||
+                    a->scope != b->scope ||
+                    a->stage_mask != b->stage_mask ||
+                    a->size != b->size ||
+                    a->element_stride != b->element_stride) {
+                    tc_log(
+                        TC_LOG_ERROR,
+                        "tc_shader_set_contract: conflicting requirements for resource '%s'",
+                        a->name);
+                    tc_shader_free_resource_requirement_array(copy, count);
+                    return false;
+                }
+            }
+        }
+    }
+
+    if (count > 1) {
+        qsort(copy, count, sizeof(tc_shader_resource_requirement),
+              tc_shader_resource_requirement_compare);
+    }
+
+    *out = copy;
+    return true;
+}
+
+bool tc_shader_set_contract(
+    tc_shader* shader,
+    const tc_shader_contract_desc* desc
+) {
+    if (!shader) {
+        tc_log(TC_LOG_ERROR, "tc_shader_set_contract called with NULL shader");
+        return false;
+    }
+    if (!desc) {
+        tc_shader_clear_contract(shader);
+        return true;
+    }
+
+    const uint32_t schema_version =
+        desc->schema_version ? desc->schema_version : TC_SHADER_CONTRACT_SCHEMA_VERSION;
+    if (schema_version != TC_SHADER_CONTRACT_SCHEMA_VERSION) {
+        tc_log(
+            TC_LOG_ERROR,
+            "tc_shader_set_contract: unsupported schema version %u",
+            schema_version);
+        return false;
+    }
+    if (desc->vertex_input_count > 0 && !desc->vertex_inputs) {
+        tc_log(
+            TC_LOG_ERROR,
+            "tc_shader_set_contract: vertex_input_count=%u but vertex_inputs is NULL",
+            desc->vertex_input_count);
+        return false;
+    }
+
+    tc_shader_contract next;
+    memset(&next, 0, sizeof(next));
+    next.schema_version = schema_version;
+    next.source_kind = desc->source_kind;
+    next.shader.index = shader->pool_index;
+    next.shader.generation =
+        shader->pool_index < g_shader_pool.capacity
+            ? g_shader_pool.generations[shader->pool_index]
+            : 0u;
+
+    if (desc->vertex_input_count > 0) {
+        const size_t bytes =
+            (size_t)desc->vertex_input_count * sizeof(tc_shader_contract_vertex_input);
+        next.vertex_inputs = (tc_shader_contract_vertex_input*)malloc(bytes);
+        if (!next.vertex_inputs) {
+            tc_log(
+                TC_LOG_ERROR,
+                "tc_shader_set_contract: vertex input allocation failed (%u entries)",
+                desc->vertex_input_count);
+            return false;
+        }
+        memcpy(next.vertex_inputs, desc->vertex_inputs, bytes);
+        for (uint32_t i = 0; i < desc->vertex_input_count; ++i) {
+            next.vertex_inputs[i].semantic[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+        }
+        next.vertex_input_count = desc->vertex_input_count;
+    }
+
+    if (!tc_shader_contract_copy_resources(
+            &next.resources,
+            desc->resources,
+            desc->resource_count)) {
+        tc_shader_contract_free_contents(&next);
+        return false;
+    }
+    next.resource_count = desc->resource_count;
+
+    next.debug_name = dup_string(desc->debug_name);
+    if (desc->debug_name && desc->debug_name[0] != '\0' && !next.debug_name) {
+        tc_log(TC_LOG_ERROR, "tc_shader_set_contract: debug_name allocation failed");
+        tc_shader_contract_free_contents(&next);
+        return false;
+    }
+    next.source_debug_name = dup_string(desc->source_debug_name);
+    if (desc->source_debug_name && desc->source_debug_name[0] != '\0'
+        && !next.source_debug_name) {
+        tc_log(TC_LOG_ERROR, "tc_shader_set_contract: source_debug_name allocation failed");
+        tc_shader_contract_free_contents(&next);
+        return false;
+    }
+
+    tc_shader_clear_contract(shader);
+    shader->contract = next;
+    shader->has_contract = 1;
+    return true;
+}
+
+bool tc_shader_has_contract(const tc_shader* shader) {
+    return shader && shader->has_contract != 0;
+}
+
+bool tc_shader_get_contract_view(
+    const tc_shader* shader,
+    tc_shader_contract_view* out
+) {
+    if (!out) {
+        tc_log(TC_LOG_ERROR, "tc_shader_get_contract_view called with NULL out");
+        return false;
+    }
+    memset(out, 0, sizeof(*out));
+    if (!shader || !tc_shader_has_contract(shader)) {
+        return false;
+    }
+
+    out->schema_version = shader->contract.schema_version;
+    out->source_kind = shader->contract.source_kind;
+    out->shader = shader->contract.shader;
+    out->vertex_inputs = shader->contract.vertex_inputs;
+    out->vertex_input_count = shader->contract.vertex_input_count;
+    out->resources = shader->contract.resources;
+    out->resource_count = shader->contract.resource_count;
+    out->debug_name = shader->contract.debug_name;
+    out->source_debug_name = shader->contract.source_debug_name;
+    return true;
 }

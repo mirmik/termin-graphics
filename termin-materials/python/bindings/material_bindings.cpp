@@ -8,6 +8,7 @@
 #include "tgfx/render_state.hpp"
 #include <tgfx/tgfx_shader_handle.hpp>
 #include <tcbase/tc_log.hpp>
+#include <cstring>
 #include <initializer_list>
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
@@ -137,6 +138,198 @@ void append_resource_binding(
     bindings.push_back(binding);
 }
 
+bool contract_has_vertex_input(
+    const std::vector<tc_shader_contract_vertex_input>& inputs,
+    const char* semantic)
+{
+    for (const auto& input : inputs) {
+        if (std::strncmp(input.semantic, semantic, TC_SHADER_RESOURCE_NAME_MAX) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void append_contract_vertex_input(
+    std::vector<tc_shader_contract_vertex_input>& inputs,
+    const char* semantic,
+    uint32_t type)
+{
+    if (contract_has_vertex_input(inputs, semantic)) {
+        return;
+    }
+
+    tc_shader_contract_vertex_input input{};
+    std::strncpy(input.semantic, semantic, TC_SHADER_RESOURCE_NAME_MAX - 1);
+    input.semantic[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+    input.type = type;
+    input.required = 1;
+    inputs.push_back(input);
+}
+
+std::vector<tc_shader_contract_vertex_input> infer_material_vertex_contract(
+    const ShaderPhase& shader_phase)
+{
+    std::vector<tc_shader_contract_vertex_input> inputs;
+    auto it = shader_phase.stages.find("vertex");
+    if (it == shader_phase.stages.end()) {
+        return inputs;
+    }
+
+    const std::string& source = it->second.source;
+    if (source_contains_any(source, {": POSITION", ":POSITION", "a_position", "in_position"})) {
+        append_contract_vertex_input(inputs, "position", TC_SHADER_CONTRACT_VALUE_FLOAT3);
+    }
+    if (source_contains_any(source, {": NORMAL", ":NORMAL", "a_normal", "in_normal"})) {
+        append_contract_vertex_input(inputs, "normal", TC_SHADER_CONTRACT_VALUE_FLOAT3);
+    }
+    if (source_contains_any(
+            source,
+            {": TEXCOORD0", ":TEXCOORD0", ": TEXCOORD", ":TEXCOORD", "a_uv", "in_uv", "a_texcoord"})) {
+        append_contract_vertex_input(inputs, "uv", TC_SHADER_CONTRACT_VALUE_FLOAT2);
+    }
+    if (source_contains_any(source, {": TANGENT", ":TANGENT", "a_tangent", "in_tangent"})) {
+        append_contract_vertex_input(inputs, "tangent", TC_SHADER_CONTRACT_VALUE_FLOAT4);
+    }
+    if (source_contains_any(source, {": BLENDINDICES", ":BLENDINDICES", "a_joints", "in_joints"})) {
+        append_contract_vertex_input(inputs, "joints", TC_SHADER_CONTRACT_VALUE_FLOAT4);
+    }
+    if (source_contains_any(source, {": BLENDWEIGHT", ":BLENDWEIGHT", "a_weights", "in_weights"})) {
+        append_contract_vertex_input(inputs, "weights", TC_SHADER_CONTRACT_VALUE_FLOAT4);
+    }
+    return inputs;
+}
+
+void append_resource_requirement(
+    std::vector<tc_shader_resource_requirement>& requirements,
+    const std::string& name,
+    uint32_t kind,
+    uint32_t scope,
+    uint32_t stage_mask,
+    uint32_t size = 0,
+    const tc_shader_resource_field* fields = nullptr,
+    uint32_t field_count = 0)
+{
+    tc_shader_resource_requirement requirement{};
+    std::strncpy(requirement.name, name.c_str(), TC_SHADER_RESOURCE_NAME_MAX - 1);
+    requirement.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+    requirement.kind = kind;
+    requirement.scope = scope;
+    requirement.stage_mask = stage_mask;
+    requirement.size = size;
+    requirement.element_stride = 0;
+    requirement.fields = const_cast<tc_shader_resource_field*>(fields);
+    requirement.field_count = field_count;
+    requirements.push_back(requirement);
+}
+
+std::vector<tc_shader_resource_field> material_fields_from_layout(
+    const MaterialUboLayout& layout)
+{
+    std::vector<tc_shader_resource_field> fields;
+    fields.reserve(layout.entries.size());
+    for (const MaterialUboEntry& entry : layout.entries) {
+        tc_shader_resource_field field{};
+        std::strncpy(field.name, entry.name.c_str(), TC_SHADER_RESOURCE_NAME_MAX - 1);
+        field.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+        std::strncpy(field.type, entry.property_type.c_str(), TC_MATERIAL_UBO_TYPE_MAX - 1);
+        field.type[TC_MATERIAL_UBO_TYPE_MAX - 1] = '\0';
+        field.offset = entry.offset;
+        field.size = entry.size;
+        fields.push_back(field);
+    }
+    return fields;
+}
+
+std::vector<tc_shader_resource_requirement> parser_shader_resource_requirements(
+    const ShaderPhase& shader_phase,
+    const MaterialUboLayout& layout,
+    const std::vector<tc_shader_resource_field>& material_fields)
+{
+    std::vector<tc_shader_resource_requirement> requirements;
+    requirements.reserve(
+        (layout.empty() ? 0u : 1u) +
+        (shader_phase.uses_engine_per_frame ? 1u : 0u) +
+        (shader_phase.uses_engine_draw_data ? 1u : 0u) +
+        shader_phase.material_texture_resources.size());
+
+    if (!layout.empty()) {
+        append_resource_requirement(
+            requirements,
+            TC_SHADER_RESOURCE_MATERIAL,
+            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+            TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+            STAGE_ALL_GRAPHICS,
+            layout.block_size,
+            material_fields.empty() ? nullptr : material_fields.data(),
+            static_cast<uint32_t>(material_fields.size()));
+    }
+    if (shader_phase.uses_engine_per_frame) {
+        append_resource_requirement(
+            requirements,
+            TC_SHADER_RESOURCE_PER_FRAME,
+            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+            TC_SHADER_RESOURCE_SCOPE_FRAME,
+            STAGE_ALL_GRAPHICS);
+    }
+    if (shader_phase.uses_engine_draw_data) {
+        append_resource_requirement(
+            requirements,
+            TC_SHADER_RESOURCE_DRAW,
+            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+            TC_SHADER_RESOURCE_SCOPE_DRAW,
+            STAGE_ALL_GRAPHICS,
+            64);
+    }
+    for (const std::string& texture_name : shader_phase.material_texture_resources) {
+        append_resource_requirement(
+            requirements,
+            texture_name,
+            TC_SHADER_RESOURCE_TEXTURE,
+            TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+            STAGE_ALL_GRAPHICS);
+    }
+
+    return requirements;
+}
+
+void apply_parser_shader_contract(
+    tc_shader* shader,
+    const ShaderPhase& shader_phase,
+    const MaterialUboLayout& layout)
+{
+    if (!shader) {
+        tc::Log::error("apply_parser_shader_contract called with null shader");
+        return;
+    }
+
+    std::vector<tc_shader_contract_vertex_input> vertex_inputs =
+        infer_material_vertex_contract(shader_phase);
+    std::vector<tc_shader_resource_field> material_fields =
+        material_fields_from_layout(layout);
+    std::vector<tc_shader_resource_requirement> resources =
+        parser_shader_resource_requirements(
+            shader_phase,
+            layout,
+            material_fields);
+
+    tc_shader_contract_desc desc{};
+    desc.schema_version = TC_SHADER_CONTRACT_SCHEMA_VERSION;
+    desc.source_kind = TC_SHADER_CONTRACT_SOURCE_DECLARED;
+    desc.vertex_inputs = vertex_inputs.empty() ? nullptr : vertex_inputs.data();
+    desc.vertex_input_count = static_cast<uint32_t>(vertex_inputs.size());
+    desc.resources = resources.empty() ? nullptr : resources.data();
+    desc.resource_count = static_cast<uint32_t>(resources.size());
+    desc.debug_name = shader->name ? shader->name : shader->uuid;
+    desc.source_debug_name = "termin-materials shader parser";
+
+    if (!tc_shader_set_contract(shader, &desc)) {
+        tc::Log::error(
+            "Failed to attach shader parser contract to material shader '%s'",
+            shader->name ? shader->name : shader->uuid);
+    }
+}
+
 void apply_parser_resource_layout(
     tc_shader* shader,
     const ShaderPhase& shader_phase,
@@ -144,7 +337,7 @@ void apply_parser_resource_layout(
     tc_shader_language language)
 {
     std::vector<tc_shader_resource_binding> bindings;
-    if (language == TC_SHADER_LANGUAGE_GLSL && !layout.empty()) {
+    if (!layout.empty()) {
         std::vector<tc_material_ubo_entry> entries;
         entries.reserve(layout.entries.size());
         for (const auto& src : layout.entries) {
@@ -165,18 +358,20 @@ void apply_parser_resource_layout(
             entries.data(),
             static_cast<uint32_t>(entries.size()),
             layout.block_size);
-        append_resource_binding(
-            bindings,
-            TC_SHADER_RESOURCE_MATERIAL,
-            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-            TC_SHADER_RESOURCE_SCOPE_MATERIAL,
-            GLSL_MATERIAL_BINDING,
-            layout.block_size);
     } else {
         tc_shader_set_material_ubo_layout(shader, nullptr, 0, 0);
     }
 
     if (language == TC_SHADER_LANGUAGE_GLSL) {
+        if (!layout.empty()) {
+            append_resource_binding(
+                bindings,
+                TC_SHADER_RESOURCE_MATERIAL,
+                TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+                TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+                GLSL_MATERIAL_BINDING,
+                layout.block_size);
+        }
         if (shader_phase.uses_engine_per_frame) {
             append_resource_binding(
                 bindings,
@@ -204,10 +399,13 @@ void apply_parser_resource_layout(
         }
     }
 
-    tc_shader_set_resource_layout(
-        shader,
-        bindings.empty() ? nullptr : bindings.data(),
-        static_cast<uint32_t>(bindings.size()));
+    if (language == TC_SHADER_LANGUAGE_GLSL) {
+        tc_shader_set_resource_layout(
+            shader,
+            bindings.empty() ? nullptr : bindings.data(),
+            static_cast<uint32_t>(bindings.size()));
+    }
+    apply_parser_shader_contract(shader, shader_phase, layout);
 }
 
 } // namespace

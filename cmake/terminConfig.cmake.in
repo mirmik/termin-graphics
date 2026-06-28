@@ -1,0 +1,19 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+set(TERMIN_SDK_ROOT "${PACKAGE_PREFIX_DIR}")
+set(TERMIN_SDK_PREFIX "${PACKAGE_PREFIX_DIR}")
+set(TERMIN_CMAKE_PACKAGE_ROOT "${PACKAGE_PREFIX_DIR}/lib/cmake")
+set(TERMIN_SDK_LIB_DIR "${PACKAGE_PREFIX_DIR}/lib")
+
+find_dependency(termin_base CONFIG REQUIRED)
+
+if(NOT TARGET termin::termin)
+    add_library(termin::termin INTERFACE IMPORTED)
+    set_target_properties(termin::termin PROPERTIES
+        INTERFACE_LINK_LIBRARIES tcbase::termin_base
+    )
+endif()
+
+check_required_components(termin)

@@ -143,11 +143,97 @@ typedef struct tc_shader_resource_binding {
     uint32_t stage_mask;  // tc_shader_stage_mask
     uint32_t size;        // bytes for buffers, 0 when unknown/not applicable
     uint8_t has_d3d11_placement;
-    uint8_t _resource_binding_reserved[3];
+    uint8_t d3d11_scalar_sampler_for_texture_array;
+    uint8_t _resource_binding_reserved[2];
     tc_shader_d3d11_placement d3d11;
     tc_shader_resource_field* fields;
     uint32_t field_count;
 } tc_shader_resource_binding;
+
+// ============================================================================
+// Generic shader interface contract
+// ============================================================================
+
+#define TC_SHADER_CONTRACT_SCHEMA_VERSION 1u
+
+typedef enum tc_shader_contract_source_kind {
+    TC_SHADER_CONTRACT_SOURCE_UNKNOWN = 0,
+    TC_SHADER_CONTRACT_SOURCE_REFLECTION = 1,
+    TC_SHADER_CONTRACT_SOURCE_ASSEMBLED = 2,
+    TC_SHADER_CONTRACT_SOURCE_GENERATED = 3,
+    TC_SHADER_CONTRACT_SOURCE_DECLARED = 4,
+    TC_SHADER_CONTRACT_SOURCE_LEGACY = 5,
+} tc_shader_contract_source_kind;
+
+typedef enum tc_shader_contract_value_type {
+    TC_SHADER_CONTRACT_VALUE_UNKNOWN = 0,
+    TC_SHADER_CONTRACT_VALUE_FLOAT = 1,
+    TC_SHADER_CONTRACT_VALUE_FLOAT2 = 2,
+    TC_SHADER_CONTRACT_VALUE_FLOAT3 = 3,
+    TC_SHADER_CONTRACT_VALUE_FLOAT4 = 4,
+    TC_SHADER_CONTRACT_VALUE_MATRIX4 = 5,
+} tc_shader_contract_value_type;
+
+typedef struct tc_shader_contract_vertex_input {
+    char semantic[TC_SHADER_RESOURCE_NAME_MAX];
+    uint32_t type;      // tc_shader_contract_value_type
+    uint32_t required;  // non-zero when the draw path must provide it
+} tc_shader_contract_vertex_input;
+
+typedef struct tc_shader_resource_requirement {
+    char name[TC_SHADER_RESOURCE_NAME_MAX];
+    uint32_t kind;            // tc_shader_resource_kind
+    uint32_t scope;           // tc_shader_resource_scope
+    uint32_t stage_mask;      // tc_shader_stage_mask
+    uint32_t size;            // bytes for buffers, 0 when unknown/not applicable
+    uint32_t element_stride;  // bytes for structured buffers, 0 when unknown/not applicable
+    tc_shader_resource_field* fields;
+    uint32_t field_count;
+} tc_shader_resource_requirement;
+
+typedef struct tc_shader_contract_desc {
+    uint32_t schema_version;
+    uint32_t source_kind; // tc_shader_contract_source_kind
+
+    const tc_shader_contract_vertex_input* vertex_inputs;
+    uint32_t vertex_input_count;
+
+    const tc_shader_resource_requirement* resources;
+    uint32_t resource_count;
+
+    const char* debug_name;
+    const char* source_debug_name;
+} tc_shader_contract_desc;
+
+typedef struct tc_shader_contract_view {
+    uint32_t schema_version;
+    uint32_t source_kind; // tc_shader_contract_source_kind
+    tc_shader_handle shader;
+
+    const tc_shader_contract_vertex_input* vertex_inputs;
+    uint32_t vertex_input_count;
+
+    const tc_shader_resource_requirement* resources;
+    uint32_t resource_count;
+
+    const char* debug_name;
+    const char* source_debug_name;
+} tc_shader_contract_view;
+
+typedef struct tc_shader_contract {
+    uint32_t schema_version;
+    uint32_t source_kind;
+    tc_shader_handle shader;
+
+    tc_shader_contract_vertex_input* vertex_inputs;
+    uint32_t vertex_input_count;
+
+    tc_shader_resource_requirement* resources;
+    uint32_t resource_count;
+
+    char* debug_name;
+    char* source_debug_name;
+} tc_shader_contract;
 
 // One field inside a shader's generated std140 material UBO block.
 // Populated by the shader parser (see termin-app/cpp/termin/render/shader_parser.cpp)
@@ -200,6 +286,14 @@ typedef struct tc_shader {
     // artifact/reflection fills set/binding metadata, runtime binds by name.
     tc_shader_resource_binding* resource_bindings;
     uint32_t resource_binding_count;
+
+    // Optional generic shader interface contract for the final shader program.
+    // This is the runtime-facing contract used by migrated render passes; it
+    // describes shader requirements, not material pipeline provenance or draw
+    // execution policy.
+    uint8_t has_contract;
+    uint8_t _contract_reserved[3];
+    tc_shader_contract contract;
 } tc_shader;
 
 // ============================================================================
@@ -277,6 +371,8 @@ TGFX_API tc_shader_artifact_policy tc_shader_get_artifact_policy(const tc_shader
 
 // Replace the shader's material UBO layout. A copy of `entries` is made;
 // caller retains ownership of its buffer. Pass count=0 to clear the layout.
+// This stores CPU-side packing metadata only; backend resource placement must
+// come from tc_shader_set_resource_layout() / compiler sidecars.
 // Version is NOT bumped — layout changes travel together with source changes,
 // which already bump version via tc_shader_set_sources.
 TGFX_API void tc_shader_set_material_ubo_layout(
@@ -313,6 +409,24 @@ TGFX_API const tc_shader_resource_binding* tc_shader_find_resource_binding(
 );
 TGFX_API bool tc_shader_has_resource_layout(const tc_shader* shader);
 TGFX_API void tc_shader_mark_resource_layout_known(tc_shader* shader);
+
+// ============================================================================
+// Shader interface contract
+// ============================================================================
+
+// Replace the shader's generic interface contract. A deep copy of all arrays
+// is made; caller retains ownership. Passing NULL clears the contract.
+TGFX_API bool tc_shader_set_contract(
+    tc_shader* shader,
+    const tc_shader_contract_desc* desc
+);
+
+TGFX_API void tc_shader_clear_contract(tc_shader* shader);
+TGFX_API bool tc_shader_has_contract(const tc_shader* shader);
+TGFX_API bool tc_shader_get_contract_view(
+    const tc_shader* shader,
+    tc_shader_contract_view* out
+);
 
 #ifdef __cplusplus
 }

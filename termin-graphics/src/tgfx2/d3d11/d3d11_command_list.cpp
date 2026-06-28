@@ -83,20 +83,10 @@ UINT d3d11_slot(const BoundResourceBinding& binding) {
         binding.value.array_element);
 }
 
-bool uses_scalar_d3d11_sampler_for_texture_array(const std::string& resource_name) {
-    // termin_shaderc legalizes Slang's D3D11 shadow-map sampler array into a
-    // single SamplerComparisonState. Textures remain arrayed at tN+i, but every
-    // element samples through the same sN sampler.
-    return resource_name == "shadow_maps" ||
-        resource_name == "u_shadow_map" ||
-        resource_name == "u_shadow_maps";
-}
-
 UINT d3d11_sampler_slot_for_sampled_texture(const BoundResourceBinding& binding) {
     const UINT base = static_cast<UINT>(
         binding.plan_entry.placement.d3d11.register_index);
-    if (uses_scalar_d3d11_sampler_for_texture_array(
-            binding.plan_entry.resource.name)) {
+    if (binding.plan_entry.placement.d3d11.scalar_sampler_for_texture_array) {
         return base;
     }
     return static_cast<UINT>(base + binding.value.array_element);

@@ -14,10 +14,10 @@ struct PushData {
 };
 
 [[TerminScope("frame")]]
-ConstantBuffer<PerFrame> u_per_frame;
+ConstantBuffer<PerFrame> per_frame;
 
 [[TerminScope("draw")]]
-ConstantBuffer<PushData> u_push;
+ConstantBuffer<PushData> id_draw;
 
 // --- vertex stage ---
 
@@ -32,9 +32,9 @@ struct VertexOutput {
 [shader("vertex")]
 VertexOutput vs_main(VertexInput input) {
     VertexOutput output;
-    output.position = termin_to_native_clip(mul(u_per_frame.projection,
-                     mul(u_per_frame.view,
-                     mul(u_push.model, float4(input.position, 1.0)))));
+    output.position = termin_to_native_clip(mul(per_frame.projection,
+                     mul(per_frame.view,
+                     mul(id_draw.model, float4(input.position, 1.0)))));
     return output;
 }
 
@@ -47,6 +47,6 @@ struct FragmentOutput {
 [shader("fragment")]
 FragmentOutput fs_main() {
     FragmentOutput output;
-    output.color = float4(u_push.pick_color.rgb, 1.0);
+    output.color = float4(id_draw.pick_color.rgb, 1.0);
     return output;
 }

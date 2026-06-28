@@ -1,7 +1,12 @@
 import json
 from pathlib import Path
 
-from shaderc_test_helpers import _run_shaderc, _write_fake_fxc, _write_fake_slangc
+from shaderc_test_helpers import (
+    _expected_scoped_binding,
+    _run_shaderc,
+    _write_fake_fxc,
+    _write_fake_slangc,
+)
 
 def test_termin_shaderc_compiles_slang_to_d3d11_cso_with_fake_tools(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
@@ -100,7 +105,12 @@ def test_termin_shaderc_compiles_slang_to_d3d11_cso_with_fake_tools(tmp_path: Pa
             "kind": "constant_buffer",
             "scope": "material",
             "set": 0,
-            "binding": 1,
+            "binding": _expected_scoped_binding(
+                "material",
+                "constant_buffer",
+                "material",
+                target="d3d11",
+            ),
             "stage_mask": 2,
             "size": 16,
             "d3d11": {
@@ -113,7 +123,12 @@ def test_termin_shaderc_compiles_slang_to_d3d11_cso_with_fake_tools(tmp_path: Pa
             "kind": "texture",
             "scope": "material",
             "set": 0,
-            "binding": 4,
+            "binding": _expected_scoped_binding(
+                "albedo_texture",
+                "texture",
+                "material",
+                target="d3d11",
+            ),
             "stage_mask": 2,
             "size": 0,
             "d3d11": {
@@ -263,8 +278,20 @@ def test_termin_shaderc_merges_bare_slang_sampler2d_when_reflection_is_partial(t
         (resource["name"], resource["kind"], resource["scope"], resource["binding"], resource["d3d11"])
         for resource in layout["resources"]
     ] == [
-        ("canvas_draw", "constant_buffer", "draw", 24, {"register_class": "b", "register_index": 0}),
-        ("u_texture", "texture", "transient", 32, {"register_class": "t", "register_index": 0}),
+        (
+            "canvas_draw",
+            "constant_buffer",
+            "draw",
+            _expected_scoped_binding("canvas_draw", "constant_buffer", "draw", target="d3d11"),
+            {"register_class": "b", "register_index": 0},
+        ),
+        (
+            "u_texture",
+            "texture",
+            "transient",
+            _expected_scoped_binding("u_texture", "texture", "transient", target="d3d11"),
+            {"register_class": "t", "register_index": 0},
+        ),
     ]
 
 
@@ -297,11 +324,11 @@ def test_termin_shaderc_d3d11_patches_helper_and_imported_hlsl_resources(tmp_pat
         "    'SamplerState albedo_texture_sampler_0 : register(s0);\\n'\n"
         "    'Texture2D<float4 > normal_texture_texture_0 : register(t0);\\n'\n"
         "    'SamplerState normal_texture_sampler_0 : register(s0);\\n'\n"
-        "    'Texture2D<float > shadow_maps_texture_0[int(16)] : register(t5);\\n'\n"
-        "    'SamplerComparisonState shadow_maps_sampler_0[int(16)] : register(s5);\\n'\n"
+        "    'Texture2D<float > visibility_maps_texture_0[int(16)] : register(t5);\\n'\n"
+        "    'SamplerComparisonState visibility_maps_sampler_0[int(16)] : register(s5);\\n'\n"
         "    'float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\\n'\n"
         "    '    return normal_texture_texture_0.Sample(normal_texture_sampler_0, uv) +\\n'\n"
-        "    '        shadow_maps_texture_0[int(3)].SampleCmp(shadow_maps_sampler_0[int(3)], uv, 0.5);\\n'\n"
+        "    '        visibility_maps_texture_0[int(3)].SampleCmp(visibility_maps_sampler_0[int(3)], uv, 0.5);\\n'\n"
         "    '}\\n',\n"
         "    encoding='utf-8')\n"
         "reflection.write_text(json.dumps({\n"
@@ -359,9 +386,9 @@ def test_termin_shaderc_d3d11_patches_helper_and_imported_hlsl_resources(tmp_pat
     hlsl = patched_hlsl.read_text(encoding="utf-8")
     assert "normal_texture_texture_0 : register(t1)" in hlsl
     assert "normal_texture_sampler_0 : register(s1)" in hlsl
-    assert "shadow_maps_texture_0[int(16)] : register(t2)" in hlsl
-    assert "shadow_maps_sampler_0 : register(s2)" in hlsl
-    assert "shadow_maps_sampler_0[int" not in hlsl
+    assert "visibility_maps_texture_0[int(16)] : register(t2)" in hlsl
+    assert "visibility_maps_sampler_0 : register(s2)" in hlsl
+    assert "visibility_maps_sampler_0[int" not in hlsl
 
     layout = json.loads((tmp_path / "out.ps.cso.layout.json").read_text(encoding="utf-8"))
     assert [
@@ -371,5 +398,14 @@ def test_termin_shaderc_d3d11_patches_helper_and_imported_hlsl_resources(tmp_pat
         ("material", "constant_buffer", "material", {"register_class": "b", "register_index": 0}),
         ("albedo_texture", "texture", "material", {"register_class": "t", "register_index": 0}),
         ("normal_texture", "texture", "material", {"register_class": "t", "register_index": 1}),
-        ("shadow_maps", "texture", "pass", {"register_class": "t", "register_index": 2}),
+        (
+            "visibility_maps",
+            "texture",
+            "unscoped",
+            {
+                "register_class": "t",
+                "register_index": 2,
+                "scalar_sampler_for_texture_array": True,
+            },
+        ),
     ]

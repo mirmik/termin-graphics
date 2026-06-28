@@ -356,6 +356,8 @@ struct D3D11HlslResourceDecl {
     bool is_sampler = false;
     bool is_texture = false;
     bool is_storage_texture = false;
+    bool is_array = false;
+    bool is_comparison_sampler = false;
 };
 
 static std::string trim_copy(std::string text) {
@@ -437,6 +439,7 @@ static std::optional<D3D11HlslResourceDecl> parse_d3d11_hlsl_resource_decl(
     if (prefix.empty()) {
         return std::nullopt;
     }
+    const bool is_array = prefix.rfind('[') != std::string::npos;
     const size_t array_pos = prefix.rfind('[');
     if (array_pos != std::string::npos) {
         prefix = trim_copy(prefix.substr(0, array_pos));
@@ -458,6 +461,9 @@ static std::optional<D3D11HlslResourceDecl> parse_d3d11_hlsl_resource_decl(
         prefix.find("SamplerComparisonState") != std::string::npos;
     decl.is_texture = prefix.find("Texture") != std::string::npos;
     decl.is_storage_texture = prefix.find("RWTexture") != std::string::npos;
+    decl.is_array = is_array;
+    decl.is_comparison_sampler =
+        prefix.find("SamplerComparisonState") != std::string::npos;
     if (prefix.rfind("cbuffer ", 0) == 0) {
         decl.kind = "constant_buffer";
     } else if (decl.is_sampler) {
@@ -502,20 +508,27 @@ static bool d3d11_hlsl_has_decl_for_resource(
         });
 }
 
+static bool d3d11_hlsl_has_comparison_sampler_array_for_resource(
+    const std::vector<D3D11HlslResourceDecl>& decls,
+    const std::string& resource_name
+) {
+    return std::any_of(
+        decls.begin(),
+        decls.end(),
+        [&](const D3D11HlslResourceDecl& decl) {
+            return decl.resource_name == resource_name &&
+                   decl.is_sampler &&
+                   decl.is_comparison_sampler &&
+                   decl.is_array;
+        });
+}
+
 static std::string infer_d3d11_hlsl_resource_scope(
     const std::string& name,
     const std::string& kind
 ) {
-    if (name == "lighting" ||
-        name == "shadow_block" ||
-        name == "shadow_maps" ||
-        name == "u_shadow_map" ||
-        name == "u_shadow_maps") {
-        return "pass";
-    }
-    if (kind == "constant_buffer" && name == "material") {
-        return "material";
-    }
+    (void)name;
+    (void)kind;
     return "unscoped";
 }
 
@@ -526,6 +539,14 @@ static void append_missing_d3d11_hlsl_resources(
 ) {
     const std::vector<D3D11HlslResourceDecl> decls =
         collect_d3d11_hlsl_resource_decls(hlsl);
+    for (ShaderResourceBinding& binding : resources) {
+        if (binding.kind == "texture" &&
+            d3d11_hlsl_has_comparison_sampler_array_for_resource(
+                decls,
+                binding.name)) {
+            binding.d3d11_scalar_sampler_for_texture_array = true;
+        }
+    }
     for (const D3D11HlslResourceDecl& decl : decls) {
         if (decl.is_sampler &&
             d3d11_hlsl_has_decl_for_resource(
@@ -552,6 +573,11 @@ static void append_missing_d3d11_hlsl_resources(
                 decls,
                 decl.resource_name,
                 true);
+        binding.d3d11_scalar_sampler_for_texture_array =
+            decl.kind == "texture" &&
+            d3d11_hlsl_has_comparison_sampler_array_for_resource(
+                decls,
+                decl.resource_name);
         binding.slang_split_texture =
             decl.kind == "texture" && !binding.slang_combined_texture;
         binding.slang_separate_sampler = decl.kind == "sampler";
@@ -578,28 +604,29 @@ bool augment_d3d11_resource_bindings_from_hlsl(
     apply_default_resource_scope(resources, options.default_scope);
     normalize_scope_first_binding_slots(
         resources,
-        options.language == "slang");
+        options.language == "slang",
+        options.target);
     assign_d3d11_register_placement(resources);
     return true;
 }
 
-static bool legalize_slang_d3d11_shadow_sampler_arrays(
+static bool legalize_slang_d3d11_comparison_sampler_arrays(
     std::string& hlsl,
     bool& changed
 ) {
-    static const std::regex shadow_sampler_decl_re(
-        R"((SamplerComparisonState\s+)shadow_maps_sampler_0\s*\[[^\]]+\])");
-    static const std::regex shadow_sampler_use_re(
-        R"(shadow_maps_sampler_0\s*\[\s*int\s*\(\s*[0-9]+\s*\)\s*\])");
+    static const std::regex comparison_sampler_decl_re(
+        R"((SamplerComparisonState\s+)([A-Za-z_][A-Za-z0-9_]*_sampler_0)\s*\[[^\]]+\])");
+    static const std::regex comparison_sampler_use_re(
+        R"(([A-Za-z_][A-Za-z0-9_]*_sampler_0)\s*\[\s*int\s*\(\s*[0-9]+\s*\)\s*\])");
     const std::string before = hlsl;
     hlsl = std::regex_replace(
         hlsl,
-        shadow_sampler_decl_re,
-        "$1shadow_maps_sampler_0");
+        comparison_sampler_decl_re,
+        "$1$2");
     hlsl = std::regex_replace(
         hlsl,
-        shadow_sampler_use_re,
-        "shadow_maps_sampler_0");
+        comparison_sampler_use_re,
+        "$1");
     if (hlsl != before) {
         changed = true;
     }
@@ -627,7 +654,7 @@ bool patch_slang_d3d11_hlsl_resource_bindings(
     }
 
     bool changed = false;
-    if (!legalize_slang_d3d11_shadow_sampler_arrays(hlsl, changed)) {
+    if (!legalize_slang_d3d11_comparison_sampler_arrays(hlsl, changed)) {
         return false;
     }
     for (const ShaderResourceBinding& resource : resources) {

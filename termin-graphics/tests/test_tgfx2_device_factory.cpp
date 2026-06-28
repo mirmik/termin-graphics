@@ -1,5 +1,6 @@
 #include "guard_main.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -191,6 +192,7 @@ TEST_CASE("backend binding plan separates semantic resources from backend placem
     CHECK(d3d11_plan.entries[0].placement.kind == tgfx::BackendPlacementKind::D3D11Register);
     CHECK(d3d11_plan.entries[0].placement.d3d11.register_class == tgfx::D3D11RegisterClass::B);
     CHECK(d3d11_plan.entries[0].placement.d3d11.register_index == 3u);
+    CHECK(!d3d11_plan.entries[0].placement.d3d11.scalar_sampler_for_texture_array);
 
     tgfx::BackendBindingPlan opengl_plan;
     REQUIRE(tgfx::build_backend_binding_plan(
@@ -888,7 +890,8 @@ TEST_CASE("tgfx2 shader runtime loads D3D11 resource placement sidecar") {
             << "    {\"name\": \"albedo_texture\", \"kind\": \"texture\", "
             << "\"scope\": \"material\", \"set\": 0, \"binding\": 4, "
             << "\"stage_mask\": 2, \"size\": 0, "
-            << "\"d3d11\": {\"register_class\": \"t\", \"register_index\": 4}}\n"
+            << "\"d3d11\": {\"register_class\": \"t\", \"register_index\": 4, "
+            << "\"scalar_sampler_for_texture_array\": true}}\n"
             << "  ]\n"
             << "}\n";
     }
@@ -919,6 +922,25 @@ TEST_CASE("tgfx2 shader runtime loads D3D11 resource placement sidecar") {
     CHECK_EQ(texture->has_d3d11_placement, 1u);
     CHECK_EQ(texture->d3d11.register_class, TC_SHADER_D3D11_REGISTER_T);
     CHECK_EQ(texture->d3d11.register_index, 4u);
+    CHECK_EQ(texture->d3d11_scalar_sampler_for_texture_array, 1u);
+
+    tgfx::BackendBindingPlan plan;
+    std::string error;
+    REQUIRE(tgfx::build_backend_binding_plan(
+        tgfx::BackendType::D3D11,
+        tc_shader_resource_bindings(shader),
+        tc_shader_resource_binding_count(shader),
+        plan,
+        &error));
+    REQUIRE(plan.entries.size() == 2);
+    const auto texture_entry = std::find_if(
+        plan.entries.begin(),
+        plan.entries.end(),
+        [](const tgfx::BackendBindingPlanEntry& entry) {
+            return entry.resource.name == "albedo_texture";
+        });
+    REQUIRE(texture_entry != plan.entries.end());
+    CHECK(texture_entry->placement.d3d11.scalar_sampler_for_texture_array);
 
     tc_shader_destroy(handle);
 }
@@ -955,7 +977,7 @@ TEST_CASE("tgfx2 shader runtime loads resource layout sidecar") {
             << "  \"target\": \"vulkan\",\n"
             << "  \"stage\": \"fragment\",\n"
             << "  \"resources\": [\n"
-            << "    {\"name\": \"material\", \"kind\": \"constant_buffer\", \"set\": 2, \"binding\": 7, \"stage_mask\": 2, \"size\": 0}\n"
+            << "    {\"name\": \"material\", \"kind\": \"constant_buffer\", \"scope\": \"material\", \"set\": 2, \"binding\": 7, \"stage_mask\": 2, \"size\": 16}\n"
             << "  ]\n"
             << "}\n"
             << "JSON\n";

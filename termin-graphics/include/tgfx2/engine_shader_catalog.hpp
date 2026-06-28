@@ -3,22 +3,7 @@
 #include "tgfx2/enums.hpp"
 #include "tgfx2/tgfx2_api.h"
 
-#include <cstddef>
-
 namespace tgfx {
-
-struct EngineShaderStageIo {
-    const char* name;
-    const char* semantic;
-    int location;
-};
-
-struct EngineShaderResourceBinding {
-    const char* name;
-    const char* logical_name;
-    const char* kind;
-    int binding;
-};
 
 struct EngineShaderStageSource {
     const char* uuid;
@@ -27,14 +12,20 @@ struct EngineShaderStageSource {
     const char* language;
     const char* source_resource_path;
     const char* entry_point;
-    const EngineShaderStageIo* inputs;
-    std::size_t input_count;
-    const EngineShaderStageIo* outputs;
-    std::size_t output_count;
-    const EngineShaderResourceBinding* resources;
-    std::size_t resource_count;
+};
+
+struct EngineShaderProgramSource {
+    const char* uuid;
+    const char* name;
+    const char* language;
+    const EngineShaderStageSource* vertex_stage;
+    const EngineShaderStageSource* fragment_stage;
 };
 
 TGFX2_API const EngineShaderStageSource& engine_fullscreen_quad_vertex_shader();
+TGFX2_API const EngineShaderStageSource* find_engine_shader_stage(
+    const char* uuid,
+    ShaderStage stage);
+TGFX2_API const EngineShaderProgramSource* find_engine_shader_program(const char* uuid);
 
 } // namespace tgfx

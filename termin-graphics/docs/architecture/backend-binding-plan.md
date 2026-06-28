@@ -99,6 +99,12 @@ D3D11 has no descriptor sets. `D3D11CommandList::bind_resource_set()` applies
 - `s#`: samplers;
 - `u#`: UAV/storage resources when supported.
 
+Backend-specific lowering decisions belong in placement metadata. For example,
+Slang D3D11 comparison sampler arrays may be legalized to one scalar sampler
+while the texture remains arrayed; this is represented by
+`placement.d3d11.scalar_sampler_for_texture_array`, not by recognizing resource
+names such as `shadow_maps`.
+
 Stage visibility comes from the plan entry's stage mask.
 When `BoundResourceSetDesc::groups` is present, clean groups are skipped so
 unchanged scopes do not rebind native D3D11 slots.

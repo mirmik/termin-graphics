@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "tgfx2/enums.hpp"
@@ -84,6 +85,7 @@ struct VulkanDescriptorPlacement {
 struct D3D11RegisterPlacement {
     D3D11RegisterClass register_class = D3D11RegisterClass::None;
     uint32_t register_index = 0;
+    bool scalar_sampler_for_texture_array = false;
 };
 
 struct OpenGLBindingPlacement {
@@ -111,6 +113,114 @@ struct BackendBindingPlan {
     BackendType backend = BackendType::Null;
     std::vector<BackendBindingPlanEntry> entries;
 };
+
+struct BackendBindingRange {
+    uint32_t base = 0;
+    uint32_t size = 0;
+};
+
+enum class BackendBindingConflictClass : uint32_t {
+    None = 0,
+    Descriptor,
+    ConstantBuffer,
+    StorageBuffer,
+    Texture,
+    Sampler,
+    StorageTexture,
+};
+
+inline bool shader_resource_kind_is_constant_buffer(ShaderResourceKind kind) {
+    return kind == ShaderResourceKind::ConstantBuffer;
+}
+
+inline bool shader_resource_kind_is_texture_like(ShaderResourceKind kind) {
+    return kind == ShaderResourceKind::Texture ||
+           kind == ShaderResourceKind::Sampler ||
+           kind == ShaderResourceKind::StorageTexture;
+}
+
+inline bool shader_resource_scope_has_transitional_binding_range(
+    ShaderResourceScope scope
+) {
+    return scope == ShaderResourceScope::Frame ||
+           scope == ShaderResourceScope::Pass ||
+           scope == ShaderResourceScope::Material ||
+           scope == ShaderResourceScope::Draw ||
+           scope == ShaderResourceScope::Transient;
+}
+
+inline uint32_t stable_shader_resource_name_hash(std::string_view value) {
+    uint32_t hash = 2166136261u;
+    for (unsigned char ch : value) {
+        hash ^= static_cast<uint32_t>(ch);
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+inline BackendBindingRange transitional_backend_binding_range(
+    BackendType backend,
+    ShaderResourceKind kind,
+    ShaderResourceScope scope
+) {
+    if (shader_resource_kind_is_constant_buffer(kind)) {
+        if (scope == ShaderResourceScope::Frame) return {0, 4};
+        if (scope == ShaderResourceScope::Pass) return {4, 4};
+        if (scope == ShaderResourceScope::Material) return {8, 8};
+        if (scope == ShaderResourceScope::Draw) return {16, 16};
+        if (scope == ShaderResourceScope::Transient) return {32, 8};
+    }
+
+    if (kind == ShaderResourceKind::StorageBuffer) {
+        if (scope == ShaderResourceScope::Draw) return {40, 16};
+        if (scope == ShaderResourceScope::Pass) return {56, 8};
+        if (scope == ShaderResourceScope::Material) return {64, 8};
+        if (scope == ShaderResourceScope::Frame) return {72, 4};
+        if (scope == ShaderResourceScope::Transient) return {76, 8};
+    }
+
+    if (shader_resource_kind_is_texture_like(kind)) {
+        if (backend == BackendType::OpenGL) {
+            if (scope == ShaderResourceScope::Frame) return {0, 4};
+            if (scope == ShaderResourceScope::Material) return {4, 4};
+            if (scope == ShaderResourceScope::Pass) return {8, 4};
+            if (scope == ShaderResourceScope::Draw) return {12, 4};
+            if (scope == ShaderResourceScope::Transient) return {16, 16};
+        }
+        if (scope == ShaderResourceScope::Material) return {80, 32};
+        if (scope == ShaderResourceScope::Pass) return {112, 16};
+        if (scope == ShaderResourceScope::Draw) return {128, 16};
+        if (scope == ShaderResourceScope::Transient) return {144, 48};
+        if (scope == ShaderResourceScope::Frame) return {192, 8};
+    }
+
+    return {};
+}
+
+inline BackendBindingConflictClass backend_binding_conflict_class(
+    BackendType backend,
+    ShaderResourceKind kind
+) {
+    if (backend != BackendType::OpenGL) {
+        return BackendBindingConflictClass::Descriptor;
+    }
+    if (shader_resource_kind_is_constant_buffer(kind)) {
+        return BackendBindingConflictClass::ConstantBuffer;
+    }
+    if (kind == ShaderResourceKind::StorageBuffer) {
+        return BackendBindingConflictClass::StorageBuffer;
+    }
+    if (kind == ShaderResourceKind::StorageTexture) {
+        return BackendBindingConflictClass::StorageTexture;
+    }
+    if (kind == ShaderResourceKind::Sampler) {
+        return BackendBindingConflictClass::Sampler;
+    }
+    if (kind == ShaderResourceKind::Texture) {
+        return BackendBindingConflictClass::Texture;
+    }
+    return BackendBindingConflictClass::None;
+}
 
 enum class BoundResourceKind : uint32_t {
     UniformBuffer = 0,

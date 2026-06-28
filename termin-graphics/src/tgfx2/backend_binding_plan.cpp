@@ -196,6 +196,8 @@ bool build_d3d11_entry(
     entry.placement.kind = BackendPlacementKind::D3D11Register;
     entry.placement.d3d11.register_class = register_class;
     entry.placement.d3d11.register_index = binding.d3d11.register_index;
+    entry.placement.d3d11.scalar_sampler_for_texture_array =
+        binding.d3d11_scalar_sampler_for_texture_array != 0;
     return true;
 }
 

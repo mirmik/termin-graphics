@@ -8,6 +8,7 @@ struct BloomUpsampleParams {
     float blend_factor;
 };
 
+[[TerminScope("pass")]]
 ConstantBuffer<BloomUpsampleParams> u_params;
 
 [[TerminScope("transient")]]

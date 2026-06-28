@@ -7,6 +7,7 @@ struct BloomCompositeParams {
     float intensity;
 };
 
+[[TerminScope("pass")]]
 ConstantBuffer<BloomCompositeParams> u_params;
 
 [[TerminScope("transient")]]

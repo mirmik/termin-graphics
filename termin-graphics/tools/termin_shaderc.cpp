@@ -6,6 +6,7 @@
 #endif
 #include <tcbase/trent/json.h>
 #include <tgfx/resources/tc_shader.h>
+#include <tgfx2/backend_binding_plan.hpp>
 #include <tgfx2/internal/process_runner.hpp>
 
 #include <algorithm>
@@ -219,54 +220,106 @@ void apply_default_resource_scope(
     }
 }
 
+static tgfx::BackendType backend_type_for_target(const std::string& target) {
+    if (target == "opengl") return tgfx::BackendType::OpenGL;
+    if (target == "d3d11") return tgfx::BackendType::D3D11;
+    if (target == "metal") return tgfx::BackendType::Metal;
+    if (target == "vulkan" || target.empty()) return tgfx::BackendType::Vulkan;
+    return tgfx::BackendType::Null;
+}
+
+static tgfx::ShaderResourceKind shader_resource_kind_for_layout(
+    const std::string& kind
+) {
+    if (kind == "constant_buffer" || kind == "uniform_buffer") {
+        return tgfx::ShaderResourceKind::ConstantBuffer;
+    }
+    if (kind == "texture") return tgfx::ShaderResourceKind::Texture;
+    if (kind == "sampler") return tgfx::ShaderResourceKind::Sampler;
+    if (kind == "storage_buffer") return tgfx::ShaderResourceKind::StorageBuffer;
+    if (kind == "storage_texture") return tgfx::ShaderResourceKind::StorageTexture;
+    return tgfx::ShaderResourceKind::None;
+}
+
+static tgfx::ShaderResourceScope shader_resource_scope_for_layout(
+    const std::string& scope
+) {
+    if (scope == "frame") return tgfx::ShaderResourceScope::Frame;
+    if (scope == "pass") return tgfx::ShaderResourceScope::Pass;
+    if (scope == "material") return tgfx::ShaderResourceScope::Material;
+    if (scope == "draw") return tgfx::ShaderResourceScope::Draw;
+    if (scope == "transient") return tgfx::ShaderResourceScope::Transient;
+    if (scope == "unscoped") return tgfx::ShaderResourceScope::Unscoped;
+    return tgfx::ShaderResourceScope::Unknown;
+}
+
+static bool resource_binding_conflicts(
+    const ShaderResourceBinding& a,
+    const ShaderResourceBinding& b,
+    const std::string& target
+) {
+    if (a.set != b.set || a.binding != b.binding) {
+        return false;
+    }
+    const tgfx::BackendType backend = backend_type_for_target(target);
+    const tgfx::BackendBindingConflictClass a_class =
+        tgfx::backend_binding_conflict_class(
+            backend,
+            shader_resource_kind_for_layout(a.kind));
+    const tgfx::BackendBindingConflictClass b_class =
+        tgfx::backend_binding_conflict_class(
+            backend,
+            shader_resource_kind_for_layout(b.kind));
+    if (a_class != b_class) {
+        return false;
+    }
+    return a.name != b.name || a.kind != b.kind || a.scope != b.scope;
+}
+
 void normalize_scope_first_binding_slots(
     std::vector<ShaderResourceBinding>& resources,
     bool normalize_transient_resources,
     const std::string& target
 ) {
-    uint32_t next_material_texture_binding = 4;
-    // Scope-first descriptor ranges use 32+ for transient resources on
-    // descriptor-based backends. OpenGL binding numbers for samplers are
-    // physical texture units, so keep them in a low, portable range.
-    uint32_t next_transient_resource_binding =
-        target == "opengl" ? 9u : 32u;
-    for (ShaderResourceBinding& resource : resources) {
+    const tgfx::BackendType backend = backend_type_for_target(target);
+    for (size_t index = 0; index < resources.size(); ++index) {
+        ShaderResourceBinding& resource = resources[index];
         resource.set = 0;
-        if (resource.kind == "constant_buffer" || resource.kind == "uniform_buffer") {
-            if (resource.scope == "frame" &&
-                (resource.name == "per_frame" || resource.name == "u_per_frame")) {
-                resource.binding = 2;
-            } else if (resource.scope == "pass" && resource.name == "lighting") {
-                resource.binding = 0;
-            } else if (resource.scope == "pass" && resource.name == "shadow_block") {
-                resource.binding = 3;
-            } else if (resource.scope == "material" && resource.name == "material") {
-                resource.binding = 1;
-            } else if (resource.scope == "draw" &&
-                       (resource.name == "bone_block" ||
-                        resource.name == "BoneBlock")) {
-                resource.binding = 16;
-            } else if (resource.scope == "draw") {
-                resource.binding = 24;
+        const tgfx::ShaderResourceKind kind =
+            shader_resource_kind_for_layout(resource.kind);
+        const tgfx::ShaderResourceScope scope =
+            shader_resource_scope_for_layout(resource.scope);
+        if (!tgfx::shader_resource_scope_has_transitional_binding_range(scope)) {
+            continue;
+        }
+        if (!normalize_transient_resources && resource.scope == "transient") {
+            continue;
+        }
+
+        const tgfx::BackendBindingRange range =
+            tgfx::transitional_backend_binding_range(backend, kind, scope);
+        if (range.size == 0) {
+            continue;
+        }
+
+        const uint32_t hash = tgfx::stable_shader_resource_name_hash(resource.name);
+        uint32_t candidate = range.base + (hash % range.size);
+        for (uint32_t attempt = 0; attempt < range.size; ++attempt) {
+            resource.binding = candidate;
+            bool conflict = false;
+            for (size_t previous = 0; previous < index; ++previous) {
+                if (resource_binding_conflicts(
+                        resource,
+                        resources[previous],
+                        target)) {
+                    conflict = true;
+                    break;
+                }
             }
-        } else if (resource.kind == "texture" && resource.scope == "pass" &&
-                   (resource.name == "shadow_maps" ||
-                    resource.name == "u_shadow_map" ||
-                    resource.name == "u_shadow_maps")) {
-            resource.binding = 8;
-        } else if (resource.kind == "texture" && resource.scope == "material") {
-            if (next_material_texture_binding == 8) {
-                ++next_material_texture_binding;
+            if (!conflict) {
+                break;
             }
-            resource.binding = next_material_texture_binding++;
-        } else if (normalize_transient_resources &&
-                   (resource.kind == "texture" ||
-                    resource.kind == "storage_texture" ||
-                    resource.kind == "sampler") &&
-                   resource.scope == "transient") {
-            resource.binding = next_transient_resource_binding++;
-        } else if (resource.kind == "storage_buffer" && resource.scope == "draw") {
-            resource.binding = 25;
+            candidate = range.base + ((candidate - range.base + 1) % range.size);
         }
     }
 }
@@ -304,6 +357,9 @@ static void append_unique_resource(
                 existing.slang_separate_sampler || binding.slang_separate_sampler;
             existing.slang_storage_texture =
                 existing.slang_storage_texture || binding.slang_storage_texture;
+            existing.d3d11_scalar_sampler_for_texture_array =
+                existing.d3d11_scalar_sampler_for_texture_array ||
+                binding.d3d11_scalar_sampler_for_texture_array;
             return;
         }
     }
@@ -1140,18 +1196,16 @@ static bool write_resource_layout_sidecar(
             for (size_t j = i + 1; j < resources.size(); ++j) {
                 const ShaderResourceBinding& a = resources[i];
                 const ShaderResourceBinding& b = resources[j];
-                if (a.set != b.set || a.binding != b.binding) {
+                if (!resource_binding_conflicts(a, b, options.target)) {
                     continue;
                 }
-                if (a.name != b.name || a.kind != b.kind || a.scope != b.scope) {
-                    std::cerr
-                        << "termin_shaderc: conflicting resources at set="
-                        << a.set << " binding=" << a.binding << ": '"
-                        << a.name << "' (" << a.kind << ", " << a.scope
-                        << ") vs '" << b.name << "' (" << b.kind << ", "
-                        << b.scope << ")\n";
-                    return false;
-                }
+                std::cerr
+                    << "termin_shaderc: conflicting resources at set="
+                    << a.set << " binding=" << a.binding << ": '"
+                    << a.name << "' (" << a.kind << ", " << a.scope
+                    << ") vs '" << b.name << "' (" << b.kind << ", "
+                    << b.scope << ")\n";
+                return false;
             }
         }
     }
@@ -1183,8 +1237,11 @@ static bool write_resource_layout_sidecar(
         if (options.target == "d3d11") {
             out << ", \"d3d11\": {"
                 << "\"register_class\": \"" << json_escape(binding.d3d11_register_class) << "\", "
-                << "\"register_index\": " << binding.d3d11_register_index
-                << "}";
+                << "\"register_index\": " << binding.d3d11_register_index;
+            if (binding.d3d11_scalar_sampler_for_texture_array) {
+                out << ", \"scalar_sampler_for_texture_array\": true";
+            }
+            out << "}";
         }
         if (!binding.fields.empty()) {
             out << ", \"fields\": [";
