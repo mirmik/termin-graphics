@@ -6,26 +6,31 @@ targeted checks that match the touched subsystem.
 
 ## Default Repository Gate
 
-Use the full repository gate before merging broad SDK, render, shader, module,
-or build-system changes:
+Use the default repository gate during normal development. It runs the working
+set: C/C++ tests without window creation, Python tests except those marked
+`full`, and no editor-process smoke tests.
 
 ```bash
 ./run-tests.sh
 ```
 
-On headless machines this includes editor-process module hot-reload smokes
-through `xvfb-run` when available. If the editor smoke stage is not relevant or
-the host cannot launch the editor, run:
+Use the full repository gate before merging broad SDK, render, shader, module,
+or build-system changes:
 
 ```bash
-./run-tests.sh --no-editor-smoke
+./run-tests.sh --full
 ```
+
+The full gate enables C++ window tests, Python tests marked `full`, and
+editor-process module hot-reload smokes. On headless Linux the smoke scripts use
+`xvfb-run` when available. If the editor smoke stage is not relevant or the host
+cannot launch the editor, run `./run-tests.sh --full --no-editor-smoke`.
 
 ## Render And Shader Matrix
 
 | Area | Command | What It Proves |
 | --- | --- | --- |
-| C/C++ render and graphics tests | `./run-tests-cpp.sh --sdl` | Builds and runs the registered CTest graph, including tgfx2 OpenGL/Vulkan-capable tests where the host supports them. |
+| C/C++ render and graphics tests | `./run-tests-cpp.sh --full --sdl` | Builds and runs the registered CTest graph, including tgfx2 OpenGL/Vulkan-capable tests where the host supports them. |
 | Python shader/material/project tests | `./run-tests-python.sh termin-app/tests/shader_parser_test.py termin-voxels/tests/test_voxel_shader.py termin-app/tests/test_shader_tool_resolution.py` | Parser/runtime shader import, built-in shader catalog, and shader tool resolution stay usable from Python. |
 | OpenGL tgfx2 smoke | `ctest --test-dir build/Release-tests -R '^(tgfx2_smoke|tgfx2_opengl_bound_resource_set)$' --output-on-failure` | OpenGL device, render target readback, shader artifacts, and bound-resource-set path work. |
 | Vulkan tgfx2 smoke | `ctest --test-dir build/Release-tests -R '^(tgfx2_vulkan_smoke|tgfx2_vulkan_window)$' --output-on-failure` | Vulkan offscreen/window paths, readback, resource binding, vertex formats, and optional Slang artifact path work. |
@@ -37,7 +42,7 @@ the host cannot launch the editor, run:
 
 | Area | Command | What It Proves |
 | --- | --- | --- |
-| Runtime package exporter | `./run-tests-python.sh termin-app/tests/test_runtime_package_exporter.py termin-app/tests/test_runtime_package_loader.py` | Runtime manifests, shader artifacts, assets, and loader behavior remain coherent. |
+| Runtime package exporter | `./run-tests-python.sh --full termin-app/tests/test_runtime_package_exporter.py termin-app/tests/test_runtime_package_loader.py` | Runtime manifests, shader artifacts, assets, and loader behavior remain coherent. |
 | Desktop build profile path | `./run-tests-python.sh termin-app/tests/test_project_build_profile_backend.py termin-app/tests/test_project_build_target_common.py termin-app/tests/test_project_build_target_preflight.py` | Build profile dispatch, target preflight, and host/tool checks remain deterministic. |
 | Relocatable desktop bundle | Run the project-specific relocated bundle smoke, for example the Chess bundle smoke tracked separately. | The packaged host can run outside the source tree with bundled assets, Python packages, and shader artifacts. |
 

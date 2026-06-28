@@ -10,9 +10,10 @@ SDK_PREFIX="${SDK_PREFIX:-$SCRIPT_DIR/sdk}"
 BUILD_TYPE="Release"
 BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 BUILD_DIR=""
+FULL=0
 VULKAN_MODE="on"
 SDL_MODE="on"
-WINDOW_TESTS_MODE="auto"
+WINDOW_TESTS_MODE="off"
 CCACHE_MODE="on"
 UNITY_MODE="off"
 PCH_MODE="on"
@@ -21,6 +22,7 @@ CMAKE_GENERATOR_NAME="${CMAKE_GENERATOR_NAME:-${TERMIN_CMAKE_GENERATOR:-}}"
 for arg in "$@"; do
     case "$arg" in
         --debug|-d)  BUILD_TYPE="Debug" ;;
+        --full)      FULL=1; WINDOW_TESTS_MODE="on" ;;
         --no-vulkan) VULKAN_MODE="off" ;;
         --vulkan)    VULKAN_MODE="on" ;;
         --no-sdl)    SDL_MODE="off" ;;
@@ -37,8 +39,12 @@ for arg in "$@"; do
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
+            echo "By default this runs the working CTest set and does not build"
+            echo "tests that create windows/GL contexts. Use --full to include them."
+            echo ""
             echo "Options:"
             echo "  --debug, -d       Debug build"
+            echo "  --full            Include window/full C++ tests"
             echo "  --no-vulkan       Disable Vulkan support"
             echo "  --vulkan          Enable Vulkan support (default)"
             echo "  --no-sdl          Disable SDL2 support"
@@ -128,6 +134,7 @@ echo "SDK prefix:  $SDK_PREFIX"
 echo "Vulkan:      $TERMIN_ENABLE_VULKAN"
 echo "SDL2:        $TERMIN_ENABLE_SDL"
 echo "Window tests:$TERMIN_BUILD_WINDOW_TESTS ($WINDOW_TESTS_MODE)"
+echo "Full set:    $FULL"
 echo "ccache:      $TERMIN_USE_CCACHE"
 echo "Unity build: $TERMIN_ENABLE_UNITY_BUILD"
 echo "PCH:         $TERMIN_ENABLE_PCH"

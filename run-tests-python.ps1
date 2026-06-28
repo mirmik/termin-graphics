@@ -6,17 +6,20 @@
 #
 # Usage:
 #   .\run-tests-python.ps1
+#   .\run-tests-python.ps1 --full
 #   .\run-tests-python.ps1 termin-app/tests/test_project_file_watcher.py -q
 
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $PytestTargets = New-Object System.Collections.Generic.List[string]
+$Full = $false
 
 function Show-Help {
     Write-Host "Usage: .\run-tests-python.ps1 [pytest-target ...]"
     Write-Host ""
-    Write-Host "  (no flags)  Activate .venv/ and auto-detect TERMIN_SDK"
+    Write-Host "  (no flags)  Activate .venv/, auto-detect TERMIN_SDK, run working tests"
+    Write-Host "  --full      Include pytest tests marked full"
     Write-Host "  pytest-target"
     Write-Host "              Run only selected pytest target(s), e.g. termin-app/tests/test_game_mode_model.py"
 }
@@ -25,6 +28,8 @@ foreach ($arg in $args) {
     if ($arg -eq "--no-venv") {
         Write-Error "--no-venv is no longer supported; run .\setup-test-venv.ps1 first."
         exit 1
+    } elseif ($arg -eq "--full") {
+        $Full = $true
     } elseif ($arg -eq "--help" -or $arg -eq "-h") {
         Show-Help
         exit 0
@@ -110,7 +115,11 @@ $env:PYTHONPATH = if ($env:PYTHONPATH) { $env:PYTHONPATH } else { "" }
 
 Write-Host ""
 Write-Host "========================================"
-Write-Host "  Python tests"
+if ($Full) {
+    Write-Host "  Python tests (full)"
+} else {
+    Write-Host "  Python tests (working set)"
+}
 Write-Host "========================================"
 
 Set-Location $ScriptDir
@@ -124,6 +133,11 @@ New-Item -ItemType Directory -Path $PytestCacheRoot -Force | Out-Null
 $env:TEMP = $PytestRunTempDir
 $env:TMP = $PytestRunTempDir
 Write-Host "Pytest temp root: $PytestRunTempDir"
+
+$PytestMarkerArgs = @()
+if (-not $Full) {
+    $PytestMarkerArgs = @("-m", "not full")
+}
 
 function New-PytestSuiteArgs {
     param([string]$Name)
@@ -154,21 +168,21 @@ function Invoke-TestSuite {
 }
 
 if ($PytestTargets.Count -gt 0) {
-    Invoke-TestSuite "selected python" (@("-m", "pytest") + $PytestTargets.ToArray() + (New-PytestSuiteArgs "selected-python") + @("-v"))
+    Invoke-TestSuite "selected python" (@("-m", "pytest") + $PytestMarkerArgs + $PytestTargets.ToArray() + (New-PytestSuiteArgs "selected-python") + @("-v"))
 } else {
-    Invoke-TestSuite "termin-base python" (@("-m", "pytest", "termin-base/tests/python/") + (New-PytestSuiteArgs "termin-base-python") + @("-v"))
+    Invoke-TestSuite "termin-base python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-base/tests/python/") + (New-PytestSuiteArgs "termin-base-python") + @("-v"))
     Invoke-TestSuite "termin-modules import smoke" @("-c", "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())")
-    Invoke-TestSuite "termin-mesh python" (@("-m", "pytest", "termin-mesh/tests/python/") + (New-PytestSuiteArgs "termin-mesh-python") + @("-v"))
-    Invoke-TestSuite "termin-prefab python" (@("-m", "pytest", "termin-prefab/tests/") + (New-PytestSuiteArgs "termin-prefab-python") + @("-v"))
-    Invoke-TestSuite "termin-glb python" (@("-m", "pytest", "termin-glb/tests/") + (New-PytestSuiteArgs "termin-glb-python") + @("-v"))
-    Invoke-TestSuite "termin-default-assets python" (@("-m", "pytest", "termin-default-assets/tests/") + (New-PytestSuiteArgs "termin-default-assets-python") + @("-v"))
-    Invoke-TestSuite "termin-csg python" (@("-m", "pytest", "termin-csg/tests/") + (New-PytestSuiteArgs "termin-csg-python") + @("-v"))
-    Invoke-TestSuite "termin-graphics python" (@("-m", "pytest", "termin-graphics/tests/python/") + (New-PytestSuiteArgs "termin-graphics-python") + @("-v"))
-    Invoke-TestSuite "termin-gui python" (@("-m", "pytest", "termin-gui/python/tests/") + (New-PytestSuiteArgs "termin-gui-python") + @("-v"))
-    Invoke-TestSuite "termin-nodegraph python" (@("-m", "pytest", "termin-nodegraph/tests/") + (New-PytestSuiteArgs "termin-nodegraph-python") + @("-v"))
-    Invoke-TestSuite "termin-qopt python" (@("-m", "pytest", "termin-qopt/tests/") + (New-PytestSuiteArgs "termin-qopt-python") + @("-v"))
-    Invoke-TestSuite "termin-pga python" (@("-m", "pytest", "termin-pga/tests/") + (New-PytestSuiteArgs "termin-pga-python") + @("-v"))
-    Invoke-TestSuite "termin-app python" (@("-m", "pytest", "termin-app/tests/") + (New-PytestSuiteArgs "termin-app-python") + @("-v"))
+    Invoke-TestSuite "termin-mesh python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-mesh/tests/python/") + (New-PytestSuiteArgs "termin-mesh-python") + @("-v"))
+    Invoke-TestSuite "termin-prefab python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-prefab/tests/") + (New-PytestSuiteArgs "termin-prefab-python") + @("-v"))
+    Invoke-TestSuite "termin-glb python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-glb/tests/") + (New-PytestSuiteArgs "termin-glb-python") + @("-v"))
+    Invoke-TestSuite "termin-default-assets python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-default-assets/tests/") + (New-PytestSuiteArgs "termin-default-assets-python") + @("-v"))
+    Invoke-TestSuite "termin-csg python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-csg/tests/") + (New-PytestSuiteArgs "termin-csg-python") + @("-v"))
+    Invoke-TestSuite "termin-graphics python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-graphics/tests/python/") + (New-PytestSuiteArgs "termin-graphics-python") + @("-v"))
+    Invoke-TestSuite "termin-gui python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-gui/python/tests/") + (New-PytestSuiteArgs "termin-gui-python") + @("-v"))
+    Invoke-TestSuite "termin-nodegraph python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-nodegraph/tests/") + (New-PytestSuiteArgs "termin-nodegraph-python") + @("-v"))
+    Invoke-TestSuite "termin-qopt python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-qopt/tests/") + (New-PytestSuiteArgs "termin-qopt-python") + @("-v"))
+    Invoke-TestSuite "termin-pga python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-pga/tests/") + (New-PytestSuiteArgs "termin-pga-python") + @("-v"))
+    Invoke-TestSuite "termin-app python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-app/tests/") + (New-PytestSuiteArgs "termin-app-python") + @("-v"))
 }
 
 if ($Failures.Count -gt 0) {

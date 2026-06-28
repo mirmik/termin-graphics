@@ -1,25 +1,33 @@
 #!/bin/bash
-# Run all repo tests: C/C++ first, then Python.
+# Run repo tests: working set by default, full set on request.
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EDITOR_SMOKE=1
+FULL=0
+NO_EDITOR_SMOKE=0
 CPP_ARGS=()
 
 for arg in "$@"; do
     case "$arg" in
+        --full)
+            FULL=1
+            ;;
         --no-editor-smoke)
-            EDITOR_SMOKE=0
+            NO_EDITOR_SMOKE=1
             ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS] [run-tests-cpp options]"
+            echo ""
+            echo "By default this runs the working test set: no window tests,"
+            echo "no editor-process smoke tests, and no pytest tests marked full."
             echo ""
             echo "Vulkan is enabled by default for C/C++ tests."
             echo "Use --no-vulkan only for OpenGL/legacy compatibility checks."
             echo ""
             echo "Options:"
-            echo "  --no-editor-smoke  Skip editor-process module hot reload smoke tests"
+            echo "  --full             Include window tests, full pytest tests, and editor smoke tests"
+            echo "  --no-editor-smoke  Skip editor-process smoke tests even with --full"
             echo "  --help, -h         Show this help"
             echo ""
             echo "Other options are passed through to run-tests-cpp.sh."
@@ -33,11 +41,20 @@ done
 
 failures=()
 
+if [[ "$FULL" -eq 1 ]]; then
+    CPP_ARGS=(--full "${CPP_ARGS[@]}")
+fi
+
+PYTHON_ARGS=()
+if [[ "$FULL" -eq 1 ]]; then
+    PYTHON_ARGS+=(--full)
+fi
+
 if ! bash "$SCRIPT_DIR/run-tests-cpp.sh" "${CPP_ARGS[@]}"; then
     failures+=("C/C++")
 fi
 
-if ! bash "$SCRIPT_DIR/run-tests-python.sh"; then
+if ! bash "$SCRIPT_DIR/run-tests-python.sh" "${PYTHON_ARGS[@]}"; then
     failures+=("Python")
 fi
 
@@ -58,7 +75,7 @@ run_editor_smoke() {
     "$script"
 }
 
-if [[ "$EDITOR_SMOKE" -eq 1 ]]; then
+if [[ "$FULL" -eq 1 && "$NO_EDITOR_SMOKE" -eq 0 ]]; then
     echo ""
     echo "========================================"
     echo "  Editor smoke tests"
@@ -74,7 +91,7 @@ if [[ "$EDITOR_SMOKE" -eq 1 ]]; then
 else
     echo ""
     echo "========================================"
-    echo "  Editor smoke tests skipped"
+    echo "  Editor smoke tests skipped (use --full to include)"
     echo "========================================"
 fi
 

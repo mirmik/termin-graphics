@@ -13,9 +13,10 @@ $SdkPrefix = if ($env:SDK_PREFIX) { $env:SDK_PREFIX } else { Join-Path $ScriptDi
 $BuildType = "Release"
 $BuildJobs = if ($env:BUILD_JOBS) { [int]$env:BUILD_JOBS } else { [Environment]::ProcessorCount }
 $BuildDir = if ($env:BUILD_DIR) { $env:BUILD_DIR } else { "" }
+$Full = $false
 $VulkanMode = "on"
 $SdlMode = "on"
-$WindowTestsMode = "auto"
+$WindowTestsMode = "off"
 $CcacheMode = "on"
 $UnityMode = "off"
 $PchMode = "on"
@@ -40,8 +41,12 @@ function Get-CMakeGeneratorFromCache {
 function Show-Help {
     Write-Host "Usage: .\run-tests-cpp.ps1 [OPTIONS]"
     Write-Host ""
+    Write-Host "By default this runs the working CTest set and does not build"
+    Write-Host "tests that create windows/GL contexts. Use --full to include them."
+    Write-Host ""
     Write-Host "Options:"
     Write-Host "  --debug, -d       Debug build"
+    Write-Host "  --full            Include window/full C++ tests"
     Write-Host "  --no-vulkan       Disable Vulkan support"
     Write-Host "  --vulkan          Enable Vulkan support (default)"
     Write-Host "  --no-sdl          Disable SDL2 support"
@@ -69,6 +74,7 @@ foreach ($arg in $args) {
     switch ($arg) {
         "--debug"           { $BuildType = "Debug" }
         "-d"                { $BuildType = "Debug" }
+        "--full"            { $Full = $true; $WindowTestsMode = "on" }
         "--no-vulkan"       { $VulkanMode = "off" }
         "--vulkan"          { $VulkanMode = "on" }
         "--no-sdl"          { $SdlMode = "off" }
@@ -149,6 +155,7 @@ Write-Host "SDK prefix:  $SdkPrefix"
 Write-Host "Vulkan:      $TerminEnableVulkan"
 Write-Host "SDL2:        $TerminEnableSdl"
 Write-Host "Window tests:$TerminBuildWindowTests ($WindowTestsMode)"
+Write-Host "Full set:    $Full"
 Write-Host "ccache:      $TerminUseCcache"
 Write-Host "Unity build: $TerminEnableUnityBuild"
 Write-Host "PCH:         $TerminEnablePch"

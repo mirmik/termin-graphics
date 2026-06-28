@@ -5,6 +5,7 @@
 # needed after ./setup-test-venv.sh.
 #
 # Flags:
+#   --full       Include pytest tests marked full
 #   test paths   Run only selected pytest targets after environment setup
 #   --help, -h   Show this help
 
@@ -12,9 +13,13 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTEST_TARGETS=()
+FULL=0
 
 for arg in "$@"; do
     case "$arg" in
+        --full)
+            FULL=1
+            ;;
         --no-venv)
             echo "--no-venv is no longer supported; run ./setup-test-venv.sh first." >&2
             exit 1
@@ -22,7 +27,8 @@ for arg in "$@"; do
         --help|-h)
             echo "Usage: $0 [pytest-target ...]"
             echo ""
-            echo "  (no flags)  Activate .venv/ and auto-detect TERMIN_SDK"
+            echo "  (no flags)  Activate .venv/, auto-detect TERMIN_SDK, run working tests"
+            echo "  --full      Include pytest tests marked full"
             echo "  pytest-target"
             echo "              Run only selected pytest target(s), e.g. termin-app/tests/test_game_mode_model.py"
             exit 0
@@ -76,12 +82,20 @@ export PYTHONPATH="${PYTHONPATH:-}"
 # --- Run tests ---
 echo ""
 echo "========================================"
-echo "  Python tests"
+if [[ "$FULL" -eq 1 ]]; then
+    echo "  Python tests (full)"
+else
+    echo "  Python tests (working set)"
+fi
 echo "========================================"
 
 cd "$SCRIPT_DIR"
 
 failures=()
+PYTEST_MARK_ARGS=()
+if [[ "$FULL" -eq 0 ]]; then
+    PYTEST_MARK_ARGS=(-m "not full")
+fi
 
 run_suite() {
     local name="$1"
@@ -99,64 +113,64 @@ run_suite() {
 
 if (( ${#PYTEST_TARGETS[@]} > 0 )); then
     run_suite "selected python" \
-        "${PYTHON_BIN}" -m pytest "${PYTEST_TARGETS[@]}" -v
+        "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" "${PYTEST_TARGETS[@]}" -v
 else
 run_suite "termin-build-tools python" \
-    "${PYTHON_BIN}" -m pytest termin-build-tools/tests/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-build-tools/tests/ -v
 
 run_suite "termin-base python" \
-    "${PYTHON_BIN}" -m pytest termin-base/tests/python/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-base/tests/python/ -v
 
 run_suite "termin-assets python" \
-    "${PYTHON_BIN}" -m pytest termin-assets/tests/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-assets/tests/ -v
 
 run_suite "termin-inspect python" \
-    "${PYTHON_BIN}" -m pytest termin-inspect/tests/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-inspect/tests/ -v
 
 run_suite "termin-modules import smoke" \
     "${PYTHON_BIN}" -c "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())"
 
 run_suite "termin-mesh python" \
-    "${PYTHON_BIN}" -m pytest termin-mesh/tests/python/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-mesh/tests/python/ -v
 
 run_suite "termin-prefab python" \
-    "${PYTHON_BIN}" -m pytest termin-prefab/tests/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-prefab/tests/ -v
 
 run_suite "termin-glb python" \
-    "${PYTHON_BIN}" -m pytest termin-glb/tests/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-glb/tests/ -v
 
 run_suite "termin-default-assets python" \
-    "${PYTHON_BIN}" -m pytest termin-default-assets/tests/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-default-assets/tests/ -v
 
 run_suite "termin-csg python" \
-    "${PYTHON_BIN}" -m pytest termin-csg/tests/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-csg/tests/ -v
 
 run_suite "termin-graphics python" \
-    "${PYTHON_BIN}" -m pytest termin-graphics/tests/python/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-graphics/tests/python/ -v
 
 run_suite "termin-materials python" \
-    "${PYTHON_BIN}" -m pytest termin-materials/tests/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-materials/tests/ -v
 
 run_suite "termin-gui python" \
-    "${PYTHON_BIN}" -m pytest termin-gui/python/tests/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-gui/python/tests/ -v
 
 run_suite "termin-nodegraph python" \
-    "${PYTHON_BIN}" -m pytest termin-nodegraph/tests/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-nodegraph/tests/ -v
 
 run_suite "termin-voxels python" \
-    "${PYTHON_BIN}" -m pytest termin-voxels/tests/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-voxels/tests/ -v
 
 run_suite "termin-bootstrap python" \
-    "${PYTHON_BIN}" -m pytest termin-bootstrap/tests/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-bootstrap/tests/ -v
 
 run_suite "termin-qopt python" \
-    "${PYTHON_BIN}" -m pytest termin-qopt/tests/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-qopt/tests/ -v
 
 run_suite "termin-pga python" \
-    "${PYTHON_BIN}" -m pytest termin-pga/tests/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-pga/tests/ -v
 
 run_suite "termin-app python" \
-    "${PYTHON_BIN}" -m pytest termin-app/tests/ -v
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-app/tests/ -v
 fi
 
 if (( ${#failures[@]} > 0 )); then

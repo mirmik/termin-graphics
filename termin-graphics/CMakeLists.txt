@@ -447,7 +447,7 @@ if(BUILD_TGFX2_TESTS)
     termin_set_rpath_test(tgfx2_device_factory_test)
     add_test(NAME tgfx2_device_factory_test COMMAND tgfx2_device_factory_test)
 
-    if(TGFX2_ENABLE_OPENGL)
+    if(TGFX2_ENABLE_OPENGL AND BUILD_TGFX2_WINDOW_TESTS)
         set(SDL2_OPENGL_SMOKE_FOUND FALSE)
         find_path(SDL2_OPENGL_SMOKE_INCLUDE_DIR SDL.h PATH_SUFFIXES SDL2)
         find_library(SDL2_OPENGL_SMOKE_LIBRARY SDL2)
