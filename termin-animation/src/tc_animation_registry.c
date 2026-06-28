@@ -91,8 +91,7 @@ tc_animation_handle tc_animation_create(const char* uuid) {
 
     tc_animation* animation = (tc_animation*)tc_pool_get(&g_animation_pool, h);
     memset(animation, 0, sizeof(tc_animation));
-    strncpy(animation->header.uuid, final_uuid, sizeof(animation->header.uuid) - 1);
-    animation->header.uuid[sizeof(animation->header.uuid) - 1] = '\0';
+    tc_resource_header_set_uuid(&animation->header, final_uuid, "tc_animation_create");
     animation->header.version = 1;
     animation->header.ref_count = 0;
     animation->header.is_loaded = 1;
@@ -185,8 +184,7 @@ tc_animation_handle tc_animation_declare(const char* uuid, const char* name) {
 
     tc_animation* animation = (tc_animation*)tc_pool_get(&g_animation_pool, h);
     memset(animation, 0, sizeof(tc_animation));
-    strncpy(animation->header.uuid, uuid, sizeof(animation->header.uuid) - 1);
-    animation->header.uuid[sizeof(animation->header.uuid) - 1] = '\0';
+    tc_resource_header_set_uuid(&animation->header, uuid, "tc_animation_declare");
     animation->header.version = 0;
     animation->header.ref_count = 0;
     animation->header.is_loaded = 0;

@@ -100,8 +100,7 @@ tc_material_handle tc_material_create(const char* uuid, const char* name) {
 
     tc_material* mat = (tc_material*)tc_pool_get(&g_material_pool, h);
     memset(mat, 0, sizeof(tc_material));
-    strncpy(mat->header.uuid, final_uuid, sizeof(mat->header.uuid) - 1);
-    mat->header.uuid[sizeof(mat->header.uuid) - 1] = '\0';
+    tc_resource_header_set_uuid(&mat->header, final_uuid, "tc_material_create");
     mat->header.name = tgfx_intern_string(name);
     mat->header.version = 1;
     mat->header.ref_count = 0;

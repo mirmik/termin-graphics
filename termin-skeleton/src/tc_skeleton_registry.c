@@ -91,8 +91,7 @@ tc_skeleton_handle tc_skeleton_create(const char* uuid) {
 
     tc_skeleton* skeleton = (tc_skeleton*)tc_pool_get(&g_skeleton_pool, h);
     memset(skeleton, 0, sizeof(tc_skeleton));
-    strncpy(skeleton->header.uuid, final_uuid, sizeof(skeleton->header.uuid) - 1);
-    skeleton->header.uuid[sizeof(skeleton->header.uuid) - 1] = '\0';
+    tc_resource_header_set_uuid(&skeleton->header, final_uuid, "tc_skeleton_create");
     skeleton->header.version = 1;
     skeleton->header.ref_count = 0;
     skeleton->header.is_loaded = 1;
@@ -183,8 +182,7 @@ tc_skeleton_handle tc_skeleton_declare(const char* uuid, const char* name) {
 
     tc_skeleton* skeleton = (tc_skeleton*)tc_pool_get(&g_skeleton_pool, h);
     memset(skeleton, 0, sizeof(tc_skeleton));
-    strncpy(skeleton->header.uuid, uuid, sizeof(skeleton->header.uuid) - 1);
-    skeleton->header.uuid[sizeof(skeleton->header.uuid) - 1] = '\0';
+    tc_resource_header_set_uuid(&skeleton->header, uuid, "tc_skeleton_declare");
     skeleton->header.version = 0;
     skeleton->header.ref_count = 0;
     skeleton->header.is_loaded = 0;

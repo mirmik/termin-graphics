@@ -103,8 +103,7 @@ tc_texture_handle tc_texture_create(const char* uuid) {
 
     tc_texture* tex = (tc_texture*)tc_pool_get(&g_texture_pool, h);
     memset(tex, 0, sizeof(tc_texture));
-    strncpy(tex->header.uuid, final_uuid, sizeof(tex->header.uuid) - 1);
-    tex->header.uuid[sizeof(tex->header.uuid) - 1] = '\0';
+    tc_resource_header_set_uuid(&tex->header, final_uuid, "tc_texture_create");
     tex->header.version = 1;
     tex->header.ref_count = 0;
     tex->header.pool_index = h.index;
@@ -208,8 +207,7 @@ tc_texture_handle tc_texture_declare(const char* uuid, const char* name) {
 
     tc_texture* tex = (tc_texture*)tc_pool_get(&g_texture_pool, h);
     memset(tex, 0, sizeof(tc_texture));
-    strncpy(tex->header.uuid, uuid, sizeof(tex->header.uuid) - 1);
-    tex->header.uuid[sizeof(tex->header.uuid) - 1] = '\0';
+    tc_resource_header_set_uuid(&tex->header, uuid, "tc_texture_declare");
     tex->header.version = 0;
     tex->header.ref_count = 0;
     tex->header.pool_index = h.index;

@@ -1,6 +1,7 @@
 // tc_shader_registry.c - Shader registry with pool + hash table and variant support
 #include "tgfx/resources/tc_shader_registry.h"
 #include <tcbase/tc_pool.h>
+#include <tcbase/tc_resource.h>
 #include <tcbase/tc_resource_map.h>
 #include <tcbase/tc_registry_utils.h>
 #include <tcbase/tc_log.h>
@@ -368,8 +369,7 @@ tc_shader_handle tc_shader_create(const char* uuid) {
     // Get shader pointer and init
     tc_shader* shader = (tc_shader*)tc_pool_get(&g_shader_pool, h);
     memset(shader, 0, sizeof(tc_shader));
-    strncpy(shader->uuid, final_uuid, sizeof(shader->uuid) - 1);
-    shader->uuid[sizeof(shader->uuid) - 1] = '\0';
+    tc_resource_copy_uuid(shader->uuid, sizeof(shader->uuid), final_uuid, "tc_shader_create");
     shader->version = 1;
     shader->ref_count = 0;
     shader->language = TC_SHADER_LANGUAGE_GLSL;

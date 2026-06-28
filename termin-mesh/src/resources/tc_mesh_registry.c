@@ -111,8 +111,7 @@ tc_mesh_handle tc_mesh_create(const char* uuid) {
     // Get mesh pointer and init
     tc_mesh* mesh = (tc_mesh*)tc_pool_get(&g_mesh_pool, h);
     memset(mesh, 0, sizeof(tc_mesh));
-    strncpy(mesh->header.uuid, final_uuid, sizeof(mesh->header.uuid) - 1);
-    mesh->header.uuid[sizeof(mesh->header.uuid) - 1] = '\0';
+    tc_resource_header_set_uuid(&mesh->header, final_uuid, "tc_mesh_create");
     mesh->header.version = 1;
     mesh->header.ref_count = 0;
     mesh->header.pool_index = h.index;
@@ -212,8 +211,7 @@ tc_mesh_handle tc_mesh_declare(const char* uuid, const char* name) {
     // Get mesh pointer and init (declared but not loaded)
     tc_mesh* mesh = (tc_mesh*)tc_pool_get(&g_mesh_pool, h);
     memset(mesh, 0, sizeof(tc_mesh));
-    strncpy(mesh->header.uuid, uuid, sizeof(mesh->header.uuid) - 1);
-    mesh->header.uuid[sizeof(mesh->header.uuid) - 1] = '\0';
+    tc_resource_header_set_uuid(&mesh->header, uuid, "tc_mesh_declare");
     mesh->header.version = 0;
     mesh->header.ref_count = 0;
     mesh->header.pool_index = h.index;
