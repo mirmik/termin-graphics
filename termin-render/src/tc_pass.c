@@ -25,6 +25,14 @@ static void ensure_pass_registry_initialized(void) {
     }
 }
 
+static void destroy_pass_facet(void* payload) {
+    tc_type_entry* entry = (tc_type_entry*)payload;
+    if (!entry || !entry->type_name || !g_pass_registry) {
+        return;
+    }
+    tc_type_registry_unregister(g_pass_registry, entry->type_name);
+}
+
 void tc_pass_set_name(tc_pass* p, const char* name) {
     if (!p) return;
     if (p->pass_name) free(p->pass_name);
@@ -60,7 +68,7 @@ void tc_pass_registry_register(
             type_name,
             TC_RUNTIME_TYPE_FACET_FRAME_PASS,
             entry,
-            NULL,
+            destroy_pass_facet,
             1
         );
     }
