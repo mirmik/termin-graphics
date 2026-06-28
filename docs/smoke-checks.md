@@ -42,7 +42,7 @@ cannot launch the editor, run `./run-tests.sh --full --no-editor-smoke`.
 
 | Area | Command | What It Proves |
 | --- | --- | --- |
-| Runtime package exporter | `./run-tests-python.sh --full termin-app/tests/test_runtime_package_exporter.py termin-app/tests/test_runtime_package_loader.py` | Runtime manifests, shader artifacts, assets, and loader behavior remain coherent. |
+| Runtime package exporter | `./run-tests-python.sh --full termin-app/tests/test_runtime_package_exporter.py termin-player/tests/test_runtime_package_loader.py` | Runtime manifests, shader artifacts, assets, and loader behavior remain coherent. |
 | Desktop build profile path | `./run-tests-python.sh termin-app/tests/test_project_build_profile_backend.py termin-app/tests/test_project_build_target_common.py termin-app/tests/test_project_build_target_preflight.py` | Build profile dispatch, target preflight, and host/tool checks remain deterministic. |
 | Relocatable desktop bundle | Run the project-specific relocated bundle smoke, for example the Chess bundle smoke tracked separately. | The packaged host can run outside the source tree with bundled assets, Python packages, and shader artifacts. |
 

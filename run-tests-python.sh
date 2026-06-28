@@ -169,6 +169,9 @@ run_suite "termin-qopt python" \
 run_suite "termin-pga python" \
     "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-pga/tests/ -v
 
+run_suite "termin-player python" \
+    "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-player/tests/ -v
+
 run_suite "termin-app python" \
     "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-app/tests/ -v
 fi

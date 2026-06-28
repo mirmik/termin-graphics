@@ -214,6 +214,7 @@ if(TERMIN_PLATFORM_ANDROID)
 endif()
 
 if(NOT TERMIN_PLATFORM_ANDROID)
+    add_subdirectory(termin-player)
     add_subdirectory(termin-app/cpp)
     add_subdirectory(tcplot)
 endif()

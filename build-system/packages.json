@@ -19,6 +19,10 @@
       ]
     },
     {
+      "path": "termin-mcp",
+      "distribution": "termin-mcp"
+    },
+    {
       "path": "termin-assets",
       "distribution": "termin-assets"
     },
@@ -57,6 +61,10 @@
       "native_extensions": [
         {"extension": "termin.materials._materials_native", "target": "_materials_native"}
       ]
+    },
+    {
+      "path": "termin-shader-runtime",
+      "distribution": "termin-shader-runtime"
     },
     {
       "path": "termin-gui",
@@ -249,6 +257,10 @@
     {
       "path": "termin-glb",
       "distribution": "termin-glb"
+    },
+    {
+      "path": "termin-player",
+      "distribution": "termin-player"
     },
     {
       "path": "termin-nodegraph",
