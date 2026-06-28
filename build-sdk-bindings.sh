@@ -190,7 +190,21 @@ echo "Install staging: $INSTALL_STAGING_DIR"
 rm -rf "$INSTALL_STAGING_DIR"
 mkdir -p "$INSTALL_STAGING_DIR" "$SDK_PREFIX"
 cmake --install "$BUILD_DIR" --prefix "$INSTALL_STAGING_DIR"
-rsync -a --exclude '/lib/python/' "$INSTALL_STAGING_DIR"/ "$SDK_PREFIX"/
+
+sync_staged_dir() {
+    local name="$1"
+    shift
+
+    if [[ -d "$INSTALL_STAGING_DIR/$name" ]]; then
+        mkdir -p "$SDK_PREFIX/$name"
+        rsync -a --delete "$@" "$INSTALL_STAGING_DIR/$name"/ "$SDK_PREFIX/$name"/
+    fi
+}
+
+sync_staged_dir bin
+sync_staged_dir include
+sync_staged_dir share
+sync_staged_dir lib --exclude '/python*/'
 
 PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
     "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" write-artifacts \
