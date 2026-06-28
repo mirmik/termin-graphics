@@ -373,8 +373,7 @@ bool prepare_material_pipeline_resources(
             resources.shadow_block_size);
     }
 
-    if (resources.lighting_ubo &&
-        tc_shader_has_feature(shader, TC_SHADER_FEATURE_LIGHTING_UBO)) {
+    if (resources.lighting_ubo) {
         bound_any |= bind_lighting_ubo_for_shader(
             ctx,
             shader,

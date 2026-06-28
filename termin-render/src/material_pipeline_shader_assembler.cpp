@@ -54,24 +54,6 @@ MaterialPipelineResourceDecl resource_decl_from_binding(
     return result;
 }
 
-tc_shader_resource_binding resource_binding_from_decl(
-    const MaterialPipelineResourceDecl& decl)
-{
-    tc_shader_resource_binding binding{};
-    std::snprintf(
-        binding.name,
-        sizeof(binding.name),
-        "%s",
-        decl.requirement.name.c_str());
-    binding.kind = decl.requirement.kind;
-    binding.scope = decl.requirement.scope;
-    binding.set = decl.placement.set;
-    binding.binding = decl.placement.binding;
-    binding.stage_mask = decl.requirement.stage_mask;
-    binding.size = decl.requirement.size;
-    return binding;
-}
-
 tc_shader_resource_requirement resource_requirement_from_decl(
     const MaterialPipelineResourceDecl& decl)
 {
@@ -262,15 +244,6 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
     append_resources(resource_decls, request.vertex_transform.resources);
     append_resources(resource_decls, request.pass.resources);
 
-    for (const MaterialPipelineResourceDecl& resource : resource_decls) {
-        if (!resource.placement.resolved) {
-            result.diagnostics.push_back(diagnostic(
-                MaterialPipelineDiagnosticCode::MissingResourcePlacement,
-                "resource '" + resource.requirement.name +
-                    "' has no resolved backend placement"));
-        }
-    }
-
     MaterialPipelineResourceMergeResult merged =
         material_pipeline_merge_resources(resource_decls);
     result.diagnostics.insert(
@@ -281,12 +254,9 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
         return result;
     }
 
-    std::vector<tc_shader_resource_binding> bindings;
-    bindings.reserve(merged.resources.size());
     std::vector<tc_shader_resource_requirement> requirements;
     requirements.reserve(merged.resources.size());
     for (const MaterialPipelineResourceDecl& resource : merged.resources) {
-        bindings.push_back(resource_binding_from_decl(resource));
         requirements.push_back(resource_requirement_from_decl(resource));
     }
     apply_instance_stream_strides(request.vertex_transform, requirements);
@@ -345,11 +315,9 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
             "tc_shader_get failed after creating '" + shader_name + "'"));
         return result;
     }
-
-    tc_shader_set_resource_layout(
-        shader,
-        bindings.empty() ? nullptr : bindings.data(),
-        static_cast<uint32_t>(bindings.size()));
+    if (request.material.shader.is_valid()) {
+        shader->features = request.material.shader.get()->features;
+    }
 
     tc_shader_contract_desc contract_desc{};
     contract_desc.schema_version = TC_SHADER_CONTRACT_SCHEMA_VERSION;

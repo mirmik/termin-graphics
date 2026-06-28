@@ -12,10 +12,10 @@ struct PushData {
 };
 
 [[TerminScope("frame")]]
-ConstantBuffer<PerFrame> u_per_frame;
+ConstantBuffer<PerFrame> per_frame;
 
 [[TerminScope("draw")]]
-ConstantBuffer<PushData> u_push;
+ConstantBuffer<PushData> id_draw;
 
 [[TerminScope("draw")]]
 ConstantBuffer<TerminBoneBlock> bone_block;
@@ -35,8 +35,8 @@ VertexOutput vs_main(VertexInput input) {
     VertexOutput output;
     float3 local_pos =
         termin_skinned_position(input.position, input.joints, input.weights, bone_block);
-    output.position = termin_to_native_clip(mul(u_per_frame.projection,
-                     mul(u_per_frame.view,
-                     mul(u_push.model, float4(local_pos, 1.0)))));
+    output.position = termin_to_native_clip(mul(per_frame.projection,
+                     mul(per_frame.view,
+                     mul(id_draw.model, float4(local_pos, 1.0)))));
     return output;
 }

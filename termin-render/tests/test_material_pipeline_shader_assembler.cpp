@@ -69,6 +69,7 @@ termin::MaterialPipelineMaterialContract material_contract()
         "",
         "fs_main");
     REQUIRE(shader.is_valid());
+    tc_shader_set_feature(shader.get(), TC_SHADER_FEATURE_LIGHTING_UBO);
 
     tc_shader_resource_binding resources[2]{};
     std::snprintf(resources[0].name, sizeof(resources[0].name), "%s", TC_SHADER_RESOURCE_MATERIAL);
@@ -115,6 +116,7 @@ TEST_CASE("material pipeline assembler attaches skinned shader contract") {
         termin::material_pipeline_assemble_shader(request);
 
     REQUIRE(result.ok());
+    REQUIRE(tc_shader_has_feature(result.shader.get(), TC_SHADER_FEATURE_LIGHTING_UBO));
     tc_shader_contract_view view{};
     REQUIRE(tc_shader_get_contract_view(result.shader.get(), &view));
     CHECK_EQ(view.source_kind, TC_SHADER_CONTRACT_SOURCE_ASSEMBLED);
@@ -126,10 +128,10 @@ TEST_CASE("material pipeline assembler attaches skinned shader contract") {
         contract_resource(view, TC_SHADER_RESOURCE_BONE_BLOCK);
     REQUIRE(bone != nullptr);
     CHECK_EQ(bone->scope, TC_SHADER_RESOURCE_SCOPE_DRAW);
-    const tc_shader_resource_binding* bone_layout =
-        tc_shader_find_resource_binding(result.shader.get(), TC_SHADER_RESOURCE_BONE_BLOCK);
-    REQUIRE(bone_layout != nullptr);
-    CHECK_EQ(bone_layout->binding, 16u);
+    CHECK(!tc_shader_has_resource_layout(result.shader.get()));
+    CHECK(tc_shader_find_resource_binding(
+              result.shader.get(),
+              TC_SHADER_RESOURCE_BONE_BLOCK) == nullptr);
 
     tc_shader_destroy(result.shader.handle);
     tc_shader_shutdown();
@@ -165,10 +167,10 @@ TEST_CASE("material pipeline assembler attaches foliage instance contract") {
     REQUIRE(instances != nullptr);
     CHECK_EQ(instances->kind, TC_SHADER_RESOURCE_STORAGE_BUFFER);
     CHECK_EQ(instances->element_stride, 32u);
-    const tc_shader_resource_binding* instance_layout =
-        tc_shader_find_resource_binding(result.shader.get(), "foliage_instances");
-    REQUIRE(instance_layout != nullptr);
-    CHECK_EQ(instance_layout->binding, 25u);
+    CHECK(!tc_shader_has_resource_layout(result.shader.get()));
+    CHECK(tc_shader_find_resource_binding(
+              result.shader.get(),
+              "foliage_instances") == nullptr);
 
     tc_shader_destroy(result.shader.handle);
     tc_shader_shutdown();
