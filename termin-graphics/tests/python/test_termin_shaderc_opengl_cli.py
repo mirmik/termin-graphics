@@ -1,7 +1,12 @@
 import json
 from pathlib import Path
 
-from shaderc_test_helpers import _expected_scoped_binding, _run_shaderc, _write_fake_slangc
+from shaderc_test_helpers import (
+    _expected_scoped_binding,
+    _expected_scoped_bindings,
+    _run_shaderc,
+    _write_fake_slangc,
+)
 
 def test_termin_shaderc_invokes_fake_slangc_for_opengl(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
@@ -255,6 +260,89 @@ def test_termin_shaderc_patches_opengl_slang_material_texture_bindings(tmp_path:
     ]
 
 
+def test_termin_shaderc_allocates_opengl_material_range_for_pbr_texture_set(tmp_path: Path) -> None:
+    texture_names = [
+        "u_albedo_texture",
+        "u_normal_texture",
+        "u_metallic_roughness_texture",
+        "u_occlusion_texture",
+        "u_emissive_texture",
+    ]
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "\n".join(f'[[TerminScope("material")]] Sampler2D {name};' for name in texture_names)
+        + "\n[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
+        + "    return "
+        + " + ".join(f"{name}.Sample(uv)" for name in texture_names)
+        + ";\n}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.frag.glsl"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "names = [\n"
+        + "".join(f"    '{name}',\n" for name in texture_names)
+        + "]\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_text(''.join(\n"
+        "    f'layout(binding = {index}) uniform sampler2D {name}_0;\\n'\n"
+        "    for index, name in enumerate(names)\n"
+        "), encoding='utf-8')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {\n"
+        "            'name': name,\n"
+        "            'userAttribs': [{'name': 'TerminScope', 'arguments': ['material']}],\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': index},\n"
+        "            'type': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True},\n"
+        "        }\n"
+        "        for index, name in enumerate(names)\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc([
+        "compile",
+        "--language",
+        "slang",
+        "--target",
+        "opengl",
+        "--stage",
+        "fragment",
+        "--entry",
+        "main",
+        "--input",
+        str(shader),
+        "--output",
+        str(output),
+        "--slangc",
+        str(fake_slangc),
+    ])
+
+    assert result.returncode == 0, result.stderr
+    expected_bindings = _expected_scoped_bindings(
+        [(name, "texture", "material") for name in texture_names],
+        target="opengl",
+    )
+    assert len(set(expected_bindings.values())) == len(texture_names)
+    glsl = output.read_text(encoding="utf-8")
+    for name in texture_names:
+        binding = expected_bindings[name]
+        assert f"layout(binding = {binding}) uniform sampler2D {name}_0" in glsl
+
+    layout = json.loads((tmp_path / "out.frag.glsl.layout.json").read_text(encoding="utf-8"))
+    assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
+        (name, "material", expected_bindings[name])
+        for name in texture_names
+    ]
+
+
 def test_termin_shaderc_filters_inactive_opengl_slang_reflection_resources(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
@@ -487,4 +575,3 @@ def test_termin_shaderc_patches_opengl_slang_storage_buffer_bindings(tmp_path: P
     assert [(r["name"], r["binding"]) for r in layout["resources"]] == [
         ("foliage_instances", foliage_binding),
     ]
-

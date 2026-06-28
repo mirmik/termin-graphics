@@ -46,6 +46,22 @@ void main() {
 }
 )";
 
+static const char* SOLID_RED_FRAG_SRC = R"(
+#version 330 core
+out vec4 FragColor;
+void main() {
+    FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+}
+)";
+
+static const char* SOLID_GREEN_FRAG_SRC = R"(
+#version 330 core
+out vec4 FragColor;
+void main() {
+    FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+}
+)";
+
 // Full-screen red fragment shader for FSQ test
 static const char* RED_FRAG_SRC = R"(
 #version 330 core
@@ -197,6 +213,121 @@ static void test_triangle_draw(tgfx::IRenderDevice& device, tgfx::PipelineCache&
     device.destroy(ibo);
     device.destroy(vs);
     device.destroy(fs);
+    device.destroy(rt);
+}
+
+static void test_index_buffer_rebind_after_pipeline_change(tgfx::IRenderDevice& device,
+                                                           tgfx::PipelineCache& cache) {
+    printf("\n--- Indexed Draw After Pipeline Change ---\n");
+
+    const uint32_t W = 64, H = 64;
+
+    tgfx::TextureDesc rt_desc;
+    rt_desc.width = W;
+    rt_desc.height = H;
+    rt_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    rt_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
+    auto rt = device.create_texture(rt_desc);
+    CHECK(bool(rt), "pipeline-change render target created");
+
+    tgfx::ShaderDesc vs_desc;
+    vs_desc.stage = tgfx::ShaderStage::Vertex;
+    vs_desc.source = VERT_SRC;
+    auto vs = device.create_shader(vs_desc);
+
+    tgfx::ShaderDesc red_desc;
+    red_desc.stage = tgfx::ShaderStage::Fragment;
+    red_desc.source = SOLID_RED_FRAG_SRC;
+    auto red_fs = device.create_shader(red_desc);
+
+    tgfx::ShaderDesc green_desc;
+    green_desc.stage = tgfx::ShaderStage::Fragment;
+    green_desc.source = SOLID_GREEN_FRAG_SRC;
+    auto green_fs = device.create_shader(green_desc);
+    CHECK(bool(vs) && bool(red_fs) && bool(green_fs), "pipeline-change shaders created");
+
+    float vertices[] = {
+         0.0f,  0.8f,  1.f, 1.f, 1.f,
+        -0.8f, -0.8f,  1.f, 1.f, 1.f,
+         0.8f, -0.8f,  1.f, 1.f, 1.f,
+    };
+    uint32_t indices[] = {0, 1, 2};
+
+    tgfx::BufferDesc vbo_desc;
+    vbo_desc.size = sizeof(vertices);
+    vbo_desc.usage = tgfx::BufferUsage::Vertex;
+    auto vbo = device.create_buffer(vbo_desc);
+    device.upload_buffer(vbo, {reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)});
+
+    tgfx::BufferDesc ibo_desc;
+    ibo_desc.size = sizeof(indices);
+    ibo_desc.usage = tgfx::BufferUsage::Index;
+    auto ibo = device.create_buffer(ibo_desc);
+    device.upload_buffer(ibo, {reinterpret_cast<const uint8_t*>(indices), sizeof(indices)});
+
+    tgfx::VertexBufferLayout layout;
+    layout.stride = 5 * sizeof(float);
+    layout.attributes = {
+        {0, tgfx::VertexFormat::Float2, 0},
+        {1, tgfx::VertexFormat::Float3, 2 * sizeof(float)},
+    };
+
+    while (glGetError() != GL_NO_ERROR) {}
+
+    tgfx::RenderContext2 ctx(device, cache);
+    ctx.begin_frame();
+
+    float clear[] = {0.f, 0.f, 0.f, 1.f};
+    ctx.begin_pass(rt, {}, clear);
+    ctx.set_viewport(0, 0, W, H);
+    ctx.set_depth_test(false);
+    ctx.set_blend(false);
+    ctx.set_cull(tgfx::CullMode::None);
+    ctx.set_vertex_layout(layout);
+
+    ctx.bind_shader(vs, red_fs);
+    ctx.draw(vbo, ibo, 3);
+    ctx.bind_shader(vs, green_fs);
+    ctx.draw(vbo, ibo, 3);
+
+    ctx.end_pass();
+    ctx.end_frame();
+
+    GLenum draw_error = glGetError();
+    if (draw_error != GL_NO_ERROR) {
+        printf("  GL error after indexed pipeline-change draw: 0x%x\n", draw_error);
+    }
+    CHECK(draw_error == GL_NO_ERROR, "pipeline change keeps indexed draw GL-valid");
+
+    auto* gl_dev = static_cast<tgfx::OpenGLRenderDevice*>(&device);
+    auto* gl_tex = gl_dev->get_texture(rt);
+    CHECK(gl_tex != nullptr, "can access pipeline-change GL texture");
+
+    GLuint read_fbo;
+    glGenFramebuffers(1, &read_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, read_fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gl_tex->gl_id, 0);
+
+    std::vector<uint8_t> pixels(W * H * 4);
+    glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDeleteFramebuffers(1, &read_fbo);
+
+    size_t center = (H/2 * W + W/2) * 4;
+    printf("  Center pixel after pipeline switch: (%u, %u, %u, %u)\n",
+           pixels[center], pixels[center+1], pixels[center+2], pixels[center+3]);
+
+    bool center_is_green =
+        pixels[center] < 40 && pixels[center+1] > 200 && pixels[center+2] < 40;
+    CHECK(center_is_green, "second indexed draw after pipeline change overwrites center");
+
+    CHECK(cache.size() == 2, "pipeline change cached two pipelines");
+
+    device.destroy(vbo);
+    device.destroy(ibo);
+    device.destroy(vs);
+    device.destroy(red_fs);
+    device.destroy(green_fs);
     device.destroy(rt);
 }
 
@@ -484,6 +615,11 @@ int main() {
         tgfx::OpenGLRenderDevice device;
         tgfx::PipelineCache cache(device);
         test_triangle_draw(device, cache);
+    }
+    {
+        tgfx::OpenGLRenderDevice device;
+        tgfx::PipelineCache cache(device);
+        test_index_buffer_rebind_after_pipeline_change(device, cache);
     }
     {
         tgfx::OpenGLRenderDevice device;

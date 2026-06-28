@@ -37,7 +37,7 @@ static bool g_shader_dev_compile_enabled = false;
 
 // Bump when termin_shaderc reflected resource placement or sidecar semantics
 // change in a way that requires recompiling cached shader artifacts.
-static constexpr uint32_t kShaderArtifactLayoutSchemaVersion = 2;
+static constexpr uint32_t kShaderArtifactLayoutSchemaVersion = 3;
 static constexpr uint32_t kShaderArtifactMetadataSchemaVersion = 1;
 static constexpr const char* kShaderArtifactMetadataSuffix = ".artifact";
 static constexpr const char* kLegacyShaderArtifactMetadataSuffix = ".meta";

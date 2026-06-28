@@ -1008,11 +1008,16 @@ void RenderContext2::flush_pipeline() {
             last_bound_resource_layout_token_ = resource_layout_token;
             mark_all_binding_scopes_dirty();
         }
-        // Vertex attribute interpretation is pipeline-local (and OpenGL
-        // recreates the VAO on bind_pipeline), so force vertex buffers to
-        // be rebound even if the handle ids are unchanged.
+        // Vertex/index binding state is pipeline-local on OpenGL because
+        // bind_pipeline() recreates the VAO. GL_ELEMENT_ARRAY_BUFFER is VAO
+        // state too, so both VBOs and IBO must be rebound even when handle ids
+        // are unchanged. Other backends tolerate the extra bind after a
+        // pipeline change.
         last_bound_vbos_.clear();
         last_bound_vbo_offsets_.clear();
+        last_bound_ibo_ = {};
+        last_bound_ibo_offset_ = 0;
+        last_bound_index_type_ = IndexType::Uint32;
         // A new VkPipeline brings a (possibly new) VkPipelineLayout — the
         // previous push-constant bytes are no longer guaranteed to be
         // visible to the next draw. Force a re-emit.

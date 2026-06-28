@@ -182,10 +182,10 @@ inline BackendBindingRange transitional_backend_binding_range(
     if (shader_resource_kind_is_texture_like(kind)) {
         if (backend == BackendType::OpenGL) {
             if (scope == ShaderResourceScope::Frame) return {0, 4};
-            if (scope == ShaderResourceScope::Material) return {4, 4};
-            if (scope == ShaderResourceScope::Pass) return {8, 4};
-            if (scope == ShaderResourceScope::Draw) return {12, 4};
-            if (scope == ShaderResourceScope::Transient) return {16, 16};
+            if (scope == ShaderResourceScope::Material) return {4, 16};
+            if (scope == ShaderResourceScope::Pass) return {20, 8};
+            if (scope == ShaderResourceScope::Draw) return {28, 4};
+            if (scope == ShaderResourceScope::Transient) return {32, 16};
         }
         if (scope == ShaderResourceScope::Material) return {80, 32};
         if (scope == ShaderResourceScope::Pass) return {112, 16};

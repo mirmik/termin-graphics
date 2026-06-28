@@ -125,10 +125,10 @@ def _scoped_binding_range(kind: str, scope: str, target: str = "vulkan") -> tupl
         if target == "opengl":
             return {
                 "frame": (0, 4),
-                "material": (4, 4),
-                "pass": (8, 4),
-                "draw": (12, 4),
-                "transient": (16, 16),
+                "material": (4, 16),
+                "pass": (20, 8),
+                "draw": (28, 4),
+                "transient": (32, 16),
             }.get(scope, (0, 0))
         return {
             "material": (80, 32),

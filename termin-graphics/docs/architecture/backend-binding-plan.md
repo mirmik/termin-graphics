@@ -118,6 +118,12 @@ OpenGL has no descriptor sets. `OpenGLCommandList::bind_resource_set()` applies
 - texture units;
 - sampler units.
 
+The current transitional OpenGL texture-unit ranges are scope-first and
+non-overlapping: frame `0..3`, material `4..19`, pass `20..27`, draw `28..31`,
+and transient `32..47`. The material range intentionally covers
+`TC_MATERIAL_MAX_TEXTURES` so generated PBR-style material shaders do not
+overflow into pass or transient texture units.
+
 Image bindings currently log unsupported diagnostics unless implemented by a
 specific path.
 When `BoundResourceSetDesc::groups` is present, clean groups are skipped so
