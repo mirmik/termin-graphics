@@ -977,7 +977,7 @@ TEST_CASE("tgfx2 shader runtime loads resource layout sidecar") {
             << "  \"target\": \"vulkan\",\n"
             << "  \"stage\": \"fragment\",\n"
             << "  \"resources\": [\n"
-            << "    {\"name\": \"material\", \"kind\": \"constant_buffer\", \"set\": 2, \"binding\": 7, \"stage_mask\": 2, \"size\": 0}\n"
+            << "    {\"name\": \"material\", \"kind\": \"constant_buffer\", \"scope\": \"material\", \"set\": 2, \"binding\": 7, \"stage_mask\": 2, \"size\": 16}\n"
             << "  ]\n"
             << "}\n"
             << "JSON\n";

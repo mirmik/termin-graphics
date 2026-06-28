@@ -1236,29 +1236,6 @@ static bool tc_shader_upsert_resource_binding(
     return true;
 }
 
-static void tc_shader_remove_resource_binding(tc_shader* shader, const char* name) {
-    int index = tc_shader_find_resource_binding_index(shader, name);
-    if (index < 0) return;
-
-    uint32_t last = shader->resource_binding_count - 1u;
-    if ((uint32_t)index != last) {
-        shader->resource_bindings[index] = shader->resource_bindings[last];
-    }
-    shader->resource_binding_count = last;
-    if (last == 0) {
-        free(shader->resource_bindings);
-        shader->resource_bindings = NULL;
-        return;
-    }
-
-    size_t bytes = (size_t)last * sizeof(tc_shader_resource_binding);
-    tc_shader_resource_binding* copy =
-        (tc_shader_resource_binding*)realloc(shader->resource_bindings, bytes);
-    if (copy) {
-        shader->resource_bindings = copy;
-    }
-}
-
 void tc_shader_set_material_ubo_layout(
     tc_shader* shader,
     const tc_material_ubo_entry* entries,
@@ -1279,7 +1256,6 @@ void tc_shader_set_material_ubo_layout(
     shader->material_ubo_block_size = 0;
 
     if (count == 0 || !entries) {
-        tc_shader_remove_resource_binding(shader, TC_SHADER_RESOURCE_MATERIAL);
         return;
     }
 
@@ -1294,21 +1270,6 @@ void tc_shader_set_material_ubo_layout(
     shader->material_ubo_entries = copy;
     shader->material_ubo_entry_count = count;
     shader->material_ubo_block_size = block_size;
-
-    tc_shader_resource_binding material_binding;
-    memset(&material_binding, 0, sizeof(material_binding));
-    strncpy(
-        material_binding.name,
-        TC_SHADER_RESOURCE_MATERIAL,
-        TC_SHADER_RESOURCE_NAME_MAX - 1);
-    material_binding.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
-    material_binding.kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
-    material_binding.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
-    material_binding.set = TC_SHADER_RESOURCE_SET_DEFAULT;
-    material_binding.binding = 1u;
-    material_binding.stage_mask = TC_SHADER_STAGE_ALL_GRAPHICS;
-    material_binding.size = block_size;
-    tc_shader_upsert_resource_binding(shader, &material_binding);
 }
 
 uint32_t tc_shader_material_ubo_entry_count(const tc_shader* shader) {

@@ -371,6 +371,8 @@ TGFX_API tc_shader_artifact_policy tc_shader_get_artifact_policy(const tc_shader
 
 // Replace the shader's material UBO layout. A copy of `entries` is made;
 // caller retains ownership of its buffer. Pass count=0 to clear the layout.
+// This stores CPU-side packing metadata only; backend resource placement must
+// come from tc_shader_set_resource_layout() / compiler sidecars.
 // Version is NOT bumped — layout changes travel together with source changes,
 // which already bump version via tc_shader_set_sources.
 TGFX_API void tc_shader_set_material_ubo_layout(
