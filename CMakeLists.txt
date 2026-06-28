@@ -201,6 +201,10 @@ if(NOT TERMIN_PLATFORM_ANDROID)
     add_subdirectory(termin-animation)
 endif()
 
+if(NOT TERMIN_PLATFORM_ANDROID)
+    add_subdirectory(termin-components/termin-components-animation)
+endif()
+
 add_subdirectory(termin-bootstrap)
 add_subdirectory(termin-runtime)
 
@@ -211,7 +215,6 @@ endif()
 
 if(NOT TERMIN_PLATFORM_ANDROID)
     add_subdirectory(termin-app/cpp)
-    add_subdirectory(termin-components/termin-components-animation)
     add_subdirectory(tcplot)
 endif()
 
