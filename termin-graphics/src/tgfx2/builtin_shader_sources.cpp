@@ -130,6 +130,46 @@ std::string builtin_shader_roots_for_log() {
     return roots_for_log(builtin_shader_roots());
 }
 
+struct BuiltinLocatedSource {
+    std::string filename;
+    std::string source;
+};
+
+std::optional<BuiltinLocatedSource> try_load_builtin_shader_source(
+    const char* filename,
+    const char* debug_name)
+{
+    if (!filename || filename[0] == '\0') {
+        return std::nullopt;
+    }
+
+    const auto roots = builtin_shader_roots();
+    for (const auto& root : roots) {
+        const std::filesystem::path path = root / filename;
+        std::error_code exists_error;
+        if (!std::filesystem::is_regular_file(path, exists_error)) {
+            continue;
+        }
+
+        std::string source = read_text_file(path);
+        if (source.empty()) {
+            tc::Log::error(
+                "[BuiltInShaderSource] Built-in shader file '%s' for '%s' is empty or unreadable at '%s'",
+                filename,
+                debug_name ? debug_name : "<unnamed>",
+                path.string().c_str());
+            return std::nullopt;
+        }
+
+        BuiltinLocatedSource result;
+        result.filename = filename;
+        result.source = std::move(source);
+        return result;
+    }
+
+    return std::nullopt;
+}
+
 const nos::trent* dict_get(const nos::trent& value, const char* key) {
     if (value.get_type() != nos::trent_type::dict || !value.contains(key)) {
         return nullptr;
@@ -155,6 +195,138 @@ std::string builtin_source_filename(const char* source_resource_path) {
         path.erase(0, std::strlen(kPrefix));
     }
     return path;
+}
+
+struct ConventionStageSource {
+    std::string filename;
+    std::string source;
+    std::string language;
+    std::string entry_point;
+};
+
+struct ConventionLiveShaderSource {
+    std::string uuid;
+    std::string name;
+    std::string language;
+    std::optional<ConventionStageSource> vertex_stage;
+    std::optional<ConventionStageSource> fragment_stage;
+};
+
+std::optional<ConventionStageSource> try_convention_stage_file(
+    const std::string& filename,
+    const char* debug_name,
+    const char* language,
+    const char* entry_point)
+{
+    std::optional<BuiltinLocatedSource> source =
+        try_load_builtin_shader_source(filename.c_str(), debug_name);
+    if (!source) {
+        return std::nullopt;
+    }
+
+    ConventionStageSource stage;
+    stage.filename = source->filename;
+    stage.source = std::move(source->source);
+    stage.language = language ? language : "";
+    stage.entry_point = entry_point ? entry_point : "";
+    return stage;
+}
+
+std::optional<ConventionStageSource> load_convention_shader_stage(
+    const char* uuid,
+    const char* stage_name)
+{
+    if (!uuid || uuid[0] == '\0' || !stage_name || stage_name[0] == '\0') {
+        return std::nullopt;
+    }
+
+    const std::string base(uuid);
+    if (std::strcmp(stage_name, "vertex") == 0) {
+        if (auto stage = try_convention_stage_file(
+                base + ".vert.slang", uuid, "slang", "vs_main")) {
+            return stage;
+        }
+        if (auto stage = try_convention_stage_file(
+                base + ".slang", uuid, "slang", "vs_main")) {
+            return stage;
+        }
+        if (auto stage = try_convention_stage_file(
+                base + ".vert.glsl", uuid, "glsl", "")) {
+            return stage;
+        }
+        return try_convention_stage_file(base + ".glsl", uuid, "glsl", "");
+    }
+
+    if (std::strcmp(stage_name, "fragment") == 0) {
+        if (auto stage = try_convention_stage_file(
+                base + ".frag.slang", uuid, "slang", "fs_main")) {
+            return stage;
+        }
+        if (auto stage = try_convention_stage_file(
+                base + ".slang", uuid, "slang", "fs_main")) {
+            return stage;
+        }
+        if (auto stage = try_convention_stage_file(
+                base + ".frag.glsl", uuid, "glsl", "")) {
+            return stage;
+        }
+        return try_convention_stage_file(base + ".glsl", uuid, "glsl", "");
+    }
+
+    return std::nullopt;
+}
+
+std::optional<ConventionLiveShaderSource> load_convention_live_shader(const char* uuid) {
+    if (!uuid || uuid[0] == '\0') {
+        return std::nullopt;
+    }
+
+    std::optional<ConventionStageSource> vertex_stage =
+        load_convention_shader_stage(uuid, "vertex");
+    std::optional<ConventionStageSource> fragment_stage =
+        load_convention_shader_stage(uuid, "fragment");
+    if (!vertex_stage && !fragment_stage) {
+        return std::nullopt;
+    }
+
+    ConventionLiveShaderSource shader;
+    shader.uuid = uuid;
+    shader.name = uuid;
+    shader.vertex_stage = std::move(vertex_stage);
+    shader.fragment_stage = std::move(fragment_stage);
+    shader.language = shader.vertex_stage
+        ? shader.vertex_stage->language
+        : shader.fragment_stage->language;
+
+    if (shader.vertex_stage && shader.fragment_stage &&
+            shader.vertex_stage->language != shader.fragment_stage->language) {
+        tc::Log::error(
+            "[BuiltInShaderConvention] Shader '%s' mixes vertex language '%s' with fragment language '%s'",
+            uuid,
+            shader.vertex_stage->language.c_str(),
+            shader.fragment_stage->language.c_str());
+        shader.language.clear();
+    }
+
+    return shader;
+}
+
+std::optional<BuiltinShaderProgramSource> load_convention_shader_program(const char* uuid) {
+    if (!uuid || uuid[0] == '\0') {
+        return std::nullopt;
+    }
+
+    const std::string filename = std::string(uuid) + ".shader";
+    std::optional<BuiltinLocatedSource> source =
+        try_load_builtin_shader_source(filename.c_str(), uuid);
+    if (!source) {
+        return std::nullopt;
+    }
+
+    BuiltinShaderProgramSource result;
+    result.name = uuid;
+    result.source = std::move(source->source);
+    return result;
 }
 
 std::optional<nos::trent> load_builtin_shader_catalog() {
@@ -350,6 +522,75 @@ tc_shader_handle register_engine_shader_program(
     return handle;
 }
 
+tc_shader_handle register_convention_live_shader(
+    const ConventionLiveShaderSource& shader_source)
+{
+    const bool is_glsl = (shader_source.language == "glsl");
+    const bool is_slang = (shader_source.language == "slang");
+    if (!is_glsl && !is_slang) {
+        tc::Log::error(
+            "[BuiltInShaderConvention] Shader '%s' has unsupported language '%s'",
+            shader_source.uuid.c_str(),
+            shader_source.language.c_str());
+        return tc_shader_handle_invalid();
+    }
+
+    const tc_shader_language shader_language =
+        is_slang ? TC_SHADER_LANGUAGE_SLANG : TC_SHADER_LANGUAGE_GLSL;
+    const tc_shader_artifact_policy artifact_policy =
+        is_slang ? TC_SHADER_ARTIFACT_REQUIRED : TC_SHADER_ARTIFACT_OPTIONAL;
+
+    tc_shader_handle handle = tc_shader_from_sources_with_entries_ex(
+        shader_source.vertex_stage
+            ? shader_source.vertex_stage->source.c_str()
+            : nullptr,
+        shader_source.fragment_stage
+            ? shader_source.fragment_stage->source.c_str()
+            : nullptr,
+        nullptr,
+        shader_source.name.c_str(),
+        /*source_path=*/nullptr,
+        shader_source.uuid.c_str(),
+        shader_language,
+        artifact_policy,
+        shader_source.vertex_stage && !shader_source.vertex_stage->entry_point.empty()
+            ? shader_source.vertex_stage->entry_point.c_str()
+            : nullptr,
+        shader_source.fragment_stage && !shader_source.fragment_stage->entry_point.empty()
+            ? shader_source.fragment_stage->entry_point.c_str()
+            : nullptr,
+        nullptr);
+
+    if (tc_shader_handle_is_invalid(handle)) {
+        tc::Log::error(
+            "[BuiltInShaderConvention] Failed to register shader '%s'",
+            shader_source.uuid.c_str());
+        return handle;
+    }
+
+    tc_shader* shader = tc_shader_get(handle);
+    if (!shader) {
+        tc::Log::error(
+            "[BuiltInShaderConvention] Registered shader '%s' but registry lookup returned null",
+            shader_source.uuid.c_str());
+        return tc_shader_handle_invalid();
+    }
+
+    if (shader_source.fragment_stage &&
+            (!shader->fragment_source || shader->fragment_source[0] == '\0')) {
+        tc::Log::error(
+            "[BuiltInShaderConvention] Registered shader '%s' has empty fragment source",
+            shader_source.uuid.c_str());
+        return tc_shader_handle_invalid();
+    }
+
+    if (!shader->is_static) {
+        shader->is_static = 1;
+        tc_shader_add_ref(shader);
+    }
+    return handle;
+}
+
 } // namespace
 
 std::string load_builtin_shader_source(const char* filename, const char* debug_name) {
@@ -359,15 +600,12 @@ std::string load_builtin_shader_source(const char* filename, const char* debug_n
         return {};
     }
 
-    const auto roots = builtin_shader_roots();
-    for (const auto& root : roots) {
-        const std::filesystem::path path = root / filename;
-        std::string source = read_text_file(path);
-        if (!source.empty()) {
-            return source;
-        }
+    if (std::optional<BuiltinLocatedSource> source =
+            try_load_builtin_shader_source(filename, debug_name)) {
+        return source->source;
     }
 
+    const auto roots = builtin_shader_roots();
     tc::Log::error(
         "[BuiltInShaderSource] Failed to load '%s' for '%s'. Searched: %s",
         filename,
@@ -435,6 +673,10 @@ std::string load_builtin_shader_stage_source_from_catalog(
             builtin_source_filename(stage->source_resource_path).c_str(),
             stage->name);
     }
+    if (std::optional<ConventionStageSource> stage =
+            load_convention_shader_stage(uuid, stage_name)) {
+        return stage->source;
+    }
 
     std::optional<nos::trent> entry = find_builtin_shader_catalog_entry(uuid);
     if (!entry) {
@@ -471,6 +713,10 @@ std::string load_builtin_shader_stage_source_from_catalog(
 tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
     if (const EngineShaderProgramSource* program = find_engine_shader_program(uuid)) {
         return register_engine_shader_program(*program);
+    }
+    if (std::optional<ConventionLiveShaderSource> shader_source =
+            load_convention_live_shader(uuid)) {
+        return register_convention_live_shader(*shader_source);
     }
 
     std::optional<nos::trent> entry = find_builtin_shader_catalog_entry(uuid);
@@ -602,6 +848,11 @@ tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
 }
 
 BuiltinShaderProgramSource load_builtin_shader_program_from_catalog(const char* uuid) {
+    if (std::optional<BuiltinShaderProgramSource> program =
+            load_convention_shader_program(uuid)) {
+        return *program;
+    }
+
     std::optional<nos::trent> entry = find_builtin_shader_catalog_entry(uuid);
     if (!entry) {
         return {};
