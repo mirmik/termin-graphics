@@ -186,13 +186,27 @@ class GLBAsset(DataAsset["GLBSceneData"]):
                 asset.set_runtime_data(tc_skel, loaded=False)
 
     def _create_animation_assets(self, animation_uuids: Dict[str, str]) -> None:
-        """Get or create child AnimationClipAssets with UUIDs from spec via ResourceManager."""
+        """Get or create child AnimationClipAssets with UUIDs from spec via ResourceManager.
+
+        Also declares animations in tc_animation registry with lazy load callback.
+        """
+        from termin.animation._animation_native import (
+            tc_animation_declare,
+            tc_animation_is_loaded,
+            tc_animation_set_load_callback,
+        )
+
         for anim_name, anim_uuid in animation_uuids.items():
             asset = cast(
                 "AnimationClipAsset",
                 self._get_or_create_child_asset("animation_clip", anim_name, anim_name, anim_uuid),
             )
             self._animation_assets[anim_name] = asset
+
+            tc_anim = tc_animation_declare(anim_uuid, anim_name)
+            if tc_anim.is_valid and not tc_animation_is_loaded(tc_anim):
+                tc_animation_set_load_callback(tc_anim, self._make_animation_load_callback(anim_name))
+                asset.set_runtime_data(tc_anim, loaded=False)
 
     def _build_spec_data(self) -> dict:
         """Build spec data with GLB settings and child UUIDs."""
@@ -335,6 +349,27 @@ class GLBAsset(DataAsset["GLBSceneData"]):
 
         return load_callback
 
+    def _make_animation_load_callback(self, anim_name: str):
+        """Create a load callback that triggers GLBAsset loading for a specific animation."""
+        def load_callback(tc_animation_data) -> bool:
+            self.ensure_loaded()
+
+            if self._data is None:
+                return False
+            if tc_animation_data.is_loaded:
+                return True
+
+            from termin.animation import clip_from_glb
+
+            for glb_anim in self._data.animations:
+                if glb_anim.name == anim_name:
+                    clip = clip_from_glb(glb_anim, tc_animation_data.uuid)
+                    return clip.is_valid
+
+            return False
+
+        return load_callback
+
     def _populate_child_assets(self) -> None:
         """Fill all child assets with extracted data from loaded GLB."""
         from termin.glb.instantiator import (
@@ -346,6 +381,7 @@ class GLBAsset(DataAsset["GLBSceneData"]):
         from tmesh import tc_mesh_is_loaded
         from termin.skeleton._skeleton_native import tc_skeleton_is_loaded
         from termin.animation import clip_from_glb
+        from termin.animation._animation_native import tc_animation_is_loaded
 
         # Populate mesh assets
         for mesh_name, asset in self._mesh_assets.items():
@@ -391,11 +427,17 @@ class GLBAsset(DataAsset["GLBSceneData"]):
 
         # Populate animation assets
         for anim_name, asset in self._animation_assets.items():
-            if asset.cached_data is None:
-                for glb_anim in self._data.animations:
-                    if glb_anim.name == anim_name:
-                        asset.set_runtime_data(clip_from_glb(glb_anim), loaded=True)
-                        break
+            for glb_anim in self._data.animations:
+                if glb_anim.name != anim_name:
+                    continue
+                clip = asset.cached_data
+                if clip is not None and clip.is_valid:
+                    if not tc_animation_is_loaded(clip):
+                        clip_from_glb(glb_anim, asset.uuid)
+                else:
+                    clip = clip_from_glb(glb_anim, asset.uuid)
+                asset.set_runtime_data(clip, loaded=True)
+                break
 
     def _create_new_mesh_asset(self, mesh_name: str) -> "MeshAsset":
         """Get or create a MeshAsset for a mesh discovered during load via ResourceManager."""

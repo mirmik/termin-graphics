@@ -243,6 +243,13 @@ bool tc_animation_is_loaded(tc_animation_handle h) {
     return animation->header.is_loaded != 0;
 }
 
+void tc_animation_set_load_callback(tc_animation_handle h, tc_animation_load_fn callback, void* user_data) {
+    tc_animation* animation = tc_animation_get(h);
+    if (!animation) return;
+    animation->header.load_callback = (tc_resource_load_fn)callback;
+    animation->header.load_user_data = user_data;
+}
+
 bool tc_animation_ensure_loaded(tc_animation_handle h) {
     tc_animation* animation = tc_animation_get(h);
     if (!animation) return false;

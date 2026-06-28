@@ -11,6 +11,7 @@ extern "C" {
 
 #include <string>
 #include <vector>
+#include <tcbase/tc_log.hpp>
 #include <tcbase/tgfx_intern_string.h>
 
 namespace termin {
@@ -225,8 +226,16 @@ public:
                 if (tc_animation* a = tc_animation_get(handle)) {
                     tc_animation_add_ref(a);
                 }
+                ensure_loaded();
                 return;
             }
+            tc_value* name_val = tc_value_dict_get(const_cast<tc_value*>(data), "name");
+            const char* name = (name_val && name_val->type == TC_VALUE_STRING && name_val->data.s)
+                ? name_val->data.s
+                : "";
+            tc::Log::warn("tc_animation_clip deserialize: animation not found, uuid=%s name=%s",
+                          uuid_val->data.s,
+                          name);
         }
 
         // Try name lookup
@@ -238,6 +247,10 @@ public:
                 if (tc_animation* a = tc_animation_get(handle)) {
                     tc_animation_add_ref(a);
                 }
+                ensure_loaded();
+            } else {
+                tc::Log::warn("tc_animation_clip deserialize: animation not found by name=%s",
+                              name_val->data.s);
             }
         }
     }
@@ -262,8 +275,9 @@ public:
 
     // Create new animation
     static TcAnimationClip create(const std::string& name = "", const std::string& uuid_hint = "") {
-        const char* uuid = uuid_hint.empty() ? nullptr : uuid_hint.c_str();
-        tc_animation_handle h = tc_animation_create(uuid);
+        tc_animation_handle h = uuid_hint.empty()
+            ? tc_animation_create(nullptr)
+            : tc_animation_get_or_create(uuid_hint.c_str());
         if (tc_animation_handle_is_invalid(h)) {
             return TcAnimationClip();
         }
