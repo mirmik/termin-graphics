@@ -1,5 +1,6 @@
 #include <render/tc_pass.h>
 #include <render/tc_pipeline.h>
+#include <inspect/tc_runtime_type_registry.h>
 #include <tc_pipeline_registry.h>
 #include <tc_type_registry.h>
 #include <tcbase/tc_log.h>
@@ -16,6 +17,7 @@
 static tc_type_registry* g_pass_registry = NULL;
 
 #define PASS_REGISTRY_NODE_OFFSET offsetof(tc_pass, registry_node)
+#define TC_RUNTIME_TYPE_FACET_FRAME_PASS "termin.render.frame_pass"
 
 static void ensure_pass_registry_initialized(void) {
     if (!g_pass_registry) {
@@ -45,17 +47,28 @@ void tc_pass_registry_register(
 ) {
     if (!type_name) return;
     ensure_pass_registry_initialized();
-    tc_type_registry_register(
+    tc_type_entry* entry = tc_type_registry_register(
         g_pass_registry,
         type_name,
         (tc_type_factory_fn)factory,
         factory_userdata,
         (int)kind
     );
+    if (entry) {
+        tc_runtime_type_registry_ensure_type(type_name);
+        tc_runtime_type_registry_set_facet(
+            type_name,
+            TC_RUNTIME_TYPE_FACET_FRAME_PASS,
+            entry,
+            NULL,
+            1
+        );
+    }
 }
 
 void tc_pass_registry_unregister(const char* type_name) {
     if (!type_name || !g_pass_registry) return;
+    tc_runtime_type_registry_remove_facet(type_name, TC_RUNTIME_TYPE_FACET_FRAME_PASS);
     tc_type_registry_unregister(g_pass_registry, type_name);
 }
 
