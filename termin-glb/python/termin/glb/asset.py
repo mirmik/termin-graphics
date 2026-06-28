@@ -100,6 +100,10 @@ class GLBAsset(DataAsset["GLBSceneData"]):
             )
         )
 
+    def _animation_asset_name(self, anim_name: str) -> str:
+        """Return the global asset name for a GLB-local animation name."""
+        return f"{self._name}_{anim_name}"
+
     # --- Convenience property ---
 
     @property
@@ -197,12 +201,15 @@ class GLBAsset(DataAsset["GLBSceneData"]):
         )
 
         for anim_name, anim_uuid in animation_uuids.items():
+            asset_name = self._animation_asset_name(anim_name)
             asset = cast(
                 "AnimationClipAsset",
-                self._get_or_create_child_asset("animation_clip", anim_name, anim_name, anim_uuid),
+                self._get_or_create_child_asset("animation_clip", asset_name, anim_name, anim_uuid),
             )
             self._animation_assets[anim_name] = asset
 
+            # Keep the runtime clip name GLB-local. AnimationPlayer uses clip.name()
+            # as the gameplay key, so callers can still play "Walk" on each player.
             tc_anim = tc_animation_declare(anim_uuid, anim_name)
             if tc_anim.is_valid and not tc_animation_is_loaded(tc_anim):
                 tc_animation_set_load_callback(tc_anim, self._make_animation_load_callback(anim_name))
@@ -461,9 +468,10 @@ class GLBAsset(DataAsset["GLBSceneData"]):
 
     def _create_new_animation_asset(self, anim_name: str) -> "AnimationClipAsset":
         """Get or create an AnimationClipAsset for an animation discovered during load via ResourceManager."""
+        asset_name = self._animation_asset_name(anim_name)
         asset = cast(
             "AnimationClipAsset",
-            self._get_or_create_child_asset("animation_clip", anim_name, anim_name, None),
+            self._get_or_create_child_asset("animation_clip", asset_name, anim_name, None),
         )
         self._animation_assets[anim_name] = asset
         return asset
