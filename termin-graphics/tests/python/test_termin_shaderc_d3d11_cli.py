@@ -324,11 +324,11 @@ def test_termin_shaderc_d3d11_patches_helper_and_imported_hlsl_resources(tmp_pat
         "    'SamplerState albedo_texture_sampler_0 : register(s0);\\n'\n"
         "    'Texture2D<float4 > normal_texture_texture_0 : register(t0);\\n'\n"
         "    'SamplerState normal_texture_sampler_0 : register(s0);\\n'\n"
-        "    'Texture2D<float > shadow_maps_texture_0[int(16)] : register(t5);\\n'\n"
-        "    'SamplerComparisonState shadow_maps_sampler_0[int(16)] : register(s5);\\n'\n"
+        "    'Texture2D<float > visibility_maps_texture_0[int(16)] : register(t5);\\n'\n"
+        "    'SamplerComparisonState visibility_maps_sampler_0[int(16)] : register(s5);\\n'\n"
         "    'float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\\n'\n"
         "    '    return normal_texture_texture_0.Sample(normal_texture_sampler_0, uv) +\\n'\n"
-        "    '        shadow_maps_texture_0[int(3)].SampleCmp(shadow_maps_sampler_0[int(3)], uv, 0.5);\\n'\n"
+        "    '        visibility_maps_texture_0[int(3)].SampleCmp(visibility_maps_sampler_0[int(3)], uv, 0.5);\\n'\n"
         "    '}\\n',\n"
         "    encoding='utf-8')\n"
         "reflection.write_text(json.dumps({\n"
@@ -386,9 +386,9 @@ def test_termin_shaderc_d3d11_patches_helper_and_imported_hlsl_resources(tmp_pat
     hlsl = patched_hlsl.read_text(encoding="utf-8")
     assert "normal_texture_texture_0 : register(t1)" in hlsl
     assert "normal_texture_sampler_0 : register(s1)" in hlsl
-    assert "shadow_maps_texture_0[int(16)] : register(t2)" in hlsl
-    assert "shadow_maps_sampler_0 : register(s2)" in hlsl
-    assert "shadow_maps_sampler_0[int" not in hlsl
+    assert "visibility_maps_texture_0[int(16)] : register(t2)" in hlsl
+    assert "visibility_maps_sampler_0 : register(s2)" in hlsl
+    assert "visibility_maps_sampler_0[int" not in hlsl
 
     layout = json.loads((tmp_path / "out.ps.cso.layout.json").read_text(encoding="utf-8"))
     assert [
@@ -398,5 +398,14 @@ def test_termin_shaderc_d3d11_patches_helper_and_imported_hlsl_resources(tmp_pat
         ("material", "constant_buffer", "material", {"register_class": "b", "register_index": 0}),
         ("albedo_texture", "texture", "material", {"register_class": "t", "register_index": 0}),
         ("normal_texture", "texture", "material", {"register_class": "t", "register_index": 1}),
-        ("shadow_maps", "texture", "unscoped", {"register_class": "t", "register_index": 2}),
+        (
+            "visibility_maps",
+            "texture",
+            "unscoped",
+            {
+                "register_class": "t",
+                "register_index": 2,
+                "scalar_sampler_for_texture_array": True,
+            },
+        ),
     ]

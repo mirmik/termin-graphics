@@ -85,6 +85,7 @@ struct VulkanDescriptorPlacement {
 struct D3D11RegisterPlacement {
     D3D11RegisterClass register_class = D3D11RegisterClass::None;
     uint32_t register_index = 0;
+    bool scalar_sampler_for_texture_array = false;
 };
 
 struct OpenGLBindingPlacement {

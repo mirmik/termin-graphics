@@ -143,7 +143,8 @@ typedef struct tc_shader_resource_binding {
     uint32_t stage_mask;  // tc_shader_stage_mask
     uint32_t size;        // bytes for buffers, 0 when unknown/not applicable
     uint8_t has_d3d11_placement;
-    uint8_t _resource_binding_reserved[3];
+    uint8_t d3d11_scalar_sampler_for_texture_array;
+    uint8_t _resource_binding_reserved[2];
     tc_shader_d3d11_placement d3d11;
     tc_shader_resource_field* fields;
     uint32_t field_count;

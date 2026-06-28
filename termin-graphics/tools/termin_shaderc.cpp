@@ -357,6 +357,9 @@ static void append_unique_resource(
                 existing.slang_separate_sampler || binding.slang_separate_sampler;
             existing.slang_storage_texture =
                 existing.slang_storage_texture || binding.slang_storage_texture;
+            existing.d3d11_scalar_sampler_for_texture_array =
+                existing.d3d11_scalar_sampler_for_texture_array ||
+                binding.d3d11_scalar_sampler_for_texture_array;
             return;
         }
     }
@@ -1234,8 +1237,11 @@ static bool write_resource_layout_sidecar(
         if (options.target == "d3d11") {
             out << ", \"d3d11\": {"
                 << "\"register_class\": \"" << json_escape(binding.d3d11_register_class) << "\", "
-                << "\"register_index\": " << binding.d3d11_register_index
-                << "}";
+                << "\"register_index\": " << binding.d3d11_register_index;
+            if (binding.d3d11_scalar_sampler_for_texture_array) {
+                out << ", \"scalar_sampler_for_texture_array\": true";
+            }
+            out << "}";
         }
         if (!binding.fields.empty()) {
             out << ", \"fields\": [";

@@ -540,6 +540,19 @@ static bool trent_uint_field(
     return true;
 }
 
+static bool trent_bool_field(
+    const nos::trent& value,
+    const char* key,
+    bool& out
+) {
+    const nos::trent* field = trent_dict_get(value, key);
+    if (!field || !field->is_bool()) {
+        return false;
+    }
+    out = field->as_bool();
+    return true;
+}
+
 static bool parse_shader_resource_layout_sidecar(
     const std::string& text,
     std::vector<tc_shader_resource_binding>& out_bindings
@@ -616,6 +629,14 @@ static bool parse_shader_resource_layout_sidecar(
             resource.has_d3d11_placement = 1;
             resource.d3d11.register_class = register_class;
             resource.d3d11.register_index = register_index;
+            bool scalar_sampler_for_texture_array = false;
+            if (trent_bool_field(
+                    *d3d11,
+                    "scalar_sampler_for_texture_array",
+                    scalar_sampler_for_texture_array)) {
+                resource.d3d11_scalar_sampler_for_texture_array =
+                    scalar_sampler_for_texture_array ? 1 : 0;
+            }
         } else if (require_d3d11_placement) {
             return false;
         }
@@ -701,6 +722,8 @@ static void merge_shader_resource_binding(
             tc_shader_resource_field* previous_fields = existing.fields;
             const uint8_t previous_has_d3d11_placement =
                 existing.has_d3d11_placement;
+            const uint8_t previous_d3d11_scalar_sampler_for_texture_array =
+                existing.d3d11_scalar_sampler_for_texture_array;
             const tc_shader_d3d11_placement previous_d3d11 = existing.d3d11;
             if (previous_has_d3d11_placement && incoming.has_d3d11_placement &&
                 (previous_d3d11.register_class != incoming.d3d11.register_class ||
@@ -725,6 +748,9 @@ static void merge_shader_resource_binding(
             if (!incoming.has_d3d11_placement && previous_has_d3d11_placement) {
                 existing.has_d3d11_placement = 1;
                 existing.d3d11 = previous_d3d11;
+            }
+            if (previous_d3d11_scalar_sampler_for_texture_array) {
+                existing.d3d11_scalar_sampler_for_texture_array = 1;
             }
             if ((incoming.scope == TC_SHADER_RESOURCE_SCOPE_UNKNOWN ||
                  incoming.scope == TC_SHADER_RESOURCE_SCOPE_UNSCOPED) &&
@@ -857,34 +883,11 @@ static bool apply_shader_resource_layout_sidecar(
             "shader resource layout sidecar");
     }
 
-    auto incoming_has_name = [&](const char* name) {
-        for (const tc_shader_resource_binding& binding : incoming) {
-            if (std::strcmp(binding.name, name) == 0) {
-                return true;
-            }
-        }
-        return false;
-    };
-
     std::vector<tc_shader_resource_binding> merged;
     const uint32_t existing_count = tc_shader_resource_binding_count(shader);
     const tc_shader_resource_binding* existing = tc_shader_resource_bindings(shader);
     if (existing && existing_count > 0) {
         for (uint32_t i = 0; i < existing_count; ++i) {
-            const bool catalog_fallback_resource =
-                existing[i].stage_mask == TC_SHADER_STAGE_ALL_GRAPHICS &&
-                existing[i].size == 0 &&
-                existing[i].field_count == 0 &&
-                existing[i].has_d3d11_placement == 0;
-            // Built-in catalog layouts are target-agnostic fallback metadata.
-            // Target-specific sidecars are authoritative for resources they
-            // describe, while prior sidecar data from other stages must still
-            // be merged to preserve stage masks. Parser-owned semantic
-            // metadata such as material UBO size/fields is also preserved when
-            // the sidecar leaves those fields unknown.
-            if (catalog_fallback_resource && incoming_has_name(existing[i].name)) {
-                continue;
-            }
             merge_shader_resource_binding(merged, existing[i]);
         }
     }

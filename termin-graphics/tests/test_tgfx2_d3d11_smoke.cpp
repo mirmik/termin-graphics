@@ -894,6 +894,7 @@ int main() {
         shadow_maps_plan.placement.kind = tgfx::BackendPlacementKind::D3D11Register;
         shadow_maps_plan.placement.d3d11.register_class = tgfx::D3D11RegisterClass::T;
         shadow_maps_plan.placement.d3d11.register_index = 5;
+        shadow_maps_plan.placement.d3d11.scalar_sampler_for_texture_array = true;
 
         tgfx::BoundResourceValue shadow_maps_value;
         shadow_maps_value.kind = tgfx::BoundResourceKind::SampledTexture;
