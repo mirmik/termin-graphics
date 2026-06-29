@@ -184,6 +184,9 @@ void* tgfx2_interop_create_d3d11_swapchain(
 
 void tgfx2_interop_destroy_d3d11_swapchain(void* swapchain) {
 #ifdef _WIN32
+    if (!swapchain) {
+        return;
+    }
     delete static_cast<tgfx::D3D11Swapchain*>(swapchain);
 #else
     (void)swapchain;

@@ -411,6 +411,64 @@ int main() {
         }
         device->destroy(bgra_target);
 
+        tgfx::TextureDesc msaa_blit_src_desc;
+        msaa_blit_src_desc.width = 4;
+        msaa_blit_src_desc.height = 4;
+        msaa_blit_src_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+        msaa_blit_src_desc.sample_count = 4;
+        msaa_blit_src_desc.usage = tgfx::TextureUsage::ColorAttachment |
+                                   tgfx::TextureUsage::Sampled |
+                                   tgfx::TextureUsage::CopySrc;
+        auto msaa_blit_src = device->create_texture(msaa_blit_src_desc);
+        if (!msaa_blit_src) {
+            std::fprintf(stderr, "D3D11 smoke: MSAA blit source creation failed\n");
+            return 1;
+        }
+
+        tgfx::RenderPassDesc msaa_blit_pass;
+        tgfx::ColorAttachmentDesc msaa_blit_attachment;
+        msaa_blit_attachment.texture = msaa_blit_src;
+        msaa_blit_attachment.load = tgfx::LoadOp::Clear;
+        msaa_blit_attachment.clear_color[0] = 0.70f;
+        msaa_blit_attachment.clear_color[1] = 0.10f;
+        msaa_blit_attachment.clear_color[2] = 0.20f;
+        msaa_blit_attachment.clear_color[3] = 1.00f;
+        msaa_blit_pass.colors.push_back(msaa_blit_attachment);
+
+        auto msaa_blit_cmd = device->create_command_list();
+        msaa_blit_cmd->begin();
+        msaa_blit_cmd->begin_render_pass(msaa_blit_pass);
+        msaa_blit_cmd->end_render_pass();
+        msaa_blit_cmd->end();
+        device->submit(*msaa_blit_cmd);
+
+        auto msaa_bgra_target = device->create_texture(bgra_desc);
+        if (!msaa_bgra_target) {
+            std::fprintf(stderr, "D3D11 smoke: MSAA BGRA blit target creation failed\n");
+            device->destroy(msaa_blit_src);
+            return 1;
+        }
+        device->blit_to_texture(msaa_bgra_target, msaa_blit_src, 0, 0, 4, 4, 0, 0, 4, 4);
+        if (!device->read_pixel_rgba8(msaa_bgra_target, 2, 2, rgba)) {
+            std::fprintf(stderr, "D3D11 smoke: MSAA RGBA->BGRA blit readback failed\n");
+            device->destroy(msaa_bgra_target);
+            device->destroy(msaa_blit_src);
+            return 1;
+        }
+        if (!close_enough(rgba[0], 0.70f) ||
+            !close_enough(rgba[1], 0.10f) ||
+            !close_enough(rgba[2], 0.20f) ||
+            !close_enough(rgba[3], 1.00f)) {
+            std::fprintf(stderr,
+                         "D3D11 smoke: unexpected MSAA RGBA->BGRA blit pixel %.3f %.3f %.3f %.3f\n",
+                         rgba[0], rgba[1], rgba[2], rgba[3]);
+            device->destroy(msaa_bgra_target);
+            device->destroy(msaa_blit_src);
+            return 1;
+        }
+        device->destroy(msaa_bgra_target);
+        device->destroy(msaa_blit_src);
+
         const char* shader_uuid = "d3d11-smoke-artifact";
         const auto artifact_root =
             std::filesystem::temp_directory_path() / "termin-tgfx2-d3d11-smoke-artifacts";

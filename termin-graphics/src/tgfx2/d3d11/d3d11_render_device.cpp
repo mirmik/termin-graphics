@@ -1261,6 +1261,57 @@ void D3D11RenderDevice::blit_to_texture(TextureHandle dst,
         return;
     }
 
+    const bool msaa_to_single = src_tex->desc.sample_count > 1 && dst_tex->desc.sample_count == 1;
+    if (msaa_to_single && d3d11::is_depth_format(src_tex->desc.format)) {
+        tc::Log::error("D3D11RenderDevice::blit_to_texture: MSAA depth resolve is not supported");
+        return;
+    }
+    if (msaa_to_single) {
+        const bool same_format = src_tex->desc.format == dst_tex->desc.format;
+        const bool full_extent = src_x == 0 && src_y == 0 && dst_x == 0 && dst_y == 0 &&
+                                 src_w == dst_w && src_h == dst_h &&
+                                 src_w == static_cast<int>(src_tex->desc.width) &&
+                                 src_h == static_cast<int>(src_tex->desc.height) &&
+                                 dst_w == static_cast<int>(dst_tex->desc.width) &&
+                                 dst_h == static_cast<int>(dst_tex->desc.height);
+        if (same_format && full_extent) {
+            context_->ResolveSubresource(
+                dst_tex->texture.Get(),
+                0,
+                src_tex->texture.Get(),
+                0,
+                d3d11::to_dxgi_format(src_tex->desc.format));
+            return;
+        }
+
+        TextureDesc resolve_desc = src_tex->desc;
+        resolve_desc.sample_count = 1;
+        resolve_desc.mip_levels = 1;
+        resolve_desc.usage = TextureUsage::Sampled | TextureUsage::CopyDst;
+        TextureHandle resolved = create_texture(resolve_desc);
+        if (!resolved) {
+            tc::Log::error("D3D11RenderDevice::blit_to_texture: failed to create MSAA resolve texture");
+            return;
+        }
+
+        auto* resolved_tex = get_texture(resolved);
+        if (!resolved_tex || !resolved_tex->texture) {
+            tc::Log::error("D3D11RenderDevice::blit_to_texture: invalid MSAA resolve texture");
+            destroy(resolved);
+            return;
+        }
+
+        context_->ResolveSubresource(
+            resolved_tex->texture.Get(),
+            0,
+            src_tex->texture.Get(),
+            0,
+            d3d11::to_dxgi_format(src_tex->desc.format));
+        blit_to_texture(dst, resolved, src_x, src_y, src_w, src_h, dst_x, dst_y, dst_w, dst_h);
+        destroy(resolved);
+        return;
+    }
+
     if (src_tex->desc.sample_count != 1 || dst_tex->desc.sample_count != 1) {
         tc::Log::error(
             "D3D11RenderDevice::blit_to_texture: shader blit requires single-sample textures "
