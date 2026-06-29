@@ -225,6 +225,10 @@
       "distribution": "termin-default-assets"
     },
     {
+      "path": "termin-stdlib",
+      "distribution": "termin-stdlib"
+    },
+    {
       "path": "termin-engine",
       "distribution": "termin-engine",
       "native_extensions": [
