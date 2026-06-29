@@ -769,7 +769,7 @@ float4 main() : SV_Target {
     CHECK(!fs::exists(legacy_metadata));
     CHECK(fs::exists(source));
     CHECK(read_test_text_file(metadata).find("artifact_metadata_schema=1\n") != std::string::npos);
-    CHECK(read_test_text_file(metadata).find("layout_schema=3\n") != std::string::npos);
+    CHECK(read_test_text_file(metadata).find("layout_schema=4\n") != std::string::npos);
     CHECK(read_test_text_file(metadata).find("shader_compiler=") != std::string::npos);
 
     bytes.clear();
@@ -852,11 +852,11 @@ TEST_CASE("tgfx2 engine shader artifact metadata invalidates stale layout schema
         bytes));
     CHECK(bytes == std::vector<uint8_t>({'S', 'P', 'I', 'R', 'V', '1'}));
     CHECK(read_test_text_file(metadata).find("artifact_metadata_schema=1\n") != std::string::npos);
-    CHECK(read_test_text_file(metadata).find("layout_schema=3\n") != std::string::npos);
+    CHECK(read_test_text_file(metadata).find("layout_schema=4\n") != std::string::npos);
 
     {
         std::string stale_metadata = read_test_text_file(metadata);
-        const std::string schema_line = "layout_schema=3\n";
+        const std::string schema_line = "layout_schema=4\n";
         const size_t pos = stale_metadata.find(schema_line);
         REQUIRE(pos != std::string::npos);
         stale_metadata.erase(pos, schema_line.size());
