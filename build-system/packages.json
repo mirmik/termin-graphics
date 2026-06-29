@@ -225,6 +225,10 @@
       "distribution": "termin-default-assets"
     },
     {
+      "path": "termin-stdlib",
+      "distribution": "termin-stdlib"
+    },
+    {
       "path": "termin-engine",
       "distribution": "termin-engine",
       "native_extensions": [
@@ -257,6 +261,18 @@
     {
       "path": "termin-glb",
       "distribution": "termin-glb"
+    },
+    {
+      "path": "termin-project",
+      "distribution": "termin-project"
+    },
+    {
+      "path": "termin-project-modules",
+      "distribution": "termin-project-modules"
+    },
+    {
+      "path": "termin-project-build",
+      "distribution": "termin-project-build"
     },
     {
       "path": "termin-player",
