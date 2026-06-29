@@ -1,35 +1,53 @@
-from termin.editor_core.resource_manager import ResourceManager
+from termin.animation.asset import AnimationClipAsset
+from termin.glb.asset import GLBAsset
 from termin.glb.scene_animation_repair import repair_glb_animation_player_clip_refs
-from termin_assets import PreLoadResult, set_resource_manager_factory
+from termin.skeleton.asset import SkeletonAsset
+from termin_assets import AssetRegistry, AssetRuntimeManager, set_resource_manager_factory
+
+
+class _ResourceManager(AssetRuntimeManager):
+    def __init__(self) -> None:
+        super().__init__()
+        self._skeleton_assets = AssetRegistry(
+            asset_class=SkeletonAsset,
+            uuid_registry=self._assets_by_uuid,
+            data_from_asset=lambda asset: asset.cached_data,
+        )
+        self._animation_assets = AssetRegistry(
+            asset_class=AnimationClipAsset,
+            uuid_registry=self._assets_by_uuid,
+            data_from_asset=lambda asset: asset.cached_data,
+        )
+        self.register_runtime_asset_registry("skeleton", self._skeleton_assets)
+        self.register_runtime_asset_registry("animation_clip", self._animation_assets)
+
+    def get_skeleton_asset_by_uuid(self, uuid: str) -> SkeletonAsset | None:
+        return self._skeleton_assets.get_asset_by_uuid(uuid)
 
 
 def _register_glb(
-    rm: ResourceManager,
+    rm: _ResourceManager,
     *,
     name: str,
     glb_uuid: str,
     skeleton_uuid: str,
     animations: dict[str, str],
 ) -> None:
-    rm.register_file(
-        PreLoadResult(
-            resource_type="glb",
-            path=f"/tmp/{name}.glb",
-            content=None,
-            uuid=glb_uuid,
-            spec_data={
-                "uuid": glb_uuid,
-                "resources": {
-                    "skeletons": {"skeleton": skeleton_uuid},
-                    "animations": animations,
-                },
+    glb_asset = GLBAsset(name=name, source_path=f"/tmp/{name}.glb", uuid=glb_uuid)
+    glb_asset.set_resource_manager(rm)
+    glb_asset.parse_spec(
+        {
+            "uuid": glb_uuid,
+            "resources": {
+                "skeletons": {"skeleton": skeleton_uuid},
+                "animations": animations,
             },
-        )
+        }
     )
 
 
 def test_repair_glb_animation_player_clip_refs_uses_sibling_skeleton_owner() -> None:
-    rm = ResourceManager()
+    rm = _ResourceManager()
     _register_glb(
         rm,
         name="Arthur",
@@ -107,4 +125,4 @@ def test_repair_glb_animation_player_clip_refs_without_manager_returns_zero() ->
     try:
         assert repair_glb_animation_player_clip_refs({"entities": []}) == 0
     finally:
-        set_resource_manager_factory(ResourceManager.instance)
+        set_resource_manager_factory(None)
