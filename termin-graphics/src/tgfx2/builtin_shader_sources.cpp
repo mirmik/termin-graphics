@@ -748,36 +748,54 @@ tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
         return tc_shader_handle_invalid();
     }
 
-    std::string vertex_source;
-    if (!vertex_path.empty()) {
-        vertex_source = load_builtin_shader_source(vertex_path.c_str(), name.c_str());
-        if (vertex_source.empty()) {
-            tc::Log::error(
-                "[BuiltInShaderCatalog] Shader '%s' failed to load vertex stage '%s'. Roots: %s",
-                uuid ? uuid : "<null>",
-                vertex_path.c_str(),
-                builtin_shader_roots_for_log().c_str());
-            return tc_shader_handle_invalid();
-        }
-    }
-
-    std::string fragment_source;
-    if (!fragment_path.empty()) {
-        fragment_source = load_builtin_shader_source(fragment_path.c_str(), name.c_str());
-        if (fragment_source.empty()) {
-            tc::Log::error(
-                "[BuiltInShaderCatalog] Shader '%s' failed to load fragment stage '%s'. Roots: %s",
-                uuid ? uuid : "<null>",
-                fragment_path.c_str(),
-                builtin_shader_roots_for_log().c_str());
-            return tc_shader_handle_invalid();
-        }
-    }
-
     const tc_shader_language shader_language =
         is_slang ? TC_SHADER_LANGUAGE_SLANG : TC_SHADER_LANGUAGE_GLSL;
     const tc_shader_artifact_policy artifact_policy =
         is_slang ? TC_SHADER_ARTIFACT_REQUIRED : TC_SHADER_ARTIFACT_OPTIONAL;
+
+    auto artifact_only_stage_source = [&](const char* stage_name, const std::string& path) {
+        std::string marker = "/* termin artifact-only builtin shader stage: ";
+        marker += uuid ? uuid : "<null>";
+        marker += ":";
+        marker += stage_name ? stage_name : "<stage>";
+        marker += " path=";
+        marker += path;
+        marker += " */\n";
+        return marker;
+    };
+
+    auto load_catalog_stage_source = [&](const char* stage_name, const std::string& path) {
+        if (path.empty()) {
+            return std::string();
+        }
+
+        if (std::optional<BuiltinLocatedSource> source =
+                try_load_builtin_shader_source(path.c_str(), name.c_str())) {
+            return std::move(source->source);
+        }
+
+        if (artifact_policy == TC_SHADER_ARTIFACT_REQUIRED) {
+            return artifact_only_stage_source(stage_name, path);
+        }
+
+        tc::Log::error(
+            "[BuiltInShaderCatalog] Shader '%s' failed to load %s stage '%s'. Roots: %s",
+            uuid ? uuid : "<null>",
+            stage_name ? stage_name : "<stage>",
+            path.c_str(),
+            builtin_shader_roots_for_log().c_str());
+        return std::string();
+    };
+
+    std::string vertex_source = load_catalog_stage_source("vertex", vertex_path);
+    if (!vertex_path.empty() && vertex_source.empty()) {
+        return tc_shader_handle_invalid();
+    }
+
+    std::string fragment_source = load_catalog_stage_source("fragment", fragment_path);
+    if (!fragment_path.empty() && fragment_source.empty()) {
+        return tc_shader_handle_invalid();
+    }
 
     auto stage_entry = [&](const char* stage_name) -> std::string {
         const nos::trent* stages = dict_get(*entry, "stages");

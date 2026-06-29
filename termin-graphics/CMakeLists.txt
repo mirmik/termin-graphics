@@ -276,7 +276,7 @@ endif()
 
 if(TGFX2_ENABLE_D3D11)
     target_compile_definitions(termin_graphics2 PRIVATE TGFX2_HAS_D3D11)
-    target_link_libraries(termin_graphics2 PRIVATE d3d11 dxgi d3dcompiler)
+    target_link_libraries(termin_graphics2 PRIVATE d3d11 dxgi d3d9 d3dcompiler)
 endif()
 
 if(MSVC)
@@ -731,3 +731,4 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/termin_graphicsConfigVersion.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/termin_graphics
 )
+

@@ -19,7 +19,7 @@ TGFX2_API void tgfx2_interop_set_device(void* device);
 TGFX2_API void* tgfx2_interop_get_device(void);
 
 // ---------------------------------------------------------------------------
-// External GL texture registration — plain-C bridge to
+// External GL texture registration - plain-C bridge to
 // IRenderDevice::register_external_texture (OpenGL backend only).
 //
 // Intended for host code (C# / WPF through P/Invoke, any non-C++ caller)
@@ -27,22 +27,13 @@ TGFX2_API void* tgfx2_interop_get_device(void);
 // GLWpfControl framebuffer) and wants to hand it to the engine without
 // talking to `IRenderDevice&` directly.
 //
-// `format` is a `tgfx::PixelFormat` cast to int — pass the matching
-// attachment format (RGBA8_UNorm = 0 / 1 depending on enum order; see
-// tgfx2/enums.hpp on the current build). `usage` is a bitmask of
+// `format` is a `tgfx::PixelFormat` cast to int. `usage` is a bitmask of
 // `tgfx::TextureUsage` flags; the most common value is
 // `Sampled | ColorAttachment | CopyDst` for a composite target.
 //
-// Returns a non-zero tgfx2 TextureHandle id on success (32-bit handle
-// body; the C++ `TextureHandle` is {id}). Returns 0 on error — typically
-// when the interop device has not been set, is not an OpenGL backend,
-// or the arguments are invalid.
-//
-// The returned handle is owned by the caller — release with
-// `tgfx2_interop_destroy_texture_handle` when the GL texture goes
-// away (WPF framebuffer resize, control disposal, etc.). Destroying
-// the handle does NOT free the underlying GL texture; the host keeps
-// owning it.
+// Returns a non-zero tgfx2 TextureHandle id on success. Returns 0 on error.
+// The returned handle is owned by the caller; release it with
+// `tgfx2_interop_destroy_texture_handle`.
 TGFX2_API uint32_t tgfx2_interop_register_external_gl_texture(
     uint32_t gl_tex_id,
     uint32_t width, uint32_t height,
@@ -54,8 +45,7 @@ TGFX2_API uint32_t tgfx2_interop_register_external_gl_texture(
 TGFX2_API void tgfx2_interop_destroy_texture_handle(uint32_t handle_id);
 
 // Copy/resolve one tgfx2 texture into another. Both arguments are
-// TextureHandle ids owned by the current interop device. The copy is
-// backend-neutral; GL/Vulkan details stay inside the active IRenderDevice.
+// TextureHandle ids owned by the current interop device.
 TGFX2_API void tgfx2_interop_blit_texture(
     uint32_t src_handle_id,
     uint32_t dst_handle_id,
@@ -86,6 +76,32 @@ TGFX2_API int tgfx2_interop_present_d3d11_swapchain(
     void* swapchain,
     uint32_t source_handle_id,
     uint32_t sync_interval);
+
+// ---------------------------------------------------------------------------
+// D3D11 -> WPF D3DImage presentation bridge.
+//
+// This path avoids creating a child-window DXGI swapchain. The bridge owns a
+// shared BGRA texture visible to both the active tgfx2 D3D11 device and WPF's
+// D3D9Ex-based D3DImage. C# obtains the IDirect3DSurface9 pointer through
+// tgfx2_interop_get_d3d11_d3dimage_surface and passes it to
+// D3DImage.SetBackBuffer. Each present blits the source tgfx2 texture into the
+// shared texture; WPF composites it with the rest of the visual tree.
+TGFX2_API void* tgfx2_interop_create_d3d11_d3dimage_bridge(
+    uint32_t width,
+    uint32_t height);
+
+TGFX2_API void tgfx2_interop_destroy_d3d11_d3dimage_bridge(void* bridge);
+
+TGFX2_API int tgfx2_interop_resize_d3d11_d3dimage_bridge(
+    void* bridge,
+    uint32_t width,
+    uint32_t height);
+
+TGFX2_API int tgfx2_interop_present_d3d11_d3dimage_bridge(
+    void* bridge,
+    uint32_t source_handle_id);
+
+TGFX2_API void* tgfx2_interop_get_d3d11_d3dimage_surface(void* bridge);
 
 #ifdef __cplusplus
 }
