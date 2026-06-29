@@ -263,6 +263,10 @@
       "distribution": "termin-project"
     },
     {
+      "path": "termin-project-modules",
+      "distribution": "termin-project-modules"
+    },
+    {
       "path": "termin-project-build",
       "distribution": "termin-project-build"
     },
