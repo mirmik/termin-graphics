@@ -259,6 +259,14 @@
       "distribution": "termin-glb"
     },
     {
+      "path": "termin-project",
+      "distribution": "termin-project"
+    },
+    {
+      "path": "termin-project-build",
+      "distribution": "termin-project-build"
+    },
+    {
       "path": "termin-player",
       "distribution": "termin-player"
     },
