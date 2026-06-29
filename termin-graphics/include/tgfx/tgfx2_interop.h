@@ -62,6 +62,31 @@ TGFX2_API void tgfx2_interop_blit_texture(
     int width,
     int height);
 
+// ---------------------------------------------------------------------------
+// D3D11 swapchain presentation bridge.
+//
+// WPF hosts that own an HWND can create a tgfx2-backed DXGI swapchain and
+// present any texture produced by the current D3D11 tgfx2 device. The returned
+// pointer is an opaque tgfx::D3D11Swapchain* and must be released with
+// tgfx2_interop_destroy_d3d11_swapchain. Functions return 1 on success and 0
+// on error; failures are logged through tc_log.
+TGFX2_API void* tgfx2_interop_create_d3d11_swapchain(
+    void* hwnd,
+    uint32_t width,
+    uint32_t height);
+
+TGFX2_API void tgfx2_interop_destroy_d3d11_swapchain(void* swapchain);
+
+TGFX2_API int tgfx2_interop_resize_d3d11_swapchain(
+    void* swapchain,
+    uint32_t width,
+    uint32_t height);
+
+TGFX2_API int tgfx2_interop_present_d3d11_swapchain(
+    void* swapchain,
+    uint32_t source_handle_id,
+    uint32_t sync_interval);
+
 #ifdef __cplusplus
 }
 

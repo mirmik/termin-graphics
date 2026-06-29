@@ -1,6 +1,12 @@
 #include <tgfx/tgfx2_interop.h>
 #include <tgfx2/i_render_device.hpp>
 
+#ifdef _WIN32
+#include <tgfx2/d3d11/d3d11_render_device.hpp>
+#include <tgfx2/d3d11/d3d11_swapchain.hpp>
+#include <windows.h>
+#endif
+
 #include <cstdint>
 #include <exception>
 
@@ -119,4 +125,134 @@ void tgfx2_interop_blit_texture(
         tc_log(TC_LOG_ERROR,
                "[tgfx2_interop] failed to blit texture: unknown error");
     }
+}
+
+void* tgfx2_interop_create_d3d11_swapchain(
+    void* hwnd,
+    uint32_t width,
+    uint32_t height)
+{
+#ifdef _WIN32
+    if (!hwnd || width == 0 || height == 0) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] invalid D3D11 swapchain request: hwnd=%p size=%ux%u",
+               hwnd, width, height);
+        return nullptr;
+    }
+
+    auto* device = static_cast<tgfx::IRenderDevice*>(g_tgfx2_device);
+    if (!device) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] cannot create D3D11 swapchain: no active tgfx2 device");
+        return nullptr;
+    }
+    if (device->backend_type() != tgfx::BackendType::D3D11) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] cannot create D3D11 swapchain: active backend is not D3D11");
+        return nullptr;
+    }
+
+    auto* d3d_device = dynamic_cast<tgfx::D3D11RenderDevice*>(device);
+    if (!d3d_device) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] active tgfx2 device reports D3D11 but is not D3D11RenderDevice");
+        return nullptr;
+    }
+
+    try {
+        return new tgfx::D3D11Swapchain(
+            *d3d_device,
+            static_cast<HWND>(hwnd),
+            width,
+            height);
+    } catch (const std::exception& e) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] failed to create D3D11 swapchain: %s",
+               e.what());
+    } catch (...) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] failed to create D3D11 swapchain: unknown error");
+    }
+    return nullptr;
+#else
+    (void)hwnd; (void)width; (void)height;
+    tc_log(TC_LOG_ERROR,
+           "[tgfx2_interop] D3D11 swapchain creation is only supported on Windows");
+    return nullptr;
+#endif
+}
+
+void tgfx2_interop_destroy_d3d11_swapchain(void* swapchain) {
+#ifdef _WIN32
+    delete static_cast<tgfx::D3D11Swapchain*>(swapchain);
+#else
+    (void)swapchain;
+#endif
+}
+
+int tgfx2_interop_resize_d3d11_swapchain(
+    void* swapchain,
+    uint32_t width,
+    uint32_t height)
+{
+#ifdef _WIN32
+    if (!swapchain || width == 0 || height == 0) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] invalid D3D11 swapchain resize: swapchain=%p size=%ux%u",
+               swapchain, width, height);
+        return 0;
+    }
+
+    try {
+        static_cast<tgfx::D3D11Swapchain*>(swapchain)->resize(width, height);
+        return 1;
+    } catch (const std::exception& e) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] failed to resize D3D11 swapchain: %s",
+               e.what());
+    } catch (...) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] failed to resize D3D11 swapchain: unknown error");
+    }
+    return 0;
+#else
+    (void)swapchain; (void)width; (void)height;
+    tc_log(TC_LOG_ERROR,
+           "[tgfx2_interop] D3D11 swapchain resize is only supported on Windows");
+    return 0;
+#endif
+}
+
+int tgfx2_interop_present_d3d11_swapchain(
+    void* swapchain,
+    uint32_t source_handle_id,
+    uint32_t sync_interval)
+{
+#ifdef _WIN32
+    if (!swapchain || source_handle_id == 0) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] invalid D3D11 swapchain present: swapchain=%p source=%u",
+               swapchain, source_handle_id);
+        return 0;
+    }
+
+    try {
+        return static_cast<tgfx::D3D11Swapchain*>(swapchain)
+            ->compose_and_present(tgfx::TextureHandle{source_handle_id}, sync_interval)
+            ? 1 : 0;
+    } catch (const std::exception& e) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] failed to present D3D11 swapchain: %s",
+               e.what());
+    } catch (...) {
+        tc_log(TC_LOG_ERROR,
+               "[tgfx2_interop] failed to present D3D11 swapchain: unknown error");
+    }
+    return 0;
+#else
+    (void)swapchain; (void)source_handle_id; (void)sync_interval;
+    tc_log(TC_LOG_ERROR,
+           "[tgfx2_interop] D3D11 swapchain present is only supported on Windows");
+    return 0;
+#endif
 }
