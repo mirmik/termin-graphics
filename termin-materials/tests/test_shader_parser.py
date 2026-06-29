@@ -1,5 +1,4 @@
 import pytest
-from pathlib import Path
 
 from termin.materials import (
     ShasderStage,
