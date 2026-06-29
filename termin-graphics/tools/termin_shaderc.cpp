@@ -1722,6 +1722,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
             return false;
         }
         if (!patch_slang_d3d11_hlsl_resource_bindings(
+                options,
                 slang_output_path,
                 resources)) {
             std::error_code ec;

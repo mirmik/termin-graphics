@@ -69,6 +69,7 @@ bool augment_d3d11_resource_bindings_from_hlsl(
     const std::filesystem::path& hlsl_path,
     std::vector<ShaderResourceBinding>& resources);
 bool patch_slang_d3d11_hlsl_resource_bindings(
+    const CompileOptions& options,
     const std::filesystem::path& hlsl_path,
     const std::vector<ShaderResourceBinding>& resources);
 bool filter_slang_vulkan_resources_for_spirv(

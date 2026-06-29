@@ -628,6 +628,11 @@ void bind_render_framework(nb::module_& m) {
              nb::arg("dst_x"), nb::arg("dst_y"),
              nb::arg("dst_w"), nb::arg("dst_h"),
              nb::arg("channel_mode"), nb::arg("highlight_hdr"))
+        .def("render_in_current_pass", &FrameGraphPresenter::render_in_current_pass,
+             nb::arg("ctx2"), nb::arg("capture_tex"),
+             nb::arg("dst_x"), nb::arg("dst_y"),
+             nb::arg("dst_w"), nb::arg("dst_h"),
+             nb::arg("channel_mode"), nb::arg("highlight_hdr"))
         .def("compute_hdr_stats", &FrameGraphPresenter::compute_hdr_stats,
              nb::arg("device"), nb::arg("tex"))
         .def("read_depth_normalized",

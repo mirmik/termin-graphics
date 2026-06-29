@@ -129,6 +129,17 @@ public:
         bool highlight_hdr
     );
 
+    void render_in_current_pass(
+        tgfx::RenderContext2* ctx2,
+        tgfx::TextureHandle capture_tex,
+        int dst_x,
+        int dst_y,
+        int dst_w,
+        int dst_h,
+        int channel_mode,
+        bool highlight_hdr
+    );
+
     // HDR / depth readback helpers take a native tgfx2 texture and
     // pull pixels through the device's read_texture_* primitives.
     HDRStats compute_hdr_stats(

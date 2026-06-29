@@ -633,7 +633,53 @@ static bool legalize_slang_d3d11_comparison_sampler_arrays(
     return true;
 }
 
+static bool patch_slang_d3d11_fragment_entry_input_position(
+    std::string& hlsl,
+    const std::string& entry,
+    bool& changed
+) {
+    if (entry.empty()) {
+        return true;
+    }
+
+    const std::regex entry_re(
+        "\\b" + regex_escape(entry) +
+        R"(\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s+[A-Za-z_][A-Za-z0-9_]*\s*[\),])");
+    std::smatch entry_match;
+    if (!std::regex_search(hlsl, entry_match, entry_re)) {
+        return true;
+    }
+
+    const std::string input_type = entry_match[1].str();
+    const std::regex struct_re(
+        "\\bstruct\\s+" + regex_escape(input_type) + R"(\s*\{)");
+    std::smatch struct_match;
+    if (!std::regex_search(hlsl, struct_match, struct_re)) {
+        return true;
+    }
+
+    const size_t struct_begin = static_cast<size_t>(struct_match.position(0));
+    const size_t brace_pos = struct_begin + static_cast<size_t>(struct_match.length(0)) - 1;
+    const size_t struct_end = hlsl.find("};", brace_pos);
+    if (struct_end == std::string::npos || struct_end <= brace_pos) {
+        return true;
+    }
+
+    const std::string body = hlsl.substr(brace_pos + 1, struct_end - brace_pos - 1);
+    if (body.find("SV_Position") != std::string::npos ||
+        body.find(':') == std::string::npos) {
+        return true;
+    }
+
+    // D3D11/FXC packs pixel-shader inputs by interpolator register. Keep
+    // fullscreen fragment UVs aligned with the engine fullscreen vertex shader.
+    hlsl.insert(brace_pos + 1, "\n    float4 __termin_screen_pos : SV_Position;");
+    changed = true;
+    return true;
+}
+
 bool patch_slang_d3d11_hlsl_resource_bindings(
+    const CompileOptions& options,
     const std::filesystem::path& hlsl_path,
     const std::vector<ShaderResourceBinding>& resources
 ) {
@@ -654,6 +700,10 @@ bool patch_slang_d3d11_hlsl_resource_bindings(
     }
 
     bool changed = false;
+    if (options.stage == "fragment" &&
+        !patch_slang_d3d11_fragment_entry_input_position(hlsl, options.entry, changed)) {
+        return false;
+    }
     if (!legalize_slang_d3d11_comparison_sampler_arrays(hlsl, changed)) {
         return false;
     }

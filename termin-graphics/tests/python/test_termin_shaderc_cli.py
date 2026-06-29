@@ -6,6 +6,7 @@ from shaderc_test_helpers import (
     _expected_scoped_bindings,
     _run_shaderc,
     _spirv_decoration_value,
+    _write_fake_fxc,
     _write_fake_slangc,
 )
 
@@ -35,6 +36,68 @@ def test_termin_shaderc_compile_help_is_successful() -> None:
     assert "Compile options:" in direct.stdout
     assert "Examples:" in direct.stdout
     assert "--layout-scheme" not in direct.stdout
+
+
+def test_termin_shaderc_patches_d3d11_fragment_struct_input_with_sv_position(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "struct FragmentInput { float2 uv : TEXCOORD0; };\n"
+        "[shader(\"fragment\")] float4 fs_main(FragmentInput input) : SV_Target0 {\n"
+        "    return float4(input.uv, 0.0, 1.0);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.ps.cso"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_text(\n"
+        "    'struct FragmentInput_0\\n'\n"
+        "    '{\\n'\n"
+        "    '    float2 uv_0 : TEXCOORD0;\\n'\n"
+        "    '};\\n'\n"
+        "    'float4 fs_main(FragmentInput_0 input_0) : SV_Target0\\n'\n"
+        "    '{\\n'\n"
+        "    '    return float4(input_0.uv_0, 0.0, 1.0);\\n'\n"
+        "    '}\\n',\n"
+        "    encoding='utf-8')\n"
+        "reflection.write_text(json.dumps({'parameters': []}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+    fake_fxc = _write_fake_fxc(tmp_path / "fake_fxc.py")
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "d3d11",
+            "--stage",
+            "fragment",
+            "--entry",
+            "fs_main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+            "--fxc",
+            str(fake_fxc),
+        ],
+        env={"TERMIN_SHADERC_KEEP_INTERMEDIATE": "1"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    hlsl = Path(str(output) + ".hlsl").read_text(encoding="utf-8")
+    assert "float4 __termin_screen_pos : SV_Position;" in hlsl
+    assert hlsl.index("__termin_screen_pos") < hlsl.index("float2 uv_0")
 
 
 def test_termin_shaderc_rejects_invalid_default_scope(tmp_path: Path) -> None:

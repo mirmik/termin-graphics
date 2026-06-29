@@ -219,10 +219,9 @@ void FrameGraphPresenter::ensure_fs(tgfx::IRenderDevice& device) {
     }
 }
 
-void FrameGraphPresenter::render(
+void FrameGraphPresenter::render_in_current_pass(
     tgfx::RenderContext2* ctx2,
     tgfx::TextureHandle capture_tex,
-    tgfx::TextureHandle target_tex,
     int dst_x,
     int dst_y,
     int dst_w,
@@ -230,7 +229,7 @@ void FrameGraphPresenter::render(
     int channel_mode,
     bool highlight_hdr
 ) {
-    if (!ctx2 || !capture_tex || !target_tex) {
+    if (!ctx2 || !capture_tex || dst_w <= 0 || dst_h <= 0) {
         return;
     }
 
@@ -243,10 +242,10 @@ void FrameGraphPresenter::render(
         }
     }
 
-    ctx2->begin_pass(target_tex, tgfx::TextureHandle{}, nullptr, 1.0f, false);
     ctx2->set_viewport(dst_x, dst_y, dst_w, dst_h);
     // The debugger widget may be called with an active tcgui clip
-    // rect. Make sure our fullscreen-quad draw isn't trimmed.
+    // rect. Make sure our fullscreen-quad draw is controlled by the
+    // preview viewport instead of an inherited text/widget scissor.
     ctx2->clear_scissor();
     ctx2->set_depth_test(false);
     ctx2->set_depth_write(false);
@@ -263,6 +262,33 @@ void FrameGraphPresenter::render(
     ctx2->set_push_constants(&push, sizeof(push));
 
     ctx2->draw_fullscreen_quad();
+}
+
+void FrameGraphPresenter::render(
+    tgfx::RenderContext2* ctx2,
+    tgfx::TextureHandle capture_tex,
+    tgfx::TextureHandle target_tex,
+    int dst_x,
+    int dst_y,
+    int dst_w,
+    int dst_h,
+    int channel_mode,
+    bool highlight_hdr
+) {
+    if (!ctx2 || !capture_tex || !target_tex) {
+        return;
+    }
+
+    ctx2->begin_pass(target_tex, tgfx::TextureHandle{}, nullptr, 1.0f, false);
+    render_in_current_pass(
+        ctx2,
+        capture_tex,
+        dst_x,
+        dst_y,
+        dst_w,
+        dst_h,
+        channel_mode,
+        highlight_hdr);
     ctx2->end_pass();
 }
 
