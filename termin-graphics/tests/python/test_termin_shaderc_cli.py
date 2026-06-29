@@ -6,7 +6,6 @@ from shaderc_test_helpers import (
     _expected_scoped_bindings,
     _run_shaderc,
     _spirv_decoration_value,
-    _write_fake_fxc,
     _write_fake_slangc,
 )
 
