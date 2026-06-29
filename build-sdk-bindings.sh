@@ -157,6 +157,10 @@ PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
     --vulkan "$TERMIN_ENABLE_VULKAN" \
     --init-submodules
 
+PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
+    "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" prepare-build-python-runtime \
+    --sdk-prefix "$SDK_PREFIX"
+
 cmake_args=()
 if [[ -n "$CMAKE_GENERATOR_NAME" && ! -f "$BUILD_DIR/CMakeCache.txt" ]]; then
     cmake_args+=(-G "$CMAKE_GENERATOR_NAME")
