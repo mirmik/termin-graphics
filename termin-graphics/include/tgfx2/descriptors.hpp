@@ -17,6 +17,9 @@ struct BufferDesc {
     uint64_t size = 0;
     BufferUsage usage{};
     bool cpu_visible = false;
+    // Required when BufferUsage::Storage is consumed as a D3D11
+    // StructuredBuffer SRV. Leave zero for non-structured buffers.
+    uint32_t structured_stride = 0;
 };
 
 struct TextureDesc {

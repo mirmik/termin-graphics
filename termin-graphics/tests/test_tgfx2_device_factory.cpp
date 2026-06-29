@@ -374,6 +374,39 @@ TEST_CASE("backend binding plan validates missing D3D11 placement and class-sepa
     CHECK(plan.entries[1].placement.d3d11.register_class == tgfx::D3D11RegisterClass::T);
 }
 
+TEST_CASE("backend binding plan maps D3D11 storage buffers to shader-resource registers") {
+    tc_shader_resource_binding binding = make_plan_test_binding(
+        "foliage_instances",
+        TC_SHADER_RESOURCE_STORAGE_BUFFER,
+        TC_SHADER_RESOURCE_SCOPE_DRAW,
+        43,
+        TC_SHADER_STAGE_VERTEX);
+    binding.has_d3d11_placement = 1;
+    binding.d3d11.register_class = TC_SHADER_D3D11_REGISTER_T;
+    binding.d3d11.register_index = 5;
+
+    tgfx::BackendBindingPlan plan;
+    std::string error;
+    REQUIRE(tgfx::build_backend_binding_plan(
+        tgfx::BackendType::D3D11,
+        &binding,
+        1,
+        plan,
+        &error));
+    REQUIRE(plan.entries.size() == 1);
+    CHECK(plan.entries[0].resource.kind == tgfx::ShaderResourceKind::StorageBuffer);
+    CHECK(plan.entries[0].placement.d3d11.register_class == tgfx::D3D11RegisterClass::T);
+    CHECK(plan.entries[0].placement.d3d11.register_index == 5u);
+
+    binding.d3d11.register_class = TC_SHADER_D3D11_REGISTER_U;
+    CHECK(!tgfx::build_backend_binding_plan(
+        tgfx::BackendType::D3D11,
+        &binding,
+        1,
+        plan,
+        &error));
+    CHECK(error.find("register class") != std::string::npos);
+}
 TEST_CASE("backend binding plan rejects unsupported Vulkan descriptor sets") {
     tc_shader_resource_binding binding = make_plan_test_binding(
         "per_frame",

@@ -107,7 +107,8 @@ static std::string d3d11_register_class_for_kind(const std::string& kind) {
     if (kind == "constant_buffer" || kind == "uniform_buffer") return "b";
     if (kind == "texture") return "t";
     if (kind == "sampler") return "s";
-    if (kind == "storage_buffer" || kind == "storage_texture") return "u";
+    if (kind == "storage_buffer") return "t";
+    if (kind == "storage_texture") return "u";
     return {};
 }
 

@@ -213,8 +213,7 @@ bool signatures_have_link_mismatch(
             mismatch = true;
             continue;
         }
-        if (vs_output->register_index != ps_input.register_index ||
-            vs_output->mask != ps_input.mask) {
+        if ((vs_output->mask & ps_input.mask) != ps_input.mask) {
             mismatch = true;
         }
     }

@@ -103,6 +103,7 @@ D3D11RegisterClass expected_d3d11_register_class(ShaderResourceKind kind) {
         case ShaderResourceKind::Sampler:
             return D3D11RegisterClass::S;
         case ShaderResourceKind::StorageBuffer:
+            return D3D11RegisterClass::T;
         case ShaderResourceKind::StorageTexture:
             return D3D11RegisterClass::U;
         case ShaderResourceKind::None:

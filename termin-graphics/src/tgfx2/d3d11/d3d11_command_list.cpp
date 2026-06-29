@@ -274,15 +274,40 @@ void bind_legacy_resource_binding(
             set_samplers(ctx, stage_mask, slot, &native);
             break;
         }
-        case ResourceBinding::Kind::StorageBuffer:
-            if (validate_d3d11_register_class(
+        case ResourceBinding::Kind::StorageBuffer: {
+            if (!validate_d3d11_register_class(
                     binding,
-                    TC_SHADER_D3D11_REGISTER_U,
+                    TC_SHADER_D3D11_REGISTER_T,
                     "storage buffer")) {
-                tc::Log::error(
-                    "D3D11CommandList::bind_resource_set: storage buffers are not implemented");
+                break;
             }
+            if (!validate_d3d11_slot(
+                    binding,
+                    slot,
+                    D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT,
+                    "storage buffer")) {
+                break;
+            }
+            if (binding.offset != 0) {
+                tc::Log::error(
+                    "D3D11CommandList::bind_resource_set: storage buffer at set=%u binding=%u has unsupported offset=%llu",
+                    binding.set,
+                    binding.binding,
+                    static_cast<unsigned long long>(binding.offset));
+                break;
+            }
+            auto* buf = device.get_buffer(binding.buffer);
+            ID3D11ShaderResourceView* srv = buf ? buf->srv.Get() : nullptr;
+            if (buf && !srv) {
+                tc::Log::error(
+                    "D3D11CommandList::bind_resource_set: storage buffer at set=%u binding=%u has no shader resource view",
+                    binding.set,
+                    binding.binding);
+                break;
+            }
+            set_shader_resources(ctx, stage_mask, slot, &srv);
             break;
+        }
     }
 }
 
@@ -373,15 +398,38 @@ void bind_bound_resource_binding(
             set_samplers(ctx, stage_mask, slot, &native);
             break;
         }
-        case BoundResourceKind::StorageBuffer:
-            if (validate_d3d11_placement(
+        case BoundResourceKind::StorageBuffer: {
+            if (!validate_d3d11_placement(
                     binding,
-                    D3D11RegisterClass::U,
+                    D3D11RegisterClass::T,
                     "storage buffer")) {
-                tc::Log::error(
-                    "D3D11CommandList::bind_resource_set: storage buffers are not implemented");
+                break;
             }
+            if (!validate_d3d11_slot(
+                    binding,
+                    slot,
+                    D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT,
+                    "storage buffer")) {
+                break;
+            }
+            if (binding.value.offset != 0) {
+                tc::Log::error(
+                    "D3D11CommandList::bind_resource_set: storage buffer resource '%s' has unsupported offset=%llu",
+                    binding.plan_entry.resource.name.c_str(),
+                    static_cast<unsigned long long>(binding.value.offset));
+                break;
+            }
+            auto* buf = device.get_buffer(binding.value.buffer);
+            ID3D11ShaderResourceView* srv = buf ? buf->srv.Get() : nullptr;
+            if (buf && !srv) {
+                tc::Log::error(
+                    "D3D11CommandList::bind_resource_set: storage buffer resource '%s' has no shader resource view",
+                    binding.plan_entry.resource.name.c_str());
+                break;
+            }
+            set_shader_resources(ctx, stage_mask, slot, &srv);
             break;
+        }
     }
 }
 

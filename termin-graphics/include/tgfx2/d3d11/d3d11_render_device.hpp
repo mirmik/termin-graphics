@@ -22,6 +22,7 @@ namespace tgfx {
 
 struct D3D11Buffer {
     Microsoft::WRL::ComPtr<ID3D11Buffer> buffer;
+    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
     BufferDesc desc;
 };
 

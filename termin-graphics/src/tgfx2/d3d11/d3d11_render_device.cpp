@@ -737,6 +737,23 @@ BufferHandle D3D11RenderDevice::create_buffer(const BufferDesc& desc) {
         bd.ByteWidth = (bd.ByteWidth + 15u) & ~15u;
     }
 
+    if (has_flag(desc.usage, BufferUsage::Storage)) {
+        if (desc.structured_stride == 0) {
+            tc::Log::error(
+                "D3D11RenderDevice::create_buffer: storage buffers require structured_stride");
+            return {};
+        }
+        if ((desc.size % desc.structured_stride) != 0) {
+            tc::Log::error(
+                "D3D11RenderDevice::create_buffer: storage buffer size=%llu is not a multiple of structured_stride=%u",
+                static_cast<unsigned long long>(desc.size),
+                desc.structured_stride);
+            return {};
+        }
+        bd.MiscFlags |= D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+        bd.StructureByteStride = desc.structured_stride;
+    }
+
     D3D11Buffer out;
     out.desc = desc;
     HRESULT hr = device_->CreateBuffer(&bd, nullptr, &out.buffer);
@@ -744,6 +761,22 @@ BufferHandle D3D11RenderDevice::create_buffer(const BufferDesc& desc) {
         tc::Log::error("D3D11RenderDevice::create_buffer failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
         return {};
     }
+
+    if (has_flag(desc.usage, BufferUsage::Storage)) {
+        D3D11_SHADER_RESOURCE_VIEW_DESC sv{};
+        sv.Format = DXGI_FORMAT_UNKNOWN;
+        sv.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+        sv.Buffer.FirstElement = 0;
+        sv.Buffer.NumElements = static_cast<UINT>(desc.size / desc.structured_stride);
+        hr = device_->CreateShaderResourceView(out.buffer.Get(), &sv, &out.srv);
+        if (FAILED(hr)) {
+            tc::Log::error(
+                "D3D11RenderDevice::create_buffer storage SRV failed: HRESULT=0x%08X",
+                static_cast<unsigned>(hr));
+            return {};
+        }
+    }
+
     return {buffers_.add(std::move(out))};
 }
 
