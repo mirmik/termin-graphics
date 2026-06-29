@@ -336,6 +336,93 @@ if((TGFX2_ENABLE_D3D11 OR (TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC)) AND NO
     install(TARGETS termin_shaderc RUNTIME DESTINATION bin)
 endif()
 
+if(WIN32 AND TGFX2_ENABLE_D3D11 AND NOT ANDROID)
+    set(_TERMIN_BUILTIN_SHADER_ARTIFACTS_DEFAULT ON)
+else()
+    set(_TERMIN_BUILTIN_SHADER_ARTIFACTS_DEFAULT OFF)
+endif()
+option(TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS
+    "Compile built-in shader artifacts into the SDK share/termin tree"
+    ${_TERMIN_BUILTIN_SHADER_ARTIFACTS_DEFAULT})
+
+if(TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS)
+    if(NOT TARGET termin_shaderc)
+        message(FATAL_ERROR
+            "TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS=ON requires the termin_shaderc target. "
+            "Enable D3D11 or Vulkan+shaderc, or disable TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS.")
+    endif()
+    if(NOT Python_EXECUTABLE)
+        find_package(Python 3.10 COMPONENTS Interpreter REQUIRED)
+    endif()
+
+    set(_termin_builtin_shader_artifact_targets "")
+    if(WIN32 AND TGFX2_ENABLE_D3D11)
+        list(APPEND _termin_builtin_shader_artifact_targets d3d11)
+    endif()
+    if(NOT _termin_builtin_shader_artifact_targets)
+        message(FATAL_ERROR
+            "TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS=ON but no built-in shader artifact targets are enabled")
+    endif()
+
+    set(_termin_builtin_shader_slangc "")
+    if(DEFINED ENV{TERMIN_SLANGC} AND EXISTS "$ENV{TERMIN_SLANGC}")
+        set(_termin_builtin_shader_slangc "$ENV{TERMIN_SLANGC}")
+    elseif(WIN32 AND DEFINED ENV{VULKAN_SDK} AND EXISTS "$ENV{VULKAN_SDK}/Bin/slangc.exe")
+        set(_termin_builtin_shader_slangc "$ENV{VULKAN_SDK}/Bin/slangc.exe")
+    else()
+        find_program(_termin_builtin_shader_slangc NAMES slangc HINTS "$ENV{VULKAN_SDK}/Bin")
+    endif()
+    if(NOT _termin_builtin_shader_slangc)
+        message(FATAL_ERROR
+            "TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS=ON requires slangc. "
+            "Set TERMIN_SLANGC or add slangc to PATH.")
+    endif()
+
+    set(_termin_builtin_shader_artifact_args
+        "--shaderc" "$<TARGET_FILE:termin_shaderc>"
+        "--slangc" "${_termin_builtin_shader_slangc}"
+        "--source-dir" "${CMAKE_CURRENT_SOURCE_DIR}/resources/builtin_shaders"
+        "--output-root" "${CMAKE_BINARY_DIR}/share/termin"
+    )
+    foreach(_target IN LISTS _termin_builtin_shader_artifact_targets)
+        list(APPEND _termin_builtin_shader_artifact_args "--target" "${_target}")
+    endforeach()
+
+    if(WIN32)
+        set(_termin_builtin_shader_fxc "")
+        if(DEFINED ENV{TERMIN_FXC} AND EXISTS "$ENV{TERMIN_FXC}")
+            set(_termin_builtin_shader_fxc "$ENV{TERMIN_FXC}")
+        else()
+            find_program(_termin_builtin_shader_fxc NAMES fxc)
+        endif()
+        if(_termin_builtin_shader_fxc)
+            list(APPEND _termin_builtin_shader_artifact_args "--fxc" "${_termin_builtin_shader_fxc}")
+        endif()
+    endif()
+
+    set(_termin_builtin_shader_artifact_script
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/compile_builtin_shader_artifacts.py")
+    set(_termin_builtin_shader_artifact_stamp
+        "${CMAKE_BINARY_DIR}/share/termin/.builtin_shader_artifacts.stamp")
+    add_custom_command(
+        OUTPUT "${_termin_builtin_shader_artifact_stamp}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/share/termin"
+        COMMAND "${Python_EXECUTABLE}" "${_termin_builtin_shader_artifact_script}"
+                ${_termin_builtin_shader_artifact_args}
+        COMMAND ${CMAKE_COMMAND} -E touch "${_termin_builtin_shader_artifact_stamp}"
+        DEPENDS
+            termin_shaderc
+            "${_termin_builtin_shader_artifact_script}"
+            ${TERMIN_BUILTIN_SHADER_FILES}
+        COMMENT "Compiling built-in shader artifacts"
+        VERBATIM
+        COMMAND_EXPAND_LISTS
+    )
+    add_custom_target(termin_builtin_shader_artifacts ALL
+        DEPENDS "${_termin_builtin_shader_artifact_stamp}")
+    add_dependencies(termin_graphics2 termin_builtin_shader_artifacts)
+endif()
+
 # --- Python bindings ---
 option(TERMIN_BUILD_PYTHON "Build Python bindings" OFF)
 
@@ -600,6 +687,11 @@ install(DIRECTORY
 
 install(DIRECTORY resources/builtin_shaders
     DESTINATION ${CMAKE_INSTALL_DATADIR}/termin
+)
+
+install(DIRECTORY "${CMAKE_BINARY_DIR}/share/termin/shaders"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/termin
+    OPTIONAL
 )
 
 # --- CMake config for find_package ---
