@@ -5,6 +5,7 @@ GUARD_TEST_MAIN();
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 #include <termin/render/material_pipeline.hpp>
 #include <termin/render/material_pipeline_shader_assembler.hpp>
@@ -28,6 +29,26 @@ struct FragmentOutput { float4 color : SV_Target0; };
 FragmentOutput fs_main() {
     FragmentOutput output;
     output.color = float4(1.0, 1.0, 1.0, 1.0);
+    return output;
+}
+)";
+
+constexpr const char* kStandardNormalFragmentSource = R"(
+struct FragmentInput
+{
+    float4 screen_pos : SV_Position;
+    float3 world_pos : TEXCOORD0;
+    float3 normal_world : TEXCOORD1;
+};
+
+struct FragmentOutput { float4 color : SV_Target0; };
+
+[shader("fragment")]
+FragmentOutput fs_main(FragmentInput input)
+{
+    FragmentOutput output;
+    float3 n = normalize(input.normal_world);
+    output.color = float4(n * 0.5 + 0.5, 1.0);
     return output;
 }
 )";
@@ -95,6 +116,26 @@ termin::MaterialPipelineMaterialContract material_contract()
         termin::material_pipeline_standard_material_fragment_interface());
 }
 
+termin::MaterialPipelineMaterialContract material_contract_from_fragment(
+    const char* fragment_source,
+    const char* name)
+{
+    termin::TcShader shader = termin::TcShader::from_sources(
+        "",
+        fragment_source,
+        "",
+        name,
+        "",
+        TC_SHADER_LANGUAGE_SLANG,
+        TC_SHADER_ARTIFACT_REQUIRED,
+        "",
+        "fs_main");
+    REQUIRE(shader.is_valid());
+    return termin::material_pipeline_material_contract_from_shader(
+        shader,
+        termin::material_pipeline_standard_material_fragment_interface());
+}
+
 } // namespace
 
 TEST_CASE("material pipeline assembler attaches skinned shader contract") {
@@ -132,6 +173,37 @@ TEST_CASE("material pipeline assembler attaches skinned shader contract") {
     CHECK(tc_shader_find_resource_binding(
               result.shader.get(),
               TC_SHADER_RESOURCE_BONE_BLOCK) == nullptr);
+
+    tc_shader_destroy(result.shader.handle);
+    tc_shader_shutdown();
+}
+
+TEST_CASE("material pipeline assembler keeps skinned debug normal material semantics linkable") {
+    tc_shader_init();
+
+    termin::MaterialPipelineShaderAssemblyRequest request{};
+    request.material = material_contract_from_fragment(
+        kStandardNormalFragmentSource,
+        "assembler-standard-normal-fragment");
+    request.vertex_transform =
+        termin::material_pipeline_builtin_vertex_transform_contract(
+            termin::VertexTransformKind::SkinnedMesh,
+            termin::MaterialPipelinePassKind::Color);
+    request.pass = termin::material_pipeline_builtin_pass_contract(
+        termin::MaterialPipelinePassKind::Color);
+    request.shader_name = "assembler-skinned-standard-normal";
+    request.shader_uuid = "assembler-skinned-standard-normal";
+
+    termin::MaterialPipelineShaderAssemblyResult result =
+        termin::material_pipeline_assemble_shader(request);
+
+    REQUIRE(result.ok());
+    REQUIRE(result.shader.get() != nullptr);
+    const std::string vertex_source = result.shader.vertex_source();
+    const std::string fragment_source = result.shader.fragment_source();
+    CHECK(vertex_source.find("normal_world : TEXCOORD1") != std::string::npos);
+    CHECK(fragment_source.find("normal_world : TEXCOORD1") != std::string::npos);
+    CHECK(fragment_source.find("normal_world : NORMAL") == std::string::npos);
 
     tc_shader_destroy(result.shader.handle);
     tc_shader_shutdown();
