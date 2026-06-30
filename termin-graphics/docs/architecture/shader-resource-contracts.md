@@ -78,24 +78,27 @@ names"; it is "no ad hoc name guessing".
 A well-known resource name is allowed when it is documented as ABI and validated
 as ABI. It is not allowed to grow hidden fallback behavior in unrelated code.
 
-Current canonical ABI resources:
+Current fixed ABI resources:
 
 | Resource name | Scope | Kind | Producer / binder | Payload / role |
 |---|---|---|---|---|
 | `per_frame` | `frame` | constant buffer | frame/pass setup helpers | camera, projection, viewport, and frame constants |
 | `draw_data` | `draw` | constant buffer | draw submission / vertex-transform path | per-draw transform data |
 | `material` | `material` | constant buffer | material system | generated material parameter block |
-| material texture property name | `material` | texture | material system | material texture slots declared by material properties |
 | `bone_block` | `draw` | constant buffer | skinned vertex-transform path | skinning matrices / bone data |
 | `lighting` | `pass` | constant buffer | lighting/color pass | scene lights and ambient lighting data |
 | `shadow_block` | `pass` | constant buffer | lighting/color pass | shadow matrix and cascade metadata |
 | `shadow_maps` | `pass` | texture array | lighting/color pass | shadow map textures sampled by material shaders |
 
-These names are stable shader ABI, not backend placement policy. A shader that
-uses Termin's standard lighting include should declare `lighting`,
-`shadow_block`, and `shadow_maps` with `pass` scope. A shader that does not use
-lighting need not declare those resources, and the pass should skip those binds
-without guessing replacement names.
+These names are stable shader ABI, not backend placement policy. Material
+texture property names are different: `albedo_texture`, `normal_texture`, and
+other material-declared textures are shader/material contract resources with
+`material` scope, not fixed global ABI vocabulary entries.
+
+A shader that uses Termin's standard lighting include should declare
+`lighting`, `shadow_block`, and `shadow_maps` with `pass` scope. A shader that
+does not use lighting need not declare those resources, and the pass should
+skip those binds without guessing replacement names.
 
 Adding a new well-known ABI resource requires updating this table, documenting
 the payload layout, adding validation/tests, and deciding whether it belongs to

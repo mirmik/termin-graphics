@@ -1,5 +1,6 @@
 // tc_shader_registry.c - Shader registry with pool + hash table and variant support
 #include "tgfx/resources/tc_shader_registry.h"
+#include "tgfx/resources/tc_shader_abi.h"
 #include <tcbase/tc_pool.h>
 #include <tcbase/tc_resource.h>
 #include <tcbase/tc_resource_map.h>
@@ -76,6 +77,32 @@ static void append_compact_resource_binding(
     (*count)++;
 }
 
+static bool append_abi_compact_resource_binding(
+    tc_shader_resource_binding* bindings,
+    uint32_t* count,
+    uint32_t abi_resource_id,
+    uint32_t binding_index,
+    uint32_t size)
+{
+    const tc_shader_abi_resource_decl* abi =
+        tc_shader_abi_resource(abi_resource_id);
+    if (!abi) {
+        tc_log(TC_LOG_ERROR,
+               "shader registry: unknown shader ABI resource id %u",
+               abi_resource_id);
+        return false;
+    }
+    append_compact_resource_binding(
+        bindings,
+        count,
+        abi->canonical_name,
+        abi->kind,
+        abi->scope,
+        binding_index,
+        size);
+    return true;
+}
+
 static void infer_raw_glsl_engine_resource_layout(tc_shader* shader) {
     if (!shader ||
         shader->language != TC_SHADER_LANGUAGE_GLSL ||
@@ -95,22 +122,18 @@ static void infer_raw_glsl_engine_resource_layout(tc_shader* shader) {
     tc_shader_resource_binding bindings[2];
     uint32_t count = 0;
     if (uses_per_frame) {
-        append_compact_resource_binding(
+        append_abi_compact_resource_binding(
             bindings,
             &count,
-            TC_SHADER_RESOURCE_PER_FRAME,
-            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-            TC_SHADER_RESOURCE_SCOPE_FRAME,
+            TC_SHADER_ABI_RESOURCE_PER_FRAME,
             2,
             0);
     }
     if (uses_draw_data) {
-        append_compact_resource_binding(
+        append_abi_compact_resource_binding(
             bindings,
             &count,
-            TC_SHADER_RESOURCE_DRAW_DATA,
-            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-            TC_SHADER_RESOURCE_SCOPE_DRAW,
+            TC_SHADER_ABI_RESOURCE_DRAW_DATA,
             24,
             64);
     }

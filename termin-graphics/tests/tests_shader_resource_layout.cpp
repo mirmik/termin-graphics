@@ -444,14 +444,22 @@ void main() {
 
     const tc_shader_resource_binding* per_frame =
         tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_PER_FRAME);
+    const tc_shader_abi_resource_decl* per_frame_abi =
+        tc_shader_abi_resource(TC_SHADER_ABI_RESOURCE_PER_FRAME);
     REQUIRE(per_frame != nullptr);
+    REQUIRE(per_frame_abi != nullptr);
+    CHECK(tc_shader_abi_binding_matches(per_frame_abi, per_frame));
     CHECK_EQ(per_frame->kind, TC_SHADER_RESOURCE_CONSTANT_BUFFER);
     CHECK_EQ(per_frame->scope, TC_SHADER_RESOURCE_SCOPE_FRAME);
     CHECK_EQ(per_frame->binding, 2u);
 
     const tc_shader_resource_binding* draw =
         tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_DRAW_DATA);
+    const tc_shader_abi_resource_decl* draw_abi =
+        tc_shader_abi_resource(TC_SHADER_ABI_RESOURCE_DRAW_DATA);
     REQUIRE(draw != nullptr);
+    REQUIRE(draw_abi != nullptr);
+    CHECK(tc_shader_abi_binding_matches(draw_abi, draw));
     CHECK_EQ(draw->kind, TC_SHADER_RESOURCE_CONSTANT_BUFFER);
     CHECK_EQ(draw->scope, TC_SHADER_RESOURCE_SCOPE_DRAW);
     CHECK_EQ(draw->binding, 24u);
