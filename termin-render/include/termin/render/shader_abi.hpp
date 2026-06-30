@@ -27,7 +27,7 @@ struct ShaderAbiResourceDecl {
     std::string_view canonical_name;
     uint32_t kind;
     uint32_t scope;
-    std::span<const std::string_view> legacy_aliases;
+    std::span<const char* const> legacy_aliases;
 };
 
 RENDER_API const ShaderAbiResourceDecl& shader_abi_resource(

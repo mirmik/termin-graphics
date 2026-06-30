@@ -1,85 +1,50 @@
 #include "termin/render/shader_abi.hpp"
 
-#include <array>
+#include <cstdint>
 #include <cstdlib>
+#include <string>
 
 #include "tcbase/tc_log.hpp"
 
 extern "C" {
+#include "tgfx/resources/tc_shader_abi.h"
 #include "tgfx/resources/tc_shader_registry.h"
 }
 
 namespace termin {
 namespace {
 
-constexpr std::array<std::string_view, 1> kDrawDataAliases = {
-    "draw",
-};
+constexpr uint32_t shader_abi_c_id(ShaderAbiResourceId id) {
+    switch (id) {
+    case ShaderAbiResourceId::PerFrame:
+        return TC_SHADER_ABI_RESOURCE_PER_FRAME;
+    case ShaderAbiResourceId::DrawData:
+        return TC_SHADER_ABI_RESOURCE_DRAW_DATA;
+    case ShaderAbiResourceId::MaterialParams:
+        return TC_SHADER_ABI_RESOURCE_MATERIAL;
+    case ShaderAbiResourceId::BoneBlock:
+        return TC_SHADER_ABI_RESOURCE_BONE_BLOCK;
+    case ShaderAbiResourceId::Lighting:
+        return TC_SHADER_ABI_RESOURCE_LIGHTING;
+    case ShaderAbiResourceId::ShadowBlock:
+        return TC_SHADER_ABI_RESOURCE_SHADOW_BLOCK;
+    case ShaderAbiResourceId::ShadowMaps:
+        return TC_SHADER_ABI_RESOURCE_SHADOW_MAPS;
+    }
+    return UINT32_MAX;
+}
 
-constexpr std::array<std::string_view, 2> kLightingAliases = {
-    "lighting_ubo",
-    "LightingBlock",
-};
-
-constexpr std::array<std::string_view, 1> kShadowBlockAliases = {
-    "ShadowBlock",
-};
-
-constexpr std::array<std::string_view, 1> kShadowMapsAliases = {
-    "u_shadow_map",
-};
-
-constexpr std::array<ShaderAbiResourceDecl, 7> kShaderAbiResources = {{
-    {
-        ShaderAbiResourceId::PerFrame,
-        TC_SHADER_RESOURCE_PER_FRAME,
-        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-        TC_SHADER_RESOURCE_SCOPE_FRAME,
-        {},
-    },
-    {
-        ShaderAbiResourceId::DrawData,
-        TC_SHADER_RESOURCE_DRAW_DATA,
-        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-        TC_SHADER_RESOURCE_SCOPE_DRAW,
-        kDrawDataAliases,
-    },
-    {
-        ShaderAbiResourceId::MaterialParams,
-        TC_SHADER_RESOURCE_MATERIAL,
-        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-        TC_SHADER_RESOURCE_SCOPE_MATERIAL,
-        {},
-    },
-    {
-        ShaderAbiResourceId::BoneBlock,
-        TC_SHADER_RESOURCE_BONE_BLOCK,
-        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-        TC_SHADER_RESOURCE_SCOPE_DRAW,
-        {},
-    },
-    {
-        ShaderAbiResourceId::Lighting,
-        "lighting",
-        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-        TC_SHADER_RESOURCE_SCOPE_PASS,
-        kLightingAliases,
-    },
-    {
-        ShaderAbiResourceId::ShadowBlock,
-        "shadow_block",
-        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-        TC_SHADER_RESOURCE_SCOPE_PASS,
-        kShadowBlockAliases,
-    },
-    {
-        ShaderAbiResourceId::ShadowMaps,
-        "shadow_maps",
-        TC_SHADER_RESOURCE_TEXTURE,
-        TC_SHADER_RESOURCE_SCOPE_PASS,
-        kShadowMapsAliases,
-    },
-}};
+ShaderAbiResourceDecl make_cpp_decl(
+    const tc_shader_abi_resource_decl& decl)
+{
+    return {
+        static_cast<ShaderAbiResourceId>(decl.id),
+        decl.canonical_name,
+        decl.kind,
+        decl.scope,
+        std::span<const char* const>(decl.legacy_aliases, decl.legacy_alias_count),
+    };
+}
 
 const char* shader_debug_name(const tc_shader* shader) {
     if (!shader) {
@@ -97,10 +62,20 @@ const char* shader_debug_name(const tc_shader* shader) {
 } // namespace
 
 const ShaderAbiResourceDecl& shader_abi_resource(ShaderAbiResourceId id) {
-    for (const ShaderAbiResourceDecl& decl : kShaderAbiResources) {
-        if (decl.id == id) {
-            return decl;
-        }
+    static ShaderAbiResourceDecl resources[] = {
+        make_cpp_decl(*tc_shader_abi_resource(TC_SHADER_ABI_RESOURCE_PER_FRAME)),
+        make_cpp_decl(*tc_shader_abi_resource(TC_SHADER_ABI_RESOURCE_DRAW_DATA)),
+        make_cpp_decl(*tc_shader_abi_resource(TC_SHADER_ABI_RESOURCE_MATERIAL)),
+        make_cpp_decl(*tc_shader_abi_resource(TC_SHADER_ABI_RESOURCE_BONE_BLOCK)),
+        make_cpp_decl(*tc_shader_abi_resource(TC_SHADER_ABI_RESOURCE_LIGHTING)),
+        make_cpp_decl(*tc_shader_abi_resource(TC_SHADER_ABI_RESOURCE_SHADOW_BLOCK)),
+        make_cpp_decl(*tc_shader_abi_resource(TC_SHADER_ABI_RESOURCE_SHADOW_MAPS)),
+    };
+
+    const uint32_t c_id = shader_abi_c_id(id);
+    const tc_shader_abi_resource_decl* c_decl = tc_shader_abi_resource(c_id);
+    if (c_decl && c_decl->id < (sizeof(resources) / sizeof(resources[0]))) {
+        return resources[c_decl->id];
     }
     tc::Log::error(
         "[ShaderABI] unknown shader ABI resource id %u",
@@ -129,12 +104,12 @@ bool shader_abi_name_matches(
 }
 
 const ShaderAbiResourceDecl* find_shader_abi_resource(std::string_view name) {
-    for (const ShaderAbiResourceDecl& decl : kShaderAbiResources) {
-        if (shader_abi_name_matches(decl, name)) {
-            return &decl;
-        }
+    const tc_shader_abi_resource_decl* c_decl =
+        tc_shader_abi_find_resource(std::string(name).c_str());
+    if (!c_decl) {
+        return nullptr;
     }
-    return nullptr;
+    return &shader_abi_resource(static_cast<ShaderAbiResourceId>(c_decl->id));
 }
 
 bool shader_abi_binding_matches(
@@ -155,38 +130,28 @@ const tc_shader_resource_binding* find_shader_abi_resource_binding(
     }
     const ShaderAbiResourceDecl& decl = shader_abi_resource(id);
     const tc_shader_resource_binding* rb =
-        tc_shader_find_resource_binding(shader, decl.canonical_name.data());
+        tc_shader_abi_find_resource_binding(shader, shader_abi_c_id(id));
     if (rb) {
-        if (shader_abi_binding_matches(decl, *rb)) {
-            return rb;
-        }
-        tc::Log::error(
-            "[ShaderABI] shader '%s' declares ABI resource '%s' with "
-            "kind=%u scope=%u, expected kind=%u scope=%u",
-            shader_debug_name(shader),
-            rb->name,
-            rb->kind,
-            rb->scope,
-            decl.kind,
-            decl.scope);
-        return nullptr;
+        return rb;
     }
-    for (std::string_view alias : decl.legacy_aliases) {
-        rb = tc_shader_find_resource_binding(shader, alias.data());
-        if (rb) {
-            if (shader_abi_binding_matches(decl, *rb)) {
-                return rb;
-            }
+    const tc_shader_abi_resource_decl* c_decl =
+        tc_shader_abi_resource(shader_abi_c_id(id));
+    if (c_decl && tc_shader_abi_find_resource_binding(shader, c_decl->id) == nullptr) {
+        const tc_shader_resource_binding* invalid =
+            tc_shader_find_resource_binding(shader, c_decl->canonical_name);
+        for (uint32_t i = 0; !invalid && i < c_decl->legacy_alias_count; ++i) {
+            invalid = tc_shader_find_resource_binding(shader, c_decl->legacy_aliases[i]);
+        }
+        if (invalid) {
             tc::Log::error(
                 "[ShaderABI] shader '%s' declares ABI resource '%s' with "
                 "kind=%u scope=%u, expected kind=%u scope=%u",
                 shader_debug_name(shader),
-                rb->name,
-                rb->kind,
-                rb->scope,
+                invalid->name,
+                invalid->kind,
+                invalid->scope,
                 decl.kind,
                 decl.scope);
-            return nullptr;
         }
     }
     return nullptr;

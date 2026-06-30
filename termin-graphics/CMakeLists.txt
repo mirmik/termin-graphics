@@ -57,6 +57,7 @@ target_link_libraries(glad PUBLIC ${CMAKE_DL_LIBS})
 # --- termin_graphics ---
 set(TGFX_C_SOURCES
     src/tgfx_shader_preprocess.c
+    src/resources/tc_shader_abi.c
     src/resources/tc_shader_registry.c
     src/resources/tc_texture_registry.c
     src/resources/tc_material_registry.c
@@ -327,7 +328,7 @@ if((TGFX2_ENABLE_D3D11 OR (TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC)) AND NO
     target_compile_features(termin_shaderc PRIVATE cxx_std_20)
     target_include_directories(termin_shaderc PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_link_libraries(termin_shaderc PRIVATE termin_base)
+    target_link_libraries(termin_shaderc PRIVATE termin_base termin_graphics)
     if(TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC)
         target_compile_definitions(termin_shaderc PRIVATE TERMIN_SHADERC_HAS_SHADERC)
         target_include_directories(termin_shaderc PRIVATE ${Vulkan_INCLUDE_DIR})
