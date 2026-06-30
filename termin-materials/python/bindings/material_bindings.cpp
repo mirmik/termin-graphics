@@ -11,6 +11,7 @@
 #include <cstring>
 #include <initializer_list>
 extern "C" {
+#include <tgfx/resources/tc_shader_abi.h>
 #include <tgfx/resources/tc_shader.h>
 #include <tgfx/resources/tc_material_registry.h>
 }
@@ -138,6 +139,35 @@ void append_resource_binding(
     bindings.push_back(binding);
 }
 
+const tc_shader_abi_resource_decl& require_shader_abi_resource(
+    uint32_t id,
+    const char* context)
+{
+    const tc_shader_abi_resource_decl* abi = tc_shader_abi_resource(id);
+    if (!abi) {
+        tc::Log::error("%s references unknown shader ABI resource id %u", context, id);
+        throw std::runtime_error("Unknown shader ABI resource id");
+    }
+    return *abi;
+}
+
+void append_abi_resource_binding(
+    std::vector<tc_shader_resource_binding>& bindings,
+    uint32_t id,
+    uint32_t binding_index,
+    uint32_t size = 0)
+{
+    const tc_shader_abi_resource_decl& abi =
+        require_shader_abi_resource(id, "append_abi_resource_binding");
+    append_resource_binding(
+        bindings,
+        abi.canonical_name,
+        abi.kind,
+        abi.scope,
+        binding_index,
+        size);
+}
+
 bool contract_has_vertex_input(
     const std::vector<tc_shader_contract_vertex_input>& inputs,
     const char* semantic)
@@ -223,6 +253,27 @@ void append_resource_requirement(
     requirements.push_back(requirement);
 }
 
+void append_abi_resource_requirement(
+    std::vector<tc_shader_resource_requirement>& requirements,
+    uint32_t id,
+    uint32_t stage_mask,
+    uint32_t size = 0,
+    const tc_shader_resource_field* fields = nullptr,
+    uint32_t field_count = 0)
+{
+    const tc_shader_abi_resource_decl& abi =
+        require_shader_abi_resource(id, "append_abi_resource_requirement");
+    append_resource_requirement(
+        requirements,
+        abi.canonical_name,
+        abi.kind,
+        abi.scope,
+        stage_mask,
+        size,
+        fields,
+        field_count);
+}
+
 std::vector<tc_shader_resource_field> material_fields_from_layout(
     const MaterialUboLayout& layout)
 {
@@ -254,31 +305,25 @@ std::vector<tc_shader_resource_requirement> parser_shader_resource_requirements(
         shader_phase.material_texture_resources.size());
 
     if (!layout.empty()) {
-        append_resource_requirement(
+        append_abi_resource_requirement(
             requirements,
-            TC_SHADER_RESOURCE_MATERIAL,
-            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-            TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+            TC_SHADER_ABI_RESOURCE_MATERIAL,
             STAGE_ALL_GRAPHICS,
             layout.block_size,
             material_fields.empty() ? nullptr : material_fields.data(),
             static_cast<uint32_t>(material_fields.size()));
     }
     if (shader_phase.uses_engine_per_frame) {
-        append_resource_requirement(
+        append_abi_resource_requirement(
             requirements,
-            TC_SHADER_RESOURCE_PER_FRAME,
-            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-            TC_SHADER_RESOURCE_SCOPE_FRAME,
+            TC_SHADER_ABI_RESOURCE_PER_FRAME,
             STAGE_ALL_GRAPHICS);
     }
     if (shader_phase.uses_engine_draw_data) {
-            append_resource_requirement(
-                requirements,
-                TC_SHADER_RESOURCE_DRAW_DATA,
-                TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-                TC_SHADER_RESOURCE_SCOPE_DRAW,
-                STAGE_ALL_GRAPHICS,
+        append_abi_resource_requirement(
+            requirements,
+            TC_SHADER_ABI_RESOURCE_DRAW_DATA,
+            STAGE_ALL_GRAPHICS,
             64);
     }
     for (const std::string& texture_name : shader_phase.material_texture_resources) {
@@ -364,28 +409,22 @@ void apply_parser_resource_layout(
 
     if (language == TC_SHADER_LANGUAGE_GLSL) {
         if (!layout.empty()) {
-            append_resource_binding(
+            append_abi_resource_binding(
                 bindings,
-                TC_SHADER_RESOURCE_MATERIAL,
-                TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-                TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+                TC_SHADER_ABI_RESOURCE_MATERIAL,
                 GLSL_MATERIAL_BINDING,
                 layout.block_size);
         }
         if (shader_phase.uses_engine_per_frame) {
-            append_resource_binding(
+            append_abi_resource_binding(
                 bindings,
-                TC_SHADER_RESOURCE_PER_FRAME,
-                TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-                TC_SHADER_RESOURCE_SCOPE_FRAME,
+                TC_SHADER_ABI_RESOURCE_PER_FRAME,
                 GLSL_PER_FRAME_BINDING);
         }
         if (shader_phase.uses_engine_draw_data) {
-            append_resource_binding(
+            append_abi_resource_binding(
                 bindings,
-                TC_SHADER_RESOURCE_DRAW_DATA,
-                TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-                TC_SHADER_RESOURCE_SCOPE_DRAW,
+                TC_SHADER_ABI_RESOURCE_DRAW_DATA,
                 GLSL_DRAW_DATA_BINDING,
                 64);
         }
