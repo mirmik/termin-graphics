@@ -95,119 +95,205 @@ inline nb::object tc_pass_to_python(tc_pass* p) {
     return nb::none();
 }
 
+static bool lookup_py_method(nb::handle obj, const char* method_name, nb::object& out_method) {
+    if (!nb::hasattr(obj, method_name)) {
+        return false;
+    }
+    out_method = obj.attr(method_name);
+    return true;
+}
+
+static size_t export_cached_string_list(nb::handle cached, const char** out, size_t max) {
+    if (!out) {
+        return 0;
+    }
+
+    size_t count = 0;
+    for (nb::handle item : cached) {
+        if (count >= max) {
+            break;
+        }
+        out[count] = PyUnicode_AsUTF8(item.ptr());
+        count++;
+    }
+    return count;
+}
+
+static size_t cache_string_iterable(
+    nb::handle py_pass,
+    nb::handle iterable,
+    const char* cache_attr,
+    const char** out,
+    size_t max
+) {
+    nb::list cached;
+    size_t count = 0;
+    for (nb::handle item : iterable) {
+        if (count >= max) {
+            break;
+        }
+        cached.append(nb::cast<nb::str>(item));
+        count++;
+    }
+
+    py_pass.attr(cache_attr) = cached;
+    return export_cached_string_list(cached, out, max);
+}
+
+static size_t cache_string_pairs(
+    nb::handle py_pass,
+    nb::handle iterable,
+    const char* cache_attr,
+    const char** out,
+    size_t max_pairs
+) {
+    if (!out) {
+        return 0;
+    }
+
+    nb::list cached;
+    size_t pair_count = 0;
+    for (nb::handle item : iterable) {
+        if (pair_count >= max_pairs) {
+            break;
+        }
+        nb::tuple pair = nb::cast<nb::tuple>(item);
+        cached.append(nb::cast<nb::str>(pair[0]));
+        cached.append(nb::cast<nb::str>(pair[1]));
+        pair_count++;
+    }
+
+    py_pass.attr(cache_attr) = cached;
+    export_cached_string_list(cached, out, pair_count * 2);
+    return pair_count;
+}
+
+static size_t py_pass_string_callback(
+    void* wrapper,
+    const char* method_name,
+    const char* cache_attr,
+    const char* log_name,
+    const char** out,
+    size_t max
+) {
+    nb::gil_scoped_acquire gil;
+    try {
+        nb::object py_pass = nb::borrow<nb::object>(static_cast<PyObject*>(wrapper));
+        nb::object method;
+        if (!lookup_py_method(py_pass, method_name, method)) {
+            return 0;
+        }
+
+        nb::object values = method();
+        return cache_string_iterable(py_pass, values, cache_attr, out, max);
+    } catch (const std::exception& e) {
+        tc_log(TC_LOG_ERROR, "[tc_pass] Python %s failed: %s", log_name, e.what());
+        return 0;
+    }
+}
+
+static void py_pass_void_callback(void* wrapper, const char* method_name, const char* log_name) {
+    nb::gil_scoped_acquire gil;
+    try {
+        nb::object py_pass = nb::borrow<nb::object>(static_cast<PyObject*>(wrapper));
+        nb::object method;
+        if (!lookup_py_method(py_pass, method_name, method)) {
+            return;
+        }
+        method();
+    } catch (const std::exception& e) {
+        tc_log(TC_LOG_ERROR, "[tc_pass] Python %s failed: %s", log_name, e.what());
+    }
+}
+
+static bool get_present_py_attr(nb::handle obj, const char* attr_name, nb::object& out_value) {
+    if (!nb::hasattr(obj, attr_name)) {
+        return false;
+    }
+    out_value = obj.attr(attr_name);
+    return true;
+}
+
+static bool get_non_none_py_attr(nb::handle obj, const char* attr_name, nb::object& out_value) {
+    if (!get_present_py_attr(obj, attr_name, out_value)) {
+        return false;
+    }
+    return !out_value.is_none();
+}
+
+static void apply_resource_spec_attrs(nb::handle py_spec, ResourceSpec& out_spec) {
+    nb::object value;
+
+    out_spec = ResourceSpec();
+    out_spec.resource = nb::cast<std::string>(py_spec.attr("resource"));
+
+    if (get_non_none_py_attr(py_spec, "resource_type", value)) {
+        out_spec.resource_type = nb::cast<std::string>(value);
+    } else {
+        out_spec.resource_type = "fbo";
+    }
+
+    if (get_non_none_py_attr(py_spec, "size", value)) {
+        nb::tuple size = nb::cast<nb::tuple>(value);
+        out_spec.size = std::make_pair(nb::cast<int>(size[0]), nb::cast<int>(size[1]));
+    }
+
+    if (get_present_py_attr(py_spec, "samples", value)) {
+        out_spec.samples = nb::cast<int>(value);
+    }
+
+    if (get_non_none_py_attr(py_spec, "clear_color", value)) {
+        nb::tuple color = nb::cast<nb::tuple>(value);
+        out_spec.clear_color = std::array<double, 4>{
+            nb::cast<double>(color[0]), nb::cast<double>(color[1]),
+            nb::cast<double>(color[2]), nb::cast<double>(color[3])
+        };
+    }
+
+    if (get_non_none_py_attr(py_spec, "clear_depth", value)) {
+        out_spec.clear_depth = nb::cast<float>(value);
+    }
+
+    if (get_non_none_py_attr(py_spec, "format", value)) {
+        out_spec.format = nb::cast<std::string>(value);
+    }
+}
+
 static void py_pass_execute(void* wrapper, void* ctx) {
     nb::gil_scoped_acquire gil;
     try {
         nb::object py_pass = nb::borrow<nb::object>(static_cast<PyObject*>(wrapper));
-        ExecuteContext* exec_ctx = static_cast<ExecuteContext*>(ctx);
-        if (nb::hasattr(py_pass, "execute")) {
-            py_pass.attr("execute")(nb::cast(exec_ctx, nb::rv_policy::reference));
+        nb::object method;
+        if (!lookup_py_method(py_pass, "execute", method)) {
+            return;
         }
+
+        ExecuteContext* exec_ctx = static_cast<ExecuteContext*>(ctx);
+        method(nb::cast(exec_ctx, nb::rv_policy::reference));
     } catch (const std::exception& e) {
         tc_log(TC_LOG_ERROR, "[tc_pass] Python execute failed: %s", e.what());
     }
 }
 
 static size_t py_pass_get_reads(void* wrapper, const char** out, size_t max) {
-    nb::gil_scoped_acquire gil;
-    try {
-        nb::object py_pass = nb::borrow<nb::object>(static_cast<PyObject*>(wrapper));
-        if (!nb::hasattr(py_pass, "compute_reads")) {
-            return 0;
-        }
-
-        nb::object reads = py_pass.attr("compute_reads")();
-        size_t count = 0;
-        nb::list cached;
-        for (auto item : reads) {
-            if (count >= max) {
-                break;
-            }
-            nb::str s = nb::cast<nb::str>(item);
-            cached.append(s);
-            count++;
-        }
-        py_pass.attr("_cached_tc_reads") = cached;
-
-        count = 0;
-        for (auto item : cached) {
-            if (count >= max) {
-                break;
-            }
-            out[count] = PyUnicode_AsUTF8(item.ptr());
-            count++;
-        }
-        return count;
-    } catch (const std::exception& e) {
-        tc_log(TC_LOG_ERROR, "[tc_pass] Python get_reads failed: %s", e.what());
-        return 0;
-    }
+    return py_pass_string_callback(wrapper, "compute_reads", "_cached_tc_reads", "get_reads", out, max);
 }
 
 static size_t py_pass_get_writes(void* wrapper, const char** out, size_t max) {
-    nb::gil_scoped_acquire gil;
-    try {
-        nb::object py_pass = nb::borrow<nb::object>(static_cast<PyObject*>(wrapper));
-        if (!nb::hasattr(py_pass, "compute_writes")) {
-            return 0;
-        }
-
-        nb::object writes = py_pass.attr("compute_writes")();
-        size_t count = 0;
-        nb::list cached;
-        for (auto item : writes) {
-            if (count >= max) {
-                break;
-            }
-            nb::str s = nb::cast<nb::str>(item);
-            cached.append(s);
-            count++;
-        }
-        py_pass.attr("_cached_tc_writes") = cached;
-
-        count = 0;
-        for (auto item : cached) {
-            if (count >= max) {
-                break;
-            }
-            out[count] = PyUnicode_AsUTF8(item.ptr());
-            count++;
-        }
-        return count;
-    } catch (const std::exception& e) {
-        tc_log(TC_LOG_ERROR, "[tc_pass] Python get_writes failed: %s", e.what());
-        return 0;
-    }
+    return py_pass_string_callback(wrapper, "compute_writes", "_cached_tc_writes", "get_writes", out, max);
 }
 
 static size_t py_pass_get_inplace_aliases(void* wrapper, const char** out, size_t max) {
     nb::gil_scoped_acquire gil;
     try {
         nb::object py_pass = nb::borrow<nb::object>(static_cast<PyObject*>(wrapper));
-        if (!nb::hasattr(py_pass, "get_inplace_aliases")) {
+        nb::object method;
+        if (!lookup_py_method(py_pass, "get_inplace_aliases", method)) {
             return 0;
         }
 
-        nb::object aliases = py_pass.attr("get_inplace_aliases")();
-        size_t pair_count = 0;
-        nb::list cached;
-        for (auto item : aliases) {
-            if (pair_count >= max) {
-                break;
-            }
-            nb::tuple pair = nb::cast<nb::tuple>(item);
-            cached.append(pair[0]);
-            cached.append(pair[1]);
-            pair_count++;
-        }
-        py_pass.attr("_cached_tc_aliases") = cached;
-
-        size_t i = 0;
-        for (auto item : cached) {
-            out[i] = PyUnicode_AsUTF8(item.ptr());
-            i++;
-        }
-        return pair_count;
+        nb::object aliases = method();
+        return cache_string_pairs(py_pass, aliases, "_cached_tc_aliases", out, max);
     } catch (const std::exception& e) {
         tc_log(TC_LOG_ERROR, "[tc_pass] Python get_inplace_aliases failed: %s", e.what());
         return 0;
@@ -218,11 +304,12 @@ static size_t py_pass_get_resource_specs(void* wrapper, void* out, size_t max) {
     nb::gil_scoped_acquire gil;
     try {
         nb::object py_pass = nb::borrow<nb::object>(static_cast<PyObject*>(wrapper));
-        if (!nb::hasattr(py_pass, "get_resource_specs")) {
+        nb::object method;
+        if (!lookup_py_method(py_pass, "get_resource_specs", method)) {
             return 0;
         }
 
-        nb::object specs = py_pass.attr("get_resource_specs")();
+        nb::object specs = method();
         ResourceSpec* out_specs = static_cast<ResourceSpec*>(out);
         size_t count = 0;
 
@@ -231,40 +318,7 @@ static size_t py_pass_get_resource_specs(void* wrapper, void* out, size_t max) {
                 break;
             }
 
-            nb::object spec = nb::borrow<nb::object>(item);
-            ResourceSpec& s = out_specs[count];
-            s = ResourceSpec();
-            s.resource = nb::cast<std::string>(spec.attr("resource"));
-
-            if (nb::hasattr(spec, "resource_type") && !spec.attr("resource_type").is_none()) {
-                s.resource_type = nb::cast<std::string>(spec.attr("resource_type"));
-            } else {
-                s.resource_type = "fbo";
-            }
-
-            if (nb::hasattr(spec, "size") && !spec.attr("size").is_none()) {
-                nb::tuple sz = nb::cast<nb::tuple>(spec.attr("size"));
-                s.size = std::make_pair(nb::cast<int>(sz[0]), nb::cast<int>(sz[1]));
-            }
-
-            if (nb::hasattr(spec, "samples")) {
-                s.samples = nb::cast<int>(spec.attr("samples"));
-            }
-
-            if (nb::hasattr(spec, "clear_color") && !spec.attr("clear_color").is_none()) {
-                nb::tuple cc = nb::cast<nb::tuple>(spec.attr("clear_color"));
-                s.clear_color = std::array<double, 4>{
-                    nb::cast<double>(cc[0]), nb::cast<double>(cc[1]),
-                    nb::cast<double>(cc[2]), nb::cast<double>(cc[3])
-                };
-            }
-            if (nb::hasattr(spec, "clear_depth") && !spec.attr("clear_depth").is_none()) {
-                s.clear_depth = nb::cast<float>(spec.attr("clear_depth"));
-            }
-            if (nb::hasattr(spec, "format") && !spec.attr("format").is_none()) {
-                s.format = nb::cast<std::string>(spec.attr("format"));
-            }
-
+            apply_resource_spec_attrs(nb::borrow<nb::object>(item), out_specs[count]);
             count++;
         }
 
@@ -276,51 +330,11 @@ static size_t py_pass_get_resource_specs(void* wrapper, void* out, size_t max) {
 }
 
 static size_t py_pass_get_internal_symbols(void* wrapper, const char** out, size_t max) {
-    nb::gil_scoped_acquire gil;
-    try {
-        nb::object py_pass = nb::borrow<nb::object>(static_cast<PyObject*>(wrapper));
-        if (!nb::hasattr(py_pass, "get_internal_symbols")) {
-            return 0;
-        }
-
-        nb::object symbols = py_pass.attr("get_internal_symbols")();
-        size_t count = 0;
-        nb::list cached;
-        for (auto item : symbols) {
-            if (count >= max) {
-                break;
-            }
-            nb::str s = nb::cast<nb::str>(item);
-            cached.append(s);
-            count++;
-        }
-        py_pass.attr("_cached_tc_symbols") = cached;
-
-        count = 0;
-        for (auto item : cached) {
-            if (count >= max) {
-                break;
-            }
-            out[count] = PyUnicode_AsUTF8(item.ptr());
-            count++;
-        }
-        return count;
-    } catch (const std::exception& e) {
-        tc_log(TC_LOG_ERROR, "[tc_pass] Python get_internal_symbols failed: %s", e.what());
-        return 0;
-    }
+    return py_pass_string_callback(wrapper, "get_internal_symbols", "_cached_tc_symbols", "get_internal_symbols", out, max);
 }
 
 static void py_pass_destroy(void* wrapper) {
-    nb::gil_scoped_acquire gil;
-    try {
-        nb::object py_pass = nb::borrow<nb::object>(static_cast<PyObject*>(wrapper));
-        if (nb::hasattr(py_pass, "destroy")) {
-            py_pass.attr("destroy")();
-        }
-    } catch (const std::exception& e) {
-        tc_log(TC_LOG_ERROR, "[tc_pass] Python destroy failed: %s", e.what());
-    }
+    py_pass_void_callback(wrapper, "destroy", "destroy");
 }
 
 static tc_external_pass_callbacks g_py_pass_callbacks = {
