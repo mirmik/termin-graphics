@@ -1,6 +1,5 @@
 #include "tgfx2/world_tube_line_renderer.hpp"
 
-#include "tgfx2/builtin_shader_sources.hpp"
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -8,19 +7,16 @@
 #include <cmath>
 #include <cstring>
 #include <functional>
-#include <limits>
 #include <vector>
 
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/i_render_device.hpp"
+#include "line_renderer_common.hpp"
 #include "tgfx2/render_context.hpp"
-#include "tgfx2/tc_shader_bridge.hpp"
 
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
 }
-
-#include <tcbase/tc_log.hpp>
 
 namespace tgfx {
 namespace {
@@ -65,71 +61,6 @@ constexpr const char* WORLD_TUBE_LINE_CAP_SHADER_UUID =
 constexpr const char* WORLD_TUBE_LINE_LIT_SHADER_UUID =
     "termin-engine-world-tube-line-lit";
 constexpr const char* TUBE_LINE_DRAW_RESOURCE = "tube_line_draw";
-
-bool ensure_shader_pair(
-    IRenderDevice& device,
-    tc_shader_handle& registry_handle,
-    const char* uuid,
-    const char* label,
-    ShaderHandle& vertex_shader,
-    ShaderHandle& fragment_shader)
-{
-    if (vertex_shader && fragment_shader) {
-        return true;
-    }
-
-    if (tc_shader_handle_is_invalid(registry_handle)) {
-        registry_handle = register_builtin_shader_from_catalog(uuid);
-    }
-    if (tc_shader_handle_is_invalid(registry_handle)) {
-        tc::Log::error("[WorldTubeLineRenderer] failed to register %s shader", label);
-        return false;
-    }
-
-    tc_shader* raw = tc_shader_get(registry_handle);
-    if (!raw || !termin::tc_shader_ensure_tgfx2(raw, &device, &vertex_shader, &fragment_shader)) {
-        tc::Log::error("[WorldTubeLineRenderer] failed to create %s shader", label);
-        vertex_shader = {};
-        fragment_shader = {};
-        return false;
-    }
-    return true;
-}
-
-bool ensure_fragment_shader(
-    IRenderDevice& device,
-    tc_shader_handle& registry_handle,
-    const char* uuid,
-    const char* label,
-    ShaderHandle& fragment_shader)
-{
-    if (fragment_shader) {
-        return true;
-    }
-
-    if (tc_shader_handle_is_invalid(registry_handle)) {
-        registry_handle = register_builtin_shader_from_catalog(uuid);
-    }
-    if (tc_shader_handle_is_invalid(registry_handle)) {
-        tc::Log::error("[WorldTubeLineRenderer] failed to register %s shader", label);
-        return false;
-    }
-
-    tc_shader* raw = tc_shader_get(registry_handle);
-    if (!raw || !termin::tc_shader_ensure_tgfx2(raw, &device, nullptr, &fragment_shader)) {
-        tc::Log::error("[WorldTubeLineRenderer] failed to create %s shader", label);
-        fragment_shader = {};
-        return false;
-    }
-    return true;
-}
-
-bool same_point(LinePoint3 a, LinePoint3 b) {
-    const float dx = a.x - b.x;
-    const float dy = a.y - b.y;
-    const float dz = a.z - b.z;
-    return dx * dx + dy * dy + dz * dz <= 1.0e-12f;
-}
 
 std::vector<TubeCornerVertex> build_body_template(int sides) {
     sides = std::clamp(sides, 3, 32);
@@ -176,41 +107,6 @@ std::vector<TubeCapCornerVertex> build_cap_template(int sides) {
     return vertices;
 }
 
-struct UploadedInstanceStream {
-    BufferHandle buffer;
-    uint64_t offset = 0;
-};
-
-UploadedInstanceStream upload_instance_stream(RenderContext2& ctx,
-                                              const void* data,
-                                              size_t byte_size) {
-    UploadedInstanceStream stream;
-    if (!data || byte_size == 0) {
-        return stream;
-    }
-
-    IRenderDevice& device = ctx.device();
-    if (byte_size <= std::numeric_limits<uint32_t>::max()) {
-        const uint64_t ring_offset = device.transient_vertex_write(
-            data, static_cast<uint32_t>(byte_size));
-        if (ring_offset != UINT64_MAX) {
-            stream.buffer = device.transient_vertex_buffer();
-            stream.offset = ring_offset;
-            return stream;
-        }
-    }
-
-    BufferDesc desc;
-    desc.size = byte_size;
-    desc.usage = BufferUsage::Vertex;
-    stream.buffer = device.create_buffer(desc);
-    device.upload_buffer(
-        stream.buffer,
-        {reinterpret_cast<const uint8_t*>(data), byte_size});
-    ctx.defer_destroy(stream.buffer);
-    return stream;
-}
-
 void bind_tube_line_shader(RenderContext2& ctx,
                            const tc_shader* shader_layout,
                            ShaderHandle vertex_shader,
@@ -251,46 +147,43 @@ void WorldTubeLineRenderer::ensure_resources(RenderContext2& ctx, int sides) {
     if (!body_corner_vbo_) {
         std::vector<TubeCornerVertex> vertices = build_body_template(sides);
         body_corner_count_ = static_cast<uint32_t>(vertices.size());
-        BufferDesc desc;
-        desc.size = sizeof(TubeCornerVertex) * vertices.size();
-        desc.usage = BufferUsage::Vertex;
-        body_corner_vbo_ = device.create_buffer(desc);
-        device.upload_buffer(
-            body_corner_vbo_,
-            {reinterpret_cast<const uint8_t*>(vertices.data()), desc.size});
+        body_corner_vbo_ = line_renderer::create_static_vertex_buffer(
+            device,
+            vertices.data(),
+            sizeof(TubeCornerVertex) * vertices.size());
     }
 
     if (!cap_corner_vbo_) {
         std::vector<TubeCapCornerVertex> vertices = build_cap_template(sides);
         cap_corner_count_ = static_cast<uint32_t>(vertices.size());
-        BufferDesc desc;
-        desc.size = sizeof(TubeCapCornerVertex) * vertices.size();
-        desc.usage = BufferUsage::Vertex;
-        cap_corner_vbo_ = device.create_buffer(desc);
-        device.upload_buffer(
-            cap_corner_vbo_,
-            {reinterpret_cast<const uint8_t*>(vertices.data()), desc.size});
+        cap_corner_vbo_ = line_renderer::create_static_vertex_buffer(
+            device,
+            vertices.data(),
+            sizeof(TubeCapCornerVertex) * vertices.size());
     }
 
-    ensure_shader_pair(
+    line_renderer::ensure_shader_pair(
         device,
         body_shader_handle_,
         WORLD_TUBE_LINE_SHADER_UUID,
         "body",
+        "WorldTubeLineRenderer",
         body_vertex_shader_,
         body_fragment_shader_);
-    ensure_shader_pair(
+    line_renderer::ensure_shader_pair(
         device,
         cap_shader_handle_,
         WORLD_TUBE_LINE_CAP_SHADER_UUID,
         "cap",
+        "WorldTubeLineRenderer",
         cap_vertex_shader_,
         cap_fragment_shader_);
-    ensure_fragment_shader(
+    line_renderer::ensure_fragment_shader(
         device,
         lit_shader_handle_,
         WORLD_TUBE_LINE_LIT_SHADER_UUID,
         "lit fragment",
+        "WorldTubeLineRenderer",
         lit_fragment_shader_);
 }
 
@@ -303,13 +196,7 @@ void WorldTubeLineRenderer::draw_polyline(
         return;
     }
 
-    std::vector<LinePoint3> clean_points;
-    clean_points.reserve(points.size());
-    for (LinePoint3 point : points) {
-        if (clean_points.empty() || !same_point(clean_points.back(), point)) {
-            clean_points.push_back(point);
-        }
-    }
+    std::vector<LinePoint3> clean_points = line_renderer::clean_points(points);
 
     if (clean_points.size() < 2) {
         return;
@@ -321,7 +208,7 @@ void WorldTubeLineRenderer::draw_polyline(
     for (size_t i = 1; i < clean_points.size(); ++i) {
         const LinePoint3 p0 = clean_points[i - 1];
         const LinePoint3 p1 = clean_points[i];
-        if (same_point(p0, p1)) {
+        if (line_renderer::same_point(p0, p1)) {
             continue;
         }
 
@@ -343,7 +230,7 @@ void WorldTubeLineRenderer::draw_polyline(
 
     const LinePoint3 first = clean_points.front();
     const LinePoint3 second = clean_points[1];
-    if (!same_point(first, second)) {
+    if (!line_renderer::same_point(first, second)) {
         TubeCapInstance cap{};
         cap.center[0] = first.x;
         cap.center[1] = first.y;
@@ -358,7 +245,7 @@ void WorldTubeLineRenderer::draw_polyline(
 
     const LinePoint3 last = clean_points.back();
     const LinePoint3 prev = clean_points[clean_points.size() - 2];
-    if (!same_point(last, prev)) {
+    if (!line_renderer::same_point(last, prev)) {
         TubeCapInstance cap{};
         cap.center[0] = last.x;
         cap.center[1] = last.y;
@@ -387,7 +274,7 @@ void WorldTubeLineRenderer::draw_polyline(
         return;
     }
 
-    const UploadedInstanceStream segment_stream = upload_instance_stream(
+    const line_renderer::UploadedInstanceStream segment_stream = line_renderer::upload_instance_stream(
         ctx,
         segments.data(),
         segments.size() * sizeof(TubeSegmentInstance));
@@ -444,7 +331,7 @@ void WorldTubeLineRenderer::draw_polyline(
         return;
     }
 
-    const UploadedInstanceStream cap_stream = upload_instance_stream(
+    const line_renderer::UploadedInstanceStream cap_stream = line_renderer::upload_instance_stream(
         ctx,
         caps.data(),
         caps.size() * sizeof(TubeCapInstance));

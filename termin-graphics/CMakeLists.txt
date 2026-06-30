@@ -109,6 +109,7 @@ set(TGFX2_SOURCES
     src/tgfx2/engine_shader_catalog.cpp
     src/tgfx2/font_atlas.cpp
     src/tgfx2/immediate_renderer.cpp
+    src/tgfx2/line_renderer_common.cpp
     src/tgfx2/line_mesh_builder.cpp
     src/tgfx2/screen_space_line_renderer.cpp
     src/tgfx2/world_space_line_renderer.cpp
@@ -731,4 +732,3 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/termin_graphicsConfigVersion.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/termin_graphics
 )
-

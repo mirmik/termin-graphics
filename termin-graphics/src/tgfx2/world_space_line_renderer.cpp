@@ -1,25 +1,21 @@
 #include "tgfx2/world_space_line_renderer.hpp"
 
-#include "tgfx2/builtin_shader_sources.hpp"
 #include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cmath>
 #include <cstring>
-#include <limits>
 #include <vector>
 
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/i_render_device.hpp"
+#include "line_renderer_common.hpp"
 #include "tgfx2/render_context.hpp"
-#include "tgfx2/tc_shader_bridge.hpp"
 
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
 }
-
-#include <tcbase/tc_log.hpp>
 
 namespace tgfx {
 namespace {
@@ -95,71 +91,6 @@ constexpr const char* WORLD_LINE_ROUND_JOIN_SHADER_UUID =
 constexpr const char* WORLD_LINE_LIT_SHADER_UUID = "termin-engine-world-line-lit";
 constexpr const char* WORLD_LINE_DRAW_RESOURCE = "world_line_draw";
 
-bool ensure_shader_pair(
-    IRenderDevice& device,
-    tc_shader_handle& registry_handle,
-    const char* uuid,
-    const char* label,
-    ShaderHandle& vertex_shader,
-    ShaderHandle& fragment_shader)
-{
-    if (vertex_shader && fragment_shader) {
-        return true;
-    }
-
-    if (tc_shader_handle_is_invalid(registry_handle)) {
-        registry_handle = register_builtin_shader_from_catalog(uuid);
-    }
-    if (tc_shader_handle_is_invalid(registry_handle)) {
-        tc::Log::error("[WorldSpaceLineRenderer] failed to register %s shader", label);
-        return false;
-    }
-
-    tc_shader* raw = tc_shader_get(registry_handle);
-    if (!raw || !termin::tc_shader_ensure_tgfx2(raw, &device, &vertex_shader, &fragment_shader)) {
-        tc::Log::error("[WorldSpaceLineRenderer] failed to create %s shader", label);
-        vertex_shader = {};
-        fragment_shader = {};
-        return false;
-    }
-    return true;
-}
-
-bool ensure_fragment_shader(
-    IRenderDevice& device,
-    tc_shader_handle& registry_handle,
-    const char* uuid,
-    const char* label,
-    ShaderHandle& fragment_shader)
-{
-    if (fragment_shader) {
-        return true;
-    }
-
-    if (tc_shader_handle_is_invalid(registry_handle)) {
-        registry_handle = register_builtin_shader_from_catalog(uuid);
-    }
-    if (tc_shader_handle_is_invalid(registry_handle)) {
-        tc::Log::error("[WorldSpaceLineRenderer] failed to register %s shader", label);
-        return false;
-    }
-
-    tc_shader* raw = tc_shader_get(registry_handle);
-    if (!raw || !termin::tc_shader_ensure_tgfx2(raw, &device, nullptr, &fragment_shader)) {
-        tc::Log::error("[WorldSpaceLineRenderer] failed to create %s shader", label);
-        fragment_shader = {};
-        return false;
-    }
-    return true;
-}
-
-bool same_point(LinePoint3 a, LinePoint3 b) {
-    const float dx = a.x - b.x;
-    const float dy = a.y - b.y;
-    const float dz = a.z - b.z;
-    return dx * dx + dy * dy + dz * dz <= 1.0e-12f;
-}
-
 std::vector<CapCornerVertex> build_round_cap_template(int round_segments) {
     round_segments = std::clamp(round_segments, 4, 64);
     std::vector<CapCornerVertex> vertices;
@@ -204,41 +135,6 @@ std::vector<CapCornerVertex> build_round_join_template(int round_segments) {
     return vertices;
 }
 
-struct UploadedInstanceStream {
-    BufferHandle buffer;
-    uint64_t offset = 0;
-};
-
-UploadedInstanceStream upload_instance_stream(RenderContext2& ctx,
-                                              const void* data,
-                                              size_t byte_size) {
-    UploadedInstanceStream stream;
-    if (!data || byte_size == 0) {
-        return stream;
-    }
-
-    IRenderDevice& device = ctx.device();
-    if (byte_size <= std::numeric_limits<uint32_t>::max()) {
-        const uint64_t ring_offset = device.transient_vertex_write(
-            data, static_cast<uint32_t>(byte_size));
-        if (ring_offset != UINT64_MAX) {
-            stream.buffer = device.transient_vertex_buffer();
-            stream.offset = ring_offset;
-            return stream;
-        }
-    }
-
-    BufferDesc desc;
-    desc.size = byte_size;
-    desc.usage = BufferUsage::Vertex;
-    stream.buffer = device.create_buffer(desc);
-    device.upload_buffer(
-        stream.buffer,
-        {reinterpret_cast<const uint8_t*>(data), byte_size});
-    ctx.defer_destroy(stream.buffer);
-    return stream;
-}
-
 void bind_world_line_shader(RenderContext2& ctx,
                             tc_shader_handle shader_handle,
                             ShaderHandle vertex_shader,
@@ -258,58 +154,57 @@ void WorldSpaceLineRenderer::ensure_resources(RenderContext2& ctx) {
     IRenderDevice& device = ctx.device();
 
     if (!corner_vbo_) {
-        BufferDesc desc;
-        desc.size = sizeof(CornerVertex) * kSegmentCorners.size();
-        desc.usage = BufferUsage::Vertex;
-        corner_vbo_ = device.create_buffer(desc);
-        device.upload_buffer(
-            corner_vbo_,
-            {reinterpret_cast<const uint8_t*>(kSegmentCorners.data()), desc.size});
+        corner_vbo_ = line_renderer::create_static_vertex_buffer(
+            device,
+            kSegmentCorners.data(),
+            sizeof(CornerVertex) * kSegmentCorners.size());
     }
 
     if (!join_corner_vbo_) {
-        BufferDesc desc;
-        desc.size = sizeof(JoinCornerVertex) * kBevelJoinCorners.size();
-        desc.usage = BufferUsage::Vertex;
-        join_corner_vbo_ = device.create_buffer(desc);
-        device.upload_buffer(
-            join_corner_vbo_,
-            {reinterpret_cast<const uint8_t*>(kBevelJoinCorners.data()), desc.size});
+        join_corner_vbo_ = line_renderer::create_static_vertex_buffer(
+            device,
+            kBevelJoinCorners.data(),
+            sizeof(JoinCornerVertex) * kBevelJoinCorners.size());
     }
 
-    ensure_shader_pair(
+    line_renderer::ensure_shader_pair(
         device,
         shader_handle_,
         WORLD_LINE_SHADER_UUID,
         "segment",
+        "WorldSpaceLineRenderer",
         vertex_shader_,
         fragment_shader_);
-    ensure_shader_pair(
+    line_renderer::ensure_shader_pair(
         device,
         cap_shader_handle_,
         WORLD_LINE_CAP_SHADER_UUID,
         "cap",
+        "WorldSpaceLineRenderer",
         cap_vertex_shader_,
         cap_fragment_shader_);
-    ensure_shader_pair(
+    line_renderer::ensure_shader_pair(
         device,
         join_shader_handle_,
         WORLD_LINE_JOIN_SHADER_UUID,
         "join",
+        "WorldSpaceLineRenderer",
         join_vertex_shader_,
         join_fragment_shader_);
-    ensure_shader_pair(
+    line_renderer::ensure_shader_pair(
         device,
         round_join_shader_handle_,
         WORLD_LINE_ROUND_JOIN_SHADER_UUID,
         "round join",
+        "WorldSpaceLineRenderer",
         round_join_vertex_shader_,
         round_join_fragment_shader_);
-    ensure_fragment_shader(
+    line_renderer::ensure_fragment_shader(
         device,
         lit_shader_handle_,
         WORLD_LINE_LIT_SHADER_UUID,
         "lit fragment",
+        "WorldSpaceLineRenderer",
         lit_fragment_shader_);
 }
 
@@ -330,13 +225,10 @@ void WorldSpaceLineRenderer::ensure_cap_template(RenderContext2& ctx,
     cap_corner_count_ = static_cast<uint32_t>(corners.size());
     cap_round_segments_ = round_segments;
 
-    BufferDesc desc;
-    desc.size = sizeof(CapCornerVertex) * corners.size();
-    desc.usage = BufferUsage::Vertex;
-    cap_corner_vbo_ = device.create_buffer(desc);
-    device.upload_buffer(
-        cap_corner_vbo_,
-        {reinterpret_cast<const uint8_t*>(corners.data()), desc.size});
+    cap_corner_vbo_ = line_renderer::create_static_vertex_buffer(
+        device,
+        corners.data(),
+        sizeof(CapCornerVertex) * corners.size());
 }
 
 void WorldSpaceLineRenderer::ensure_round_join_template(RenderContext2& ctx,
@@ -356,13 +248,10 @@ void WorldSpaceLineRenderer::ensure_round_join_template(RenderContext2& ctx,
     round_join_corner_count_ = static_cast<uint32_t>(corners.size());
     round_join_segments_ = round_segments;
 
-    BufferDesc desc;
-    desc.size = sizeof(CapCornerVertex) * corners.size();
-    desc.usage = BufferUsage::Vertex;
-    round_join_corner_vbo_ = device.create_buffer(desc);
-    device.upload_buffer(
-        round_join_corner_vbo_,
-        {reinterpret_cast<const uint8_t*>(corners.data()), desc.size});
+    round_join_corner_vbo_ = line_renderer::create_static_vertex_buffer(
+        device,
+        corners.data(),
+        sizeof(CapCornerVertex) * corners.size());
 }
 
 void WorldSpaceLineRenderer::draw_polyline(
@@ -374,13 +263,7 @@ void WorldSpaceLineRenderer::draw_polyline(
         return;
     }
 
-    std::vector<LinePoint3> clean_points;
-    clean_points.reserve(points.size());
-    for (LinePoint3 point : points) {
-        if (clean_points.empty() || !same_point(clean_points.back(), point)) {
-            clean_points.push_back(point);
-        }
-    }
+    std::vector<LinePoint3> clean_points = line_renderer::clean_points(points);
 
     if (clean_points.size() < 2) {
         return;
@@ -394,7 +277,7 @@ void WorldSpaceLineRenderer::draw_polyline(
     for (size_t i = 1; i < clean_points.size(); ++i) {
         const LinePoint3 p0 = clean_points[i - 1];
         const LinePoint3 p1 = clean_points[i];
-        if (same_point(p0, p1)) {
+        if (line_renderer::same_point(p0, p1)) {
             continue;
         }
 
@@ -423,7 +306,7 @@ void WorldSpaceLineRenderer::draw_polyline(
     if (style.cap == LineCapStyle::Round) {
         const LinePoint3 first = clean_points.front();
         const LinePoint3 second = clean_points[1];
-        if (!same_point(first, second)) {
+        if (!line_renderer::same_point(first, second)) {
             CapInstance cap{};
             cap.center[0] = first.x;
             cap.center[1] = first.y;
@@ -438,7 +321,7 @@ void WorldSpaceLineRenderer::draw_polyline(
 
         const LinePoint3 last = clean_points.back();
         const LinePoint3 prev = clean_points[clean_points.size() - 2];
-        if (!same_point(last, prev)) {
+        if (!line_renderer::same_point(last, prev)) {
             CapInstance cap{};
             cap.center[0] = last.x;
             cap.center[1] = last.y;
@@ -499,7 +382,7 @@ void WorldSpaceLineRenderer::draw_polyline(
         return;
     }
 
-    const UploadedInstanceStream segment_stream = upload_instance_stream(
+    const line_renderer::UploadedInstanceStream segment_stream = line_renderer::upload_instance_stream(
         ctx,
         instances.data(),
         instances.size() * sizeof(SegmentInstance));
@@ -549,7 +432,7 @@ void WorldSpaceLineRenderer::draw_polyline(
 
     if (!cap_instances.empty()) {
         ensure_cap_template(ctx, style.round_segments);
-        const UploadedInstanceStream cap_stream = upload_instance_stream(
+        const line_renderer::UploadedInstanceStream cap_stream = line_renderer::upload_instance_stream(
             ctx,
             cap_instances.data(),
             cap_instances.size() * sizeof(CapInstance));
@@ -603,7 +486,7 @@ void WorldSpaceLineRenderer::draw_polyline(
 
     if (!round_join_instances.empty()) {
         ensure_round_join_template(ctx, style.round_segments);
-        const UploadedInstanceStream round_join_stream = upload_instance_stream(
+        const line_renderer::UploadedInstanceStream round_join_stream = line_renderer::upload_instance_stream(
             ctx,
             round_join_instances.data(),
             round_join_instances.size() * sizeof(CapInstance));
@@ -656,7 +539,7 @@ void WorldSpaceLineRenderer::draw_polyline(
     }
 
     if (!join_instances.empty()) {
-        const UploadedInstanceStream join_stream = upload_instance_stream(
+        const line_renderer::UploadedInstanceStream join_stream = line_renderer::upload_instance_stream(
             ctx,
             join_instances.data(),
             join_instances.size() * sizeof(JoinInstance));
