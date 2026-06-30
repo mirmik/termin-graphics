@@ -259,13 +259,14 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
     assert layout["language"] == "slang"
     assert layout["target"] == "vulkan"
     assert layout["stage"] == "fragment"
+    material_binding = _expected_scoped_binding("material", "constant_buffer", "material")
     assert layout["resources"] == [
         {
             "name": "material",
             "kind": "constant_buffer",
-            "scope": "unscoped",
+            "scope": "material",
             "set": 0,
-            "binding": 1,
+            "binding": material_binding,
             "stage_mask": 2,
             "size": 16,
             "fields": [
@@ -314,15 +315,76 @@ def test_termin_shaderc_writes_glsl_bone_block_resource_layout(tmp_path: Path) -
 
     assert result.returncode == 0, result.stderr
     layout = json.loads((tmp_path / "skinned.vert.spv.layout.json").read_text(encoding="utf-8"))
+    expected_binding = _expected_scoped_binding("bone_block", "constant_buffer", "draw")
     assert {
-        "name": "BoneBlock",
+        "name": "bone_block",
         "kind": "constant_buffer",
-        "scope": "unscoped",
+        "scope": "draw",
         "set": 0,
-        "binding": 16,
+        "binding": expected_binding,
         "stage_mask": 1,
         "size": 0,
     } in layout["resources"]
+
+
+def test_termin_shaderc_rejects_shader_abi_scope_mismatch(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "struct DrawData { float4x4 model; };\n"
+        "[[TerminScope(\"material\")]] ConstantBuffer<DrawData> draw_data;\n"
+        "[shader(\"vertex\")] float4 main(float3 position : POSITION) : SV_Position {\n"
+        "    return mul(draw_data.model, float4(position, 1.0));\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.spv"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_bytes(b'FAKE-spirv')\n"
+        "reflection.write_text(json.dumps({\n"
+        "    'parameters': [\n"
+        "        {\n"
+        "            'name': 'draw_data',\n"
+        "            'userAttribs': [{'name': 'TerminScope', 'arguments': ['material']}],\n"
+        "            'binding': {'kind': 'descriptorTableSlot', 'index': 0},\n"
+        "            'type': {\n"
+        "                'kind': 'constantBuffer',\n"
+        "                'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 64}},\n"
+        "            },\n"
+        "        },\n"
+        "    ]\n"
+        "}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "vertex",
+            "--entry",
+            "main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode != 0
+    assert "shader ABI resource 'draw_data' has scope 'material', expected 'draw'" in result.stderr
 
 
 def test_termin_shaderc_drops_dead_slang_reflection_resources(tmp_path: Path) -> None:
@@ -578,10 +640,11 @@ def test_termin_shaderc_marks_missing_scope_as_unscoped(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert "resource 'material' has no scope" in result.stderr
+    assert "resource 'albedo_texture' has no scope" in result.stderr
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
+    material_binding = _expected_scoped_binding("material", "constant_buffer", "material")
     assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
-        ("material", "unscoped", 0),
+        ("material", "material", material_binding),
         ("albedo_texture", "unscoped", 1),
     ]
 

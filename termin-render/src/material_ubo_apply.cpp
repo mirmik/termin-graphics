@@ -1,6 +1,7 @@
 // material_ubo_apply.cpp - Apply material phase resources by reflected names.
 #include "termin/render/material_ubo_apply.hpp"
 #include "termin/materials/shader_parser.hpp"
+#include "termin/render/shader_abi.hpp"
 #include "termin/render/tgfx2_bridge.hpp"
 
 #include "tgfx2/i_render_device.hpp"
@@ -132,7 +133,7 @@ MaterialUboLayout layout_from_tc_shader(const tc_shader* shader) {
     }
 
     const tc_shader_resource_binding* material_rb =
-        tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_MATERIAL);
+        find_shader_abi_resource_binding(shader, ShaderAbiResourceId::MaterialParams);
     if (!material_rb ||
         material_rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER ||
         material_rb->field_count == 0 ||
@@ -185,7 +186,7 @@ bool apply_material_phase_ubo(
     // Build the layout view on the tc_shader C-side entries.
     MaterialUboLayout layout = layout_from_tc_shader(shader);
     const tc_shader_resource_binding* material_rb =
-        tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_MATERIAL);
+        find_shader_abi_resource_binding(shader, ShaderAbiResourceId::MaterialParams);
 
     bool bound_any = false;
     if (!layout.empty()) {

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <termin/render/render_export.hpp>
+#include <termin/render/shader_abi.hpp>
 
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
@@ -24,6 +25,7 @@ enum class MaterialPipelineResourceOwner : uint8_t {
 enum class MaterialPipelineDiagnosticCode : uint8_t {
     None,
     ResourceNameConflict,
+    AbiResourceContractMismatch,
     MissingVertexOutputSemantic,
     MissingVertexTransformTemplate,
     MissingFragmentSource,
@@ -64,6 +66,12 @@ RENDER_API const char* material_pipeline_resource_owner_name(
 
 RENDER_API const char* material_pipeline_diagnostic_code_name(
     MaterialPipelineDiagnosticCode code);
+
+RENDER_API MaterialPipelineResourceDecl material_pipeline_abi_resource_decl(
+    ShaderAbiResourceId id,
+    uint32_t stage_mask,
+    MaterialPipelineResourceOwner owner,
+    uint32_t size = 0);
 
 RENDER_API bool material_pipeline_merge_resource(
     std::vector<MaterialPipelineResourceDecl>& resources,

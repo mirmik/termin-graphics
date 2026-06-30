@@ -6,6 +6,7 @@
 #endif
 #include <tcbase/trent/json.h>
 #include <tgfx/resources/tc_shader.h>
+#include <tgfx/resources/tc_shader_abi.h>
 #include <tgfx2/backend_binding_plan.hpp>
 #include <tgfx2/internal/process_runner.hpp>
 
@@ -242,6 +243,38 @@ static tgfx::ShaderResourceKind shader_resource_kind_for_layout(
     return tgfx::ShaderResourceKind::None;
 }
 
+static uint32_t shader_resource_c_kind_for_layout(
+    const std::string& kind
+) {
+    if (kind == "constant_buffer" || kind == "uniform_buffer") {
+        return TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    }
+    if (kind == "texture") return TC_SHADER_RESOURCE_TEXTURE;
+    if (kind == "sampler") return TC_SHADER_RESOURCE_SAMPLER;
+    if (kind == "storage_buffer") return TC_SHADER_RESOURCE_STORAGE_BUFFER;
+    if (kind == "storage_texture") return TC_SHADER_RESOURCE_STORAGE_TEXTURE;
+    return TC_SHADER_RESOURCE_NONE;
+}
+
+static std::string shader_resource_scope_layout_name(uint32_t scope) {
+    switch (scope) {
+    case TC_SHADER_RESOURCE_SCOPE_FRAME:
+        return "frame";
+    case TC_SHADER_RESOURCE_SCOPE_PASS:
+        return "pass";
+    case TC_SHADER_RESOURCE_SCOPE_MATERIAL:
+        return "material";
+    case TC_SHADER_RESOURCE_SCOPE_DRAW:
+        return "draw";
+    case TC_SHADER_RESOURCE_SCOPE_TRANSIENT:
+        return "transient";
+    case TC_SHADER_RESOURCE_SCOPE_UNSCOPED:
+        return "unscoped";
+    default:
+        return "unknown";
+    }
+}
+
 static tgfx::ShaderResourceScope shader_resource_scope_for_layout(
     const std::string& scope
 ) {
@@ -365,6 +398,45 @@ static void append_unique_resource(
         }
     }
     resources.push_back(std::move(binding));
+}
+
+static bool canonicalize_shader_abi_resources(
+    std::vector<ShaderResourceBinding>& resources
+) {
+    std::vector<ShaderResourceBinding> canonical;
+    canonical.reserve(resources.size());
+    for (ShaderResourceBinding& resource : resources) {
+        const tc_shader_abi_resource_decl* abi =
+            tc_shader_abi_find_resource(resource.name.c_str());
+        if (abi) {
+            const uint32_t kind = shader_resource_c_kind_for_layout(resource.kind);
+            if (kind != abi->kind) {
+                std::cerr
+                    << "termin_shaderc: shader ABI resource '" << resource.name
+                    << "' has kind '" << resource.kind
+                    << "', expected kind " << abi->kind << "\n";
+                return false;
+            }
+
+            const std::string expected_scope =
+                shader_resource_scope_layout_name(abi->scope);
+            if (is_unscoped_resource_scope(resource.scope) ||
+                resource.scope == "unknown") {
+                resource.scope = expected_scope;
+            } else if (resource.scope != expected_scope) {
+                std::cerr
+                    << "termin_shaderc: shader ABI resource '" << resource.name
+                    << "' has scope '" << resource.scope
+                    << "', expected '" << expected_scope << "'\n";
+                return false;
+            }
+
+            resource.name = abi->canonical_name;
+        }
+        append_unique_resource(canonical, std::move(resource));
+    }
+    resources = std::move(canonical);
+    return true;
 }
 
 bool has_resource_named(
@@ -1098,6 +1170,9 @@ static bool collect_resource_bindings(
                 source,
                 options.entry);
         }
+    }
+    if (!canonicalize_shader_abi_resources(resources)) {
+        return false;
     }
     assign_missing_resource_scopes(resources);
     apply_default_resource_scope(resources, options.default_scope);

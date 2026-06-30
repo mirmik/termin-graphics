@@ -1,4 +1,5 @@
 #include "termin/render/frame_uniforms.hpp"
+#include "termin/render/shader_abi.hpp"
 
 #include "tcbase/tc_log.hpp"
 #include "tgfx2/i_render_device.hpp"
@@ -75,10 +76,7 @@ void bind_engine_per_frame_uniforms(
     const tc_shader* shader)
 {
     const tc_shader_resource_binding* rb =
-        shader ? tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_PER_FRAME) : nullptr;
-    if (!rb && shader) {
-        rb = tc_shader_find_resource_binding(shader, "u_per_frame");
-    }
+        find_shader_abi_resource_binding(shader, ShaderAbiResourceId::PerFrame);
     if (rb && rb->kind == TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
         ctx2.bind_uniform_data(rb->name, &uniforms, sizeof(uniforms));
         return;

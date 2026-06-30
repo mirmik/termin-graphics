@@ -41,7 +41,7 @@ void main() {
     shader = phase.shader
     assert shader.resource_binding_count == 2
     per_frame = shader.find_resource_binding("per_frame")
-    draw_data = shader.find_resource_binding("draw")
+    draw_data = shader.find_resource_binding("draw_data")
     assert per_frame is not None
     assert draw_data is not None
     assert per_frame["kind_name"] == "constant_buffer"

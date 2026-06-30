@@ -4,7 +4,36 @@
 #include <cstring>
 
 extern "C" {
+#include <tgfx/resources/tc_shader_abi.h>
 #include <tgfx/resources/tc_shader_registry.h>
+}
+
+TEST_CASE("shader ABI C API exposes canonical names and legacy aliases") {
+    const tc_shader_abi_resource_decl* draw =
+        tc_shader_abi_find_resource(TC_SHADER_RESOURCE_DRAW);
+    REQUIRE(draw != nullptr);
+    CHECK_EQ(draw->id, static_cast<uint32_t>(TC_SHADER_ABI_RESOURCE_DRAW_DATA));
+    CHECK(std::strcmp(draw->canonical_name, TC_SHADER_RESOURCE_DRAW_DATA) == 0);
+    CHECK_EQ(draw->kind, static_cast<uint32_t>(TC_SHADER_RESOURCE_CONSTANT_BUFFER));
+    CHECK_EQ(draw->scope, static_cast<uint32_t>(TC_SHADER_RESOURCE_SCOPE_DRAW));
+    CHECK(tc_shader_abi_name_is_legacy_alias(draw, TC_SHADER_RESOURCE_DRAW));
+    CHECK(!tc_shader_abi_name_is_legacy_alias(draw, TC_SHADER_RESOURCE_DRAW_DATA));
+
+    const tc_shader_abi_resource_decl* bone =
+        tc_shader_abi_find_resource("BoneBlock");
+    REQUIRE(bone != nullptr);
+    CHECK_EQ(bone->id, static_cast<uint32_t>(TC_SHADER_ABI_RESOURCE_BONE_BLOCK));
+    CHECK(std::strcmp(bone->canonical_name, TC_SHADER_RESOURCE_BONE_BLOCK) == 0);
+    CHECK(tc_shader_abi_name_is_legacy_alias(bone, "BoneBlock"));
+
+    tc_shader_resource_binding binding{};
+    std::snprintf(binding.name, sizeof(binding.name), "%s", "BoneBlock");
+    binding.kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    binding.scope = TC_SHADER_RESOURCE_SCOPE_DRAW;
+    CHECK(tc_shader_abi_binding_matches(bone, &binding));
+
+    binding.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    CHECK(!tc_shader_abi_binding_matches(bone, &binding));
 }
 
 TEST_CASE("shader resource layout presence distinguishes known empty layout") {
@@ -347,7 +376,7 @@ TEST_CASE("shader resource layout rejects overlapping D3D11 register placement")
     bindings[0].d3d11.register_class = TC_SHADER_D3D11_REGISTER_B;
     bindings[0].d3d11.register_index = 1;
 
-    std::snprintf(bindings[1].name, sizeof(bindings[1].name), "%s", "draw");
+    std::snprintf(bindings[1].name, sizeof(bindings[1].name), "%s", TC_SHADER_RESOURCE_DRAW_DATA);
     bindings[1].kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
     bindings[1].scope = TC_SHADER_RESOURCE_SCOPE_DRAW;
     bindings[1].set = 0;
@@ -415,14 +444,22 @@ void main() {
 
     const tc_shader_resource_binding* per_frame =
         tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_PER_FRAME);
+    const tc_shader_abi_resource_decl* per_frame_abi =
+        tc_shader_abi_resource(TC_SHADER_ABI_RESOURCE_PER_FRAME);
     REQUIRE(per_frame != nullptr);
+    REQUIRE(per_frame_abi != nullptr);
+    CHECK(tc_shader_abi_binding_matches(per_frame_abi, per_frame));
     CHECK_EQ(per_frame->kind, TC_SHADER_RESOURCE_CONSTANT_BUFFER);
     CHECK_EQ(per_frame->scope, TC_SHADER_RESOURCE_SCOPE_FRAME);
     CHECK_EQ(per_frame->binding, 2u);
 
     const tc_shader_resource_binding* draw =
-        tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_DRAW);
+        tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_DRAW_DATA);
+    const tc_shader_abi_resource_decl* draw_abi =
+        tc_shader_abi_resource(TC_SHADER_ABI_RESOURCE_DRAW_DATA);
     REQUIRE(draw != nullptr);
+    REQUIRE(draw_abi != nullptr);
+    CHECK(tc_shader_abi_binding_matches(draw_abi, draw));
     CHECK_EQ(draw->kind, TC_SHADER_RESOURCE_CONSTANT_BUFFER);
     CHECK_EQ(draw->scope, TC_SHADER_RESOURCE_SCOPE_DRAW);
     CHECK_EQ(draw->binding, 24u);

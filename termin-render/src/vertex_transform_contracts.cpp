@@ -116,11 +116,10 @@ VertexInputContract skinned_position_normal_mesh_input()
 
 void add_engine_per_frame(VertexTransformContract& contract)
 {
-    contract.resources.push_back(resource(
-        TC_SHADER_RESOURCE_PER_FRAME,
-        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-        TC_SHADER_RESOURCE_SCOPE_FRAME,
-        TC_SHADER_STAGE_VERTEX));
+    contract.resources.push_back(material_pipeline_abi_resource_decl(
+        ShaderAbiResourceId::PerFrame,
+        TC_SHADER_STAGE_VERTEX,
+        MaterialPipelineResourceOwner::VertexTransform));
 }
 
 void add_static_draw_data(VertexTransformContract& contract, const char* name)
@@ -135,11 +134,10 @@ void add_static_draw_data(VertexTransformContract& contract, const char* name)
 
 void add_bone_block(VertexTransformContract& contract)
 {
-    contract.resources.push_back(resource(
-        TC_SHADER_RESOURCE_BONE_BLOCK,
-        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-        TC_SHADER_RESOURCE_SCOPE_DRAW,
-        TC_SHADER_STAGE_VERTEX));
+    contract.resources.push_back(material_pipeline_abi_resource_decl(
+        ShaderAbiResourceId::BoneBlock,
+        TC_SHADER_STAGE_VERTEX,
+        MaterialPipelineResourceOwner::VertexTransform));
 }
 
 void add_foliage_resources(VertexTransformContract& contract)
@@ -193,7 +191,11 @@ VertexTransformContract static_contract(MaterialPipelinePassKind pass_kind)
     case MaterialPipelinePassKind::Color:
         contract.vertex_inputs = full_material_mesh_input();
         add_engine_per_frame(contract);
-        add_static_draw_data(contract, "draw_data");
+        contract.resources.push_back(material_pipeline_abi_resource_decl(
+            ShaderAbiResourceId::DrawData,
+            TC_SHADER_STAGE_VERTEX,
+            MaterialPipelineResourceOwner::VertexTransform,
+            64u));
         break;
     }
 
