@@ -1,3 +1,5 @@
+import atexit
+
 from termin_nanobind.runtime import preload_sdk_libs
 
 preload_sdk_libs("termin_render")
@@ -87,6 +89,9 @@ def shutdown_render_pipelines() -> None:
             tc_pipeline_destroy(info["handle"])
         except Exception as exc:
             log.error(f"[RenderFramework] failed to destroy render pipeline during shutdown: {exc}")
+
+
+atexit.register(shutdown_render_pipelines)
 
 __all__ = [
     "RenderPipeline",
