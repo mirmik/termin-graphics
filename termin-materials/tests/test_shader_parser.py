@@ -748,6 +748,14 @@ def test_stdlib_slang_textured_normal_material_uses_texture_property():
 def test_builtin_pbr_shader_uses_slang_scope_model():
     from termin.default_assets.render.shader_asset import ShaderAsset
 
+    expected_material_textures = [
+        "u_albedo_texture",
+        "u_normal_texture",
+        "u_metallic_roughness_texture",
+        "u_occlusion_texture",
+        "u_emissive_texture",
+    ]
+
     stdlib = stdlib_root()
     shader_asset = ShaderAsset.from_file(
         stdlib / "shaders" / "CookTorrancePBR.shader",
@@ -764,6 +772,7 @@ def test_builtin_pbr_shader_uses_slang_scope_model():
     assert phase.phase_mark == "opaque"
     assert phase.available_marks == ["opaque", "transparent"]
     assert not phase.material_ubo_layout.empty()
+    assert phase.material_texture_resources == expected_material_textures
 
     vertex = phase.stages["vertex"].source
     assert "import termin_prelude;" in vertex

@@ -1552,6 +1552,7 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
             MaterialUboLayout layout = compute_std140_layout(phase.uniforms);
             std::vector<std::string> texture_names =
                 collect_texture_properties(phase.uniforms);
+            phase.material_texture_resources = texture_names;
 
             if (!layout.empty() && contains_slang_material_params_declaration(phase)) {
                 throw std::runtime_error(
