@@ -74,10 +74,7 @@ bool ensure_fragment_shader(IRenderDevice& device,
 }
 
 bool same_point(LinePoint3 a, LinePoint3 b) {
-    const float dx = a.x - b.x;
-    const float dy = a.y - b.y;
-    const float dz = a.z - b.z;
-    return dx * dx + dy * dy + dz * dz <= 1.0e-12f;
+    return (a - b).norm_squared() <= 1.0e-12f;
 }
 
 std::vector<LinePoint3> clean_points(std::span<const LinePoint3> points) {

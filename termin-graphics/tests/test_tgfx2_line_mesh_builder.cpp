@@ -1,8 +1,13 @@
 #include "guard_main.h"
 
+#include <termin/geom/vec3.hpp>
 #include <tgfx2/line_mesh_builder.hpp>
 
 #include <cmath>
+#include <type_traits>
+
+static_assert(std::is_same_v<tgfx::LinePoint3, termin::Vec3f>,
+              "tgfx line points should use the canonical float vector type");
 
 namespace {
 

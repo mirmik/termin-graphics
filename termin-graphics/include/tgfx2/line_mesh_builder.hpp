@@ -4,15 +4,13 @@
 #include <span>
 #include <vector>
 
+#include <termin/geom/vec3.hpp>
+
 #include "tgfx2/tgfx2_api.h"
 
 namespace tgfx {
 
-struct LinePoint3 {
-    float x = 0.0f;
-    float y = 0.0f;
-    float z = 0.0f;
-};
+using LinePoint3 = termin::Vec3f;
 
 struct LineVertex {
     LinePoint3 position;

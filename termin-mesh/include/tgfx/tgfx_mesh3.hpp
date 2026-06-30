@@ -9,7 +9,9 @@
 #include <cstdint>
 #include <cmath>
 
-#include <tgfx/tgfx_vec3.hpp>
+#include <termin/geom/vec2.hpp>
+#include <termin/geom/vec3.hpp>
+#include <termin/geom/vec4.hpp>
 
 namespace termin {
 

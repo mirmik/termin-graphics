@@ -9,86 +9,44 @@ namespace {
 constexpr float kEpsilon = 1.0e-6f;
 constexpr float kPi = 3.14159265358979323846f;
 
-struct Vec3 {
-    float x = 0.0f;
-    float y = 0.0f;
-    float z = 0.0f;
-};
-
-Vec3 to_vec(LinePoint3 p) {
-    return {p.x, p.y, p.z};
-}
-
-LinePoint3 to_point(Vec3 v) {
-    return {v.x, v.y, v.z};
-}
-
-Vec3 add(Vec3 a, Vec3 b) {
-    return {a.x + b.x, a.y + b.y, a.z + b.z};
-}
-
-Vec3 sub(Vec3 a, Vec3 b) {
-    return {a.x - b.x, a.y - b.y, a.z - b.z};
-}
-
-Vec3 mul(Vec3 v, float s) {
-    return {v.x * s, v.y * s, v.z * s};
-}
-
-float dot(Vec3 a, Vec3 b) {
-    return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-Vec3 cross(Vec3 a, Vec3 b) {
-    return {
-        a.y * b.z - a.z * b.y,
-        a.z * b.x - a.x * b.z,
-        a.x * b.y - a.y * b.x,
-    };
-}
-
-float length(Vec3 v) {
-    return std::sqrt(dot(v, v));
-}
-
-Vec3 normalize(Vec3 v) {
-    const float len = length(v);
+LinePoint3 normalize_or_zero(LinePoint3 v) {
+    const float len = v.norm();
     if (len <= kEpsilon) {
         return {};
     }
-    return mul(v, 1.0f / len);
+    return v / len;
 }
 
-bool same_point(Vec3 a, Vec3 b) {
-    return length(sub(a, b)) <= kEpsilon;
+bool same_point(LinePoint3 a, LinePoint3 b) {
+    return (a - b).norm() <= kEpsilon;
 }
 
-Vec3 safe_side(Vec3 dir, Vec3 up_hint) {
-    Vec3 up = normalize(up_hint);
-    if (length(up) <= kEpsilon) {
-        up = {0.0f, 1.0f, 0.0f};
+LinePoint3 safe_side(LinePoint3 dir, LinePoint3 up_hint) {
+    LinePoint3 up = normalize_or_zero(up_hint);
+    if (up.norm() <= kEpsilon) {
+        up = LinePoint3::unit_y();
     }
 
-    Vec3 side = normalize(cross(up, dir));
-    if (length(side) > kEpsilon) {
+    LinePoint3 side = normalize_or_zero(up.cross(dir));
+    if (side.norm() > kEpsilon) {
         return side;
     }
 
-    side = normalize(cross(Vec3{1.0f, 0.0f, 0.0f}, dir));
-    if (length(side) > kEpsilon) {
+    side = normalize_or_zero(LinePoint3::unit_x().cross(dir));
+    if (side.norm() > kEpsilon) {
         return side;
     }
 
-    return normalize(cross(Vec3{0.0f, 0.0f, 1.0f}, dir));
+    return normalize_or_zero(LinePoint3::unit_z().cross(dir));
 }
 
-uint32_t append_vertex(LineMesh& mesh, Vec3 p) {
+uint32_t append_vertex(LineMesh& mesh, LinePoint3 p) {
     const uint32_t index = static_cast<uint32_t>(mesh.vertices.size());
-    mesh.vertices.push_back(LineVertex{to_point(p)});
+    mesh.vertices.push_back(LineVertex{p});
     return index;
 }
 
-void append_triangle(LineMesh& mesh, Vec3 a, Vec3 b, Vec3 c) {
+void append_triangle(LineMesh& mesh, LinePoint3 a, LinePoint3 b, LinePoint3 c) {
     const uint32_t ia = append_vertex(mesh, a);
     const uint32_t ib = append_vertex(mesh, b);
     const uint32_t ic = append_vertex(mesh, c);
@@ -97,42 +55,45 @@ void append_triangle(LineMesh& mesh, Vec3 a, Vec3 b, Vec3 c) {
     mesh.indices.push_back(ic);
 }
 
-void append_quad(LineMesh& mesh, Vec3 a, Vec3 b, Vec3 c, Vec3 d) {
+void append_quad(LineMesh& mesh, LinePoint3 a, LinePoint3 b, LinePoint3 c, LinePoint3 d) {
     append_triangle(mesh, a, b, c);
     append_triangle(mesh, a, c, d);
 }
 
-void append_round_disk(LineMesh& mesh, Vec3 center, Vec3 axis_a, Vec3 axis_b,
+void append_round_disk(LineMesh& mesh, LinePoint3 center, LinePoint3 axis_a, LinePoint3 axis_b,
                        float radius, int segments) {
     segments = std::clamp(segments, 6, 64);
-    Vec3 prev = add(center, mul(axis_a, radius));
+    LinePoint3 prev = center + axis_a * radius;
     for (int i = 1; i <= segments; ++i) {
         const float t = (2.0f * kPi * static_cast<float>(i)) / static_cast<float>(segments);
-        Vec3 next = add(center, mul(add(mul(axis_a, std::cos(t)),
-                                     mul(axis_b, std::sin(t))), radius));
+        const float c = std::cos(t);
+        const float s = std::sin(t);
+        LinePoint3 next = center + (axis_a * c + axis_b * s) * radius;
         append_triangle(mesh, center, prev, next);
         prev = next;
     }
 }
 
-void append_round_cap(LineMesh& mesh, Vec3 center, Vec3 side, Vec3 outward,
+void append_round_cap(LineMesh& mesh, LinePoint3 center, LinePoint3 side, LinePoint3 outward,
                       float radius, int segments) {
     segments = std::clamp(segments, 4, 64);
-    Vec3 prev = add(center, mul(side, radius));
+    LinePoint3 prev = center + side * radius;
     for (int i = 1; i <= segments; ++i) {
         const float t = (kPi * static_cast<float>(i)) / static_cast<float>(segments);
-        Vec3 rim = add(mul(side, std::cos(t)), mul(outward, std::sin(t)));
-        Vec3 next = add(center, mul(rim, radius));
+        const float c = std::cos(t);
+        const float s = std::sin(t);
+        LinePoint3 rim = side * c + outward * s;
+        LinePoint3 next = center + rim * radius;
         append_triangle(mesh, center, prev, next);
         prev = next;
     }
 }
 
 struct Segment {
-    Vec3 p0;
-    Vec3 p1;
-    Vec3 dir;
-    Vec3 side;
+    LinePoint3 p0;
+    LinePoint3 p1;
+    LinePoint3 dir;
+    LinePoint3 side;
 };
 
 } // namespace
@@ -144,12 +105,11 @@ LineMesh build_line_mesh(std::span<const LinePoint3> points,
         return mesh;
     }
 
-    std::vector<Vec3> clean_points;
+    std::vector<LinePoint3> clean_points;
     clean_points.reserve(points.size() + (style.closed ? 1 : 0));
     for (LinePoint3 p : points) {
-        Vec3 v = to_vec(p);
-        if (clean_points.empty() || !same_point(clean_points.back(), v)) {
-            clean_points.push_back(v);
+        if (clean_points.empty() || !same_point(clean_points.back(), p)) {
+            clean_points.push_back(p);
         }
     }
 
@@ -165,16 +125,16 @@ LineMesh build_line_mesh(std::span<const LinePoint3> points,
     std::vector<Segment> segments;
     segments.reserve(clean_points.size() - 1);
     for (size_t i = 1; i < clean_points.size(); ++i) {
-        Vec3 p0 = clean_points[i - 1];
-        Vec3 p1 = clean_points[i];
-        Vec3 delta = sub(p1, p0);
-        const float len = length(delta);
+        LinePoint3 p0 = clean_points[i - 1];
+        LinePoint3 p1 = clean_points[i];
+        LinePoint3 delta = p1 - p0;
+        const float len = delta.norm();
         if (len <= kEpsilon) {
             continue;
         }
-        Vec3 dir = mul(delta, 1.0f / len);
-        Vec3 side = safe_side(dir, to_vec(style.up_hint));
-        if (length(side) <= kEpsilon) {
+        LinePoint3 dir = delta / len;
+        LinePoint3 side = safe_side(dir, style.up_hint);
+        if (side.norm() <= kEpsilon) {
             continue;
         }
         segments.push_back({p0, p1, dir, side});
@@ -187,27 +147,27 @@ LineMesh build_line_mesh(std::span<const LinePoint3> points,
     for (size_t i = 0; i < segments.size(); ++i) {
         Segment seg = segments[i];
         if (style.cap == LineCapStyle::Square && i == 0 && !style.closed) {
-            seg.p0 = sub(seg.p0, mul(seg.dir, half_width));
+            seg.p0 -= seg.dir * half_width;
         }
         if (style.cap == LineCapStyle::Square && i + 1 == segments.size() && !style.closed) {
-            seg.p1 = add(seg.p1, mul(seg.dir, half_width));
+            seg.p1 += seg.dir * half_width;
         }
 
-        const Vec3 offset = mul(seg.side, half_width);
+        const LinePoint3 offset = seg.side * half_width;
         append_quad(mesh,
-                    add(seg.p0, offset),
-                    sub(seg.p0, offset),
-                    sub(seg.p1, offset),
-                    add(seg.p1, offset));
+                    seg.p0 + offset,
+                    seg.p0 - offset,
+                    seg.p1 - offset,
+                    seg.p1 + offset);
     }
 
     if (!style.closed && style.cap == LineCapStyle::Round) {
         const Segment& first = segments.front();
-        append_round_cap(mesh, first.p0, first.side, mul(first.dir, -1.0f),
+        append_round_cap(mesh, first.p0, first.side, -first.dir,
                          half_width, style.round_segments);
 
         const Segment& last = segments.back();
-        append_round_cap(mesh, last.p1, mul(last.side, -1.0f), last.dir,
+        append_round_cap(mesh, last.p1, -last.side, last.dir,
                          half_width, style.round_segments);
     }
 
