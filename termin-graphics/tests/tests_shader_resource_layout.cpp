@@ -347,7 +347,7 @@ TEST_CASE("shader resource layout rejects overlapping D3D11 register placement")
     bindings[0].d3d11.register_class = TC_SHADER_D3D11_REGISTER_B;
     bindings[0].d3d11.register_index = 1;
 
-    std::snprintf(bindings[1].name, sizeof(bindings[1].name), "%s", "draw");
+    std::snprintf(bindings[1].name, sizeof(bindings[1].name), "%s", TC_SHADER_RESOURCE_DRAW_DATA);
     bindings[1].kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
     bindings[1].scope = TC_SHADER_RESOURCE_SCOPE_DRAW;
     bindings[1].set = 0;
@@ -421,7 +421,7 @@ void main() {
     CHECK_EQ(per_frame->binding, 2u);
 
     const tc_shader_resource_binding* draw =
-        tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_DRAW);
+        tc_shader_find_resource_binding(shader, TC_SHADER_RESOURCE_DRAW_DATA);
     REQUIRE(draw != nullptr);
     CHECK_EQ(draw->kind, TC_SHADER_RESOURCE_CONSTANT_BUFFER);
     CHECK_EQ(draw->scope, TC_SHADER_RESOURCE_SCOPE_DRAW);

@@ -193,7 +193,7 @@ VertexTransformContract static_contract(MaterialPipelinePassKind pass_kind)
     case MaterialPipelinePassKind::Color:
         contract.vertex_inputs = full_material_mesh_input();
         add_engine_per_frame(contract);
-        add_static_draw_data(contract, "draw_data");
+        add_static_draw_data(contract, TC_SHADER_RESOURCE_DRAW_DATA);
         break;
     }
 

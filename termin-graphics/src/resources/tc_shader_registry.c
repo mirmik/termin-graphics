@@ -108,7 +108,7 @@ static void infer_raw_glsl_engine_resource_layout(tc_shader* shader) {
         append_compact_resource_binding(
             bindings,
             &count,
-            TC_SHADER_RESOURCE_DRAW,
+            TC_SHADER_RESOURCE_DRAW_DATA,
             TC_SHADER_RESOURCE_CONSTANT_BUFFER,
             TC_SHADER_RESOURCE_SCOPE_DRAW,
             24,

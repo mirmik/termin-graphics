@@ -1,6 +1,7 @@
 #include "termin/render/shader_resource_apply.hpp"
+#include "termin/render/shader_abi.hpp"
+
 #include <algorithm>
-#include <iterator>
 
 #include "tcbase/tc_log.hpp"
 #include "tgfx2/render_context.hpp"
@@ -12,27 +13,58 @@ extern "C" {
 namespace termin {
 namespace {
 
-const tc_shader_resource_binding* find_resource(
+const char* shader_debug_name(const tc_shader* shader) {
+    if (!shader) return "<null>";
+    if (shader->name && shader->name[0] != '\0') return shader->name;
+    if (shader->uuid[0] != '\0') return shader->uuid;
+    return "<unnamed>";
+}
+
+const tc_shader_resource_binding* find_abi_resource_by_any_name(
     const tc_shader* shader,
-    std::span<const char* const> names,
-    uint32_t expected_kind)
+    const ShaderAbiResourceDecl& decl)
 {
     if (!shader) return nullptr;
-    for (const char* name : names) {
-        const tc_shader_resource_binding* rb =
-            tc_shader_find_resource_binding(shader, name);
-        if (rb && rb->kind == expected_kind) {
+    const tc_shader_resource_binding* rb =
+        tc_shader_find_resource_binding(shader, decl.canonical_name.data());
+    if (rb) {
+        return rb;
+    }
+    for (std::string_view alias : decl.legacy_aliases) {
+        rb = tc_shader_find_resource_binding(shader, alias.data());
+        if (rb) {
             return rb;
         }
     }
     return nullptr;
 }
 
-const char* shader_debug_name(const tc_shader* shader) {
-    if (!shader) return "<null>";
-    if (shader->name && shader->name[0] != '\0') return shader->name;
-    if (shader->uuid[0] != '\0') return shader->uuid;
-    return "<unnamed>";
+const tc_shader_resource_binding* find_valid_abi_resource(
+    const tc_shader* shader,
+    ShaderAbiResourceId id,
+    const char* diagnostic_name)
+{
+    const ShaderAbiResourceDecl& decl = shader_abi_resource(id);
+    const tc_shader_resource_binding* rb =
+        find_abi_resource_by_any_name(shader, decl);
+    if (!rb) {
+        return nullptr;
+    }
+    if (shader_abi_binding_matches(decl, *rb)) {
+        return rb;
+    }
+
+    tc::Log::error(
+        "[ShaderResourceApply] shader '%s' declares %s ABI resource '%s' "
+        "with kind=%u scope=%u, expected kind=%u scope=%u",
+        shader_debug_name(shader),
+        diagnostic_name,
+        rb->name,
+        rb->kind,
+        rb->scope,
+        decl.kind,
+        decl.scope);
+    return nullptr;
 }
 
 } // namespace
@@ -52,15 +84,10 @@ bool bind_lighting_ubo_for_shader(
 {
     if (!lighting_ubo) return false;
 
-    static constexpr const char* kNames[] = {
-        "lighting",
-        "lighting_ubo",
-        "LightingBlock",
-    };
-    const tc_shader_resource_binding* rb = find_resource(
+    const tc_shader_resource_binding* rb = find_valid_abi_resource(
         shader,
-        std::span<const char* const>(kNames, std::size(kNames)),
-        TC_SHADER_RESOURCE_CONSTANT_BUFFER);
+        ShaderAbiResourceId::Lighting,
+        "lighting");
     if (rb) {
         ctx.bind_uniform(rb->name, lighting_ubo);
         return true;
@@ -85,14 +112,10 @@ bool bind_shadow_block_for_shader(
 {
     if (!data || size == 0) return false;
 
-    static constexpr const char* kNames[] = {
-        "shadow_block",
-        "ShadowBlock",
-    };
-    const tc_shader_resource_binding* rb = find_resource(
+    const tc_shader_resource_binding* rb = find_valid_abi_resource(
         shader,
-        std::span<const char* const>(kNames, std::size(kNames)),
-        TC_SHADER_RESOURCE_CONSTANT_BUFFER);
+        ShaderAbiResourceId::ShadowBlock,
+        "shadow_block");
     if (rb) {
         ctx.bind_uniform_data(rb->name, data, size);
         return true;
@@ -118,14 +141,10 @@ bool bind_shadow_maps_for_shader(
 {
     if (shadow_maps.empty()) return false;
 
-    static constexpr const char* kNames[] = {
-        "shadow_maps",
-        "u_shadow_map",
-    };
-    const tc_shader_resource_binding* rb = find_resource(
+    const tc_shader_resource_binding* rb = find_valid_abi_resource(
         shader,
-        std::span<const char* const>(kNames, std::size(kNames)),
-        TC_SHADER_RESOURCE_TEXTURE);
+        ShaderAbiResourceId::ShadowMaps,
+        "shadow_maps");
     if (rb) {
         // Bind by reflected resource name below.
     } else {

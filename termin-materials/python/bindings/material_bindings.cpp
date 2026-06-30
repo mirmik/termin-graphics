@@ -273,12 +273,12 @@ std::vector<tc_shader_resource_requirement> parser_shader_resource_requirements(
             STAGE_ALL_GRAPHICS);
     }
     if (shader_phase.uses_engine_draw_data) {
-        append_resource_requirement(
-            requirements,
-            TC_SHADER_RESOURCE_DRAW,
-            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-            TC_SHADER_RESOURCE_SCOPE_DRAW,
-            STAGE_ALL_GRAPHICS,
+            append_resource_requirement(
+                requirements,
+                TC_SHADER_RESOURCE_DRAW_DATA,
+                TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+                TC_SHADER_RESOURCE_SCOPE_DRAW,
+                STAGE_ALL_GRAPHICS,
             64);
     }
     for (const std::string& texture_name : shader_phase.material_texture_resources) {
@@ -383,7 +383,7 @@ void apply_parser_resource_layout(
         if (shader_phase.uses_engine_draw_data) {
             append_resource_binding(
                 bindings,
-                TC_SHADER_RESOURCE_DRAW,
+                TC_SHADER_RESOURCE_DRAW_DATA,
                 TC_SHADER_RESOURCE_CONSTANT_BUFFER,
                 TC_SHADER_RESOURCE_SCOPE_DRAW,
                 GLSL_DRAW_DATA_BINDING,

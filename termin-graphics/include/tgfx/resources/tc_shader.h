@@ -115,6 +115,9 @@ typedef enum tc_shader_d3d11_register_class {
 // be authored into Slang sources long-term.
 #define TC_SHADER_RESOURCE_MATERIAL "material"
 #define TC_SHADER_RESOURCE_PER_FRAME "per_frame"
+// Canonical draw-transform ABI resource. `TC_SHADER_RESOURCE_DRAW` is kept as
+// a legacy alias during migration.
+#define TC_SHADER_RESOURCE_DRAW_DATA "draw_data"
 #define TC_SHADER_RESOURCE_DRAW "draw"
 #define TC_SHADER_RESOURCE_BONE_BLOCK "bone_block"
 
