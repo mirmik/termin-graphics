@@ -1,6 +1,7 @@
 #include <termin/render/material_pipeline_contracts.hpp>
 
 #include <cstdio>
+#include <utility>
 
 namespace termin {
 namespace {
@@ -53,6 +54,42 @@ void add_diagnostic(
     diagnostics.push_back(std::move(diagnostic));
 }
 
+MaterialPipelineResourceDecl abi_expected_resource_decl(
+    const ShaderAbiResourceDecl& abi,
+    const MaterialPipelineResourceDecl& incoming)
+{
+    MaterialPipelineResourceDecl result = incoming;
+    result.requirement.name = std::string(abi.canonical_name);
+    result.requirement.kind = abi.kind;
+    result.requirement.scope = abi.scope;
+    return result;
+}
+
+bool canonicalize_and_validate_abi_resource(
+    MaterialPipelineResourceDecl& resource,
+    std::vector<MaterialPipelineDiagnostic>& diagnostics)
+{
+    const ShaderAbiResourceDecl* abi =
+        find_shader_abi_resource(resource.requirement.name);
+    if (!abi) {
+        return true;
+    }
+
+    if (resource.requirement.kind != abi->kind ||
+        resource.requirement.scope != abi->scope) {
+        add_diagnostic(
+            diagnostics,
+            MaterialPipelineDiagnosticCode::AbiResourceContractMismatch,
+            abi_expected_resource_decl(*abi, resource),
+            resource,
+            "shader ABI resource is declared with incompatible contract");
+        return false;
+    }
+
+    resource.requirement.name = std::string(abi->canonical_name);
+    return true;
+}
+
 } // namespace
 
 const char* material_pipeline_resource_owner_name(
@@ -81,6 +118,8 @@ const char* material_pipeline_diagnostic_code_name(
         return "none";
     case MaterialPipelineDiagnosticCode::ResourceNameConflict:
         return "resource_name_conflict";
+    case MaterialPipelineDiagnosticCode::AbiResourceContractMismatch:
+        return "abi_resource_contract_mismatch";
     case MaterialPipelineDiagnosticCode::MissingVertexOutputSemantic:
         return "missing_vertex_output_semantic";
     case MaterialPipelineDiagnosticCode::MissingVertexTransformTemplate:
@@ -93,11 +132,33 @@ const char* material_pipeline_diagnostic_code_name(
     return "unknown";
 }
 
+MaterialPipelineResourceDecl material_pipeline_abi_resource_decl(
+    ShaderAbiResourceId id,
+    uint32_t stage_mask,
+    MaterialPipelineResourceOwner owner,
+    uint32_t size)
+{
+    const ShaderAbiResourceDecl& abi = shader_abi_resource(id);
+    MaterialPipelineResourceDecl result{};
+    result.requirement.name = std::string(abi.canonical_name);
+    result.requirement.kind = abi.kind;
+    result.requirement.scope = abi.scope;
+    result.requirement.stage_mask = stage_mask;
+    result.requirement.size = size;
+    result.owner = owner;
+    return result;
+}
+
 bool material_pipeline_merge_resource(
     std::vector<MaterialPipelineResourceDecl>& resources,
-    const MaterialPipelineResourceDecl& incoming,
+    const MaterialPipelineResourceDecl& incoming_resource,
     std::vector<MaterialPipelineDiagnostic>& diagnostics)
 {
+    MaterialPipelineResourceDecl incoming = incoming_resource;
+    if (!canonicalize_and_validate_abi_resource(incoming, diagnostics)) {
+        return false;
+    }
+
     for (MaterialPipelineResourceDecl& existing : resources) {
         if (same_resource_identity(existing, incoming)) {
             existing.requirement.stage_mask |= incoming.requirement.stage_mask;

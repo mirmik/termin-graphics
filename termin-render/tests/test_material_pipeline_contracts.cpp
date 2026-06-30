@@ -79,13 +79,13 @@ TEST_CASE("Material pipeline resource merge permits distinct draw resources") {
 TEST_CASE("Material pipeline resource merge rejects same-name contract conflicts") {
     std::array<termin::MaterialPipelineResourceDecl, 2> resources{{
         resource(
-            "material",
+            "custom_params",
             TC_SHADER_RESOURCE_CONSTANT_BUFFER,
             TC_SHADER_RESOURCE_SCOPE_MATERIAL,
             TC_SHADER_STAGE_FRAGMENT,
             termin::MaterialPipelineResourceOwner::Material),
         resource(
-            "material",
+            "custom_params",
             TC_SHADER_RESOURCE_TEXTURE,
             TC_SHADER_RESOURCE_SCOPE_MATERIAL,
             TC_SHADER_STAGE_FRAGMENT,
@@ -100,7 +100,7 @@ TEST_CASE("Material pipeline resource merge rejects same-name contract conflicts
     CHECK(
         result.diagnostics[0].code ==
         termin::MaterialPipelineDiagnosticCode::ResourceNameConflict);
-    CHECK(result.diagnostics[0].message.find("material") != std::string::npos);
+    CHECK(result.diagnostics[0].message.find("custom_params") != std::string::npos);
 }
 
 TEST_CASE("Material pipeline resource merge combines same-name declarations by requirement") {
@@ -126,6 +126,53 @@ TEST_CASE("Material pipeline resource merge combines same-name declarations by r
     REQUIRE_EQ(result.resources.size(), 1u);
     CHECK((result.resources[0].requirement.stage_mask & TC_SHADER_STAGE_VERTEX) != 0);
     CHECK((result.resources[0].requirement.stage_mask & TC_SHADER_STAGE_FRAGMENT) != 0);
+}
+
+TEST_CASE("Material pipeline resource merge canonicalizes shader ABI aliases") {
+    std::array<termin::MaterialPipelineResourceDecl, 2> resources{{
+        resource(
+            TC_SHADER_RESOURCE_DRAW,
+            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+            TC_SHADER_RESOURCE_SCOPE_DRAW,
+            TC_SHADER_STAGE_VERTEX,
+            termin::MaterialPipelineResourceOwner::LegacyGlsl),
+        resource(
+            TC_SHADER_RESOURCE_DRAW_DATA,
+            TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+            TC_SHADER_RESOURCE_SCOPE_DRAW,
+            TC_SHADER_STAGE_FRAGMENT,
+            termin::MaterialPipelineResourceOwner::VertexTransform),
+    }};
+
+    termin::MaterialPipelineResourceMergeResult result =
+        termin::material_pipeline_merge_resources(resources);
+
+    REQUIRE(result.ok());
+    REQUIRE_EQ(result.resources.size(), 1u);
+    CHECK_EQ(result.resources[0].requirement.name, std::string(TC_SHADER_RESOURCE_DRAW_DATA));
+    CHECK((result.resources[0].requirement.stage_mask & TC_SHADER_STAGE_VERTEX) != 0);
+    CHECK((result.resources[0].requirement.stage_mask & TC_SHADER_STAGE_FRAGMENT) != 0);
+}
+
+TEST_CASE("Material pipeline resource merge rejects shader ABI contract mismatch") {
+    std::array<termin::MaterialPipelineResourceDecl, 1> resources{{
+        resource(
+            TC_SHADER_RESOURCE_MATERIAL,
+            TC_SHADER_RESOURCE_TEXTURE,
+            TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+            TC_SHADER_STAGE_FRAGMENT,
+            termin::MaterialPipelineResourceOwner::Material),
+    }};
+
+    termin::MaterialPipelineResourceMergeResult result =
+        termin::material_pipeline_merge_resources(resources);
+
+    REQUIRE(!result.ok());
+    REQUIRE_EQ(result.diagnostics.size(), 1u);
+    CHECK(
+        result.diagnostics[0].code ==
+        termin::MaterialPipelineDiagnosticCode::AbiResourceContractMismatch);
+    CHECK(result.diagnostics[0].message.find("material") != std::string::npos);
 }
 
 TEST_CASE("Material pipeline resource merge carries resource requirements") {
