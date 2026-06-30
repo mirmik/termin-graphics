@@ -1,65 +1,20 @@
 from __future__ import annotations
 
-from typing import List, Tuple
-
-from termin.render_framework.frame_graph_view import PipelineFrameGraphView
 from termin.render_framework.python_pass import PythonFramePass
-from termin.render_framework import RenderPipeline
+
+from framegraph_test_helpers import DummyFramePass
+from framegraph_test_helpers import build_alias_groups, build_schedule
 
 
-def build_pipeline(passes):
-    pipeline = RenderPipeline("test")
-    for frame_pass in passes:
-        pipeline.add_pass(frame_pass)
-    return pipeline
-
-
-def build_schedule(passes):
-    with PipelineFrameGraphView(build_pipeline(passes)) as graph:
-        return graph.schedule()
-
-
-def build_alias_groups(passes):
-    with PipelineFrameGraphView(build_pipeline(passes)) as graph:
-        graph.schedule()
-        return {
-            canonical: set(aliases)
-            for canonical, aliases in graph.alias_groups().items()
-        }
-
-
-class DummyPass(PythonFramePass):
+class DummyPass(DummyFramePass):
     def __init__(self, name: str, reads=None, writes=None, inplace: bool = False):
-        if reads is None:
-            reads = set()
-        if writes is None:
-            writes = set()
-        super().__init__(pass_name=name)
-        self._reads = set(reads)
-        self._writes = set(writes)
-        self._internal_symbols = ["a", "b", "c"]
-        # Для inplace храним явную пару алиасов
-        self._inplace = inplace
-        if inplace and reads and writes:
-            self._inplace_src = list(reads)[0] if reads else None
-            self._inplace_dst = list(writes)[0] if writes else None
-        else:
-            self._inplace_src = None
-            self._inplace_dst = None
-
-    def compute_reads(self):
-        return self._reads
-
-    def compute_writes(self):
-        return self._writes
-
-    def get_inplace_aliases(self) -> List[Tuple[str, str]]:
-        if self._inplace and self._inplace_src and self._inplace_dst:
-            return [(self._inplace_src, self._inplace_dst)]
-        return []
-
-    def get_internal_symbols(self) -> list[str]:
-        return list(self._internal_symbols)
+        super().__init__(
+            name,
+            reads=reads,
+            writes=writes,
+            inplace=inplace,
+            internal_symbols=["a", "b", "c"],
+        )
 
 
 def test_framepass_has_no_internal_symbols_by_default():

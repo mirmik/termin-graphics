@@ -1,52 +1,9 @@
 # utest/framegraph_test.py
 
 import unittest
-from typing import List, Tuple
 
-from termin.render_framework.frame_graph_view import PipelineFrameGraphView
-from termin.render_framework.python_pass import PythonFramePass
-from termin.render_framework import RenderPipeline
-
-
-def build_schedule(passes):
-    pipeline = RenderPipeline("test")
-    for frame_pass in passes:
-        pipeline.add_pass(frame_pass)
-    with PipelineFrameGraphView(pipeline) as graph:
-        return graph.schedule()
-
-
-class DummyPass(PythonFramePass):
-    """Тестовый пасс без реального исполнения."""
-
-    def __init__(self, pass_name, reads=None, writes=None, inplace=False):
-        super().__init__(pass_name=pass_name)
-        self._reads = set(reads or [])
-        self._writes = set(writes or [])
-        # Для inplace храним явную пару алиасов
-        self._inplace = inplace
-        if inplace and reads and writes:
-            # Для простоты берём первый read и первый write
-            self._inplace_src = list(reads)[0] if reads else None
-            self._inplace_dst = list(writes)[0] if writes else None
-        else:
-            self._inplace_src = None
-            self._inplace_dst = None
-
-    def compute_reads(self):
-        return self._reads
-
-    def compute_writes(self):
-        return self._writes
-
-    def get_inplace_aliases(self) -> List[Tuple[str, str]]:
-        if self._inplace and self._inplace_src and self._inplace_dst:
-            return [(self._inplace_src, self._inplace_dst)]
-        return []
-
-    def execute(self, *args, **kwargs):
-        # В тестах ничего не делаем
-        return
+from framegraph_test_helpers import DummyFramePass as DummyPass
+from framegraph_test_helpers import build_schedule
 
 
 class FrameGraphTests(unittest.TestCase):
