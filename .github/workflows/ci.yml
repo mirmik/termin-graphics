@@ -9,6 +9,10 @@ on:
 env:
   BUILD_TYPE: Release
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ── 0. Python lint ─────────────────────────────────────────────
   lint-python:
