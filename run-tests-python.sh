@@ -6,7 +6,8 @@
 #
 # Flags:
 #   --full       Include pytest tests marked full
-#   test paths   Run only selected pytest targets after environment setup
+#   test paths   Run only selected pytest targets after environment setup;
+#                selected runs skip the repo-wide Python lint suite.
 #   --help, -h   Show this help
 
 set -uo pipefail
@@ -31,6 +32,7 @@ for arg in "$@"; do
             echo "  --full      Include pytest tests marked full"
             echo "  pytest-target"
             echo "              Run only selected pytest target(s), e.g. termin-app/tests/test_game_mode_model.py"
+            echo "              Selected runs skip the repo-wide Python lint suite."
             exit 0
             ;;
         --*) echo "Unknown option: $arg" >&2; exit 1 ;;
@@ -115,6 +117,9 @@ if (( ${#PYTEST_TARGETS[@]} > 0 )); then
     run_suite "selected python" \
         "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" "${PYTEST_TARGETS[@]}" -v
 else
+run_suite "Python lint" \
+    bash "$SCRIPT_DIR/run-lint-python.sh"
+
 run_suite "termin-build-tools python" \
     "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-build-tools/tests/ -v
 

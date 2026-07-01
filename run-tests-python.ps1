@@ -8,6 +8,7 @@
 #   .\run-tests-python.ps1
 #   .\run-tests-python.ps1 --full
 #   .\run-tests-python.ps1 termin-app/tests/test_project_file_watcher.py -q
+# Selected pytest-target runs skip the repo-wide Python lint suite.
 
 $ErrorActionPreference = "Stop"
 
@@ -22,6 +23,7 @@ function Show-Help {
     Write-Host "  --full      Include pytest tests marked full"
     Write-Host "  pytest-target"
     Write-Host "              Run only selected pytest target(s), e.g. termin-app/tests/test_game_mode_model.py"
+    Write-Host "              Selected runs skip the repo-wide Python lint suite."
 }
 
 foreach ($arg in $args) {
@@ -170,6 +172,7 @@ function Invoke-TestSuite {
 if ($PytestTargets.Count -gt 0) {
     Invoke-TestSuite "selected python" (@("-m", "pytest") + $PytestMarkerArgs + $PytestTargets.ToArray() + (New-PytestSuiteArgs "selected-python") + @("-v"))
 } else {
+    Invoke-TestSuite "Python lint" @("-m", "ruff", "check", $ScriptDir)
     Invoke-TestSuite "termin-base python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-base/tests/python/") + (New-PytestSuiteArgs "termin-base-python") + @("-v"))
     Invoke-TestSuite "termin-modules import smoke" @("-c", "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())")
     Invoke-TestSuite "termin-mesh python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-mesh/tests/python/") + (New-PytestSuiteArgs "termin-mesh-python") + @("-v"))
