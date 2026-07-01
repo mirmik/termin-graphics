@@ -31,6 +31,7 @@ cannot launch the editor, run `./run-tests.sh --full --no-editor-smoke`.
 | Area | Command | What It Proves |
 | --- | --- | --- |
 | C/C++ render and graphics tests | `./run-tests-cpp.sh --full --sdl` | Builds and runs the registered CTest graph, including tgfx2 OpenGL/Vulkan-capable tests where the host supports them. |
+| SDF font atlas headless check | `ctest --test-dir build/Release-tests -R '^tgfx2_sdf_test$' --output-on-failure` | FontAtlas bitmap/SDF glyph metrics, UVs, measurements, and CPU atlas signal work without a GL/Vulkan/D3D runtime. |
 | Python shader/material/project tests | `./run-tests-python.sh termin-materials/tests/test_shader_parser.py termin-voxels/tests/test_voxel_shader.py termin-shader-runtime/tests/test_shader_tool_resolution.py termin-app/tests/test_shader_tool_resolution.py` | Parser/runtime shader import, built-in shader catalog, and shader tool resolution stay usable from Python. |
 | OpenGL tgfx2 smoke | `ctest --test-dir build/Release-tests -R '^(tgfx2_smoke|tgfx2_opengl_bound_resource_set)$' --output-on-failure` | OpenGL device, render target readback, shader artifacts, and bound-resource-set path work. |
 | Vulkan tgfx2 smoke | `ctest --test-dir build/Release-tests -R '^(tgfx2_vulkan_smoke|tgfx2_vulkan_window)$' --output-on-failure` | Vulkan offscreen/window paths, readback, resource binding, vertex formats, and optional Slang artifact path work. |

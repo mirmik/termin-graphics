@@ -1,22 +1,15 @@
-// SDF font atlas smoke test — exercises FontAtlas SDF path without GPU.
+// SDF font atlas smoke test — exercises FontAtlas bitmap/SDF paths without GPU.
 // Run with: ./tgfx2_sdf_test
 #include <algorithm>
+#include <cstddef>
 #include <cmath>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
 
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-
-#include "tgfx2/descriptors.hpp"
-#include "tgfx2/device_factory.hpp"
-#include "tgfx2/enums.hpp"
 #include "tgfx2/font_atlas.hpp"
-#include "tgfx2/i_render_device.hpp"
-#include "tgfx2/opengl/opengl_render_device.hpp"
-#include "tgfx2/pipeline_cache.hpp"
-#include "tgfx2/render_context.hpp"
+
+#ifndef TGFX2_TEST_FONT_PATH
+#error "TGFX2_TEST_FONT_PATH must point at a deterministic test TTF"
+#endif
 
 namespace {
 
@@ -63,43 +56,8 @@ void check_glyph(const tgfx::FontAtlas::GlyphInfo& glyph, const char* label) {
 }  // namespace
 
 int main() {
-    if (!glfwInit()) {
-        fprintf(stderr, "GLFW init failed\n");
-        return 1;
-    }
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-
-    GLFWwindow* window = glfwCreateWindow(800, 200, "SDF test", nullptr, nullptr);
-    if (!window) {
-        fprintf(stderr, "Window creation failed\n");
-        glfwTerminate();
-        return 1;
-    }
-    glfwMakeContextCurrent(window);
-
-    if (!gladLoaderLoadGL()) {
-        fprintf(stderr, "GLAD init failed\n");
-        glfwDestroyWindow(window);
-        glfwTerminate();
-        return 1;
-    }
-
-    // Create device + context.
-    auto device = tgfx::create_device(tgfx::BackendType::OpenGL);
-    if (!device) {
-        fprintf(stderr, "create_device failed\n");
-        glfwDestroyWindow(window);
-        glfwTerminate();
-        return 1;
-    }
-    tgfx::PipelineCache cache(*device);
-    tgfx::RenderContext2 ctx(*device, cache);
-
     // Load font.
-    const char* font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+    const char* font_path = TGFX2_TEST_FONT_PATH;
     tgfx::FontAtlas font(font_path, 14);
     printf("Font loaded: %s\n", font_path);
     printf("SDF config: enabled=%d threshold=%d ref=%d spread=%d\n",
@@ -115,7 +73,7 @@ int main() {
     // Exercise bitmap path (below threshold).
     printf("\n--- Bitmap path ---\n");
     for (float sz : {8.0f, 10.0f, 12.0f, 14.0f, 16.0f}) {
-        font.ensure_glyphs(test_str, sz, &ctx);
+        font.ensure_glyphs(test_str, sz);
         auto m = font.measure_text(test_str, sz);
         printf("  size=%.0f  measure=(%.1f, %.1f)  sdf=%d\n",
                sz, m.width, m.height, font.is_sdf_size(sz));
@@ -123,9 +81,9 @@ int main() {
         check(m.width > 0.0f, "bitmap text measure width should be positive");
         check(m.height == sz, "bitmap text measure height should match requested size");
     }
-    auto bitmap_texture = font.ensure_texture(&ctx);
-    printf("  Bitmap atlas texture: id=%u\n", bitmap_texture.id);
-    check(bitmap_texture.id != 0, "bitmap atlas texture handle should be valid");
+    check(font.cpu_atlas_data() != nullptr, "bitmap CPU atlas should be allocated");
+    check(font.atlas_width() > 0, "bitmap atlas width should be positive");
+    check(font.atlas_height() > 0, "bitmap atlas height should be positive");
     auto bitmap_a = font.get_glyph('A', 14.0f);
     check(bitmap_a.has_value(), "bitmap glyph A should be present at 14px");
     if (bitmap_a) {
@@ -140,7 +98,7 @@ int main() {
     // Exercise SDF path (above threshold).
     printf("\n--- SDF path ---\n");
     for (float sz : {18.0f, 20.0f, 24.0f, 28.0f, 32.0f, 48.0f, 64.0f}) {
-        font.ensure_glyphs(test_str, sz, &ctx);
+        font.ensure_glyphs(test_str, sz);
         auto m = font.measure_text(test_str, sz);
         printf("  size=%.0f  measure=(%.1f, %.1f)  sdf=%d\n",
                sz, m.width, m.height, font.is_sdf_size(sz));
@@ -148,9 +106,7 @@ int main() {
         check(m.width > 0.0f, "SDF text measure width should be positive");
         check(m.height == sz, "SDF text measure height should match requested size");
     }
-    auto sdf_texture = font.sdf_atlas_texture(&ctx);
-    printf("  SDF atlas texture: id=%u\n", sdf_texture.id);
-    check(sdf_texture.id != 0, "SDF atlas texture handle should be valid");
+    check(font.sdf_atlas_data() != nullptr, "SDF CPU atlas should be allocated");
     auto sdf_a = font.get_glyph('A', 24.0f);
     check(sdf_a.has_value(), "SDF glyph A should be present at 24px");
     if (sdf_a) {
@@ -194,14 +150,12 @@ int main() {
         "\xe2\x80\xa2\xe2\x80\xa3\xe2\x97\xa6"              // •‣◦
         "\xe2\x9c\x93\xe2\x9c\x97\xe2\x9c\x95"              // ✓✗✕
         "\xe2\x86\x90\xe2\x86\x92\xe2\x86\x91\xe2\x86\x93";  // ←→↑↓
-    font.ensure_glyphs(stress_str, 24.0f, &ctx);
+    font.ensure_glyphs(stress_str, 24.0f);
     auto m = font.measure_text(stress_str, 24.0f);
     printf("  Stress string measure at 24px: %.1f x %.1f\n", m.width, m.height);
     check(m.width > 0.0f, "stress string measure width should be positive");
     check(m.height == 24.0f, "stress string measure height should match requested size");
 
-    // Cleanup.
-    font.release_gpu();
     if (failures != 0) {
         fprintf(stderr, "\nSDF atlas test failed with %d assertion(s).\n", failures);
         return 1;

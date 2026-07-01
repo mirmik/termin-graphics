@@ -478,6 +478,14 @@ if(BUILD_TGFX2_TESTS)
     set(TGFX2_VULKAN_RUNTIME_SKIP_RE
         "Failed to create Vulkan device: Failed to create Vulkan instance|Failed to create Vulkan device: No Vulkan-capable GPU found")
 
+    add_executable(tgfx2_sdf_test tests/test_tgfx2_sdf.cpp)
+    target_compile_definitions(tgfx2_sdf_test PRIVATE
+        TGFX2_TEST_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf")
+    target_link_libraries(tgfx2_sdf_test PRIVATE termin_graphics2)
+    termin_set_rpath_test(tgfx2_sdf_test)
+    add_test(NAME tgfx2_sdf_test COMMAND tgfx2_sdf_test)
+    set_tests_properties(tgfx2_sdf_test PROPERTIES TIMEOUT 10)
+
     if(BUILD_TGFX2_WINDOW_TESTS)
         find_package(glfw3 QUIET)
         if(NOT TARGET glfw)
@@ -498,14 +506,6 @@ if(BUILD_TGFX2_TESTS)
         termin_set_rpath_test(tgfx2_smoke)
         add_test(NAME tgfx2_smoke COMMAND tgfx2_smoke)
         set_tests_properties(tgfx2_smoke PROPERTIES
-            TIMEOUT 10
-            SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
-
-        add_executable(tgfx2_sdf_test tests/test_tgfx2_sdf.cpp)
-        target_link_libraries(tgfx2_sdf_test PRIVATE termin_graphics2 glfw)
-        termin_set_rpath_test(tgfx2_sdf_test)
-        add_test(NAME tgfx2_sdf_test COMMAND tgfx2_sdf_test)
-        set_tests_properties(tgfx2_sdf_test PROPERTIES
             TIMEOUT 10
             SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
 
