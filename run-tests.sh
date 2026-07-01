@@ -81,12 +81,12 @@ if [[ "$FULL" -eq 1 && "$NO_EDITOR_SMOKE" -eq 0 ]]; then
     echo "  Editor smoke tests"
     echo "========================================"
 
-    if ! run_editor_smoke "Python module hot reload smoke" "$SCRIPT_DIR/scripts/smoke-python-module-hot-reload"; then
-        failures+=("Editor smoke: Python module hot reload")
+    if ! run_editor_smoke "Python module explicit reload smoke" "$SCRIPT_DIR/scripts/smoke-python-module-hot-reload"; then
+        failures+=("Editor smoke: Python module explicit reload")
     fi
 
-    if ! run_editor_smoke "C++ module cascade hot reload smoke" "$SCRIPT_DIR/scripts/smoke-cpp-module-cascade-hot-reload"; then
-        failures+=("Editor smoke: C++ module cascade hot reload")
+    if ! run_editor_smoke "C++ module cascade explicit reload smoke" "$SCRIPT_DIR/scripts/smoke-cpp-module-cascade-hot-reload"; then
+        failures+=("Editor smoke: C++ module cascade explicit reload")
     fi
 else
     echo ""
