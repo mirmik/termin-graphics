@@ -117,9 +117,6 @@ if (( ${#PYTEST_TARGETS[@]} > 0 )); then
     run_suite "selected python" \
         "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" "${PYTEST_TARGETS[@]}" -v
 else
-run_suite "Python lint" \
-    bash "$SCRIPT_DIR/run-lint-python.sh"
-
 run_suite "termin-build-tools python" \
     "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-build-tools/tests/ -v
 
@@ -179,6 +176,9 @@ run_suite "termin-player python" \
 
 run_suite "termin-app python" \
     "${PYTHON_BIN}" -m pytest "${PYTEST_MARK_ARGS[@]}" termin-app/tests/ -v
+
+run_suite "Python lint" \
+    bash "$SCRIPT_DIR/run-lint-python.sh"
 fi
 
 if (( ${#failures[@]} > 0 )); then

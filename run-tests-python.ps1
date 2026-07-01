@@ -172,7 +172,6 @@ function Invoke-TestSuite {
 if ($PytestTargets.Count -gt 0) {
     Invoke-TestSuite "selected python" (@("-m", "pytest") + $PytestMarkerArgs + $PytestTargets.ToArray() + (New-PytestSuiteArgs "selected-python") + @("-v"))
 } else {
-    Invoke-TestSuite "Python lint" @("-m", "ruff", "check", $ScriptDir)
     Invoke-TestSuite "termin-base python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-base/tests/python/") + (New-PytestSuiteArgs "termin-base-python") + @("-v"))
     Invoke-TestSuite "termin-modules import smoke" @("-c", "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())")
     Invoke-TestSuite "termin-mesh python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-mesh/tests/python/") + (New-PytestSuiteArgs "termin-mesh-python") + @("-v"))
@@ -186,6 +185,7 @@ if ($PytestTargets.Count -gt 0) {
     Invoke-TestSuite "termin-qopt python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-qopt/tests/") + (New-PytestSuiteArgs "termin-qopt-python") + @("-v"))
     Invoke-TestSuite "termin-pga python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-pga/tests/") + (New-PytestSuiteArgs "termin-pga-python") + @("-v"))
     Invoke-TestSuite "termin-app python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-app/tests/") + (New-PytestSuiteArgs "termin-app-python") + @("-v"))
+    Invoke-TestSuite "Python lint" @("-m", "ruff", "check", $ScriptDir)
 }
 
 if ($Failures.Count -gt 0) {
