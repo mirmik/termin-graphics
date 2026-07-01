@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <string>
 #include "tgfx2/tgfx2_api.h"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/i_render_device.hpp"
@@ -8,6 +9,10 @@
 namespace tgfx {
 
 TGFX2_API std::unique_ptr<IRenderDevice> create_device(BackendType type);
+
+TGFX2_API const char* backend_name(BackendType type);
+TGFX2_API BackendType backend_from_name(const std::string& name);
+TGFX2_API bool backend_is_compiled(BackendType type);
 
 // Return the platform-preferred backend among the compiled backends.
 // Windows prefers D3D11 when it is available; otherwise Vulkan is preferred

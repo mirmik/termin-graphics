@@ -89,10 +89,27 @@ TEST_CASE("tgfx2 device factory parses TERMIN_BACKEND aliases") {
     set_backend_env("DX11");
     CHECK(tgfx::default_backend_from_env() == tgfx::BackendType::D3D11);
 
+    set_backend_env("null");
+    CHECK(tgfx::default_backend_from_env() == tgfx::BackendType::Null);
+
     set_backend_env("definitely-not-a-backend");
     CHECK(tgfx::default_backend_from_env() == tgfx::compiled_default_backend());
 
     set_backend_env(nullptr);
+}
+
+TEST_CASE("tgfx2 backend names and compiled availability are queryable") {
+    CHECK(std::string(tgfx::backend_name(tgfx::BackendType::OpenGL)) == "opengl");
+    CHECK(std::string(tgfx::backend_name(tgfx::BackendType::Vulkan)) == "vulkan");
+    CHECK(std::string(tgfx::backend_name(tgfx::BackendType::D3D11)) == "d3d11");
+
+    CHECK(tgfx::backend_from_name("GL") == tgfx::BackendType::OpenGL);
+    CHECK(tgfx::backend_from_name("vk") == tgfx::BackendType::Vulkan);
+    CHECK(tgfx::backend_from_name("DX11") == tgfx::BackendType::D3D11);
+    CHECK(tgfx::backend_from_name("definitely-not-a-backend") == tgfx::BackendType::Null);
+
+    CHECK(tgfx::backend_is_compiled(tgfx::compiled_default_backend()));
+    CHECK(!tgfx::backend_is_compiled(tgfx::BackendType::Null));
 }
 
 TEST_CASE("tgfx2 shader artifact paths are backend aware") {

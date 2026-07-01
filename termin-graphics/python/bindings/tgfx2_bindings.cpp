@@ -47,6 +47,20 @@ namespace nb = nanobind;
 namespace tgfx_bindings {
 
 void bind_tgfx2(nb::module_& m) {
+    m.def(
+        "compiled_backend_name",
+        []() -> std::string {
+            return tgfx::backend_name(tgfx::compiled_default_backend());
+        },
+        "Return the platform-preferred compiled tgfx2 backend name.");
+    m.def(
+        "backend_is_compiled",
+        [](const std::string& name) -> bool {
+            return tgfx::backend_is_compiled(tgfx::backend_from_name(name));
+        },
+        nb::arg("name"),
+        "Return whether the named tgfx2 backend is compiled into this SDK.");
+
     // --- Opaque handle wrappers ---
     //
     // HandlePool entries in tgfx2 are value-typed (32-bit id). We wrap
