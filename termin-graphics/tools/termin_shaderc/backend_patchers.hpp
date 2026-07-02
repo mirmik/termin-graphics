@@ -67,6 +67,7 @@ bool legalize_slang_opengl_glsl_builtins(const CompileOptions& options);
 bool augment_d3d11_resource_bindings_from_hlsl(
     const CompileOptions& options,
     const std::filesystem::path& hlsl_path,
+    const std::vector<ShaderResourceBinding>& declared_resources,
     std::vector<ShaderResourceBinding>& resources);
 bool patch_slang_d3d11_hlsl_resource_bindings(
     const CompileOptions& options,

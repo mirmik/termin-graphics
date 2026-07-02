@@ -523,6 +523,19 @@ static bool d3d11_hlsl_has_comparison_sampler_array_for_resource(
         });
 }
 
+static const ShaderResourceBinding* find_declared_d3d11_hlsl_resource(
+    const std::vector<ShaderResourceBinding>& declared_resources,
+    const std::string& name,
+    const std::string& kind
+) {
+    for (const ShaderResourceBinding& resource : declared_resources) {
+        if (resource.name == name && resource.kind == kind) {
+            return &resource;
+        }
+    }
+    return nullptr;
+}
+
 static std::string infer_d3d11_hlsl_resource_scope(
     const std::string& name,
     const std::string& kind
@@ -534,6 +547,7 @@ static std::string infer_d3d11_hlsl_resource_scope(
 
 static void append_missing_d3d11_hlsl_resources(
     std::vector<ShaderResourceBinding>& resources,
+    const std::vector<ShaderResourceBinding>& declared_resources,
     const std::string& hlsl,
     uint32_t stage_mask
 ) {
@@ -560,13 +574,25 @@ static void append_missing_d3d11_hlsl_resources(
         }
 
         ShaderResourceBinding binding;
+        if (const ShaderResourceBinding* declared =
+                find_declared_d3d11_hlsl_resource(
+                    declared_resources,
+                    decl.resource_name,
+                    decl.kind)) {
+            binding = *declared;
+        } else {
+            binding.name = decl.resource_name;
+            binding.kind = decl.kind;
+            binding.scope =
+                infer_d3d11_hlsl_resource_scope(binding.name, binding.kind);
+        }
         binding.name = decl.resource_name;
         binding.kind = decl.kind;
-        binding.scope =
-            infer_d3d11_hlsl_resource_scope(binding.name, binding.kind);
-        binding.stage_mask = stage_mask;
+        binding.stage_mask |= stage_mask;
         binding.binding = decl.register_index;
         binding.set = 0;
+        binding.d3d11_register_class.clear();
+        binding.d3d11_register_index = 0;
         binding.slang_combined_texture =
             decl.kind == "texture" &&
             d3d11_hlsl_has_decl_for_resource(
@@ -589,6 +615,7 @@ static void append_missing_d3d11_hlsl_resources(
 bool augment_d3d11_resource_bindings_from_hlsl(
     const CompileOptions& options,
     const std::filesystem::path& hlsl_path,
+    const std::vector<ShaderResourceBinding>& declared_resources,
     std::vector<ShaderResourceBinding>& resources
 ) {
     std::string hlsl;
@@ -598,6 +625,7 @@ bool augment_d3d11_resource_bindings_from_hlsl(
 
     append_missing_d3d11_hlsl_resources(
         resources,
+        declared_resources,
         hlsl,
         stage_mask_for_stage(options.stage));
     assign_missing_resource_scopes(resources);

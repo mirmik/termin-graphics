@@ -22,6 +22,7 @@
 #include <regex>
 #include <sstream>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -1028,6 +1029,29 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
             binding.stage_mask = stage_mask;
             append_unique_resource(resources, std::move(binding));
         }
+        static const std::regex slang_constant_buffer_re(
+            R"REGEX((?:\[\[\s*(?:TerminScope|Scope)\s*\(\s*"([^"]+)"\s*\)\s*\]\]\s*)?(?:(?:public|extern|static|uniform)\s+)*ConstantBuffer\s*<\s*[^>]+\s*>\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*register\s*\(\s*b([0-9]+)\s*,\s*space([0-9]+)\s*\))?\s*;)REGEX");
+        for (std::sregex_iterator it(source.begin(), source.end(), slang_constant_buffer_re), end;
+             it != end;
+             ++it) {
+            const std::smatch& match = *it;
+            ShaderResourceBinding binding;
+            const std::string scope = match[1].str();
+            binding.name = match[2].str();
+            binding.kind = "constant_buffer";
+            if (binding.name == "material" && !match[3].matched) {
+                continue;
+            }
+            if (!scope.empty() && is_valid_explicit_resource_scope(scope)) {
+                binding.scope = scope;
+            }
+            if (match[3].matched && match[4].matched) {
+                binding.binding = static_cast<uint32_t>(std::stoul(match[3].str()));
+                binding.set = static_cast<uint32_t>(std::stoul(match[4].str()));
+            }
+            binding.stage_mask = stage_mask;
+            append_unique_resource(resources, std::move(binding));
+        }
         static const std::regex texture_register_re(
             R"((Sampler[0-9A-Za-z_]*|Texture[A-Za-z0-9_<>, \t]*|RWTexture[A-Za-z0-9_<>, \t]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*([tu])([0-9]+)\s*,\s*space([0-9]+)\s*\))");
         for (std::sregex_iterator it(source.begin(), source.end(), texture_register_re), end;
@@ -1048,7 +1072,7 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
             append_unique_resource(resources, std::move(binding));
         }
         static const std::regex bare_resource_re(
-            R"REGEX((?:\[\[\s*(?:TerminScope|Scope)\s*\(\s*"([^"]+)"\s*\)\s*\]\]\s*)?(Sampler[0-9A-Za-z_]*|Texture[A-Za-z0-9_<>, \t]*|RWTexture[A-Za-z0-9_<>, \t]*|SamplerState|SamplerComparisonState)\s+([A-Za-z_][A-Za-z0-9_]*)\s*;)REGEX");
+            R"REGEX((?:\[\[\s*(?:TerminScope|Scope)\s*\(\s*"([^"]+)"\s*\)\s*\]\]\s*)?(?:(?:public|extern|static|uniform)\s+)*(Sampler[0-9A-Za-z_]*|Texture[A-Za-z0-9_<>, \t]*|RWTexture[A-Za-z0-9_<>, \t]*|SamplerState|SamplerComparisonState)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[[^\]]+\]\s*)*(?::\s*register\s*\(\s*([tus])([0-9]+)\s*,\s*space([0-9]+)\s*\))?\s*;)REGEX");
         for (std::sregex_iterator it(source.begin(), source.end(), bare_resource_re), end;
              it != end;
              ++it) {
@@ -1059,6 +1083,10 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
             binding.name = match[3].str();
             if (!scope.empty() && is_valid_explicit_resource_scope(scope)) {
                 binding.scope = scope;
+            }
+            if (match[5].matched && match[6].matched) {
+                binding.binding = static_cast<uint32_t>(std::stoul(match[5].str()));
+                binding.set = static_cast<uint32_t>(std::stoul(match[6].str()));
             }
             if (type == "SamplerState" || type == "SamplerComparisonState") {
                 binding.kind = "sampler";
@@ -1130,6 +1158,94 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
         }
     }
 
+    return resources;
+}
+
+static std::optional<std::filesystem::path> resolve_slang_import_path(
+    const std::string& module_name,
+    const std::vector<std::string>& include_dirs
+) {
+    std::string module_path = module_name;
+    std::replace(module_path.begin(), module_path.end(), '.', '/');
+    std::vector<std::string> candidates = {
+        module_name + ".slang",
+        module_path + ".slang",
+    };
+    for (const std::string& dir : include_dirs) {
+        for (const std::string& candidate_name : candidates) {
+            std::filesystem::path candidate = std::filesystem::path(dir) / candidate_name;
+            std::error_code ec;
+            if (std::filesystem::exists(candidate, ec) &&
+                std::filesystem::is_regular_file(candidate, ec)) {
+                return candidate;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+static std::string normalized_existing_path_key(const std::filesystem::path& path) {
+    std::error_code ec;
+    std::filesystem::path normalized = std::filesystem::weakly_canonical(path, ec);
+    if (ec) {
+        normalized = std::filesystem::absolute(path, ec).lexically_normal();
+    }
+    return normalized.string();
+}
+
+static void collect_slang_import_resource_bindings(
+    const std::string& source,
+    const CompileOptions& options,
+    const std::vector<std::string>& include_dirs,
+    std::unordered_set<std::string>& visited_imports,
+    std::vector<ShaderResourceBinding>& out_resources
+) {
+    static const std::regex import_re(
+        R"(\bimport\s+([A-Za-z_][A-Za-z0-9_\.]*)\s*;)");
+    for (std::sregex_iterator it(source.begin(), source.end(), import_re), end;
+         it != end;
+         ++it) {
+        const std::string module_name = (*it)[1].str();
+        std::optional<std::filesystem::path> import_path =
+            resolve_slang_import_path(module_name, include_dirs);
+        if (!import_path) {
+            continue;
+        }
+        const std::string key = normalized_existing_path_key(*import_path);
+        if (!visited_imports.insert(key).second) {
+            continue;
+        }
+
+        std::string import_source;
+        if (!read_file(import_path->string(), import_source)) {
+            continue;
+        }
+        append_missing_resources(
+            out_resources,
+            infer_resource_bindings(import_source, options));
+        collect_slang_import_resource_bindings(
+            import_source,
+            options,
+            include_dirs,
+            visited_imports,
+            out_resources);
+    }
+}
+
+static std::vector<ShaderResourceBinding> collect_declared_slang_resource_bindings(
+    const std::string& source,
+    const CompileOptions& options,
+    const std::vector<std::string>& include_dirs
+) {
+    std::vector<ShaderResourceBinding> resources =
+        infer_resource_bindings(source, options);
+    std::unordered_set<std::string> visited_imports;
+    collect_slang_import_resource_bindings(
+        source,
+        options,
+        include_dirs,
+        visited_imports,
+        resources);
     return resources;
 }
 
@@ -1744,6 +1860,11 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         !ensure_parent_directory(options.output, "artifact output")) {
         return false;
     }
+    const std::vector<std::string> include_dirs = slang_include_dirs(options, argv0);
+    const std::vector<ShaderResourceBinding> declared_slang_resources =
+        is_d3d11
+            ? collect_declared_slang_resource_bindings(source, options, include_dirs)
+            : std::vector<ShaderResourceBinding>{};
     std::vector<std::string> args = {
         *slangc,
         options.input,
@@ -1753,7 +1874,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         native_clip_y_up_define,
         *matrix_layout_arg,
     };
-    for (const std::string& include_dir : slang_include_dirs(options, argv0)) {
+    for (const std::string& include_dir : include_dirs) {
         args.insert(args.end(), {"-I", include_dir});
     }
     args.insert(args.end(), {"-reflection-json", reflection_path.string()});
@@ -1786,6 +1907,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         if (!augment_d3d11_resource_bindings_from_hlsl(
                 options,
                 slang_output_path,
+                declared_slang_resources,
                 resources)) {
             std::error_code ec;
             std::filesystem::remove(options.output, ec);

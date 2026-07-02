@@ -374,6 +374,102 @@ def test_termin_shaderc_merges_bare_slang_sampler2d_when_reflection_is_partial(t
     ]
 
 
+def test_termin_shaderc_d3d11_preserves_imported_slang_scope_for_hlsl_augmented_resource(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        "import test_shadows;\n"
+        "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
+        "    return float4(1.0);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "test_shadows.slang").write_text(
+        "[[TerminScope(\"pass\")]] public Sampler2DShadow shadow_maps[16];\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.ps.cso"
+    patched_hlsl = tmp_path / "patched.hlsl"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "out.write_text(\n"
+        "    'Texture2D<float > shadow_maps_texture_0[int(16)] : register(t0);\\n'\n"
+        "    'SamplerComparisonState shadow_maps_sampler_0[int(16)] : register(s0);\\n'\n"
+        "    'float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\\n'\n"
+        "    '    return shadow_maps_texture_0[int(0)].SampleCmp(shadow_maps_sampler_0[int(0)], uv, 0.5);\\n'\n"
+        "    '}\\n',\n"
+        "    encoding='utf-8')\n"
+        "reflection.write_text(json.dumps({'parameters': []}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+    fake_fxc = tmp_path / "fake_fxc.py"
+    fake_fxc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('/Fo') + 1])\n"
+        "out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "capture = os.environ.get('FAKE_FXC_HLSL_CAPTURE')\n"
+        "if capture:\n"
+        "    pathlib.Path(capture).write_text(pathlib.Path(sys.argv[-1]).read_text(encoding='utf-8'), encoding='utf-8')\n"
+        "out.write_bytes(b'FAKE-CSO')\n",
+        encoding="utf-8",
+    )
+    fake_fxc.chmod(0o755)
+
+    result = _run_shaderc([
+        "compile",
+        "--language",
+        "slang",
+        "--target",
+        "d3d11",
+        "--stage",
+        "fragment",
+        "--entry",
+        "main",
+        "--input",
+        str(shader),
+        "--output",
+        str(output),
+        "--slangc",
+        str(fake_slangc),
+        "--fxc",
+        str(fake_fxc),
+    ], env={"FAKE_FXC_HLSL_CAPTURE": str(patched_hlsl)})
+
+    assert result.returncode == 0, result.stderr
+    assert "resource 'shadow_maps' has no scope" not in result.stderr
+    hlsl = patched_hlsl.read_text(encoding="utf-8")
+    assert "shadow_maps_sampler_0 : register(s0)" in hlsl
+    assert "shadow_maps_sampler_0[int" not in hlsl
+
+    layout = json.loads((tmp_path / "out.ps.cso.layout.json").read_text(encoding="utf-8"))
+    assert layout["resources"] == [
+        {
+            "name": "shadow_maps",
+            "kind": "texture",
+            "scope": "pass",
+            "set": 0,
+            "binding": _expected_scoped_binding(
+                "shadow_maps",
+                "texture",
+                "pass",
+                target="d3d11",
+            ),
+            "stage_mask": 2,
+            "size": 0,
+            "d3d11": {
+                "register_class": "t",
+                "register_index": 0,
+                "scalar_sampler_for_texture_array": True,
+            },
+        }
+    ]
+
 def test_termin_shaderc_d3d11_patches_helper_and_imported_hlsl_resources(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
