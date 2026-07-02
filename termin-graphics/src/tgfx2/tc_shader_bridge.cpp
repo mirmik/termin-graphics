@@ -1428,3 +1428,10 @@ bool tc_shader_ensure_tgfx2(
 }
 
 } // namespace termin
+extern "C" TGFX2_API void tgfx2_set_shader_artifact_root(const char* root) {
+    termin::tgfx2_set_shader_artifact_root(root);
+}
+
+extern "C" TGFX2_API const char* tgfx2_get_shader_artifact_root(void) {
+    return termin::tgfx2_get_shader_artifact_root();
+}

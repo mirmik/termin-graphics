@@ -81,3 +81,7 @@ TGFX2_API bool tgfx2_load_shader_artifact(
     std::vector<uint8_t>& out);
 
 } // namespace termin
+extern "C" {
+TGFX2_API void tgfx2_set_shader_artifact_root(const char* root);
+TGFX2_API const char* tgfx2_get_shader_artifact_root(void);
+}
