@@ -815,6 +815,7 @@ TextureHandle D3D11RenderDevice::create_texture(const TextureDesc& desc) {
         hr = device_->CreateShaderResourceView(out.texture.Get(), &sv, &out.srv);
         if (FAILED(hr)) {
             tc::Log::error("D3D11RenderDevice::create_texture SRV failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
+            return {};
         }
     }
 
@@ -822,6 +823,7 @@ TextureHandle D3D11RenderDevice::create_texture(const TextureDesc& desc) {
         hr = device_->CreateRenderTargetView(out.texture.Get(), nullptr, &out.rtv);
         if (FAILED(hr)) {
             tc::Log::error("D3D11RenderDevice::create_texture RTV failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
+            return {};
         }
     }
 
@@ -832,6 +834,7 @@ TextureHandle D3D11RenderDevice::create_texture(const TextureDesc& desc) {
         hr = device_->CreateDepthStencilView(out.texture.Get(), &dv, &out.dsv);
         if (FAILED(hr)) {
             tc::Log::error("D3D11RenderDevice::create_texture DSV failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
+            return {};
         }
     }
 
@@ -1051,6 +1054,18 @@ void D3D11RenderDevice::destroy(ResourceSetHandle handle) { resource_sets_.remov
 void D3D11RenderDevice::upload_buffer(BufferHandle dst, std::span<const uint8_t> data, uint64_t offset) {
     auto* buf = get_buffer(dst);
     if (!buf || !buf->buffer || data.empty()) return;
+
+    D3D11_BUFFER_DESC native_desc{};
+    buf->buffer->GetDesc(&native_desc);
+    if (offset > native_desc.ByteWidth || data.size() > static_cast<size_t>(native_desc.ByteWidth - offset)) {
+        tc::Log::error(
+            "D3D11RenderDevice::upload_buffer: upload range [%llu, %llu) exceeds buffer size %u",
+            static_cast<unsigned long long>(offset),
+            static_cast<unsigned long long>(offset + data.size()),
+            native_desc.ByteWidth);
+        return;
+    }
+
     if (buf->desc.cpu_visible) {
         D3D11_MAPPED_SUBRESOURCE mapped{};
         HRESULT hr = context_->Map(buf->buffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
@@ -1060,17 +1075,6 @@ void D3D11RenderDevice::upload_buffer(BufferHandle dst, std::span<const uint8_t>
         }
         std::memcpy(static_cast<uint8_t*>(mapped.pData) + offset, data.data(), data.size());
         context_->Unmap(buf->buffer.Get(), 0);
-        return;
-    }
-
-    D3D11_BUFFER_DESC native_desc{};
-    buf->buffer->GetDesc(&native_desc);
-    if (offset + data.size() > native_desc.ByteWidth) {
-        tc::Log::error(
-            "D3D11RenderDevice::upload_buffer: upload range [%llu, %llu) exceeds buffer size %u",
-            static_cast<unsigned long long>(offset),
-            static_cast<unsigned long long>(offset + data.size()),
-            native_desc.ByteWidth);
         return;
     }
 
@@ -1133,6 +1137,15 @@ void D3D11RenderDevice::read_buffer(BufferHandle src, std::span<uint8_t> data, u
 
     D3D11_BUFFER_DESC src_desc{};
     buf->buffer->GetDesc(&src_desc);
+    if (offset > src_desc.ByteWidth || data.size() > static_cast<size_t>(src_desc.ByteWidth - offset)) {
+        tc::Log::error(
+            "D3D11RenderDevice::read_buffer: read range [%llu, %llu) exceeds buffer size %u",
+            static_cast<unsigned long long>(offset),
+            static_cast<unsigned long long>(offset + data.size()),
+            src_desc.ByteWidth);
+        return;
+    }
+
     D3D11_BUFFER_DESC staging_desc = src_desc;
     staging_desc.Usage = D3D11_USAGE_STAGING;
     staging_desc.BindFlags = 0;
@@ -1205,6 +1218,7 @@ TextureHandle D3D11RenderDevice::register_external_texture(ID3D11Texture2D* text
             tc::Log::error(
                 "D3D11RenderDevice::register_external_texture SRV failed: HRESULT=0x%08X",
                 static_cast<unsigned>(hr));
+            return {};
         }
     }
 
@@ -1214,6 +1228,7 @@ TextureHandle D3D11RenderDevice::register_external_texture(ID3D11Texture2D* text
             tc::Log::error(
                 "D3D11RenderDevice::register_external_texture RTV failed: HRESULT=0x%08X",
                 static_cast<unsigned>(hr));
+            return {};
         }
     }
 
@@ -1226,6 +1241,7 @@ TextureHandle D3D11RenderDevice::register_external_texture(ID3D11Texture2D* text
             tc::Log::error(
                 "D3D11RenderDevice::register_external_texture DSV failed: HRESULT=0x%08X",
                 static_cast<unsigned>(hr));
+            return {};
         }
     }
 
