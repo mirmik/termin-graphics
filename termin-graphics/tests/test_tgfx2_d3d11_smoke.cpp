@@ -231,6 +231,46 @@ int main() {
             return 1;
         }
 
+        tgfx::TextureDesc unsupported_rgb_desc;
+        unsupported_rgb_desc.width = 2;
+        unsupported_rgb_desc.height = 2;
+        unsupported_rgb_desc.format = tgfx::PixelFormat::RGB8_UNorm;
+        unsupported_rgb_desc.usage = tgfx::TextureUsage::Sampled |
+                                     tgfx::TextureUsage::CopyDst;
+        if (device->create_texture(unsupported_rgb_desc)) {
+            std::fprintf(stderr, "D3D11 smoke: RGB8 texture creation should fail explicitly\n");
+            return 1;
+        }
+
+        tgfx::TextureDesc unsupported_storage_desc;
+        unsupported_storage_desc.width = 2;
+        unsupported_storage_desc.height = 2;
+        unsupported_storage_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+        unsupported_storage_desc.usage = tgfx::TextureUsage::Storage |
+                                         tgfx::TextureUsage::Sampled;
+        if (device->create_texture(unsupported_storage_desc)) {
+            std::fprintf(stderr, "D3D11 smoke: storage texture creation should fail explicitly\n");
+            return 1;
+        }
+
+        tgfx::BackendBindingPlanEntry unsupported_storage_plan;
+        unsupported_storage_plan.resource.name = "output_image";
+        unsupported_storage_plan.resource.kind = tgfx::ShaderResourceKind::StorageTexture;
+        unsupported_storage_plan.resource.scope = tgfx::ShaderResourceScope::Pass;
+        unsupported_storage_plan.stage_mask = TC_SHADER_STAGE_FRAGMENT;
+        unsupported_storage_plan.placement.kind = tgfx::BackendPlacementKind::D3D11Register;
+        unsupported_storage_plan.placement.d3d11.register_class = tgfx::D3D11RegisterClass::U;
+        unsupported_storage_plan.placement.d3d11.register_index = 0;
+        tgfx::BoundResourceValue unsupported_storage_value;
+        unsupported_storage_value.kind = tgfx::BoundResourceKind::SampledTexture;
+        tgfx::BoundResourceSetDesc unsupported_storage_set_desc;
+        unsupported_storage_set_desc.bindings.push_back(
+            {unsupported_storage_plan, unsupported_storage_value});
+        if (device->create_bound_resource_set(unsupported_storage_set_desc)) {
+            std::fprintf(stderr, "D3D11 smoke: storage texture resource set should fail explicitly\n");
+            return 1;
+        }
+
         tgfx::TextureDesc color_desc;
         color_desc.width = 4;
         color_desc.height = 4;

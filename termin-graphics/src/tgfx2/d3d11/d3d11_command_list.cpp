@@ -318,6 +318,14 @@ void bind_bound_resource_binding(
 ) {
     const UINT slot = d3d11_slot(binding);
     const uint32_t stage_mask = effective_stage_mask(binding);
+    if (binding.plan_entry.resource.kind == ShaderResourceKind::StorageTexture ||
+        binding.plan_entry.placement.d3d11.register_class == D3D11RegisterClass::U) {
+        tc::Log::error(
+            "D3D11CommandList::bind_resource_set: storage texture/UAV resource '%s' "
+            "is not supported by the D3D11 backend",
+            binding.plan_entry.resource.name.c_str());
+        return;
+    }
     switch (binding.value.kind) {
         case BoundResourceKind::UniformBuffer: {
             if (!validate_d3d11_placement(

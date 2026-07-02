@@ -424,6 +424,30 @@ TEST_CASE("backend binding plan maps D3D11 storage buffers to shader-resource re
         &error));
     CHECK(error.find("register class") != std::string::npos);
 }
+
+TEST_CASE("backend binding plan rejects D3D11 storage textures until UAV binding exists") {
+    tc_shader_resource_binding binding = make_plan_test_binding(
+        "output_image",
+        TC_SHADER_RESOURCE_STORAGE_TEXTURE,
+        TC_SHADER_RESOURCE_SCOPE_PASS,
+        0,
+        TC_SHADER_STAGE_FRAGMENT);
+    binding.has_d3d11_placement = 1;
+    binding.d3d11.register_class = TC_SHADER_D3D11_REGISTER_U;
+    binding.d3d11.register_index = 0;
+
+    tgfx::BackendBindingPlan plan;
+    std::string error;
+    CHECK(!tgfx::build_backend_binding_plan(
+        tgfx::BackendType::D3D11,
+        &binding,
+        1,
+        plan,
+        &error));
+    CHECK(error.find("storage texture") != std::string::npos);
+    CHECK(error.find("D3D11") != std::string::npos);
+}
+
 TEST_CASE("backend binding plan rejects unsupported Vulkan descriptor sets") {
     tc_shader_resource_binding binding = make_plan_test_binding(
         "per_frame",

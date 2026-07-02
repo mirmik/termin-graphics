@@ -136,7 +136,6 @@ UINT texture_bind_flags(TextureUsage usage, PixelFormat format) {
     if (has_flag(usage, TextureUsage::DepthStencilAttachment) || d3d11::is_depth_format(format)) {
         flags |= D3D11_BIND_DEPTH_STENCIL;
     }
-    if (has_flag(usage, TextureUsage::Storage)) flags |= D3D11_BIND_UNORDERED_ACCESS;
     return flags ? flags : D3D11_BIND_SHADER_RESOURCE;
 }
 
@@ -272,6 +271,96 @@ bool supports_rgba_float_readback(PixelFormat format) {
         default:
             return false;
     }
+}
+
+bool validate_d3d11_texture_desc(
+    const TextureDesc& desc,
+    const char* origin
+) {
+    if (desc.width == 0 || desc.height == 0) {
+        tc::Log::error("%s: zero-sized texture", origin);
+        return false;
+    }
+    if (desc.format == PixelFormat::RGB8_UNorm) {
+        tc::Log::error(
+            "%s: PixelFormat::RGB8_UNorm is not supported on D3D11; "
+            "use RGBA8_UNorm or normalize RGB data before upload",
+            origin);
+        return false;
+    }
+    if (has_flag(desc.usage, TextureUsage::Storage)) {
+        tc::Log::error(
+            "%s: TextureUsage::Storage is not supported on D3D11 because "
+            "the backend does not create or bind texture UAVs",
+            origin);
+        return false;
+    }
+    if (d3d11::to_dxgi_format(desc.format) == DXGI_FORMAT_UNKNOWN) {
+        tc::Log::error("%s: unsupported texture format", origin);
+        return false;
+    }
+    return true;
+}
+
+bool validate_d3d11_texture_upload(
+    const D3D11Texture& tex,
+    uint32_t x,
+    uint32_t y,
+    uint32_t w,
+    uint32_t h,
+    std::span<const uint8_t> data,
+    uint32_t mip,
+    const char* origin
+) {
+    const uint32_t mip_levels = std::max(1u, tex.desc.mip_levels);
+    if (mip >= mip_levels) {
+        tc::Log::error(
+            "%s: mip %u out of range for texture (mips=%u)",
+            origin,
+            mip,
+            mip_levels);
+        return false;
+    }
+    if (w == 0 || h == 0) {
+        tc::Log::error("%s: empty upload region", origin);
+        return false;
+    }
+
+    const uint32_t mip_w = std::max(1u, tex.desc.width >> mip);
+    const uint32_t mip_h = std::max(1u, tex.desc.height >> mip);
+    if (x > mip_w || y > mip_h || w > mip_w - x || h > mip_h - y) {
+        tc::Log::error(
+            "%s: region (%u,%u %ux%u) outside mip %u bounds (%ux%u)",
+            origin,
+            x,
+            y,
+            w,
+            h,
+            mip,
+            mip_w,
+            mip_h);
+        return false;
+    }
+
+    const uint32_t bytes_per_pixel = d3d11::pixel_format_bytes(tex.desc.format);
+    if (bytes_per_pixel == 0) {
+        tc::Log::error("%s: unsupported texture format", origin);
+        return false;
+    }
+
+    const uint64_t expected_size =
+        static_cast<uint64_t>(w) *
+        static_cast<uint64_t>(h) *
+        static_cast<uint64_t>(bytes_per_pixel);
+    if (data.size() < expected_size) {
+        tc::Log::error(
+            "%s: data too small for upload (%zu bytes, expected at least %llu)",
+            origin,
+            data.size(),
+            static_cast<unsigned long long>(expected_size));
+        return false;
+    }
+    return true;
 }
 
 PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
@@ -781,8 +870,7 @@ BufferHandle D3D11RenderDevice::create_buffer(const BufferDesc& desc) {
 }
 
 TextureHandle D3D11RenderDevice::create_texture(const TextureDesc& desc) {
-    if (desc.width == 0 || desc.height == 0) {
-        tc::Log::error("D3D11RenderDevice::create_texture: zero-sized texture");
+    if (!validate_d3d11_texture_desc(desc, "D3D11RenderDevice::create_texture")) {
         return {};
     }
 
@@ -1020,6 +1108,18 @@ PipelineHandle D3D11RenderDevice::create_pipeline(const PipelineDesc& desc) {
 }
 
 ResourceSetHandle D3D11RenderDevice::create_resource_set(const ResourceSetDesc& desc) {
+    for (const ResourceBinding& binding : desc.bindings) {
+        if (binding.d3d11.has_placement &&
+            binding.d3d11.register_class == TC_SHADER_D3D11_REGISTER_U) {
+            tc::Log::error(
+                "D3D11RenderDevice::create_resource_set: UAV register placement is not supported "
+                "(set=%u binding=%u)",
+                binding.set,
+                binding.binding);
+            return {};
+        }
+    }
+
     D3D11ResourceSet out;
     out.desc = desc;
     return {resource_sets_.add(std::move(out))};
@@ -1029,6 +1129,33 @@ ResourceSetHandle D3D11RenderDevice::create_bound_resource_set(
     const BoundResourceSetDesc& desc,
     const std::vector<ResourceBinding>& legacy_numeric_bindings
 ) {
+    bool has_unsupported_uav = false;
+    for_each_bound_resource_binding(desc, [&](const BoundResourceBinding& binding) {
+        if (binding.plan_entry.resource.kind == ShaderResourceKind::StorageTexture ||
+            binding.plan_entry.placement.d3d11.register_class == D3D11RegisterClass::U) {
+            tc::Log::error(
+                "D3D11RenderDevice::create_bound_resource_set: storage texture/UAV resource '%s' "
+                "is not supported by the D3D11 backend",
+                binding.plan_entry.resource.name.c_str());
+            has_unsupported_uav = true;
+        }
+    });
+    if (has_unsupported_uav) {
+        return {};
+    }
+
+    for (const ResourceBinding& binding : legacy_numeric_bindings) {
+        if (binding.d3d11.has_placement &&
+            binding.d3d11.register_class == TC_SHADER_D3D11_REGISTER_U) {
+            tc::Log::error(
+                "D3D11RenderDevice::create_bound_resource_set: legacy UAV register placement is not supported "
+                "(set=%u binding=%u)",
+                binding.set,
+                binding.binding);
+            return {};
+        }
+    }
+
     D3D11ResourceSet out;
     out.bound_desc = desc;
     out.legacy_numeric_bindings = legacy_numeric_bindings;
@@ -1108,7 +1235,27 @@ void D3D11RenderDevice::upload_buffer(BufferHandle dst, std::span<const uint8_t>
 void D3D11RenderDevice::upload_texture(TextureHandle dst, std::span<const uint8_t> data, uint32_t mip) {
     auto* tex = get_texture(dst);
     if (!tex || !tex->texture || data.empty()) return;
+    const uint32_t mip_levels = std::max(1u, tex->desc.mip_levels);
+    if (mip >= mip_levels) {
+        tc::Log::error(
+            "D3D11RenderDevice::upload_texture: mip %u out of range for texture (mips=%u)",
+            mip,
+            mip_levels);
+        return;
+    }
     const uint32_t w = std::max(1u, tex->desc.width >> mip);
+    const uint32_t h = std::max(1u, tex->desc.height >> mip);
+    if (!validate_d3d11_texture_upload(
+            *tex,
+            0,
+            0,
+            w,
+            h,
+            data,
+            mip,
+            "D3D11RenderDevice::upload_texture")) {
+        return;
+    }
     const uint32_t row_pitch = w * d3d11::pixel_format_bytes(tex->desc.format);
     context_->UpdateSubresource(tex->texture.Get(), mip, nullptr, data.data(), row_pitch, 0);
 }
@@ -1120,6 +1267,17 @@ void D3D11RenderDevice::upload_texture_region(TextureHandle dst,
                                               uint32_t mip) {
     auto* tex = get_texture(dst);
     if (!tex || !tex->texture || data.empty()) return;
+    if (!validate_d3d11_texture_upload(
+            *tex,
+            x,
+            y,
+            w,
+            h,
+            data,
+            mip,
+            "D3D11RenderDevice::upload_texture_region")) {
+        return;
+    }
     D3D11_BOX box{};
     box.left = x;
     box.top = y;
@@ -1199,6 +1357,9 @@ TextureHandle D3D11RenderDevice::register_external_texture(uintptr_t native_hand
 TextureHandle D3D11RenderDevice::register_external_texture(ID3D11Texture2D* texture, const TextureDesc& desc) {
     if (!texture) {
         tc::Log::error("D3D11RenderDevice::register_external_texture: null native texture");
+        return {};
+    }
+    if (!validate_d3d11_texture_desc(desc, "D3D11RenderDevice::register_external_texture")) {
         return {};
     }
 
@@ -1427,11 +1588,7 @@ void D3D11RenderDevice::blit_to_texture(TextureHandle dst,
     context_->PSSetSamplers(0, 1, &sampler);
     context_->GSSetShader(nullptr, nullptr, 0);
     context_->Draw(3, 0);
-
-    ID3D11ShaderResourceView* null_srv = nullptr;
-    ID3D11RenderTargetView* null_rtv = nullptr;
-    context_->PSSetShaderResources(0, 1, &null_srv);
-    context_->OMSetRenderTargets(1, &null_rtv, nullptr);
+    reset_state();
 }
 
 void D3D11RenderDevice::clear_texture(

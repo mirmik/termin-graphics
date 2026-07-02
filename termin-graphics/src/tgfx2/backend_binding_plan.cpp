@@ -176,6 +176,13 @@ bool build_d3d11_entry(
     BackendBindingPlanEntry& entry,
     std::string* error
 ) {
+    if (entry.resource.kind == ShaderResourceKind::StorageTexture) {
+        set_error(
+            error,
+            "shader resource " + resource_label(binding) +
+            " is a storage texture, but the D3D11 backend has no UAV texture binding path");
+        return false;
+    }
     if (!binding.has_d3d11_placement) {
         set_error(
             error,
