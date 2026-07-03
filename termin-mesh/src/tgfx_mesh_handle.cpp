@@ -222,4 +222,35 @@ TcMesh TcMesh::from_interleaved(
     return TcMesh(h);
 }
 
+TcMesh TcMesh::from_interleaved_with_submeshes(
+    const void* vertices, size_t vertex_count,
+    const uint32_t* indices, size_t index_count,
+    const tc_vertex_layout& layout,
+    const std::vector<tc_submesh>& submeshes,
+    const std::string& name,
+    const std::string& uuid_hint,
+    tc_draw_mode draw_mode) {
+
+    TcMesh mesh = TcMesh::from_interleaved(
+        vertices,
+        vertex_count,
+        indices,
+        index_count,
+        layout,
+        name,
+        uuid_hint,
+        draw_mode);
+    if (!mesh.is_valid()) {
+        return mesh;
+    }
+
+    if (!submeshes.empty()) {
+        tc_mesh* raw = mesh.get();
+        if (raw && !tc_mesh_set_submeshes(raw, submeshes.data(), submeshes.size())) {
+            tc_log_error("[TcMesh] Failed to set submeshes for '%s'", name.c_str());
+        }
+    }
+    return mesh;
+}
+
 } // namespace termin

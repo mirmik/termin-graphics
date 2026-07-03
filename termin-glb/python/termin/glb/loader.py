@@ -20,13 +20,31 @@ from tcbase import log
 
 # ---------- DATA CLASSES ----------
 
+class GLBSubmeshData:
+    """One glTF primitive converted to a Termin submesh section."""
+    def __init__(
+        self,
+        name: str,
+        first_index: int,
+        index_count: int,
+        material_index: int,
+        material_slot: int,
+    ):
+        self.name = name
+        self.first_index = first_index
+        self.index_count = index_count
+        self.material_index = material_index
+        self.material_slot = material_slot
+
+
 class GLBMeshData:
     """Mesh data extracted from GLB."""
     def __init__(self, name: str, vertices: np.ndarray, normals: Optional[np.ndarray],
-                 uvs: Optional[np.ndarray], indices: np.ndarray, material_index: int,
+                 uvs: Optional[np.ndarray], indices: np.ndarray, material_index: int = -1,
                  tangents: Optional[np.ndarray] = None,
                  joint_indices: Optional[np.ndarray] = None,
-                 joint_weights: Optional[np.ndarray] = None):
+                 joint_weights: Optional[np.ndarray] = None,
+                 submeshes: Optional[List[GLBSubmeshData]] = None):
         self.name = name
         self.vertices = vertices
         self.normals = normals
@@ -37,6 +55,9 @@ class GLBMeshData:
         # Skinning data (N, 4) arrays
         self.joint_indices = joint_indices  # Bone indices per vertex
         self.joint_weights = joint_weights  # Blend weights per vertex
+        self.submeshes = submeshes or [
+            GLBSubmeshData(name, 0, int(len(indices)), material_index, 0)
+        ]
 
     @property
     def is_skinned(self) -> bool:
@@ -296,9 +317,33 @@ def _read_accessor(gltf: dict, buffers: list[bytes], accessor_index: int) -> np.
 
 def _parse_meshes(gltf: dict, buffers: list[bytes], scene_data: GLBSceneData):
     """Parse all meshes from glTF."""
+    def concat_optional(chunks: list[Optional[np.ndarray]], components: int) -> Optional[np.ndarray]:
+        if not any(chunk is not None for chunk in chunks):
+            return None
+        filled = []
+        for vertex_chunk, chunk in zip(vertex_chunks, chunks, strict=True):
+            if chunk is None:
+                filled.append(np.zeros((len(vertex_chunk), components), dtype=np.float32))
+            else:
+                filled.append(chunk.astype(np.float32))
+        return np.concatenate(filled, axis=0).astype(np.float32)
+
     for mesh_idx, mesh in enumerate(gltf.get("meshes", [])):
         mesh_name = mesh.get("name", f"Mesh_{mesh_idx}")
         scene_data.mesh_index_map[mesh_idx] = []
+
+        vertex_chunks: list[np.ndarray] = []
+        normal_chunks: list[Optional[np.ndarray]] = []
+        uv_chunks: list[Optional[np.ndarray]] = []
+        tangent_chunks: list[Optional[np.ndarray]] = []
+        joint_chunks: list[Optional[np.ndarray]] = []
+        weight_chunks: list[Optional[np.ndarray]] = []
+        index_chunks: list[np.ndarray] = []
+        submeshes: list[GLBSubmeshData] = []
+        material_slot_for_index: Dict[int, int] = {}
+        first_material_index = -1
+        next_vertex_base = 0
+        next_first_index = 0
 
         for prim_idx, primitive in enumerate(mesh.get("primitives", [])):
             attributes = primitive.get("attributes", {})
@@ -342,6 +387,11 @@ def _parse_meshes(gltf: dict, buffers: list[bytes], scene_data: GLBSceneData):
 
             # Material
             material_index = primitive.get("material", 0)
+            if first_material_index < 0:
+                first_material_index = material_index
+            if material_index not in material_slot_for_index:
+                material_slot_for_index[material_index] = len(material_slot_for_index)
+            material_slot = material_slot_for_index[material_index]
 
             # Build expanded vertex arrays consumed by mesh asset population.
             expanded_verts = vertices[indices]
@@ -351,22 +401,60 @@ def _parse_meshes(gltf: dict, buffers: list[bytes], scene_data: GLBSceneData):
             expanded_joints = joint_indices[indices] if joint_indices is not None else None
             expanded_weights = joint_weights[indices] if joint_weights is not None else None
 
-            prim_name = mesh_name if prim_idx == 0 else f"{mesh_name}_{prim_idx}"
+            prim_name = f"{mesh_name}/primitive_{prim_idx}"
+            if 0 <= material_index < len(gltf.get("materials", [])):
+                material_name = gltf["materials"][material_index].get("name")
+                if material_name:
+                    prim_name = f"{mesh_name}/{material_name}"
 
-            our_mesh_idx = len(scene_data.meshes)
-            scene_data.mesh_index_map[mesh_idx].append(our_mesh_idx)
+            vertex_chunks.append(expanded_verts.astype(np.float32))
+            normal_chunks.append(expanded_normals.astype(np.float32) if expanded_normals is not None else None)
+            uv_chunks.append(expanded_uvs.astype(np.float32) if expanded_uvs is not None else None)
+            tangent_chunks.append(expanded_tangents.astype(np.float32) if expanded_tangents is not None else None)
+            joint_chunks.append(expanded_joints.astype(np.float32) if expanded_joints is not None else None)
+            weight_chunks.append(expanded_weights.astype(np.float32) if expanded_weights is not None else None)
 
-            scene_data.meshes.append(GLBMeshData(
+            local_indices = np.arange(
+                next_vertex_base,
+                next_vertex_base + len(expanded_verts),
+                dtype=np.uint32,
+            )
+            index_chunks.append(local_indices)
+            submeshes.append(GLBSubmeshData(
                 name=prim_name,
-                vertices=expanded_verts.astype(np.float32),
-                normals=expanded_normals.astype(np.float32) if expanded_normals is not None else None,
-                uvs=expanded_uvs.astype(np.float32) if expanded_uvs is not None else None,
-                indices=np.arange(len(expanded_verts), dtype=np.uint32),
+                first_index=next_first_index,
+                index_count=len(local_indices),
                 material_index=material_index,
-                tangents=expanded_tangents.astype(np.float32) if expanded_tangents is not None else None,
-                joint_indices=expanded_joints.astype(np.float32) if expanded_joints is not None else None,
-                joint_weights=expanded_weights.astype(np.float32) if expanded_weights is not None else None,
+                material_slot=material_slot,
             ))
+            next_vertex_base += len(expanded_verts)
+            next_first_index += len(local_indices)
+
+        if not vertex_chunks:
+            continue
+
+        vertices = np.concatenate(vertex_chunks, axis=0).astype(np.float32)
+        normals = concat_optional(normal_chunks, 3)
+        uvs = concat_optional(uv_chunks, 2)
+        tangents = concat_optional(tangent_chunks, 4)
+        joint_indices = concat_optional(joint_chunks, 4)
+        joint_weights = concat_optional(weight_chunks, 4)
+        indices = np.concatenate(index_chunks, axis=0).astype(np.uint32)
+
+        our_mesh_idx = len(scene_data.meshes)
+        scene_data.mesh_index_map[mesh_idx].append(our_mesh_idx)
+        scene_data.meshes.append(GLBMeshData(
+            name=mesh_name,
+            vertices=vertices,
+            normals=normals,
+            uvs=uvs,
+            indices=indices,
+            material_index=first_material_index,
+            tangents=tangents,
+            joint_indices=joint_indices,
+            joint_weights=joint_weights,
+            submeshes=submeshes,
+        ))
 
 
 def _parse_materials(gltf: dict, scene_data: GLBSceneData):

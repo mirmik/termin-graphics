@@ -293,6 +293,37 @@ bool draw_material_pipeline_mesh(
     return false;
 }
 
+bool draw_material_pipeline_submesh(
+    tgfx::RenderContext2& ctx,
+    tc_mesh* mesh,
+    size_t submesh_index,
+    MaterialMeshVertexInput input)
+{
+    switch (input) {
+        case MaterialMeshVertexInput::FullMaterial:
+            return ::termin::draw_tc_submesh(ctx, mesh, submesh_index);
+        case MaterialMeshVertexInput::Position:
+            return ::termin::draw_tc_submesh(ctx, mesh, submesh_index, {"position"});
+        case MaterialMeshVertexInput::PositionNormal:
+            return ::termin::draw_tc_submesh(ctx, mesh, submesh_index, {"position", "normal"});
+        case MaterialMeshVertexInput::SkinnedPositionJointsWeights:
+            return ::termin::draw_tc_submesh(
+                ctx,
+                mesh,
+                submesh_index,
+                {"position", "joints", "weights"},
+                true);
+        case MaterialMeshVertexInput::SkinnedPositionNormalJointsWeights:
+            return ::termin::draw_tc_submesh(
+                ctx,
+                mesh,
+                submesh_index,
+                {"position", "normal", "joints", "weights"},
+                true);
+    }
+    return false;
+}
+
 bool ensure_material_pipeline_shader(
     tgfx::RenderContext2& ctx,
     tgfx::IRenderDevice& device,

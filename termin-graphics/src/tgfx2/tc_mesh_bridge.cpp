@@ -12,6 +12,7 @@
 #include <tcbase/tc_log.hpp>
 
 #include "tgfx/resources/tc_mesh.h"
+#include "tgfx/resources/tc_mesh_registry.h"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/render_context.hpp"
@@ -456,6 +457,59 @@ bool draw_tc_mesh(
     return true;
 }
 
+bool draw_tc_submesh(
+    RenderContext2& ctx,
+    tc_mesh* mesh,
+    size_t submesh_index,
+    const VertexBufferLayout* layout_override
+) {
+    if (!mesh) return false;
+    if (mesh->submesh_count == 0 && !tc_mesh_ensure_default_submesh(mesh)) {
+        return false;
+    }
+    const tc_submesh* submesh = tc_mesh_get_submesh(mesh, submesh_index);
+    if (!submesh) {
+        tc::Log::error(
+            "draw_tc_submesh: mesh '%s' has no submesh %zu (count=%zu)",
+            mesh->header.name ? mesh->header.name : mesh->header.uuid,
+            submesh_index,
+            mesh->submesh_count);
+        return false;
+    }
+    if (submesh->index_count == 0 ||
+        static_cast<size_t>(submesh->first_index) > mesh->index_count ||
+        static_cast<size_t>(submesh->index_count) >
+            mesh->index_count - static_cast<size_t>(submesh->first_index)) {
+        tc::Log::error(
+            "draw_tc_submesh: invalid range for mesh '%s' submesh=%zu first=%u count=%u mesh_indices=%zu",
+            mesh->header.name ? mesh->header.name : mesh->header.uuid,
+            submesh_index,
+            submesh->first_index,
+            submesh->index_count,
+            mesh->index_count);
+        return false;
+    }
+
+    Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
+    if (binding.index_count == 0) return false;
+
+    ctx.set_vertex_layout(layout_override ? *layout_override : binding.layout);
+    ctx.set_topology(
+        submesh->draw_mode == TC_DRAW_LINES
+            ? PrimitiveTopology::LineList
+            : PrimitiveTopology::TriangleList);
+    ctx.draw(
+        binding.vertex_buffer,
+        binding.index_buffer,
+        static_cast<uint64_t>(submesh->first_index) * sizeof(uint32_t),
+        submesh->index_count,
+        submesh->vertex_offset,
+        binding.index_type);
+
+    release_mesh_binding(ctx.device(), binding);
+    return true;
+}
+
 bool draw_tc_mesh(
     RenderContext2& ctx,
     tc_mesh* mesh,
@@ -479,6 +533,25 @@ bool draw_tc_mesh(
     return true;
 }
 
+bool draw_tc_submesh(
+    RenderContext2& ctx,
+    tc_mesh* mesh,
+    size_t submesh_index,
+    std::initializer_list<uint32_t> used_locations,
+    bool use_shader_input_locations
+) {
+    Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
+    if (binding.index_count == 0) return false;
+
+    VertexBufferLayout filtered =
+        filter_vertex_layout_to_locations(
+            binding.layout,
+            used_locations,
+            use_shader_input_locations);
+    release_mesh_binding(ctx.device(), binding);
+    return draw_tc_submesh(ctx, mesh, submesh_index, &filtered);
+}
+
 bool draw_tc_mesh(
     RenderContext2& ctx,
     tc_mesh* mesh,
@@ -500,6 +573,25 @@ bool draw_tc_mesh(
 
     release_mesh_binding(ctx.device(), binding);
     return true;
+}
+
+bool draw_tc_submesh(
+    RenderContext2& ctx,
+    tc_mesh* mesh,
+    size_t submesh_index,
+    std::initializer_list<std::string_view> used_semantics,
+    bool use_shader_input_locations
+) {
+    Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
+    if (binding.index_count == 0) return false;
+
+    VertexBufferLayout filtered =
+        filter_vertex_layout_to_semantics(
+            binding.layout,
+            used_semantics,
+            use_shader_input_locations);
+    release_mesh_binding(ctx.device(), binding);
+    return draw_tc_submesh(ctx, mesh, submesh_index, &filtered);
 }
 
 } // namespace tgfx

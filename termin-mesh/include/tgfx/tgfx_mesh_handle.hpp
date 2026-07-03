@@ -137,9 +137,28 @@ public:
         return m ? static_cast<tc_draw_mode>(m->draw_mode) : TC_DRAW_TRIANGLES;
     }
 
+    size_t submesh_count() const {
+        tc_mesh* m = get();
+        return m ? tc_mesh_get_submesh_count(m) : 0;
+    }
+
+    const tc_submesh* submesh(size_t index) const {
+        tc_mesh* m = get();
+        return m ? tc_mesh_get_submesh(m, index) : nullptr;
+    }
+
+    bool set_submeshes(const std::vector<tc_submesh>& submeshes) {
+        tc_mesh* m = get();
+        if (!m) return false;
+        return tc_mesh_set_submeshes(m, submeshes.data(), submeshes.size());
+    }
+
     void set_draw_mode(tc_draw_mode mode) {
         if (tc_mesh* m = get()) {
             m->draw_mode = static_cast<uint8_t>(mode);
+            if (m->submesh_count == 1) {
+                m->submeshes[0].draw_mode = static_cast<uint8_t>(mode);
+            }
         }
     }
 
@@ -235,6 +254,15 @@ public:
         const void* vertices, size_t vertex_count,
         const uint32_t* indices, size_t index_count,
         const tc_vertex_layout& layout,
+        const std::string& name = "",
+        const std::string& uuid_hint = "",
+        tc_draw_mode draw_mode = TC_DRAW_TRIANGLES);
+
+    static TcMesh from_interleaved_with_submeshes(
+        const void* vertices, size_t vertex_count,
+        const uint32_t* indices, size_t index_count,
+        const tc_vertex_layout& layout,
+        const std::vector<tc_submesh>& submeshes,
         const std::string& name = "",
         const std::string& uuid_hint = "",
         tc_draw_mode draw_mode = TC_DRAW_TRIANGLES);

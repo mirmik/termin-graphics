@@ -63,6 +63,21 @@ def _compute_vertex_normals(vertices: np.ndarray, indices: np.ndarray) -> np.nda
     return normals / lengths
 
 
+def _glb_submeshes_to_tc(glb_mesh: "GLBMeshData"):
+    from tmesh import TcSubmesh
+
+    return [
+        TcSubmesh(
+            first_index=int(submesh.first_index),
+            index_count=int(submesh.index_count),
+            vertex_offset=0,
+            material_slot=int(submesh.material_slot),
+            name=submesh.name,
+        )
+        for submesh in glb_mesh.submeshes
+    ]
+
+
 def _glb_mesh_to_tc_mesh(glb_mesh: "GLBMeshData", uuid: str = "") -> "TcMesh":
     """Convert GLBMeshData to TcMesh directly (no intermediate Mesh3).
 
@@ -138,8 +153,8 @@ def _glb_mesh_to_tc_mesh(glb_mesh: "GLBMeshData", uuid: str = "") -> "TcMesh":
     # Flatten buffer for TcMesh
     buffer_flat = buffer.ravel().astype(np.float32)
 
-    return TcMesh.from_interleaved(
-        buffer_flat, num_verts, indices, layout, glb_mesh.name, uuid
+    return TcMesh.from_interleaved_with_submeshes(
+        buffer_flat, num_verts, indices, layout, _glb_submeshes_to_tc(glb_mesh), glb_mesh.name, uuid
     )
 
 
@@ -148,7 +163,7 @@ def _populate_tc_mesh_from_glb(tc_mesh: TcMesh, glb_mesh: "GLBMeshData") -> bool
 
     Returns True if successful, False otherwise.
     """
-    from tmesh import TcVertexLayout, tc_mesh_set_data
+    from tmesh import TcVertexLayout, tc_mesh_set_data, tc_mesh_set_submeshes
 
     vertices = glb_mesh.vertices.astype(np.float32)
     indices = glb_mesh.indices.astype(np.uint32).ravel()
@@ -210,7 +225,9 @@ def _populate_tc_mesh_from_glb(tc_mesh: TcMesh, glb_mesh: "GLBMeshData") -> bool
 
     buffer_flat = buffer.ravel().astype(np.float32)
 
-    return tc_mesh_set_data(tc_mesh, buffer_flat, num_verts, layout, indices, glb_mesh.name)
+    if not tc_mesh_set_data(tc_mesh, buffer_flat, num_verts, layout, indices, glb_mesh.name):
+        return False
+    return tc_mesh_set_submeshes(tc_mesh, _glb_submeshes_to_tc(glb_mesh))
 
 
 def _glb_skin_to_tc_skeleton(skin, nodes, uuid: str = "") -> "TcSkeleton":
@@ -615,12 +632,12 @@ def _set_material_texture_if_present(material, name: str, texture) -> None:
     )
 
 
-def _apply_import_material_override(
-    renderer: MeshRenderer,
+def _configure_import_material(
+    material,
     glb_material: "GLBMaterialData",
     texture_lookup: dict[int, object],
 ) -> None:
-    """Apply one glTF material as a MeshRenderer material override."""
+    """Apply one glTF material to an already-created Termin material."""
     from termin.geombase import Vec4
     from tcbase import log
 
@@ -661,16 +678,6 @@ def _apply_import_material_override(
         f"emissive_index={glb_material.emissive_texture}"
     )
 
-    renderer.set_override_material(True)
-    material = renderer.get_overridden_material()
-    if not material.is_valid:
-        log.error(f"[glb_instantiator] Failed to create material override for '{glb_material.name}'")
-        return
-    log.info(
-        f"[glb_instantiator] material override created: "
-        f"source_material='{glb_material.name}' override_name='{material.name}' phases={len(material.phases)}"
-    )
-
     material.set_uniform_vec4("u_color", color)
     material.set_uniform_float("u_metallic", float(glb_material.metallic_factor))
     material.set_uniform_float("u_roughness", float(glb_material.roughness_factor))
@@ -685,12 +692,82 @@ def _apply_import_material_override(
     _set_material_texture_if_present(material, "u_emissive_texture", emissive_texture)
 
 
+def _create_import_material_slot(base_material, glb_material: "GLBMaterialData", texture_lookup: dict[int, object]):
+    """Create one material instance for a glTF material slot."""
+    from tcbase import log
+
+    material = base_material.copy("")
+    if not material.is_valid:
+        log.error(f"[glb_instantiator] Failed to create material slot for '{glb_material.name}'")
+        return material
+    material.name = f"{base_material.name}_gltf_{glb_material.name}"
+    log.info(
+        f"[glb_instantiator] material slot created: "
+        f"source_material='{glb_material.name}' slot_name='{material.name}' phases={len(material.phases)}"
+    )
+    _configure_import_material(material, glb_material, texture_lookup)
+    return material
+
+
+def _apply_import_material_override(
+    renderer: MeshRenderer,
+    glb_material: "GLBMaterialData",
+    texture_lookup: dict[int, object],
+) -> None:
+    """Apply one glTF material as a MeshRenderer material override."""
+    from tcbase import log
+
+    renderer.set_override_material(True)
+    material = renderer.get_overridden_material()
+    if not material.is_valid:
+        log.error(f"[glb_instantiator] Failed to create material override for '{glb_material.name}'")
+        return
+    log.info(
+        f"[glb_instantiator] material override created: "
+        f"source_material='{glb_material.name}' override_name='{material.name}' phases={len(material.phases)}"
+    )
+    _configure_import_material(material, glb_material, texture_lookup)
+
+
+def _apply_glb_material_slots(
+    renderer: MeshRenderer,
+    glb_mesh: "GLBMeshData",
+    scene_data: "GLBSceneData",
+    texture_lookup: dict[int, object],
+) -> None:
+    """Populate MeshRenderer material slots from glTF primitive materials."""
+    base_material = renderer.get_base_material()
+    if not base_material.is_valid:
+        return
+
+    material_for_slot: dict[int, int] = {}
+    for submesh in glb_mesh.submeshes:
+        if submesh.material_index < 0 or submesh.material_index >= len(scene_data.materials):
+            continue
+        material_for_slot[submesh.material_slot] = submesh.material_index
+
+    if not material_for_slot:
+        return
+
+    for slot, material_index in sorted(material_for_slot.items()):
+        material = _create_import_material_slot(
+            base_material,
+            scene_data.materials[material_index],
+            texture_lookup,
+        )
+        if material.is_valid:
+            renderer.set_material_slot(slot, material)
+
+
 def _apply_glb_material_override_if_present(
     renderer: MeshRenderer,
     glb_mesh: "GLBMeshData",
     scene_data: "GLBSceneData",
     texture_lookup: dict[int, object],
 ) -> None:
+    if len(glb_mesh.submeshes) > 1:
+        _apply_glb_material_slots(renderer, glb_mesh, scene_data, texture_lookup)
+        return
     if glb_mesh.material_index < 0 or glb_mesh.material_index >= len(scene_data.materials):
         return
     _apply_import_material_override(

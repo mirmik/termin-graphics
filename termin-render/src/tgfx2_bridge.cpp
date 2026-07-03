@@ -84,6 +84,15 @@ bool draw_tc_mesh(
     return tgfx::draw_tc_mesh(ctx, mesh, layout_override);
 }
 
+bool draw_tc_submesh(
+    tgfx::RenderContext2& ctx,
+    tc_mesh* mesh,
+    size_t submesh_index,
+    const tgfx::VertexBufferLayout* layout_override
+) {
+    return tgfx::draw_tc_submesh(ctx, mesh, submesh_index, layout_override);
+}
+
 bool draw_tc_mesh(
     tgfx::RenderContext2& ctx,
     tc_mesh* mesh,
@@ -93,6 +102,21 @@ bool draw_tc_mesh(
     return tgfx::draw_tc_mesh(ctx, mesh, used_locations, use_shader_input_locations);
 }
 
+bool draw_tc_submesh(
+    tgfx::RenderContext2& ctx,
+    tc_mesh* mesh,
+    size_t submesh_index,
+    std::initializer_list<uint32_t> used_locations,
+    bool use_shader_input_locations
+) {
+    return tgfx::draw_tc_submesh(
+        ctx,
+        mesh,
+        submesh_index,
+        used_locations,
+        use_shader_input_locations);
+}
+
 bool draw_tc_mesh(
     tgfx::RenderContext2& ctx,
     tc_mesh* mesh,
@@ -100,6 +124,21 @@ bool draw_tc_mesh(
     bool use_shader_input_locations
 ) {
     return tgfx::draw_tc_mesh(ctx, mesh, used_semantics, use_shader_input_locations);
+}
+
+bool draw_tc_submesh(
+    tgfx::RenderContext2& ctx,
+    tc_mesh* mesh,
+    size_t submesh_index,
+    std::initializer_list<std::string_view> used_semantics,
+    bool use_shader_input_locations
+) {
+    return tgfx::draw_tc_submesh(
+        ctx,
+        mesh,
+        submesh_index,
+        used_semantics,
+        use_shader_input_locations);
 }
 
 } // namespace termin

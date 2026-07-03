@@ -351,6 +351,12 @@ public:
     // Draw with bound vertex/index buffers.
     void draw(BufferHandle vbo, BufferHandle ibo,
               uint32_t index_count, IndexType idx_type = IndexType::Uint32);
+    void draw(BufferHandle vbo,
+              BufferHandle ibo,
+              uint64_t index_offset,
+              uint32_t index_count,
+              int32_t vertex_offset,
+              IndexType idx_type = IndexType::Uint32);
     void draw_indexed_instanced(BufferHandle vertex_vbo,
                                 BufferHandle index_buffer,
                                 BufferHandle instance_vbo,

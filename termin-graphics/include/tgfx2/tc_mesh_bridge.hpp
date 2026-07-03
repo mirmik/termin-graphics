@@ -73,6 +73,13 @@ TGFX2_API bool draw_tc_mesh(
     const VertexBufferLayout* layout_override = nullptr
 );
 
+TGFX2_API bool draw_tc_submesh(
+    RenderContext2& ctx,
+    tc_mesh* mesh,
+    size_t submesh_index,
+    const VertexBufferLayout* layout_override = nullptr
+);
+
 TGFX2_API bool draw_tc_mesh(
     RenderContext2& ctx,
     tc_mesh* mesh,
@@ -80,9 +87,25 @@ TGFX2_API bool draw_tc_mesh(
     bool use_shader_input_locations = false
 );
 
+TGFX2_API bool draw_tc_submesh(
+    RenderContext2& ctx,
+    tc_mesh* mesh,
+    size_t submesh_index,
+    std::initializer_list<uint32_t> used_locations,
+    bool use_shader_input_locations = false
+);
+
 TGFX2_API bool draw_tc_mesh(
     RenderContext2& ctx,
     tc_mesh* mesh,
+    std::initializer_list<std::string_view> used_semantics,
+    bool use_shader_input_locations = false
+);
+
+TGFX2_API bool draw_tc_submesh(
+    RenderContext2& ctx,
+    tc_mesh* mesh,
+    size_t submesh_index,
     std::initializer_list<std::string_view> used_semantics,
     bool use_shader_input_locations = false
 );

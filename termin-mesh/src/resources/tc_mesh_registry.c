@@ -23,7 +23,7 @@ static tc_mesh_destroy_hook_fn g_destroy_hooks[TC_MAX_MESH_DESTROY_HOOKS];
 static void* g_destroy_hook_user[TC_MAX_MESH_DESTROY_HOOKS];
 static int g_destroy_hook_count = 0;
 
-// Free mesh internal data (vertices, indices)
+// Free mesh internal data (vertices, indices, submeshes)
 static void mesh_free_data(tc_mesh* mesh) {
     if (!mesh) return;
     if (mesh->vertices) {
@@ -33,6 +33,52 @@ static void mesh_free_data(tc_mesh* mesh) {
     if (mesh->indices) {
         free(mesh->indices);
         mesh->indices = NULL;
+    }
+    if (mesh->submeshes) {
+        free(mesh->submeshes);
+        mesh->submeshes = NULL;
+    }
+    mesh->submesh_count = 0;
+}
+
+static bool tc_mesh_validate_submesh_range(
+    const tc_mesh* mesh,
+    const tc_submesh* submesh,
+    size_t submesh_index
+) {
+    if (!mesh || !submesh) return false;
+    if (submesh->index_count == 0) {
+        tc_log(TC_LOG_ERROR,
+               "tc_mesh_set_submeshes: submesh %zu has zero index_count for mesh '%s'",
+               submesh_index,
+               mesh->header.name ? mesh->header.name : mesh->header.uuid);
+        return false;
+    }
+    if ((size_t)submesh->first_index > mesh->index_count ||
+        (size_t)submesh->index_count > mesh->index_count - (size_t)submesh->first_index) {
+        tc_log(TC_LOG_ERROR,
+               "tc_mesh_set_submeshes: submesh %zu range [%u, %u) exceeds mesh '%s' index_count=%zu",
+               submesh_index,
+               submesh->first_index,
+               submesh->first_index + submesh->index_count,
+               mesh->header.name ? mesh->header.name : mesh->header.uuid,
+               mesh->index_count);
+        return false;
+    }
+    return true;
+}
+
+static void tc_mesh_make_default_submesh(tc_mesh* mesh, tc_submesh* out) {
+    memset(out, 0, sizeof(*out));
+    out->first_index = 0;
+    out->index_count = mesh && mesh->index_count <= UINT32_MAX
+        ? (uint32_t)mesh->index_count
+        : 0;
+    out->vertex_offset = 0;
+    out->material_slot = 0;
+    out->draw_mode = mesh ? mesh->draw_mode : TC_DRAW_TRIANGLES;
+    if (mesh && mesh->header.name && mesh->header.name[0]) {
+        snprintf(out->name, sizeof(out->name), "%s", mesh->header.name);
     }
 }
 
@@ -487,9 +533,102 @@ bool tc_mesh_set_indices(
 
     mesh->indices = new_indices;
     mesh->index_count = index_count;
+    tc_mesh_ensure_default_submesh(mesh);
     mesh->header.version++;
 
     return true;
+}
+
+bool tc_mesh_set_submeshes(
+    tc_mesh* mesh,
+    const tc_submesh* submeshes,
+    size_t submesh_count
+) {
+    if (!mesh) return false;
+
+    if (submesh_count == 0) {
+        return tc_mesh_ensure_default_submesh(mesh);
+    }
+    if (!submeshes) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_set_submeshes: submeshes is NULL with count=%zu", submesh_count);
+        return false;
+    }
+    if (mesh->index_count > UINT32_MAX) {
+        tc_log(TC_LOG_ERROR,
+               "tc_mesh_set_submeshes: mesh '%s' index_count=%zu exceeds uint32 submesh range",
+               mesh->header.name ? mesh->header.name : mesh->header.uuid,
+               mesh->index_count);
+        return false;
+    }
+
+    for (size_t i = 0; i < submesh_count; ++i) {
+        if (!tc_mesh_validate_submesh_range(mesh, &submeshes[i], i)) {
+            return false;
+        }
+    }
+
+    size_t data_size = submesh_count * sizeof(tc_submesh);
+    tc_submesh* new_submeshes = (tc_submesh*)malloc(data_size);
+    if (!new_submeshes) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_set_submeshes: allocation failed");
+        return false;
+    }
+    memcpy(new_submeshes, submeshes, data_size);
+    for (size_t i = 0; i < submesh_count; ++i) {
+        new_submeshes[i].name[TC_SUBMESH_NAME_MAX - 1] = '\0';
+        if (new_submeshes[i].draw_mode != TC_DRAW_LINES) {
+            new_submeshes[i].draw_mode = TC_DRAW_TRIANGLES;
+        }
+    }
+
+    if (mesh->submeshes) free(mesh->submeshes);
+    mesh->submeshes = new_submeshes;
+    mesh->submesh_count = submesh_count;
+    mesh->header.version++;
+    return true;
+}
+
+bool tc_mesh_ensure_default_submesh(tc_mesh* mesh) {
+    if (!mesh) return false;
+    if (mesh->index_count == 0) {
+        if (mesh->submeshes) {
+            free(mesh->submeshes);
+            mesh->submeshes = NULL;
+        }
+        mesh->submesh_count = 0;
+        return true;
+    }
+    if (mesh->index_count > UINT32_MAX) {
+        tc_log(TC_LOG_ERROR,
+               "tc_mesh_ensure_default_submesh: mesh '%s' index_count=%zu exceeds uint32 submesh range",
+               mesh->header.name ? mesh->header.name : mesh->header.uuid,
+               mesh->index_count);
+        return false;
+    }
+
+    tc_submesh submesh;
+    tc_mesh_make_default_submesh(mesh, &submesh);
+    tc_submesh* new_submeshes = (tc_submesh*)malloc(sizeof(tc_submesh));
+    if (!new_submeshes) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_ensure_default_submesh: allocation failed");
+        return false;
+    }
+    *new_submeshes = submesh;
+
+    if (mesh->submeshes) free(mesh->submeshes);
+    mesh->submeshes = new_submeshes;
+    mesh->submesh_count = 1;
+    return true;
+}
+
+size_t tc_mesh_get_submesh_count(const tc_mesh* mesh) {
+    if (!mesh) return 0;
+    return mesh->submesh_count;
+}
+
+const tc_submesh* tc_mesh_get_submesh(const tc_mesh* mesh, size_t index) {
+    if (!mesh || index >= mesh->submesh_count) return NULL;
+    return &mesh->submeshes[index];
 }
 
 bool tc_mesh_set_data(
@@ -542,6 +681,9 @@ bool tc_mesh_set_data(
     mesh->layout = *layout;
     mesh->indices = new_indices;
     mesh->index_count = index_count;
+    if (!tc_mesh_ensure_default_submesh(mesh)) {
+        return false;
+    }
     mesh->header.version++;
     mesh->header.is_loaded = 1;  // Data is now loaded
 
@@ -597,7 +739,8 @@ static bool collect_mesh_info(tc_mesh_handle h, tc_mesh* mesh, void* user_data) 
     info->index_count = mesh->index_count;
     info->stride = mesh->layout.stride;
     info->memory_bytes = mesh->vertex_count * mesh->layout.stride +
-                         mesh->index_count * sizeof(uint32_t);
+                         mesh->index_count * sizeof(uint32_t) +
+                         mesh->submesh_count * sizeof(tc_submesh);
     info->is_loaded = mesh->header.is_loaded;
     info->has_load_callback = mesh->header.load_callback != NULL;
 

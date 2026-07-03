@@ -74,6 +74,12 @@ RENDER_API bool draw_material_pipeline_mesh(
     tc_mesh* mesh,
     MaterialMeshVertexInput input);
 
+RENDER_API bool draw_material_pipeline_submesh(
+    tgfx::RenderContext2& ctx,
+    tc_mesh* mesh,
+    size_t submesh_index,
+    MaterialMeshVertexInput input);
+
 RENDER_API bool ensure_material_pipeline_shader(
     tgfx::RenderContext2& ctx,
     tgfx::IRenderDevice& device,

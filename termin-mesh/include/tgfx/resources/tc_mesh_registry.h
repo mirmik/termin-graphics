@@ -101,6 +101,10 @@ TGFX_API void tc_mesh_registry_remove_destroy_hook(
 TGFX_API bool tc_mesh_set_vertices(tc_mesh* mesh, const void* data, size_t vertex_count, const tc_vertex_layout* layout);
 TGFX_API bool tc_mesh_set_indices(tc_mesh* mesh, const uint32_t* data, size_t index_count);
 TGFX_API bool tc_mesh_set_data(tc_mesh* mesh, const void* vertices, size_t vertex_count, const tc_vertex_layout* layout, const uint32_t* indices, size_t index_count, const char* name);
+TGFX_API bool tc_mesh_set_submeshes(tc_mesh* mesh, const tc_submesh* submeshes, size_t submesh_count);
+TGFX_API bool tc_mesh_ensure_default_submesh(tc_mesh* mesh);
+TGFX_API size_t tc_mesh_get_submesh_count(const tc_mesh* mesh);
+TGFX_API const tc_submesh* tc_mesh_get_submesh(const tc_mesh* mesh, size_t index);
 
 static inline void tc_mesh_bump_version(tc_mesh* mesh) {
     if (mesh) mesh->header.version++;

@@ -92,10 +92,62 @@ def test_mesh_registry_set_data_smoke():
     assert ok
     assert handle.vertex_count == 3
     assert handle.index_count == 3
+    assert handle.submesh_count == 1
+    submesh = handle.submesh_at(0)
+    assert submesh is not None
+    assert submesh.first_index == 0
+    assert submesh.index_count == 3
+    assert submesh.material_slot == 0
     assert tmesh.tc_mesh_count() >= 1
 
     all_info = tmesh.tc_mesh_get_all_info()
     assert any(info["uuid"] == handle.uuid for info in all_info)
+
+
+def test_tc_mesh_submesh_ranges_and_material_slots():
+    mesh_uuid = f"pytest-submesh-{uuid.uuid4()}"
+    layout = tmesh.TcVertexLayout.pos_normal_uv()
+    vertices = np.array(
+        [
+            0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,
+            1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0,
+            0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0,
+            2.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,
+            3.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0,
+            2.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0,
+        ],
+        dtype=np.float32,
+    )
+    indices = np.array([0, 1, 2, 3, 4, 5], dtype=np.uint32)
+    submeshes = [
+        tmesh.TcSubmesh(first_index=0, index_count=3, material_slot=0, name="left"),
+        tmesh.TcSubmesh(first_index=3, index_count=3, material_slot=1, name="right"),
+    ]
+
+    handle = tmesh.TcMesh.from_interleaved_with_submeshes(
+        vertices,
+        6,
+        indices,
+        layout,
+        submeshes,
+        "pytest-submesh-mesh",
+        mesh_uuid,
+    )
+
+    assert handle.is_valid
+    assert handle.submesh_count == 2
+    left = handle.submesh_at(0)
+    right = handle.submesh_at(1)
+    assert left is not None
+    assert right is not None
+    assert left.first_index == 0
+    assert left.index_count == 3
+    assert left.material_slot == 0
+    assert left.name == "left"
+    assert right.first_index == 3
+    assert right.index_count == 3
+    assert right.material_slot == 1
+    assert right.name == "right"
 
 
 def _cube_tc_mesh():

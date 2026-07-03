@@ -7,6 +7,8 @@
 #include <optional>
 #include <unordered_map>
 #include <mutex>
+#include <cstdio>
+#include <cstring>
 
 #include "tgfx/tgfx_mesh3.hpp"
 #include "tgfx/tgfx_mesh_handle.hpp"
@@ -246,6 +248,54 @@ void bind_mesh(nb::module_& m) {
         .value("TRIANGLES", TC_DRAW_TRIANGLES)
         .value("LINES", TC_DRAW_LINES);
 
+    nb::class_<tc_submesh>(m, "TcSubmesh")
+        .def("__init__", [](tc_submesh* self,
+                             uint32_t first_index,
+                             uint32_t index_count,
+                             int32_t vertex_offset,
+                             uint32_t material_slot,
+                             tc_draw_mode draw_mode,
+                             const std::string& name) {
+            new (self) tc_submesh();
+            std::memset(self, 0, sizeof(tc_submesh));
+            self->first_index = first_index;
+            self->index_count = index_count;
+            self->vertex_offset = vertex_offset;
+            self->material_slot = material_slot;
+            self->draw_mode = static_cast<uint8_t>(draw_mode);
+            std::snprintf(self->name, sizeof(self->name), "%s", name.c_str());
+        },
+        nb::arg("first_index") = 0,
+        nb::arg("index_count") = 0,
+        nb::arg("vertex_offset") = 0,
+        nb::arg("material_slot") = 0,
+        nb::arg("draw_mode") = TC_DRAW_TRIANGLES,
+        nb::arg("name") = "")
+        .def_rw("first_index", &tc_submesh::first_index)
+        .def_rw("index_count", &tc_submesh::index_count)
+        .def_rw("vertex_offset", &tc_submesh::vertex_offset)
+        .def_rw("material_slot", &tc_submesh::material_slot)
+        .def_prop_rw("draw_mode",
+            [](const tc_submesh& self) {
+                return static_cast<tc_draw_mode>(self.draw_mode);
+            },
+            [](tc_submesh& self, tc_draw_mode mode) {
+                self.draw_mode = static_cast<uint8_t>(mode);
+            })
+        .def_prop_rw("name",
+            [](const tc_submesh& self) {
+                return std::string(self.name);
+            },
+            [](tc_submesh& self, const std::string& name) {
+                std::snprintf(self.name, sizeof(self.name), "%s", name.c_str());
+            })
+        .def("__repr__", [](const tc_submesh& self) {
+            return "<TcSubmesh first_index=" + std::to_string(self.first_index) +
+                   " index_count=" + std::to_string(self.index_count) +
+                   " material_slot=" + std::to_string(self.material_slot) +
+                   " name=" + std::string(self.name) + ">";
+        });
+
     nb::class_<tc_vertex_layout>(m, "TcVertexLayout")
         .def("__init__", [](tc_vertex_layout* self) {
             new (self) tc_vertex_layout();
@@ -277,6 +327,7 @@ void bind_mesh(nb::module_& m) {
     nb::class_<tc_mesh>(m, "TcMeshData")
         .def_ro("vertex_count", &tc_mesh::vertex_count)
         .def_ro("index_count", &tc_mesh::index_count)
+        .def_ro("submesh_count", &tc_mesh::submesh_count)
         .def_prop_ro("version", [](const tc_mesh& m) { return m.header.version; })
         .def_prop_ro("ref_count", [](const tc_mesh& m) { return m.header.ref_count; })
         .def_prop_ro("uuid", [](const tc_mesh& m) { return std::string(m.header.uuid); })
@@ -291,6 +342,11 @@ void bind_mesh(nb::module_& m) {
         .def("get_indices_buffer", [](const tc_mesh& m) -> nb::object {
             if (!m.indices || m.index_count == 0) return nb::none();
             return make_array_1d(m.indices, m.index_count);
+        })
+        .def("submesh_at", [](const tc_mesh& m, size_t index) -> nb::object {
+            const tc_submesh* submesh = tc_mesh_get_submesh(&m, index);
+            if (!submesh) return nb::none();
+            return nb::cast(*submesh);
         });
 
     // TcMesh - GPU-ready mesh wrapper
@@ -302,6 +358,7 @@ void bind_mesh(nb::module_& m) {
         .def_prop_ro("version", &TcMesh::version)
         .def_prop_ro("vertex_count", &TcMesh::vertex_count)
         .def_prop_ro("index_count", &TcMesh::index_count)
+        .def_prop_ro("submesh_count", &TcMesh::submesh_count)
         .def_prop_ro("triangle_count", &TcMesh::triangle_count)
         .def_prop_ro("stride", &TcMesh::stride)
         .def_prop_rw("draw_mode",
@@ -312,6 +369,21 @@ void bind_mesh(nb::module_& m) {
             if (!m) return nb::none();
             return nb::cast(m, nb::rv_policy::reference);
         })
+        .def_prop_ro("submeshes", [](const TcMesh& h) {
+            std::vector<tc_submesh> result;
+            tc_mesh* m = h.get();
+            if (!m) return result;
+            result.reserve(m->submesh_count);
+            for (size_t i = 0; i < m->submesh_count; ++i) {
+                result.push_back(m->submeshes[i]);
+            }
+            return result;
+        })
+        .def("submesh_at", [](const TcMesh& h, size_t index) -> nb::object {
+            const tc_submesh* submesh = h.submesh(index);
+            if (!submesh) return nb::none();
+            return nb::cast(*submesh);
+        }, nb::arg("index"))
         .def_prop_ro("vertices", [](const TcMesh& h) -> nb::object {
             tc_mesh* m = h.get();
             if (!m || !m->vertices || m->vertex_count == 0) return nb::none();
@@ -597,6 +669,22 @@ void bind_mesh(nb::module_& m) {
         }, nb::arg("vertices"), nb::arg("vertex_count"), nb::arg("indices"),
            nb::arg("layout"), nb::arg("name") = "", nb::arg("uuid") = "",
            nb::arg("draw_mode") = TC_DRAW_TRIANGLES)
+        .def_static("from_interleaved_with_submeshes", [](
+                nb::ndarray<nb::c_contig, nb::device::cpu> vertices,
+                size_t vertex_count,
+                nb::ndarray<uint32_t, nb::c_contig, nb::device::cpu> indices,
+                const tc_vertex_layout& layout,
+                const std::vector<tc_submesh>& submeshes,
+                std::string name,
+                std::string uuid_hint,
+                tc_draw_mode draw_mode) {
+            return TcMesh::from_interleaved_with_submeshes(
+                vertices.data(), vertex_count,
+                indices.data(), indices.size(),
+                layout, submeshes, name, uuid_hint, draw_mode);
+        }, nb::arg("vertices"), nb::arg("vertex_count"), nb::arg("indices"),
+           nb::arg("layout"), nb::arg("submeshes"), nb::arg("name") = "",
+           nb::arg("uuid") = "", nb::arg("draw_mode") = TC_DRAW_TRIANGLES)
         .def_static("from_uuid", &TcMesh::from_uuid, nb::arg("uuid"))
         .def_static("get_or_create", &TcMesh::get_or_create, nb::arg("uuid"))
         .def_static("from_name", [](const std::string& name) {
@@ -666,6 +754,14 @@ void bind_mesh(nb::module_& m) {
        nb::arg("vertex_count"), nb::arg("layout"), nb::arg("indices"),
        nb::arg("name") = "",
        "Set mesh vertex and index data");
+
+    m.def("tc_mesh_set_submeshes", [](TcMesh& handle,
+                                      const std::vector<tc_submesh>& submeshes) {
+        tc_mesh* m = handle.get();
+        if (!m) return false;
+        return tc_mesh_set_submeshes(m, submeshes.data(), submeshes.size());
+    }, nb::arg("handle"), nb::arg("submeshes"),
+       "Set mesh submesh ranges");
 
     m.def("tc_mesh_contains", [](const std::string& uuid) {
         return tc_mesh_contains(uuid.c_str());

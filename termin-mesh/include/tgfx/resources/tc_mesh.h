@@ -40,6 +40,7 @@ typedef tgfx_vertex_layout tc_vertex_layout;
 
 #define TC_ATTRIB_NAME_MAX  TGFX_ATTRIB_NAME_MAX
 #define TC_VERTEX_ATTRIBS_MAX TGFX_VERTEX_ATTRIBS_MAX
+#define TC_SUBMESH_NAME_MAX 64
 
 // ============================================================================
 // Load callback type
@@ -52,12 +53,23 @@ typedef bool (*tc_mesh_load_fn)(struct tc_mesh* mesh, void* user_data);
 // Mesh data
 // ============================================================================
 
+typedef struct tc_submesh {
+    uint32_t first_index;
+    uint32_t index_count;
+    int32_t vertex_offset;
+    uint32_t material_slot;
+    uint8_t draw_mode;
+    char name[TC_SUBMESH_NAME_MAX];
+} tc_submesh;
+
 typedef struct tc_mesh {
     tc_resource_header header;   // common resource fields (uuid, name, version, etc.)
     void* vertices;              // raw vertex data blob
     size_t vertex_count;
     uint32_t* indices;           // indices (3 per triangle or 2 per line)
     size_t index_count;          // total indices
+    tc_submesh* submeshes;       // owned draw sections/material slots
+    size_t submesh_count;
     tc_vertex_layout layout;
     uint8_t draw_mode;           // tc_draw_mode (TC_DRAW_TRIANGLES or TC_DRAW_LINES)
     uint8_t _pad2[3];

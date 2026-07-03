@@ -120,6 +120,94 @@ def test_load_gltf_with_external_bin_and_texture(tmp_path):
     assert material.emissive_factor.tolist() == pytest.approx([0.1, 0.2, 0.3])
 
 
+def test_load_gltf_multi_primitive_mesh_as_submeshes(tmp_path):
+    positions = struct.pack(
+        "<18f",
+        0.0, 0.0, 0.0,
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        2.0, 0.0, 0.0,
+        3.0, 0.0, 0.0,
+        2.0, 1.0, 0.0,
+    )
+    normals = struct.pack("<18f", *([0.0, 0.0, 1.0] * 6))
+    uvs = struct.pack("<12f", *([0.0, 0.0] * 6))
+    indices_a = struct.pack("<3H", 0, 1, 2)
+    indices_b = struct.pack("<3H", 3, 4, 5)
+    payload = positions + normals + uvs + indices_a + indices_b
+
+    bin_path = tmp_path / "multi.bin"
+    bin_path.write_bytes(payload)
+
+    gltf = {
+        "asset": {"version": "2.0"},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [{"mesh": 0, "name": "MultiNode"}],
+        "materials": [{"name": "Red"}, {"name": "Blue"}],
+        "meshes": [
+            {
+                "name": "MultiMesh",
+                "primitives": [
+                    {
+                        "attributes": {"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2},
+                        "indices": 3,
+                        "material": 0,
+                    },
+                    {
+                        "attributes": {"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2},
+                        "indices": 4,
+                        "material": 1,
+                    },
+                ],
+            }
+        ],
+        "accessors": [
+            {"bufferView": 0, "componentType": 5126, "count": 6, "type": "VEC3"},
+            {"bufferView": 1, "componentType": 5126, "count": 6, "type": "VEC3"},
+            {"bufferView": 2, "componentType": 5126, "count": 6, "type": "VEC2"},
+            {"bufferView": 3, "componentType": 5123, "count": 3, "type": "SCALAR"},
+            {"bufferView": 4, "componentType": 5123, "count": 3, "type": "SCALAR"},
+        ],
+        "bufferViews": [
+            {"buffer": 0, "byteOffset": 0, "byteLength": len(positions)},
+            {"buffer": 0, "byteOffset": len(positions), "byteLength": len(normals)},
+            {"buffer": 0, "byteOffset": len(positions) + len(normals), "byteLength": len(uvs)},
+            {
+                "buffer": 0,
+                "byteOffset": len(positions) + len(normals) + len(uvs),
+                "byteLength": len(indices_a),
+            },
+            {
+                "buffer": 0,
+                "byteOffset": len(positions) + len(normals) + len(uvs) + len(indices_a),
+                "byteLength": len(indices_b),
+            },
+        ],
+        "buffers": [{"uri": "multi.bin", "byteLength": len(payload)}],
+    }
+    gltf_path = tmp_path / "multi.gltf"
+    gltf_path.write_text(json.dumps(gltf), encoding="utf-8")
+
+    scene_data = load_glb_file(gltf_path)
+
+    assert len(scene_data.meshes) == 1
+    mesh = scene_data.meshes[0]
+    assert mesh.name == "MultiMesh"
+    assert mesh.vertices.shape == (6, 3)
+    assert mesh.indices.tolist() == [0, 1, 2, 3, 4, 5]
+    assert len(mesh.submeshes) == 2
+    assert mesh.submeshes[0].first_index == 0
+    assert mesh.submeshes[0].index_count == 3
+    assert mesh.submeshes[0].material_index == 0
+    assert mesh.submeshes[0].material_slot == 0
+    assert mesh.submeshes[1].first_index == 3
+    assert mesh.submeshes[1].index_count == 3
+    assert mesh.submeshes[1].material_index == 1
+    assert mesh.submeshes[1].material_slot == 1
+    assert scene_data.mesh_index_map[0] == [0]
+
+
 def test_glb_asset_loads_gltf_from_source_path(tmp_path):
     DefaultResourceManager._reset_for_testing()
     rm = DefaultResourceManager.instance()

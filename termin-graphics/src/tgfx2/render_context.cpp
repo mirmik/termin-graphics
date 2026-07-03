@@ -1337,6 +1337,36 @@ void RenderContext2::draw(
     cmd_->draw_indexed(index_count);
 }
 
+void RenderContext2::draw(
+    BufferHandle vbo,
+    BufferHandle ibo,
+    uint64_t index_offset,
+    uint32_t index_count,
+    int32_t vertex_offset,
+    IndexType idx_type
+) {
+    flush_pipeline();
+    flush_resource_set();
+    if (last_bound_vbos_.size() <= 0) {
+        last_bound_vbos_.resize(1);
+        last_bound_vbo_offsets_.resize(1);
+    }
+    if (vbo != last_bound_vbos_[0] || last_bound_vbo_offsets_[0] != 0) {
+        cmd_->bind_vertex_buffer(0, vbo);
+        last_bound_vbos_[0] = vbo;
+        last_bound_vbo_offsets_[0] = 0;
+    }
+    if (ibo != last_bound_ibo_
+        || last_bound_ibo_offset_ != index_offset
+        || idx_type != last_bound_index_type_) {
+        cmd_->bind_index_buffer(ibo, idx_type, index_offset);
+        last_bound_ibo_ = ibo;
+        last_bound_ibo_offset_ = index_offset;
+        last_bound_index_type_ = idx_type;
+    }
+    cmd_->draw_indexed(index_count, 0, vertex_offset);
+}
+
 void RenderContext2::draw_indexed_instanced(
     BufferHandle vertex_vbo,
     BufferHandle index_buffer,
