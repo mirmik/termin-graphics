@@ -1,7 +1,6 @@
 #include "tgfx2/tc_mesh_bridge.hpp"
 
 #include <algorithm>
-#include <cstring>
 #include <mutex>
 #include <span>
 #include <string>
@@ -242,59 +241,55 @@ SemanticLayoutCacheKey make_semantic_layout_cache_key(
     return key;
 }
 
-void append_default_standard_attributes(Tgfx2MeshBinding& out, uint32_t old_stride) {
-    uint32_t offset = old_stride;
-    if (!layout_has_location(out.layout, 1)) {
-        out.layout.attributes.push_back({1, VertexFormat::Float3, offset, "normal"});
-        offset += 3u * sizeof(float);
+const tc_submesh* validate_submesh_range(tc_mesh* mesh, size_t submesh_index) {
+    if (!mesh) return nullptr;
+    if (mesh->submesh_count == 0 && !tc_mesh_ensure_default_submesh(mesh)) {
+        return nullptr;
     }
-    if (!layout_has_location(out.layout, 2)) {
-        out.layout.attributes.push_back({2, VertexFormat::Float2, offset, "uv"});
-        offset += 2u * sizeof(float);
+    const tc_submesh* submesh = tc_mesh_get_submesh(mesh, submesh_index);
+    if (!submesh) {
+        tc::Log::error(
+            "draw_tc_submesh: mesh '%s' has no submesh %zu (count=%zu)",
+            mesh->header.name ? mesh->header.name : mesh->header.uuid,
+            submesh_index,
+            mesh->submesh_count);
+        return nullptr;
     }
-    if (!layout_has_location(out.layout, 3)) {
-        out.layout.attributes.push_back({3, VertexFormat::Float4, offset, "tangent"});
-        offset += 4u * sizeof(float);
+    if (submesh->index_count == 0 ||
+        static_cast<size_t>(submesh->first_index) > mesh->index_count ||
+        static_cast<size_t>(submesh->index_count) >
+            mesh->index_count - static_cast<size_t>(submesh->first_index)) {
+        tc::Log::error(
+            "draw_tc_submesh: invalid range for mesh '%s' submesh=%zu first=%u count=%u mesh_indices=%zu",
+            mesh->header.name ? mesh->header.name : mesh->header.uuid,
+            submesh_index,
+            submesh->first_index,
+            submesh->index_count,
+            mesh->index_count);
+        return nullptr;
     }
-    out.layout.stride = offset;
+    return submesh;
 }
 
-bool needs_default_standard_attributes(const VertexBufferLayout& layout) {
-    return !layout_has_location(layout, 1) ||
-           !layout_has_location(layout, 2) ||
-           !layout_has_location(layout, 3);
-}
-
-BufferHandle create_augmented_vertex_buffer(
-    IRenderDevice& device,
-    tc_mesh* mesh,
-    uint32_t new_stride
+bool draw_tc_submesh_binding(
+    RenderContext2& ctx,
+    const Tgfx2MeshBinding& binding,
+    const tc_submesh& submesh,
+    const VertexBufferLayout* layout_override
 ) {
-    const uint32_t old_stride = mesh->layout.stride;
-    if (old_stride == 0 || new_stride <= old_stride) return {};
-
-    const auto* src = static_cast<const uint8_t*>(mesh->vertices);
-    std::vector<uint8_t> vertices(
-        static_cast<size_t>(mesh->vertex_count) * static_cast<size_t>(new_stride),
-        0);
-    for (uint32_t i = 0; i < mesh->vertex_count; ++i) {
-        std::memcpy(
-            vertices.data() + static_cast<size_t>(i) * new_stride,
-            src + static_cast<size_t>(i) * old_stride,
-            old_stride);
-    }
-
-    BufferDesc desc;
-    desc.size = vertices.size();
-    desc.usage = BufferUsage::Vertex | BufferUsage::CopyDst;
-    BufferHandle buffer = device.create_buffer(desc);
-    if (!buffer) {
-        tc::Log::error("wrap_mesh_as_tgfx2: failed to allocate augmented VBO for '%s'",
-                       mesh->header.name ? mesh->header.name : mesh->header.uuid);
-        return {};
-    }
-    device.upload_buffer(buffer, std::span<const uint8_t>(vertices.data(), vertices.size()));
-    return buffer;
+    ctx.set_vertex_layout(layout_override ? *layout_override : binding.layout);
+    ctx.set_topology(
+        submesh.draw_mode == TC_DRAW_LINES
+            ? PrimitiveTopology::LineList
+            : PrimitiveTopology::TriangleList);
+    ctx.draw(
+        binding.vertex_buffer,
+        binding.index_buffer,
+        static_cast<uint64_t>(submesh.first_index) * sizeof(uint32_t),
+        submesh.index_count,
+        submesh.vertex_offset,
+        binding.index_type);
+    return true;
 }
 
 } // namespace
@@ -344,17 +339,6 @@ Tgfx2MeshBinding wrap_mesh_as_tgfx2(IRenderDevice& device, tc_mesh* mesh) {
         return Tgfx2MeshBinding{};
     }
 
-    if (needs_default_standard_attributes(out.layout)) {
-        const uint32_t old_stride = out.layout.stride;
-        append_default_standard_attributes(out, old_stride);
-        BufferHandle augmented_vbo =
-            create_augmented_vertex_buffer(device, mesh, out.layout.stride);
-        if (!augmented_vbo) {
-            return Tgfx2MeshBinding{};
-        }
-        out.vertex_buffer = augmented_vbo;
-        out.destroy_vertex_buffer = true;
-    }
     return out;
 }
 
@@ -463,49 +447,15 @@ bool draw_tc_submesh(
     size_t submesh_index,
     const VertexBufferLayout* layout_override
 ) {
-    if (!mesh) return false;
-    if (mesh->submesh_count == 0 && !tc_mesh_ensure_default_submesh(mesh)) {
-        return false;
-    }
-    const tc_submesh* submesh = tc_mesh_get_submesh(mesh, submesh_index);
+    const tc_submesh* submesh = validate_submesh_range(mesh, submesh_index);
     if (!submesh) {
-        tc::Log::error(
-            "draw_tc_submesh: mesh '%s' has no submesh %zu (count=%zu)",
-            mesh->header.name ? mesh->header.name : mesh->header.uuid,
-            submesh_index,
-            mesh->submesh_count);
-        return false;
-    }
-    if (submesh->index_count == 0 ||
-        static_cast<size_t>(submesh->first_index) > mesh->index_count ||
-        static_cast<size_t>(submesh->index_count) >
-            mesh->index_count - static_cast<size_t>(submesh->first_index)) {
-        tc::Log::error(
-            "draw_tc_submesh: invalid range for mesh '%s' submesh=%zu first=%u count=%u mesh_indices=%zu",
-            mesh->header.name ? mesh->header.name : mesh->header.uuid,
-            submesh_index,
-            submesh->first_index,
-            submesh->index_count,
-            mesh->index_count);
         return false;
     }
 
     Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
     if (binding.index_count == 0) return false;
 
-    ctx.set_vertex_layout(layout_override ? *layout_override : binding.layout);
-    ctx.set_topology(
-        submesh->draw_mode == TC_DRAW_LINES
-            ? PrimitiveTopology::LineList
-            : PrimitiveTopology::TriangleList);
-    ctx.draw(
-        binding.vertex_buffer,
-        binding.index_buffer,
-        static_cast<uint64_t>(submesh->first_index) * sizeof(uint32_t),
-        submesh->index_count,
-        submesh->vertex_offset,
-        binding.index_type);
-
+    draw_tc_submesh_binding(ctx, binding, *submesh, layout_override);
     release_mesh_binding(ctx.device(), binding);
     return true;
 }
@@ -540,6 +490,11 @@ bool draw_tc_submesh(
     std::initializer_list<uint32_t> used_locations,
     bool use_shader_input_locations
 ) {
+    const tc_submesh* submesh = validate_submesh_range(mesh, submesh_index);
+    if (!submesh) {
+        return false;
+    }
+
     Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
     if (binding.index_count == 0) return false;
 
@@ -548,8 +503,9 @@ bool draw_tc_submesh(
             binding.layout,
             used_locations,
             use_shader_input_locations);
+    draw_tc_submesh_binding(ctx, binding, *submesh, &filtered);
     release_mesh_binding(ctx.device(), binding);
-    return draw_tc_submesh(ctx, mesh, submesh_index, &filtered);
+    return true;
 }
 
 bool draw_tc_mesh(
@@ -582,6 +538,11 @@ bool draw_tc_submesh(
     std::initializer_list<std::string_view> used_semantics,
     bool use_shader_input_locations
 ) {
+    const tc_submesh* submesh = validate_submesh_range(mesh, submesh_index);
+    if (!submesh) {
+        return false;
+    }
+
     Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
     if (binding.index_count == 0) return false;
 
@@ -590,8 +551,9 @@ bool draw_tc_submesh(
             binding.layout,
             used_semantics,
             use_shader_input_locations);
+    draw_tc_submesh_binding(ctx, binding, *submesh, &filtered);
     release_mesh_binding(ctx.device(), binding);
-    return draw_tc_submesh(ctx, mesh, submesh_index, &filtered);
+    return true;
 }
 
 } // namespace tgfx

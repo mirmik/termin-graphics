@@ -317,33 +317,21 @@ def _read_accessor(gltf: dict, buffers: list[bytes], accessor_index: int) -> np.
 
 def _parse_meshes(gltf: dict, buffers: list[bytes], scene_data: GLBSceneData):
     """Parse all meshes from glTF."""
-    def concat_optional(chunks: list[Optional[np.ndarray]], components: int) -> Optional[np.ndarray]:
-        if not any(chunk is not None for chunk in chunks):
-            return None
-        filled = []
-        for vertex_chunk, chunk in zip(vertex_chunks, chunks, strict=True):
-            if chunk is None:
-                filled.append(np.zeros((len(vertex_chunk), components), dtype=np.float32))
-            else:
-                filled.append(chunk.astype(np.float32))
-        return np.concatenate(filled, axis=0).astype(np.float32)
-
     for mesh_idx, mesh in enumerate(gltf.get("meshes", [])):
         mesh_name = mesh.get("name", f"Mesh_{mesh_idx}")
         scene_data.mesh_index_map[mesh_idx] = []
 
-        vertex_chunks: list[np.ndarray] = []
-        normal_chunks: list[Optional[np.ndarray]] = []
-        uv_chunks: list[Optional[np.ndarray]] = []
-        tangent_chunks: list[Optional[np.ndarray]] = []
-        joint_chunks: list[Optional[np.ndarray]] = []
-        weight_chunks: list[Optional[np.ndarray]] = []
+        primitive_records: list[dict[str, Any]] = []
         index_chunks: list[np.ndarray] = []
         submeshes: list[GLBSubmeshData] = []
         material_slot_for_index: Dict[int, int] = {}
         first_material_index = -1
-        next_vertex_base = 0
         next_first_index = 0
+        has_normals = False
+        has_uvs = False
+        has_tangents = False
+        has_joints = False
+        has_weights = False
 
         for prim_idx, primitive in enumerate(mesh.get("primitives", [])):
             attributes = primitive.get("attributes", {})
@@ -351,30 +339,35 @@ def _parse_meshes(gltf: dict, buffers: list[bytes], scene_data: GLBSceneData):
             # Vertices (required)
             if "POSITION" not in attributes:
                 continue
-            vertices = _read_accessor(gltf, buffers, attributes["POSITION"])
+            vertices = _read_accessor(gltf, buffers, attributes["POSITION"]).astype(np.float32)
 
             # Normals (optional)
             normals = None
             if "NORMAL" in attributes:
-                normals = _read_accessor(gltf, buffers, attributes["NORMAL"])
+                normals = _read_accessor(gltf, buffers, attributes["NORMAL"]).astype(np.float32)
+                has_normals = True
 
             # UVs (optional)
             uvs = None
             if "TEXCOORD_0" in attributes:
-                uvs = _read_accessor(gltf, buffers, attributes["TEXCOORD_0"])
+                uvs = _read_accessor(gltf, buffers, attributes["TEXCOORD_0"]).astype(np.float32)
+                has_uvs = True
 
             # Tangents (optional) - vec4 with w = handedness
             tangents = None
             if "TANGENT" in attributes:
-                tangents = _read_accessor(gltf, buffers, attributes["TANGENT"])
+                tangents = _read_accessor(gltf, buffers, attributes["TANGENT"]).astype(np.float32)
+                has_tangents = True
 
             # Skinning data (optional)
             joint_indices = None
             joint_weights = None
             if "JOINTS_0" in attributes:
-                joint_indices = _read_accessor(gltf, buffers, attributes["JOINTS_0"])
+                joint_indices = _read_accessor(gltf, buffers, attributes["JOINTS_0"]).astype(np.float32)
+                has_joints = True
             if "WEIGHTS_0" in attributes:
-                joint_weights = _read_accessor(gltf, buffers, attributes["WEIGHTS_0"])
+                joint_weights = _read_accessor(gltf, buffers, attributes["WEIGHTS_0"]).astype(np.float32)
+                has_weights = True
 
             # Indices
             if "indices" in primitive:
@@ -393,52 +386,111 @@ def _parse_meshes(gltf: dict, buffers: list[bytes], scene_data: GLBSceneData):
                 material_slot_for_index[material_index] = len(material_slot_for_index)
             material_slot = material_slot_for_index[material_index]
 
-            # Build expanded vertex arrays consumed by mesh asset population.
-            expanded_verts = vertices[indices]
-            expanded_normals = normals[indices] if normals is not None else None
-            expanded_uvs = uvs[indices] if uvs is not None else None
-            expanded_tangents = tangents[indices] if tangents is not None else None
-            expanded_joints = joint_indices[indices] if joint_indices is not None else None
-            expanded_weights = joint_weights[indices] if joint_weights is not None else None
-
             prim_name = f"{mesh_name}/primitive_{prim_idx}"
             if 0 <= material_index < len(gltf.get("materials", [])):
                 material_name = gltf["materials"][material_index].get("name")
                 if material_name:
                     prim_name = f"{mesh_name}/{material_name}"
 
-            vertex_chunks.append(expanded_verts.astype(np.float32))
-            normal_chunks.append(expanded_normals.astype(np.float32) if expanded_normals is not None else None)
-            uv_chunks.append(expanded_uvs.astype(np.float32) if expanded_uvs is not None else None)
-            tangent_chunks.append(expanded_tangents.astype(np.float32) if expanded_tangents is not None else None)
-            joint_chunks.append(expanded_joints.astype(np.float32) if expanded_joints is not None else None)
-            weight_chunks.append(expanded_weights.astype(np.float32) if expanded_weights is not None else None)
-
-            local_indices = np.arange(
-                next_vertex_base,
-                next_vertex_base + len(expanded_verts),
-                dtype=np.uint32,
-            )
-            index_chunks.append(local_indices)
+            primitive_records.append({
+                "vertices": vertices,
+                "normals": normals,
+                "uvs": uvs,
+                "tangents": tangents,
+                "joint_indices": joint_indices,
+                "joint_weights": joint_weights,
+                "indices": indices,
+                "material_index": material_index,
+                "material_slot": material_slot,
+                "name": prim_name,
+            })
             submeshes.append(GLBSubmeshData(
                 name=prim_name,
                 first_index=next_first_index,
-                index_count=len(local_indices),
+                index_count=len(indices),
                 material_index=material_index,
                 material_slot=material_slot,
             ))
-            next_vertex_base += len(expanded_verts)
-            next_first_index += len(local_indices)
+            next_first_index += len(indices)
 
-        if not vertex_chunks:
+        if not primitive_records:
             continue
 
-        vertices = np.concatenate(vertex_chunks, axis=0).astype(np.float32)
-        normals = concat_optional(normal_chunks, 3)
-        uvs = concat_optional(uv_chunks, 2)
-        tangents = concat_optional(tangent_chunks, 4)
-        joint_indices = concat_optional(joint_chunks, 4)
-        joint_weights = concat_optional(weight_chunks, 4)
+        vertex_map: dict[tuple, int] = {}
+        vertex_out: list[np.ndarray] = []
+        normal_out: list[np.ndarray] = []
+        uv_out: list[np.ndarray] = []
+        tangent_out: list[np.ndarray] = []
+        joint_out: list[np.ndarray] = []
+        weight_out: list[np.ndarray] = []
+
+        zero3 = (0.0, 0.0, 0.0)
+        zero2 = (0.0, 0.0)
+        zero4 = (0.0, 0.0, 0.0, 0.0)
+
+        def row_tuple(data: Optional[np.ndarray], index: int, fallback: tuple[float, ...]) -> tuple[float, ...]:
+            if data is None:
+                return fallback
+            return tuple(data[index].tolist())
+
+        for record in primitive_records:
+            local_indices: list[int] = []
+            source_indices = record["indices"]
+            for source_index in source_indices:
+                idx = int(source_index)
+                key_parts = [row_tuple(record["vertices"], idx, zero3)]
+                if has_normals:
+                    key_parts.append(row_tuple(record["normals"], idx, zero3))
+                if has_uvs:
+                    key_parts.append(row_tuple(record["uvs"], idx, zero2))
+                if has_tangents:
+                    key_parts.append(row_tuple(record["tangents"], idx, zero4))
+                if has_joints:
+                    key_parts.append(row_tuple(record["joint_indices"], idx, zero4))
+                if has_weights:
+                    key_parts.append(row_tuple(record["joint_weights"], idx, zero4))
+                key = tuple(key_parts)
+
+                vertex_index = vertex_map.get(key)
+                if vertex_index is None:
+                    vertex_index = len(vertex_out)
+                    vertex_map[key] = vertex_index
+                    vertex_out.append(record["vertices"][idx])
+                    if has_normals:
+                        normal_out.append(
+                            record["normals"][idx] if record["normals"] is not None
+                            else np.zeros(3, dtype=np.float32)
+                        )
+                    if has_uvs:
+                        uv_out.append(
+                            record["uvs"][idx] if record["uvs"] is not None
+                            else np.zeros(2, dtype=np.float32)
+                        )
+                    if has_tangents:
+                        tangent_out.append(
+                            record["tangents"][idx] if record["tangents"] is not None
+                            else np.zeros(4, dtype=np.float32)
+                        )
+                    if has_joints:
+                        joint_out.append(
+                            record["joint_indices"][idx] if record["joint_indices"] is not None
+                            else np.zeros(4, dtype=np.float32)
+                        )
+                    if has_weights:
+                        weight_out.append(
+                            record["joint_weights"][idx] if record["joint_weights"] is not None
+                            else np.zeros(4, dtype=np.float32)
+                        )
+                local_indices.append(vertex_index)
+
+            index_chunks.append(np.asarray(local_indices, dtype=np.uint32))
+
+        vertices = np.asarray(vertex_out, dtype=np.float32)
+        normals = np.asarray(normal_out, dtype=np.float32) if has_normals else None
+        uvs = np.asarray(uv_out, dtype=np.float32) if has_uvs else None
+        tangents = np.asarray(tangent_out, dtype=np.float32) if has_tangents else None
+        joint_indices = np.asarray(joint_out, dtype=np.float32) if has_joints else None
+        joint_weights = np.asarray(weight_out, dtype=np.float32) if has_weights else None
         indices = np.concatenate(index_chunks, axis=0).astype(np.uint32)
 
         our_mesh_idx = len(scene_data.meshes)

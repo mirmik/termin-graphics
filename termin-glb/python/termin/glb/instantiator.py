@@ -63,6 +63,93 @@ def _compute_vertex_normals(vertices: np.ndarray, indices: np.ndarray) -> np.nda
     return normals / lengths
 
 
+def _fallback_tangents(normals: np.ndarray) -> np.ndarray:
+    refs = np.zeros_like(normals, dtype=np.float32)
+    refs[:, 2] = 1.0
+    z_aligned = np.abs(normals[:, 2]) > 0.999
+    refs[z_aligned] = np.array([0.0, 1.0, 0.0], dtype=np.float32)
+    tangents = np.cross(refs, normals).astype(np.float32)
+    lengths = np.linalg.norm(tangents, axis=1, keepdims=True)
+    lengths = np.where(lengths < 1e-8, 1.0, lengths)
+    return tangents / lengths
+
+
+def _compute_vertex_tangents(
+    vertices: np.ndarray,
+    normals: np.ndarray,
+    uvs: np.ndarray,
+    indices: np.ndarray,
+) -> np.ndarray:
+    """Compute per-vertex tangents from indexed triangles and UVs."""
+    vertex_count = len(vertices)
+    tangents_1 = np.zeros((vertex_count, 3), dtype=np.float32)
+    tangents_2 = np.zeros((vertex_count, 3), dtype=np.float32)
+
+    triangle_indices = indices[: (len(indices) // 3) * 3].reshape(-1, 3)
+    if len(triangle_indices) > 0:
+        i0 = triangle_indices[:, 0]
+        i1 = triangle_indices[:, 1]
+        i2 = triangle_indices[:, 2]
+
+        p0 = vertices[i0]
+        p1 = vertices[i1]
+        p2 = vertices[i2]
+        uv0 = uvs[i0]
+        uv1 = uvs[i1]
+        uv2 = uvs[i2]
+
+        edge1 = p1 - p0
+        edge2 = p2 - p0
+        duv1 = uv1 - uv0
+        duv2 = uv2 - uv0
+
+        denom = duv1[:, 0] * duv2[:, 1] - duv2[:, 0] * duv1[:, 1]
+        valid = np.abs(denom) > 1e-8
+        if np.any(valid):
+            inv = np.zeros_like(denom, dtype=np.float32)
+            inv[valid] = 1.0 / denom[valid]
+            sdir = (duv2[:, 1:2] * edge1 - duv1[:, 1:2] * edge2) * inv[:, None]
+            tdir = (duv1[:, 0:1] * edge2 - duv2[:, 0:1] * edge1) * inv[:, None]
+
+            valid_i0 = i0[valid]
+            valid_i1 = i1[valid]
+            valid_i2 = i2[valid]
+            valid_sdir = sdir[valid].astype(np.float32)
+            valid_tdir = tdir[valid].astype(np.float32)
+            np.add.at(tangents_1, valid_i0, valid_sdir)
+            np.add.at(tangents_1, valid_i1, valid_sdir)
+            np.add.at(tangents_1, valid_i2, valid_sdir)
+            np.add.at(tangents_2, valid_i0, valid_tdir)
+            np.add.at(tangents_2, valid_i1, valid_tdir)
+            np.add.at(tangents_2, valid_i2, valid_tdir)
+
+    tangent_xyz = tangents_1 - normals * np.sum(normals * tangents_1, axis=1, keepdims=True)
+    lengths = np.linalg.norm(tangent_xyz, axis=1, keepdims=True)
+    fallback = _fallback_tangents(normals)
+    valid_tangent = lengths[:, 0] > 1e-8
+    tangent_xyz[valid_tangent] /= lengths[valid_tangent]
+    tangent_xyz[~valid_tangent] = fallback[~valid_tangent]
+
+    handedness = np.ones((vertex_count, 1), dtype=np.float32)
+    bitangent_sign = np.sum(np.cross(normals, tangent_xyz) * tangents_2, axis=1)
+    handedness[bitangent_sign < 0.0, 0] = -1.0
+    return np.concatenate([tangent_xyz.astype(np.float32), handedness], axis=1)
+
+
+def _mesh_tangents_for_material_layout(
+    glb_mesh: "GLBMeshData",
+    vertices: np.ndarray,
+    normals: np.ndarray,
+    uvs: np.ndarray,
+    indices: np.ndarray,
+) -> np.ndarray | None:
+    if glb_mesh.tangents is not None:
+        return glb_mesh.tangents.astype(np.float32)
+    if glb_mesh.uvs is None:
+        return None
+    return _compute_vertex_tangents(vertices, normals, uvs, indices)
+
+
 def _glb_submeshes_to_tc(glb_mesh: "GLBMeshData"):
     from tmesh import TcSubmesh
 
@@ -103,10 +190,9 @@ def _glb_mesh_to_tc_mesh(glb_mesh: "GLBMeshData", uuid: str = "") -> "TcMesh":
     else:
         uvs = np.zeros((num_verts, 2), dtype=np.float32)
 
-    # Tangents (optional, vec4 with w = handedness)
-    has_tangents = glb_mesh.tangents is not None
-    if has_tangents:
-        tangents = glb_mesh.tangents.astype(np.float32)
+    # Tangents (optional in glTF, generated when normal+uv are available)
+    tangents = _mesh_tangents_for_material_layout(glb_mesh, vertices, normals, uvs, indices)
+    has_tangents = tangents is not None
 
     is_skinned = glb_mesh.is_skinned
 
@@ -181,10 +267,9 @@ def _populate_tc_mesh_from_glb(tc_mesh: TcMesh, glb_mesh: "GLBMeshData") -> bool
     else:
         uvs = np.zeros((num_verts, 2), dtype=np.float32)
 
-    # Tangents (optional, vec4 with w = handedness)
-    has_tangents = glb_mesh.tangents is not None
-    if has_tangents:
-        tangents = glb_mesh.tangents.astype(np.float32)
+    # Tangents (optional in glTF, generated when normal+uv are available)
+    tangents = _mesh_tangents_for_material_layout(glb_mesh, vertices, normals, uvs, indices)
+    has_tangents = tangents is not None
 
     is_skinned = glb_mesh.is_skinned
 
