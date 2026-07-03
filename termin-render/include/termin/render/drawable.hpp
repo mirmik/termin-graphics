@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <functional>
 #include <cstddef>
@@ -65,6 +66,11 @@ struct GeometryDrawCall {
     }
 };
 
+struct MeshDrawGeometry {
+    tc_mesh* mesh = nullptr;
+    size_t submesh_index = 0;
+};
+
 enum class DirectTgfx2DrawKind {
     MaterialPhase,
     OverrideColor,
@@ -118,6 +124,23 @@ public:
         return nullptr;
     }
 
+    virtual bool resolve_mesh_geometry(
+        const std::string& phase_mark,
+        int geometry_id,
+        MeshDrawGeometry& out
+    ) const {
+        if (geometry_id != 0) {
+            return false;
+        }
+        tc_mesh* mesh = get_mesh_for_phase(phase_mark, geometry_id);
+        if (!mesh) {
+            return false;
+        }
+        out.mesh = mesh;
+        out.submesh_index = 0;
+        return true;
+    }
+
     // Upload any per-draw uniforms that aren't derivable from the
     // material UBO / push-constant path. Called by tgfx2 pass draw
     // loops (ShadowPass, ColorPass, ...) right before the draw, after
@@ -157,6 +180,26 @@ public:
         (void)geometry_id;
         (void)kind;
         return false;
+    }
+
+    virtual std::vector<int> get_geometry_ids_for_phase(const std::string& phase_mark) {
+        std::vector<int> ids;
+        std::vector<GeometryDrawCall> draws = get_geometry_draws(&phase_mark);
+        for (const GeometryDrawCall& draw : draws) {
+            if (std::find(ids.begin(), ids.end(), draw.geometry_id) == ids.end()) {
+                ids.push_back(draw.geometry_id);
+            }
+        }
+        if (!ids.empty()) {
+            return ids;
+        }
+
+        MeshDrawGeometry mesh_geometry{};
+        if (resolve_mesh_geometry(phase_mark, 0, mesh_geometry) ||
+            supports_direct_tgfx2_draw(phase_mark, 0, DirectTgfx2DrawKind::OverrideColor)) {
+            ids.push_back(0);
+        }
+        return ids;
     }
 
     // Direct tgfx2 draw hook for drawables that are not backed by a
