@@ -10,6 +10,7 @@
 #include "tcbase/tc_log.hpp"
 
 #include <cstring>
+#include <cstdio>
 #include <string>
 #include <unordered_set>
 
@@ -29,6 +30,10 @@ bool should_log_material_shader_override_error(
     key += '|';
     key += std::to_string(static_cast<unsigned>(request.pass_kind));
     key += '|';
+    if (request.pass_contract.has_value()) {
+        key += request.pass_contract->debug_name;
+    }
+    key += '|';
     key += std::to_string(static_cast<unsigned>(request.shader_variant_op));
     key += '|';
     key += reason ? reason : "";
@@ -37,6 +42,88 @@ bool should_log_material_shader_override_error(
 
 const char* material_shader_override_context(const MaterialShaderOverrideRequest& request) {
     return request.debug_context ? request.debug_context : "MaterialShaderOverride";
+}
+
+uint64_t fnv1a_append(const char* text, uint64_t hash)
+{
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(text ? text : "");
+    while (*p) {
+        hash ^= static_cast<uint64_t>(*p++);
+        hash *= 0x100000001b3ULL;
+    }
+    return hash;
+}
+
+uint64_t fnv1a_append_u32(uint32_t value, uint64_t hash)
+{
+    char buffer[16];
+    std::snprintf(buffer, sizeof(buffer), "%u", value);
+    return fnv1a_append(buffer, hash);
+}
+
+void append_semantics_to_hash(
+    const std::vector<MaterialPipelineSemantic>& semantics,
+    uint64_t& hash)
+{
+    for (const MaterialPipelineSemantic& semantic : semantics) {
+        hash = fnv1a_append(semantic.name.c_str(), hash);
+        hash = fnv1a_append(":", hash);
+        hash = fnv1a_append_u32(static_cast<uint32_t>(semantic.type), hash);
+        hash = fnv1a_append(";", hash);
+    }
+}
+
+void append_resources_to_hash(
+    const std::vector<MaterialPipelineResourceDecl>& resources,
+    uint64_t& hash)
+{
+    for (const MaterialPipelineResourceDecl& resource : resources) {
+        hash = fnv1a_append(resource.requirement.name.c_str(), hash);
+        hash = fnv1a_append(":", hash);
+        hash = fnv1a_append_u32(resource.requirement.kind, hash);
+        hash = fnv1a_append(":", hash);
+        hash = fnv1a_append_u32(resource.requirement.scope, hash);
+        hash = fnv1a_append(":", hash);
+        hash = fnv1a_append_u32(resource.requirement.stage_mask, hash);
+        hash = fnv1a_append(";", hash);
+    }
+}
+
+void make_shader_override_variant_uuid(
+    char* out_uuid,
+    size_t out_size,
+    TcShader original_shader,
+    tc_shader_variant_op variant_op,
+    const VertexTransformContract& vertex_transform,
+    const MaterialPipelinePassContract& pass_contract)
+{
+    if (!out_uuid || out_size == 0) {
+        return;
+    }
+
+    uint64_t hash = 0xcbf29ce484222325ULL;
+    hash = fnv1a_append(original_shader.uuid(), hash);
+    hash = fnv1a_append("::material_override::", hash);
+    hash = fnv1a_append_u32(static_cast<uint32_t>(variant_op), hash);
+    hash = fnv1a_append("::vertex::", hash);
+    hash = fnv1a_append_u32(static_cast<uint32_t>(vertex_transform.kind), hash);
+    hash = fnv1a_append(vertex_transform.debug_name.c_str(), hash);
+    if (vertex_transform.template_uuid.has_value()) {
+        hash = fnv1a_append(vertex_transform.template_uuid->c_str(), hash);
+    }
+    append_semantics_to_hash(vertex_transform.vertex_inputs.mesh_attributes, hash);
+    append_semantics_to_hash(vertex_transform.produced_fragment_input.semantics, hash);
+    append_resources_to_hash(vertex_transform.resources, hash);
+    hash = fnv1a_append("::pass::", hash);
+    hash = fnv1a_append_u32(static_cast<uint32_t>(pass_contract.kind), hash);
+    hash = fnv1a_append(pass_contract.debug_name.c_str(), hash);
+    hash = fnv1a_append(pass_contract.uses_material_fragment ? ":matfrag:1" : ":matfrag:0", hash);
+    append_semantics_to_hash(
+        pass_contract.required_material_fragment_input.semantics,
+        hash);
+    append_resources_to_hash(pass_contract.resources, hash);
+
+    std::snprintf(out_uuid, out_size, "shv_%016llx", static_cast<unsigned long long>(hash));
 }
 
 bool material_shader_override_supported(VertexTransformKind kind)
@@ -83,28 +170,24 @@ const char* shader_override_suffix(VertexTransformKind kind)
     }
 }
 
-MaterialFragmentInterface required_fragment_interface_for_pass(
-    MaterialPipelinePassKind pass_kind)
-{
-    if (pass_kind == MaterialPipelinePassKind::Color) {
-        return material_pipeline_standard_material_fragment_interface();
-    }
-    return {};
-}
-
 std::string shader_override_name_for_request(
     TcShader original_shader,
-    const MaterialShaderOverrideRequest& request)
+    const MaterialShaderOverrideRequest& request,
+    const VertexTransformContract& vertex_transform,
+    const MaterialPipelinePassContract& pass)
 {
     std::string name = original_shader.name();
     if (name.empty()) {
         name = original_shader.uuid();
     }
     name += shader_override_suffix(request.vertex_transform_kind);
-    const char* pass_name = material_pipeline_pass_kind_name(request.pass_kind);
-    if (pass_name && pass_name[0] != '\0') {
+    if (!vertex_transform.debug_name.empty()) {
         name += "_";
-        name += pass_name;
+        name += vertex_transform.debug_name;
+    }
+    if (!pass.debug_name.empty()) {
+        name += "_";
+        name += pass.debug_name;
     }
     return name;
 }
@@ -179,23 +262,37 @@ TcShader assemble_material_shader_override(const MaterialShaderOverrideRequest& 
         return TcShader();
     }
 
+    MaterialPipelinePassContract pass_contract =
+        request.pass_contract.has_value()
+            ? *request.pass_contract
+            : material_pipeline_builtin_pass_contract(request.pass_kind);
+    VertexTransformContract vertex_transform_contract =
+        request.vertex_transform_contract.has_value()
+            ? *request.vertex_transform_contract
+            : material_pipeline_builtin_vertex_transform_contract(
+                request.vertex_transform_kind,
+                request.pass_kind);
+
     char variant_uuid[40];
-    tc_shader_make_variant_uuid(
+    make_shader_override_variant_uuid(
         variant_uuid,
         sizeof(variant_uuid),
-        original_shader.uuid(),
-        shader_variant_op);
+        original_shader,
+        shader_variant_op,
+        vertex_transform_contract,
+        pass_contract);
 
     MaterialPipelineShaderAssemblyRequest assembly_request{};
     assembly_request.material = material_pipeline_material_contract_from_shader(
         original_shader,
-        required_fragment_interface_for_pass(request.pass_kind));
-    assembly_request.vertex_transform =
-        material_pipeline_builtin_vertex_transform_contract(
-            request.vertex_transform_kind,
-            request.pass_kind);
-    assembly_request.pass = material_pipeline_builtin_pass_contract(request.pass_kind);
-    assembly_request.shader_name = shader_override_name_for_request(original_shader, request);
+        pass_contract.required_material_fragment_input);
+    assembly_request.vertex_transform = vertex_transform_contract;
+    assembly_request.pass = pass_contract;
+    assembly_request.shader_name = shader_override_name_for_request(
+        original_shader,
+        request,
+        vertex_transform_contract,
+        pass_contract);
     assembly_request.shader_uuid = variant_uuid;
     assembly_request.language = original_shader.language();
     assembly_request.artifact_policy = original_shader.artifact_policy();

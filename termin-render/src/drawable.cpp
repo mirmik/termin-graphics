@@ -55,6 +55,29 @@ tc_shader_handle Drawable::_cb_override_shader(
     return result.handle;
 }
 
+TcShader override_drawable_shader(
+    tc_component* component,
+    const ShaderOverrideContext& context)
+{
+    if (!component) {
+        return context.original_shader;
+    }
+
+    if (tc_component_get_drawable_vtable(component) == &Drawable::cxx_drawable_vtable()) {
+        Drawable* drawable = static_cast<Drawable*>(
+            tc_component_get_drawable_userdata(component));
+        if (drawable) {
+            return drawable->override_shader_with_context(context);
+        }
+    }
+
+    return TcShader(tc_component_override_shader(
+        component,
+        context.phase_mark.c_str(),
+        context.geometry_id,
+        context.original_shader.handle));
+}
+
 void Drawable::_cb_collect_shader_usages(
     tc_component* c,
     const char* phase_mark,

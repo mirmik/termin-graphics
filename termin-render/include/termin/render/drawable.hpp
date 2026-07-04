@@ -24,6 +24,7 @@ struct tc_mesh;
 #include <tgfx/resources/tc_material_registry.h>
 #include <tgfx/tgfx_shader_handle.hpp>
 
+#include <termin/render/material_pipeline_shader_assembler.hpp>
 #include <termin/render/render_context.hpp>
 #include <termin/render/render_export.hpp>
 
@@ -76,6 +77,13 @@ enum class DirectTgfx2DrawKind {
     OverrideColor,
 };
 
+struct ShaderOverrideContext {
+    std::string phase_mark;
+    int geometry_id = 0;
+    TcShader original_shader;
+    MaterialPipelinePassContract pass_contract;
+};
+
 class RENDER_API Drawable {
 public:
     mutable std::vector<GeometryDrawCall> _cached_geometry_draws;
@@ -94,6 +102,15 @@ public:
         (void)phase_mark;
         (void)geometry_id;
         return original_shader;
+    }
+
+    virtual TcShader override_shader_with_context(
+        const ShaderOverrideContext& context
+    ) {
+        return override_shader(
+            context.phase_mark,
+            context.geometry_id,
+            context.original_shader);
     }
 
     virtual void collect_shader_usages(
@@ -244,6 +261,10 @@ private:
     static tc_shader_handle _cb_override_shader(tc_component* c, const char* phase_mark, int geometry_id, tc_shader_handle original_shader);
     static void _cb_collect_shader_usages(tc_component* c, const char* phase_mark, int geometry_id, tc_shader_handle original_shader, tc_shader_usage_emit_fn emit, void* user_data);
 };
+
+RENDER_API TcShader override_drawable_shader(
+    tc_component* component,
+    const ShaderOverrideContext& context);
 
 struct PhaseDrawCall {
     Entity entity;

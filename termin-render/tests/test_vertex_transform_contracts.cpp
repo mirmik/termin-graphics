@@ -6,6 +6,7 @@ GUARD_TEST_MAIN();
 #include <string>
 
 #include <termin/render/vertex_transform_contracts.hpp>
+#include <termin/render/material_pipeline_shader_assembler.hpp>
 
 namespace {
 
@@ -139,4 +140,28 @@ TEST_CASE("Static transform is explicitly transitional") {
         find_resource(contract, "draw_data");
     REQUIRE(draw_data != nullptr);
     CHECK(draw_data->owner == termin::MaterialPipelineResourceOwner::VertexTransform);
+}
+
+TEST_CASE("Built-in pass contracts carry fragment input intent explicitly") {
+    termin::MaterialPipelinePassContract color =
+        termin::material_pipeline_builtin_pass_contract(
+            termin::MaterialPipelinePassKind::Color);
+    CHECK(termin::material_pipeline_interface_produces(
+        color.required_material_fragment_input,
+        "world_pos",
+        termin::MaterialPipelineValueType::Float3));
+    CHECK(termin::material_pipeline_interface_produces(
+        color.required_material_fragment_input,
+        "normal_world",
+        termin::MaterialPipelineValueType::Float3));
+
+    termin::MaterialPipelinePassContract shadow =
+        termin::material_pipeline_builtin_pass_contract(
+            termin::MaterialPipelinePassKind::Shadow);
+    CHECK(shadow.required_material_fragment_input.semantics.empty());
+
+    termin::MaterialPipelinePassContract id =
+        termin::material_pipeline_builtin_pass_contract(
+            termin::MaterialPipelinePassKind::Id);
+    CHECK(id.required_material_fragment_input.semantics.empty());
 }

@@ -19,6 +19,7 @@ struct MaterialPipelineMaterialContract {
 struct MaterialPipelinePassContract {
     MaterialPipelinePassKind kind = MaterialPipelinePassKind::Color;
     std::string debug_name;
+    MaterialFragmentInterface required_material_fragment_input;
     bool uses_material_fragment = true;
     std::string fragment_source_override;
     std::string fragment_entry_override = "fs_main";

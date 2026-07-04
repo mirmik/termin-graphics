@@ -2,9 +2,11 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 
 #include "termin/render/frame_uniforms.hpp"
+#include "termin/render/material_pipeline_shader_assembler.hpp"
 #include "termin/render/vertex_transform_contracts.hpp"
 #include "termin/render/render_export.hpp"
 #include "tgfx/tgfx_shader_handle.hpp"
@@ -51,6 +53,8 @@ struct MaterialShaderOverrideRequest {
     TcShader original_shader;
     VertexTransformKind vertex_transform_kind = VertexTransformKind::StaticMesh;
     MaterialPipelinePassKind pass_kind = MaterialPipelinePassKind::Color;
+    std::optional<VertexTransformContract> vertex_transform_contract;
+    std::optional<MaterialPipelinePassContract> pass_contract;
     tc_shader_variant_op shader_variant_op = TC_SHADER_VARIANT_NONE;
     const char* debug_context = nullptr;
 };
