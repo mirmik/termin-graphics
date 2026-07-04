@@ -28,8 +28,6 @@ bool should_log_material_shader_override_error(
     key += '|';
     key += std::to_string(static_cast<unsigned>(request.vertex_transform_kind));
     key += '|';
-    key += std::to_string(static_cast<unsigned>(request.pass_kind));
-    key += '|';
     if (request.pass_contract.has_value()) {
         key += request.pass_contract->debug_name;
     }
@@ -115,7 +113,6 @@ void make_shader_override_variant_uuid(
     append_semantics_to_hash(vertex_transform.produced_fragment_input.semantics, hash);
     append_resources_to_hash(vertex_transform.resources, hash);
     hash = fnv1a_append("::pass::", hash);
-    hash = fnv1a_append_u32(static_cast<uint32_t>(pass_contract.kind), hash);
     hash = fnv1a_append(pass_contract.debug_name.c_str(), hash);
     hash = fnv1a_append(pass_contract.uses_material_fragment ? ":matfrag:1" : ":matfrag:0", hash);
     append_semantics_to_hash(
@@ -234,6 +231,22 @@ bool shader_requires_material_pipeline_contract(const tc_shader* shader)
            shader->variant_op == TC_SHADER_VARIANT_FOLIAGE_SHADOW;
 }
 
+const std::optional<VertexTransformContract>& vertex_transform_for_request(
+    const MaterialPipelinePassContract& pass_contract,
+    VertexTransformKind kind)
+{
+    switch (kind) {
+    case VertexTransformKind::SkinnedMesh:
+        return pass_contract.skinned_vertex_transform;
+    case VertexTransformKind::Foliage:
+    case VertexTransformKind::FoliageShadow:
+        return pass_contract.foliage_vertex_transform;
+    case VertexTransformKind::StaticMesh:
+        return pass_contract.static_vertex_transform;
+    }
+    return pass_contract.static_vertex_transform;
+}
+
 } // namespace
 
 TcShader assemble_material_shader_override(const MaterialShaderOverrideRequest& request) {
@@ -262,16 +275,37 @@ TcShader assemble_material_shader_override(const MaterialShaderOverrideRequest& 
         return TcShader();
     }
 
-    MaterialPipelinePassContract pass_contract =
-        request.pass_contract.has_value()
-            ? *request.pass_contract
-            : material_pipeline_builtin_pass_contract(request.pass_kind);
-    VertexTransformContract vertex_transform_contract =
+    if (!request.pass_contract.has_value()) {
+        if (should_log_material_shader_override_error(request, "missing_pass_contract")) {
+            tc::Log::error(
+                "[%s] cannot create material shader override for '%s': pass contract is required",
+                context,
+                original_shader.name());
+        }
+        return TcShader();
+    }
+
+    MaterialPipelinePassContract pass_contract = *request.pass_contract;
+
+    std::optional<VertexTransformContract> vertex_transform_contract_opt =
         request.vertex_transform_contract.has_value()
-            ? *request.vertex_transform_contract
-            : material_pipeline_builtin_vertex_transform_contract(
-                request.vertex_transform_kind,
-                request.pass_kind);
+            ? request.vertex_transform_contract
+            : vertex_transform_for_request(
+                pass_contract,
+                request.vertex_transform_kind);
+    if (!vertex_transform_contract_opt.has_value()) {
+        if (should_log_material_shader_override_error(request, "missing_vertex_transform_contract")) {
+            tc::Log::error(
+                "[%s] cannot create material shader override for '%s': pass '%s' has no %s vertex transform contract",
+                context,
+                original_shader.name(),
+                pass_contract.debug_name.c_str(),
+                vertex_transform_kind_name(request.vertex_transform_kind));
+        }
+        return TcShader();
+    }
+    VertexTransformContract vertex_transform_contract =
+        std::move(*vertex_transform_contract_opt);
 
     char variant_uuid[40];
     make_shader_override_variant_uuid(

@@ -5,8 +5,8 @@ GUARD_TEST_MAIN();
 #include <algorithm>
 #include <string>
 
-#include <termin/render/vertex_transform_contracts.hpp>
 #include <termin/render/material_pipeline_shader_assembler.hpp>
+#include <termin/render/vertex_transform_contracts.hpp>
 
 namespace {
 
@@ -36,13 +36,64 @@ const termin::MaterialPipelineResourceDecl* find_resource(
     return it == contract.resources.end() ? nullptr : &(*it);
 }
 
+termin::VertexTransformContract material_static_transform()
+{
+    return termin::material_pipeline_make_static_vertex_transform_contract(
+        "static",
+        termin::material_pipeline_full_material_mesh_input(),
+        termin::material_pipeline_standard_material_fragment_interface(),
+        termin::material_pipeline_common_vertex_resources("draw_data"));
+}
+
+termin::VertexTransformContract compact_static_transform(const char* draw_resource)
+{
+    return termin::material_pipeline_make_static_vertex_transform_contract(
+        "static_compact",
+        termin::material_pipeline_position_mesh_input(),
+        termin::material_pipeline_standard_material_fragment_interface(),
+        termin::material_pipeline_common_vertex_resources(draw_resource));
+}
+
+termin::VertexTransformContract normal_static_transform()
+{
+    return termin::material_pipeline_make_static_vertex_transform_contract(
+        "static_position_normal",
+        termin::material_pipeline_position_normal_mesh_input(),
+        termin::material_pipeline_standard_material_fragment_interface(),
+        termin::material_pipeline_common_vertex_resources("normal_draw"));
+}
+
+termin::VertexTransformContract foliage_material_transform()
+{
+    return termin::material_pipeline_make_foliage_vertex_transform_contract(
+        termin::VertexTransformKind::Foliage,
+        "foliage",
+        "termin-engine-foliage-instanced",
+        termin::material_pipeline_foliage_material_mesh_input(),
+        termin::material_pipeline_standard_material_fragment_interface(),
+        termin::material_pipeline_foliage_vertex_resources());
+}
+
+termin::VertexTransformContract foliage_shadow_transform()
+{
+    return termin::material_pipeline_make_foliage_vertex_transform_contract(
+        termin::VertexTransformKind::FoliageShadow,
+        "foliage_shadow",
+        "termin-engine-foliage-shadow",
+        termin::material_pipeline_position_mesh_input(),
+        termin::material_pipeline_standard_material_fragment_interface(),
+        termin::material_pipeline_foliage_vertex_resources());
+}
+
 } // namespace
 
-TEST_CASE("Skinned material transform declares template, inputs, and bone block") {
+TEST_CASE("Skinned transform builder declares template, inputs, and bone block") {
     termin::VertexTransformContract contract =
-        termin::material_pipeline_builtin_vertex_transform_contract(
-            termin::VertexTransformKind::SkinnedMesh,
-            termin::MaterialPipelinePassKind::Color);
+        termin::material_pipeline_make_skinned_vertex_transform_contract(
+            material_static_transform(),
+            "skinned",
+            "termin-engine-skinned-material",
+            termin::material_pipeline_skinned_material_mesh_input());
 
     REQUIRE(contract.template_uuid.has_value());
     CHECK_EQ(*contract.template_uuid, std::string("termin-engine-skinned-material"));
@@ -67,11 +118,13 @@ TEST_CASE("Skinned material transform declares template, inputs, and bone block"
         termin::MaterialPipelineValueType::Float3));
 }
 
-TEST_CASE("Skinned shadow transform uses compact position skinning input") {
+TEST_CASE("Skinned compact transform uses position skinning input") {
     termin::VertexTransformContract contract =
-        termin::material_pipeline_builtin_vertex_transform_contract(
-            termin::VertexTransformKind::SkinnedMesh,
-            termin::MaterialPipelinePassKind::Shadow);
+        termin::material_pipeline_make_skinned_vertex_transform_contract(
+            compact_static_transform("shadow_draw"),
+            "skinned_shadow",
+            "termin-engine-skinned-shadow",
+            termin::material_pipeline_skinned_position_mesh_input());
 
     REQUIRE(contract.template_uuid.has_value());
     CHECK_EQ(*contract.template_uuid, std::string("termin-engine-skinned-shadow"));
@@ -82,11 +135,8 @@ TEST_CASE("Skinned shadow transform uses compact position skinning input") {
     CHECK(!has_attribute(contract.vertex_inputs, "uv", termin::MaterialPipelineValueType::Float2));
 }
 
-TEST_CASE("Foliage material transform declares instanced resources") {
-    termin::VertexTransformContract contract =
-        termin::material_pipeline_builtin_vertex_transform_contract(
-            termin::VertexTransformKind::Foliage,
-            termin::MaterialPipelinePassKind::Color);
+TEST_CASE("Foliage transform builder declares instanced resources") {
+    termin::VertexTransformContract contract = foliage_material_transform();
 
     REQUIRE(contract.template_uuid.has_value());
     CHECK_EQ(*contract.template_uuid, std::string("termin-engine-foliage-instanced"));
@@ -111,25 +161,19 @@ TEST_CASE("Foliage material transform declares instanced resources") {
     CHECK_EQ(contract.instance_streams[0].name, std::string("foliage_instances"));
 }
 
-TEST_CASE("Foliage shadow transform uses shadow template and position-only mesh input") {
-    termin::VertexTransformContract contract =
-        termin::material_pipeline_builtin_vertex_transform_contract(
-            termin::VertexTransformKind::FoliageShadow,
-            termin::MaterialPipelinePassKind::Color);
+TEST_CASE("Foliage shadow transform uses position-only mesh input") {
+    termin::VertexTransformContract contract = foliage_shadow_transform();
 
     REQUIRE(contract.template_uuid.has_value());
     CHECK_EQ(*contract.template_uuid, std::string("termin-engine-foliage-shadow"));
-    CHECK(contract.pass_kind == termin::MaterialPipelinePassKind::Shadow);
+    CHECK(contract.kind == termin::VertexTransformKind::FoliageShadow);
     CHECK(has_attribute(contract.vertex_inputs, "position", termin::MaterialPipelineValueType::Float3));
     CHECK(!has_attribute(contract.vertex_inputs, "normal", termin::MaterialPipelineValueType::Float3));
     CHECK(!has_attribute(contract.vertex_inputs, "uv", termin::MaterialPipelineValueType::Float2));
 }
 
-TEST_CASE("Static transform is explicitly transitional") {
-    termin::VertexTransformContract contract =
-        termin::material_pipeline_builtin_vertex_transform_contract(
-            termin::VertexTransformKind::StaticMesh,
-            termin::MaterialPipelinePassKind::Color);
+TEST_CASE("Static transform is descriptor-built") {
+    termin::VertexTransformContract contract = material_static_transform();
 
     CHECK(!contract.template_uuid.has_value());
     CHECK(has_attribute(contract.vertex_inputs, "position", termin::MaterialPipelineValueType::Float3));
@@ -142,26 +186,35 @@ TEST_CASE("Static transform is explicitly transitional") {
     CHECK(draw_data->owner == termin::MaterialPipelineResourceOwner::VertexTransform);
 }
 
-TEST_CASE("Built-in pass contracts carry fragment input intent explicitly") {
-    termin::MaterialPipelinePassContract color =
-        termin::material_pipeline_builtin_pass_contract(
-            termin::MaterialPipelinePassKind::Color);
+TEST_CASE("Position-normal transform is data, not pass kind") {
+    termin::VertexTransformContract contract = normal_static_transform();
+
+    CHECK_EQ(contract.debug_name, std::string("static_position_normal"));
+    CHECK(has_attribute(contract.vertex_inputs, "position", termin::MaterialPipelineValueType::Float3));
+    CHECK(has_attribute(contract.vertex_inputs, "normal", termin::MaterialPipelineValueType::Float3));
+    CHECK(find_resource(contract, "normal_draw") != nullptr);
+}
+
+TEST_CASE("Pass contracts carry fragment input intent explicitly") {
+    termin::MaterialPipelinePassContract material_pass;
+    material_pass.debug_name = "arbitrary_material_pass";
+    material_pass.required_material_fragment_input =
+        termin::material_pipeline_standard_material_fragment_interface();
+    material_pass.static_vertex_transform = material_static_transform();
+
     CHECK(termin::material_pipeline_interface_produces(
-        color.required_material_fragment_input,
+        material_pass.required_material_fragment_input,
         "world_pos",
         termin::MaterialPipelineValueType::Float3));
     CHECK(termin::material_pipeline_interface_produces(
-        color.required_material_fragment_input,
+        material_pass.required_material_fragment_input,
         "normal_world",
         termin::MaterialPipelineValueType::Float3));
 
-    termin::MaterialPipelinePassContract shadow =
-        termin::material_pipeline_builtin_pass_contract(
-            termin::MaterialPipelinePassKind::Shadow);
-    CHECK(shadow.required_material_fragment_input.semantics.empty());
-
-    termin::MaterialPipelinePassContract id =
-        termin::material_pipeline_builtin_pass_contract(
-            termin::MaterialPipelinePassKind::Id);
-    CHECK(id.required_material_fragment_input.semantics.empty());
+    termin::MaterialPipelinePassContract auxiliary_pass;
+    auxiliary_pass.debug_name = "arbitrary_auxiliary_pass";
+    auxiliary_pass.required_material_fragment_input = termin::MaterialFragmentInterface{};
+    auxiliary_pass.static_vertex_transform = compact_static_transform("custom_draw");
+    CHECK(auxiliary_pass.required_material_fragment_input.semantics.empty());
+    CHECK(find_resource(*auxiliary_pass.static_vertex_transform, "custom_draw") != nullptr);
 }

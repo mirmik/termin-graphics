@@ -136,6 +136,57 @@ termin::MaterialPipelineMaterialContract material_contract_from_fragment(
         termin::material_pipeline_standard_material_fragment_interface());
 }
 
+termin::MaterialPipelinePassContract material_pass_contract()
+{
+    termin::MaterialPipelinePassContract contract;
+    contract.debug_name = "assembler_material_pass";
+    contract.required_material_fragment_input =
+        termin::material_pipeline_standard_material_fragment_interface();
+    contract.uses_material_fragment = true;
+    contract.static_vertex_transform =
+        termin::material_pipeline_make_static_vertex_transform_contract(
+            "static",
+            termin::material_pipeline_full_material_mesh_input(),
+            termin::material_pipeline_standard_material_fragment_interface(),
+            termin::material_pipeline_common_vertex_resources("draw_data"));
+    contract.skinned_vertex_transform =
+        termin::material_pipeline_make_skinned_vertex_transform_contract(
+            *contract.static_vertex_transform,
+            "skinned",
+            "termin-engine-skinned-material",
+            termin::material_pipeline_skinned_material_mesh_input());
+    contract.foliage_vertex_transform =
+        termin::material_pipeline_make_foliage_vertex_transform_contract(
+            termin::VertexTransformKind::Foliage,
+            "foliage",
+            "termin-engine-foliage-instanced",
+            termin::material_pipeline_foliage_material_mesh_input(),
+            termin::material_pipeline_standard_material_fragment_interface(),
+            termin::material_pipeline_foliage_vertex_resources());
+    return contract;
+}
+
+termin::MaterialPipelinePassContract compact_auxiliary_pass_contract()
+{
+    termin::MaterialPipelinePassContract contract;
+    contract.debug_name = "assembler_compact_auxiliary_pass";
+    contract.required_material_fragment_input = termin::MaterialFragmentInterface{};
+    contract.uses_material_fragment = true;
+    contract.static_vertex_transform =
+        termin::material_pipeline_make_static_vertex_transform_contract(
+            "static_compact",
+            termin::material_pipeline_position_mesh_input(),
+            termin::material_pipeline_standard_material_fragment_interface(),
+            termin::material_pipeline_common_vertex_resources("compact_draw"));
+    contract.skinned_vertex_transform =
+        termin::material_pipeline_make_skinned_vertex_transform_contract(
+            *contract.static_vertex_transform,
+            "skinned_compact",
+            "termin-engine-skinned-shadow",
+            termin::material_pipeline_skinned_position_mesh_input());
+    return contract;
+}
+
 } // namespace
 
 TEST_CASE("material pipeline assembler attaches skinned shader contract") {
@@ -143,12 +194,8 @@ TEST_CASE("material pipeline assembler attaches skinned shader contract") {
 
     termin::MaterialPipelineShaderAssemblyRequest request{};
     request.material = material_contract();
-    request.vertex_transform =
-        termin::material_pipeline_builtin_vertex_transform_contract(
-            termin::VertexTransformKind::SkinnedMesh,
-            termin::MaterialPipelinePassKind::Color);
-    request.pass = termin::material_pipeline_builtin_pass_contract(
-        termin::MaterialPipelinePassKind::Color);
+    request.pass = material_pass_contract();
+    request.vertex_transform = *request.pass.skinned_vertex_transform;
     request.shader_name = "assembler-skinned-contract";
     request.shader_uuid = "assembler-skinned-contract";
     request.vertex_source_override = kVertexSource;
@@ -185,12 +232,8 @@ TEST_CASE("material pipeline assembler keeps skinned debug normal material seman
     request.material = material_contract_from_fragment(
         kStandardNormalFragmentSource,
         "assembler-standard-normal-fragment");
-    request.vertex_transform =
-        termin::material_pipeline_builtin_vertex_transform_contract(
-            termin::VertexTransformKind::SkinnedMesh,
-            termin::MaterialPipelinePassKind::Color);
-    request.pass = termin::material_pipeline_builtin_pass_contract(
-        termin::MaterialPipelinePassKind::Color);
+    request.pass = material_pass_contract();
+    request.vertex_transform = *request.pass.skinned_vertex_transform;
     request.shader_name = "assembler-skinned-standard-normal";
     request.shader_uuid = "assembler-skinned-standard-normal";
 
@@ -214,12 +257,8 @@ TEST_CASE("material pipeline assembler attaches foliage instance contract") {
 
     termin::MaterialPipelineShaderAssemblyRequest request{};
     request.material = material_contract();
-    request.vertex_transform =
-        termin::material_pipeline_builtin_vertex_transform_contract(
-            termin::VertexTransformKind::Foliage,
-            termin::MaterialPipelinePassKind::Color);
-    request.pass = termin::material_pipeline_builtin_pass_contract(
-        termin::MaterialPipelinePassKind::Color);
+    request.pass = material_pass_contract();
+    request.vertex_transform = *request.pass.foliage_vertex_transform;
     request.shader_name = "assembler-foliage-contract";
     request.shader_uuid = "assembler-foliage-contract";
     request.vertex_source_override = kVertexSource;
@@ -253,12 +292,8 @@ TEST_CASE("material mesh input selection follows static compact shader contract"
 
     termin::MaterialPipelineShaderAssemblyRequest request{};
     request.material = material_contract();
-    request.vertex_transform =
-        termin::material_pipeline_builtin_vertex_transform_contract(
-            termin::VertexTransformKind::StaticMesh,
-            termin::MaterialPipelinePassKind::Shadow);
-    request.pass = termin::material_pipeline_builtin_pass_contract(
-        termin::MaterialPipelinePassKind::Shadow);
+    request.pass = compact_auxiliary_pass_contract();
+    request.vertex_transform = *request.pass.static_vertex_transform;
     request.shader_name = "assembler-static-shadow-contract";
     request.shader_uuid = "assembler-static-shadow-contract";
     request.vertex_source_override = kVertexSource;
@@ -282,12 +317,8 @@ TEST_CASE("material mesh input selection follows skinned compact shader contract
 
     termin::MaterialPipelineShaderAssemblyRequest request{};
     request.material = material_contract();
-    request.vertex_transform =
-        termin::material_pipeline_builtin_vertex_transform_contract(
-            termin::VertexTransformKind::SkinnedMesh,
-            termin::MaterialPipelinePassKind::Shadow);
-    request.pass = termin::material_pipeline_builtin_pass_contract(
-        termin::MaterialPipelinePassKind::Shadow);
+    request.pass = compact_auxiliary_pass_contract();
+    request.vertex_transform = *request.pass.skinned_vertex_transform;
     request.shader_name = "assembler-skinned-shadow-contract";
     request.shader_uuid = "assembler-skinned-shadow-contract";
     request.vertex_source_override = kVertexSource;

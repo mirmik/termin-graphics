@@ -183,20 +183,6 @@ MaterialPipelineMaterialContract material_pipeline_material_contract_from_shader
     return contract;
 }
 
-MaterialPipelinePassContract material_pipeline_builtin_pass_contract(
-    MaterialPipelinePassKind kind)
-{
-    MaterialPipelinePassContract contract;
-    contract.kind = kind;
-    contract.debug_name = material_pipeline_pass_kind_name(kind);
-    contract.required_material_fragment_input =
-        kind == MaterialPipelinePassKind::Color
-            ? material_pipeline_standard_material_fragment_interface()
-            : MaterialFragmentInterface{};
-    contract.uses_material_fragment = true;
-    return contract;
-}
-
 MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
     const MaterialPipelineShaderAssemblyRequest& request)
 {

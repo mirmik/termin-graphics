@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -17,13 +18,15 @@ struct MaterialPipelineMaterialContract {
 };
 
 struct MaterialPipelinePassContract {
-    MaterialPipelinePassKind kind = MaterialPipelinePassKind::Color;
     std::string debug_name;
     MaterialFragmentInterface required_material_fragment_input;
     bool uses_material_fragment = true;
     std::string fragment_source_override;
     std::string fragment_entry_override = "fs_main";
     std::vector<MaterialPipelineResourceDecl> resources;
+    std::optional<VertexTransformContract> static_vertex_transform;
+    std::optional<VertexTransformContract> skinned_vertex_transform;
+    std::optional<VertexTransformContract> foliage_vertex_transform;
 };
 
 struct MaterialPipelineShaderAssemblyRequest {
@@ -54,9 +57,6 @@ struct MaterialPipelineShaderAssemblyResult {
 RENDER_API MaterialPipelineMaterialContract material_pipeline_material_contract_from_shader(
     TcShader shader,
     MaterialFragmentInterface required_fragment_input);
-
-RENDER_API MaterialPipelinePassContract material_pipeline_builtin_pass_contract(
-    MaterialPipelinePassKind kind);
 
 RENDER_API MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
     const MaterialPipelineShaderAssemblyRequest& request);
