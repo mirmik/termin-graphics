@@ -32,6 +32,36 @@ static void destroy_pass_facet(void* payload) {
     tc_type_registry_unregister(g_pass_registry, entry->type_name);
 }
 
+typedef struct pass_type_collect_ctx {
+    const char** names;
+    size_t count;
+    size_t capacity;
+} pass_type_collect_ctx;
+
+static bool collect_pass_type(const char* type_name, void* user_data) {
+    pass_type_collect_ctx* ctx = (pass_type_collect_ctx*)user_data;
+    if (!type_name || !ctx) {
+        return true;
+    }
+
+    if (ctx->count >= ctx->capacity) {
+        size_t new_capacity = ctx->capacity == 0 ? 8 : ctx->capacity * 2;
+        const char** names = (const char**)realloc(
+            ctx->names,
+            new_capacity * sizeof(const char*)
+        );
+        if (!names) {
+            tc_log(TC_LOG_ERROR, "[tc_pass] failed to grow pass type list during registry cleanup");
+            return false;
+        }
+        ctx->names = names;
+        ctx->capacity = new_capacity;
+    }
+
+    ctx->names[ctx->count++] = type_name;
+    return true;
+}
+
 bool tc_pass_link_registered_type(tc_pass* p, const char* type_name) {
     if (!p || !type_name) {
         return false;
@@ -176,6 +206,17 @@ void tc_pass_unlink_from_registry(tc_pass* p) {
 }
 
 void tc_pass_registry_cleanup(void) {
+    pass_type_collect_ctx ctx = { NULL, 0, 0 };
+    tc_runtime_type_registry_foreach_type_with_facet(
+        TC_RUNTIME_TYPE_FACET_FRAME_PASS,
+        collect_pass_type,
+        &ctx
+    );
+    for (size_t i = 0; i < ctx.count; ++i) {
+        tc_runtime_type_registry_remove_facet(ctx.names[i], TC_RUNTIME_TYPE_FACET_FRAME_PASS);
+    }
+    free(ctx.names);
+
     if (g_pass_registry) {
         tc_type_registry_free(g_pass_registry);
         g_pass_registry = NULL;
