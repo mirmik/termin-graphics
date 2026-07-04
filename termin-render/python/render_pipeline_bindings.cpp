@@ -9,6 +9,7 @@
 #include <tcbase/tc_log.hpp>
 
 extern "C" {
+#include "render/tc_pass.h"
 #include "render/tc_pipeline_pool.h"
 }
 
@@ -296,6 +297,39 @@ void bind_render_pipeline(nb::module_& m) {
                 for (size_t i = 0; i < nb::len(passes); i++) {
                     try {
                         nb::dict pass_data = nb::cast<nb::dict>(passes[i]);
+                        std::string pass_type;
+                        if (pass_data.contains("type")) {
+                            pass_type = nb::cast<std::string>(pass_data["type"]);
+                        }
+                        if (!pass_type.empty() &&
+                            tc_pass_registry_has(pass_type.c_str()) &&
+                            tc_pass_registry_get_kind(pass_type.c_str()) == TC_NATIVE_PASS) {
+                            tc_pass* native_pass = tc_pass_registry_create(pass_type.c_str());
+                            if (!native_pass) {
+                                throw std::runtime_error("failed to create native pass '" + pass_type + "'");
+                            }
+
+                            TcPassRef native_ref(native_pass);
+                            if (pass_data.contains("pass_name")) {
+                                native_ref.set_pass_name(nb::cast<std::string>(pass_data["pass_name"]));
+                            }
+                            if (pass_data.contains("enabled")) {
+                                native_ref.set_enabled(nb::cast<bool>(pass_data["enabled"]));
+                            }
+                            if (pass_data.contains("passthrough")) {
+                                native_ref.set_passthrough(nb::cast<bool>(pass_data["passthrough"]));
+                            }
+                            if (pass_data.contains("viewport_name") && !pass_data["viewport_name"].is_none()) {
+                                native_ref.set_viewport_name(nb::cast<std::string>(pass_data["viewport_name"]));
+                            }
+                            if (pass_data.contains("data")) {
+                                nb::object native_ref_obj = nb::cast(native_ref);
+                                native_ref_obj.attr("deserialize_data")(pass_data["data"]);
+                            }
+                            pipeline->add_pass(native_pass);
+                            continue;
+                        }
+
                         nb::object frame_pass = deserialize_pass(pass_data, resource_manager);
                         if (!frame_pass.is_none() && nb::hasattr(frame_pass, "_tc_pass")) {
                             nb::object tc_pass_obj = frame_pass.attr("_tc_pass");
