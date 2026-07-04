@@ -23,7 +23,6 @@ struct CapInput {
     float3 center : POSITION0;
     float width : TEXCOORD1;
     float3 neighbor : POSITION1;
-    float flags : TEXCOORD2;
     float4 color : COLOR0;
 };
 

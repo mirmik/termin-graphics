@@ -574,6 +574,9 @@ def _parse_textures(
 
     for tex_idx, texture in enumerate(gltf.get("textures", [])):
         source_idx = texture.get("source")
+        webp_ext = texture.get("extensions", {}).get("EXT_texture_webp")
+        if webp_ext is not None and "source" in webp_ext:
+            source_idx = webp_ext.get("source")
         if source_idx is None or source_idx >= len(images):
             continue
 

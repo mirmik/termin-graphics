@@ -122,6 +122,53 @@ def test_load_gltf_with_external_bin_and_texture(tmp_path):
     assert material.emissive_factor.tolist() == pytest.approx([0.1, 0.2, 0.3])
 
 
+def test_load_gltf_webp_texture_extension_from_buffer_view(tmp_path):
+    image_bytes = b"RIFF\x0c\x00\x00\x00WEBPVP8 "
+    bin_path = tmp_path / "texture.bin"
+    bin_path.write_bytes(image_bytes)
+
+    gltf = {
+        "asset": {"version": "2.0"},
+        "extensionsUsed": ["EXT_texture_webp"],
+        "materials": [
+            {
+                "name": "WebPMaterial",
+                "pbrMetallicRoughness": {
+                    "baseColorTexture": {"index": 0},
+                },
+            },
+        ],
+        "textures": [
+            {
+                "extensions": {"EXT_texture_webp": {"source": 0}},
+                "sampler": 0,
+            },
+        ],
+        "images": [
+            {
+                "bufferView": 0,
+                "mimeType": "image/webp",
+                "name": "EmbeddedWebP",
+            },
+        ],
+        "bufferViews": [
+            {"buffer": 0, "byteOffset": 0, "byteLength": len(image_bytes)},
+        ],
+        "buffers": [{"uri": "texture.bin", "byteLength": len(image_bytes)}],
+    }
+    gltf_path = tmp_path / "webp_texture.gltf"
+    gltf_path.write_text(json.dumps(gltf), encoding="utf-8")
+
+    scene_data = load_glb_file(gltf_path)
+
+    assert len(scene_data.textures) == 1
+    assert scene_data.textures[0].index == 0
+    assert scene_data.textures[0].name == "EmbeddedWebP"
+    assert scene_data.textures[0].mime_type == "image/webp"
+    assert scene_data.textures[0].data == image_bytes
+    assert scene_data.materials[0].base_color_texture == 0
+
+
 def test_load_gltf_multi_primitive_mesh_as_submeshes(tmp_path):
     positions = struct.pack(
         "<18f",

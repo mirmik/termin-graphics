@@ -42,7 +42,6 @@ struct CapInstance {
     float center[3];
     float width;
     float neighbor[3];
-    float flags;
     float color[4];
 };
 
@@ -456,8 +455,7 @@ void WorldSpaceLineRenderer::draw_polyline(
             {1, VertexFormat::Float3, offsetof(CapInstance, center)},
             {2, VertexFormat::Float,  offsetof(CapInstance, width)},
             {3, VertexFormat::Float3, offsetof(CapInstance, neighbor)},
-            {4, VertexFormat::Float,  offsetof(CapInstance, flags)},
-            {5, VertexFormat::Float4, offsetof(CapInstance, color)},
+            {4, VertexFormat::Float4, offsetof(CapInstance, color)},
         };
 
         const ShaderHandle cap_selected_fragment_shader = params.fragment_shader
@@ -510,8 +508,7 @@ void WorldSpaceLineRenderer::draw_polyline(
             {1, VertexFormat::Float3, offsetof(CapInstance, center)},
             {2, VertexFormat::Float,  offsetof(CapInstance, width)},
             {3, VertexFormat::Float3, offsetof(CapInstance, neighbor)},
-            {4, VertexFormat::Float,  offsetof(CapInstance, flags)},
-            {5, VertexFormat::Float4, offsetof(CapInstance, color)},
+            {4, VertexFormat::Float4, offsetof(CapInstance, color)},
         };
 
         const ShaderHandle round_join_selected_fragment_shader = params.fragment_shader
