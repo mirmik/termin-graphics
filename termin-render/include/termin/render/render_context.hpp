@@ -6,6 +6,7 @@
 #include <termin/geom/mat44.hpp>
 #include <termin/geom/vec3.hpp>
 #include <termin/geom/vec4.hpp>
+#include <termin/render/material_pipeline_shader_assembler.hpp>
 #include <termin/render/render_camera.hpp>
 #include <termin/tc_scene.hpp>
 #include <tgfx/tgfx_shader_handle.hpp>
@@ -20,6 +21,7 @@ struct RenderContext {
     Mat44f view;
     Mat44f projection;
     std::string phase = "main";
+    MaterialPipelinePassContract pass_contract;
     Mat44f model = Mat44f::identity();
     TcShader current_tc_shader;
     uint64_t layer_mask = 0xFFFFFFFFFFFFFFFF;
