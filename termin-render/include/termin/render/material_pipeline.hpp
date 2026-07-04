@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
 
 #include "termin/render/frame_uniforms.hpp"
 #include "termin/render/material_pipeline_shader_assembler.hpp"
@@ -59,6 +60,12 @@ struct MaterialShaderOverrideRequest {
 };
 
 RENDER_API TcShader assemble_material_shader_override(const MaterialShaderOverrideRequest& request);
+
+RENDER_API std::string material_pipeline_shader_intent_fingerprint(
+    TcShader original_shader,
+    tc_shader_variant_op variant_op,
+    const VertexTransformContract& vertex_transform,
+    const MaterialPipelinePassContract& pass_contract);
 
 enum class MaterialMeshVertexInput {
     FullMaterial,

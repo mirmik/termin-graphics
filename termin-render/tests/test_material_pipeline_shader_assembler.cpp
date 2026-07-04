@@ -336,3 +336,35 @@ TEST_CASE("material mesh input selection follows skinned compact shader contract
     tc_shader_destroy(result.shader.handle);
     tc_shader_shutdown();
 }
+
+TEST_CASE("material shader intent fingerprint includes skinned vertex transform") {
+    tc_shader_init();
+
+    termin::MaterialPipelineMaterialContract material = material_contract();
+    termin::MaterialPipelinePassContract pass_a = compact_auxiliary_pass_contract();
+    termin::MaterialPipelinePassContract pass_b = pass_a;
+    pass_b.skinned_vertex_transform =
+        termin::material_pipeline_make_skinned_vertex_transform_contract(
+            *pass_b.static_vertex_transform,
+            "skinned_compact",
+            "termin-engine-skinned-depth",
+            termin::material_pipeline_skinned_position_mesh_input());
+
+    const std::string fingerprint_a =
+        termin::material_pipeline_shader_intent_fingerprint(
+            material.shader,
+            TC_SHADER_VARIANT_SKINNING,
+            *pass_a.skinned_vertex_transform,
+            pass_a);
+    const std::string fingerprint_b =
+        termin::material_pipeline_shader_intent_fingerprint(
+            material.shader,
+            TC_SHADER_VARIANT_SKINNING,
+            *pass_b.skinned_vertex_transform,
+            pass_b);
+
+    CHECK(fingerprint_a != fingerprint_b);
+
+    tc_shader_destroy(material.shader.handle);
+    tc_shader_shutdown();
+}

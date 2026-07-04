@@ -78,6 +78,46 @@ TcShader override_drawable_shader(
         context.original_shader.handle));
 }
 
+void collect_drawable_shader_usages_with_context(
+    tc_component* component,
+    const ShaderOverrideContext& context,
+    const std::function<void(TcShader)>& emit)
+{
+    if (!emit) {
+        return;
+    }
+
+    if (!component) {
+        if (context.original_shader.is_valid()) {
+            emit(context.original_shader);
+        }
+        return;
+    }
+
+    if (tc_component_get_drawable_vtable(component) == &Drawable::cxx_drawable_vtable()) {
+        Drawable* drawable = static_cast<Drawable*>(
+            tc_component_get_drawable_userdata(component));
+        if (drawable) {
+            drawable->collect_shader_usages_with_context(context, emit);
+            return;
+        }
+    }
+
+    if (context.original_shader.is_valid()) {
+        emit(context.original_shader);
+    }
+    TcShader override_shader(tc_component_override_shader(
+        component,
+        context.phase_mark.c_str(),
+        context.geometry_id,
+        context.original_shader.handle));
+    if (override_shader.is_valid() &&
+        (override_shader.handle.index != context.original_shader.handle.index ||
+         override_shader.handle.generation != context.original_shader.handle.generation)) {
+        emit(override_shader);
+    }
+}
+
 void Drawable::_cb_collect_shader_usages(
     tc_component* c,
     const char* phase_mark,

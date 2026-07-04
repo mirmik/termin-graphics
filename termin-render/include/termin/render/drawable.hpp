@@ -124,6 +124,21 @@ public:
         emit(original_shader);
     }
 
+    virtual void collect_shader_usages_with_context(
+        const ShaderOverrideContext& context,
+        const std::function<void(TcShader)>& emit
+    ) {
+        if (context.original_shader.is_valid()) {
+            emit(context.original_shader);
+        }
+        TcShader override_shader = override_shader_with_context(context);
+        if (override_shader.is_valid() &&
+            (override_shader.handle.index != context.original_shader.handle.index ||
+             override_shader.handle.generation != context.original_shader.handle.generation)) {
+            emit(override_shader);
+        }
+    }
+
     // Expose the underlying tc_mesh for a given phase + geometry id so
     // tgfx2-migrated passes (ShadowPass, IdPass, ColorPass) can wrap it
     // via wrap_mesh_as_tgfx2() and draw through RenderContext2.
@@ -265,6 +280,11 @@ private:
 RENDER_API TcShader override_drawable_shader(
     tc_component* component,
     const ShaderOverrideContext& context);
+
+RENDER_API void collect_drawable_shader_usages_with_context(
+    tc_component* component,
+    const ShaderOverrideContext& context,
+    const std::function<void(TcShader)>& emit);
 
 struct PhaseDrawCall {
     Entity entity;
