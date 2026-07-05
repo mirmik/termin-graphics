@@ -1141,13 +1141,18 @@ void VulkanRenderDevice::drain_pending_destroy(PendingDestroyQueue& q) {
             pipelines_.remove(h.id);
         }
     }
-    // Resource-set handles are owned by the per-pool descriptor cache —
-    // removed together with the VkDescriptorSet when the pool is reset
-    // (see `descriptor_cache_[current_pool_idx_].clear()` in submit()).
-    // Do NOT remove from HandlePool here: the same handle id may still
-    // be live in the cache for its slot, and a subsequent cache-hit
-    // would otherwise return a dangling entry.
-    (void)q.resource_sets;
+    // Cached resource-set handles are owned by the per-pool descriptor cache
+    // and are removed together with the VkDescriptorSet when the pool is reset.
+    // Uncached sets, such as dynamic-ring UBO bindings, still allocate wrapper
+    // metadata in resource_sets_ and must be released once the submitted command
+    // buffer can no longer reference their dynamic offsets.
+    for (auto h : q.resource_sets) {
+        if (auto* r = resource_sets_.get(h.id)) {
+            if (!r->descriptor_cache_owned) {
+                resource_sets_.remove(h.id);
+            }
+        }
+    }
     for (auto fb : q.framebuffers) {
         if (fb != VK_NULL_HANDLE) {
             vkDestroyFramebuffer(device_, fb, nullptr);

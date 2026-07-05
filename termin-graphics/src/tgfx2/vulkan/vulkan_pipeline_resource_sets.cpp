@@ -884,8 +884,10 @@ ResourceSetHandle VulkanRenderDevice::create_resolved_resource_set(
         res.dynamic_offsets[i] = dyn_slots[i].offset;
     }
 
+    const bool cache_owned = !has_ring;
+    res.descriptor_cache_owned = cache_owned;
     ResourceSetHandle handle{resource_sets_.add(std::move(res))};
-    if (!has_ring) cache[key] = handle;
+    if (cache_owned) cache[key] = handle;
     return handle;
 }
 

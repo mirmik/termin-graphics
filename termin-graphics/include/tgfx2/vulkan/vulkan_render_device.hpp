@@ -84,6 +84,7 @@ struct VkResourceSetResource {
     BoundResourceSetDesc bound_desc;
     std::vector<ResourceBinding> legacy_numeric_bindings;
     bool has_bound_desc = false;
+    bool descriptor_cache_owned = false;
     // Dynamic offsets emitted at bind time, in binding-number order.
     // Sized for the worst-case dynamic UBO count per layout.
     static constexpr uint32_t MAX_DYNAMIC_OFFSETS = 8;
