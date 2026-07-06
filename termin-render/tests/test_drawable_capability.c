@@ -23,8 +23,9 @@ static void test_drawable_draw_geometry(tc_component* self, void* render_context
     g_draw_called = true;
 }
 
-static void* test_drawable_get_geometry_draws(tc_component* self, const char* phase_mark) {
+static void* test_drawable_get_geometry_draws(tc_component* self, void* render_context, const char* phase_mark) {
     (void)self;
+    (void)render_context;
     (void)phase_mark;
     return (void*)0x1;
 }
@@ -73,7 +74,7 @@ GUARD_C_TEST(test_live_reindex_for_drawable_capability) {
     GUARD_C_CHECK(tc_component_is_drawable(&component));
     GUARD_C_CHECK_PTR_EQ((void*)0x1234, tc_component_get_drawable_userdata(&component));
     GUARD_C_CHECK(tc_component_has_phase(&component, "opaque"));
-    GUARD_C_CHECK_PTR_EQ((void*)0x1, tc_component_get_geometry_draws(&component, "opaque"));
+    GUARD_C_CHECK_PTR_EQ((void*)0x1, tc_component_get_geometry_draws(&component, &component, "opaque"));
 
     g_draw_called = false;
     tc_component_draw_geometry(&component, NULL, 0);

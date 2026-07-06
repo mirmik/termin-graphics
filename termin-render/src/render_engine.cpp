@@ -969,6 +969,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
         ctx.camera = const_cast<RenderCamera*>(&rt_ctx.camera);
         ctx.lights = lights;
         ctx.layer_mask = rt_ctx.layer_mask;
+        ctx.render_category_mask = rt_ctx.render_category_mask;
 
         tc_pass_execute(pass, &ctx);
 

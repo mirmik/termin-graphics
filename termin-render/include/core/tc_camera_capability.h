@@ -19,6 +19,7 @@ typedef struct tc_camera_data {
     double near_clip;
     double far_clip;
     uint64_t layer_mask;    // camera visibility mask
+    uint64_t render_category_mask; // optional render category visibility mask
 } tc_camera_data;
 
 // Vtable for camera capability
