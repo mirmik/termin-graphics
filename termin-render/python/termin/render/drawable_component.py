@@ -19,5 +19,13 @@ class DrawableComponent(PythonComponent):
     def phase_marks(self):
         return []
 
+    def get_geometry_ids_for_phase(self, context, phase_mark: str) -> list[int]:
+        ids: list[int] = []
+        for draw in self.get_geometry_draws(context, phase_mark):
+            geometry_id = draw.geometry_id
+            if geometry_id not in ids:
+                ids.append(geometry_id)
+        return ids
+
 
 __all__ = ["DrawableComponent"]

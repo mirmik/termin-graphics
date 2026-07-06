@@ -24,10 +24,18 @@ static void* py_drawable_get_geometry_draws(tc_component* c, void* render_contex
     return NULL;
 }
 
+static void* py_drawable_get_geometry_ids_for_phase(tc_component* c, void* render_context, const char* phase_mark) {
+    if (g_py_drawable_callbacks.get_geometry_ids_for_phase && c->body) {
+        return g_py_drawable_callbacks.get_geometry_ids_for_phase(c->body, render_context, phase_mark);
+    }
+    return NULL;
+}
+
 static const tc_drawable_vtable g_python_drawable_vtable = {
     .has_phase = py_drawable_has_phase,
     .draw_geometry = py_drawable_draw_geometry,
     .get_geometry_draws = py_drawable_get_geometry_draws,
+    .get_geometry_ids_for_phase = py_drawable_get_geometry_ids_for_phase,
     .override_shader = NULL,
     .collect_shader_usages = NULL,
 };

@@ -95,6 +95,7 @@ struct ShaderOverrideContext {
 class RENDER_API Drawable {
 public:
     mutable std::vector<GeometryDrawCall> _cached_geometry_draws;
+    mutable std::vector<int> _cached_geometry_ids;
 
     virtual ~Drawable() = default;
 
@@ -287,6 +288,7 @@ private:
     static bool _cb_has_phase(tc_component* c, const char* phase_mark);
     static void _cb_draw_geometry(tc_component* c, void* render_context, int geometry_id);
     static void* _cb_get_geometry_draws(tc_component* c, void* render_context, const char* phase_mark);
+    static void* _cb_get_geometry_ids_for_phase(tc_component* c, void* render_context, const char* phase_mark);
     static tc_shader_handle _cb_override_shader(tc_component* c, const char* phase_mark, int geometry_id, tc_shader_handle original_shader);
     static void _cb_collect_shader_usages(tc_component* c, const char* phase_mark, int geometry_id, tc_shader_handle original_shader, tc_shader_usage_emit_fn emit, void* user_data);
 };

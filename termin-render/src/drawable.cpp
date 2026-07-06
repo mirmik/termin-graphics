@@ -38,6 +38,21 @@ void* Drawable::_cb_get_geometry_draws(tc_component* c, void* render_context, co
     return &drawable->_cached_geometry_draws;
 }
 
+void* Drawable::_cb_get_geometry_ids_for_phase(tc_component* c, void* render_context, const char* phase_mark) {
+    if (!c) return nullptr;
+
+    Drawable* drawable = static_cast<Drawable*>(tc_component_get_drawable_userdata(c));
+    if (!drawable) return nullptr;
+
+    auto* ctx = static_cast<RenderContext*>(render_context);
+    if (!ctx) return nullptr;
+
+    drawable->_cached_geometry_ids = drawable->get_geometry_ids_for_phase(
+        *ctx,
+        phase_mark ? phase_mark : "");
+    return &drawable->_cached_geometry_ids;
+}
+
 tc_shader_handle Drawable::_cb_override_shader(
     tc_component* c,
     const char* phase_mark,
@@ -164,6 +179,7 @@ const tc_drawable_vtable& Drawable::cxx_drawable_vtable() {
         &Drawable::_cb_has_phase,
         &Drawable::_cb_draw_geometry,
         &Drawable::_cb_get_geometry_draws,
+        &Drawable::_cb_get_geometry_ids_for_phase,
         &Drawable::_cb_override_shader,
         &Drawable::_cb_collect_shader_usages
     };

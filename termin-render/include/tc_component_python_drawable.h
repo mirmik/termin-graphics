@@ -10,11 +10,13 @@ extern "C" {
 typedef bool (*tc_py_drawable_has_phase_fn)(void* py_self, const char* phase_mark);
 typedef void (*tc_py_drawable_draw_geometry_fn)(void* py_self, void* render_context, int geometry_id);
 typedef void* (*tc_py_drawable_get_geometry_draws_fn)(void* py_self, void* render_context, const char* phase_mark);
+typedef void* (*tc_py_drawable_get_geometry_ids_for_phase_fn)(void* py_self, void* render_context, const char* phase_mark);
 
 typedef struct {
     tc_py_drawable_has_phase_fn has_phase;
     tc_py_drawable_draw_geometry_fn draw_geometry;
     tc_py_drawable_get_geometry_draws_fn get_geometry_draws;
+    tc_py_drawable_get_geometry_ids_for_phase_fn get_geometry_ids_for_phase;
 } tc_python_drawable_callbacks;
 
 TC_API void tc_component_set_python_drawable_callbacks(const tc_python_drawable_callbacks* callbacks);

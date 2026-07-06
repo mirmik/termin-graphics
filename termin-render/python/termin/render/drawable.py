@@ -57,6 +57,7 @@ class Drawable(Protocol):
 
     Методы:
         draw_geometry: Рисует геометрию (шейдер уже привязан пассом).
+        get_geometry_ids_for_phase: Возвращает идентификаторы геометрии для фазы.
         get_geometry_draws: Возвращает GeometryDrawCalls для ColorPass.
     """
 
@@ -74,6 +75,21 @@ class Drawable(Protocol):
                      context.model содержит матрицу модели (для VAO binding).
             geometry_id: Идентификатор геометрии для отрисовки.
                          0 = основная/единственная геометрия.
+        """
+        ...
+
+    def get_geometry_ids_for_phase(
+        self,
+        context: "RenderContext",
+        phase_mark: str,
+    ) -> List[int]:
+        """
+        Возвращает идентификаторы геометрии, которые drawable может нарисовать
+        для указанной pass-фазы.
+
+        Этот метод описывает доступную геометрию, а не material phase. Pass-ы
+        со своим shader-ом используют его, чтобы не требовать одноимённую
+        material phase.
         """
         ...
 
