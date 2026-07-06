@@ -23,7 +23,7 @@ void Drawable::_cb_draw_geometry(tc_component* c, void* render_context, int geom
     drawable->draw_geometry(*ctx, geometry_id);
 }
 
-void* Drawable::_cb_get_geometry_draws(tc_component* c, const char* phase_mark) {
+void* Drawable::_cb_get_geometry_draws(tc_component* c, void* render_context, const char* phase_mark) {
     if (!c) return nullptr;
 
     Drawable* drawable = static_cast<Drawable*>(tc_component_get_drawable_userdata(c));
@@ -31,7 +31,10 @@ void* Drawable::_cb_get_geometry_draws(tc_component* c, const char* phase_mark) 
 
     std::string phase = phase_mark ? phase_mark : "";
     const std::string* phase_ptr = phase.empty() ? nullptr : &phase;
-    drawable->_cached_geometry_draws = drawable->get_geometry_draws(phase_ptr);
+    auto* ctx = static_cast<RenderContext*>(render_context);
+    if (!ctx) return nullptr;
+
+    drawable->_cached_geometry_draws = drawable->get_geometry_draws(*ctx, phase_ptr);
     return &drawable->_cached_geometry_draws;
 }
 

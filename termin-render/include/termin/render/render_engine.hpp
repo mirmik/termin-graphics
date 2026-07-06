@@ -51,6 +51,7 @@ public:
     Rect4i render_rect{0, 0, 0, 0};
     tc_entity_handle internal_entities = TC_ENTITY_HANDLE_INVALID;
     uint64_t layer_mask = 0xFFFFFFFFFFFFFFFFULL;
+    uint64_t render_category_mask = 0xFFFFFFFFFFFFFFFFULL;
 
     // Final render target — native tgfx2 color + depth textures owned
     // by the caller (typically a render target or legacy viewport state). Passes in the

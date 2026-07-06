@@ -4,6 +4,7 @@
 extern "C" {
 #include "core/tc_drawable_capability.h"
 #include "core/tc_drawable_protocol.h"
+#include "render/tc_render_category_flags.h"
 #include "tc_component_python_drawable.h"
 #include "core/tc_component.h"
 #include "tc_project_settings.h"
@@ -18,6 +19,10 @@ void bind_scene_render_extensions(nb::module_& m);
 }
 
 NB_MODULE(_render_native, m) {
+    m.attr("RENDER_CATEGORY_COLLIDERS") = nb::int_(TC_RENDER_CATEGORY_COLLIDERS);
+    m.attr("RENDER_CATEGORY_NAVMESH") = nb::int_(TC_RENDER_CATEGORY_NAVMESH);
+    m.attr("RENDER_CATEGORY_ALL") = nb::int_(TC_RENDER_CATEGORY_ALL);
+
     nb::enum_<tc_render_sync_mode>(m, "RenderSyncMode")
         .value("NONE", TC_RENDER_SYNC_NONE)
         .value("FLUSH", TC_RENDER_SYNC_FLUSH)

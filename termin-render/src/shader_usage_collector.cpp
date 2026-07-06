@@ -1,6 +1,7 @@
 #include <termin/render/shader_usage_collector.hpp>
 
 #include <string>
+#include <cstdint>
 #include <unordered_set>
 #include <vector>
 
@@ -65,7 +66,10 @@ static bool collect_drawable_shader_usages(tc_component* component, void* user_d
         return true;
     }
 
-    void* draws_ptr = tc_component_get_geometry_draws(component, nullptr);
+    RenderContext render_context;
+    render_context.layer_mask = UINT64_MAX;
+    render_context.render_category_mask = UINT64_MAX;
+    void* draws_ptr = tc_component_get_geometry_draws(component, &render_context, nullptr);
     if (!draws_ptr) {
         return true;
     }

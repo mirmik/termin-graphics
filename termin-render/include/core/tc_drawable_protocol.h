@@ -13,7 +13,7 @@ typedef void (*tc_shader_usage_emit_fn)(tc_component* self, tc_shader_handle sha
 struct tc_drawable_vtable {
     bool (*has_phase)(tc_component* self, const char* phase_mark);
     void (*draw_geometry)(tc_component* self, void* render_context, int geometry_id);
-    void* (*get_geometry_draws)(tc_component* self, const char* phase_mark);
+    void* (*get_geometry_draws)(tc_component* self, void* render_context, const char* phase_mark);
     tc_shader_handle (*override_shader)(tc_component* self, const char* phase_mark, int geometry_id, tc_shader_handle original_shader);
     void (*collect_shader_usages)(tc_component* self, const char* phase_mark, int geometry_id, tc_shader_handle original_shader, tc_shader_usage_emit_fn emit, void* user_data);
 };
@@ -49,10 +49,10 @@ static inline void tc_component_draw_geometry(tc_component* c, void* render_cont
     }
 }
 
-static inline void* tc_component_get_geometry_draws(tc_component* c, const char* phase_mark) {
+static inline void* tc_component_get_geometry_draws(tc_component* c, void* render_context, const char* phase_mark) {
     const tc_drawable_vtable* vt = tc_component_get_drawable_vtable(c);
     if (c && vt && vt->get_geometry_draws) {
-        return vt->get_geometry_draws(c, phase_mark);
+        return vt->get_geometry_draws(c, render_context, phase_mark);
     }
     return NULL;
 }

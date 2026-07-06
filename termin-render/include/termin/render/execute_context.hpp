@@ -53,6 +53,7 @@ public:
     tc_entity_handle internal_entities = TC_ENTITY_HANDLE_INVALID;
     std::vector<Light> lights;
     uint64_t layer_mask = 0xFFFFFFFFFFFFFFFFULL;
+    uint64_t render_category_mask = 0xFFFFFFFFFFFFFFFFULL;
 };
 
 } // namespace termin
