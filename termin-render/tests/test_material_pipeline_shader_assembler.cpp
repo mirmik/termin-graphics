@@ -337,6 +337,31 @@ TEST_CASE("material mesh input selection follows skinned compact shader contract
     tc_shader_shutdown();
 }
 
+TEST_CASE("material mesh input selection keeps full skinned material attributes") {
+    tc_shader_init();
+
+    termin::MaterialPipelineShaderAssemblyRequest request{};
+    request.material = material_contract();
+    request.pass = material_pass_contract();
+    request.vertex_transform = *request.pass.skinned_vertex_transform;
+    request.shader_name = "assembler-skinned-full-material-contract";
+    request.shader_uuid = "assembler-skinned-full-material-contract";
+    request.vertex_source_override = kVertexSource;
+
+    termin::MaterialPipelineShaderAssemblyResult result =
+        termin::material_pipeline_assemble_shader(request);
+
+    REQUIRE(result.ok());
+    CHECK(
+        termin::material_mesh_vertex_input_for_shader(
+            result.shader.get(),
+            termin::MaterialMeshVertexInput::FullMaterial) ==
+        termin::MaterialMeshVertexInput::SkinnedFullMaterial);
+
+    tc_shader_destroy(result.shader.handle);
+    tc_shader_shutdown();
+}
+
 TEST_CASE("material shader intent fingerprint includes skinned vertex transform") {
     tc_shader_init();
 

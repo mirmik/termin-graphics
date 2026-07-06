@@ -71,6 +71,7 @@ enum class MaterialMeshVertexInput {
     FullMaterial,
     Position,
     PositionNormal,
+    SkinnedFullMaterial,
     SkinnedPositionJointsWeights,
     SkinnedPositionNormalJointsWeights,
 };

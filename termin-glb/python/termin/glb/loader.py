@@ -1002,11 +1002,14 @@ def normalize_glb_scale(scene_data: GLBSceneData) -> bool:
 
     scale_children_translation(root_idx)
 
-    # 5. Scale animation translation keyframes
+    # 5. Keep animation channels in the same local space as normalized nodes.
     for anim in scene_data.animations:
         for channel in anim.channels:
+            if channel.node_index == root_idx:
+                for key in channel.scale_keys:
+                    key[1] = key[1] / root_scale
+                continue
             for key in channel.pos_keys:
-                # key = [time, [x, y, z]]
                 key[1] = key[1] * scale_factor
 
     # Store original scale for reference
@@ -1044,11 +1047,23 @@ def apply_blender_z_up_fix(scene_data: GLBSceneData) -> None:
     # -90° around X: quaternion [-sin(45°), 0, 0, cos(45°)]
     rot_neg_90_x = np.array([-0.70710678, 0.0, 0.0, 0.70710678], dtype=np.float32)
 
+    root_node_indices = {idx for idx in scene_data.root_nodes if idx < len(scene_data.nodes)}
+
     # Rotate root nodes of scene by -90° X
     for root_idx in scene_data.root_nodes:
         if root_idx < len(scene_data.nodes):
             root_node = scene_data.nodes[root_idx]
             root_node.rotation = _qmul(rot_neg_90_x, root_node.rotation)
+
+    # Animation channels are absolute local TRS tracks. Any correction applied
+    # to a node rest pose must also be applied to that node's tracks; otherwise
+    # enabling animation snaps the imported root back to raw glTF space.
+    for anim in scene_data.animations:
+        for channel in anim.channels:
+            if channel.node_index not in root_node_indices:
+                continue
+            for key in channel.rot_keys:
+                key[1] = _qmul(rot_neg_90_x, key[1])
 
     # Transform root bone (first joint, e.g. Hips) by +90° X
     # This is a full transform: rotation, translation, and scale

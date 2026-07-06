@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Protocol
 
 import numpy as np
 
-from termin.geombase import Pose3
 from termin.geombase import GeneralPose3
 from termin.animation import TcAnimationClip
 from termin.animation_components import AnimationPlayer
@@ -955,6 +954,59 @@ class GLBInstantiateResult:
         return None
 
 
+def _ordered_node_targets(scene_data: "GLBSceneData", node_to_entity: Dict[int, Entity]) -> List[Entity]:
+    """Return imported node entities in stable GLB node-index order."""
+    result: List[Entity] = []
+    for node_index in range(len(scene_data.nodes)):
+        entity = node_to_entity.get(node_index)
+        if entity is not None:
+            result.append(entity)
+    return result
+
+
+def _fallback_skeleton_root_from_bones(bone_entities: List[Entity]) -> Optional[Entity]:
+    if not bone_entities:
+        return None
+    root_bone = bone_entities[0]
+    if root_bone is None or not root_bone.transform:
+        return None
+    parent_transform = root_bone.transform.parent
+    if parent_transform is None:
+        return None
+    parent_entity = parent_transform.entity
+    if parent_entity is None:
+        return None
+    return parent_entity
+
+
+def _resolve_skeleton_root_entity(
+    skin,
+    node_to_entity: Dict[int, Entity],
+    bone_entities: List[Entity],
+) -> Optional[Entity]:
+    from tcbase import log
+
+    armature_node_index = skin.armature_node_index
+    if armature_node_index is not None:
+        root = node_to_entity.get(armature_node_index)
+        if root is not None:
+            return root
+        log.warning(
+            f"[glb_instantiator] skin skeleton node index {armature_node_index} "
+            "was not instantiated; falling back to root bone parent"
+        )
+
+    root = _fallback_skeleton_root_from_bones(bone_entities)
+    if root is not None:
+        log.warning(
+            f"[glb_instantiator] skin has no explicit skeleton root; "
+            f"using parent of first root bone '{bone_entities[0].name}'"
+        )
+    else:
+        log.warning("[glb_instantiator] could not resolve skeleton root entity")
+    return root
+
+
 def instantiate_glb(
     glb_asset: "GLBAsset",
     name: str | None = None,
@@ -1015,16 +1067,17 @@ def instantiate_glb(
     def create_entity(entity_name: str) -> Entity:
         if scene is not None:
             ent = scene.create_entity(entity_name)
-            ent.transform.relocate(Pose3.identity())
+            ent.transform.relocate(GeneralPose3.identity())
             return ent
-        return Entity(pose=Pose3.identity(), name=entity_name)
+        return Entity(pose=GeneralPose3.identity(), name=entity_name)
 
     # Step 1: Create Entity hierarchy
     root_entity = None
     if scene_data.root_nodes:
-        if len(scene_data.root_nodes) == 1:
-            root_entity = _create_entity_from_node(
-                scene_data.root_nodes[0],
+        root_entity = create_entity(name)
+        for root_index in scene_data.root_nodes:
+            child_entity = _create_entity_from_node(
+                root_index,
                 scene_data,
                 meshes,
                 mesh_assets,
@@ -1034,22 +1087,7 @@ def instantiate_glb(
                 pending_skinned=pending_skinned,
                 scene=scene,
             )
-            root_entity.name = name
-        else:
-            root_entity = create_entity(name)
-            for root_index in scene_data.root_nodes:
-                child_entity = _create_entity_from_node(
-                    root_index,
-                    scene_data,
-                    meshes,
-                    mesh_assets,
-                    base_material,
-                    texture_lookup,
-                    node_to_entity=node_to_entity,
-                    pending_skinned=pending_skinned,
-                    scene=scene,
-                )
-                root_entity.transform.add_child(child_entity.transform)
+            root_entity.transform.add_child(child_entity.transform)
     else:
         # Fallback: no node hierarchy, create entities for each mesh directly
         root_entity = create_entity(name)
@@ -1100,6 +1138,9 @@ def instantiate_glb(
             skeleton=tc_skeleton,
             bone_entities=bone_entities,
         )
+        skeleton_root = _resolve_skeleton_root_entity(skin, node_to_entity, bone_entities)
+        if skeleton_root is not None:
+            skeleton_controller.skeleton_root = skeleton_root
         root_entity.add_component(skeleton_controller)
 
     # Step 3: Setup SkinnedMeshRenderers
@@ -1122,6 +1163,7 @@ def instantiate_glb(
 
     if animation_assets:
         animation_player = AnimationPlayer()
+        animation_player.node_targets = _ordered_node_targets(scene_data, node_to_entity)
 
         for _anim_name, anim_asset in animation_assets.items():
             clip = anim_asset.clip

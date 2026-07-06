@@ -86,6 +86,15 @@ public:
     void update();
 
     /**
+     * Recompute bone matrices in a specific skinning root space.
+     *
+     * Skinned renderers pass their own entity here because their shader applies
+     * u_model after skinning. The bone matrices therefore need to transform
+     * mesh-local vertices, not vertices relative to a shared skeleton controller.
+     */
+    void update(Entity skinning_root);
+
+    /**
      * Get bone matrices for GPU upload.
      * Copies to float array (bone_count * 16 floats).
      */

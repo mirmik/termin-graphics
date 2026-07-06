@@ -7,7 +7,16 @@ import pytest
 from termin.default_assets.resource_manager import DefaultResourceManager
 from termin.glb.asset import GLBAsset
 from termin.glb.instantiator import _glb_mesh_to_tc_mesh
-from termin.glb.loader import load_glb_file
+from termin.glb.loader import (
+    GLBAnimationChannel,
+    GLBAnimationClip,
+    GLBNodeData,
+    GLBSceneData,
+    GLBSkinData,
+    apply_blender_z_up_fix,
+    load_glb_file,
+    normalize_glb_scale,
+)
 
 
 def _write_triangle_gltf(tmp_path):
@@ -167,6 +176,70 @@ def test_load_gltf_webp_texture_extension_from_buffer_view(tmp_path):
     assert scene_data.textures[0].mime_type == "image/webp"
     assert scene_data.textures[0].data == image_bytes
     assert scene_data.materials[0].base_color_texture == 0
+
+
+def test_root_node_animation_tracks_follow_pose_corrections():
+    scene_data = GLBSceneData()
+    scene_data.root_nodes = [0]
+    scene_data.nodes = [
+        GLBNodeData(
+            name="Armature",
+            children=[1],
+            mesh_index=None,
+            translation=np.array([0.0, 0.0, 0.0], dtype=np.float32),
+            rotation=np.array([0.70710678, 0.0, 0.0, 0.70710678], dtype=np.float32),
+            scale=np.array([0.1, 0.1, 0.1], dtype=np.float32),
+        ),
+        GLBNodeData(
+            name="Base",
+            children=[],
+            mesh_index=None,
+            translation=np.array([0.0, 1.0, 0.0], dtype=np.float32),
+            rotation=np.array([-0.70710678, 0.0, 0.0, 0.70710678], dtype=np.float32),
+            scale=np.array([1.0, 1.0, 1.0], dtype=np.float32),
+        ),
+    ]
+    scene_data.skins = [
+        GLBSkinData(
+            name="Skin",
+            joint_node_indices=[1],
+            inverse_bind_matrices=np.eye(4, dtype=np.float32).reshape(1, 4, 4),
+        )
+    ]
+    scene_data.animations = [
+        GLBAnimationClip(
+            name="Idle",
+            channels=[
+                GLBAnimationChannel(
+                    node_index=0,
+                    node_name="Armature",
+                    pos_keys=[[0.0, np.array([0.0, -1.7, -0.4], dtype=np.float32)]],
+                    rot_keys=[[0.0, np.array([0.70710678, 0.0, 0.0, 0.70710678], dtype=np.float32)]],
+                    scale_keys=[[0.0, np.array([0.1, 0.1, 0.1], dtype=np.float32)]],
+                ),
+                GLBAnimationChannel(
+                    node_index=1,
+                    node_name="Base",
+                    pos_keys=[[0.0, np.array([0.0, 1.0, 0.0], dtype=np.float32)]],
+                    rot_keys=[[0.0, np.array([-0.70710678, 0.0, 0.0, 0.70710678], dtype=np.float32)]],
+                    scale_keys=[[0.0, np.array([1.0, 1.0, 1.0], dtype=np.float32)]],
+                ),
+            ],
+            duration=0.0,
+        )
+    ]
+
+    apply_blender_z_up_fix(scene_data)
+    normalize_glb_scale(scene_data)
+
+    root_node = scene_data.nodes[0]
+    root_channel = scene_data.animations[0].channels[0]
+    np.testing.assert_allclose(root_node.rotation, [0.0, 0.0, 0.0, 1.0], atol=1e-6)
+    np.testing.assert_allclose(root_node.scale, [1.0, 1.0, 1.0], atol=1e-6)
+    np.testing.assert_allclose(root_channel.rot_keys[0][1], root_node.rotation, atol=1e-6)
+    np.testing.assert_allclose(root_channel.scale_keys[0][1], root_node.scale, atol=1e-6)
+    np.testing.assert_allclose(root_channel.pos_keys[0][1], [0.0, -1.7, -0.4], atol=1e-6)
+    np.testing.assert_allclose(scene_data.animations[0].channels[1].pos_keys[0][1], [0.0, 0.0, 0.1], atol=1e-6)
 
 
 def test_load_gltf_multi_primitive_mesh_as_submeshes(tmp_path):

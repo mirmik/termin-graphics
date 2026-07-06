@@ -410,7 +410,7 @@ MaterialMeshVertexInput material_mesh_vertex_input_for_shader(
 
     if (has_joints && has_weights) {
         if (has_uv || has_tangent) {
-            return MaterialMeshVertexInput::FullMaterial;
+            return MaterialMeshVertexInput::SkinnedFullMaterial;
         }
         if (has_normal) {
             return MaterialMeshVertexInput::SkinnedPositionNormalJointsWeights;
@@ -439,6 +439,12 @@ bool draw_material_pipeline_mesh(
             return ::termin::draw_tc_mesh(ctx, mesh, {"position"});
         case MaterialMeshVertexInput::PositionNormal:
             return ::termin::draw_tc_mesh(ctx, mesh, {"position", "normal"});
+        case MaterialMeshVertexInput::SkinnedFullMaterial:
+            return ::termin::draw_tc_mesh(
+                ctx,
+                mesh,
+                {"position", "normal", "uv", "tangent", "joints", "weights"},
+                true);
         case MaterialMeshVertexInput::SkinnedPositionJointsWeights:
             return ::termin::draw_tc_mesh(
                 ctx,
@@ -468,6 +474,13 @@ bool draw_material_pipeline_submesh(
             return ::termin::draw_tc_submesh(ctx, mesh, submesh_index, {"position"});
         case MaterialMeshVertexInput::PositionNormal:
             return ::termin::draw_tc_submesh(ctx, mesh, submesh_index, {"position", "normal"});
+        case MaterialMeshVertexInput::SkinnedFullMaterial:
+            return ::termin::draw_tc_submesh(
+                ctx,
+                mesh,
+                submesh_index,
+                {"position", "normal", "uv", "tangent", "joints", "weights"},
+                true);
         case MaterialMeshVertexInput::SkinnedPositionJointsWeights:
             return ::termin::draw_tc_submesh(
                 ctx,

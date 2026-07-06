@@ -118,6 +118,10 @@ Entity SkeletonInstance::find_skeleton_root() {
 }
 
 void SkeletonInstance::update() {
+    update(find_skeleton_root());
+}
+
+void SkeletonInstance::update(Entity skinning_root) {
     if (_bone_entities.empty() || !_skeleton || !_skeleton->bones) return;
 
     // Helper to convert row-major array to column-major Mat44
@@ -141,9 +145,9 @@ void SkeletonInstance::update() {
         return m;
     };
 
-    // Get inverse of skeleton root world matrix
+    // Get inverse of skinning root world matrix
     Mat44 skeleton_world_inv = Mat44::identity();
-    Entity root = find_skeleton_root();
+    Entity root = skinning_root.valid() ? skinning_root : find_skeleton_root();
 
     if (root.valid()) {
         double m[16];

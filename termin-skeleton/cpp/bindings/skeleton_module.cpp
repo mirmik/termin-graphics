@@ -395,7 +395,9 @@ void bind_skeleton_instance(nb::module_& m) {
            nb::arg("translation") = nb::none(),
            nb::arg("rotation") = nb::none(),
            nb::arg("scale") = nb::none())
-        .def("update", &termin::SkeletonInstance::update)
+        .def("update", [](termin::SkeletonInstance& si) {
+            si.update();
+        })
         .def("get_bone_matrices", [](termin::SkeletonInstance& si) {
             si.update();
             int n = si.bone_count();
