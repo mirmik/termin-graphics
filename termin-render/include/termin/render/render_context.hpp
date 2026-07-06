@@ -25,6 +25,7 @@ struct RenderContext {
     Mat44f model = Mat44f::identity();
     TcShader current_tc_shader;
     uint64_t layer_mask = 0xFFFFFFFFFFFFFFFF;
+    uint64_t render_category_mask = 0xFFFFFFFFFFFFFFFF;
     Vec3 camera_position{0.0, 0.0, 0.0};
     bool has_override_color = false;
     Vec4 override_color{0.0, 0.0, 0.0, 0.0};

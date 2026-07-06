@@ -47,6 +47,7 @@ void bind_render_engine(nb::module_& m) {
         .def_rw("camera", &RenderTargetContext::camera)
         .def_rw("render_rect", &RenderTargetContext::render_rect)
         .def_rw("layer_mask", &RenderTargetContext::layer_mask)
+        .def_rw("render_category_mask", &RenderTargetContext::render_category_mask)
         .def_rw("output_color_tex", &RenderTargetContext::output_color_tex)
         .def_rw("output_depth_tex", &RenderTargetContext::output_depth_tex)
         .def_rw("clear_color_enabled", &RenderTargetContext::clear_color_enabled)

@@ -92,7 +92,10 @@ public:
 
     virtual std::set<std::string> get_phase_marks() const = 0;
     virtual void draw_geometry(const RenderContext& context, int geometry_id = 0) = 0;
-    virtual std::vector<GeometryDrawCall> get_geometry_draws(const std::string* phase_mark = nullptr) = 0;
+    virtual std::vector<GeometryDrawCall> get_geometry_draws(
+        const RenderContext& context,
+        const std::string* phase_mark = nullptr
+    ) = 0;
 
     virtual TcShader override_shader(
         const std::string& phase_mark,
@@ -214,9 +217,12 @@ public:
         return false;
     }
 
-    virtual std::vector<int> get_geometry_ids_for_phase(const std::string& phase_mark) {
+    virtual std::vector<int> get_geometry_ids_for_phase(
+        const RenderContext& context,
+        const std::string& phase_mark
+    ) {
         std::vector<int> ids;
-        std::vector<GeometryDrawCall> draws = get_geometry_draws(&phase_mark);
+        std::vector<GeometryDrawCall> draws = get_geometry_draws(context, &phase_mark);
         for (const GeometryDrawCall& draw : draws) {
             if (std::find(ids.begin(), ids.end(), draw.geometry_id) == ids.end()) {
                 ids.push_back(draw.geometry_id);
@@ -272,7 +278,7 @@ protected:
 private:
     static bool _cb_has_phase(tc_component* c, const char* phase_mark);
     static void _cb_draw_geometry(tc_component* c, void* render_context, int geometry_id);
-    static void* _cb_get_geometry_draws(tc_component* c, const char* phase_mark);
+    static void* _cb_get_geometry_draws(tc_component* c, void* render_context, const char* phase_mark);
     static tc_shader_handle _cb_override_shader(tc_component* c, const char* phase_mark, int geometry_id, tc_shader_handle original_shader);
     static void _cb_collect_shader_usages(tc_component* c, const char* phase_mark, int geometry_id, tc_shader_handle original_shader, tc_shader_usage_emit_fn emit, void* user_data);
 };

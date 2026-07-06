@@ -17,9 +17,9 @@ static void py_drawable_draw_geometry(tc_component* c, void* render_context, int
     }
 }
 
-static void* py_drawable_get_geometry_draws(tc_component* c, const char* phase_mark) {
+static void* py_drawable_get_geometry_draws(tc_component* c, void* render_context, const char* phase_mark) {
     if (g_py_drawable_callbacks.get_geometry_draws && c->body) {
-        return g_py_drawable_callbacks.get_geometry_draws(c->body, phase_mark);
+        return g_py_drawable_callbacks.get_geometry_draws(c->body, render_context, phase_mark);
     }
     return NULL;
 }

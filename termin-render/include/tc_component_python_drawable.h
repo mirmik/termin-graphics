@@ -9,7 +9,7 @@ extern "C" {
 
 typedef bool (*tc_py_drawable_has_phase_fn)(void* py_self, const char* phase_mark);
 typedef void (*tc_py_drawable_draw_geometry_fn)(void* py_self, void* render_context, int geometry_id);
-typedef void* (*tc_py_drawable_get_geometry_draws_fn)(void* py_self, const char* phase_mark);
+typedef void* (*tc_py_drawable_get_geometry_draws_fn)(void* py_self, void* render_context, const char* phase_mark);
 
 typedef struct {
     tc_py_drawable_has_phase_fn has_phase;

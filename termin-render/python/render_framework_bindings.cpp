@@ -312,6 +312,9 @@ void bind_render_framework(nb::module_& m) {
             if (kwargs.contains("layer_mask")) {
                 self->layer_mask = nb::cast<uint64_t>(kwargs["layer_mask"]);
             }
+            if (kwargs.contains("render_category_mask")) {
+                self->render_category_mask = nb::cast<uint64_t>(kwargs["render_category_mask"]);
+            }
         })
         .def_prop_rw("camera",
             [](const ExecuteContext& ctx) -> RenderCamera* { return ctx.camera; },
@@ -336,6 +339,7 @@ void bind_render_framework(nb::module_& m) {
         .def_rw("scene", &ExecuteContext::scene)
         .def_rw("lights", &ExecuteContext::lights)
         .def_rw("layer_mask", &ExecuteContext::layer_mask)
+        .def_rw("render_category_mask", &ExecuteContext::render_category_mask)
         // Stage 7: expose the tgfx2 RenderContext2 pointer so Python
         // passes can open a ctx2 render pass, bind shaders/textures,
         // and dispatch draws without going through the legacy
@@ -519,6 +523,9 @@ void bind_render_framework(nb::module_& m) {
             if (kwargs.contains("layer_mask")) {
                 self->layer_mask = nb::cast<uint64_t>(kwargs["layer_mask"]);
             }
+            if (kwargs.contains("render_category_mask")) {
+                self->render_category_mask = nb::cast<uint64_t>(kwargs["render_category_mask"]);
+            }
             if (kwargs.contains("view")) {
                 nb::object v = nb::borrow<nb::object>(kwargs["view"]);
                 if (nb::isinstance<Mat44>(v)) {
@@ -568,6 +575,7 @@ void bind_render_framework(nb::module_& m) {
         .def_rw("phase", &RenderContext::phase)
         .def_rw("scene", &RenderContext::scene)
         .def_rw("layer_mask", &RenderContext::layer_mask)
+        .def_rw("render_category_mask", &RenderContext::render_category_mask)
         .def_rw("view", &RenderContext::view)
         .def_rw("projection", &RenderContext::projection)
         .def_rw("model", &RenderContext::model)

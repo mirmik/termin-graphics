@@ -1,0 +1,10 @@
+#ifndef TC_RENDER_CATEGORY_FLAGS_H
+#define TC_RENDER_CATEGORY_FLAGS_H
+
+#include <stdint.h>
+
+#define TC_RENDER_CATEGORY_COLLIDERS (UINT64_C(1) << 0)
+#define TC_RENDER_CATEGORY_NAVMESH   (UINT64_C(1) << 1)
+#define TC_RENDER_CATEGORY_ALL       UINT64_MAX
+
+#endif
