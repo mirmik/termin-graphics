@@ -36,6 +36,11 @@ const termin::MaterialPipelineResourceDecl* find_resource(
     return it == contract.resources.end() ? nullptr : &(*it);
 }
 
+struct CustomGeometryPassDescriptor {
+    std::string phase_mark;
+    termin::MaterialPipelinePassContract shader_contract;
+};
+
 termin::VertexTransformContract material_static_transform()
 {
     return termin::material_pipeline_make_static_vertex_transform_contract(
@@ -217,4 +222,45 @@ TEST_CASE("Pass contracts carry fragment input intent explicitly") {
     auxiliary_pass.static_vertex_transform = compact_static_transform("custom_draw");
     CHECK(auxiliary_pass.required_material_fragment_input.semantics.empty());
     CHECK(find_resource(*auxiliary_pass.static_vertex_transform, "custom_draw") != nullptr);
+}
+
+TEST_CASE("Custom geometry pass labels do not select vertex contracts") {
+    CustomGeometryPassDescriptor material_pass{
+        "actor_attribute",
+        termin::MaterialPipelinePassContract{}};
+    material_pass.shader_contract.debug_name = "actor_attribute_material";
+    material_pass.shader_contract.required_material_fragment_input =
+        termin::material_pipeline_standard_material_fragment_interface();
+    material_pass.shader_contract.static_vertex_transform = material_static_transform();
+
+    CustomGeometryPassDescriptor compact_pass{
+        "actor_attribute",
+        termin::MaterialPipelinePassContract{}};
+    compact_pass.shader_contract.debug_name = "actor_attribute_compact";
+    compact_pass.shader_contract.required_material_fragment_input =
+        termin::MaterialFragmentInterface{};
+    compact_pass.shader_contract.static_vertex_transform =
+        compact_static_transform("actor_attribute_draw");
+
+    CHECK_EQ(material_pass.phase_mark, compact_pass.phase_mark);
+    CHECK(termin::material_pipeline_interface_produces(
+        material_pass.shader_contract.required_material_fragment_input,
+        "world_pos",
+        termin::MaterialPipelineValueType::Float3));
+    CHECK(has_attribute(
+        material_pass.shader_contract.static_vertex_transform->vertex_inputs,
+        "normal",
+        termin::MaterialPipelineValueType::Float3));
+    CHECK(compact_pass.shader_contract.required_material_fragment_input.semantics.empty());
+    CHECK(has_attribute(
+        compact_pass.shader_contract.static_vertex_transform->vertex_inputs,
+        "position",
+        termin::MaterialPipelineValueType::Float3));
+    CHECK(!has_attribute(
+        compact_pass.shader_contract.static_vertex_transform->vertex_inputs,
+        "normal",
+        termin::MaterialPipelineValueType::Float3));
+    CHECK(find_resource(
+        *compact_pass.shader_contract.static_vertex_transform,
+        "actor_attribute_draw") != nullptr);
 }

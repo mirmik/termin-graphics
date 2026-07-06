@@ -19,6 +19,11 @@ struct MaterialPipelineMaterialContract {
 
 struct MaterialPipelinePassContract {
     std::string debug_name;
+
+    // Pass-owned material/shader ABI intent. This structure is deliberately
+    // independent from drawable phase labels: a pass with phase_mark="opaque",
+    // "depth", "actor_attribute", or any project-owned label can request any
+    // compatible vertex transform/resource/fragment contract explicitly.
     MaterialFragmentInterface required_material_fragment_input;
     bool uses_material_fragment = true;
     std::string fragment_source_override;

@@ -78,9 +78,17 @@ enum class DirectTgfx2DrawKind {
 };
 
 struct ShaderOverrideContext {
+    // Drawable-facing representation/material routing label. This selects
+    // geometry/material participation only; render passes must not rely on it
+    // to imply vertex layout, skinning template, pass resources, or output
+    // semantics.
     std::string phase_mark;
     int geometry_id = 0;
     TcShader original_shader;
+
+    // Pass-owned shader/layout intent. Context-aware override paths must use
+    // this contract for material-pipeline variants instead of interpreting
+    // phase_mark strings such as "shadow", "depth", "pick", or "normal".
     MaterialPipelinePassContract pass_contract;
 };
 
