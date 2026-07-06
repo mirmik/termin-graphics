@@ -3,6 +3,17 @@ import uuid
 import numpy as np
 import tmesh
 import pytest
+from tcbase._geom_native import Vec3
+
+
+def _v3(value) -> Vec3:
+    return Vec3(float(value[0]), float(value[1]), float(value[2]))
+
+
+def _assert_vec3_approx(actual: Vec3, expected, abs: float = 1e-6) -> None:
+    assert actual.x == pytest.approx(expected[0], abs=abs)
+    assert actual.y == pytest.approx(expected[1], abs=abs)
+    assert actual.z == pytest.approx(expected[2], abs=abs)
 
 
 def test_vertex_layout_building():
@@ -266,12 +277,12 @@ def test_surface_edge_query_finds_symmetric_top_cube_edges(point, expected_edge)
 
     edge = mesh.find_surface_edge(
         start_triangle=0,
-        point=point,
-        normal=(0.0, 0.0, 1.0),
+        point=_v3(point),
+        normal=Vec3(0.0, 0.0, 1.0),
     )
 
     assert edge is not None
-    assert edge["point"] == pytest.approx(expected_edge, abs=1e-6)
+    _assert_vec3_approx(edge["point"], expected_edge)
     assert edge["distance"] == pytest.approx(0.2, abs=1e-6)
 
 
@@ -280,12 +291,12 @@ def test_surface_edge_query_ignores_unshared_internal_diagonal():
 
     edge = mesh.find_surface_edge(
         start_triangle=0,
-        point=(0.1, 0.0, 3.5),
-        normal=(0.0, 0.0, 1.0),
+        point=Vec3(0.1, 0.0, 3.5),
+        normal=Vec3(0.0, 0.0, 1.0),
     )
 
     assert edge is not None
-    assert edge["point"] == pytest.approx((1.5, 0.0, 3.5), abs=1e-6)
+    _assert_vec3_approx(edge["point"], (1.5, 0.0, 3.5))
     assert edge["distance"] == pytest.approx(1.4, abs=1e-6)
 
 
@@ -294,12 +305,12 @@ def test_surface_edge_query_finds_nearest_edge_on_vertical_surface():
 
     edge = mesh.find_surface_edge(
         start_triangle=4,
-        point=(1.5, 0.0, 2.5),
-        normal=(1.0, 0.0, 0.0),
+        point=Vec3(1.5, 0.0, 2.5),
+        normal=Vec3(1.0, 0.0, 0.0),
     )
 
     assert edge is not None
-    assert edge["point"] == pytest.approx((1.5, 0.0, 3.5), abs=1e-6)
+    _assert_vec3_approx(edge["point"], (1.5, 0.0, 3.5))
     assert edge["distance"] == pytest.approx(1.0, abs=1e-6)
 
 
@@ -308,12 +319,12 @@ def test_surface_edge_query_finds_short_edge_on_long_box_top_face():
 
     edge = mesh.find_surface_edge(
         start_triangle=0,
-        point=(-9.8, 0.0, 3.5),
-        normal=(0.0, 0.0, 1.0),
+        point=Vec3(-9.8, 0.0, 3.5),
+        normal=Vec3(0.0, 0.0, 1.0),
     )
 
     assert edge is not None
-    assert edge["point"] == pytest.approx((-10.0, 0.0, 3.5), abs=1e-6)
+    _assert_vec3_approx(edge["point"], (-10.0, 0.0, 3.5))
     assert edge["distance"] == pytest.approx(0.2, abs=1e-6)
 
 
@@ -322,13 +333,13 @@ def test_surface_edge_query_uses_metric_for_distance():
 
     edge = mesh.find_surface_edge(
         start_triangle=0,
-        point=(0.9, 1.3, 3.5),
-        normal=(0.0, 0.0, 1.0),
-        metric=(0.1, 1.0, 1.0),
+        point=Vec3(0.9, 1.3, 3.5),
+        normal=Vec3(0.0, 0.0, 1.0),
+        metric=Vec3(0.1, 1.0, 1.0),
     )
 
     assert edge is not None
-    assert edge["point"] == pytest.approx((1.5, 1.3, 3.5), abs=1e-6)
+    _assert_vec3_approx(edge["point"], (1.5, 1.3, 3.5))
     assert edge["distance"] == pytest.approx(0.06, abs=1e-6)
 
 
@@ -337,15 +348,15 @@ def test_surface_edge_aligned_query_uses_metric_for_direction_filter():
 
     edge = mesh.find_surface_edge_aligned(
         start_triangle=0,
-        point=(0.9, 1.3, 3.5),
-        normal=(0.0, 0.0, 1.0),
-        edge_direction=(0.0, 1.0, 0.0),
+        point=Vec3(0.9, 1.3, 3.5),
+        normal=Vec3(0.0, 0.0, 1.0),
+        edge_direction=Vec3(0.0, 1.0, 0.0),
         max_angle_degrees=10.0,
-        metric=(0.1, 1.0, 1.0),
+        metric=Vec3(0.1, 1.0, 1.0),
     )
 
     assert edge is not None
-    assert edge["point"] == pytest.approx((1.5, 1.3, 3.5), abs=1e-6)
+    _assert_vec3_approx(edge["point"], (1.5, 1.3, 3.5))
     assert edge["distance"] == pytest.approx(0.06, abs=1e-6)
 
 
@@ -354,12 +365,12 @@ def test_surface_edge_query_finds_short_vertical_edge_on_long_box_wall_face():
 
     edge = mesh.find_surface_edge(
         start_triangle=4,
-        point=(-9.8, -0.5, 2.0),
-        normal=(0.0, -1.0, 0.0),
+        point=Vec3(-9.8, -0.5, 2.0),
+        normal=Vec3(0.0, -1.0, 0.0),
     )
 
     assert edge is not None
-    assert edge["point"] == pytest.approx((-10.0, -0.5, 2.0), abs=1e-6)
+    _assert_vec3_approx(edge["point"], (-10.0, -0.5, 2.0))
     assert edge["distance"] == pytest.approx(0.2, abs=1e-6)
     assert edge["side"] == -1
 
@@ -369,12 +380,12 @@ def test_surface_edge_query_prefers_near_horizontal_edge_over_far_wall_end():
 
     edge = mesh.find_surface_edge(
         start_triangle=4,
-        point=(-5.0, -0.5, 3.3),
-        normal=(0.0, -1.0, 0.0),
+        point=Vec3(-5.0, -0.5, 3.3),
+        normal=Vec3(0.0, -1.0, 0.0),
     )
 
     assert edge is not None
-    assert edge["point"] == pytest.approx((-5.0, -0.5, 3.5), abs=1e-6)
+    _assert_vec3_approx(edge["point"], (-5.0, -0.5, 3.5))
     assert edge["distance"] == pytest.approx(0.2, abs=1e-6)
 
 
@@ -383,14 +394,14 @@ def test_surface_edge_aligned_query_filters_by_vertical_edge_direction():
 
     edge = mesh.find_surface_edge_aligned(
         start_triangle=4,
-        point=(-5.0, -0.5, 3.3),
-        normal=(0.0, -1.0, 0.0),
-        edge_direction=(0.0, 0.0, 1.0),
+        point=Vec3(-5.0, -0.5, 3.3),
+        normal=Vec3(0.0, -1.0, 0.0),
+        edge_direction=Vec3(0.0, 0.0, 1.0),
         max_angle_degrees=10.0,
     )
 
     assert edge is not None
-    assert edge["point"] == pytest.approx((-10.0, -0.5, 3.3), abs=1e-6)
+    _assert_vec3_approx(edge["point"], (-10.0, -0.5, 3.3))
     assert edge["distance"] == pytest.approx(5.0, abs=1e-6)
     assert edge["side"] == -1
 
@@ -400,9 +411,9 @@ def test_surface_edge_aligned_query_rejects_mismatching_edge_direction():
 
     edge = mesh.find_surface_edge_aligned(
         start_triangle=4,
-        point=(-5.0, -0.5, 3.3),
-        normal=(0.0, -1.0, 0.0),
-        edge_direction=(0.0, 1.0, 0.0),
+        point=Vec3(-5.0, -0.5, 3.3),
+        normal=Vec3(0.0, -1.0, 0.0),
+        edge_direction=Vec3(0.0, 1.0, 0.0),
         max_angle_degrees=10.0,
     )
 
@@ -412,8 +423,8 @@ def test_surface_edge_aligned_query_rejects_mismatching_edge_direction():
 def test_nearest_surface_edge_query_does_not_require_start_triangle():
     mesh = _box_tc_mesh_unshared(width=20.0, depth=1.0, height=3.0)
 
-    edge = mesh.find_nearest_surface_edge(point=(-9.8, 0.0, 3.5))
+    edge = mesh.find_nearest_surface_edge(point=Vec3(-9.8, 0.0, 3.5))
 
     assert edge is not None
-    assert edge["point"] == pytest.approx((-10.0, 0.0, 3.5), abs=1e-6)
+    _assert_vec3_approx(edge["point"], (-10.0, 0.0, 3.5))
     assert edge["distance"] == pytest.approx(0.2, abs=1e-6)

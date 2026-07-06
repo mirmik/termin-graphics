@@ -12,6 +12,7 @@
 
 #include "tgfx/tgfx_mesh3.hpp"
 #include "tgfx/tgfx_mesh_handle.hpp"
+#include <termin/geom/vec3.hpp>
 
 extern "C" {
 #include <tcbase/tc_log.h>
@@ -86,6 +87,8 @@ nb::object make_array_1d(const T* data, size_t size) {
 namespace tmesh_bindings {
 
 void bind_mesh(nb::module_& m) {
+    nb::module_::import_("tcbase._geom_native");
+
     // =========================================================================
     // Mesh3 - Pure CPU mesh
     // =========================================================================
@@ -476,37 +479,34 @@ void bind_mesh(nb::module_& m) {
         }, nb::arg("origin"), nb::arg("direction"), nb::arg("t_min") = 0.0f, nb::arg("t_max") = 1000000.0f)
         .def("find_surface_edge", [](const TcMesh& h,
                                       uint32_t start_triangle,
-                                      nb::tuple point,
-                                      nb::tuple normal,
-                                      nb::tuple up,
-                                      nb::tuple metric) -> nb::object {
-            if (point.size() < 3 || normal.size() < 3 || up.size() < 3 || metric.size() < 3) {
-                return nb::none();
-            }
+                                      const Vec3& point,
+                                      const Vec3& normal,
+                                      const Vec3& up,
+                                      const Vec3& metric) -> nb::object {
             tc_mesh* m = h.get();
             if (!m) {
                 return nb::none();
             }
 
             float p[3] = {
-                nb::cast<float>(point[0]),
-                nb::cast<float>(point[1]),
-                nb::cast<float>(point[2])
+                static_cast<float>(point.x),
+                static_cast<float>(point.y),
+                static_cast<float>(point.z)
             };
             float n[3] = {
-                nb::cast<float>(normal[0]),
-                nb::cast<float>(normal[1]),
-                nb::cast<float>(normal[2])
+                static_cast<float>(normal.x),
+                static_cast<float>(normal.y),
+                static_cast<float>(normal.z)
             };
             float u[3] = {
-                nb::cast<float>(up[0]),
-                nb::cast<float>(up[1]),
-                nb::cast<float>(up[2])
+                static_cast<float>(up.x),
+                static_cast<float>(up.y),
+                static_cast<float>(up.z)
             };
             float s[3] = {
-                nb::cast<float>(metric[0]),
-                nb::cast<float>(metric[1]),
-                nb::cast<float>(metric[2])
+                static_cast<float>(metric.x),
+                static_cast<float>(metric.y),
+                static_cast<float>(metric.z)
             };
 
             tc_mesh_surface_edge_hit hit;
@@ -515,7 +515,7 @@ void bind_mesh(nb::module_& m) {
             }
 
             nb::dict d;
-            d["point"] = nb::make_tuple(hit.point[0], hit.point[1], hit.point[2]);
+            d["point"] = Vec3(hit.point[0], hit.point[1], hit.point[2]);
             d["indices"] = nb::make_tuple(hit.indices[0], hit.indices[1]);
             d["distance"] = hit.distance;
             d["side"] = hit.side;
@@ -523,53 +523,49 @@ void bind_mesh(nb::module_& m) {
         }, nb::arg("start_triangle"),
            nb::arg("point"),
            nb::arg("normal"),
-           nb::arg("up") = nb::make_tuple(0.0f, 0.0f, 1.0f),
-           nb::arg("metric") = nb::make_tuple(1.0f, 1.0f, 1.0f),
+           nb::arg("up") = Vec3(0.0, 0.0, 1.0),
+           nb::arg("metric") = Vec3(1.0, 1.0, 1.0),
            "Find the nearest boundary edge of the connected surface containing "
            "start_triangle. point/normal/up are mesh-local. metric is a "
            "per-axis measurement metric used for distance tests; returned point "
            "and indices remain in original mesh-local coordinates.")
         .def("find_surface_edge_aligned", [](const TcMesh& h,
                                               uint32_t start_triangle,
-                                              nb::tuple point,
-                                              nb::tuple normal,
-                                              nb::tuple edge_direction,
+                                              const Vec3& point,
+                                              const Vec3& normal,
+                                              const Vec3& edge_direction,
                                               float max_angle_degrees,
-                                              nb::tuple up,
-                                              nb::tuple metric) -> nb::object {
-            if (point.size() < 3 || normal.size() < 3 || edge_direction.size() < 3 ||
-                up.size() < 3 || metric.size() < 3) {
-                return nb::none();
-            }
+                                              const Vec3& up,
+                                              const Vec3& metric) -> nb::object {
             tc_mesh* m = h.get();
             if (!m) {
                 return nb::none();
             }
 
             float p[3] = {
-                nb::cast<float>(point[0]),
-                nb::cast<float>(point[1]),
-                nb::cast<float>(point[2])
+                static_cast<float>(point.x),
+                static_cast<float>(point.y),
+                static_cast<float>(point.z)
             };
             float n[3] = {
-                nb::cast<float>(normal[0]),
-                nb::cast<float>(normal[1]),
-                nb::cast<float>(normal[2])
+                static_cast<float>(normal.x),
+                static_cast<float>(normal.y),
+                static_cast<float>(normal.z)
             };
             float d[3] = {
-                nb::cast<float>(edge_direction[0]),
-                nb::cast<float>(edge_direction[1]),
-                nb::cast<float>(edge_direction[2])
+                static_cast<float>(edge_direction.x),
+                static_cast<float>(edge_direction.y),
+                static_cast<float>(edge_direction.z)
             };
             float u[3] = {
-                nb::cast<float>(up[0]),
-                nb::cast<float>(up[1]),
-                nb::cast<float>(up[2])
+                static_cast<float>(up.x),
+                static_cast<float>(up.y),
+                static_cast<float>(up.z)
             };
             float s[3] = {
-                nb::cast<float>(metric[0]),
-                nb::cast<float>(metric[1]),
-                nb::cast<float>(metric[2])
+                static_cast<float>(metric.x),
+                static_cast<float>(metric.y),
+                static_cast<float>(metric.z)
             };
 
             tc_mesh_surface_edge_hit hit;
@@ -578,7 +574,7 @@ void bind_mesh(nb::module_& m) {
             }
 
             nb::dict result;
-            result["point"] = nb::make_tuple(hit.point[0], hit.point[1], hit.point[2]);
+            result["point"] = Vec3(hit.point[0], hit.point[1], hit.point[2]);
             result["indices"] = nb::make_tuple(hit.indices[0], hit.indices[1]);
             result["distance"] = hit.distance;
             result["side"] = hit.side;
@@ -588,38 +584,35 @@ void bind_mesh(nb::module_& m) {
            nb::arg("normal"),
            nb::arg("edge_direction"),
            nb::arg("max_angle_degrees"),
-           nb::arg("up") = nb::make_tuple(0.0f, 0.0f, 1.0f),
-           nb::arg("metric") = nb::make_tuple(1.0f, 1.0f, 1.0f),
+           nb::arg("up") = Vec3(0.0, 0.0, 1.0),
+           nb::arg("metric") = Vec3(1.0, 1.0, 1.0),
            "Find a boundary edge of the connected surface, filtering candidates "
            "by edge direction. The sign of edge_direction is ignored. metric is "
            "applied to both distance measurement and direction comparison; "
            "returned point and indices remain in original mesh-local coordinates.")
         .def("find_nearest_surface_edge", [](const TcMesh& h,
-                                              nb::tuple point,
-                                              nb::tuple up,
-                                              nb::tuple metric) -> nb::object {
-            if (point.size() < 3 || up.size() < 3 || metric.size() < 3) {
-                return nb::none();
-            }
+                                              const Vec3& point,
+                                              const Vec3& up,
+                                              const Vec3& metric) -> nb::object {
             tc_mesh* m = h.get();
             if (!m) {
                 return nb::none();
             }
 
             float p[3] = {
-                nb::cast<float>(point[0]),
-                nb::cast<float>(point[1]),
-                nb::cast<float>(point[2])
+                static_cast<float>(point.x),
+                static_cast<float>(point.y),
+                static_cast<float>(point.z)
             };
             float u[3] = {
-                nb::cast<float>(up[0]),
-                nb::cast<float>(up[1]),
-                nb::cast<float>(up[2])
+                static_cast<float>(up.x),
+                static_cast<float>(up.y),
+                static_cast<float>(up.z)
             };
             float s[3] = {
-                nb::cast<float>(metric[0]),
-                nb::cast<float>(metric[1]),
-                nb::cast<float>(metric[2])
+                static_cast<float>(metric.x),
+                static_cast<float>(metric.y),
+                static_cast<float>(metric.z)
             };
 
             tc_mesh_surface_edge_hit hit;
@@ -628,14 +621,14 @@ void bind_mesh(nb::module_& m) {
             }
 
             nb::dict d;
-            d["point"] = nb::make_tuple(hit.point[0], hit.point[1], hit.point[2]);
+            d["point"] = Vec3(hit.point[0], hit.point[1], hit.point[2]);
             d["indices"] = nb::make_tuple(hit.indices[0], hit.indices[1]);
             d["distance"] = hit.distance;
             d["side"] = hit.side;
             return d;
         }, nb::arg("point"),
-           nb::arg("up") = nb::make_tuple(0.0f, 0.0f, 1.0f),
-           nb::arg("metric") = nb::make_tuple(1.0f, 1.0f, 1.0f),
+           nb::arg("up") = Vec3(0.0, 0.0, 1.0),
+           nb::arg("metric") = Vec3(1.0, 1.0, 1.0),
            "Convenience query that first finds the nearest triangle to point "
            "using metric-space distance, then finds the nearest boundary edge "
            "of that surface. Returned point and indices remain in original "
