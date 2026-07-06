@@ -38,6 +38,7 @@ cannot launch the editor, run `./run-tests.sh --full --no-editor-smoke`.
 | D3D11 bound path on Windows | `pwsh scripts/validate-tgfx2-d3d11-bound-path.ps1` | Windows D3D11 device smoke and backend-facing bound-resource-set path work. |
 | Backend window presentation | `ctest --test-dir build/Release-tests -R '^(backend_window_triangle|backend_window_d3d11_present)$' --output-on-failure` | SDLBackendWindow presentation works for the compiled backends, with unsupported window backends skipped by the test. |
 | Built-in render pass shaders | `ctest --test-dir build/Release-tests -R '^termin_render_passes_builtin_shader_sources_test$' --output-on-failure` | Built-in shader sources/catalog entries and render-pass shader templates remain loadable. |
+| DebugTrianglePass pixel smoke | `ctest --test-dir build/Release-tests -R '^termin_render_passes_debug_triangle_pixel_smoke$' --output-on-failure` | Vulkan offscreen execution of a real `termin-render-passes` FramePass, built-in shader catalog lookup, RenderContext2 pass recording, texture output, and pixel readback work. |
 
 ## Packaged Runtime Matrix
 
