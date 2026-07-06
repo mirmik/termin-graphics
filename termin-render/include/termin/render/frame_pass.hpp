@@ -27,6 +27,7 @@ extern "C" {
 #include "tgfx/handles.hpp"
 #include <termin/render/resource_spec.hpp>
 #include <termin/render/render_export.hpp>
+#include <tgfx/tgfx_shader_handle.hpp>
 
 namespace termin {
 
@@ -209,6 +210,14 @@ public:
 
     virtual void execute(ExecuteContext& ctx) {
         (void)ctx;
+    }
+
+    virtual void collect_shader_usages(
+        tc_scene_handle scene,
+        const std::function<void(TcShader)>& emit
+    ) const {
+        (void)scene;
+        (void)emit;
     }
 
     virtual std::set<const char*> compute_reads() const {

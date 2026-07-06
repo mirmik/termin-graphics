@@ -75,6 +75,7 @@ public:
     void insert_pass_before(tc_pass* pass, tc_pass* before);
     tc_pass* get_pass(const std::string& name);
     tc_pass* get_pass_at(size_t index);
+    const tc_pass* get_pass_at(size_t index) const;
     size_t pass_count() const;
 
     void add_spec(const ResourceSpec& spec);

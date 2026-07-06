@@ -50,6 +50,10 @@ tc_pass* RenderPipeline::get_pass_at(size_t index) {
     return tc_pipeline_get_pass_at(handle_, index);
 }
 
+const tc_pass* RenderPipeline::get_pass_at(size_t index) const {
+    return tc_pipeline_get_pass_at(handle_, index);
+}
+
 size_t RenderPipeline::pass_count() const {
     return tc_pipeline_pass_count(handle_);
 }

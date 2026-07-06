@@ -16,6 +16,7 @@
 #include <termin/render/frame_debug_capture_pass.hpp>
 #include <termin/render/frame_graph_debugger_core.hpp>
 #include <termin/render/graph_alias_pass.hpp>
+#include <termin/render/render_pipeline.hpp>
 #include <termin/render/shader_usage_collector.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <termin/render/frame_pass.hpp>
@@ -105,6 +106,10 @@ void bind_render_framework(nb::module_& m) {
     m.def("collect_scene_shader_usages", &collect_scene_shader_usages,
           nb::arg("scene"),
           "Collect tc_shader usages declared by drawable components in a scene.");
+    m.def("collect_shader_usages_for_pipeline", &collect_shader_usages_for_pipeline,
+          nb::arg("scene"),
+          nb::arg("pipeline"),
+          "Collect tc_shader usages required by enabled passes in a render pipeline.");
 
     nb::class_<ResourceSpec>(m, "ResourceSpec")
         .def(nb::init<>())
