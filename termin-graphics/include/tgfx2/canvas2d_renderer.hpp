@@ -8,6 +8,9 @@
 #include <string_view>
 #include <vector>
 
+#include <termin/geom/bounds2.hpp>
+#include <termin/geom/rect2.hpp>
+
 #include "tgfx2/font_atlas.hpp"
 #include "tgfx2/handles.hpp"
 #include "tgfx2/text2d_renderer.hpp"
@@ -118,13 +121,13 @@ private:
     void flush_();
     bool bind_solid_(CanvasColor color);
     bool bind_texture_(CanvasColor tint, TextureHandle texture);
-    void push_quad_(float x0, float y0, float x1, float y1,
-                    float u0, float v0, float u1, float v1);
-    void append_solid_quad_(float x0, float y0, float x1, float y1,
-                            CanvasColor color);
-    void append_textured_quad_(float x0, float y0, float x1, float y1,
-                               float u0, float v0, float u1, float v1,
-                               CanvasColor tint, TextureHandle texture);
+    void push_quad_(termin::Bounds2f bounds, termin::Bounds2f uv);
+    void append_solid_quad_(termin::Bounds2f bounds, CanvasColor color);
+    void append_textured_quad_(
+        termin::Bounds2f bounds,
+        termin::Bounds2f uv,
+        CanvasColor tint,
+        TextureHandle texture);
 };
 
 }  // namespace tgfx
