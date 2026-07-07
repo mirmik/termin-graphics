@@ -879,11 +879,12 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
                 else if (axis == 1) pos[0] -= (float)offset;  // Y axis: offset in -X
                 else pos[0] -= (float)offset;                 // Z axis: offset in -X
 
-                text3d_->draw(axes::format_tick(t), pos,
-                              label_color.r, label_color.g,
-                              label_color.b, label_color.a,
-                              tick_text_size_px,
-                              tgfx::Text3DRenderer::Anchor::Center);
+                text3d_->draw(axes::format_tick(t), tgfx::Text3DRenderer::DrawOptions{
+                    termin::Vec3f{pos[0], pos[1], pos[2]},
+                    termin::Color4{label_color.r, label_color.g, label_color.b, label_color.a},
+                    tick_text_size_px,
+                    tgfx::Text3DRenderer::Anchor::Center
+                });
             }
         }
 
@@ -912,11 +913,12 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
                 pos[0] -= (float)(offset * 1.9);
             }
 
-            text3d_->draw(*axis_labels[axis], pos,
-                          label_color.r, label_color.g,
-                          label_color.b, label_color.a,
-                          label_size,
-                          tgfx::Text3DRenderer::Anchor::Center);
+            text3d_->draw(*axis_labels[axis], tgfx::Text3DRenderer::DrawOptions{
+                termin::Vec3f{pos[0], pos[1], pos[2]},
+                termin::Color4{label_color.r, label_color.g, label_color.b, label_color.a},
+                label_size,
+                tgfx::Text3DRenderer::Anchor::Center
+            });
         }
         text3d_->end();
 
@@ -934,10 +936,12 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
                 (float)(marker_y_ * y_scale),
                 (float)(marker_z_ * z_scale + data_size * 0.04),
             };
-            text3d_->draw(label_buf, pos,
-                          1.0f, 1.0f, 0.0f, 1.0f,
-                          marker_text_size_px,
-                          tgfx::Text3DRenderer::Anchor::Center);
+            text3d_->draw(label_buf, tgfx::Text3DRenderer::DrawOptions{
+                termin::Vec3f{pos[0], pos[1], pos[2]},
+                termin::Color4{1.0f, 1.0f, 0.0f, 1.0f},
+                marker_text_size_px,
+                tgfx::Text3DRenderer::Anchor::Center
+            });
             text3d_->end();
             ctx->set_depth_test(true);
         }

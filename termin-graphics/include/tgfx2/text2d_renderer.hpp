@@ -21,6 +21,8 @@
 #include <cstdint>
 #include <string_view>
 
+#include <termin/geom/color.hpp>
+
 #include "tgfx2/handles.hpp"
 #include "tgfx2/tgfx2_api.h"
 extern "C" {
@@ -36,6 +38,14 @@ class FontAtlas;
 class TGFX2_TYPE_API Text2DRenderer {
 public:
     enum class Anchor : uint8_t { Left, Center, Right };
+
+    struct DrawOptions {
+        float x = 0.0f;
+        float y = 0.0f;
+        termin::Color4 color = termin::Color4::white();
+        float size = 14.0f;
+        Anchor anchor = Anchor::Left;
+    };
 
 private:
     // Shader lives on the tc_shader registry — shared across
@@ -74,11 +84,7 @@ public:
     // scaled from the atlas rasterise size). Anchor selects whether
     // (x, y) is the left, centre or right of the text box (top-aligned
     // on Y for Left/Right, center for Center).
-    void draw(std::string_view text_utf8,
-              float x, float y,
-              float r, float g, float b, float a,
-              float size = 14.0f,
-              Anchor anchor = Anchor::Left);
+    void draw(std::string_view text_utf8, const DrawOptions& options);
 
     // End batch. Currently a no-op — shader/state stays bound on ctx
     // until the caller rebinds or ends its pass.

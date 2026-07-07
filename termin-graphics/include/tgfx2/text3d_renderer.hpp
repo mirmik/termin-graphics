@@ -21,6 +21,9 @@
 #include <cstdint>
 #include <string_view>
 
+#include <termin/geom/color.hpp>
+#include <termin/geom/vec3.hpp>
+
 #include "tgfx2/handles.hpp"
 #include "tgfx2/tgfx2_api.h"
 extern "C" {
@@ -37,6 +40,13 @@ class TGFX2_TYPE_API Text3DRenderer {
 public:
     enum class Anchor : uint8_t { Left, Center, Right };
     enum class ExpansionMode : uint8_t { WorldPlane, ScreenAligned };
+
+    struct DrawOptions {
+        termin::Vec3f position{};
+        termin::Color4 color = termin::Color4::white();
+        float size = 0.05f;
+        Anchor anchor = Anchor::Center;
+    };
 
 private:
     IRenderDevice* compiled_on_ = nullptr;
@@ -70,11 +80,7 @@ public:
     // Draw a UTF-8 string at world-space `position`. `size` is the text
     // height in renderer units: world units for WorldPlane, display pixels
     // for ScreenAligned. Color in [0, 1].
-    void draw(std::string_view text_utf8,
-              const float position[3],
-              float r, float g, float b, float a,
-              float size = 0.05f,
-              Anchor anchor = Anchor::Center);
+    void draw(std::string_view text_utf8, const DrawOptions& options);
 
     void end();
     void release_gpu();

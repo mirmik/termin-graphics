@@ -1153,11 +1153,16 @@ void bind_tgfx2(nb::module_& m) {
                 const std::string& text,
                 float x, float y,
                 std::tuple<float, float, float, float> color,
-                float size,
-                nb::object anchor) {
+                 float size,
+                 nb::object anchor) {
                  auto [r, g, b, a] = color;
-                 self.draw(text, x, y, r, g, b, a, size,
-                           resolve_text2d_anchor(anchor));
+                 self.draw(text, tgfx::Text2DRenderer::DrawOptions{
+                     x,
+                     y,
+                     termin::Color4{r, g, b, a},
+                     size,
+                     resolve_text2d_anchor(anchor)
+                 });
              },
              nb::arg("text"),
              nb::arg("x"), nb::arg("y"),
@@ -1212,12 +1217,15 @@ void bind_tgfx2(nb::module_& m) {
                 std::tuple<float, float, float> position,
                 std::tuple<float, float, float, float> color,
                 float size,
-                nb::object anchor) {
+                 nb::object anchor) {
                  auto [px, py, pz] = position;
-                 float pos[3] = {px, py, pz};
                  auto [r, g, b, a] = color;
-                 self.draw(text, pos, r, g, b, a, size,
-                           resolve_text3d_anchor(anchor));
+                 self.draw(text, tgfx::Text3DRenderer::DrawOptions{
+                     termin::Vec3f{px, py, pz},
+                     termin::Color4{r, g, b, a},
+                     size,
+                     resolve_text3d_anchor(anchor)
+                 });
              },
              nb::arg("text"),
              nb::arg("position"),

@@ -305,11 +305,13 @@ void Canvas2DRenderer::draw_text(std::string_view text,
     if (active_font == nullptr) return;
 
     flush_();
-    text2d_.draw(text,
-                 x - static_cast<float>(viewport_x_),
-                 y - static_cast<float>(viewport_y_),
-                 color.r, color.g, color.b, color.a,
-                 size_px, anchor);
+    text2d_.draw(text, Text2DRenderer::DrawOptions{
+        x - static_cast<float>(viewport_x_),
+        y - static_cast<float>(viewport_y_),
+        termin::Color4{color.r, color.g, color.b, color.a},
+        size_px,
+        anchor
+    });
 }
 
 FontAtlas::Size2f Canvas2DRenderer::measure_text(std::string_view text,
