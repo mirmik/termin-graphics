@@ -80,10 +80,18 @@ typedef struct tc_render_item_text_batch_payload {
     uint32_t orientation;
 } tc_render_item_text_batch_payload;
 
+typedef struct tc_render_item_foliage_batch_payload {
+    struct tc_mesh* prototype_mesh;
+    tc_mesh_handle prototype_mesh_handle;
+    /* Borrowed unless the item is stored in termin::RenderItemCollection. */
+    const char* foliage_uuid;
+} tc_render_item_foliage_batch_payload;
+
 typedef union tc_render_item_payload {
     tc_render_item_mesh_payload mesh;
     tc_render_item_line_batch_payload line_batch;
     tc_render_item_text_batch_payload text_batch;
+    tc_render_item_foliage_batch_payload foliage_batch;
 } tc_render_item_payload;
 
 typedef struct tc_render_item {

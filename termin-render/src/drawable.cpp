@@ -319,6 +319,19 @@ bool validate_render_item(
         return false;
     }
 
+    if (item.kind == TC_RENDER_ITEM_KIND_FOLIAGE_BATCH &&
+        (!item.payload.foliage_batch.prototype_mesh ||
+         !item.payload.foliage_batch.foliage_uuid ||
+         item.payload.foliage_batch.foliage_uuid[0] == '\0')) {
+        tc::Log::error(
+            "[RenderItemSink] malformed FoliageBatch item: pass='%s' phase='%s' component='%s' geometry=%d has no prototype mesh or foliage asset",
+            pass_name,
+            phase_mark,
+            component_type,
+            item.geometry_id);
+        return false;
+    }
+
     if ((item.flags & TC_RENDER_ITEM_FLAG_HAS_MATERIAL_PHASE) && !item.material_phase) {
         tc::Log::error(
             "[RenderItemSink] malformed %s item: pass='%s' phase='%s' component='%s' geometry=%d has material flag without material phase",
@@ -375,6 +388,13 @@ bool emit_render_item_to_vector(const tc_render_item* item, void* user_data) {
             copy.payload.text_batch.font_path = stored_font_path->c_str();
             data->collection->text_batch_strings.push_back(std::move(stored_font_path));
         }
+    }
+    if (copy.kind == TC_RENDER_ITEM_KIND_FOLIAGE_BATCH &&
+        copy.payload.foliage_batch.foliage_uuid) {
+        auto stored_uuid =
+            std::make_unique<std::string>(copy.payload.foliage_batch.foliage_uuid);
+        copy.payload.foliage_batch.foliage_uuid = stored_uuid->c_str();
+        data->collection->foliage_batch_strings.push_back(std::move(stored_uuid));
     }
     data->collection->items.push_back(copy);
     return true;

@@ -72,11 +72,6 @@ struct MeshDrawGeometry {
     size_t submesh_index = 0;
 };
 
-enum class DirectTgfx2DrawKind {
-    MaterialPhase,
-    OverrideColor,
-};
-
 struct ShaderOverrideContext {
     // Drawable-facing representation/material routing label. This selects
     // geometry/material participation only; render passes must not rely on it
@@ -204,30 +199,12 @@ public:
         (void)geometry_id;
     }
 
-    // Direct tgfx2 drawables can bind their own shaders instead of the
-    // material shader pair. Passes still need to know whether to prepare and
-    // bind the engine lighting block for those shaders.
     virtual bool needs_lighting_ubo_tgfx2(
         const std::string& phase_mark,
         int geometry_id
     ) const {
         (void)phase_mark;
         (void)geometry_id;
-        return false;
-    }
-
-    // Direct tgfx2 drawing is intentionally opt-in per pass contract.
-    // MaterialPhase means the caller provides a live material phase and
-    // expects material/lighting/shadow bindings to be honored. OverrideColor
-    // means the pass owns the shader/color contract (for example IdPass).
-    virtual bool supports_direct_tgfx2_draw(
-        const std::string& phase_mark,
-        int geometry_id,
-        DirectTgfx2DrawKind kind
-    ) const {
-        (void)phase_mark;
-        (void)geometry_id;
-        (void)kind;
         return false;
     }
 
@@ -247,30 +224,10 @@ public:
         }
 
         MeshDrawGeometry mesh_geometry{};
-        if (resolve_mesh_geometry(phase_mark, 0, mesh_geometry) ||
-            supports_direct_tgfx2_draw(phase_mark, 0, DirectTgfx2DrawKind::OverrideColor)) {
+        if (resolve_mesh_geometry(phase_mark, 0, mesh_geometry)) {
             ids.push_back(0);
         }
         return ids;
-    }
-
-    // Direct tgfx2 draw hook for drawables that are not backed by a
-    // tc_mesh in a given render mode. Passes call this only after
-    // supports_direct_tgfx2_draw() confirms the drawable understands that
-    // pass contract.
-    virtual bool draw_tgfx2(
-        tgfx::RenderContext2& ctx2,
-        const RenderContext& context,
-        const std::string& phase_mark,
-        tc_material_phase* phase,
-        int geometry_id
-    ) {
-        (void)ctx2;
-        (void)context;
-        (void)phase_mark;
-        (void)phase;
-        (void)geometry_id;
-        return false;
     }
 
     virtual Mat44f get_model_matrix(const Entity& entity) const;
@@ -312,11 +269,13 @@ struct RENDER_API RenderItemCollection {
     std::vector<tc_render_item> items;
     std::vector<std::vector<tc_render_item_vec3>> line_batch_points;
     std::vector<std::unique_ptr<std::string>> text_batch_strings;
+    std::vector<std::unique_ptr<std::string>> foliage_batch_strings;
 
     void clear() {
         items.clear();
         line_batch_points.clear();
         text_batch_strings.clear();
+        foliage_batch_strings.clear();
     }
 };
 
