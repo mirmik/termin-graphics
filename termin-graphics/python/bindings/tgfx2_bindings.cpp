@@ -547,6 +547,12 @@ void bind_tgfx2(nb::module_& m) {
                                          static_cast<uint32_t>(data.size()));
              },
              nb::arg("data"))
+        .def("set_push_constants",
+             [](tgfx::RenderContext2& self, const std::string& data) {
+                 self.set_push_constants(data.data(),
+                                         static_cast<uint32_t>(data.size()));
+             },
+             nb::arg("data"))
         // Symbolic resource binding API — resolved from shader layout
         // metadata set via use_shader_resource_layout().
         .def("use_shader_resource_layout",
@@ -558,6 +564,14 @@ void bind_tgfx2(nb::module_& m) {
              [](tgfx::RenderContext2& self,
                 const std::string& name,
                 nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
+                 self.bind_uniform_data(name, data.data(),
+                                        static_cast<uint32_t>(data.size()));
+             },
+             nb::arg("name"), nb::arg("data"))
+        .def("bind_uniform_by_name",
+             [](tgfx::RenderContext2& self,
+                const std::string& name,
+                const std::string& data) {
                  self.bind_uniform_data(name, data.data(),
                                         static_cast<uint32_t>(data.size()));
              },

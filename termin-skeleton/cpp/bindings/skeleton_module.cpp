@@ -2,11 +2,14 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/array.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/ndarray.h>
 #include <iostream>
 #include <unordered_map>
 #include <mutex>
 
+#include "termin/geom/quat.hpp"
+#include "termin/geom/vec3.hpp"
 #include "termin/skeleton/skeleton_instance.hpp"
 #include "termin/skeleton/tc_skeleton_handle.hpp"
 #include "termin/inspect/tc_kind.hpp"
@@ -55,33 +58,6 @@ static bool skeleton_python_load_callback_wrapper(tc_skeleton* skeleton, void* u
 }
 
 namespace {
-
-// Helper: numpy/sequence (3,) -> std::array<double, 3>
-std::array<double, 3> numpy_to_vec3(nb::object obj) {
-    try {
-        auto arr = nb::cast<nb::ndarray<double, nb::c_contig, nb::device::cpu>>(obj);
-        double* ptr = arr.data();
-        return {ptr[0], ptr[1], ptr[2]};
-    } catch (...) {
-        tc::Log::debug("[numpy_to_vec3] ndarray cast failed, falling back to sequence");
-    }
-    nb::sequence seq = nb::cast<nb::sequence>(obj);
-    return {nb::cast<double>(seq[0]), nb::cast<double>(seq[1]), nb::cast<double>(seq[2])};
-}
-
-// Helper: numpy/sequence (4,) -> std::array<double, 4>
-std::array<double, 4> numpy_to_vec4(nb::object obj) {
-    try {
-        auto arr = nb::cast<nb::ndarray<double, nb::c_contig, nb::device::cpu>>(obj);
-        double* ptr = arr.data();
-        return {ptr[0], ptr[1], ptr[2], ptr[3]};
-    } catch (...) {
-        tc::Log::debug("[numpy_to_vec4] ndarray cast failed, falling back to sequence");
-    }
-    nb::sequence seq = nb::cast<nb::sequence>(obj);
-    return {nb::cast<double>(seq[0]), nb::cast<double>(seq[1]),
-            nb::cast<double>(seq[2]), nb::cast<double>(seq[3])};
-}
 
 void bind_tc_bone(nb::module_& m) {
     nb::class_<tc_bone>(m, "TcBone")
@@ -329,33 +305,12 @@ void bind_skeleton_instance(nb::module_& m) {
         }, nb::arg("bone_name"))
         .def("set_bone_transform", [](termin::SkeletonInstance& si,
                 int bone_index,
-                nb::object translation,
-                nb::object rotation,
-                nb::object scale) {
-            std::array<double, 3> t_arr;
-            std::array<double, 4> r_arr;
-            std::array<double, 3> s_arr;
-            const double* t_ptr = nullptr;
-            const double* r_ptr = nullptr;
-            const double* s_ptr = nullptr;
-
-            if (!translation.is_none()) {
-                t_arr = numpy_to_vec3(translation);
-                t_ptr = t_arr.data();
-            }
-            if (!rotation.is_none()) {
-                r_arr = numpy_to_vec4(rotation);
-                r_ptr = r_arr.data();
-            }
-            if (!scale.is_none()) {
-                if (nb::isinstance<nb::float_>(scale) || nb::isinstance<nb::int_>(scale)) {
-                    double s = nb::cast<double>(scale);
-                    s_arr = {s, s, s};
-                } else {
-                    s_arr = numpy_to_vec3(scale);
-                }
-                s_ptr = s_arr.data();
-            }
+                std::optional<termin::Vec3> translation,
+                std::optional<termin::Quat> rotation,
+                std::optional<termin::Vec3> scale) {
+            const double* t_ptr = translation ? &translation->x : nullptr;
+            const double* r_ptr = rotation ? &rotation->x : nullptr;
+            const double* s_ptr = scale ? &scale->x : nullptr;
             si.set_bone_transform(bone_index, t_ptr, r_ptr, s_ptr);
         }, nb::arg("bone_index"),
            nb::arg("translation") = nb::none(),
@@ -363,33 +318,12 @@ void bind_skeleton_instance(nb::module_& m) {
            nb::arg("scale") = nb::none())
         .def("set_bone_transform_by_name", [](termin::SkeletonInstance& si,
                 const std::string& bone_name,
-                nb::object translation,
-                nb::object rotation,
-                nb::object scale) {
-            std::array<double, 3> t_arr;
-            std::array<double, 4> r_arr;
-            std::array<double, 3> s_arr;
-            const double* t_ptr = nullptr;
-            const double* r_ptr = nullptr;
-            const double* s_ptr = nullptr;
-
-            if (!translation.is_none()) {
-                t_arr = numpy_to_vec3(translation);
-                t_ptr = t_arr.data();
-            }
-            if (!rotation.is_none()) {
-                r_arr = numpy_to_vec4(rotation);
-                r_ptr = r_arr.data();
-            }
-            if (!scale.is_none()) {
-                if (nb::isinstance<nb::float_>(scale) || nb::isinstance<nb::int_>(scale)) {
-                    double s = nb::cast<double>(scale);
-                    s_arr = {s, s, s};
-                } else {
-                    s_arr = numpy_to_vec3(scale);
-                }
-                s_ptr = s_arr.data();
-            }
+                std::optional<termin::Vec3> translation,
+                std::optional<termin::Quat> rotation,
+                std::optional<termin::Vec3> scale) {
+            const double* t_ptr = translation ? &translation->x : nullptr;
+            const double* r_ptr = rotation ? &rotation->x : nullptr;
+            const double* s_ptr = scale ? &scale->x : nullptr;
             si.set_bone_transform_by_name(bone_name, t_ptr, r_ptr, s_ptr);
         }, nb::arg("bone_name"),
            nb::arg("translation") = nb::none(),
