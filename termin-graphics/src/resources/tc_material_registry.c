@@ -5,7 +5,7 @@
 #include <tcbase/tc_resource_map.h>
 #include <tcbase/tc_registry_utils.h>
 #include <tcbase/tc_log.h>
-#include <tcbase/tgfx_intern_string.h>
+#include <tcbase/tc_string.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -101,7 +101,7 @@ tc_material_handle tc_material_create(const char* uuid, const char* name) {
     tc_material* mat = (tc_material*)tc_pool_get(&g_material_pool, h);
     memset(mat, 0, sizeof(tc_material));
     tc_resource_header_set_uuid(&mat->header, final_uuid, "tc_material_create");
-    mat->header.name = tgfx_intern_string(name);
+    mat->header.name = tc_intern_string(name);
     mat->header.version = 1;
     mat->header.ref_count = 0;
     mat->header.is_loaded = 1;

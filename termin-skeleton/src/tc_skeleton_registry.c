@@ -6,7 +6,7 @@
 #include <tcbase/tc_log.h>
 #include <tcbase/tc_pool.h>
 #include <tcbase/tc_resource_map.h>
-#include <tcbase/tgfx_intern_string.h>
+#include <tcbase/tc_string.h>
 #include <tcbase/tc_registry_utils.h>
 
 static tc_pool g_skeleton_pool;
@@ -188,7 +188,7 @@ tc_skeleton_handle tc_skeleton_declare(const char* uuid, const char* name) {
     skeleton->header.is_loaded = 0;
 
     if (name && name[0] != '\0') {
-        skeleton->header.name = tgfx_intern_string(name);
+        skeleton->header.name = tc_intern_string(name);
     }
 
     if (!tc_resource_map_add(g_uuid_to_index, skeleton->header.uuid, tc_pack_index(h.index))) {
