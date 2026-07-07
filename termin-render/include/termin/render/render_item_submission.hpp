@@ -3,10 +3,14 @@
 #include <termin/render/material_pipeline.hpp>
 #include <termin/render/render_export.hpp>
 
+#include <functional>
+
 extern "C" {
 #include <core/tc_render_item.h>
 #include <tgfx/resources/tc_shader.h>
 }
+
+struct tc_material_phase;
 
 namespace tgfx {
 class RenderContext2;
@@ -24,6 +28,8 @@ struct RenderItemDrawSubmitRequest {
     const char* phase_mark = nullptr;
     const char* debug_pass_name = nullptr;
     const char* debug_entity_name = nullptr;
+    std::function<void(tgfx::RenderContext2&, const tc_shader*, tc_material_phase*)>
+        prepare_material_resources;
 };
 
 using RenderItemDrawEncoderFn = bool (*)(
