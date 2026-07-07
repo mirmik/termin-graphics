@@ -296,6 +296,17 @@ bool validate_render_item(
         return false;
     }
 
+    if (item.kind == TC_RENDER_ITEM_KIND_LINE_BATCH &&
+        (!item.payload.line_batch.points || item.payload.line_batch.point_count < 2)) {
+        tc::Log::error(
+            "[RenderItemSink] malformed LineBatch item: pass='%s' phase='%s' component='%s' geometry=%d has no drawable points",
+            pass_name,
+            phase_mark,
+            component_type,
+            item.geometry_id);
+        return false;
+    }
+
     if ((item.flags & TC_RENDER_ITEM_FLAG_HAS_MATERIAL_PHASE) && !item.material_phase) {
         tc::Log::error(
             "[RenderItemSink] malformed %s item: pass='%s' phase='%s' component='%s' geometry=%d has material flag without material phase",

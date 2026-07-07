@@ -14,9 +14,14 @@ class RenderContext2;
 
 namespace termin {
 
+struct RenderContext;
+
 struct RenderItemDrawSubmitRequest {
     const tc_shader* shader = nullptr;
     MaterialMeshVertexInput mesh_vertex_input = MaterialMeshVertexInput::FullMaterial;
+    const RenderContext* draw_context = nullptr;
+    tc_material_phase* material_phase = nullptr;
+    const char* phase_mark = nullptr;
     const char* debug_pass_name = nullptr;
     const char* debug_entity_name = nullptr;
 };

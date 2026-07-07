@@ -14,6 +14,8 @@
 #include "line_renderer_common.hpp"
 #include "tgfx2/render_context.hpp"
 
+#include <tcbase/tc_log.hpp>
+
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
 }
@@ -179,7 +181,11 @@ void bind_tube_line_shader(RenderContext2& ctx,
 
 } // namespace
 
-void WorldTubeLineRenderer::ensure_resources(RenderContext2& ctx, int sides) {
+bool WorldTubeLineRenderer::ensure_resources(RenderContext2& ctx, int sides) {
+    if (resources_failed_) {
+        return false;
+    }
+
     sides = std::clamp(sides, 3, 32);
     IRenderDevice& device = ctx.device();
 
@@ -204,6 +210,11 @@ void WorldTubeLineRenderer::ensure_resources(RenderContext2& ctx, int sides) {
             device,
             vertices.data(),
             sizeof(TubeCornerVertex) * vertices.size());
+        if (!body_corner_vbo_) {
+            tc::Log::error("[WorldTubeLineRenderer] failed to create body corner buffer");
+            resources_failed_ = true;
+            return false;
+        }
     }
 
     if (!cap_corner_vbo_) {
@@ -213,9 +224,14 @@ void WorldTubeLineRenderer::ensure_resources(RenderContext2& ctx, int sides) {
             device,
             vertices.data(),
             sizeof(TubeCapCornerVertex) * vertices.size());
+        if (!cap_corner_vbo_) {
+            tc::Log::error("[WorldTubeLineRenderer] failed to create cap corner buffer");
+            resources_failed_ = true;
+            return false;
+        }
     }
 
-    line_renderer::ensure_shader_pair(
+    const bool body_ready = line_renderer::ensure_shader_pair(
         device,
         body_shader_handle_,
         WORLD_TUBE_LINE_SHADER_UUID,
@@ -223,7 +239,7 @@ void WorldTubeLineRenderer::ensure_resources(RenderContext2& ctx, int sides) {
         "WorldTubeLineRenderer",
         body_vertex_shader_,
         body_fragment_shader_);
-    line_renderer::ensure_shader_pair(
+    const bool cap_ready = line_renderer::ensure_shader_pair(
         device,
         cap_shader_handle_,
         WORLD_TUBE_LINE_CAP_SHADER_UUID,
@@ -231,13 +247,26 @@ void WorldTubeLineRenderer::ensure_resources(RenderContext2& ctx, int sides) {
         "WorldTubeLineRenderer",
         cap_vertex_shader_,
         cap_fragment_shader_);
-    line_renderer::ensure_fragment_shader(
+    const bool lit_ready = line_renderer::ensure_fragment_shader(
         device,
         lit_shader_handle_,
         WORLD_TUBE_LINE_LIT_SHADER_UUID,
         "lit fragment",
         "WorldTubeLineRenderer",
         lit_fragment_shader_);
+
+    if (!body_ready || !cap_ready || !lit_ready) {
+        resources_failed_ = true;
+        return false;
+    }
+
+    if (!tc_shader_get(body_shader_handle_) || !tc_shader_get(cap_shader_handle_)) {
+        tc::Log::error("[WorldTubeLineRenderer] required shader layout is unavailable");
+        resources_failed_ = true;
+        return false;
+    }
+
+    return true;
 }
 
 void WorldTubeLineRenderer::draw_polyline(
@@ -311,7 +340,9 @@ void WorldTubeLineRenderer::draw_polyline(
         caps.push_back(cap);
     }
 
-    ensure_resources(ctx, style.sides);
+    if (!ensure_resources(ctx, style.sides)) {
+        return;
+    }
     const ShaderHandle body_selected_vertex_shader = params.body_vertex_shader
         ? params.body_vertex_shader
         : body_vertex_shader_;
@@ -323,7 +354,12 @@ void WorldTubeLineRenderer::draw_polyline(
     const tc_shader* body_selected_layout = params.body_shader_layout
         ? params.body_shader_layout
         : tc_shader_get(body_shader_handle_);
-    if (!body_selected_vertex_shader || !body_selected_fragment_shader) {
+    if (!body_selected_vertex_shader || !body_selected_fragment_shader || !body_selected_layout) {
+        tc::Log::error("[WorldTubeLineRenderer] cannot draw body: shader state is incomplete");
+        return;
+    }
+    if (!body_corner_vbo_ || body_corner_count_ == 0) {
+        tc::Log::error("[WorldTubeLineRenderer] cannot draw body: geometry buffer is unavailable");
         return;
     }
 
@@ -394,7 +430,12 @@ void WorldTubeLineRenderer::draw_polyline(
     const tc_shader* cap_selected_layout = params.cap_shader_layout
         ? params.cap_shader_layout
         : tc_shader_get(cap_shader_handle_);
-    if (!cap_selected_vertex_shader || !cap_selected_fragment_shader) {
+    if (!cap_selected_vertex_shader || !cap_selected_fragment_shader || !cap_selected_layout) {
+        tc::Log::error("[WorldTubeLineRenderer] cannot draw cap: shader state is incomplete");
+        return;
+    }
+    if (!cap_corner_vbo_ || cap_corner_count_ == 0) {
+        tc::Log::error("[WorldTubeLineRenderer] cannot draw cap: geometry buffer is unavailable");
         return;
     }
 
@@ -433,6 +474,7 @@ void WorldTubeLineRenderer::release(RenderContext2& ctx) {
     cap_vertex_shader_ = {};
     cap_fragment_shader_ = {};
     lit_fragment_shader_ = {};
+    resources_failed_ = false;
     template_sides_ = 0;
 }
 
