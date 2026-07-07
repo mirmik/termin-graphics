@@ -98,27 +98,6 @@ VertexLayoutDesc make_vertex_layout_desc(const VertexLayoutDesc& layout) {
     return desc;
 }
 
-VertexBufferLayout make_vertex_buffer_layout(const VertexLayoutDesc& desc) {
-    VertexBufferLayout layout;
-    layout.stride = desc.stride;
-    layout.per_instance = desc.per_instance;
-    layout.use_shader_input_locations = desc.use_shader_input_locations;
-    const uint32_t count = std::min<uint32_t>(
-        desc.attribute_count,
-        TGFX2_VERTEX_ATTRIBUTE_MAX);
-    layout.attributes.reserve(count);
-    for (uint32_t i = 0; i < count; ++i) {
-        const VertexAttributeDesc& attr = desc.attributes[i];
-        layout.attributes.push_back({
-            attr.location,
-            attr.format,
-            attr.offset,
-            std::string(semantic_view(attr.semantic)),
-        });
-    }
-    return layout;
-}
-
 bool vertex_layout_desc_equal(
     const VertexLayoutDesc& a,
     const VertexLayoutDesc& b

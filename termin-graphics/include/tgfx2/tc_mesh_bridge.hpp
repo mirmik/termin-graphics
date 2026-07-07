@@ -25,8 +25,6 @@ struct Tgfx2MeshBinding {
     BufferHandle vertex_buffer;
     BufferHandle index_buffer;
     VertexLayoutDesc layout_desc;
-    // Legacy C++ layout view. New hot paths should use layout_desc.
-    VertexBufferLayout layout;
     uint32_t index_count = 0;
     IndexType index_type = IndexType::Uint32;
     PrimitiveTopology topology = PrimitiveTopology::TriangleList;
@@ -44,24 +42,24 @@ TGFX2_API void release_mesh_binding(
     const Tgfx2MeshBinding& binding
 );
 
-TGFX2_API VertexBufferLayout filter_vertex_layout_to_locations(
-    const VertexBufferLayout& layout,
+TGFX2_API VertexLayoutDesc filter_vertex_layout_to_locations(
+    const VertexLayoutDesc& layout,
     std::initializer_list<uint32_t> used_locations,
     bool use_shader_input_locations = false
 );
 
-TGFX2_API VertexBufferLayout filter_vertex_layout_to_semantics(
-    const VertexBufferLayout& layout,
+TGFX2_API VertexLayoutDesc filter_vertex_layout_to_semantics(
+    const VertexLayoutDesc& layout,
     std::initializer_list<std::string_view> used_semantics,
     bool use_shader_input_locations = false
 );
 
 TGFX2_API std::string_view standard_vertex_semantic_for_location(uint32_t location);
 
-TGFX2_API std::string_view vertex_attribute_semantic(const VertexAttribute& attr);
+TGFX2_API std::string_view vertex_attribute_semantic(const VertexAttributeDesc& attr);
 
 TGFX2_API bool vertex_layout_has_semantic(
-    const VertexBufferLayout& layout,
+    const VertexLayoutDesc& layout,
     std::string_view semantic
 );
 
@@ -75,11 +73,24 @@ TGFX2_API bool draw_tc_mesh(
     const VertexBufferLayout* layout_override = nullptr
 );
 
+TGFX2_API bool draw_tc_mesh(
+    RenderContext2& ctx,
+    tc_mesh* mesh,
+    const VertexLayoutDesc* layout_override
+);
+
 TGFX2_API bool draw_tc_submesh(
     RenderContext2& ctx,
     tc_mesh* mesh,
     size_t submesh_index,
     const VertexBufferLayout* layout_override = nullptr
+);
+
+TGFX2_API bool draw_tc_submesh(
+    RenderContext2& ctx,
+    tc_mesh* mesh,
+    size_t submesh_index,
+    const VertexLayoutDesc* layout_override
 );
 
 TGFX2_API bool draw_tc_mesh(

@@ -64,28 +64,6 @@ RENDER_API void release_mesh_binding(
     const Tgfx2MeshBinding& binding
 );
 
-// Drop every VertexAttribute whose `location` is not in the provided set.
-// Stride and per_instance are preserved — the caller keeps feeding the
-// same interleaved VBO, we just tell the pipeline to skip attribute
-// fetches that the shader will never read. Without this, Vulkan logs
-// "Vertex attribute at location N not consumed by vertex shader"
-// performance warnings for every minimal-input VS (shadow / depth-only /
-// id-pass) paired with a full mesh layout.
-//
-// Takes an initializer_list so call sites read as
-// `filter_vertex_layout_to_locations(layout, {0})`.
-RENDER_API tgfx::VertexBufferLayout filter_vertex_layout_to_locations(
-    const tgfx::VertexBufferLayout& layout,
-    std::initializer_list<uint32_t> used_locations,
-    bool use_shader_input_locations = false
-);
-
-RENDER_API tgfx::VertexBufferLayout filter_vertex_layout_to_semantics(
-    const tgfx::VertexBufferLayout& layout,
-    std::initializer_list<std::string_view> used_semantics,
-    bool use_shader_input_locations = false
-);
-
 RENDER_API bool draw_tc_mesh(
     tgfx::RenderContext2& ctx,
     tc_mesh* mesh,

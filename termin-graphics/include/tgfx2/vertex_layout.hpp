@@ -106,7 +106,6 @@ TGFX2_API const char* intern_vertex_semantic(const char* semantic);
 TGFX2_API const char* intern_vertex_semantic(std::string_view semantic);
 TGFX2_API VertexLayoutDesc make_vertex_layout_desc(const VertexBufferLayout& layout);
 TGFX2_API VertexLayoutDesc make_vertex_layout_desc(const VertexLayoutDesc& layout);
-TGFX2_API VertexBufferLayout make_vertex_buffer_layout(const VertexLayoutDesc& desc);
 TGFX2_API bool vertex_layout_desc_equal(
     const VertexLayoutDesc& a,
     const VertexLayoutDesc& b

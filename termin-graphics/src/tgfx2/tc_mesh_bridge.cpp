@@ -1,12 +1,8 @@
 #include "tgfx2/tc_mesh_bridge.hpp"
 
 #include <algorithm>
-#include <mutex>
 #include <span>
-#include <string>
 #include <string_view>
-#include <unordered_map>
-#include <vector>
 
 #include <tcbase/tc_log.hpp>
 
@@ -120,7 +116,6 @@ bool fill_binding_from_mesh(Tgfx2MeshBinding& out, tc_mesh* mesh) {
 
         out.layout_desc.attributes[i] = va;
     }
-    out.layout = make_vertex_buffer_layout(out.layout_desc);
 
     out.index_count = static_cast<uint32_t>(mesh->index_count);
     out.index_type = IndexType::Uint32;
@@ -128,13 +123,6 @@ bool fill_binding_from_mesh(Tgfx2MeshBinding& out, tc_mesh* mesh) {
         ? PrimitiveTopology::LineList
         : PrimitiveTopology::TriangleList;
     return true;
-}
-
-bool layout_has_location(const VertexBufferLayout& layout, uint32_t location) {
-    return std::any_of(layout.attributes.begin(), layout.attributes.end(),
-        [location](const VertexAttribute& attr) {
-            return attr.location == location;
-        });
 }
 
 bool semantic_in_list(
@@ -147,111 +135,6 @@ bool semantic_in_list(
         }
     }
     return false;
-}
-
-void hash_combine(size_t& seed, size_t v) {
-    seed ^= v + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-}
-
-struct VertexAttributeSignature {
-    uint32_t location = 0;
-    VertexFormat format = VertexFormat::Float3;
-    uint32_t offset = 0;
-    std::string semantic;
-
-    bool operator==(const VertexAttributeSignature& other) const {
-        return location == other.location &&
-               format == other.format &&
-               offset == other.offset &&
-               semantic == other.semantic;
-    }
-};
-
-struct VertexLayoutSignature {
-    uint32_t stride = 0;
-    bool per_instance = false;
-    bool use_shader_input_locations = false;
-    std::vector<VertexAttributeSignature> attributes;
-
-    bool operator==(const VertexLayoutSignature& other) const {
-        return stride == other.stride &&
-               per_instance == other.per_instance &&
-               use_shader_input_locations == other.use_shader_input_locations &&
-               attributes == other.attributes;
-    }
-};
-
-struct VertexLayoutSignatureHash {
-    size_t operator()(const VertexLayoutSignature& layout) const {
-        size_t hash = 0;
-        hash_combine(hash, std::hash<uint32_t>{}(layout.stride));
-        hash_combine(hash, std::hash<bool>{}(layout.per_instance));
-        hash_combine(hash, std::hash<bool>{}(layout.use_shader_input_locations));
-        hash_combine(hash, std::hash<size_t>{}(layout.attributes.size()));
-        for (const VertexAttributeSignature& attr : layout.attributes) {
-            hash_combine(hash, std::hash<uint32_t>{}(attr.location));
-            hash_combine(hash, std::hash<int>{}(static_cast<int>(attr.format)));
-            hash_combine(hash, std::hash<uint32_t>{}(attr.offset));
-            hash_combine(hash, std::hash<std::string>{}(attr.semantic));
-        }
-        return hash;
-    }
-};
-
-VertexLayoutSignature make_vertex_layout_signature(const VertexBufferLayout& layout) {
-    VertexLayoutSignature signature;
-    signature.stride = layout.stride;
-    signature.per_instance = layout.per_instance;
-    signature.use_shader_input_locations = layout.use_shader_input_locations;
-    signature.attributes.reserve(layout.attributes.size());
-    for (const VertexAttribute& attr : layout.attributes) {
-        signature.attributes.push_back({
-            attr.location,
-            attr.format,
-            attr.offset,
-            attr.semantic,
-        });
-    }
-    return signature;
-}
-
-struct SemanticLayoutCacheKey {
-    VertexLayoutSignature layout;
-    bool use_shader_input_locations = false;
-    std::vector<std::string> semantics;
-
-    bool operator==(const SemanticLayoutCacheKey& other) const {
-        return layout == other.layout &&
-               use_shader_input_locations == other.use_shader_input_locations &&
-               semantics == other.semantics;
-    }
-};
-
-struct SemanticLayoutCacheKeyHash {
-    size_t operator()(const SemanticLayoutCacheKey& key) const {
-        size_t hash = VertexLayoutSignatureHash{}(key.layout);
-        hash_combine(hash, std::hash<bool>{}(key.use_shader_input_locations));
-        hash_combine(hash, std::hash<size_t>{}(key.semantics.size()));
-        for (const std::string& semantic : key.semantics) {
-            hash_combine(hash, std::hash<std::string>{}(semantic));
-        }
-        return hash;
-    }
-};
-
-SemanticLayoutCacheKey make_semantic_layout_cache_key(
-    const VertexBufferLayout& layout,
-    std::initializer_list<std::string_view> used_semantics,
-    bool use_shader_input_locations
-) {
-    SemanticLayoutCacheKey key;
-    key.layout = make_vertex_layout_signature(layout);
-    key.use_shader_input_locations = use_shader_input_locations;
-    key.semantics.reserve(used_semantics.size());
-    for (std::string_view semantic : used_semantics) {
-        key.semantics.emplace_back(semantic);
-    }
-    return key;
 }
 
 const tc_submesh* validate_submesh_range(tc_mesh* mesh, size_t submesh_index) {
@@ -288,7 +171,7 @@ bool draw_tc_submesh_binding(
     RenderContext2& ctx,
     const Tgfx2MeshBinding& binding,
     const tc_submesh& submesh,
-    const VertexBufferLayout* layout_override
+    const VertexLayoutDesc* layout_override
 ) {
     if (layout_override) {
         ctx.set_vertex_layout(*layout_override);
@@ -324,21 +207,26 @@ std::string_view standard_vertex_semantic_for_location(uint32_t location) {
     }
 }
 
-std::string_view vertex_attribute_semantic(const VertexAttribute& attr) {
-    if (!attr.semantic.empty()) {
+std::string_view vertex_attribute_semantic(const VertexAttributeDesc& attr) {
+    if (attr.semantic && attr.semantic[0] != '\0') {
         return attr.semantic;
     }
     return standard_vertex_semantic_for_location(attr.location);
 }
 
 bool vertex_layout_has_semantic(
-    const VertexBufferLayout& layout,
+    const VertexLayoutDesc& layout,
     std::string_view semantic
 ) {
-    return std::any_of(layout.attributes.begin(), layout.attributes.end(),
-        [semantic](const VertexAttribute& attr) {
-            return vertex_attribute_semantic(attr) == semantic;
-        });
+    const uint32_t attribute_count = std::min(
+        layout.attribute_count,
+        TGFX2_VERTEX_ATTRIBUTE_MAX);
+    for (uint32_t i = 0; i < attribute_count; ++i) {
+        if (vertex_attribute_semantic(layout.attributes[i]) == semantic) {
+            return true;
+        }
+    }
+    return false;
 }
 
 Tgfx2MeshBinding wrap_mesh_as_tgfx2(IRenderDevice& device, tc_mesh* mesh) {
@@ -370,19 +258,28 @@ void release_mesh_binding(IRenderDevice& device, const Tgfx2MeshBinding& binding
     }
 }
 
-VertexBufferLayout filter_vertex_layout_to_locations(
-    const VertexBufferLayout& layout,
+VertexLayoutDesc filter_vertex_layout_to_locations(
+    const VertexLayoutDesc& layout,
     std::initializer_list<uint32_t> used_locations,
     bool use_shader_input_locations
 ) {
-    VertexBufferLayout out;
+    VertexLayoutDesc out;
     out.stride = layout.stride;
     out.per_instance = layout.per_instance;
     out.use_shader_input_locations = use_shader_input_locations;
-    for (const auto& attr : layout.attributes) {
+    const uint32_t attribute_count = std::min(
+        layout.attribute_count,
+        TGFX2_VERTEX_ATTRIBUTE_MAX);
+    for (uint32_t i = 0; i < attribute_count; ++i) {
+        const VertexAttributeDesc& attr = layout.attributes[i];
         for (uint32_t loc : used_locations) {
             if (attr.location == loc) {
-                out.attributes.push_back(attr);
+                if (out.attribute_count >= TGFX2_VERTEX_ATTRIBUTE_MAX) {
+                    tc::Log::error(
+                        "filter_vertex_layout_to_locations: output attribute overflow");
+                    return out;
+                }
+                out.attributes[out.attribute_count++] = attr;
                 break;
             }
         }
@@ -390,39 +287,27 @@ VertexBufferLayout filter_vertex_layout_to_locations(
     return out;
 }
 
-VertexBufferLayout filter_vertex_layout_to_semantics(
-    const VertexBufferLayout& layout,
+VertexLayoutDesc filter_vertex_layout_to_semantics(
+    const VertexLayoutDesc& layout,
     std::initializer_list<std::string_view> used_semantics,
     bool use_shader_input_locations
 ) {
-    static std::mutex cache_mutex;
-    static std::unordered_map<
-        SemanticLayoutCacheKey,
-        VertexBufferLayout,
-        SemanticLayoutCacheKeyHash
-    > cache;
-
-    SemanticLayoutCacheKey key =
-        make_semantic_layout_cache_key(
-            layout,
-            used_semantics,
-            use_shader_input_locations);
-
-    {
-        std::lock_guard<std::mutex> lock(cache_mutex);
-        auto it = cache.find(key);
-        if (it != cache.end()) {
-            return it->second;
-        }
-    }
-
-    VertexBufferLayout out;
+    VertexLayoutDesc out;
     out.stride = layout.stride;
     out.per_instance = layout.per_instance;
     out.use_shader_input_locations = use_shader_input_locations;
-    for (const auto& attr : layout.attributes) {
+    const uint32_t attribute_count = std::min(
+        layout.attribute_count,
+        TGFX2_VERTEX_ATTRIBUTE_MAX);
+    for (uint32_t i = 0; i < attribute_count; ++i) {
+        const VertexAttributeDesc& attr = layout.attributes[i];
         if (semantic_in_list(vertex_attribute_semantic(attr), used_semantics)) {
-            out.attributes.push_back(attr);
+            if (out.attribute_count >= TGFX2_VERTEX_ATTRIBUTE_MAX) {
+                tc::Log::error(
+                    "filter_vertex_layout_to_semantics: output attribute overflow");
+                return out;
+            }
+            out.attributes[out.attribute_count++] = attr;
         }
     }
     for (std::string_view semantic : used_semantics) {
@@ -433,12 +318,7 @@ VertexBufferLayout filter_vertex_layout_to_semantics(
                 semantic.data());
         }
     }
-    {
-        std::lock_guard<std::mutex> lock(cache_mutex);
-        auto [it, inserted] = cache.emplace(std::move(key), out);
-        (void)inserted;
-        return it->second;
-    }
+    return out;
 }
 
 bool draw_tc_mesh(
@@ -449,11 +329,26 @@ bool draw_tc_mesh(
     Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
     if (binding.index_count == 0) return false;
 
-    if (layout_override) {
-        ctx.set_vertex_layout(*layout_override);
-    } else {
-        ctx.set_vertex_layout(binding.layout_desc);
-    }
+    const VertexLayoutDesc override_desc =
+        layout_override ? make_vertex_layout_desc(*layout_override) : VertexLayoutDesc{};
+    ctx.set_vertex_layout(layout_override ? override_desc : binding.layout_desc);
+    ctx.set_topology(binding.topology);
+    ctx.draw(binding.vertex_buffer, binding.index_buffer,
+             binding.index_count, binding.index_type);
+
+    release_mesh_binding(ctx.device(), binding);
+    return true;
+}
+
+bool draw_tc_mesh(
+    RenderContext2& ctx,
+    tc_mesh* mesh,
+    const VertexLayoutDesc* layout_override
+) {
+    Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
+    if (binding.index_count == 0) return false;
+
+    ctx.set_vertex_layout(layout_override ? *layout_override : binding.layout_desc);
     ctx.set_topology(binding.topology);
     ctx.draw(binding.vertex_buffer, binding.index_buffer,
              binding.index_count, binding.index_type);
@@ -467,6 +362,31 @@ bool draw_tc_submesh(
     tc_mesh* mesh,
     size_t submesh_index,
     const VertexBufferLayout* layout_override
+) {
+    const tc_submesh* submesh = validate_submesh_range(mesh, submesh_index);
+    if (!submesh) {
+        return false;
+    }
+
+    Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
+    if (binding.index_count == 0) return false;
+
+    const VertexLayoutDesc override_desc =
+        layout_override ? make_vertex_layout_desc(*layout_override) : VertexLayoutDesc{};
+    draw_tc_submesh_binding(
+        ctx,
+        binding,
+        *submesh,
+        layout_override ? &override_desc : nullptr);
+    release_mesh_binding(ctx.device(), binding);
+    return true;
+}
+
+bool draw_tc_submesh(
+    RenderContext2& ctx,
+    tc_mesh* mesh,
+    size_t submesh_index,
+    const VertexLayoutDesc* layout_override
 ) {
     const tc_submesh* submesh = validate_submesh_range(mesh, submesh_index);
     if (!submesh) {
@@ -490,9 +410,9 @@ bool draw_tc_mesh(
     Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
     if (binding.index_count == 0) return false;
 
-    VertexBufferLayout filtered =
+    VertexLayoutDesc filtered =
         filter_vertex_layout_to_locations(
-            binding.layout,
+            binding.layout_desc,
             used_locations,
             use_shader_input_locations);
     ctx.set_vertex_layout(filtered);
@@ -519,9 +439,9 @@ bool draw_tc_submesh(
     Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
     if (binding.index_count == 0) return false;
 
-    VertexBufferLayout filtered =
+    VertexLayoutDesc filtered =
         filter_vertex_layout_to_locations(
-            binding.layout,
+            binding.layout_desc,
             used_locations,
             use_shader_input_locations);
     draw_tc_submesh_binding(ctx, binding, *submesh, &filtered);
@@ -538,9 +458,9 @@ bool draw_tc_mesh(
     Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
     if (binding.index_count == 0) return false;
 
-    VertexBufferLayout filtered =
+    VertexLayoutDesc filtered =
         filter_vertex_layout_to_semantics(
-            binding.layout,
+            binding.layout_desc,
             used_semantics,
             use_shader_input_locations);
     ctx.set_vertex_layout(filtered);
@@ -567,9 +487,9 @@ bool draw_tc_submesh(
     Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
     if (binding.index_count == 0) return false;
 
-    VertexBufferLayout filtered =
+    VertexLayoutDesc filtered =
         filter_vertex_layout_to_semantics(
-            binding.layout,
+            binding.layout_desc,
             used_semantics,
             use_shader_input_locations);
     draw_tc_submesh_binding(ctx, binding, *submesh, &filtered);

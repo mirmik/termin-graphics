@@ -65,14 +65,15 @@ public:
 } // namespace
 
 TEST_CASE("filter vertex layout by semantic names") {
-    tgfx::VertexBufferLayout layout;
+    tgfx::VertexLayoutDesc layout;
     layout.stride = 80;
-    layout.attributes.push_back({0, tgfx::VertexFormat::Float3, 0, "position"});
-    layout.attributes.push_back({1, tgfx::VertexFormat::Float3, 12, "normal"});
-    layout.attributes.push_back({4, tgfx::VertexFormat::Float4, 48, "joints"});
-    layout.attributes.push_back({5, tgfx::VertexFormat::Float4, 64, "weights"});
+    layout.attribute_count = 4;
+    layout.attributes[0] = {0, tgfx::VertexFormat::Float3, 0, tgfx::intern_vertex_semantic("position")};
+    layout.attributes[1] = {1, tgfx::VertexFormat::Float3, 12, tgfx::intern_vertex_semantic("normal")};
+    layout.attributes[2] = {4, tgfx::VertexFormat::Float4, 48, tgfx::intern_vertex_semantic("joints")};
+    layout.attributes[3] = {5, tgfx::VertexFormat::Float4, 64, tgfx::intern_vertex_semantic("weights")};
 
-    tgfx::VertexBufferLayout filtered =
+    tgfx::VertexLayoutDesc filtered =
         tgfx::filter_vertex_layout_to_semantics(
             layout,
             {"position", "joints", "weights"},
@@ -80,39 +81,45 @@ TEST_CASE("filter vertex layout by semantic names") {
 
     CHECK_EQ(filtered.stride, 80u);
     CHECK(filtered.use_shader_input_locations);
-    REQUIRE_EQ(filtered.attributes.size(), 3u);
-    CHECK_EQ(filtered.attributes[0].semantic, "position");
-    CHECK_EQ(filtered.attributes[1].semantic, "joints");
-    CHECK_EQ(filtered.attributes[2].semantic, "weights");
+    REQUIRE_EQ(filtered.attribute_count, 3u);
+    CHECK_EQ(filtered.attributes[0].semantic, tgfx::intern_vertex_semantic("position"));
+    CHECK_EQ(filtered.attributes[1].semantic, tgfx::intern_vertex_semantic("joints"));
+    CHECK_EQ(filtered.attributes[2].semantic, tgfx::intern_vertex_semantic("weights"));
 }
 
 TEST_CASE("semantic filter falls back to standard locations") {
-    tgfx::VertexBufferLayout layout;
+    tgfx::VertexLayoutDesc layout;
     layout.stride = 24;
-    layout.attributes.push_back({0, tgfx::VertexFormat::Float3, 0});
-    layout.attributes.push_back({1, tgfx::VertexFormat::Float3, 12});
+    layout.attribute_count = 2;
+    layout.attributes[0] = {0, tgfx::VertexFormat::Float3, 0, nullptr};
+    layout.attributes[1] = {1, tgfx::VertexFormat::Float3, 12, nullptr};
 
-    tgfx::VertexBufferLayout filtered =
+    tgfx::VertexLayoutDesc filtered =
         tgfx::filter_vertex_layout_to_semantics(
             layout,
             {"position", "normal"});
 
-    REQUIRE_EQ(filtered.attributes.size(), 2u);
+    REQUIRE_EQ(filtered.attribute_count, 2u);
     CHECK_EQ(filtered.attributes[0].location, 0u);
     CHECK_EQ(filtered.attributes[1].location, 1u);
 }
 
 TEST_CASE("vertex semantic helpers prefer explicit names over standard locations") {
-    tgfx::VertexAttribute position{0, tgfx::VertexFormat::Float3, 0};
-    tgfx::VertexAttribute custom{0, tgfx::VertexFormat::Float3, 0, "custom_position"};
+    tgfx::VertexAttributeDesc position{0, tgfx::VertexFormat::Float3, 0, nullptr};
+    tgfx::VertexAttributeDesc custom{
+        0,
+        tgfx::VertexFormat::Float3,
+        0,
+        tgfx::intern_vertex_semantic("custom_position")};
 
     CHECK_EQ(tgfx::standard_vertex_semantic_for_location(0), "position");
     CHECK_EQ(tgfx::vertex_attribute_semantic(position), "position");
     CHECK_EQ(tgfx::vertex_attribute_semantic(custom), "custom_position");
 
-    tgfx::VertexBufferLayout layout;
-    layout.attributes.push_back(position);
-    layout.attributes.push_back({2, tgfx::VertexFormat::Float2, 12});
+    tgfx::VertexLayoutDesc layout;
+    layout.attribute_count = 2;
+    layout.attributes[0] = position;
+    layout.attributes[1] = {2, tgfx::VertexFormat::Float2, 12, nullptr};
 
     CHECK(tgfx::vertex_layout_has_semantic(layout, "position"));
     CHECK(tgfx::vertex_layout_has_semantic(layout, "uv"));
@@ -135,7 +142,6 @@ TEST_CASE("wrap mesh keeps canonical layout without per-draw augmentation") {
     CHECK(binding.vertex_buffer);
     CHECK(binding.index_buffer);
     CHECK_FALSE(binding.destroy_vertex_buffer);
-    CHECK_EQ(binding.layout.stride, mesh.layout.stride);
     CHECK_EQ(binding.layout_desc.stride, mesh.layout.stride);
     REQUIRE_EQ(binding.layout_desc.attribute_count, 3u);
     CHECK_EQ(binding.layout_desc.attributes[0].semantic,
@@ -144,8 +150,8 @@ TEST_CASE("wrap mesh keeps canonical layout without per-draw augmentation") {
              tgfx::intern_vertex_semantic("normal"));
     CHECK_EQ(binding.layout_desc.attributes[2].semantic,
              tgfx::intern_vertex_semantic("uv"));
-    CHECK(tgfx::vertex_layout_has_semantic(binding.layout, "position"));
-    CHECK(tgfx::vertex_layout_has_semantic(binding.layout, "normal"));
-    CHECK(tgfx::vertex_layout_has_semantic(binding.layout, "uv"));
-    CHECK_FALSE(tgfx::vertex_layout_has_semantic(binding.layout, "tangent"));
+    CHECK(tgfx::vertex_layout_has_semantic(binding.layout_desc, "position"));
+    CHECK(tgfx::vertex_layout_has_semantic(binding.layout_desc, "normal"));
+    CHECK(tgfx::vertex_layout_has_semantic(binding.layout_desc, "uv"));
+    CHECK_FALSE(tgfx::vertex_layout_has_semantic(binding.layout_desc, "tangent"));
 }

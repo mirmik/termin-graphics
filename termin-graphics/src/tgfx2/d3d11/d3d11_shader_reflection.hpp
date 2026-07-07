@@ -23,7 +23,6 @@ struct D3D11SignatureParam {
     D3D_NAME system_value = D3D_NAME_UNDEFINED;
 };
 
-D3D11InputSemantic semantic_for_attribute(const VertexAttribute& attr);
 D3D11InputSemantic semantic_for_attribute(const VertexAttributeDesc& attr);
 std::vector<D3D11InputSemantic> reflect_d3d11_vertex_inputs(const D3D11ShaderModule& vs);
 std::vector<D3D11SignatureParam> reflect_d3d11_signature(
