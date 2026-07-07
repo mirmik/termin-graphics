@@ -384,27 +384,6 @@ bool collect_drawable_render_items(
     return tc_component_collect_render_items(component, &context, &sink);
 }
 
-bool collect_drawable_render_items(
-    tc_component* component,
-    const tc_render_item_collect_context& context,
-    std::vector<tc_render_item>& out_items)
-{
-    RenderItemCollection collection;
-    if (!collect_drawable_render_items(component, context, collection)) {
-        return false;
-    }
-
-    for (const tc_render_item& item : collection.items) {
-        if (item.kind == TC_RENDER_ITEM_KIND_LINE_BATCH) {
-            tc::Log::error(
-                "[RenderItemCollector] vector collection cannot retain LineBatch payload ownership; use RenderItemCollection");
-            return false;
-        }
-    }
-    out_items.insert(out_items.end(), collection.items.begin(), collection.items.end());
-    return true;
-}
-
 void Drawable::_cb_collect_shader_usages(
     tc_component* c,
     const char* phase_mark,

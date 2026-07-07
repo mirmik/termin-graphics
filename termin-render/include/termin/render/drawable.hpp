@@ -323,11 +323,6 @@ RENDER_API bool collect_drawable_render_items(
     const tc_render_item_collect_context& context,
     RenderItemCollection& out_collection);
 
-RENDER_API bool collect_drawable_render_items(
-    tc_component* component,
-    const tc_render_item_collect_context& context,
-    std::vector<tc_render_item>& out_items);
-
 struct PhaseDrawCall {
     Entity entity;
     tc_component* component = nullptr;
