@@ -4,6 +4,8 @@
 
 #include <tcbase/tc_log.hpp>
 
+#include <tgfx2/i_render_device.hpp>
+
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -42,6 +44,72 @@ bool find_registered_render_item_draw_encoder(
     }
     out_encoder = it->second;
     return true;
+}
+
+bool request_has_shader_handle(const RenderItemDrawSubmitRequest& request)
+{
+    return !tc_shader_handle_is_invalid(request.shader_handle);
+}
+
+bool resolve_request_shader(
+    tgfx::RenderContext2& ctx,
+    const RenderItemDrawSubmitRequest& request,
+    const char* pass_name,
+    const char* entity_name,
+    MaterialPipelineShaderBinding& out_binding,
+    const tc_shader*& out_shader)
+{
+    out_binding = {};
+    out_shader = nullptr;
+
+    if (!request_has_shader_handle(request)) {
+        out_shader = request.shader;
+        return out_shader != nullptr;
+    }
+
+    if (!request.device) {
+        tc::Log::error(
+            "[%s] skip RenderItem draw for '%s': shader_handle was provided without render device",
+            pass_name,
+            entity_name);
+        return false;
+    }
+
+    if (!ensure_material_pipeline_shader(
+            ctx,
+            *request.device,
+            request.shader_handle,
+            pass_name,
+            out_binding)) {
+        return false;
+    }
+    out_shader = out_binding.shader;
+    return out_shader != nullptr;
+}
+
+bool prepare_request_material_resources(
+    tgfx::RenderContext2& ctx,
+    const RenderItemDrawSubmitRequest& request,
+    const tc_shader* shader,
+    const char* pass_name,
+    const char* entity_name)
+{
+    if (request.material_resources == nullptr) {
+        return true;
+    }
+    if (!request.device) {
+        tc::Log::error(
+            "[%s] skip RenderItem draw for '%s': material resources were provided without render device",
+            pass_name,
+            entity_name);
+        return false;
+    }
+    return prepare_material_pipeline_resources(
+        ctx,
+        *request.device,
+        shader,
+        request.material_phase,
+        *request.material_resources);
 }
 
 } // namespace
@@ -117,8 +185,26 @@ bool submit_render_item_draw(
 
     switch (item.kind) {
         case TC_RENDER_ITEM_KIND_MESH: {
+            MaterialPipelineShaderBinding binding{};
+            const tc_shader* shader = nullptr;
+            if (!resolve_request_shader(ctx, request, pass_name, entity_name, binding, shader)) {
+                tc::Log::error(
+                    "[%s] skip RenderItem mesh draw for '%s': request has no shader",
+                    pass_name,
+                    entity_name);
+                return false;
+            }
+            if (!prepare_request_material_resources(
+                    ctx,
+                    request,
+                    shader,
+                    pass_name,
+                    entity_name)) {
+                return false;
+            }
+
             MeshRenderItemEncodeRequest mesh_request{};
-            mesh_request.shader = request.shader;
+            mesh_request.shader = shader;
             mesh_request.vertex_input = request.mesh_vertex_input;
             mesh_request.debug_pass_name = pass_name;
             mesh_request.debug_entity_name = entity_name;

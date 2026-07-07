@@ -13,6 +13,7 @@ extern "C" {
 struct tc_material_phase;
 
 namespace tgfx {
+class IRenderDevice;
 class RenderContext2;
 }
 
@@ -22,12 +23,15 @@ struct RenderContext;
 
 struct RenderItemDrawSubmitRequest {
     const tc_shader* shader = nullptr;
+    tc_shader_handle shader_handle = tc_shader_handle_invalid();
+    tgfx::IRenderDevice* device = nullptr;
     MaterialMeshVertexInput mesh_vertex_input = MaterialMeshVertexInput::FullMaterial;
     const RenderContext* draw_context = nullptr;
     tc_material_phase* material_phase = nullptr;
     const char* phase_mark = nullptr;
     const char* debug_pass_name = nullptr;
     const char* debug_entity_name = nullptr;
+    const MaterialPipelineResourceContext* material_resources = nullptr;
     std::function<void(tgfx::RenderContext2&, const tc_shader*, tc_material_phase*)>
         prepare_material_resources;
 };
