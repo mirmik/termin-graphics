@@ -102,111 +102,17 @@ bool Drawable::collect_render_items(
     const tc_render_item_collect_context& context,
     tc_render_item_sink& sink
 ) {
+    (void)context;
     if (!sink.emit) {
         tc::Log::error("[Drawable] cannot emit render items: sink callback is null");
         return false;
     }
-    if (!context.phase_mark || context.phase_mark[0] == '\0') {
-        tc::Log::error("[Drawable] cannot emit render items: phase_mark is empty");
-        return false;
-    }
-
     auto* component = dynamic_cast<Component*>(this);
-    if (!component) {
-        return true;
-    }
-
-    RenderContext render_context;
-    render_context.phase = context.phase_mark;
-    render_context.layer_mask = context.layer_mask;
-    render_context.render_category_mask = context.render_category_mask;
-    if (context.pass_contract) {
-        render_context.pass_contract =
-            *static_cast<const MaterialPipelinePassContract*>(context.pass_contract);
-    }
-
-    const std::string phase_mark(context.phase_mark);
-    std::vector<GeometryDrawCall> geometry_draws = get_geometry_draws(render_context, &phase_mark);
-    std::vector<int> geometry_ids;
-    geometry_ids.reserve(geometry_draws.size());
-    for (const GeometryDrawCall& draw : geometry_draws) {
-        if (std::find(geometry_ids.begin(), geometry_ids.end(), draw.geometry_id) ==
-            geometry_ids.end()) {
-            geometry_ids.push_back(draw.geometry_id);
-        }
-    }
-    if (geometry_ids.empty()) {
-        MeshDrawGeometry mesh_geometry{};
-        if (resolve_mesh_geometry(phase_mark, 0, mesh_geometry)) {
-            geometry_ids.push_back(0);
-        }
-    }
-    if (geometry_ids.empty()) {
-        return true;
-    }
-
-    Entity owner = component->entity();
-    Mat44f model = owner.valid() ? get_model_matrix(owner) : Mat44f::identity();
-
-    for (int geometry_id : geometry_ids) {
-        MeshDrawGeometry mesh_geometry{};
-        if (!resolve_mesh_geometry(phase_mark, geometry_id, mesh_geometry)) {
-            continue;
-        }
-        if (!mesh_geometry.mesh) {
-            tc::Log::error(
-                "[Drawable] cannot emit mesh RenderItem: geometry %d resolved null mesh",
-                geometry_id);
-            continue;
-        }
-
-        tc_mesh_handle mesh_handle = tc_mesh_find(mesh_geometry.mesh->header.uuid);
-        if (tc_mesh_handle_is_invalid(mesh_handle)) {
-            tc::Log::error(
-                "[Drawable] cannot emit mesh RenderItem: geometry %d mesh has no stable registry handle",
-                geometry_id);
-            continue;
-        }
-
-        const GeometryDrawCall* selected_draw = nullptr;
-        for (const GeometryDrawCall& draw : geometry_draws) {
-            if (draw.geometry_id == geometry_id) {
-                selected_draw = &draw;
-                break;
-            }
-        }
-
-        tc_material_phase* phase = selected_draw ? selected_draw->resolve_phase() : nullptr;
-        const bool emit_without_material_phase =
-            !phase &&
-            ((context.flags & TC_RENDER_ITEM_COLLECT_FLAG_ALLOW_MISSING_MATERIAL_PHASE) != 0u);
-        if (!phase && !emit_without_material_phase) {
-            continue;
-        }
-
-        tc_render_item item{};
-        item.kind = TC_RENDER_ITEM_KIND_MESH;
-        item.flags = TC_RENDER_ITEM_FLAG_HAS_MODEL_MATRIX;
-        item.component = component->tc_component_ptr();
-        item.geometry_id = geometry_id;
-        item.material_phase = phase;
-        item.material = tc_material_handle_invalid();
-        item.material_phase_index = SIZE_MAX;
-        if (phase) {
-            item.flags |= TC_RENDER_ITEM_FLAG_HAS_MATERIAL_PHASE;
-            tc_material_find_phase_ref(phase, &item.material, &item.material_phase_index);
-        }
-        std::memcpy(item.model_matrix, model.data, sizeof(float) * 16);
-        item.payload.mesh.mesh = mesh_geometry.mesh;
-        item.payload.mesh.mesh_handle = mesh_handle;
-        item.payload.mesh.submesh_index = mesh_geometry.submesh_index;
-
-        if (!sink.emit(&item, sink.user_data)) {
-            return false;
-        }
-    }
-
-    return true;
+    const char* type_name = component ? tc_component_type_name(component->tc_component_ptr()) : "<non-component>";
+    tc::Log::error(
+        "[Drawable] component '%s' does not implement collect_render_items",
+        type_name ? type_name : "<unknown>");
+    return false;
 }
 
 namespace {

@@ -221,13 +221,6 @@ if(TERMIN_RENDER_BUILD_TESTS)
     target_link_libraries(termin_render_drawable_test PRIVATE termin_render)
     add_test(NAME termin_render_drawable_test COMMAND termin_render_drawable_test)
 
-    add_executable(termin_render_drawable_phase_ref_test tests/test_drawable_phase_ref.cpp)
-    target_include_directories(termin_render_drawable_phase_ref_test PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
-    )
-    target_link_libraries(termin_render_drawable_phase_ref_test PRIVATE termin_render)
-    add_test(NAME termin_render_drawable_phase_ref_test COMMAND termin_render_drawable_phase_ref_test)
-
     add_executable(termin_render_material_pipeline_contracts_test tests/test_material_pipeline_contracts.cpp)
     target_include_directories(termin_render_material_pipeline_contracts_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
@@ -279,7 +272,6 @@ if(TERMIN_RENDER_BUILD_TESTS)
 
     set_target_properties(
         termin_render_drawable_test
-        termin_render_drawable_phase_ref_test
         termin_render_material_pipeline_contracts_test
         termin_render_material_ubo_apply_test
         termin_render_vertex_transform_contracts_test

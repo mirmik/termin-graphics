@@ -32,46 +32,6 @@ namespace tgfx { class RenderContext2; }
 
 namespace termin {
 
-struct GeometryDrawCall {
-    tc_material_phase* phase = nullptr;
-    tc_material_handle material = tc_material_handle_invalid();
-    size_t phase_index = SIZE_MAX;
-    int geometry_id = 0;
-
-    GeometryDrawCall() = default;
-
-    GeometryDrawCall(tc_material_phase* p, int gid = 0)
-        : phase(p), geometry_id(gid) {
-        bind_phase_ref(p);
-    }
-
-    void bind_phase_ref(tc_material_phase* p) {
-        phase = p;
-        material = tc_material_handle_invalid();
-        phase_index = SIZE_MAX;
-        tc_material_find_phase_ref(p, &material, &phase_index);
-    }
-
-    bool has_stable_phase_ref() const {
-        return !tc_material_handle_is_invalid(material) && phase_index != SIZE_MAX;
-    }
-
-    tc_material_phase* resolve_phase() const {
-        if (has_stable_phase_ref()) {
-            tc_material* mat = tc_material_get(material);
-            if (mat && phase_index < mat->phase_count) {
-                return &mat->phases[phase_index];
-            }
-        }
-        return phase;
-    }
-};
-
-struct MeshDrawGeometry {
-    tc_mesh* mesh = nullptr;
-    size_t submesh_index = 0;
-};
-
 struct ShaderOverrideContext {
     // Drawable-facing representation/material routing label. This selects
     // geometry/material participation only; render passes must not rely on it
@@ -92,11 +52,6 @@ public:
     virtual ~Drawable() = default;
 
     virtual std::set<std::string> get_phase_marks() const = 0;
-    virtual void draw_geometry(const RenderContext& context, int geometry_id = 0) = 0;
-    virtual std::vector<GeometryDrawCall> get_geometry_draws(
-        const RenderContext& context,
-        const std::string* phase_mark = nullptr
-    ) = 0;
 
     virtual TcShader override_shader(
         const std::string& phase_mark,
@@ -147,38 +102,6 @@ public:
         const tc_render_item_collect_context& context,
         tc_render_item_sink& sink
     );
-
-    // Legacy C++ mesh helper used by Drawable::collect_render_items() to
-    // synthesize mesh RenderItems for renderers that have not overridden
-    // collect_render_items() yet.
-    //
-    // The C drawable protocol no longer exposes this as a pass-facing draw
-    // route; new renderers should submit RenderItems directly.
-    virtual tc_mesh* get_mesh_for_phase(
-        const std::string& phase_mark,
-        int geometry_id
-    ) const {
-        (void)phase_mark;
-        (void)geometry_id;
-        return nullptr;
-    }
-
-    virtual bool resolve_mesh_geometry(
-        const std::string& phase_mark,
-        int geometry_id,
-        MeshDrawGeometry& out
-    ) const {
-        if (geometry_id != 0) {
-            return false;
-        }
-        tc_mesh* mesh = get_mesh_for_phase(phase_mark, geometry_id);
-        if (!mesh) {
-            return false;
-        }
-        out.mesh = mesh;
-        out.submesh_index = 0;
-        return true;
-    }
 
     // Upload any per-draw uniforms that aren't derivable from the
     // material UBO / push-constant path. Called by tgfx2 pass draw

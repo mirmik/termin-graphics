@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from typing import Protocol, Set, runtime_checkable
 
 from termin.render._render_native import (
-    GeometryDrawCall,
     RENDER_ITEM_COLLECT_ALLOW_MISSING_MATERIAL_PHASE,
     RenderItem,
 )
@@ -65,7 +64,6 @@ class Drawable(Protocol):
 __all__ = [
     "DEFAULT_GEOMETRY_ID",
     "Drawable",
-    "GeometryDrawCall",
     "RenderItem",
     "RenderItemCollectContext",
 ]

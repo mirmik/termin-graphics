@@ -4,7 +4,6 @@ from termin_nanobind.runtime import preload_sdk_libs
 preload_sdk_libs("termin_render")
 
 from termin.render._render_native import (
-    GeometryDrawCall,
     PhaseDrawCall,
     RENDER_CATEGORY_ALL,
     RENDER_CATEGORY_COLLIDERS,
@@ -41,7 +40,6 @@ from termin.render.viewport_config import (
 __all__ = [
     "DEFAULT_GEOMETRY_ID",
     "Drawable",
-    "GeometryDrawCall",
     "PhaseDrawCall",
     "RENDER_CATEGORY_ALL",
     "RENDER_CATEGORY_COLLIDERS",
