@@ -81,6 +81,7 @@ set(TERMIN_RENDER_SOURCES
     src/render_pipeline.cpp
     src/render_engine.cpp
     src/render_item_mesh.cpp
+    src/render_item_submission.cpp
     src/shader_abi.cpp
     src/shader_usage_collector.cpp
     src/shader_resource_apply.cpp
@@ -139,7 +140,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/resource_aliases.hpp
     include/termin/render/render_pipeline.hpp
     include/termin/render/render_engine.hpp
-    include/termin/render/render_item_mesh.hpp
+    include/termin/render/render_item_submission.hpp
     include/termin/render/scene_pipeline_template.hpp
     include/termin/render/shader_abi.hpp
     include/termin/render/shader_resource_apply.hpp

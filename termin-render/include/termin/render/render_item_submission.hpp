@@ -14,16 +14,16 @@ class RenderContext2;
 
 namespace termin {
 
-struct MeshRenderItemEncodeRequest {
+struct RenderItemDrawSubmitRequest {
     const tc_shader* shader = nullptr;
-    MaterialMeshVertexInput vertex_input = MaterialMeshVertexInput::FullMaterial;
+    MaterialMeshVertexInput mesh_vertex_input = MaterialMeshVertexInput::FullMaterial;
     const char* debug_pass_name = nullptr;
     const char* debug_entity_name = nullptr;
 };
 
-RENDER_API bool encode_mesh_render_item_draw(
+RENDER_API bool submit_render_item_draw(
     tgfx::RenderContext2& ctx,
     const tc_render_item& item,
-    const MeshRenderItemEncodeRequest& request);
+    const RenderItemDrawSubmitRequest& request);
 
 } // namespace termin
