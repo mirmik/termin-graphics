@@ -421,39 +421,35 @@ void ImmediateRenderer::cone_solid(
 }
 
 void ImmediateRenderer::torus_solid(
-    const Vec3& center,
-    const Vec3& axis,
-    double major_radius,
-    double minor_radius,
+    const TorusSolidSpec& spec,
     const Color4& color,
-    int major_segments,
-    int minor_segments,
     bool depth_test
 ) {
-    Vec3 ax = axis.normalized();
+    Vec3 ax = spec.axis.normalized();
     auto [tangent, bitangent] = _build_basis(ax);
 
     // Generate torus vertices
-    std::vector<std::vector<Vec3>> vertices(major_segments);
+    std::vector<std::vector<Vec3>> vertices(spec.major_segments);
 
-    for (int i = 0; i < major_segments; ++i) {
-        double theta = 2.0 * M_PI * i / major_segments;
-        Vec3 ring_center = center + (tangent * std::cos(theta) + bitangent * std::sin(theta)) * major_radius;
+    for (int i = 0; i < spec.major_segments; ++i) {
+        double theta = 2.0 * M_PI * i / spec.major_segments;
+        Vec3 ring_center = spec.center +
+            (tangent * std::cos(theta) + bitangent * std::sin(theta)) * spec.major_radius;
         Vec3 radial = tangent * std::cos(theta) + bitangent * std::sin(theta);
 
-        vertices[i].reserve(minor_segments);
-        for (int j = 0; j < minor_segments; ++j) {
-            double phi = 2.0 * M_PI * j / minor_segments;
-            Vec3 point = ring_center + (radial * std::cos(phi) + ax * std::sin(phi)) * minor_radius;
+        vertices[i].reserve(spec.minor_segments);
+        for (int j = 0; j < spec.minor_segments; ++j) {
+            double phi = 2.0 * M_PI * j / spec.minor_segments;
+            Vec3 point = ring_center + (radial * std::cos(phi) + ax * std::sin(phi)) * spec.minor_radius;
             vertices[i].push_back(point);
         }
     }
 
     // Generate triangles
-    for (int i = 0; i < major_segments; ++i) {
-        int i_next = (i + 1) % major_segments;
-        for (int j = 0; j < minor_segments; ++j) {
-            int j_next = (j + 1) % minor_segments;
+    for (int i = 0; i < spec.major_segments; ++i) {
+        int i_next = (i + 1) % spec.major_segments;
+        for (int j = 0; j < spec.minor_segments; ++j) {
+            int j_next = (j + 1) % spec.minor_segments;
             const Vec3& p00 = vertices[i][j];
             const Vec3& p10 = vertices[i_next][j];
             const Vec3& p01 = vertices[i][j_next];
@@ -465,30 +461,24 @@ void ImmediateRenderer::torus_solid(
 }
 
 void ImmediateRenderer::arrow_solid(
-    const Vec3& origin,
-    const Vec3& direction,
-    double length,
+    const ArrowSolidSpec& spec,
     const Color4& color,
-    double shaft_radius,
-    double head_radius,
-    double head_length_ratio,
-    int segments,
     bool depth_test
 ) {
-    double dir_len = direction.norm();
+    double dir_len = spec.direction.norm();
     if (dir_len < 1e-6) return;
-    Vec3 dir = direction / dir_len;
+    Vec3 dir = spec.direction / dir_len;
 
-    double head_length = length * head_length_ratio;
-    double shaft_length = length - head_length;
+    double head_length = spec.length * spec.head_length_ratio;
+    double shaft_length = spec.length - head_length;
 
-    Vec3 shaft_end = origin + dir * shaft_length;
-    Vec3 tip = origin + dir * length;
+    Vec3 shaft_end = spec.origin + dir * shaft_length;
+    Vec3 tip = spec.origin + dir * spec.length;
 
     // Shaft cylinder
-    cylinder_solid(origin, shaft_end, shaft_radius, color, segments, true, depth_test);
+    cylinder_solid(spec.origin, shaft_end, spec.shaft_radius, color, spec.segments, true, depth_test);
     // Head cone
-    cone_solid(shaft_end, tip, head_radius, color, segments, true, depth_test);
+    cone_solid(shaft_end, tip, spec.head_radius, color, spec.segments, true, depth_test);
 }
 
 // ============================================================
