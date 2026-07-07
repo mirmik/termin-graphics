@@ -15,48 +15,6 @@ bool Drawable::_cb_has_phase(tc_component* c, const char* phase_mark) {
     return drawable->has_phase(phase_mark ? phase_mark : "");
 }
 
-void Drawable::_cb_draw_geometry(tc_component* c, void* render_context, int geometry_id) {
-    if (!c) return;
-
-    RenderContext* ctx = static_cast<RenderContext*>(render_context);
-    if (!ctx) return;
-
-    Drawable* drawable = static_cast<Drawable*>(tc_component_get_drawable_userdata(c));
-    if (!drawable) return;
-
-    drawable->draw_geometry(*ctx, geometry_id);
-}
-
-void* Drawable::_cb_get_geometry_draws(tc_component* c, void* render_context, const char* phase_mark) {
-    if (!c) return nullptr;
-
-    Drawable* drawable = static_cast<Drawable*>(tc_component_get_drawable_userdata(c));
-    if (!drawable) return nullptr;
-
-    std::string phase = phase_mark ? phase_mark : "";
-    const std::string* phase_ptr = phase.empty() ? nullptr : &phase;
-    auto* ctx = static_cast<RenderContext*>(render_context);
-    if (!ctx) return nullptr;
-
-    drawable->_cached_geometry_draws = drawable->get_geometry_draws(*ctx, phase_ptr);
-    return &drawable->_cached_geometry_draws;
-}
-
-void* Drawable::_cb_get_geometry_ids_for_phase(tc_component* c, void* render_context, const char* phase_mark) {
-    if (!c) return nullptr;
-
-    Drawable* drawable = static_cast<Drawable*>(tc_component_get_drawable_userdata(c));
-    if (!drawable) return nullptr;
-
-    auto* ctx = static_cast<RenderContext*>(render_context);
-    if (!ctx) return nullptr;
-
-    drawable->_cached_geometry_ids = drawable->get_geometry_ids_for_phase(
-        *ctx,
-        phase_mark ? phase_mark : "");
-    return &drawable->_cached_geometry_ids;
-}
-
 tc_shader_handle Drawable::_cb_override_shader(
     tc_component* c,
     const char* phase_mark,
@@ -168,12 +126,25 @@ bool Drawable::collect_render_items(
     }
 
     const std::string phase_mark(context.phase_mark);
-    std::vector<int> geometry_ids = get_geometry_ids_for_phase(render_context, phase_mark);
+    std::vector<GeometryDrawCall> geometry_draws = get_geometry_draws(render_context, &phase_mark);
+    std::vector<int> geometry_ids;
+    geometry_ids.reserve(geometry_draws.size());
+    for (const GeometryDrawCall& draw : geometry_draws) {
+        if (std::find(geometry_ids.begin(), geometry_ids.end(), draw.geometry_id) ==
+            geometry_ids.end()) {
+            geometry_ids.push_back(draw.geometry_id);
+        }
+    }
+    if (geometry_ids.empty()) {
+        MeshDrawGeometry mesh_geometry{};
+        if (resolve_mesh_geometry(phase_mark, 0, mesh_geometry)) {
+            geometry_ids.push_back(0);
+        }
+    }
     if (geometry_ids.empty()) {
         return true;
     }
 
-    std::vector<GeometryDrawCall> geometry_draws = get_geometry_draws(render_context, &phase_mark);
     Entity owner = component->entity();
     Mat44f model = owner.valid() ? get_model_matrix(owner) : Mat44f::identity();
 
@@ -487,9 +458,6 @@ Mat44f Drawable::get_model_matrix(const Entity& entity) const {
 const tc_drawable_vtable& Drawable::cxx_drawable_vtable() {
     static const tc_drawable_vtable vtable = {
         &Drawable::_cb_has_phase,
-        &Drawable::_cb_draw_geometry,
-        &Drawable::_cb_get_geometry_draws,
-        &Drawable::_cb_get_geometry_ids_for_phase,
         &Drawable::_cb_override_shader,
         &Drawable::_cb_collect_shader_usages,
         &Drawable::_cb_collect_render_items

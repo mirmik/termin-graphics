@@ -54,61 +54,19 @@ static void append_shader_usage(TcShader shader, ShaderUsageCollectContext* ctx)
     }
 }
 
-static void emit_shader_usage(tc_component* self, tc_shader_handle shader_handle, void* user_data) {
-    (void)self;
-    auto* ctx = static_cast<ShaderUsageCollectContext*>(user_data);
-    append_shader_usage(TcShader(shader_handle), ctx);
-}
-
-static bool collect_drawable_shader_usages(tc_component* component, void* user_data) {
-    auto* ctx = static_cast<ShaderUsageCollectContext*>(user_data);
-    if (!ctx) {
-        return true;
-    }
-
-    RenderContext render_context;
-    render_context.layer_mask = UINT64_MAX;
-    render_context.render_category_mask = UINT64_MAX;
-    void* draws_ptr = tc_component_get_geometry_draws(component, &render_context, nullptr);
-    if (!draws_ptr) {
-        return true;
-    }
-
-    auto* geometry_draws = static_cast<std::vector<GeometryDrawCall>*>(draws_ptr);
-    for (const auto& draw : *geometry_draws) {
-        tc_material_phase* phase = draw.resolve_phase();
-        if (!phase) {
-            continue;
-        }
-
-        tc_component_collect_shader_usages(
-            component,
-            phase->phase_mark,
-            draw.geometry_id,
-            phase->shader,
-            emit_shader_usage,
-            ctx
-        );
-    }
-
-    return true;
-}
-
 } // namespace
 
 std::vector<TcShader> collect_scene_shader_usages(tc_scene_handle scene) {
     std::vector<TcShader> shaders;
-    std::unordered_set<std::string> seen;
 
     if (!tc_scene_handle_valid(scene)) {
         tc::Log::error("collect_scene_shader_usages: invalid scene handle");
         return shaders;
     }
 
-    ShaderUsageCollectContext ctx{&shaders, &seen, "collect_scene_shader_usages"};
-    // Build artifacts must cover potential scene usage, not just the current
-    // runtime-visible subset.
-    tc_scene_foreach_drawable(scene, collect_drawable_shader_usages, &ctx, TC_SCENE_FILTER_NONE, 0);
+    tc::Log::error(
+        "collect_scene_shader_usages: scene-only drawable shader collection was removed; "
+        "use collect_shader_usages_for_pipeline(scene, pipeline) so passes provide RenderItem phases and shader contracts");
     return shaders;
 }
 

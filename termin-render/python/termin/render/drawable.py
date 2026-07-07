@@ -1,33 +1,14 @@
 """
-Drawable protocol — унифицированный интерфейс для рендеринга.
+Drawable protocol — legacy Python-facing rendering notes.
 
-Позволяет ColorPass, ShadowPass, IdPass и другим пассам единообразно
-работать с разными типами рендереров (MeshRenderer, LineRenderer, IconRenderer и т.д.).
+Runtime passes collect RenderItems through the native drawable protocol.
+The old Python draw_geometry/get_geometry_draws shape is retained only as
+documentation for legacy Python components that have not been migrated yet.
 
 Разделение ответственности:
 - FramePass отвечает за привязку шейдера/материала
-- Drawable отвечает за отрисовку геометрии
-
-Использование:
-    # ColorPass спрашивает фазы у Drawable, применяет их и рисует
-    for drawable in drawables:
-        for draw_call in drawable.get_geometry_draws(context, phase_mark):
-            graphics.apply_render_state(draw_call.phase.state)
-            material.apply(model, view, projection)
-            drawable.draw_geometry(context, draw_call.geometry_id)
-
-    # ShadowPass использует свой шейдер
-    for drawable in drawables:
-        if "shadow" in drawable.phase_marks:
-            shadow_shader.use()
-            # ... setup uniforms ...
-            drawable.draw_geometry(context)
-
-    # IdPass использует свой шейдер с pick_id
-    for drawable in drawables:
-        id_shader.use()
-        id_shader.set_uniform("u_pick_color", encode_pick_id(entity.pick_id))
-        drawable.draw_geometry(context)
+- Drawable/renderer submits RenderItems
+- RenderItem encoders own backend-specific draw details
 """
 
 from __future__ import annotations
@@ -47,7 +28,10 @@ DEFAULT_GEOMETRY_ID = 0
 @runtime_checkable
 class Drawable(Protocol):
     """
-    Протокол для компонентов, которые умеют рисовать геометрию.
+    Legacy protocol for components that expose geometry.
+
+    New render paths should submit RenderItems through the native drawable
+    protocol instead of driving draw_geometry from passes.
 
     Атрибуты:
         phase_marks: Множество фаз, в которых участвует этот drawable.
@@ -56,9 +40,8 @@ class Drawable(Protocol):
                      Используется пассами для фильтрации.
 
     Методы:
-        draw_geometry: Рисует геометрию (шейдер уже привязан пассом).
-        get_geometry_ids_for_phase: Возвращает идентификаторы геометрии для фазы.
-        get_geometry_draws: Возвращает GeometryDrawCalls для ColorPass.
+        draw_geometry: Legacy direct geometry draw hook.
+        get_geometry_draws: Legacy material/geometry discovery hook.
     """
 
     phase_marks: Set[str]
@@ -67,29 +50,14 @@ class Drawable(Protocol):
         """
         Рисует геометрию.
 
-        Шейдер и материал уже привязаны пассом перед вызовом.
-        Drawable должен просто отрисовать свою геометрию (mesh, lines, etc.)
+        Legacy hook. Runtime passes should not call this through the C drawable
+        protocol; renderers should submit RenderItems instead.
 
         Параметры:
             context: Контекст рендеринга.
                      context.model содержит матрицу модели (для VAO binding).
             geometry_id: Идентификатор геометрии для отрисовки.
                          0 = основная/единственная геометрия.
-        """
-        ...
-
-    def get_geometry_ids_for_phase(
-        self,
-        context: "RenderContext",
-        phase_mark: str,
-    ) -> List[int]:
-        """
-        Возвращает идентификаторы геометрии, которые drawable может нарисовать
-        для указанной pass-фазы.
-
-        Этот метод описывает доступную геометрию, а не material phase. Pass-ы
-        со своим shader-ом используют его, чтобы не требовать одноимённую
-        material phase.
         """
         ...
 
@@ -101,8 +69,8 @@ class Drawable(Protocol):
         """
         Возвращает GeometryDrawCalls для этого drawable.
 
-        Используется ColorPass для получения материалов и геометрий.
-        ShadowPass и IdPass игнорируют этот метод и используют свои шейдеры.
+        Legacy hook for material/geometry discovery. Runtime passes should
+        collect RenderItems instead.
 
         Параметры:
             context: Контекст рендеринга.

@@ -89,9 +89,6 @@ struct ShaderOverrideContext {
 
 class RENDER_API Drawable {
 public:
-    mutable std::vector<GeometryDrawCall> _cached_geometry_draws;
-    mutable std::vector<int> _cached_geometry_ids;
-
     virtual ~Drawable() = default;
 
     virtual std::set<std::string> get_phase_marks() const = 0;
@@ -151,14 +148,12 @@ public:
         tc_render_item_sink& sink
     );
 
-    // Expose the underlying tc_mesh for a given phase + geometry id so
-    // tgfx2-migrated passes (ShadowPass, IdPass, ColorPass) can wrap it
-    // via wrap_mesh_as_tgfx2() and draw through RenderContext2.
+    // Legacy C++ mesh helper used by Drawable::collect_render_items() to
+    // synthesize mesh RenderItems for renderers that have not overridden
+    // collect_render_items() yet.
     //
-    // Default returns nullptr; drawables that are still on the old
-    // path fall back to draw_geometry(). MeshRenderer overrides to
-    // return its TcMesh. Returning non-null opts a drawable in to the
-    // tgfx2 shadow/id/color rendering paths one type at a time.
+    // The C drawable protocol no longer exposes this as a pass-facing draw
+    // route; new renderers should submit RenderItems directly.
     virtual tc_mesh* get_mesh_for_phase(
         const std::string& phase_mark,
         int geometry_id
@@ -208,28 +203,6 @@ public:
         return false;
     }
 
-    virtual std::vector<int> get_geometry_ids_for_phase(
-        const RenderContext& context,
-        const std::string& phase_mark
-    ) {
-        std::vector<int> ids;
-        std::vector<GeometryDrawCall> draws = get_geometry_draws(context, &phase_mark);
-        for (const GeometryDrawCall& draw : draws) {
-            if (std::find(ids.begin(), ids.end(), draw.geometry_id) == ids.end()) {
-                ids.push_back(draw.geometry_id);
-            }
-        }
-        if (!ids.empty()) {
-            return ids;
-        }
-
-        MeshDrawGeometry mesh_geometry{};
-        if (resolve_mesh_geometry(phase_mark, 0, mesh_geometry)) {
-            ids.push_back(0);
-        }
-        return ids;
-    }
-
     virtual Mat44f get_model_matrix(const Entity& entity) const;
 
     bool has_phase(const std::string& phase_mark) const {
@@ -248,9 +221,6 @@ protected:
 
 private:
     static bool _cb_has_phase(tc_component* c, const char* phase_mark);
-    static void _cb_draw_geometry(tc_component* c, void* render_context, int geometry_id);
-    static void* _cb_get_geometry_draws(tc_component* c, void* render_context, const char* phase_mark);
-    static void* _cb_get_geometry_ids_for_phase(tc_component* c, void* render_context, const char* phase_mark);
     static tc_shader_handle _cb_override_shader(tc_component* c, const char* phase_mark, int geometry_id, tc_shader_handle original_shader);
     static void _cb_collect_shader_usages(tc_component* c, const char* phase_mark, int geometry_id, tc_shader_handle original_shader, tc_shader_usage_emit_fn emit, void* user_data);
     static bool _cb_collect_render_items(tc_component* c, const tc_render_item_collect_context* context, tc_render_item_sink* sink);

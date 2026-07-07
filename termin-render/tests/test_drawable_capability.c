@@ -9,33 +9,11 @@
 #include "core/tc_drawable_capability.h"
 #include "core/tc_drawable_protocol.h"
 
-static bool g_draw_called = false;
 static int g_render_item_emit_count = 0;
 
 static bool test_drawable_has_phase(tc_component* self, const char* phase_mark) {
     (void)self;
     return phase_mark && strcmp(phase_mark, "opaque") == 0;
-}
-
-static void test_drawable_draw_geometry(tc_component* self, void* render_context, int geometry_id) {
-    (void)self;
-    (void)render_context;
-    (void)geometry_id;
-    g_draw_called = true;
-}
-
-static void* test_drawable_get_geometry_draws(tc_component* self, void* render_context, const char* phase_mark) {
-    (void)self;
-    (void)render_context;
-    (void)phase_mark;
-    return (void*)0x1;
-}
-
-static void* test_drawable_get_geometry_ids_for_phase(tc_component* self, void* render_context, const char* phase_mark) {
-    (void)self;
-    (void)render_context;
-    (void)phase_mark;
-    return (void*)0x2;
 }
 
 static tc_shader_handle test_drawable_override_shader(tc_component* self, const char* phase_mark, int geometry_id, tc_shader_handle original_shader) {
@@ -60,9 +38,6 @@ static bool test_drawable_collect_render_items(tc_component* self, const tc_rend
 
 static const tc_drawable_vtable g_test_drawable_vtable = {
     .has_phase = test_drawable_has_phase,
-    .draw_geometry = test_drawable_draw_geometry,
-    .get_geometry_draws = test_drawable_get_geometry_draws,
-    .get_geometry_ids_for_phase = test_drawable_get_geometry_ids_for_phase,
     .override_shader = test_drawable_override_shader,
     .collect_shader_usages = NULL,
     .collect_render_items = test_drawable_collect_render_items,
@@ -105,12 +80,6 @@ GUARD_C_TEST(test_live_reindex_for_drawable_capability) {
     GUARD_C_CHECK(tc_component_is_drawable(&component));
     GUARD_C_CHECK_PTR_EQ((void*)0x1234, tc_component_get_drawable_userdata(&component));
     GUARD_C_CHECK(tc_component_has_phase(&component, "opaque"));
-    GUARD_C_CHECK_PTR_EQ((void*)0x1, tc_component_get_geometry_draws(&component, &component, "opaque"));
-    GUARD_C_CHECK_PTR_EQ((void*)0x2, tc_component_get_geometry_ids_for_phase(&component, &component, "opaque"));
-
-    g_draw_called = false;
-    tc_component_draw_geometry(&component, NULL, 0);
-    GUARD_C_CHECK(g_draw_called);
 
     g_render_item_emit_count = 0;
     tc_render_item_collect_context collect_context;
