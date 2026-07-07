@@ -75,6 +75,12 @@ def test_builtin_catalog_shader_binding_smoke():
     assert "u_tex" in shader.fragment_source
 
 
+def test_render_context_bind_uniform_by_name_accepts_bytes():
+    doc = tgfx.Tgfx2RenderContext.bind_uniform_by_name.__doc__
+
+    assert "data: bytes" in doc
+
+
 def test_slang_shader_material_parser_uses_explicit_entries():
     from termin.materials import create_material_from_parsed, parse_shader_text
 

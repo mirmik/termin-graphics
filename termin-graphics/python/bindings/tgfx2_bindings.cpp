@@ -16,7 +16,9 @@
 #include <nanobind/stl/array.h>
 #include <nanobind/ndarray.h>
 
+#include <limits>
 #include <memory>
+#include <stdexcept>
 
 #include <tgfx2/render_context.hpp>
 #include <tgfx2/canvas2d_renderer.hpp>
@@ -566,6 +568,23 @@ void bind_tgfx2(nb::module_& m) {
                 nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
                  self.bind_uniform_data(name, data.data(),
                                         static_cast<uint32_t>(data.size()));
+             },
+             nb::arg("name"), nb::arg("data"))
+        .def("bind_uniform_by_name",
+             [](tgfx::RenderContext2& self,
+                const std::string& name,
+                nb::bytes data) {
+                 char* raw = nullptr;
+                 Py_ssize_t size = 0;
+                 if (PyBytes_AsStringAndSize(data.ptr(), &raw, &size) != 0 ||
+                     raw == nullptr || size < 0) {
+                     throw std::runtime_error("bind_uniform_by_name() received invalid bytes");
+                 }
+                 if (static_cast<uint64_t>(size) >
+                     static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
+                     throw std::runtime_error("bind_uniform_by_name() bytes payload is too large");
+                 }
+                 self.bind_uniform_data(name, raw, static_cast<uint32_t>(size));
              },
              nb::arg("name"), nb::arg("data"))
         .def("bind_uniform_by_name",
