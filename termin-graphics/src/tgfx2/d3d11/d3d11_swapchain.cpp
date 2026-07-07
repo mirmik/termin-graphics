@@ -140,14 +140,10 @@ bool D3D11Swapchain::compose_and_present(TextureHandle color_texture, uint32_t s
     device_.blit_to_texture(
         backbuffer_texture_,
         color_texture,
-        0,
-        0,
-        static_cast<int>(src_desc.width),
-        static_cast<int>(src_desc.height),
-        0,
-        0,
-        static_cast<int>(width_),
-        static_cast<int>(height_));
+        termin::Rect2i::from_size(
+            static_cast<int>(src_desc.width),
+            static_cast<int>(src_desc.height)),
+        termin::Rect2i::from_size(static_cast<int>(width_), static_cast<int>(height_)));
     return present(sync_interval);
 }
 

@@ -462,14 +462,13 @@ public:
     void blit_to_texture(
         TextureHandle dst,
         TextureHandle src,
-        int src_x, int src_y, int src_w, int src_h,
-        int dst_x, int dst_y, int dst_w, int dst_h) override;
+        termin::Rect2i src_rect,
+        termin::Rect2i dst_rect) override;
 
     void clear_texture(
         TextureHandle dst,
-        float r, float g, float b, float a,
-        int viewport_x, int viewport_y,
-        int viewport_w, int viewport_h) override;
+        termin::Color4 color,
+        termin::Rect2i viewport) override;
 
     // Internal access for command list
     VkDevice device() const { return device_; }

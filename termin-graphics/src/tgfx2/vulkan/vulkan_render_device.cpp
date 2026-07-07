@@ -1505,12 +1505,16 @@ VkFramebuffer VulkanRenderDevice::get_or_create_framebuffer(
 void VulkanRenderDevice::blit_to_texture(
     TextureHandle dst_handle,
     TextureHandle src_handle,
-    int src_x, int src_y, int src_w, int src_h,
-    int dst_x, int dst_y, int dst_w, int dst_h)
+    termin::Rect2i src_rect,
+    termin::Rect2i dst_rect)
 {
     auto* src = textures_.get(src_handle.id);
     auto* dst = textures_.get(dst_handle.id);
     if (!src || !dst) return;
+    const int src_w = src_rect.width();
+    const int src_h = src_rect.height();
+    const int dst_w = dst_rect.width();
+    const int dst_h = dst_rect.height();
 
     // Self-blit is meaningless and would emit contradictory
     // TRANSFER_SRC/DST barriers on the same image.
@@ -1571,9 +1575,9 @@ void VulkanRenderDevice::blit_to_texture(
             } else {
                 VkImageResolve resolve{};
                 resolve.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-                resolve.srcOffset = {src_x, src_y, 0};
+                resolve.srcOffset = {src_rect.x0, src_rect.y0, 0};
                 resolve.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-                resolve.dstOffset = {dst_x, dst_y, 0};
+                resolve.dstOffset = {dst_rect.x0, dst_rect.y0, 0};
                 resolve.extent = {static_cast<uint32_t>(src_w),
                                   static_cast<uint32_t>(src_h), 1};
                 vkCmdResolveImage(cb,
@@ -1597,9 +1601,9 @@ void VulkanRenderDevice::blit_to_texture(
             } else {
                 VkImageCopy region{};
                 region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-                region.srcOffset = {src_x, src_y, 0};
+                region.srcOffset = {src_rect.x0, src_rect.y0, 0};
                 region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-                region.dstOffset = {dst_x, dst_y, 0};
+                region.dstOffset = {dst_rect.x0, dst_rect.y0, 0};
                 region.extent = {static_cast<uint32_t>(src_w),
                                  static_cast<uint32_t>(src_h), 1};
                 vkCmdCopyImage(cb,
@@ -1610,11 +1614,11 @@ void VulkanRenderDevice::blit_to_texture(
         } else {
             VkImageBlit blit{};
             blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            blit.srcOffsets[0] = {src_x, src_y, 0};
-            blit.srcOffsets[1] = {src_x + src_w, src_y + src_h, 1};
+            blit.srcOffsets[0] = {src_rect.x0, src_rect.y0, 0};
+            blit.srcOffsets[1] = {src_rect.x1, src_rect.y1, 1};
             blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            blit.dstOffsets[0] = {dst_x, dst_y, 0};
-            blit.dstOffsets[1] = {dst_x + dst_w, dst_y + dst_h, 1};
+            blit.dstOffsets[0] = {dst_rect.x0, dst_rect.y0, 0};
+            blit.dstOffsets[1] = {dst_rect.x1, dst_rect.y1, 1};
             vkCmdBlitImage(cb,
                 src->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                 dst->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -1641,9 +1645,8 @@ void VulkanRenderDevice::blit_to_texture(
 
 void VulkanRenderDevice::clear_texture(
     TextureHandle dst_handle,
-    float r, float g, float b, float a,
-    int viewport_x, int viewport_y,
-    int viewport_w, int viewport_h)
+    termin::Color4 color,
+    termin::Rect2i viewport)
 {
     auto* dst = textures_.get(dst_handle.id);
     if (!dst) return;
@@ -1656,10 +1659,10 @@ void VulkanRenderDevice::clear_texture(
             VK_IMAGE_ASPECT_COLOR_BIT);
 
         VkClearColorValue clear{};
-        clear.float32[0] = r;
-        clear.float32[1] = g;
-        clear.float32[2] = b;
-        clear.float32[3] = a;
+        clear.float32[0] = color.r;
+        clear.float32[1] = color.g;
+        clear.float32[2] = color.b;
+        clear.float32[3] = color.a;
 
         // vkCmdClearColorImage requires a full-image range with an
         // offset-based mechanism — it does not natively support a
@@ -1669,8 +1672,7 @@ void VulkanRenderDevice::clear_texture(
         // whole display before compositing viewports), so clearing the
         // whole image is correct; if a future caller needs a true rect
         // clear, route through begin_pass + scissor instead.
-        (void)viewport_x; (void)viewport_y;
-        (void)viewport_w; (void)viewport_h;
+        (void)viewport;
 
         VkImageSubresourceRange range{};
         range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;

@@ -12,6 +12,8 @@
 #include "tgfx2/backend_binding_plan.hpp"
 #include "tgfx2/capabilities.hpp"
 #include "tgfx2/i_command_list.hpp"
+#include <termin/geom/color.hpp>
+#include <termin/geom/rect2.hpp>
 
 // Forward-declare tc_texture / tc_mesh — the per-device tc-resource
 // cache hooks below take pointers to them. Full definitions live in C
@@ -168,24 +170,20 @@ public:
     virtual void blit_to_texture(
         TextureHandle dst,
         TextureHandle src,
-        int src_x, int src_y, int src_w, int src_h,
-        int dst_x, int dst_y, int dst_w, int dst_h) {
+        termin::Rect2i src_rect,
+        termin::Rect2i dst_rect) {
         (void)dst; (void)src;
-        (void)src_x; (void)src_y; (void)src_w; (void)src_h;
-        (void)dst_x; (void)dst_y; (void)dst_w; (void)dst_h;
+        (void)src_rect; (void)dst_rect;
         throw std::runtime_error("blit_to_texture: not supported on this backend");
     }
 
-    // Clear a tgfx2 color texture to `(r,g,b,a)` inside the given
-    // viewport rect (scissor).
+    // Clear a tgfx2 color texture to `color` inside the given viewport
+    // rect (scissor).
     virtual void clear_texture(
         TextureHandle dst,
-        float r, float g, float b, float a,
-        int viewport_x, int viewport_y,
-        int viewport_w, int viewport_h) {
-        (void)dst; (void)r; (void)g; (void)b; (void)a;
-        (void)viewport_x; (void)viewport_y;
-        (void)viewport_w; (void)viewport_h;
+        termin::Color4 color,
+        termin::Rect2i viewport) {
+        (void)dst; (void)color; (void)viewport;
         throw std::runtime_error("clear_texture: not supported on this backend");
     }
 

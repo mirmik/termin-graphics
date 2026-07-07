@@ -1417,14 +1417,8 @@ TextureHandle D3D11RenderDevice::register_external_texture(ID3D11Texture2D* text
 
 void D3D11RenderDevice::blit_to_texture(TextureHandle dst,
                                         TextureHandle src,
-                                        int src_x,
-                                        int src_y,
-                                        int src_w,
-                                        int src_h,
-                                        int dst_x,
-                                        int dst_y,
-                                        int dst_w,
-                                        int dst_h) {
+                                        termin::Rect2i src_rect,
+                                        termin::Rect2i dst_rect) {
     auto* src_tex = get_texture(src);
     auto* dst_tex = get_texture(dst);
     if (!src_tex || !src_tex->texture || !dst_tex || !dst_tex->texture) {
@@ -1434,6 +1428,15 @@ void D3D11RenderDevice::blit_to_texture(TextureHandle dst,
             dst.id);
         return;
     }
+
+    const int src_x = src_rect.x0;
+    const int src_y = src_rect.y0;
+    const int src_w = src_rect.width();
+    const int src_h = src_rect.height();
+    const int dst_x = dst_rect.x0;
+    const int dst_y = dst_rect.y0;
+    const int dst_w = dst_rect.width();
+    const int dst_h = dst_rect.height();
 
     if (src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) {
         tc::Log::error("D3D11RenderDevice::blit_to_texture: invalid empty region");
@@ -1523,7 +1526,7 @@ void D3D11RenderDevice::blit_to_texture(TextureHandle dst,
             src_tex->texture.Get(),
             0,
             d3d11::to_dxgi_format(src_tex->desc.format));
-        blit_to_texture(dst, resolved, src_x, src_y, src_w, src_h, dst_x, dst_y, dst_w, dst_h);
+        blit_to_texture(dst, resolved, src_rect, dst_rect);
         destroy(resolved);
         return;
     }
@@ -1599,11 +1602,8 @@ void D3D11RenderDevice::blit_to_texture(TextureHandle dst,
 
 void D3D11RenderDevice::clear_texture(
     TextureHandle dst_handle,
-    float r, float g, float b, float a,
-    int viewport_x,
-    int viewport_y,
-    int viewport_w,
-    int viewport_h)
+    termin::Color4 clear_color,
+    termin::Rect2i viewport)
 {
     auto* dst = get_texture(dst_handle);
     if (!dst || !dst->texture || !dst->rtv) {
@@ -1612,22 +1612,22 @@ void D3D11RenderDevice::clear_texture(
             dst_handle.id);
         return;
     }
-    if (viewport_w <= 0 || viewport_h <= 0) {
+    if (viewport.width() <= 0 || viewport.height() <= 0) {
         tc::Log::error("D3D11RenderDevice::clear_texture: invalid empty viewport");
         return;
     }
 
     const int tex_w = static_cast<int>(dst->desc.width);
     const int tex_h = static_cast<int>(dst->desc.height);
-    const int x0 = std::clamp(viewport_x, 0, tex_w);
-    const int y0 = std::clamp(viewport_y, 0, tex_h);
-    const int x1 = std::clamp(viewport_x + viewport_w, 0, tex_w);
-    const int y1 = std::clamp(viewport_y + viewport_h, 0, tex_h);
+    const int x0 = std::clamp(viewport.x0, 0, tex_w);
+    const int y0 = std::clamp(viewport.y0, 0, tex_h);
+    const int x1 = std::clamp(viewport.x1, 0, tex_w);
+    const int y1 = std::clamp(viewport.y1, 0, tex_h);
     if (x1 <= x0 || y1 <= y0) {
         return;
     }
 
-    const float color[4] = {r, g, b, a};
+    const float color[4] = {clear_color.r, clear_color.g, clear_color.b, clear_color.a};
     if (x0 == 0 && y0 == 0 && x1 == tex_w && y1 == tex_h) {
         context_->ClearRenderTargetView(dst->rtv.Get(), color);
         return;
