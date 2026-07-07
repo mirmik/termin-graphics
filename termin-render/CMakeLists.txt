@@ -103,6 +103,7 @@ set(TERMIN_RENDER_HEADERS
     include/core/tc_scene_skybox.h
     include/core/tc_drawable_capability.h
     include/core/tc_drawable_protocol.h
+    include/core/tc_render_item.h
     include/core/tc_light_capability.h
     include/core/tc_camera_capability.h
     include/core/tc_scene_drawable.h

@@ -1,5 +1,7 @@
 #include <termin/render/drawable.hpp>
 
+#include <tcbase/tc_log.hpp>
+
 namespace termin {
 
 bool Drawable::_cb_has_phase(tc_component* c, const char* phase_mark) {
@@ -136,6 +138,133 @@ void collect_drawable_shader_usages_with_context(
     }
 }
 
+namespace {
+
+const char* render_item_kind_name(uint32_t kind) {
+    switch (kind) {
+        case TC_RENDER_ITEM_KIND_MESH:
+            return "Mesh";
+        case TC_RENDER_ITEM_KIND_LINE_BATCH:
+            return "LineBatch";
+        case TC_RENDER_ITEM_KIND_TEXT_BATCH:
+            return "TextBatch";
+        case TC_RENDER_ITEM_KIND_FOLIAGE_BATCH:
+            return "FoliageBatch";
+        default:
+            return "Invalid";
+    }
+}
+
+const char* component_debug_name(const tc_component* component) {
+    if (!component) {
+        return "<unknown>";
+    }
+    if (component->declared_type_name) {
+        return component->declared_type_name;
+    }
+    if (component->display_name) {
+        return component->display_name;
+    }
+    return "<unknown>";
+}
+
+bool validate_render_item(
+    const tc_render_item& item,
+    const tc_render_item_collect_context& context,
+    tc_component* source_component)
+{
+    const char* phase_mark = context.phase_mark ? context.phase_mark : "";
+    const char* pass_name = context.debug_pass_name ? context.debug_pass_name : "<unknown>";
+    tc_component* component = item.component ? item.component : source_component;
+    const char* component_type = component_debug_name(component);
+
+    if (item.kind == TC_RENDER_ITEM_KIND_INVALID) {
+        tc::Log::error(
+            "[RenderItemSink] malformed item: pass='%s' phase='%s' component='%s' emitted invalid kind",
+            pass_name,
+            phase_mark,
+            component_type);
+        return false;
+    }
+
+    if (item.kind == TC_RENDER_ITEM_KIND_MESH && !item.payload.mesh.mesh) {
+        tc::Log::error(
+            "[RenderItemSink] malformed Mesh item: pass='%s' phase='%s' component='%s' geometry=%d has null mesh",
+            pass_name,
+            phase_mark,
+            component_type,
+            item.geometry_id);
+        return false;
+    }
+
+    if ((item.flags & TC_RENDER_ITEM_FLAG_HAS_MATERIAL_PHASE) && !item.material_phase) {
+        tc::Log::error(
+            "[RenderItemSink] malformed %s item: pass='%s' phase='%s' component='%s' geometry=%d has material flag without material phase",
+            render_item_kind_name(item.kind),
+            pass_name,
+            phase_mark,
+            component_type,
+            item.geometry_id);
+        return false;
+    }
+
+    return true;
+}
+
+struct RenderItemVectorSinkData {
+    std::vector<tc_render_item>* items = nullptr;
+    const tc_render_item_collect_context* context = nullptr;
+    tc_component* component = nullptr;
+};
+
+bool emit_render_item_to_vector(const tc_render_item* item, void* user_data) {
+    auto* data = static_cast<RenderItemVectorSinkData*>(user_data);
+    if (!data || !data->items || !data->context || !item) {
+        tc::Log::error("[RenderItemSink] invalid vector sink callback state");
+        return false;
+    }
+
+    if (!validate_render_item(*item, *data->context, data->component)) {
+        return true;
+    }
+
+    tc_render_item copy = *item;
+    if (!copy.component) {
+        copy.component = data->component;
+    }
+    data->items->push_back(copy);
+    return true;
+}
+
+} // namespace
+
+bool collect_drawable_render_items(
+    tc_component* component,
+    const tc_render_item_collect_context& context,
+    std::vector<tc_render_item>& out_items)
+{
+    if (!component) {
+        tc::Log::error("[RenderItemCollector] cannot collect from null component");
+        return false;
+    }
+    if (!context.phase_mark || context.phase_mark[0] == '\0') {
+        tc::Log::error(
+            "[RenderItemCollector] component '%s' collection requested with empty phase mark",
+            component_debug_name(component));
+        return false;
+    }
+
+    RenderItemVectorSinkData sink_data;
+    sink_data.items = &out_items;
+    sink_data.context = &context;
+    sink_data.component = component;
+
+    tc_render_item_sink sink;
+    sink.emit = emit_render_item_to_vector;
+    sink.user_data = &sink_data;
+    return tc_component_collect_render_items(component, &context, &sink);
+}
+
 void Drawable::_cb_collect_shader_usages(
     tc_component* c,
     const char* phase_mark,
@@ -162,6 +291,23 @@ void Drawable::_cb_collect_shader_usages(
     );
 }
 
+bool Drawable::_cb_collect_render_items(
+    tc_component* c,
+    const tc_render_item_collect_context* context,
+    tc_render_item_sink* sink
+) {
+    if (!c || !context || !sink || !sink->emit) {
+        return false;
+    }
+
+    Drawable* drawable = static_cast<Drawable*>(tc_component_get_drawable_userdata(c));
+    if (!drawable) {
+        return false;
+    }
+
+    return drawable->collect_render_items(*context, *sink);
+}
+
 Mat44f Drawable::get_model_matrix(const Entity& entity) const {
     double m[16];
     entity.transform().world_matrix(m);
@@ -181,7 +327,8 @@ const tc_drawable_vtable& Drawable::cxx_drawable_vtable() {
         &Drawable::_cb_get_geometry_draws,
         &Drawable::_cb_get_geometry_ids_for_phase,
         &Drawable::_cb_override_shader,
-        &Drawable::_cb_collect_shader_usages
+        &Drawable::_cb_collect_shader_usages,
+        &Drawable::_cb_collect_render_items
     };
     return vtable;
 }

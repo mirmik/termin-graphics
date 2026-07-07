@@ -10,6 +10,7 @@
 #include "core/tc_drawable_protocol.h"
 
 static bool g_draw_called = false;
+static int g_render_item_emit_count = 0;
 
 static bool test_drawable_has_phase(tc_component* self, const char* phase_mark) {
     (void)self;
@@ -44,6 +45,19 @@ static tc_shader_handle test_drawable_override_shader(tc_component* self, const 
     return original_shader;
 }
 
+static bool test_drawable_collect_render_items(tc_component* self, const tc_render_item_collect_context* context, tc_render_item_sink* sink) {
+    (void)self;
+    if (!context || !sink || !sink->emit) {
+        return false;
+    }
+
+    tc_render_item item;
+    memset(&item, 0, sizeof(item));
+    item.kind = TC_RENDER_ITEM_KIND_MESH;
+    item.geometry_id = 7;
+    return sink->emit(&item, sink->user_data);
+}
+
 static const tc_drawable_vtable g_test_drawable_vtable = {
     .has_phase = test_drawable_has_phase,
     .draw_geometry = test_drawable_draw_geometry,
@@ -51,7 +65,16 @@ static const tc_drawable_vtable g_test_drawable_vtable = {
     .get_geometry_ids_for_phase = test_drawable_get_geometry_ids_for_phase,
     .override_shader = test_drawable_override_shader,
     .collect_shader_usages = NULL,
+    .collect_render_items = test_drawable_collect_render_items,
 };
+
+static bool count_render_item_emit(const tc_render_item* item, void* user_data) {
+    (void)user_data;
+    if (item && item->kind == TC_RENDER_ITEM_KIND_MESH && item->geometry_id == 7) {
+        g_render_item_emit_count++;
+    }
+    return true;
+}
 
 static bool count_components(tc_component* c, void* user_data) {
     (void)c;
@@ -88,6 +111,16 @@ GUARD_C_TEST(test_live_reindex_for_drawable_capability) {
     g_draw_called = false;
     tc_component_draw_geometry(&component, NULL, 0);
     GUARD_C_CHECK(g_draw_called);
+
+    g_render_item_emit_count = 0;
+    tc_render_item_collect_context collect_context;
+    memset(&collect_context, 0, sizeof(collect_context));
+    collect_context.phase_mark = "opaque";
+    tc_render_item_sink sink;
+    sink.emit = count_render_item_emit;
+    sink.user_data = NULL;
+    GUARD_C_CHECK(tc_component_collect_render_items(&component, &collect_context, &sink));
+    GUARD_C_CHECK_EQ_INT(1, g_render_item_emit_count);
 
     int count = 0;
     tc_scene_foreach_drawable(scene, count_components, &count, TC_SCENE_FILTER_NONE, 0);
