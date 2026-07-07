@@ -340,7 +340,7 @@ bool apply_material_phase_ubo(
             // behavior for "no usable layout": do not bind a material UBO.
         } else if (material_rb && material_rb->kind == TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
             ctx.bind_uniform_data(
-                TC_SHADER_RESOURCE_MATERIAL,
+                material_rb,
                 staging.data(),
                 static_cast<uint32_t>(staging.size()));
             bound_any = true;
@@ -377,7 +377,7 @@ bool apply_material_phase_ubo(
             const tc_shader_resource_binding* rb =
                 tc_shader_find_resource_binding(shader, mat_tex.name);
             if (rb && rb->kind == TC_SHADER_RESOURCE_TEXTURE) {
-                ctx.bind_texture(mat_tex.name, tex2);
+                ctx.bind_texture(rb, tex2);
                 bound_any = true;
             } else {
                 if (!rb && tc_shader_has_resource_layout(shader)) {

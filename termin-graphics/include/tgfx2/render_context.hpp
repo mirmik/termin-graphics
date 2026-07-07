@@ -19,7 +19,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
-#include <string>
+#include <string_view>
 #include <vector>
 
 #include "tgfx2/tgfx2_api.h"
@@ -32,6 +32,7 @@
 
 // Forward declaration for C-level shader type (global namespace, extern "C").
 struct tc_shader;
+struct tc_shader_resource_binding;
 
 namespace tgfx {
 
@@ -73,17 +74,6 @@ private:
     int viewport_w_ = 1;
     int viewport_h_ = 1;
 
-    // Symbolic binding support — resolved in flush_resource_set().
-    struct SymbolicBinding {
-        std::string name;
-        enum class Kind { Uniform, StorageBuffer, Texture } kind = Kind::Uniform;
-        BufferHandle buffer;
-        TextureHandle texture;
-        SamplerHandle sampler;
-        uint64_t offset = 0;
-        uint64_t range = 0;
-    };
-
     enum class ResourceScope : uint8_t {
         Unknown = 0,
         Frame,
@@ -97,7 +87,6 @@ private:
     struct ResourceBindingBucket {
         std::vector<ResourceBinding> numeric;
         std::vector<BoundResourceBinding> planned;
-        std::vector<SymbolicBinding> symbolic;
     };
 
     // Pending resource bindings grouped by update scope. Symbolic/migrated
@@ -112,7 +101,7 @@ private:
     bool bindings_dirty_ = true;
     ResourceSetHandle current_resource_set_;
 
-    // Shader resource layout for symbolic resolution. Set by
+    // Shader resource layout for named/resolved resource binding. Set by
     // use_shader_resource_layout(), cleared when shader changes.
     const struct ::tc_shader* active_shader_layout_ = nullptr;
     BackendBindingPlan active_backend_binding_plan_;
@@ -144,6 +133,12 @@ private:
     bool any_dirty_binding_scope() const;
     BoundResourceSetDesc build_pending_bound_resource_set(
         uintptr_t resource_layout_token) const;
+    const BackendBindingPlanEntry* active_backend_binding_for(
+        const struct ::tc_shader_resource_binding* rb,
+        const char* action) const;
+    const struct ::tc_shader_resource_binding* active_resource_binding_by_name(
+        std::string_view name,
+        const char* action) const;
 
     // Queued push-constant bytes. Re-emitted after every flush_pipeline
     // so the data lands on the freshly-bound VkPipelineLayout (Vulkan)
@@ -246,8 +241,8 @@ public:
     // Legacy numeric uniform binding. The buffer is resolved into a
     // ResourceSet lazily at draw time; call-sites do not manage
     // ResourceSetHandle lifecycles. Migrated Slang paths should prefer
-    // bind_uniform(name). The `set` parameter is legacy numeric placement;
-    // migrated symbolic paths get backend placement from BackendBindingPlan.
+    // bind_uniform(name/rb). The `set` parameter is legacy numeric placement;
+    // migrated named/resolved paths get backend placement from BackendBindingPlan.
     // Passing range=0 means \"bind whole buffer\" (backend uses glBindBufferBase).
     void bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
                              uint64_t offset = 0, uint64_t range = 0,
@@ -256,28 +251,44 @@ public:
                              uint64_t offset = 0, uint64_t range = 0,
                              uint32_t set = 0);
 
-    // Symbolic resource binding — resolved to backend placement from the
+    // Named resource binding — resolved immediately to backend placement from the
     // shader layout set via use_shader_resource_layout().
     // Falls back to a logged warning + no-op when the name is not
     // found in the active layout.
     void bind_uniform(std::string_view name, BufferHandle buffer,
                       uint64_t offset = 0, uint64_t range = 0);
+    void bind_uniform(const struct ::tc_shader_resource_binding* rb,
+                      BufferHandle buffer,
+                      uint64_t offset = 0, uint64_t range = 0);
     void bind_storage_buffer(std::string_view name, BufferHandle buffer,
                              uint64_t offset = 0, uint64_t range = 0);
+    void bind_storage_buffer(const struct ::tc_shader_resource_binding* rb,
+                             BufferHandle buffer,
+                             uint64_t offset = 0, uint64_t range = 0);
     void bind_texture(std::string_view name, TextureHandle texture,
+                      SamplerHandle sampler = {});
+    void bind_texture(const struct ::tc_shader_resource_binding* rb,
+                      TextureHandle texture,
                       SamplerHandle sampler = {});
     void bind_texture_array_element(std::string_view name,
                                     uint32_t array_element,
                                     TextureHandle texture,
                                     SamplerHandle sampler = {});
-    // Symbolic uniform with inline data — resolves the name and writes
+    void bind_texture_array_element(const struct ::tc_shader_resource_binding* rb,
+                                    uint32_t array_element,
+                                    TextureHandle texture,
+                                    SamplerHandle sampler = {});
+    // Named/resolved uniform with inline data — writes
     // to the ring UBO at the resolved binding. Convenience for Python
     // passes that only need small per-draw uniform data without managing
     // a BufferHandle.
     void bind_uniform_data(std::string_view name, const void* data, uint32_t size);
+    void bind_uniform_data(const struct ::tc_shader_resource_binding* rb,
+                           const void* data,
+                           uint32_t size);
 
-    // Set the shader resource layout used for symbolic binding
-    // resolution. Call once after bind_shader() when symbolic
+    // Set the shader resource layout used for named/resolved binding
+    // resolution. Call once after bind_shader() when named/resolved
     // bind_uniform / bind_texture will be used later in the pass.
     // Passing nullptr clears the layout (back to numeric-only mode).
     void use_shader_resource_layout(const struct ::tc_shader* shader);
@@ -294,7 +305,7 @@ public:
     // UBO block size declared by the shader.
     //
     // `binding` must be one of the layout's UNIFORM_BUFFER_DYNAMIC slots.
-    // `set` remains a legacy numeric placement field. Migrated symbolic
+    // `set` remains a legacy numeric placement field. Migrated named/resolved
     // resources should resolve placement through BackendBindingPlan.
     void bind_uniform_buffer_ring(uint32_t binding, const void* data, uint32_t size,
                                   uint32_t set = 0);

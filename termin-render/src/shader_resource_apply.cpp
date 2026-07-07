@@ -89,7 +89,7 @@ bool bind_lighting_ubo_for_shader(
         ShaderAbiResourceId::Lighting,
         "lighting");
     if (rb) {
-        ctx.bind_uniform(rb->name, lighting_ubo);
+        ctx.bind_uniform(rb, lighting_ubo);
         return true;
     }
 
@@ -117,7 +117,7 @@ bool bind_shadow_block_for_shader(
         ShaderAbiResourceId::ShadowBlock,
         "shadow_block");
     if (rb) {
-        ctx.bind_uniform_data(rb->name, data, size);
+        ctx.bind_uniform_data(rb, data, size);
         return true;
     }
 
@@ -164,7 +164,7 @@ bool bind_shadow_maps_for_shader(
         if (!shadow_maps[i]) continue;
         if (rb) {
             ctx.bind_texture_array_element(
-                rb->name,
+                rb,
                 static_cast<uint32_t>(i),
                 shadow_maps[i],
                 sampler);

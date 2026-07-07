@@ -33,6 +33,19 @@ const char* render_context_backend_name(BackendType backend) {
     return "unknown";
 }
 
+bool fixed_resource_name_equals(const char* stored, std::string_view name) {
+    for (size_t i = 0; i < TC_SHADER_RESOURCE_NAME_MAX; ++i) {
+        const char ch = stored[i];
+        if (ch == '\0') {
+            return i == name.size();
+        }
+        if (i >= name.size() || ch != name[i]) {
+            return false;
+        }
+    }
+    return name.size() == TC_SHADER_RESOURCE_NAME_MAX;
+}
+
 } // namespace
 
 // ============================================================================
@@ -424,18 +437,6 @@ void RenderContext2::clear_dirty_binding_scopes() {
     bindings_dirty_ = false;
 }
 
-const BackendBindingPlanEntry* find_backend_binding_plan_entry(
-    const BackendBindingPlan& plan,
-    std::string_view name
-) {
-    for (const BackendBindingPlanEntry& entry : plan.entries) {
-        if (entry.resource.name == name) {
-            return &entry;
-        }
-    }
-    return nullptr;
-}
-
 bool same_shader_resource_key(
     const ShaderResourceKey& a,
     const ShaderResourceKey& b
@@ -549,8 +550,7 @@ void RenderContext2::upsert_pending_planned_binding(
 bool RenderContext2::pending_binding_buckets_empty() const {
     for (const ResourceBindingBucket& bucket : pending_binding_buckets_) {
         if (!bucket.numeric.empty() ||
-            !bucket.planned.empty() ||
-            !bucket.symbolic.empty()) {
+            !bucket.planned.empty()) {
             return false;
         }
     }
@@ -561,7 +561,6 @@ void RenderContext2::clear_pending_binding_buckets() {
     for (ResourceBindingBucket& bucket : pending_binding_buckets_) {
         bucket.numeric.clear();
         bucket.planned.clear();
-        bucket.symbolic.clear();
     }
     mark_all_binding_scopes_dirty();
 }
@@ -595,6 +594,118 @@ BoundResourceSetDesc RenderContext2::build_pending_bound_resource_set(
         bound_desc.groups.push_back(std::move(group));
     }
     return bound_desc;
+}
+
+const tc_shader_resource_binding* RenderContext2::active_resource_binding_by_name(
+    std::string_view name,
+    const char* action
+) const {
+    if (!active_shader_layout_) {
+        tc_log(TC_LOG_WARN,
+               "RenderContext2: %s('%.*s') called without active shader layout",
+               action,
+               static_cast<int>(name.size()),
+               name.data());
+        return nullptr;
+    }
+
+    const tc_shader_resource_binding* bindings =
+        tc_shader_resource_bindings(active_shader_layout_);
+    const uint32_t count = tc_shader_resource_binding_count(active_shader_layout_);
+    if (count > 0 && !bindings) {
+        tc_log(TC_LOG_WARN,
+               "RenderContext2: %s('%.*s') shader '%s' has invalid resource binding table",
+               action,
+               static_cast<int>(name.size()),
+               name.data(),
+               active_shader_layout_->name ? active_shader_layout_->name
+                                           : active_shader_layout_->uuid);
+        return nullptr;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+        if (fixed_resource_name_equals(bindings[i].name, name)) {
+            return &bindings[i];
+        }
+    }
+
+    tc_log(TC_LOG_WARN,
+           "RenderContext2: %s('%.*s') not found in shader '%s'",
+           action,
+           static_cast<int>(name.size()),
+           name.data(),
+           active_shader_layout_->name ? active_shader_layout_->name
+                                       : active_shader_layout_->uuid);
+    return nullptr;
+}
+
+const BackendBindingPlanEntry* RenderContext2::active_backend_binding_for(
+    const tc_shader_resource_binding* rb,
+    const char* action
+) const {
+    if (!rb) {
+        tc_log(TC_LOG_WARN, "RenderContext2: %s called with null shader resource binding", action);
+        return nullptr;
+    }
+    if (!active_shader_layout_) {
+        tc_log(TC_LOG_WARN,
+               "RenderContext2: %s('%s') called without active shader layout",
+               action,
+               rb->name);
+        return nullptr;
+    }
+    if (!active_backend_binding_plan_valid_) {
+        tc_log(TC_LOG_WARN,
+               "RenderContext2: %s('%s') skipped because backend binding plan is unavailable",
+               action,
+               rb->name);
+        return nullptr;
+    }
+
+    const tc_shader_resource_binding* bindings =
+        tc_shader_resource_bindings(active_shader_layout_);
+    const uint32_t count = tc_shader_resource_binding_count(active_shader_layout_);
+    if (count > 0 && !bindings) {
+        tc_log(TC_LOG_WARN,
+               "RenderContext2: %s('%s') shader '%s' has invalid resource binding table",
+               action,
+               rb->name,
+               active_shader_layout_->name ? active_shader_layout_->name
+                                           : active_shader_layout_->uuid);
+        return nullptr;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+        if (&bindings[i] != rb) {
+            continue;
+        }
+        if (i >= active_backend_binding_plan_.entries.size()) {
+            tc_log(TC_LOG_WARN,
+                   "RenderContext2: %s('%s') missing backend binding plan entry at index=%u",
+                   action,
+                   rb->name,
+                   i);
+            return nullptr;
+        }
+        const BackendBindingPlanEntry& entry = active_backend_binding_plan_.entries[i];
+        if (entry.resource.name != rb->name ||
+            static_cast<uint32_t>(entry.resource.kind) != rb->kind ||
+            static_cast<uint32_t>(entry.resource.scope) != rb->scope) {
+            tc_log(TC_LOG_WARN,
+                   "RenderContext2: %s('%s') backend binding plan entry mismatch at index=%u",
+                   action,
+                   rb->name,
+                   i);
+            return nullptr;
+        }
+        return &entry;
+    }
+
+    tc_log(TC_LOG_WARN,
+           "RenderContext2: %s('%s') binding does not belong to active shader '%s'",
+           action,
+           rb->name,
+           active_shader_layout_->name ? active_shader_layout_->name
+                                       : active_shader_layout_->uuid);
+    return nullptr;
 }
 
 void RenderContext2::bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
@@ -759,18 +870,14 @@ void RenderContext2::use_shader_resource_layout(const struct ::tc_shader* shader
                render_context_backend_name(device_.backend_type()),
                plan_error.empty() ? "unknown error" : plan_error.c_str());
     }
-    // When the layout changes, unresolved symbolic bindings and per-draw
-    // numeric leftovers must not be resolved/flushed against the new shader.
+    // When the layout changes, resolved bindings and per-draw numeric leftovers
+    // must not be flushed against the new shader.
     // Frame/pass/material numeric buckets are kept for legacy compatibility;
-    // migrated resources should enter those buckets through symbolic layout
+    // migrated resources should enter those buckets through resource layout
     // resolution after this call.
     bool cleared = false;
     for (size_t i = 0; i < pending_binding_buckets_.size(); ++i) {
         ResourceBindingBucket& bucket = pending_binding_buckets_[i];
-        if (!bucket.symbolic.empty()) {
-            bucket.symbolic.clear();
-            cleared = true;
-        }
         if (layout_changed && !bucket.planned.empty()) {
             bucket.planned.clear();
             mark_binding_scope_dirty(static_cast<ResourceScope>(i));
@@ -796,28 +903,70 @@ void RenderContext2::use_shader_resource_layout(const struct ::tc_shader* shader
 
 void RenderContext2::bind_uniform(std::string_view name, BufferHandle buffer,
                                   uint64_t offset, uint64_t range) {
-    SymbolicBinding sb;
-    sb.name = std::string(name);
-    sb.kind = SymbolicBinding::Kind::Uniform;
-    sb.buffer = buffer;
-    sb.offset = offset;
-    sb.range = range;
-    pending_binding_buckets_[static_cast<size_t>(ResourceScope::Unknown)]
-        .symbolic.push_back(std::move(sb));
-    bindings_dirty_ = true;
+    bind_uniform(active_resource_binding_by_name(name, "bind_uniform"), buffer, offset, range);
+}
+
+void RenderContext2::bind_uniform(const tc_shader_resource_binding* rb,
+                                  BufferHandle buffer,
+                                  uint64_t offset,
+                                  uint64_t range) {
+    if (!rb) return;
+    if (rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
+        tc_log(TC_LOG_WARN,
+               "RenderContext2: bind_uniform('%s') resolved to kind=%u, expected constant_buffer",
+               rb->name,
+               rb->kind);
+        return;
+    }
+    const BackendBindingPlanEntry* plan_entry =
+        active_backend_binding_for(rb, "bind_uniform");
+    if (!plan_entry) return;
+
+    BoundResourceValue value;
+    value.kind = BoundResourceKind::UniformBuffer;
+    value.buffer = buffer;
+    value.offset = offset;
+    value.range = range;
+    upsert_pending_planned_binding(
+        scope_from_shader_resource(rb->scope),
+        *plan_entry,
+        value);
 }
 
 void RenderContext2::bind_storage_buffer(std::string_view name, BufferHandle buffer,
                                          uint64_t offset, uint64_t range) {
-    SymbolicBinding sb;
-    sb.name = std::string(name);
-    sb.kind = SymbolicBinding::Kind::StorageBuffer;
-    sb.buffer = buffer;
-    sb.offset = offset;
-    sb.range = range;
-    pending_binding_buckets_[static_cast<size_t>(ResourceScope::Unknown)]
-        .symbolic.push_back(std::move(sb));
-    bindings_dirty_ = true;
+    bind_storage_buffer(
+        active_resource_binding_by_name(name, "bind_storage_buffer"),
+        buffer,
+        offset,
+        range);
+}
+
+void RenderContext2::bind_storage_buffer(const tc_shader_resource_binding* rb,
+                                         BufferHandle buffer,
+                                         uint64_t offset,
+                                         uint64_t range) {
+    if (!rb) return;
+    if (rb->kind != TC_SHADER_RESOURCE_STORAGE_BUFFER) {
+        tc_log(TC_LOG_WARN,
+               "RenderContext2: bind_storage_buffer('%s') resolved to kind=%u, expected storage_buffer",
+               rb->name,
+               rb->kind);
+        return;
+    }
+    const BackendBindingPlanEntry* plan_entry =
+        active_backend_binding_for(rb, "bind_storage_buffer");
+    if (!plan_entry) return;
+
+    BoundResourceValue value;
+    value.kind = BoundResourceKind::StorageBuffer;
+    value.buffer = buffer;
+    value.offset = offset;
+    value.range = range;
+    upsert_pending_planned_binding(
+        scope_from_shader_resource(rb->scope),
+        *plan_entry,
+        value);
 }
 
 void RenderContext2::bind_texture(std::string_view name, TextureHandle texture,
@@ -825,56 +974,68 @@ void RenderContext2::bind_texture(std::string_view name, TextureHandle texture,
     bind_texture_array_element(name, 0, texture, sampler);
 }
 
+void RenderContext2::bind_texture(const tc_shader_resource_binding* rb,
+                                  TextureHandle texture,
+                                  SamplerHandle sampler) {
+    bind_texture_array_element(rb, 0, texture, sampler);
+}
+
 void RenderContext2::bind_texture_array_element(std::string_view name,
                                                 uint32_t array_element,
                                                 TextureHandle texture,
                                                 SamplerHandle sampler) {
-    SymbolicBinding sb;
-    sb.name = std::string(name);
-    sb.kind = SymbolicBinding::Kind::Texture;
-    sb.texture = texture;
-    sb.sampler = sampler;
-    sb.offset = array_element;
-    pending_binding_buckets_[static_cast<size_t>(ResourceScope::Unknown)]
-        .symbolic.push_back(std::move(sb));
-    bindings_dirty_ = true;
+    bind_texture_array_element(
+        active_resource_binding_by_name(name, "bind_texture"),
+        array_element,
+        texture,
+        sampler);
 }
 
-void RenderContext2::bind_uniform_data(std::string_view name, const void* data, uint32_t size) {
-    if (!data || size == 0) return;
-    if (!active_shader_layout_) {
-        tc_log(TC_LOG_WARN, "RenderContext2: bind_uniform_data('%.*s') called without active shader layout",
-               static_cast<int>(name.size()), name.data());
-        return;
-    }
-    const tc_shader_resource_binding* rb =
-        tc_shader_find_resource_binding(active_shader_layout_, std::string(name).c_str());
-    if (!rb) {
-        tc_log(TC_LOG_WARN, "RenderContext2: bind_uniform_data('%.*s') not found in shader '%s'",
-               static_cast<int>(name.size()), name.data(),
-               active_shader_layout_->name ? active_shader_layout_->name : active_shader_layout_->uuid);
-        return;
-    }
-    if (rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
+void RenderContext2::bind_texture_array_element(const tc_shader_resource_binding* rb,
+                                                uint32_t array_element,
+                                                TextureHandle texture,
+                                                SamplerHandle sampler) {
+    if (!rb) return;
+    if (rb->kind != TC_SHADER_RESOURCE_TEXTURE) {
         tc_log(TC_LOG_WARN,
-               "RenderContext2: bind_uniform_data('%.*s') resolved to kind=%u, expected constant_buffer",
-               static_cast<int>(name.size()), name.data(), rb->kind);
-        return;
-    }
-    if (!active_backend_binding_plan_valid_) {
-        tc_log(TC_LOG_WARN,
-               "RenderContext2: bind_uniform_data('%.*s') skipped because backend binding plan is unavailable",
-               static_cast<int>(name.size()), name.data());
+               "RenderContext2: bind_texture('%s') resolved to kind=%u, expected texture",
+               rb->name,
+               rb->kind);
         return;
     }
     const BackendBindingPlanEntry* plan_entry =
-        find_backend_binding_plan_entry(active_backend_binding_plan_, name);
-    if (!plan_entry) {
+        active_backend_binding_for(rb, "bind_texture");
+    if (!plan_entry) return;
+
+    BoundResourceValue value;
+    value.kind = BoundResourceKind::SampledTexture;
+    value.texture = texture;
+    value.sampler = sampler;
+    value.array_element = array_element;
+    upsert_pending_planned_binding(
+        scope_from_shader_resource(rb->scope),
+        *plan_entry,
+        value);
+}
+
+void RenderContext2::bind_uniform_data(std::string_view name, const void* data, uint32_t size) {
+    bind_uniform_data(active_resource_binding_by_name(name, "bind_uniform_data"), data, size);
+}
+
+void RenderContext2::bind_uniform_data(const tc_shader_resource_binding* rb,
+                                       const void* data,
+                                       uint32_t size) {
+    if (!data || size == 0 || !rb) return;
+    if (rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
         tc_log(TC_LOG_WARN,
-               "RenderContext2: bind_uniform_data('%.*s') not found in backend binding plan",
-               static_cast<int>(name.size()), name.data());
+               "RenderContext2: bind_uniform_data('%s') resolved to kind=%u, expected constant_buffer",
+               rb->name,
+               rb->kind);
         return;
     }
+    const BackendBindingPlanEntry* plan_entry =
+        active_backend_binding_for(rb, "bind_uniform_data");
+    if (!plan_entry) return;
 
     BufferHandle buffer = device_.ring_ubo_handle();
     uint64_t offset = 0;
@@ -1034,98 +1195,6 @@ void RenderContext2::flush_pipeline() {
 
 void RenderContext2::flush_resource_set() {
     if (!bindings_dirty_) return;
-
-    // Resolve symbolic bindings against the active shader layout. The queued
-    // symbolic call may initially sit in Unknown; the shader metadata decides
-    // the final scope bucket.
-    if (!active_shader_layout_) {
-        for (ResourceBindingBucket& bucket : pending_binding_buckets_) {
-            if (bucket.symbolic.empty()) continue;
-            for (const SymbolicBinding& sb : bucket.symbolic) {
-                tc_log(TC_LOG_WARN,
-                       "RenderContext2: symbolic binding '%.*s' called without active shader layout",
-                       static_cast<int>(sb.name.size()), sb.name.data());
-            }
-            bucket.symbolic.clear();
-        }
-    } else {
-        for (ResourceBindingBucket& bucket : pending_binding_buckets_) {
-            if (bucket.symbolic.empty()) continue;
-            for (const SymbolicBinding& sb : bucket.symbolic) {
-                const tc_shader_resource_binding* rb =
-                    tc_shader_find_resource_binding(active_shader_layout_, sb.name.c_str());
-                if (!rb) {
-                    tc_log(TC_LOG_WARN,
-                           "RenderContext2: symbolic binding '%.*s' not found in shader '%s'",
-                           static_cast<int>(sb.name.size()), sb.name.data(),
-                           active_shader_layout_->name ? active_shader_layout_->name
-                                                       : active_shader_layout_->uuid);
-                    continue;
-                }
-
-                if (!active_backend_binding_plan_valid_) {
-                    tc_log(TC_LOG_WARN,
-                           "RenderContext2: symbolic binding '%.*s' skipped because backend binding plan is unavailable",
-                           static_cast<int>(sb.name.size()), sb.name.data());
-                    continue;
-                }
-                const BackendBindingPlanEntry* plan_entry =
-                    find_backend_binding_plan_entry(active_backend_binding_plan_, sb.name);
-                if (!plan_entry) {
-                    tc_log(TC_LOG_WARN,
-                           "RenderContext2: symbolic binding '%.*s' not found in backend binding plan",
-                           static_cast<int>(sb.name.size()), sb.name.data());
-                    continue;
-                }
-
-                BoundResourceValue value;
-                switch (sb.kind) {
-                    case SymbolicBinding::Kind::Uniform:
-                        if (rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
-                            tc_log(TC_LOG_WARN,
-                                   "RenderContext2: symbolic binding '%.*s' resolved to kind=%u, expected constant_buffer",
-                                   static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
-                            continue;
-                        }
-                        value.kind = BoundResourceKind::UniformBuffer;
-                        value.buffer = sb.buffer;
-                        value.offset = sb.offset;
-                        value.range = sb.range;
-                        break;
-                    case SymbolicBinding::Kind::StorageBuffer:
-                        if (rb->kind != TC_SHADER_RESOURCE_STORAGE_BUFFER) {
-                            tc_log(TC_LOG_WARN,
-                                   "RenderContext2: symbolic binding '%.*s' resolved to kind=%u, expected storage_buffer",
-                                   static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
-                            continue;
-                        }
-                        value.kind = BoundResourceKind::StorageBuffer;
-                        value.buffer = sb.buffer;
-                        value.offset = sb.offset;
-                        value.range = sb.range;
-                        break;
-                    case SymbolicBinding::Kind::Texture:
-                        if (rb->kind != TC_SHADER_RESOURCE_TEXTURE) {
-                            tc_log(TC_LOG_WARN,
-                                   "RenderContext2: symbolic binding '%.*s' resolved to kind=%u, expected texture",
-                                   static_cast<int>(sb.name.size()), sb.name.data(), rb->kind);
-                            continue;
-                        }
-                        value.kind = BoundResourceKind::SampledTexture;
-                        value.texture = sb.texture;
-                        value.sampler = sb.sampler;
-                        value.array_element = static_cast<uint32_t>(sb.offset);
-                        break;
-                }
-
-                upsert_pending_planned_binding(
-                    scope_from_shader_resource(rb->scope),
-                    *plan_entry,
-                    value);
-            }
-            bucket.symbolic.clear();
-        }
-    }
 
     if (!any_dirty_binding_scope()) {
         clear_dirty_binding_scopes();

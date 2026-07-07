@@ -78,7 +78,7 @@ void bind_engine_per_frame_uniforms(
     const tc_shader_resource_binding* rb =
         find_shader_abi_resource_binding(shader, ShaderAbiResourceId::PerFrame);
     if (rb && rb->kind == TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
-        ctx2.bind_uniform_data(rb->name, &uniforms, sizeof(uniforms));
+        ctx2.bind_uniform_data(rb, &uniforms, sizeof(uniforms));
         return;
     }
     if (shader && tc_shader_has_resource_layout(shader)) {
