@@ -7,6 +7,7 @@
 
 #include "core/tc_component.h"
 #include "tgfx/resources/tc_material.h"
+#include "tgfx/resources/tc_mesh_registry.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,8 +30,14 @@ typedef enum tc_render_item_flags {
     TC_RENDER_ITEM_FLAG_HAS_SKINNING_MATRICES = 1u << 2,
 } tc_render_item_flags;
 
+typedef enum tc_render_item_collect_flags {
+    TC_RENDER_ITEM_COLLECT_FLAG_NONE = 0,
+    TC_RENDER_ITEM_COLLECT_FLAG_ALLOW_MISSING_MATERIAL_PHASE = 1u << 0,
+} tc_render_item_collect_flags;
+
 typedef struct tc_render_item_mesh_payload {
     struct tc_mesh* mesh;
+    tc_mesh_handle mesh_handle;
     size_t submesh_index;
     const float* skinning_matrices;
     uint32_t skinning_matrix_count;
@@ -54,6 +61,7 @@ typedef struct tc_render_item {
 
 typedef struct tc_render_item_collect_context {
     const char* phase_mark;
+    uint32_t flags;
     uint64_t layer_mask;
     uint64_t render_category_mask;
     const char* debug_pass_name;

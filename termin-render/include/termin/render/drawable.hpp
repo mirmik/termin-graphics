@@ -154,11 +154,7 @@ public:
     virtual bool collect_render_items(
         const tc_render_item_collect_context& context,
         tc_render_item_sink& sink
-    ) {
-        (void)context;
-        (void)sink;
-        return false;
-    }
+    );
 
     // Expose the underlying tc_mesh for a given phase + geometry id so
     // tgfx2-migrated passes (ShadowPass, IdPass, ColorPass) can wrap it
