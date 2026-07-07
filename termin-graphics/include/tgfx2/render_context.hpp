@@ -89,7 +89,7 @@ private:
         std::vector<BoundResourceBinding> planned;
     };
 
-    // Pending resource bindings grouped by update scope. Symbolic/migrated
+    // Pending resource bindings grouped by update scope. Named/resolved
     // paths are emitted as BoundResourceSetDesc so backend command lists can
     // apply their native placement model. Numeric entries remain as an explicit
     // legacy side channel until low-level binding APIs are retired.
@@ -121,12 +121,12 @@ private:
         uint32_t array_element = 0);
     static BoundResourceBinding* find_planned_binding(
         std::vector<BoundResourceBinding>& bindings,
-        const BackendBindingPlanEntry& plan_entry,
+        const BackendBoundResourceSlot& slot,
         const BoundResourceValue& value);
     void upsert_pending_binding(ResourceScope scope, const ResourceBinding& binding);
     void upsert_pending_planned_binding(
         ResourceScope scope,
-        const BackendBindingPlanEntry& plan_entry,
+        const BackendBoundResourceSlot& slot,
         const BoundResourceValue& value);
     bool pending_binding_buckets_empty() const;
     void clear_pending_binding_buckets();

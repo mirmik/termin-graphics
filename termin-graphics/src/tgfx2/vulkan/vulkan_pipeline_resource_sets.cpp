@@ -1035,30 +1035,30 @@ ResourceSetHandle VulkanRenderDevice::create_bound_resource_set(
         if (!bound_ok) {
             return;
         }
-        const BackendBindingPlanEntry& entry = b.plan_entry;
-        if (entry.placement.kind != BackendPlacementKind::VulkanDescriptor) {
+        const BackendBoundResourceSlot& slot = b.slot;
+        if (slot.placement.kind != BackendPlacementKind::VulkanDescriptor) {
             tc_log(TC_LOG_ERROR,
                    "VulkanRenderDevice: resource '%s' has non-Vulkan placement kind=%u",
-                   entry.resource.name.c_str(),
-                   static_cast<unsigned>(entry.placement.kind));
+                   bound_resource_debug_name(b),
+                   static_cast<unsigned>(slot.placement.kind));
             bound_ok = false;
             return;
         }
-        if (entry.placement.vulkan.set != 0) {
+        if (slot.placement.vulkan.set != 0) {
             tc_log(TC_LOG_ERROR,
                    "VulkanRenderDevice: resource '%s' uses unsupported descriptor set=%u",
-                   entry.resource.name.c_str(),
-                   entry.placement.vulkan.set);
+                   bound_resource_debug_name(b),
+                   slot.placement.vulkan.set);
             bound_ok = false;
             return;
         }
-        const uint32_t binding = entry.placement.vulkan.binding;
+        const uint32_t binding = slot.placement.vulkan.binding;
         const VkDescriptorSetLayoutBinding* lb =
             find_layout_binding(layout_bindings, binding);
         if (!lb) {
             tc_log(TC_LOG_ERROR,
                    "VulkanRenderDevice: resource '%s' references missing layout binding=%u",
-                   entry.resource.name.c_str(),
+                   bound_resource_debug_name(b),
                    binding);
             bound_ok = false;
             return;
@@ -1066,7 +1066,7 @@ ResourceSetHandle VulkanRenderDevice::create_bound_resource_set(
         if (b.value.array_element >= lb->descriptorCount) {
             tc_log(TC_LOG_ERROR,
                    "VulkanRenderDevice: resource '%s' array element=%u exceeds descriptor count=%u at binding=%u",
-                   entry.resource.name.c_str(),
+                   bound_resource_debug_name(b),
                    b.value.array_element,
                    lb->descriptorCount,
                    binding);
@@ -1074,13 +1074,13 @@ ResourceSetHandle VulkanRenderDevice::create_bound_resource_set(
             return;
         }
         const VkDescriptorType expected = expected_descriptor_type_from_layout(
-            entry.placement.vulkan.descriptor_kind,
+            slot.placement.vulkan.descriptor_kind,
             lb->descriptorType);
         if (expected == VK_DESCRIPTOR_TYPE_MAX_ENUM) {
             tc_log(TC_LOG_ERROR,
                    "VulkanRenderDevice: resource '%s' descriptor kind=%u does not match layout descriptor type=%u at binding=%u",
-                   entry.resource.name.c_str(),
-                   static_cast<unsigned>(entry.placement.vulkan.descriptor_kind),
+                   bound_resource_debug_name(b),
+                   static_cast<unsigned>(slot.placement.vulkan.descriptor_kind),
                    static_cast<unsigned>(lb->descriptorType),
                    binding);
             bound_ok = false;
@@ -1088,12 +1088,12 @@ ResourceSetHandle VulkanRenderDevice::create_bound_resource_set(
         }
         if (!bound_value_kind_matches_descriptor_kind(
                 b.value.kind,
-                entry.placement.vulkan.descriptor_kind)) {
+                slot.placement.vulkan.descriptor_kind)) {
             tc_log(TC_LOG_ERROR,
                    "VulkanRenderDevice: resource '%s' value kind=%u does not match descriptor kind=%u at binding=%u",
-                   entry.resource.name.c_str(),
+                   bound_resource_debug_name(b),
                    static_cast<unsigned>(b.value.kind),
-                   static_cast<unsigned>(entry.placement.vulkan.descriptor_kind),
+                   static_cast<unsigned>(slot.placement.vulkan.descriptor_kind),
                    binding);
             bound_ok = false;
             return;

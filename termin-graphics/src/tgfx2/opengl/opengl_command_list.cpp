@@ -324,7 +324,7 @@ void bind_bound_resource_binding(
     OpenGLRenderDevice& device,
     const BoundResourceBinding& binding
 ) {
-    const OpenGLBindingPlacement& placement = binding.plan_entry.placement.opengl;
+    const OpenGLBindingPlacement& placement = binding.slot.placement.opengl;
     switch (placement.binding_class) {
         case OpenGLBindingClass::UniformBuffer: {
             auto* buf = device.get_buffer(binding.value.buffer);
@@ -387,7 +387,7 @@ void bind_bound_resource_binding(
         default:
             tc::Log::error(
                 "OpenGLCommandList::bind_resource_set: missing OpenGL placement for resource '%s'",
-                binding.plan_entry.resource.name.c_str());
+                bound_resource_debug_name(binding));
             break;
     }
 }

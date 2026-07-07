@@ -72,21 +72,21 @@ bool validate_d3d11_slot(
 }
 
 uint32_t effective_stage_mask(const BoundResourceBinding& binding) {
-    return binding.plan_entry.stage_mask == TC_SHADER_STAGE_NONE
+    return binding.slot.stage_mask == TC_SHADER_STAGE_NONE
         ? TC_SHADER_STAGE_ALL_GRAPHICS
-        : binding.plan_entry.stage_mask;
+        : binding.slot.stage_mask;
 }
 
 UINT d3d11_slot(const BoundResourceBinding& binding) {
     return static_cast<UINT>(
-        binding.plan_entry.placement.d3d11.register_index +
+        binding.slot.placement.d3d11.register_index +
         binding.value.array_element);
 }
 
 UINT d3d11_sampler_slot_for_sampled_texture(const BoundResourceBinding& binding) {
     const UINT base = static_cast<UINT>(
-        binding.plan_entry.placement.d3d11.register_index);
-    if (binding.plan_entry.placement.d3d11.scalar_sampler_for_texture_array) {
+        binding.slot.placement.d3d11.register_index);
+    if (binding.slot.placement.d3d11.scalar_sampler_for_texture_array) {
         return base;
     }
     return static_cast<UINT>(base + binding.value.array_element);
@@ -97,25 +97,25 @@ bool validate_d3d11_placement(
     D3D11RegisterClass expected,
     const char* kind_name
 ) {
-    const BackendBindingPlanEntry& entry = binding.plan_entry;
-    if (entry.placement.kind != BackendPlacementKind::D3D11Register) {
+    const BackendBoundResourceSlot& slot = binding.slot;
+    if (slot.placement.kind != BackendPlacementKind::D3D11Register) {
         tc::Log::error(
             "D3D11CommandList::bind_resource_set: %s resource '%s' has "
             "non-D3D11 placement kind=%u",
             kind_name,
-            entry.resource.name.c_str(),
-            static_cast<unsigned>(entry.placement.kind));
+            bound_resource_debug_name(binding),
+            static_cast<unsigned>(slot.placement.kind));
         return false;
     }
-    if (entry.placement.d3d11.register_class == expected) {
+    if (slot.placement.d3d11.register_class == expected) {
         return true;
     }
     tc::Log::error(
         "D3D11CommandList::bind_resource_set: %s resource '%s' has "
         "D3D11 class=%u, expected class=%u",
         kind_name,
-        entry.resource.name.c_str(),
-        static_cast<unsigned>(entry.placement.d3d11.register_class),
+        bound_resource_debug_name(binding),
+        static_cast<unsigned>(slot.placement.d3d11.register_class),
         static_cast<unsigned>(expected));
     return false;
 }
@@ -133,7 +133,7 @@ bool validate_d3d11_slot(
         "D3D11CommandList::bind_resource_set: %s resource '%s' resolved to "
         "out-of-range D3D11 slot=%u limit=%u",
         kind_name,
-        binding.plan_entry.resource.name.c_str(),
+        bound_resource_debug_name(binding),
         slot,
         limit);
     return false;
@@ -318,12 +318,12 @@ void bind_bound_resource_binding(
 ) {
     const UINT slot = d3d11_slot(binding);
     const uint32_t stage_mask = effective_stage_mask(binding);
-    if (binding.plan_entry.resource.kind == ShaderResourceKind::StorageTexture ||
-        binding.plan_entry.placement.d3d11.register_class == D3D11RegisterClass::U) {
+    if (binding.slot.kind == ShaderResourceKind::StorageTexture ||
+        binding.slot.placement.d3d11.register_class == D3D11RegisterClass::U) {
         tc::Log::error(
             "D3D11CommandList::bind_resource_set: storage texture/UAV resource '%s' "
             "is not supported by the D3D11 backend",
-            binding.plan_entry.resource.name.c_str());
+            bound_resource_debug_name(binding));
         return;
     }
     switch (binding.value.kind) {
@@ -345,7 +345,7 @@ void bind_bound_resource_binding(
                 tc::Log::error(
                     "D3D11CommandList::bind_resource_set: uniform buffer "
                     "resource '%s' has unsupported offset=%llu",
-                    binding.plan_entry.resource.name.c_str(),
+                    bound_resource_debug_name(binding),
                     static_cast<unsigned long long>(binding.value.offset));
                 break;
             }
@@ -423,7 +423,7 @@ void bind_bound_resource_binding(
             if (binding.value.offset != 0) {
                 tc::Log::error(
                     "D3D11CommandList::bind_resource_set: storage buffer resource '%s' has unsupported offset=%llu",
-                    binding.plan_entry.resource.name.c_str(),
+                    bound_resource_debug_name(binding),
                     static_cast<unsigned long long>(binding.value.offset));
                 break;
             }
@@ -432,7 +432,7 @@ void bind_bound_resource_binding(
             if (buf && !srv) {
                 tc::Log::error(
                     "D3D11CommandList::bind_resource_set: storage buffer resource '%s' has no shader resource view",
-                    binding.plan_entry.resource.name.c_str());
+                    bound_resource_debug_name(binding));
                 break;
             }
             set_shader_resources(ctx, stage_mask, slot, &srv);

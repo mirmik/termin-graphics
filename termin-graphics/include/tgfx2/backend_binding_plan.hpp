@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include "tgfx2/enums.hpp"
@@ -239,10 +240,31 @@ struct BoundResourceValue {
     uint32_t array_element = 0;
 };
 
+struct BackendBoundResourceSlot {
+    ShaderResourceKind kind = ShaderResourceKind::None;
+    ShaderResourceScope scope = ShaderResourceScope::Unknown;
+    uint32_t stage_mask = 0;
+    uint32_t array_count = 1;
+    uint32_t size = 0;
+    BackendPlacement placement;
+    const char* debug_name = nullptr;
+};
+
 struct BoundResourceBinding {
-    BackendBindingPlanEntry plan_entry;
+    BackendBoundResourceSlot slot;
     BoundResourceValue value;
 };
+
+static_assert(std::is_standard_layout_v<BoundResourceValue>);
+static_assert(std::is_trivially_copyable_v<BoundResourceValue>);
+static_assert(std::is_standard_layout_v<BackendBoundResourceSlot>);
+static_assert(std::is_trivially_copyable_v<BackendBoundResourceSlot>);
+static_assert(std::is_standard_layout_v<BoundResourceBinding>);
+static_assert(std::is_trivially_copyable_v<BoundResourceBinding>);
+
+inline const char* bound_resource_debug_name(const BoundResourceBinding& binding) {
+    return binding.slot.debug_name ? binding.slot.debug_name : "<unnamed>";
+}
 
 struct BoundResourceGroup {
     ShaderResourceScope scope = ShaderResourceScope::Unknown;
@@ -308,13 +330,15 @@ TGFX2_API bool build_backend_binding_plan(
     BackendBindingPlan& out_plan,
     std::string* error = nullptr);
 
+TGFX2_API BackendBoundResourceSlot bound_resource_slot_from_plan_entry(
+    const BackendBindingPlanEntry& entry);
+
 TGFX2_API ResourceBinding resource_binding_from_bound(
     const BoundResourceBinding& binding);
 
 // Compatibility adapter for custom/unported backends that still implement only
 // create_resource_set(ResourceSetDesc). Concrete tgfx2 backends should override
-// create_bound_resource_set() and consume BackendBindingPlanEntry placement
-// directly.
+// create_bound_resource_set() and consume compact bound slots directly.
 TGFX2_API ResourceSetDesc legacy_resource_set_desc_from_bound(
     const BoundResourceSetDesc& bound_desc,
     const std::vector<ResourceBinding>& legacy_numeric_bindings = {});

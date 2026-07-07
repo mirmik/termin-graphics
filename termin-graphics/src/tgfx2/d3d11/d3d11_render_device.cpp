@@ -1131,12 +1131,12 @@ ResourceSetHandle D3D11RenderDevice::create_bound_resource_set(
 ) {
     bool has_unsupported_uav = false;
     for_each_bound_resource_binding(desc, [&](const BoundResourceBinding& binding) {
-        if (binding.plan_entry.resource.kind == ShaderResourceKind::StorageTexture ||
-            binding.plan_entry.placement.d3d11.register_class == D3D11RegisterClass::U) {
+        if (binding.slot.kind == ShaderResourceKind::StorageTexture ||
+            binding.slot.placement.d3d11.register_class == D3D11RegisterClass::U) {
             tc::Log::error(
                 "D3D11RenderDevice::create_bound_resource_set: storage texture/UAV resource '%s' "
                 "is not supported by the D3D11 backend",
-                binding.plan_entry.resource.name.c_str());
+                bound_resource_debug_name(binding));
             has_unsupported_uav = true;
         }
     });

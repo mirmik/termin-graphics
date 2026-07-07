@@ -404,31 +404,31 @@ ResourceBinding::Kind resource_binding_kind_from_bound(BoundResourceKind kind) {
 
 void apply_backend_binding_plan_entry(
     ResourceBinding& dst,
-    const BackendBindingPlanEntry& entry
+    const BackendBoundResourceSlot& slot
 ) {
-    dst.stage_mask = entry.stage_mask;
+    dst.stage_mask = slot.stage_mask;
     dst.d3d11 = {};
 
-    switch (entry.placement.kind) {
+    switch (slot.placement.kind) {
         case BackendPlacementKind::VulkanDescriptor:
-            dst.set = entry.placement.vulkan.set;
-            dst.binding = entry.placement.vulkan.binding;
+            dst.set = slot.placement.vulkan.set;
+            dst.binding = slot.placement.vulkan.binding;
             break;
         case BackendPlacementKind::D3D11Register:
             dst.set = 0;
-            dst.binding = entry.placement.d3d11.register_index;
+            dst.binding = slot.placement.d3d11.register_index;
             dst.d3d11.has_placement = true;
             dst.d3d11.register_class = d3d11_register_class_to_shader(
-                entry.placement.d3d11.register_class);
-            dst.d3d11.register_index = entry.placement.d3d11.register_index;
+                slot.placement.d3d11.register_class);
+            dst.d3d11.register_index = slot.placement.d3d11.register_index;
             break;
         case BackendPlacementKind::OpenGLBinding:
             dst.set = 0;
-            if (entry.placement.opengl.binding_class == OpenGLBindingClass::TextureUnit ||
-                entry.placement.opengl.binding_class == OpenGLBindingClass::SamplerUnit) {
-                dst.binding = entry.placement.opengl.texture_unit;
+            if (slot.placement.opengl.binding_class == OpenGLBindingClass::TextureUnit ||
+                slot.placement.opengl.binding_class == OpenGLBindingClass::SamplerUnit) {
+                dst.binding = slot.placement.opengl.texture_unit;
             } else {
-                dst.binding = entry.placement.opengl.binding_point;
+                dst.binding = slot.placement.opengl.binding_point;
             }
             break;
         case BackendPlacementKind::None:
@@ -506,9 +506,23 @@ bool build_backend_binding_plan(
     return true;
 }
 
+BackendBoundResourceSlot bound_resource_slot_from_plan_entry(
+    const BackendBindingPlanEntry& entry
+) {
+    BackendBoundResourceSlot slot;
+    slot.kind = entry.resource.kind;
+    slot.scope = entry.resource.scope;
+    slot.stage_mask = entry.stage_mask;
+    slot.array_count = entry.array_count;
+    slot.size = entry.size;
+    slot.placement = entry.placement;
+    slot.debug_name = entry.resource.name.c_str();
+    return slot;
+}
+
 ResourceBinding resource_binding_from_bound(const BoundResourceBinding& binding) {
     ResourceBinding out;
-    apply_backend_binding_plan_entry(out, binding.plan_entry);
+    apply_backend_binding_plan_entry(out, binding.slot);
     out.kind = resource_binding_kind_from_bound(binding.value.kind);
     out.buffer = binding.value.buffer;
     out.texture = binding.value.texture;

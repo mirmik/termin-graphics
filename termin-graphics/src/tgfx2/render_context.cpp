@@ -437,13 +437,6 @@ void RenderContext2::clear_dirty_binding_scopes() {
     bindings_dirty_ = false;
 }
 
-bool same_shader_resource_key(
-    const ShaderResourceKey& a,
-    const ShaderResourceKey& b
-) {
-    return a.name == b.name && a.kind == b.kind && a.scope == b.scope;
-}
-
 bool same_backend_placement(
     const BackendPlacement& a,
     const BackendPlacement& b
@@ -459,15 +452,17 @@ bool same_backend_placement(
         a.opengl.texture_unit == b.opengl.texture_unit;
 }
 
-bool same_backend_plan_entry(
-    const BackendBindingPlanEntry& a,
-    const BackendBindingPlanEntry& b
+bool same_backend_bound_resource_slot(
+    const BackendBoundResourceSlot& a,
+    const BackendBoundResourceSlot& b
 ) {
-    return same_shader_resource_key(a.resource, b.resource) &&
+    return a.kind == b.kind &&
+        a.scope == b.scope &&
         a.stage_mask == b.stage_mask &&
         a.array_count == b.array_count &&
         a.size == b.size &&
-        same_backend_placement(a.placement, b.placement);
+        same_backend_placement(a.placement, b.placement) &&
+        a.debug_name == b.debug_name;
 }
 
 bool same_bound_resource_value(
@@ -496,11 +491,12 @@ ResourceBinding* RenderContext2::find_pending_binding(
 
 BoundResourceBinding* RenderContext2::find_planned_binding(
     std::vector<BoundResourceBinding>& bindings,
-    const BackendBindingPlanEntry& plan_entry,
+    const BackendBoundResourceSlot& slot,
     const BoundResourceValue& value
 ) {
     for (BoundResourceBinding& binding : bindings) {
-        if (binding.plan_entry.resource.name == plan_entry.resource.name &&
+        if (same_backend_placement(binding.slot.placement, slot.placement) &&
+            binding.slot.kind == slot.kind &&
             binding.value.array_element == value.array_element) {
             return &binding;
         }
@@ -528,21 +524,21 @@ void RenderContext2::upsert_pending_binding(
 
 void RenderContext2::upsert_pending_planned_binding(
     ResourceScope scope,
-    const BackendBindingPlanEntry& plan_entry,
+    const BackendBoundResourceSlot& slot,
     const BoundResourceValue& value
 ) {
     auto& bucket = pending_binding_buckets_[static_cast<size_t>(scope)];
     BoundResourceBinding* existing =
-        find_planned_binding(bucket.planned, plan_entry, value);
+        find_planned_binding(bucket.planned, slot, value);
     if (existing) {
-        if (same_backend_plan_entry(existing->plan_entry, plan_entry) &&
+        if (same_backend_bound_resource_slot(existing->slot, slot) &&
             same_bound_resource_value(existing->value, value)) {
             return;
         }
-        existing->plan_entry = plan_entry;
+        existing->slot = slot;
         existing->value = value;
     } else {
-        bucket.planned.push_back({plan_entry, value});
+        bucket.planned.push_back({slot, value});
     }
     mark_binding_scope_dirty(scope);
 }
@@ -927,9 +923,11 @@ void RenderContext2::bind_uniform(const tc_shader_resource_binding* rb,
     value.buffer = buffer;
     value.offset = offset;
     value.range = range;
+    const BackendBoundResourceSlot slot =
+        bound_resource_slot_from_plan_entry(*plan_entry);
     upsert_pending_planned_binding(
         scope_from_shader_resource(rb->scope),
-        *plan_entry,
+        slot,
         value);
 }
 
@@ -963,9 +961,11 @@ void RenderContext2::bind_storage_buffer(const tc_shader_resource_binding* rb,
     value.buffer = buffer;
     value.offset = offset;
     value.range = range;
+    const BackendBoundResourceSlot slot =
+        bound_resource_slot_from_plan_entry(*plan_entry);
     upsert_pending_planned_binding(
         scope_from_shader_resource(rb->scope),
-        *plan_entry,
+        slot,
         value);
 }
 
@@ -1012,9 +1012,11 @@ void RenderContext2::bind_texture_array_element(const tc_shader_resource_binding
     value.texture = texture;
     value.sampler = sampler;
     value.array_element = array_element;
+    const BackendBoundResourceSlot slot =
+        bound_resource_slot_from_plan_entry(*plan_entry);
     upsert_pending_planned_binding(
         scope_from_shader_resource(rb->scope),
-        *plan_entry,
+        slot,
         value);
 }
 
@@ -1056,9 +1058,11 @@ void RenderContext2::bind_uniform_data(const tc_shader_resource_binding* rb,
     value.buffer = buffer;
     value.offset = offset;
     value.range = size;
+    const BackendBoundResourceSlot slot =
+        bound_resource_slot_from_plan_entry(*plan_entry);
     upsert_pending_planned_binding(
         scope_from_shader_resource(rb->scope),
-        *plan_entry,
+        slot,
         value);
 }
 
