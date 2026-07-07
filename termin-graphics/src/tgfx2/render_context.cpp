@@ -1418,62 +1418,31 @@ void RenderContext2::draw(
     cmd_->draw_indexed(index_count, 0, vertex_offset);
 }
 
-void RenderContext2::draw_indexed_instanced(
-    BufferHandle vertex_vbo,
-    BufferHandle index_buffer,
-    BufferHandle instance_vbo,
-    uint32_t index_count,
-    uint32_t instance_count,
-    IndexType idx_type
-) {
-    draw_indexed_instanced(
-        vertex_vbo,
-        0,
-        index_buffer,
-        0,
-        instance_vbo,
-        0,
-        index_count,
-        instance_count,
-        idx_type
-    );
-}
-
-void RenderContext2::draw_indexed_instanced(
-    BufferHandle vertex_vbo,
-    uint64_t vertex_offset,
-    BufferHandle index_buffer,
-    uint64_t index_offset,
-    BufferHandle instance_vbo,
-    uint64_t instance_offset,
-    uint32_t index_count,
-    uint32_t instance_count,
-    IndexType idx_type
-) {
+void RenderContext2::draw_indexed_instanced(const IndexedInstancedDraw& draw) {
     flush_pipeline();
     flush_resource_set();
     ensure_cached_vertex_buffer_slots(2);
-    if (vertex_vbo != last_bound_vbos_[0]
-        || vertex_offset != last_bound_vbo_offsets_[0]) {
-        cmd_->bind_vertex_buffer(0, vertex_vbo, vertex_offset);
-        last_bound_vbos_[0] = vertex_vbo;
-        last_bound_vbo_offsets_[0] = vertex_offset;
+    if (draw.vertex_buffer != last_bound_vbos_[0]
+        || draw.vertex_offset != last_bound_vbo_offsets_[0]) {
+        cmd_->bind_vertex_buffer(0, draw.vertex_buffer, draw.vertex_offset);
+        last_bound_vbos_[0] = draw.vertex_buffer;
+        last_bound_vbo_offsets_[0] = draw.vertex_offset;
     }
-    if (instance_vbo && (instance_vbo != last_bound_vbos_[1]
-        || instance_offset != last_bound_vbo_offsets_[1])) {
-        cmd_->bind_vertex_buffer(1, instance_vbo, instance_offset);
-        last_bound_vbos_[1] = instance_vbo;
-        last_bound_vbo_offsets_[1] = instance_offset;
+    if (draw.instance_buffer && (draw.instance_buffer != last_bound_vbos_[1]
+        || draw.instance_offset != last_bound_vbo_offsets_[1])) {
+        cmd_->bind_vertex_buffer(1, draw.instance_buffer, draw.instance_offset);
+        last_bound_vbos_[1] = draw.instance_buffer;
+        last_bound_vbo_offsets_[1] = draw.instance_offset;
     }
-    if (index_buffer != last_bound_ibo_
-        || index_offset != last_bound_ibo_offset_
-        || idx_type != last_bound_index_type_) {
-        cmd_->bind_index_buffer(index_buffer, idx_type, index_offset);
-        last_bound_ibo_ = index_buffer;
-        last_bound_ibo_offset_ = index_offset;
-        last_bound_index_type_ = idx_type;
+    if (draw.index_buffer != last_bound_ibo_
+        || draw.index_offset != last_bound_ibo_offset_
+        || draw.index_type != last_bound_index_type_) {
+        cmd_->bind_index_buffer(draw.index_buffer, draw.index_type, draw.index_offset);
+        last_bound_ibo_ = draw.index_buffer;
+        last_bound_ibo_offset_ = draw.index_offset;
+        last_bound_index_type_ = draw.index_type;
     }
-    cmd_->draw_indexed_instanced(index_count, instance_count);
+    cmd_->draw_indexed_instanced(draw.index_count, draw.instance_count);
 }
 
 void RenderContext2::draw_arrays(BufferHandle vbo, uint32_t vertex_count) {

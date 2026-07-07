@@ -42,6 +42,19 @@ class ICommandList;
 class PipelineCache;
 
 class TGFX2_TYPE_API RenderContext2 {
+public:
+    struct IndexedInstancedDraw {
+        BufferHandle vertex_buffer;
+        uint64_t vertex_offset = 0;
+        BufferHandle index_buffer;
+        uint64_t index_offset = 0;
+        BufferHandle instance_buffer;
+        uint64_t instance_offset = 0;
+        uint32_t index_count = 0;
+        uint32_t instance_count = 0;
+        IndexType index_type = IndexType::Uint32;
+    };
+
 private:
     static constexpr uint32_t kTrackedVertexBufferMax = 2;
 
@@ -360,21 +373,7 @@ public:
               uint32_t index_count,
               int32_t vertex_offset,
               IndexType idx_type = IndexType::Uint32);
-    void draw_indexed_instanced(BufferHandle vertex_vbo,
-                                BufferHandle index_buffer,
-                                BufferHandle instance_vbo,
-                                uint32_t index_count,
-                                uint32_t instance_count,
-                                IndexType idx_type = IndexType::Uint32);
-    void draw_indexed_instanced(BufferHandle vertex_vbo,
-                                uint64_t vertex_offset,
-                                BufferHandle index_buffer,
-                                uint64_t index_offset,
-                                BufferHandle instance_vbo,
-                                uint64_t instance_offset,
-                                uint32_t index_count,
-                                uint32_t instance_count,
-                                IndexType idx_type = IndexType::Uint32);
+    void draw_indexed_instanced(const IndexedInstancedDraw& draw);
 
     // Draw non-indexed.
     void draw_arrays(BufferHandle vbo, uint32_t vertex_count);
