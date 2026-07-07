@@ -411,6 +411,11 @@ public:
                                uint32_t vertex_count,
                                const VertexBufferLayout& layout,
                                PrimitiveTopology topology);
+    void draw_transient_arrays(const void* data,
+                               uint32_t byte_size,
+                               uint32_t vertex_count,
+                               const VertexLayoutDesc& layout,
+                               PrimitiveTopology topology);
 
     // --- Immediate drawing ---
     // Fast-path for transient UI/debug streams: hands vertices to the

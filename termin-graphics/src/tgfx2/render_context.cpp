@@ -46,6 +46,25 @@ bool fixed_resource_name_equals(const char* stored, std::string_view name) {
     return name.size() == TC_SHADER_RESOURCE_NAME_MAX;
 }
 
+VertexLayoutDesc fullscreen_quad_vertex_layout_desc() {
+    VertexLayoutDesc layout;
+    layout.stride = 4 * sizeof(float);
+    layout.attribute_count = 2;
+    layout.attributes[0] = {
+        0,
+        VertexFormat::Float2,
+        0,
+        intern_vertex_semantic("position"),
+    };
+    layout.attributes[1] = {
+        1,
+        VertexFormat::Float2,
+        2 * sizeof(float),
+        intern_vertex_semantic("uv"),
+    };
+    return layout;
+}
+
 } // namespace
 
 // ============================================================================
@@ -1330,14 +1349,7 @@ void RenderContext2::draw_fullscreen_quad() {
         return;
     }
 
-    // Set FSQ vertex layout if not already set
-    VertexBufferLayout fsq_layout;
-    fsq_layout.stride = 4 * sizeof(float);
-    fsq_layout.attributes = {
-        {0, VertexFormat::Float2, 0, "POSITION"},                    // aPos
-        {1, VertexFormat::Float2, 2 * sizeof(float), "TEXCOORD"},    // aUV
-    };
-    set_vertex_layout(fsq_layout);
+    set_vertex_layout(fullscreen_quad_vertex_layout_desc());
     // Explicit topology — previous draws (ImmediateRenderer line/point
     // batches) may leave topology_ pointing at LineList, which makes
     // the FSQ index list `{0,1,2, 0,2,3}` render as three line segments
@@ -1365,13 +1377,7 @@ void RenderContext2::draw_fullscreen_quad() {
 void RenderContext2::draw_fullscreen_quad_with_bound_shader() {
     ensure_fsq_resources();
 
-    VertexBufferLayout fsq_layout;
-    fsq_layout.stride = 4 * sizeof(float);
-    fsq_layout.attributes = {
-        {0, VertexFormat::Float2, 0, "POSITION"},
-        {1, VertexFormat::Float2, 2 * sizeof(float), "TEXCOORD"},
-    };
-    set_vertex_layout(fsq_layout);
+    set_vertex_layout(fullscreen_quad_vertex_layout_desc());
     set_topology(PrimitiveTopology::TriangleList);
 
     flush_pipeline();
@@ -1603,6 +1609,19 @@ void RenderContext2::draw_transient_arrays(const void* data,
                                            uint32_t vertex_count,
                                            const VertexBufferLayout& layout,
                                            PrimitiveTopology topology) {
+    draw_transient_arrays(
+        data,
+        byte_size,
+        vertex_count,
+        make_vertex_layout_desc(layout),
+        topology);
+}
+
+void RenderContext2::draw_transient_arrays(const void* data,
+                                           uint32_t byte_size,
+                                           uint32_t vertex_count,
+                                           const VertexLayoutDesc& layout,
+                                           PrimitiveTopology topology) {
     if (!data || byte_size == 0 || vertex_count == 0) return;
 
     const bool profile = tc_profiler_enabled();
@@ -1647,13 +1666,12 @@ void RenderContext2::draw_transient_arrays(const void* data,
 void RenderContext2::draw_immediate_generic(const float* data,
                                             uint32_t vertex_count,
                                             PrimitiveTopology topo) {
-    VertexBufferLayout layout;
+    VertexLayoutDesc layout;
     layout.stride = 7 * sizeof(float);
     layout.use_shader_input_locations = true;
-    layout.attributes = {
-        {0, VertexFormat::Float3, 0},
-        {1, VertexFormat::Float4, 3 * sizeof(float)},
-    };
+    layout.attribute_count = 2;
+    layout.attributes[0] = {0, VertexFormat::Float3, 0, nullptr};
+    layout.attributes[1] = {1, VertexFormat::Float4, 3 * sizeof(float), nullptr};
     draw_transient_arrays(
         data,
         vertex_count * 7 * static_cast<uint32_t>(sizeof(float)),

@@ -54,6 +54,59 @@ struct TubePush {
     float up_hint[4];
 };
 
+VertexAttributeDesc vertex_attr(uint32_t location, VertexFormat format, size_t offset) {
+    return {
+        location,
+        format,
+        static_cast<uint32_t>(offset),
+        nullptr,
+    };
+}
+
+VertexLayoutDesc tube_body_corner_layout() {
+    VertexLayoutDesc layout;
+    layout.stride = sizeof(TubeCornerVertex);
+    layout.use_shader_input_locations = true;
+    layout.attribute_count = 1;
+    layout.attributes[0] = vertex_attr(0, VertexFormat::Float3, 0);
+    return layout;
+}
+
+VertexLayoutDesc tube_segment_instance_layout() {
+    VertexLayoutDesc layout;
+    layout.stride = sizeof(TubeSegmentInstance);
+    layout.per_instance = true;
+    layout.use_shader_input_locations = true;
+    layout.attribute_count = 4;
+    layout.attributes[0] = vertex_attr(1, VertexFormat::Float3, offsetof(TubeSegmentInstance, p0));
+    layout.attributes[1] = vertex_attr(2, VertexFormat::Float, offsetof(TubeSegmentInstance, width));
+    layout.attributes[2] = vertex_attr(3, VertexFormat::Float3, offsetof(TubeSegmentInstance, p1));
+    layout.attributes[3] = vertex_attr(4, VertexFormat::Float4, offsetof(TubeSegmentInstance, color));
+    return layout;
+}
+
+VertexLayoutDesc tube_cap_corner_layout() {
+    VertexLayoutDesc layout;
+    layout.stride = sizeof(TubeCapCornerVertex);
+    layout.use_shader_input_locations = true;
+    layout.attribute_count = 1;
+    layout.attributes[0] = vertex_attr(0, VertexFormat::Float3, 0);
+    return layout;
+}
+
+VertexLayoutDesc tube_cap_instance_layout() {
+    VertexLayoutDesc layout;
+    layout.stride = sizeof(TubeCapInstance);
+    layout.per_instance = true;
+    layout.use_shader_input_locations = true;
+    layout.attribute_count = 4;
+    layout.attributes[0] = vertex_attr(1, VertexFormat::Float3, offsetof(TubeCapInstance, center));
+    layout.attributes[1] = vertex_attr(2, VertexFormat::Float, offsetof(TubeCapInstance, width));
+    layout.attributes[2] = vertex_attr(3, VertexFormat::Float3, offsetof(TubeCapInstance, neighbor));
+    layout.attributes[3] = vertex_attr(4, VertexFormat::Float4, offsetof(TubeCapInstance, color));
+    return layout;
+}
+
 constexpr float kPi = 3.14159265358979323846f;
 constexpr const char* WORLD_TUBE_LINE_SHADER_UUID = "termin-engine-world-tube-line";
 constexpr const char* WORLD_TUBE_LINE_CAP_SHADER_UUID =
@@ -291,23 +344,9 @@ void WorldTubeLineRenderer::draw_polyline(
     push.up_hint[2] = style.up_hint.z;
     push.up_hint[3] = 0.0f;
 
-    VertexBufferLayout corners;
-    corners.stride = sizeof(TubeCornerVertex);
-    corners.per_instance = false;
-    corners.use_shader_input_locations = true;
-    corners.attributes = {
-        {0, VertexFormat::Float3, 0},
-    };
-
-    VertexBufferLayout segment_layout;
-    segment_layout.stride = sizeof(TubeSegmentInstance);
-    segment_layout.per_instance = true;
-    segment_layout.use_shader_input_locations = true;
-    segment_layout.attributes = {
-        {1, VertexFormat::Float3, offsetof(TubeSegmentInstance, p0)},
-        {2, VertexFormat::Float,  offsetof(TubeSegmentInstance, width)},
-        {3, VertexFormat::Float3, offsetof(TubeSegmentInstance, p1)},
-        {4, VertexFormat::Float4, offsetof(TubeSegmentInstance, color)},
+    const VertexLayoutDesc segment_layouts[2] = {
+        tube_body_corner_layout(),
+        tube_segment_instance_layout(),
     };
 
     bind_tube_line_shader(
@@ -317,7 +356,7 @@ void WorldTubeLineRenderer::draw_polyline(
         body_selected_fragment_shader,
         push,
         params.bind_resources);
-    ctx.set_vertex_layouts({corners, segment_layout});
+    ctx.set_vertex_layouts(segment_layouts, 2);
     ctx.set_topology(PrimitiveTopology::TriangleList);
     ctx.draw_arrays_instanced(
         body_corner_vbo_,
@@ -339,23 +378,9 @@ void WorldTubeLineRenderer::draw_polyline(
         return;
     }
 
-    VertexBufferLayout cap_corners;
-    cap_corners.stride = sizeof(TubeCapCornerVertex);
-    cap_corners.per_instance = false;
-    cap_corners.use_shader_input_locations = true;
-    cap_corners.attributes = {
-        {0, VertexFormat::Float3, 0},
-    };
-
-    VertexBufferLayout cap_layout;
-    cap_layout.stride = sizeof(TubeCapInstance);
-    cap_layout.per_instance = true;
-    cap_layout.use_shader_input_locations = true;
-    cap_layout.attributes = {
-        {1, VertexFormat::Float3, offsetof(TubeCapInstance, center)},
-        {2, VertexFormat::Float,  offsetof(TubeCapInstance, width)},
-        {3, VertexFormat::Float3, offsetof(TubeCapInstance, neighbor)},
-        {4, VertexFormat::Float4, offsetof(TubeCapInstance, color)},
+    const VertexLayoutDesc cap_layouts[2] = {
+        tube_cap_corner_layout(),
+        tube_cap_instance_layout(),
     };
 
     const ShaderHandle cap_selected_vertex_shader = params.cap_vertex_shader
@@ -380,7 +405,7 @@ void WorldTubeLineRenderer::draw_polyline(
         cap_selected_fragment_shader,
         push,
         params.bind_resources);
-    ctx.set_vertex_layouts({cap_corners, cap_layout});
+    ctx.set_vertex_layouts(cap_layouts, 2);
     ctx.set_topology(PrimitiveTopology::TriangleList);
     ctx.draw_arrays_instanced(
         cap_corner_vbo_,

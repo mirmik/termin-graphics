@@ -65,6 +65,85 @@ struct ScreenLinePush {
     float viewport[4];
 };
 
+VertexAttributeDesc vertex_attr(uint32_t location, VertexFormat format, size_t offset) {
+    return {
+        location,
+        format,
+        static_cast<uint32_t>(offset),
+        nullptr,
+    };
+}
+
+VertexLayoutDesc screen_segment_corner_layout() {
+    VertexLayoutDesc layout;
+    layout.stride = sizeof(CornerVertex);
+    layout.use_shader_input_locations = true;
+    layout.attribute_count = 1;
+    layout.attributes[0] = vertex_attr(0, VertexFormat::Float2, 0);
+    return layout;
+}
+
+VertexLayoutDesc screen_segment_instance_layout() {
+    VertexLayoutDesc layout;
+    layout.stride = sizeof(SegmentInstance);
+    layout.per_instance = true;
+    layout.use_shader_input_locations = true;
+    layout.attribute_count = 5;
+    layout.attributes[0] = vertex_attr(1, VertexFormat::Float3, offsetof(SegmentInstance, p0));
+    layout.attributes[1] = vertex_attr(2, VertexFormat::Float, offsetof(SegmentInstance, width_px));
+    layout.attributes[2] = vertex_attr(3, VertexFormat::Float3, offsetof(SegmentInstance, p1));
+    layout.attributes[3] = vertex_attr(4, VertexFormat::Float, offsetof(SegmentInstance, flags));
+    layout.attributes[4] = vertex_attr(5, VertexFormat::Float4, offsetof(SegmentInstance, color));
+    return layout;
+}
+
+VertexLayoutDesc screen_cap_corner_layout() {
+    VertexLayoutDesc layout;
+    layout.stride = sizeof(CapCornerVertex);
+    layout.use_shader_input_locations = true;
+    layout.attribute_count = 1;
+    layout.attributes[0] = vertex_attr(0, VertexFormat::Float2, 0);
+    return layout;
+}
+
+VertexLayoutDesc screen_cap_instance_layout() {
+    VertexLayoutDesc layout;
+    layout.stride = sizeof(CapInstance);
+    layout.per_instance = true;
+    layout.use_shader_input_locations = true;
+    layout.attribute_count = 5;
+    layout.attributes[0] = vertex_attr(1, VertexFormat::Float3, offsetof(CapInstance, center));
+    layout.attributes[1] = vertex_attr(2, VertexFormat::Float, offsetof(CapInstance, width_px));
+    layout.attributes[2] = vertex_attr(3, VertexFormat::Float3, offsetof(CapInstance, neighbor));
+    layout.attributes[3] = vertex_attr(4, VertexFormat::Float, offsetof(CapInstance, flags));
+    layout.attributes[4] = vertex_attr(5, VertexFormat::Float4, offsetof(CapInstance, color));
+    return layout;
+}
+
+VertexLayoutDesc screen_join_corner_layout() {
+    VertexLayoutDesc layout;
+    layout.stride = sizeof(JoinCornerVertex);
+    layout.use_shader_input_locations = true;
+    layout.attribute_count = 1;
+    layout.attributes[0] = vertex_attr(0, VertexFormat::Float, 0);
+    return layout;
+}
+
+VertexLayoutDesc screen_join_instance_layout() {
+    VertexLayoutDesc layout;
+    layout.stride = sizeof(JoinInstance);
+    layout.per_instance = true;
+    layout.use_shader_input_locations = true;
+    layout.attribute_count = 6;
+    layout.attributes[0] = vertex_attr(1, VertexFormat::Float3, offsetof(JoinInstance, prev));
+    layout.attributes[1] = vertex_attr(2, VertexFormat::Float, offsetof(JoinInstance, width_px));
+    layout.attributes[2] = vertex_attr(3, VertexFormat::Float3, offsetof(JoinInstance, center));
+    layout.attributes[3] = vertex_attr(4, VertexFormat::Float, offsetof(JoinInstance, flags));
+    layout.attributes[4] = vertex_attr(5, VertexFormat::Float3, offsetof(JoinInstance, next));
+    layout.attributes[5] = vertex_attr(6, VertexFormat::Float4, offsetof(JoinInstance, color));
+    return layout;
+}
+
 constexpr std::array<CornerVertex, 6> kSegmentCorners{{
     {0.0f,  1.0f},
     {0.0f, -1.0f},
@@ -388,28 +467,13 @@ void ScreenSpaceLineRenderer::draw_polyline(
     push.viewport[0] = std::max(params.viewport_width, 1.0f);
     push.viewport[1] = std::max(params.viewport_height, 1.0f);
 
-    VertexBufferLayout corners;
-    corners.stride = sizeof(CornerVertex);
-    corners.per_instance = false;
-    corners.use_shader_input_locations = true;
-    corners.attributes = {
-        {0, VertexFormat::Float2, 0},
-    };
-
-    VertexBufferLayout segment;
-    segment.stride = sizeof(SegmentInstance);
-    segment.per_instance = true;
-    segment.use_shader_input_locations = true;
-    segment.attributes = {
-        {1, VertexFormat::Float3, offsetof(SegmentInstance, p0)},
-        {2, VertexFormat::Float,  offsetof(SegmentInstance, width_px)},
-        {3, VertexFormat::Float3, offsetof(SegmentInstance, p1)},
-        {4, VertexFormat::Float,  offsetof(SegmentInstance, flags)},
-        {5, VertexFormat::Float4, offsetof(SegmentInstance, color)},
+    const VertexLayoutDesc segment_layouts[2] = {
+        screen_segment_corner_layout(),
+        screen_segment_instance_layout(),
     };
 
     bind_screen_line_shader(ctx, shader_handle_, vertex_shader_, fragment_shader_, push);
-    ctx.set_vertex_layouts({corners, segment});
+    ctx.set_vertex_layouts(segment_layouts, 2);
     ctx.set_topology(PrimitiveTopology::TriangleList);
     ctx.draw_arrays_instanced(
         corner_vbo_,
@@ -432,24 +496,9 @@ void ScreenSpaceLineRenderer::draw_polyline(
             return;
         }
 
-        VertexBufferLayout cap_corners;
-        cap_corners.stride = sizeof(CapCornerVertex);
-        cap_corners.per_instance = false;
-        cap_corners.use_shader_input_locations = true;
-        cap_corners.attributes = {
-            {0, VertexFormat::Float2, 0},
-        };
-
-        VertexBufferLayout cap_layout;
-        cap_layout.stride = sizeof(CapInstance);
-        cap_layout.per_instance = true;
-        cap_layout.use_shader_input_locations = true;
-        cap_layout.attributes = {
-            {1, VertexFormat::Float3, offsetof(CapInstance, center)},
-            {2, VertexFormat::Float,  offsetof(CapInstance, width_px)},
-            {3, VertexFormat::Float3, offsetof(CapInstance, neighbor)},
-            {4, VertexFormat::Float,  offsetof(CapInstance, flags)},
-            {5, VertexFormat::Float4, offsetof(CapInstance, color)},
+        const VertexLayoutDesc cap_layouts[2] = {
+            screen_cap_corner_layout(),
+            screen_cap_instance_layout(),
         };
 
         bind_screen_line_shader(
@@ -458,7 +507,7 @@ void ScreenSpaceLineRenderer::draw_polyline(
             cap_vertex_shader_,
             cap_fragment_shader_,
             push);
-        ctx.set_vertex_layouts({cap_corners, cap_layout});
+        ctx.set_vertex_layouts(cap_layouts, 2);
         ctx.set_topology(PrimitiveTopology::TriangleList);
         ctx.draw_arrays_instanced(
             cap_corner_vbo_,
@@ -482,24 +531,9 @@ void ScreenSpaceLineRenderer::draw_polyline(
             return;
         }
 
-        VertexBufferLayout round_join_corners;
-        round_join_corners.stride = sizeof(CapCornerVertex);
-        round_join_corners.per_instance = false;
-        round_join_corners.use_shader_input_locations = true;
-        round_join_corners.attributes = {
-            {0, VertexFormat::Float2, 0},
-        };
-
-        VertexBufferLayout round_join_layout;
-        round_join_layout.stride = sizeof(CapInstance);
-        round_join_layout.per_instance = true;
-        round_join_layout.use_shader_input_locations = true;
-        round_join_layout.attributes = {
-            {1, VertexFormat::Float3, offsetof(CapInstance, center)},
-            {2, VertexFormat::Float,  offsetof(CapInstance, width_px)},
-            {3, VertexFormat::Float3, offsetof(CapInstance, neighbor)},
-            {4, VertexFormat::Float,  offsetof(CapInstance, flags)},
-            {5, VertexFormat::Float4, offsetof(CapInstance, color)},
+        const VertexLayoutDesc round_join_layouts[2] = {
+            screen_cap_corner_layout(),
+            screen_cap_instance_layout(),
         };
 
         bind_screen_line_shader(
@@ -508,7 +542,7 @@ void ScreenSpaceLineRenderer::draw_polyline(
             round_join_vertex_shader_,
             round_join_fragment_shader_,
             push);
-        ctx.set_vertex_layouts({round_join_corners, round_join_layout});
+        ctx.set_vertex_layouts(round_join_layouts, 2);
         ctx.set_topology(PrimitiveTopology::TriangleList);
         ctx.draw_arrays_instanced(
             round_join_corner_vbo_,
@@ -531,25 +565,9 @@ void ScreenSpaceLineRenderer::draw_polyline(
             return;
         }
 
-        VertexBufferLayout join_corners;
-        join_corners.stride = sizeof(JoinCornerVertex);
-        join_corners.per_instance = false;
-        join_corners.use_shader_input_locations = true;
-        join_corners.attributes = {
-            {0, VertexFormat::Float, 0},
-        };
-
-        VertexBufferLayout join_layout;
-        join_layout.stride = sizeof(JoinInstance);
-        join_layout.per_instance = true;
-        join_layout.use_shader_input_locations = true;
-        join_layout.attributes = {
-            {1, VertexFormat::Float3, offsetof(JoinInstance, prev)},
-            {2, VertexFormat::Float,  offsetof(JoinInstance, width_px)},
-            {3, VertexFormat::Float3, offsetof(JoinInstance, center)},
-            {4, VertexFormat::Float,  offsetof(JoinInstance, flags)},
-            {5, VertexFormat::Float3, offsetof(JoinInstance, next)},
-            {6, VertexFormat::Float4, offsetof(JoinInstance, color)},
+        const VertexLayoutDesc join_layouts[2] = {
+            screen_join_corner_layout(),
+            screen_join_instance_layout(),
         };
 
         bind_screen_line_shader(
@@ -558,7 +576,7 @@ void ScreenSpaceLineRenderer::draw_polyline(
             join_vertex_shader_,
             join_fragment_shader_,
             push);
-        ctx.set_vertex_layouts({join_corners, join_layout});
+        ctx.set_vertex_layouts(join_layouts, 2);
         ctx.set_topology(PrimitiveTopology::TriangleList);
         ctx.draw_arrays_instanced(
             join_corner_vbo_,

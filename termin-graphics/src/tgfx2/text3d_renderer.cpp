@@ -60,16 +60,21 @@ struct Text3DVertex {
 static_assert(sizeof(Text3DVertex) == 7 * sizeof(float),
               "Text3DVertex layout drift - shader and C++ disagree");
 
-VertexBufferLayout text3d_vertex_layout() {
-    VertexBufferLayout layout;
+VertexLayoutDesc text3d_vertex_layout() {
+    VertexLayoutDesc layout;
     layout.stride = sizeof(Text3DVertex);
-    layout.attributes = {
-        {0, VertexFormat::Float3,
-         static_cast<uint32_t>(offsetof(Text3DVertex, world_pos)),
-         "POSITION"},
-        {1, VertexFormat::Float4,
-         static_cast<uint32_t>(offsetof(Text3DVertex, offset_uv)),
-         "TEXCOORD0"},
+    layout.attribute_count = 2;
+    layout.attributes[0] = {
+        0,
+        VertexFormat::Float3,
+        static_cast<uint32_t>(offsetof(Text3DVertex, world_pos)),
+        intern_vertex_semantic("position"),
+    };
+    layout.attributes[1] = {
+        1,
+        VertexFormat::Float4,
+        static_cast<uint32_t>(offsetof(Text3DVertex, offset_uv)),
+        intern_vertex_semantic("uv0"),
     };
     return layout;
 }
@@ -235,7 +240,7 @@ void Text3DRenderer::draw(std::string_view text_utf8,
     if (verts.empty()) return;
 
     const uint32_t vertex_count = static_cast<uint32_t>(verts.size());
-    const VertexBufferLayout layout = text3d_vertex_layout();
+    const VertexLayoutDesc layout = text3d_vertex_layout();
     ctx.draw_transient_arrays(
         verts.data(),
         static_cast<uint32_t>(verts.size() * sizeof(Text3DVertex)),
