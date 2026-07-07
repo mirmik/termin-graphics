@@ -33,6 +33,24 @@ TGFX_API size_t tc_shader_count(void);
 // Shader source operations
 // ============================================================================
 
+typedef struct tc_shader_source_desc {
+    const char* vertex_source;
+    const char* fragment_source;
+    const char* geometry_source;
+    const char* name;
+    const char* source_path;
+    const char* vertex_entry;
+    const char* fragment_entry;
+    const char* geometry_entry;
+} tc_shader_source_desc;
+
+typedef struct tc_shader_create_desc {
+    tc_shader_source_desc sources;
+    const char* uuid;
+    tc_shader_language language;
+    tc_shader_artifact_policy artifact_policy;
+} tc_shader_create_desc;
+
 TGFX_API bool tc_shader_set_sources(
     tc_shader* shader,
     const char* vertex_source,
@@ -42,16 +60,9 @@ TGFX_API bool tc_shader_set_sources(
     const char* source_path
 );
 
-TGFX_API bool tc_shader_set_sources_with_entries(
+TGFX_API bool tc_shader_set_sources_desc(
     tc_shader* shader,
-    const char* vertex_source,
-    const char* fragment_source,
-    const char* geometry_source,
-    const char* name,
-    const char* source_path,
-    const char* vertex_entry,
-    const char* fragment_entry,
-    const char* geometry_entry
+    const tc_shader_source_desc* desc
 );
 
 TGFX_API tc_shader_handle tc_shader_from_sources(
@@ -63,29 +74,8 @@ TGFX_API tc_shader_handle tc_shader_from_sources(
     const char* uuid
 );
 
-TGFX_API tc_shader_handle tc_shader_from_sources_ex(
-    const char* vertex_source,
-    const char* fragment_source,
-    const char* geometry_source,
-    const char* name,
-    const char* source_path,
-    const char* uuid,
-    tc_shader_language language,
-    tc_shader_artifact_policy artifact_policy
-);
-
-TGFX_API tc_shader_handle tc_shader_from_sources_with_entries_ex(
-    const char* vertex_source,
-    const char* fragment_source,
-    const char* geometry_source,
-    const char* name,
-    const char* source_path,
-    const char* uuid,
-    tc_shader_language language,
-    tc_shader_artifact_policy artifact_policy,
-    const char* vertex_entry,
-    const char* fragment_entry,
-    const char* geometry_entry
+TGFX_API tc_shader_handle tc_shader_from_sources_desc(
+    const tc_shader_create_desc* desc
 );
 
 // Register a shader with process-lifetime ownership. The registry holds
