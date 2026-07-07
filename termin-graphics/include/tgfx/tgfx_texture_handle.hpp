@@ -13,9 +13,35 @@ extern "C" {
 #include <cstring>
 #include <vector>
 #include <cstdint>
+#include <cstddef>
 #include <tuple>
 
 namespace termin {
+
+struct TexturePixelDataView {
+    const void* data = nullptr;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint8_t channels = 4;
+
+    size_t byte_size() const {
+        return static_cast<size_t>(width) * height * channels;
+    }
+};
+
+struct TextureTransformFlags {
+    bool flip_x = false;
+    bool flip_y = true;
+    bool transpose = false;
+};
+
+struct TcTextureCreateInfo {
+    TexturePixelDataView pixels;
+    TextureTransformFlags transform;
+    std::string name;
+    std::string source_path;
+    std::string uuid_hint;
+};
 
 // TcTexture - texture wrapper with registry integration
 // Stores handle (index + generation) instead of raw pointer
@@ -184,18 +210,7 @@ public:
     }
 
     // Create TcTexture from raw pixel data
-    static TcTexture from_data(
-        const void* pixel_data,
-        uint32_t width,
-        uint32_t height,
-        uint8_t channels = 4,
-        bool flip_x = false,
-        bool flip_y = true,
-        bool transpose = false,
-        const std::string& name = "",
-        const std::string& source_path = "",
-        const std::string& uuid_hint = ""
-    );
+    static TcTexture from_data(const TcTextureCreateInfo& info);
 
     // Create 1x1 white texture
     static TcTexture white_1x1();

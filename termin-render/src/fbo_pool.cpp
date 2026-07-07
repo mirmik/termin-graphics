@@ -6,15 +6,9 @@ namespace termin {
 bool FBOPool::ensure_native(
     tgfx::IRenderDevice& device,
     const std::string& key,
-    int width,
-    int height,
-    tgfx::PixelFormat color_format,
-    bool has_depth,
-    tgfx::PixelFormat depth_format,
-    int samples
+    const tgfx::RenderTargetPoolDesc& desc
 ) {
-    return ensure(device, key, width, height, color_format,
-                  has_depth, depth_format, samples);
+    return ensure(device, key, desc);
 }
 
 tgfx::TextureHandle FBOPool::get_color_tgfx2(const std::string& key) const {

@@ -32,7 +32,7 @@ std::string resource_type_for_texture(const RenderPipeline& pipeline, const Pipe
             return spec.resource_type;
         }
     }
-    return tgfx::is_depth_format(entry.format) ? "depth_texture" : "color_texture";
+    return tgfx::is_depth_format(entry.desc.format) ? "depth_texture" : "color_texture";
 }
 
 nb::object fbo_info(RenderPipeline& self, const std::string& key) {
@@ -45,13 +45,13 @@ nb::object fbo_info(RenderPipeline& self, const std::string& key) {
         }
         nb::dict d;
         d["key"] = entry.key;
-        d["width"] = entry.width;
-        d["height"] = entry.height;
-        d["samples"] = entry.samples;
-        d["has_depth"] = entry.has_depth;
+        d["width"] = entry.desc.width;
+        d["height"] = entry.desc.height;
+        d["samples"] = entry.desc.samples;
+        d["has_depth"] = entry.desc.has_depth;
         d["resource_type"] = "fbo";
-        d["color_format"] = static_cast<int>(entry.color_format);
-        d["depth_format"] = static_cast<int>(entry.depth_format);
+        d["color_format"] = static_cast<int>(entry.desc.color_format);
+        d["depth_format"] = static_cast<int>(entry.desc.depth_format);
         d["color_texture_handle"] = entry.color_tgfx2.id;
         d["depth_texture_handle"] = entry.depth_tgfx2.id;
         return d;
@@ -233,12 +233,12 @@ void bind_render_pipeline(nb::module_& m) {
                 nb::dict d;
                 d["key"] = key;
                 d["canonical"] = entry.key;
-                d["width"] = entry.width;
-                d["height"] = entry.height;
+                d["width"] = entry.desc.width;
+                d["height"] = entry.desc.height;
                 d["samples"] = 1;
                 d["has_depth"] = false;
                 d["resource_type"] = resource_type_for_texture(self, entry);
-                d["color_format_name"] = std::string(tgfx::pixel_format_name(entry.format));
+                d["color_format_name"] = std::string(tgfx::pixel_format_name(entry.desc.format));
                 d["color_texture_handle"] = entry.handle.id;
                 d["depth_texture_handle"] = 0;
                 return d;

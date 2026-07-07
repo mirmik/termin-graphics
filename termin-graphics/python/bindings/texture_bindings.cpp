@@ -160,12 +160,13 @@ void bind_texture(nb::module_& m) {
             const std::string& source_path,
             const std::string& uuid_hint
         ) {
-            return TcTexture::from_data(
-                data.data(),
-                width, height, channels,
-                flip_x, flip_y, transpose,
-                name, source_path, uuid_hint
-            );
+            return TcTexture::from_data(TcTextureCreateInfo{
+                TexturePixelDataView{data.data(), width, height, channels},
+                TextureTransformFlags{flip_x, flip_y, transpose},
+                name,
+                source_path,
+                uuid_hint
+            });
         },
             nb::arg("data"),
             nb::arg("width"),

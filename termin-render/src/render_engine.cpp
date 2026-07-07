@@ -475,9 +475,13 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 tgfx::TextureUsage::CopyDst;
             tgfx::PixelFormat color_format =
                 resolve_fbo_color_format(format, default_rt_ctx, *device);
+            tgfx::TextureDesc texture_desc;
+            texture_desc.width = static_cast<uint32_t>(tex_width);
+            texture_desc.height = static_cast<uint32_t>(tex_height);
+            texture_desc.format = color_format;
+            texture_desc.usage = usage;
             if (!pipeline_cache.texture_pool.ensure(
-                    *device, canon, tex_width, tex_height,
-                    color_format, usage)) {
+                    *device, canon, texture_desc)) {
                 tc::Log::error(
                     "RenderEngine::render_scene_pipeline_offscreen: failed to allocate color_texture '%s'",
                     canon);
@@ -506,9 +510,13 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 tgfx::TextureUsage::DepthStencilAttachment |
                 tgfx::TextureUsage::CopySrc |
                 tgfx::TextureUsage::CopyDst;
+            tgfx::TextureDesc texture_desc;
+            texture_desc.width = static_cast<uint32_t>(tex_width);
+            texture_desc.height = static_cast<uint32_t>(tex_height);
+            texture_desc.format = tgfx::PixelFormat::D32F;
+            texture_desc.usage = usage;
             if (!pipeline_cache.texture_pool.ensure(
-                    *device, canon, tex_width, tex_height,
-                    tgfx::PixelFormat::D32F, usage)) {
+                    *device, canon, texture_desc)) {
                 tc::Log::error(
                     "RenderEngine::render_scene_pipeline_offscreen: failed to allocate depth_texture '%s'",
                     canon);
@@ -556,10 +564,15 @@ void RenderEngine::render_scene_pipeline_offscreen(
         FBOPool& fbo_pool = pipeline.fbo_pool();
 
         tgfx::PixelFormat color_fmt = resolve_fbo_color_format(format, default_rt_ctx, *device);
+        tgfx::RenderTargetPoolDesc target_desc;
+        target_desc.width = fbo_width;
+        target_desc.height = fbo_height;
+        target_desc.samples = samples;
+        target_desc.color_format = color_fmt;
+        target_desc.has_depth = true;
+        target_desc.depth_format = tgfx::PixelFormat::D32F;
 
-        fbo_pool.ensure_native(
-            *device, canon, fbo_width, fbo_height,
-            color_fmt, /*has_depth=*/true, tgfx::PixelFormat::D32F, samples);
+        fbo_pool.ensure_native(*device, canon, target_desc);
         (void)filter;
 
         const char* aliases[64];

@@ -42,12 +42,7 @@ public:
     bool ensure_native(
         tgfx::IRenderDevice& device,
         const std::string& key,
-        int width,
-        int height,
-        tgfx::PixelFormat color_format = tgfx::PixelFormat::RGBA8_UNorm,
-        bool has_depth = true,
-        tgfx::PixelFormat depth_format = tgfx::PixelFormat::D24_UNorm,
-        int samples = 1
+        const tgfx::RenderTargetPoolDesc& desc
     );
 
     // Persistent tgfx2 texture handles for this entry's color / depth
