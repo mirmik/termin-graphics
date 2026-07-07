@@ -139,22 +139,19 @@ void Text3DRenderer::begin(RenderContext2* ctx,
     std::memcpy(cam_up_, cam_up, sizeof(cam_up_));
 }
 
-void Text3DRenderer::draw(std::string_view text_utf8,
-                           const float position[3],
-                           float r, float g, float b, float a,
-                           float size,
-                           Anchor anchor) {
+void Text3DRenderer::draw(std::string_view text_utf8, const DrawOptions& options) {
     if (text_utf8.empty() || font_ == nullptr || ctx_ == nullptr) return;
     const bool screen_aligned = expansion_mode_ == ExpansionMode::ScreenAligned;
+    const termin::Color4& color = options.color;
 
     // `size` is world units for WorldPlane and display pixels for ScreenAligned.
-    const float metrics_size = screen_aligned ? size : kText3DRasterPx;
+    const float metrics_size = screen_aligned ? options.size : kText3DRasterPx;
     const bool use_sdf = screen_aligned && font_->is_sdf_size(metrics_size);
     font_->ensure_glyphs(text_utf8, metrics_size, ctx_);
 
     const float glyph_scale = screen_aligned
         ? 1.0f
-        : size / std::max(1.0f, static_cast<float>(font_->line_height_px(kText3DRasterPx)));
+        : options.size / std::max(1.0f, static_cast<float>(font_->line_height_px(kText3DRasterPx)));
     const float ascent = static_cast<float>(font_->ascent_px(metrics_size))
                        * glyph_scale;
 
@@ -162,7 +159,7 @@ void Text3DRenderer::draw(std::string_view text_utf8,
                         * glyph_scale;
 
     float start_x = 0.0f;
-    switch (anchor) {
+    switch (options.anchor) {
         case Anchor::Center: start_x = -total_w * 0.5f; break;
         case Anchor::Right:  start_x = -total_w;        break;
         case Anchor::Left:
@@ -177,10 +174,10 @@ void Text3DRenderer::draw(std::string_view text_utf8,
 
     Text3DPushData push{};
     std::memcpy(push.mvp, mvp_, sizeof(push.mvp));
-    push.color[0] = r;
-    push.color[1] = g;
-    push.color[2] = b;
-    push.color[3] = a;
+    push.color[0] = color.r;
+    push.color[1] = color.g;
+    push.color[2] = color.b;
+    push.color[3] = color.a;
     push.cam_right[0] = cam_right_[0];
     push.cam_right[1] = cam_right_[1];
     push.cam_right[2] = cam_right_[2];
@@ -202,9 +199,9 @@ void Text3DRenderer::draw(std::string_view text_utf8,
     std::vector<Text3DVertex> verts;
     verts.reserve(text_utf8.size() * 6);
 
-    const float px = position[0];
-    const float py = position[1];
-    const float pz = position[2];
+    const float px = options.position.x;
+    const float py = options.position.y;
+    const float pz = options.position.z;
 
     float cursor_x = start_x;
     size_t i = 0;

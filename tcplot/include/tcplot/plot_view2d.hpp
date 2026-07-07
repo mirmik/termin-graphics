@@ -38,24 +38,13 @@ public:
     PlotView2D(const PlotView2D&) = delete;
     PlotView2D& operator=(const PlotView2D&) = delete;
 
-    void plot(const double* x, const double* y, size_t n,
-              float cr, float cg, float cb, float ca,
-              double thickness = 1.5,
-              const char* label = "");
+    void plot(SeriesData2DView series, LinePlotOptions options = {});
 
-    void plot_colormap(const double* x, const double* y, const double* scalar,
-                       size_t n,
-                       SurfaceColorMap colormap = SurfaceColorMap::Jet,
-                       double scalar_min = 0.0,
-                       double scalar_max = 1.0,
-                       double thickness = 1.5,
-                       const char* label = "",
-                       bool colormap_reversed = false);
+    void plot_colormap(SeriesData2DView series,
+                       const double* scalar,
+                       LineColormapOptions options = {});
 
-    void scatter(const double* x, const double* y, size_t n,
-                 float cr, float cg, float cb, float ca,
-                 double size = 4.0,
-                 const char* label = "");
+    void scatter(SeriesData2DView series, ScatterPlotOptions options = {});
 
     void clear();
     void fit();

@@ -547,6 +547,12 @@ void bind_tgfx2(nb::module_& m) {
                                          static_cast<uint32_t>(data.size()));
              },
              nb::arg("data"))
+        .def("set_push_constants",
+             [](tgfx::RenderContext2& self, const std::string& data) {
+                 self.set_push_constants(data.data(),
+                                         static_cast<uint32_t>(data.size()));
+             },
+             nb::arg("data"))
         // Symbolic resource binding API — resolved from shader layout
         // metadata set via use_shader_resource_layout().
         .def("use_shader_resource_layout",
@@ -558,6 +564,14 @@ void bind_tgfx2(nb::module_& m) {
              [](tgfx::RenderContext2& self,
                 const std::string& name,
                 nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
+                 self.bind_uniform_data(name, data.data(),
+                                        static_cast<uint32_t>(data.size()));
+             },
+             nb::arg("name"), nb::arg("data"))
+        .def("bind_uniform_by_name",
+             [](tgfx::RenderContext2& self,
+                const std::string& name,
+                const std::string& data) {
                  self.bind_uniform_data(name, data.data(),
                                         static_cast<uint32_t>(data.size()));
              },
@@ -1153,11 +1167,16 @@ void bind_tgfx2(nb::module_& m) {
                 const std::string& text,
                 float x, float y,
                 std::tuple<float, float, float, float> color,
-                float size,
-                nb::object anchor) {
+                 float size,
+                 nb::object anchor) {
                  auto [r, g, b, a] = color;
-                 self.draw(text, x, y, r, g, b, a, size,
-                           resolve_text2d_anchor(anchor));
+                 self.draw(text, tgfx::Text2DRenderer::DrawOptions{
+                     x,
+                     y,
+                     termin::Color4{r, g, b, a},
+                     size,
+                     resolve_text2d_anchor(anchor)
+                 });
              },
              nb::arg("text"),
              nb::arg("x"), nb::arg("y"),
@@ -1212,12 +1231,15 @@ void bind_tgfx2(nb::module_& m) {
                 std::tuple<float, float, float> position,
                 std::tuple<float, float, float, float> color,
                 float size,
-                nb::object anchor) {
+                 nb::object anchor) {
                  auto [px, py, pz] = position;
-                 float pos[3] = {px, py, pz};
                  auto [r, g, b, a] = color;
-                 self.draw(text, pos, r, g, b, a, size,
-                           resolve_text3d_anchor(anchor));
+                 self.draw(text, tgfx::Text3DRenderer::DrawOptions{
+                     termin::Vec3f{px, py, pz},
+                     termin::Color4{r, g, b, a},
+                     size,
+                     resolve_text3d_anchor(anchor)
+                 });
              },
              nb::arg("text"),
              nb::arg("position"),

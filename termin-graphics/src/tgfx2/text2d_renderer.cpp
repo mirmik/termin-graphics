@@ -175,36 +175,33 @@ void Text2DRenderer::begin(RenderContext2* ctx,
         proj_);
 }
 
-void Text2DRenderer::draw(std::string_view text_utf8,
-                           float x, float y,
-                           float r, float g, float b, float a,
-                           float size,
-                           Anchor anchor) {
+void Text2DRenderer::draw(std::string_view text_utf8, const DrawOptions& options) {
     if (text_utf8.empty() || font_ == nullptr || ctx_ == nullptr) return;
 
     const bool profile = tc_profiler_enabled();
+    const termin::Color4& color = options.color;
 
     // Rasterise any missing glyphs for this display size and re-upload
     // the atlas if needed. Bitmap path bakes per-size; SDF path bakes
     // once at reference size. The atlas handles branching internally.
     if (profile) tc_profiler_begin_section("text.ensure_glyphs");
-    font_->ensure_glyphs(text_utf8, size, ctx_);
+    font_->ensure_glyphs(text_utf8, options.size, ctx_);
     if (profile) tc_profiler_end_section();
 
     if (profile) tc_profiler_begin_section("text.measure");
-    auto total = font_->measure_text(text_utf8, size);
+    auto total = font_->measure_text(text_utf8, options.size);
     const float total_w = total.width;
     if (profile) tc_profiler_end_section();
 
-    float start_x = x;
-    float start_y = y;
-    switch (anchor) {
+    float start_x = options.x;
+    float start_y = options.y;
+    switch (options.anchor) {
         case Anchor::Center:
-            start_x = x - total_w * 0.5f;
-            start_y = y - size * 0.5f;
+            start_x = options.x - total_w * 0.5f;
+            start_y = options.y - options.size * 0.5f;
             break;
         case Anchor::Right:
-            start_x = x - total_w;
+            start_x = options.x - total_w;
             break;
         case Anchor::Left:
         default:
@@ -226,9 +223,9 @@ void Text2DRenderer::draw(std::string_view text_utf8,
     // our own begin() and this draw.
     RenderContext2& ctx = *ctx_;
 
-    const bool use_sdf = font_->is_sdf_size(size);
+    const bool use_sdf = font_->is_sdf_size(options.size);
     const float sdf_scale = use_sdf
-        ? size / static_cast<float>(font_->sdf_reference_px())
+        ? options.size / static_cast<float>(font_->sdf_reference_px())
         : 1.0f;
     const float sdf_spread_px = use_sdf
         ? static_cast<float>(font_->sdf_spread()) * sdf_scale
@@ -257,10 +254,10 @@ void Text2DRenderer::draw(std::string_view text_utf8,
                 push.projection[col * 4 + row] = proj_[row * 4 + col];
             }
         }
-        push.color[0] = r;
-        push.color[1] = g;
-        push.color[2] = b;
-        push.color[3] = a;
+        push.color[0] = color.r;
+        push.color[1] = color.g;
+        push.color[2] = color.b;
+        push.color[3] = color.a;
         // smoothing: ±1 reference texel edge width → 1/(2*spread) in
         // texture space where edge=0.5 and dist=[0,1] maps to
         // [-spread, +spread] reference texels.
@@ -273,10 +270,10 @@ void Text2DRenderer::draw(std::string_view text_utf8,
                 push.projection[col * 4 + row] = proj_[row * 4 + col];
             }
         }
-        push.color[0] = r;
-        push.color[1] = g;
-        push.color[2] = b;
-        push.color[3] = a;
+        push.color[0] = color.r;
+        push.color[1] = color.g;
+        push.color[2] = color.b;
+        push.color[3] = color.a;
         ctx.bind_uniform_data("text2d_draw", &push, static_cast<uint32_t>(sizeof(push)));
     }
     if (profile) tc_profiler_end_section();
@@ -299,7 +296,7 @@ void Text2DRenderer::draw(std::string_view text_utf8,
     size_t i = 0;
     while (i < text_utf8.size()) {
         uint32_t cp = internal::utf8_decode(text_utf8, i);
-        auto gi = font_->get_glyph(cp, size);
+        auto gi = font_->get_glyph(cp, options.size);
         if (!gi) continue;
 
         // Metrics are already in display pixels at this size — no

@@ -22,11 +22,12 @@ namespace tcplot {
 
 namespace {
 
-std::optional<Color4> plot2d_opt_color(float r, float g, float b, float a) {
-    if (std::isnan(r) || std::isnan(g) || std::isnan(b) || std::isnan(a)) {
+std::optional<Color4> plot2d_opt_color(Color4 color) {
+    if (std::isnan(color.r) || std::isnan(color.g)
+        || std::isnan(color.b) || std::isnan(color.a)) {
         return std::nullopt;
     }
-    return Color4{r, g, b, a};
+    return color;
 }
 
 std::vector<double> plot2d_copy_array(const double* src, size_t n) {
@@ -74,37 +75,34 @@ void PlotView2D::ensure_offscreen_(int w, int h) {
     offscreen_h_ = h;
 }
 
-void PlotView2D::plot(const double* x, const double* y, size_t n,
-                       float cr, float cg, float cb, float ca,
-                       double thickness,
-                       const char* label) {
-    engine_->plot(plot2d_copy_array(x, n), plot2d_copy_array(y, n),
-                  plot2d_opt_color(cr, cg, cb, ca), thickness,
-                  label ? std::string(label) : std::string());
+void PlotView2D::plot(SeriesData2DView series, LinePlotOptions options) {
+    if (options.color.has_value()) {
+        options.color = plot2d_opt_color(*options.color);
+    }
+    engine_->plot(
+        plot2d_copy_array(series.x, series.count),
+        plot2d_copy_array(series.y, series.count),
+        std::move(options));
 }
 
-void PlotView2D::plot_colormap(const double* x, const double* y,
-                                const double* scalar, size_t n,
-                                SurfaceColorMap colormap,
-                                double scalar_min,
-                                double scalar_max,
-                                double thickness,
-                                const char* label,
-                                bool colormap_reversed) {
-    engine_->plot_colormap(plot2d_copy_array(x, n), plot2d_copy_array(y, n),
-                           plot2d_copy_array(scalar, n), colormap,
-                           scalar_min, scalar_max, thickness,
-                           label ? std::string(label) : std::string(),
-                           colormap_reversed);
+void PlotView2D::plot_colormap(SeriesData2DView series,
+                                const double* scalar,
+                                LineColormapOptions options) {
+    engine_->plot_colormap(
+        plot2d_copy_array(series.x, series.count),
+        plot2d_copy_array(series.y, series.count),
+        plot2d_copy_array(scalar, series.count),
+        std::move(options));
 }
 
-void PlotView2D::scatter(const double* x, const double* y, size_t n,
-                          float cr, float cg, float cb, float ca,
-                          double size,
-                          const char* label) {
-    engine_->scatter(plot2d_copy_array(x, n), plot2d_copy_array(y, n),
-                     plot2d_opt_color(cr, cg, cb, ca), size,
-                     label ? std::string(label) : std::string());
+void PlotView2D::scatter(SeriesData2DView series, ScatterPlotOptions options) {
+    if (options.color.has_value()) {
+        options.color = plot2d_opt_color(*options.color);
+    }
+    engine_->scatter(
+        plot2d_copy_array(series.x, series.count),
+        plot2d_copy_array(series.y, series.count),
+        std::move(options));
 }
 
 void PlotView2D::clear() { engine_->clear(); }

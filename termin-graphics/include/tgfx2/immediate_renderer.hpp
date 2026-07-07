@@ -17,6 +17,25 @@ namespace tgfx { class RenderContext2; class IRenderDevice; }
 
 namespace termin {
 
+struct TorusSolidSpec {
+    Vec3 center;
+    Vec3 axis;
+    double major_radius = 0.0;
+    double minor_radius = 0.0;
+    int major_segments = 32;
+    int minor_segments = 12;
+};
+
+struct ArrowSolidSpec {
+    Vec3 origin;
+    Vec3 direction;
+    double length = 0.0;
+    double shaft_radius = 0.03;
+    double head_radius = 0.06;
+    double head_length_ratio = 0.25;
+    int segments = 16;
+};
+
 /**
  * Immediate mode renderer for debug visualization, gizmos, etc.
  *
@@ -161,25 +180,14 @@ public:
     );
 
     void torus_solid(
-        const Vec3& center,
-        const Vec3& axis,
-        double major_radius,
-        double minor_radius,
+        const TorusSolidSpec& spec,
         const Color4& color,
-        int major_segments = 32,
-        int minor_segments = 12,
         bool depth_test = false
     );
 
     void arrow_solid(
-        const Vec3& origin,
-        const Vec3& direction,
-        double length,
+        const ArrowSolidSpec& spec,
         const Color4& color,
-        double shaft_radius = 0.03,
-        double head_radius = 0.06,
-        double head_length_ratio = 0.25,
-        int segments = 16,
         bool depth_test = false
     );
 

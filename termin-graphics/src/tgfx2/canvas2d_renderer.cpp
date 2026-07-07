@@ -189,7 +189,7 @@ void Canvas2DRenderer::end_clip() {
 void Canvas2DRenderer::draw_rect(float x, float y, float w, float h,
                                  CanvasColor color, float /*radius*/) {
     if (ctx_ == nullptr || w <= 0.0f || h <= 0.0f) return;
-    append_solid_quad_(x, y, x + w, y + h, color);
+    append_solid_quad_(termin::Rect2f{x, y, w, h}.bounds(), color);
 }
 
 void Canvas2DRenderer::draw_circle(float cx, float cy, float radius,
@@ -287,9 +287,11 @@ void Canvas2DRenderer::draw_texture(TextureHandle texture,
     if (ctx_ == nullptr || !texture || w <= 0.0f || h <= 0.0f) return;
     const float v0 = flip_v ? 1.0f : 0.0f;
     const float v1 = flip_v ? 0.0f : 1.0f;
-    append_textured_quad_(x, y, x + w, y + h,
-                          0.0f, v0, 1.0f, v1,
-                          tint, texture);
+    append_textured_quad_(
+        termin::Rect2f{x, y, w, h}.bounds(),
+        termin::Bounds2f{0.0f, v0, 1.0f, v1},
+        tint,
+        texture);
 }
 
 void Canvas2DRenderer::draw_text(std::string_view text,
@@ -303,11 +305,13 @@ void Canvas2DRenderer::draw_text(std::string_view text,
     if (active_font == nullptr) return;
 
     flush_();
-    text2d_.draw(text,
-                 x - static_cast<float>(viewport_x_),
-                 y - static_cast<float>(viewport_y_),
-                 color.r, color.g, color.b, color.a,
-                 size_px, anchor);
+    text2d_.draw(text, Text2DRenderer::DrawOptions{
+        x - static_cast<float>(viewport_x_),
+        y - static_cast<float>(viewport_y_),
+        termin::Color4{color.r, color.g, color.b, color.a},
+        size_px,
+        anchor
+    });
 }
 
 FontAtlas::Size2f Canvas2DRenderer::measure_text(std::string_view text,
@@ -439,37 +443,34 @@ bool Canvas2DRenderer::bind_texture_(CanvasColor tint, TextureHandle texture) {
     return true;
 }
 
-void Canvas2DRenderer::push_quad_(float x0, float y0, float x1, float y1,
-                                  float u0, float v0, float u1, float v1) {
+void Canvas2DRenderer::push_quad_(termin::Bounds2f bounds, termin::Bounds2f uv) {
     const float quad[] = {
-        x0, y0, 0.0f, u0, v0, 0.0f, 0.0f,
-        x0, y1, 0.0f, u0, v1, 0.0f, 0.0f,
-        x1, y1, 0.0f, u1, v1, 0.0f, 0.0f,
-        x0, y0, 0.0f, u0, v0, 0.0f, 0.0f,
-        x1, y1, 0.0f, u1, v1, 0.0f, 0.0f,
-        x1, y0, 0.0f, u1, v0, 0.0f, 0.0f,
+        bounds.x0, bounds.y0, 0.0f, uv.x0, uv.y0, 0.0f, 0.0f,
+        bounds.x0, bounds.y1, 0.0f, uv.x0, uv.y1, 0.0f, 0.0f,
+        bounds.x1, bounds.y1, 0.0f, uv.x1, uv.y1, 0.0f, 0.0f,
+        bounds.x0, bounds.y0, 0.0f, uv.x0, uv.y0, 0.0f, 0.0f,
+        bounds.x1, bounds.y1, 0.0f, uv.x1, uv.y1, 0.0f, 0.0f,
+        bounds.x1, bounds.y0, 0.0f, uv.x1, uv.y0, 0.0f, 0.0f,
     };
     batch_vertices_.insert(batch_vertices_.end(), std::begin(quad), std::end(quad));
 }
 
-void Canvas2DRenderer::append_solid_quad_(float x0, float y0,
-                                          float x1, float y1,
-                                          CanvasColor color) {
+void Canvas2DRenderer::append_solid_quad_(termin::Bounds2f bounds, CanvasColor color) {
     if (batch_mode_ != BatchMode::Solid || !same_color(batch_color_, color)) {
         flush_();
         batch_mode_ = BatchMode::Solid;
         batch_color_ = color;
         batch_texture_ = TextureHandle{};
     }
-    push_quad_(x0, y0, x1, y1, 0.0f, 0.0f, 1.0f, 1.0f);
+    push_quad_(bounds, termin::Bounds2f{0.0f, 0.0f, 1.0f, 1.0f});
 }
 
-void Canvas2DRenderer::append_textured_quad_(float x0, float y0,
-                                             float x1, float y1,
-                                             float u0, float v0,
-                                             float u1, float v1,
-                                             CanvasColor tint,
-                                             TextureHandle texture) {
+void Canvas2DRenderer::append_textured_quad_(
+    termin::Bounds2f bounds,
+    termin::Bounds2f uv,
+    CanvasColor tint,
+    TextureHandle texture
+) {
     if (batch_mode_ != BatchMode::Texture
         || !same_color(batch_color_, tint)
         || batch_texture_.id != texture.id) {
@@ -478,7 +479,7 @@ void Canvas2DRenderer::append_textured_quad_(float x0, float y0,
         batch_color_ = tint;
         batch_texture_ = texture;
     }
-    push_quad_(x0, y0, x1, y1, u0, v0, u1, v1);
+    push_quad_(bounds, uv);
 }
 
 }  // namespace tgfx

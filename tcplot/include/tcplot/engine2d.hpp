@@ -90,23 +90,14 @@ public:
 
     // --- Series API ---
     void plot(std::vector<double> x, std::vector<double> y,
-              std::optional<Color4> color = std::nullopt,
-              double thickness = 1.5,
-              std::string label = "");
+              LinePlotOptions options = {});
 
     void plot_colormap(std::vector<double> x, std::vector<double> y,
                        std::vector<double> scalar,
-                       SurfaceColorMap colormap = SurfaceColorMap::Jet,
-                       double scalar_min = 0.0,
-                       double scalar_max = 1.0,
-                       double thickness = 1.5,
-                       std::string label = "",
-                       bool colormap_reversed = false);
+                       LineColormapOptions options = {});
 
     void scatter(std::vector<double> x, std::vector<double> y,
-                 std::optional<Color4> color = std::nullopt,
-                 double size = 4.0,
-                 std::string label = "");
+                 ScatterPlotOptions options = {});
 
     void clear();
 

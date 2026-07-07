@@ -329,8 +329,9 @@ TERMIN_MATERIALS_API std::string rewrite_engine_uniforms_for_stage_source(
  *
  * The buffer pointed to by `out_buffer` must be at least `layout.block_size`
  * bytes long. Float/vector/matrix values are written as 32-bit floats; Int and
- * Bool values are written as 32-bit integers. `Texture` properties are ignored
- * because they are not in the UBO.
+ * Bool values are written as 32-bit integers. Bool fields also accept Int
+ * values and normalize them to 0/1. `Texture` properties are ignored because
+ * they are not in the UBO.
  */
 TERMIN_MATERIALS_API void std140_pack(
     const MaterialUboLayout& layout,

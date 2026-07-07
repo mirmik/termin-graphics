@@ -48,7 +48,7 @@ public:
     RenderCamera camera;
     // Render extent for this target. This is not the UI viewport's screen
     // rectangle; display placement is handled later during present/blit.
-    Rect4i render_rect{0, 0, 0, 0};
+    Rect2i render_rect{0, 0, 0, 0};
     tc_entity_handle internal_entities = TC_ENTITY_HANDLE_INVALID;
     uint64_t layer_mask = 0xFFFFFFFFFFFFFFFFULL;
     uint64_t render_category_mask = 0xFFFFFFFFFFFFFFFFULL;

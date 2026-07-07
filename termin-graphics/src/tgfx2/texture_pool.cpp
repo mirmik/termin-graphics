@@ -6,6 +6,24 @@ namespace tgfx {
 
 namespace {
 
+bool texture_desc_equal(const TextureDesc& a, const TextureDesc& b) {
+    return a.width == b.width &&
+           a.height == b.height &&
+           a.mip_levels == b.mip_levels &&
+           a.sample_count == b.sample_count &&
+           a.format == b.format &&
+           a.usage == b.usage;
+}
+
+bool render_target_desc_equal(const RenderTargetPoolDesc& a, const RenderTargetPoolDesc& b) {
+    return a.width == b.width &&
+           a.height == b.height &&
+           a.samples == b.samples &&
+           a.color_format == b.color_format &&
+           a.has_depth == b.has_depth &&
+           (!a.has_depth || a.depth_format == b.depth_format);
+}
+
 void release_texture(TexturePoolEntry& entry) {
     if (entry.device && entry.handle) {
         entry.device->destroy(entry.handle);
@@ -36,22 +54,14 @@ TexturePool::~TexturePool() {
 
 bool TexturePool::ensure(IRenderDevice& device,
                          std::string_view key,
-                         int width,
-                         int height,
-                         PixelFormat format,
-                         TextureUsage usage,
-                         uint32_t sample_count) {
+                         const TextureDesc& desc) {
     for (auto& entry : entries) {
         if (entry.key != key) {
             continue;
         }
 
         const bool needs_recreate = entry.device != &device ||
-                                    entry.width != width ||
-                                    entry.height != height ||
-                                    entry.sample_count != sample_count ||
-                                    entry.format != format ||
-                                    entry.usage != usage;
+                                    !texture_desc_equal(entry.desc, desc);
         if (!needs_recreate) {
             return true;
         }
@@ -59,18 +69,7 @@ bool TexturePool::ensure(IRenderDevice& device,
         release_texture(entry);
         device.invalidate_render_target_cache();
         entry.device = &device;
-        entry.width = width;
-        entry.height = height;
-        entry.sample_count = sample_count;
-        entry.format = format;
-        entry.usage = usage;
-
-        TextureDesc desc;
-        desc.width = static_cast<uint32_t>(width);
-        desc.height = static_cast<uint32_t>(height);
-        desc.sample_count = sample_count;
-        desc.format = format;
-        desc.usage = usage;
+        entry.desc = desc;
         entry.handle = device.create_texture(desc);
         return static_cast<bool>(entry.handle);
     }
@@ -78,18 +77,7 @@ bool TexturePool::ensure(IRenderDevice& device,
     TexturePoolEntry entry;
     entry.key = std::string(key);
     entry.device = &device;
-    entry.width = width;
-    entry.height = height;
-    entry.sample_count = sample_count;
-    entry.format = format;
-    entry.usage = usage;
-
-    TextureDesc desc;
-    desc.width = static_cast<uint32_t>(width);
-    desc.height = static_cast<uint32_t>(height);
-    desc.sample_count = sample_count;
-    desc.format = format;
-    desc.usage = usage;
+    entry.desc = desc;
     entry.handle = device.create_texture(desc);
     const bool ok = static_cast<bool>(entry.handle);
     entries.push_back(std::move(entry));
@@ -118,30 +106,25 @@ RenderTargetPool::~RenderTargetPool() {
 
 bool RenderTargetPool::ensure(IRenderDevice& device,
                               std::string_view key,
-                              int width,
-                              int height,
-                              PixelFormat color_format,
-                              bool has_depth,
-                              PixelFormat depth_format,
-                              int samples) {
+                              const RenderTargetPoolDesc& desc) {
     auto alloc_textures = [&](RenderTargetEntry& entry) {
         TextureDesc color_desc;
-        color_desc.width = static_cast<uint32_t>(width);
-        color_desc.height = static_cast<uint32_t>(height);
-        color_desc.format = color_format;
-        color_desc.sample_count = static_cast<uint32_t>(samples);
+        color_desc.width = static_cast<uint32_t>(desc.width);
+        color_desc.height = static_cast<uint32_t>(desc.height);
+        color_desc.format = desc.color_format;
+        color_desc.sample_count = static_cast<uint32_t>(desc.samples);
         color_desc.usage = TextureUsage::Sampled |
                            TextureUsage::ColorAttachment |
                            TextureUsage::CopySrc |
                            TextureUsage::CopyDst;
         entry.color_tgfx2 = device.create_texture(color_desc);
 
-        if (has_depth) {
+        if (desc.has_depth) {
             TextureDesc depth_desc;
-            depth_desc.width = static_cast<uint32_t>(width);
-            depth_desc.height = static_cast<uint32_t>(height);
-            depth_desc.format = depth_format;
-            depth_desc.sample_count = static_cast<uint32_t>(samples);
+            depth_desc.width = static_cast<uint32_t>(desc.width);
+            depth_desc.height = static_cast<uint32_t>(desc.height);
+            depth_desc.format = desc.depth_format;
+            depth_desc.sample_count = static_cast<uint32_t>(desc.samples);
             depth_desc.usage = TextureUsage::Sampled |
                                TextureUsage::DepthStencilAttachment |
                                TextureUsage::CopySrc |
@@ -156,12 +139,7 @@ bool RenderTargetPool::ensure(IRenderDevice& device,
         }
 
         const bool needs_recreate = entry.native_device != &device ||
-                                    entry.width != width ||
-                                    entry.height != height ||
-                                    entry.samples != samples ||
-                                    entry.color_format != color_format ||
-                                    entry.has_depth != has_depth ||
-                                    (has_depth && entry.depth_format != depth_format);
+                                    !render_target_desc_equal(entry.desc, desc);
         if (!needs_recreate) {
             return true;
         }
@@ -169,29 +147,19 @@ bool RenderTargetPool::ensure(IRenderDevice& device,
         release_render_target(entry);
         device.invalidate_render_target_cache();
         entry.native_device = &device;
-        entry.width = width;
-        entry.height = height;
-        entry.samples = samples;
-        entry.color_format = color_format;
-        entry.depth_format = depth_format;
-        entry.has_depth = has_depth;
+        entry.desc = desc;
         alloc_textures(entry);
         return static_cast<bool>(entry.color_tgfx2) &&
-               (!has_depth || static_cast<bool>(entry.depth_tgfx2));
+               (!desc.has_depth || static_cast<bool>(entry.depth_tgfx2));
     }
 
     RenderTargetEntry entry;
     entry.key = std::string(key);
     entry.native_device = &device;
-    entry.width = width;
-    entry.height = height;
-    entry.samples = samples;
-    entry.color_format = color_format;
-    entry.depth_format = depth_format;
-    entry.has_depth = has_depth;
+    entry.desc = desc;
     alloc_textures(entry);
     const bool ok = static_cast<bool>(entry.color_tgfx2) &&
-                    (!has_depth || static_cast<bool>(entry.depth_tgfx2));
+                    (!desc.has_depth || static_cast<bool>(entry.depth_tgfx2));
     entries.push_back(std::move(entry));
     return ok;
 }

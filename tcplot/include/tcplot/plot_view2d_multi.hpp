@@ -77,26 +77,17 @@ public:
     // Add a line series to `panel_idx`. Returns index of the series
     // within that panel (0-based), or -1 if panel_idx is out of range.
     int add_line(int panel_idx,
-                 const double* x, const double* y, size_t n,
-                 float cr, float cg, float cb, float ca,
-                 double thickness = 1.5,
-                 const char* label = "");
+                 SeriesData2DView series,
+                 LinePlotOptions options = {});
 
     int add_line_colormap(int panel_idx,
-                          const double* x, const double* y,
-                          const double* scalar, size_t n,
-                          SurfaceColorMap colormap = SurfaceColorMap::Jet,
-                          double scalar_min = 0.0,
-                          double scalar_max = 1.0,
-                          double thickness = 1.5,
-                          const char* label = "",
-                          bool colormap_reversed = false);
+                          SeriesData2DView series,
+                          const double* scalar,
+                          LineColormapOptions options = {});
 
     int add_scatter(int panel_idx,
-                    const double* x, const double* y, size_t n,
-                    float cr, float cg, float cb, float ca,
-                    double size = 4.0,
-                    const char* label = "");
+                    SeriesData2DView series,
+                    ScatterPlotOptions options = {});
 
     // Append points to an existing line series. Autoscroll + per-panel
     // Y-autoscale both react to the new data — see set_autoscroll.

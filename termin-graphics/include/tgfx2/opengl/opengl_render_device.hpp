@@ -267,14 +267,13 @@ public:
     void blit_to_texture(
         TextureHandle dst,
         TextureHandle src,
-        int src_x, int src_y, int src_w, int src_h,
-        int dst_x, int dst_y, int dst_w, int dst_h) override;
+        termin::Bounds2i src_rect,
+        termin::Bounds2i dst_rect) override;
 
     void clear_texture(
         TextureHandle dst,
-        float r, float g, float b, float a,
-        int viewport_x, int viewport_y,
-        int viewport_w, int viewport_h) override;
+        termin::Color4 color,
+        termin::Bounds2i viewport) override;
 
     // Backend-local window presentation. Kept off IRenderDevice so raw
     // OpenGL framebuffer semantics do not leak into the tgfx2 public API.

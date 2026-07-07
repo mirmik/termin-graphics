@@ -221,15 +221,10 @@ void FrameGraphPresenter::ensure_fs(tgfx::IRenderDevice& device) {
 
 void FrameGraphPresenter::render_in_current_pass(
     tgfx::RenderContext2* ctx2,
-    tgfx::TextureHandle capture_tex,
-    int dst_x,
-    int dst_y,
-    int dst_w,
-    int dst_h,
-    int channel_mode,
-    bool highlight_hdr
+    const FrameGraphPresenterDraw& draw
 ) {
-    if (!ctx2 || !capture_tex || dst_w <= 0 || dst_h <= 0) {
+    const Rect2i& dst = draw.dst_rect;
+    if (!ctx2 || !draw.capture_tex || dst.width <= 0 || dst.height <= 0) {
         return;
     }
 
@@ -242,7 +237,7 @@ void FrameGraphPresenter::render_in_current_pass(
         }
     }
 
-    ctx2->set_viewport(dst_x, dst_y, dst_w, dst_h);
+    ctx2->set_viewport(dst.x, dst.y, dst.width, dst.height);
     // The debugger widget may be called with an active tcgui clip
     // rect. Make sure our fullscreen-quad draw is controlled by the
     // preview viewport instead of an inherited text/widget scissor.
@@ -255,10 +250,10 @@ void FrameGraphPresenter::render_in_current_pass(
     ctx2->bind_shader(ctx2->fsq_vertex_shader(), fs);
     ctx2->use_shader_resource_layout(tc_shader_get(shader_handle_));
 
-    ctx2->bind_texture("u_tex", capture_tex);
+    ctx2->bind_texture("u_tex", draw.capture_tex);
     PresenterPushData push{};
-    push.channel_mode = channel_mode;
-    push.highlight_hdr = highlight_hdr ? 1 : 0;
+    push.channel_mode = draw.options.channel_mode;
+    push.highlight_hdr = draw.options.highlight_hdr ? 1 : 0;
     ctx2->set_push_constants(&push, sizeof(push));
 
     ctx2->draw_fullscreen_quad();
@@ -266,29 +261,15 @@ void FrameGraphPresenter::render_in_current_pass(
 
 void FrameGraphPresenter::render(
     tgfx::RenderContext2* ctx2,
-    tgfx::TextureHandle capture_tex,
     tgfx::TextureHandle target_tex,
-    int dst_x,
-    int dst_y,
-    int dst_w,
-    int dst_h,
-    int channel_mode,
-    bool highlight_hdr
+    const FrameGraphPresenterDraw& draw
 ) {
-    if (!ctx2 || !capture_tex || !target_tex) {
+    if (!ctx2 || !draw.capture_tex || !target_tex) {
         return;
     }
 
     ctx2->begin_pass(target_tex, tgfx::TextureHandle{}, nullptr, 1.0f, false);
-    render_in_current_pass(
-        ctx2,
-        capture_tex,
-        dst_x,
-        dst_y,
-        dst_w,
-        dst_h,
-        channel_mode,
-        highlight_hdr);
+    render_in_current_pass(ctx2, draw);
     ctx2->end_pass();
 }
 

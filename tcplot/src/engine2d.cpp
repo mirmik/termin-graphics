@@ -106,10 +106,14 @@ void PlotEngine2D::set_fbo_height(float h) {
 // ---------------------------------------------------------------------------
 
 void PlotEngine2D::plot(std::vector<double> x, std::vector<double> y,
-                         std::optional<Color4> color,
-                         double thickness,
-                         std::string label) {
-    data.add_line(std::move(x), std::move(y), {}, color, thickness, std::move(label));
+                         LinePlotOptions options) {
+    data.add_line(
+        std::move(x),
+        std::move(y),
+        {},
+        options.color,
+        options.thickness,
+        std::move(options.label));
     ++data_version_;
     if (!view_x_min_.has_value()) fit();
 }
@@ -117,19 +121,19 @@ void PlotEngine2D::plot(std::vector<double> x, std::vector<double> y,
 void PlotEngine2D::plot_colormap(std::vector<double> x,
                                   std::vector<double> y,
                                   std::vector<double> scalar,
-                                  SurfaceColorMap colormap,
-                                  double scalar_min,
-                                  double scalar_max,
-                                  double thickness,
-                                  std::string label,
-                                  bool colormap_reversed) {
-    LineSeries& s = data.add_line(std::move(x), std::move(y), {}, std::nullopt,
-                                  thickness, std::move(label));
+                                  LineColormapOptions options) {
+    LineSeries& s = data.add_line(
+        std::move(x),
+        std::move(y),
+        {},
+        std::nullopt,
+        options.thickness,
+        std::move(options.label));
     s.scalar = std::move(scalar);
-    s.colormap = colormap;
-    s.colormap_reversed = colormap_reversed;
-    s.scalar_min = scalar_min;
-    s.scalar_max = scalar_max;
+    s.colormap = options.colormap;
+    s.colormap_reversed = options.colormap_reversed;
+    s.scalar_min = options.scalar_min;
+    s.scalar_max = options.scalar_max;
     if (s.scalar_max <= s.scalar_min) {
         s.scalar_max = s.scalar_min + 1.0;
     }
@@ -138,10 +142,14 @@ void PlotEngine2D::plot_colormap(std::vector<double> x,
 }
 
 void PlotEngine2D::scatter(std::vector<double> x, std::vector<double> y,
-                            std::optional<Color4> color,
-                            double size,
-                            std::string label) {
-    data.add_scatter(std::move(x), std::move(y), {}, color, size, std::move(label));
+                            ScatterPlotOptions options) {
+    data.add_scatter(
+        std::move(x),
+        std::move(y),
+        {},
+        options.color,
+        options.size,
+        std::move(options.label));
     ++data_version_;
     if (!view_x_min_.has_value()) fit();
 }

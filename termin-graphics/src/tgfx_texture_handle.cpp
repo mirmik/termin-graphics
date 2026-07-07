@@ -6,28 +6,25 @@
 
 namespace termin {
 
-TcTexture TcTexture::from_data(
-    const void* pixel_data,
-    uint32_t width,
-    uint32_t height,
-    uint8_t channels,
-    bool flip_x,
-    bool flip_y,
-    bool transpose,
-    const std::string& name,
-    const std::string& source_path,
-    const std::string& uuid_hint
-) {
+TcTexture TcTexture::from_data(const TcTextureCreateInfo& info) {
+    const TexturePixelDataView& pixels = info.pixels;
+
     // Compute UUID from content if not provided
     char uuid_buf[40];
     const char* final_uuid = nullptr;
 
-    if (!uuid_hint.empty()) {
-        final_uuid = uuid_hint.c_str();
+    if (!info.uuid_hint.empty()) {
+        final_uuid = info.uuid_hint.c_str();
     } else {
         // Compute content-based UUID
-        size_t data_size = (size_t)width * height * channels;
-        tc_texture_compute_uuid(pixel_data, data_size, width, height, channels, uuid_buf);
+        tc_texture_compute_uuid(
+            pixels.data,
+            pixels.byte_size(),
+            pixels.width,
+            pixels.height,
+            pixels.channels,
+            uuid_buf
+        );
         final_uuid = uuid_buf;
     }
 
@@ -38,15 +35,20 @@ TcTexture TcTexture::from_data(
         if (tex) {
             if (!tc_texture_set_data(
                 tex,
-                pixel_data,
-                width, height, channels,
-                name.empty() ? nullptr : name.c_str(),
-                source_path.empty() ? nullptr : source_path.c_str()
+                pixels.data,
+                pixels.width, pixels.height, pixels.channels,
+                info.name.empty() ? nullptr : info.name.c_str(),
+                info.source_path.empty() ? nullptr : info.source_path.c_str()
             )) {
                 tc::Log::error("TcTexture::from_data: failed to set data on declared texture");
                 return TcTexture();
             }
-            tc_texture_set_transforms(tex, flip_x, flip_y, transpose);
+            tc_texture_set_transforms(
+                tex,
+                info.transform.flip_x,
+                info.transform.flip_y,
+                info.transform.transpose
+            );
         }
         return TcTexture(h);
     }
@@ -62,10 +64,10 @@ TcTexture TcTexture::from_data(
     // Set data
     if (!tc_texture_set_data(
         tex,
-        pixel_data,
-        width, height, channels,
-        name.empty() ? nullptr : name.c_str(),
-        source_path.empty() ? nullptr : source_path.c_str()
+        pixels.data,
+        pixels.width, pixels.height, pixels.channels,
+        info.name.empty() ? nullptr : info.name.c_str(),
+        info.source_path.empty() ? nullptr : info.source_path.c_str()
     )) {
         tc::Log::error("TcTexture::from_data: failed to set data");
         tc_texture_destroy(h);
@@ -73,7 +75,12 @@ TcTexture TcTexture::from_data(
     }
 
     // Set transforms
-    tc_texture_set_transforms(tex, flip_x, flip_y, transpose);
+    tc_texture_set_transforms(
+        tex,
+        info.transform.flip_x,
+        info.transform.flip_y,
+        info.transform.transpose
+    );
 
     return TcTexture(h);
 }
@@ -89,14 +96,13 @@ TcTexture TcTexture::white_1x1() {
 
     // Create 1x1 white pixel
     uint8_t white_pixel[4] = {255, 255, 255, 255};
-    return from_data(
-        white_pixel,
-        1, 1, 4,
-        false, false, false,
+    return from_data(TcTextureCreateInfo{
+        TexturePixelDataView{white_pixel, 1, 1, 4},
+        TextureTransformFlags{false, false, false},
         "__white_1x1__",
         "",
         WHITE_UUID
-    );
+    });
 }
 
 TcTexture TcTexture::dummy_shadow_1x1() {

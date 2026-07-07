@@ -20,6 +20,23 @@ namespace termin {
 // Forward declaration
 class Mesh3;
 
+struct TcMeshInterleavedDataView {
+    const void* vertices = nullptr;
+    size_t vertex_count = 0;
+    const uint32_t* indices = nullptr;
+    size_t index_count = 0;
+    const tc_vertex_layout* layout = nullptr;
+};
+
+struct TcMeshCreateInfo {
+    TcMeshInterleavedDataView data;
+    const tc_submesh* submeshes = nullptr;
+    size_t submesh_count = 0;
+    std::string name;
+    std::string uuid_hint;
+    tc_draw_mode draw_mode = TC_DRAW_TRIANGLES;
+};
+
 // TcMesh - GPU-ready mesh wrapper
 // Stores handle (index + generation) instead of raw pointer
 class TGFX_API TcMesh {
@@ -249,23 +266,8 @@ public:
                              const std::string& override_uuid = "",
                              const tc_vertex_layout* custom_layout = nullptr);
 
-    // Create TcMesh from raw interleaved vertex data
-    static TcMesh from_interleaved(
-        const void* vertices, size_t vertex_count,
-        const uint32_t* indices, size_t index_count,
-        const tc_vertex_layout& layout,
-        const std::string& name = "",
-        const std::string& uuid_hint = "",
-        tc_draw_mode draw_mode = TC_DRAW_TRIANGLES);
-
-    static TcMesh from_interleaved_with_submeshes(
-        const void* vertices, size_t vertex_count,
-        const uint32_t* indices, size_t index_count,
-        const tc_vertex_layout& layout,
-        const std::vector<tc_submesh>& submeshes,
-        const std::string& name = "",
-        const std::string& uuid_hint = "",
-        tc_draw_mode draw_mode = TC_DRAW_TRIANGLES);
+    // Create TcMesh from raw interleaved vertex data.
+    static TcMesh from_interleaved(const TcMeshCreateInfo& create_info);
 
     // Get by UUID from registry
     static TcMesh from_uuid(const std::string& uuid) {

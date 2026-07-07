@@ -3,6 +3,8 @@
 #include <nanobind/stl/unordered_map.h>
 #include <nanobind/stl/vector.h>
 
+#include "termin/geom/quat.hpp"
+#include "termin/geom/vec3.hpp"
 #include "termin/animation/tc_animation_handle.hpp"
 #include "termin/inspect/tc_kind.hpp"
 #include <tcbase/tc_log.hpp>
@@ -144,8 +146,8 @@ void bind_tc_animation_clip(nb::module_& m) {
         // Set channels from Python data
         // channels_data: list of dicts with:
         //   - target_name: str
-        //   - translation_keys: list of (time, [x, y, z])
-        //   - rotation_keys: list of (time, [x, y, z, w])
+        //   - translation_keys: list of (time, Vec3)
+        //   - rotation_keys: list of (time, Quat)
         //   - scale_keys: list of (time, value)
         .def("set_channels", [](TcAnimationClip& self, nb::list channels_data) {
             tc_animation* anim = self.get();
@@ -183,10 +185,10 @@ void bind_tc_animation_clip(nb::module_& m) {
                         for (size_t j = 0; j < tr_count; j++) {
                             nb::tuple kf = nb::cast<nb::tuple>(tr_keys[j]);
                             keys[j].time = nb::cast<double>(kf[0]);
-                            nb::object val = kf[1];
-                            keys[j].value[0] = nb::cast<double>(val[nb::int_(0)]);
-                            keys[j].value[1] = nb::cast<double>(val[nb::int_(1)]);
-                            keys[j].value[2] = nb::cast<double>(val[nb::int_(2)]);
+                            Vec3 val = nb::cast<Vec3>(kf[1]);
+                            keys[j].value[0] = val.x;
+                            keys[j].value[1] = val.y;
+                            keys[j].value[2] = val.z;
                             if (keys[j].time > max_time) max_time = keys[j].time;
                         }
                     }
@@ -201,11 +203,11 @@ void bind_tc_animation_clip(nb::module_& m) {
                         for (size_t j = 0; j < rot_count; j++) {
                             nb::tuple kf = nb::cast<nb::tuple>(rot_keys[j]);
                             keys[j].time = nb::cast<double>(kf[0]);
-                            nb::object val = kf[1];
-                            keys[j].value[0] = nb::cast<double>(val[nb::int_(0)]);
-                            keys[j].value[1] = nb::cast<double>(val[nb::int_(1)]);
-                            keys[j].value[2] = nb::cast<double>(val[nb::int_(2)]);
-                            keys[j].value[3] = nb::cast<double>(val[nb::int_(3)]);
+                            Quat val = nb::cast<Quat>(kf[1]);
+                            keys[j].value[0] = val.x;
+                            keys[j].value[1] = val.y;
+                            keys[j].value[2] = val.z;
+                            keys[j].value[3] = val.w;
                             if (keys[j].time > max_time) max_time = keys[j].time;
                         }
                     }

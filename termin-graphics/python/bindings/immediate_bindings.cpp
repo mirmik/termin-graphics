@@ -88,11 +88,55 @@ void bind_immediate(nb::module_& m) {
         .def("cone_solid", &ImmediateRenderer::cone_solid,
              nb::arg("base"), nb::arg("tip"), nb::arg("radius"), nb::arg("color"),
              nb::arg("segments") = 16, nb::arg("cap") = true, nb::arg("depth_test") = false)
-        .def("torus_solid", &ImmediateRenderer::torus_solid,
+        .def("torus_solid", [](ImmediateRenderer& self,
+                                const Vec3& center,
+                                const Vec3& axis,
+                                double major_radius,
+                                double minor_radius,
+                                const Color4& color,
+                                int major_segments,
+                                int minor_segments,
+                                bool depth_test) {
+            self.torus_solid(
+                TorusSolidSpec{
+                    center,
+                    axis,
+                    major_radius,
+                    minor_radius,
+                    major_segments,
+                    minor_segments
+                },
+                color,
+                depth_test
+            );
+        },
              nb::arg("center"), nb::arg("axis"), nb::arg("major_radius"), nb::arg("minor_radius"),
              nb::arg("color"), nb::arg("major_segments") = 32, nb::arg("minor_segments") = 12,
              nb::arg("depth_test") = false)
-        .def("arrow_solid", &ImmediateRenderer::arrow_solid,
+        .def("arrow_solid", [](ImmediateRenderer& self,
+                                const Vec3& origin,
+                                const Vec3& direction,
+                                double length,
+                                const Color4& color,
+                                double shaft_radius,
+                                double head_radius,
+                                double head_length_ratio,
+                                int segments,
+                                bool depth_test) {
+            self.arrow_solid(
+                ArrowSolidSpec{
+                    origin,
+                    direction,
+                    length,
+                    shaft_radius,
+                    head_radius,
+                    head_length_ratio,
+                    segments
+                },
+                color,
+                depth_test
+            );
+        },
              nb::arg("origin"), nb::arg("direction"), nb::arg("length"), nb::arg("color"),
              nb::arg("shaft_radius") = 0.03, nb::arg("head_radius") = 0.06,
              nb::arg("head_length_ratio") = 0.25, nb::arg("segments") = 16, nb::arg("depth_test") = false)

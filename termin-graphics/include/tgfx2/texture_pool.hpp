@@ -15,11 +15,7 @@ class IRenderDevice;
 
 struct TGFX2_TYPE_API TexturePoolEntry {
     std::string key;
-    int width = 0;
-    int height = 0;
-    uint32_t sample_count = 1;
-    PixelFormat format = PixelFormat::Undefined;
-    TextureUsage usage{};
+    TextureDesc desc;
     IRenderDevice* device = nullptr;
     TextureHandle handle;
 
@@ -43,24 +39,24 @@ public:
 
     bool ensure(IRenderDevice& device,
                 std::string_view key,
-                int width,
-                int height,
-                PixelFormat format,
-                TextureUsage usage,
-                uint32_t sample_count = 1);
+                const TextureDesc& desc);
     TextureHandle get(std::string_view key) const;
     void clear();
 };
 
-struct TGFX2_TYPE_API RenderTargetEntry {
-    std::string key;
+struct TGFX2_TYPE_API RenderTargetPoolDesc {
     int width = 0;
     int height = 0;
     int samples = 1;
-    IRenderDevice* native_device = nullptr;
     PixelFormat color_format = PixelFormat::RGBA8_UNorm;
+    bool has_depth = true;
     PixelFormat depth_format = PixelFormat::D24_UNorm;
-    bool has_depth = false;
+};
+
+struct TGFX2_TYPE_API RenderTargetEntry {
+    std::string key;
+    IRenderDevice* native_device = nullptr;
+    RenderTargetPoolDesc desc;
     TextureHandle color_tgfx2;
     TextureHandle depth_tgfx2;
 
@@ -84,12 +80,7 @@ public:
 
     bool ensure(IRenderDevice& device,
                 std::string_view key,
-                int width,
-                int height,
-                PixelFormat color_format = PixelFormat::RGBA8_UNorm,
-                bool has_depth = true,
-                PixelFormat depth_format = PixelFormat::D24_UNorm,
-                int samples = 1);
+                const RenderTargetPoolDesc& desc);
     TextureHandle color(std::string_view key) const;
     TextureHandle depth(std::string_view key) const;
     IRenderDevice* device() const;

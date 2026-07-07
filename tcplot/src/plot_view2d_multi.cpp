@@ -96,25 +96,19 @@ void PlotView2DMulti::set_panel_count(int n) {
 // ---------------------------------------------------------------------------
 
 int PlotView2DMulti::add_line(int panel_idx,
-                                const double* x, const double* y, size_t n,
-                                float cr, float cg, float cb, float ca,
-                                double thickness,
-                                const char* label) {
+                              SeriesData2DView series,
+                              LinePlotOptions options) {
     if (panel_idx < 0 || panel_idx >= (int)panels_.size()) return -1;
     PlotEngine2D& eng = *panels_[panel_idx];
     const int new_idx = static_cast<int>(eng.line_count());
 
-    Color4 c{cr, cg, cb, ca};
-    eng.plot(to_vec(x, n), to_vec(y, n),
-             std::optional<Color4>{c},
-             thickness,
-             label ? std::string(label) : std::string());
+    eng.plot(to_vec(series.x, series.count), to_vec(series.y, series.count), std::move(options));
 
     // Seed shared X with first data we see.
-    if (n > 0 && !have_shared_x_) {
+    if (series.count > 0 && !have_shared_x_) {
         have_shared_x_ = true;
-        shared_x_min_ = x[0];
-        shared_x_max_ = x[n - 1];
+        shared_x_min_ = series.x[0];
+        shared_x_max_ = series.x[series.count - 1];
         if (shared_x_max_ <= shared_x_min_) {
             shared_x_max_ = shared_x_min_ + 1.0;
         }
@@ -123,27 +117,23 @@ int PlotView2DMulti::add_line(int panel_idx,
 }
 
 int PlotView2DMulti::add_line_colormap(int panel_idx,
-                                       const double* x, const double* y,
-                                       const double* scalar, size_t n,
-                                       SurfaceColorMap colormap,
-                                       double scalar_min,
-                                       double scalar_max,
-                                       double thickness,
-                                       const char* label,
-                                       bool colormap_reversed) {
+                                       SeriesData2DView series,
+                                       const double* scalar,
+                                       LineColormapOptions options) {
     if (panel_idx < 0 || panel_idx >= (int)panels_.size()) return -1;
     PlotEngine2D& eng = *panels_[panel_idx];
     const int new_idx = static_cast<int>(eng.line_count());
 
-    eng.plot_colormap(to_vec(x, n), to_vec(y, n), to_vec(scalar, n),
-                      colormap, scalar_min, scalar_max, thickness,
-                      label ? std::string(label) : std::string(),
-                      colormap_reversed);
+    eng.plot_colormap(
+        to_vec(series.x, series.count),
+        to_vec(series.y, series.count),
+        to_vec(scalar, series.count),
+        std::move(options));
 
-    if (n > 0 && !have_shared_x_) {
+    if (series.count > 0 && !have_shared_x_) {
         have_shared_x_ = true;
-        shared_x_min_ = x[0];
-        shared_x_max_ = x[n - 1];
+        shared_x_min_ = series.x[0];
+        shared_x_max_ = series.x[series.count - 1];
         if (shared_x_max_ <= shared_x_min_) {
             shared_x_max_ = shared_x_min_ + 1.0;
         }
@@ -152,18 +142,13 @@ int PlotView2DMulti::add_line_colormap(int panel_idx,
 }
 
 int PlotView2DMulti::add_scatter(int panel_idx,
-                                 const double* x, const double* y, size_t n,
-                                 float cr, float cg, float cb, float ca,
-                                 double size,
-                                 const char* label) {
+                                 SeriesData2DView series,
+                                 ScatterPlotOptions options) {
     if (panel_idx < 0 || panel_idx >= (int)panels_.size()) return -1;
     PlotEngine2D& eng = *panels_[panel_idx];
     const int new_idx = static_cast<int>(eng.data.scatters.size());
 
-    Color4 c{cr, cg, cb, ca};
-    eng.scatter(to_vec(x, n), to_vec(y, n),
-                std::optional<Color4>{c}, size,
-                label ? std::string(label) : std::string());
+    eng.scatter(to_vec(series.x, series.count), to_vec(series.y, series.count), std::move(options));
     return new_idx;
 }
 

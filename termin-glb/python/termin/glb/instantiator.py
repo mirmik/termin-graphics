@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Protocol
 
 import numpy as np
 
-from termin.geombase import GeneralPose3
+from termin.geombase import GeneralPose3, Quat, Vec3
 from termin.animation import TcAnimationClip
 from termin.animation_components import AnimationPlayer
 from termin.skeleton import SkeletonInstance, TcSkeleton
@@ -874,7 +874,11 @@ def _create_entity_from_node(
 ) -> Entity:
     """Recursively create Entity hierarchy from GLBNodeData."""
     node = scene_data.nodes[node_index]
-    pose = GeneralPose3(lin=node.translation, ang=node.rotation, scale=node.scale)
+    pose = GeneralPose3(
+        lin=Vec3(node.translation),
+        ang=Quat(node.rotation),
+        scale=Vec3(node.scale),
+    )
 
     # Create entity in scene's pool if scene provided, else standalone
     if scene is not None:
