@@ -328,8 +328,9 @@ TERMIN_MATERIALS_API std::string rewrite_engine_uniforms_for_stage_source(
  * zero-filling `out_buffer` beforehand if it wants deterministic defaults).
  *
  * The buffer pointed to by `out_buffer` must be at least `layout.block_size`
- * bytes long. Values are written as 32-bit floats (even booleans, per
- * std140). `Texture` properties are ignored — they are not in the UBO.
+ * bytes long. Float/vector/matrix values are written as 32-bit floats; Int and
+ * Bool values are written as 32-bit integers. `Texture` properties are ignored
+ * because they are not in the UBO.
  */
 TERMIN_MATERIALS_API void std140_pack(
     const MaterialUboLayout& layout,

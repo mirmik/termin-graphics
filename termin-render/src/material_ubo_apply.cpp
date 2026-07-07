@@ -1,6 +1,5 @@
 // material_ubo_apply.cpp - Apply material phase resources by reflected names.
 #include "termin/render/material_ubo_apply.hpp"
-#include "termin/materials/shader_parser.hpp"
 #include "termin/render/shader_abi.hpp"
 #include "termin/render/tgfx2_bridge.hpp"
 
@@ -9,6 +8,7 @@
 #include "tcbase/tc_log.hpp"
 
 #include <cstdint>
+#include <cstring>
 #include <mutex>
 #include <string>
 #include <unordered_set>
@@ -56,113 +56,242 @@ void log_missing_material_resource_once(
         reason ? reason : "required by material phase");
 }
 
-// Runtime→C++ converter: build a `MaterialProperty` carrying the current
-// value out of a `tc_uniform_value`. The parser's `default_value` variant
-// is reused as a generic "current value" container — that's a mild naming
-// abuse but avoids duplicating std140_pack logic for runtime values.
-MaterialProperty property_from_uniform(const tc_uniform_value& u) {
-    MaterialProperty p;
-    p.name = u.name;
-    switch (static_cast<tc_uniform_type>(u.type)) {
-        case TC_UNIFORM_BOOL:
-            p.property_type = "Bool";
-            p.default_value = static_cast<bool>(u.data.i != 0);
-            break;
-        case TC_UNIFORM_INT:
-            p.property_type = "Int";
-            p.default_value = static_cast<int>(u.data.i);
-            break;
-        case TC_UNIFORM_FLOAT:
-            p.property_type = "Float";
-            p.default_value = static_cast<double>(u.data.f);
-            break;
-        case TC_UNIFORM_VEC2:
-            p.property_type = "Vec2";
-            p.default_value = std::vector<double>{u.data.v2[0], u.data.v2[1]};
-            break;
-        case TC_UNIFORM_VEC3:
-            p.property_type = "Vec3";
-            p.default_value = std::vector<double>{
-                u.data.v3[0], u.data.v3[1], u.data.v3[2]
-            };
-            break;
-        case TC_UNIFORM_VEC4:
-            p.property_type = "Vec4";
-            p.default_value = std::vector<double>{
-                u.data.v4[0], u.data.v4[1], u.data.v4[2], u.data.v4[3]
-            };
-            break;
-        case TC_UNIFORM_MAT4: {
-            p.property_type = "Mat4";
-            std::vector<double> v;
-            v.reserve(16);
-            for (int i = 0; i < 16; i++) v.push_back(u.data.m4[i]);
-            p.default_value = std::move(v);
-            break;
-        }
-        default:
-            // TC_UNIFORM_NONE / TC_UNIFORM_FLOAT_ARRAY — not handled by
-            // std140_pack at this stage. Leave empty; the packer will skip.
-            p.property_type = "";
-            break;
-    }
-    return p;
+inline bool type_is(const char* type, const char* expected) {
+    return type && std::strcmp(type, expected) == 0;
 }
 
-// Build a throwaway MaterialUboLayout copy from a tc_shader's C-side
-// entries so we can hand it to std140_pack. We cannot just cast the C
-// array — std140_pack consumes a C++ MaterialUboLayout with std::string
-// names inside MaterialUboEntry.
-MaterialUboLayout layout_from_tc_shader(const tc_shader* shader) {
-    MaterialUboLayout layout;
-    if (!shader) return layout;
+inline void write_float(uint8_t* dst, float value) {
+    std::memcpy(dst, &value, sizeof(value));
+}
 
-    if (shader->material_ubo_entry_count > 0) {
-        layout.block_size = shader->material_ubo_block_size;
-        layout.entries.reserve(shader->material_ubo_entry_count);
-        for (uint32_t i = 0; i < shader->material_ubo_entry_count; i++) {
-            const tc_material_ubo_entry& src = shader->material_ubo_entries[i];
-            MaterialUboEntry e;
-            e.name = src.name;
-            e.property_type = src.property_type;
-            e.offset = src.offset;
-            e.size = src.size;
-            layout.entries.push_back(std::move(e));
+inline void write_int(uint8_t* dst, int32_t value) {
+    std::memcpy(dst, &value, sizeof(value));
+}
+
+inline void write_float_array(uint8_t* dst, const float* values, size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+        write_float(dst + i * sizeof(float), values[i]);
+    }
+}
+
+uint32_t std140_payload_size_for_type(const char* type) {
+    if (type_is(type, "Float") || type_is(type, "Int") || type_is(type, "Bool")) {
+        return 4u;
+    }
+    if (type_is(type, "Vec2")) {
+        return 8u;
+    }
+    if (type_is(type, "Vec3")) {
+        return 12u;
+    }
+    if (type_is(type, "Vec4") || type_is(type, "Color")) {
+        return 16u;
+    }
+    if (type_is(type, "Mat4")) {
+        return 64u;
+    }
+    return 0u;
+}
+
+const tc_uniform_value* find_phase_uniform(
+    const tc_material_phase* phase,
+    const char* name)
+{
+    if (!phase || !name || name[0] == '\0') {
+        return nullptr;
+    }
+    for (size_t i = 0; i < phase->uniform_count; ++i) {
+        if (std::strcmp(phase->uniforms[i].name, name) == 0) {
+            return &phase->uniforms[i];
         }
-        return layout;
+    }
+    return nullptr;
+}
+
+bool field_range_is_valid(
+    const tc_shader* shader,
+    const char* field_name,
+    const char* field_type,
+    uint32_t field_offset,
+    uint32_t block_size)
+{
+    const uint32_t payload_size = std140_payload_size_for_type(field_type);
+    if (payload_size == 0u) {
+        return true;
+    }
+    if (field_offset <= block_size && payload_size <= block_size - field_offset) {
+        return true;
     }
 
-    const tc_shader_resource_binding* material_rb =
-        find_shader_abi_resource_binding(shader, ShaderAbiResourceId::MaterialParams);
-    if (!material_rb ||
-        material_rb->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER ||
-        material_rb->field_count == 0 ||
-        !material_rb->fields) {
-        return layout;
-    }
+    tc::Log::error(
+        "Material UBO field '%s' in shader '%s' exceeds block size "
+        "(type=%s offset=%u payload=%u block=%u)",
+        field_name ? field_name : "<unnamed>",
+        shader_debug_name(shader),
+        field_type ? field_type : "<null>",
+        field_offset,
+        payload_size,
+        block_size);
+    return false;
+}
 
-    layout.block_size = material_rb->size;
-    layout.entries.reserve(material_rb->field_count);
-    for (uint32_t i = 0; i < material_rb->field_count; i++) {
-        const tc_shader_resource_field& src = material_rb->fields[i];
-        if (src.type[0] == '\0') {
+bool pack_uniform_value_to_std140_field(
+    const tc_uniform_value& uniform,
+    const char* field_type,
+    uint8_t* dst)
+{
+    if (type_is(field_type, "Float")) {
+        if (uniform.type == TC_UNIFORM_FLOAT) {
+            write_float(dst, uniform.data.f);
+            return true;
+        }
+        if (uniform.type == TC_UNIFORM_INT) {
+            write_float(dst, static_cast<float>(uniform.data.i));
+            return true;
+        }
+        return false;
+    }
+    if (type_is(field_type, "Int")) {
+        if (uniform.type == TC_UNIFORM_INT) {
+            write_int(dst, uniform.data.i);
+            return true;
+        }
+        if (uniform.type == TC_UNIFORM_FLOAT) {
+            write_int(dst, static_cast<int32_t>(uniform.data.f));
+            return true;
+        }
+        return false;
+    }
+    if (type_is(field_type, "Bool")) {
+        if (uniform.type == TC_UNIFORM_BOOL) {
+            write_int(dst, uniform.data.i != 0 ? 1 : 0);
+            return true;
+        }
+        return false;
+    }
+    if (type_is(field_type, "Vec2")) {
+        if (uniform.type == TC_UNIFORM_VEC2) {
+            write_float_array(dst, uniform.data.v2, 2);
+            return true;
+        }
+        return false;
+    }
+    if (type_is(field_type, "Vec3")) {
+        if (uniform.type == TC_UNIFORM_VEC3) {
+            write_float_array(dst, uniform.data.v3, 3);
+            return true;
+        }
+        return false;
+    }
+    if (type_is(field_type, "Vec4") || type_is(field_type, "Color")) {
+        if (uniform.type == TC_UNIFORM_VEC4) {
+            write_float_array(dst, uniform.data.v4, 4);
+            return true;
+        }
+        return false;
+    }
+    if (type_is(field_type, "Mat4")) {
+        if (uniform.type == TC_UNIFORM_MAT4) {
+            write_float_array(dst, uniform.data.m4, 16);
+            return true;
+        }
+        return false;
+    }
+    return false;
+}
+
+void pack_material_ubo_entry(
+    const tc_material_phase* phase,
+    const tc_shader* shader,
+    const char* field_name,
+    const char* field_type,
+    uint32_t field_offset,
+    uint32_t block_size,
+    uint8_t* out_buffer)
+{
+    if (!field_range_is_valid(
+            shader,
+            field_name,
+            field_type,
+            field_offset,
+            block_size)) {
+        return;
+    }
+    const tc_uniform_value* uniform = find_phase_uniform(phase, field_name);
+    if (!uniform) {
+        return;
+    }
+    pack_uniform_value_to_std140_field(
+        *uniform,
+        field_type,
+        out_buffer + field_offset);
+}
+
+bool pack_material_ubo_from_legacy_entries(
+    const tc_material_phase* phase,
+    const tc_shader* shader,
+    uint8_t* out_buffer,
+    uint32_t block_size)
+{
+    if (!shader || shader->material_ubo_entry_count == 0) {
+        return false;
+    }
+    for (uint32_t i = 0; i < shader->material_ubo_entry_count; ++i) {
+        const tc_material_ubo_entry& entry = shader->material_ubo_entries[i];
+        pack_material_ubo_entry(
+            phase,
+            shader,
+            entry.name,
+            entry.property_type,
+            entry.offset,
+            block_size,
+            out_buffer);
+    }
+    return true;
+}
+
+bool validate_reflected_material_fields(
+    const tc_shader* shader,
+    const tc_shader_resource_binding* material_rb)
+{
+    if (!shader || !material_rb || material_rb->field_count == 0 || !material_rb->fields) {
+        return false;
+    }
+    for (uint32_t i = 0; i < material_rb->field_count; ++i) {
+        const tc_shader_resource_field& field = material_rb->fields[i];
+        if (field.type[0] == '\0') {
             tc::Log::error(
                 "Material UBO field '%s' in shader '%s' has no reflected type",
-                src.name,
-                shader->name ? shader->name : shader->uuid);
-            layout.entries.clear();
-            layout.block_size = 0;
-            return layout;
+                field.name,
+                shader_debug_name(shader));
+            return false;
         }
-
-        MaterialUboEntry e;
-        e.name = src.name;
-        e.property_type = src.type;
-        e.offset = src.offset;
-        e.size = src.size;
-        layout.entries.push_back(std::move(e));
     }
-    return layout;
+    return true;
+}
+
+bool pack_material_ubo_from_reflected_fields(
+    const tc_material_phase* phase,
+    const tc_shader* shader,
+    const tc_shader_resource_binding* material_rb,
+    uint8_t* out_buffer,
+    uint32_t block_size)
+{
+    if (!validate_reflected_material_fields(shader, material_rb)) {
+        return false;
+    }
+    for (uint32_t i = 0; i < material_rb->field_count; ++i) {
+        const tc_shader_resource_field& field = material_rb->fields[i];
+        pack_material_ubo_entry(
+            phase,
+            shader,
+            field.name,
+            field.type,
+            field.offset,
+            block_size,
+            out_buffer);
+    }
+    return true;
 }
 
 } // namespace
@@ -175,25 +304,41 @@ bool apply_material_phase_ubo(
 {
     if (!phase || !shader) return false;
 
-    // Translate phase uniforms (C) into MaterialProperty (C++) for
-    // std140_pack. Linear, tiny (≤ 32 uniforms).
-    std::vector<MaterialProperty> values;
-    values.reserve(phase->uniform_count);
-    for (size_t i = 0; i < phase->uniform_count; i++) {
-        values.push_back(property_from_uniform(phase->uniforms[i]));
-    }
-
-    // Build the layout view on the tc_shader C-side entries.
-    MaterialUboLayout layout = layout_from_tc_shader(shader);
     const tc_shader_resource_binding* material_rb =
         find_shader_abi_resource_binding(shader, ShaderAbiResourceId::MaterialParams);
 
     bool bound_any = false;
-    if (!layout.empty()) {
-        std::vector<uint8_t> staging(layout.block_size, 0);
-        std140_pack(layout, values, staging.data());
+    const bool has_legacy_material_ubo_layout =
+        shader->material_ubo_entry_count > 0 && shader->material_ubo_block_size > 0;
+    const bool has_reflected_material_fields =
+        material_rb &&
+        material_rb->kind == TC_SHADER_RESOURCE_CONSTANT_BUFFER &&
+        material_rb->field_count > 0 &&
+        material_rb->fields &&
+        material_rb->size > 0;
 
-        if (material_rb && material_rb->kind == TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
+    if (has_legacy_material_ubo_layout || has_reflected_material_fields) {
+        const uint32_t block_size = has_legacy_material_ubo_layout
+            ? shader->material_ubo_block_size
+            : material_rb->size;
+        std::vector<uint8_t> staging(block_size, 0);
+        const bool packed_layout = has_legacy_material_ubo_layout
+            ? pack_material_ubo_from_legacy_entries(
+                phase,
+                shader,
+                staging.data(),
+                block_size)
+            : pack_material_ubo_from_reflected_fields(
+                phase,
+                shader,
+                material_rb,
+                staging.data(),
+                block_size);
+
+        if (!packed_layout) {
+            // Invalid reflected metadata was logged above. Leave the old
+            // behavior for "no usable layout": do not bind a material UBO.
+        } else if (material_rb && material_rb->kind == TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
             ctx.bind_uniform_data(
                 TC_SHADER_RESOURCE_MATERIAL,
                 staging.data(),
