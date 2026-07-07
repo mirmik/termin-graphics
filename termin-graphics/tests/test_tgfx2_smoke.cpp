@@ -183,7 +183,7 @@ int main() {
         {0, tgfx::VertexFormat::Float2, 0},                      // aPos
         {1, tgfx::VertexFormat::Float3, 2 * sizeof(float)},      // aColor
     };
-    pipe_desc.vertex_layouts.push_back(layout);
+    pipe_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(layout));
 
     auto pipeline = device->create_pipeline(pipe_desc);
     printf("Pipeline created: id=%u\n", pipeline.id);
@@ -371,7 +371,7 @@ int main() {
             artifact_pipe_desc.topology = tgfx::PrimitiveTopology::TriangleList;
             artifact_pipe_desc.depth_stencil.depth_test = false;
             artifact_pipe_desc.raster.cull = tgfx::CullMode::None;
-            artifact_pipe_desc.vertex_layouts.push_back(layout);
+            artifact_pipe_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(layout));
 
             artifact_pipeline = device->create_pipeline(artifact_pipe_desc);
             printf("Artifact pipeline created: id=%u\n", artifact_pipeline.id);

@@ -359,7 +359,7 @@ static bool render_bound_resource_set_smoke(tgfx::IRenderDevice& device) {
     tgfx::VertexBufferLayout layout;
     layout.stride = 2 * sizeof(float);
     layout.attributes = {{0, tgfx::VertexFormat::Float2, 0}};
-    pipeline_desc.vertex_layouts.push_back(layout);
+    pipeline_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(layout));
 
     tgfx::PipelineHandle pipeline = device.create_pipeline(pipeline_desc);
     const uintptr_t resource_layout_token =
@@ -413,7 +413,10 @@ static bool render_bound_resource_set_smoke(tgfx::IRenderDevice& device) {
     bound_desc.resource_layout_token = resource_layout_token;
     tgfx::BoundResourceGroup material_group;
     material_group.scope = tgfx::ShaderResourceScope::Material;
-    material_group.bindings.push_back({plan_entry, value});
+    material_group.bindings.push_back({
+        tgfx::bound_resource_slot_from_plan_entry(plan_entry),
+        value,
+    });
     bound_desc.groups.push_back(std::move(material_group));
     tgfx::ResourceSetHandle resource_set =
         device.create_bound_resource_set(bound_desc);
@@ -423,7 +426,7 @@ static bool render_bound_resource_set_smoke(tgfx::IRenderDevice& device) {
     }
 
     tgfx::BoundResourceSetDesc wrong_backend_desc = bound_desc;
-    wrong_backend_desc.groups[0].bindings[0].plan_entry.placement.kind =
+    wrong_backend_desc.groups[0].bindings[0].slot.placement.kind =
         tgfx::BackendPlacementKind::OpenGLBinding;
     if (device.create_bound_resource_set(wrong_backend_desc)) {
         fprintf(stderr, "Vulkan bound smoke: accepted non-Vulkan placement\n");
@@ -431,7 +434,7 @@ static bool render_bound_resource_set_smoke(tgfx::IRenderDevice& device) {
     }
 
     tgfx::BoundResourceSetDesc wrong_descriptor_desc = bound_desc;
-    wrong_descriptor_desc.groups[0].bindings[0].plan_entry.placement.vulkan.descriptor_kind =
+    wrong_descriptor_desc.groups[0].bindings[0].slot.placement.vulkan.descriptor_kind =
         tgfx::BackendDescriptorKind::Sampler;
     if (device.create_bound_resource_set(wrong_descriptor_desc)) {
         fprintf(stderr, "Vulkan bound smoke: accepted wrong descriptor kind\n");
@@ -717,7 +720,7 @@ int main(int argc, char** argv) {
         {0, tgfx::VertexFormat::Float2, 0},
         {1, tgfx::VertexFormat::Float3, 2 * sizeof(float)},
     };
-    pipe_desc.vertex_layouts.push_back(layout);
+    pipe_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(layout));
 
     auto pipeline = device->create_pipeline(pipe_desc);
     printf("Pipeline: id=%u\n", pipeline.id);

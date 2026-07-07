@@ -177,7 +177,7 @@ void main() {
         {0, tgfx::VertexFormat::Float2, 0},
         {1, tgfx::VertexFormat::Float3, 2 * sizeof(float)},
     };
-    pipe_desc.vertex_layouts.push_back(layout);
+    pipe_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(layout));
 
     tgfx::PipelineHandle pipe = device->create_pipeline(pipe_desc);
 

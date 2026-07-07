@@ -383,7 +383,7 @@ std::string describe_vk_vertex_attributes(
 }
 
 std::string describe_vertex_layouts(
-    const std::vector<VertexBufferLayout>& layouts
+    const std::vector<VertexLayoutDesc>& layouts
 ) {
     std::ostringstream out;
     for (size_t i = 0; i < layouts.size(); ++i) {
@@ -393,8 +393,11 @@ std::string describe_vertex_layouts(
             << " stride=" << layout.stride
             << " rate=" << (layout.per_instance ? "instance" : "vertex")
             << " attrs=[";
-        for (size_t j = 0; j < layout.attributes.size(); ++j) {
-            const auto& attr = layout.attributes[j];
+        const uint32_t attribute_count = std::min(
+            layout.attribute_count,
+            TGFX2_VERTEX_ATTRIBUTE_MAX);
+        for (uint32_t j = 0; j < attribute_count; ++j) {
+            const VertexAttributeDesc& attr = layout.attributes[j];
             if (j) out << "; ";
             out << "loc=" << attr.location
                 << " offset=" << attr.offset

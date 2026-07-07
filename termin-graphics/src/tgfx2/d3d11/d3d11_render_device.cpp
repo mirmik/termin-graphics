@@ -1017,14 +1017,20 @@ PipelineHandle D3D11RenderDevice::create_pipeline(const PipelineDesc& desc) {
     const auto reflected_inputs = reflect_d3d11_vertex_inputs(*vs);
     size_t input_element_count = 0;
     for (const auto& layout : desc.vertex_layouts) {
-        input_element_count += layout.attributes.size();
+        input_element_count += std::min(
+            layout.attribute_count,
+            TGFX2_VERTEX_ATTRIBUTE_MAX);
     }
     semantic_names.reserve(input_element_count);
     input_elements.reserve(input_element_count);
     size_t reflected_input_index = 0;
     for (uint32_t slot = 0; slot < desc.vertex_layouts.size(); ++slot) {
         const auto& layout = desc.vertex_layouts[slot];
-        for (const auto& attr : layout.attributes) {
+        const uint32_t attribute_count = std::min(
+            layout.attribute_count,
+            TGFX2_VERTEX_ATTRIBUTE_MAX);
+        for (uint32_t i = 0; i < attribute_count; ++i) {
+            const VertexAttributeDesc& attr = layout.attributes[i];
             D3D11InputSemantic semantic = semantic_for_attribute(attr);
             if (layout.use_shader_input_locations) {
                 if (reflected_input_index >= reflected_inputs.size()) {

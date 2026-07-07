@@ -138,7 +138,7 @@ PipelineHandle PipelineCache::get(const PipelineCacheKey& key) {
 
     for (const VertexLayoutDesc& layout : key.vertex_layouts) {
         if (layout.stride > 0) {
-            desc.vertex_layouts.push_back(make_vertex_buffer_layout(layout));
+            desc.vertex_layouts.push_back(layout);
         }
     }
 

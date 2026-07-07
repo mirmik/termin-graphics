@@ -232,7 +232,11 @@ void OpenGLCommandList::setup_vao_for_pipeline(GLPipeline* pipeline) {
     // after this with the VBO already bound and performs the actual
     // attribute-pointer configuration.
     for (const auto& layout : pipeline->desc.vertex_layouts) {
-        for (const auto& attr : layout.attributes) {
+        const uint32_t attribute_count = std::min(
+            layout.attribute_count,
+            TGFX2_VERTEX_ATTRIBUTE_MAX);
+        for (uint32_t i = 0; i < attribute_count; ++i) {
+            const VertexAttributeDesc& attr = layout.attributes[i];
             glEnableVertexAttribArray(attr.location);
             if (layout.per_instance) {
                 glVertexAttribDivisor(attr.location, 1);
@@ -432,7 +436,11 @@ void OpenGLCommandList::bind_vertex_buffer(uint32_t slot, BufferHandle buffer, u
     auto* pipe = device_.get_pipeline(current_pipeline_);
     if (pipe && slot < pipe->desc.vertex_layouts.size()) {
         const auto& layout = pipe->desc.vertex_layouts[slot];
-        for (const auto& attr : layout.attributes) {
+        const uint32_t attribute_count = std::min(
+            layout.attribute_count,
+            TGFX2_VERTEX_ATTRIBUTE_MAX);
+        for (uint32_t i = 0; i < attribute_count; ++i) {
+            const VertexAttributeDesc& attr = layout.attributes[i];
             auto gl_type = gl::vertex_format_gl_type(attr.format);
             auto count = gl::vertex_format_component_count(attr.format);
             auto ptr_offset = static_cast<uintptr_t>(attr.offset + offset);

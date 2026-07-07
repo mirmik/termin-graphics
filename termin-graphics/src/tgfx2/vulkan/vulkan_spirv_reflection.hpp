@@ -42,7 +42,7 @@ std::string describe_vk_vertex_attributes(
 );
 
 std::string describe_vertex_layouts(
-    const std::vector<VertexBufferLayout>& layouts
+    const std::vector<VertexLayoutDesc>& layouts
 );
 
 } // namespace tgfx

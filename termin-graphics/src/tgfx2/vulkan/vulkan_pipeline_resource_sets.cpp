@@ -344,10 +344,11 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
         bd.inputRate = vl.per_instance ? VK_VERTEX_INPUT_RATE_INSTANCE : VK_VERTEX_INPUT_RATE_VERTEX;
         bindings.push_back(bd);
 
-        for (uint32_t attr_index = 0;
-             attr_index < static_cast<uint32_t>(vl.attributes.size());
-             ++attr_index) {
-            const auto& attr = vl.attributes[attr_index];
+        const uint32_t attribute_count = std::min(
+            vl.attribute_count,
+            TGFX2_VERTEX_ATTRIBUTE_MAX);
+        for (uint32_t attr_index = 0; attr_index < attribute_count; ++attr_index) {
+            const VertexAttributeDesc& attr = vl.attributes[attr_index];
             uint32_t location = attr.location;
             if (vl.use_shader_input_locations) {
                 if (!vertex_shader || !vertex_shader->vertex_input_locations_known) {

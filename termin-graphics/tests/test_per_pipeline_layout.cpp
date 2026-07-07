@@ -97,7 +97,7 @@ int main() {
     tgfx::VertexBufferLayout layout;
     layout.stride = 2 * sizeof(float);
     layout.attributes = {{0, tgfx::VertexFormat::Float2, 0}};
-    pipe_desc.vertex_layouts.push_back(layout);
+    pipe_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(layout));
 
     auto pipeline = device->create_pipeline(pipe_desc);
 

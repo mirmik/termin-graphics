@@ -137,7 +137,7 @@ int main() {
     tgfx::VertexBufferLayout vertex_layout;
     vertex_layout.stride = 2 * sizeof(float);
     vertex_layout.attributes = {{0, tgfx::VertexFormat::Float2, 0}};
-    pipeline_desc.vertex_layouts.push_back(vertex_layout);
+    pipeline_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(vertex_layout));
 
     tgfx::PipelineHandle pipeline = device->create_pipeline(pipeline_desc);
     const uintptr_t resource_layout_token =
@@ -190,7 +190,10 @@ int main() {
     bound_desc.resource_layout_token = resource_layout_token;
     tgfx::BoundResourceGroup material_group;
     material_group.scope = tgfx::ShaderResourceScope::Material;
-    material_group.bindings.push_back({plan_entry, value});
+    material_group.bindings.push_back({
+        tgfx::bound_resource_slot_from_plan_entry(plan_entry),
+        value,
+    });
     bound_desc.groups.push_back(std::move(material_group));
     tgfx::ResourceSetHandle resource_set =
         device->create_bound_resource_set(bound_desc);

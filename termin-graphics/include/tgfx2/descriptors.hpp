@@ -57,7 +57,7 @@ struct PipelineDesc {
     ShaderHandle fragment_shader;
     ShaderHandle geometry_shader;  // optional (id=0 = not used)
 
-    std::vector<VertexBufferLayout> vertex_layouts;
+    std::vector<VertexLayoutDesc> vertex_layouts;
     PrimitiveTopology topology = PrimitiveTopology::TriangleList;
 
     RasterState raster;

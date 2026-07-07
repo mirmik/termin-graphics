@@ -736,7 +736,7 @@ int main() {
             tgfx::VertexFormat::Float3,
             0,
             "POSITION");
-        textured_pipeline_desc.vertex_layouts.push_back(vertex_layout);
+        textured_pipeline_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(vertex_layout));
         auto textured_pipeline = device->create_pipeline(textured_pipeline_desc);
         if (!textured_pipeline) {
             std::fprintf(stderr, "D3D11 smoke: textured create_pipeline failed\n");
@@ -751,7 +751,7 @@ int main() {
             0,
             tgfx::VertexFormat::Float3,
             0);
-        standard_location_desc.vertex_layouts.push_back(standard_location_layout);
+        standard_location_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(standard_location_layout));
         if (!device->create_pipeline(standard_location_desc)) {
             std::fprintf(stderr, "D3D11 smoke: standard location input layout failed\n");
             return 1;
@@ -905,7 +905,7 @@ int main() {
             tgfx::VertexFormat::Float3,
             static_cast<uint32_t>(offsetof(NormalVertex, normal)),
             "normal");
-        normal_pipeline_desc.vertex_layouts.push_back(normal_layout);
+        normal_pipeline_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(normal_layout));
         auto normal_pipeline = device->create_pipeline(normal_pipeline_desc);
         if (!normal_pipeline) {
             std::fprintf(stderr, "D3D11 smoke: normal material pipeline creation failed\n");
@@ -1341,7 +1341,7 @@ int main() {
             {0, tgfx::VertexFormat::Float3, 0, "position"},
             {1, tgfx::VertexFormat::Float4, 3 * sizeof(float), "uv"},
         };
-        logical_semantic_desc.vertex_layouts.push_back(logical_semantic_layout);
+        logical_semantic_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(logical_semantic_layout));
         if (!device->create_pipeline(logical_semantic_desc)) {
             std::fprintf(stderr, "D3D11 smoke: logical semantic input layout failed\n");
             return 1;
@@ -1356,7 +1356,7 @@ int main() {
             {0, tgfx::VertexFormat::Float3, 0, "position"},
             {4, tgfx::VertexFormat::Float4, 3 * sizeof(float), "joints"},
         };
-        reflected_semantic_desc.vertex_layouts.push_back(reflected_semantic_layout);
+        reflected_semantic_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(reflected_semantic_layout));
         if (!device->create_pipeline(reflected_semantic_desc)) {
             std::fprintf(stderr, "D3D11 smoke: reflected semantic input layout failed\n");
             return 1;

@@ -87,6 +87,17 @@ D3D11InputSemantic semantic_for_attribute(const VertexAttribute& attr) {
     return {"TEXCOORD", attr.location};
 }
 
+D3D11InputSemantic semantic_for_attribute(const VertexAttributeDesc& attr) {
+    if (attr.semantic && attr.semantic[0] != '\0') {
+        return d3d11_semantic_for_logical_attribute(attr.semantic);
+    }
+    std::string_view standard_semantic = standard_vertex_semantic_for_location(attr.location);
+    if (!standard_semantic.empty()) {
+        return d3d11_semantic_for_logical_attribute(std::string(standard_semantic));
+    }
+    return {"TEXCOORD", attr.location};
+}
+
 std::vector<D3D11InputSemantic> reflect_d3d11_vertex_inputs(const D3D11ShaderModule& vs) {
     std::vector<D3D11InputSemantic> out;
     if (vs.bytecode.empty()) {
