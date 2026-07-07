@@ -245,11 +245,11 @@ public:
 
     // --- Dynamic-offset ring UBO ------------------------------------
     //
-    // A backend-managed host-visible ring buffer used by the
-    // `RenderContext2::bind_uniform_buffer_ring()` API. Pass code writes
+    // A backend-managed host-visible ring buffer used by
+    // `RenderContext2::bind_uniform_data()`. Pass/material code writes
     // per-draw UBO data into the ring via `ring_ubo_write(data, size)`
     // which returns an aligned byte offset; the offset is then attached
-    // to a normal UniformBuffer binding on `ring_ubo_handle()`, letting
+    // to a resolved UniformBuffer binding on `ring_ubo_handle()`, letting
     // one shared backing store replace a per-draw `vkCreateBuffer` +
     // `vkUpdateDescriptorSets` pair.
     //

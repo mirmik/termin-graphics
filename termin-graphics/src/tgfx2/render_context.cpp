@@ -750,36 +750,6 @@ const BackendBindingPlanEntry* RenderContext2::active_backend_binding_for(
     return nullptr;
 }
 
-void RenderContext2::bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
-                                          uint64_t offset, uint64_t range,
-                                          uint32_t set) {
-    ResourceBinding* existing =
-        find_pending_binding(
-            default_numeric_scope(),
-            binding,
-            ResourceBinding::Kind::UniformBuffer,
-            set);
-    if (existing) {
-        if (existing->buffer == buffer && existing->offset == offset &&
-            existing->range == range) {
-            return;
-        }
-        existing->buffer = buffer;
-        existing->offset = offset;
-        existing->range = range;
-    } else {
-        ResourceBinding b;
-        b.set = set;
-        b.kind = ResourceBinding::Kind::UniformBuffer;
-        b.binding = binding;
-        b.buffer = buffer;
-        b.offset = offset;
-        b.range = range;
-        upsert_pending_binding(default_numeric_scope(), b);
-    }
-    mark_binding_scope_dirty(default_numeric_scope());
-}
-
 void RenderContext2::bind_storage_buffer(uint32_t binding, BufferHandle buffer,
                                           uint64_t offset, uint64_t range,
                                           uint32_t set) {
@@ -808,32 +778,6 @@ void RenderContext2::bind_storage_buffer(uint32_t binding, BufferHandle buffer,
         upsert_pending_binding(default_numeric_scope(), b);
     }
     mark_binding_scope_dirty(default_numeric_scope());
-}
-
-void RenderContext2::bind_uniform_buffer_ring(uint32_t binding,
-                                                const void* data, uint32_t size,
-                                                uint32_t set) {
-    if (!data || size == 0) return;
-    // Write into the device ring; the returned offset is aligned to
-    // minUniformBufferOffsetAlignment. An invalid ring (handle.id == 0)
-    // means the backend hasn't implemented the ring path — fall back to
-    // a transient UBO via the classic API so behaviour stays correct.
-    BufferHandle ring = device_.ring_ubo_handle();
-    if (ring.id == 0) {
-        // Transient UBO fallback — creates garbage at the callrate of
-        // whoever used this API before the backend grew a real ring.
-        BufferDesc bd;
-        bd.size = size;
-        bd.usage = BufferUsage::Uniform;
-        bd.cpu_visible = true;
-        BufferHandle tmp = device_.create_buffer(bd);
-        device_.upload_buffer(tmp, {reinterpret_cast<const uint8_t*>(data), size});
-        defer_destroy(tmp);
-        bind_uniform_buffer(binding, tmp, 0, size, set);
-        return;
-    }
-    uint32_t offset = device_.ring_ubo_write(data, size);
-    bind_uniform_buffer(binding, ring, offset, size, set);
 }
 
 void RenderContext2::bind_sampled_texture(uint32_t binding, TextureHandle tex,

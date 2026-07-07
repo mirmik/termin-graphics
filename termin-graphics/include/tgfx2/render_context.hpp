@@ -247,15 +247,12 @@ public:
     void set_topology(PrimitiveTopology topo);
 
     // --- Resource bindings (UBOs, textures, samplers) ---
-    // Legacy numeric uniform binding. The buffer is resolved into a
+    // Legacy numeric storage binding. The buffer is resolved into a
     // ResourceSet lazily at draw time; call-sites do not manage
     // ResourceSetHandle lifecycles. Migrated Slang paths should prefer
-    // bind_uniform(name/rb). The `set` parameter is legacy numeric placement;
-    // migrated named/resolved paths get backend placement from BackendBindingPlan.
-    // Passing range=0 means \"bind whole buffer\" (backend uses glBindBufferBase).
-    void bind_uniform_buffer(uint32_t binding, BufferHandle buffer,
-                             uint64_t offset = 0, uint64_t range = 0,
-                             uint32_t set = 0);
+    // bind_storage_buffer(name/rb). The `set` parameter is legacy numeric
+    // placement; migrated named/resolved paths get backend placement from
+    // BackendBindingPlan. Passing range=0 means "bind whole buffer".
     void bind_storage_buffer(uint32_t binding, BufferHandle buffer,
                              uint64_t offset = 0, uint64_t range = 0,
                              uint32_t set = 0);
@@ -304,20 +301,6 @@ public:
     const struct ::tc_shader* active_shader_resource_layout() const {
         return active_shader_layout_;
     }
-
-    // Write `size` bytes of `data` into the backend's shared ring UBO
-    // and bind it at `binding` in the given backend resource layout. No
-    // caller-managed BufferHandle, no per-draw upload_buffer, no
-    // descriptor-set allocation for UBO-only differences between draws.
-    // On Vulkan this becomes a dynamic descriptor offset; on OpenGL as a
-    // `glBindBufferRange` into the ring buffer. `size` must be ≤ the
-    // UBO block size declared by the shader.
-    //
-    // `binding` must be one of the layout's UNIFORM_BUFFER_DYNAMIC slots.
-    // `set` remains a legacy numeric placement field. Migrated named/resolved
-    // resources should resolve placement through BackendBindingPlan.
-    void bind_uniform_buffer_ring(uint32_t binding, const void* data, uint32_t size,
-                                  uint32_t set = 0);
 
     // Set per-draw push constants. Payload becomes visible to the next
     // draw call at binding slot TGFX2_PUSH_CONSTANTS_BINDING (GL) or via
@@ -438,23 +421,11 @@ public:
 
     // --- Access ---
     IRenderDevice& device() { return device_; }
-    ICommandList* cmd() { return cmd_.get(); }
-
-    // Force pending render state to be resolved into an active pipeline.
-    // Normally called internally from draw*() methods; exposed for diagnostics
-    // and low-level integration points that need the backend pipeline bound
-    // before a draw call.
-    void flush_pipeline();
 
     // Return the built-in fullscreen-quad vertex shader, lazily creating it
-    // and the FSQ VBO/IBO on first access. Exposed so Phase 2 passes can
-    // bind_shader(fsq_vertex_shader(), their_fs) explicitly and then
-    // flush_pipeline() before setting uniforms via raw GL, avoiding the
-    // "Pipeline requires valid vertex and fragment shaders" error that
-    // would otherwise fire when flush_pipeline() runs while bound_vs_ is
-    // still empty (the VS substitution inside draw_fullscreen_quad() only
-    // happens at the start of that method, too late for a pre-draw uniform
-    // set).
+    // and the FSQ VBO/IBO on first access. Exposed for passes that provide
+    // their own fragment shader but use RenderContext2's canonical fullscreen
+    // quad vertex stream.
     ShaderHandle fsq_vertex_shader();
 
 private:
@@ -463,6 +434,7 @@ private:
                                 PrimitiveTopology topo);
 
     void ensure_fsq_resources();
+    void flush_pipeline();
     void flush_resource_set();
 };
 

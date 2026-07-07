@@ -115,13 +115,14 @@ namespaced form as an unknown attribute and omits it from reflection JSON.
 Some existing GLSL/material paths still bind numeric slots directly:
 
 ```cpp
-ctx2->bind_uniform_buffer_ring(2, &pf, sizeof(pf));
-ctx2->bind_uniform_buffer_ring(3, &shadow, sizeof(shadow));
 ctx2->bind_sampled_texture_array_element(8, i, shadow_map);
 ```
 
-Those paths are compatibility debt. They should be migrated by first adding
-resource scope metadata, then resolving by logical name. Do not add new numeric
+The old numeric uniform ring API has been removed; migrated uniform uploads
+should go through `bind_uniform_data(name/rb, ...)` so the backend placement is
+resolved from the shader resource layout. Remaining numeric texture/storage
+paths are compatibility debt. They should be migrated by first adding resource
+scope metadata, then resolving by logical name. Do not add new numeric
 slot assignments for Slang code.
 
 ## Why Not Finish Single-Set First

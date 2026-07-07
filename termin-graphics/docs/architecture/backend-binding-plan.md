@@ -149,9 +149,12 @@ marks all scopes dirty when pass or pipeline resource layout changes.
 Repeated symbolic binds with the same resolved value do not dirty the scope or
 recreate the current resource set.
 
-Numeric APIs such as `bind_uniform_buffer(uint32_t binding, ...)` remain as an
-explicit legacy/low-level side channel. They are carried as
-`legacy_numeric_bindings` beside planned bindings during the migration.
+Numeric storage/texture APIs remain as an explicit legacy/low-level side
+channel. They are carried as `legacy_numeric_bindings` beside planned bindings
+during the migration. Numeric uniform binding has been removed from
+`RenderContext2`; migrated uniform uploads go through
+`bind_uniform_data(name/rb, ...)` so placement comes from the active shader
+resource layout.
 
 ## Legacy Numeric API
 

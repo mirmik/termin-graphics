@@ -349,7 +349,7 @@ private:
     std::array<std::atomic<uint64_t>, kFrameSlotCount> ring_ubo_heads_ = {};
     uint32_t ring_ubo_slot_idx_ = 0;
     // BufferHandle that aliases ring_ubo_buffer_ in buffers_. Used by the
-    // RenderContext2::bind_uniform_buffer_ring() path and recognised by
+    // RenderContext2::bind_uniform_data() path and recognised by
     // create_resource_set() / bind_resource_set() to emit a dynamic offset
     // rather than update the descriptor on each bind.
     BufferHandle ring_ubo_handle_ = {};

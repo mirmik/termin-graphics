@@ -167,7 +167,7 @@ private:
     GLintptr     transient_vb_offset_     = 0;
     bool         transient_vb_initialized_ = false;
 
-    // Dynamic uniform ring state used by RenderContext2::bind_uniform_buffer_ring.
+    // Dynamic uniform ring state used by RenderContext2::bind_uniform_data().
     BufferHandle ring_ubo_handle_;
     GLuint       ring_ubo_gl_          = 0;
     GLsizeiptr   ring_ubo_size_        = 4 << 20;   // 4 MB
