@@ -26,6 +26,7 @@
 #include "tgfx2/backend_binding_plan.hpp"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/handles.hpp"
+#include "tgfx2/i_command_list.hpp"
 #include "tgfx2/render_state.hpp"
 #include "tgfx2/vertex_layout.hpp"
 #include "tgfx2/descriptors.hpp"
@@ -42,6 +43,8 @@ class PipelineCache;
 
 class TGFX2_TYPE_API RenderContext2 {
 private:
+    static constexpr uint32_t kTrackedVertexBufferMax = 2;
+
     IRenderDevice& device_;
     PipelineCache& cache_;
     std::unique_ptr<ICommandList> cmd_;
@@ -144,7 +147,8 @@ private:
     // so the data lands on the freshly-bound VkPipelineLayout (Vulkan)
     // or the current ring UBO offset (OpenGL). Cleared when the caller
     // passes an empty payload.
-    std::vector<uint8_t> pending_push_constants_;
+    std::array<uint8_t, TGFX2_PUSH_CONSTANTS_MAX_BYTES> pending_push_constants_{};
+    uint32_t pending_push_constants_size_ = 0;
     // True when pending_push_constants_ hasn't been emitted into the cmd
     // buffer yet since the last set_push_constants() call. Cleared after
     // flush_pipeline() pushes them. Kills the double-emit that happened
@@ -170,8 +174,9 @@ private:
     // VBO for hundreds of instanced draws — thousand-scale reduction in
     // bind cmd recording). Reset to {} at begin_pass so a new pass
     // always re-binds.
-    std::vector<BufferHandle> last_bound_vbos_;
-    std::vector<uint64_t> last_bound_vbo_offsets_;
+    std::array<BufferHandle, kTrackedVertexBufferMax> last_bound_vbos_{};
+    std::array<uint64_t, kTrackedVertexBufferMax> last_bound_vbo_offsets_{};
+    uint32_t last_bound_vbo_count_ = 0;
     BufferHandle last_bound_ibo_ = {};
     uint64_t last_bound_ibo_offset_ = 0;
     IndexType last_bound_index_type_ = IndexType::Uint32;
@@ -180,6 +185,8 @@ private:
     // pipeline cache returned the same handle again (same state combo).
     PipelineHandle last_bound_pipeline_ = {};
     uint64_t last_bound_resource_layout_token_ = 0;
+    void reset_cached_vertex_buffers();
+    void ensure_cached_vertex_buffer_slots(uint32_t count);
 
 public:
     RenderContext2(IRenderDevice& device, PipelineCache& cache);

@@ -242,8 +242,7 @@ void RenderContext2::begin_pass(
     clear_pending_binding_buckets();
     // Vulkan's cmd-buffer-level binds don't survive a render pass
     // boundary — reset cached state so draw() re-binds on first use.
-    last_bound_vbos_.clear();
-    last_bound_vbo_offsets_.clear();
+    reset_cached_vertex_buffers();
     last_bound_ibo_ = {};
     last_bound_ibo_offset_ = 0;
     last_bound_index_type_ = IndexType::Uint32;
@@ -388,6 +387,30 @@ void RenderContext2::set_topology(PrimitiveTopology topo) {
         topology_ = topo;
         pipeline_dirty_ = true;
     }
+}
+
+void RenderContext2::reset_cached_vertex_buffers() {
+    last_bound_vbos_.fill({});
+    last_bound_vbo_offsets_.fill(0);
+    last_bound_vbo_count_ = 0;
+}
+
+void RenderContext2::ensure_cached_vertex_buffer_slots(uint32_t count) {
+    if (count <= last_bound_vbo_count_) {
+        return;
+    }
+    if (count > kTrackedVertexBufferMax) {
+        tc_log(TC_LOG_ERROR,
+               "RenderContext2: requested %u cached vertex buffer slots, max=%u",
+               count,
+               kTrackedVertexBufferMax);
+        count = kTrackedVertexBufferMax;
+    }
+    for (uint32_t i = last_bound_vbo_count_; i < count; ++i) {
+        last_bound_vbos_[i] = {};
+        last_bound_vbo_offsets_[i] = 0;
+    }
+    last_bound_vbo_count_ = count;
 }
 
 // ============================================================================
@@ -1099,13 +1122,21 @@ void RenderContext2::set_push_constants(const void* data, uint32_t size) {
     // set_push_constants() → set_blend(...) → draw() — ~20% of draws,
     // visible as pushC ≈ 1.4 per draw in the hot-path summary.
     if (data == nullptr || size == 0) {
-        pending_push_constants_.clear();
+        pending_push_constants_size_ = 0;
         push_constants_dirty_ = false;
         return;
     }
-    pending_push_constants_.assign(
-        reinterpret_cast<const uint8_t*>(data),
-        reinterpret_cast<const uint8_t*>(data) + size);
+    if (size > TGFX2_PUSH_CONSTANTS_MAX_BYTES) {
+        tc_log(TC_LOG_ERROR,
+               "RenderContext2: push constants payload size=%u exceeds max=%u",
+               size,
+               TGFX2_PUSH_CONSTANTS_MAX_BYTES);
+        pending_push_constants_size_ = 0;
+        push_constants_dirty_ = false;
+        return;
+    }
+    std::memcpy(pending_push_constants_.data(), data, size);
+    pending_push_constants_size_ = size;
     push_constants_dirty_ = true;
 }
 
@@ -1147,9 +1178,9 @@ void RenderContext2::flush_pipeline() {
         // pending from a set_push_constants() call that came after the
         // previous draw. Emit them here so the next draw sees fresh
         // bytes without paying the pipeline-cache lookup.
-        if (push_constants_dirty_ && !pending_push_constants_.empty()) {
+        if (push_constants_dirty_ && pending_push_constants_size_ != 0) {
             cmd_->set_push_constants(pending_push_constants_.data(),
-                                     static_cast<uint32_t>(pending_push_constants_.size()));
+                                     pending_push_constants_size_);
             push_constants_dirty_ = false;
         }
         return;
@@ -1201,8 +1232,7 @@ void RenderContext2::flush_pipeline() {
         // state too, so both VBOs and IBO must be rebound even when handle ids
         // are unchanged. Other backends tolerate the extra bind after a
         // pipeline change.
-        last_bound_vbos_.clear();
-        last_bound_vbo_offsets_.clear();
+        reset_cached_vertex_buffers();
         last_bound_ibo_ = {};
         last_bound_ibo_offset_ = 0;
         last_bound_index_type_ = IndexType::Uint32;
@@ -1213,9 +1243,9 @@ void RenderContext2::flush_pipeline() {
     }
     pipeline_dirty_ = false;
 
-    if (push_constants_dirty_ && !pending_push_constants_.empty()) {
+    if (push_constants_dirty_ && pending_push_constants_size_ != 0) {
         cmd_->set_push_constants(pending_push_constants_.data(),
-                                 static_cast<uint32_t>(pending_push_constants_.size()));
+                                 pending_push_constants_size_);
         push_constants_dirty_ = false;
     }
 }
@@ -1400,10 +1430,7 @@ void RenderContext2::draw(
     // vkCmdBindVertexBuffers / vkCmdBindIndexBuffer each cost a cmd-buffer
     // word + driver trampoline — redundant ones add up to a measurable
     // slice of cmd-recording time.
-    if (last_bound_vbos_.size() <= 0) {
-        last_bound_vbos_.resize(1);
-        last_bound_vbo_offsets_.resize(1);
-    }
+    ensure_cached_vertex_buffer_slots(1);
     if (vbo != last_bound_vbos_[0] || last_bound_vbo_offsets_[0] != 0) {
         cmd_->bind_vertex_buffer(0, vbo);
         last_bound_vbos_[0] = vbo;
@@ -1430,10 +1457,7 @@ void RenderContext2::draw(
 ) {
     flush_pipeline();
     flush_resource_set();
-    if (last_bound_vbos_.size() <= 0) {
-        last_bound_vbos_.resize(1);
-        last_bound_vbo_offsets_.resize(1);
-    }
+    ensure_cached_vertex_buffer_slots(1);
     if (vbo != last_bound_vbos_[0] || last_bound_vbo_offsets_[0] != 0) {
         cmd_->bind_vertex_buffer(0, vbo);
         last_bound_vbos_[0] = vbo;
@@ -1484,10 +1508,7 @@ void RenderContext2::draw_indexed_instanced(
 ) {
     flush_pipeline();
     flush_resource_set();
-    if (last_bound_vbos_.size() < 2) {
-        last_bound_vbos_.resize(2);
-        last_bound_vbo_offsets_.resize(2);
-    }
+    ensure_cached_vertex_buffer_slots(2);
     if (vertex_vbo != last_bound_vbos_[0]
         || vertex_offset != last_bound_vbo_offsets_[0]) {
         cmd_->bind_vertex_buffer(0, vertex_vbo, vertex_offset);
@@ -1520,10 +1541,7 @@ void RenderContext2::draw_arrays(BufferHandle vbo,
                                  uint32_t vertex_count) {
     flush_pipeline();
     flush_resource_set();
-    if (last_bound_vbos_.size() <= 0) {
-        last_bound_vbos_.resize(1);
-        last_bound_vbo_offsets_.resize(1);
-    }
+    ensure_cached_vertex_buffer_slots(1);
     if (vbo != last_bound_vbos_[0] || last_bound_vbo_offsets_[0] != vertex_offset) {
         cmd_->bind_vertex_buffer(0, vbo, vertex_offset);
         last_bound_vbos_[0] = vbo;
@@ -1537,10 +1555,7 @@ void RenderContext2::draw_arrays_instanced(BufferHandle vbo,
                                            uint32_t instance_count) {
     flush_pipeline();
     flush_resource_set();
-    if (last_bound_vbos_.size() <= 0) {
-        last_bound_vbos_.resize(1);
-        last_bound_vbo_offsets_.resize(1);
-    }
+    ensure_cached_vertex_buffer_slots(1);
     if (vbo != last_bound_vbos_[0] || last_bound_vbo_offsets_[0] != 0) {
         cmd_->bind_vertex_buffer(0, vbo);
         last_bound_vbos_[0] = vbo;
@@ -1555,10 +1570,7 @@ void RenderContext2::draw_arrays_instanced(BufferHandle vertex_vbo,
                                            uint32_t instance_count) {
     flush_pipeline();
     flush_resource_set();
-    if (last_bound_vbos_.size() < 2) {
-        last_bound_vbos_.resize(2);
-        last_bound_vbo_offsets_.resize(2);
-    }
+    ensure_cached_vertex_buffer_slots(2);
     if (vertex_vbo != last_bound_vbos_[0] || last_bound_vbo_offsets_[0] != 0) {
         cmd_->bind_vertex_buffer(0, vertex_vbo);
         last_bound_vbos_[0] = vertex_vbo;
@@ -1580,10 +1592,7 @@ void RenderContext2::draw_arrays_instanced(BufferHandle vertex_vbo,
                                            uint32_t instance_count) {
     flush_pipeline();
     flush_resource_set();
-    if (last_bound_vbos_.size() < 2) {
-        last_bound_vbos_.resize(2);
-        last_bound_vbo_offsets_.resize(2);
-    }
+    ensure_cached_vertex_buffer_slots(2);
     if (vertex_vbo != last_bound_vbos_[0]
         || vertex_offset != last_bound_vbo_offsets_[0]) {
         cmd_->bind_vertex_buffer(0, vertex_vbo, vertex_offset);
