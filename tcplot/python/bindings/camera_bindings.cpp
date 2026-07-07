@@ -2,7 +2,6 @@
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
-#include <nanobind/stl/tuple.h>
 
 #include "tcplot/orbit_camera.hpp"
 
@@ -36,11 +35,10 @@ void bind_camera(nb::module_& m) {
         // Public state fields.
         .def_prop_rw("target",
             [](const tcplot::OrbitCamera& c) {
-                return std::make_tuple(c.target.x, c.target.y, c.target.z);
+                return c.target;
             },
-            [](tcplot::OrbitCamera& c, std::tuple<float, float, float> t) {
-                auto [x, y, z] = t;
-                c.target = {x, y, z};
+            [](tcplot::OrbitCamera& c, const termin::Vec3f& target) {
+                c.target = target;
             })
         .def_rw("distance",  &tcplot::OrbitCamera::distance)
         .def_rw("azimuth",   &tcplot::OrbitCamera::azimuth)
@@ -57,9 +55,7 @@ void bind_camera(nb::module_& m) {
         // re-export layer reshapes to (4,4) numpy for parity with the
         // old camera3d.py API (view_matrix / mvp return np.ndarray).
         .def_prop_ro("eye", [](const tcplot::OrbitCamera& c) {
-            float e[3];
-            c.compute_eye(e);
-            return std::make_tuple(e[0], e[1], e[2]);
+            return c.eye();
         })
 
         .def("view_matrix", [](const tcplot::OrbitCamera& c) {
@@ -87,11 +83,9 @@ void bind_camera(nb::module_& m) {
 
         .def("fit_bounds",
              [](tcplot::OrbitCamera& c,
-                std::tuple<float, float, float> lo,
-                std::tuple<float, float, float> hi) {
-                 const float lo_f[3] = {std::get<0>(lo), std::get<1>(lo), std::get<2>(lo)};
-                 const float hi_f[3] = {std::get<0>(hi), std::get<1>(hi), std::get<2>(hi)};
-                 c.fit_bounds(lo_f, hi_f);
+                const termin::Vec3f& lo,
+                const termin::Vec3f& hi) {
+                 c.fit_bounds(lo, hi);
              },
              nb::arg("bounds_min"), nb::arg("bounds_max"));
 }

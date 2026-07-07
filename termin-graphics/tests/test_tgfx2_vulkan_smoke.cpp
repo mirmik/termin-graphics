@@ -914,16 +914,22 @@ int main(int argc, char** argv) {
 
         if (slang_artifact_ok) {
             termin::tgfx2_set_shader_artifact_root(artifact_root.string().c_str());
-            slang_shader_handle = tc_shader_from_sources_ex(
-                invalid_fallback_src,
-                invalid_fallback_src,
-                nullptr,
-                "tgfx2 Vulkan Slang matrix smoke",
-                nullptr,
+            const tc_shader_create_desc shader_desc = {
+                {
+                    invalid_fallback_src,
+                    invalid_fallback_src,
+                    nullptr,
+                    "tgfx2 Vulkan Slang matrix smoke",
+                    nullptr,
+                    nullptr,
+                    nullptr,
+                    nullptr
+                },
                 artifact_uuid,
                 TC_SHADER_LANGUAGE_SLANG,
                 TC_SHADER_ARTIFACT_REQUIRED
-            );
+            };
+            slang_shader_handle = tc_shader_from_sources_desc(&shader_desc);
 
             tc_shader* slang_shader = tc_shader_get(slang_shader_handle);
             tgfx::ShaderHandle slang_vs;

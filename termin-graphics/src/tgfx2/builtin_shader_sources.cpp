@@ -483,22 +483,26 @@ tc_shader_handle register_engine_shader_program(
     const tc_shader_artifact_policy artifact_policy =
         is_slang ? TC_SHADER_ARTIFACT_REQUIRED : TC_SHADER_ARTIFACT_OPTIONAL;
 
-    tc_shader_handle handle = tc_shader_from_sources_with_entries_ex(
-        vertex_source.empty() ? nullptr : vertex_source.c_str(),
-        fragment_source.empty() ? nullptr : fragment_source.c_str(),
-        nullptr,
-        program.name,
-        /*source_path=*/nullptr,
+    const tc_shader_create_desc shader_desc = {
+        {
+            vertex_source.empty() ? nullptr : vertex_source.c_str(),
+            fragment_source.empty() ? nullptr : fragment_source.c_str(),
+            nullptr,
+            program.name,
+            /*source_path=*/nullptr,
+            program.vertex_stage && program.vertex_stage->entry_point
+                ? program.vertex_stage->entry_point
+                : nullptr,
+            program.fragment_stage && program.fragment_stage->entry_point
+                ? program.fragment_stage->entry_point
+                : nullptr,
+            nullptr
+        },
         program.uuid,
         shader_language,
-        artifact_policy,
-        program.vertex_stage && program.vertex_stage->entry_point
-            ? program.vertex_stage->entry_point
-            : nullptr,
-        program.fragment_stage && program.fragment_stage->entry_point
-            ? program.fragment_stage->entry_point
-            : nullptr,
-        nullptr);
+        artifact_policy
+    };
+    tc_shader_handle handle = tc_shader_from_sources_desc(&shader_desc);
 
     if (tc_shader_handle_is_invalid(handle)) {
         tc::Log::error(
@@ -540,26 +544,30 @@ tc_shader_handle register_convention_live_shader(
     const tc_shader_artifact_policy artifact_policy =
         is_slang ? TC_SHADER_ARTIFACT_REQUIRED : TC_SHADER_ARTIFACT_OPTIONAL;
 
-    tc_shader_handle handle = tc_shader_from_sources_with_entries_ex(
-        shader_source.vertex_stage
-            ? shader_source.vertex_stage->source.c_str()
-            : nullptr,
-        shader_source.fragment_stage
-            ? shader_source.fragment_stage->source.c_str()
-            : nullptr,
-        nullptr,
-        shader_source.name.c_str(),
-        /*source_path=*/nullptr,
+    const tc_shader_create_desc shader_desc = {
+        {
+            shader_source.vertex_stage
+                ? shader_source.vertex_stage->source.c_str()
+                : nullptr,
+            shader_source.fragment_stage
+                ? shader_source.fragment_stage->source.c_str()
+                : nullptr,
+            nullptr,
+            shader_source.name.c_str(),
+            /*source_path=*/nullptr,
+            shader_source.vertex_stage && !shader_source.vertex_stage->entry_point.empty()
+                ? shader_source.vertex_stage->entry_point.c_str()
+                : nullptr,
+            shader_source.fragment_stage && !shader_source.fragment_stage->entry_point.empty()
+                ? shader_source.fragment_stage->entry_point.c_str()
+                : nullptr,
+            nullptr
+        },
         shader_source.uuid.c_str(),
         shader_language,
-        artifact_policy,
-        shader_source.vertex_stage && !shader_source.vertex_stage->entry_point.empty()
-            ? shader_source.vertex_stage->entry_point.c_str()
-            : nullptr,
-        shader_source.fragment_stage && !shader_source.fragment_stage->entry_point.empty()
-            ? shader_source.fragment_stage->entry_point.c_str()
-            : nullptr,
-        nullptr);
+        artifact_policy
+    };
+    tc_shader_handle handle = tc_shader_from_sources_desc(&shader_desc);
 
     if (tc_shader_handle_is_invalid(handle)) {
         tc::Log::error(
@@ -807,18 +815,22 @@ tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
     const std::string vertex_entry = stage_entry("vertex");
     const std::string fragment_entry = stage_entry("fragment");
 
-    tc_shader_handle handle = tc_shader_from_sources_with_entries_ex(
-        vertex_source.empty() ? nullptr : vertex_source.c_str(),
-        fragment_source.empty() ? nullptr : fragment_source.c_str(),
-        nullptr,
-        name.c_str(),
-        /*source_path=*/nullptr,
+    const tc_shader_create_desc shader_desc = {
+        {
+            vertex_source.empty() ? nullptr : vertex_source.c_str(),
+            fragment_source.empty() ? nullptr : fragment_source.c_str(),
+            nullptr,
+            name.c_str(),
+            /*source_path=*/nullptr,
+            vertex_entry.empty() ? nullptr : vertex_entry.c_str(),
+            fragment_entry.empty() ? nullptr : fragment_entry.c_str(),
+            nullptr
+        },
         uuid,
         shader_language,
-        artifact_policy,
-        vertex_entry.empty() ? nullptr : vertex_entry.c_str(),
-        fragment_entry.empty() ? nullptr : fragment_entry.c_str(),
-        nullptr);
+        artifact_policy
+    };
+    tc_shader_handle handle = tc_shader_from_sources_desc(&shader_desc);
 
     if (tc_shader_handle_is_invalid(handle)) {
         tc::Log::error(

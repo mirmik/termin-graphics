@@ -73,202 +73,186 @@ void tc_mesh_compute_uuid(
 // Mesh queries
 // ============================================================================
 
-static bool tc_mesh_vec3_sub(const float a[3], const float b[3], float out[3]) {
-    out[0] = a[0] - b[0];
-    out[1] = a[1] - b[1];
-    out[2] = a[2] - b[2];
-    return true;
+static tc_vec3f tc_mesh_vec3f_make(float x, float y, float z) {
+    tc_vec3f out;
+    out.x = x;
+    out.y = y;
+    out.z = z;
+    return out;
 }
 
-static void tc_mesh_vec3_add(const float a[3], const float b[3], float out[3]) {
-    out[0] = a[0] + b[0];
-    out[1] = a[1] + b[1];
-    out[2] = a[2] + b[2];
+static tc_vec3f tc_mesh_vec3f_zero(void) {
+    return tc_mesh_vec3f_make(0.0f, 0.0f, 0.0f);
 }
 
-static void tc_mesh_vec3_mul(const float v[3], float k, float out[3]) {
-    out[0] = v[0] * k;
-    out[1] = v[1] * k;
-    out[2] = v[2] * k;
+static tc_vec3f tc_mesh_vec3f_one(void) {
+    return tc_mesh_vec3f_make(1.0f, 1.0f, 1.0f);
 }
 
-static void tc_mesh_vec3_cross(const float a[3], const float b[3], float out[3]) {
-    out[0] = a[1] * b[2] - a[2] * b[1];
-    out[1] = a[2] * b[0] - a[0] * b[2];
-    out[2] = a[0] * b[1] - a[1] * b[0];
+static tc_vec3f tc_mesh_vec3f_add(tc_vec3f a, tc_vec3f b) {
+    return tc_mesh_vec3f_make(a.x + b.x, a.y + b.y, a.z + b.z);
 }
 
-static float tc_mesh_vec3_dot(const float a[3], const float b[3]) {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+static tc_vec3f tc_mesh_vec3f_sub(tc_vec3f a, tc_vec3f b) {
+    return tc_mesh_vec3f_make(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
-static float tc_mesh_vec3_len_sq(const float v[3]) {
-    return tc_mesh_vec3_dot(v, v);
+static tc_vec3f tc_mesh_vec3f_mul(tc_vec3f v, float k) {
+    return tc_mesh_vec3f_make(v.x * k, v.y * k, v.z * k);
 }
 
-static bool tc_mesh_vec3_normalize(float v[3]) {
-    float len_sq = tc_mesh_vec3_dot(v, v);
+static tc_vec3f tc_mesh_vec3f_cross(tc_vec3f a, tc_vec3f b) {
+    return tc_mesh_vec3f_make(
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x);
+}
+
+static float tc_mesh_vec3f_dot(tc_vec3f a, tc_vec3f b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+static float tc_mesh_vec3f_len_sq(tc_vec3f v) {
+    return tc_mesh_vec3f_dot(v, v);
+}
+
+static bool tc_mesh_vec3f_normalize(tc_vec3f* v) {
+    float len_sq = tc_mesh_vec3f_len_sq(*v);
     if (len_sq <= 1e-20f) {
         return false;
     }
     float inv_len = 1.0f / sqrtf(len_sq);
-    v[0] *= inv_len;
-    v[1] *= inv_len;
-    v[2] *= inv_len;
+    v->x *= inv_len;
+    v->y *= inv_len;
+    v->z *= inv_len;
     return true;
 }
 
-static void tc_mesh_make_metric(const float metric[3], float out[3]) {
-    if (!metric) {
-        out[0] = 1.0f;
-        out[1] = 1.0f;
-        out[2] = 1.0f;
-        return;
+static bool tc_mesh_vec3f_is_zero_metric(tc_vec3f metric) {
+    return fabsf(metric.x) <= 1e-8f &&
+           fabsf(metric.y) <= 1e-8f &&
+           fabsf(metric.z) <= 1e-8f;
+}
+
+static tc_vec3f tc_mesh_make_metric(tc_vec3f metric) {
+    if (tc_mesh_vec3f_is_zero_metric(metric)) {
+        return tc_mesh_vec3f_one();
     }
-    out[0] = fabsf(metric[0]) > 1e-8f ? fabsf(metric[0]) : 1e-8f;
-    out[1] = fabsf(metric[1]) > 1e-8f ? fabsf(metric[1]) : 1e-8f;
-    out[2] = fabsf(metric[2]) > 1e-8f ? fabsf(metric[2]) : 1e-8f;
+    return tc_mesh_vec3f_make(
+        fabsf(metric.x) > 1e-8f ? fabsf(metric.x) : 1e-8f,
+        fabsf(metric.y) > 1e-8f ? fabsf(metric.y) : 1e-8f,
+        fabsf(metric.z) > 1e-8f ? fabsf(metric.z) : 1e-8f);
 }
 
-static void tc_mesh_vec3_apply_metric(const float v[3], const float metric[3], float out[3]) {
-    out[0] = v[0] * metric[0];
-    out[1] = v[1] * metric[1];
-    out[2] = v[2] * metric[2];
+static tc_vec3f tc_mesh_vec3f_apply_metric(tc_vec3f v, tc_vec3f metric) {
+    return tc_mesh_vec3f_make(v.x * metric.x, v.y * metric.y, v.z * metric.z);
 }
 
-static void tc_mesh_vec3_abs_direction(const float a[3], const float b[3], float out[3]) {
-    tc_mesh_vec3_sub(b, a, out);
-    tc_mesh_vec3_normalize(out);
+static tc_vec3f tc_mesh_vec3f_abs_direction(tc_vec3f a, tc_vec3f b) {
+    tc_vec3f out = tc_mesh_vec3f_sub(b, a);
+    tc_mesh_vec3f_normalize(&out);
+    return out;
 }
 
 static void tc_mesh_closest_point_on_segment(
-    const float point[3],
-    const float a[3],
-    const float b[3],
-    float out_point[3],
+    tc_vec3f point,
+    tc_vec3f a,
+    tc_vec3f b,
+    tc_vec3f* out_point,
     float* out_distance
 ) {
-    float ab[3];
-    float ap[3];
-    tc_mesh_vec3_sub(b, a, ab);
-    tc_mesh_vec3_sub(point, a, ap);
-    float denom = tc_mesh_vec3_dot(ab, ab);
+    tc_vec3f ab = tc_mesh_vec3f_sub(b, a);
+    tc_vec3f ap = tc_mesh_vec3f_sub(point, a);
+    float denom = tc_mesh_vec3f_dot(ab, ab);
     float t = 0.0f;
     if (denom > 1e-12f) {
-        t = tc_mesh_vec3_dot(ap, ab) / denom;
+        t = tc_mesh_vec3f_dot(ap, ab) / denom;
         if (t < 0.0f) t = 0.0f;
         if (t > 1.0f) t = 1.0f;
     }
 
-    float ab_scaled[3];
-    float delta[3];
-    tc_mesh_vec3_mul(ab, t, ab_scaled);
-    tc_mesh_vec3_add(a, ab_scaled, out_point);
-    tc_mesh_vec3_sub(out_point, point, delta);
-    *out_distance = sqrtf(tc_mesh_vec3_dot(delta, delta));
+    *out_point = tc_mesh_vec3f_add(a, tc_mesh_vec3f_mul(ab, t));
+    tc_vec3f delta = tc_mesh_vec3f_sub(*out_point, point);
+    *out_distance = sqrtf(tc_mesh_vec3f_dot(delta, delta));
 }
 
 static void tc_mesh_closest_point_on_segment_metric(
-    const float point[3],
-    const float a[3],
-    const float b[3],
-    const float metric[3],
-    float out_point[3],
+    tc_vec3f point,
+    tc_vec3f a,
+    tc_vec3f b,
+    tc_vec3f metric,
+    tc_vec3f* out_point,
     float* out_distance
 ) {
-    float point_m[3], a_m[3], b_m[3];
-    tc_mesh_vec3_apply_metric(point, metric, point_m);
-    tc_mesh_vec3_apply_metric(a, metric, a_m);
-    tc_mesh_vec3_apply_metric(b, metric, b_m);
-
-    float ab_m[3];
-    float ap_m[3];
-    tc_mesh_vec3_sub(b_m, a_m, ab_m);
-    tc_mesh_vec3_sub(point_m, a_m, ap_m);
-    float denom = tc_mesh_vec3_dot(ab_m, ab_m);
+    tc_vec3f point_m = tc_mesh_vec3f_apply_metric(point, metric);
+    tc_vec3f a_m = tc_mesh_vec3f_apply_metric(a, metric);
+    tc_vec3f b_m = tc_mesh_vec3f_apply_metric(b, metric);
+    tc_vec3f ab_m = tc_mesh_vec3f_sub(b_m, a_m);
+    tc_vec3f ap_m = tc_mesh_vec3f_sub(point_m, a_m);
+    float denom = tc_mesh_vec3f_dot(ab_m, ab_m);
     float t = 0.0f;
     if (denom > 1e-12f) {
-        t = tc_mesh_vec3_dot(ap_m, ab_m) / denom;
+        t = tc_mesh_vec3f_dot(ap_m, ab_m) / denom;
         if (t < 0.0f) t = 0.0f;
         if (t > 1.0f) t = 1.0f;
     }
 
-    float ab[3], ab_scaled[3], candidate_m[3], delta_m[3];
-    tc_mesh_vec3_sub(b, a, ab);
-    tc_mesh_vec3_mul(ab, t, ab_scaled);
-    tc_mesh_vec3_add(a, ab_scaled, out_point);
-    tc_mesh_vec3_apply_metric(out_point, metric, candidate_m);
-    tc_mesh_vec3_sub(candidate_m, point_m, delta_m);
-    *out_distance = sqrtf(tc_mesh_vec3_dot(delta_m, delta_m));
+    tc_vec3f ab = tc_mesh_vec3f_sub(b, a);
+    *out_point = tc_mesh_vec3f_add(a, tc_mesh_vec3f_mul(ab, t));
+    tc_vec3f candidate_m = tc_mesh_vec3f_apply_metric(*out_point, metric);
+    tc_vec3f delta_m = tc_mesh_vec3f_sub(candidate_m, point_m);
+    *out_distance = sqrtf(tc_mesh_vec3f_dot(delta_m, delta_m));
 }
 
 static void tc_mesh_closest_point_on_triangle(
-    const float point[3],
-    const float a[3],
-    const float b[3],
-    const float c[3],
-    float out_point[3],
+    tc_vec3f point,
+    tc_vec3f a,
+    tc_vec3f b,
+    tc_vec3f c,
+    tc_vec3f* out_point,
     float* out_distance
 ) {
-    float ab[3], ac[3], ap[3];
-    tc_mesh_vec3_sub(b, a, ab);
-    tc_mesh_vec3_sub(c, a, ac);
-    tc_mesh_vec3_sub(point, a, ap);
-    float d1 = tc_mesh_vec3_dot(ab, ap);
-    float d2 = tc_mesh_vec3_dot(ac, ap);
+    tc_vec3f ab = tc_mesh_vec3f_sub(b, a);
+    tc_vec3f ac = tc_mesh_vec3f_sub(c, a);
+    tc_vec3f ap = tc_mesh_vec3f_sub(point, a);
+    float d1 = tc_mesh_vec3f_dot(ab, ap);
+    float d2 = tc_mesh_vec3f_dot(ac, ap);
     if (d1 <= 0.0f && d2 <= 0.0f) {
-        out_point[0] = a[0];
-        out_point[1] = a[1];
-        out_point[2] = a[2];
+        *out_point = a;
     } else {
-        float bp[3];
-        tc_mesh_vec3_sub(point, b, bp);
-        float d3 = tc_mesh_vec3_dot(ab, bp);
-        float d4 = tc_mesh_vec3_dot(ac, bp);
+        tc_vec3f bp = tc_mesh_vec3f_sub(point, b);
+        float d3 = tc_mesh_vec3f_dot(ab, bp);
+        float d4 = tc_mesh_vec3f_dot(ac, bp);
         if (d3 >= 0.0f && d4 <= d3) {
-            out_point[0] = b[0];
-            out_point[1] = b[1];
-            out_point[2] = b[2];
+            *out_point = b;
         } else {
             float vc = d1 * d4 - d3 * d2;
             if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f) {
                 float v = d1 / (d1 - d3);
-                float ab_scaled[3];
-                tc_mesh_vec3_mul(ab, v, ab_scaled);
-                tc_mesh_vec3_add(a, ab_scaled, out_point);
+                *out_point = tc_mesh_vec3f_add(a, tc_mesh_vec3f_mul(ab, v));
             } else {
-                float cp[3];
-                tc_mesh_vec3_sub(point, c, cp);
-                float d5 = tc_mesh_vec3_dot(ab, cp);
-                float d6 = tc_mesh_vec3_dot(ac, cp);
+                tc_vec3f cp = tc_mesh_vec3f_sub(point, c);
+                float d5 = tc_mesh_vec3f_dot(ab, cp);
+                float d6 = tc_mesh_vec3f_dot(ac, cp);
                 if (d6 >= 0.0f && d5 <= d6) {
-                    out_point[0] = c[0];
-                    out_point[1] = c[1];
-                    out_point[2] = c[2];
+                    *out_point = c;
                 } else {
                     float vb = d5 * d2 - d1 * d6;
                     if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f) {
                         float w = d2 / (d2 - d6);
-                        float ac_scaled[3];
-                        tc_mesh_vec3_mul(ac, w, ac_scaled);
-                        tc_mesh_vec3_add(a, ac_scaled, out_point);
+                        *out_point = tc_mesh_vec3f_add(a, tc_mesh_vec3f_mul(ac, w));
                     } else {
                         float va = d3 * d6 - d5 * d4;
                         if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f) {
-                            float bc[3], bc_scaled[3];
-                            tc_mesh_vec3_sub(c, b, bc);
+                            tc_vec3f bc = tc_mesh_vec3f_sub(c, b);
                             float w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
-                            tc_mesh_vec3_mul(bc, w, bc_scaled);
-                            tc_mesh_vec3_add(b, bc_scaled, out_point);
+                            *out_point = tc_mesh_vec3f_add(b, tc_mesh_vec3f_mul(bc, w));
                         } else {
                             float denom = 1.0f / (va + vb + vc);
                             float v = vb * denom;
                             float w = vc * denom;
-                            float ab_scaled[3], ac_scaled[3], sum[3];
-                            tc_mesh_vec3_mul(ab, v, ab_scaled);
-                            tc_mesh_vec3_mul(ac, w, ac_scaled);
-                            tc_mesh_vec3_add(a, ab_scaled, sum);
-                            tc_mesh_vec3_add(sum, ac_scaled, out_point);
+                            tc_vec3f sum = tc_mesh_vec3f_add(a, tc_mesh_vec3f_mul(ab, v));
+                            *out_point = tc_mesh_vec3f_add(sum, tc_mesh_vec3f_mul(ac, w));
                         }
                     }
                 }
@@ -276,9 +260,8 @@ static void tc_mesh_closest_point_on_triangle(
         }
     }
 
-    float delta[3];
-    tc_mesh_vec3_sub(out_point, point, delta);
-    *out_distance = sqrtf(tc_mesh_vec3_dot(delta, delta));
+    tc_vec3f delta = tc_mesh_vec3f_sub(*out_point, point);
+    *out_distance = sqrtf(tc_mesh_vec3f_dot(delta, delta));
 }
 
 static bool tc_mesh_triangle_indices(const tc_mesh* mesh, uint32_t tri, uint32_t out[3]) {
@@ -297,37 +280,38 @@ static bool tc_mesh_triangle_indices(const tc_mesh* mesh, uint32_t tri, uint32_t
            out[2] < mesh->vertex_count;
 }
 
-static bool tc_mesh_triangle_normal(const tc_mesh* mesh, uint32_t tri, float out[3]) {
-    float a[3], b[3], c[3];
-    if (!tc_mesh_get_triangle3f(mesh, tri, a, b, c)) {
+static bool tc_mesh_triangle_normal(const tc_mesh* mesh, uint32_t tri, tc_vec3f* out) {
+    tc_vec3f a;
+    tc_vec3f b;
+    tc_vec3f c;
+    if (!tc_mesh_get_triangle3f(mesh, tri, &a, &b, &c)) {
         return false;
     }
-    float ab[3], ac[3];
-    tc_mesh_vec3_sub(b, a, ab);
-    tc_mesh_vec3_sub(c, a, ac);
-    tc_mesh_vec3_cross(ab, ac, out);
-    return tc_mesh_vec3_normalize(out);
+    tc_vec3f ab = tc_mesh_vec3f_sub(b, a);
+    tc_vec3f ac = tc_mesh_vec3f_sub(c, a);
+    *out = tc_mesh_vec3f_cross(ab, ac);
+    return tc_mesh_vec3f_normalize(out);
 }
 
 static bool tc_mesh_triangle_normal_metric(
     const tc_mesh* mesh,
     uint32_t tri,
-    const float metric[3],
-    float out[3]
+    tc_vec3f metric,
+    tc_vec3f* out
 ) {
-    float a[3], b[3], c[3];
-    if (!tc_mesh_get_triangle3f(mesh, tri, a, b, c)) {
+    tc_vec3f a;
+    tc_vec3f b;
+    tc_vec3f c;
+    if (!tc_mesh_get_triangle3f(mesh, tri, &a, &b, &c)) {
         return false;
     }
-    float a_m[3], b_m[3], c_m[3];
-    tc_mesh_vec3_apply_metric(a, metric, a_m);
-    tc_mesh_vec3_apply_metric(b, metric, b_m);
-    tc_mesh_vec3_apply_metric(c, metric, c_m);
-    float ab[3], ac[3];
-    tc_mesh_vec3_sub(b_m, a_m, ab);
-    tc_mesh_vec3_sub(c_m, a_m, ac);
-    tc_mesh_vec3_cross(ab, ac, out);
-    return tc_mesh_vec3_normalize(out);
+    tc_vec3f a_m = tc_mesh_vec3f_apply_metric(a, metric);
+    tc_vec3f b_m = tc_mesh_vec3f_apply_metric(b, metric);
+    tc_vec3f c_m = tc_mesh_vec3f_apply_metric(c, metric);
+    tc_vec3f ab = tc_mesh_vec3f_sub(b_m, a_m);
+    tc_vec3f ac = tc_mesh_vec3f_sub(c_m, a_m);
+    *out = tc_mesh_vec3f_cross(ab, ac);
+    return tc_mesh_vec3f_normalize(out);
 }
 
 typedef struct tc_mesh_edge_adjacency {
@@ -369,22 +353,22 @@ static bool tc_mesh_make_geometric_edge_key(
     int64_t out_key[6],
     uint64_t* out_hash
 ) {
-    float pa[3];
-    float pb[3];
-    if (!tc_mesh_get_position3f(mesh, a, pa) ||
-        !tc_mesh_get_position3f(mesh, b, pb)) {
+    tc_vec3f pa;
+    tc_vec3f pb;
+    if (!tc_mesh_get_position3f(mesh, a, &pa) ||
+        !tc_mesh_get_position3f(mesh, b, &pb)) {
         return false;
     }
 
     int64_t qa[3] = {
-        tc_mesh_quantize_coord(pa[0]),
-        tc_mesh_quantize_coord(pa[1]),
-        tc_mesh_quantize_coord(pa[2]),
+        tc_mesh_quantize_coord(pa.x),
+        tc_mesh_quantize_coord(pa.y),
+        tc_mesh_quantize_coord(pa.z),
     };
     int64_t qb[3] = {
-        tc_mesh_quantize_coord(pb[0]),
-        tc_mesh_quantize_coord(pb[1]),
-        tc_mesh_quantize_coord(pb[2]),
+        tc_mesh_quantize_coord(pb.x),
+        tc_mesh_quantize_coord(pb.y),
+        tc_mesh_quantize_coord(pb.z),
     };
 
     const int64_t* first = qa;
@@ -485,7 +469,7 @@ static bool tc_mesh_is_boundary_edge(
 bool tc_mesh_get_position3f(
     const tc_mesh* mesh,
     uint32_t vertex_index,
-    float out_position[3]
+    tc_vec3f* out_position
 ) {
     if (!mesh || !out_position || !mesh->vertices || vertex_index >= mesh->vertex_count) {
         return false;
@@ -498,18 +482,16 @@ bool tc_mesh_get_position3f(
 
     const uint8_t* base = (const uint8_t*)mesh->vertices;
     const float* p = (const float*)(base + ((size_t)vertex_index * mesh->layout.stride) + pos->offset);
-    out_position[0] = p[0];
-    out_position[1] = p[1];
-    out_position[2] = p[2];
+    *out_position = tc_mesh_vec3f_make(p[0], p[1], p[2]);
     return true;
 }
 
 bool tc_mesh_get_triangle3f(
     const tc_mesh* mesh,
     uint32_t triangle_index,
-    float out_a[3],
-    float out_b[3],
-    float out_c[3]
+    tc_vec3f* out_a,
+    tc_vec3f* out_b,
+    tc_vec3f* out_c
 ) {
     if (!mesh || !out_a || !out_b || !out_c || !mesh->indices) {
         return false;
@@ -555,8 +537,8 @@ bool tc_mesh_raycast(
         return false;
     }
 
-    float dir[3] = {ray->direction[0], ray->direction[1], ray->direction[2]};
-    if (!tc_mesh_vec3_normalize(dir)) {
+    tc_vec3f dir = ray->direction;
+    if (!tc_mesh_vec3f_normalize(&dir)) {
         return false;
     }
 
@@ -579,63 +561,55 @@ bool tc_mesh_raycast(
             continue;
         }
 
-        float v0[3], v1[3], v2[3];
-        if (!tc_mesh_get_position3f(mesh, i0, v0) ||
-            !tc_mesh_get_position3f(mesh, i1, v1) ||
-            !tc_mesh_get_position3f(mesh, i2, v2)) {
+        tc_vec3f v0;
+        tc_vec3f v1;
+        tc_vec3f v2;
+        if (!tc_mesh_get_position3f(mesh, i0, &v0) ||
+            !tc_mesh_get_position3f(mesh, i1, &v1) ||
+            !tc_mesh_get_position3f(mesh, i2, &v2)) {
             continue;
         }
 
-        float edge1[3], edge2[3], pvec[3];
-        tc_mesh_vec3_sub(v1, v0, edge1);
-        tc_mesh_vec3_sub(v2, v0, edge2);
-        tc_mesh_vec3_cross(dir, edge2, pvec);
+        tc_vec3f edge1 = tc_mesh_vec3f_sub(v1, v0);
+        tc_vec3f edge2 = tc_mesh_vec3f_sub(v2, v0);
+        tc_vec3f pvec = tc_mesh_vec3f_cross(dir, edge2);
 
-        float det = tc_mesh_vec3_dot(edge1, pvec);
+        float det = tc_mesh_vec3f_dot(edge1, pvec);
         if (fabsf(det) < epsilon) {
             continue;
         }
 
         float inv_det = 1.0f / det;
-        float tvec[3];
-        tc_mesh_vec3_sub(ray->origin, v0, tvec);
+        tc_vec3f tvec = tc_mesh_vec3f_sub(ray->origin, v0);
 
-        float u = tc_mesh_vec3_dot(tvec, pvec) * inv_det;
+        float u = tc_mesh_vec3f_dot(tvec, pvec) * inv_det;
         if (u < 0.0f || u > 1.0f) {
             continue;
         }
 
-        float qvec[3];
-        tc_mesh_vec3_cross(tvec, edge1, qvec);
+        tc_vec3f qvec = tc_mesh_vec3f_cross(tvec, edge1);
 
-        float v = tc_mesh_vec3_dot(dir, qvec) * inv_det;
+        float v = tc_mesh_vec3f_dot(dir, qvec) * inv_det;
         if (v < 0.0f || u + v > 1.0f) {
             continue;
         }
 
-        float t = tc_mesh_vec3_dot(edge2, qvec) * inv_det;
+        float t = tc_mesh_vec3f_dot(edge2, qvec) * inv_det;
         if (t < t_min || t > best_t) {
             continue;
         }
 
-        float normal[3];
-        tc_mesh_vec3_cross(edge1, edge2, normal);
-        if (!tc_mesh_vec3_normalize(normal)) {
+        tc_vec3f normal = tc_mesh_vec3f_cross(edge1, edge2);
+        if (!tc_mesh_vec3f_normalize(&normal)) {
             continue;
         }
 
         best_t = t;
         found = true;
         best_hit.t = t;
-        best_hit.position[0] = ray->origin[0] + dir[0] * t;
-        best_hit.position[1] = ray->origin[1] + dir[1] * t;
-        best_hit.position[2] = ray->origin[2] + dir[2] * t;
-        best_hit.normal[0] = normal[0];
-        best_hit.normal[1] = normal[1];
-        best_hit.normal[2] = normal[2];
-        best_hit.barycentric[0] = 1.0f - u - v;
-        best_hit.barycentric[1] = u;
-        best_hit.barycentric[2] = v;
+        best_hit.position = tc_mesh_vec3f_add(ray->origin, tc_mesh_vec3f_mul(dir, t));
+        best_hit.normal = normal;
+        best_hit.barycentric = tc_mesh_vec3f_make(1.0f - u - v, u, v);
         best_hit.triangle_index = (uint32_t)tri;
         best_hit.indices[0] = i0;
         best_hit.indices[1] = i1;
@@ -652,17 +626,10 @@ bool tc_mesh_raycast(
 
 static bool tc_mesh_find_surface_edge_filtered(
     const tc_mesh* mesh,
-    uint32_t start_triangle,
-    const float point[3],
-    const float normal[3],
-    const float up[3],
-    const float metric[3],
-    bool use_direction_filter,
-    const float edge_direction[3],
-    float max_angle_degrees,
+    const tc_mesh_surface_edge_query* query,
     tc_mesh_surface_edge_hit* out_hit
 ) {
-    if (!mesh || !point || !normal || !up || !out_hit) {
+    if (!mesh || !query || !out_hit) {
         return false;
     }
     if (mesh->draw_mode != TC_DRAW_TRIANGLES) {
@@ -676,39 +643,29 @@ static bool tc_mesh_find_surface_edge_filtered(
     }
 
     size_t triangle_count = mesh->index_count / 3;
-    if (start_triangle >= triangle_count) {
+    if (query->start_triangle >= triangle_count) {
         return false;
     }
 
-    float query_metric[3];
-    tc_mesh_make_metric(metric, query_metric);
+    tc_vec3f query_metric = tc_mesh_make_metric(query->metric);
+    tc_vec3f point_m = tc_mesh_vec3f_apply_metric(query->point, query_metric);
 
-    float point_m[3];
-    tc_mesh_vec3_apply_metric(point, query_metric, point_m);
-
-    float local_up[3] = {up[0], up[1], up[2]};
-    float n0[3] = {normal[0], normal[1], normal[2]};
-    float local_up_m[3];
-    float n0_m[3];
-    tc_mesh_vec3_apply_metric(local_up, query_metric, local_up_m);
-    tc_mesh_vec3_apply_metric(n0, query_metric, n0_m);
-    if (!tc_mesh_vec3_normalize(local_up) || !tc_mesh_vec3_normalize(n0) ||
-        !tc_mesh_vec3_normalize(local_up_m) || !tc_mesh_vec3_normalize(n0_m)) {
+    tc_vec3f local_up = query->up;
+    tc_vec3f n0 = query->normal;
+    tc_vec3f local_up_m = tc_mesh_vec3f_apply_metric(local_up, query_metric);
+    tc_vec3f n0_m = tc_mesh_vec3f_apply_metric(n0, query_metric);
+    if (!tc_mesh_vec3f_normalize(&local_up) || !tc_mesh_vec3f_normalize(&n0) ||
+        !tc_mesh_vec3f_normalize(&local_up_m) || !tc_mesh_vec3f_normalize(&n0_m)) {
         return false;
     }
-    float desired_edge_direction[3] = {0.0f, 0.0f, 0.0f};
+    tc_vec3f desired_edge_direction = tc_mesh_vec3f_zero();
     float min_edge_direction_dot = -1.0f;
-    if (use_direction_filter) {
-        if (!edge_direction) {
+    if (query->use_direction_filter) {
+        desired_edge_direction = tc_mesh_vec3f_apply_metric(query->edge_direction, query_metric);
+        if (!tc_mesh_vec3f_normalize(&desired_edge_direction)) {
             return false;
         }
-        desired_edge_direction[0] = edge_direction[0];
-        desired_edge_direction[1] = edge_direction[1];
-        desired_edge_direction[2] = edge_direction[2];
-        tc_mesh_vec3_apply_metric(desired_edge_direction, query_metric, desired_edge_direction);
-        if (!tc_mesh_vec3_normalize(desired_edge_direction)) {
-            return false;
-        }
+        float max_angle_degrees = query->max_angle_degrees;
         if (max_angle_degrees < 0.0f) {
             max_angle_degrees = 0.0f;
         }
@@ -719,7 +676,7 @@ static bool tc_mesh_find_surface_edge_filtered(
     }
 
     tc_mesh_edge_adjacency* edges = (tc_mesh_edge_adjacency*)calloc(triangle_count * 3, sizeof(tc_mesh_edge_adjacency));
-    float* normals = (float*)calloc(triangle_count * 3, sizeof(float));
+    tc_vec3f* normals = (tc_vec3f*)calloc(triangle_count, sizeof(tc_vec3f));
     bool* has_normal = (bool*)calloc(triangle_count, sizeof(bool));
     bool* accepted = (bool*)calloc(triangle_count, sizeof(bool));
     uint32_t* queue = (uint32_t*)calloc(triangle_count, sizeof(uint32_t));
@@ -742,13 +699,13 @@ static bool tc_mesh_find_surface_edge_filtered(
         tc_mesh_add_edge_record(mesh, edges, &edge_count, idx[1], idx[2], tri);
         tc_mesh_add_edge_record(mesh, edges, &edge_count, idx[2], idx[0], tri);
 
-        float* n = &normals[(size_t)tri * 3];
+        tc_vec3f* n = &normals[tri];
         if (tc_mesh_triangle_normal_metric(mesh, tri, query_metric, n)) {
             has_normal[tri] = true;
         }
     }
 
-    if (!has_normal[start_triangle]) {
+    if (!has_normal[query->start_triangle]) {
         free(edges);
         free(normals);
         free(has_normal);
@@ -761,8 +718,8 @@ static bool tc_mesh_find_surface_edge_filtered(
     const float plane_distance_threshold = 0.05f;
     size_t queue_begin = 0;
     size_t queue_end = 0;
-    accepted[start_triangle] = true;
-    queue[queue_end++] = start_triangle;
+    accepted[query->start_triangle] = true;
+    queue[queue_end++] = query->start_triangle;
 
     while (queue_begin < queue_end) {
         uint32_t tri = queue[queue_begin++];
@@ -789,22 +746,20 @@ static bool tc_mesh_find_surface_edge_filtered(
                 if (next == tri || accepted[next] || !has_normal[next]) {
                     continue;
                 }
-                float* next_normal = &normals[(size_t)next * 3];
-                if (tc_mesh_vec3_dot(next_normal, n0_m) < normal_cos_threshold) {
+                tc_vec3f next_normal = normals[next];
+                if (tc_mesh_vec3f_dot(next_normal, n0_m) < normal_cos_threshold) {
                     continue;
                 }
 
                 uint32_t next_idx[3];
-                float v0[3];
+                tc_vec3f v0;
                 if (!tc_mesh_triangle_indices(mesh, next, next_idx) ||
-                    !tc_mesh_get_position3f(mesh, next_idx[0], v0)) {
+                    !tc_mesh_get_position3f(mesh, next_idx[0], &v0)) {
                     continue;
                 }
-                float v0_m[3];
-                float to_v0[3];
-                tc_mesh_vec3_apply_metric(v0, query_metric, v0_m);
-                tc_mesh_vec3_sub(v0_m, point_m, to_v0);
-                if (fabsf(tc_mesh_vec3_dot(to_v0, n0_m)) > plane_distance_threshold) {
+                tc_vec3f v0_m = tc_mesh_vec3f_apply_metric(v0, query_metric);
+                tc_vec3f to_v0 = tc_mesh_vec3f_sub(v0_m, point_m);
+                if (fabsf(tc_mesh_vec3f_dot(to_v0, n0_m)) > plane_distance_threshold) {
                     continue;
                 }
 
@@ -816,21 +771,19 @@ static bool tc_mesh_find_surface_edge_filtered(
 
     bool found = false;
     float best_distance = FLT_MAX;
-    float best_point[3] = {0.0f, 0.0f, 0.0f};
+    tc_vec3f best_point = tc_mesh_vec3f_zero();
     uint32_t best_a = 0;
     uint32_t best_b = 0;
     int32_t best_side = 0;
 
-    float horizontal_normal[3];
-    float up_part[3];
-    tc_mesh_vec3_mul(local_up_m, tc_mesh_vec3_dot(n0_m, local_up_m), up_part);
-    tc_mesh_vec3_sub(n0_m, up_part, horizontal_normal);
-    bool has_tangent = tc_mesh_vec3_len_sq(horizontal_normal) > 1e-12f;
-    float tangent[3] = {0.0f, 0.0f, 0.0f};
+    tc_vec3f up_part = tc_mesh_vec3f_mul(local_up_m, tc_mesh_vec3f_dot(n0_m, local_up_m));
+    tc_vec3f horizontal_normal = tc_mesh_vec3f_sub(n0_m, up_part);
+    bool has_tangent = tc_mesh_vec3f_len_sq(horizontal_normal) > 1e-12f;
+    tc_vec3f tangent = tc_mesh_vec3f_zero();
     if (has_tangent) {
-        tc_mesh_vec3_normalize(horizontal_normal);
-        tc_mesh_vec3_cross(local_up_m, horizontal_normal, tangent);
-        has_tangent = tc_mesh_vec3_normalize(tangent);
+        tc_mesh_vec3f_normalize(&horizontal_normal);
+        tangent = tc_mesh_vec3f_cross(local_up_m, horizontal_normal);
+        has_tangent = tc_mesh_vec3f_normalize(&tangent);
     }
 
     for (uint32_t tri = 0; tri < (uint32_t)triangle_count; ++tri) {
@@ -848,37 +801,40 @@ static bool tc_mesh_find_surface_edge_filtered(
                 continue;
             }
 
-            float a[3], b[3];
-            if (!tc_mesh_get_position3f(mesh, ia, a) ||
-                !tc_mesh_get_position3f(mesh, ib, b)) {
+            tc_vec3f a;
+            tc_vec3f b;
+            if (!tc_mesh_get_position3f(mesh, ia, &a) ||
+                !tc_mesh_get_position3f(mesh, ib, &b)) {
                 continue;
             }
-            if (use_direction_filter) {
-                float a_m[3], b_m[3], edge_dir[3];
-                tc_mesh_vec3_apply_metric(a, query_metric, a_m);
-                tc_mesh_vec3_apply_metric(b, query_metric, b_m);
-                tc_mesh_vec3_abs_direction(a_m, b_m, edge_dir);
-                if (fabsf(tc_mesh_vec3_dot(edge_dir, desired_edge_direction)) < min_edge_direction_dot) {
+            if (query->use_direction_filter) {
+                tc_vec3f a_m = tc_mesh_vec3f_apply_metric(a, query_metric);
+                tc_vec3f b_m = tc_mesh_vec3f_apply_metric(b, query_metric);
+                tc_vec3f edge_dir = tc_mesh_vec3f_abs_direction(a_m, b_m);
+                if (fabsf(tc_mesh_vec3f_dot(edge_dir, desired_edge_direction)) < min_edge_direction_dot) {
                     continue;
                 }
             }
 
-            float candidate[3];
+            tc_vec3f candidate;
             float distance = FLT_MAX;
-            tc_mesh_closest_point_on_segment_metric(point, a, b, query_metric, candidate, &distance);
+            tc_mesh_closest_point_on_segment_metric(
+                query->point,
+                a,
+                b,
+                query_metric,
+                &candidate,
+                &distance);
             if (distance < best_distance) {
                 best_distance = distance;
-                best_point[0] = candidate[0];
-                best_point[1] = candidate[1];
-                best_point[2] = candidate[2];
+                best_point = candidate;
                 best_a = ia;
                 best_b = ib;
                 best_side = 0;
                 if (has_tangent) {
-                    float candidate_m[3], delta[3];
-                    tc_mesh_vec3_apply_metric(candidate, query_metric, candidate_m);
-                    tc_mesh_vec3_sub(candidate_m, point_m, delta);
-                    float s = tc_mesh_vec3_dot(delta, tangent);
+                    tc_vec3f candidate_m = tc_mesh_vec3f_apply_metric(candidate, query_metric);
+                    tc_vec3f delta = tc_mesh_vec3f_sub(candidate_m, point_m);
+                    float s = tc_mesh_vec3f_dot(delta, tangent);
                     if (s > 1e-5f) {
                         best_side = 1;
                     } else if (s < -1e-5f) {
@@ -891,9 +847,7 @@ static bool tc_mesh_find_surface_edge_filtered(
     }
 
     if (found) {
-        out_hit->point[0] = best_point[0];
-        out_hit->point[1] = best_point[1];
-        out_hit->point[2] = best_point[2];
+        out_hit->point = best_point;
         out_hit->indices[0] = best_a;
         out_hit->indices[1] = best_b;
         out_hit->distance = best_distance;
@@ -911,113 +865,76 @@ static bool tc_mesh_find_surface_edge_filtered(
 bool tc_mesh_find_surface_edge(
     const tc_mesh* mesh,
     uint32_t start_triangle,
-    const float point[3],
-    const float normal[3],
-    const float up[3],
+    tc_vec3f point,
+    tc_vec3f normal,
+    tc_vec3f up,
     tc_mesh_surface_edge_hit* out_hit
 ) {
-    const float unit_metric[3] = {1.0f, 1.0f, 1.0f};
-    return tc_mesh_find_surface_edge_filtered(
-        mesh,
-        start_triangle,
-        point,
-        normal,
-        up,
-        unit_metric,
-        false,
-        NULL,
-        0.0f,
-        out_hit);
+    tc_mesh_surface_edge_query query = {0};
+    query.start_triangle = start_triangle;
+    query.point = point;
+    query.normal = normal;
+    query.up = up;
+    query.metric = tc_mesh_vec3f_one();
+    return tc_mesh_find_surface_edge_query(mesh, &query, out_hit);
 }
 
 bool tc_mesh_find_surface_edge_metric(
     const tc_mesh* mesh,
     uint32_t start_triangle,
-    const float point[3],
-    const float normal[3],
-    const float up[3],
-    const float metric[3],
+    tc_vec3f point,
+    tc_vec3f normal,
+    tc_vec3f up,
+    tc_vec3f metric,
     tc_mesh_surface_edge_hit* out_hit
 ) {
-    return tc_mesh_find_surface_edge_filtered(
-        mesh,
-        start_triangle,
-        point,
-        normal,
-        up,
-        metric,
-        false,
-        NULL,
-        0.0f,
-        out_hit);
+    tc_mesh_surface_edge_query query = {0};
+    query.start_triangle = start_triangle;
+    query.point = point;
+    query.normal = normal;
+    query.up = up;
+    query.metric = metric;
+    return tc_mesh_find_surface_edge_query(mesh, &query, out_hit);
+}
+
+bool tc_mesh_find_surface_edge_query(
+    const tc_mesh* mesh,
+    const tc_mesh_surface_edge_query* query,
+    tc_mesh_surface_edge_hit* out_hit
+) {
+    return tc_mesh_find_surface_edge_filtered(mesh, query, out_hit);
 }
 
 bool tc_mesh_find_surface_edge_aligned(
     const tc_mesh* mesh,
-    uint32_t start_triangle,
-    const float point[3],
-    const float normal[3],
-    const float up[3],
-    const float edge_direction[3],
-    float max_angle_degrees,
+    const tc_mesh_surface_edge_query* query,
     tc_mesh_surface_edge_hit* out_hit
 ) {
-    const float unit_metric[3] = {1.0f, 1.0f, 1.0f};
-    return tc_mesh_find_surface_edge_filtered(
-        mesh,
-        start_triangle,
-        point,
-        normal,
-        up,
-        unit_metric,
-        true,
-        edge_direction,
-        max_angle_degrees,
-        out_hit);
-}
-
-bool tc_mesh_find_surface_edge_aligned_metric(
-    const tc_mesh* mesh,
-    uint32_t start_triangle,
-    const float point[3],
-    const float normal[3],
-    const float up[3],
-    const float edge_direction[3],
-    float max_angle_degrees,
-    const float metric[3],
-    tc_mesh_surface_edge_hit* out_hit
-) {
-    return tc_mesh_find_surface_edge_filtered(
-        mesh,
-        start_triangle,
-        point,
-        normal,
-        up,
-        metric,
-        true,
-        edge_direction,
-        max_angle_degrees,
-        out_hit);
+    if (!query) {
+        return false;
+    }
+    tc_mesh_surface_edge_query aligned_query = *query;
+    aligned_query.use_direction_filter = true;
+    return tc_mesh_find_surface_edge_query(mesh, &aligned_query, out_hit);
 }
 
 bool tc_mesh_find_nearest_surface_edge(
     const tc_mesh* mesh,
-    const float point[3],
-    const float up[3],
+    tc_vec3f point,
+    tc_vec3f up,
     tc_mesh_surface_edge_hit* out_hit
 ) {
-    const float unit_metric[3] = {1.0f, 1.0f, 1.0f};
-    return tc_mesh_find_nearest_surface_edge_metric(mesh, point, up, unit_metric, out_hit);
+    return tc_mesh_find_nearest_surface_edge_metric(mesh, point, up, tc_mesh_vec3f_one(), out_hit);
 }
 
 bool tc_mesh_find_nearest_surface_edge_metric(
     const tc_mesh* mesh,
-    const float point[3],
-    const float up[3],
-    const float metric[3],
+    tc_vec3f point,
+    tc_vec3f up,
+    tc_vec3f metric,
     tc_mesh_surface_edge_hit* out_hit
 ) {
-    if (!mesh || !point || !up || !out_hit) {
+    if (!mesh || !out_hit) {
         return false;
     }
     if (mesh->draw_mode != TC_DRAW_TRIANGLES) {
@@ -1031,43 +948,40 @@ bool tc_mesh_find_nearest_surface_edge_metric(
     }
 
     size_t triangle_count = mesh->index_count / 3;
-    float query_metric[3];
-    float point_m[3];
-    tc_mesh_make_metric(metric, query_metric);
-    tc_mesh_vec3_apply_metric(point, query_metric, point_m);
+    tc_vec3f query_metric = tc_mesh_make_metric(metric);
+    tc_vec3f point_m = tc_mesh_vec3f_apply_metric(point, query_metric);
 
     bool found = false;
     uint32_t best_triangle = 0;
     float best_distance = FLT_MAX;
-    float best_normal[3] = {0.0f, 0.0f, 0.0f};
+    tc_vec3f best_normal = tc_mesh_vec3f_zero();
 
     for (uint32_t tri = 0; tri < (uint32_t)triangle_count; ++tri) {
-        float a[3], b[3], c[3];
-        if (!tc_mesh_get_triangle3f(mesh, tri, a, b, c)) {
+        tc_vec3f a;
+        tc_vec3f b;
+        tc_vec3f c;
+        if (!tc_mesh_get_triangle3f(mesh, tri, &a, &b, &c)) {
             continue;
         }
 
-        float a_m[3], b_m[3], c_m[3];
-        tc_mesh_vec3_apply_metric(a, query_metric, a_m);
-        tc_mesh_vec3_apply_metric(b, query_metric, b_m);
-        tc_mesh_vec3_apply_metric(c, query_metric, c_m);
-        float closest[3];
+        tc_vec3f a_m = tc_mesh_vec3f_apply_metric(a, query_metric);
+        tc_vec3f b_m = tc_mesh_vec3f_apply_metric(b, query_metric);
+        tc_vec3f c_m = tc_mesh_vec3f_apply_metric(c, query_metric);
+        tc_vec3f closest;
         float distance = FLT_MAX;
-        tc_mesh_closest_point_on_triangle(point_m, a_m, b_m, c_m, closest, &distance);
+        tc_mesh_closest_point_on_triangle(point_m, a_m, b_m, c_m, &closest, &distance);
         if (distance >= best_distance) {
             continue;
         }
 
-        float normal[3];
-        if (!tc_mesh_triangle_normal_metric(mesh, tri, query_metric, normal)) {
+        tc_vec3f normal;
+        if (!tc_mesh_triangle_normal_metric(mesh, tri, query_metric, &normal)) {
             continue;
         }
 
         best_distance = distance;
         best_triangle = tri;
-        best_normal[0] = normal[0];
-        best_normal[1] = normal[1];
-        best_normal[2] = normal[2];
+        best_normal = normal;
         found = true;
     }
 

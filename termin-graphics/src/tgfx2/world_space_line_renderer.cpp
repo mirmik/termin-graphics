@@ -26,9 +26,9 @@ struct CornerVertex {
 };
 
 struct SegmentInstance {
-    float p0[3];
+    LinePoint3 p0;
     float width;
-    float p1[3];
+    LinePoint3 p1;
     float flags;
     float color[4];
 };
@@ -39,9 +39,9 @@ struct CapCornerVertex {
 };
 
 struct CapInstance {
-    float center[3];
+    LinePoint3 center;
     float width;
-    float neighbor[3];
+    LinePoint3 neighbor;
     float color[4];
 };
 
@@ -50,14 +50,21 @@ struct JoinCornerVertex {
 };
 
 struct JoinInstance {
-    float prev[3];
+    LinePoint3 prev;
     float width;
-    float center[3];
+    LinePoint3 center;
     float flags;
-    float next[3];
+    LinePoint3 next;
     float pad;
     float color[4];
 };
+
+static_assert(sizeof(SegmentInstance) == 12 * sizeof(float),
+              "SegmentInstance layout drift - shader and C++ disagree");
+static_assert(sizeof(CapInstance) == 11 * sizeof(float),
+              "CapInstance layout drift - shader and C++ disagree");
+static_assert(sizeof(JoinInstance) == 16 * sizeof(float),
+              "JoinInstance layout drift - shader and C++ disagree");
 
 struct WorldLinePush {
     float view_projection[16];
@@ -359,13 +366,9 @@ void WorldSpaceLineRenderer::draw_polyline(
         }
 
         SegmentInstance instance{};
-        instance.p0[0] = p0.x;
-        instance.p0[1] = p0.y;
-        instance.p0[2] = p0.z;
+        instance.p0 = p0;
         instance.width = style.width;
-        instance.p1[0] = p1.x;
-        instance.p1[1] = p1.y;
-        instance.p1[2] = p1.z;
+        instance.p1 = p1;
         if (style.cap == LineCapStyle::Square && i == 1) {
             instance.flags += kFlagExtendStart;
         }
@@ -385,13 +388,9 @@ void WorldSpaceLineRenderer::draw_polyline(
         const LinePoint3 second = clean_points[1];
         if (!line_renderer::same_point(first, second)) {
             CapInstance cap{};
-            cap.center[0] = first.x;
-            cap.center[1] = first.y;
-            cap.center[2] = first.z;
+            cap.center = first;
             cap.width = style.width;
-            cap.neighbor[0] = second.x;
-            cap.neighbor[1] = second.y;
-            cap.neighbor[2] = second.z;
+            cap.neighbor = second;
             std::memcpy(cap.color, style.color.data(), sizeof(cap.color));
             cap_instances.push_back(cap);
         }
@@ -400,13 +399,9 @@ void WorldSpaceLineRenderer::draw_polyline(
         const LinePoint3 prev = clean_points[clean_points.size() - 2];
         if (!line_renderer::same_point(last, prev)) {
             CapInstance cap{};
-            cap.center[0] = last.x;
-            cap.center[1] = last.y;
-            cap.center[2] = last.z;
+            cap.center = last;
             cap.width = style.width;
-            cap.neighbor[0] = prev.x;
-            cap.neighbor[1] = prev.y;
-            cap.neighbor[2] = prev.z;
+            cap.neighbor = prev;
             std::memcpy(cap.color, style.color.data(), sizeof(cap.color));
             cap_instances.push_back(cap);
         }
@@ -419,13 +414,9 @@ void WorldSpaceLineRenderer::draw_polyline(
             const LinePoint3 center = clean_points[i];
             const LinePoint3 next = clean_points[i + 1];
             CapInstance join{};
-            join.center[0] = center.x;
-            join.center[1] = center.y;
-            join.center[2] = center.z;
+            join.center = center;
             join.width = style.width;
-            join.neighbor[0] = next.x;
-            join.neighbor[1] = next.y;
-            join.neighbor[2] = next.z;
+            join.neighbor = next;
             std::memcpy(join.color, style.color.data(), sizeof(join.color));
             round_join_instances.push_back(join);
         }
@@ -436,16 +427,10 @@ void WorldSpaceLineRenderer::draw_polyline(
             const LinePoint3 center = clean_points[i];
             const LinePoint3 next = clean_points[i + 1];
             JoinInstance join{};
-            join.prev[0] = prev.x;
-            join.prev[1] = prev.y;
-            join.prev[2] = prev.z;
+            join.prev = prev;
             join.width = style.width;
-            join.center[0] = center.x;
-            join.center[1] = center.y;
-            join.center[2] = center.z;
-            join.next[0] = next.x;
-            join.next[1] = next.y;
-            join.next[2] = next.z;
+            join.center = center;
+            join.next = next;
             std::memcpy(join.color, style.color.data(), sizeof(join.color));
             join_instances.push_back(join);
         }
@@ -471,9 +456,9 @@ void WorldSpaceLineRenderer::draw_polyline(
     std::memcpy(push.view_projection,
                 params.view_projection.data(),
                 sizeof(push.view_projection));
-    push.camera_position[0] = params.camera_position[0];
-    push.camera_position[1] = params.camera_position[1];
-    push.camera_position[2] = params.camera_position[2];
+    push.camera_position[0] = params.camera_position.x;
+    push.camera_position[1] = params.camera_position.y;
+    push.camera_position[2] = params.camera_position.z;
     push.camera_position[3] = 1.0f;
 
     const VertexLayoutDesc segment_layouts[2] = {

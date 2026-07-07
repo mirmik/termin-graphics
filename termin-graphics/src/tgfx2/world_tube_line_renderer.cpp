@@ -36,20 +36,25 @@ struct TubeCapCornerVertex {
 };
 
 struct TubeSegmentInstance {
-    float p0[3];
+    LinePoint3 p0;
     float width;
-    float p1[3];
+    LinePoint3 p1;
     float pad;
     float color[4];
 };
 
 struct TubeCapInstance {
-    float center[3];
+    LinePoint3 center;
     float width;
-    float neighbor[3];
+    LinePoint3 neighbor;
     float pad;
     float color[4];
 };
+
+static_assert(sizeof(TubeSegmentInstance) == 12 * sizeof(float),
+              "TubeSegmentInstance layout drift - shader and C++ disagree");
+static_assert(sizeof(TubeCapInstance) == 12 * sizeof(float),
+              "TubeCapInstance layout drift - shader and C++ disagree");
 
 struct TubePush {
     float view_projection[16];
@@ -295,13 +300,9 @@ void WorldTubeLineRenderer::draw_polyline(
         }
 
         TubeSegmentInstance segment{};
-        segment.p0[0] = p0.x;
-        segment.p0[1] = p0.y;
-        segment.p0[2] = p0.z;
+        segment.p0 = p0;
         segment.width = style.width;
-        segment.p1[0] = p1.x;
-        segment.p1[1] = p1.y;
-        segment.p1[2] = p1.z;
+        segment.p1 = p1;
         std::memcpy(segment.color, style.color.data(), sizeof(segment.color));
         segments.push_back(segment);
     }
@@ -314,13 +315,9 @@ void WorldTubeLineRenderer::draw_polyline(
     const LinePoint3 second = clean_points[1];
     if (!line_renderer::same_point(first, second)) {
         TubeCapInstance cap{};
-        cap.center[0] = first.x;
-        cap.center[1] = first.y;
-        cap.center[2] = first.z;
+        cap.center = first;
         cap.width = style.width;
-        cap.neighbor[0] = second.x;
-        cap.neighbor[1] = second.y;
-        cap.neighbor[2] = second.z;
+        cap.neighbor = second;
         std::memcpy(cap.color, style.color.data(), sizeof(cap.color));
         caps.push_back(cap);
     }
@@ -329,13 +326,9 @@ void WorldTubeLineRenderer::draw_polyline(
     const LinePoint3 prev = clean_points[clean_points.size() - 2];
     if (!line_renderer::same_point(last, prev)) {
         TubeCapInstance cap{};
-        cap.center[0] = last.x;
-        cap.center[1] = last.y;
-        cap.center[2] = last.z;
+        cap.center = last;
         cap.width = style.width;
-        cap.neighbor[0] = prev.x;
-        cap.neighbor[1] = prev.y;
-        cap.neighbor[2] = prev.z;
+        cap.neighbor = prev;
         std::memcpy(cap.color, style.color.data(), sizeof(cap.color));
         caps.push_back(cap);
     }

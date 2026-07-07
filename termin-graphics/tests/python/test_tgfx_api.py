@@ -1,5 +1,5 @@
 import tgfx
-from tcbase._geom_native import Vec3
+from tcbase._geom_native import Vec3, Vec3f
 
 
 def test_basic_types_and_render_state():
@@ -254,9 +254,10 @@ def test_world_space_line_binding_smoke():
         1.0 if i in (0, 5, 10, 15) else 0.0
         for i in range(16)
     )
-    params.camera_position = (1.0, 2.0, 3.0)
+    params.camera_position = Vec3f(1.0, 2.0, 3.0)
     params.lighting_enabled = True
 
     assert len(params.view_projection) == 16
-    assert params.camera_position == [1.0, 2.0, 3.0]
+    assert isinstance(params.camera_position, Vec3f)
+    assert params.camera_position.approx_eq(Vec3f(1.0, 2.0, 3.0))
     assert params.lighting_enabled is True

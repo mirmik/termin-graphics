@@ -346,16 +346,22 @@ int main() {
         fprintf(stderr, "Failed to write shader artifacts\n");
     } else {
         termin::tgfx2_set_shader_artifact_root(artifact_root.string().c_str());
-        artifact_shader_handle = tc_shader_from_sources_ex(
-            invalid_fallback_src,
-            invalid_fallback_src,
-            nullptr,
-            "tgfx2 artifact smoke",
-            nullptr,
+        const tc_shader_create_desc shader_desc = {
+            {
+                invalid_fallback_src,
+                invalid_fallback_src,
+                nullptr,
+                "tgfx2 artifact smoke",
+                nullptr,
+                nullptr,
+                nullptr,
+                nullptr
+            },
             artifact_uuid,
             TC_SHADER_LANGUAGE_SLANG,
             TC_SHADER_ARTIFACT_REQUIRED
-        );
+        };
+        artifact_shader_handle = tc_shader_from_sources_desc(&shader_desc);
 
         tc_shader* artifact_shader = tc_shader_get(artifact_shader_handle);
         tgfx::ShaderHandle artifact_vs;

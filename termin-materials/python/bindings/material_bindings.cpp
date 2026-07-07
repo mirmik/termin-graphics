@@ -230,26 +230,30 @@ std::vector<tc_shader_contract_vertex_input> infer_material_vertex_contract(
     return inputs;
 }
 
+struct ResourceRequirementInfo {
+    std::string name;
+    uint32_t kind = 0;
+    uint32_t scope = 0;
+    uint32_t stage_mask = 0;
+    uint32_t size = 0;
+    const tc_shader_resource_field* fields = nullptr;
+    uint32_t field_count = 0;
+};
+
 void append_resource_requirement(
     std::vector<tc_shader_resource_requirement>& requirements,
-    const std::string& name,
-    uint32_t kind,
-    uint32_t scope,
-    uint32_t stage_mask,
-    uint32_t size = 0,
-    const tc_shader_resource_field* fields = nullptr,
-    uint32_t field_count = 0)
+    const ResourceRequirementInfo& info)
 {
     tc_shader_resource_requirement requirement{};
-    std::strncpy(requirement.name, name.c_str(), TC_SHADER_RESOURCE_NAME_MAX - 1);
+    std::strncpy(requirement.name, info.name.c_str(), TC_SHADER_RESOURCE_NAME_MAX - 1);
     requirement.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
-    requirement.kind = kind;
-    requirement.scope = scope;
-    requirement.stage_mask = stage_mask;
-    requirement.size = size;
+    requirement.kind = info.kind;
+    requirement.scope = info.scope;
+    requirement.stage_mask = info.stage_mask;
+    requirement.size = info.size;
     requirement.element_stride = 0;
-    requirement.fields = const_cast<tc_shader_resource_field*>(fields);
-    requirement.field_count = field_count;
+    requirement.fields = const_cast<tc_shader_resource_field*>(info.fields);
+    requirement.field_count = info.field_count;
     requirements.push_back(requirement);
 }
 
@@ -263,15 +267,15 @@ void append_abi_resource_requirement(
 {
     const tc_shader_abi_resource_decl& abi =
         require_shader_abi_resource(id, "append_abi_resource_requirement");
-    append_resource_requirement(
-        requirements,
-        abi.canonical_name,
-        abi.kind,
-        abi.scope,
-        stage_mask,
-        size,
-        fields,
-        field_count);
+    ResourceRequirementInfo info;
+    info.name = abi.canonical_name;
+    info.kind = abi.kind;
+    info.scope = abi.scope;
+    info.stage_mask = stage_mask;
+    info.size = size;
+    info.fields = fields;
+    info.field_count = field_count;
+    append_resource_requirement(requirements, info);
 }
 
 std::vector<tc_shader_resource_field> material_fields_from_layout(
@@ -327,12 +331,12 @@ std::vector<tc_shader_resource_requirement> parser_shader_resource_requirements(
             64);
     }
     for (const std::string& texture_name : shader_phase.material_texture_resources) {
-        append_resource_requirement(
-            requirements,
-            texture_name,
-            TC_SHADER_RESOURCE_TEXTURE,
-            TC_SHADER_RESOURCE_SCOPE_MATERIAL,
-            STAGE_ALL_GRAPHICS);
+        ResourceRequirementInfo info;
+        info.name = texture_name;
+        info.kind = TC_SHADER_RESOURCE_TEXTURE;
+        info.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+        info.stage_mask = STAGE_ALL_GRAPHICS;
+        append_resource_requirement(requirements, info);
     }
 
     return requirements;
@@ -447,20 +451,21 @@ void apply_parser_resource_layout(
     apply_parser_shader_contract(shader, shader_phase, layout);
 }
 
-} // namespace
-
+struct ParsedMaterialCreateOptions {
+    nb::object color = nb::none();
+    nb::object textures = nb::none();
+    nb::object uniforms = nb::none();
+    nb::object name = nb::none();
+    nb::object source_path = nb::none();
+    std::string shader_uuid;
+    nb::object default_white_texture = nb::none();
+    nb::object default_normal_texture = nb::none();
+};
 
 TcMaterial create_material_from_parsed(
     const ShaderMultyPhaseProgramm& program,
-    nb::object color,
-    nb::object textures,
-    nb::object uniforms,
-    nb::object name,
-    nb::object source_path,
-    const std::string& shader_uuid,
-    nb::object default_white_texture,
-    nb::object default_normal_texture
-) {
+    const ParsedMaterialCreateOptions& options)
+{
     if (program.phases.empty()) {
         throw std::runtime_error("Program has no phases");
     }
@@ -468,20 +473,24 @@ TcMaterial create_material_from_parsed(
 
     // Create material with uuid hint if provided
     TcMaterial mat = TcMaterial::create(
-        name.is_none() ? program.program : nb::cast<std::string>(name),
-        shader_uuid
+        options.name.is_none() ? program.program : nb::cast<std::string>(options.name),
+        options.shader_uuid
     );
     if (!mat.is_valid()) {
         throw std::runtime_error("Failed to create TcMaterial");
     }
 
     mat.set_shader_name(program.program.c_str());
-    if (!source_path.is_none()) {
-        mat.set_source_path(nb::cast<std::string>(source_path).c_str());
+    if (!options.source_path.is_none()) {
+        mat.set_source_path(nb::cast<std::string>(options.source_path).c_str());
     }
 
-    TcTexture white_tex = optional_tc_texture(default_white_texture, "create_material_from_parsed(default_white_texture)");
-    TcTexture normal_tex = optional_tc_texture(default_normal_texture, "create_material_from_parsed(default_normal_texture)");
+    TcTexture white_tex = optional_tc_texture(
+        options.default_white_texture,
+        "create_material_from_parsed(default_white_texture)");
+    TcTexture normal_tex = optional_tc_texture(
+        options.default_normal_texture,
+        "create_material_from_parsed(default_normal_texture)");
 
     for (const auto& shader_phase : program.phases) {
         // Get shader sources from stages
@@ -518,20 +527,23 @@ TcMaterial create_material_from_parsed(
             shader_name = shader_phase.phase_mark;
         }
 
-        // Add phase
-        tc_material_phase* phase = mat.add_phase_from_sources(
-            vs.c_str(), fs.c_str(), gs.empty() ? nullptr : gs.c_str(),
-            shader_name.c_str(),
-            shader_phase.phase_mark.c_str(),
-            shader_phase.priority,
-            rs,
-            nullptr,
-            language,
-            artifact_policy_for_language(language),
-            it_vert->second.entry.c_str(),
-            it_frag->second.entry.c_str(),
-            it_geom != shader_phase.stages.end() ? it_geom->second.entry.c_str() : nullptr
-        );
+        TcMaterialPhaseFromSourcesInfo phase_info;
+        phase_info.shader.sources.vertex = vs;
+        phase_info.shader.sources.fragment = fs;
+        phase_info.shader.sources.geometry = gs;
+        phase_info.shader.sources.name = shader_name;
+        phase_info.shader.sources.vertex_entry = it_vert->second.entry;
+        phase_info.shader.sources.fragment_entry = it_frag->second.entry;
+        if (it_geom != shader_phase.stages.end()) {
+            phase_info.shader.sources.geometry_entry = it_geom->second.entry;
+        }
+        phase_info.shader.language = language;
+        phase_info.shader.artifact_policy = artifact_policy_for_language(language);
+        phase_info.phase_mark = shader_phase.phase_mark;
+        phase_info.priority = shader_phase.priority;
+        phase_info.state = rs;
+
+        tc_material_phase* phase = mat.add_phase_from_sources(phase_info);
 
         if (!phase) {
             tc::Log::error("Failed to add phase '%s' to material", shader_phase.phase_mark.c_str());
@@ -592,8 +604,8 @@ TcMaterial create_material_from_parsed(
         }
 
         // Apply extra uniforms
-        if (!uniforms.is_none()) {
-            nb::dict extras = nb::cast<nb::dict>(uniforms);
+        if (!options.uniforms.is_none()) {
+            nb::dict extras = nb::cast<nb::dict>(options.uniforms);
             for (auto item : extras) {
                 std::string key = nb::cast<std::string>(item.first);
                 nb::object val = nb::borrow<nb::object>(item.second);
@@ -641,8 +653,8 @@ TcMaterial create_material_from_parsed(
         }
 
         // Override with provided textures
-        if (!textures.is_none()) {
-            nb::dict tex_dict = nb::cast<nb::dict>(textures);
+        if (!options.textures.is_none()) {
+            nb::dict tex_dict = nb::cast<nb::dict>(options.textures);
             for (auto item : tex_dict) {
                 std::string key = nb::cast<std::string>(item.first);
                 nb::object val = nb::borrow<nb::object>(item.second);
@@ -657,12 +669,14 @@ TcMaterial create_material_from_parsed(
         }
 
         // Set color
-        if (!color.is_none()) {
-            if (nb::isinstance<Vec4>(color)) {
-                Vec4 c = nb::cast<Vec4>(color);
+        if (!options.color.is_none()) {
+            if (nb::isinstance<Vec4>(options.color)) {
+                Vec4 c = nb::cast<Vec4>(options.color);
                 tc_material_phase_set_color(phase, c.x, c.y, c.z, c.w);
-            } else if (nb::isinstance<nb::tuple>(color) || nb::isinstance<nb::list>(color)) {
-                nb::sequence seq = nb::cast<nb::sequence>(color);
+            } else if (
+                nb::isinstance<nb::tuple>(options.color) ||
+                nb::isinstance<nb::list>(options.color)) {
+                nb::sequence seq = nb::cast<nb::sequence>(options.color);
                 tc_material_phase_set_color(phase,
                     nb::cast<float>(seq[0]),
                     nb::cast<float>(seq[1]),
@@ -675,6 +689,32 @@ TcMaterial create_material_from_parsed(
 
     return mat;
 }
+
+// NOLINTNEXTLINE(readability-function-size): preserves the Python API; implementation uses ParsedMaterialCreateOptions.
+TcMaterial create_material_from_parsed_py(
+    const ShaderMultyPhaseProgramm& program,
+    nb::object color,
+    nb::object textures,
+    nb::object uniforms,
+    nb::object name,
+    nb::object source_path,
+    const std::string& shader_uuid,
+    nb::object default_white_texture,
+    nb::object default_normal_texture)
+{
+    ParsedMaterialCreateOptions options;
+    options.color = color;
+    options.textures = textures;
+    options.uniforms = uniforms;
+    options.name = name;
+    options.source_path = source_path;
+    options.shader_uuid = shader_uuid;
+    options.default_white_texture = default_white_texture;
+    options.default_normal_texture = default_normal_texture;
+    return create_material_from_parsed(program, options);
+}
+
+} // namespace
 
 void bind_material(nb::module_& m) {
     // Old MaterialPhase and Material classes removed - use TcMaterialPhase and TcMaterial
@@ -1057,21 +1097,24 @@ void bind_tc_material(nb::module_& m) {
                     : geometry_source;
                 gs_ptr = gs.c_str();
             }
-            tc_material_phase* phase = self.add_phase_from_sources(
-                vs.c_str(),
-                fs.c_str(),
-                gs_ptr,
-                shader_name.c_str(),
-                phase_mark.c_str(),
-                priority,
-                state,
-                shader_uuid.empty() ? nullptr : shader_uuid.c_str(),
-                shader_language,
-                shader_artifact_policy,
-                vertex_entry.empty() ? nullptr : vertex_entry.c_str(),
-                fragment_entry.empty() ? nullptr : fragment_entry.c_str(),
-                geometry_entry.empty() ? nullptr : geometry_entry.c_str()
-            );
+            TcMaterialPhaseFromSourcesInfo phase_info;
+            phase_info.shader.sources.vertex = vs;
+            phase_info.shader.sources.fragment = fs;
+            if (gs_ptr) {
+                phase_info.shader.sources.geometry = gs;
+            }
+            phase_info.shader.sources.name = shader_name;
+            phase_info.shader.sources.vertex_entry = vertex_entry;
+            phase_info.shader.sources.fragment_entry = fragment_entry;
+            phase_info.shader.sources.geometry_entry = geometry_entry;
+            phase_info.shader.uuid = shader_uuid;
+            phase_info.shader.language = shader_language;
+            phase_info.shader.artifact_policy = shader_artifact_policy;
+            phase_info.phase_mark = phase_mark;
+            phase_info.priority = priority;
+            phase_info.state = state;
+
+            tc_material_phase* phase = self.add_phase_from_sources(phase_info);
 
             if (phase && shader_language == TC_SHADER_LANGUAGE_GLSL) {
                 ShaderPhase raw_phase = infer_raw_glsl_resource_phase(vs, fs, gs);
@@ -1200,7 +1243,7 @@ void bind_tc_material(nb::module_& m) {
             return d;
         });
 
-    m.def("create_material_from_parsed", &create_material_from_parsed,
+    m.def("create_material_from_parsed", &create_material_from_parsed_py,
         nb::arg("program"),
         nb::arg("color") = nb::none(),
         nb::arg("textures") = nb::none(),

@@ -586,16 +586,13 @@ TEST_CASE("tc_shader records language and artifact policy") {
     CHECK(std::string(legacy_shader->source_hash) == std::string(legacy_hash));
     CHECK(tc_shader_find_by_hash(legacy_hash).index == legacy.index);
 
-    tc_shader_handle slang = tc_shader_from_sources_ex(
-        vs,
-        fs,
-        nullptr,
-        "slang_shader_metadata_test",
-        nullptr,
+    const tc_shader_create_desc slang_desc = {
+        {vs, fs, nullptr, "slang_shader_metadata_test", nullptr, nullptr, nullptr, nullptr},
         "shader-metadata-slang",
         TC_SHADER_LANGUAGE_SLANG,
         TC_SHADER_ARTIFACT_REQUIRED
-    );
+    };
+    tc_shader_handle slang = tc_shader_from_sources_desc(&slang_desc);
     CHECK(!tc_shader_handle_is_invalid(slang));
     tc_shader* slang_shader = tc_shader_get(slang);
     CHECK(slang_shader != nullptr);
@@ -623,15 +620,13 @@ TEST_CASE("tc_shader records language and artifact policy") {
     CHECK(tc_shader_get_language(variant_shader) == TC_SHADER_LANGUAGE_SLANG);
     CHECK(tc_shader_get_artifact_policy(variant_shader) == TC_SHADER_ARTIFACT_REQUIRED);
 
-    tc_shader_handle required_variant = tc_shader_from_sources_ex(
-        vs,
-        fs,
-        nullptr,
-        "required_variant_metadata_test",
-        nullptr,
+    const tc_shader_create_desc required_variant_desc = {
+        {vs, fs, nullptr, "required_variant_metadata_test", nullptr, nullptr, nullptr, nullptr},
         "shader-metadata-required-variant",
         TC_SHADER_LANGUAGE_SLANG,
-        TC_SHADER_ARTIFACT_REQUIRED);
+        TC_SHADER_ARTIFACT_REQUIRED
+    };
+    tc_shader_handle required_variant = tc_shader_from_sources_desc(&required_variant_desc);
     CHECK(!tc_shader_handle_is_invalid(required_variant));
     tc_shader* required_variant_shader = tc_shader_get(required_variant);
     REQUIRE(required_variant_shader != nullptr);
@@ -691,26 +686,20 @@ TEST_CASE("tc_shader identity hash separates source languages") {
     const char* vs = "#version 330 core\nvoid main(){gl_Position=vec4(0.0);}";
     const char* fs = "#version 330 core\nout vec4 c; void main(){c=vec4(1.0);}";
 
-    tc_shader_handle glsl = tc_shader_from_sources_ex(
-        vs,
-        fs,
-        nullptr,
-        "identity_glsl",
-        nullptr,
+    const tc_shader_create_desc glsl_desc = {
+        {vs, fs, nullptr, "identity_glsl", nullptr, nullptr, nullptr, nullptr},
         nullptr,
         TC_SHADER_LANGUAGE_GLSL,
         TC_SHADER_ARTIFACT_OPTIONAL
-    );
-    tc_shader_handle slang = tc_shader_from_sources_ex(
-        vs,
-        fs,
-        nullptr,
-        "identity_slang",
-        nullptr,
+    };
+    tc_shader_handle glsl = tc_shader_from_sources_desc(&glsl_desc);
+    const tc_shader_create_desc slang_desc = {
+        {vs, fs, nullptr, "identity_slang", nullptr, nullptr, nullptr, nullptr},
         nullptr,
         TC_SHADER_LANGUAGE_SLANG,
         TC_SHADER_ARTIFACT_REQUIRED
-    );
+    };
+    tc_shader_handle slang = tc_shader_from_sources_desc(&slang_desc);
 
     CHECK(!tc_shader_handle_is_invalid(glsl));
     CHECK(!tc_shader_handle_is_invalid(slang));
@@ -780,16 +769,13 @@ float4 main() : SV_Target {
 }
 )";
 
-    tc_shader_handle handle = tc_shader_from_sources_ex(
-        vs,
-        fs_src,
-        nullptr,
-        "lazy_dev_compile_shader",
-        nullptr,
+    const tc_shader_create_desc shader_desc = {
+        {vs, fs_src, nullptr, "lazy_dev_compile_shader", nullptr, nullptr, nullptr, nullptr},
         shader_uuid.c_str(),
         TC_SHADER_LANGUAGE_SLANG,
         TC_SHADER_ARTIFACT_REQUIRED
-    );
+    };
+    tc_shader_handle handle = tc_shader_from_sources_desc(&shader_desc);
     CHECK(!tc_shader_handle_is_invalid(handle));
     tc_shader* shader = tc_shader_get(handle);
     CHECK(shader != nullptr);
@@ -938,16 +924,22 @@ TEST_CASE("tgfx2 shader runtime loads D3D11 resource placement sidecar") {
     ShaderRuntimeTestGuard guard;
     guard.root = root;
 
-    tc_shader_handle handle = tc_shader_from_sources_ex(
-        "",
-        "float4 main() : SV_Target0 { return 1; }",
-        nullptr,
-        "d3d11_layout_sidecar_shader",
-        nullptr,
+    const tc_shader_create_desc shader_desc = {
+        {
+            "",
+            "float4 main() : SV_Target0 { return 1; }",
+            nullptr,
+            "d3d11_layout_sidecar_shader",
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr
+        },
         shader_uuid.c_str(),
         TC_SHADER_LANGUAGE_SLANG,
         TC_SHADER_ARTIFACT_REQUIRED
-    );
+    };
+    tc_shader_handle handle = tc_shader_from_sources_desc(&shader_desc);
     CHECK(!tc_shader_handle_is_invalid(handle));
     tc_shader* shader = tc_shader_get(handle);
     REQUIRE(shader != nullptr);
@@ -1076,16 +1068,13 @@ float4 main() : SV_Target {
 }
 )";
 
-    tc_shader_handle handle = tc_shader_from_sources_ex(
-        "",
-        fs_src,
-        nullptr,
-        "layout_sidecar_shader",
-        nullptr,
+    const tc_shader_create_desc shader_desc = {
+        {"", fs_src, nullptr, "layout_sidecar_shader", nullptr, nullptr, nullptr, nullptr},
         shader_uuid.c_str(),
         TC_SHADER_LANGUAGE_SLANG,
         TC_SHADER_ARTIFACT_REQUIRED
-    );
+    };
+    tc_shader_handle handle = tc_shader_from_sources_desc(&shader_desc);
     CHECK(!tc_shader_handle_is_invalid(handle));
     tc_shader* shader = tc_shader_get(handle);
     REQUIRE(shader != nullptr);

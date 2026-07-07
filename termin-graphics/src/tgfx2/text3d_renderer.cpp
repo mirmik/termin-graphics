@@ -54,7 +54,7 @@ static_assert(sizeof(Text3DPushData) == 128,
               "Text3DPushData layout drift - shader and C++ disagree");
 
 struct Text3DVertex {
-    float world_pos[3];
+    termin::Vec3f world_pos;
     float offset_uv[4];
 };
 static_assert(sizeof(Text3DVertex) == 7 * sizeof(float),
@@ -124,8 +124,8 @@ void Text3DRenderer::release_gpu() {
 
 void Text3DRenderer::begin(RenderContext2* ctx,
                             const float mvp[16],
-                            const float cam_right[3],
-                            const float cam_up[3],
+                            const termin::Vec3f& cam_right,
+                            const termin::Vec3f& cam_up,
                             FontAtlas* font) {
     if (font != nullptr) font_ = font;
     ctx_ = ctx;
@@ -135,8 +135,8 @@ void Text3DRenderer::begin(RenderContext2* ctx,
     }
 
     std::memcpy(mvp_, mvp, sizeof(mvp_));
-    std::memcpy(cam_right_, cam_right, sizeof(cam_right_));
-    std::memcpy(cam_up_, cam_up, sizeof(cam_up_));
+    cam_right_ = cam_right;
+    cam_up_ = cam_up;
 }
 
 void Text3DRenderer::draw(std::string_view text_utf8, const DrawOptions& options) {
@@ -178,12 +178,12 @@ void Text3DRenderer::draw(std::string_view text_utf8, const DrawOptions& options
     push.color[1] = color.g;
     push.color[2] = color.b;
     push.color[3] = color.a;
-    push.cam_right[0] = cam_right_[0];
-    push.cam_right[1] = cam_right_[1];
-    push.cam_right[2] = cam_right_[2];
-    push.cam_up[0] = cam_up_[0];
-    push.cam_up[1] = cam_up_[1];
-    push.cam_up[2] = cam_up_[2];
+    push.cam_right[0] = cam_right_.x;
+    push.cam_right[1] = cam_right_.y;
+    push.cam_right[2] = cam_right_.z;
+    push.cam_up[0] = cam_up_.x;
+    push.cam_up[1] = cam_up_.y;
+    push.cam_up[2] = cam_up_.z;
     push.flags[0] = screen_aligned ? 1.0f : 0.0f;
     push.flags[1] = screen_aligned ? 2.0f / static_cast<float>(ctx.viewport_width()) : 1.0f;
     push.flags[2] = screen_aligned ? 2.0f / static_cast<float>(ctx.viewport_height()) : 1.0f;
@@ -198,10 +198,6 @@ void Text3DRenderer::draw(std::string_view text_utf8, const DrawOptions& options
 
     std::vector<Text3DVertex> verts;
     verts.reserve(text_utf8.size() * 6);
-
-    const float px = options.position.x;
-    const float py = options.position.y;
-    const float pz = options.position.z;
 
     float cursor_x = start_x;
     size_t i = 0;
@@ -222,12 +218,12 @@ void Text3DRenderer::draw(std::string_view text_utf8, const DrawOptions& options
         const float u1 = gi->u1, v1 = gi->v1;
 
         const Text3DVertex quad[] = {
-            {{px, py, pz}, {left,  bottom, u0, v1}},
-            {{px, py, pz}, {right, bottom, u1, v1}},
-            {{px, py, pz}, {left,  top,    u0, v0}},
-            {{px, py, pz}, {right, bottom, u1, v1}},
-            {{px, py, pz}, {right, top,    u1, v0}},
-            {{px, py, pz}, {left,  top,    u0, v0}},
+            {options.position, {left,  bottom, u0, v1}},
+            {options.position, {right, bottom, u1, v1}},
+            {options.position, {left,  top,    u0, v0}},
+            {options.position, {right, bottom, u1, v1}},
+            {options.position, {right, top,    u1, v0}},
+            {options.position, {left,  top,    u0, v0}},
         };
         verts.insert(verts.end(), std::begin(quad), std::end(quad));
 

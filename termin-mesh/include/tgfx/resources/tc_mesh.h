@@ -4,6 +4,7 @@
 #include "tgfx/tgfx_api.h"
 #include <tcbase/tc_resource.h>
 #include <tcbase/tc_binding_types.h>
+#include <tcbase/types/geom_types.h>
 #include <tgfx/tgfx_types.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -80,27 +81,38 @@ typedef struct tc_mesh {
 // ============================================================================
 
 typedef struct tc_mesh_ray {
-    float origin[3];
-    float direction[3];
+    tc_vec3f origin;
+    tc_vec3f direction;
     float t_min;
     float t_max;
 } tc_mesh_ray;
 
 typedef struct tc_mesh_hit {
     float t;
-    float position[3];
-    float normal[3];
-    float barycentric[3];
+    tc_vec3f position;
+    tc_vec3f normal;
+    tc_vec3f barycentric;
     uint32_t triangle_index;
     uint32_t indices[3];
 } tc_mesh_hit;
 
 typedef struct tc_mesh_surface_edge_hit {
-    float point[3];
+    tc_vec3f point;
     uint32_t indices[2];
     float distance;
     int32_t side;
 } tc_mesh_surface_edge_hit;
+
+typedef struct tc_mesh_surface_edge_query {
+    uint32_t start_triangle;
+    tc_vec3f point;
+    tc_vec3f normal;
+    tc_vec3f up;
+    tc_vec3f metric;
+    bool use_direction_filter;
+    tc_vec3f edge_direction;
+    float max_angle_degrees;
+} tc_mesh_surface_edge_query;
 
 
 // ============================================================================
@@ -171,15 +183,15 @@ TGFX_API void tc_mesh_compute_uuid(
 TGFX_API bool tc_mesh_get_position3f(
     const tc_mesh* mesh,
     uint32_t vertex_index,
-    float out_position[3]
+    tc_vec3f* out_position
 );
 
 TGFX_API bool tc_mesh_get_triangle3f(
     const tc_mesh* mesh,
     uint32_t triangle_index,
-    float out_a[3],
-    float out_b[3],
-    float out_c[3]
+    tc_vec3f* out_a,
+    tc_vec3f* out_b,
+    tc_vec3f* out_c
 );
 
 TGFX_API bool tc_mesh_raycast(
@@ -202,9 +214,9 @@ TGFX_API bool tc_mesh_raycast(
 TGFX_API bool tc_mesh_find_surface_edge(
     const tc_mesh* mesh,
     uint32_t start_triangle,
-    const float point[3],
-    const float normal[3],
-    const float up[3],
+    tc_vec3f point,
+    tc_vec3f normal,
+    tc_vec3f up,
     tc_mesh_surface_edge_hit* out_hit
 );
 
@@ -221,10 +233,18 @@ TGFX_API bool tc_mesh_find_surface_edge(
 TGFX_API bool tc_mesh_find_surface_edge_metric(
     const tc_mesh* mesh,
     uint32_t start_triangle,
-    const float point[3],
-    const float normal[3],
-    const float up[3],
-    const float metric[3],
+    tc_vec3f point,
+    tc_vec3f normal,
+    tc_vec3f up,
+    tc_vec3f metric,
+    tc_mesh_surface_edge_hit* out_hit
+);
+
+// General surface edge query. Use this for metric-aware aligned searches or
+// when passing the query through typed API boundaries.
+TGFX_API bool tc_mesh_find_surface_edge_query(
+    const tc_mesh* mesh,
+    const tc_mesh_surface_edge_query* query,
     tc_mesh_surface_edge_hit* out_hit
 );
 
@@ -233,35 +253,11 @@ TGFX_API bool tc_mesh_find_surface_edge_metric(
 //
 // The sign of the edge direction is ignored: an edge parallel to
 // edge_direction or to -edge_direction is accepted. All input vectors are in
-// mesh-local coordinates. Without the metric variant below, direction filtering
-// and distances use the default unit metric.
+// mesh-local coordinates. query.metric is applied both to measured distances
+// and to the direction comparison; zero metric means the default unit metric.
 TGFX_API bool tc_mesh_find_surface_edge_aligned(
     const tc_mesh* mesh,
-    uint32_t start_triangle,
-    const float point[3],
-    const float normal[3],
-    const float up[3],
-    const float edge_direction[3],
-    float max_angle_degrees,
-    tc_mesh_surface_edge_hit* out_hit
-);
-
-// Metric-aware aligned edge query.
-//
-// metric is applied both to measured distances and to the direction comparison:
-// edge_direction and each candidate edge vector are first multiplied by metric
-// and normalized, then compared by abs(dot). This makes the direction test
-// describe alignment in the same measured geometry that is used for nearest-edge
-// selection. Returned coordinates are still original mesh-local coordinates.
-TGFX_API bool tc_mesh_find_surface_edge_aligned_metric(
-    const tc_mesh* mesh,
-    uint32_t start_triangle,
-    const float point[3],
-    const float normal[3],
-    const float up[3],
-    const float edge_direction[3],
-    float max_angle_degrees,
-    const float metric[3],
+    const tc_mesh_surface_edge_query* query,
     tc_mesh_surface_edge_hit* out_hit
 );
 
@@ -271,8 +267,8 @@ TGFX_API bool tc_mesh_find_surface_edge_aligned_metric(
 // raycast/picking result.
 TGFX_API bool tc_mesh_find_nearest_surface_edge(
     const tc_mesh* mesh,
-    const float point[3],
-    const float up[3],
+    tc_vec3f point,
+    tc_vec3f up,
     tc_mesh_surface_edge_hit* out_hit
 );
 
@@ -281,9 +277,9 @@ TGFX_API bool tc_mesh_find_nearest_surface_edge(
 // but the returned point remains in original mesh-local coordinates.
 TGFX_API bool tc_mesh_find_nearest_surface_edge_metric(
     const tc_mesh* mesh,
-    const float point[3],
-    const float up[3],
-    const float metric[3],
+    tc_vec3f point,
+    tc_vec3f up,
+    tc_vec3f metric,
     tc_mesh_surface_edge_hit* out_hit
 );
 
