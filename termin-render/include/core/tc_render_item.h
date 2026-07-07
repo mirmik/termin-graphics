@@ -50,6 +50,7 @@ typedef struct tc_render_item_mesh_payload {
 } tc_render_item_mesh_payload;
 
 typedef struct tc_render_item_line_batch_payload {
+    /* Borrowed unless the item is stored in termin::RenderItemCollection. */
     const tc_render_item_vec3* points;
     size_t point_count;
     float width;

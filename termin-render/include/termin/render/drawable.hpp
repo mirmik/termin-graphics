@@ -308,6 +308,21 @@ RENDER_API void collect_drawable_shader_usages_with_context(
     const ShaderOverrideContext& context,
     const std::function<void(TcShader)>& emit);
 
+struct RENDER_API RenderItemCollection {
+    std::vector<tc_render_item> items;
+    std::vector<std::vector<tc_render_item_vec3>> line_batch_points;
+
+    void clear() {
+        items.clear();
+        line_batch_points.clear();
+    }
+};
+
+RENDER_API bool collect_drawable_render_items(
+    tc_component* component,
+    const tc_render_item_collect_context& context,
+    RenderItemCollection& out_collection);
+
 RENDER_API bool collect_drawable_render_items(
     tc_component* component,
     const tc_render_item_collect_context& context,

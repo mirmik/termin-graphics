@@ -2,6 +2,7 @@
 
 #include <tcbase/tc_log.hpp>
 #include <cstring>
+#include <vector>
 
 namespace termin {
 
@@ -322,14 +323,14 @@ bool validate_render_item(
 }
 
 struct RenderItemVectorSinkData {
-    std::vector<tc_render_item>* items = nullptr;
+    RenderItemCollection* collection = nullptr;
     const tc_render_item_collect_context* context = nullptr;
     tc_component* component = nullptr;
 };
 
 bool emit_render_item_to_vector(const tc_render_item* item, void* user_data) {
     auto* data = static_cast<RenderItemVectorSinkData*>(user_data);
-    if (!data || !data->items || !data->context || !item) {
+    if (!data || !data->collection || !data->context || !item) {
         tc::Log::error("[RenderItemSink] invalid vector sink callback state");
         return false;
     }
@@ -342,7 +343,15 @@ bool emit_render_item_to_vector(const tc_render_item* item, void* user_data) {
     if (!copy.component) {
         copy.component = data->component;
     }
-    data->items->push_back(copy);
+    if (copy.kind == TC_RENDER_ITEM_KIND_LINE_BATCH &&
+        copy.payload.line_batch.points &&
+        copy.payload.line_batch.point_count > 0) {
+        const tc_render_item_vec3* begin = copy.payload.line_batch.points;
+        const tc_render_item_vec3* end = begin + copy.payload.line_batch.point_count;
+        auto& stored_points = data->collection->line_batch_points.emplace_back(begin, end);
+        copy.payload.line_batch.points = stored_points.data();
+    }
+    data->collection->items.push_back(copy);
     return true;
 }
 
@@ -351,7 +360,7 @@ bool emit_render_item_to_vector(const tc_render_item* item, void* user_data) {
 bool collect_drawable_render_items(
     tc_component* component,
     const tc_render_item_collect_context& context,
-    std::vector<tc_render_item>& out_items)
+    RenderItemCollection& out_collection)
 {
     if (!component) {
         tc::Log::error("[RenderItemCollector] cannot collect from null component");
@@ -365,7 +374,7 @@ bool collect_drawable_render_items(
     }
 
     RenderItemVectorSinkData sink_data;
-    sink_data.items = &out_items;
+    sink_data.collection = &out_collection;
     sink_data.context = &context;
     sink_data.component = component;
 
@@ -373,6 +382,27 @@ bool collect_drawable_render_items(
     sink.emit = emit_render_item_to_vector;
     sink.user_data = &sink_data;
     return tc_component_collect_render_items(component, &context, &sink);
+}
+
+bool collect_drawable_render_items(
+    tc_component* component,
+    const tc_render_item_collect_context& context,
+    std::vector<tc_render_item>& out_items)
+{
+    RenderItemCollection collection;
+    if (!collect_drawable_render_items(component, context, collection)) {
+        return false;
+    }
+
+    for (const tc_render_item& item : collection.items) {
+        if (item.kind == TC_RENDER_ITEM_KIND_LINE_BATCH) {
+            tc::Log::error(
+                "[RenderItemCollector] vector collection cannot retain LineBatch payload ownership; use RenderItemCollection");
+            return false;
+        }
+    }
+    out_items.insert(out_items.end(), collection.items.begin(), collection.items.end());
+    return true;
 }
 
 void Drawable::_cb_collect_shader_usages(
