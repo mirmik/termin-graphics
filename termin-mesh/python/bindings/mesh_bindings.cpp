@@ -452,12 +452,14 @@ void bind_mesh(nb::module_& m) {
             }
 
             tc_mesh_ray ray;
-            ray.origin[0] = nb::cast<float>(origin[0]);
-            ray.origin[1] = nb::cast<float>(origin[1]);
-            ray.origin[2] = nb::cast<float>(origin[2]);
-            ray.direction[0] = nb::cast<float>(direction[0]);
-            ray.direction[1] = nb::cast<float>(direction[1]);
-            ray.direction[2] = nb::cast<float>(direction[2]);
+            ray.origin = tc_vec3f{
+                nb::cast<float>(origin[0]),
+                nb::cast<float>(origin[1]),
+                nb::cast<float>(origin[2])};
+            ray.direction = tc_vec3f{
+                nb::cast<float>(direction[0]),
+                nb::cast<float>(direction[1]),
+                nb::cast<float>(direction[2])};
             ray.t_min = t_min;
             ray.t_max = t_max;
 
@@ -468,12 +470,12 @@ void bind_mesh(nb::module_& m) {
 
             nb::dict d;
             d["t"] = hit.t;
-            d["position"] = nb::make_tuple(hit.position[0], hit.position[1], hit.position[2]);
-            d["normal"] = nb::make_tuple(hit.normal[0], hit.normal[1], hit.normal[2]);
+            d["position"] = nb::make_tuple(hit.position.x, hit.position.y, hit.position.z);
+            d["normal"] = nb::make_tuple(hit.normal.x, hit.normal.y, hit.normal.z);
             d["barycentric"] = nb::make_tuple(
-                hit.barycentric[0],
-                hit.barycentric[1],
-                hit.barycentric[2]);
+                hit.barycentric.x,
+                hit.barycentric.y,
+                hit.barycentric.z);
             d["triangle_index"] = hit.triangle_index;
             d["indices"] = nb::make_tuple(hit.indices[0], hit.indices[1], hit.indices[2]);
             return d;
@@ -489,34 +491,31 @@ void bind_mesh(nb::module_& m) {
                 return nb::none();
             }
 
-            float p[3] = {
+            tc_mesh_surface_edge_hit hit;
+            tc_mesh_surface_edge_query query{};
+            query.start_triangle = start_triangle;
+            query.point = tc_vec3f{
                 static_cast<float>(point.x),
                 static_cast<float>(point.y),
-                static_cast<float>(point.z)
-            };
-            float n[3] = {
+                static_cast<float>(point.z)};
+            query.normal = tc_vec3f{
                 static_cast<float>(normal.x),
                 static_cast<float>(normal.y),
-                static_cast<float>(normal.z)
-            };
-            float u[3] = {
+                static_cast<float>(normal.z)};
+            query.up = tc_vec3f{
                 static_cast<float>(up.x),
                 static_cast<float>(up.y),
-                static_cast<float>(up.z)
-            };
-            float s[3] = {
+                static_cast<float>(up.z)};
+            query.metric = tc_vec3f{
                 static_cast<float>(metric.x),
                 static_cast<float>(metric.y),
-                static_cast<float>(metric.z)
-            };
-
-            tc_mesh_surface_edge_hit hit;
-            if (!tc_mesh_find_surface_edge_metric(m, start_triangle, p, n, u, s, &hit)) {
+                static_cast<float>(metric.z)};
+            if (!tc_mesh_find_surface_edge_query(m, &query, &hit)) {
                 return nb::none();
             }
 
             nb::dict d;
-            d["point"] = Vec3(hit.point[0], hit.point[1], hit.point[2]);
+            d["point"] = Vec3(hit.point.x, hit.point.y, hit.point.z);
             d["indices"] = nb::make_tuple(hit.indices[0], hit.indices[1]);
             d["distance"] = hit.distance;
             d["side"] = hit.side;
@@ -543,39 +542,37 @@ void bind_mesh(nb::module_& m) {
                 return nb::none();
             }
 
-            float p[3] = {
+            tc_mesh_surface_edge_hit hit;
+            tc_mesh_surface_edge_query query{};
+            query.start_triangle = start_triangle;
+            query.point = tc_vec3f{
                 static_cast<float>(point.x),
                 static_cast<float>(point.y),
-                static_cast<float>(point.z)
-            };
-            float n[3] = {
+                static_cast<float>(point.z)};
+            query.normal = tc_vec3f{
                 static_cast<float>(normal.x),
                 static_cast<float>(normal.y),
-                static_cast<float>(normal.z)
-            };
-            float d[3] = {
-                static_cast<float>(edge_direction.x),
-                static_cast<float>(edge_direction.y),
-                static_cast<float>(edge_direction.z)
-            };
-            float u[3] = {
+                static_cast<float>(normal.z)};
+            query.up = tc_vec3f{
                 static_cast<float>(up.x),
                 static_cast<float>(up.y),
-                static_cast<float>(up.z)
-            };
-            float s[3] = {
+                static_cast<float>(up.z)};
+            query.metric = tc_vec3f{
                 static_cast<float>(metric.x),
                 static_cast<float>(metric.y),
-                static_cast<float>(metric.z)
-            };
-
-            tc_mesh_surface_edge_hit hit;
-            if (!tc_mesh_find_surface_edge_aligned_metric(m, start_triangle, p, n, u, d, max_angle_degrees, s, &hit)) {
+                static_cast<float>(metric.z)};
+            query.edge_direction = tc_vec3f{
+                static_cast<float>(edge_direction.x),
+                static_cast<float>(edge_direction.y),
+                static_cast<float>(edge_direction.z)};
+            query.use_direction_filter = true;
+            query.max_angle_degrees = max_angle_degrees;
+            if (!tc_mesh_find_surface_edge_query(m, &query, &hit)) {
                 return nb::none();
             }
 
             nb::dict result;
-            result["point"] = Vec3(hit.point[0], hit.point[1], hit.point[2]);
+            result["point"] = Vec3(hit.point.x, hit.point.y, hit.point.z);
             result["indices"] = nb::make_tuple(hit.indices[0], hit.indices[1]);
             result["distance"] = hit.distance;
             result["side"] = hit.side;
@@ -600,29 +597,27 @@ void bind_mesh(nb::module_& m) {
                 return nb::none();
             }
 
-            float p[3] = {
-                static_cast<float>(point.x),
-                static_cast<float>(point.y),
-                static_cast<float>(point.z)
-            };
-            float u[3] = {
-                static_cast<float>(up.x),
-                static_cast<float>(up.y),
-                static_cast<float>(up.z)
-            };
-            float s[3] = {
-                static_cast<float>(metric.x),
-                static_cast<float>(metric.y),
-                static_cast<float>(metric.z)
-            };
-
             tc_mesh_surface_edge_hit hit;
-            if (!tc_mesh_find_nearest_surface_edge_metric(m, p, u, s, &hit)) {
+            if (!tc_mesh_find_nearest_surface_edge_metric(
+                    m,
+                    tc_vec3f{
+                        static_cast<float>(point.x),
+                        static_cast<float>(point.y),
+                        static_cast<float>(point.z)},
+                    tc_vec3f{
+                        static_cast<float>(up.x),
+                        static_cast<float>(up.y),
+                        static_cast<float>(up.z)},
+                    tc_vec3f{
+                        static_cast<float>(metric.x),
+                        static_cast<float>(metric.y),
+                        static_cast<float>(metric.z)},
+                    &hit)) {
                 return nb::none();
             }
 
             nb::dict d;
-            d["point"] = Vec3(hit.point[0], hit.point[1], hit.point[2]);
+            d["point"] = Vec3(hit.point.x, hit.point.y, hit.point.z);
             d["indices"] = nb::make_tuple(hit.indices[0], hit.indices[1]);
             d["distance"] = hit.distance;
             d["side"] = hit.side;
