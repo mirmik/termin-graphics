@@ -23,25 +23,6 @@ public:
     float cascade_split_far = 0.0f;
 
 public:
-    ShadowMapArrayEntry() = default;
-
-    ShadowMapArrayEntry(
-        tgfx::TextureHandle depth,
-        int w, int h,
-        const Mat44f& matrix,
-        int light_idx,
-        int cascade_idx = 0,
-        float split_near = 0.0f,
-        float split_far = 0.0f
-    ) : depth_tex2(depth),
-        width(w),
-        height(h),
-        light_space_matrix(matrix),
-        light_index(light_idx),
-        cascade_index(cascade_idx),
-        cascade_split_near(split_near),
-        cascade_split_far(split_far) {}
-
 };
 
 class RENDER_API ShadowMapArrayResource : public FrameGraphResource {
@@ -62,21 +43,8 @@ public:
         entries.clear();
     }
 
-    void add_entry(
-        tgfx::TextureHandle depth_tex2,
-        int width,
-        int height,
-        const Mat44f& light_space_matrix,
-        int light_index,
-        int cascade_index = 0,
-        float cascade_split_near = 0.0f,
-        float cascade_split_far = 0.0f
-    ) {
-        entries.push_back(ShadowMapArrayEntry(
-            depth_tex2, width, height,
-            light_space_matrix, light_index, cascade_index,
-            cascade_split_near, cascade_split_far
-        ));
+    void add_entry(const ShadowMapArrayEntry& entry) {
+        entries.push_back(entry);
     }
 
     const ShadowMapArrayEntry& operator[](size_t index) const {
