@@ -141,6 +141,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/render_pipeline.hpp
     include/termin/render/render_engine.hpp
     include/termin/render/render_item_submission.hpp
+    include/termin/render/python_render_item.hpp
     include/termin/render/scene_pipeline_template.hpp
     include/termin/render/shader_abi.hpp
     include/termin/render/shader_resource_apply.hpp

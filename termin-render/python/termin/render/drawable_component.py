@@ -1,5 +1,6 @@
 from termin.scene import PythonComponent
 from termin.render._render_native import install_drawable_vtable, drawable_capability_id
+from termin.render.drawable import RenderItemCollectContext
 from termin.scene import ComponentRegistry
 
 
@@ -18,6 +19,11 @@ class DrawableComponent(PythonComponent):
 
     def phase_marks(self):
         return []
+
+    def collect_render_items(self, context: RenderItemCollectContext):
+        raise NotImplementedError(
+            f"{type(self).__name__}.collect_render_items() must return RenderItem objects"
+        )
 
 
 __all__ = ["DrawableComponent"]

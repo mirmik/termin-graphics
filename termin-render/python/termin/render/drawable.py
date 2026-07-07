@@ -1,9 +1,7 @@
 """
-Drawable protocol — legacy Python-facing rendering notes.
+Drawable protocol.
 
 Runtime passes collect RenderItems through the native drawable protocol.
-The old Python draw_geometry/get_geometry_draws shape is retained only as
-documentation for legacy Python components that have not been migrated yet.
 
 Разделение ответственности:
 - FramePass отвечает за привязку шейдера/материала
@@ -13,25 +11,37 @@ documentation for legacy Python components that have not been migrated yet.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Protocol, Set, runtime_checkable
+from dataclasses import dataclass
+from typing import Protocol, Set, runtime_checkable
 
-from termin.render._render_native import GeometryDrawCall
-
-if TYPE_CHECKING:
-    from termin.render_framework import RenderContext
+from termin.render._render_native import (
+    GeometryDrawCall,
+    RENDER_ITEM_COLLECT_ALLOW_MISSING_MATERIAL_PHASE,
+    RenderItem,
+)
 
 
 # Идентификатор геометрии по умолчанию
 DEFAULT_GEOMETRY_ID = 0
 
 
+@dataclass(frozen=True)
+class RenderItemCollectContext:
+    phase_mark: str = ""
+    flags: int = 0
+    layer_mask: int = (1 << 64) - 1
+    render_category_mask: int = (1 << 64) - 1
+    debug_pass_name: str = ""
+
+    @property
+    def allow_missing_material_phase(self) -> bool:
+        return (self.flags & RENDER_ITEM_COLLECT_ALLOW_MISSING_MATERIAL_PHASE) != 0
+
+
 @runtime_checkable
 class Drawable(Protocol):
     """
-    Legacy protocol for components that expose geometry.
-
-    New render paths should submit RenderItems through the native drawable
-    protocol instead of driving draw_geometry from passes.
+    Protocol for components that submit renderable work through RenderItems.
 
     Атрибуты:
         phase_marks: Множество фаз, в которых участвует этот drawable.
@@ -40,44 +50,22 @@ class Drawable(Protocol):
                      Используется пассами для фильтрации.
 
     Методы:
-        draw_geometry: Legacy direct geometry draw hook.
-        get_geometry_draws: Legacy material/geometry discovery hook.
+        collect_render_items: Возвращает RenderItems для указанного pass context.
     """
 
     phase_marks: Set[str]
 
-    def draw_geometry(self, context: "RenderContext", _geometry_id: int = DEFAULT_GEOMETRY_ID) -> None:
+    def collect_render_items(self, context: RenderItemCollectContext) -> list[RenderItem]:
         """
-        Рисует геометрию.
-
-        Legacy hook. Runtime passes should not call this through the C drawable
-        protocol; renderers should submit RenderItems instead.
-
-        Параметры:
-            context: Контекст рендеринга.
-                     context.model содержит матрицу модели (для VAO binding).
-            geometry_id: Идентификатор геометрии для отрисовки.
-                         0 = основная/единственная геометрия.
+        Возвращает RenderItems для текущей фазы pass-а.
         """
         ...
 
-    def get_geometry_draws(
-        self,
-        context: "RenderContext",
-        phase_mark: str | None = None,
-    ) -> List[GeometryDrawCall]:
-        """
-        Возвращает GeometryDrawCalls для этого drawable.
 
-        Legacy hook for material/geometry discovery. Runtime passes should
-        collect RenderItems instead.
-
-        Параметры:
-            context: Контекст рендеринга.
-            phase_mark: Фильтр по метке фазы ("opaque", "transparent", "editor", etc.)
-                        Если None, возвращает все фазы.
-
-        Возвращает:
-            Список GeometryDrawCall, отсортированный по priority.
-        """
-        ...
+__all__ = [
+    "DEFAULT_GEOMETRY_ID",
+    "Drawable",
+    "GeometryDrawCall",
+    "RenderItem",
+    "RenderItemCollectContext",
+]

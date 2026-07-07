@@ -9,6 +9,7 @@ from termin.render._render_native import (
     RENDER_CATEGORY_ALL,
     RENDER_CATEGORY_COLLIDERS,
     RENDER_CATEGORY_NAVMESH,
+    RenderItem,
     RenderTargetConfig,
     RenderSyncMode,
     SCENE_EXT_TYPE_RENDER_MOUNT,
@@ -25,7 +26,7 @@ from termin.render._render_native import (
     scene_render_state,
     set_render_sync_mode,
 )
-from termin.render.drawable import DEFAULT_GEOMETRY_ID, Drawable
+from termin.render.drawable import DEFAULT_GEOMETRY_ID, Drawable, RenderItemCollectContext
 from termin.render.drawable_component import DrawableComponent
 from termin.render.immediate import ImmediateRenderer
 from termin.render.render_target_config import (
@@ -46,6 +47,8 @@ __all__ = [
     "RENDER_CATEGORY_COLLIDERS",
     "RENDER_CATEGORY_NAVMESH",
     "ImmediateRenderer",
+    "RenderItem",
+    "RenderItemCollectContext",
     "RenderTargetConfig",
     "RenderSyncMode",
     "SCENE_EXT_TYPE_RENDER_MOUNT",
