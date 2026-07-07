@@ -7,6 +7,7 @@
 #include <tcbase/tc_log.hpp>
 #include "tgfx2/enums.hpp"
 #include "tgfx2/handles.hpp"
+#include <termin/geom/rect2.hpp>
 #include <termin/render/render_export.hpp>
 extern "C" {
 #include <tgfx/resources/tc_shader_registry.h>
@@ -102,6 +103,17 @@ private:
     );
 };
 
+struct FrameGraphPresenterOptions {
+    int channel_mode = 0;
+    bool highlight_hdr = false;
+};
+
+struct FrameGraphPresenterDraw {
+    tgfx::TextureHandle capture_tex;
+    Rect2i dst_rect;
+    FrameGraphPresenterOptions options;
+};
+
 // Draws a captured tgfx2 texture into a target texture with a
 // channel-picker / HDR-highlight fragment shader. Target is a
 // tgfx::TextureHandle — either a native pool entry or an external
@@ -119,25 +131,13 @@ public:
 
     void render(
         tgfx::RenderContext2* ctx2,
-        tgfx::TextureHandle capture_tex,
         tgfx::TextureHandle target_tex,
-        int dst_x,
-        int dst_y,
-        int dst_w,
-        int dst_h,
-        int channel_mode,
-        bool highlight_hdr
+        const FrameGraphPresenterDraw& draw
     );
 
     void render_in_current_pass(
         tgfx::RenderContext2* ctx2,
-        tgfx::TextureHandle capture_tex,
-        int dst_x,
-        int dst_y,
-        int dst_w,
-        int dst_h,
-        int channel_mode,
-        bool highlight_hdr
+        const FrameGraphPresenterDraw& draw
     );
 
     // HDR / depth readback helpers take a native tgfx2 texture and

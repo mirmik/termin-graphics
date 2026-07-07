@@ -636,12 +636,45 @@ void bind_render_framework(nb::module_& m) {
 
     nb::class_<FrameGraphPresenter>(m, "FrameGraphPresenter")
         .def(nb::init<>())
-        .def("render", &FrameGraphPresenter::render,
+        .def("render",
+             [](FrameGraphPresenter& self,
+                tgfx::RenderContext2* ctx2,
+                tgfx::TextureHandle capture_tex,
+                tgfx::TextureHandle target_tex,
+                int dst_x,
+                int dst_y,
+                int dst_w,
+                int dst_h,
+                int channel_mode,
+                bool highlight_hdr) {
+                 FrameGraphPresenterDraw draw;
+                 draw.capture_tex = capture_tex;
+                 draw.dst_rect = Rect2i{dst_x, dst_y, dst_w, dst_h};
+                 draw.options.channel_mode = channel_mode;
+                 draw.options.highlight_hdr = highlight_hdr;
+                 self.render(ctx2, target_tex, draw);
+             },
              nb::arg("ctx2"), nb::arg("capture_tex"), nb::arg("target_tex"),
              nb::arg("dst_x"), nb::arg("dst_y"),
              nb::arg("dst_w"), nb::arg("dst_h"),
              nb::arg("channel_mode"), nb::arg("highlight_hdr"))
-        .def("render_in_current_pass", &FrameGraphPresenter::render_in_current_pass,
+        .def("render_in_current_pass",
+             [](FrameGraphPresenter& self,
+                tgfx::RenderContext2* ctx2,
+                tgfx::TextureHandle capture_tex,
+                int dst_x,
+                int dst_y,
+                int dst_w,
+                int dst_h,
+                int channel_mode,
+                bool highlight_hdr) {
+                 FrameGraphPresenterDraw draw;
+                 draw.capture_tex = capture_tex;
+                 draw.dst_rect = Rect2i{dst_x, dst_y, dst_w, dst_h};
+                 draw.options.channel_mode = channel_mode;
+                 draw.options.highlight_hdr = highlight_hdr;
+                 self.render_in_current_pass(ctx2, draw);
+             },
              nb::arg("ctx2"), nb::arg("capture_tex"),
              nb::arg("dst_x"), nb::arg("dst_y"),
              nb::arg("dst_w"), nb::arg("dst_h"),
