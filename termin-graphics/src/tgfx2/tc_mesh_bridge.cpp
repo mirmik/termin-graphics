@@ -20,16 +20,28 @@ namespace tgfx {
 namespace {
 
 bool fill_binding_from_mesh(Tgfx2MeshBinding& out, tc_mesh* mesh) {
-    out.layout.stride = mesh->layout.stride;
-    out.layout.use_shader_input_locations =
+    out.layout_desc.stride = mesh->layout.stride;
+    out.layout_desc.use_shader_input_locations =
         mesh->layout.use_shader_input_locations != 0;
-    out.layout.attributes.reserve(mesh->layout.attrib_count);
+    out.layout_desc.attribute_count = std::min<uint32_t>(
+        mesh->layout.attrib_count,
+        TGFX2_VERTEX_ATTRIBUTE_MAX);
+    if (mesh->layout.attrib_count > TGFX2_VERTEX_ATTRIBUTE_MAX) {
+        tc::Log::error(
+            "wrap_mesh_as_tgfx2: mesh '%s' has %u attributes, max is %u; truncating",
+            mesh->header.name ? mesh->header.name : mesh->header.uuid,
+            unsigned(mesh->layout.attrib_count),
+            TGFX2_VERTEX_ATTRIBUTE_MAX);
+    }
     for (uint8_t i = 0; i < mesh->layout.attrib_count; i++) {
+        if (i >= TGFX2_VERTEX_ATTRIBUTE_MAX) {
+            break;
+        }
         const tgfx_vertex_attrib& a = mesh->layout.attribs[i];
-        VertexAttribute va;
+        VertexAttributeDesc va;
         va.location = a.location;
         va.offset = a.offset;
-        va.semantic = a.name;
+        va.semantic = intern_vertex_semantic(a.name);
 
         bool ok = true;
         switch (static_cast<tgfx_attrib_type>(a.type)) {
@@ -106,8 +118,9 @@ bool fill_binding_from_mesh(Tgfx2MeshBinding& out, tc_mesh* mesh) {
             }
         }
 
-        out.layout.attributes.push_back(va);
+        out.layout_desc.attributes[i] = va;
     }
+    out.layout = make_vertex_buffer_layout(out.layout_desc);
 
     out.index_count = static_cast<uint32_t>(mesh->index_count);
     out.index_type = IndexType::Uint32;
@@ -277,7 +290,11 @@ bool draw_tc_submesh_binding(
     const tc_submesh& submesh,
     const VertexBufferLayout* layout_override
 ) {
-    ctx.set_vertex_layout(layout_override ? *layout_override : binding.layout);
+    if (layout_override) {
+        ctx.set_vertex_layout(*layout_override);
+    } else {
+        ctx.set_vertex_layout(binding.layout_desc);
+    }
     ctx.set_topology(
         submesh.draw_mode == TC_DRAW_LINES
             ? PrimitiveTopology::LineList
@@ -432,7 +449,11 @@ bool draw_tc_mesh(
     Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
     if (binding.index_count == 0) return false;
 
-    ctx.set_vertex_layout(layout_override ? *layout_override : binding.layout);
+    if (layout_override) {
+        ctx.set_vertex_layout(*layout_override);
+    } else {
+        ctx.set_vertex_layout(binding.layout_desc);
+    }
     ctx.set_topology(binding.topology);
     ctx.draw(binding.vertex_buffer, binding.index_buffer,
              binding.index_count, binding.index_type);

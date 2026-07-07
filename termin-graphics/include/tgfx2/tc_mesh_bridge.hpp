@@ -24,6 +24,8 @@ class RenderContext2;
 struct Tgfx2MeshBinding {
     BufferHandle vertex_buffer;
     BufferHandle index_buffer;
+    VertexLayoutDesc layout_desc;
+    // Legacy C++ layout view. New hot paths should use layout_desc.
     VertexBufferLayout layout;
     uint32_t index_count = 0;
     IndexType index_type = IndexType::Uint32;

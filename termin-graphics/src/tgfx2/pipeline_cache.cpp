@@ -15,31 +15,13 @@ namespace tgfx {
 // Key equality
 // ============================================================================
 
-static bool layouts_equal(const VertexBufferLayout& a, const VertexBufferLayout& b) {
-    if (a.stride != b.stride || a.per_instance != b.per_instance ||
-        a.use_shader_input_locations != b.use_shader_input_locations)
-        return false;
-    if (a.attributes.size() != b.attributes.size())
-        return false;
-    for (size_t i = 0; i < a.attributes.size(); i++) {
-        if (a.attributes[i].format != b.attributes[i].format ||
-            a.attributes[i].offset != b.attributes[i].offset ||
-            a.attributes[i].semantic != b.attributes[i].semantic)
-            return false;
-        if (!a.use_shader_input_locations &&
-            a.attributes[i].location != b.attributes[i].location)
-            return false;
-    }
-    return true;
-}
-
-static bool layout_vectors_equal(const std::vector<VertexBufferLayout>& a,
-                                 const std::vector<VertexBufferLayout>& b) {
+static bool layout_vectors_equal(const std::vector<VertexLayoutDesc>& a,
+                                 const std::vector<VertexLayoutDesc>& b) {
     if (a.size() != b.size()) {
         return false;
     }
     for (size_t i = 0; i < a.size(); ++i) {
-        if (!layouts_equal(a[i], b[i])) {
+        if (!vertex_layout_desc_equal(a[i], b[i])) {
             return false;
         }
     }
@@ -154,9 +136,9 @@ PipelineHandle PipelineCache::get(const PipelineCacheKey& key) {
     desc.fragment_shader = key.fragment_shader;
     desc.geometry_shader = key.geometry_shader;
 
-    for (const VertexBufferLayout& layout : key.vertex_layouts) {
+    for (const VertexLayoutDesc& layout : key.vertex_layouts) {
         if (layout.stride > 0) {
-            desc.vertex_layouts.push_back(layout);
+            desc.vertex_layouts.push_back(make_vertex_buffer_layout(layout));
         }
     }
 

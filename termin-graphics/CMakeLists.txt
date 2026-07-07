@@ -125,6 +125,7 @@ set(TGFX2_SOURCES
     src/tgfx2/tc_mesh_bridge.cpp
     src/tgfx2/tc_shader_bridge.cpp
     src/tgfx2/texture_pool.cpp
+    src/tgfx2/vertex_layout.cpp
 )
 
 if(TGFX2_ENABLE_OPENGL)

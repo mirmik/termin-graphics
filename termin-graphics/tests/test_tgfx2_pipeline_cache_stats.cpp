@@ -80,7 +80,7 @@ private:
     uint32_t next_pipeline_id_ = 1;
 };
 
-tgfx::VertexBufferLayout make_layout(uint32_t stride, const char* semantic) {
+tgfx::VertexLayoutDesc make_layout(uint32_t stride, const char* semantic) {
     tgfx::VertexBufferLayout layout;
     layout.stride = stride;
     layout.attributes.push_back({
@@ -89,7 +89,7 @@ tgfx::VertexBufferLayout make_layout(uint32_t stride, const char* semantic) {
         0,
         semantic,
     });
-    return layout;
+    return tgfx::make_vertex_layout_desc(layout);
 }
 
 } // namespace

@@ -246,7 +246,10 @@ TEST_CASE("bound resource groups are preferred over flat compatibility bindings"
     grouped_desc.resource_layout_token = 0x1234u;
     tgfx::BoundResourceGroup frame_group;
     frame_group.scope = tgfx::ShaderResourceScope::Frame;
-    frame_group.bindings.push_back({grouped_entry, grouped_value});
+    frame_group.bindings.push_back({
+        tgfx::bound_resource_slot_from_plan_entry(grouped_entry),
+        grouped_value,
+    });
     grouped_desc.groups.push_back(frame_group);
 
     tgfx::BackendBindingPlanEntry clean_entry = grouped_entry;
@@ -256,13 +259,19 @@ TEST_CASE("bound resource groups are preferred over flat compatibility bindings"
     tgfx::BoundResourceGroup clean_group;
     clean_group.scope = tgfx::ShaderResourceScope::Material;
     clean_group.dirty = false;
-    clean_group.bindings.push_back({clean_entry, grouped_value});
+    clean_group.bindings.push_back({
+        tgfx::bound_resource_slot_from_plan_entry(clean_entry),
+        grouped_value,
+    });
     grouped_desc.groups.push_back(clean_group);
 
     tgfx::BackendBindingPlanEntry ignored_flat_entry = grouped_entry;
     ignored_flat_entry.resource.name = "ignored_flat";
     ignored_flat_entry.placement.opengl.binding_point = 7;
-    grouped_desc.bindings.push_back({ignored_flat_entry, grouped_value});
+    grouped_desc.bindings.push_back({
+        tgfx::bound_resource_slot_from_plan_entry(ignored_flat_entry),
+        grouped_value,
+    });
 
     tgfx::ResourceBinding legacy_numeric;
     legacy_numeric.kind = tgfx::ResourceBinding::Kind::UniformBuffer;
@@ -276,7 +285,7 @@ TEST_CASE("bound resource groups are preferred over flat compatibility bindings"
     tgfx::for_each_dirty_bound_resource_binding(
         grouped_desc,
         [&](const tgfx::BoundResourceBinding& binding) {
-            dirty_binding_sum += binding.plan_entry.placement.opengl.binding_point;
+            dirty_binding_sum += binding.slot.placement.opengl.binding_point;
         });
     CHECK(dirty_binding_sum == 2u);
 

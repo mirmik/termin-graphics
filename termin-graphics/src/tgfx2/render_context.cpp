@@ -330,33 +330,37 @@ void RenderContext2::bind_shader(ShaderHandle vs, ShaderHandle fs, ShaderHandle 
 }
 
 void RenderContext2::set_vertex_layout(const VertexBufferLayout& layout) {
-    set_vertex_layouts({layout});
+    const VertexLayoutDesc desc = make_vertex_layout_desc(layout);
+    set_vertex_layout(desc);
 }
 
 void RenderContext2::set_vertex_layouts(const std::vector<VertexBufferLayout>& layouts) {
-    vertex_layouts_ = layouts;
-    // Cache the layout's hash once here so flush_pipeline's cache lookup
-    // doesn't have to iterate the attributes vector on every draw.
-    size_t h = 0;
-    auto mix = [&h](size_t v) {
-        h ^= v + 0x9e3779b9 + (h << 6) + (h >> 2);
-    };
-    mix(std::hash<size_t>{}(layouts.size()));
-    for (const auto& layout : layouts) {
-        mix(std::hash<uint32_t>{}(layout.stride));
-        mix(std::hash<bool>{}(layout.per_instance));
-        mix(std::hash<bool>{}(layout.use_shader_input_locations));
-        mix(std::hash<size_t>{}(layout.attributes.size()));
-        for (const auto& a : layout.attributes) {
-            if (!layout.use_shader_input_locations) {
-                mix(std::hash<uint32_t>{}(a.location));
-            }
-            mix(std::hash<int>{}(static_cast<int>(a.format)));
-            mix(std::hash<uint32_t>{}(a.offset));
-            mix(std::hash<std::string>{}(a.semantic));
-        }
+    std::vector<VertexLayoutDesc> descs;
+    descs.reserve(layouts.size());
+    for (const VertexBufferLayout& layout : layouts) {
+        descs.push_back(make_vertex_layout_desc(layout));
     }
-    vertex_layouts_hash_ = h;
+    set_vertex_layouts(
+        descs.data(),
+        static_cast<uint32_t>(descs.size()));
+}
+
+void RenderContext2::set_vertex_layout(const VertexLayoutDesc& layout) {
+    set_vertex_layouts(&layout, 1);
+}
+
+void RenderContext2::set_vertex_layouts(
+    const VertexLayoutDesc* layouts,
+    uint32_t count
+) {
+    vertex_layouts_.clear();
+    vertex_layouts_.reserve(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        vertex_layouts_.push_back(make_vertex_layout_desc(layouts[i]));
+    }
+    vertex_layouts_hash_ = hash_vertex_layout_descs(
+        vertex_layouts_.data(),
+        static_cast<uint32_t>(vertex_layouts_.size()));
     pipeline_dirty_ = true;
 }
 

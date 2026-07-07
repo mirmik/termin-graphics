@@ -53,10 +53,10 @@ private:
     ColorMask color_mask_;
 
     ShaderHandle bound_vs_, bound_fs_, bound_gs_;
-    std::vector<VertexBufferLayout> vertex_layouts_;
+    std::vector<VertexLayoutDesc> vertex_layouts_;
     // Hash of `vertex_layouts_`, recomputed only when set_vertex_layout* is
     // called. Fed into PipelineCacheKey so flush_pipeline's lookup skips
-    // re-hashing the attributes vector on every draw.
+    // re-hashing vertex attributes on every draw.
     size_t vertex_layouts_hash_ = 0;
     PrimitiveTopology topology_ = PrimitiveTopology::TriangleList;
 
@@ -235,6 +235,8 @@ public:
     // --- Vertex layout ---
     void set_vertex_layout(const VertexBufferLayout& layout);
     void set_vertex_layouts(const std::vector<VertexBufferLayout>& layouts);
+    void set_vertex_layout(const VertexLayoutDesc& layout);
+    void set_vertex_layouts(const VertexLayoutDesc* layouts, uint32_t count);
     void set_topology(PrimitiveTopology topo);
 
     // --- Resource bindings (UBOs, textures, samplers) ---

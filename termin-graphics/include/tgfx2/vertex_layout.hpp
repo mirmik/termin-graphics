@@ -1,11 +1,18 @@
 #pragma once
 
+#include "tgfx2/tgfx2_api.h"
+
+#include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace tgfx {
+
+inline constexpr uint32_t TGFX2_VERTEX_ATTRIBUTE_MAX = 8;
 
 enum class VertexFormat {
     // Floating point (glVertexAttribPointer)
@@ -73,5 +80,41 @@ struct VertexBufferLayout {
     // streams where the shader compiler owns the final location assignment.
     bool use_shader_input_locations = false;
 };
+
+struct VertexAttributeDesc {
+    uint32_t location = 0;
+    VertexFormat format = VertexFormat::Float3;
+    uint32_t offset = 0;
+    // Interned semantic name. Null means "use the legacy location fallback".
+    const char* semantic = nullptr;
+};
+
+struct VertexLayoutDesc {
+    uint32_t stride = 0;
+    uint32_t attribute_count = 0;
+    VertexAttributeDesc attributes[TGFX2_VERTEX_ATTRIBUTE_MAX]{};
+    bool per_instance = false;
+    bool use_shader_input_locations = false;
+};
+
+static_assert(std::is_standard_layout_v<VertexAttributeDesc>);
+static_assert(std::is_trivially_copyable_v<VertexAttributeDesc>);
+static_assert(std::is_standard_layout_v<VertexLayoutDesc>);
+static_assert(std::is_trivially_copyable_v<VertexLayoutDesc>);
+
+TGFX2_API const char* intern_vertex_semantic(const char* semantic);
+TGFX2_API const char* intern_vertex_semantic(std::string_view semantic);
+TGFX2_API VertexLayoutDesc make_vertex_layout_desc(const VertexBufferLayout& layout);
+TGFX2_API VertexLayoutDesc make_vertex_layout_desc(const VertexLayoutDesc& layout);
+TGFX2_API VertexBufferLayout make_vertex_buffer_layout(const VertexLayoutDesc& desc);
+TGFX2_API bool vertex_layout_desc_equal(
+    const VertexLayoutDesc& a,
+    const VertexLayoutDesc& b
+);
+TGFX2_API size_t hash_vertex_layout_desc(const VertexLayoutDesc& layout);
+TGFX2_API size_t hash_vertex_layout_descs(
+    const VertexLayoutDesc* layouts,
+    uint32_t count
+);
 
 } // namespace tgfx

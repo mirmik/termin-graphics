@@ -136,6 +136,14 @@ TEST_CASE("wrap mesh keeps canonical layout without per-draw augmentation") {
     CHECK(binding.index_buffer);
     CHECK_FALSE(binding.destroy_vertex_buffer);
     CHECK_EQ(binding.layout.stride, mesh.layout.stride);
+    CHECK_EQ(binding.layout_desc.stride, mesh.layout.stride);
+    REQUIRE_EQ(binding.layout_desc.attribute_count, 3u);
+    CHECK_EQ(binding.layout_desc.attributes[0].semantic,
+             tgfx::intern_vertex_semantic("position"));
+    CHECK_EQ(binding.layout_desc.attributes[1].semantic,
+             tgfx::intern_vertex_semantic("normal"));
+    CHECK_EQ(binding.layout_desc.attributes[2].semantic,
+             tgfx::intern_vertex_semantic("uv"));
     CHECK(tgfx::vertex_layout_has_semantic(binding.layout, "position"));
     CHECK(tgfx::vertex_layout_has_semantic(binding.layout, "normal"));
     CHECK(tgfx::vertex_layout_has_semantic(binding.layout, "uv"));
