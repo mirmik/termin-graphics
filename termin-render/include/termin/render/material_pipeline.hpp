@@ -5,6 +5,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <type_traits>
 
 #include "termin/render/frame_uniforms.hpp"
 #include "termin/render/material_pipeline_shader_assembler.hpp"
@@ -39,6 +40,47 @@ struct MaterialPipelineUniformData {
     uint32_t size = 0;
 };
 
+struct MaterialPipelineUniformUpload {
+    const tc_shader_resource_binding* binding = nullptr;
+    const void* data = nullptr;
+    uint32_t size = 0;
+};
+
+struct MaterialPipelineTextureUpload {
+    const tc_shader_resource_binding* binding = nullptr;
+    tgfx::TextureHandle texture;
+    tgfx::SamplerHandle sampler;
+    uint32_t array_element = 0;
+};
+
+struct MaterialPipelineResourceView {
+    const EnginePerFrameStd140* per_frame = nullptr;
+
+    const MaterialPipelineUniformUpload* uniforms = nullptr;
+    uint32_t uniform_count = 0;
+
+    const MaterialPipelineTextureUpload* textures = nullptr;
+    uint32_t texture_count = 0;
+
+    const void* shadow_block = nullptr;
+    uint32_t shadow_block_size = 0;
+
+    tgfx::BufferHandle lighting_ubo;
+
+    const tgfx::TextureHandle* shadow_maps = nullptr;
+    uint32_t shadow_map_count = 0;
+    tgfx::SamplerHandle shadow_sampler;
+};
+
+static_assert(std::is_standard_layout_v<MaterialPipelineUniformUpload>);
+static_assert(std::is_trivially_copyable_v<MaterialPipelineUniformUpload>);
+static_assert(std::is_standard_layout_v<MaterialPipelineTextureUpload>);
+static_assert(std::is_trivially_copyable_v<MaterialPipelineTextureUpload>);
+static_assert(std::is_standard_layout_v<MaterialPipelineResourceView>);
+static_assert(std::is_trivially_copyable_v<MaterialPipelineResourceView>);
+
+// Transitional C++ convenience wrapper. New render-task/submission paths should
+// pass MaterialPipelineResourceView with resolved shader resource bindings.
 struct MaterialPipelineResourceContext {
     const EnginePerFrameStd140* per_frame = nullptr;
     std::span<const MaterialPipelineUniformData> uniforms;
@@ -97,6 +139,13 @@ RENDER_API bool ensure_material_pipeline_shader(
     tc_shader_handle shader_handle,
     const char* debug_context,
     MaterialPipelineShaderBinding& out);
+
+RENDER_API bool prepare_material_pipeline_resources(
+    tgfx::RenderContext2& ctx,
+    tgfx::IRenderDevice& device,
+    const tc_shader* shader,
+    tc_material_phase* phase,
+    const MaterialPipelineResourceView& resources);
 
 RENDER_API bool prepare_material_pipeline_resources(
     tgfx::RenderContext2& ctx,

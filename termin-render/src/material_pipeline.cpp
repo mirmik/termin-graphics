@@ -9,6 +9,7 @@
 #include "tgfx2/tc_shader_bridge.hpp"
 #include "tcbase/tc_log.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <cstdio>
 #include <string>
@@ -550,7 +551,7 @@ bool prepare_material_pipeline_resources(
     tgfx::IRenderDevice& device,
     const tc_shader* shader,
     tc_material_phase* phase,
-    const MaterialPipelineResourceContext& resources)
+    const MaterialPipelineResourceView& resources)
 {
     if (!shader) {
         return false;
@@ -563,12 +564,30 @@ bool prepare_material_pipeline_resources(
         bound_any = true;
     }
 
-    for (const MaterialPipelineUniformData& uniform : resources.uniforms) {
-        if (!uniform.name || !uniform.data || uniform.size == 0) {
-            continue;
+    if (resources.uniforms) {
+        for (uint32_t i = 0; i < resources.uniform_count; ++i) {
+            const MaterialPipelineUniformUpload& uniform = resources.uniforms[i];
+            if (!uniform.binding || !uniform.data || uniform.size == 0) {
+                continue;
+            }
+            ctx.bind_uniform_data(uniform.binding, uniform.data, uniform.size);
+            bound_any = true;
         }
-        ctx.bind_uniform_data(uniform.name, uniform.data, uniform.size);
-        bound_any = true;
+    }
+
+    if (resources.textures) {
+        for (uint32_t i = 0; i < resources.texture_count; ++i) {
+            const MaterialPipelineTextureUpload& texture = resources.textures[i];
+            if (!texture.binding || !texture.texture) {
+                continue;
+            }
+            ctx.bind_texture_array_element(
+                texture.binding,
+                texture.array_element,
+                texture.texture,
+                texture.sampler);
+            bound_any = true;
+        }
     }
 
     if (resources.shadow_block && resources.shadow_block_size > 0) {
@@ -594,13 +613,56 @@ bool prepare_material_pipeline_resources(
             ctx);
     }
 
-    if (!resources.shadow_maps.empty() && resources.shadow_sampler) {
+    if (resources.shadow_maps && resources.shadow_map_count > 0 && resources.shadow_sampler) {
         bound_any |= bind_shadow_maps_for_shader(
             ctx,
             shader,
-            resources.shadow_maps,
+            {resources.shadow_maps, resources.shadow_map_count},
             resources.shadow_sampler,
-            resources.max_shadow_maps);
+            resources.shadow_map_count);
+    }
+
+    return bound_any;
+}
+
+bool prepare_material_pipeline_resources(
+    tgfx::RenderContext2& ctx,
+    tgfx::IRenderDevice& device,
+    const tc_shader* shader,
+    tc_material_phase* phase,
+    const MaterialPipelineResourceContext& resources)
+{
+    if (!shader) {
+        return false;
+    }
+
+    MaterialPipelineResourceView view{};
+    view.per_frame = resources.per_frame;
+    view.shadow_block = resources.shadow_block;
+    view.shadow_block_size = resources.shadow_block_size;
+    view.lighting_ubo = resources.lighting_ubo;
+    view.shadow_maps = resources.shadow_maps.data();
+    const size_t shadow_count =
+        resources.max_shadow_maps == 0
+            ? resources.shadow_maps.size()
+            : std::min(resources.shadow_maps.size(), resources.max_shadow_maps);
+    view.shadow_map_count = static_cast<uint32_t>(
+        std::min<size_t>(shadow_count, UINT32_MAX));
+    view.shadow_sampler = resources.shadow_sampler;
+
+    bool bound_any = prepare_material_pipeline_resources(
+        ctx,
+        device,
+        shader,
+        phase,
+        view);
+
+    for (const MaterialPipelineUniformData& uniform : resources.uniforms) {
+        if (!uniform.name || !uniform.data || uniform.size == 0) {
+            continue;
+        }
+        ctx.bind_uniform_data(uniform.name, uniform.data, uniform.size);
+        bound_any = true;
     }
 
     return bound_any;
