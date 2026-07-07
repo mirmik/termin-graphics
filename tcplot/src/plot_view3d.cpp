@@ -26,11 +26,12 @@ namespace tcplot {
 
 namespace {
 
-std::optional<Color4> plot3d_opt_color(float r, float g, float b, float a) {
-    if (std::isnan(r) || std::isnan(g) || std::isnan(b) || std::isnan(a)) {
+std::optional<Color4> plot3d_opt_color(Color4 color) {
+    if (std::isnan(color.r) || std::isnan(color.g)
+        || std::isnan(color.b) || std::isnan(color.a)) {
         return std::nullopt;
     }
-    return Color4{r, g, b, a};
+    return color;
 }
 
 std::vector<double> plot3d_copy_array(const double* src, size_t n) {
@@ -108,52 +109,45 @@ void PlotView3D::ensure_offscreen_(int w, int h) {
 // Series
 // ---------------------------------------------------------------------------
 
-void PlotView3D::plot(const double* x, const double* y, const double* z,
-                       size_t n,
-                       float cr, float cg, float cb, float ca,
-                       double thickness,
-                       const char* label) {
-    engine_->plot(plot3d_copy_array(x, n), plot3d_copy_array(y, n), plot3d_copy_array(z, n),
-                  plot3d_opt_color(cr, cg, cb, ca),
-                  thickness,
-                  label ? std::string(label) : std::string());
+void PlotView3D::plot(SeriesData3DView series, LinePlotOptions options) {
+    if (options.color.has_value()) {
+        options.color = plot3d_opt_color(*options.color);
+    }
+    engine_->plot(
+        plot3d_copy_array(series.x, series.count),
+        plot3d_copy_array(series.y, series.count),
+        plot3d_copy_array(series.z, series.count),
+        std::move(options));
 }
 
-void PlotView3D::scatter(const double* x, const double* y, const double* z,
-                          size_t n,
-                          float cr, float cg, float cb, float ca,
-                          double size,
-                          const char* label) {
-    engine_->scatter(plot3d_copy_array(x, n), plot3d_copy_array(y, n), plot3d_copy_array(z, n),
-                     plot3d_opt_color(cr, cg, cb, ca),
-                     size,
-                     label ? std::string(label) : std::string());
+void PlotView3D::scatter(SeriesData3DView series, ScatterPlotOptions options) {
+    if (options.color.has_value()) {
+        options.color = plot3d_opt_color(*options.color);
+    }
+    engine_->scatter(
+        plot3d_copy_array(series.x, series.count),
+        plot3d_copy_array(series.y, series.count),
+        plot3d_copy_array(series.z, series.count),
+        std::move(options));
 }
 
-void PlotView3D::surface(const double* X, const double* Y, const double* Z,
-                          uint32_t rows, uint32_t cols,
-                          float cr, float cg, float cb, float ca,
-                          bool wireframe,
-                          const char* label) {
-    surface_colormap(X, Y, Z, rows, cols, SurfaceColorMap::Jet,
-                     cr, cg, cb, ca, wireframe, label);
+void PlotView3D::surface(SurfaceDataView surface, SurfacePlotOptions options) {
+    options.colormap = SurfaceColorMap::Jet;
+    surface_colormap(surface, std::move(options));
 }
 
-void PlotView3D::surface_colormap(const double* X, const double* Y, const double* Z,
-                                  uint32_t rows, uint32_t cols,
-                                  SurfaceColorMap colormap,
-                                  float cr, float cg, float cb, float ca,
-                                  bool wireframe,
-                                  const char* label,
-                                  bool colormap_reversed) {
-    const size_t n = static_cast<size_t>(rows) * cols;
-    engine_->surface(plot3d_copy_array(X, n), plot3d_copy_array(Y, n), plot3d_copy_array(Z, n),
-                     rows, cols,
-                     plot3d_opt_color(cr, cg, cb, ca),
-                     colormap,
-                     wireframe,
-                     label ? std::string(label) : std::string(),
-                     colormap_reversed);
+void PlotView3D::surface_colormap(SurfaceDataView surface, SurfacePlotOptions options) {
+    if (options.color.has_value()) {
+        options.color = plot3d_opt_color(*options.color);
+    }
+    const size_t n = surface.count();
+    engine_->surface(
+        plot3d_copy_array(surface.x, n),
+        plot3d_copy_array(surface.y, n),
+        plot3d_copy_array(surface.z, n),
+        surface.rows,
+        surface.cols,
+        std::move(options));
 }
 
 void PlotView3D::clear()               { engine_->clear(); }
@@ -190,17 +184,9 @@ bool PlotView3D::set_surface_color(int surface_idx, float r, float g, float b, f
     if (surface_idx < 0) return false;
     return engine_->set_surface_color(static_cast<size_t>(surface_idx), Color4{r, g, b, a});
 }
-bool PlotView3D::set_surface_grid(int surface_idx, bool visible,
-                                  uint32_t row_step, uint32_t col_step,
-                                  float r, float g, float b, float a,
-                                  float width_px) {
+bool PlotView3D::set_surface_grid(int surface_idx, SurfaceGridOptions options) {
     if (surface_idx < 0) return false;
-    return engine_->set_surface_grid(static_cast<size_t>(surface_idx),
-                                     visible,
-                                     row_step,
-                                     col_step,
-                                     Color4{r, g, b, a},
-                                     width_px);
+    return engine_->set_surface_grid(static_cast<size_t>(surface_idx), options);
 }
 void PlotView3D::toggle_wireframe()    { engine_->toggle_wireframe(); }
 void PlotView3D::toggle_marker_mode()  { engine_->toggle_marker_mode(); }

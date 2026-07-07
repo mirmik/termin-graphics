@@ -239,18 +239,18 @@ void bind_render_framework(nb::module_& m) {
         .def_rw("cpu_time_ms", &InternalSymbolTiming::cpu_time_ms)
         .def_rw("gpu_time_ms", &InternalSymbolTiming::gpu_time_ms);
 
-    nb::class_<Rect4i>(m, "Rect4i")
+    nb::class_<Rect2i>(m, "Rect2i")
         .def(nb::init<>())
         .def(nb::init<int, int, int, int>(),
              nb::arg("x"), nb::arg("y"), nb::arg("width"), nb::arg("height"))
-        .def_rw("x", &Rect4i::x)
-        .def_rw("y", &Rect4i::y)
-        .def_rw("width", &Rect4i::width)
-        .def_rw("height", &Rect4i::height)
-        .def("__len__", [](const Rect4i&) {
+        .def_rw("x", &Rect2i::x)
+        .def_rw("y", &Rect2i::y)
+        .def_rw("width", &Rect2i::width)
+        .def_rw("height", &Rect2i::height)
+        .def("__len__", [](const Rect2i&) {
             return 4;
         })
-        .def("__getitem__", [](const Rect4i& self, size_t index) {
+        .def("__getitem__", [](const Rect2i& self, size_t index) {
             switch (index) {
                 case 0: return self.x;
                 case 1: return self.y;
@@ -259,16 +259,16 @@ void bind_render_framework(nb::module_& m) {
                 default: throw nb::index_error();
             }
         })
-        .def("__iter__", [](const Rect4i& self) {
+        .def("__iter__", [](const Rect2i& self) {
             return nb::make_iterator(
-                nb::type<Rect4i>(),
-                "rect4i_iter",
+                nb::type<Rect2i>(),
+                "rect2i_iter",
                 &self.x,
                 &self.x + 4
             );
         }, nb::keep_alive<0, 1>())
-        .def("__repr__", [](const Rect4i& self) {
-            return "Rect4i(" +
+        .def("__repr__", [](const Rect2i& self) {
+            return "Rect2i(" +
                 std::to_string(self.x) + ", " +
                 std::to_string(self.y) + ", " +
                 std::to_string(self.width) + ", " +

@@ -46,7 +46,7 @@ public:
     // arrays are written by one pass and read by another.
     ShadowArrayMap shadow_arrays;
     // Render extent for the pass. This is not a display viewport rectangle.
-    Rect4i render_rect;
+    Rect2i render_rect;
     TcSceneRef scene;
     RenderCamera* camera = nullptr;
     std::string render_target_name;

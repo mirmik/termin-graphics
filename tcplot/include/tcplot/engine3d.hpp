@@ -69,32 +69,21 @@ public:
 
     // --- Public add-series API ---
     void plot(std::vector<double> x, std::vector<double> y, std::vector<double> z,
-              std::optional<Color4> color = std::nullopt,
-              double thickness = 1.5,
-              std::string label = "");
+              LinePlotOptions options = {});
 
     void scatter(std::vector<double> x, std::vector<double> y, std::vector<double> z,
-                 std::optional<Color4> color = std::nullopt,
-                 double size = 4.0,
-                 std::string label = "");
+                 ScatterPlotOptions options = {});
 
     void surface(std::vector<double> X, std::vector<double> Y, std::vector<double> Z,
                  uint32_t rows, uint32_t cols,
-                 std::optional<Color4> color = std::nullopt,
-                 SurfaceColorMap colormap = SurfaceColorMap::Jet,
-                 bool wireframe = false,
-                 std::string label = "",
-                 bool colormap_reversed = false);
+                 SurfacePlotOptions options = {});
 
     void clear();
 
     bool set_surface_colormap(size_t idx, SurfaceColorMap colormap);
     bool set_surface_colormap_reversed(size_t idx, bool reversed);
     bool set_surface_color(size_t idx, Color4 color);
-    bool set_surface_grid(size_t idx, bool visible,
-                          uint32_t row_step, uint32_t col_step,
-                          Color4 color,
-                          float width_px = 1.5f);
+    bool set_surface_grid(size_t idx, SurfaceGridOptions options);
 
     void toggle_wireframe() { show_wireframe = !show_wireframe; }
     void toggle_marker_mode();

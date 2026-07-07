@@ -42,6 +42,68 @@ struct TCPLOT_API ScatterSeries {
     std::string label;
 };
 
+struct TCPLOT_API SeriesData2DView {
+    const double* x = nullptr;
+    const double* y = nullptr;
+    size_t count = 0;
+};
+
+struct TCPLOT_API SeriesData3DView {
+    const double* x = nullptr;
+    const double* y = nullptr;
+    const double* z = nullptr;
+    size_t count = 0;
+};
+
+struct TCPLOT_API SurfaceDataView {
+    const double* x = nullptr;
+    const double* y = nullptr;
+    const double* z = nullptr;
+    uint32_t rows = 0;
+    uint32_t cols = 0;
+
+    size_t count() const {
+        return static_cast<size_t>(rows) * static_cast<size_t>(cols);
+    }
+};
+
+struct TCPLOT_API LinePlotOptions {
+    std::optional<Color4> color;
+    double thickness = 1.5;
+    std::string label;
+};
+
+struct TCPLOT_API LineColormapOptions {
+    SurfaceColorMap colormap = SurfaceColorMap::Jet;
+    double scalar_min = 0.0;
+    double scalar_max = 1.0;
+    double thickness = 1.5;
+    std::string label;
+    bool colormap_reversed = false;
+};
+
+struct TCPLOT_API ScatterPlotOptions {
+    std::optional<Color4> color;
+    double size = 4.0;
+    std::string label;
+};
+
+struct TCPLOT_API SurfacePlotOptions {
+    std::optional<Color4> color;
+    SurfaceColorMap colormap = SurfaceColorMap::Jet;
+    bool wireframe = false;
+    std::string label;
+    bool colormap_reversed = false;
+};
+
+struct TCPLOT_API SurfaceGridOptions {
+    bool visible = false;
+    uint32_t row_step = 8;
+    uint32_t col_step = 8;
+    Color4 color = styles::grid_color();
+    float width_px = 1.5f;
+};
+
 // Grid-sampled surface. X/Y/Z are row-major flats of shape (rows, cols).
 // X[j * cols + i] is the x-coordinate of grid cell (j, i); same for Y/Z.
 struct TCPLOT_API SurfaceSeries {

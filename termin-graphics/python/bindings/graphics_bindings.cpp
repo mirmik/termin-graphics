@@ -72,27 +72,27 @@ void bind_types(nb::module_& m) {
         .def("__eq__", &Size2i::operator==)
         .def("__ne__", &Size2i::operator!=);
 
-    // Rect2i
-    nb::class_<Rect2i>(m, "Rect2i")
+    // Bounds2i
+    nb::class_<Bounds2i>(m, "Bounds2i")
         .def(nb::init<>())
         .def(nb::init<int, int, int, int>(),
             nb::arg("x0"), nb::arg("y0"), nb::arg("x1"), nb::arg("y1"))
-        .def("__init__", [](Rect2i* self, nb::tuple t) {
+        .def("__init__", [](Bounds2i* self, nb::tuple t) {
             if (t.size() != 4) throw std::runtime_error("Rect tuple must have 4 elements");
-            new (self) Rect2i(nb::cast<int>(t[0]), nb::cast<int>(t[1]), nb::cast<int>(t[2]), nb::cast<int>(t[3]));
+            new (self) Bounds2i(nb::cast<int>(t[0]), nb::cast<int>(t[1]), nb::cast<int>(t[2]), nb::cast<int>(t[3]));
         })
-        .def_rw("x0", &Rect2i::x0)
-        .def_rw("y0", &Rect2i::y0)
-        .def_rw("x1", &Rect2i::x1)
-        .def_rw("y1", &Rect2i::y1)
-        .def("width", &Rect2i::width)
-        .def("height", &Rect2i::height)
-        .def_static("from_size", nb::overload_cast<int, int>(&Rect2i::from_size))
-        .def_static("from_size", nb::overload_cast<Size2i>(&Rect2i::from_size))
-        .def("__iter__", [](const Rect2i& r) {
+        .def_rw("x0", &Bounds2i::x0)
+        .def_rw("y0", &Bounds2i::y0)
+        .def_rw("x1", &Bounds2i::x1)
+        .def_rw("y1", &Bounds2i::y1)
+        .def("width", &Bounds2i::width)
+        .def("height", &Bounds2i::height)
+        .def_static("from_size", nb::overload_cast<int, int>(&Bounds2i::from_size))
+        .def_static("from_size", nb::overload_cast<Size2i>(&Bounds2i::from_size))
+        .def("__iter__", [](const Bounds2i& r) {
             return nb::iter(nb::make_tuple(r.x0, r.y0, r.x1, r.y1));
         })
-        .def("__getitem__", [](const Rect2i& r, int i) {
+        .def("__getitem__", [](const Bounds2i& r, int i) {
             if (i < 0 || i > 3) throw nb::index_error();
             return (&r.x0)[i];
         });
@@ -100,7 +100,7 @@ void bind_types(nb::module_& m) {
     // Implicit conversions from Python tuples
     nb::implicitly_convertible<nb::tuple, Color4>();
     nb::implicitly_convertible<nb::tuple, Size2i>();
-    nb::implicitly_convertible<nb::tuple, Rect2i>();
+    nb::implicitly_convertible<nb::tuple, Bounds2i>();
 }
 
 void bind_render_state(nb::module_& m) {

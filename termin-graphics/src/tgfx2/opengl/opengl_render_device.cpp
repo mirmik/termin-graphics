@@ -1396,8 +1396,8 @@ bool OpenGLRenderDevice::read_pixel_depth_float(
 void OpenGLRenderDevice::blit_to_texture(
     TextureHandle dst_color,
     TextureHandle src_color,
-    int src_x, int src_y, int src_w, int src_h,
-    int dst_x, int dst_y, int dst_w, int dst_h
+    termin::Bounds2i src_rect,
+    termin::Bounds2i dst_rect
 ) {
     GLTexture* src = textures_.get(src_color.id);
     GLTexture* dst = textures_.get(dst_color.id);
@@ -1441,8 +1441,8 @@ void OpenGLRenderDevice::blit_to_texture(
             static_cast<unsigned>(dst->target));
     } else {
         glBlitFramebuffer(
-            src_x, src_y, src_x + src_w, src_y + src_h,
-            dst_x, dst_y, dst_x + dst_w, dst_y + dst_h,
+            src_rect.x0, src_rect.y0, src_rect.x1, src_rect.y1,
+            dst_rect.x0, dst_rect.y0, dst_rect.x1, dst_rect.y1,
             GL_COLOR_BUFFER_BIT, GL_LINEAR
         );
         GLenum err = glGetError();
@@ -1453,7 +1453,8 @@ void OpenGLRenderDevice::blit_to_texture(
                 "src=%dx%d dst=%dx%d",
                 static_cast<unsigned>(err),
                 src_color.id, dst_color.id,
-                src_w, src_h, dst_w, dst_h);
+                src_rect.width(), src_rect.height(),
+                dst_rect.width(), dst_rect.height());
         }
     }
 
@@ -1464,9 +1465,8 @@ void OpenGLRenderDevice::blit_to_texture(
 
 void OpenGLRenderDevice::clear_texture(
     TextureHandle dst_color,
-    float r, float g, float b, float a,
-    int viewport_x, int viewport_y,
-    int viewport_w, int viewport_h
+    termin::Color4 color,
+    termin::Bounds2i viewport
 ) {
     GLTexture* dst = textures_.get(dst_color.id);
     if (!dst) return;
@@ -1481,8 +1481,8 @@ void OpenGLRenderDevice::clear_texture(
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
     glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                            dst->target, dst->gl_id, 0);
-    glViewport(viewport_x, viewport_y, viewport_w, viewport_h);
-    glClearColor(r, g, b, a);
+    glViewport(viewport.x0, viewport.y0, viewport.width(), viewport.height());
+    glClearColor(color.r, color.g, color.b, color.a);
     GLboolean prev_color_mask[4] = {GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE};
     glGetBooleanv(GL_COLOR_WRITEMASK, prev_color_mask);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
