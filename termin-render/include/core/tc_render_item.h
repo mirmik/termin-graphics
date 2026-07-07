@@ -28,6 +28,7 @@ typedef enum tc_render_item_flags {
     TC_RENDER_ITEM_FLAG_HAS_MODEL_MATRIX = 1u << 0,
     TC_RENDER_ITEM_FLAG_HAS_MATERIAL_PHASE = 1u << 1,
     TC_RENDER_ITEM_FLAG_HAS_SKINNING_MATRICES = 1u << 2,
+    TC_RENDER_ITEM_FLAG_HAS_OVERRIDE_COLOR = 1u << 3,
 } tc_render_item_flags;
 
 typedef enum tc_render_item_collect_flags {
@@ -103,6 +104,7 @@ typedef struct tc_render_item {
     tc_material_handle material;
     size_t material_phase_index;
     float model_matrix[16];
+    tc_render_item_vec4 override_color;
     tc_render_item_payload payload;
 } tc_render_item;
 
