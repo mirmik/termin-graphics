@@ -280,7 +280,30 @@ void bind_shader(nb::module_& m) {
         .def("variant_is_stale", &TcShader::variant_is_stale)
         .def("original", &TcShader::original)
         .def("set_variant_info", &TcShader::set_variant_info)
-        .def_static("from_sources", &TcShader::from_sources,
+        .def_static("from_sources",
+            [](const std::string& vertex,
+               const std::string& fragment,
+               const std::string& geometry,
+               const std::string& name,
+               const std::string& source_path,
+               tc_shader_language language,
+               tc_shader_artifact_policy artifact_policy,
+               const std::string& vertex_entry,
+               const std::string& fragment_entry,
+               const std::string& geometry_entry) {
+                TcShaderCreateInfo create_info{};
+                create_info.sources.vertex = vertex;
+                create_info.sources.fragment = fragment;
+                create_info.sources.geometry = geometry;
+                create_info.sources.name = name;
+                create_info.sources.source_path = source_path;
+                create_info.sources.vertex_entry = vertex_entry;
+                create_info.sources.fragment_entry = fragment_entry;
+                create_info.sources.geometry_entry = geometry_entry;
+                create_info.language = language;
+                create_info.artifact_policy = artifact_policy;
+                return TcShader::from_sources(create_info);
+            },
             nb::arg("vertex"), nb::arg("fragment"),
             nb::arg("geometry") = "", nb::arg("name") = "", nb::arg("source_path") = "",
             nb::arg("language") = TC_SHADER_LANGUAGE_GLSL,
@@ -304,11 +327,39 @@ void bind_shader(nb::module_& m) {
         .def_static("from_name", &TcShader::from_name)
         .def_static("get_or_create", &TcShader::get_or_create, nb::arg("uuid"),
             "Get existing tc_shader by UUID or create new one")
-        .def("set_sources", &TcShader::set_sources,
+        .def("set_sources",
+            [](TcShader& self,
+               const std::string& vertex,
+               const std::string& fragment,
+               const std::string& geometry,
+               const std::string& name,
+               const std::string& source_path) {
+                return self.set_sources(vertex, fragment, geometry, name, source_path);
+            },
             nb::arg("vertex"), nb::arg("fragment"),
             nb::arg("geometry") = "", nb::arg("name") = "", nb::arg("source_path") = "",
             "Set shader sources (bumps version if changed)")
-        .def("set_sources_with_entries", &TcShader::set_sources_with_entries,
+        .def("set_sources_with_entries",
+            [](TcShader& self,
+               const std::string& vertex,
+               const std::string& fragment,
+               const std::string& geometry,
+               const std::string& name,
+               const std::string& source_path,
+               const std::string& vertex_entry,
+               const std::string& fragment_entry,
+               const std::string& geometry_entry) {
+                TcShaderSources sources{};
+                sources.vertex = vertex;
+                sources.fragment = fragment;
+                sources.geometry = geometry;
+                sources.name = name;
+                sources.source_path = source_path;
+                sources.vertex_entry = vertex_entry;
+                sources.fragment_entry = fragment_entry;
+                sources.geometry_entry = geometry_entry;
+                return self.set_sources(sources);
+            },
             nb::arg("vertex"), nb::arg("fragment"),
             nb::arg("geometry") = "", nb::arg("name") = "", nb::arg("source_path") = "",
             nb::arg("vertex_entry") = "",

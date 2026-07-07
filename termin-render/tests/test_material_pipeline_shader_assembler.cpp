@@ -79,16 +79,14 @@ const tc_shader_resource_requirement* contract_resource(
 
 termin::MaterialPipelineMaterialContract material_contract()
 {
-    termin::TcShader shader = termin::TcShader::from_sources(
-        "",
-        kFragmentSource,
-        "",
-        "assembler-material-fragment",
-        "",
-        TC_SHADER_LANGUAGE_SLANG,
-        TC_SHADER_ARTIFACT_REQUIRED,
-        "",
-        "fs_main");
+    termin::TcShaderCreateInfo create_info{};
+    create_info.sources.vertex = "";
+    create_info.sources.fragment = kFragmentSource;
+    create_info.sources.name = "assembler-material-fragment";
+    create_info.sources.fragment_entry = "fs_main";
+    create_info.language = TC_SHADER_LANGUAGE_SLANG;
+    create_info.artifact_policy = TC_SHADER_ARTIFACT_REQUIRED;
+    termin::TcShader shader = termin::TcShader::from_sources(create_info);
     REQUIRE(shader.is_valid());
     tc_shader_set_feature(shader.get(), TC_SHADER_FEATURE_LIGHTING_UBO);
 
@@ -120,16 +118,14 @@ termin::MaterialPipelineMaterialContract material_contract_from_fragment(
     const char* fragment_source,
     const char* name)
 {
-    termin::TcShader shader = termin::TcShader::from_sources(
-        "",
-        fragment_source,
-        "",
-        name,
-        "",
-        TC_SHADER_LANGUAGE_SLANG,
-        TC_SHADER_ARTIFACT_REQUIRED,
-        "",
-        "fs_main");
+    termin::TcShaderCreateInfo create_info{};
+    create_info.sources.vertex = "";
+    create_info.sources.fragment = fragment_source;
+    create_info.sources.name = name;
+    create_info.sources.fragment_entry = "fs_main";
+    create_info.language = TC_SHADER_LANGUAGE_SLANG;
+    create_info.artifact_policy = TC_SHADER_ARTIFACT_REQUIRED;
+    termin::TcShader shader = termin::TcShader::from_sources(create_info);
     REQUIRE(shader.is_valid());
     return termin::material_pipeline_material_contract_from_shader(
         shader,

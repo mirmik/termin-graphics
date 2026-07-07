@@ -426,15 +426,22 @@ void main() {
 }
 )";
 
-    tc_shader_handle handle = tc_shader_from_sources_ex(
-        vertex_source,
-        fragment_source,
-        nullptr,
-        "raw-glsl-engine-layout-test",
-        nullptr,
+    const tc_shader_create_desc shader_desc = {
+        {
+            vertex_source,
+            fragment_source,
+            nullptr,
+            "raw-glsl-engine-layout-test",
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr
+        },
         "raw-glsl-engine-layout-test",
         TC_SHADER_LANGUAGE_GLSL,
-        TC_SHADER_ARTIFACT_OPTIONAL);
+        TC_SHADER_ARTIFACT_OPTIONAL
+    };
+    tc_shader_handle handle = tc_shader_from_sources_desc(&shader_desc);
     REQUIRE(!tc_shader_handle_is_invalid(handle));
 
     tc_shader* shader = tc_shader_get(handle);
@@ -494,32 +501,40 @@ struct FragmentOutput { float4 color : SV_Target0; };
 }
 )";
 
-    tc_shader_handle first = tc_shader_from_sources_with_entries_ex(
-        vertex_source,
-        fragment_source,
-        nullptr,
-        "entry-point-identity-test",
-        nullptr,
+    const tc_shader_create_desc first_desc = {
+        {
+            vertex_source,
+            fragment_source,
+            nullptr,
+            "entry-point-identity-test",
+            nullptr,
+            "vs_main",
+            "fs_main",
+            nullptr
+        },
         nullptr,
         TC_SHADER_LANGUAGE_SLANG,
-        TC_SHADER_ARTIFACT_REQUIRED,
-        "vs_main",
-        "fs_main",
-        nullptr);
+        TC_SHADER_ARTIFACT_REQUIRED
+    };
+    tc_shader_handle first = tc_shader_from_sources_desc(&first_desc);
     REQUIRE(!tc_shader_handle_is_invalid(first));
 
-    tc_shader_handle second = tc_shader_from_sources_with_entries_ex(
-        vertex_source,
-        fragment_source,
-        nullptr,
-        "entry-point-identity-test-alt",
-        nullptr,
+    const tc_shader_create_desc second_desc = {
+        {
+            vertex_source,
+            fragment_source,
+            nullptr,
+            "entry-point-identity-test-alt",
+            nullptr,
+            "vs_alt",
+            "fs_main",
+            nullptr
+        },
         nullptr,
         TC_SHADER_LANGUAGE_SLANG,
-        TC_SHADER_ARTIFACT_REQUIRED,
-        "vs_alt",
-        "fs_main",
-        nullptr);
+        TC_SHADER_ARTIFACT_REQUIRED
+    };
+    tc_shader_handle second = tc_shader_from_sources_desc(&second_desc);
     REQUIRE(!tc_shader_handle_is_invalid(second));
     CHECK(first.index != second.index);
 

@@ -24,6 +24,13 @@ extern "C" {
 
 namespace termin {
 
+struct TcMaterialPhaseFromSourcesInfo {
+    TcShaderCreateInfo shader;
+    std::string phase_mark = "opaque";
+    int priority = 0;
+    tc_render_state state = tc_render_state_opaque();
+};
+
 class TcMaterial {
 public:
     tc_material_handle handle = tc_material_handle_invalid();
@@ -183,42 +190,21 @@ public:
         return tc_material_add_phase(m, shader_handle, mark, priority);
     }
 
-    tc_material_phase* add_phase_from_sources(
-        const char* vertex_source,
-        const char* fragment_source,
-        const char* geometry_source,
-        const char* shader_name,
-        const char* phase_mark,
-        int priority,
-        const tc_render_state& state,
-        const char* shader_uuid = nullptr,
-        tc_shader_language language = TC_SHADER_LANGUAGE_GLSL,
-        tc_shader_artifact_policy artifact_policy = TC_SHADER_ARTIFACT_OPTIONAL,
-        const char* vertex_entry = nullptr,
-        const char* fragment_entry = nullptr,
-        const char* geometry_entry = nullptr
-    ) {
+    tc_material_phase* add_phase_from_sources(const TcMaterialPhaseFromSourcesInfo& info) {
         tc_material* m = get();
         if (!m) return nullptr;
 
-        tc_shader_handle sh = tc_shader_from_sources_with_entries_ex(
-            vertex_source,
-            fragment_source,
-            geometry_source,
-            shader_name,
-            nullptr,
-            shader_uuid,
-            language,
-            artifact_policy,
-            vertex_entry,
-            fragment_entry,
-            geometry_entry
-        );
+        const tc_shader_create_desc shader_desc = info.shader.to_c_desc();
+        tc_shader_handle sh = tc_shader_from_sources_desc(&shader_desc);
         if (tc_shader_handle_is_invalid(sh)) return nullptr;
 
-        tc_material_phase* phase = tc_material_add_phase(m, sh, phase_mark, priority);
+        tc_material_phase* phase = tc_material_add_phase(
+            m,
+            sh,
+            info.phase_mark.c_str(),
+            info.priority);
         if (phase) {
-            phase->state = state;
+            phase->state = info.state;
         }
         return phase;
     }

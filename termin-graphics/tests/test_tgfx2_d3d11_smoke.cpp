@@ -551,18 +551,22 @@ int main() {
         termin::tgfx2_set_shader_dev_compile_enabled(false);
 
         RegistryGuard registries;
-        tc_shader_handle shader_handle = tc_shader_from_sources_with_entries_ex(
-            vs_source,
-            ps_source,
-            nullptr,
-            "D3D11 smoke artifact shader",
-            nullptr,
+        const tc_shader_create_desc shader_desc = {
+            {
+                vs_source,
+                ps_source,
+                nullptr,
+                "D3D11 smoke artifact shader",
+                nullptr,
+                "main",
+                "main",
+                nullptr
+            },
             shader_uuid,
             TC_SHADER_LANGUAGE_HLSL,
-            TC_SHADER_ARTIFACT_REQUIRED,
-            "main",
-            "main",
-            nullptr);
+            TC_SHADER_ARTIFACT_REQUIRED
+        };
+        tc_shader_handle shader_handle = tc_shader_from_sources_desc(&shader_desc);
         tc_shader* shader = tc_shader_get(shader_handle);
         if (!shader) {
             std::fprintf(stderr, "D3D11 smoke: failed to create tc_shader\n");
@@ -641,18 +645,22 @@ int main() {
             return 1;
         }
 
-        tc_shader_handle textured_shader_handle = tc_shader_from_sources_with_entries_ex(
-            textured_vs_source,
-            textured_ps_source,
-            nullptr,
-            "D3D11 smoke tc resource shader",
-            nullptr,
+        const tc_shader_create_desc textured_shader_desc = {
+            {
+                textured_vs_source,
+                textured_ps_source,
+                nullptr,
+                "D3D11 smoke tc resource shader",
+                nullptr,
+                "main",
+                "main",
+                nullptr
+            },
             textured_shader_uuid,
             TC_SHADER_LANGUAGE_HLSL,
-            TC_SHADER_ARTIFACT_REQUIRED,
-            "main",
-            "main",
-            nullptr);
+            TC_SHADER_ARTIFACT_REQUIRED
+        };
+        tc_shader_handle textured_shader_handle = tc_shader_from_sources_desc(&textured_shader_desc);
         tc_shader* textured_shader = tc_shader_get(textured_shader_handle);
         if (!textured_shader) {
             std::fprintf(stderr, "D3D11 smoke: failed to create textured tc_shader\n");

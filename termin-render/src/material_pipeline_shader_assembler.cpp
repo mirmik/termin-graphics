@@ -271,26 +271,30 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
         artifact_policy = request.material.shader.artifact_policy();
     }
 
-    tc_shader_handle handle = tc_shader_from_sources_with_entries_ex(
-        vertex_source.c_str(),
-        fragment_source.c_str(),
-        request.geometry_source_override.empty()
-            ? nullptr
-            : request.geometry_source_override.c_str(),
-        shader_name.c_str(),
-        nullptr,
+    const tc_shader_create_desc shader_desc = {
+        {
+            vertex_source.c_str(),
+            fragment_source.c_str(),
+            request.geometry_source_override.empty()
+                ? nullptr
+                : request.geometry_source_override.c_str(),
+            shader_name.c_str(),
+            nullptr,
+            vertex_entry.empty() ? nullptr : vertex_entry.c_str(),
+            fragment_entry.empty() ? nullptr : fragment_entry.c_str(),
+            request.geometry_entry_override.empty()
+                ? nullptr
+                : request.geometry_entry_override.c_str()
+        },
         request.shader_uuid.empty() ? nullptr : request.shader_uuid.c_str(),
         language,
-        artifact_policy,
-        vertex_entry.empty() ? nullptr : vertex_entry.c_str(),
-        fragment_entry.empty() ? nullptr : fragment_entry.c_str(),
-        request.geometry_entry_override.empty()
-            ? nullptr
-            : request.geometry_entry_override.c_str());
+        artifact_policy
+    };
+    tc_shader_handle handle = tc_shader_from_sources_desc(&shader_desc);
     if (tc_shader_handle_is_invalid(handle)) {
         result.diagnostics.push_back(diagnostic(
             MaterialPipelineDiagnosticCode::ShaderCreationFailed,
-            "tc_shader_from_sources_with_entries_ex failed for '" +
+            "tc_shader_from_sources_desc failed for '" +
                 shader_name + "'"));
         return result;
     }
