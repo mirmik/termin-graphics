@@ -146,13 +146,7 @@ void bind_tgfx2(nb::module_& m) {
               return termin::tgfx2_get_shader_dev_compile_enabled();
           });
 
-    nb::class_<tgfx::LinePoint3>(m, "LinePoint3")
-        .def(nb::init<>())
-        .def(nb::init<float, float, float>(),
-             nb::arg("x"), nb::arg("y"), nb::arg("z"))
-        .def_rw("x", &tgfx::LinePoint3::x)
-        .def_rw("y", &tgfx::LinePoint3::y)
-        .def_rw("z", &tgfx::LinePoint3::z);
+    m.attr("LinePoint3") = nb::module_::import_("tcbase._geom_native").attr("Vec3f");
 
     nb::enum_<tgfx::LineCapStyle>(m, "LineCapStyle")
         .value("Butt", tgfx::LineCapStyle::Butt)
@@ -1235,7 +1229,12 @@ void bind_tgfx2(nb::module_& m) {
                          "Text3DRenderer.begin: mvp needs 16 floats, "
                          "cam_right/cam_up need 3 each");
                  }
-                 self.begin(ctx, mvp.data(), cam_right.data(), cam_up.data(), font);
+                 self.begin(
+                     ctx,
+                     mvp.data(),
+                     termin::Vec3f{cam_right.data()[0], cam_right.data()[1], cam_right.data()[2]},
+                     termin::Vec3f{cam_up.data()[0], cam_up.data()[1], cam_up.data()[2]},
+                     font);
              },
              nb::arg("ctx"),
              nb::arg("mvp"),

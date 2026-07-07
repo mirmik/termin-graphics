@@ -26,7 +26,7 @@ struct WorldSpaceLineStyle {
 struct WorldSpaceLineParams {
     // Column-major view-projection matrix.
     std::array<float, 16> view_projection{};
-    std::array<float, 3> camera_position{0.0f, 0.0f, 5.0f};
+    LinePoint3 camera_position{0.0f, 0.0f, 5.0f};
     bool lighting_enabled = false;
     ShaderHandle fragment_shader{};
 };

@@ -18,6 +18,7 @@ NB_MODULE(_tgfx_native, m) {
     m.doc() = "termin-graphics native Python bindings";
 
     nb::module_::import_("tcbase._tcbase_native");
+    nb::module_::import_("tcbase._geom_native");
 
     tgfx_bindings::bind_types(m);
     tgfx_bindings::bind_render_state(m);

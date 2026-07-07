@@ -117,9 +117,9 @@ void bind_plot3d_draw_data(
     pc.axis_shading[1] = engine.y_scale;
     pc.axis_shading[2] = engine.z_scale;
     pc.axis_shading[3] = (params.surface_mode && engine.surface_shading) ? 1.0f : 0.0f;
-    pc.light_strength[0] = engine.surface_light_dir[0];
-    pc.light_strength[1] = engine.surface_light_dir[1];
-    pc.light_strength[2] = engine.surface_light_dir[2];
+    pc.light_strength[0] = engine.surface_light_dir.x;
+    pc.light_strength[1] = engine.surface_light_dir.y;
+    pc.light_strength[2] = engine.surface_light_dir.z;
     pc.light_strength[3] = std::clamp(engine.surface_shading_strength, 0.0f, 1.0f);
     ctx.bind_uniform_data("tcplot3d_draw", &pc, static_cast<uint32_t>(sizeof(pc)));
 }
@@ -267,9 +267,9 @@ void PlotEngine3D::plot(std::vector<double> x, std::vector<double> y,
 
     double lo[3], hi[3];
     data.data_bounds_3d(lo, hi);
-    const float lo_f[3] = {(float)lo[0], (float)lo[1], (float)lo[2]};
-    const float hi_f[3] = {(float)hi[0], (float)hi[1], (float)hi[2]};
-    camera.fit_bounds(lo_f, hi_f);
+    camera.fit_bounds(
+        termin::Vec3f{static_cast<float>(lo[0]), static_cast<float>(lo[1]), static_cast<float>(lo[2])},
+        termin::Vec3f{static_cast<float>(hi[0]), static_cast<float>(hi[1]), static_cast<float>(hi[2])});
 }
 
 void PlotEngine3D::scatter(std::vector<double> x, std::vector<double> y,
@@ -281,9 +281,9 @@ void PlotEngine3D::scatter(std::vector<double> x, std::vector<double> y,
 
     double lo[3], hi[3];
     data.data_bounds_3d(lo, hi);
-    const float lo_f[3] = {(float)lo[0], (float)lo[1], (float)lo[2]};
-    const float hi_f[3] = {(float)hi[0], (float)hi[1], (float)hi[2]};
-    camera.fit_bounds(lo_f, hi_f);
+    camera.fit_bounds(
+        termin::Vec3f{static_cast<float>(lo[0]), static_cast<float>(lo[1]), static_cast<float>(lo[2])},
+        termin::Vec3f{static_cast<float>(hi[0]), static_cast<float>(hi[1]), static_cast<float>(hi[2])});
 }
 
 void PlotEngine3D::surface(std::vector<double> X, std::vector<double> Y,
@@ -312,9 +312,9 @@ void PlotEngine3D::surface(std::vector<double> X, std::vector<double> Y,
 
     double lo[3], hi[3];
     data.data_bounds_3d(lo, hi);
-    const float lo_f[3] = {(float)lo[0], (float)lo[1], (float)lo[2]};
-    const float hi_f[3] = {(float)hi[0], (float)hi[1], (float)hi[2]};
-    camera.fit_bounds(lo_f, hi_f);
+    camera.fit_bounds(
+        termin::Vec3f{static_cast<float>(lo[0]), static_cast<float>(lo[1]), static_cast<float>(lo[2])},
+        termin::Vec3f{static_cast<float>(hi[0]), static_cast<float>(hi[1]), static_cast<float>(hi[2])});
 }
 
 void PlotEngine3D::clear() {
@@ -371,9 +371,7 @@ void PlotEngine3D::set_surface_shading(bool enabled, float strength) {
 void PlotEngine3D::set_surface_light_dir(float x, float y, float z) {
     const float len = std::sqrt(x * x + y * y + z * z);
     if (len <= 1e-6f) return;
-    surface_light_dir[0] = x / len;
-    surface_light_dir[1] = y / len;
-    surface_light_dir[2] = z / len;
+    surface_light_dir = termin::Vec3f{x / len, y / len, z / len};
 }
 
 // ---------------------------------------------------------------------------
@@ -828,8 +826,8 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         camera.view_matrix(view);
         // view is column-major 4x4. Row 0: world-space camera-right;
         // Row 1: world-space camera-up. Same extraction as in Python.
-        const float cr[3] = {view[0 * 4 + 0], view[1 * 4 + 0], view[2 * 4 + 0]};
-        const float cu[3] = {view[0 * 4 + 1], view[1 * 4 + 1], view[2 * 4 + 1]};
+        const termin::Vec3f cr{view[0 * 4 + 0], view[1 * 4 + 0], view[2 * 4 + 0]};
+        const termin::Vec3f cu{view[0 * 4 + 1], view[1 * 4 + 1], view[2 * 4 + 1]};
 
         // For Text3D we pass the UNSCALED camera MVP: label positions
         // already have z_scale baked into their world-Z (see pos[2]
@@ -862,7 +860,7 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
             const double axis_hi = hi[axis];
             const std::vector<double> ticks = axes::nice_ticks(axis_lo, axis_hi, 6);
             for (double t : ticks) {
-                float pos[3] = {
+                termin::Vec3f pos{
                     (float)(lo[0] * x_scale),
                     (float)(lo[1] * y_scale),
                     (float)(lo[2] * z_scale),
@@ -880,7 +878,7 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
                 else pos[0] -= (float)offset;                 // Z axis: offset in -X
 
                 text3d_->draw(axes::format_tick(t), tgfx::Text3DRenderer::DrawOptions{
-                    termin::Vec3f{pos[0], pos[1], pos[2]},
+                    pos,
                     termin::Color4{label_color.r, label_color.g, label_color.b, label_color.a},
                     tick_text_size_px,
                     tgfx::Text3DRenderer::Anchor::Center
@@ -897,7 +895,7 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         for (int axis = 0; axis < 3; ++axis) {
             if (axis_labels[axis]->empty()) continue;
 
-            float pos[3] = {
+            termin::Vec3f pos{
                 (float)(lo[0] * x_scale),
                 (float)(lo[1] * y_scale),
                 (float)(lo[2] * z_scale),
@@ -914,7 +912,7 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
             }
 
             text3d_->draw(*axis_labels[axis], tgfx::Text3DRenderer::DrawOptions{
-                termin::Vec3f{pos[0], pos[1], pos[2]},
+                pos,
                 termin::Color4{label_color.r, label_color.g, label_color.b, label_color.a},
                 label_size,
                 tgfx::Text3DRenderer::Anchor::Center
@@ -931,13 +929,13 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
             std::snprintf(label_buf, sizeof(label_buf),
                           "(%.3g, %.3g, %.3g)",
                           marker_x_, marker_y_, marker_z_);
-            float pos[3] = {
+            const termin::Vec3f pos{
                 (float)(marker_x_ * x_scale),
                 (float)(marker_y_ * y_scale),
                 (float)(marker_z_ * z_scale + data_size * 0.04),
             };
             text3d_->draw(label_buf, tgfx::Text3DRenderer::DrawOptions{
-                termin::Vec3f{pos[0], pos[1], pos[2]},
+                pos,
                 termin::Color4{1.0f, 1.0f, 0.0f, 1.0f},
                 marker_text_size_px,
                 tgfx::Text3DRenderer::Anchor::Center

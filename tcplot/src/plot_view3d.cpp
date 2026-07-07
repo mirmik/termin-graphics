@@ -228,25 +228,25 @@ void PlotView3D::fit_camera() {
     double lo[3], hi[3];
     engine_->data.data_bounds_3d(lo, hi);
 
-    const float scaled_lo[3] = {
+    const termin::Vec3f scaled_lo{
         static_cast<float>(lo[0] * engine_->x_scale),
         static_cast<float>(lo[1] * engine_->y_scale),
         static_cast<float>(lo[2] * engine_->z_scale),
     };
-    const float scaled_hi[3] = {
+    const termin::Vec3f scaled_hi{
         static_cast<float>(hi[0] * engine_->x_scale),
         static_cast<float>(hi[1] * engine_->y_scale),
         static_cast<float>(hi[2] * engine_->z_scale),
     };
-    const float bounds_min[3] = {
-        std::min(scaled_lo[0], scaled_hi[0]),
-        std::min(scaled_lo[1], scaled_hi[1]),
-        std::min(scaled_lo[2], scaled_hi[2]),
+    const termin::Vec3f bounds_min{
+        std::min(scaled_lo.x, scaled_hi.x),
+        std::min(scaled_lo.y, scaled_hi.y),
+        std::min(scaled_lo.z, scaled_hi.z),
     };
-    const float bounds_max[3] = {
-        std::max(scaled_lo[0], scaled_hi[0]),
-        std::max(scaled_lo[1], scaled_hi[1]),
-        std::max(scaled_lo[2], scaled_hi[2]),
+    const termin::Vec3f bounds_max{
+        std::max(scaled_lo.x, scaled_hi.x),
+        std::max(scaled_lo.y, scaled_hi.y),
+        std::max(scaled_lo.z, scaled_hi.z),
     };
     engine_->camera.fit_bounds(bounds_min, bounds_max);
 }

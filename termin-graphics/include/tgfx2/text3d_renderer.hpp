@@ -57,8 +57,8 @@ private:
     RenderContext2* ctx_ = nullptr;
     FontAtlas* font_ = nullptr;
     float mvp_[16]{};
-    float cam_right_[3]{};
-    float cam_up_[3]{};
+    termin::Vec3f cam_right_{};
+    termin::Vec3f cam_up_{};
     ExpansionMode expansion_mode_ = ExpansionMode::WorldPlane;
 
 public:
@@ -73,8 +73,8 @@ public:
     // caller may free their source buffers immediately.
     void begin(RenderContext2* ctx,
                const float mvp[16],
-               const float cam_right[3],
-               const float cam_up[3],
+               const termin::Vec3f& cam_right,
+               const termin::Vec3f& cam_up,
                FontAtlas* font = nullptr);
 
     // Draw a UTF-8 string at world-space `position`. `size` is the text

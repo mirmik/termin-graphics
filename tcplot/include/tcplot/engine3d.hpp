@@ -55,7 +55,7 @@ public:
     float z_scale = 1.0f;
     bool surface_shading = false;
     float surface_shading_strength = 0.35f;
-    float surface_light_dir[3] = {-0.4f, -0.6f, 0.7f};
+    termin::Vec3f surface_light_dir{-0.4f, -0.6f, 0.7f};
     bool marker_mode = false;
 
     PlotEngine3D();
