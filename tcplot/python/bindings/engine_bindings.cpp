@@ -75,9 +75,12 @@ void bind_engines(nb::module_& m) {
              [](tcplot::PlotEngine2D& self,
                 nb::ndarray<double, nb::c_contig, nb::device::cpu> x,
                 nb::ndarray<double, nb::c_contig, nb::device::cpu> y,
-                nb::object color, double thickness, const std::string& label) {
-                 self.plot(vec_from_array(x), vec_from_array(y),
-                           optional_color_from_obj(color), thickness, label);
+                 nb::object color, double thickness, const std::string& label) {
+                 tcplot::LinePlotOptions options;
+                 options.color = optional_color_from_obj(color);
+                 options.thickness = thickness;
+                 options.label = label;
+                 self.plot(vec_from_array(x), vec_from_array(y), std::move(options));
              },
              nb::arg("x"), nb::arg("y"),
              nb::arg("color") = nb::none(),
@@ -89,8 +92,11 @@ void bind_engines(nb::module_& m) {
                 nb::ndarray<double, nb::c_contig, nb::device::cpu> x,
                 nb::ndarray<double, nb::c_contig, nb::device::cpu> y,
                 nb::object color, double size, const std::string& label) {
-                 self.scatter(vec_from_array(x), vec_from_array(y),
-                              optional_color_from_obj(color), size, label);
+                 tcplot::ScatterPlotOptions options;
+                 options.color = optional_color_from_obj(color);
+                 options.size = size;
+                 options.label = label;
+                 self.scatter(vec_from_array(x), vec_from_array(y), std::move(options));
              },
              nb::arg("x"), nb::arg("y"),
              nb::arg("color") = nb::none(),
@@ -183,10 +189,15 @@ void bind_engines(nb::module_& m) {
                 nb::ndarray<double, nb::c_contig, nb::device::cpu> y,
                 nb::ndarray<double, nb::c_contig, nb::device::cpu> z,
                 nb::object color, double thickness, const std::string& label) {
-                 self.plot(vec_from_array(x), vec_from_array(y),
-                           vec_from_array(z),
-                           optional_color_from_obj(color),
-                           thickness, label);
+                 tcplot::LinePlotOptions options;
+                 options.color = optional_color_from_obj(color);
+                 options.thickness = thickness;
+                 options.label = label;
+                 self.plot(
+                     vec_from_array(x),
+                     vec_from_array(y),
+                     vec_from_array(z),
+                     std::move(options));
              },
              nb::arg("x"), nb::arg("y"), nb::arg("z"),
              nb::arg("color") = nb::none(),
@@ -199,10 +210,15 @@ void bind_engines(nb::module_& m) {
                 nb::ndarray<double, nb::c_contig, nb::device::cpu> y,
                 nb::ndarray<double, nb::c_contig, nb::device::cpu> z,
                 nb::object color, double size, const std::string& label) {
-                 self.scatter(vec_from_array(x), vec_from_array(y),
-                              vec_from_array(z),
-                              optional_color_from_obj(color),
-                              size, label);
+                 tcplot::ScatterPlotOptions options;
+                 options.color = optional_color_from_obj(color);
+                 options.size = size;
+                 options.label = label;
+                 self.scatter(
+                     vec_from_array(x),
+                     vec_from_array(y),
+                     vec_from_array(z),
+                     std::move(options));
              },
              nb::arg("x"), nb::arg("y"), nb::arg("z"),
              nb::arg("color") = nb::none(),
@@ -221,12 +237,18 @@ void bind_engines(nb::module_& m) {
                 uint32_t rows, uint32_t cols,
                 nb::object color, tcplot::SurfaceColorMap colormap,
                 bool wireframe, const std::string& label) {
-                 self.surface(vec_from_array(X), vec_from_array(Y),
-                              vec_from_array(Z),
-                              rows, cols,
-                              optional_color_from_obj(color),
-                              colormap,
-                              wireframe, label);
+                 tcplot::SurfacePlotOptions options;
+                 options.color = optional_color_from_obj(color);
+                 options.colormap = colormap;
+                 options.wireframe = wireframe;
+                 options.label = label;
+                 self.surface(
+                     vec_from_array(X),
+                     vec_from_array(Y),
+                     vec_from_array(Z),
+                     rows,
+                     cols,
+                     std::move(options));
              },
              nb::arg("X"), nb::arg("Y"), nb::arg("Z"),
              nb::arg("rows"), nb::arg("cols"),
@@ -250,7 +272,13 @@ void bind_engines(nb::module_& m) {
                 float width_px) {
                  auto c = optional_color_from_obj(color);
                  if (!c.has_value()) return false;
-                 return self.set_surface_grid(idx, visible, row_step, col_step, *c, width_px);
+                 tcplot::SurfaceGridOptions options;
+                 options.visible = visible;
+                 options.row_step = row_step;
+                 options.col_step = col_step;
+                 options.color = *c;
+                 options.width_px = width_px;
+                 return self.set_surface_grid(idx, options);
              },
              nb::arg("idx"), nb::arg("visible"),
              nb::arg("row_step"), nb::arg("col_step"),

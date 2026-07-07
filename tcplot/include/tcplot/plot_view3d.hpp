@@ -62,30 +62,12 @@ public:
     // Color is passed as 4 floats; use NaN in any component to mean
     // "no color, use palette cycle" (so SWIG bindings can avoid an
     // optional-color wrapper).
-    void plot(const double* x, const double* y, const double* z,
-              size_t n,
-              float cr, float cg, float cb, float ca,
-              double thickness = 1.5,
-              const char* label = "");
+    void plot(SeriesData3DView series, LinePlotOptions options = {});
 
-    void scatter(const double* x, const double* y, const double* z,
-                 size_t n,
-                 float cr, float cg, float cb, float ca,
-                 double size = 4.0,
-                 const char* label = "");
+    void scatter(SeriesData3DView series, ScatterPlotOptions options = {});
 
-    void surface(const double* X, const double* Y, const double* Z,
-                 uint32_t rows, uint32_t cols,
-                 float cr, float cg, float cb, float ca,
-                 bool wireframe = false,
-                 const char* label = "");
-    void surface_colormap(const double* X, const double* Y, const double* Z,
-                          uint32_t rows, uint32_t cols,
-                          SurfaceColorMap colormap,
-                          float cr, float cg, float cb, float ca,
-                          bool wireframe = false,
-                          const char* label = "",
-                          bool colormap_reversed = false);
+    void surface(SurfaceDataView surface, SurfacePlotOptions options = {});
+    void surface_colormap(SurfaceDataView surface, SurfacePlotOptions options);
 
     void clear();
     void set_title(const char* title);
@@ -98,10 +80,7 @@ public:
     bool set_surface_colormap(int surface_idx, SurfaceColorMap colormap);
     bool set_surface_colormap_reversed(int surface_idx, bool reversed);
     bool set_surface_color(int surface_idx, float r, float g, float b, float a);
-    bool set_surface_grid(int surface_idx, bool visible,
-                          uint32_t row_step, uint32_t col_step,
-                          float r, float g, float b, float a,
-                          float width_px = 1.5f);
+    bool set_surface_grid(int surface_idx, SurfaceGridOptions options);
     void toggle_wireframe();
     void toggle_marker_mode();
     void set_z_scale(float s);

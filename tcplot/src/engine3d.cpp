@@ -54,6 +54,16 @@ struct Plot3DPushData {
 static_assert(sizeof(Plot3DPushData) == 128,
               "Plot3DPushData layout drift - shader + C++ disagree");
 
+struct Plot3DDrawParams {
+    const float* mvp = nullptr;
+    float z_min = 0.0f;
+    float z_max = 1.0f;
+    bool surface_mode = false;
+    SurfaceColorMap colormap = SurfaceColorMap::Jet;
+    bool colormap_reversed = false;
+    Color4 surface_color{1.0f, 1.0f, 1.0f, 1.0f};
+};
+
 constexpr const char* TCPLOT_3D_SHADER_UUID = "termin-engine-tcplot-3d";
 constexpr const char* IMMEDIATE_ENGINE_SHADER_UUID = "termin-engine-immediate";
 
@@ -87,30 +97,26 @@ tgfx::VertexBufferLayout pos_color_layout() {
     return layout;
 }
 
-void bind_plot3d_draw_data(tgfx::RenderContext2& ctx,
-                               const float mvp[16],
-                               float z_min,
-                               float z_max,
-                               bool surface_mode,
-                               const PlotEngine3D& engine,
-                               SurfaceColorMap colormap = SurfaceColorMap::Jet,
-                               bool colormap_reversed = false,
-                               Color4 surface_color = {1.0f, 1.0f, 1.0f, 1.0f}) {
+void bind_plot3d_draw_data(
+    tgfx::RenderContext2& ctx,
+    const PlotEngine3D& engine,
+    const Plot3DDrawParams& params
+) {
     Plot3DPushData pc{};
-    std::memcpy(pc.mvp, mvp, sizeof(pc.mvp));
-    pc.params[0] = z_min;
-    pc.params[1] = z_max;
-    pc.params[2] = surface_mode ? 1.0f : 0.0f;
-    pc.params[3] = static_cast<float>(colormap)
-                 + (colormap_reversed ? 100.0f : 0.0f);
-    pc.surface_color[0] = surface_color.r;
-    pc.surface_color[1] = surface_color.g;
-    pc.surface_color[2] = surface_color.b;
-    pc.surface_color[3] = surface_color.a;
+    std::memcpy(pc.mvp, params.mvp, sizeof(pc.mvp));
+    pc.params[0] = params.z_min;
+    pc.params[1] = params.z_max;
+    pc.params[2] = params.surface_mode ? 1.0f : 0.0f;
+    pc.params[3] = static_cast<float>(params.colormap)
+                 + (params.colormap_reversed ? 100.0f : 0.0f);
+    pc.surface_color[0] = params.surface_color.r;
+    pc.surface_color[1] = params.surface_color.g;
+    pc.surface_color[2] = params.surface_color.b;
+    pc.surface_color[3] = params.surface_color.a;
     pc.axis_shading[0] = engine.x_scale;
     pc.axis_shading[1] = engine.y_scale;
     pc.axis_shading[2] = engine.z_scale;
-    pc.axis_shading[3] = (surface_mode && engine.surface_shading) ? 1.0f : 0.0f;
+    pc.axis_shading[3] = (params.surface_mode && engine.surface_shading) ? 1.0f : 0.0f;
     pc.light_strength[0] = engine.surface_light_dir[0];
     pc.light_strength[1] = engine.surface_light_dir[1];
     pc.light_strength[2] = engine.surface_light_dir[2];
@@ -164,6 +170,26 @@ void PlotEngine3D::draw_mesh_(tgfx::RenderContext2& ctx, const MeshGpu& mesh) {
 
 namespace {
 
+struct SurfaceVertexGrid {
+    float col = 0.0f;
+    float row = 0.0f;
+    float row_step = 1.0f;
+    float col_step = 1.0f;
+    Color4 color = styles::grid_color();
+    bool visible = false;
+    float width_px = 1.5f;
+    float max_col = 0.0f;
+    float max_row = 0.0f;
+};
+
+struct SurfaceVertexData {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    Color4 color;
+    SurfaceVertexGrid grid;
+};
+
 // Push the 7-float (pos+color) vertex for a single point.
 inline void push_vertex(std::vector<float>& verts,
                         float x, float y, float z, const Color4& c) {
@@ -177,35 +203,26 @@ inline void push_vertex(std::vector<float>& verts,
     for (int i = 0; i < 12; ++i) verts.push_back(0.0f);
 }
 
-inline void push_surface_vertex(std::vector<float>& verts,
-                                float x, float y, float z,
-                                const Color4& c,
-                                float col, float row,
-                                float row_step, float col_step,
-                                const Color4& grid_color,
-                                bool grid_visible,
-                                float grid_width_px,
-                                float max_col,
-                                float max_row) {
-    verts.push_back(x);
-    verts.push_back(y);
-    verts.push_back(z);
-    verts.push_back(c.r);
-    verts.push_back(c.g);
-    verts.push_back(c.b);
-    verts.push_back(c.a);
-    verts.push_back(col);
-    verts.push_back(row);
-    verts.push_back(col_step);
-    verts.push_back(row_step);
-    verts.push_back(grid_color.r);
-    verts.push_back(grid_color.g);
-    verts.push_back(grid_color.b);
-    verts.push_back(grid_color.a);
-    verts.push_back(grid_visible ? 1.0f : 0.0f);
-    verts.push_back(grid_width_px);
-    verts.push_back(max_col);
-    verts.push_back(max_row);
+inline void push_surface_vertex(std::vector<float>& verts, const SurfaceVertexData& vertex) {
+    verts.push_back(vertex.x);
+    verts.push_back(vertex.y);
+    verts.push_back(vertex.z);
+    verts.push_back(vertex.color.r);
+    verts.push_back(vertex.color.g);
+    verts.push_back(vertex.color.b);
+    verts.push_back(vertex.color.a);
+    verts.push_back(vertex.grid.col);
+    verts.push_back(vertex.grid.row);
+    verts.push_back(vertex.grid.col_step);
+    verts.push_back(vertex.grid.row_step);
+    verts.push_back(vertex.grid.color.r);
+    verts.push_back(vertex.grid.color.g);
+    verts.push_back(vertex.grid.color.b);
+    verts.push_back(vertex.grid.color.a);
+    verts.push_back(vertex.grid.visible ? 1.0f : 0.0f);
+    verts.push_back(vertex.grid.width_px);
+    verts.push_back(vertex.grid.max_col);
+    verts.push_back(vertex.grid.max_row);
 }
 
 // Resolve a possibly-missing Color4 against a series index. Matches
@@ -243,11 +260,9 @@ void PlotEngine3D::set_viewport(float x, float y, float width, float height) {
 
 void PlotEngine3D::plot(std::vector<double> x, std::vector<double> y,
                          std::vector<double> z,
-                         std::optional<Color4> color,
-                         double thickness,
-                         std::string label) {
+                         LinePlotOptions options) {
     data.add_line(std::move(x), std::move(y), std::move(z),
-                  color, thickness, std::move(label));
+                  options.color, options.thickness, std::move(options.label));
     dirty_ = true;
 
     double lo[3], hi[3];
@@ -259,11 +274,9 @@ void PlotEngine3D::plot(std::vector<double> x, std::vector<double> y,
 
 void PlotEngine3D::scatter(std::vector<double> x, std::vector<double> y,
                             std::vector<double> z,
-                            std::optional<Color4> color,
-                            double size,
-                            std::string label) {
+                            ScatterPlotOptions options) {
     data.add_scatter(std::move(x), std::move(y), std::move(z),
-                     color, size, std::move(label));
+                     options.color, options.size, std::move(options.label));
     dirty_ = true;
 
     double lo[3], hi[3];
@@ -276,28 +289,24 @@ void PlotEngine3D::scatter(std::vector<double> x, std::vector<double> y,
 void PlotEngine3D::surface(std::vector<double> X, std::vector<double> Y,
                             std::vector<double> Z,
                             uint32_t rows, uint32_t cols,
-                            std::optional<Color4> color,
-                            SurfaceColorMap colormap,
-                            bool wireframe,
-                            std::string label,
-                            bool colormap_reversed) {
+                            SurfacePlotOptions options) {
     SurfaceSeries s;
     s.X = std::move(X);
     s.Y = std::move(Y);
     s.Z = std::move(Z);
     s.rows = rows;
     s.cols = cols;
-    if (color.has_value()) {
-        s.color = *color;
+    if (options.color.has_value()) {
+        s.color = *options.color;
     } else {
         const uint32_t idx = static_cast<uint32_t>(
             data.lines.size() + data.scatters.size() + data.surfaces.size());
         s.color = styles::cycle_color(idx);
     }
-    s.colormap = colormap;
-    s.colormap_reversed = colormap_reversed;
-    s.wireframe = wireframe;
-    s.label = std::move(label);
+    s.colormap = options.colormap;
+    s.colormap_reversed = options.colormap_reversed;
+    s.wireframe = options.wireframe;
+    s.label = std::move(options.label);
     data.surfaces.push_back(std::move(s));
     dirty_ = true;
 
@@ -335,17 +344,14 @@ bool PlotEngine3D::set_surface_color(size_t idx, Color4 color) {
     return true;
 }
 
-bool PlotEngine3D::set_surface_grid(size_t idx, bool visible,
-                                    uint32_t row_step, uint32_t col_step,
-                                    Color4 color,
-                                    float width_px) {
+bool PlotEngine3D::set_surface_grid(size_t idx, SurfaceGridOptions options) {
     if (idx >= data.surfaces.size()) return false;
     SurfaceSeries& surf = data.surfaces[idx];
-    surf.grid_visible = visible;
-    surf.grid_row_step = std::max<uint32_t>(1, row_step);
-    surf.grid_col_step = std::max<uint32_t>(1, col_step);
-    surf.grid_width_px = std::max(width_px, 0.1f);
-    surf.grid_color = color;
+    surf.grid_visible = options.visible;
+    surf.grid_row_step = std::max<uint32_t>(1, options.row_step);
+    surf.grid_col_step = std::max<uint32_t>(1, options.col_step);
+    surf.grid_width_px = std::max(options.width_px, 0.1f);
+    surf.grid_color = options.color;
     dirty_ = true;
     return true;
 }
@@ -613,15 +619,21 @@ void PlotEngine3D::build_surface_mesh_(tgfx::IRenderDevice& device,
             const double x = surf.X[idx];
             const double y = surf.Y[idx];
             const double z = surf.Z[idx];
-            push_surface_vertex(verts, (float)x, (float)y, (float)z,
-                                {surface_color.r, surface_color.g, surface_color.b, alpha},
-                                static_cast<float>(i), static_cast<float>(j),
-                                row_step, col_step,
-                                grid_color,
-                                surf.grid_visible,
-                                grid_width_px,
-                                static_cast<float>(cols - 1),
-                                static_cast<float>(rows - 1));
+            SurfaceVertexData vertex;
+            vertex.x = static_cast<float>(x);
+            vertex.y = static_cast<float>(y);
+            vertex.z = static_cast<float>(z);
+            vertex.color = {surface_color.r, surface_color.g, surface_color.b, alpha};
+            vertex.grid.col = static_cast<float>(i);
+            vertex.grid.row = static_cast<float>(j);
+            vertex.grid.row_step = row_step;
+            vertex.grid.col_step = col_step;
+            vertex.grid.color = grid_color;
+            vertex.grid.visible = surf.grid_visible;
+            vertex.grid.width_px = grid_width_px;
+            vertex.grid.max_col = static_cast<float>(cols - 1);
+            vertex.grid.max_row = static_cast<float>(rows - 1);
+            push_surface_vertex(verts, vertex);
         }
     }
 
@@ -732,7 +744,7 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     const float z_max = static_cast<float>(hi[2]);
 
     // Grid (no jet).
-    bind_plot3d_draw_data(*ctx, mvp, z_min, z_max, false, *this);
+    bind_plot3d_draw_data(*ctx, *this, {mvp, z_min, z_max, false});
     if (grid_mesh_) draw_mesh_(*ctx, *grid_mesh_);
 
     // Opaque surfaces. Color mapping is shader-driven to avoid baking
@@ -742,14 +754,16 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         const SurfaceSeries& style = surface_mesh_styles_[i];
         const Color4 surface_color =
             style.color.value_or(Color4{1.0f, 1.0f, 1.0f, 1.0f});
-        bind_plot3d_draw_data(*ctx, mvp, z_min, z_max, true, *this,
-                                  style.colormap, style.colormap_reversed,
-                                  surface_color);
+        Plot3DDrawParams surface_params{mvp, z_min, z_max, true};
+        surface_params.colormap = style.colormap;
+        surface_params.colormap_reversed = style.colormap_reversed;
+        surface_params.surface_color = surface_color;
+        bind_plot3d_draw_data(*ctx, *this, surface_params);
         draw_mesh_(*ctx, surface_meshes_[i]);
     }
 
     // Wireframes on top (no depth, no jet).
-    bind_plot3d_draw_data(*ctx, mvp, z_min, z_max, false, *this);
+    bind_plot3d_draw_data(*ctx, *this, {mvp, z_min, z_max, false});
     if (show_wireframe) {
         ctx->set_depth_test(false);
         ctx->set_blend(true);
