@@ -1,12 +1,12 @@
 // tc_render_target_config.c - Render target configuration implementation
 #include "tc_render_target_config.h"
-#include <tcbase/tgfx_intern_string.h>
+#include <tcbase/tc_string.h>
 #include <string.h>
 
 void tc_render_target_config_init(tc_render_target_config* config) {
     if (!config) return;
     memset(config, 0, sizeof(tc_render_target_config));
-    config->kind = tgfx_intern_string("texture_2d");
+    config->kind = tc_intern_string("texture_2d");
     config->width = 512;
     config->height = 512;
     config->clear_color_value[3] = 1.0f;
@@ -24,21 +24,21 @@ void tc_render_target_config_free(tc_render_target_config* config) {
 
 void tc_render_target_config_copy(tc_render_target_config* dst, const tc_render_target_config* src) {
     if (!dst || !src) return;
-    dst->name = src->name ? tgfx_intern_string(src->name) : NULL;
-    dst->kind = src->kind ? tgfx_intern_string(src->kind) : tgfx_intern_string("texture_2d");
-    dst->camera_uuid = src->camera_uuid ? tgfx_intern_string(src->camera_uuid) : NULL;
-    dst->xr_origin_uuid = src->xr_origin_uuid ? tgfx_intern_string(src->xr_origin_uuid) : NULL;
+    dst->name = src->name ? tc_intern_string(src->name) : NULL;
+    dst->kind = src->kind ? tc_intern_string(src->kind) : tc_intern_string("texture_2d");
+    dst->camera_uuid = src->camera_uuid ? tc_intern_string(src->camera_uuid) : NULL;
+    dst->xr_origin_uuid = src->xr_origin_uuid ? tc_intern_string(src->xr_origin_uuid) : NULL;
     dst->width = src->width;
     dst->height = src->height;
     dst->dynamic_resolution = src->dynamic_resolution;
-    dst->color_format = src->color_format ? tgfx_intern_string(src->color_format) : NULL;
-    dst->depth_format = src->depth_format ? tgfx_intern_string(src->depth_format) : NULL;
+    dst->color_format = src->color_format ? tc_intern_string(src->color_format) : NULL;
+    dst->depth_format = src->depth_format ? tc_intern_string(src->depth_format) : NULL;
     dst->clear_color = src->clear_color;
     memcpy(dst->clear_color_value, src->clear_color_value, sizeof(dst->clear_color_value));
     dst->clear_depth = src->clear_depth;
     dst->clear_depth_value = src->clear_depth_value;
-    dst->pipeline_uuid = src->pipeline_uuid ? tgfx_intern_string(src->pipeline_uuid) : NULL;
-    dst->pipeline_name = src->pipeline_name ? tgfx_intern_string(src->pipeline_name) : NULL;
+    dst->pipeline_uuid = src->pipeline_uuid ? tc_intern_string(src->pipeline_uuid) : NULL;
+    dst->pipeline_name = src->pipeline_name ? tc_intern_string(src->pipeline_name) : NULL;
     dst->layer_mask = src->layer_mask;
     dst->enabled = src->enabled;
     dst->pipeline_params = (src->pipeline_params.type == TC_VALUE_DICT)

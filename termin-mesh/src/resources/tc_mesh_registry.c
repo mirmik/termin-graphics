@@ -4,7 +4,7 @@
 #include <tcbase/tc_resource_map.h>
 #include <tcbase/tc_registry_utils.h>
 #include <tcbase/tc_log.h>
-#include <tcbase/tgfx_intern_string.h>
+#include <tcbase/tc_string.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -266,7 +266,7 @@ tc_mesh_handle tc_mesh_declare(const char* uuid, const char* name) {
     mesh->header.load_user_data = NULL;
 
     if (name && name[0] != '\0') {
-        mesh->header.name = tgfx_intern_string(name);
+        mesh->header.name = tc_intern_string(name);
     }
 
     // Add to UUID map
@@ -643,7 +643,7 @@ bool tc_mesh_set_data(
     if (!mesh || !layout) return false;
 
     if (name) {
-        mesh->header.name = tgfx_intern_string(name);
+        mesh->header.name = tc_intern_string(name);
     }
 
     size_t vertex_size = vertex_count * layout->stride;

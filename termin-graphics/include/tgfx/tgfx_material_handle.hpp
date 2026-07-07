@@ -14,7 +14,7 @@ extern "C" {
 #include <string>
 #include <vector>
 
-#include <tcbase/tgfx_intern_string.h>
+#include <tcbase/tc_string.h>
 #include <tcbase/tc_log.h>
 #include <termin/geom/mat44.hpp>
 #include <termin/geom/vec3.hpp>
@@ -102,7 +102,7 @@ public:
     void set_name(const char* new_name) {
         tc_material* m = get();
         if (m) {
-            m->header.name = tgfx_intern_string(new_name);
+            m->header.name = tc_intern_string(new_name);
         }
     }
 
@@ -138,7 +138,7 @@ public:
     void set_source_path(const char* path) {
         tc_material* m = get();
         if (m) {
-            m->source_path = (path && path[0]) ? tgfx_intern_string(path) : nullptr;
+            m->source_path = (path && path[0]) ? tc_intern_string(path) : nullptr;
         }
     }
 

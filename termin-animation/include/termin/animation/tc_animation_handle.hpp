@@ -12,7 +12,7 @@ extern "C" {
 #include <string>
 #include <vector>
 #include <tcbase/tc_log.hpp>
-#include <tcbase/tgfx_intern_string.h>
+#include <tcbase/tc_string.h>
 
 namespace termin {
 namespace animation {
@@ -284,7 +284,7 @@ public:
 
         tc_animation* a = tc_animation_get(h);
         if (a && !name.empty()) {
-            a->header.name = tgfx_intern_string(name.c_str());
+            a->header.name = tc_intern_string(name.c_str());
         }
 
         return TcAnimationClip(h);

@@ -6,7 +6,7 @@
 #include <tcbase/tc_resource_map.h>
 #include <tcbase/tc_registry_utils.h>
 #include <tcbase/tc_log.h>
-#include <tcbase/tgfx_intern_string.h>
+#include <tcbase/tc_string.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -655,10 +655,10 @@ bool tc_shader_set_sources_with_entries(
 
     // Set name and path
     if (name && name[0] != '\0') {
-        shader->name = tgfx_intern_string(name);
+        shader->name = tc_intern_string(name);
     }
     if (source_path && source_path[0] != '\0') {
-        shader->source_path = tgfx_intern_string(source_path);
+        shader->source_path = tc_intern_string(source_path);
     }
 
     shader->version++;

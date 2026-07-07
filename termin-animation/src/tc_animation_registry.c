@@ -7,7 +7,7 @@
 #include <tcbase/tc_log.h>
 #include <tcbase/tc_pool.h>
 #include <tcbase/tc_resource_map.h>
-#include <tcbase/tgfx_intern_string.h>
+#include <tcbase/tc_string.h>
 #include <tcbase/tc_registry_utils.h>
 
 static tc_pool g_animation_pool;
@@ -192,7 +192,7 @@ tc_animation_handle tc_animation_declare(const char* uuid, const char* name) {
     animation->loop = 1;
 
     if (name && name[0] != '\0') {
-        animation->header.name = tgfx_intern_string(name);
+        animation->header.name = tc_intern_string(name);
     }
 
     if (!tc_resource_map_add(g_uuid_to_index, animation->header.uuid, tc_pack_index(h.index))) {

@@ -9,7 +9,7 @@ extern "C" {
 }
 
 #include <string>
-#include <tcbase/tgfx_intern_string.h>
+#include <tcbase/tc_string.h>
 
 namespace termin {
 
@@ -173,7 +173,7 @@ public:
 
         tc_skeleton* s = tc_skeleton_get(h);
         if (s && !name.empty()) {
-            s->header.name = tgfx_intern_string(name.c_str());
+            s->header.name = tc_intern_string(name.c_str());
         }
 
         return TcSkeleton(h);

@@ -4,7 +4,7 @@
 #include <tcbase/tc_resource_map.h>
 #include <tcbase/tc_registry_utils.h>
 #include <tcbase/tc_log.h>
-#include <tcbase/tgfx_intern_string.h>
+#include <tcbase/tc_string.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -219,7 +219,7 @@ tc_texture_handle tc_texture_declare(const char* uuid, const char* name) {
     tex->usage = TC_TEXTURE_USAGE_SAMPLED;
 
     if (name && name[0] != '\0') {
-        tex->header.name = tgfx_intern_string(name);
+        tex->header.name = tc_intern_string(name);
     }
 
     if (!tc_resource_map_add(g_texture_uuid_to_index, tex->header.uuid, tc_pack_index(h.index))) {
@@ -449,10 +449,10 @@ bool tc_texture_set_data(
     tex->header.version++;
 
     if (name) {
-        tex->header.name = tgfx_intern_string(name);
+        tex->header.name = tc_intern_string(name);
     }
     if (source_path) {
-        tex->source_path = tgfx_intern_string(source_path);
+        tex->source_path = tc_intern_string(source_path);
     }
 
     return true;
