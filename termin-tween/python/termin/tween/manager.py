@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
-
-import numpy as np
 
 from termin.tween.ease import Ease
 from termin.tween.tween import Tween, MoveTween, RotateTween, ScaleTween
@@ -49,7 +48,7 @@ class TweenManager:
     def move(
         self,
         transform: "GeneralTransform3",
-        target: np.ndarray,
+        target: Sequence[float],
         duration: float,
         ease: Ease = Ease.LINEAR,
         delay: float = 0.0,
@@ -62,7 +61,7 @@ class TweenManager:
     def rotate(
         self,
         transform: "GeneralTransform3",
-        target: np.ndarray,
+        target: Sequence[float],
         duration: float,
         ease: Ease = Ease.LINEAR,
         delay: float = 0.0,
@@ -75,7 +74,7 @@ class TweenManager:
     def scale(
         self,
         transform: "GeneralTransform3",
-        target: np.ndarray | float,
+        target: Sequence[float] | float,
         duration: float,
         ease: Ease = Ease.LINEAR,
         delay: float = 0.0,
