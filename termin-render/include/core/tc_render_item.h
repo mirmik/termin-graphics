@@ -41,6 +41,13 @@ typedef struct tc_render_item_vec3 {
     double z;
 } tc_render_item_vec3;
 
+typedef struct tc_render_item_vec4 {
+    double x;
+    double y;
+    double z;
+    double w;
+} tc_render_item_vec4;
+
 typedef struct tc_render_item_mesh_payload {
     struct tc_mesh* mesh;
     tc_mesh_handle mesh_handle;
@@ -59,9 +66,24 @@ typedef struct tc_render_item_line_batch_payload {
     int32_t tube_sides;
 } tc_render_item_line_batch_payload;
 
+typedef struct tc_render_item_text_batch_payload {
+    /* Borrowed unless the item is stored in termin::RenderItemCollection. */
+    const char* text;
+    /* Borrowed unless the item is stored in termin::RenderItemCollection. */
+    const char* font_path;
+    tc_render_item_vec3 local_offset;
+    tc_render_item_vec3 plane_normal;
+    tc_render_item_vec3 text_up;
+    tc_render_item_vec4 color;
+    float size;
+    uint32_t anchor;
+    uint32_t orientation;
+} tc_render_item_text_batch_payload;
+
 typedef union tc_render_item_payload {
     tc_render_item_mesh_payload mesh;
     tc_render_item_line_batch_payload line_batch;
+    tc_render_item_text_batch_payload text_batch;
 } tc_render_item_payload;
 
 typedef struct tc_render_item {

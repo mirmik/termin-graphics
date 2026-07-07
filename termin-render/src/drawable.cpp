@@ -308,6 +308,17 @@ bool validate_render_item(
         return false;
     }
 
+    if (item.kind == TC_RENDER_ITEM_KIND_TEXT_BATCH &&
+        (!item.payload.text_batch.text || item.payload.text_batch.text[0] == '\0')) {
+        tc::Log::error(
+            "[RenderItemSink] malformed TextBatch item: pass='%s' phase='%s' component='%s' geometry=%d has empty text",
+            pass_name,
+            phase_mark,
+            component_type,
+            item.geometry_id);
+        return false;
+    }
+
     if ((item.flags & TC_RENDER_ITEM_FLAG_HAS_MATERIAL_PHASE) && !item.material_phase) {
         tc::Log::error(
             "[RenderItemSink] malformed %s item: pass='%s' phase='%s' component='%s' geometry=%d has material flag without material phase",
@@ -350,6 +361,20 @@ bool emit_render_item_to_vector(const tc_render_item* item, void* user_data) {
         const tc_render_item_vec3* end = begin + copy.payload.line_batch.point_count;
         auto& stored_points = data->collection->line_batch_points.emplace_back(begin, end);
         copy.payload.line_batch.points = stored_points.data();
+    }
+    if (copy.kind == TC_RENDER_ITEM_KIND_TEXT_BATCH) {
+        if (copy.payload.text_batch.text) {
+            auto stored_text =
+                std::make_unique<std::string>(copy.payload.text_batch.text);
+            copy.payload.text_batch.text = stored_text->c_str();
+            data->collection->text_batch_strings.push_back(std::move(stored_text));
+        }
+        if (copy.payload.text_batch.font_path) {
+            auto stored_font_path =
+                std::make_unique<std::string>(copy.payload.text_batch.font_path);
+            copy.payload.text_batch.font_path = stored_font_path->c_str();
+            data->collection->text_batch_strings.push_back(std::move(stored_font_path));
+        }
     }
     data->collection->items.push_back(copy);
     return true;

@@ -311,10 +311,12 @@ RENDER_API void collect_drawable_shader_usages_with_context(
 struct RENDER_API RenderItemCollection {
     std::vector<tc_render_item> items;
     std::vector<std::vector<tc_render_item_vec3>> line_batch_points;
+    std::vector<std::unique_ptr<std::string>> text_batch_strings;
 
     void clear() {
         items.clear();
         line_batch_points.clear();
+        text_batch_strings.clear();
     }
 };
 
