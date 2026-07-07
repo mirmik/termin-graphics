@@ -308,10 +308,10 @@ public:
         device_.blit_to_texture(
             shared_texture_handle_,
             source,
-            termin::Rect2i::from_size(
+            termin::Bounds2i::from_size(
                 static_cast<int>(src_desc.width),
                 static_cast<int>(src_desc.height)),
-            termin::Rect2i::from_size(static_cast<int>(width_), static_cast<int>(height_)));
+            termin::Bounds2i::from_size(static_cast<int>(width_), static_cast<int>(height_)));
         if (probe && log_frame) {
             const tgfx::TextureDesc dst_desc = device_.texture_desc(shared_texture_handle_);
             tgfx2_log_pixel_probe(device_, reinterpret_cast<uintptr_t>(this), present_count_, "dst-after", shared_texture_handle_, dst_desc);
@@ -456,8 +456,8 @@ void tgfx2_interop_blit_texture(
         device->blit_to_texture(
             tgfx::TextureHandle{dst_handle_id},
             tgfx::TextureHandle{src_handle_id},
-            termin::Rect2i::from_size(width, height),
-            termin::Rect2i::from_size(width, height));
+            termin::Bounds2i::from_size(width, height),
+            termin::Bounds2i::from_size(width, height));
     } catch (const std::exception& e) {
         tc_log(TC_LOG_ERROR,
                "[tgfx2_interop] failed to blit texture: %s",

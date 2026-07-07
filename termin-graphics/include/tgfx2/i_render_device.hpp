@@ -13,7 +13,7 @@
 #include "tgfx2/capabilities.hpp"
 #include "tgfx2/i_command_list.hpp"
 #include <termin/geom/color.hpp>
-#include <termin/geom/rect2.hpp>
+#include <termin/geom/bounds2.hpp>
 
 // Forward-declare tc_texture / tc_mesh — the per-device tc-resource
 // cache hooks below take pointers to them. Full definitions live in C
@@ -170,8 +170,8 @@ public:
     virtual void blit_to_texture(
         TextureHandle dst,
         TextureHandle src,
-        termin::Rect2i src_rect,
-        termin::Rect2i dst_rect) {
+        termin::Bounds2i src_rect,
+        termin::Bounds2i dst_rect) {
         (void)dst; (void)src;
         (void)src_rect; (void)dst_rect;
         throw std::runtime_error("blit_to_texture: not supported on this backend");
@@ -182,7 +182,7 @@ public:
     virtual void clear_texture(
         TextureHandle dst,
         termin::Color4 color,
-        termin::Rect2i viewport) {
+        termin::Bounds2i viewport) {
         (void)dst; (void)color; (void)viewport;
         throw std::runtime_error("clear_texture: not supported on this backend");
     }

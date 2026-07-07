@@ -1505,8 +1505,8 @@ VkFramebuffer VulkanRenderDevice::get_or_create_framebuffer(
 void VulkanRenderDevice::blit_to_texture(
     TextureHandle dst_handle,
     TextureHandle src_handle,
-    termin::Rect2i src_rect,
-    termin::Rect2i dst_rect)
+    termin::Bounds2i src_rect,
+    termin::Bounds2i dst_rect)
 {
     auto* src = textures_.get(src_handle.id);
     auto* dst = textures_.get(dst_handle.id);
@@ -1646,7 +1646,7 @@ void VulkanRenderDevice::blit_to_texture(
 void VulkanRenderDevice::clear_texture(
     TextureHandle dst_handle,
     termin::Color4 color,
-    termin::Rect2i viewport)
+    termin::Bounds2i viewport)
 {
     auto* dst = textures_.get(dst_handle.id);
     if (!dst) return;

@@ -323,7 +323,7 @@ int main() {
         device->clear_texture(
             color,
             termin::Color4{0.10f, 0.20f, 0.30f, 1.0f},
-            termin::Rect2i::from_size(4, 4));
+            termin::Bounds2i::from_size(4, 4));
         if (!device->read_pixel_rgba8(color, 2, 2, rgba)) {
             std::fprintf(stderr, "D3D11 smoke: clear_texture readback failed\n");
             return 1;
@@ -353,7 +353,7 @@ int main() {
         device->clear_texture(
             hdr_color,
             termin::Color4{1.25f, 0.50f, 0.125f, 1.0f},
-            termin::Rect2i::from_size(4, 4));
+            termin::Bounds2i::from_size(4, 4));
         std::vector<float> hdr_readback(4 * 4 * 4, 0.0f);
         if (!device->read_texture_rgba_float(hdr_color, hdr_readback.data())) {
             std::fprintf(stderr, "D3D11 smoke: RGBA16F read_texture_rgba_float failed\n");
@@ -442,8 +442,8 @@ int main() {
         device->blit_to_texture(
             bgra_target,
             color,
-            termin::Rect2i::from_size(4, 4),
-            termin::Rect2i::from_size(4, 4));
+            termin::Bounds2i::from_size(4, 4),
+            termin::Bounds2i::from_size(4, 4));
         if (!device->read_pixel_rgba8(bgra_target, 2, 2, rgba)) {
             std::fprintf(stderr, "D3D11 smoke: RGBA->BGRA blit readback failed\n");
             device->destroy(bgra_target);
@@ -501,8 +501,8 @@ int main() {
         device->blit_to_texture(
             msaa_bgra_target,
             msaa_blit_src,
-            termin::Rect2i::from_size(4, 4),
-            termin::Rect2i::from_size(4, 4));
+            termin::Bounds2i::from_size(4, 4),
+            termin::Bounds2i::from_size(4, 4));
         if (!device->read_pixel_rgba8(msaa_bgra_target, 2, 2, rgba)) {
             std::fprintf(stderr, "D3D11 smoke: MSAA RGBA->BGRA blit readback failed\n");
             device->destroy(msaa_bgra_target);

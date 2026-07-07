@@ -25,6 +25,7 @@ extern "C" {
 #include "tc_inspect_cpp.hpp"
 
 #include "tgfx/handles.hpp"
+#include <termin/geom/rect2.hpp>
 #include <termin/render/resource_spec.hpp>
 #include <termin/render/render_export.hpp>
 #include <tgfx/tgfx_shader_handle.hpp>
@@ -38,13 +39,6 @@ struct InternalSymbolTiming {
     std::string name;
     double cpu_time_ms = 0.0;
     double gpu_time_ms = 0.0;
-};
-
-struct Rect4i {
-    int x = 0;
-    int y = 0;
-    int width = 0;
-    int height = 0;
 };
 
 using ResourceMap = std::unordered_map<std::string, FrameGraphResource*>;

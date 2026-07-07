@@ -105,8 +105,8 @@ int main() {
         device.blit_to_texture(
             swapchain.backbuffer_texture(),
             offscreen,
-            termin::Rect2i::from_size(kWidth, kHeight),
-            termin::Rect2i::from_size(kWidth, kHeight));
+            termin::Bounds2i::from_size(kWidth, kHeight),
+            termin::Bounds2i::from_size(kWidth, kHeight));
 
         float rgba[4] = {};
         if (!device.read_pixel_rgba8(swapchain.backbuffer_texture(), kWidth / 2, kHeight / 2, rgba)) {

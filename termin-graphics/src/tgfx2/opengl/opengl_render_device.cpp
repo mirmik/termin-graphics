@@ -1396,8 +1396,8 @@ bool OpenGLRenderDevice::read_pixel_depth_float(
 void OpenGLRenderDevice::blit_to_texture(
     TextureHandle dst_color,
     TextureHandle src_color,
-    termin::Rect2i src_rect,
-    termin::Rect2i dst_rect
+    termin::Bounds2i src_rect,
+    termin::Bounds2i dst_rect
 ) {
     GLTexture* src = textures_.get(src_color.id);
     GLTexture* dst = textures_.get(dst_color.id);
@@ -1466,7 +1466,7 @@ void OpenGLRenderDevice::blit_to_texture(
 void OpenGLRenderDevice::clear_texture(
     TextureHandle dst_color,
     termin::Color4 color,
-    termin::Rect2i viewport
+    termin::Bounds2i viewport
 ) {
     GLTexture* dst = textures_.get(dst_color.id);
     if (!dst) return;

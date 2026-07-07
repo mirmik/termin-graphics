@@ -1417,8 +1417,8 @@ TextureHandle D3D11RenderDevice::register_external_texture(ID3D11Texture2D* text
 
 void D3D11RenderDevice::blit_to_texture(TextureHandle dst,
                                         TextureHandle src,
-                                        termin::Rect2i src_rect,
-                                        termin::Rect2i dst_rect) {
+                                        termin::Bounds2i src_rect,
+                                        termin::Bounds2i dst_rect) {
     auto* src_tex = get_texture(src);
     auto* dst_tex = get_texture(dst);
     if (!src_tex || !src_tex->texture || !dst_tex || !dst_tex->texture) {
@@ -1603,7 +1603,7 @@ void D3D11RenderDevice::blit_to_texture(TextureHandle dst,
 void D3D11RenderDevice::clear_texture(
     TextureHandle dst_handle,
     termin::Color4 clear_color,
-    termin::Rect2i viewport)
+    termin::Bounds2i viewport)
 {
     auto* dst = get_texture(dst_handle);
     if (!dst || !dst->texture || !dst->rtv) {
