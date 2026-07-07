@@ -989,6 +989,10 @@ bool pack_one(const std::string& property_type,
             write_int(dst, *b ? 1 : 0);
             return true;
         }
+        if (auto* i = std::get_if<int>(&value)) {
+            write_int(dst, *i != 0 ? 1 : 0);
+            return true;
+        }
         return false;
     }
     if (property_type == "Vec2" || property_type == "Vec3" ||
@@ -1026,8 +1030,9 @@ namespace {
 // runtime value side (tc_uniform_value → MaterialProperty) doesn't know
 // whether the original declaration was `Color` or `Vec4` — both round-
 // trip through a vec4 of floats. Similarly, Float/Int can be written
-// through the same 4-byte slot, and Bool packs identically to Int
-// (std140 rule: Bool is stored as 32-bit uint).
+// through the same 4-byte slot. Bool fields also accept Int values because
+// editor/runtime material APIs commonly expose bool toggles through integer
+// setters; they are normalized to 0/1 by pack_one().
 bool property_types_compatible(const std::string& a, const std::string& b) {
     if (a == b) return true;
     // Color and Vec4 are the same std140 payload.
@@ -1035,6 +1040,7 @@ bool property_types_compatible(const std::string& a, const std::string& b) {
     // Scalar std140 slots are 4 bytes. Reflected layouts may only know
     // the slot size; allow the packer to coerce numeric scalar values.
     if ((a == "Float" || a == "Int") && (b == "Float" || b == "Int")) return true;
+    if (a == "Int" && b == "Bool") return true;
     return false;
 }
 

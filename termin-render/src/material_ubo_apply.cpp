@@ -135,11 +135,16 @@ bool field_range_is_valid(
     return false;
 }
 
-bool pack_uniform_value_to_std140_field(
+} // namespace
+
+bool pack_material_uniform_value_to_std140_field(
     const tc_uniform_value& uniform,
     const char* field_type,
     uint8_t* dst)
 {
+    if (!field_type || !dst) {
+        return false;
+    }
     if (type_is(field_type, "Float")) {
         if (uniform.type == TC_UNIFORM_FLOAT) {
             write_float(dst, uniform.data.f);
@@ -164,6 +169,10 @@ bool pack_uniform_value_to_std140_field(
     }
     if (type_is(field_type, "Bool")) {
         if (uniform.type == TC_UNIFORM_BOOL) {
+            write_int(dst, uniform.data.i != 0 ? 1 : 0);
+            return true;
+        }
+        if (uniform.type == TC_UNIFORM_INT) {
             write_int(dst, uniform.data.i != 0 ? 1 : 0);
             return true;
         }
@@ -200,6 +209,8 @@ bool pack_uniform_value_to_std140_field(
     return false;
 }
 
+namespace {
+
 void pack_material_ubo_entry(
     const tc_material_phase* phase,
     const tc_shader* shader,
@@ -221,7 +232,7 @@ void pack_material_ubo_entry(
     if (!uniform) {
         return;
     }
-    pack_uniform_value_to_std140_field(
+    pack_material_uniform_value_to_std140_field(
         *uniform,
         field_type,
         out_buffer + field_offset);
