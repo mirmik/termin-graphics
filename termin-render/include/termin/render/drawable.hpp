@@ -151,6 +151,11 @@ public:
         }
     }
 
+    virtual bool collect_render_items(
+        const tc_render_item_collect_context& context,
+        tc_render_item_sink& sink
+    );
+
     // Expose the underlying tc_mesh for a given phase + geometry id so
     // tgfx2-migrated passes (ShadowPass, IdPass, ColorPass) can wrap it
     // via wrap_mesh_as_tgfx2() and draw through RenderContext2.
@@ -291,6 +296,7 @@ private:
     static void* _cb_get_geometry_ids_for_phase(tc_component* c, void* render_context, const char* phase_mark);
     static tc_shader_handle _cb_override_shader(tc_component* c, const char* phase_mark, int geometry_id, tc_shader_handle original_shader);
     static void _cb_collect_shader_usages(tc_component* c, const char* phase_mark, int geometry_id, tc_shader_handle original_shader, tc_shader_usage_emit_fn emit, void* user_data);
+    static bool _cb_collect_render_items(tc_component* c, const tc_render_item_collect_context* context, tc_render_item_sink* sink);
 };
 
 RENDER_API TcShader override_drawable_shader(
@@ -301,6 +307,23 @@ RENDER_API void collect_drawable_shader_usages_with_context(
     tc_component* component,
     const ShaderOverrideContext& context,
     const std::function<void(TcShader)>& emit);
+
+struct RENDER_API RenderItemCollection {
+    std::vector<tc_render_item> items;
+    std::vector<std::vector<tc_render_item_vec3>> line_batch_points;
+    std::vector<std::unique_ptr<std::string>> text_batch_strings;
+
+    void clear() {
+        items.clear();
+        line_batch_points.clear();
+        text_batch_strings.clear();
+    }
+};
+
+RENDER_API bool collect_drawable_render_items(
+    tc_component* component,
+    const tc_render_item_collect_context& context,
+    RenderItemCollection& out_collection);
 
 struct PhaseDrawCall {
     Entity entity;

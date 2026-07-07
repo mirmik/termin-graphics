@@ -70,8 +70,9 @@ private:
     uint32_t body_corner_count_ = 0;
     uint32_t cap_corner_count_ = 0;
     int template_sides_ = 0;
+    bool resources_failed_ = false;
 
-    void ensure_resources(RenderContext2& ctx, int sides);
+    bool ensure_resources(RenderContext2& ctx, int sides);
 };
 
 } // namespace tgfx

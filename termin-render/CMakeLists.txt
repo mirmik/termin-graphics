@@ -80,6 +80,8 @@ set(TERMIN_RENDER_SOURCES
     src/material_ubo_apply.cpp
     src/render_pipeline.cpp
     src/render_engine.cpp
+    src/render_item_mesh.cpp
+    src/render_item_submission.cpp
     src/shader_abi.cpp
     src/shader_usage_collector.cpp
     src/shader_resource_apply.cpp
@@ -103,6 +105,7 @@ set(TERMIN_RENDER_HEADERS
     include/core/tc_scene_skybox.h
     include/core/tc_drawable_capability.h
     include/core/tc_drawable_protocol.h
+    include/core/tc_render_item.h
     include/core/tc_light_capability.h
     include/core/tc_camera_capability.h
     include/core/tc_scene_drawable.h
@@ -137,6 +140,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/resource_aliases.hpp
     include/termin/render/render_pipeline.hpp
     include/termin/render/render_engine.hpp
+    include/termin/render/render_item_submission.hpp
     include/termin/render/scene_pipeline_template.hpp
     include/termin/render/shader_abi.hpp
     include/termin/render/shader_resource_apply.hpp
@@ -265,6 +269,13 @@ if(TERMIN_RENDER_BUILD_TESTS)
     target_link_libraries(termin_render_shader_abi_test PRIVATE termin_render)
     add_test(NAME termin_render_shader_abi_test COMMAND termin_render_shader_abi_test)
 
+    add_executable(termin_render_item_submission_test tests/test_render_item_submission.cpp)
+    target_include_directories(termin_render_item_submission_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_render_item_submission_test PRIVATE termin_render)
+    add_test(NAME termin_render_item_submission_test COMMAND termin_render_item_submission_test)
+
     set_target_properties(
         termin_render_drawable_test
         termin_render_drawable_phase_ref_test
@@ -274,6 +285,7 @@ if(TERMIN_RENDER_BUILD_TESTS)
         termin_render_material_pipeline_shader_assembler_test
         termin_render_shader_contract_test
         termin_render_shader_abi_test
+        termin_render_item_submission_test
         PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
 endif()

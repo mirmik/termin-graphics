@@ -3,6 +3,7 @@
 
 #include "core/tc_component.h"
 #include "core/tc_drawable_capability.h"
+#include "core/tc_render_item.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -17,6 +18,7 @@ struct tc_drawable_vtable {
     void* (*get_geometry_ids_for_phase)(tc_component* self, void* render_context, const char* phase_mark);
     tc_shader_handle (*override_shader)(tc_component* self, const char* phase_mark, int geometry_id, tc_shader_handle original_shader);
     void (*collect_shader_usages)(tc_component* self, const char* phase_mark, int geometry_id, tc_shader_handle original_shader, tc_shader_usage_emit_fn emit, void* user_data);
+    bool (*collect_render_items)(tc_component* self, const tc_render_item_collect_context* context, tc_render_item_sink* sink);
 };
 
 static inline bool tc_component_is_drawable(const tc_component* c) {
@@ -84,6 +86,14 @@ static inline void tc_component_collect_shader_usages(tc_component* c, const cha
         return;
     }
     emit(c, original_shader, user_data);
+}
+
+static inline bool tc_component_collect_render_items(tc_component* c, const tc_render_item_collect_context* context, tc_render_item_sink* sink) {
+    const tc_drawable_vtable* vt = tc_component_get_drawable_vtable(c);
+    if (c && vt && vt->collect_render_items) {
+        return vt->collect_render_items(c, context, sink);
+    }
+    return false;
 }
 
 #ifdef __cplusplus
