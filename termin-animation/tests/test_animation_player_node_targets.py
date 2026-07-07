@@ -2,6 +2,7 @@ import pytest
 
 from termin.animation import TcAnimationClip
 from termin.animation_components import AnimationPlayer
+from termin.geombase import Vec3
 from termin.scene import Entity
 
 
@@ -14,8 +15,8 @@ def test_animation_player_applies_non_bone_node_channel():
         {
             "target_name": "Armature",
             "translation_keys": [
-                (0.0, [0.0, 0.0, 0.0]),
-                (1.0, [1.0, 2.0, 3.0]),
+                (0.0, Vec3(0.0, 0.0, 0.0)),
+                (1.0, Vec3(1.0, 2.0, 3.0)),
             ],
             "rotation_keys": [],
             "scale_keys": [],
