@@ -34,20 +34,23 @@ static tc_mesh* alloc_mesh(size_t vertex_count, size_t index_count) {
     return mesh;
 }
 
-static void set_vertex(tc_mesh* mesh, size_t idx,
-                       float px, float py, float pz,
-                       float nx, float ny, float nz,
-                       float u, float v) {
+typedef struct tc_primitive_vertex {
+    float position[3];
+    float normal[3];
+    float uv[2];
+} tc_primitive_vertex;
+
+static void set_vertex(tc_mesh* mesh, size_t idx, tc_primitive_vertex vertex) {
     size_t stride = mesh->layout.stride;
     float* ptr = (float*)((char*)mesh->vertices + idx * stride);
-    ptr[0] = px;
-    ptr[1] = py;
-    ptr[2] = pz;
-    ptr[3] = nx;
-    ptr[4] = ny;
-    ptr[5] = nz;
-    ptr[6] = u;
-    ptr[7] = v;
+    ptr[0] = vertex.position[0];
+    ptr[1] = vertex.position[1];
+    ptr[2] = vertex.position[2];
+    ptr[3] = vertex.normal[0];
+    ptr[4] = vertex.normal[1];
+    ptr[5] = vertex.normal[2];
+    ptr[6] = vertex.uv[0];
+    ptr[7] = vertex.uv[1];
 }
 
 static void free_temp_mesh(tc_mesh* mesh) {
@@ -131,10 +134,11 @@ tc_mesh* tc_primitive_cube_new(float size_x, float size_y, float size_z) {
     for (int f = 0; f < 6; f++) {
         uint32_t base = (uint32_t)vi;
         for (int c = 0; c < 4; c++) {
-            set_vertex(mesh, vi++,
-                       faces[f].v[c][0], faces[f].v[c][1], faces[f].v[c][2],
-                       faces[f].nx, faces[f].ny, faces[f].nz,
-                       uvs[c][0], uvs[c][1]);
+            set_vertex(mesh, vi++, (tc_primitive_vertex){
+                {faces[f].v[c][0], faces[f].v[c][1], faces[f].v[c][2]},
+                {faces[f].nx, faces[f].ny, faces[f].nz},
+                {uvs[c][0], uvs[c][1]}
+            });
         }
         mesh->indices[ii++] = base + 0;
         mesh->indices[ii++] = base + 1;
@@ -186,7 +190,11 @@ tc_mesh* tc_primitive_sphere_new(float radius, int meridians, int parallels) {
 
             float u_coord = (float)s / (float)segments;
 
-            set_vertex(mesh, vi++, px, py, pz, nx, ny, nz, u_coord, v_coord);
+            set_vertex(mesh, vi++, (tc_primitive_vertex){
+                {px, py, pz},
+                {nx, ny, nz},
+                {u_coord, v_coord}
+            });
         }
     }
 
@@ -242,7 +250,11 @@ tc_mesh* tc_primitive_cylinder_new(float radius, float height, int segments) {
             float px = radius * c;
             float pz = radius * sn;
             float u_coord = (float)s / (float)segments;
-            set_vertex(mesh, vi++, px, y, pz, c, 0, sn, u_coord, v_coord);
+            set_vertex(mesh, vi++, (tc_primitive_vertex){
+                {px, y, pz},
+                {c, 0, sn},
+                {u_coord, v_coord}
+            });
         }
     }
 
@@ -266,10 +278,18 @@ tc_mesh* tc_primitive_cylinder_new(float radius, float height, int segments) {
         float angle = (float)s * 2.0f * (float)M_PI / (float)segments;
         float c = cosf(angle);
         float sn = sinf(angle);
-        set_vertex(mesh, vi++, radius * c, -half_h, radius * sn, 0, -1, 0, c * 0.5f + 0.5f, sn * 0.5f + 0.5f);
+        set_vertex(mesh, vi++, (tc_primitive_vertex){
+            {radius * c, -half_h, radius * sn},
+            {0, -1, 0},
+            {c * 0.5f + 0.5f, sn * 0.5f + 0.5f}
+        });
     }
     uint32_t bottom_center = (uint32_t)vi;
-    set_vertex(mesh, vi++, 0, -half_h, 0, 0, -1, 0, 0.5f, 0.5f);
+    set_vertex(mesh, vi++, (tc_primitive_vertex){
+        {0, -half_h, 0},
+        {0, -1, 0},
+        {0.5f, 0.5f}
+    });
 
     for (int s = 0; s < segments; s++) {
         int next_s = (s + 1) % segments;
@@ -283,10 +303,18 @@ tc_mesh* tc_primitive_cylinder_new(float radius, float height, int segments) {
         float angle = (float)s * 2.0f * (float)M_PI / (float)segments;
         float c = cosf(angle);
         float sn = sinf(angle);
-        set_vertex(mesh, vi++, radius * c, half_h, radius * sn, 0, 1, 0, c * 0.5f + 0.5f, sn * 0.5f + 0.5f);
+        set_vertex(mesh, vi++, (tc_primitive_vertex){
+            {radius * c, half_h, radius * sn},
+            {0, 1, 0},
+            {c * 0.5f + 0.5f, sn * 0.5f + 0.5f}
+        });
     }
     uint32_t top_center = (uint32_t)vi;
-    set_vertex(mesh, vi++, 0, half_h, 0, 0, 1, 0, 0.5f, 0.5f);
+    set_vertex(mesh, vi++, (tc_primitive_vertex){
+        {0, half_h, 0},
+        {0, 1, 0},
+        {0.5f, 0.5f}
+    });
 
     for (int s = 0; s < segments; s++) {
         int next_s = (s + 1) % segments;
@@ -316,7 +344,11 @@ tc_mesh* tc_primitive_cone_new(float radius, float height, int segments) {
     size_t ii = 0;
 
     uint32_t apex_idx = (uint32_t)vi;
-    set_vertex(mesh, vi++, 0, half_h, 0, 0, 1, 0, 0.5f, 1.0f);
+    set_vertex(mesh, vi++, (tc_primitive_vertex){
+        {0, half_h, 0},
+        {0, 1, 0},
+        {0.5f, 1.0f}
+    });
 
     uint32_t base_start = (uint32_t)vi;
     float slope = radius / height;
@@ -327,9 +359,11 @@ tc_mesh* tc_primitive_cone_new(float radius, float height, int segments) {
         float angle = (float)s * 2.0f * (float)M_PI / (float)segments;
         float c = cosf(angle);
         float sn = sinf(angle);
-        set_vertex(mesh, vi++, radius * c, -half_h, radius * sn,
-                   nr * c, ny, nr * sn,
-                   (float)s / (float)segments, 0.0f);
+        set_vertex(mesh, vi++, (tc_primitive_vertex){
+            {radius * c, -half_h, radius * sn},
+            {nr * c, ny, nr * sn},
+            {(float)s / (float)segments, 0.0f}
+        });
     }
 
     for (int s = 0; s < segments; s++) {
@@ -344,10 +378,18 @@ tc_mesh* tc_primitive_cone_new(float radius, float height, int segments) {
         float angle = (float)s * 2.0f * (float)M_PI / (float)segments;
         float c = cosf(angle);
         float sn = sinf(angle);
-        set_vertex(mesh, vi++, radius * c, -half_h, radius * sn, 0, -1, 0, c * 0.5f + 0.5f, sn * 0.5f + 0.5f);
+        set_vertex(mesh, vi++, (tc_primitive_vertex){
+            {radius * c, -half_h, radius * sn},
+            {0, -1, 0},
+            {c * 0.5f + 0.5f, sn * 0.5f + 0.5f}
+        });
     }
     uint32_t cap_center = (uint32_t)vi;
-    set_vertex(mesh, vi++, 0, -half_h, 0, 0, -1, 0, 0.5f, 0.5f);
+    set_vertex(mesh, vi++, (tc_primitive_vertex){
+        {0, -half_h, 0},
+        {0, -1, 0},
+        {0.5f, 0.5f}
+    });
 
     for (int s = 0; s < segments; s++) {
         int next_s = (s + 1) % segments;
@@ -381,7 +423,11 @@ tc_mesh* tc_primitive_plane_new(float width, float height, int segments_w, int s
         for (int w = 0; w <= segments_w; w++) {
             float x = ((float)w / (float)segments_w - 0.5f) * width;
             float u_coord = (float)w / (float)segments_w;
-            set_vertex(mesh, vi++, x, y, 0, 0, 0, 1, u_coord, v_coord);
+            set_vertex(mesh, vi++, (tc_primitive_vertex){
+                {x, y, 0},
+                {0, 0, 1},
+                {u_coord, v_coord}
+            });
         }
     }
 

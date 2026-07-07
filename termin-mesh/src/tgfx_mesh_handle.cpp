@@ -3,6 +3,20 @@
 
 namespace termin {
 
+static void set_mesh_submeshes(TcMesh& mesh, const TcMeshCreateInfo& create_info) {
+    if (!create_info.submeshes || create_info.submesh_count == 0) {
+        return;
+    }
+
+    tc_mesh* raw = mesh.get();
+    if (raw && !tc_mesh_set_submeshes(
+            raw,
+            create_info.submeshes,
+            create_info.submesh_count)) {
+        tc_log_error("[TcMesh] Failed to set submeshes for '%s'", create_info.name.c_str());
+    }
+}
+
 bool TcMesh::set_from_mesh3(const Mesh3& mesh, const tc_vertex_layout* custom_layout) {
     tc_mesh* m = get();
     if (!m) {
@@ -172,34 +186,36 @@ TcMesh TcMesh::from_mesh3(const Mesh3& mesh,
     return TcMesh(h);
 }
 
-TcMesh TcMesh::from_interleaved(
-    const void* vertices, size_t vertex_count,
-    const uint32_t* indices, size_t index_count,
-    const tc_vertex_layout& layout,
-    const std::string& name,
-    const std::string& uuid_hint,
-    tc_draw_mode draw_mode) {
+TcMesh TcMesh::from_interleaved(const TcMeshCreateInfo& create_info) {
+    const TcMeshInterleavedDataView& data = create_info.data;
 
-    if (vertices == nullptr || vertex_count == 0) {
+    if (data.vertices == nullptr || data.vertex_count == 0 || data.layout == nullptr) {
         return TcMesh();
     }
 
     // Use uuid_hint if provided, otherwise compute from data
-    std::string uuid_str = uuid_hint;
+    std::string uuid_str = create_info.uuid_hint;
 
     // Check if already in registry
     if (!uuid_str.empty()) {
         tc_mesh_handle h = tc_mesh_find(uuid_str.c_str());
         if (!tc_mesh_handle_is_invalid(h)) {
-            return TcMesh(h);
+            TcMesh mesh(h);
+            set_mesh_submeshes(mesh, create_info);
+            return mesh;
         }
     }
 
     // Compute UUID from data if not provided
     if (uuid_str.empty()) {
-        size_t vertices_size = vertex_count * layout.stride;
+        size_t vertices_size = data.vertex_count * data.layout->stride;
         char computed_uuid[40];
-        tc_mesh_compute_uuid(vertices, vertices_size, indices, index_count, computed_uuid);
+        tc_mesh_compute_uuid(
+            data.vertices,
+            vertices_size,
+            data.indices,
+            data.index_count,
+            computed_uuid);
         uuid_str = computed_uuid;
     }
 
@@ -213,43 +229,18 @@ TcMesh TcMesh::from_interleaved(
     // Set data if mesh is new (vertex_count == 0)
     if (m->vertex_count == 0) {
         tc_mesh_set_data(m,
-                        vertices, vertex_count, &layout,
-                        indices, index_count,
-                        name.empty() ? nullptr : name.c_str());
-        m->draw_mode = static_cast<uint8_t>(draw_mode);
+                        data.vertices, data.vertex_count, data.layout,
+                        data.indices, data.index_count,
+                        create_info.name.empty() ? nullptr : create_info.name.c_str());
+        m->draw_mode = static_cast<uint8_t>(create_info.draw_mode);
     }
 
-    return TcMesh(h);
-}
-
-TcMesh TcMesh::from_interleaved_with_submeshes(
-    const void* vertices, size_t vertex_count,
-    const uint32_t* indices, size_t index_count,
-    const tc_vertex_layout& layout,
-    const std::vector<tc_submesh>& submeshes,
-    const std::string& name,
-    const std::string& uuid_hint,
-    tc_draw_mode draw_mode) {
-
-    TcMesh mesh = TcMesh::from_interleaved(
-        vertices,
-        vertex_count,
-        indices,
-        index_count,
-        layout,
-        name,
-        uuid_hint,
-        draw_mode);
+    TcMesh mesh(h);
     if (!mesh.is_valid()) {
         return mesh;
     }
 
-    if (!submeshes.empty()) {
-        tc_mesh* raw = mesh.get();
-        if (raw && !tc_mesh_set_submeshes(raw, submeshes.data(), submeshes.size())) {
-            tc_log_error("[TcMesh] Failed to set submeshes for '%s'", name.c_str());
-        }
-    }
+    set_mesh_submeshes(mesh, create_info);
     return mesh;
 }
 

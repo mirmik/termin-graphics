@@ -9,6 +9,7 @@
 #include <mutex>
 #include <cstdio>
 #include <cstring>
+#include <utility>
 
 #include "tgfx/tgfx_mesh3.hpp"
 #include "tgfx/tgfx_mesh_handle.hpp"
@@ -655,10 +656,17 @@ void bind_mesh(nb::module_& m) {
                 std::string name,
                 std::string uuid_hint,
                 tc_draw_mode draw_mode) {
-            return TcMesh::from_interleaved(
-                vertices.data(), vertex_count,
-                indices.data(), indices.size(),
-                layout, name, uuid_hint, draw_mode);
+            TcMeshCreateInfo create_info;
+            create_info.data = TcMeshInterleavedDataView{
+                vertices.data(),
+                vertex_count,
+                indices.data(),
+                indices.size(),
+                &layout};
+            create_info.name = std::move(name);
+            create_info.uuid_hint = std::move(uuid_hint);
+            create_info.draw_mode = draw_mode;
+            return TcMesh::from_interleaved(create_info);
         }, nb::arg("vertices"), nb::arg("vertex_count"), nb::arg("indices"),
            nb::arg("layout"), nb::arg("name") = "", nb::arg("uuid") = "",
            nb::arg("draw_mode") = TC_DRAW_TRIANGLES)
@@ -671,10 +679,19 @@ void bind_mesh(nb::module_& m) {
                 std::string name,
                 std::string uuid_hint,
                 tc_draw_mode draw_mode) {
-            return TcMesh::from_interleaved_with_submeshes(
-                vertices.data(), vertex_count,
-                indices.data(), indices.size(),
-                layout, submeshes, name, uuid_hint, draw_mode);
+            TcMeshCreateInfo create_info;
+            create_info.data = TcMeshInterleavedDataView{
+                vertices.data(),
+                vertex_count,
+                indices.data(),
+                indices.size(),
+                &layout};
+            create_info.submeshes = submeshes.data();
+            create_info.submesh_count = submeshes.size();
+            create_info.name = std::move(name);
+            create_info.uuid_hint = std::move(uuid_hint);
+            create_info.draw_mode = draw_mode;
+            return TcMesh::from_interleaved(create_info);
         }, nb::arg("vertices"), nb::arg("vertex_count"), nb::arg("indices"),
            nb::arg("layout"), nb::arg("submeshes"), nb::arg("name") = "",
            nb::arg("uuid") = "", nb::arg("draw_mode") = TC_DRAW_TRIANGLES)
