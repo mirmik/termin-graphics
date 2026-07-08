@@ -48,21 +48,28 @@ endif()
 if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     enable_testing()
 
-    add_executable(termin_gui_native_document_test
+    function(termin_gui_native_add_test target)
+        add_executable(${target} ${ARGN})
+        target_link_libraries(${target} PRIVATE termin_gui_native)
+        if(NOT WIN32)
+            set_target_properties(${target} PROPERTIES
+                BUILD_RPATH "$<TARGET_FILE_DIR:termin_gui_native>;$<TARGET_FILE_DIR:tcbase::termin_base>"
+            )
+        endif()
+        add_test(NAME ${target} COMMAND ${target})
+        if(NOT WIN32)
+            set_tests_properties(${target} PROPERTIES
+                ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:termin_gui_native>:$<TARGET_FILE_DIR:tcbase::termin_base>:$ENV{LD_LIBRARY_PATH}"
+            )
+        endif()
+    endfunction()
+
+    termin_gui_native_add_test(termin_gui_native_document_test
         tests/test_tc_ui_document.cpp
     )
-    target_link_libraries(termin_gui_native_document_test PRIVATE termin_gui_native)
-    if(NOT WIN32)
-        set_target_properties(termin_gui_native_document_test PROPERTIES
-            BUILD_RPATH "$<TARGET_FILE_DIR:termin_gui_native>;$<TARGET_FILE_DIR:tcbase::termin_base>"
-        )
-    endif()
-    add_test(NAME termin_gui_native_document_test COMMAND termin_gui_native_document_test)
-    if(NOT WIN32)
-        set_tests_properties(termin_gui_native_document_test PROPERTIES
-            ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:termin_gui_native>:$<TARGET_FILE_DIR:tcbase::termin_base>:$ENV{LD_LIBRARY_PATH}"
-        )
-    endif()
+    termin_gui_native_add_test(termin_gui_native_draw_list_test
+        tests/test_ui_draw_list.cpp
+    )
 endif()
 
 include(GNUInstallDirs)
