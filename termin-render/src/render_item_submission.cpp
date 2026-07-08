@@ -112,6 +112,68 @@ bool prepare_request_material_resources(
         *request.material_resources);
 }
 
+bool mesh_render_item_draw_encoder(
+    tgfx::RenderContext2& ctx,
+    const tc_render_item& item,
+    const RenderItemDrawSubmitRequest& request,
+    void* user_data)
+{
+    (void)user_data;
+
+    const char* pass_name = request.debug_pass_name
+        ? request.debug_pass_name
+        : "RenderItemSubmit";
+    const char* entity_name = request.debug_entity_name
+        ? request.debug_entity_name
+        : "<unnamed>";
+
+    MaterialPipelineShaderBinding binding{};
+    const tc_shader* shader = nullptr;
+    if (!resolve_request_shader(ctx, request, pass_name, entity_name, binding, shader)) {
+        tc::Log::error(
+            "[%s] skip RenderItem mesh draw for '%s': request has no shader",
+            pass_name,
+            entity_name);
+        return false;
+    }
+    if (!prepare_request_material_resources(
+            ctx,
+            request,
+            shader,
+            pass_name,
+            entity_name)) {
+        return false;
+    }
+    if (request.prepare_material_resources) {
+        request.prepare_material_resources(
+            ctx,
+            shader,
+            request.material_phase);
+    }
+
+    MeshRenderItemEncodeRequest mesh_request{};
+    mesh_request.shader = shader;
+    mesh_request.vertex_input = request.mesh_vertex_input;
+    mesh_request.debug_pass_name = pass_name;
+    mesh_request.debug_entity_name = entity_name;
+    return encode_mesh_render_item_draw(ctx, item, mesh_request);
+}
+
+void ensure_builtin_render_item_draw_encoders()
+{
+    static std::once_flag once;
+    std::call_once(once, []() {
+        RegisteredRenderItemDrawEncoder mesh_encoder{};
+        mesh_encoder.encode = mesh_render_item_draw_encoder;
+        mesh_encoder.debug_name = "MeshRenderItem";
+
+        std::lock_guard<std::mutex> lock(render_item_draw_encoder_mutex());
+        render_item_draw_encoder_registry().emplace(
+            TC_RENDER_ITEM_KIND_MESH,
+            std::move(mesh_encoder));
+    });
+}
+
 } // namespace
 
 bool register_render_item_draw_encoder(
@@ -129,6 +191,8 @@ bool register_render_item_draw_encoder(
             item_kind);
         return false;
     }
+
+    ensure_builtin_render_item_draw_encoders();
 
     std::lock_guard<std::mutex> lock(render_item_draw_encoder_mutex());
     auto& registry = render_item_draw_encoder_registry();
@@ -152,6 +216,14 @@ bool unregister_render_item_draw_encoder(
     RenderItemDrawEncoderFn encode,
     void* user_data)
 {
+    ensure_builtin_render_item_draw_encoders();
+
+    if (item_kind == TC_RENDER_ITEM_KIND_MESH) {
+        tc::Log::error(
+            "[RenderItemSubmit] cannot unregister built-in mesh draw encoder");
+        return false;
+    }
+
     std::lock_guard<std::mutex> lock(render_item_draw_encoder_mutex());
     auto& registry = render_item_draw_encoder_registry();
     auto it = registry.find(item_kind);
@@ -183,51 +255,18 @@ bool submit_render_item_draw(
         ? request.debug_entity_name
         : "<unnamed>";
 
-    switch (item.kind) {
-        case TC_RENDER_ITEM_KIND_MESH: {
-            MaterialPipelineShaderBinding binding{};
-            const tc_shader* shader = nullptr;
-            if (!resolve_request_shader(ctx, request, pass_name, entity_name, binding, shader)) {
-                tc::Log::error(
-                    "[%s] skip RenderItem mesh draw for '%s': request has no shader",
-                    pass_name,
-                    entity_name);
-                return false;
-            }
-            if (!prepare_request_material_resources(
-                    ctx,
-                    request,
-                    shader,
-                    pass_name,
-                    entity_name)) {
-                return false;
-            }
-            if (request.prepare_material_resources) {
-                request.prepare_material_resources(
-                    ctx,
-                    shader,
-                    request.material_phase);
-            }
+    ensure_builtin_render_item_draw_encoders();
 
-            MeshRenderItemEncodeRequest mesh_request{};
-            mesh_request.shader = shader;
-            mesh_request.vertex_input = request.mesh_vertex_input;
-            mesh_request.debug_pass_name = pass_name;
-            mesh_request.debug_entity_name = entity_name;
-            return encode_mesh_render_item_draw(ctx, item, mesh_request);
-        }
-        default:
-            RegisteredRenderItemDrawEncoder encoder{};
-            if (find_registered_render_item_draw_encoder(item.kind, encoder)) {
-                return encoder.encode(ctx, item, request, encoder.user_data);
-            }
-            tc::Log::error(
-                "[%s] skip RenderItem draw for '%s': unsupported item kind %u",
-                pass_name,
-                entity_name,
-                item.kind);
-            return false;
+    RegisteredRenderItemDrawEncoder encoder{};
+    if (find_registered_render_item_draw_encoder(item.kind, encoder)) {
+        return encoder.encode(ctx, item, request, encoder.user_data);
     }
+    tc::Log::error(
+        "[%s] skip RenderItem draw for '%s': unsupported item kind %u",
+        pass_name,
+        entity_name,
+        item.kind);
+    return false;
 }
 
 } // namespace termin
