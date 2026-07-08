@@ -5,7 +5,9 @@
 #include <tcbase/tc_log.hpp>
 
 #include <tgfx2/i_render_device.hpp>
+#include <tgfx2/render_context.hpp>
 
+#include <cstdint>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -87,29 +89,69 @@ bool resolve_request_shader(
     return out_shader != nullptr;
 }
 
-bool prepare_request_material_resources(
+bool bind_request_resources(
     tgfx::RenderContext2& ctx,
     const RenderItemDrawSubmitRequest& request,
     const tc_shader* shader,
     const char* pass_name,
     const char* entity_name)
 {
-    if (request.material_resources == nullptr) {
+    if (request.resources == nullptr) {
         return true;
     }
-    if (!request.device) {
+    const RenderItemResourceBinding& resources = *request.resources;
+    if (resources.material_resources && !request.device) {
         tc::Log::error(
-            "[%s] skip RenderItem draw for '%s': material resources were provided without render device",
+            "[%s] skip RenderItem draw for '%s': material resource binding was provided without render device",
             pass_name,
             entity_name);
         return false;
     }
-    return prepare_material_pipeline_resources(
-        ctx,
-        *request.device,
-        shader,
-        request.material_phase,
-        *request.material_resources);
+    if (resources.material_resources) {
+        prepare_material_pipeline_resources(
+            ctx,
+            *request.device,
+            shader,
+            request.material_phase,
+            *resources.material_resources);
+    }
+    if (resources.named_uniforms) {
+        for (uint32_t i = 0; i < resources.named_uniform_count; ++i) {
+            const RenderItemNamedUniformBinding& uniform = resources.named_uniforms[i];
+            if (!uniform.name || !uniform.data || uniform.size == 0) {
+                continue;
+            }
+            if (uniform.only_if_shader_has_resource &&
+                !tc_shader_find_resource_binding(shader, uniform.only_if_shader_has_resource)) {
+                continue;
+            }
+            if (uniform.only_if_shader_lacks_resource &&
+                tc_shader_find_resource_binding(shader, uniform.only_if_shader_lacks_resource)) {
+                continue;
+            }
+            ctx.bind_uniform_data(uniform.name, uniform.data, uniform.size);
+        }
+    }
+    if (resources.named_textures) {
+        for (uint32_t i = 0; i < resources.named_texture_count; ++i) {
+            const RenderItemNamedTextureBinding& texture = resources.named_textures[i];
+            if (!texture.name || !texture.texture) {
+                continue;
+            }
+            const tc_shader_resource_binding* rb =
+                tc_shader_find_resource_binding(shader, texture.name);
+            if (!rb || rb->kind != TC_SHADER_RESOURCE_TEXTURE) {
+                tc::Log::error(
+                    "[%s] skip extra texture '%s' for '%s': shader does not declare a Texture2D resource with that name",
+                    pass_name,
+                    texture.name,
+                    entity_name);
+                continue;
+            }
+            ctx.bind_texture(texture.name, texture.texture, texture.sampler);
+        }
+    }
+    return true;
 }
 
 bool mesh_render_item_draw_encoder(
@@ -136,19 +178,13 @@ bool mesh_render_item_draw_encoder(
             entity_name);
         return false;
     }
-    if (!prepare_request_material_resources(
+    if (!bind_request_resources(
             ctx,
             request,
             shader,
             pass_name,
             entity_name)) {
         return false;
-    }
-    if (request.prepare_material_resources) {
-        request.prepare_material_resources(
-            ctx,
-            shader,
-            request.material_phase);
     }
 
     MeshRenderItemEncodeRequest mesh_request{};
@@ -241,6 +277,32 @@ bool unregister_render_item_draw_encoder(
     }
     registry.erase(it);
     return true;
+}
+
+bool bind_render_item_common_resources(
+    tgfx::RenderContext2& ctx,
+    const tc_shader* shader,
+    const RenderItemDrawSubmitRequest& request)
+{
+    const char* pass_name = request.debug_pass_name
+        ? request.debug_pass_name
+        : "RenderItemSubmit";
+    const char* entity_name = request.debug_entity_name
+        ? request.debug_entity_name
+        : "<unnamed>";
+    if (!shader) {
+        tc::Log::error(
+            "[%s] cannot bind RenderItem common resources for '%s': shader layout is null",
+            pass_name,
+            entity_name);
+        return false;
+    }
+    return bind_request_resources(
+        ctx,
+        request,
+        shader,
+        pass_name,
+        entity_name);
 }
 
 bool submit_render_item_draw(
