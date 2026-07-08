@@ -202,6 +202,12 @@ bool submit_render_item_draw(
                     entity_name)) {
                 return false;
             }
+            if (request.prepare_material_resources) {
+                request.prepare_material_resources(
+                    ctx,
+                    shader,
+                    request.material_phase);
+            }
 
             MeshRenderItemEncodeRequest mesh_request{};
             mesh_request.shader = shader;
