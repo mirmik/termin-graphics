@@ -8,17 +8,24 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(TERMIN_GUI_NATIVE_BUILD_TESTS "Build termin-gui-native tests" ON)
+option(TERMIN_GUI_NATIVE_BUILD_EXAMPLES "Build termin-gui-native examples" OFF)
 
 if(COMMAND termin_require_package)
     termin_require_package(termin_base tcbase::termin_base)
 else()
     find_package(termin_base REQUIRED)
 endif()
+if(COMMAND termin_require_package)
+    termin_require_package(termin_graphics tgfx::termin_graphics2)
+else()
+    find_package(termin_graphics REQUIRED)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
 
 add_library(termin_gui_native SHARED
+    src/draw_list_renderer.cpp
     src/tc_ui_document.cpp
 )
 add_library(termin_gui_native::termin_gui_native ALIAS termin_gui_native)
@@ -34,6 +41,7 @@ target_include_directories(termin_gui_native
 target_link_libraries(termin_gui_native
     PUBLIC
         tcbase::termin_base
+        tgfx::termin_graphics2
 )
 
 termin_set_rpath_lib(termin_gui_native)
@@ -70,6 +78,28 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     termin_gui_native_add_test(termin_gui_native_draw_list_test
         tests/test_ui_draw_list.cpp
     )
+endif()
+
+if(TERMIN_GUI_NATIVE_BUILD_EXAMPLES)
+    if(COMMAND termin_require_package)
+        termin_require_package(termin_display termin_display::termin_display)
+    else()
+        find_package(termin_display REQUIRED)
+    endif()
+
+    add_executable(termin_gui_native_rect_window
+        examples/ui_rect_window.cpp
+    )
+    target_link_libraries(termin_gui_native_rect_window
+        PRIVATE
+            termin_gui_native
+            termin_display::termin_display
+    )
+    if(NOT WIN32)
+        set_target_properties(termin_gui_native_rect_window PROPERTIES
+            BUILD_RPATH "$<TARGET_FILE_DIR:termin_gui_native>;$<TARGET_FILE_DIR:termin_display::termin_display>;$<TARGET_FILE_DIR:tgfx::termin_graphics2>;$<TARGET_FILE_DIR:tcbase::termin_base>"
+        )
+    endif()
 endif()
 
 include(GNUInstallDirs)
