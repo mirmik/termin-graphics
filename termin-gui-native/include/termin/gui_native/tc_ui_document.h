@@ -16,6 +16,7 @@ TC_DEFINE_HANDLE(tc_widget_handle)
 
 typedef struct tc_ui_document tc_ui_document;
 typedef struct tc_widget tc_widget;
+typedef struct tc_ui_draw_list tc_ui_draw_list;
 typedef struct tc_ui_paint_context tc_ui_paint_context;
 
 typedef struct tc_ui_size {
@@ -30,10 +31,39 @@ typedef struct tc_ui_rect {
     float height;
 } tc_ui_rect;
 
+typedef struct tc_ui_point {
+    float x;
+    float y;
+} tc_ui_point;
+
+typedef struct tc_ui_color {
+    float r;
+    float g;
+    float b;
+    float a;
+} tc_ui_color;
+
 typedef struct tc_ui_constraints {
     tc_ui_size min_size;
     tc_ui_size max_size;
 } tc_ui_constraints;
+
+typedef enum tc_ui_draw_command_type {
+    TC_UI_DRAW_FILL_RECT = 0,
+    TC_UI_DRAW_STROKE_RECT = 1,
+    TC_UI_DRAW_LINE = 2,
+    TC_UI_DRAW_PUSH_CLIP = 3,
+    TC_UI_DRAW_POP_CLIP = 4
+} tc_ui_draw_command_type;
+
+typedef struct tc_ui_draw_command {
+    tc_ui_draw_command_type type;
+    tc_ui_rect rect;
+    tc_ui_point p0;
+    tc_ui_point p1;
+    tc_ui_color color;
+    float thickness;
+} tc_ui_draw_command;
 
 typedef enum tc_ui_event_result {
     TC_UI_EVENT_IGNORED = 0,
@@ -177,6 +207,47 @@ TERMIN_GUI_NATIVE_API void tc_ui_document_paint_roots(
     tc_ui_document* document,
     tc_ui_paint_context* context
 );
+
+TERMIN_GUI_NATIVE_API tc_ui_draw_list* tc_ui_draw_list_create(void);
+TERMIN_GUI_NATIVE_API void tc_ui_draw_list_destroy(tc_ui_draw_list* draw_list);
+TERMIN_GUI_NATIVE_API void tc_ui_draw_list_clear(tc_ui_draw_list* draw_list);
+TERMIN_GUI_NATIVE_API size_t tc_ui_draw_list_command_count(const tc_ui_draw_list* draw_list);
+TERMIN_GUI_NATIVE_API const tc_ui_draw_command* tc_ui_draw_list_command_at(
+    const tc_ui_draw_list* draw_list,
+    size_t index
+);
+
+TERMIN_GUI_NATIVE_API tc_ui_paint_context* tc_ui_paint_context_create(
+    tc_ui_draw_list* draw_list
+);
+TERMIN_GUI_NATIVE_API void tc_ui_paint_context_destroy(tc_ui_paint_context* context);
+TERMIN_GUI_NATIVE_API tc_ui_draw_list* tc_ui_paint_context_draw_list(
+    tc_ui_paint_context* context
+);
+
+TERMIN_GUI_NATIVE_API void tc_ui_painter_fill_rect(
+    tc_ui_paint_context* context,
+    tc_ui_rect rect,
+    tc_ui_color color
+);
+TERMIN_GUI_NATIVE_API void tc_ui_painter_stroke_rect(
+    tc_ui_paint_context* context,
+    tc_ui_rect rect,
+    tc_ui_color color,
+    float thickness
+);
+TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_line(
+    tc_ui_paint_context* context,
+    tc_ui_point p0,
+    tc_ui_point p1,
+    tc_ui_color color,
+    float thickness
+);
+TERMIN_GUI_NATIVE_API void tc_ui_painter_push_clip(
+    tc_ui_paint_context* context,
+    tc_ui_rect rect
+);
+TERMIN_GUI_NATIVE_API void tc_ui_painter_pop_clip(tc_ui_paint_context* context);
 
 #ifdef __cplusplus
 }

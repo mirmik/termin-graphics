@@ -34,6 +34,14 @@ struct tc_ui_document {
     size_t live_count = 0;
 };
 
+struct tc_ui_draw_list {
+    std::vector<tc_ui_draw_command> commands;
+};
+
+struct tc_ui_paint_context {
+    tc_ui_draw_list* draw_list = nullptr;
+};
+
 static WidgetSlot* resolve_slot(tc_ui_document* document, tc_widget_handle handle) {
     if (!document || tc_widget_handle_is_invalid(handle)) {
         return nullptr;
@@ -365,6 +373,123 @@ void tc_ui_document_paint_roots(tc_ui_document* document, tc_ui_paint_context* c
             widget->vtable->paint(widget, document, context);
         }
     }
+}
+
+tc_ui_draw_list* tc_ui_draw_list_create(void) {
+    return new (std::nothrow) tc_ui_draw_list();
+}
+
+void tc_ui_draw_list_destroy(tc_ui_draw_list* draw_list) {
+    delete draw_list;
+}
+
+void tc_ui_draw_list_clear(tc_ui_draw_list* draw_list) {
+    if (!draw_list) {
+        tc_log_error("[termin-gui-native] cannot clear null UI draw list");
+        return;
+    }
+    draw_list->commands.clear();
+}
+
+size_t tc_ui_draw_list_command_count(const tc_ui_draw_list* draw_list) {
+    return draw_list ? draw_list->commands.size() : 0;
+}
+
+const tc_ui_draw_command* tc_ui_draw_list_command_at(
+    const tc_ui_draw_list* draw_list,
+    size_t index
+) {
+    if (!draw_list || index >= draw_list->commands.size()) {
+        return nullptr;
+    }
+    return &draw_list->commands[index];
+}
+
+tc_ui_paint_context* tc_ui_paint_context_create(tc_ui_draw_list* draw_list) {
+    if (!draw_list) {
+        tc_log_error("[termin-gui-native] cannot create paint context with null draw list");
+        return nullptr;
+    }
+
+    auto* context = new (std::nothrow) tc_ui_paint_context();
+    if (!context) {
+        tc_log_error("[termin-gui-native] failed to allocate UI paint context");
+        return nullptr;
+    }
+    context->draw_list = draw_list;
+    return context;
+}
+
+void tc_ui_paint_context_destroy(tc_ui_paint_context* context) {
+    delete context;
+}
+
+tc_ui_draw_list* tc_ui_paint_context_draw_list(tc_ui_paint_context* context) {
+    return context ? context->draw_list : nullptr;
+}
+
+static bool append_draw_command(tc_ui_paint_context* context, tc_ui_draw_command command) {
+    if (!context || !context->draw_list) {
+        tc_log_error("[termin-gui-native] cannot append UI draw command without paint context");
+        return false;
+    }
+    context->draw_list->commands.push_back(command);
+    return true;
+}
+
+void tc_ui_painter_fill_rect(
+    tc_ui_paint_context* context,
+    tc_ui_rect rect,
+    tc_ui_color color
+) {
+    tc_ui_draw_command command {};
+    command.type = TC_UI_DRAW_FILL_RECT;
+    command.rect = rect;
+    command.color = color;
+    append_draw_command(context, command);
+}
+
+void tc_ui_painter_stroke_rect(
+    tc_ui_paint_context* context,
+    tc_ui_rect rect,
+    tc_ui_color color,
+    float thickness
+) {
+    tc_ui_draw_command command {};
+    command.type = TC_UI_DRAW_STROKE_RECT;
+    command.rect = rect;
+    command.color = color;
+    command.thickness = thickness;
+    append_draw_command(context, command);
+}
+
+void tc_ui_painter_draw_line(
+    tc_ui_paint_context* context,
+    tc_ui_point p0,
+    tc_ui_point p1,
+    tc_ui_color color,
+    float thickness
+) {
+    tc_ui_draw_command command {};
+    command.type = TC_UI_DRAW_LINE;
+    command.p0 = p0;
+    command.p1 = p1;
+    command.color = color;
+    command.thickness = thickness;
+    append_draw_command(context, command);
+}
+
+void tc_ui_painter_push_clip(tc_ui_paint_context* context, tc_ui_rect rect) {
+    tc_ui_draw_command command {};
+    command.type = TC_UI_DRAW_PUSH_CLIP;
+    command.rect = rect;
+    append_draw_command(context, command);
+}
+
+void tc_ui_painter_pop_clip(tc_ui_paint_context* context) {
+    tc_ui_draw_command command {};
+    command.type = TC_UI_DRAW_POP_CLIP;
+    append_draw_command(context, command);
 }
 
 } // extern "C"
