@@ -67,6 +67,13 @@
       "distribution": "tcgui"
     },
     {
+      "path": "termin-gui-native",
+      "distribution": "termin-gui-native",
+      "native_extensions": [
+        {"extension": "termin.gui_native._gui_native", "target": "_gui_native"}
+      ]
+    },
+    {
       "path": "termin-inspect",
       "distribution": "termin-inspect",
       "native_extensions": [

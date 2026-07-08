@@ -9,6 +9,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(TERMIN_GUI_NATIVE_BUILD_TESTS "Build termin-gui-native tests" ON)
 option(TERMIN_GUI_NATIVE_BUILD_EXAMPLES "Build termin-gui-native examples" OFF)
+option(TERMIN_BUILD_PYTHON "Build termin-gui-native Python bindings" OFF)
 
 if(COMMAND termin_require_package)
     termin_require_package(termin_base tcbase::termin_base)
@@ -100,6 +101,28 @@ if(TERMIN_GUI_NATIVE_BUILD_EXAMPLES)
             BUILD_RPATH "$<TARGET_FILE_DIR:termin_gui_native>;$<TARGET_FILE_DIR:termin_display::termin_display>;$<TARGET_FILE_DIR:tgfx::termin_graphics2>;$<TARGET_FILE_DIR:tcbase::termin_base>"
         )
     endif()
+endif()
+
+if(TERMIN_BUILD_PYTHON)
+    find_package(Python 3.8 COMPONENTS Interpreter Development REQUIRED)
+    find_package(nanobind CONFIG REQUIRED)
+
+    nanobind_add_module(_gui_native NB_SHARED
+        python/bindings/gui_native_module.cpp
+    )
+    target_link_libraries(_gui_native
+        PRIVATE
+            termin_gui_native
+    )
+    target_include_directories(_gui_native
+        PRIVATE
+            ${CMAKE_CURRENT_LIST_DIR}/include
+    )
+    termin_set_rpath_python(_gui_native)
+    install(TARGETS _gui_native DESTINATION lib/python/termin/gui_native)
+    install(DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/python/termin/gui_native/
+            DESTINATION lib/python/termin/gui_native
+            FILES_MATCHING PATTERN "*.py")
 endif()
 
 include(GNUInstallDirs)
