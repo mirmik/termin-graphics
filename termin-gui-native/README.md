@@ -1,0 +1,18 @@
+# termin-gui-native
+
+Experimental native UI document prototype for the future `termin-gui`
+migration.
+
+The current module is intentionally small:
+
+- `tc_ui_document` owns widget objects and handle lifetime;
+- `tc_widget` is an intrusive C ABI header embedded into concrete widgets;
+- widget implementations keep their own handle references;
+- plain destroy deletes only the requested widget;
+- recursive destroy is an explicit API and asks the widget vtable for recursive
+  destroy targets;
+- roots are explicit paint entry points, not an implicit ownership tree.
+
+This module does not replace the existing Python `termin-gui` package yet. It
+is a place to test the ownership, handle and polyglot widget contracts before
+adding Python bindings or porting real widgets.
