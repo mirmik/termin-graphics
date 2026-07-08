@@ -19,6 +19,7 @@ struct RegisteredRenderItemDrawEncoder {
     RenderItemDrawEncoderFn encode = nullptr;
     void* user_data = nullptr;
     std::string debug_name;
+    RenderItemEncoderCapabilities capabilities{};
 };
 
 std::mutex& render_item_draw_encoder_mutex()
@@ -195,6 +196,21 @@ bool mesh_render_item_draw_encoder(
     return encode_mesh_render_item_draw(ctx, item, mesh_request);
 }
 
+RenderItemEncoderCapabilities mesh_render_item_capabilities()
+{
+    RenderItemEncoderCapabilities capabilities{};
+    capabilities.pass_semantic_mask =
+        render_item_pass_semantic_bit(RenderItemPassSemantic::Color)
+        | render_item_pass_semantic_bit(RenderItemPassSemantic::Shadow)
+        | render_item_pass_semantic_bit(RenderItemPassSemantic::Id)
+        | render_item_pass_semantic_bit(RenderItemPassSemantic::Depth)
+        | render_item_pass_semantic_bit(RenderItemPassSemantic::DepthOnly)
+        | render_item_pass_semantic_bit(RenderItemPassSemantic::Normal);
+    capabilities.requires_draw_context = true;
+    capabilities.consumes_common_resources = true;
+    return capabilities;
+}
+
 void ensure_builtin_render_item_draw_encoders()
 {
     static std::once_flag once;
@@ -202,6 +218,7 @@ void ensure_builtin_render_item_draw_encoders()
         RegisteredRenderItemDrawEncoder mesh_encoder{};
         mesh_encoder.encode = mesh_render_item_draw_encoder;
         mesh_encoder.debug_name = "MeshRenderItem";
+        mesh_encoder.capabilities = mesh_render_item_capabilities();
 
         std::lock_guard<std::mutex> lock(render_item_draw_encoder_mutex());
         render_item_draw_encoder_registry().emplace(
@@ -243,6 +260,7 @@ bool register_render_item_draw_encoder(
     registered.encode = desc.encode;
     registered.user_data = desc.user_data;
     registered.debug_name = desc.debug_name ? desc.debug_name : "";
+    registered.capabilities = desc.capabilities;
     registry.emplace(item_kind, std::move(registered));
     return true;
 }
@@ -277,6 +295,32 @@ bool unregister_render_item_draw_encoder(
     }
     registry.erase(it);
     return true;
+}
+
+bool get_render_item_encoder_capabilities(
+    uint32_t item_kind,
+    RenderItemEncoderCapabilities& out)
+{
+    ensure_builtin_render_item_draw_encoders();
+
+    RegisteredRenderItemDrawEncoder encoder{};
+    if (!find_registered_render_item_draw_encoder(item_kind, encoder)) {
+        out = {};
+        return false;
+    }
+    out = encoder.capabilities;
+    return true;
+}
+
+bool render_item_encoder_supports_pass(
+    uint32_t item_kind,
+    RenderItemPassSemantic semantic)
+{
+    RenderItemEncoderCapabilities capabilities{};
+    if (!get_render_item_encoder_capabilities(item_kind, capabilities)) {
+        return false;
+    }
+    return (capabilities.pass_semantic_mask & render_item_pass_semantic_bit(semantic)) != 0;
 }
 
 bool bind_render_item_common_resources(
