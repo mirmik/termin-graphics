@@ -7,6 +7,7 @@ from termin.scene import ComponentRegistry
 class DrawableComponent(PythonComponent):
     """Component capable of rendering (has drawable vtable)."""
 
+    component_category = "Rendering"
     is_drawable: bool = True
 
     def __init__(self, enabled: bool = True, display_name: str = ""):
