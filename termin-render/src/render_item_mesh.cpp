@@ -3,8 +3,8 @@
 #include <termin/render/shader_abi.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstring>
-#include <vector>
 
 #include <tcbase/tc_log.hpp>
 #include <tgfx2/render_context.hpp>
@@ -100,9 +100,14 @@ bool resolve_render_item_mesh_draw_geometry(
     return true;
 }
 
-std::vector<uint8_t> pack_render_item_bone_block_std140(const tc_render_item& item)
+using RenderItemBoneBlockStorage =
+    std::array<uint8_t, static_cast<size_t>(RENDER_ITEM_BONE_BLOCK_SIZE)>;
+
+void pack_render_item_bone_block_std140(
+    const tc_render_item& item,
+    RenderItemBoneBlockStorage& staging)
 {
-    std::vector<uint8_t> staging(RENDER_ITEM_BONE_BLOCK_SIZE, 0);
+    staging.fill(0);
     const uint32_t matrix_count = std::min<uint32_t>(
         item.payload.mesh.skinning_matrix_count,
         RENDER_ITEM_BONE_BLOCK_MAX_BONES);
@@ -117,7 +122,6 @@ std::vector<uint8_t> pack_render_item_bone_block_std140(const tc_render_item& it
         staging.data() + RENDER_ITEM_BONE_BLOCK_MAX_BONES * 16u * sizeof(float),
         &count,
         sizeof(int32_t));
-    return staging;
 }
 
 bool render_item_requires_bone_block(const tc_render_item& item)
@@ -173,7 +177,6 @@ bool encode_mesh_render_item_draw(
         return false;
     }
 
-    std::vector<uint8_t> bone_block;
     if (render_item_requires_bone_block(item)) {
         if (!shader_accepts_render_item_bone_block(
                 request.shader,
@@ -181,7 +184,8 @@ bool encode_mesh_render_item_draw(
                 entity_name)) {
             return false;
         }
-        bone_block = pack_render_item_bone_block_std140(item);
+        RenderItemBoneBlockStorage bone_block{};
+        pack_render_item_bone_block_std140(item, bone_block);
         ctx.bind_uniform_data(
             TC_SHADER_RESOURCE_BONE_BLOCK,
             bone_block.data(),

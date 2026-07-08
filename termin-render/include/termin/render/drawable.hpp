@@ -184,6 +184,7 @@ struct PhaseDrawCall {
     tc_shader_handle final_shader;
     int priority = 0;
     int geometry_id = 0;
+    tc_render_item item{};
     tc_material_handle material = tc_material_handle_invalid();
     size_t phase_index = SIZE_MAX;
 
