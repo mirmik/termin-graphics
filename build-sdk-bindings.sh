@@ -210,6 +210,13 @@ sync_staged_dir include
 sync_staged_dir share
 sync_staged_dir lib --exclude '/python*/'
 
+# The staged lib/ tree intentionally does not own the bundled CPython shared
+# library.  rsync --delete therefore removes it unless we restore the runtime
+# after synchronizing native SDK artifacts.
+PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
+    "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" prepare-build-python-runtime \
+    --sdk-prefix "$SDK_PREFIX"
+
 PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
     "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" write-artifacts \
     --build-dir "$BUILD_DIR" \

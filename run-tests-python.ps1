@@ -1,8 +1,7 @@
 #!/usr/bin/env pwsh
 # Run Python test suites across projects.
 #
-# Auto-activates .venv/ and auto-detects TERMIN_SDK, so no manual setup is
-# needed after setting up the editable test environment.
+# Uses the isolated bundled SDK Python plus a checkout-local source overlay.
 #
 # Usage:
 #   .\run-tests-python.ps1
@@ -19,7 +18,7 @@ $Full = $false
 function Show-Help {
     Write-Host "Usage: .\run-tests-python.ps1 [pytest-target ...]"
     Write-Host ""
-    Write-Host "  (no flags)  Activate .venv/, auto-detect TERMIN_SDK, run working tests"
+    Write-Host "  (no flags)  Use SDK Python + checkout overlay and run working tests"
     Write-Host "  --full      Include pytest tests marked full"
     Write-Host "  pytest-target"
     Write-Host "              Run only selected pytest target(s), e.g. termin-app/tests/test_game_mode_model.py"
@@ -28,7 +27,7 @@ function Show-Help {
 
 foreach ($arg in $args) {
     if ($arg -eq "--no-venv") {
-        Write-Error "--no-venv is no longer supported; run .\setup-test-venv.ps1 first."
+        Write-Error "--no-venv is no longer supported; run .\setup-sdk-python-env.ps1 first."
         exit 1
     } elseif ($arg -eq "--full") {
         $Full = $true
@@ -42,39 +41,6 @@ foreach ($arg in $args) {
         $PytestTargets.Add($arg)
     }
 }
-
-$venvActivateCandidates = @(
-    (Join-Path $ScriptDir ".venv\Scripts\Activate.ps1"),
-    (Join-Path $ScriptDir ".venv\bin\Activate.ps1")
-)
-$ActivatedVenv = $false
-foreach ($activatePath in $venvActivateCandidates) {
-    if (Test-Path $activatePath) {
-        Write-Host "Activating venv: $(Join-Path $ScriptDir '.venv')"
-        . $activatePath
-        $ActivatedVenv = $true
-        break
-    }
-}
-if (-not $ActivatedVenv) {
-    Write-Error "test .venv is missing. Run .\setup-test-venv.ps1 before .\run-tests-python.ps1."
-    exit 1
-}
-
-if ($env:PYTHON_BIN) {
-    $PythonBin = $env:PYTHON_BIN
-} else {
-    $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
-    if (-not $pythonCommand) {
-        $pythonCommand = Get-Command py -ErrorAction SilentlyContinue
-    }
-    if (-not $pythonCommand) {
-        Write-Error "python not found"
-        exit 1
-    }
-    $PythonBin = $pythonCommand.Source
-}
-Write-Host "Python: $PythonBin"
 
 if (-not $env:TERMIN_SDK) {
     $localSdk = Join-Path $ScriptDir "sdk"
@@ -91,9 +57,23 @@ if (-not $env:TERMIN_SDK) {
 }
 if ($env:TERMIN_SDK) {
     Write-Host "TERMIN_SDK: $($env:TERMIN_SDK)"
+} else {
+    throw "Termin SDK was not found."
 }
 
-$SdkPrefix = if ($env:SDK_PREFIX) { $env:SDK_PREFIX } else { Join-Path $ScriptDir "sdk" }
+$PythonBin = if ($env:PYTHON_BIN) { $env:PYTHON_BIN } else { Join-Path $env:TERMIN_SDK "bin\termin_python.exe" }
+$OverlayManifest = if ($env:TERMIN_PYTHON_OVERLAY) { $env:TERMIN_PYTHON_OVERLAY } else { Join-Path $ScriptDir "build\python-envs\test\overlay.json" }
+if (-not (Test-Path $PythonBin -PathType Leaf)) {
+    throw "SDK Python launcher is missing: $PythonBin"
+}
+if (-not (Test-Path $OverlayManifest -PathType Leaf)) {
+    throw "Python test overlay is missing: $OverlayManifest. Run .\setup-sdk-python-env.ps1 first."
+}
+$PythonPrefixArgs = @("--termin-overlay", $OverlayManifest)
+Write-Host "Python: $PythonBin"
+Write-Host "Overlay: $OverlayManifest"
+
+$SdkPrefix = if ($env:SDK_PREFIX) { $env:SDK_PREFIX } else { $env:TERMIN_SDK }
 
 $pathEntries = @(
     (Join-Path $SdkPrefix "bin"),
@@ -110,10 +90,9 @@ if ($env:LD_LIBRARY_PATH) {
     $env:LD_LIBRARY_PATH = $sdkLib
 }
 
-# Editable installs in .venv are the source of truth for Python tests. Do not
-# prepend SDK site-packages here: stale installed SDK packages can shadow the
-# checkout and hide source changes.
-$env:PYTHONPATH = if ($env:PYTHONPATH) { $env:PYTHONPATH } else { "" }
+Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue
+Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+Remove-Item Env:PYTHONUSERBASE -ErrorAction SilentlyContinue
 
 Write-Host ""
 Write-Host "========================================"
@@ -163,7 +142,7 @@ function Invoke-TestSuite {
     Write-Host "  $Name"
     Write-Host "----------------------------------------"
 
-    & $PythonBin @CommandArgs
+    & $PythonBin @PythonPrefixArgs @CommandArgs
     if ($LASTEXITCODE -ne 0) {
         $Failures.Add($Name)
     }
@@ -173,16 +152,10 @@ if ($PytestTargets.Count -gt 0) {
     Invoke-TestSuite "selected python" (@("-m", "pytest") + $PytestMarkerArgs + $PytestTargets.ToArray() + (New-PytestSuiteArgs "selected-python") + @("-v"))
 } else {
     $TestProfile = if ($Full) { "windows-d3d11" } else { "pr" }
-    $BuildToolsPath = Join-Path $ScriptDir "termin-build-tools"
-    $env:PYTHONPATH = if ($env:PYTHONPATH) {
-        "$BuildToolsPath$([IO.Path]::PathSeparator)$($env:PYTHONPATH)"
-    } else {
-        $BuildToolsPath
-    }
-
-    & $PythonBin -m termin_build.repository_control `
+    & $PythonBin @PythonPrefixArgs -m termin_build.repository_control `
         --repo-root $ScriptDir run $TestProfile `
-        --platform windows --python $PythonBin
+        --platform windows --python $PythonBin `
+        --python-arg=--termin-overlay --python-arg=$OverlayManifest
     if ($LASTEXITCODE -ne 0) {
         $Failures.Add("manifest Python suites")
     }
