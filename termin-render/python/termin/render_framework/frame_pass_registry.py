@@ -52,10 +52,14 @@ class FramePassRegistry:
 
             try:
                 module = importlib.import_module(module_name)
-                cls = getattr(module, class_name, None)
-                if cls is not None:
-                    self.register(class_name, cls)
-                    registered.append(class_name)
+                cls = getattr(module, class_name)
+                self.register(class_name, cls)
+                registered.append(class_name)
+            except AttributeError:
+                log.error(
+                    f"Builtin frame pass module {module_name} does not expose {class_name}",
+                    exc_info=True,
+                )
             except Exception as e:
                 log.warning(f"Failed to register frame pass {class_name} from {module_name}: {e}")
 
