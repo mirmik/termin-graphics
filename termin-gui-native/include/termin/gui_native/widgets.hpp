@@ -661,6 +661,11 @@ public:
 
     void set_value(float value);
     float value() const { return value_; }
+    float min_value() const { return min_value_; }
+    float max_value() const { return max_value_; }
+    float step() const { return step_; }
+    void set_range(float min_value, float max_value);
+    void set_step(float step);
     Signal<Slider&, float>& changed() { return changed_; }
     const Signal<Slider&, float>& changed() const { return changed_; }
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
@@ -668,8 +673,212 @@ public:
 
 private:
     float value_ = 0.0f;
+    float min_value_ = 0.0f;
+    float max_value_ = 1.0f;
+    float step_ = 0.0f;
     bool dragging_ = false;
     Signal<Slider&, float> changed_;
+};
+
+class SpinBox : public NativeWidget {
+public:
+    explicit SpinBox(float value = 0.0f);
+
+    float value() const { return value_; }
+    float min_value() const { return min_value_; }
+    float max_value() const { return max_value_; }
+    float step() const { return step_; }
+    int decimals() const { return decimals_; }
+    bool editing() const { return editing_; }
+    const std::string& edit_text() const { return edit_text_; }
+    void set_value(float value);
+    void set_range(float min_value, float max_value);
+    void set_step(float step);
+    void set_decimals(int decimals);
+    Signal<SpinBox&, float>& changed() { return changed_; }
+    const Signal<SpinBox&, float>& changed() const { return changed_; }
+
+    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
+    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
+    tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event) override;
+    tc_ui_event_result text_event(tc_ui_document* document, const tc_ui_text_event* event) override;
+    void focus_event(tc_ui_document* document, bool focused) override;
+
+private:
+    std::string formatted_value() const;
+    void begin_edit();
+    void commit_edit();
+    void cancel_edit();
+    tc_ui_rect up_button_rect() const;
+    tc_ui_rect down_button_rect() const;
+
+    float value_ = 0.0f;
+    float min_value_ = -1000000000.0f;
+    float max_value_ = 1000000000.0f;
+    float step_ = 1.0f;
+    int decimals_ = 2;
+    bool editing_ = false;
+    std::string edit_text_;
+    size_t caret_ = 0;
+    float button_width_ = 18.0f;
+    Signal<SpinBox&, float> changed_;
+};
+
+class SliderEdit : public NativeWidget {
+public:
+    explicit SliderEdit(float value = 0.0f);
+
+    float value() const { return value_; }
+    void set_value(float value);
+    void set_range(float min_value, float max_value);
+    void set_step(float step);
+    void set_decimals(int decimals);
+    void set_label(std::string label);
+    const std::string& label() const { return label_; }
+    tc_widget_handle slider_handle() const { return slider_handle_; }
+    tc_widget_handle spin_box_handle() const { return spin_box_handle_; }
+    Signal<SliderEdit&, float>& changed() { return changed_; }
+    const Signal<SliderEdit&, float>& changed() const { return changed_; }
+
+    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document* document, tc_ui_rect rect) override;
+    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
+    void on_destroy(tc_ui_document* document) override;
+
+private:
+    bool ensure_children(tc_ui_document* document);
+    void sync_children(tc_ui_document* document);
+
+    float value_ = 0.0f;
+    float min_value_ = 0.0f;
+    float max_value_ = 1.0f;
+    float step_ = 0.0f;
+    int decimals_ = 2;
+    float spacing_ = 4.0f;
+    float spin_box_width_ = 80.0f;
+    std::string label_;
+    tc_widget_handle slider_handle_ {};
+    tc_widget_handle spin_box_handle_ {};
+    size_t slider_connection_ = 0;
+    size_t spin_box_connection_ = 0;
+    bool syncing_ = false;
+    Signal<SliderEdit&, float> changed_;
+};
+
+class ComboBoxPopup;
+
+class ComboBox : public NativeWidget {
+public:
+    ComboBox();
+
+    size_t item_count() const { return items_.size(); }
+    const std::string& item_text(size_t index) const;
+    int selected_index() const { return selected_index_; }
+    std::string selected_text() const;
+    bool open() const { return open_; }
+    void add_item(std::string item);
+    void clear_items();
+    void set_selected_index(int index);
+    Signal<ComboBox&, int, const std::string&>& changed() { return changed_; }
+    const Signal<ComboBox&, int, const std::string&>& changed() const { return changed_; }
+
+    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
+    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
+    tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event) override;
+    void on_destroy(tc_ui_document* document) override;
+
+private:
+    friend class ComboBoxPopup;
+    bool show_popup(tc_ui_document* document);
+    void hide_popup(tc_ui_document* document);
+    void popup_dismissed();
+
+    std::vector<std::string> items_;
+    int selected_index_ = -1;
+    bool open_ = false;
+    tc_widget_handle popup_handle_ {};
+    float item_height_ = 24.0f;
+    size_t max_visible_items_ = 8;
+    Signal<ComboBox&, int, const std::string&> changed_;
+};
+
+class IconButton : public NativeWidget {
+public:
+    explicit IconButton(std::string icon = {});
+
+    void set_icon(std::string icon);
+    void set_texture(uint32_t texture_id);
+    void set_active(bool active);
+    bool active() const { return active_; }
+    Signal<IconButton&>& clicked() { return clicked_; }
+    const Signal<IconButton&>& clicked() const { return clicked_; }
+    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
+
+private:
+    std::string icon_;
+    uint32_t texture_id_ = 0;
+    bool active_ = false;
+    bool pressed_ = false;
+    Signal<IconButton&> clicked_;
+};
+
+class ImageWidget : public NativeWidget {
+public:
+    ImageWidget();
+
+    void set_texture(uint32_t texture_id, tc_ui_size intrinsic_size = {});
+    uint32_t texture_id() const { return texture_id_; }
+    tc_ui_size intrinsic_size() const { return intrinsic_size_; }
+    void set_tint(Color tint);
+    void set_preserve_aspect(bool preserve) { preserve_aspect_ = preserve; }
+    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
+    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
+
+private:
+    uint32_t texture_id_ = 0;
+    tc_ui_size intrinsic_size_ {64.0f, 64.0f};
+    Color tint_ {1.0f, 1.0f, 1.0f, 1.0f};
+    bool preserve_aspect_ = true;
+};
+
+class Canvas : public NativeWidget {
+public:
+    using PaintCallback = std::function<void(Canvas&, tc_ui_paint_context*)>;
+
+    Canvas();
+
+    void set_texture(uint32_t texture_id, tc_ui_size image_size = {});
+    void set_overlay_texture(uint32_t texture_id);
+    void set_paint_callback(PaintCallback callback);
+    float zoom() const { return zoom_; }
+    void set_zoom(float zoom, tc_ui_point anchor);
+    void fit_in_view();
+    tc_ui_point widget_to_image(tc_ui_point point) const;
+    tc_ui_point image_to_widget(tc_ui_point point) const;
+    Signal<Canvas&, float>& zoom_changed() { return zoom_changed_; }
+    Signal<Canvas&, tc_ui_point, const tc_ui_pointer_event&>& pointer_input() { return pointer_input_; }
+
+    void layout(tc_ui_document* document, tc_ui_rect rect) override;
+    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
+
+private:
+    uint32_t texture_id_ = 0;
+    uint32_t overlay_texture_id_ = 0;
+    tc_ui_size image_size_ {};
+    float zoom_ = 1.0f;
+    float min_zoom_ = 0.01f;
+    float max_zoom_ = 100.0f;
+    tc_ui_point offset_ {};
+    bool panning_ = false;
+    tc_ui_point pan_start_ {};
+    tc_ui_point pan_start_offset_ {};
+    PaintCallback paint_callback_;
+    Signal<Canvas&, float> zoom_changed_;
+    Signal<Canvas&, tc_ui_point, const tc_ui_pointer_event&> pointer_input_;
 };
 
 class Swatch : public NativeWidget {

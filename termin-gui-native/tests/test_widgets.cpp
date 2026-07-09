@@ -1216,6 +1216,180 @@ void test_text_area_multiline_utf8_editing_navigation_and_scroll() {
     tc_ui_draw_list_destroy(draw_list);
 }
 
+void test_spin_box_numeric_edit_buttons_and_keys() {
+    Document document;
+    install_test_text_measurer(document);
+    DocumentBuilder ui(document);
+    auto& spin = ui.make_root<SpinBox>(5.0f);
+    spin.set_range(-10.0f, 10.0f);
+    spin.set_step(0.5f);
+    spin.set_decimals(1);
+    document.layout_roots(tc_ui_rect {0.0f, 0.0f, 120.0f, 34.0f});
+    assert(document.set_focus(spin));
+    int changes = 0;
+    spin.changed().connect([&changes](SpinBox&, float) { ++changes; });
+
+    tc_ui_pointer_event pointer {};
+    pointer.type = TC_UI_POINTER_DOWN;
+    pointer.x = spin.bounds().x + spin.bounds().width - 4.0f;
+    pointer.y = spin.bounds().y + 4.0f;
+    assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+    assert(near(spin.value(), 5.5f));
+
+    pointer.x = spin.bounds().x + 10.0f;
+    assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+    assert(spin.editing());
+    tc_ui_key_event key {};
+    key.type = TC_UI_KEY_DOWN;
+    key.key = TC_UI_KEY_HOME;
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    const size_t initial_length = spin.edit_text().size();
+    key.key = TC_UI_KEY_DELETE;
+    for (size_t index = 0; index < initial_length; ++index) {
+        assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    }
+    tc_ui_text_event text {"7.5"};
+    assert(document.dispatch_text_event(text) == TC_UI_EVENT_HANDLED);
+    key.key = TC_UI_KEY_ENTER;
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    assert(!spin.editing());
+    assert(near(spin.value(), 7.5f));
+    assert(changes == 2);
+}
+
+void test_slider_edit_owns_canonical_children_and_syncs_values() {
+    Document document;
+    install_test_text_measurer(document);
+    DocumentBuilder ui(document);
+    auto& edit = ui.make_root<SliderEdit>(2.0f);
+    edit.set_range(0.0f, 10.0f);
+    edit.set_step(0.5f);
+    edit.set_label("Exposure");
+    document.layout_roots(tc_ui_rect {0.0f, 0.0f, 300.0f, 52.0f});
+    assert(edit.child_count() == 2);
+    assert(tc_ui_document_is_alive(document.get(), edit.slider_handle()));
+    assert(tc_ui_document_is_alive(document.get(), edit.spin_box_handle()));
+
+    int changes = 0;
+    edit.changed().connect([&changes](SliderEdit&, float) { ++changes; });
+    tc_widget* slider_widget = tc_ui_document_resolve_widget(document.get(), edit.slider_handle());
+    auto* slider = static_cast<Slider*>(slider_widget->body);
+    slider->set_value(7.0f);
+    assert(near(edit.value(), 7.0f));
+    tc_widget* spin_widget = tc_ui_document_resolve_widget(document.get(), edit.spin_box_handle());
+    assert(near(static_cast<SpinBox*>(spin_widget->body)->value(), 7.0f));
+    assert(changes == 1);
+
+    const tc_widget_handle root_handle = edit.handle();
+    assert(tc_ui_document_destroy_widget_recursive(document.get(), root_handle));
+    assert(tc_ui_document_live_widget_count(document.get()) == 0);
+}
+
+void test_combo_box_overlay_selection_and_destruction() {
+    Document document;
+    install_test_text_measurer(document);
+    DocumentBuilder ui(document);
+    auto& combo = ui.make_root<ComboBox>();
+    combo.add_item("First");
+    combo.add_item("Second");
+    combo.add_item("Third");
+    document.layout_roots(tc_ui_rect {10.0f, 10.0f, 180.0f, 34.0f});
+    int changes = 0;
+    combo.changed().connect([&changes](ComboBox&, int, const std::string&) { ++changes; });
+
+    tc_ui_pointer_event pointer {};
+    pointer.type = TC_UI_POINTER_DOWN;
+    pointer.x = 20.0f;
+    pointer.y = 20.0f;
+    assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+    assert(combo.open());
+    assert(tc_ui_document_overlay_count(document.get()) == 1);
+    const tc_widget_handle popup_handle = tc_ui_document_overlay_at(document.get(), 0);
+    const tc_widget* popup = tc_ui_document_resolve_widget_const(document.get(), popup_handle);
+    assert(popup);
+    pointer.x = popup->bounds.x + 10.0f;
+    pointer.y = popup->bounds.y + 24.0f + 10.0f;
+    assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+    assert(combo.selected_index() == 1);
+    assert(combo.selected_text() == "Second");
+    assert(changes == 1);
+    assert(!combo.open());
+    assert(tc_ui_document_overlay_count(document.get()) == 0);
+
+    assert(tc_ui_document_destroy_widget_recursive(document.get(), combo.handle()));
+    assert(!tc_ui_document_is_alive(document.get(), popup_handle));
+    assert(tc_ui_document_live_widget_count(document.get()) == 0);
+}
+
+void test_icon_image_and_canvas_media_contracts() {
+    Document document;
+    install_test_text_measurer(document);
+    DocumentBuilder ui(document);
+    auto& root = ui.make_root<VStack>("media-root");
+    auto& icon = ui.make<IconButton>("I");
+    auto& image = ui.make<ImageWidget>();
+    auto& canvas = ui.make<Canvas>();
+    image.set_texture(41, tc_ui_size {200.0f, 100.0f});
+    canvas.set_texture(42, tc_ui_size {100.0f, 50.0f});
+    canvas.set_overlay_texture(43);
+    int custom_paints = 0;
+    canvas.set_paint_callback([&custom_paints](Canvas&, tc_ui_paint_context* context) {
+        ++custom_paints;
+        tc_ui_painter_draw_line(
+            context,
+            tc_ui_point {0.0f, 0.0f},
+            tc_ui_point {1.0f, 1.0f},
+            tc_ui_color {1.0f, 0.0f, 0.0f, 1.0f},
+            1.0f
+        );
+    });
+    root.add_fixed_child(icon, 28.0f);
+    root.add_fixed_child(image, 80.0f);
+    root.add_fixed_child(canvas, 120.0f);
+    document.layout_roots(tc_ui_rect {0.0f, 0.0f, 240.0f, 240.0f});
+
+    const tc_ui_point center {
+        canvas.bounds().x + canvas.bounds().width * 0.5f,
+        canvas.bounds().y + canvas.bounds().height * 0.5f
+    };
+    canvas.fit_in_view();
+    const tc_ui_point image_center = canvas.widget_to_image(center);
+    assert(near(image_center.x, 50.0f));
+    assert(near(image_center.y, 25.0f));
+
+    tc_ui_pointer_event wheel {};
+    wheel.type = TC_UI_POINTER_WHEEL;
+    wheel.x = center.x;
+    wheel.y = center.y;
+    wheel.wheel_y = 1.0f;
+    const float old_zoom = canvas.zoom();
+    assert(canvas.pointer_event(document.get(), &wheel) == TC_UI_EVENT_HANDLED);
+    assert(canvas.zoom() > old_zoom);
+    const tc_ui_point anchored = canvas.widget_to_image(center);
+    assert(near(anchored.x, image_center.x));
+    assert(near(anchored.y, image_center.y));
+
+    int clicks = 0;
+    icon.clicked().connect([&clicks](IconButton&) { ++clicks; });
+    tc_ui_pointer_event click {};
+    click.type = TC_UI_POINTER_DOWN;
+    click.x = icon.bounds().x + 4.0f;
+    click.y = icon.bounds().y + 4.0f;
+    assert(icon.pointer_event(document.get(), &click) == TC_UI_EVENT_HANDLED);
+    click.type = TC_UI_POINTER_UP;
+    assert(icon.pointer_event(document.get(), &click) == TC_UI_EVENT_HANDLED);
+    assert(clicks == 1);
+
+    tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
+    tc_ui_paint_context* context = tc_ui_paint_context_create(draw_list);
+    document.paint_roots(context);
+    assert(custom_paints == 1);
+    assert(count_commands(draw_list, TC_UI_DRAW_TEXTURE) == 3);
+    assert(count_commands(draw_list, TC_UI_DRAW_LINE) >= 1);
+    tc_ui_paint_context_destroy(context);
+    tc_ui_draw_list_destroy(draw_list);
+}
+
 void test_widget_signals_are_emitted_from_interactions() {
     Document document;
     DocumentBuilder ui(document);
@@ -1467,6 +1641,10 @@ int main() {
     test_text_input_scrolls_to_keep_caret_inside_clip();
     test_text_input_utf8_selection_and_host_clipboard();
     test_text_area_multiline_utf8_editing_navigation_and_scroll();
+    test_spin_box_numeric_edit_buttons_and_keys();
+    test_slider_edit_owns_canonical_children_and_syncs_values();
+    test_combo_box_overlay_selection_and_destruction();
+    test_icon_image_and_canvas_media_contracts();
     test_widget_signals_are_emitted_from_interactions();
     test_containers_register_and_replace_canonical_children();
     test_common_visibility_enabled_and_mouse_transparent_state();

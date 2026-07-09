@@ -1,8 +1,12 @@
 #include <termin/gui_native/widgets.hpp>
 
 #include <algorithm>
+#include <cerrno>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
+#include <iomanip>
+#include <sstream>
 #include <string_view>
 
 #include <tcbase/tc_log.h>
@@ -3178,7 +3182,11 @@ Slider::Slider(float value)
 }
 
 void Slider::set_value(float value) {
-    const float next = clamp_float(value, 0.0f, 1.0f);
+    float next = clamp_float(value, min_value_, max_value_);
+    if (step_ > 0.0f) {
+        next = min_value_ + std::round((next - min_value_) / step_) * step_;
+        next = clamp_float(next, min_value_, max_value_);
+    }
     if (std::fabs(next - value_) <= 0.0001f) {
         return;
     }
@@ -3187,12 +3195,34 @@ void Slider::set_value(float value) {
     changed_.emit(*this, value_);
 }
 
+void Slider::set_range(float min_value, float max_value) {
+    if (!std::isfinite(min_value) || !std::isfinite(max_value) || max_value < min_value) {
+        tc_log_error("[termin-gui-native] Slider rejected invalid range");
+        return;
+    }
+    min_value_ = min_value;
+    max_value_ = max_value;
+    set_value(value_);
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+}
+
+void Slider::set_step(float step) {
+    if (!std::isfinite(step) || step < 0.0f) {
+        tc_log_error("[termin-gui-native] Slider rejected invalid step");
+        return;
+    }
+    step_ = step;
+    set_value(value_);
+}
+
 void Slider::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     const float center_y = bounds().y + bounds().height * 0.5f;
     const float left = bounds().x + 10.0f;
     const float right = bounds().x + bounds().width - 10.0f;
-    const float knob_x = left + (right - left) * value_;
+    const float range = max_value_ - min_value_;
+    const float ratio = range > 0.0f ? (value_ - min_value_) / range : 0.0f;
+    const float knob_x = left + (right - left) * ratio;
     tc_ui_painter_draw_line(
         context,
         tc_ui_point {left, center_y},
@@ -3242,8 +3272,778 @@ tc_ui_event_result Slider::pointer_event(tc_ui_document* document, const tc_ui_p
     if (right <= left) {
         return TC_UI_EVENT_HANDLED;
     }
-    set_value((event->x - left) / (right - left));
+    const float ratio = clamp_float((event->x - left) / (right - left), 0.0f, 1.0f);
+    set_value(min_value_ + ratio * (max_value_ - min_value_));
     return TC_UI_EVENT_HANDLED;
+}
+
+SpinBox::SpinBox(float value)
+    : NativeWidget("SpinBox") {
+    set_style_role(TC_UI_STYLE_TEXT_INPUT);
+    set_focusable(true);
+    set_preferred_size(tc_ui_size {120.0f, 34.0f});
+    set_value(value);
+}
+
+void SpinBox::set_value(float value) {
+    if (!std::isfinite(value)) {
+        tc_log_error("[termin-gui-native] SpinBox rejected non-finite value");
+        return;
+    }
+    const float next = clamp_float(value, min_value_, max_value_);
+    if (std::fabs(next - value_) <= 0.000001f) return;
+    value_ = next;
+    if (editing_) {
+        edit_text_ = formatted_value();
+        caret_ = edit_text_.size();
+    }
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+    changed_.emit(*this, value_);
+}
+
+void SpinBox::set_range(float min_value, float max_value) {
+    if (!std::isfinite(min_value) || !std::isfinite(max_value) || max_value < min_value) {
+        tc_log_error("[termin-gui-native] SpinBox rejected invalid range");
+        return;
+    }
+    min_value_ = min_value;
+    max_value_ = max_value;
+    set_value(value_);
+}
+
+void SpinBox::set_step(float step) {
+    if (!std::isfinite(step) || step <= 0.0f) {
+        tc_log_error("[termin-gui-native] SpinBox rejected invalid step");
+        return;
+    }
+    step_ = step;
+}
+
+void SpinBox::set_decimals(int decimals) {
+    if (decimals < 0 || decimals > 9) {
+        tc_log_error("[termin-gui-native] SpinBox rejected decimals outside [0, 9]");
+        return;
+    }
+    decimals_ = decimals;
+    if (editing_) {
+        edit_text_ = formatted_value();
+        caret_ = edit_text_.size();
+    }
+    mark_dirty(TC_WIDGET_DIRTY_PAINT);
+}
+
+std::string SpinBox::formatted_value() const {
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(decimals_) << value_;
+    return stream.str();
+}
+
+void SpinBox::begin_edit() {
+    if (editing_) return;
+    editing_ = true;
+    edit_text_ = formatted_value();
+    caret_ = edit_text_.size();
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+}
+
+void SpinBox::commit_edit() {
+    if (!editing_) return;
+    editing_ = false;
+    errno = 0;
+    char* end = nullptr;
+    const float parsed = std::strtof(edit_text_.c_str(), &end);
+    if (errno == ERANGE || end == edit_text_.c_str() || !end || *end != '\0' || !std::isfinite(parsed)) {
+        tc_log_error("[termin-gui-native] SpinBox rejected invalid numeric edit '%s'", edit_text_.c_str());
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return;
+    }
+    set_value(parsed);
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+}
+
+void SpinBox::cancel_edit() {
+    editing_ = false;
+    edit_text_.clear();
+    caret_ = 0;
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+}
+
+tc_ui_rect SpinBox::up_button_rect() const {
+    return tc_ui_rect {
+        bounds().x + bounds().width - button_width_,
+        bounds().y,
+        button_width_,
+        bounds().height * 0.5f
+    };
+}
+
+tc_ui_rect SpinBox::down_button_rect() const {
+    tc_ui_rect result = up_button_rect();
+    result.y += result.height;
+    return result;
+}
+
+tc_ui_size SpinBox::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+    const tc_ui_style style = computed_style(document);
+    tc_ui_text_metrics metrics {};
+    tc_ui_size result = preferred_size();
+    if (measure_text(document, formatted_value(), style.font_size, metrics)) {
+        result.width = std::max(result.width, metrics.width + button_width_ + 20.0f);
+        result.height = std::max(result.height, metrics.line_height + 8.0f);
+    }
+    return clamp_size(result, constraints);
+}
+
+void SpinBox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+    const tc_ui_style style = computed_style(document);
+    const std::string display = editing_ ? edit_text_ : formatted_value();
+    tc_ui_text_metrics metrics {};
+    measure_text(document, display, style.font_size, metrics);
+    const float ascent = metrics.ascent > 0.0f ? metrics.ascent : style.font_size;
+    const float line_height_value = metrics.line_height > 0.0f ? metrics.line_height : style.font_size;
+    tc_ui_painter_fill_rect(context, bounds(), style.background);
+    tc_ui_painter_stroke_rect(context, bounds(), style.border, style.border_width);
+    tc_ui_painter_fill_rect(context, up_button_rect(), style.border);
+    tc_ui_painter_fill_rect(context, down_button_rect(), style.border);
+    tc_ui_painter_draw_text(
+        context, "+",
+        tc_ui_point {up_button_rect().x + 5.0f, up_button_rect().y + up_button_rect().height - 3.0f},
+        style.font_size, style.foreground
+    );
+    tc_ui_painter_draw_text(
+        context, "-",
+        tc_ui_point {down_button_rect().x + 6.0f, down_button_rect().y + down_button_rect().height - 3.0f},
+        style.font_size, style.foreground
+    );
+    const tc_ui_rect clip {
+        bounds().x + style.padding_left,
+        bounds().y + style.padding_top,
+        std::max(0.0f, bounds().width - button_width_ - style.padding_left - 2.0f),
+        std::max(0.0f, bounds().height - style.padding_top - style.padding_bottom)
+    };
+    const float baseline = clip.y + std::max(0.0f, (clip.height - line_height_value) * 0.5f) + ascent;
+    tc_ui_painter_push_clip(context, clip);
+    tc_ui_painter_draw_text(context, display.c_str(), tc_ui_point {clip.x, baseline}, style.font_size, style.foreground);
+    if (editing_ && tc_widget_handle_eq(tc_ui_document_focused_widget(document), handle())) {
+        tc_ui_text_metrics prefix {};
+        measure_text(document, std::string_view(edit_text_).substr(0, caret_), style.font_size, prefix);
+        const float x = clip.x + prefix.width;
+        tc_ui_painter_draw_line(context, tc_ui_point {x, clip.y + 3.0f}, tc_ui_point {x, clip.y + clip.height - 3.0f}, style.accent, 1.0f);
+    }
+    tc_ui_painter_pop_clip(context);
+}
+
+tc_ui_event_result SpinBox::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
+    if (!event || event->type != TC_UI_POINTER_DOWN || !rect_contains(bounds(), event->x, event->y)) {
+        return TC_UI_EVENT_IGNORED;
+    }
+    tc_ui_document_set_focus(document, handle());
+    if (rect_contains(up_button_rect(), event->x, event->y)) {
+        set_value(value_ + step_);
+    } else if (rect_contains(down_button_rect(), event->x, event->y)) {
+        set_value(value_ - step_);
+    } else {
+        begin_edit();
+    }
+    return TC_UI_EVENT_HANDLED;
+}
+
+tc_ui_event_result SpinBox::key_event(tc_ui_document*, const tc_ui_key_event* event) {
+    if (!event || event->type != TC_UI_KEY_DOWN) return TC_UI_EVENT_IGNORED;
+    if (event->key == TC_UI_KEY_UP_ARROW) {
+        set_value(value_ + step_);
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->key == TC_UI_KEY_DOWN_ARROW) {
+        set_value(value_ - step_);
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (!editing_) return TC_UI_EVENT_IGNORED;
+    switch (event->key) {
+    case TC_UI_KEY_LEFT: if (caret_ > 0) --caret_; break;
+    case TC_UI_KEY_RIGHT: if (caret_ < edit_text_.size()) ++caret_; break;
+    case TC_UI_KEY_HOME: caret_ = 0; break;
+    case TC_UI_KEY_END: caret_ = edit_text_.size(); break;
+    case TC_UI_KEY_BACKSPACE:
+        if (caret_ > 0) edit_text_.erase(--caret_, 1);
+        break;
+    case TC_UI_KEY_DELETE:
+        if (caret_ < edit_text_.size()) edit_text_.erase(caret_, 1);
+        break;
+    case TC_UI_KEY_ENTER: commit_edit(); break;
+    case TC_UI_KEY_ESCAPE: cancel_edit(); break;
+    default: return TC_UI_EVENT_IGNORED;
+    }
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+    return TC_UI_EVENT_HANDLED;
+}
+
+tc_ui_event_result SpinBox::text_event(tc_ui_document*, const tc_ui_text_event* event) {
+    if (!event || !event->text || event->text[0] == '\0') return TC_UI_EVENT_IGNORED;
+    if (!editing_) begin_edit();
+    std::string filtered;
+    for (const char ch : std::string_view(event->text)) {
+        if ((ch >= '0' && ch <= '9') || ch == '.' || ch == '-' || ch == '+' || ch == 'e' || ch == 'E') {
+            filtered.push_back(ch);
+        }
+    }
+    if (!filtered.empty()) {
+        edit_text_.insert(caret_, filtered);
+        caret_ += filtered.size();
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+    }
+    return TC_UI_EVENT_HANDLED;
+}
+
+void SpinBox::focus_event(tc_ui_document*, bool focused) {
+    if (!focused) commit_edit();
+}
+
+SliderEdit::SliderEdit(float value)
+    : NativeWidget("SliderEdit"), value_(value) {
+    set_preferred_size(tc_ui_size {300.0f, 34.0f});
+}
+
+void SliderEdit::set_value(float value) {
+    if (!std::isfinite(value)) {
+        tc_log_error("[termin-gui-native] SliderEdit rejected non-finite value");
+        return;
+    }
+    const float next = clamp_float(value, min_value_, max_value_);
+    if (std::fabs(next - value_) <= 0.000001f) return;
+    value_ = next;
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+    changed_.emit(*this, value_);
+}
+
+void SliderEdit::set_range(float min_value, float max_value) {
+    if (!std::isfinite(min_value) || !std::isfinite(max_value) || max_value < min_value) {
+        tc_log_error("[termin-gui-native] SliderEdit rejected invalid range");
+        return;
+    }
+    min_value_ = min_value;
+    max_value_ = max_value;
+    set_value(value_);
+}
+
+void SliderEdit::set_step(float step) {
+    if (!std::isfinite(step) || step < 0.0f) {
+        tc_log_error("[termin-gui-native] SliderEdit rejected invalid step");
+        return;
+    }
+    step_ = step;
+}
+
+void SliderEdit::set_decimals(int decimals) {
+    if (decimals < 0 || decimals > 9) {
+        tc_log_error("[termin-gui-native] SliderEdit rejected invalid decimals");
+        return;
+    }
+    decimals_ = decimals;
+}
+
+void SliderEdit::set_label(std::string label) {
+    label_ = std::move(label);
+    set_preferred_size(tc_ui_size {300.0f, label_.empty() ? 34.0f : 52.0f});
+}
+
+bool SliderEdit::ensure_children(tc_ui_document* document) {
+    if (!tc_widget_handle_is_invalid(slider_handle_) && !tc_widget_handle_is_invalid(spin_box_handle_)) {
+        return true;
+    }
+    auto slider = std::make_unique<Slider>(value_);
+    auto spin_box = std::make_unique<SpinBox>(value_);
+    slider_handle_ = tc_ui_document_adopt_widget(document, slider->c_widget());
+    if (tc_widget_handle_is_invalid(slider_handle_)) return false;
+    slider.release();
+    spin_box_handle_ = tc_ui_document_adopt_widget(document, spin_box->c_widget());
+    if (tc_widget_handle_is_invalid(spin_box_handle_)) {
+        tc_ui_document_destroy_widget(document, slider_handle_);
+        slider_handle_ = tc_widget_handle_invalid();
+        return false;
+    }
+    spin_box.release();
+    tc_widget* slider_widget = tc_ui_document_resolve_widget(document, slider_handle_);
+    tc_widget* spin_widget = tc_ui_document_resolve_widget(document, spin_box_handle_);
+    if (!tc_widget_append_child(c_widget(), slider_widget) || !tc_widget_append_child(c_widget(), spin_widget)) {
+        tc_log_error("[termin-gui-native] SliderEdit failed to attach numeric children");
+        return false;
+    }
+    auto* slider_body = static_cast<Slider*>(slider_widget->body);
+    auto* spin_body = static_cast<SpinBox*>(spin_widget->body);
+    slider_connection_ = slider_body->changed().connect([this, spin_body](Slider&, float value) {
+        if (syncing_) return;
+        syncing_ = true;
+        set_value(value);
+        spin_body->set_value(value_);
+        syncing_ = false;
+    });
+    spin_box_connection_ = spin_body->changed().connect([this, slider_body](SpinBox&, float value) {
+        if (syncing_) return;
+        syncing_ = true;
+        set_value(value);
+        slider_body->set_value(value_);
+        syncing_ = false;
+    });
+    return true;
+}
+
+void SliderEdit::sync_children(tc_ui_document* document) {
+    auto* slider = static_cast<Slider*>(tc_ui_document_resolve_widget(document, slider_handle_)->body);
+    auto* spin_box = static_cast<SpinBox*>(tc_ui_document_resolve_widget(document, spin_box_handle_)->body);
+    syncing_ = true;
+    slider->set_range(min_value_, max_value_);
+    slider->set_step(step_);
+    slider->set_value(value_);
+    spin_box->set_range(min_value_, max_value_);
+    spin_box->set_step(step_ > 0.0f ? step_ : 0.01f);
+    spin_box->set_decimals(decimals_);
+    spin_box->set_value(value_);
+    syncing_ = false;
+}
+
+tc_ui_size SliderEdit::measure(tc_ui_document*, tc_ui_constraints constraints) {
+    return clamp_size(preferred_size(), constraints);
+}
+
+void SliderEdit::layout(tc_ui_document* document, tc_ui_rect rect) {
+    NativeWidget::layout(document, rect);
+    if (!ensure_children(document)) return;
+    sync_children(document);
+    const float label_height = label_.empty() ? 0.0f : 18.0f;
+    const float content_y = rect.y + label_height;
+    const float content_height = std::max(0.0f, rect.height - label_height);
+    const float slider_width = std::max(0.0f, rect.width - spin_box_width_ - spacing_);
+    tc_widget_set_bounds(
+        tc_ui_document_resolve_widget(document, slider_handle_),
+        tc_ui_rect {rect.x, content_y, slider_width, content_height}
+    );
+    tc_widget_set_bounds(
+        tc_ui_document_resolve_widget(document, spin_box_handle_),
+        tc_ui_rect {rect.x + slider_width + spacing_, content_y, spin_box_width_, content_height}
+    );
+}
+
+void SliderEdit::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+    if (label_.empty()) return;
+    const tc_ui_style style = computed_style(document);
+    tc_ui_painter_draw_text(context, label_.c_str(), tc_ui_point {bounds().x, bounds().y + 13.0f}, 11.0f, style.foreground);
+}
+
+void SliderEdit::on_destroy(tc_ui_document* document) {
+    if (tc_widget* widget = tc_ui_document_resolve_widget(document, slider_handle_)) {
+        static_cast<Slider*>(widget->body)->changed().disconnect(slider_connection_);
+    }
+    if (tc_widget* widget = tc_ui_document_resolve_widget(document, spin_box_handle_)) {
+        static_cast<SpinBox*>(widget->body)->changed().disconnect(spin_box_connection_);
+    }
+}
+
+class ComboBoxPopup final : public NativeWidget {
+public:
+    explicit ComboBoxPopup(ComboBox& owner)
+        : NativeWidget("ComboBoxPopup"), owner_(owner) {}
+
+    void paint(tc_ui_document* document, tc_ui_paint_context* context) override {
+        const tc_ui_style style = owner_.computed_style(document);
+        tc_ui_painter_fill_rect(context, bounds(), tc_ui_color {0.18f, 0.18f, 0.22f, 0.98f});
+        tc_ui_painter_push_clip(context, bounds());
+        for (size_t index = 0; index < owner_.items_.size(); ++index) {
+            const float y = bounds().y + static_cast<float>(index) * owner_.item_height_ - scroll_y_;
+            if (y + owner_.item_height_ < bounds().y || y > bounds().y + bounds().height) continue;
+            if (static_cast<int>(index) == hovered_ || static_cast<int>(index) == owner_.selected_index_) {
+                tc_ui_color color = style.accent;
+                color.a = static_cast<int>(index) == hovered_ ? 0.45f : 0.25f;
+                tc_ui_painter_fill_rect(context, tc_ui_rect {bounds().x, y, bounds().width, owner_.item_height_}, color);
+            }
+            tc_ui_painter_draw_text(
+                context, owner_.items_[index].c_str(),
+                tc_ui_point {bounds().x + 8.0f, y + owner_.item_height_ * 0.72f},
+                style.font_size, style.foreground
+            );
+        }
+        tc_ui_painter_pop_clip(context);
+        tc_ui_painter_stroke_rect(context, bounds(), style.border, 1.0f);
+    }
+
+    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override {
+        if (!event) return TC_UI_EVENT_IGNORED;
+        if (event->type == TC_UI_POINTER_WHEEL) {
+            const float content_height = static_cast<float>(owner_.items_.size()) * owner_.item_height_;
+            scroll_y_ = clamp_float(
+                scroll_y_ - event->wheel_y * owner_.item_height_ * 2.0f,
+                0.0f,
+                std::max(0.0f, content_height - bounds().height)
+            );
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+            return TC_UI_EVENT_HANDLED;
+        }
+        if (event->type == TC_UI_POINTER_MOVE) {
+            const int next = static_cast<int>((event->y - bounds().y + scroll_y_) / owner_.item_height_);
+            hovered_ = next >= 0 && next < static_cast<int>(owner_.items_.size()) ? next : -1;
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+            return TC_UI_EVENT_HANDLED;
+        }
+        if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
+            const int index = static_cast<int>((event->y - bounds().y + scroll_y_) / owner_.item_height_);
+            if (index >= 0 && index < static_cast<int>(owner_.items_.size())) {
+                owner_.set_selected_index(index);
+                owner_.hide_popup(document);
+            }
+            return TC_UI_EVENT_HANDLED;
+        }
+        return TC_UI_EVENT_IGNORED;
+    }
+
+    void overlay_dismissed(tc_ui_document*, tc_ui_overlay_dismiss_reason) override {
+        owner_.popup_dismissed();
+    }
+
+private:
+    ComboBox& owner_;
+    int hovered_ = -1;
+    float scroll_y_ = 0.0f;
+};
+
+ComboBox::ComboBox()
+    : NativeWidget("ComboBox") {
+    set_style_role(TC_UI_STYLE_TEXT_INPUT);
+    set_focusable(true);
+    set_preferred_size(tc_ui_size {200.0f, 34.0f});
+}
+
+const std::string& ComboBox::item_text(size_t index) const {
+    if (index >= items_.size()) throw std::out_of_range("ComboBox item index out of range");
+    return items_[index];
+}
+
+std::string ComboBox::selected_text() const {
+    return selected_index_ >= 0 && selected_index_ < static_cast<int>(items_.size())
+        ? items_[selected_index_]
+        : std::string {};
+}
+
+void ComboBox::add_item(std::string item) {
+    if (!valid_utf8(item)) {
+        tc_log_error("[termin-gui-native] ComboBox rejected invalid UTF-8 item");
+        return;
+    }
+    items_.push_back(std::move(item));
+    mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+}
+
+void ComboBox::clear_items() {
+    items_.clear();
+    selected_index_ = -1;
+    mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+}
+
+void ComboBox::set_selected_index(int index) {
+    if (index < -1 || index >= static_cast<int>(items_.size())) {
+        tc_log_error("[termin-gui-native] ComboBox rejected invalid selected index");
+        return;
+    }
+    if (selected_index_ == index) return;
+    selected_index_ = index;
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+    const std::string text = selected_text();
+    changed_.emit(*this, selected_index_, text);
+}
+
+tc_ui_size ComboBox::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+    const tc_ui_style style = computed_style(document);
+    float max_width = 0.0f;
+    for (const std::string& item : items_) {
+        tc_ui_text_metrics metrics {};
+        if (measure_text(document, item, style.font_size, metrics)) max_width = std::max(max_width, metrics.width);
+    }
+    tc_ui_size result {std::max(200.0f, max_width + 36.0f), std::max(34.0f, style.min_height)};
+    return clamp_size(result, constraints);
+}
+
+void ComboBox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+    const tc_ui_style style = computed_style(document);
+    const std::string text = selected_text().empty() ? "Select..." : selected_text();
+    tc_ui_painter_fill_rect(context, bounds(), style.background);
+    tc_ui_painter_stroke_rect(context, bounds(), open_ ? style.accent : style.border, style.border_width);
+    tc_ui_painter_draw_text(context, text.c_str(), tc_ui_point {bounds().x + 8.0f, bounds().y + bounds().height * 0.68f}, style.font_size, style.foreground);
+    tc_ui_painter_draw_text(context, open_ ? "^" : "v", tc_ui_point {bounds().x + bounds().width - 18.0f, bounds().y + bounds().height * 0.68f}, style.font_size, style.foreground);
+}
+
+bool ComboBox::show_popup(tc_ui_document* document) {
+    if (items_.empty()) return false;
+    if (tc_widget_handle_is_invalid(popup_handle_)) {
+        auto popup = std::make_unique<ComboBoxPopup>(*this);
+        popup_handle_ = tc_ui_document_adopt_widget(document, popup->c_widget());
+        if (tc_widget_handle_is_invalid(popup_handle_)) return false;
+        popup.release();
+    }
+    tc_widget* popup = tc_ui_document_resolve_widget(document, popup_handle_);
+    if (!popup) return false;
+    const float height = std::min(items_.size(), max_visible_items_) * item_height_;
+    float y = bounds().y + bounds().height;
+    const tc_widget* root = c_widget();
+    while (root->parent) root = root->parent;
+    if (y + height > root->bounds.y + root->bounds.height) y = bounds().y - height;
+    tc_widget_set_bounds(popup, tc_ui_rect {bounds().x, y, bounds().width, height});
+    open_ = tc_ui_document_show_overlay(document, popup_handle_, TC_UI_OVERLAY_DISMISS_ON_OUTSIDE);
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+    return open_;
+}
+
+void ComboBox::hide_popup(tc_ui_document* document) {
+    if (open_) tc_ui_document_dismiss_overlay(document, popup_handle_, TC_UI_OVERLAY_DISMISS_PROGRAMMATIC);
+}
+
+void ComboBox::popup_dismissed() {
+    open_ = false;
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+}
+
+tc_ui_event_result ComboBox::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
+    if (!event || event->type != TC_UI_POINTER_DOWN || !rect_contains(bounds(), event->x, event->y)) return TC_UI_EVENT_IGNORED;
+    tc_ui_document_set_focus(document, handle());
+    if (open_) hide_popup(document); else show_popup(document);
+    return TC_UI_EVENT_HANDLED;
+}
+
+tc_ui_event_result ComboBox::key_event(tc_ui_document* document, const tc_ui_key_event* event) {
+    if (!event || event->type != TC_UI_KEY_DOWN) return TC_UI_EVENT_IGNORED;
+    if (event->key == TC_UI_KEY_ESCAPE && open_) {
+        hide_popup(document);
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->key == TC_UI_KEY_ENTER) {
+        if (open_) hide_popup(document); else show_popup(document);
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->key == TC_UI_KEY_UP_ARROW && !items_.empty()) {
+        set_selected_index(std::max(0, selected_index_ - 1));
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->key == TC_UI_KEY_DOWN_ARROW && !items_.empty()) {
+        set_selected_index(std::min(static_cast<int>(items_.size()) - 1, selected_index_ + 1));
+        return TC_UI_EVENT_HANDLED;
+    }
+    return TC_UI_EVENT_IGNORED;
+}
+
+void ComboBox::on_destroy(tc_ui_document* document) {
+    if (!tc_widget_handle_is_invalid(popup_handle_) && tc_ui_document_is_alive(document, popup_handle_)) {
+        if (open_) tc_ui_document_dismiss_overlay(document, popup_handle_, TC_UI_OVERLAY_DISMISS_PROGRAMMATIC);
+        tc_ui_document_destroy_widget(document, popup_handle_);
+    }
+    popup_handle_ = tc_widget_handle_invalid();
+}
+
+IconButton::IconButton(std::string icon)
+    : NativeWidget("IconButton"), icon_(std::move(icon)) {
+    set_style_role(TC_UI_STYLE_BUTTON);
+    set_preferred_size(tc_ui_size {28.0f, 28.0f});
+}
+
+void IconButton::set_icon(std::string icon) {
+    if (!valid_utf8(icon)) {
+        tc_log_error("[termin-gui-native] IconButton rejected invalid UTF-8 icon");
+        return;
+    }
+    icon_ = std::move(icon);
+    mark_dirty(TC_WIDGET_DIRTY_PAINT);
+}
+
+void IconButton::set_texture(uint32_t texture_id) {
+    texture_id_ = texture_id;
+    mark_dirty(TC_WIDGET_DIRTY_PAINT);
+}
+
+void IconButton::set_active(bool active) {
+    active_ = active;
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+}
+
+void IconButton::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+    const uint32_t extra = (active_ ? TC_UI_STYLE_STATE_CHECKED : 0) |
+        (pressed_ ? TC_UI_STYLE_STATE_PRESSED : 0);
+    const tc_ui_style style = computed_style(document, extra);
+    tc_ui_painter_fill_rounded_rect(context, bounds(), 4.0f, style.background);
+    if (texture_id_ != 0) {
+        const float inset = 5.0f;
+        tc_ui_painter_draw_texture(context, texture_id_, tc_ui_rect {bounds().x + inset, bounds().y + inset, bounds().width - inset * 2.0f, bounds().height - inset * 2.0f}, style.foreground, false);
+    } else if (!icon_.empty()) {
+        tc_ui_text_metrics metrics {};
+        measure_text(document, icon_, style.font_size, metrics);
+        tc_ui_painter_draw_text(context, icon_.c_str(), tc_ui_point {bounds().x + (bounds().width - metrics.width) * 0.5f, bounds().y + bounds().height * 0.68f}, style.font_size, style.foreground);
+    }
+}
+
+tc_ui_event_result IconButton::pointer_event(tc_ui_document*, const tc_ui_pointer_event* event) {
+    if (!event) return TC_UI_EVENT_IGNORED;
+    if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
+        pressed_ = true;
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->type == TC_UI_POINTER_UP && pressed_) {
+        pressed_ = false;
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        if (rect_contains(bounds(), event->x, event->y)) clicked_.emit(*this);
+        return TC_UI_EVENT_HANDLED;
+    }
+    return TC_UI_EVENT_IGNORED;
+}
+
+ImageWidget::ImageWidget()
+    : NativeWidget("ImageWidget") {
+    set_preferred_size(intrinsic_size_);
+}
+
+void ImageWidget::set_texture(uint32_t texture_id, tc_ui_size intrinsic_size) {
+    texture_id_ = texture_id;
+    if (intrinsic_size.width > 0.0f && intrinsic_size.height > 0.0f) {
+        intrinsic_size_ = intrinsic_size;
+        set_preferred_size(intrinsic_size_);
+    }
+    mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+}
+
+void ImageWidget::set_tint(Color tint) {
+    tint_ = tint;
+    mark_dirty(TC_WIDGET_DIRTY_PAINT);
+}
+
+tc_ui_size ImageWidget::measure(tc_ui_document*, tc_ui_constraints constraints) {
+    return clamp_size(intrinsic_size_, constraints);
+}
+
+void ImageWidget::paint(tc_ui_document*, tc_ui_paint_context* context) {
+    if (texture_id_ == 0) return;
+    tc_ui_rect destination = bounds();
+    if (preserve_aspect_ && intrinsic_size_.width > 0.0f && intrinsic_size_.height > 0.0f) {
+        const float scale = std::min(bounds().width / intrinsic_size_.width, bounds().height / intrinsic_size_.height);
+        destination.width = intrinsic_size_.width * scale;
+        destination.height = intrinsic_size_.height * scale;
+        destination.x += (bounds().width - destination.width) * 0.5f;
+        destination.y += (bounds().height - destination.height) * 0.5f;
+    }
+    tc_ui_painter_draw_texture(context, texture_id_, destination, tint_.c_color(), false);
+}
+
+Canvas::Canvas()
+    : NativeWidget("Canvas") {
+    set_style_role(TC_UI_STYLE_PANEL);
+    set_focusable(true);
+    set_preferred_size(tc_ui_size {320.0f, 240.0f});
+}
+
+void Canvas::set_texture(uint32_t texture_id, tc_ui_size image_size) {
+    texture_id_ = texture_id;
+    image_size_ = image_size;
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+}
+
+void Canvas::set_overlay_texture(uint32_t texture_id) {
+    overlay_texture_id_ = texture_id;
+    mark_dirty(TC_WIDGET_DIRTY_PAINT);
+}
+
+void Canvas::set_paint_callback(PaintCallback callback) {
+    paint_callback_ = std::move(callback);
+    mark_dirty(TC_WIDGET_DIRTY_PAINT);
+}
+
+void Canvas::set_zoom(float zoom, tc_ui_point anchor) {
+    const tc_ui_point image_anchor = widget_to_image(anchor);
+    const float next = clamp_float(zoom, min_zoom_, max_zoom_);
+    if (std::fabs(next - zoom_) <= 0.000001f) return;
+    zoom_ = next;
+    offset_.x = anchor.x - bounds().x - image_anchor.x * zoom_;
+    offset_.y = anchor.y - bounds().y - image_anchor.y * zoom_;
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+    zoom_changed_.emit(*this, zoom_);
+}
+
+void Canvas::fit_in_view() {
+    if (image_size_.width <= 0.0f || image_size_.height <= 0.0f || bounds().width <= 0.0f || bounds().height <= 0.0f) return;
+    zoom_ = std::min(bounds().width / image_size_.width, bounds().height / image_size_.height) * 0.95f;
+    zoom_ = clamp_float(zoom_, min_zoom_, max_zoom_);
+    offset_.x = (bounds().width - image_size_.width * zoom_) * 0.5f;
+    offset_.y = (bounds().height - image_size_.height * zoom_) * 0.5f;
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+    zoom_changed_.emit(*this, zoom_);
+}
+
+tc_ui_point Canvas::widget_to_image(tc_ui_point point) const {
+    return tc_ui_point {
+        (point.x - bounds().x - offset_.x) / zoom_,
+        (point.y - bounds().y - offset_.y) / zoom_
+    };
+}
+
+tc_ui_point Canvas::image_to_widget(tc_ui_point point) const {
+    return tc_ui_point {
+        bounds().x + offset_.x + point.x * zoom_,
+        bounds().y + offset_.y + point.y * zoom_
+    };
+}
+
+void Canvas::layout(tc_ui_document* document, tc_ui_rect rect) {
+    const bool first_layout = bounds().width <= 0.0f || bounds().height <= 0.0f;
+    NativeWidget::layout(document, rect);
+    if (first_layout && image_size_.width > 0.0f && image_size_.height > 0.0f) fit_in_view();
+}
+
+void Canvas::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+    const tc_ui_style style = computed_style(document);
+    tc_ui_painter_fill_rect(context, bounds(), style.background);
+    tc_ui_painter_push_clip(context, bounds());
+    if (texture_id_ != 0 && image_size_.width > 0.0f && image_size_.height > 0.0f) {
+        const tc_ui_rect destination {
+            bounds().x + offset_.x,
+            bounds().y + offset_.y,
+            image_size_.width * zoom_,
+            image_size_.height * zoom_
+        };
+        tc_ui_painter_draw_texture(context, texture_id_, destination, tc_ui_color {1, 1, 1, 1}, false);
+        if (overlay_texture_id_ != 0) {
+            tc_ui_painter_draw_texture(context, overlay_texture_id_, destination, tc_ui_color {1, 1, 1, 1}, false);
+        }
+    }
+    if (paint_callback_) paint_callback_(*this, context);
+    tc_ui_painter_pop_clip(context);
+}
+
+tc_ui_event_result Canvas::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
+    if (!event) return TC_UI_EVENT_IGNORED;
+    const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
+    if (event->type == TC_UI_POINTER_WHEEL && rect_contains(bounds(), event->x, event->y) && image_size_.width > 0.0f) {
+        const float factor = event->wheel_y > 0.0f ? 1.15f : 1.0f / 1.15f;
+        set_zoom(zoom_ * factor, tc_ui_point {event->x, event->y});
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->type == TC_UI_POINTER_DOWN && event->button == 2 && rect_contains(bounds(), event->x, event->y)) {
+        panning_ = true;
+        pan_start_ = tc_ui_point {event->x, event->y};
+        pan_start_offset_ = offset_;
+        tc_ui_document_set_pointer_capture(document, handle());
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->type == TC_UI_POINTER_MOVE && (panning_ || captured)) {
+        offset_.x = pan_start_offset_.x + event->x - pan_start_.x;
+        offset_.y = pan_start_offset_.y + event->y - pan_start_.y;
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->type == TC_UI_POINTER_UP && (panning_ || captured)) {
+        panning_ = false;
+        tc_ui_document_release_pointer_capture(document, handle());
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (rect_contains(bounds(), event->x, event->y)) {
+        const bool has_listeners = pointer_input_.size() > 0;
+        pointer_input_.emit(*this, widget_to_image(tc_ui_point {event->x, event->y}), *event);
+        return has_listeners ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
+    }
+    return TC_UI_EVENT_IGNORED;
 }
 
 Swatch::Swatch(Color color)
