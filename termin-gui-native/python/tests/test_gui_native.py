@@ -92,6 +92,38 @@ def test_python_widget_paint_builds_draw_list():
     assert pop.type == DrawCommandType.PopClip
 
 
+def test_python_extended_draw_commands_copy_polyline_points():
+    draw_list = DrawList()
+    context = PaintContext(draw_list)
+    white = Color(1.0, 1.0, 1.0, 1.0)
+    points = [Point(1.0, 2.0), Point(3.0, 4.0), Point(5.0, 6.0)]
+
+    context.fill_rounded_rect(Rect(0.0, 0.0, 20.0, 10.0), 3.0, white)
+    context.stroke_rounded_rect(Rect(1.0, 1.0, 18.0, 8.0), 2.0, white, 1.5)
+    context.fill_circle(Point(10.0, 10.0), 5.0, white, 20)
+    context.stroke_circle(Point(10.0, 10.0), 6.0, white, 2.0, 24)
+    context.draw_arc(Point(10.0, 10.0), 7.0, 0.25, 2.5, white, 1.0, 12)
+    context.draw_polyline(points, white, 3.0)
+    context.draw_text("snapshot", Point(1.0, 1.0), 12.0, white)
+    points[1].x = 99.0
+
+    commands = draw_list.commands
+    draw_list.clear()
+    assert [command.type for command in commands] == [
+        DrawCommandType.FillRoundedRect,
+        DrawCommandType.StrokeRoundedRect,
+        DrawCommandType.FillCircle,
+        DrawCommandType.StrokeCircle,
+        DrawCommandType.Arc,
+        DrawCommandType.Polyline,
+        DrawCommandType.Text,
+    ]
+    assert commands[0].radius == 3.0
+    assert commands[4].segments == 12
+    assert commands[5].points[1].x == 3.0
+    assert commands[6].text == "snapshot"
+
+
 def test_python_paint_exception_propagates():
     class FailingWidget(Widget):
         def paint(self, context):

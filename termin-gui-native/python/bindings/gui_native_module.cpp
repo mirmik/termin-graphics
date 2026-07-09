@@ -1,5 +1,6 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 
 #include <exception>
 #include <memory>
@@ -39,6 +40,58 @@ public:
 
 private:
     tc_ui_draw_list* draw_list_ = nullptr;
+};
+
+struct DrawCommand {
+    tc_ui_draw_command value {};
+    std::string text;
+    std::vector<tc_ui_point> points;
+
+    explicit DrawCommand(const tc_ui_draw_command& source)
+        : value(source),
+          text(source.text ? source.text : ""),
+          points(source.points && source.point_count > 0
+              ? std::vector<tc_ui_point>(source.points, source.points + source.point_count)
+              : std::vector<tc_ui_point> {}) {
+        refresh_pointers();
+    }
+
+    DrawCommand(const DrawCommand& other)
+        : value(other.value), text(other.text), points(other.points) {
+        refresh_pointers();
+    }
+
+    DrawCommand(DrawCommand&& other) noexcept
+        : value(other.value), text(std::move(other.text)), points(std::move(other.points)) {
+        refresh_pointers();
+    }
+
+    DrawCommand& operator=(const DrawCommand& other) {
+        if (this != &other) {
+            value = other.value;
+            text = other.text;
+            points = other.points;
+            refresh_pointers();
+        }
+        return *this;
+    }
+
+    DrawCommand& operator=(DrawCommand&& other) noexcept {
+        if (this != &other) {
+            value = other.value;
+            text = std::move(other.text);
+            points = std::move(other.points);
+            refresh_pointers();
+        }
+        return *this;
+    }
+
+private:
+    void refresh_pointers() {
+        value.text = text.empty() ? nullptr : text.c_str();
+        value.points = points.empty() ? nullptr : points.data();
+        value.point_count = points.size();
+    }
 };
 
 class PaintContext {
@@ -496,12 +549,12 @@ private:
     std::shared_ptr<DocumentState> state_;
 };
 
-tc_ui_draw_command command_at_checked(const DrawList& draw_list, size_t index) {
+DrawCommand command_at_checked(const DrawList& draw_list, size_t index) {
     const tc_ui_draw_command* command = tc_ui_draw_list_command_at(draw_list.get(), index);
     if (!command) {
         throw std::out_of_range("draw command index out of range");
     }
-    return *command;
+    return DrawCommand {*command};
 }
 
 } // namespace
@@ -935,20 +988,48 @@ NB_MODULE(_gui_native, m) {
         .value("Line", TC_UI_DRAW_LINE)
         .value("PushClip", TC_UI_DRAW_PUSH_CLIP)
         .value("PopClip", TC_UI_DRAW_POP_CLIP)
-        .value("Text", TC_UI_DRAW_TEXT);
+        .value("Text", TC_UI_DRAW_TEXT)
+        .value("FillRoundedRect", TC_UI_DRAW_FILL_ROUNDED_RECT)
+        .value("StrokeRoundedRect", TC_UI_DRAW_STROKE_ROUNDED_RECT)
+        .value("FillCircle", TC_UI_DRAW_FILL_CIRCLE)
+        .value("StrokeCircle", TC_UI_DRAW_STROKE_CIRCLE)
+        .value("Arc", TC_UI_DRAW_ARC)
+        .value("Polyline", TC_UI_DRAW_POLYLINE)
+        .value("Texture", TC_UI_DRAW_TEXTURE);
 
-    nb::class_<tc_ui_draw_command>(m, "DrawCommand")
-        .def_prop_ro("type", [](const tc_ui_draw_command& command) { return command.type; })
-        .def_prop_ro("rect", [](const tc_ui_draw_command& command) { return command.rect; })
-        .def_prop_ro("p0", [](const tc_ui_draw_command& command) { return command.p0; })
-        .def_prop_ro("p1", [](const tc_ui_draw_command& command) { return command.p1; })
-        .def_prop_ro("color", [](const tc_ui_draw_command& command) { return command.color; })
-        .def_prop_ro("thickness", [](const tc_ui_draw_command& command) { return command.thickness; })
-        .def_prop_ro("text", [](const tc_ui_draw_command& command) {
-            return command.text ? std::string(command.text) : std::string();
+    nb::class_<DrawCommand>(m, "DrawCommand")
+        .def_prop_ro("type", [](const DrawCommand& command) { return command.value.type; })
+        .def_prop_ro("rect", [](const DrawCommand& command) { return command.value.rect; })
+        .def_prop_ro("p0", [](const DrawCommand& command) { return command.value.p0; })
+        .def_prop_ro("p1", [](const DrawCommand& command) { return command.value.p1; })
+        .def_prop_ro("color", [](const DrawCommand& command) { return command.value.color; })
+        .def_prop_ro("thickness", [](const DrawCommand& command) { return command.value.thickness; })
+        .def_prop_ro("text", [](const DrawCommand& command) {
+            return command.text;
         })
-        .def_prop_ro("font_size", [](const tc_ui_draw_command& command) {
-            return command.font_size;
+        .def_prop_ro("font_size", [](const DrawCommand& command) {
+            return command.value.font_size;
+        })
+        .def_prop_ro("radius", [](const DrawCommand& command) {
+            return command.value.radius;
+        })
+        .def_prop_ro("start_radians", [](const DrawCommand& command) {
+            return command.value.start_radians;
+        })
+        .def_prop_ro("end_radians", [](const DrawCommand& command) {
+            return command.value.end_radians;
+        })
+        .def_prop_ro("segments", [](const DrawCommand& command) {
+            return command.value.segments;
+        })
+        .def_prop_ro("points", [](const DrawCommand& command) {
+            return command.points;
+        })
+        .def_prop_ro("texture_id", [](const DrawCommand& command) {
+            return command.value.texture_id;
+        })
+        .def_prop_ro("flip_v", [](const DrawCommand& command) {
+            return command.value.flip_v;
         });
 
     nb::class_<DrawList>(m, "DrawList")
@@ -974,12 +1055,82 @@ NB_MODULE(_gui_native, m) {
         .def("fill_rect", [](PaintContext& self, tc_ui_rect rect, tc_ui_color color) {
             tc_ui_painter_fill_rect(self.get(), rect, color);
         }, nb::arg("rect"), nb::arg("color"))
+        .def("fill_rounded_rect", [](PaintContext& self,
+                                      tc_ui_rect rect,
+                                      float radius,
+                                      tc_ui_color color) {
+            tc_ui_painter_fill_rounded_rect(self.get(), rect, radius, color);
+        }, nb::arg("rect"), nb::arg("radius"), nb::arg("color"))
         .def("stroke_rect", [](PaintContext& self, tc_ui_rect rect, tc_ui_color color, float thickness) {
             tc_ui_painter_stroke_rect(self.get(), rect, color, thickness);
         }, nb::arg("rect"), nb::arg("color"), nb::arg("thickness"))
+        .def("stroke_rounded_rect", [](PaintContext& self,
+                                        tc_ui_rect rect,
+                                        float radius,
+                                        tc_ui_color color,
+                                        float thickness) {
+            tc_ui_painter_stroke_rounded_rect(self.get(), rect, radius, color, thickness);
+        }, nb::arg("rect"), nb::arg("radius"), nb::arg("color"), nb::arg("thickness") = 1.0f)
+        .def("fill_circle", [](PaintContext& self,
+                                tc_ui_point center,
+                                float radius,
+                                tc_ui_color color,
+                                int32_t segments) {
+            tc_ui_painter_fill_circle(self.get(), center, radius, color, segments);
+        }, nb::arg("center"), nb::arg("radius"), nb::arg("color"), nb::arg("segments") = 0)
+        .def("stroke_circle", [](PaintContext& self,
+                                  tc_ui_point center,
+                                  float radius,
+                                  tc_ui_color color,
+                                  float thickness,
+                                  int32_t segments) {
+            tc_ui_painter_stroke_circle(self.get(), center, radius, color, thickness, segments);
+        }, nb::arg("center"), nb::arg("radius"), nb::arg("color"),
+           nb::arg("thickness") = 1.0f, nb::arg("segments") = 0)
+        .def("draw_arc", [](PaintContext& self,
+                             tc_ui_point center,
+                             float radius,
+                             float start_radians,
+                             float end_radians,
+                             tc_ui_color color,
+                             float thickness,
+                             int32_t segments) {
+            tc_ui_painter_draw_arc(
+                self.get(), center, radius, start_radians, end_radians,
+                color, thickness, segments
+            );
+        }, nb::arg("center"), nb::arg("radius"), nb::arg("start_radians"),
+           nb::arg("end_radians"), nb::arg("color"),
+           nb::arg("thickness") = 1.0f, nb::arg("segments") = 0)
         .def("draw_line", [](PaintContext& self, tc_ui_point p0, tc_ui_point p1, tc_ui_color color, float thickness) {
             tc_ui_painter_draw_line(self.get(), p0, p1, color, thickness);
         }, nb::arg("p0"), nb::arg("p1"), nb::arg("color"), nb::arg("thickness"))
+        .def("draw_polyline", [](PaintContext& self,
+                                  const std::vector<tc_ui_point>& points,
+                                  tc_ui_color color,
+                                  float thickness) {
+            tc_ui_painter_draw_polyline(
+                self.get(), points.data(), points.size(), color, thickness
+            );
+        }, nb::arg("points"), nb::arg("color"), nb::arg("thickness") = 1.0f)
+        .def("draw_texture", [](PaintContext& self,
+                                 tgfx::TextureHandle texture,
+                                 tc_ui_rect rect,
+                                 tc_ui_color tint,
+                                 bool flip_v) {
+            tc_ui_painter_draw_texture(self.get(), texture.id, rect, tint, flip_v);
+        }, nb::arg("texture"), nb::arg("rect"),
+           nb::arg("tint") = tc_ui_color {1.0f, 1.0f, 1.0f, 1.0f},
+           nb::arg("flip_v") = false)
+        .def("draw_image", [](PaintContext& self,
+                               tgfx::TextureHandle texture,
+                               tc_ui_rect rect,
+                               tc_ui_color tint,
+                               bool flip_v) {
+            tc_ui_painter_draw_texture(self.get(), texture.id, rect, tint, flip_v);
+        }, nb::arg("texture"), nb::arg("rect"),
+           nb::arg("tint") = tc_ui_color {1.0f, 1.0f, 1.0f, 1.0f},
+           nb::arg("flip_v") = false)
         .def("draw_text", [](PaintContext& self, const std::string& text, tc_ui_point position, float font_size, tc_ui_color color) {
             tc_ui_painter_draw_text(self.get(), text.c_str(), position, font_size, color);
         }, nb::arg("text"), nb::arg("position"), nb::arg("font_size"), nb::arg("color"))

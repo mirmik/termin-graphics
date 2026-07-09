@@ -187,9 +187,47 @@ void Canvas2DRenderer::end_clip() {
 }
 
 void Canvas2DRenderer::draw_rect(float x, float y, float w, float h,
-                                 CanvasColor color, float /*radius*/) {
+                                 CanvasColor color, float radius) {
     if (ctx_ == nullptr || w <= 0.0f || h <= 0.0f) return;
-    append_solid_quad_(termin::Rect2f{x, y, w, h}.bounds(), color);
+    radius = std::clamp(radius, 0.0f, std::min(w, h) * 0.5f);
+    if (radius <= 0.0f) {
+        append_solid_quad_(termin::Rect2f{x, y, w, h}.bounds(), color);
+        return;
+    }
+
+    constexpr float kPi = 3.14159265358979323846f;
+    constexpr int kCornerSegments = 6;
+    std::vector<CanvasVec2> perimeter;
+    perimeter.reserve(4 * (kCornerSegments + 1));
+    const auto append_corner = [&perimeter, radius, kPi, kCornerSegments](
+        float cx,
+        float cy,
+        float start_angle
+    ) {
+        for (int segment = 0; segment <= kCornerSegments; ++segment) {
+            const float angle = start_angle +
+                (kPi * 0.5f) * static_cast<float>(segment) /
+                    static_cast<float>(kCornerSegments);
+            perimeter.push_back(CanvasVec2 {
+                cx + std::cos(angle) * radius,
+                cy + std::sin(angle) * radius,
+            });
+        }
+    };
+    append_corner(x + radius, y + radius, kPi);
+    append_corner(x + w - radius, y + radius, kPi * 1.5f);
+    append_corner(x + w - radius, y + h - radius, 0.0f);
+    append_corner(x + radius, y + h - radius, kPi * 0.5f);
+
+    const CanvasVec2 center {x + w * 0.5f, y + h * 0.5f};
+    for (size_t index = 0; index < perimeter.size(); ++index) {
+        append_solid_triangle_(
+            center,
+            perimeter[index],
+            perimeter[(index + 1) % perimeter.size()],
+            color
+        );
+    }
 }
 
 void Canvas2DRenderer::draw_circle(float cx, float cy, float radius,
@@ -221,6 +259,52 @@ void Canvas2DRenderer::draw_circle(float cx, float cy, float radius,
     }
 }
 
+void Canvas2DRenderer::draw_circle_outline(
+    float cx,
+    float cy,
+    float radius,
+    CanvasColor color,
+    float thickness,
+    int segments
+) {
+    constexpr float kTau = 6.2831853071795864769f;
+    draw_arc(cx, cy, radius, 0.0f, kTau, color, thickness, segments);
+}
+
+void Canvas2DRenderer::draw_arc(
+    float cx,
+    float cy,
+    float radius,
+    float start_radians,
+    float end_radians,
+    CanvasColor color,
+    float thickness,
+    int segments
+) {
+    if (ctx_ == nullptr || radius <= 0.0f || thickness <= 0.0f ||
+        !std::isfinite(start_radians) || !std::isfinite(end_radians)) {
+        return;
+    }
+    constexpr float kTau = 6.2831853071795864769f;
+    const float sweep = end_radians - start_radians;
+    if (std::fabs(sweep) <= 0.0001f) return;
+    if (segments <= 0) {
+        segments = static_cast<int>(std::ceil(24.0f * std::fabs(sweep) / kTau));
+    }
+    segments = std::clamp(segments, 2, 192);
+    std::vector<CanvasVec2> points;
+    points.reserve(static_cast<size_t>(segments) + 1);
+    for (int segment = 0; segment <= segments; ++segment) {
+        const float t = static_cast<float>(segment) / static_cast<float>(segments);
+        const float angle = start_radians + sweep * t;
+        points.push_back(CanvasVec2 {
+            cx + std::cos(angle) * radius,
+            cy + std::sin(angle) * radius,
+        });
+    }
+    draw_polyline(points, color, thickness);
+}
+
 void Canvas2DRenderer::draw_rect_outline(float x, float y, float w, float h,
                                          CanvasColor color, float thickness) {
     if (w <= 0.0f || h <= 0.0f || thickness <= 0.0f) return;
@@ -229,6 +313,38 @@ void Canvas2DRenderer::draw_rect_outline(float x, float y, float w, float h,
     draw_rect(x, y + h - t, w, t, color);
     draw_rect(x, y, t, h, color);
     draw_rect(x + w - t, y, t, h, color);
+}
+
+void Canvas2DRenderer::draw_rounded_rect_outline(
+    float x,
+    float y,
+    float w,
+    float h,
+    float radius,
+    CanvasColor color,
+    float thickness,
+    int corner_segments
+) {
+    if (w <= 0.0f || h <= 0.0f || thickness <= 0.0f) return;
+    radius = std::clamp(radius, 0.0f, std::min(w, h) * 0.5f);
+    if (radius <= 0.0f) {
+        draw_rect_outline(x, y, w, h, color, thickness);
+        return;
+    }
+    constexpr float kPi = 3.14159265358979323846f;
+    corner_segments = std::clamp(corner_segments, 2, 48);
+    draw_line(x + radius, y, x + w - radius, y, color, thickness);
+    draw_line(x + w, y + radius, x + w, y + h - radius, color, thickness);
+    draw_line(x + w - radius, y + h, x + radius, y + h, color, thickness);
+    draw_line(x, y + h - radius, x, y + radius, color, thickness);
+    draw_arc(x + radius, y + radius, radius, kPi, kPi * 1.5f,
+             color, thickness, corner_segments);
+    draw_arc(x + w - radius, y + radius, radius, kPi * 1.5f, kPi * 2.0f,
+             color, thickness, corner_segments);
+    draw_arc(x + w - radius, y + h - radius, radius, 0.0f, kPi * 0.5f,
+             color, thickness, corner_segments);
+    draw_arc(x + radius, y + h - radius, radius, kPi * 0.5f, kPi,
+             color, thickness, corner_segments);
 }
 
 void Canvas2DRenderer::draw_line(float x0, float y0, float x1, float y1,
@@ -463,6 +579,26 @@ void Canvas2DRenderer::append_solid_quad_(termin::Bounds2f bounds, CanvasColor c
         batch_texture_ = TextureHandle{};
     }
     push_quad_(bounds, termin::Bounds2f{0.0f, 0.0f, 1.0f, 1.0f});
+}
+
+void Canvas2DRenderer::append_solid_triangle_(
+    CanvasVec2 p0,
+    CanvasVec2 p1,
+    CanvasVec2 p2,
+    CanvasColor color
+) {
+    if (batch_mode_ != BatchMode::Solid || !same_color(batch_color_, color)) {
+        flush_();
+        batch_mode_ = BatchMode::Solid;
+        batch_color_ = color;
+        batch_texture_ = TextureHandle{};
+    }
+    const float triangle[] = {
+        p0.x, p0.y, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        p1.x, p1.y, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        p2.x, p2.y, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    };
+    batch_vertices_.insert(batch_vertices_.end(), std::begin(triangle), std::end(triangle));
 }
 
 void Canvas2DRenderer::append_textured_quad_(

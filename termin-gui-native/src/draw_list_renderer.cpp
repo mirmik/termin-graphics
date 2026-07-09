@@ -71,6 +71,7 @@ void UiDrawListRenderer::render(
 
     canvas_.begin(context, width, height);
     const size_t count = tc_ui_draw_list_command_count(draw_list);
+    size_t clip_depth = 0;
     for (size_t index = 0; index < count; ++index) {
         const tc_ui_draw_command* command = tc_ui_draw_list_command_at(draw_list, index);
         if (!command) {
@@ -98,6 +99,59 @@ void UiDrawListRenderer::render(
                 command->thickness
             );
             break;
+        case TC_UI_DRAW_FILL_ROUNDED_RECT:
+            canvas_.draw_rect(
+                command->rect.x,
+                command->rect.y,
+                command->rect.width,
+                command->rect.height,
+                canvas_color(command->color),
+                command->radius
+            );
+            break;
+        case TC_UI_DRAW_STROKE_ROUNDED_RECT:
+            canvas_.draw_rounded_rect_outline(
+                command->rect.x,
+                command->rect.y,
+                command->rect.width,
+                command->rect.height,
+                command->radius,
+                canvas_color(command->color),
+                command->thickness,
+                command->segments > 0 ? command->segments : 6
+            );
+            break;
+        case TC_UI_DRAW_FILL_CIRCLE:
+            canvas_.draw_circle(
+                command->p0.x,
+                command->p0.y,
+                command->radius,
+                canvas_color(command->color),
+                command->segments > 0 ? command->segments : 24
+            );
+            break;
+        case TC_UI_DRAW_STROKE_CIRCLE:
+            canvas_.draw_circle_outline(
+                command->p0.x,
+                command->p0.y,
+                command->radius,
+                canvas_color(command->color),
+                command->thickness,
+                command->segments > 0 ? command->segments : 24
+            );
+            break;
+        case TC_UI_DRAW_ARC:
+            canvas_.draw_arc(
+                command->p0.x,
+                command->p0.y,
+                command->radius,
+                command->start_radians,
+                command->end_radians,
+                canvas_color(command->color),
+                command->thickness,
+                command->segments
+            );
+            break;
         case TC_UI_DRAW_LINE:
             canvas_.draw_line(
                 command->p0.x,
@@ -108,6 +162,29 @@ void UiDrawListRenderer::render(
                 command->thickness
             );
             break;
+        case TC_UI_DRAW_POLYLINE:
+            for (size_t point_index = 1; point_index < command->point_count; ++point_index) {
+                canvas_.draw_line(
+                    command->points[point_index - 1].x,
+                    command->points[point_index - 1].y,
+                    command->points[point_index].x,
+                    command->points[point_index].y,
+                    canvas_color(command->color),
+                    command->thickness
+                );
+            }
+            break;
+        case TC_UI_DRAW_TEXTURE:
+            canvas_.draw_texture(
+                tgfx::TextureHandle {command->texture_id},
+                command->rect.x,
+                command->rect.y,
+                command->rect.width,
+                command->rect.height,
+                canvas_color(command->color),
+                command->flip_v
+            );
+            break;
         case TC_UI_DRAW_PUSH_CLIP:
             canvas_.begin_clip(
                 command->rect.x,
@@ -115,9 +192,15 @@ void UiDrawListRenderer::render(
                 command->rect.width,
                 command->rect.height
             );
+            clip_depth += 1;
             break;
         case TC_UI_DRAW_POP_CLIP:
-            canvas_.end_clip();
+            if (clip_depth == 0) {
+                tc_log_error("[termin-gui-native] ignoring unmatched UI pop-clip command");
+            } else {
+                canvas_.end_clip();
+                clip_depth -= 1;
+            }
             break;
         case TC_UI_DRAW_TEXT:
             if (canvas_.default_font()) {
@@ -137,6 +220,12 @@ void UiDrawListRenderer::render(
             tc_log_error("[termin-gui-native] unknown UI draw command type %d", static_cast<int>(command->type));
             break;
         }
+    }
+    if (clip_depth != 0) {
+        tc_log_error(
+            "[termin-gui-native] UI draw list ended with %zu unclosed clip command(s)",
+            clip_depth
+        );
     }
     canvas_.end();
 }

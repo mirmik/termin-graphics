@@ -102,6 +102,12 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     termin_gui_native_add_test(termin_gui_native_showcase_test
         tests/test_showcase.cpp
     )
+    termin_gui_native_add_test(termin_gui_native_renderer_pixel_smoke
+        tests/test_draw_list_renderer_pixel_smoke.cpp
+    )
+    if(TARGET termin_shaderc)
+        add_dependencies(termin_gui_native_renderer_pixel_smoke termin_shaderc)
+    endif()
 endif()
 
 if(TERMIN_GUI_NATIVE_BUILD_EXAMPLES)

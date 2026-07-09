@@ -55,8 +55,19 @@ public:
                    CanvasColor color, float radius = 0.0f);
     void draw_circle(float cx, float cy, float radius,
                      CanvasColor color, int segments = 24);
+    void draw_circle_outline(float cx, float cy, float radius,
+                             CanvasColor color, float thickness = 1.0f,
+                             int segments = 24);
+    void draw_arc(float cx, float cy, float radius,
+                  float start_radians, float end_radians,
+                  CanvasColor color, float thickness = 1.0f,
+                  int segments = 0);
     void draw_rect_outline(float x, float y, float w, float h,
                            CanvasColor color, float thickness = 1.0f);
+    void draw_rounded_rect_outline(float x, float y, float w, float h,
+                                   float radius, CanvasColor color,
+                                   float thickness = 1.0f,
+                                   int corner_segments = 6);
     void draw_line(float x0, float y0, float x1, float y1,
                    CanvasColor color, float thickness = 1.0f);
     void draw_polyline(std::span<const CanvasVec2> points,
@@ -123,6 +134,8 @@ private:
     bool bind_texture_(CanvasColor tint, TextureHandle texture);
     void push_quad_(termin::Bounds2f bounds, termin::Bounds2f uv);
     void append_solid_quad_(termin::Bounds2f bounds, CanvasColor color);
+    void append_solid_triangle_(CanvasVec2 p0, CanvasVec2 p1, CanvasVec2 p2,
+                                CanvasColor color);
     void append_textured_quad_(
         termin::Bounds2f bounds,
         termin::Bounds2f uv,

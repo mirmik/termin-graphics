@@ -53,9 +53,15 @@ The current module is intentionally small:
 - tooltip delay/scheduling belongs to the host. `tc_ui_tooltip_rect` is a pure
   helper for offset placement and viewport clamping;
 - widget `paint` writes backend-neutral commands into `tc_ui_draw_list` through
-  `tc_ui_paint_context`; no GPU renderer is required for unit tests.
-- text commands are stored with draw-list-owned string backing and rendered by
-  `UiDrawListRenderer` when a default `FontAtlas` is configured;
+  `tc_ui_paint_context`; commands cover rect/rounded rect, circle/arc,
+  line/polyline, texture, text and nested clips. No GPU renderer is required
+  for command unit tests;
+- text and polyline commands use draw-list-owned backing storage. Texture
+  commands carry a non-owning backend-neutral texture id whose device resource
+  must remain alive through `UiDrawListRenderer::render`;
+- `UiDrawListRenderer` renders every command through `Canvas2DRenderer` when a
+  default `FontAtlas` is configured for text. Its offscreen pixel smoke covers
+  text, sampled texture, rounded geometry and nested clip intersection;
 - `tc_ui_document` accepts a non-owning C text-measure callback with explicit
   UTF-8 byte lengths. `UiDrawListRenderer::bind_text_measurer` adapts its
   `FontAtlas`; the renderer must outlive document layout/paint using that

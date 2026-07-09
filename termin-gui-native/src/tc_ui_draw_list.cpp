@@ -1,5 +1,7 @@
 #include <termin/gui_native/tc_ui_document.h>
 
+#include <cmath>
+#include <exception>
 #include <memory>
 #include <new>
 #include <string>
@@ -10,6 +12,7 @@
 struct tc_ui_draw_list {
     std::vector<tc_ui_draw_command> commands;
     std::vector<std::unique_ptr<std::string>> text_storage;
+    std::vector<std::unique_ptr<std::vector<tc_ui_point>>> point_storage;
 };
 
 struct tc_ui_paint_context {
@@ -33,6 +36,7 @@ void tc_ui_draw_list_clear(tc_ui_draw_list* draw_list) {
     }
     draw_list->commands.clear();
     draw_list->text_storage.clear();
+    draw_list->point_storage.clear();
 }
 
 size_t tc_ui_draw_list_command_count(const tc_ui_draw_list* draw_list) {
@@ -76,14 +80,49 @@ static bool append_draw_command(tc_ui_paint_context* context, tc_ui_draw_command
         tc_log_error("[termin-gui-native] cannot append UI draw command without paint context");
         return false;
     }
-    context->draw_list->commands.push_back(command);
-    return true;
+    try {
+        context->draw_list->commands.push_back(command);
+        return true;
+    } catch (const std::exception& error) {
+        tc_log_error(
+            "[termin-gui-native] failed to append UI draw command: %s",
+            error.what()
+        );
+        return false;
+    }
+}
+
+static bool finite_point(tc_ui_point point) {
+    return std::isfinite(point.x) && std::isfinite(point.y);
+}
+
+static bool finite_rect(tc_ui_rect rect) {
+    return std::isfinite(rect.x) && std::isfinite(rect.y) &&
+        std::isfinite(rect.width) && std::isfinite(rect.height);
 }
 
 void tc_ui_painter_fill_rect(tc_ui_paint_context* context, tc_ui_rect rect, tc_ui_color color) {
     tc_ui_draw_command command {};
     command.type = TC_UI_DRAW_FILL_RECT;
     command.rect = rect;
+    command.color = color;
+    append_draw_command(context, command);
+}
+
+void tc_ui_painter_fill_rounded_rect(
+    tc_ui_paint_context* context,
+    tc_ui_rect rect,
+    float radius,
+    tc_ui_color color
+) {
+    if (!finite_rect(rect) || !std::isfinite(radius) || radius < 0.0f) {
+        tc_log_error("[termin-gui-native] rejected invalid rounded rectangle command");
+        return;
+    }
+    tc_ui_draw_command command {};
+    command.type = TC_UI_DRAW_FILL_ROUNDED_RECT;
+    command.rect = rect;
+    command.radius = radius;
     command.color = color;
     append_draw_command(context, command);
 }
@@ -99,6 +138,98 @@ void tc_ui_painter_stroke_rect(
     command.rect = rect;
     command.color = color;
     command.thickness = thickness;
+    append_draw_command(context, command);
+}
+
+void tc_ui_painter_stroke_rounded_rect(
+    tc_ui_paint_context* context,
+    tc_ui_rect rect,
+    float radius,
+    tc_ui_color color,
+    float thickness
+) {
+    if (!finite_rect(rect) || !std::isfinite(radius) || radius < 0.0f ||
+        !std::isfinite(thickness) || thickness <= 0.0f) {
+        tc_log_error("[termin-gui-native] rejected invalid rounded rectangle stroke command");
+        return;
+    }
+    tc_ui_draw_command command {};
+    command.type = TC_UI_DRAW_STROKE_ROUNDED_RECT;
+    command.rect = rect;
+    command.radius = radius;
+    command.color = color;
+    command.thickness = thickness;
+    append_draw_command(context, command);
+}
+
+void tc_ui_painter_fill_circle(
+    tc_ui_paint_context* context,
+    tc_ui_point center,
+    float radius,
+    tc_ui_color color,
+    int32_t segments
+) {
+    if (!finite_point(center) || !std::isfinite(radius) || radius <= 0.0f || segments < 0) {
+        tc_log_error("[termin-gui-native] rejected invalid circle command");
+        return;
+    }
+    tc_ui_draw_command command {};
+    command.type = TC_UI_DRAW_FILL_CIRCLE;
+    command.p0 = center;
+    command.radius = radius;
+    command.color = color;
+    command.segments = segments;
+    append_draw_command(context, command);
+}
+
+void tc_ui_painter_stroke_circle(
+    tc_ui_paint_context* context,
+    tc_ui_point center,
+    float radius,
+    tc_ui_color color,
+    float thickness,
+    int32_t segments
+) {
+    if (!finite_point(center) || !std::isfinite(radius) || radius <= 0.0f ||
+        !std::isfinite(thickness) || thickness <= 0.0f || segments < 0) {
+        tc_log_error("[termin-gui-native] rejected invalid circle stroke command");
+        return;
+    }
+    tc_ui_draw_command command {};
+    command.type = TC_UI_DRAW_STROKE_CIRCLE;
+    command.p0 = center;
+    command.radius = radius;
+    command.color = color;
+    command.thickness = thickness;
+    command.segments = segments;
+    append_draw_command(context, command);
+}
+
+void tc_ui_painter_draw_arc(
+    tc_ui_paint_context* context,
+    tc_ui_point center,
+    float radius,
+    float start_radians,
+    float end_radians,
+    tc_ui_color color,
+    float thickness,
+    int32_t segments
+) {
+    if (!finite_point(center) || !std::isfinite(radius) || radius <= 0.0f ||
+        !std::isfinite(start_radians) || !std::isfinite(end_radians) ||
+        !std::isfinite(thickness) || thickness <= 0.0f || segments < 0) {
+        tc_log_error("[termin-gui-native] rejected invalid arc command");
+        return;
+    }
+    tc_ui_draw_command command {};
+    command.type = TC_UI_DRAW_ARC;
+    command.p0 = center;
+    command.radius = radius;
+    command.start_radians = start_radians;
+    command.end_radians = end_radians;
+    command.color = color;
+    command.thickness = thickness;
+    command.segments = segments;
     append_draw_command(context, command);
 }
 
@@ -118,6 +249,63 @@ void tc_ui_painter_draw_line(
     append_draw_command(context, command);
 }
 
+void tc_ui_painter_draw_polyline(
+    tc_ui_paint_context* context,
+    const tc_ui_point* points,
+    size_t point_count,
+    tc_ui_color color,
+    float thickness
+) {
+    if (!context || !context->draw_list) {
+        tc_log_error("[termin-gui-native] cannot append polyline without paint context");
+        return;
+    }
+    if (!points || point_count < 2 || !std::isfinite(thickness) || thickness <= 0.0f) {
+        tc_log_error("[termin-gui-native] rejected invalid polyline command");
+        return;
+    }
+    for (size_t index = 0; index < point_count; ++index) {
+        if (!finite_point(points[index])) {
+            tc_log_error("[termin-gui-native] rejected polyline with non-finite point");
+            return;
+        }
+    }
+    try {
+        auto owned_points = std::make_unique<std::vector<tc_ui_point>>(points, points + point_count);
+        const tc_ui_point* stable_points = owned_points->data();
+        context->draw_list->point_storage.push_back(std::move(owned_points));
+        tc_ui_draw_command command {};
+        command.type = TC_UI_DRAW_POLYLINE;
+        command.points = stable_points;
+        command.point_count = point_count;
+        command.color = color;
+        command.thickness = thickness;
+        append_draw_command(context, command);
+    } catch (const std::exception& error) {
+        tc_log_error("[termin-gui-native] failed to own polyline points: %s", error.what());
+    }
+}
+
+void tc_ui_painter_draw_texture(
+    tc_ui_paint_context* context,
+    uint32_t texture_id,
+    tc_ui_rect rect,
+    tc_ui_color tint,
+    bool flip_v
+) {
+    if (texture_id == 0 || !finite_rect(rect)) {
+        tc_log_error("[termin-gui-native] rejected invalid texture command");
+        return;
+    }
+    tc_ui_draw_command command {};
+    command.type = TC_UI_DRAW_TEXTURE;
+    command.texture_id = texture_id;
+    command.rect = rect;
+    command.color = tint;
+    command.flip_v = flip_v;
+    append_draw_command(context, command);
+}
+
 void tc_ui_painter_draw_text(
     tc_ui_paint_context* context,
     const char* text,
@@ -133,17 +321,21 @@ void tc_ui_painter_draw_text(
         return;
     }
 
-    auto owned_text = std::make_unique<std::string>(text);
-    const char* stable_text = owned_text->c_str();
-    context->draw_list->text_storage.push_back(std::move(owned_text));
+    try {
+        auto owned_text = std::make_unique<std::string>(text);
+        const char* stable_text = owned_text->c_str();
+        context->draw_list->text_storage.push_back(std::move(owned_text));
 
-    tc_ui_draw_command command {};
-    command.type = TC_UI_DRAW_TEXT;
-    command.p0 = position;
-    command.color = color;
-    command.text = stable_text;
-    command.font_size = font_size;
-    append_draw_command(context, command);
+        tc_ui_draw_command command {};
+        command.type = TC_UI_DRAW_TEXT;
+        command.p0 = position;
+        command.color = color;
+        command.text = stable_text;
+        command.font_size = font_size;
+        append_draw_command(context, command);
+    } catch (const std::exception& error) {
+        tc_log_error("[termin-gui-native] failed to own UI text: %s", error.what());
+    }
 }
 
 void tc_ui_painter_push_clip(tc_ui_paint_context* context, tc_ui_rect rect) {

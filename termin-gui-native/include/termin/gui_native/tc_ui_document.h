@@ -160,7 +160,14 @@ typedef enum tc_ui_draw_command_type {
     TC_UI_DRAW_LINE = 2,
     TC_UI_DRAW_PUSH_CLIP = 3,
     TC_UI_DRAW_POP_CLIP = 4,
-    TC_UI_DRAW_TEXT = 5
+    TC_UI_DRAW_TEXT = 5,
+    TC_UI_DRAW_FILL_ROUNDED_RECT = 6,
+    TC_UI_DRAW_STROKE_ROUNDED_RECT = 7,
+    TC_UI_DRAW_FILL_CIRCLE = 8,
+    TC_UI_DRAW_STROKE_CIRCLE = 9,
+    TC_UI_DRAW_ARC = 10,
+    TC_UI_DRAW_POLYLINE = 11,
+    TC_UI_DRAW_TEXTURE = 12
 } tc_ui_draw_command_type;
 
 typedef struct tc_ui_draw_command {
@@ -172,6 +179,14 @@ typedef struct tc_ui_draw_command {
     float thickness;
     const char* text;
     float font_size;
+    float radius;
+    float start_radians;
+    float end_radians;
+    int32_t segments;
+    const tc_ui_point* points;
+    size_t point_count;
+    uint32_t texture_id;
+    bool flip_v;
 } tc_ui_draw_command;
 
 typedef enum tc_ui_event_result {
@@ -606,11 +621,49 @@ TERMIN_GUI_NATIVE_API void tc_ui_painter_fill_rect(
     tc_ui_rect rect,
     tc_ui_color color
 );
+TERMIN_GUI_NATIVE_API void tc_ui_painter_fill_rounded_rect(
+    tc_ui_paint_context* context,
+    tc_ui_rect rect,
+    float radius,
+    tc_ui_color color
+);
 TERMIN_GUI_NATIVE_API void tc_ui_painter_stroke_rect(
     tc_ui_paint_context* context,
     tc_ui_rect rect,
     tc_ui_color color,
     float thickness
+);
+TERMIN_GUI_NATIVE_API void tc_ui_painter_stroke_rounded_rect(
+    tc_ui_paint_context* context,
+    tc_ui_rect rect,
+    float radius,
+    tc_ui_color color,
+    float thickness
+);
+TERMIN_GUI_NATIVE_API void tc_ui_painter_fill_circle(
+    tc_ui_paint_context* context,
+    tc_ui_point center,
+    float radius,
+    tc_ui_color color,
+    int32_t segments
+);
+TERMIN_GUI_NATIVE_API void tc_ui_painter_stroke_circle(
+    tc_ui_paint_context* context,
+    tc_ui_point center,
+    float radius,
+    tc_ui_color color,
+    float thickness,
+    int32_t segments
+);
+TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_arc(
+    tc_ui_paint_context* context,
+    tc_ui_point center,
+    float radius,
+    float start_radians,
+    float end_radians,
+    tc_ui_color color,
+    float thickness,
+    int32_t segments
 );
 TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_line(
     tc_ui_paint_context* context,
@@ -618,6 +671,20 @@ TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_line(
     tc_ui_point p1,
     tc_ui_color color,
     float thickness
+);
+TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_polyline(
+    tc_ui_paint_context* context,
+    const tc_ui_point* points,
+    size_t point_count,
+    tc_ui_color color,
+    float thickness
+);
+TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_texture(
+    tc_ui_paint_context* context,
+    uint32_t texture_id,
+    tc_ui_rect rect,
+    tc_ui_color tint,
+    bool flip_v
 );
 TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_text(
     tc_ui_paint_context* context,
