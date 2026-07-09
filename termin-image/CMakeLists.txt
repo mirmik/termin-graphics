@@ -9,11 +9,8 @@ option(TERMIN_BUILD_PYTHON "Build Python bindings" OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
-
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(TERMIN_IMAGE_PNG REQUIRED IMPORTED_TARGET libpng)
-pkg_check_modules(TERMIN_IMAGE_JPEG REQUIRED IMPORTED_TARGET libjpeg)
-pkg_check_modules(TERMIN_IMAGE_WEBP REQUIRED IMPORTED_TARGET libwebp)
+include(TerminImageCodecs)
+termin_configure_image_codecs()
 
 add_library(termin_image SHARED
     src/image_decode.cpp
@@ -26,9 +23,7 @@ target_include_directories(termin_image PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 target_link_libraries(termin_image PRIVATE
-    PkgConfig::TERMIN_IMAGE_PNG
-    PkgConfig::TERMIN_IMAGE_JPEG
-    PkgConfig::TERMIN_IMAGE_WEBP
+    ${TERMIN_IMAGE_CODEC_TARGETS}
 )
 termin_set_rpath_lib(termin_image)
 
