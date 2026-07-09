@@ -20,6 +20,8 @@
 
 После пересборки Python/C++ биндингов native `.so`/`.pyd` берутся непосредственно из SDK. Копировать их в исходники и пересоздавать editable venv не требуется; `./setup-sdk-python-env.sh` нужно повторить только для обновления overlay fingerprint после изменения SDK.
 
+Python runtime SDK формируется из exact lock `build-system/python-runtime-lock.txt`. Build frontend живёт отдельно в `build/python-runtime/build-env`, а установка SDK выполняется offline из подготовленных wheelhouse. Для проверки без сетевого доступа после заполнения wheelhouse можно задать `TERMIN_PYTHON_RUNTIME_OFFLINE=1` при вызове `termin_build.sdk install-python`.
+
 ## Запуск редактора
 `./run-termin.sh` запускает launcher и удобен для ручной работы. Для автоматизированной отладки Codex должен запускать редактор напрямую, чтобы не ждать выбора проекта в launcher:
 

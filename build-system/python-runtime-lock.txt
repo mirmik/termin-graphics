@@ -1,0 +1,10 @@
+# Runtime-only third-party distributions bundled into the Termin SDK.
+# Keep every entry exact: the build stage materializes wheels (including a
+# locally built wheel for sdist-only pyassimp), then SDK population installs
+# this file offline from build/python-runtime/external-wheels with --no-deps.
+glfw==2.10.0
+numpy==2.2.6
+packaging==26.2
+pyassimp==5.2.5
+PyYAML==6.0.3
+watchdog==6.0.0
