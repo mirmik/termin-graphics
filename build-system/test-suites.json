@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "description": "Repository test scheduling inventory. Initial planner bootstrap; suite population and orphan-test enforcement are tracked in Kanboard #262.",
+  "profiles": [
+    {
+      "id": "check",
+      "description": "Repository manifest and policy validation."
+    },
+    {
+      "id": "pr",
+      "description": "Deterministic headless suites for the primary pull-request environment."
+    },
+    {
+      "id": "linux-full",
+      "description": "All automatic Linux suites."
+    },
+    {
+      "id": "windows-d3d11",
+      "description": "Windows and D3D11-specific suites."
+    },
+    {
+      "id": "editor-smoke",
+      "description": "Isolated editor-process smoke suites."
+    },
+    {
+      "id": "device-android",
+      "description": "Android device build, deploy, and runtime gates."
+    },
+    {
+      "id": "device-quest",
+      "description": "Quest/OpenXR device build, deploy, and runtime gates."
+    },
+    {
+      "id": "manual",
+      "description": "Explicitly recorded human verification gates."
+    }
+  ],
+  "suites": [
+    {
+      "id": "termin-build-tools-python",
+      "module": "termin-build-tools",
+      "executor": "pytest",
+      "roots": ["termin-build-tools/tests"],
+      "profiles": ["pr", "linux-full", "windows-d3d11"],
+      "environment": "bootstrap-python",
+      "platforms": ["linux", "windows"]
+    }
+  ]
+}

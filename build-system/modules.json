@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "description": "Repository module identity catalog. Python-backed module identities are derived from the canonical package manifest; this file declares modules that are not Python distributions.",
+  "python_package_manifest": "build-system/packages.json",
+  "modules": [
+    {
+      "id": "termin-android",
+      "path": "termin-android",
+      "kinds": ["cmake", "platform"]
+    },
+    {
+      "id": "termin-cli",
+      "path": "termin-cli",
+      "kinds": ["cmake", "tooling"]
+    },
+    {
+      "id": "termin-components",
+      "path": "termin-components",
+      "kinds": ["documentation", "group"]
+    },
+    {
+      "id": "termin-components-animation",
+      "path": "termin-components/termin-components-animation",
+      "kinds": ["cmake"]
+    },
+    {
+      "id": "termin-components-collision",
+      "path": "termin-components/termin-components-collision",
+      "kinds": ["cmake"]
+    },
+    {
+      "id": "termin-components-skeleton",
+      "path": "termin-components/termin-components-skeleton",
+      "kinds": ["cmake"]
+    },
+    {
+      "id": "termin-csharp",
+      "path": "termin-csharp",
+      "kinds": ["cmake", "bindings"]
+    },
+    {
+      "id": "termin-openxr",
+      "path": "termin-openxr",
+      "kinds": ["cmake", "platform"]
+    },
+    {
+      "id": "termin-runtime",
+      "path": "termin-runtime",
+      "kinds": ["cmake", "runtime"]
+    }
+  ]
+}
