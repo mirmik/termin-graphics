@@ -15,7 +15,7 @@ void main() { out_color = vec4(1.0); }
 """
 
 
-def test_raw_glsl_phase_records_rewritten_engine_resource_layout() -> None:
+def test_raw_glsl_phase_does_not_infer_engine_resource_layout() -> None:
     import tgfx  # noqa: F401  # Registers TcShader before TcMaterialPhase.shader casts it.
 
     material = TcMaterial.create("RawGlslEngineLayoutMaterial", "")
@@ -39,15 +39,9 @@ void main() {
     assert phase is not None
 
     shader = phase.shader
-    assert shader.resource_binding_count == 2
-    per_frame = shader.find_resource_binding("per_frame")
-    draw_data = shader.find_resource_binding("draw_data")
-    assert per_frame is not None
-    assert draw_data is not None
-    assert per_frame["kind_name"] == "constant_buffer"
-    assert per_frame["scope_name"] == "frame"
-    assert draw_data["kind_name"] == "constant_buffer"
-    assert draw_data["scope_name"] == "draw"
+    assert shader.resource_binding_count == 0
+    assert shader.find_resource_binding("per_frame") is None
+    assert shader.find_resource_binding("draw_data") is None
 
 
 def test_material_copy_survives_registry_growth() -> None:

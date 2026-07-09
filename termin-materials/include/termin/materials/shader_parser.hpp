@@ -141,17 +141,18 @@ struct ShaderPhase {
     // canonical inspector schema lives on ShaderMultyPhaseProgramm.
     std::vector<MaterialProperty> uniforms;
 
-    // Plain GLSL material-block uniforms that are controlled by
-    // passes/controllers, not by the material inspector.
+    // Deprecated parser field kept for ABI/source compatibility. `.shader`
+    // programs are Slang-only now, so plain GLSL material uniforms are no
+    // longer discovered here.
     std::vector<MaterialProperty> material_uniforms;
 
     // std140 layout for the auto-generated material UBO. Empty unless the
-    // parser sees scalar/vector @property or plain uniform entries; in that
-    // case it rewrites the stage sources to reference the generated block.
+    // parser sees scalar/vector @property entries; in that case it rewrites
+    // the stage sources to reference the generated Slang constant buffer.
     MaterialUboLayout material_ubo_layout;
 
-    // Parser-synthesized GLSL resources that must be mirrored into
-    // tc_shader_resource_binding for bind-by-name runtime code.
+    // Parser-synthesized material resources that must be mirrored into
+    // shader contracts / artifact metadata for bind-by-name runtime code.
     std::vector<std::string> material_texture_resources;
     bool uses_engine_per_frame = false;
     bool uses_engine_draw_data = false;
@@ -172,7 +173,7 @@ struct ShaderPhase {
 class ShaderMultyPhaseProgramm {
 public:
     std::string program;  // Program name
-    std::string language = "glsl";  // Source language: glsl or slang.
+    std::string language = "slang";  // `.shader` source language.
     std::vector<ShaderPhase> phases;
     std::string source_path;
     std::vector<std::string> features;  // Feature flags (e.g., "lighting_ubo")
@@ -276,13 +277,6 @@ TERMIN_MATERIALS_API std::pair<uint32_t, uint32_t> std140_size_align(const std::
 TERMIN_MATERIALS_API MaterialUboLayout compute_std140_layout(const std::vector<MaterialProperty>& properties);
 
 /**
- * Produce the GLSL text for a `layout(std140) uniform MaterialParams { ... };`
- * block matching the given layout. The returned string includes a trailing
- * newline. Empty layout yields an empty string.
- */
-TERMIN_MATERIALS_API std::string synthesize_material_ubo_glsl(const MaterialUboLayout& layout);
-
-/**
  * Produce the Slang text for a `MaterialParams` struct plus a backend-neutral
  * `ConstantBuffer<MaterialParams> material` declaration matching the given
  * std140 layout. Backend binding assignment is captured by compiled artifact
@@ -298,25 +292,6 @@ TERMIN_MATERIALS_API std::string synthesize_material_ubo_slang(const MaterialUbo
 TERMIN_MATERIALS_API std::string strip_uniform_decls(
     const std::string& source,
     const std::vector<std::string>& names
-);
-
-/**
- * Insert a GLSL text block into a shader source immediately after its
- * `#version ...` line (or at the top if there is none).
- */
-TERMIN_MATERIALS_API std::string inject_after_version(const std::string& source, const std::string& block);
-
-/**
- * Apply the same engine uniform rewrite used by .shader assets to a raw
- * GLSL stage source created through TcMaterial.add_phase_from_sources().
- *
- * This strips plain u_model/u_view/u_projection-style declarations and
- * injects parser-owned PerFrame/DrawData resource blocks when the stage
- * references those names. It also normalizes #version to 450 core.
- */
-TERMIN_MATERIALS_API std::string rewrite_engine_uniforms_for_stage_source(
-    const std::string& source,
-    const std::string& stage_name
 );
 
 /**

@@ -2,7 +2,6 @@ from pathlib import Path
 
 from termin.animation import AnimationClipAsset as PackageAnimationClipAsset
 from termin.animation.asset import AnimationClipAsset
-from termin.animation.animation_clip_asset import AnimationClipAsset as LegacyAnimationClipAsset
 
 
 class FakeAnimationClip:
@@ -21,6 +20,5 @@ def test_animation_clip_asset_wraps_clip() -> None:
     assert asset.source_path == Path("/tmp/walk.anim")
 
 
-def test_animation_clip_asset_domain_legacy_modules_reexport_canonical_class() -> None:
+def test_animation_clip_asset_package_reexports_canonical_class() -> None:
     assert PackageAnimationClipAsset is AnimationClipAsset
-    assert LegacyAnimationClipAsset is AnimationClipAsset

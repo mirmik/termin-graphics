@@ -1,6 +1,5 @@
 // tc_shader_registry.c - Shader registry with pool + hash table and variant support
 #include "tgfx/resources/tc_shader_registry.h"
-#include "tgfx/resources/tc_shader_abi.h"
 #include <tcbase/tc_pool.h>
 #include <tcbase/tc_resource.h>
 #include <tcbase/tc_resource_map.h>
@@ -42,104 +41,6 @@ static bool tc_shader_language_valid(tc_shader_language language) {
 static bool tc_shader_artifact_policy_valid(tc_shader_artifact_policy policy) {
     return policy == TC_SHADER_ARTIFACT_OPTIONAL
         || policy == TC_SHADER_ARTIFACT_REQUIRED;
-}
-
-static bool source_contains_token(const char* source, const char* token) {
-    return source && token && strstr(source, token) != NULL;
-}
-
-static bool any_source_contains_token(const tc_shader* shader, const char* token) {
-    return source_contains_token(shader ? shader->vertex_source : NULL, token)
-        || source_contains_token(shader ? shader->fragment_source : NULL, token)
-        || source_contains_token(shader ? shader->geometry_source : NULL, token);
-}
-
-static void append_compact_resource_binding(
-    tc_shader_resource_binding* bindings,
-    uint32_t* count,
-    const char* name,
-    uint32_t kind,
-    uint32_t scope,
-    uint32_t binding_index,
-    uint32_t size)
-{
-    tc_shader_resource_binding* binding = &bindings[*count];
-    memset(binding, 0, sizeof(*binding));
-    strncpy(binding->name, name, TC_SHADER_RESOURCE_NAME_MAX - 1);
-    binding->name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
-    binding->kind = kind;
-    binding->scope = scope;
-    binding->set = TC_SHADER_RESOURCE_SET_DEFAULT;
-    binding->binding = binding_index;
-    binding->stage_mask =
-        TC_SHADER_STAGE_VERTEX | TC_SHADER_STAGE_FRAGMENT | TC_SHADER_STAGE_GEOMETRY;
-    binding->size = size;
-    (*count)++;
-}
-
-static bool append_abi_compact_resource_binding(
-    tc_shader_resource_binding* bindings,
-    uint32_t* count,
-    uint32_t abi_resource_id,
-    uint32_t binding_index,
-    uint32_t size)
-{
-    const tc_shader_abi_resource_decl* abi =
-        tc_shader_abi_resource(abi_resource_id);
-    if (!abi) {
-        tc_log(TC_LOG_ERROR,
-               "shader registry: unknown shader ABI resource id %u",
-               abi_resource_id);
-        return false;
-    }
-    append_compact_resource_binding(
-        bindings,
-        count,
-        abi->canonical_name,
-        abi->kind,
-        abi->scope,
-        binding_index,
-        size);
-    return true;
-}
-
-static void infer_raw_glsl_engine_resource_layout(tc_shader* shader) {
-    if (!shader ||
-        shader->language != TC_SHADER_LANGUAGE_GLSL ||
-        tc_shader_has_resource_layout(shader)) {
-        return;
-    }
-
-    const bool uses_per_frame =
-        any_source_contains_token(shader, "uniform PerFrame") ||
-        any_source_contains_token(shader, "ConstantBuffer<PerFrame>") ||
-        any_source_contains_token(shader, "u_per_frame");
-    const bool uses_draw_data =
-        any_source_contains_token(shader, "uniform DrawData") ||
-        any_source_contains_token(shader, "ConstantBuffer<DrawData>") ||
-        any_source_contains_token(shader, "draw_data");
-
-    tc_shader_resource_binding bindings[2];
-    uint32_t count = 0;
-    if (uses_per_frame) {
-        append_abi_compact_resource_binding(
-            bindings,
-            &count,
-            TC_SHADER_ABI_RESOURCE_PER_FRAME,
-            2,
-            0);
-    }
-    if (uses_draw_data) {
-        append_abi_compact_resource_binding(
-            bindings,
-            &count,
-            TC_SHADER_ABI_RESOURCE_DRAW_DATA,
-            24,
-            64);
-    }
-    if (count > 0) {
-        tc_shader_set_resource_layout(shader, bindings, count);
-    }
 }
 
 // Free shader internal data (sources)
@@ -697,7 +598,6 @@ tc_shader_handle tc_shader_from_sources_desc(
             tc_shader_set_language(shader, desc->language);
             tc_shader_set_artifact_policy(shader, desc->artifact_policy);
             tc_shader_set_sources_desc(shader, &desc->sources);
-            infer_raw_glsl_engine_resource_layout(shader);
             return existing;
         }
         // Create new shader with specified uuid
@@ -712,7 +612,6 @@ tc_shader_handle tc_shader_from_sources_desc(
             tc_shader_destroy(h);
             return tc_shader_handle_invalid();
         }
-        infer_raw_glsl_engine_resource_layout(shader);
         return h;
     }
 
@@ -727,7 +626,6 @@ tc_shader_handle tc_shader_from_sources_desc(
 
     tc_shader_handle existing = tc_shader_find_by_hash(hash);
     if (!tc_shader_handle_is_invalid(existing)) {
-        infer_raw_glsl_engine_resource_layout(tc_shader_get(existing));
         return existing;
     }
 
@@ -744,7 +642,6 @@ tc_shader_handle tc_shader_from_sources_desc(
         tc_shader_destroy(h);
         return tc_shader_handle_invalid();
     }
-    infer_raw_glsl_engine_resource_layout(shader);
 
     return h;
 }
