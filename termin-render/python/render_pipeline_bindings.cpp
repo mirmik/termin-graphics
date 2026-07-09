@@ -303,7 +303,7 @@ void bind_render_pipeline(nb::module_& m) {
                                 nb::object native_ref_obj = nb::cast(native_ref);
                                 native_ref_obj.attr("deserialize_data")(pass_data["data"]);
                             }
-                            pipeline->add_pass(native_pass);
+                            tc_pipeline_add_pass_take(pipeline->handle(), native_pass);
                             continue;
                         }
 

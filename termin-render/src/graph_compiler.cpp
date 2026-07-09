@@ -1033,7 +1033,7 @@ RenderPipeline* compile_graph(GraphData& graph) {
 
         if (!pass_ref.object_ptr()) {
             tc::Log::error("compile_graph: Failed to get object pointer for '%s'", node->pass_class.c_str());
-            tc_pass_drop(pass_ptr);
+            tc_pass_release(pass_ptr);
             continue;
         }
 
@@ -1076,7 +1076,7 @@ RenderPipeline* compile_graph(GraphData& graph) {
             }
         }
 
-        pipeline->add_pass(pass_ptr);
+        tc_pipeline_add_pass_take(pipeline->handle(), pass_ptr);
     }
 
     if (pipeline->pass_count() == 0 && had_pass_nodes) {

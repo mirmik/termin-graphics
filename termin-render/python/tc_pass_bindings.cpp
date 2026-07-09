@@ -343,14 +343,7 @@ static void py_pass_ref_retain(tc_pass* p) {
 static void py_pass_ref_release(tc_pass* p) {
     if (p && p->body) {
         nb::gil_scoped_acquire gil;
-        PyObject* body = reinterpret_cast<PyObject*>(p->body);
-        bool factory_owned =
-            p->bindings[TC_LANGUAGE_PYTHON] == body &&
-            !tc_pipeline_handle_valid(p->owner_pipeline);
-        Py_DECREF(body);
-        if (factory_owned) {
-            Py_DECREF(body);
-        }
+        Py_DECREF(reinterpret_cast<PyObject*>(p->body));
     }
 }
 

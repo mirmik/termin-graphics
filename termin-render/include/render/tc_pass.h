@@ -214,6 +214,8 @@ TC_API void tc_pass_registry_register(
 
 TC_API void tc_pass_registry_unregister(const char* type_name);
 TC_API bool tc_pass_registry_has(const char* type_name);
+// Returns a new owned pass reference. Call tc_pass_release() if the pass is not
+// transferred with tc_pipeline_add_pass_take() or another owner-retaining API.
 TC_API tc_pass* tc_pass_registry_create(const char* type_name);
 TC_API void tc_pass_registry_cleanup(void);
 TC_API size_t tc_pass_registry_type_count(void);
