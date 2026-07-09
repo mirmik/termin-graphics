@@ -32,9 +32,17 @@ The current module is intentionally small:
   `tgfx::Canvas2DRenderer`;
 - `TERMIN_GUI_NATIVE_BUILD_EXAMPLES=ON` builds a small SDL window example that
   presents a few colored rectangles and a line.
-- `TERMIN_BUILD_PYTHON=ON` builds `termin.gui_native`, a nanobind bridge for
-  Python widgets that emit the same draw-list commands; `examples/ui_rect_window.py`
-  mirrors the C++ rectangle-window example.
+- `TERMIN_BUILD_PYTHON=ON` builds `termin.gui_native`, whose Python-defined
+  widgets dispatch the complete measure/layout/paint/input/lifecycle vtable
+  through the same embedded `tc_widget` contract;
+- Python `WidgetRef` objects contain only an invalidation state plus a handle.
+  They expose common state and canonical tree mutation without duplicating
+  widget data or retaining the document itself;
+- the same `WidgetRef` wraps C++ widgets created by the initial native
+  `HStack`, `VStack`, `Panel`, `Label` and `Button` document factories;
+- the document-owned Python shim retains its Python body until the C deleter
+  runs under the GIL; stale refs remain safe after widget or document teardown;
+- `examples/ui_rect_window.py` mirrors the C++ rectangle-window example.
 
 This module does not replace the existing Python `termin-gui` package yet. It
 is a place to test the ownership, handle and polyglot widget contracts before
