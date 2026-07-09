@@ -657,7 +657,7 @@ def test_string_shader_uuid_produces_readable_distinct_phase_ids():
 
 
 def test_stdlib_slang_material_creates_slang_tc_shader():
-    from tgfx import ShaderLanguage
+    from tgfx import ShaderArtifactPolicy, ShaderLanguage
     from termin.default_assets.render.material_asset import MaterialAsset
     from termin.default_assets.render.shader_asset import ShaderAsset
     from termin.default_assets.resource_manager import DefaultResourceManager
@@ -688,6 +688,7 @@ def test_stdlib_slang_material_creates_slang_tc_shader():
     phase = material.get_phase(0)
     assert phase is not None
     assert phase.shader.language == ShaderLanguage.SLANG
+    assert phase.shader.artifact_policy == ShaderArtifactPolicy.REQUIRED
     assert "import termin_prelude;" in phase.shader.vertex_source
     assert "[[TerminScope(\"frame\")]]" in phase.shader.vertex_source
     assert "[[TerminScope(\"draw\")]]" in phase.shader.vertex_source
@@ -699,7 +700,7 @@ def test_stdlib_slang_material_creates_slang_tc_shader():
 
 
 def test_stdlib_slang_textured_normal_material_uses_texture_property():
-    from tgfx import ShaderLanguage
+    from tgfx import ShaderArtifactPolicy, ShaderLanguage
     from termin.default_assets.render.material_asset import MaterialAsset
     from termin.default_assets.render.shader_asset import ShaderAsset
     from termin.default_assets.resource_manager import DefaultResourceManager
@@ -730,6 +731,7 @@ def test_stdlib_slang_textured_normal_material_uses_texture_property():
     phase = material.get_phase(0)
     assert phase is not None
     assert phase.shader.language == ShaderLanguage.SLANG
+    assert phase.shader.artifact_policy == ShaderArtifactPolicy.REQUIRED
     assert "register(" not in phase.shader.vertex_source
     assert "register(" not in phase.shader.fragment_source
     assert "import termin_prelude;" in phase.shader.vertex_source
