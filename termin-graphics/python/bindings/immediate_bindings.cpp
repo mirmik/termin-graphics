@@ -25,12 +25,15 @@ void bind_immediate(nb::module_& m) {
              nb::arg("p0"), nb::arg("p1"), nb::arg("p2"), nb::arg("p3"), nb::arg("color"), nb::arg("depth_test") = false)
         // Batch triangles with per-vertex colors
         .def("triangles", [](ImmediateRenderer& self,
-                             nb::ndarray<nb::numpy, float, nb::c_contig> vertices,
-                             nb::ndarray<nb::numpy, uint32_t, nb::c_contig> indices,
-                             nb::ndarray<nb::numpy, float, nb::c_contig> colors,
+                             nb::ndarray<float, nb::shape<-1, 3>, nb::c_contig, nb::device::cpu> vertices,
+                             nb::ndarray<uint32_t, nb::shape<-1, 3>, nb::c_contig, nb::device::cpu> indices,
+                             nb::ndarray<float, nb::shape<-1, 4>, nb::c_contig, nb::device::cpu> colors,
                              bool depth_test) {
             size_t vertex_count = vertices.shape(0);
             size_t triangle_count = indices.shape(0);
+            if (colors.shape(0) != vertex_count) {
+                throw std::runtime_error("ImmediateRenderer.triangles colors must have one RGBA row per vertex");
+            }
             self.triangles(
                 vertices.data(),
                 vertex_count,
@@ -41,11 +44,11 @@ void bind_immediate(nb::module_& m) {
             );
         },
              nb::arg("vertices"), nb::arg("indices"), nb::arg("colors"), nb::arg("depth_test") = false,
-             "Batch triangles from numpy arrays (vertices Nx3, indices Mx3, colors Nx4)")
+             "Batch triangles from buffer-compatible arrays (vertices Nx3, indices Mx3, colors Nx4)")
         // Batch triangles with single color
         .def("triangles", [](ImmediateRenderer& self,
-                             nb::ndarray<nb::numpy, float, nb::c_contig> vertices,
-                             nb::ndarray<nb::numpy, uint32_t, nb::c_contig> indices,
+                             nb::ndarray<float, nb::shape<-1, 3>, nb::c_contig, nb::device::cpu> vertices,
+                             nb::ndarray<uint32_t, nb::shape<-1, 3>, nb::c_contig, nb::device::cpu> indices,
                              const Color4& color,
                              bool depth_test) {
             size_t vertex_count = vertices.shape(0);
@@ -60,7 +63,7 @@ void bind_immediate(nb::module_& m) {
             );
         },
              nb::arg("vertices"), nb::arg("indices"), nb::arg("color"), nb::arg("depth_test") = false,
-             "Batch triangles from numpy arrays with single color (vertices Nx3, indices Mx3)")
+             "Batch triangles from buffer-compatible arrays with single color (vertices Nx3, indices Mx3)")
         // Wireframe
         .def("polyline", &ImmediateRenderer::polyline,
              nb::arg("points"), nb::arg("color"), nb::arg("closed") = false, nb::arg("depth_test") = false)
@@ -143,8 +146,8 @@ void bind_immediate(nb::module_& m) {
         // Rendering via tgfx2 ctx2 (Stage 8.1 migration)
         .def("flush", [](ImmediateRenderer& self,
                          tgfx::RenderContext2* ctx2,
-                         nb::ndarray<nb::numpy, double, nb::shape<4, 4>> view,
-                         nb::ndarray<nb::numpy, double, nb::shape<4, 4>> proj,
+                         nb::ndarray<double, nb::shape<4, 4>, nb::c_contig, nb::device::cpu> view,
+                         nb::ndarray<double, nb::shape<4, 4>, nb::c_contig, nb::device::cpu> proj,
                          bool depth_test,
                          bool blend) {
             Mat44 view_mat, proj_mat;
@@ -170,8 +173,8 @@ void bind_immediate(nb::module_& m) {
              nb::arg("depth_test") = true, nb::arg("blend") = true)
         .def("flush_depth", [](ImmediateRenderer& self,
                          tgfx::RenderContext2* ctx2,
-                         nb::ndarray<nb::numpy, double, nb::shape<4, 4>> view,
-                         nb::ndarray<nb::numpy, double, nb::shape<4, 4>> proj,
+                         nb::ndarray<double, nb::shape<4, 4>, nb::c_contig, nb::device::cpu> view,
+                         nb::ndarray<double, nb::shape<4, 4>, nb::c_contig, nb::device::cpu> proj,
                          bool blend) {
             Mat44 view_mat, proj_mat;
             for (int row = 0; row < 4; ++row) {

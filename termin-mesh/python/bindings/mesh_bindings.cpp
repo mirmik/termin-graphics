@@ -96,8 +96,8 @@ void bind_mesh(nb::module_& m) {
     nb::class_<Mesh3>(m, "Mesh3")
         .def(nb::init<>())
         .def("__init__", [](Mesh3* self,
-                           nb::ndarray<float, nb::c_contig, nb::device::cpu> vertices,
-                           nb::ndarray<uint32_t, nb::c_contig, nb::device::cpu> triangles,
+                           nb::ndarray<float, nb::shape<-1, 3>, nb::c_contig, nb::device::cpu> vertices,
+                           nb::ndarray<uint32_t, nb::shape<-1, 3>, nb::c_contig, nb::device::cpu> triangles,
                            nb::object uvs_obj,
                            nb::object normals_obj,
                            std::string name,
@@ -122,7 +122,7 @@ void bind_mesh(nb::module_& m) {
 
             // Optional normals
             if (!normals_obj.is_none()) {
-                auto n_arr = nb::cast<nb::ndarray<float, nb::c_contig, nb::device::cpu>>(normals_obj);
+                auto n_arr = nb::cast<nb::ndarray<float, nb::shape<-1, 3>, nb::c_contig, nb::device::cpu>>(normals_obj);
                 float* n_ptr = n_arr.data();
                 size_t n = n_arr.shape(0);
                 self->normals.resize(n);
@@ -133,7 +133,7 @@ void bind_mesh(nb::module_& m) {
 
             // Optional UVs
             if (!uvs_obj.is_none()) {
-                auto uv_arr = nb::cast<nb::ndarray<float, nb::c_contig, nb::device::cpu>>(uvs_obj);
+                auto uv_arr = nb::cast<nb::ndarray<float, nb::shape<-1, 2>, nb::c_contig, nb::device::cpu>>(uvs_obj);
                 float* uv_ptr = uv_arr.data();
                 size_t n = uv_arr.shape(0);
                 self->uvs.resize(n);

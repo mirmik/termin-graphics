@@ -34,7 +34,6 @@ setup(
         "termin-scene",
         "termin-inspect",
         "numpy",
-        "Pillow>=9.0",
     ],
     ext_modules=native_extensions_for_source(_DIR),
     cmdclass={"build": TerminCMakeBuild, "build_ext": BuildExt},

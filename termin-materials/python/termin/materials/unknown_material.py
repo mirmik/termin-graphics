@@ -2,50 +2,13 @@
 
 from __future__ import annotations
 
-from termin.materials import TcMaterial, TcRenderState
+from tcbase import log
+from tgfx import TcShader
+
+from termin.materials import TcMaterial
 
 
-UNKNOWN_VERT = """#version 330 core
-
-layout(location = 0) in vec3 a_position;
-layout(location = 1) in vec3 a_normal;
-
-uniform mat4 u_model;
-uniform mat4 u_view;
-uniform mat4 u_projection;
-
-out vec3 v_normal;
-out vec3 v_world_pos;
-
-void main() {
-    vec4 world = u_model * vec4(a_position, 1.0);
-    v_world_pos = world.xyz;
-    v_normal = mat3(transpose(inverse(u_model))) * a_normal;
-    gl_Position = u_projection * u_view * world;
-}
-"""
-
-UNKNOWN_FRAG = """#version 330 core
-
-in vec3 v_normal;
-in vec3 v_world_pos;
-
-uniform vec3 u_camera_position;
-
-out vec4 FragColor;
-
-void main() {
-    vec3 N = normalize(v_normal);
-    vec3 V = normalize(u_camera_position - v_world_pos);
-
-    float up = dot(N, vec3(0.0, 0.0, 1.0)) * 0.5 + 0.5;
-    vec3 base_color = vec3(1.0, 0.0, 1.0);
-    float fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
-
-    vec3 color = base_color * (0.3 + 0.7 * up) + vec3(1.0) * fresnel * 0.3;
-    FragColor = vec4(color, 1.0);
-}
-"""
+UNKNOWN_SHADER_UUID = "termin-engine-line-default"
 
 
 def create_unknown_material(
@@ -60,15 +23,15 @@ def create_unknown_material(
     mat = TcMaterial.create(mat_name, "")
     mat.shader_name = "UnknownShader"
 
-    phase = mat.add_phase_from_sources(
-        vertex_source=UNKNOWN_VERT,
-        fragment_source=UNKNOWN_FRAG,
-        geometry_source="",
-        shader_name="UnknownShader",
-        phase_mark="opaque",
-        priority=0,
-        state=TcRenderState.opaque(),
-    )
+    shader = TcShader.from_builtin_catalog(UNKNOWN_SHADER_UUID)
+    if not shader.is_valid:
+        log.error(
+            "UnknownMaterial: failed to load built-in shader '%s'",
+            UNKNOWN_SHADER_UUID,
+        )
+        return mat
+
+    phase = mat.add_phase(shader, "opaque", 0)
 
     if phase is not None:
         phase.set_color(1.0, 0.0, 1.0, 1.0)

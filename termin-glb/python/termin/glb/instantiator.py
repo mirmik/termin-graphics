@@ -592,9 +592,7 @@ def _registered_glb_texture(rm, texture: "GLBTcTexture"):
 
 def _decode_glb_texture(rm, texture: "GLBTcTexture"):
     """Decode glTF image bytes into a registered TextureAsset."""
-    import io
-
-    from PIL import Image
+    from termin.image import decode_rgba8
     from termin.default_assets.render.texture_asset import TextureAsset
     from tgfx import TcTexture
     from tcbase import log
@@ -614,9 +612,8 @@ def _decode_glb_texture(rm, texture: "GLBTcTexture"):
 
     try:
         texture_name = _unique_glb_texture_name(rm, texture, texture_uuid)
-        image = Image.open(io.BytesIO(texture.data)).convert("RGBA")
-        data = np.array(image, dtype=np.uint8)
-        height, width = data.shape[:2]
+        decoded = decode_rgba8(texture.data, texture.name or f"glb-texture-{texture.index}")
+        data = decoded.to_numpy(copy=True)
         asset = TextureAsset(
             texture_data=None,
             name=texture_name,
@@ -624,9 +621,9 @@ def _decode_glb_texture(rm, texture: "GLBTcTexture"):
         )
         asset.texture_data = TcTexture.from_data(
             data,
-            width=width,
-            height=height,
-            channels=4,
+            width=decoded.width,
+            height=decoded.height,
+            channels=decoded.channels,
             flip_x=False,
             flip_y=True,
             transpose=False,

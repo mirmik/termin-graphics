@@ -64,6 +64,27 @@ void bind_scene_pipeline_template(nb::module_& m);
 void bind_render_engine(nb::module_& m);
 void bind_render_pipeline(nb::module_& m);
 
+static Mat44f mat44f_from_buffer_compatible_object(nb::object value, const char* field_name) {
+    try {
+        auto arr = nb::cast<nb::ndarray<float, nb::shape<4, 4>, nb::c_contig, nb::device::cpu>>(value);
+        Mat44f matrix;
+        for (int row = 0; row < 4; ++row) {
+            for (int col = 0; col < 4; ++col) {
+                matrix.data[col * 4 + row] = arr(row, col);
+            }
+        }
+        return matrix;
+    } catch (const std::exception& e) {
+        tc::Log::error(
+            "RenderContext %s expects a 4x4 C-contiguous float32 buffer-compatible matrix: %s",
+            field_name,
+            e.what());
+        throw std::runtime_error(
+            std::string("RenderContext ") + field_name +
+            " expects a 4x4 C-contiguous float32 buffer-compatible matrix");
+    }
+}
+
 } // namespace termin
 
 void bind_tc_render_target(nb::module_& m);
@@ -536,12 +557,7 @@ void bind_render_framework(nb::module_& m) {
                 if (nb::isinstance<Mat44>(v)) {
                     self->view = nb::cast<Mat44>(v).to_float();
                 } else {
-                    auto arr = nb::cast<nb::ndarray<nb::numpy, float, nb::shape<4, 4>>>(v);
-                    for (int row = 0; row < 4; ++row) {
-                        for (int col = 0; col < 4; ++col) {
-                            self->view.data[col * 4 + row] = arr(row, col);
-                        }
-                    }
+                    self->view = mat44f_from_buffer_compatible_object(v, "view");
                 }
             }
             if (kwargs.contains("projection")) {
@@ -549,12 +565,7 @@ void bind_render_framework(nb::module_& m) {
                 if (nb::isinstance<Mat44>(p)) {
                     self->projection = nb::cast<Mat44>(p).to_float();
                 } else {
-                    auto arr = nb::cast<nb::ndarray<nb::numpy, float, nb::shape<4, 4>>>(p);
-                    for (int row = 0; row < 4; ++row) {
-                        for (int col = 0; col < 4; ++col) {
-                            self->projection.data[col * 4 + row] = arr(row, col);
-                        }
-                    }
+                    self->projection = mat44f_from_buffer_compatible_object(p, "projection");
                 }
             }
             if (kwargs.contains("model")) {
@@ -562,12 +573,7 @@ void bind_render_framework(nb::module_& m) {
                 if (nb::isinstance<Mat44>(model)) {
                     self->model = nb::cast<Mat44>(model).to_float();
                 } else {
-                    auto arr = nb::cast<nb::ndarray<nb::numpy, float, nb::shape<4, 4>>>(model);
-                    for (int row = 0; row < 4; ++row) {
-                        for (int col = 0; col < 4; ++col) {
-                            self->model.data[col * 4 + row] = arr(row, col);
-                        }
-                    }
+                    self->model = mat44f_from_buffer_compatible_object(model, "model");
                 }
             }
             if (kwargs.contains("camera")) {

@@ -22,10 +22,6 @@ namespace nb = nanobind;
 
 namespace {
 
-constexpr uint32_t GLSL_MATERIAL_BINDING = 1;
-constexpr uint32_t GLSL_PER_FRAME_BINDING = 2;
-constexpr uint32_t GLSL_DRAW_DATA_BINDING = 24;
-constexpr uint32_t GLSL_MATERIAL_TEXTURE_BINDING_BASE = 4;
 constexpr uint32_t STAGE_ALL_GRAPHICS =
     TC_SHADER_STAGE_VERTEX | TC_SHADER_STAGE_FRAGMENT | TC_SHADER_STAGE_GEOMETRY;
 
@@ -41,26 +37,6 @@ bool source_contains_any(
     return false;
 }
 
-ShaderPhase infer_raw_glsl_resource_phase(
-    const std::string& vertex_source,
-    const std::string& fragment_source,
-    const std::string& geometry_source)
-{
-    ShaderPhase shader_phase;
-    const bool uses_per_frame =
-        source_contains_any(vertex_source, {"uniform PerFrame", "ConstantBuffer<PerFrame>", "u_per_frame"}) ||
-        source_contains_any(fragment_source, {"uniform PerFrame", "ConstantBuffer<PerFrame>", "u_per_frame"}) ||
-        source_contains_any(geometry_source, {"uniform PerFrame", "ConstantBuffer<PerFrame>", "u_per_frame"});
-    const bool uses_draw_data =
-        source_contains_any(vertex_source, {"uniform DrawData", "ConstantBuffer<DrawData>", "draw_data"}) ||
-        source_contains_any(fragment_source, {"uniform DrawData", "ConstantBuffer<DrawData>", "draw_data"}) ||
-        source_contains_any(geometry_source, {"uniform DrawData", "ConstantBuffer<DrawData>", "draw_data"});
-
-    shader_phase.uses_engine_per_frame = uses_per_frame;
-    shader_phase.uses_engine_draw_data = uses_draw_data;
-    return shader_phase;
-}
-
 TcTexture require_tc_texture(nb::object value, const std::string& context) {
     if (nb::isinstance<TcTexture>(value)) {
         return nb::cast<TcTexture>(value);
@@ -74,6 +50,10 @@ TcTexture optional_tc_texture(nb::object value, const std::string& context) {
         return TcTexture();
     }
     return require_tc_texture(value, context);
+}
+
+bool supports_python_buffer(nb::handle value) {
+    return PyObject_CheckBuffer(value.ptr()) != 0;
 }
 
 tc_shader_language shader_language_from_string(const std::string& language) {
@@ -119,26 +99,6 @@ void put_uniform_value(nb::dict& result, const std::string& name, tc_uniform_val
     }
 }
 
-void append_resource_binding(
-    std::vector<tc_shader_resource_binding>& bindings,
-    const std::string& name,
-    uint32_t kind,
-    uint32_t scope,
-    uint32_t binding_index,
-    uint32_t size = 0)
-{
-    tc_shader_resource_binding binding{};
-    std::strncpy(binding.name, name.c_str(), TC_SHADER_RESOURCE_NAME_MAX - 1);
-    binding.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
-    binding.kind = kind;
-    binding.scope = scope;
-    binding.set = TC_SHADER_RESOURCE_SET_DEFAULT;
-    binding.binding = binding_index;
-    binding.stage_mask = STAGE_ALL_GRAPHICS;
-    binding.size = size;
-    bindings.push_back(binding);
-}
-
 const tc_shader_abi_resource_decl& require_shader_abi_resource(
     uint32_t id,
     const char* context)
@@ -149,23 +109,6 @@ const tc_shader_abi_resource_decl& require_shader_abi_resource(
         throw std::runtime_error("Unknown shader ABI resource id");
     }
     return *abi;
-}
-
-void append_abi_resource_binding(
-    std::vector<tc_shader_resource_binding>& bindings,
-    uint32_t id,
-    uint32_t binding_index,
-    uint32_t size = 0)
-{
-    const tc_shader_abi_resource_decl& abi =
-        require_shader_abi_resource(id, "append_abi_resource_binding");
-    append_resource_binding(
-        bindings,
-        abi.canonical_name,
-        abi.kind,
-        abi.scope,
-        binding_index,
-        size);
 }
 
 bool contract_has_vertex_input(
@@ -382,10 +325,8 @@ void apply_parser_shader_contract(
 void apply_parser_resource_layout(
     tc_shader* shader,
     const ShaderPhase& shader_phase,
-    const MaterialUboLayout& layout,
-    tc_shader_language language)
+    const MaterialUboLayout& layout)
 {
-    std::vector<tc_shader_resource_binding> bindings;
     if (!layout.empty()) {
         std::vector<tc_material_ubo_entry> entries;
         entries.reserve(layout.entries.size());
@@ -411,43 +352,6 @@ void apply_parser_resource_layout(
         tc_shader_set_material_ubo_layout(shader, nullptr, 0, 0);
     }
 
-    if (language == TC_SHADER_LANGUAGE_GLSL) {
-        if (!layout.empty()) {
-            append_abi_resource_binding(
-                bindings,
-                TC_SHADER_ABI_RESOURCE_MATERIAL,
-                GLSL_MATERIAL_BINDING,
-                layout.block_size);
-        }
-        if (shader_phase.uses_engine_per_frame) {
-            append_abi_resource_binding(
-                bindings,
-                TC_SHADER_ABI_RESOURCE_PER_FRAME,
-                GLSL_PER_FRAME_BINDING);
-        }
-        if (shader_phase.uses_engine_draw_data) {
-            append_abi_resource_binding(
-                bindings,
-                TC_SHADER_ABI_RESOURCE_DRAW_DATA,
-                GLSL_DRAW_DATA_BINDING,
-                64);
-        }
-        for (size_t i = 0; i < shader_phase.material_texture_resources.size(); ++i) {
-            append_resource_binding(
-                bindings,
-                shader_phase.material_texture_resources[i],
-                TC_SHADER_RESOURCE_TEXTURE,
-                TC_SHADER_RESOURCE_SCOPE_MATERIAL,
-                GLSL_MATERIAL_TEXTURE_BINDING_BASE + static_cast<uint32_t>(i));
-        }
-    }
-
-    if (language == TC_SHADER_LANGUAGE_GLSL) {
-        tc_shader_set_resource_layout(
-            shader,
-            bindings.empty() ? nullptr : bindings.data(),
-            static_cast<uint32_t>(bindings.size()));
-    }
     apply_parser_shader_contract(shader, shader_phase, layout);
 }
 
@@ -569,8 +473,7 @@ TcMaterial create_material_from_parsed(
         apply_parser_resource_layout(
             tc_shader_get(phase->shader),
             shader_phase,
-            layout,
-            language);
+            layout);
 
         std::vector<MaterialProperty> shader_uniforms = shader_phase.uniforms;
         shader_uniforms.insert(
@@ -850,8 +753,8 @@ void bind_tc_material(nb::module_& m) {
                 Vec4 v = nb::cast<Vec4>(value);
                 float arr[4] = {(float)v.x, (float)v.y, (float)v.z, (float)v.w};
                 tc_material_phase_set_uniform(&p, name.c_str(), TC_UNIFORM_VEC4, arr);
-            } else if (nb::ndarray_check(value)) {
-                nb::ndarray<nb::numpy, float> arr = nb::cast<nb::ndarray<nb::numpy, float>>(value);
+            } else if (supports_python_buffer(value)) {
+                auto arr = nb::cast<nb::ndarray<float, nb::c_contig, nb::device::cpu>>(value);
                 size_t size = arr.size();
                 float* ptr = arr.data();
                 if (size == 2) {
@@ -862,6 +765,13 @@ void bind_tc_material(nb::module_& m) {
                     tc_material_phase_set_uniform(&p, name.c_str(), TC_UNIFORM_VEC4, ptr);
                 } else if (size == 16) {
                     tc_material_phase_set_uniform(&p, name.c_str(), TC_UNIFORM_MAT4, ptr);
+                } else {
+                    tc::Log::error(
+                        "tc_material_phase.set_param('%s') expects float32 buffer size 2, 3, 4, or 16; got %zu",
+                        name.c_str(),
+                        size);
+                    throw std::runtime_error(
+                        "tc_material_phase.set_param expects float32 buffer size 2, 3, 4, or 16");
                 }
             }
         }, nb::arg("name"), nb::arg("value"));
@@ -937,8 +847,12 @@ void bind_tc_material(nb::module_& m) {
                 if (nb::isinstance<Vec4>(color_obj)) {
                     Vec4 c = nb::cast<Vec4>(color_obj);
                     tc_material_phase_set_color(phase, c.x, c.y, c.z, c.w);
-                } else if (nb::ndarray_check(color_obj)) {
-                    nb::ndarray<nb::numpy, float> arr = nb::cast<nb::ndarray<nb::numpy, float>>(color_obj);
+                } else if (supports_python_buffer(color_obj)) {
+                    auto arr = nb::cast<nb::ndarray<float, nb::c_contig, nb::device::cpu>>(color_obj);
+                    if (arr.size() != 4) {
+                        tc::Log::error("TcMaterial(color) expects float32 buffer size 4; got %zu", arr.size());
+                        throw std::runtime_error("TcMaterial(color) expects float32 buffer size 4");
+                    }
                     float* ptr = arr.data();
                     tc_material_phase_set_color(phase, ptr[0], ptr[1], ptr[2], ptr[3]);
                 } else if (nb::isinstance<nb::tuple>(color_obj) || nb::isinstance<nb::list>(color_obj)) {
@@ -1083,18 +997,12 @@ void bind_tc_material(nb::module_& m) {
             tc_shader_language shader_language = static_cast<tc_shader_language>(language);
             tc_shader_artifact_policy shader_artifact_policy =
                 static_cast<tc_shader_artifact_policy>(artifact_policy);
-            std::string vs = shader_language == TC_SHADER_LANGUAGE_GLSL
-                ? rewrite_engine_uniforms_for_stage_source(vertex_source, "vertex")
-                : vertex_source;
-            std::string fs = shader_language == TC_SHADER_LANGUAGE_GLSL
-                ? rewrite_engine_uniforms_for_stage_source(fragment_source, "fragment")
-                : fragment_source;
+            std::string vs = vertex_source;
+            std::string fs = fragment_source;
             std::string gs;
             const char* gs_ptr = nullptr;
             if (!geometry_source.empty()) {
-                gs = shader_language == TC_SHADER_LANGUAGE_GLSL
-                    ? rewrite_engine_uniforms_for_stage_source(geometry_source, "geometry")
-                    : geometry_source;
+                gs = geometry_source;
                 gs_ptr = gs.c_str();
             }
             TcMaterialPhaseFromSourcesInfo phase_info;
@@ -1116,14 +1024,6 @@ void bind_tc_material(nb::module_& m) {
 
             tc_material_phase* phase = self.add_phase_from_sources(phase_info);
 
-            if (phase && shader_language == TC_SHADER_LANGUAGE_GLSL) {
-                ShaderPhase raw_phase = infer_raw_glsl_resource_phase(vs, fs, gs);
-                apply_parser_resource_layout(
-                    tc_shader_get(phase->shader),
-                    raw_phase,
-                    MaterialUboLayout{},
-                    shader_language);
-            }
             return phase;
         }, nb::arg("vertex_source"), nb::arg("fragment_source"),
            nb::arg("geometry_source") = "", nb::arg("shader_name") = "",

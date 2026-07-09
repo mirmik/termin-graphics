@@ -19,9 +19,6 @@ namespace termin {
 
 namespace {
 
-constexpr uint32_t GLSL_MATERIAL_BINDING = 1;
-constexpr uint32_t GLSL_MATERIAL_TEXTURE_BINDING_BASE = 4;
-
 // Trim whitespace from both ends
 std::string trim(const std::string& s) {
     size_t start = s.find_first_not_of(" \t\r\n");
@@ -223,33 +220,6 @@ MaterialUboLayout compute_std140_layout(const std::vector<MaterialProperty>& pro
     return layout;
 }
 
-std::string synthesize_material_ubo_glsl(const MaterialUboLayout& layout) {
-    if (layout.empty()) return "";
-
-    auto glsl_type = [](const std::string& prop_type) -> const char* {
-        if (prop_type == "Float") return "float";
-        if (prop_type == "Int")   return "int";
-        if (prop_type == "Bool")  return "bool";
-        if (prop_type == "Vec2")  return "vec2";
-        if (prop_type == "Vec3")  return "vec3";
-        if (prop_type == "Vec4")  return "vec4";
-        if (prop_type == "Color") return "vec4";
-        if (prop_type == "Mat4")  return "mat4";
-        return nullptr;
-    };
-
-    std::ostringstream out;
-    out << "layout(std140, binding = " << GLSL_MATERIAL_BINDING
-        << ") uniform MaterialParams {\n";
-    for (const auto& e : layout.entries) {
-        const char* t = glsl_type(e.property_type);
-        if (!t) continue;
-        out << "    " << t << " " << e.name << ";\n";
-    }
-    out << "};\n";
-    return out.str();
-}
-
 std::string synthesize_material_ubo_slang(const MaterialUboLayout& layout) {
     if (layout.empty()) return "";
 
@@ -288,45 +258,6 @@ std::vector<std::string> collect_texture_properties(const std::vector<MaterialPr
         }
     }
     return names;
-}
-
-std::string strip_sampler_decls(
-    const std::string& source,
-    const std::vector<std::string>& sampler_names
-) {
-    if (sampler_names.empty()) return source;
-
-    std::vector<std::regex> res;
-    res.reserve(sampler_names.size());
-    for (const auto& name : sampler_names) {
-        std::string pattern =
-            std::string("[ \\t]*(layout[ \\t]*\\([^)]*\\)[ \\t]*)?")
-            + "uniform[ \\t]+sampler[A-Za-z0-9_]*[ \\t]+"
-            + name + "[ \\t]*;[ \\t]*";
-        res.emplace_back(pattern);
-    }
-
-    std::string result;
-    size_t i = 0;
-    while (i < source.size()) {
-        size_t eol = source.find('\n', i);
-        size_t line_end = (eol == std::string::npos) ? source.size() : eol;
-        std::string line = source.substr(i, line_end - i);
-        bool drop = false;
-        for (const auto& re : res) {
-            if (std::regex_match(line, re)) {
-                drop = true;
-                break;
-            }
-        }
-        if (!drop) {
-            result.append(line);
-            if (eol != std::string::npos) result.push_back('\n');
-        }
-        if (eol == std::string::npos) break;
-        i = eol + 1;
-    }
-    return result;
 }
 
 std::string strip_slang_sampler_decls(
@@ -385,29 +316,6 @@ std::string ensure_slang_prelude_import(std::string source) {
     return "import termin_prelude;\n" + source;
 }
 
-std::string synthesize_material_sampler_glsl(
-    const std::vector<std::string>& texture_names,
-    const std::string& stage_source,
-    std::vector<std::string>* emitted_names = nullptr
-) {
-    if (texture_names.empty()) return "";
-
-    std::ostringstream out;
-    for (size_t i = 0; i < texture_names.size(); ++i) {
-        const std::string& name = texture_names[i];
-        if (!source_uses_identifier(stage_source, name)) {
-            continue;
-        }
-        if (emitted_names &&
-            std::find(emitted_names->begin(), emitted_names->end(), name) == emitted_names->end()) {
-            emitted_names->push_back(name);
-        }
-        out << "layout(binding = " << (GLSL_MATERIAL_TEXTURE_BINDING_BASE + static_cast<uint32_t>(i))
-            << ") uniform sampler2D " << name << ";\n";
-    }
-    return out.str();
-}
-
 std::string synthesize_material_sampler_slang(
     const std::vector<std::string>& texture_names,
     const std::string& stage_source
@@ -426,72 +334,6 @@ std::string synthesize_material_sampler_slang(
 }
 
 bool is_engine_uniform_name(const std::string& name);
-
-std::optional<std::string> material_type_from_glsl_uniform_type(
-    const std::string& glsl_type)
-{
-    if (glsl_type == "float") return "Float";
-    if (glsl_type == "int") return "Int";
-    if (glsl_type == "bool") return "Bool";
-    if (glsl_type == "vec2") return "Vec2";
-    if (glsl_type == "vec3") return "Vec3";
-    if (glsl_type == "vec4") return "Vec4";
-    if (glsl_type == "mat4") return "Mat4";
-    if (glsl_type == "sampler2D") return "Texture";
-    return std::nullopt;
-}
-
-std::vector<MaterialProperty> discover_material_uniforms_from_stages(
-    const ShaderPhase& phase,
-    const std::vector<MaterialProperty>& material_properties)
-{
-    std::vector<MaterialProperty> discovered;
-    std::vector<std::string> known_names;
-
-    for (const auto& prop : material_properties) {
-        known_names.push_back(prop.name);
-    }
-    for (const auto& prop : phase.uniforms) {
-        known_names.push_back(prop.name);
-    }
-
-    auto known = [&](const std::string& name) {
-        return std::find(known_names.begin(), known_names.end(), name) != known_names.end();
-    };
-
-    std::regex uniform_re(
-        R"(^[ \t]*(?:layout[ \t]*\([^)]*\)[ \t]*)?uniform[ \t]+([A-Za-z_][A-Za-z0-9_]*)[ \t]+([A-Za-z_][A-Za-z0-9_]*)(?:[ \t]*\[[^\]]+\])?[ \t]*;[ \t]*(?://.*)?$)");
-
-    for (const auto& kv : phase.stages) {
-        std::istringstream lines(kv.second.source);
-        std::string line;
-        while (std::getline(lines, line)) {
-            std::smatch match;
-            if (!std::regex_match(line, match, uniform_re)) {
-                continue;
-            }
-
-            std::string glsl_type = match[1].str();
-            std::string name = match[2].str();
-            if (known(name) || is_engine_uniform_name(name)) {
-                continue;
-            }
-
-            auto material_type = material_type_from_glsl_uniform_type(glsl_type);
-            if (!material_type.has_value()) {
-                continue;
-            }
-
-            known_names.push_back(name);
-            discovered.emplace_back(
-                name,
-                material_type.value(),
-                get_default_for_type(material_type.value()));
-        }
-    }
-
-    return discovered;
-}
 
 std::vector<MaterialProperty> collect_used_material_properties(
     const std::vector<MaterialProperty>& material_properties,
@@ -536,15 +378,15 @@ bool stage_uses_material_ubo_layout(
 // Engine uniforms auto-substitution
 // ============================================================================
 //
-// GLSL shaders can declare engine-provided per-frame / per-draw data
-// as plain `uniform mat4 u_view;` etc. — fine on GL 3.3, but SPIR-V
-// disallows non-opaque uniforms outside a block. Transform the stage
-// source so that:
+// Slang .shader stages may still use the compact engine names
+// (`u_view`, `u_model`, etc.) while authoring migrated stdlib materials.
+// Transform the stage source so that:
 //
-//   - `uniform <type> <name>;` decls for known engine names are stripped
-//   - a PerFrame UBO is injected with view / projection / view_projection /
+//   - legacy-style `uniform <type> <name>;` decls for known engine names are
+//     stripped
+//   - a PerFrame constant buffer is injected with view / projection / view_projection /
 //     camera_position
-//   - a draw-scope UBO with `u_model` is injected
+//   - a draw-scope constant buffer with `u_model` is injected
 //   - `#define u_model draw_data._u_model` so stage bodies keep writing
 //     `u_model * vec4(pos, 1.0)` without manual rewrite
 //
@@ -604,37 +446,6 @@ std::string strip_engine_uniform_decls(const std::string& source) {
     }
     return result;
 }
-
-// Engine-supplied per-frame block. Inject this only when a stage declares
-// legacy plain per-frame uniforms. Do not use identifier-only scans here:
-// fields such as `struct IdPushData { mat4 u_model; }` are not engine
-// uniforms and must not trigger macro injection.
-const char* ENGINE_PER_FRAME_BLOCK = R"(
-layout(std140, binding = 2) uniform PerFrame {
-    mat4 u_view;
-    mat4 u_projection;
-    mat4 u_view_projection;
-    mat4 u_inv_view;
-    mat4 u_inv_proj;
-    vec4 u_camera_position;
-    vec2 u_resolution;
-    float u_near;
-    float u_far;
-};
-)";
-
-// Engine-supplied per-draw block. `u_model` is aliased via `#define` so
-// existing stage bodies keep using the plain identifier. This block is
-// intentionally separate from PerFrame: the macro is only safe when the source
-// actually declared a top-level `uniform mat4 u_model;`.
-const char* ENGINE_MODEL_PUSH_BLOCK = R"(
-
-struct ColorPushData {
-    mat4 _u_model;
-};
-layout(std140, binding = 24) uniform DrawData { ColorPushData draw_data; };
-#define u_model draw_data._u_model
-)";
 
 struct EngineUniformDeclUsage {
     bool per_frame = false;
@@ -768,19 +579,7 @@ EngineUniformDeclUsage collect_engine_uniform_usage(const std::string& source) {
     return usage;
 }
 
-std::string synthesize_engine_uniform_glsl(const EngineUniformDeclUsage& usage) {
-    std::string block;
-    if (usage.per_frame) {
-        block += ENGINE_PER_FRAME_BLOCK;
-    }
-    if (usage.model) {
-        block += ENGINE_MODEL_PUSH_BLOCK;
-    }
-    return block;
-}
-
-// Slang equivalents of the engine uniform blocks — same data, same bindings,
-// only the syntax differs (ConstantBuffer<T>).
+// Slang equivalents of the engine uniform blocks.
 const char* ENGINE_PER_FRAME_BLOCK_SLANG = R"(
 struct PerFrame {
     column_major float4x4 u_view;
@@ -861,72 +660,6 @@ std::string strip_uniform_decls(const std::string& source,
         i = eol + 1;
     }
     return result;
-}
-
-std::string inject_after_version(const std::string& source, const std::string& block) {
-    // Always runs — even with an empty block — so that every stage's
-    // `#version 330 core` gets upgraded to `#version 450 core` for
-    // shaderc. Without the upgrade shaderc emits a "forced to 450 while
-    // source declares 330" warning and treats legacy (attribute/
-    // varying) syntax inconsistently; with it every stage is uniform.
-
-    // Synthesized GLSL blocks use parser-owned compact bindings, mirrored
-    // into tc_shader_resource_binding by material/shader asset loaders. This
-    // is a GL 4.2+ / GL_ARB_shading_language_420pack feature and also the
-    // baseline for Vulkan GLSL via shaderc. User-authored `.shader`
-    // stages often start with `#version 330 core` — safe to upgrade in
-    // place since everything we inject is forward-compatible and the
-    // stage body rarely uses anything 330-specific. Find the first
-    // `#version` line, replace it with `#version 450 core`, then insert
-    // the generated block right after.
-    std::regex version_re(R"([ \t]*#version[^\n]*)");
-    size_t i = 0;
-    while (i < source.size()) {
-        size_t eol = source.find('\n', i);
-        size_t line_end = (eol == std::string::npos) ? source.size() : eol;
-        std::string line = source.substr(i, line_end - i);
-        if (std::regex_match(line, version_re)) {
-            size_t line_start = i;
-            std::string before = source.substr(0, line_start);
-            std::string after = (eol == std::string::npos) ? std::string()
-                                                           : source.substr(eol + 1);
-            return before + "#version 450 core\n" + block + after;
-        }
-        if (eol == std::string::npos) break;
-        i = eol + 1;
-    }
-    // No #version — prepend both the version line and the block.
-    return std::string("#version 450 core\n") + block + source;
-}
-
-std::string rewrite_engine_uniforms_for_stage_source(
-    const std::string& source,
-    const std::string& stage_name
-) {
-    std::string src = tgfx::internal::preprocess_shader_source(
-        source, stage_name.c_str());
-
-    // Parsed .shader sources may already have gone through the engine
-    // rewrite before they are passed to TcMaterial.add_phase_from_sources
-    // (e.g. builtin resources created from ShaderMultyPhaseProgramm). Keep
-    // the helper idempotent.
-    bool already_rewritten =
-        src.find("uniform PerFrame") != std::string::npos ||
-        src.find("uniform DrawData") != std::string::npos ||
-        src.find("#define u_model draw_data._u_model") != std::string::npos;
-    if (already_rewritten) {
-        return inject_after_version(src, "");
-    }
-
-    EngineUniformDeclUsage usage = collect_engine_uniform_usage(src);
-    if (usage.any()) {
-        src = strip_engine_uniform_decls(src);
-    }
-
-    return inject_after_version(
-        src,
-        synthesize_engine_uniform_glsl(usage)
-    );
 }
 
 // ========== std140 value packer ==========
@@ -1549,168 +1282,48 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
         std::move(material_properties));
     result.language = language;
 
-    if (result.language == "slang") {
-        for (auto& phase : result.phases) {
-            phase.uniforms = collect_used_material_properties(
-                result.material_properties,
-                phase);
-
-            MaterialUboLayout layout = compute_std140_layout(phase.uniforms);
-            std::vector<std::string> texture_names =
-                collect_texture_properties(phase.uniforms);
-            phase.material_texture_resources = texture_names;
-
-            if (!layout.empty() && contains_slang_material_params_declaration(phase)) {
-                throw std::runtime_error(
-                    "Slang .shader @property auto-generates MaterialParams; "
-                    "remove the manual MaterialParams/ConstantBuffer declaration");
-            }
-
-            std::string block_slang = synthesize_material_ubo_slang(layout);
-            for (auto& kv : phase.stages) {
-                std::string sampler_slang =
-                    synthesize_material_sampler_slang(texture_names, kv.second.source);
-                if (!sampler_slang.empty()) {
-                    kv.second.source =
-                        strip_slang_sampler_decls(kv.second.source, texture_names);
-                }
-
-                // Engine uniforms for Slang: detect u_view / u_model usage
-                // and inject matching PerFrame / draw-data resources.
-                EngineUniformDeclUsage eng_usage =
-                    collect_engine_uniform_usage(kv.second.source);
-                std::string eng_slang;
-                if (eng_usage.any()) {
-                    kv.second.source =
-                        strip_engine_uniform_decls(kv.second.source);
-                    eng_slang = synthesize_engine_uniform_slang(eng_usage);
-                }
-
-                if (stage_uses_material_ubo_layout(kv.second, layout)) {
-                    kv.second.source = block_slang + eng_slang + sampler_slang + kv.second.source;
-                } else if (!sampler_slang.empty() || !eng_slang.empty()) {
-                    kv.second.source = eng_slang + sampler_slang + kv.second.source;
-                }
-                kv.second.source = ensure_slang_prelude_import(std::move(kv.second.source));
-            }
-            if (!layout.empty()) {
-                phase.material_ubo_layout = std::move(layout);
-            }
-        }
-        return result;
-    }
-
-    // Material UBO synthesis is unconditional: any phase that declares
-    // scalar/vector @property or @uniform entries gets a std140
-    // MaterialParams block auto-synthesized, injected into the stage
-    // sources, and the original `uniform T name;` decls stripped from the
-    // raw GLSL. Texture properties/uniforms are not part of the UBO, but
-    // their sampler declarations still get explicit layout bindings that
-    // match ColorPass material texture slots.
-    //
-    // Phases without UBO-eligible properties get an empty layout and
-    // their sources are left alone.
-    //
-    // The former `@features material_ubo` opt-in was temporary scaffolding
-    // for the migration; see shadow/depth/normal/id pass pattern for the
-    // same "two code paths converge into one" cleanup.
     for (auto& phase : result.phases) {
-        for (auto& kv : phase.stages) {
-            kv.second.source = tgfx::internal::preprocess_shader_source(
-                kv.second.source,
-                kv.first.c_str());
-        }
-
         phase.uniforms = collect_used_material_properties(
             result.material_properties,
             phase);
-        phase.material_uniforms = discover_material_uniforms_from_stages(
-            phase,
-            result.material_properties);
 
-        std::vector<MaterialProperty> shader_uniforms = phase.uniforms;
-        shader_uniforms.insert(
-            shader_uniforms.end(),
-            phase.material_uniforms.begin(),
-            phase.material_uniforms.end());
-
-        MaterialUboLayout layout = compute_std140_layout(shader_uniforms);
-        std::vector<std::string> texture_names = collect_texture_properties(shader_uniforms);
-        std::string block_glsl;
-        std::vector<std::string> ubo_names;
+        MaterialUboLayout layout = compute_std140_layout(phase.uniforms);
+        std::vector<std::string> texture_names =
+            collect_texture_properties(phase.uniforms);
         phase.material_texture_resources = texture_names;
-        phase.uses_engine_per_frame = false;
-        phase.uses_engine_draw_data = false;
-        if (!layout.empty()) {
-            block_glsl = synthesize_material_ubo_glsl(layout);
-            ubo_names.reserve(layout.entries.size());
-            for (const auto& e : layout.entries) {
-                ubo_names.push_back(e.name);
-            }
+
+        if (!layout.empty() && contains_slang_material_params_declaration(phase)) {
+            throw std::runtime_error(
+                "Slang .shader @property auto-generates MaterialParams; "
+                "remove the manual MaterialParams/ConstantBuffer declaration");
         }
 
+        std::string block_slang = synthesize_material_ubo_slang(layout);
         for (auto& kv : phase.stages) {
-            std::string& src = kv.second.source;
-
-            std::string sampler_glsl =
-                synthesize_material_sampler_glsl(
-                    texture_names,
-                    src);
-            src = strip_sampler_decls(src, texture_names);
-
-            // Material UBO: strip @property plain-uniform decls and
-            // inject the synthesised std140 block. Only for phases with
-            // non-empty layout — phases without @property entries skip
-            // this step but still go through the engine uniforms pass
-            // below so their u_view/u_projection/u_model references
-            // still resolve.
-            if (!layout.empty()) {
-                src = strip_uniform_decls(src, ubo_names);
+            std::string sampler_slang =
+                synthesize_material_sampler_slang(texture_names, kv.second.source);
+            if (!sampler_slang.empty()) {
+                kv.second.source =
+                    strip_slang_sampler_decls(kv.second.source, texture_names);
             }
 
-            // Engine uniforms: strip plain decls of u_view / u_projection /
-            // u_model / u_view_projection / u_camera_position, then inject the
-            // matching PerFrame and/or draw-data UBO blocks.
-            //
-            // Skip the engine injection entirely when any of the engine
-            // names collide with a MaterialParams @property entry — this
-            // happens in shaders that hand the view/proj matrices down
-            // through the material system rather than asking the engine
-            // to supply them (e.g. the Skybox program). Injecting would
-            // redeclare `u_view` in PerFrame and collide with the same
-            // name already promoted from MaterialParams into the global
-            // scope ("nameless block contains a member that already has
-            // a name at global scope").
-            bool collision_with_material = false;
-            for (const char* engine_name : ENGINE_PLAIN_UNIFORM_NAMES) {
-                for (const auto& ubo_name : ubo_names) {
-                    if (ubo_name == engine_name) {
-                        collision_with_material = true;
-                        break;
-                    }
-                }
-                if (collision_with_material) break;
-            }
-            EngineUniformDeclUsage engine_usage;
-            if (!collision_with_material) {
-                engine_usage = collect_engine_uniform_usage(src);
-            }
-            if (engine_usage.any()) {
-                phase.uses_engine_per_frame =
-                    phase.uses_engine_per_frame || engine_usage.per_frame;
-                phase.uses_engine_draw_data =
-                    phase.uses_engine_draw_data || engine_usage.model;
-                src = strip_engine_uniform_decls(src);
+            // Engine uniforms for Slang: detect u_view / u_model usage
+            // and inject matching PerFrame / draw-data resources.
+            EngineUniformDeclUsage eng_usage =
+                collect_engine_uniform_usage(kv.second.source);
+            std::string eng_slang;
+            if (eng_usage.any()) {
+                kv.second.source =
+                    strip_engine_uniform_decls(kv.second.source);
+                eng_slang = synthesize_engine_uniform_slang(eng_usage);
             }
 
-            // Combine material block + engine block into a single
-            // after-version injection so both land above the stage body
-            // and get the same `#version 450 core` upgrade treatment.
-            // Always called so the stage's #version line is upgraded to
-            // 450 regardless of whether there's anything to inject.
-            std::string inject = block_glsl + sampler_glsl;
-            inject += synthesize_engine_uniform_glsl(engine_usage);
-            src = inject_after_version(src, inject);
+            if (stage_uses_material_ubo_layout(kv.second, layout)) {
+                kv.second.source = block_slang + eng_slang + sampler_slang + kv.second.source;
+            } else if (!sampler_slang.empty() || !eng_slang.empty()) {
+                kv.second.source = eng_slang + sampler_slang + kv.second.source;
+            }
+            kv.second.source = ensure_slang_prelude_import(std::move(kv.second.source));
         }
 
         if (!layout.empty()) {
