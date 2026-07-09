@@ -49,16 +49,14 @@ static tc_pass* python_pass_factory(void* userdata) {
     try {
         nb::object py_obj = (*(it->second))();
 
-        if (nb::hasattr(py_obj, "_tc_pass")) {
-            nb::object tc_pass_ref_obj = py_obj.attr("_tc_pass");
-            if (nb::isinstance<TcPassRef>(tc_pass_ref_obj)) {
-                TcPassRef ref = nb::cast<TcPassRef>(tc_pass_ref_obj);
-                tc_pass* p = ref.ptr();
-                if (p) {
-                    Py_INCREF(py_obj.ptr());
-                    p->bindings[TC_LANGUAGE_PYTHON] = py_obj.ptr();
-                    return p;
-                }
+        nb::object tc_pass_ref_obj = py_obj.attr("_tc_pass");
+        if (nb::isinstance<TcPassRef>(tc_pass_ref_obj)) {
+            TcPassRef ref = nb::cast<TcPassRef>(tc_pass_ref_obj);
+            tc_pass* p = ref.ptr();
+            if (p) {
+                Py_INCREF(py_obj.ptr());
+                p->bindings[TC_LANGUAGE_PYTHON] = py_obj.ptr();
+                return p;
             }
         }
 
@@ -206,43 +204,29 @@ static void py_pass_void_callback(void* wrapper, const char* method_name, const 
     }
 }
 
-static bool get_present_py_attr(nb::handle obj, const char* attr_name, nb::object& out_value) {
-    if (!nb::hasattr(obj, attr_name)) {
-        return false;
-    }
-    out_value = obj.attr(attr_name);
-    return true;
-}
-
-static bool get_non_none_py_attr(nb::handle obj, const char* attr_name, nb::object& out_value) {
-    if (!get_present_py_attr(obj, attr_name, out_value)) {
-        return false;
-    }
-    return !out_value.is_none();
-}
-
 static void apply_resource_spec_attrs(nb::handle py_spec, ResourceSpec& out_spec) {
     nb::object value;
 
     out_spec = ResourceSpec();
     out_spec.resource = nb::cast<std::string>(py_spec.attr("resource"));
 
-    if (get_non_none_py_attr(py_spec, "resource_type", value)) {
+    value = py_spec.attr("resource_type");
+    if (!value.is_none()) {
         out_spec.resource_type = nb::cast<std::string>(value);
     } else {
         out_spec.resource_type = "fbo";
     }
 
-    if (get_non_none_py_attr(py_spec, "size", value)) {
+    value = py_spec.attr("size");
+    if (!value.is_none()) {
         nb::tuple size = nb::cast<nb::tuple>(value);
         out_spec.size = std::make_pair(nb::cast<int>(size[0]), nb::cast<int>(size[1]));
     }
 
-    if (get_present_py_attr(py_spec, "samples", value)) {
-        out_spec.samples = nb::cast<int>(value);
-    }
+    out_spec.samples = nb::cast<int>(py_spec.attr("samples"));
 
-    if (get_non_none_py_attr(py_spec, "clear_color", value)) {
+    value = py_spec.attr("clear_color");
+    if (!value.is_none()) {
         nb::tuple color = nb::cast<nb::tuple>(value);
         out_spec.clear_color = std::array<double, 4>{
             nb::cast<double>(color[0]), nb::cast<double>(color[1]),
@@ -250,11 +234,13 @@ static void apply_resource_spec_attrs(nb::handle py_spec, ResourceSpec& out_spec
         };
     }
 
-    if (get_non_none_py_attr(py_spec, "clear_depth", value)) {
+    value = py_spec.attr("clear_depth");
+    if (!value.is_none()) {
         out_spec.clear_depth = nb::cast<float>(value);
     }
 
-    if (get_non_none_py_attr(py_spec, "format", value)) {
+    value = py_spec.attr("format");
+    if (!value.is_none()) {
         out_spec.format = nb::cast<std::string>(value);
     }
 }
@@ -904,7 +890,7 @@ void bind_tc_pass_runtime(nb::module_& m) {
             }
 
             std::string resource_type = "fbo";
-            if (!spec.is_none() && nb::hasattr(spec, "resource_type")) {
+            if (!spec.is_none()) {
                 nb::object rt = spec.attr("resource_type");
                 if (!rt.is_none()) {
                     resource_type = nb::cast<std::string>(rt);
@@ -926,16 +912,16 @@ void bind_tc_pass_runtime(nb::module_& m) {
             fbo_info["format"] = nb::str("");
 
             if (!spec.is_none()) {
-                if (nb::hasattr(spec, "size") && !spec.attr("size").is_none()) {
-                    nb::tuple size = nb::cast<nb::tuple>(spec.attr("size"));
+                nb::object size_obj = spec.attr("size");
+                if (!size_obj.is_none()) {
+                    nb::tuple size = nb::cast<nb::tuple>(size_obj);
                     fbo_info["width"] = size[0];
                     fbo_info["height"] = size[1];
                 }
-                if (nb::hasattr(spec, "samples")) {
-                    fbo_info["samples"] = spec.attr("samples");
-                }
-                if (nb::hasattr(spec, "format") && !spec.attr("format").is_none()) {
-                    fbo_info["format"] = spec.attr("format");
+                fbo_info["samples"] = spec.attr("samples");
+                nb::object format_obj = spec.attr("format");
+                if (!format_obj.is_none()) {
+                    fbo_info["format"] = format_obj;
                 }
             }
 
