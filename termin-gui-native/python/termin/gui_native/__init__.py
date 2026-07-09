@@ -16,6 +16,9 @@ from termin.gui_native._gui_native import (  # noqa: E402
     KeyCode,
     KeyEvent,
     KeyEventType,
+    ModifierFlag,
+    OverlayDismissReason,
+    OverlayFlag,
     PaintContext,
     Point,
     PointerEvent,
@@ -27,6 +30,7 @@ from termin.gui_native._gui_native import (  # noqa: E402
     WidgetHandle,
     WidgetRef,
     invalid_widget_handle,
+    tooltip_rect,
 )
 
 
@@ -116,11 +120,6 @@ class Widget:
                 child.paint(context)
 
     def pointer_event(self, event: PointerEvent) -> EventResult:
-        for child in reversed(self.native.children):
-            if not child.visible or not child.enabled:
-                continue
-            if child.dispatch_pointer_event(event) == EventResult.Handled:
-                return EventResult.Handled
         return EventResult.Ignored
 
     def hit_test(self, x: float, y: float) -> WidgetHandle:
@@ -145,6 +144,12 @@ class Widget:
     def text_event(self, text: str) -> EventResult:
         return EventResult.Ignored
 
+    def focus_event(self, focused: bool) -> None:
+        pass
+
+    def overlay_dismissed(self, reason: OverlayDismissReason) -> None:
+        pass
+
     def on_destroy(self) -> None:
         pass
 
@@ -161,6 +166,9 @@ __all__ = [
     "KeyCode",
     "KeyEvent",
     "KeyEventType",
+    "ModifierFlag",
+    "OverlayDismissReason",
+    "OverlayFlag",
     "PaintContext",
     "Point",
     "PointerEvent",
@@ -173,4 +181,5 @@ __all__ = [
     "WidgetHandle",
     "WidgetRef",
     "invalid_widget_handle",
+    "tooltip_rect",
 ]

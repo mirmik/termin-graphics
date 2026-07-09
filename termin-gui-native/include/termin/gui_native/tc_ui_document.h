@@ -93,8 +93,30 @@ typedef enum tc_ui_pointer_event_type {
     TC_UI_POINTER_MOVE = 0,
     TC_UI_POINTER_DOWN = 1,
     TC_UI_POINTER_UP = 2,
-    TC_UI_POINTER_WHEEL = 3
+    TC_UI_POINTER_WHEEL = 3,
+    TC_UI_POINTER_ENTER = 4,
+    TC_UI_POINTER_LEAVE = 5
 } tc_ui_pointer_event_type;
+
+typedef enum tc_ui_modifier_flag {
+    TC_UI_MOD_SHIFT = 1u << 0,
+    TC_UI_MOD_CTRL = 1u << 1,
+    TC_UI_MOD_ALT = 1u << 2,
+    TC_UI_MOD_SUPER = 1u << 3
+} tc_ui_modifier_flag;
+
+typedef enum tc_ui_overlay_flag {
+    TC_UI_OVERLAY_MODAL = 1u << 0,
+    TC_UI_OVERLAY_DISMISS_ON_OUTSIDE = 1u << 1,
+    TC_UI_OVERLAY_POINTER_TRANSPARENT = 1u << 2,
+    TC_UI_OVERLAY_TOOLTIP = 1u << 3
+} tc_ui_overlay_flag;
+
+typedef enum tc_ui_overlay_dismiss_reason {
+    TC_UI_OVERLAY_DISMISS_PROGRAMMATIC = 0,
+    TC_UI_OVERLAY_DISMISS_OUTSIDE = 1,
+    TC_UI_OVERLAY_DISMISS_ESCAPE = 2
+} tc_ui_overlay_dismiss_reason;
 
 typedef enum tc_widget_flag {
     TC_WIDGET_FOCUSABLE = 1u << 0,
@@ -187,6 +209,16 @@ typedef struct tc_widget_vtable {
         tc_widget* widget,
         tc_ui_document* document,
         const tc_ui_text_event* event
+    );
+    void (*focus_event)(
+        tc_widget* widget,
+        tc_ui_document* document,
+        bool focused
+    );
+    void (*overlay_dismissed)(
+        tc_widget* widget,
+        tc_ui_document* document,
+        tc_ui_overlay_dismiss_reason reason
     );
 
     void (*on_destroy)(tc_widget* widget, tc_ui_document* document);
@@ -335,9 +367,44 @@ TERMIN_GUI_NATIVE_API void tc_ui_document_paint_roots(
     tc_ui_paint_context* context
 );
 
+TERMIN_GUI_NATIVE_API void tc_ui_document_paint(
+    tc_ui_document* document,
+    tc_ui_paint_context* context
+);
+
 TERMIN_GUI_NATIVE_API void tc_ui_document_layout_roots(
     tc_ui_document* document,
     tc_ui_rect rect
+);
+
+TERMIN_GUI_NATIVE_API bool tc_ui_document_show_overlay(
+    tc_ui_document* document,
+    tc_widget_handle handle,
+    uint32_t flags
+);
+
+TERMIN_GUI_NATIVE_API bool tc_ui_document_dismiss_overlay(
+    tc_ui_document* document,
+    tc_widget_handle handle,
+    tc_ui_overlay_dismiss_reason reason
+);
+
+TERMIN_GUI_NATIVE_API size_t tc_ui_document_overlay_count(const tc_ui_document* document);
+TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_overlay_at(
+    const tc_ui_document* document,
+    size_t index
+);
+TERMIN_GUI_NATIVE_API uint32_t tc_ui_document_overlay_flags_at(
+    const tc_ui_document* document,
+    size_t index
+);
+
+TERMIN_GUI_NATIVE_API tc_ui_rect tc_ui_tooltip_rect(
+    tc_ui_rect viewport,
+    tc_ui_point anchor,
+    tc_ui_size preferred_size,
+    tc_ui_point offset,
+    float margin
 );
 
 TERMIN_GUI_NATIVE_API tc_ui_event_result tc_ui_document_dispatch_pointer_event(
@@ -356,6 +423,10 @@ TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_hovered_widget(
 );
 
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_pointer_capture(
+    const tc_ui_document* document
+);
+
+TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_pressed_widget(
     const tc_ui_document* document
 );
 
@@ -382,6 +453,9 @@ TERMIN_GUI_NATIVE_API bool tc_ui_document_clear_focus(
     tc_ui_document* document,
     tc_widget_handle handle
 );
+
+TERMIN_GUI_NATIVE_API bool tc_ui_document_focus_next(tc_ui_document* document);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_focus_previous(tc_ui_document* document);
 
 TERMIN_GUI_NATIVE_API tc_ui_event_result tc_ui_document_dispatch_key_event(
     tc_ui_document* document,

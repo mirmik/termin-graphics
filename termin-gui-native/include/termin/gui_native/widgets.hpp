@@ -146,6 +146,11 @@ public:
     virtual tc_widget_handle hit_test(tc_ui_document* document, float x, float y);
     virtual tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event);
     virtual tc_ui_event_result text_event(tc_ui_document* document, const tc_ui_text_event* event);
+    virtual void focus_event(tc_ui_document* document, bool focused);
+    virtual void overlay_dismissed(
+        tc_ui_document* document,
+        tc_ui_overlay_dismiss_reason reason
+    );
     virtual void on_destroy(tc_ui_document* document);
 
 private:
@@ -176,6 +181,16 @@ private:
         tc_widget* widget,
         tc_ui_document* document,
         const tc_ui_text_event* event
+    );
+    static void dispatch_focus_event(
+        tc_widget* widget,
+        tc_ui_document* document,
+        bool focused
+    );
+    static void dispatch_overlay_dismissed(
+        tc_widget* widget,
+        tc_ui_document* document,
+        tc_ui_overlay_dismiss_reason reason
     );
     static void dispatch_on_destroy(tc_widget* widget, tc_ui_document* document);
 

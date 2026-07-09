@@ -544,6 +544,8 @@ const tc_widget_vtable NativeWidget::VTABLE {
     &NativeWidget::dispatch_hit_test,
     &NativeWidget::dispatch_key_event,
     &NativeWidget::dispatch_text_event,
+    &NativeWidget::dispatch_focus_event,
+    &NativeWidget::dispatch_overlay_dismissed,
     &NativeWidget::dispatch_on_destroy,
 };
 
@@ -593,6 +595,10 @@ tc_ui_event_result NativeWidget::key_event(tc_ui_document*, const tc_ui_key_even
 tc_ui_event_result NativeWidget::text_event(tc_ui_document*, const tc_ui_text_event*) {
     return TC_UI_EVENT_IGNORED;
 }
+
+void NativeWidget::focus_event(tc_ui_document*, bool) {}
+
+void NativeWidget::overlay_dismissed(tc_ui_document*, tc_ui_overlay_dismiss_reason) {}
 
 void NativeWidget::on_destroy(tc_ui_document*) {}
 
@@ -658,6 +664,28 @@ tc_ui_event_result NativeWidget::dispatch_text_event(
 ) {
     auto* self = static_cast<NativeWidget*>(widget ? widget->body : nullptr);
     return self ? self->text_event(document, event) : TC_UI_EVENT_IGNORED;
+}
+
+void NativeWidget::dispatch_focus_event(
+    tc_widget* widget,
+    tc_ui_document* document,
+    bool focused
+) {
+    auto* self = static_cast<NativeWidget*>(widget ? widget->body : nullptr);
+    if (self) {
+        self->focus_event(document, focused);
+    }
+}
+
+void NativeWidget::dispatch_overlay_dismissed(
+    tc_widget* widget,
+    tc_ui_document* document,
+    tc_ui_overlay_dismiss_reason reason
+) {
+    auto* self = static_cast<NativeWidget*>(widget ? widget->body : nullptr);
+    if (self) {
+        self->overlay_dismissed(document, reason);
+    }
 }
 
 void NativeWidget::dispatch_on_destroy(tc_widget* widget, tc_ui_document* document) {
@@ -922,22 +950,10 @@ void BoxLayout::paint(tc_ui_document* document, tc_ui_paint_context* context) {
 }
 
 tc_ui_event_result BoxLayout::pointer_event(
-    tc_ui_document* document,
+    tc_ui_document*,
     const tc_ui_pointer_event* event
 ) {
-    if (!event || !visible() || !enabled() || !rect_contains(bounds(), event->x, event->y)) {
-        return TC_UI_EVENT_IGNORED;
-    }
-    for (size_t index = child_count(); index > 0; --index) {
-        tc_widget* child = child_at(index - 1);
-        if (!child || !tc_widget_is_visible(child) || !tc_widget_is_enabled(child) ||
-            !child->vtable || !child->vtable->pointer_event) {
-            continue;
-        }
-        if (child->vtable->pointer_event(child, document, event) == TC_UI_EVENT_HANDLED) {
-            return TC_UI_EVENT_HANDLED;
-        }
-    }
+    (void)event;
     return TC_UI_EVENT_IGNORED;
 }
 
@@ -1144,20 +1160,7 @@ void GridLayout::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     tc_ui_painter_pop_clip(context);
 }
 
-tc_ui_event_result GridLayout::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
-    if (!event || !visible() || !enabled() || !rect_contains(bounds(), event->x, event->y)) {
-        return TC_UI_EVENT_IGNORED;
-    }
-    for (size_t index = child_count(); index > 0; --index) {
-        tc_widget* child = child_at(index - 1);
-        if (!child || !tc_widget_is_visible(child) || !tc_widget_is_enabled(child) ||
-            !child->vtable || !child->vtable->pointer_event) {
-            continue;
-        }
-        if (child->vtable->pointer_event(child, document, event) == TC_UI_EVENT_HANDLED) {
-            return TC_UI_EVENT_HANDLED;
-        }
-    }
+tc_ui_event_result GridLayout::pointer_event(tc_ui_document*, const tc_ui_pointer_event*) {
     return TC_UI_EVENT_IGNORED;
 }
 
@@ -1302,17 +1305,7 @@ void GroupBox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     tc_ui_painter_pop_clip(context);
 }
 
-tc_ui_event_result GroupBox::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
-    if (!event || !visible() || !enabled() || !rect_contains(bounds(), event->x, event->y)) {
-        return TC_UI_EVENT_IGNORED;
-    }
-    if (!tc_widget_handle_is_invalid(this->content()) && rect_contains(content_rect(), event->x, event->y)) {
-        tc_widget* content = resolve_child(document, c_widget(), this->content(), "GroupBox::pointer_event");
-        if (content && tc_widget_is_enabled(content) && content->vtable && content->vtable->pointer_event &&
-            content->vtable->pointer_event(content, document, event) == TC_UI_EVENT_HANDLED) {
-            return TC_UI_EVENT_HANDLED;
-        }
-    }
+tc_ui_event_result GroupBox::pointer_event(tc_ui_document*, const tc_ui_pointer_event*) {
     return TC_UI_EVENT_IGNORED;
 }
 
@@ -1483,17 +1476,7 @@ tc_ui_event_result Splitter::pointer_event(tc_ui_document* document, const tc_ui
         return TC_UI_EVENT_HANDLED;
     }
 
-    auto dispatch_child = [this, document, event](tc_widget_handle handle) {
-        tc_widget* child = resolve_child(document, c_widget(), handle, "Splitter::pointer_event");
-        if (!child || !tc_widget_is_enabled(child) || !child->vtable || !child->vtable->pointer_event) {
-            return TC_UI_EVENT_IGNORED;
-        }
-        return child->vtable->pointer_event(child, document, event);
-    };
-    if (dispatch_child(this->second()) == TC_UI_EVENT_HANDLED) {
-        return TC_UI_EVENT_HANDLED;
-    }
-    return dispatch_child(this->first());
+    return TC_UI_EVENT_IGNORED;
 }
 
 tc_widget_handle Splitter::hit_test(tc_ui_document* document, float x, float y) {
@@ -1677,14 +1660,7 @@ tc_ui_event_result ScrollArea::pointer_event(tc_ui_document* document, const tc_
         }
         return TC_UI_EVENT_HANDLED;
     }
-    if (tc_widget_handle_is_invalid(this->content())) {
-        return TC_UI_EVENT_IGNORED;
-    }
-    tc_widget* content = resolve_child(document, c_widget(), this->content(), "ScrollArea::pointer_event");
-    if (!content || !tc_widget_is_enabled(content) || !content->vtable || !content->vtable->pointer_event) {
-        return TC_UI_EVENT_IGNORED;
-    }
-    return content->vtable->pointer_event(content, document, event);
+    return TC_UI_EVENT_IGNORED;
 }
 
 tc_widget_handle ScrollArea::hit_test(tc_ui_document* document, float x, float y) {
@@ -1832,14 +1808,7 @@ tc_ui_event_result TabView::pointer_event(tc_ui_document* document, const tc_ui_
             return TC_UI_EVENT_HANDLED;
         }
     }
-    if (child_count() == 0 || selected_index_ >= child_count() || !rect_contains(page_rect(), event->x, event->y)) {
-        return TC_UI_EVENT_IGNORED;
-    }
-    tc_widget* selected = child_at(selected_index_);
-    if (!selected || !tc_widget_is_enabled(selected) || !selected->vtable || !selected->vtable->pointer_event) {
-        return TC_UI_EVENT_IGNORED;
-    }
-    return selected->vtable->pointer_event(selected, document, event);
+    return TC_UI_EVENT_IGNORED;
 }
 
 tc_widget_handle TabView::hit_test(tc_ui_document* document, float x, float y) {

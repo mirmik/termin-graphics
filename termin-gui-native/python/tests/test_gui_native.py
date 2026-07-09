@@ -15,6 +15,9 @@ from termin.gui_native import (
     KeyCode,
     KeyEvent,
     KeyEventType,
+    ModifierFlag,
+    OverlayDismissReason,
+    OverlayFlag,
     PaintContext,
     Point,
     PointerEvent,
@@ -22,6 +25,7 @@ from termin.gui_native import (
     Rect,
     Size,
     Widget,
+    tooltip_rect,
 )
 
 
@@ -111,6 +115,7 @@ def test_python_widget_complete_vtable_and_common_state():
             self.pointer_events = []
             self.key_events = []
             self.text_events = []
+            self.focus_events = []
 
         def measure(self, constraints):
             self.measured.append(constraints.max_size.width)
@@ -133,6 +138,9 @@ def test_python_widget_complete_vtable_and_common_state():
             self.text_events.append(text)
             return EventResult.Handled
 
+        def focus_event(self, focused):
+            self.focus_events.append(focused)
+
     document = Document()
     widget = InteractiveWidget()
     handle = document.adopt_root(widget, "InteractiveWidget")
@@ -154,7 +162,8 @@ def test_python_widget_complete_vtable_and_common_state():
     pointer.y = 20.0
     assert document.dispatch_pointer_event(pointer) == EventResult.Handled
     assert document.focused_widget == handle
-    assert widget.pointer_events == [PointerEventType.Down]
+    assert widget.pointer_events == [PointerEventType.Enter, PointerEventType.Down]
+    assert widget.focus_events == [True]
 
     key = KeyEvent()
     key.type = KeyEventType.Down
@@ -163,6 +172,140 @@ def test_python_widget_complete_vtable_and_common_state():
     assert document.dispatch_text_event("hello") == EventResult.Handled
     assert widget.key_events == [KeyCode.Enter]
     assert widget.text_events == ["hello"]
+
+
+def test_python_routing_bubbles_and_survives_target_destroy():
+    events = []
+    document = Document()
+
+    class Parent(Widget):
+        def pointer_event(self, event):
+            events.append(("parent", event.type))
+            return EventResult.Handled if event.type == PointerEventType.Down else EventResult.Ignored
+
+    class SelfDestroyingChild(Widget):
+        def pointer_event(self, event):
+            events.append(("child", event.type))
+            if event.type == PointerEventType.Down:
+                document.destroy_widget(self.handle)
+            return EventResult.Ignored
+
+    parent = Parent()
+    child = SelfDestroyingChild()
+    parent_handle = document.adopt_root(parent, "parent")
+    child_handle = document.adopt(child, "child")
+    assert parent.native.append_child(child.native)
+    parent.bounds = Rect(0.0, 0.0, 100.0, 40.0)
+    child.bounds = Rect(0.0, 0.0, 100.0, 40.0)
+
+    event = PointerEvent()
+    event.type = PointerEventType.Down
+    event.x = 10.0
+    event.y = 10.0
+    assert document.dispatch_pointer_event(event) == EventResult.Handled
+    assert events == [
+        ("child", PointerEventType.Enter),
+        ("child", PointerEventType.Down),
+        ("parent", PointerEventType.Down),
+    ]
+    assert not document.is_alive(child_handle)
+    assert document.pressed_widget == parent_handle
+
+
+def test_python_focus_events_and_tab_traversal():
+    document = Document()
+    root = Widget()
+    first = Widget()
+    skipped = Widget()
+    third = Widget()
+    focus_events = []
+
+    first.focus_event = lambda focused: focus_events.append(("first", focused))
+    skipped.focus_event = lambda focused: focus_events.append(("skipped", focused))
+    third.focus_event = lambda focused: focus_events.append(("third", focused))
+
+    document.adopt_root(root, "root")
+    first_handle = document.adopt(first, "first")
+    document.adopt(skipped, "skipped")
+    third_handle = document.adopt(third, "third")
+    root.native.append_child(first.native)
+    root.native.append_child(skipped.native)
+    root.native.append_child(third.native)
+    first.focusable = True
+    skipped.focusable = True
+    third.focusable = True
+    skipped.enabled = False
+
+    assert document.focus_next()
+    assert document.focused_widget == first_handle
+    assert document.focus_next()
+    assert document.focused_widget == third_handle
+
+    event = KeyEvent()
+    event.type = KeyEventType.Down
+    event.key = KeyCode.Tab
+    event.modifiers = int(ModifierFlag.Shift)
+    assert document.dispatch_key_event(event) == EventResult.Handled
+    assert document.focused_widget == first_handle
+    assert focus_events == [
+        ("first", True),
+        ("first", False),
+        ("third", True),
+        ("third", False),
+        ("first", True),
+    ]
+
+
+def test_python_overlay_order_dismissal_and_tooltip_placement():
+    paint_order = []
+    dismissals = []
+
+    class OverlayWidget(Widget):
+        def __init__(self, name):
+            self.name = name
+
+        def paint(self, context):
+            paint_order.append(self.name)
+
+        def overlay_dismissed(self, reason):
+            dismissals.append(reason)
+
+    document = Document()
+    root = OverlayWidget("root")
+    popup = OverlayWidget("popup")
+    tooltip = OverlayWidget("tooltip")
+    document.adopt_root(root, "root")
+    popup_handle = document.adopt(popup, "popup")
+    tooltip_handle = document.adopt(tooltip, "tooltip")
+    root.bounds = Rect(0.0, 0.0, 100.0, 80.0)
+    popup.bounds = Rect(10.0, 10.0, 40.0, 30.0)
+    tooltip.bounds = Rect(12.0, 12.0, 30.0, 20.0)
+    assert document.show_overlay(
+        popup_handle,
+        int(OverlayFlag.DismissOnOutside),
+    )
+    assert document.show_overlay(tooltip_handle, int(OverlayFlag.Tooltip))
+    assert document.overlay_count == 2
+    assert document.hit_test(20.0, 20.0) == popup_handle
+
+    document.paint(PaintContext(DrawList()))
+    assert paint_order == ["root", "popup", "tooltip"]
+
+    event = PointerEvent()
+    event.type = PointerEventType.Down
+    event.x = 90.0
+    event.y = 70.0
+    assert document.dispatch_pointer_event(event) == EventResult.Handled
+    assert dismissals == [OverlayDismissReason.Outside]
+    assert document.overlay_count == 1
+
+    placed = tooltip_rect(
+        Rect(0.0, 0.0, 100.0, 80.0),
+        Point(95.0, 75.0),
+        Size(30.0, 20.0),
+    )
+    assert placed.x == 66.0
+    assert placed.y == 56.0
 
 
 def test_python_widget_tree_recursive_destroy_and_stale_refs():
@@ -242,13 +385,13 @@ def test_python_base_widget_routes_canonical_children():
     class ChildWidget(Widget):
         def __init__(self):
             self.paint_count = 0
-            self.pointer_count = 0
+            self.pointer_events = []
 
         def paint(self, context):
             self.paint_count += 1
 
         def pointer_event(self, event):
-            self.pointer_count += 1
+            self.pointer_events.append(event.type)
             return EventResult.Handled
 
     document = Document()
@@ -271,7 +414,7 @@ def test_python_base_widget_routes_canonical_children():
     event.x = 20.0
     event.y = 20.0
     assert document.dispatch_pointer_event(event) == EventResult.Handled
-    assert child.pointer_count == 1
+    assert child.pointer_events == [PointerEventType.Enter, PointerEventType.Down]
 
 
 def test_python_widget_rejects_double_adoption_without_false_destroy():

@@ -22,8 +22,26 @@ The current module is intentionally small:
   `Splitter`, `ScrollArea`, `TabView`, `Panel`, `Button`, `Checkbox`,
   `ProgressBar`, `TextInput`, `Separator`, `Slider`, `Swatch`, `Label`, and
   `Spacer`;
-- `tc_ui_document_layout_roots` and `tc_ui_document_dispatch_pointer_event`
-  exercise layout and event dispatch without making ownership implicit;
+- `tc_ui_document_layout_roots` and the input dispatch APIs exercise layout
+  and event routing without making ownership implicit;
+- pointer, key and text input route from target to root over a snapshot of
+  generation handles. A callback may destroy or reparent route members; stale
+  handles are skipped without dereferencing freed language bodies;
+- hover changes emit direct `Enter`/`Leave` notifications, while ordinary
+  pointer events bubble until `Handled`. Pointer down records the handling
+  widget as pressed, and capture overrides pressed routing until release;
+- focus changes emit an explicit vtable callback. Unhandled `Tab` and
+  `Shift+Tab` cycle over effectively visible/enabled focusable widgets in
+  canonical depth-first order;
+- hiding or disabling a subtree clears hover, pressed, capture and focus state
+  that points into it through the common `tc_widget` setters;
+- ordered overlays are non-owning presentation entries over the same canonical
+  widgets. They paint after roots and win hit testing from top to bottom;
+- overlay flags provide modal barriers, outside-click dismissal and
+  pointer-transparent tooltip behavior. Dismissal has an explicit reason and
+  crosses the C++/Python vtable like other lifecycle notifications;
+- tooltip delay/scheduling belongs to the host. `tc_ui_tooltip_rect` is a pure
+  helper for offset placement and viewport clamping;
 - widget `paint` writes backend-neutral commands into `tc_ui_draw_list` through
   `tc_ui_paint_context`; no GPU renderer is required for unit tests.
 - text commands are stored with draw-list-owned string backing and rendered by

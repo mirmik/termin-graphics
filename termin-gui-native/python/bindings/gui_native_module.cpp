@@ -327,6 +327,38 @@ struct PythonWidget {
         }
     }
 
+    static void focus_event(tc_widget* widget, tc_ui_document*, bool focused) {
+        PythonWidget* self = from_widget(widget);
+        if (!self) {
+            tc_log_error("[termin-gui-native/python] cannot route focus event to invalid Python widget shim");
+            return;
+        }
+        try {
+            nb::gil_scoped_acquire gil;
+            self->object.attr("focus_event")(focused);
+        } catch (...) {
+            self->capture_exception("focus_event");
+        }
+    }
+
+    static void overlay_dismissed(
+        tc_widget* widget,
+        tc_ui_document*,
+        tc_ui_overlay_dismiss_reason reason
+    ) {
+        PythonWidget* self = from_widget(widget);
+        if (!self) {
+            tc_log_error("[termin-gui-native/python] cannot notify invalid dismissed overlay shim");
+            return;
+        }
+        try {
+            nb::gil_scoped_acquire gil;
+            self->object.attr("overlay_dismissed")(reason);
+        } catch (...) {
+            self->capture_exception("overlay_dismissed");
+        }
+    }
+
     static void on_destroy(tc_widget* widget, tc_ui_document*) {
         PythonWidget* self = from_widget(widget);
         if (!self) {
@@ -356,6 +388,8 @@ const tc_widget_vtable PythonWidget::VTABLE {
     &PythonWidget::hit_test,
     &PythonWidget::key_event,
     &PythonWidget::text_event,
+    &PythonWidget::focus_event,
+    &PythonWidget::overlay_dismissed,
     &PythonWidget::on_destroy,
 };
 
@@ -512,7 +546,26 @@ NB_MODULE(_gui_native, m) {
         .value("Move", TC_UI_POINTER_MOVE)
         .value("Down", TC_UI_POINTER_DOWN)
         .value("Up", TC_UI_POINTER_UP)
-        .value("Wheel", TC_UI_POINTER_WHEEL);
+        .value("Wheel", TC_UI_POINTER_WHEEL)
+        .value("Enter", TC_UI_POINTER_ENTER)
+        .value("Leave", TC_UI_POINTER_LEAVE);
+
+    nb::enum_<tc_ui_modifier_flag>(m, "ModifierFlag", nb::is_arithmetic())
+        .value("Shift", TC_UI_MOD_SHIFT)
+        .value("Ctrl", TC_UI_MOD_CTRL)
+        .value("Alt", TC_UI_MOD_ALT)
+        .value("Super", TC_UI_MOD_SUPER);
+
+    nb::enum_<tc_ui_overlay_flag>(m, "OverlayFlag", nb::is_arithmetic())
+        .value("Modal", TC_UI_OVERLAY_MODAL)
+        .value("DismissOnOutside", TC_UI_OVERLAY_DISMISS_ON_OUTSIDE)
+        .value("PointerTransparent", TC_UI_OVERLAY_POINTER_TRANSPARENT)
+        .value("Tooltip", TC_UI_OVERLAY_TOOLTIP);
+
+    nb::enum_<tc_ui_overlay_dismiss_reason>(m, "OverlayDismissReason")
+        .value("Programmatic", TC_UI_OVERLAY_DISMISS_PROGRAMMATIC)
+        .value("Outside", TC_UI_OVERLAY_DISMISS_OUTSIDE)
+        .value("Escape", TC_UI_OVERLAY_DISMISS_ESCAPE);
 
     nb::class_<tc_ui_pointer_event>(m, "PointerEvent")
         .def(nb::init<>())
@@ -553,6 +606,10 @@ NB_MODULE(_gui_native, m) {
         .def_rw("scancode", &tc_ui_key_event::scancode)
         .def_rw("modifiers", &tc_ui_key_event::modifiers)
         .def_rw("repeat", &tc_ui_key_event::repeat);
+
+    m.def("tooltip_rect", &tc_ui_tooltip_rect,
+          nb::arg("viewport"), nb::arg("anchor"), nb::arg("preferred_size"),
+          nb::arg("offset") = tc_ui_point {12.0f, 18.0f}, nb::arg("margin") = 4.0f);
 
     nb::enum_<tc_widget_flag>(m, "WidgetFlag", nb::is_arithmetic())
         .value("Focusable", TC_WIDGET_FOCUSABLE)
@@ -859,6 +916,32 @@ NB_MODULE(_gui_native, m) {
             tc_ui_document_paint_roots(self.get(), context.get());
             self.throw_pending_exception();
         }, nb::arg("context"))
+        .def("paint", [](Document& self, PaintContext& context) {
+            tc_ui_document_paint(self.get(), context.get());
+            self.throw_pending_exception();
+        }, nb::arg("context"))
+        .def("show_overlay", [](Document& self, WidgetHandle handle, uint32_t flags) {
+            bool shown = tc_ui_document_show_overlay(self.get(), handle.handle, flags);
+            self.throw_pending_exception();
+            return shown;
+        }, nb::arg("handle"), nb::arg("flags") = 0)
+        .def("dismiss_overlay", [](Document& self,
+                                    WidgetHandle handle,
+                                    tc_ui_overlay_dismiss_reason reason) {
+            bool dismissed = tc_ui_document_dismiss_overlay(self.get(), handle.handle, reason);
+            self.throw_pending_exception();
+            return dismissed;
+        }, nb::arg("handle"),
+           nb::arg("reason") = TC_UI_OVERLAY_DISMISS_PROGRAMMATIC)
+        .def_prop_ro("overlay_count", [](const Document& self) {
+            return tc_ui_document_overlay_count(self.get());
+        })
+        .def("overlay_at", [](const Document& self, size_t index) {
+            return WidgetHandle {tc_ui_document_overlay_at(self.get(), index)};
+        }, nb::arg("index"))
+        .def("overlay_flags_at", [](const Document& self, size_t index) {
+            return tc_ui_document_overlay_flags_at(self.get(), index);
+        }, nb::arg("index"))
         .def("hit_test", [](Document& self, float x, float y) {
             tc_widget_handle handle = tc_ui_document_hit_test(self.get(), x, y);
             self.throw_pending_exception();
@@ -886,6 +969,9 @@ NB_MODULE(_gui_native, m) {
         .def_prop_ro("pointer_capture", [](const Document& self) {
             return WidgetHandle {tc_ui_document_pointer_capture(self.get())};
         })
+        .def_prop_ro("pressed_widget", [](const Document& self) {
+            return WidgetHandle {tc_ui_document_pressed_widget(self.get())};
+        })
         .def("set_pointer_capture", [](Document& self, WidgetHandle handle) {
             return tc_ui_document_set_pointer_capture(self.get(), handle.handle);
         }, nb::arg("handle"))
@@ -900,7 +986,13 @@ NB_MODULE(_gui_native, m) {
         }, nb::arg("handle"))
         .def("clear_focus", [](Document& self, WidgetHandle handle) {
             return tc_ui_document_clear_focus(self.get(), handle.handle);
-        }, nb::arg("handle"));
+        }, nb::arg("handle"))
+        .def("focus_next", [](Document& self) {
+            return tc_ui_document_focus_next(self.get());
+        })
+        .def("focus_previous", [](Document& self) {
+            return tc_ui_document_focus_previous(self.get());
+        });
 
     nb::class_<termin::gui_native::UiDrawListRenderer>(m, "DrawListRenderer")
         .def(nb::init<>())

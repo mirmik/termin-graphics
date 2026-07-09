@@ -130,6 +130,23 @@ public:
         tc_ui_document_paint_roots(_document, context);
     }
 
+    void paint(tc_ui_paint_context* context) {
+        tc_ui_document_paint(_document, context);
+    }
+
+    bool show_overlay(const Widget& widget, uint32_t flags = 0) {
+        return tc_ui_document_show_overlay(_document, widget.handle(), flags);
+    }
+
+    bool dismiss_overlay(
+        const Widget& widget,
+        tc_ui_overlay_dismiss_reason reason = TC_UI_OVERLAY_DISMISS_PROGRAMMATIC
+    ) {
+        return tc_ui_document_dismiss_overlay(_document, widget.handle(), reason);
+    }
+
+    size_t overlay_count() const { return tc_ui_document_overlay_count(_document); }
+
     tc_ui_event_result dispatch_pointer_event(const tc_ui_pointer_event& event) {
         return tc_ui_document_dispatch_pointer_event(_document, &event);
     }
@@ -144,6 +161,10 @@ public:
 
     tc_widget_handle pointer_capture() const {
         return tc_ui_document_pointer_capture(_document);
+    }
+
+    tc_widget_handle pressed_widget() const {
+        return tc_ui_document_pressed_widget(_document);
     }
 
     bool set_pointer_capture(const Widget& widget) {
@@ -165,6 +186,9 @@ public:
     bool clear_focus(const Widget& widget) {
         return tc_ui_document_clear_focus(_document, widget.handle());
     }
+
+    bool focus_next() { return tc_ui_document_focus_next(_document); }
+    bool focus_previous() { return tc_ui_document_focus_previous(_document); }
 
     tc_ui_event_result dispatch_key_event(const tc_ui_key_event& event) {
         return tc_ui_document_dispatch_key_event(_document, &event);

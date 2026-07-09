@@ -1252,7 +1252,7 @@ void test_common_visibility_enabled_and_mouse_transparent_state() {
     assert(near(button.bounds().width, 160.0f));
 
     tc_widget_handle hit = document.hit_test(20.0f, 20.0f);
-    assert(tc_widget_handle_eq(hit, button.handle()));
+    assert(tc_widget_handle_eq(hit, root.handle()));
     tc_ui_pointer_event event {};
     event.type = TC_UI_POINTER_DOWN;
     event.x = 20.0f;
