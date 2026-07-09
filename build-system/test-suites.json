@@ -1,0 +1,338 @@
+{
+  "schema": 1,
+  "description": "Repository test scheduling inventory. Every repository-owned Python test matching the declared patterns must have exactly one pytest suite owner.",
+  "python_test_inventory": {
+    "patterns": ["test_*.py", "*_test.py"],
+    "exclude_roots": [
+      ".git",
+      ".venv",
+      "build",
+      "sdk",
+      "termin-thirdparty"
+    ],
+    "exclude_directory_names": ["__pycache__", "build"]
+  },
+  "suite_defaults": {
+    "pytest": {
+      "profiles": ["pr", "linux-full", "windows-d3d11"],
+      "environment": "sdk-source-overlay",
+      "platforms": ["linux", "windows"],
+      "capabilities": []
+    }
+  },
+  "profiles": [
+    {
+      "id": "check",
+      "description": "Repository manifest and policy validation."
+    },
+    {
+      "id": "pr",
+      "description": "Deterministic headless suites for the primary pull-request environment.",
+      "pytest_mark_expression": "not full"
+    },
+    {
+      "id": "linux-full",
+      "description": "All automatic Linux suites."
+    },
+    {
+      "id": "windows-d3d11",
+      "description": "Windows and D3D11-specific suites."
+    },
+    {
+      "id": "editor-smoke",
+      "description": "Isolated editor-process smoke suites."
+    },
+    {
+      "id": "device-android",
+      "description": "Android device build, deploy, and runtime gates."
+    },
+    {
+      "id": "device-quest",
+      "description": "Quest/OpenXR device build, deploy, and runtime gates."
+    },
+    {
+      "id": "manual",
+      "description": "Explicitly recorded human verification gates."
+    }
+  ],
+  "suites": [
+    {
+      "id": "tcplot-tests-python",
+      "module": "tcplot",
+      "executor": "pytest",
+      "roots": ["tcplot/tests/python"]
+    },
+    {
+      "id": "termin-animation-tests",
+      "module": "termin-animation",
+      "executor": "pytest",
+      "roots": ["termin-animation/tests"]
+    },
+    {
+      "id": "termin-app-tests",
+      "module": "termin-app",
+      "executor": "pytest",
+      "roots": ["termin-app/tests"]
+    },
+    {
+      "id": "termin-assets-tests",
+      "module": "termin-assets",
+      "executor": "pytest",
+      "roots": ["termin-assets/tests"]
+    },
+    {
+      "id": "termin-base-tests-python",
+      "module": "termin-base",
+      "executor": "pytest",
+      "roots": ["termin-base/tests/python"]
+    },
+    {
+      "id": "termin-bootstrap-tests",
+      "module": "termin-bootstrap",
+      "executor": "pytest",
+      "roots": ["termin-bootstrap/tests"]
+    },
+    {
+      "id": "termin-build-tools-tests",
+      "module": "termin-build-tools",
+      "executor": "pytest",
+      "roots": ["termin-build-tools/tests"],
+      "environment": "bootstrap-python"
+    },
+    {
+      "id": "termin-collision-tests",
+      "module": "termin-collision",
+      "executor": "pytest",
+      "roots": ["termin-collision/tests"]
+    },
+    {
+      "id": "termin-components-collision-tests",
+      "module": "termin-components-collision",
+      "executor": "pytest",
+      "roots": ["termin-components/termin-components-collision/tests"]
+    },
+    {
+      "id": "termin-components-foliage-tests",
+      "module": "termin-components-foliage",
+      "executor": "pytest",
+      "roots": ["termin-components/termin-components-foliage/tests"]
+    },
+    {
+      "id": "termin-components-kinematic-tests",
+      "module": "termin-components-kinematic",
+      "executor": "pytest",
+      "roots": ["termin-components/termin-components-kinematic/tests"]
+    },
+    {
+      "id": "termin-components-mesh-tests",
+      "module": "termin-components-mesh",
+      "executor": "pytest",
+      "roots": ["termin-components/termin-components-mesh/tests"]
+    },
+    {
+      "id": "termin-components-physics-tests",
+      "module": "termin-components-physics",
+      "executor": "pytest",
+      "roots": ["termin-components/termin-components-physics/tests"]
+    },
+    {
+      "id": "termin-components-render-tests-python",
+      "module": "termin-components-render",
+      "executor": "pytest",
+      "roots": ["termin-components/termin-components-render/tests/python"]
+    },
+    {
+      "id": "termin-components-skeleton-tests",
+      "module": "termin-components-skeleton",
+      "executor": "pytest",
+      "roots": ["termin-components/termin-components-skeleton/tests"]
+    },
+    {
+      "id": "termin-components-tween-tests",
+      "module": "termin-components-tween",
+      "executor": "pytest",
+      "roots": ["termin-components/termin-components-tween/tests"]
+    },
+    {
+      "id": "termin-components-ui-tests",
+      "module": "termin-components-ui",
+      "executor": "pytest",
+      "roots": ["termin-components/termin-components-ui/tests"]
+    },
+    {
+      "id": "termin-csg-tests",
+      "module": "termin-csg",
+      "executor": "pytest",
+      "roots": ["termin-csg/tests"]
+    },
+    {
+      "id": "termin-default-assets-tests",
+      "module": "termin-default-assets",
+      "executor": "pytest",
+      "roots": ["termin-default-assets/tests"]
+    },
+    {
+      "id": "termin-engine-tests",
+      "module": "termin-engine",
+      "executor": "pytest",
+      "roots": ["termin-engine/tests"]
+    },
+    {
+      "id": "termin-glb-tests",
+      "module": "termin-glb",
+      "executor": "pytest",
+      "roots": ["termin-glb/tests"]
+    },
+    {
+      "id": "termin-graphics-tests-python",
+      "module": "termin-graphics",
+      "executor": "pytest",
+      "roots": ["termin-graphics/tests/python"]
+    },
+    {
+      "id": "termin-gui-native-python-tests",
+      "module": "termin-gui-native",
+      "executor": "pytest",
+      "roots": ["termin-gui-native/python/tests"]
+    },
+    {
+      "id": "termin-gui-python-tests",
+      "module": "termin-gui",
+      "executor": "pytest",
+      "roots": ["termin-gui/python/tests"]
+    },
+    {
+      "id": "termin-inspect-tests",
+      "module": "termin-inspect",
+      "executor": "pytest",
+      "roots": ["termin-inspect/tests"]
+    },
+    {
+      "id": "termin-materials-tests",
+      "module": "termin-materials",
+      "executor": "pytest",
+      "roots": ["termin-materials/tests"]
+    },
+    {
+      "id": "termin-mesh-tests-python",
+      "module": "termin-mesh",
+      "executor": "pytest",
+      "roots": ["termin-mesh/tests/python"]
+    },
+    {
+      "id": "termin-navmesh-tests",
+      "module": "termin-navmesh",
+      "executor": "pytest",
+      "roots": ["termin-navmesh/tests"]
+    },
+    {
+      "id": "termin-nodegraph-tests",
+      "module": "termin-nodegraph",
+      "executor": "pytest",
+      "roots": ["termin-nodegraph/tests"]
+    },
+    {
+      "id": "termin-pga-tests",
+      "module": "termin-pga",
+      "executor": "pytest",
+      "roots": ["termin-pga/tests"]
+    },
+    {
+      "id": "termin-physics-fem-tests",
+      "module": "termin-physics-fem",
+      "executor": "pytest",
+      "roots": ["termin-physics-fem/tests"]
+    },
+    {
+      "id": "termin-physics-tests",
+      "module": "termin-physics",
+      "executor": "pytest",
+      "roots": ["termin-physics/tests"]
+    },
+    {
+      "id": "termin-player-tests",
+      "module": "termin-player",
+      "executor": "pytest",
+      "roots": ["termin-player/tests"]
+    },
+    {
+      "id": "termin-prefab-tests",
+      "module": "termin-prefab",
+      "executor": "pytest",
+      "roots": ["termin-prefab/tests"]
+    },
+    {
+      "id": "termin-project-build-tests",
+      "module": "termin-project-build",
+      "executor": "pytest",
+      "roots": ["termin-project-build/tests"]
+    },
+    {
+      "id": "termin-project-modules-tests",
+      "module": "termin-project-modules",
+      "executor": "pytest",
+      "roots": ["termin-project-modules/tests"]
+    },
+    {
+      "id": "termin-project-tests",
+      "module": "termin-project",
+      "executor": "pytest",
+      "roots": ["termin-project/tests"]
+    },
+    {
+      "id": "termin-qopt-tests",
+      "module": "termin-qopt",
+      "executor": "pytest",
+      "roots": ["termin-qopt/tests"],
+      "capabilities": ["scipy"]
+    },
+    {
+      "id": "termin-render-passes-tests",
+      "module": "termin-render-passes",
+      "executor": "pytest",
+      "roots": ["termin-render-passes/tests"]
+    },
+    {
+      "id": "termin-render-tests",
+      "module": "termin-render",
+      "executor": "pytest",
+      "roots": ["termin-render/tests"]
+    },
+    {
+      "id": "termin-scene-tests",
+      "module": "termin-scene",
+      "executor": "pytest",
+      "roots": ["termin-scene/tests"]
+    },
+    {
+      "id": "termin-shader-runtime-tests",
+      "module": "termin-shader-runtime",
+      "executor": "pytest",
+      "roots": ["termin-shader-runtime/tests"]
+    },
+    {
+      "id": "termin-skeleton-tests",
+      "module": "termin-skeleton",
+      "executor": "pytest",
+      "roots": ["termin-skeleton/tests"]
+    },
+    {
+      "id": "termin-stdlib-tests",
+      "module": "termin-stdlib",
+      "executor": "pytest",
+      "roots": ["termin-stdlib/tests"]
+    },
+    {
+      "id": "termin-tween-tests",
+      "module": "termin-tween",
+      "executor": "pytest",
+      "roots": ["termin-tween/tests"]
+    },
+    {
+      "id": "termin-voxels-tests",
+      "module": "termin-voxels",
+      "executor": "pytest",
+      "roots": ["termin-voxels/tests"]
+    }
+  ]
+}

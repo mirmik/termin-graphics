@@ -1,0 +1,6 @@
+# Build-only frontend used to materialize external and Termin wheels.
+# This environment never contributes packages to the SDK runtime.
+nanobind==2.13.0
+pip==26.1.2
+setuptools==83.0.0
+wheel==0.47.0

@@ -15,10 +15,12 @@
 ## Сборка и тестирование
 Под Linux полная сборка SDK выполняется скриптом `./build-sdk.sh`. В SDK входит приложение редактора и bundled Python-библиотеки, используемые редактором.
 Во избежание проблем лучше собирать SDK штатным скриптом (лучше с флагом `--no-wheels`). Оно не так долго собирается, чтобы вручную копировать либы.
-Тесты собираются и исполняются через центральную точку `./run-tests.sh`. При этом Python-тесты запускаются в отдельном `.venv`, который создаётся скриптом `./setup-test-venv.sh`.
+Тесты собираются и исполняются через центральную точку `./run-tests.sh`. Python-тесты запускаются bundled Python из SDK через `sdk/bin/termin_python`; test-only зависимости и checkout source overlay создаются в `build/python-envs/test` скриптом `./setup-sdk-python-env.sh`. Старый `./setup-test-venv.sh` временно оставлен только как совместимый wrapper.
 Под Windows используются соответствующие `.ps1`-версии этих скриптов.
 
-После пересборки Python/C++ биндингов через `./build-sdk-bindings.sh` для editable `.venv` нужно выполнить `./setup-test-venv.sh --force`, чтобы обновить скопированные native `.so`/`.pyd` в исходниках пакетов.
+После пересборки Python/C++ биндингов native `.so`/`.pyd` берутся непосредственно из SDK. Копировать их в исходники и пересоздавать editable venv не требуется; `./setup-sdk-python-env.sh` нужно повторить только для обновления overlay fingerprint после изменения SDK.
+
+Python runtime SDK формируется из exact lock `build-system/python-runtime-lock.txt`. Build frontend живёт отдельно в `build/python-runtime/build-env`, а установка SDK выполняется offline из подготовленных wheelhouse. Для проверки без сетевого доступа после заполнения wheelhouse можно задать `TERMIN_PYTHON_RUNTIME_OFFLINE=1` при вызове `termin_build.sdk install-python`.
 
 ## Запуск редактора
 `./run-termin.sh` запускает launcher и удобен для ручной работы. Для автоматизированной отладки Codex должен запускать редактор напрямую, чтобы не ждать выбора проекта в launcher:
