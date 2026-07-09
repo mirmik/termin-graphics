@@ -16,6 +16,7 @@ setup(
     install_requires=[
         "tcbase",
         "termin-assets",
+        "termin-image",
         "termin-scene",
         "termin-default-assets",
         "termin-components-render",
@@ -25,7 +26,6 @@ setup(
         "termin-skeleton",
         "termin-animation",
         "numpy",
-        "Pillow>=9.0",
     ],
     entry_points={
         "termin.asset_import_plugins": [

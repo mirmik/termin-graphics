@@ -13,7 +13,7 @@ from tgfx import TcTexture
 
 class Texture:
     """
-    Loads an image via Pillow and uploads it as ``GL_TEXTURE_2D``.
+    Loads an image through the texture asset pipeline and uploads it as ``GL_TEXTURE_2D``.
 
     This is a small Python wrapper over a ``TcTexture`` pool handle.
     """

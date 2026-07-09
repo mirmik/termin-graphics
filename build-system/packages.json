@@ -19,6 +19,13 @@
       ]
     },
     {
+      "path": "termin-image",
+      "distribution": "termin-image",
+      "native_extensions": [
+        {"extension": "termin.image._image_native", "target": "_image_native"}
+      ]
+    },
+    {
       "path": "termin-assets",
       "distribution": "termin-assets"
     },

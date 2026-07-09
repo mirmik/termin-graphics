@@ -9,32 +9,36 @@ _DIR = os.path.dirname(os.path.realpath(__file__))
 
 
 class BuildExt(TerminCMakeBuildExt):
+    upstream_packages = {"termin_nanobind": "libnanobind"}
+    bundle_includes = True
     source_dir = _DIR
 
 
 setup(
-    name="termin-render",
+    name="termin-image",
     version=BuildExt.compute_local_version("0.1.0"),
     license="MIT",
-    description="Rendering framework Python bindings (thin; requires termin SDK at runtime)",
+    description="Native image codecs for Termin texture and tooling paths",
     author="mirmik",
     author_email="mirmikns@yandex.ru",
     python_requires=">=3.8",
-    packages=["termin.render", "termin.render_framework", "termin_render_framework_specs"],
-    package_dir={
-        "termin.render": "python/termin/render",
-        "termin.render_framework": "python/termin/render_framework",
-        "termin_render_framework_specs": "python/termin_render_framework_specs",
-    },
+    packages=["termin.image"],
+    package_dir={"termin.image": "python/termin/image"},
     install_requires=[
         "termin-nanobind",
-        "tcbase",
-        "tgfx",
-        "termin-materials",
-        "termin-scene",
-        "termin-inspect",
         "numpy",
     ],
+    package_data={
+        "termin.image": [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "lib/*.so*",
+            "*.dll",
+            "lib/*.dll",
+            "lib/*.lib",
+            "lib/cmake/termin_image/*.cmake",
+        ],
+    },
     ext_modules=native_extensions_for_source(_DIR),
     cmdclass={"build": TerminCMakeBuild, "build_ext": BuildExt},
     zip_safe=False,
