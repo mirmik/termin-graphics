@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import atexit
 import os
 from pathlib import Path
 
@@ -11,62 +10,23 @@ from tcbase import log
 from termin.shader_tools import existing_executable, resolve_path_tool, resolve_sdk_tool
 
 
-_GLSL_PREPROCESSOR_CLEANUP_REGISTERED = False
-
-
-def configure_glsl_preprocessor_fallback() -> None:
-    """Configure process ResourceManager fallback for GLSL ``#include`` loading."""
-    global _GLSL_PREPROCESSOR_CLEANUP_REGISTERED
-
+def configure_glsl_preprocessor() -> None:
+    """Register the process GLSL preprocessor for explicitly loaded includes."""
     import tgfx  # noqa: F401
 
-    from termin.materials import glsl_preprocessor, register_glsl_preprocessor
+    from termin.materials import register_glsl_preprocessor
 
-    glsl_preprocessor().set_fallback_loader(_glsl_fallback_loader)
     register_glsl_preprocessor()
-    if not _GLSL_PREPROCESSOR_CLEANUP_REGISTERED:
-        atexit.register(unregister_glsl_preprocessor_fallback)
-        _GLSL_PREPROCESSOR_CLEANUP_REGISTERED = True
 
 
-def unregister_glsl_preprocessor_fallback() -> None:
-    """Release Python callbacks held by the process-wide GLSL preprocessor."""
-    global _GLSL_PREPROCESSOR_CLEANUP_REGISTERED
-
+def unregister_glsl_preprocessor() -> None:
+    """Unregister the process GLSL preprocessor callback."""
     try:
-        from termin.materials import unregister_glsl_preprocessor
+        from termin.materials import unregister_glsl_preprocessor as unregister
 
-        unregister_glsl_preprocessor()
-        if _GLSL_PREPROCESSOR_CLEANUP_REGISTERED:
-            atexit.unregister(unregister_glsl_preprocessor_fallback)
-        _GLSL_PREPROCESSOR_CLEANUP_REGISTERED = False
+        unregister()
     except Exception as exc:
         log.error(f"[GlslPreprocessor] cleanup failed: {exc}")
-
-
-def _glsl_fallback_loader(name: str) -> bool:
-    """Load GLSL include from ResourceManager if it is not already registered."""
-    from termin_assets import get_resource_manager
-
-    try:
-        rm = get_resource_manager()
-        if rm is None:
-            log.error(
-                f"[GlslPreprocessor] Fallback: no ResourceManager configured for GLSL '{name}'"
-            )
-            return False
-        asset = rm.glsl.get_asset(name)
-        if asset is None:
-            log.error(f"[GlslPreprocessor] Fallback: glsl '{name}' not found in ResourceManager")
-            return False
-
-        asset.ensure_loaded()
-        from termin.materials import glsl_preprocessor
-
-        return glsl_preprocessor().has_include(name)
-    except Exception as exc:
-        log.error(f"[GlslPreprocessor] Fallback loader error for GLSL include '{name}': {exc}")
-        return False
 
 
 def _configured_tool(env_name: str, label: str) -> Path | None:

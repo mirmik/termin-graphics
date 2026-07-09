@@ -57,40 +57,19 @@ void bind_shader_parser(nb::module_& m) {
         .def_static("has_includes", &GlslPreprocessor::has_includes)
         .def("preprocess", &GlslPreprocessor::preprocess,
             nb::arg("source"), nb::arg("source_name") = "<unknown>",
-            "Preprocess GLSL source, resolving #include directives")
-        .def("set_fallback_loader", [](GlslPreprocessor& pp, nb::object callback) {
-            if (callback.is_none()) {
-                pp.set_fallback_loader(nullptr);
-            } else {
-                pp.set_fallback_loader([callback](const std::string& name) -> bool {
-                    nb::gil_scoped_acquire guard;
-                    try {
-                        return nb::cast<bool>(callback(name));
-                    } catch (const nb::python_error& e) {
-                        tc::Log::error("GLSL fallback loader error for '%s': %s", name.c_str(), e.what());
-                        return false;
-                    } catch (const std::exception& e) {
-                        tc::Log::error("GLSL fallback loader error for '%s': %s", name.c_str(), e.what());
-                        return false;
-                    }
-                });
-            }
-        }, nb::arg("callback"),
-            "Set fallback loader callback for lazy-loading includes");
+            "Preprocess GLSL source, resolving #include directives");
 
     m.def("glsl_preprocessor", &glsl_preprocessor, nb::rv_policy::reference,
         "Get the global GLSL preprocessor instance");
 
     // Register the process-wide GLSL preprocess callback.
-    // This should be called after set_fallback_loader to ensure includes can be resolved
     m.def("register_glsl_preprocessor", []() {
         tgfx_gpu_set_shader_preprocess(glsl_preprocess_callback);
     }, "Register GLSL preprocessor with shader compilation system");
 
     m.def("unregister_glsl_preprocessor", []() {
         tgfx_gpu_set_shader_preprocess(nullptr);
-        glsl_preprocessor().set_fallback_loader(nullptr);
-    }, "Unregister the GLSL preprocessor and release Python fallback callbacks");
+    }, "Unregister the GLSL preprocessor");
 
     // --- MaterialProperty (UniformProperty) ---
     nb::class_<MaterialProperty>(m, "MaterialProperty")
