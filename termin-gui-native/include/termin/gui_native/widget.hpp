@@ -210,6 +210,14 @@ public:
         tc_ui_document_set_text_measurer(_document, measure, user_data);
     }
 
+    void set_clipboard(
+        tc_ui_clipboard_get_text_fn get_text,
+        tc_ui_clipboard_set_text_fn set_text,
+        void* user_data
+    ) {
+        tc_ui_document_set_clipboard(_document, get_text, set_text, user_data);
+    }
+
     bool measure_text(
         const char* text_utf8,
         size_t text_byte_length,

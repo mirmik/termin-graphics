@@ -565,3 +565,64 @@ def test_renderer_font_exposes_document_text_metrics():
     del renderer
     gc.collect()
     assert document.measure_text("still alive", 14.0).width > 0.0
+
+
+def test_native_text_input_utf8_selection_uses_injected_clipboard():
+    clipboard = {"text": ""}
+    document = Document()
+    document.set_clipboard_handlers(
+        lambda: clipboard["text"],
+        lambda text: clipboard.__setitem__("text", text),
+    )
+    widget = document.create_text_input("aé🙂b")
+    assert document.add_root(widget.handle)
+    assert document.set_focus(widget.handle)
+
+    widget.select(1, 7)
+    assert widget.selected_text == "é🙂"
+    key = KeyEvent()
+    key.type = KeyEventType.Down
+    key.modifiers = int(ModifierFlag.Ctrl)
+    key.key = KeyCode.C
+    assert document.dispatch_key_event(key) == EventResult.Handled
+    assert clipboard["text"] == "é🙂"
+
+    key.key = KeyCode.X
+    assert document.dispatch_key_event(key) == EventResult.Handled
+    assert widget.text == "ab"
+    assert widget.caret == 1
+    key.key = KeyCode.V
+    assert document.dispatch_key_event(key) == EventResult.Handled
+    assert widget.text == "aé🙂b"
+    assert widget.caret == 7
+
+
+def test_native_text_area_multiline_selection_and_navigation():
+    clipboard = {"text": ""}
+    document = Document()
+    document.set_clipboard_handlers(
+        lambda: clipboard["text"],
+        lambda text: clipboard.__setitem__("text", text),
+    )
+    area = document.create_text_area("aé\nwide\n🙂z")
+    assert document.add_root(area.handle)
+    assert document.set_focus(area.handle)
+
+    area.select(1, 9)
+    assert area.selected_text == "é\nwide\n"
+    key = KeyEvent()
+    key.type = KeyEventType.Down
+    key.modifiers = int(ModifierFlag.Ctrl)
+    key.key = KeyCode.X
+    assert document.dispatch_key_event(key) == EventResult.Handled
+    assert clipboard["text"] == "é\nwide\n"
+    assert area.text == "a🙂z"
+
+    key.key = KeyCode.V
+    assert document.dispatch_key_event(key) == EventResult.Handled
+    assert area.text == "aé\nwide\n🙂z"
+    area.caret = len(area.text.encode())
+    key.modifiers = 0
+    key.key = KeyCode.Home
+    assert document.dispatch_key_event(key) == EventResult.Handled
+    assert area.caret == 9

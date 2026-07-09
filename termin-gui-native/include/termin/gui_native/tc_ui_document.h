@@ -154,6 +154,13 @@ typedef bool (*tc_ui_text_measure_fn)(
     tc_ui_text_metrics* out_metrics
 );
 
+typedef const char* (*tc_ui_clipboard_get_text_fn)(void* user_data);
+typedef bool (*tc_ui_clipboard_set_text_fn)(
+    void* user_data,
+    const char* text_utf8,
+    size_t text_byte_length
+);
+
 typedef enum tc_ui_draw_command_type {
     TC_UI_DRAW_FILL_RECT = 0,
     TC_UI_DRAW_STROKE_RECT = 1,
@@ -255,11 +262,17 @@ typedef enum tc_ui_key_code {
     TC_UI_KEY_TAB = 9,
     TC_UI_KEY_ENTER = 13,
     TC_UI_KEY_ESCAPE = 27,
+    TC_UI_KEY_A = 65,
+    TC_UI_KEY_C = 67,
+    TC_UI_KEY_V = 86,
+    TC_UI_KEY_X = 88,
     TC_UI_KEY_DELETE = 127,
     TC_UI_KEY_LEFT = 1000,
     TC_UI_KEY_RIGHT = 1001,
     TC_UI_KEY_HOME = 1002,
-    TC_UI_KEY_END = 1003
+    TC_UI_KEY_END = 1003,
+    TC_UI_KEY_UP_ARROW = 1004,
+    TC_UI_KEY_DOWN_ARROW = 1005
 } tc_ui_key_code;
 
 typedef struct tc_ui_key_event {
@@ -473,6 +486,20 @@ TERMIN_GUI_NATIVE_API bool tc_ui_document_measure_text(
     size_t text_byte_length,
     float font_size,
     tc_ui_text_metrics* out_metrics
+);
+
+TERMIN_GUI_NATIVE_API void tc_ui_document_set_clipboard(
+    tc_ui_document* document,
+    tc_ui_clipboard_get_text_fn get_text,
+    tc_ui_clipboard_set_text_fn set_text,
+    void* user_data
+);
+
+TERMIN_GUI_NATIVE_API const char* tc_ui_document_clipboard_text(tc_ui_document* document);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_set_clipboard_text(
+    tc_ui_document* document,
+    const char* text_utf8,
+    size_t text_byte_length
 );
 
 TERMIN_GUI_NATIVE_API bool tc_ui_document_add_root(

@@ -50,6 +50,10 @@ struct tc_ui_document {
     void* text_measurer_user_data;
     bool missing_text_measurer_logged;
     bool text_measure_failure_logged;
+
+    tc_ui_clipboard_get_text_fn clipboard_get_text;
+    tc_ui_clipboard_set_text_fn clipboard_set_text;
+    void* clipboard_user_data;
 };
 
 static bool change_focus(tc_ui_document* document, tc_widget_handle next);
@@ -1698,6 +1702,52 @@ bool tc_ui_document_measure_text(
             document->text_measure_failure_logged = true;
         }
         memset(out_metrics, 0, sizeof(*out_metrics));
+        return false;
+    }
+    return true;
+}
+
+void tc_ui_document_set_clipboard(
+    tc_ui_document* document,
+    tc_ui_clipboard_get_text_fn get_text,
+    tc_ui_clipboard_set_text_fn set_text,
+    void* user_data
+) {
+    if (!document) {
+        tc_log_error("[termin-gui-native] cannot configure clipboard on null document");
+        return;
+    }
+    document->clipboard_get_text = get_text;
+    document->clipboard_set_text = set_text;
+    document->clipboard_user_data = (get_text || set_text) ? user_data : NULL;
+}
+
+const char* tc_ui_document_clipboard_text(tc_ui_document* document) {
+    const char* text;
+    if (!document || !document->clipboard_get_text) {
+        return NULL;
+    }
+    text = document->clipboard_get_text(document->clipboard_user_data);
+    if (!text) {
+        tc_log_error("[termin-gui-native] clipboard getter failed");
+    }
+    return text;
+}
+
+bool tc_ui_document_set_clipboard_text(
+    tc_ui_document* document,
+    const char* text_utf8,
+    size_t text_byte_length
+) {
+    if (!document || !document->clipboard_set_text || (!text_utf8 && text_byte_length > 0)) {
+        return false;
+    }
+    if (!document->clipboard_set_text(
+        document->clipboard_user_data,
+        text_utf8 ? text_utf8 : "",
+        text_byte_length
+    )) {
+        tc_log_error("[termin-gui-native] clipboard setter failed");
         return false;
     }
     return true;

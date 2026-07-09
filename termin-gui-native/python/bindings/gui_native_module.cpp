@@ -225,6 +225,33 @@ struct WidgetRef {
     }
 };
 
+template<typename T>
+T& native_widget_checked(const WidgetRef& ref, const char* expected_type) {
+    tc_widget* widget = ref.resolve_checked();
+    auto* base = static_cast<termin::gui_native::Widget*>(widget->body);
+    T* typed = dynamic_cast<T*>(base);
+    if (!typed) {
+        throw std::runtime_error(std::string("widget is not a ") + expected_type);
+    }
+    return *typed;
+}
+
+struct TextInputRef {
+    WidgetRef widget;
+
+    termin::gui_native::TextInput& get() const {
+        return native_widget_checked<termin::gui_native::TextInput>(widget, "TextInput");
+    }
+};
+
+struct TextAreaRef {
+    WidgetRef widget;
+
+    termin::gui_native::TextArea& get() const {
+        return native_widget_checked<termin::gui_native::TextArea>(widget, "TextArea");
+    }
+};
+
 struct PythonWidget {
     uint32_t magic = PYTHON_WIDGET_MAGIC;
     tc_widget widget {};
@@ -483,7 +510,10 @@ const tc_widget_vtable PythonWidget::VTABLE {
 
 class Document {
 public:
-    Document() : state_(std::make_shared<DocumentState>()) {
+    Document()
+        : state_(std::make_shared<DocumentState>()),
+          clipboard_getter_(nb::none()),
+          clipboard_setter_(nb::none()) {
         state_->document = tc_ui_document_create();
         if (!state_->document) {
             throw std::runtime_error("failed to create tc_ui_document");
@@ -545,8 +575,52 @@ public:
         }
     }
 
+    void set_clipboard_handlers(nb::object getter, nb::object setter) {
+        clipboard_getter_ = std::move(getter);
+        clipboard_setter_ = std::move(setter);
+        tc_ui_document_set_clipboard(
+            get(),
+            clipboard_getter_.is_none() ? nullptr : &Document::clipboard_get,
+            clipboard_setter_.is_none() ? nullptr : &Document::clipboard_set,
+            this
+        );
+    }
+
 private:
+    static const char* clipboard_get(void* user_data) {
+        auto* self = static_cast<Document*>(user_data);
+        try {
+            nb::gil_scoped_acquire gil;
+            self->clipboard_buffer_ = nb::cast<std::string>(self->clipboard_getter_());
+            return self->clipboard_buffer_.c_str();
+        } catch (...) {
+            if (!self->state_->pending_exception) {
+                self->state_->pending_exception = std::current_exception();
+            }
+            tc_log_error("[termin-gui-native/python] clipboard getter failed");
+            return nullptr;
+        }
+    }
+
+    static bool clipboard_set(void* user_data, const char* text, size_t byte_length) {
+        auto* self = static_cast<Document*>(user_data);
+        try {
+            nb::gil_scoped_acquire gil;
+            self->clipboard_setter_(std::string(text ? text : "", byte_length));
+            return true;
+        } catch (...) {
+            if (!self->state_->pending_exception) {
+                self->state_->pending_exception = std::current_exception();
+            }
+            tc_log_error("[termin-gui-native/python] clipboard setter failed");
+            return false;
+        }
+    }
+
     std::shared_ptr<DocumentState> state_;
+    nb::object clipboard_getter_;
+    nb::object clipboard_setter_;
+    std::string clipboard_buffer_;
 };
 
 DrawCommand command_at_checked(const DrawList& draw_list, size_t index) {
@@ -766,11 +840,17 @@ NB_MODULE(_gui_native, m) {
         .value("Tab", TC_UI_KEY_TAB)
         .value("Enter", TC_UI_KEY_ENTER)
         .value("Escape", TC_UI_KEY_ESCAPE)
+        .value("A", TC_UI_KEY_A)
+        .value("C", TC_UI_KEY_C)
+        .value("V", TC_UI_KEY_V)
+        .value("X", TC_UI_KEY_X)
         .value("Delete", TC_UI_KEY_DELETE)
         .value("Left", TC_UI_KEY_LEFT)
         .value("Right", TC_UI_KEY_RIGHT)
         .value("Home", TC_UI_KEY_HOME)
-        .value("End", TC_UI_KEY_END);
+        .value("End", TC_UI_KEY_END)
+        .value("Up", TC_UI_KEY_UP_ARROW)
+        .value("Down", TC_UI_KEY_DOWN_ARROW);
 
     nb::class_<tc_ui_key_event>(m, "KeyEvent")
         .def(nb::init<>())
@@ -981,6 +1061,67 @@ NB_MODULE(_gui_native, m) {
             self.throw_pending_exception();
             return result;
         });
+
+    nb::class_<TextInputRef>(m, "TextInput")
+        .def_prop_ro("widget", [](const TextInputRef& self) { return self.widget; })
+        .def_prop_ro("handle", [](const TextInputRef& self) {
+            return WidgetHandle {self.widget.handle};
+        })
+        .def_prop_rw("text",
+            [](const TextInputRef& self) { return self.get().text(); },
+            [](const TextInputRef& self, const std::string& value) { self.get().set_text(value); })
+        .def_prop_rw("caret",
+            [](const TextInputRef& self) { return self.get().caret(); },
+            [](const TextInputRef& self, size_t value) { self.get().set_caret(value); })
+        .def_prop_ro("has_selection", [](const TextInputRef& self) {
+            return self.get().has_selection();
+        })
+        .def_prop_ro("selection_start", [](const TextInputRef& self) {
+            return self.get().selection_start();
+        })
+        .def_prop_ro("selection_end", [](const TextInputRef& self) {
+            return self.get().selection_end();
+        })
+        .def_prop_ro("selected_text", [](const TextInputRef& self) {
+            return self.get().selected_text();
+        })
+        .def_prop_ro("scroll_x", [](const TextInputRef& self) { return self.get().scroll_x(); })
+        .def("select", [](const TextInputRef& self, size_t anchor, size_t caret) {
+            self.get().select(anchor, caret);
+        }, nb::arg("anchor"), nb::arg("caret"))
+        .def("select_all", [](const TextInputRef& self) { self.get().select_all(); })
+        .def("clear_selection", [](const TextInputRef& self) { self.get().clear_selection(); });
+
+    nb::class_<TextAreaRef>(m, "TextArea")
+        .def_prop_ro("widget", [](const TextAreaRef& self) { return self.widget; })
+        .def_prop_ro("handle", [](const TextAreaRef& self) {
+            return WidgetHandle {self.widget.handle};
+        })
+        .def_prop_rw("text",
+            [](const TextAreaRef& self) { return self.get().text(); },
+            [](const TextAreaRef& self, const std::string& value) { self.get().set_text(value); })
+        .def_prop_rw("caret",
+            [](const TextAreaRef& self) { return self.get().caret(); },
+            [](const TextAreaRef& self, size_t value) { self.get().set_caret(value); })
+        .def_prop_ro("has_selection", [](const TextAreaRef& self) {
+            return self.get().has_selection();
+        })
+        .def_prop_ro("selection_start", [](const TextAreaRef& self) {
+            return self.get().selection_start();
+        })
+        .def_prop_ro("selection_end", [](const TextAreaRef& self) {
+            return self.get().selection_end();
+        })
+        .def_prop_ro("selected_text", [](const TextAreaRef& self) {
+            return self.get().selected_text();
+        })
+        .def_prop_ro("scroll_x", [](const TextAreaRef& self) { return self.get().scroll_x(); })
+        .def_prop_ro("scroll_y", [](const TextAreaRef& self) { return self.get().scroll_y(); })
+        .def("select", [](const TextAreaRef& self, size_t anchor, size_t caret) {
+            self.get().select(anchor, caret);
+        }, nb::arg("anchor"), nb::arg("caret"))
+        .def("select_all", [](const TextAreaRef& self) { self.get().select_all(); })
+        .def("clear_selection", [](const TextAreaRef& self) { self.get().clear_selection(); });
 
     nb::enum_<tc_ui_draw_command_type>(m, "DrawCommandType")
         .value("FillRect", TC_UI_DRAW_FILL_RECT)
@@ -1208,6 +1349,8 @@ NB_MODULE(_gui_native, m) {
             }
             return metrics;
         }, nb::arg("text"), nb::arg("font_size"))
+        .def("set_clipboard_handlers", &Document::set_clipboard_handlers,
+             nb::arg("getter"), nb::arg("setter"))
         .def("create_hstack", [](Document& self, const std::string& debug_name) {
             return self.make_native<termin::gui_native::HStack>(debug_name.c_str());
         }, nb::arg("debug_name") = "HStack")
@@ -1233,6 +1376,12 @@ NB_MODULE(_gui_native, m) {
             widget->set_debug_name(debug_name);
             return result;
         }, nb::arg("text") = "", nb::arg("debug_name") = "Button")
+        .def("create_text_input", [](Document& self, const std::string& text) {
+            return TextInputRef {self.make_native<termin::gui_native::TextInput>(text)};
+        }, nb::arg("text") = "")
+        .def("create_text_area", [](Document& self, const std::string& text) {
+            return TextAreaRef {self.make_native<termin::gui_native::TextArea>(text)};
+        }, nb::arg("text") = "")
         .def("layout_roots", [](Document& self, tc_ui_rect rect) {
             tc_ui_document_layout_roots(self.get(), rect);
             self.throw_pending_exception();

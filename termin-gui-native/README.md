@@ -30,7 +30,7 @@ The current module is intentionally small:
 - `termin/gui_native/widgets.hpp` adds a first C++ widget layer:
   `NativeWidget`, `BoxLayout`, `HStack`, `VStack`, `GridLayout`, `GroupBox`,
   `Splitter`, `ScrollArea`, `TabView`, `Panel`, `Button`, `Checkbox`,
-  `ProgressBar`, `TextInput`, `Separator`, `Slider`, `Swatch`, `Label`, and
+  `ProgressBar`, `TextInput`, `TextArea`, `Separator`, `Slider`, `Swatch`, `Label`, and
   `Spacer`;
 - `tc_ui_document_layout_roots` and the input dispatch APIs exercise layout
   and event routing without making ownership implicit;
@@ -66,9 +66,11 @@ The current module is intentionally small:
   UTF-8 byte lengths. `UiDrawListRenderer::bind_text_measurer` adapts its
   `FontAtlas`; the renderer must outlive document layout/paint using that
   binding;
-- `Label` and `TextInput` use typographic advances and line metrics. Single-line
-  input clips and horizontally scrolls to its caret, while cursor movement and
-  deletion preserve UTF-8 codepoint boundaries;
+- `Label`, `TextInput` and `TextArea` use typographic advances and line metrics.
+  Both editors expose byte-offset carets normalized to UTF-8 codepoint
+  boundaries, selection, mouse/keyboard navigation and copy/cut/paste through
+  document-level host clipboard callbacks. `TextInput` scrolls horizontally;
+  the unwrapped multiline `TextArea` scrolls on both axes;
 - `UiDrawListRenderer` can flush the command list through
   `tgfx::Canvas2DRenderer`;
 - `TERMIN_GUI_NATIVE_BUILD_EXAMPLES=ON` builds a small SDL window example that
@@ -80,7 +82,9 @@ The current module is intentionally small:
   They expose common state and canonical tree mutation without duplicating
   widget data or retaining the document itself;
 - the same `WidgetRef` wraps C++ widgets created by the initial native
-  `HStack`, `VStack`, `Panel`, `Label` and `Button` document factories;
+  `HStack`, `VStack`, `Panel`, `Label`, `Button`, `TextInput` and `TextArea`
+  document factories. The editor factories return typed references without
+  duplicating widget state;
 - the document-owned Python shim retains its Python body until the C deleter
   runs under the GIL; stale refs remain safe after widget or document teardown;
 - `examples/ui_rect_window.py` mirrors the C++ rectangle-window example.

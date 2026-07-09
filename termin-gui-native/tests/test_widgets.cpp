@@ -73,6 +73,26 @@ void install_test_text_measurer(Document& document) {
     document.set_text_measurer(&test_text_measure, nullptr);
 }
 
+struct TestClipboard {
+    std::string text;
+};
+
+const char* test_clipboard_get(void* user_data) {
+    return static_cast<TestClipboard*>(user_data)->text.c_str();
+}
+
+bool test_clipboard_set(void* user_data, const char* text, size_t byte_length) {
+    if (!user_data || (!text && byte_length > 0)) {
+        return false;
+    }
+    static_cast<TestClipboard*>(user_data)->text.assign(text ? text : "", byte_length);
+    return true;
+}
+
+void install_test_clipboard(Document& document, TestClipboard& clipboard) {
+    document.set_clipboard(&test_clipboard_get, &test_clipboard_set, &clipboard);
+}
+
 class CapturingProbe final : public NativeWidget {
 public:
     CapturingProbe() : NativeWidget("CapturingProbe") {
@@ -1092,6 +1112,110 @@ void test_text_input_scrolls_to_keep_caret_inside_clip() {
     tc_ui_draw_list_destroy(draw_list);
 }
 
+void test_text_input_utf8_selection_and_host_clipboard() {
+    Document document;
+    install_test_text_measurer(document);
+    TestClipboard clipboard;
+    install_test_clipboard(document, clipboard);
+    DocumentBuilder ui(document);
+    auto& input = ui.make_root<TextInput>("a\xc3\xa9\xf0\x9f\x99\x82" "b");
+    document.layout_roots(tc_ui_rect {0.0f, 0.0f, 120.0f, 34.0f});
+    assert(document.set_focus(input));
+
+    input.select(1, 7);
+    assert(input.has_selection());
+    assert(input.selected_text() == "\xc3\xa9\xf0\x9f\x99\x82");
+
+    tc_ui_key_event key {};
+    key.type = TC_UI_KEY_DOWN;
+    key.modifiers = TC_UI_MOD_CTRL;
+    key.key = 'c';
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    assert(clipboard.text == "\xc3\xa9\xf0\x9f\x99\x82");
+
+    key.key = 'x';
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    assert(input.text() == "ab");
+    assert(input.caret() == 1);
+    assert(!input.has_selection());
+
+    key.key = 'v';
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    assert(input.text() == "a\xc3\xa9\xf0\x9f\x99\x82" "b");
+    assert(input.caret() == 7);
+
+    key.modifiers = TC_UI_MOD_SHIFT;
+    key.key = TC_UI_KEY_LEFT;
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    assert(input.selected_text() == "\xf0\x9f\x99\x82");
+
+    tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
+    tc_ui_paint_context* context = tc_ui_paint_context_create(draw_list);
+    document.paint_roots(context);
+    assert(count_commands(draw_list, TC_UI_DRAW_FILL_RECT) >= 2);
+    tc_ui_paint_context_destroy(context);
+    tc_ui_draw_list_destroy(draw_list);
+}
+
+void test_text_area_multiline_utf8_editing_navigation_and_scroll() {
+    Document document;
+    install_test_text_measurer(document);
+    TestClipboard clipboard;
+    install_test_clipboard(document, clipboard);
+    DocumentBuilder ui(document);
+    auto& area = ui.make_root<TextArea>(
+        "a\xc3\xa9\nWWWWWWWW\n\xf0\x9f\x99\x82z\nlast"
+    );
+    document.layout_roots(tc_ui_rect {10.0f, 20.0f, 70.0f, 42.0f});
+    assert(document.set_focus(area));
+    assert(area.scroll_y() > 0.0f);
+    area.set_caret(12);
+    document.layout_roots(tc_ui_rect {10.0f, 20.0f, 70.0f, 42.0f});
+    assert(area.scroll_x() > 0.0f);
+
+    area.select(1, 13);
+    assert(area.selected_text() == "\xc3\xa9\nWWWWWWWW\n");
+    tc_ui_key_event key {};
+    key.type = TC_UI_KEY_DOWN;
+    key.modifiers = TC_UI_MOD_CTRL;
+    key.key = 'c';
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    assert(clipboard.text == "\xc3\xa9\nWWWWWWWW\n");
+
+    key.key = 'x';
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    assert(area.text() == "a\xf0\x9f\x99\x82z\nlast");
+    assert(area.caret() == 1);
+
+    key.key = 'v';
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    assert(area.text() == "a\xc3\xa9\nWWWWWWWW\n\xf0\x9f\x99\x82z\nlast");
+    assert(area.caret() == 13);
+
+    area.set_caret(area.text().size());
+    key.modifiers = 0;
+    key.key = TC_UI_KEY_UP_ARROW;
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    assert(area.caret() == 18);
+    key.modifiers = TC_UI_MOD_SHIFT;
+    key.key = TC_UI_KEY_HOME;
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    assert(area.selected_text() == "\xf0\x9f\x99\x82z");
+
+    tc_ui_text_event text {"Q"};
+    assert(document.dispatch_text_event(text) == TC_UI_EVENT_HANDLED);
+    assert(area.text() == "a\xc3\xa9\nWWWWWWWW\nQ\nlast");
+
+    tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
+    tc_ui_paint_context* context = tc_ui_paint_context_create(draw_list);
+    document.paint_roots(context);
+    assert(count_commands(draw_list, TC_UI_DRAW_TEXT) >= 2);
+    assert(count_commands(draw_list, TC_UI_DRAW_PUSH_CLIP) == 1);
+    assert(count_commands(draw_list, TC_UI_DRAW_POP_CLIP) == 1);
+    tc_ui_paint_context_destroy(context);
+    tc_ui_draw_list_destroy(draw_list);
+}
+
 void test_widget_signals_are_emitted_from_interactions() {
     Document document;
     DocumentBuilder ui(document);
@@ -1341,6 +1465,8 @@ int main() {
     test_text_measurement_uses_proportional_metrics();
     test_text_input_edits_utf8_at_codepoint_boundaries();
     test_text_input_scrolls_to_keep_caret_inside_clip();
+    test_text_input_utf8_selection_and_host_clipboard();
+    test_text_area_multiline_utf8_editing_navigation_and_scroll();
     test_widget_signals_are_emitted_from_interactions();
     test_containers_register_and_replace_canonical_children();
     test_common_visibility_enabled_and_mouse_transparent_state();

@@ -9,6 +9,7 @@ class ProgressBar;
 class ScrollArea;
 class Slider;
 class TabView;
+class TextArea;
 class TextInput;
 
 struct ShowcaseRefs {
@@ -16,6 +17,7 @@ struct ShowcaseRefs {
     Slider* slider = nullptr;
     Checkbox* checkbox = nullptr;
     ScrollArea* content_scroll = nullptr;
+    TextArea* text_area = nullptr;
     TextInput* text_input = nullptr;
     TabView* tabs = nullptr;
 };

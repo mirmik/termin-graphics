@@ -65,6 +65,11 @@ ShowcaseRefs build_showcase(Document& document) {
         progress->set_value(value);
     });
 
+    refs.text_area = &ui.make<TextArea>(
+        "Native TextArea\nUTF-8 selection and host clipboard\nHorizontal and vertical scrolling"
+    );
+    content.add_fixed_child(*refs.text_area, 96.0f);
+
     auto& palette = ui.make<GridLayout>("palette-grid");
     palette.set_padding(EdgeInsets {8.0f, 8.0f, 8.0f, 8.0f})
         .set_spacing(8.0f, 8.0f)

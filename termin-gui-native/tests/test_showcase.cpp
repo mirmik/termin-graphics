@@ -37,6 +37,7 @@ void test_showcase_builds_stable_headless_snapshot() {
     assert(refs.slider);
     assert(refs.checkbox);
     assert(refs.content_scroll);
+    assert(refs.text_area);
     assert(refs.text_input);
     assert(refs.tabs);
     assert(refs.tabs->page_count() == 2);
@@ -49,18 +50,19 @@ void test_showcase_builds_stable_headless_snapshot() {
     document.layout_roots(tc_ui_rect {0.0f, 0.0f, 800.0f, 600.0f});
     assert(refs.content_scroll->content_size().height >= refs.content_scroll->bounds().height);
     assert(refs.text_input->bounds().width > 0.0f);
+    assert(refs.text_area->bounds().height > 0.0f);
 
     tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
     tc_ui_paint_context* paint_context = tc_ui_paint_context_create(draw_list);
     document.paint_roots(paint_context);
 
-    require_equal(tc_ui_draw_list_command_count(draw_list), 99, "showcase total commands");
-    require_equal(count_commands(draw_list, TC_UI_DRAW_FILL_RECT), 25, "showcase fill commands");
-    require_equal(count_commands(draw_list, TC_UI_DRAW_STROKE_RECT), 19, "showcase stroke commands");
+    require_equal(tc_ui_draw_list_command_count(draw_list), 106, "showcase total commands");
+    require_equal(count_commands(draw_list, TC_UI_DRAW_FILL_RECT), 26, "showcase fill commands");
+    require_equal(count_commands(draw_list, TC_UI_DRAW_STROKE_RECT), 20, "showcase stroke commands");
     require_equal(count_commands(draw_list, TC_UI_DRAW_LINE), 8, "showcase line commands");
-    require_equal(count_commands(draw_list, TC_UI_DRAW_TEXT), 9, "showcase text commands");
-    require_equal(count_commands(draw_list, TC_UI_DRAW_PUSH_CLIP), 19, "showcase push clip commands");
-    require_equal(count_commands(draw_list, TC_UI_DRAW_POP_CLIP), 19, "showcase pop clip commands");
+    require_equal(count_commands(draw_list, TC_UI_DRAW_TEXT), 12, "showcase text commands");
+    require_equal(count_commands(draw_list, TC_UI_DRAW_PUSH_CLIP), 20, "showcase push clip commands");
+    require_equal(count_commands(draw_list, TC_UI_DRAW_POP_CLIP), 20, "showcase pop clip commands");
 
     const tc_ui_draw_command* first = tc_ui_draw_list_command_at(draw_list, 0);
     const tc_ui_draw_command* last = tc_ui_draw_list_command_at(
