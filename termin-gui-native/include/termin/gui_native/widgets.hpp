@@ -521,6 +521,7 @@ private:
     std::string text_;
     Color fill_;
     Color accent_ {0.80f, 0.88f, 1.0f, 1.0f};
+    bool pressed_ = false;
     Signal<Button&> clicked_;
 };
 
@@ -558,6 +559,7 @@ public:
 
 private:
     bool checked_ = false;
+    bool pressed_ = false;
     Signal<Checkbox&, bool> changed_;
 };
 
@@ -630,6 +632,7 @@ public:
 
 private:
     float value_ = 0.0f;
+    bool dragging_ = false;
     Signal<Slider&, float> changed_;
 };
 
