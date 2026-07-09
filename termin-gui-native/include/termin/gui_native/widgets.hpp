@@ -482,10 +482,11 @@ public:
     Label& set_text(std::string text);
     Label& set_color(Color color);
     Label& set_font_size(float font_size);
+    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
 
 private:
-    void update_min_size();
+    void update_unmeasured_size();
 
     std::string text_;
     float font_size_ = 15.0f;
@@ -541,6 +542,7 @@ public:
 
     const std::string& text() const { return text_; }
     size_t caret() const { return caret_; }
+    float scroll_x() const { return scroll_x_; }
     void set_text(std::string text);
     void set_caret(size_t caret);
     Signal<TextInput&, const std::string&>& changed() { return changed_; }
@@ -548,17 +550,24 @@ public:
     Signal<TextInput&, const std::string&>& submitted() { return submitted_; }
     const Signal<TextInput&, const std::string&>& submitted() const { return submitted_; }
 
+    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document* document, tc_ui_rect rect) override;
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
     tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
     tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event) override;
     tc_ui_event_result text_event(tc_ui_document* document, const tc_ui_text_event* event) override;
 
 private:
-    void update_preferred_size();
+    tc_ui_rect text_clip_rect() const;
+    bool measure_prefix(tc_ui_document* document, size_t byte_offset, float& width) const;
+    void ensure_caret_visible(tc_ui_document* document);
+    size_t caret_from_content_x(tc_ui_document* document, float content_x) const;
+    void update_unmeasured_size();
     void emit_changed();
 
     std::string text_;
     size_t caret_ = 0;
+    float scroll_x_ = 0.0f;
     float font_size_ = 14.0f;
     Color text_color_ {0.94f, 0.96f, 0.98f, 1.0f};
     Signal<TextInput&, const std::string&> changed_;

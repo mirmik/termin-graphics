@@ -174,6 +174,25 @@ public:
         return tc_ui_document_dispatch_text_event(_document, &event);
     }
 
+    void set_text_measurer(tc_ui_text_measure_fn measure, void* user_data) {
+        tc_ui_document_set_text_measurer(_document, measure, user_data);
+    }
+
+    bool measure_text(
+        const char* text_utf8,
+        size_t text_byte_length,
+        float font_size,
+        tc_ui_text_metrics& out_metrics
+    ) {
+        return tc_ui_document_measure_text(
+            _document,
+            text_utf8,
+            text_byte_length,
+            font_size,
+            &out_metrics
+        );
+    }
+
 private:
     tc_ui_document* _document = nullptr;
 };

@@ -48,6 +48,22 @@ typedef struct tc_ui_constraints {
     tc_ui_size max_size;
 } tc_ui_constraints;
 
+typedef struct tc_ui_text_metrics {
+    float width;
+    float height;
+    float ascent;
+    float descent;
+    float line_height;
+} tc_ui_text_metrics;
+
+typedef bool (*tc_ui_text_measure_fn)(
+    void* user_data,
+    const char* text_utf8,
+    size_t text_byte_length,
+    float font_size,
+    tc_ui_text_metrics* out_metrics
+);
+
 typedef enum tc_ui_draw_command_type {
     TC_UI_DRAW_FILL_RECT = 0,
     TC_UI_DRAW_STROKE_RECT = 1,
@@ -279,6 +295,20 @@ TERMIN_GUI_NATIVE_API bool tc_ui_document_destroy_widget_recursive(
 
 TERMIN_GUI_NATIVE_API size_t tc_ui_document_live_widget_count(
     const tc_ui_document* document
+);
+
+TERMIN_GUI_NATIVE_API void tc_ui_document_set_text_measurer(
+    tc_ui_document* document,
+    tc_ui_text_measure_fn measure,
+    void* user_data
+);
+
+TERMIN_GUI_NATIVE_API bool tc_ui_document_measure_text(
+    tc_ui_document* document,
+    const char* text_utf8,
+    size_t text_byte_length,
+    float font_size,
+    tc_ui_text_metrics* out_metrics
 );
 
 TERMIN_GUI_NATIVE_API bool tc_ui_document_add_root(

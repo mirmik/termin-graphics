@@ -28,6 +28,13 @@ The current module is intentionally small:
   `tc_ui_paint_context`; no GPU renderer is required for unit tests.
 - text commands are stored with draw-list-owned string backing and rendered by
   `UiDrawListRenderer` when a default `FontAtlas` is configured;
+- `tc_ui_document` accepts a non-owning C text-measure callback with explicit
+  UTF-8 byte lengths. `UiDrawListRenderer::bind_text_measurer` adapts its
+  `FontAtlas`; the renderer must outlive document layout/paint using that
+  binding;
+- `Label` and `TextInput` use typographic advances and line metrics. Single-line
+  input clips and horizontally scrolls to its caret, while cursor movement and
+  deletion preserve UTF-8 codepoint boundaries;
 - `UiDrawListRenderer` can flush the command list through
   `tgfx::Canvas2DRenderer`;
 - `TERMIN_GUI_NATIVE_BUILD_EXAMPLES=ON` builds a small SDL window example that

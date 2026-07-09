@@ -1,6 +1,7 @@
 #include <termin/gui_native/draw_list_renderer.hpp>
 
 #include <exception>
+#include <string_view>
 
 #include <tcbase/tc_log.h>
 
@@ -25,6 +26,32 @@ bool UiDrawListRenderer::set_default_font_path(const std::string& path, int defa
         canvas_.set_default_font(nullptr);
         return false;
     }
+}
+
+void UiDrawListRenderer::bind_text_measurer(tc_ui_document* document) {
+    tc_ui_document_set_text_measurer(document, &UiDrawListRenderer::measure_text, this);
+}
+
+bool UiDrawListRenderer::measure_text(
+    void* user_data,
+    const char* text_utf8,
+    size_t text_byte_length,
+    float font_size,
+    tc_ui_text_metrics* out_metrics
+) {
+    auto* self = static_cast<UiDrawListRenderer*>(user_data);
+    if (!self || !self->owned_font_ || !out_metrics) {
+        return false;
+    }
+    const std::string_view text(text_utf8 ? text_utf8 : "", text_byte_length);
+    self->owned_font_->ensure_glyphs(text, font_size);
+    const tgfx::FontAtlas::Size2f measured = self->owned_font_->measure_text(text, font_size);
+    out_metrics->width = measured.width;
+    out_metrics->height = measured.height;
+    out_metrics->ascent = static_cast<float>(self->owned_font_->ascent_px(font_size));
+    out_metrics->descent = static_cast<float>(self->owned_font_->descent_px(font_size));
+    out_metrics->line_height = static_cast<float>(self->owned_font_->line_height_px(font_size));
+    return true;
 }
 
 void UiDrawListRenderer::render(

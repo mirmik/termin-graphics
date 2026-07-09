@@ -1,3 +1,4 @@
+#include <termin/gui_native/draw_list_renderer.hpp>
 #include <termin/gui_native/widget.hpp>
 
 #include <cassert>
@@ -5,6 +6,7 @@
 #include <string>
 
 using termin::gui_native::Document;
+using termin::gui_native::UiDrawListRenderer;
 using termin::gui_native::Widget;
 
 namespace {
@@ -102,9 +104,28 @@ void test_widget_paint_builds_draw_list() {
     tc_ui_draw_list_destroy(draw_list);
 }
 
+void test_renderer_font_binds_document_text_measurement() {
+    Document document;
+    UiDrawListRenderer renderer;
+    const std::string font_path = std::string(TERMIN_GUI_NATIVE_SOURCE_DIR) +
+        "/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf";
+    assert(renderer.set_default_font_path(font_path, 14));
+    renderer.bind_text_measurer(document.get());
+
+    tc_ui_text_metrics full {};
+    tc_ui_text_metrics prefix {};
+    assert(document.measure_text("Wi", 2, 18.0f, full));
+    assert(document.measure_text("Wi", 1, 18.0f, prefix));
+    assert(full.width > prefix.width);
+    assert(prefix.width > 0.0f);
+    assert(full.ascent > 0.0f);
+    assert(full.line_height >= full.ascent);
+}
+
 } // namespace
 
 int main() {
     test_widget_paint_builds_draw_list();
+    test_renderer_font_binds_document_text_measurement();
     return EXIT_SUCCESS;
 }

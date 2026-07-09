@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <string_view>
 
 #include <tcbase/tc_log.h>
 
@@ -23,6 +24,127 @@ bool rect_contains(tc_ui_rect rect, float x, float y) {
     return x >= rect.x && y >= rect.y &&
            x <= rect.x + rect.width &&
            y <= rect.y + rect.height;
+}
+
+bool decode_utf8(std::string_view text, size_t& offset, uint32_t& codepoint) {
+    if (offset >= text.size()) {
+        return false;
+    }
+    const auto byte = [&text](size_t index) {
+        return static_cast<uint8_t>(text[index]);
+    };
+    const uint8_t first = byte(offset);
+    size_t length = 0;
+    uint32_t value = 0;
+    uint32_t minimum = 0;
+    if (first < 0x80u) {
+        length = 1;
+        value = first;
+    } else if ((first & 0xe0u) == 0xc0u) {
+        length = 2;
+        value = first & 0x1fu;
+        minimum = 0x80u;
+    } else if ((first & 0xf0u) == 0xe0u) {
+        length = 3;
+        value = first & 0x0fu;
+        minimum = 0x800u;
+    } else if ((first & 0xf8u) == 0xf0u) {
+        length = 4;
+        value = first & 0x07u;
+        minimum = 0x10000u;
+    } else {
+        return false;
+    }
+    if (offset + length > text.size()) {
+        return false;
+    }
+    for (size_t index = 1; index < length; ++index) {
+        const uint8_t continuation = byte(offset + index);
+        if ((continuation & 0xc0u) != 0x80u) {
+            return false;
+        }
+        value = (value << 6u) | (continuation & 0x3fu);
+    }
+    if (value < minimum || value > 0x10ffffu || (value >= 0xd800u && value <= 0xdfffu)) {
+        return false;
+    }
+    offset += length;
+    codepoint = value;
+    return true;
+}
+
+bool valid_utf8(std::string_view text) {
+    size_t offset = 0;
+    while (offset < text.size()) {
+        uint32_t codepoint = 0;
+        if (!decode_utf8(text, offset, codepoint)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+size_t utf8_floor_boundary(std::string_view text, size_t offset) {
+    offset = std::min(offset, text.size());
+    while (offset > 0 && offset < text.size() &&
+           (static_cast<uint8_t>(text[offset]) & 0xc0u) == 0x80u) {
+        --offset;
+    }
+    return offset;
+}
+
+size_t utf8_previous_boundary(std::string_view text, size_t offset) {
+    offset = utf8_floor_boundary(text, offset);
+    if (offset == 0) {
+        return 0;
+    }
+    --offset;
+    while (offset > 0 && (static_cast<uint8_t>(text[offset]) & 0xc0u) == 0x80u) {
+        --offset;
+    }
+    return offset;
+}
+
+size_t utf8_next_boundary(std::string_view text, size_t offset) {
+    offset = utf8_floor_boundary(text, offset);
+    if (offset >= text.size()) {
+        return text.size();
+    }
+    size_t next = offset;
+    uint32_t codepoint = 0;
+    if (!decode_utf8(text, next, codepoint)) {
+        return std::min(offset + 1, text.size());
+    }
+    return next;
+}
+
+bool measure_text(
+    tc_ui_document* document,
+    std::string_view text,
+    float font_size,
+    tc_ui_text_metrics& metrics
+) {
+    return tc_ui_document_measure_text(
+        document,
+        text.data(),
+        text.size(),
+        font_size,
+        &metrics
+    );
+}
+
+float centered_text_baseline(
+    tc_ui_document* document,
+    std::string_view text,
+    float font_size,
+    tc_ui_rect rect
+) {
+    tc_ui_text_metrics metrics {};
+    if (!measure_text(document, text, font_size, metrics)) {
+        return rect.y + rect.height * 0.5f + font_size * 0.35f;
+    }
+    const float line_height = metrics.line_height > 0.0f ? metrics.line_height : metrics.height;
+    return rect.y + std::max(0.0f, (rect.height - line_height) * 0.5f) + metrics.ascent;
 }
 
 tc_ui_size clamp_size(tc_ui_size size, tc_ui_constraints constraints) {
@@ -1104,10 +1226,14 @@ void GroupBox::set_content(tc_widget_handle handle) {
 }
 
 tc_ui_size GroupBox::measure(tc_ui_document* document, tc_ui_constraints constraints) {
-    tc_ui_size measured {
-        std::max(preferred_size().width, static_cast<float>(title_.size()) * 8.0f + padding_.left + padding_.right),
-        preferred_size().height
-    };
+    tc_ui_size measured = preferred_size();
+    tc_ui_text_metrics title_metrics {};
+    if (measure_text(document, title_, 13.0f, title_metrics)) {
+        measured.width = std::max(
+            measured.width,
+            title_metrics.width + padding_.left + padding_.right
+        );
+    }
     if (!tc_widget_handle_is_invalid(this->content())) {
         if (tc_widget* content = resolve_child(document, c_widget(), this->content(), "GroupBox::measure")) {
             const tc_ui_size content_size = measure_widget(content, document, unconstrained());
@@ -1157,7 +1283,10 @@ void GroupBox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
         tc_ui_painter_draw_text(
             context,
             title_.c_str(),
-            tc_ui_point {bounds().x + padding_.left, bounds().y + 20.0f},
+            tc_ui_point {
+                bounds().x + padding_.left,
+                centered_text_baseline(document, title_, 13.0f, title_clip)
+            },
             13.0f,
             tc_ui_color {0.86f, 0.90f, 0.96f, 1.0f}
         );
@@ -1664,7 +1793,15 @@ void TabView::paint(tc_ui_document* document, tc_ui_paint_context* context) {
         tc_ui_painter_draw_text(
             context,
             page ? page->title.c_str() : "",
-            tc_ui_point {tab.x + 8.0f, tab.y + 21.0f},
+            tc_ui_point {
+                tab.x + 8.0f,
+                centered_text_baseline(
+                    document,
+                    page ? std::string_view(page->title) : std::string_view {},
+                    13.0f,
+                    tab
+                )
+            },
             13.0f,
             tc_ui_color {0.88f, 0.91f, 0.96f, 1.0f}
         );
@@ -1778,7 +1915,7 @@ Button& Button::set_text(std::string text) {
     return *this;
 }
 
-void Button::paint(tc_ui_document*, tc_ui_paint_context* context) {
+void Button::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     tc_ui_painter_fill_rect(context, bounds(), fill_.c_color());
     tc_ui_painter_stroke_rect(context, bounds(), accent_.c_color(), 2.0f);
     const float y = bounds().y + bounds().height * 0.5f;
@@ -1794,7 +1931,10 @@ void Button::paint(tc_ui_document*, tc_ui_paint_context* context) {
         tc_ui_painter_draw_text(
             context,
             text_.c_str(),
-            tc_ui_point {bounds().x + 12.0f, bounds().y + bounds().height * 0.5f + 5.0f},
+            tc_ui_point {
+                bounds().x + 12.0f,
+                centered_text_baseline(document, text_, 14.0f, bounds())
+            },
             14.0f,
             tc_ui_color {0.94f, 0.97f, 1.0f, 1.0f}
         );
@@ -1836,12 +1976,12 @@ Label::Label(std::string text, float font_size, Color color)
       text_(std::move(text)),
       font_size_(std::max(1.0f, font_size)),
       color_(color) {
-    update_min_size();
+    update_unmeasured_size();
 }
 
 Label& Label::set_text(std::string text) {
     text_ = std::move(text);
-    update_min_size();
+    update_unmeasured_size();
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
     return *this;
 }
@@ -1854,28 +1994,44 @@ Label& Label::set_color(Color color) {
 
 Label& Label::set_font_size(float font_size) {
     font_size_ = std::max(1.0f, font_size);
-    update_min_size();
+    update_unmeasured_size();
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
     return *this;
 }
 
-void Label::paint(tc_ui_document*, tc_ui_paint_context* context) {
+tc_ui_size Label::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+    tc_ui_text_metrics metrics {};
+    tc_ui_size measured = preferred_size();
+    if (measure_text(document, text_, font_size_, metrics)) {
+        measured.width = metrics.width;
+        measured.height = metrics.line_height > 0.0f ? metrics.line_height : metrics.height;
+    }
+    measured.width = std::max(measured.width, min_size().width);
+    measured.height = std::max(measured.height, min_size().height);
+    return clamp_size(measured, constraints);
+}
+
+void Label::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+    tc_ui_text_metrics metrics {};
+    const bool has_metrics = measure_text(document, text_, font_size_, metrics);
+    const float line_height = has_metrics && metrics.line_height > 0.0f
+        ? metrics.line_height
+        : font_size_;
+    const float ascent = has_metrics && metrics.ascent > 0.0f ? metrics.ascent : font_size_;
+    const float baseline = bounds().y + std::max(0.0f, (bounds().height - line_height) * 0.5f) + ascent;
     tc_ui_painter_push_clip(context, bounds());
     tc_ui_painter_draw_text(
         context,
         text_.c_str(),
-        tc_ui_point {bounds().x, bounds().y + font_size_},
+        tc_ui_point {bounds().x, baseline},
         font_size_,
         color_.c_color()
     );
     tc_ui_painter_pop_clip(context);
 }
 
-void Label::update_min_size() {
-    set_preferred_size(tc_ui_size {
-        std::max(1.0f, static_cast<float>(text_.size()) * font_size_ * 0.56f),
-        font_size_ * 1.35f
-    });
+void Label::update_unmeasured_size() {
+    set_preferred_size(tc_ui_size {0.0f, font_size_});
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
@@ -2008,23 +2164,32 @@ void Separator::paint(tc_ui_document*, tc_ui_paint_context* context) {
 }
 
 TextInput::TextInput(std::string text)
-    : NativeWidget("TextInput"), text_(std::move(text)), caret_(text_.size()) {
+    : NativeWidget("TextInput"), text_(std::move(text)) {
+    if (!valid_utf8(text_)) {
+        tc_log_error("[termin-gui-native] TextInput rejected invalid UTF-8 initial text");
+        text_.clear();
+    }
+    caret_ = text_.size();
     set_focusable(true);
-    update_preferred_size();
+    update_unmeasured_size();
 }
 
 void TextInput::set_text(std::string text) {
+    if (!valid_utf8(text)) {
+        tc_log_error("[termin-gui-native] TextInput rejected invalid UTF-8 text");
+        return;
+    }
     if (text_ == text) {
         return;
     }
     text_ = std::move(text);
-    caret_ = std::min(caret_, text_.size());
-    update_preferred_size();
+    caret_ = utf8_floor_boundary(text_, std::min(caret_, text_.size()));
+    update_unmeasured_size();
     emit_changed();
 }
 
 void TextInput::set_caret(size_t caret) {
-    const size_t next = std::min(caret, text_.size());
+    const size_t next = utf8_floor_boundary(text_, caret);
     if (caret_ == next) {
         return;
     }
@@ -2032,30 +2197,53 @@ void TextInput::set_caret(size_t caret) {
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
+tc_ui_size TextInput::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+    tc_ui_text_metrics metrics {};
+    tc_ui_size measured = preferred_size();
+    if (measure_text(document, text_, font_size_, metrics)) {
+        measured.width = std::max(160.0f, metrics.width + 18.0f);
+        const float line_height = metrics.line_height > 0.0f ? metrics.line_height : metrics.height;
+        measured.height = std::max(34.0f, line_height + 10.0f);
+    }
+    measured.width = std::max(measured.width, min_size().width);
+    measured.height = std::max(measured.height, min_size().height);
+    return clamp_size(measured, constraints);
+}
+
+void TextInput::layout(tc_ui_document* document, tc_ui_rect rect) {
+    NativeWidget::layout(document, rect);
+    ensure_caret_visible(document);
+}
+
 void TextInput::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+    ensure_caret_visible(document);
     const bool focused = tc_widget_handle_eq(tc_ui_document_focused_widget(document), handle());
     const tc_ui_color border = focused
         ? tc_ui_color {0.38f, 0.62f, 0.92f, 1.0f}
         : tc_ui_color {0.36f, 0.38f, 0.42f, 1.0f};
     tc_ui_painter_fill_rect(context, bounds(), tc_ui_color {0.08f, 0.09f, 0.11f, 1.0f});
     tc_ui_painter_stroke_rect(context, bounds(), border, focused ? 2.0f : 1.0f);
-    const tc_ui_rect text_clip {
-        bounds().x + 8.0f,
-        bounds().y + 2.0f,
-        std::max(0.0f, bounds().width - 16.0f),
-        std::max(0.0f, bounds().height - 4.0f)
-    };
+    const tc_ui_rect text_clip = text_clip_rect();
+    tc_ui_text_metrics metrics {};
+    const bool has_metrics = measure_text(document, text_, font_size_, metrics);
+    const float line_height = has_metrics && metrics.line_height > 0.0f
+        ? metrics.line_height
+        : font_size_;
+    const float ascent = has_metrics && metrics.ascent > 0.0f ? metrics.ascent : font_size_;
+    const float baseline = text_clip.y + std::max(0.0f, (text_clip.height - line_height) * 0.5f) + ascent;
+    const float text_x = text_clip.x - scroll_x_;
     tc_ui_painter_push_clip(context, text_clip);
     tc_ui_painter_draw_text(
         context,
         text_.c_str(),
-        tc_ui_point {bounds().x + 8.0f, bounds().y + bounds().height * 0.5f + font_size_ * 0.35f},
+        tc_ui_point {text_x, baseline},
         font_size_,
         text_color_.c_color()
     );
     if (focused) {
-        const float glyph_width = font_size_ * 0.56f;
-        const float caret_x = bounds().x + 8.0f + glyph_width * static_cast<float>(caret_);
+        float caret_width = 0.0f;
+        measure_prefix(document, caret_, caret_width);
+        const float caret_x = text_x + caret_width;
         tc_ui_painter_draw_line(
             context,
             tc_ui_point {caret_x, bounds().y + 7.0f},
@@ -2072,43 +2260,52 @@ tc_ui_event_result TextInput::pointer_event(tc_ui_document* document, const tc_u
         return TC_UI_EVENT_IGNORED;
     }
     tc_ui_document_set_focus(document, handle());
-    const float glyph_width = std::max(1.0f, font_size_ * 0.56f);
-    const float local_x = std::max(0.0f, event->x - bounds().x - 8.0f);
-    set_caret(static_cast<size_t>(std::floor(local_x / glyph_width + 0.5f)));
+    const tc_ui_rect clip = text_clip_rect();
+    const float content_x = std::max(0.0f, event->x - clip.x + scroll_x_);
+    set_caret(caret_from_content_x(document, content_x));
+    ensure_caret_visible(document);
     return TC_UI_EVENT_HANDLED;
 }
 
-tc_ui_event_result TextInput::key_event(tc_ui_document*, const tc_ui_key_event* event) {
+tc_ui_event_result TextInput::key_event(tc_ui_document* document, const tc_ui_key_event* event) {
     if (!event || event->type != TC_UI_KEY_DOWN) {
         return TC_UI_EVENT_IGNORED;
     }
     switch (event->key) {
     case TC_UI_KEY_BACKSPACE:
         if (caret_ > 0) {
-            text_.erase(caret_ - 1, 1);
-            caret_ -= 1;
-            update_preferred_size();
+            const size_t previous = utf8_previous_boundary(text_, caret_);
+            text_.erase(previous, caret_ - previous);
+            caret_ = previous;
+            update_unmeasured_size();
             emit_changed();
         }
+        ensure_caret_visible(document);
         return TC_UI_EVENT_HANDLED;
     case TC_UI_KEY_DELETE:
         if (caret_ < text_.size()) {
-            text_.erase(caret_, 1);
-            update_preferred_size();
+            const size_t next = utf8_next_boundary(text_, caret_);
+            text_.erase(caret_, next - caret_);
+            update_unmeasured_size();
             emit_changed();
         }
+        ensure_caret_visible(document);
         return TC_UI_EVENT_HANDLED;
     case TC_UI_KEY_LEFT:
-        set_caret(caret_ > 0 ? caret_ - 1 : 0);
+        set_caret(utf8_previous_boundary(text_, caret_));
+        ensure_caret_visible(document);
         return TC_UI_EVENT_HANDLED;
     case TC_UI_KEY_RIGHT:
-        set_caret(caret_ + 1);
+        set_caret(utf8_next_boundary(text_, caret_));
+        ensure_caret_visible(document);
         return TC_UI_EVENT_HANDLED;
     case TC_UI_KEY_HOME:
         set_caret(0);
+        ensure_caret_visible(document);
         return TC_UI_EVENT_HANDLED;
     case TC_UI_KEY_END:
         set_caret(text_.size());
+        ensure_caret_visible(document);
         return TC_UI_EVENT_HANDLED;
     case TC_UI_KEY_ENTER:
         submitted_.emit(*this, text_);
@@ -2118,22 +2315,88 @@ tc_ui_event_result TextInput::key_event(tc_ui_document*, const tc_ui_key_event* 
     }
 }
 
-tc_ui_event_result TextInput::text_event(tc_ui_document*, const tc_ui_text_event* event) {
+tc_ui_event_result TextInput::text_event(tc_ui_document* document, const tc_ui_text_event* event) {
     if (!event || !event->text || event->text[0] == '\0') {
         return TC_UI_EVENT_IGNORED;
     }
+    const std::string_view inserted(event->text);
+    if (!valid_utf8(inserted)) {
+        tc_log_error("[termin-gui-native] TextInput rejected invalid UTF-8 input event");
+        return TC_UI_EVENT_IGNORED;
+    }
     text_.insert(caret_, event->text);
-    caret_ += std::strlen(event->text);
-    update_preferred_size();
+    caret_ += inserted.size();
+    update_unmeasured_size();
     emit_changed();
+    ensure_caret_visible(document);
     return TC_UI_EVENT_HANDLED;
 }
 
-void TextInput::update_preferred_size() {
-    set_preferred_size(tc_ui_size {
-        std::max(160.0f, static_cast<float>(text_.size()) * font_size_ * 0.56f + 18.0f),
-        34.0f
-    });
+tc_ui_rect TextInput::text_clip_rect() const {
+    return tc_ui_rect {
+        bounds().x + 8.0f,
+        bounds().y + 2.0f,
+        std::max(0.0f, bounds().width - 16.0f),
+        std::max(0.0f, bounds().height - 4.0f)
+    };
+}
+
+bool TextInput::measure_prefix(
+    tc_ui_document* document,
+    size_t byte_offset,
+    float& width
+) const {
+    tc_ui_text_metrics metrics {};
+    const size_t boundary = utf8_floor_boundary(text_, byte_offset);
+    if (!measure_text(document, std::string_view(text_).substr(0, boundary), font_size_, metrics)) {
+        width = 0.0f;
+        return false;
+    }
+    width = metrics.width;
+    return true;
+}
+
+void TextInput::ensure_caret_visible(tc_ui_document* document) {
+    const float viewport_width = text_clip_rect().width;
+    float caret_width = 0.0f;
+    tc_ui_text_metrics full_metrics {};
+    if (viewport_width <= 0.0f || !measure_prefix(document, caret_, caret_width) ||
+        !measure_text(document, text_, font_size_, full_metrics)) {
+        scroll_x_ = 0.0f;
+        return;
+    }
+    const float visible_width = std::max(0.0f, viewport_width - 1.0f);
+    if (caret_width < scroll_x_) {
+        scroll_x_ = caret_width;
+    } else if (caret_width > scroll_x_ + visible_width) {
+        scroll_x_ = caret_width - visible_width;
+    }
+    scroll_x_ = clamp_float(scroll_x_, 0.0f, std::max(0.0f, full_metrics.width - visible_width));
+}
+
+size_t TextInput::caret_from_content_x(tc_ui_document* document, float content_x) const {
+    size_t current = 0;
+    float current_width = 0.0f;
+    if (!measure_prefix(document, current, current_width)) {
+        return 0;
+    }
+    while (current < text_.size()) {
+        const size_t next = utf8_next_boundary(text_, current);
+        float next_width = current_width;
+        if (!measure_prefix(document, next, next_width)) {
+            return current;
+        }
+        if (content_x < (current_width + next_width) * 0.5f) {
+            return current;
+        }
+        current = next;
+        current_width = next_width;
+    }
+    return text_.size();
+}
+
+void TextInput::update_unmeasured_size() {
+    set_preferred_size(tc_ui_size {160.0f, 34.0f});
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 

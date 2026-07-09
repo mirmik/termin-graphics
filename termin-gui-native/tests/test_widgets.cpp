@@ -25,6 +25,54 @@ size_t count_commands(const tc_ui_draw_list* draw_list, tc_ui_draw_command_type 
     return count;
 }
 
+bool test_text_measure(
+    void*,
+    const char* text,
+    size_t byte_length,
+    float font_size,
+    tc_ui_text_metrics* out_metrics
+) {
+    if (!text || !out_metrics || font_size <= 0.0f) {
+        return false;
+    }
+    float width = 0.0f;
+    size_t offset = 0;
+    while (offset < byte_length) {
+        const uint8_t first = static_cast<uint8_t>(text[offset]);
+        if (first < 0x80u) {
+            if (first == static_cast<uint8_t>('i')) {
+                width += font_size * 0.25f;
+            } else if (first == static_cast<uint8_t>('W')) {
+                width += font_size * 0.90f;
+            } else {
+                width += font_size * 0.50f;
+            }
+            offset += 1;
+        } else if ((first & 0xe0u) == 0xc0u && offset + 2 <= byte_length) {
+            width += font_size * 0.60f;
+            offset += 2;
+        } else if ((first & 0xf0u) == 0xe0u && offset + 3 <= byte_length) {
+            width += font_size * 0.70f;
+            offset += 3;
+        } else if ((first & 0xf8u) == 0xf0u && offset + 4 <= byte_length) {
+            width += font_size;
+            offset += 4;
+        } else {
+            return false;
+        }
+    }
+    out_metrics->width = width;
+    out_metrics->height = font_size;
+    out_metrics->ascent = font_size * 0.8f;
+    out_metrics->descent = font_size * 0.2f;
+    out_metrics->line_height = font_size * 1.2f;
+    return true;
+}
+
+void install_test_text_measurer(Document& document) {
+    document.set_text_measurer(&test_text_measure, nullptr);
+}
+
 class CapturingProbe final : public NativeWidget {
 public:
     CapturingProbe() : NativeWidget("CapturingProbe") {
@@ -846,6 +894,7 @@ void test_separator_layout_and_paint_command() {
 
 void test_text_input_focus_text_edit_and_submit() {
     Document document;
+    install_test_text_measurer(document);
     DocumentBuilder ui(document);
     auto& root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
     auto& input = ui.make<TextInput>("ab");
@@ -903,6 +952,7 @@ void test_text_input_focus_text_edit_and_submit() {
 
 void test_text_widgets_clip_text_paint() {
     Document document;
+    install_test_text_measurer(document);
     DocumentBuilder ui(document);
     auto& root = ui.make_root<BoxLayout>(Orientation::Vertical, "root");
     auto& label = ui.make<Label>("Long label text that must stay inside its widget", 14.0f);
@@ -940,6 +990,103 @@ void test_text_widgets_clip_text_paint() {
     assert(saw_label_clip);
     assert(saw_input_inner_clip);
     assert(count_commands(draw_list, TC_UI_DRAW_PUSH_CLIP) == count_commands(draw_list, TC_UI_DRAW_POP_CLIP));
+
+    tc_ui_paint_context_destroy(paint_context);
+    tc_ui_draw_list_destroy(draw_list);
+}
+
+void test_text_measurement_uses_proportional_metrics() {
+    Document document;
+    install_test_text_measurer(document);
+    DocumentBuilder ui(document);
+    auto& narrow = ui.make<Label>("iii", 20.0f);
+    auto& wide = ui.make<Label>("WWW", 20.0f);
+    const tc_ui_constraints constraints {
+        tc_ui_size {0.0f, 0.0f},
+        tc_ui_size {1000.0f, 1000.0f}
+    };
+
+    const tc_ui_size narrow_size = narrow.measure(document.get(), constraints);
+    const tc_ui_size wide_size = wide.measure(document.get(), constraints);
+    assert(near(narrow_size.width, 15.0f));
+    assert(near(wide_size.width, 54.0f));
+    assert(wide_size.width > narrow_size.width * 3.0f);
+    assert(near(narrow_size.height, 24.0f));
+}
+
+void test_text_input_edits_utf8_at_codepoint_boundaries() {
+    Document document;
+    install_test_text_measurer(document);
+    DocumentBuilder ui(document);
+    const std::string initial = "a\xc3\xa9\xf0\x9f\x99\x82" "b";
+    auto& input = ui.make_root<TextInput>(initial);
+    document.layout_roots(tc_ui_rect {0.0f, 0.0f, 220.0f, 40.0f});
+    assert(input.caret() == 8);
+
+    tc_ui_key_event key {};
+    key.type = TC_UI_KEY_DOWN;
+    key.key = TC_UI_KEY_LEFT;
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_IGNORED);
+    assert(document.set_focus(input));
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    assert(input.caret() == 7);
+
+    key.key = TC_UI_KEY_BACKSPACE;
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    assert(input.text() == "a\xc3\xa9" "b");
+    assert(input.caret() == 3);
+
+    key.key = TC_UI_KEY_DELETE;
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    assert(input.text() == "a\xc3\xa9");
+    assert(input.caret() == 3);
+
+    input.set_caret(2);
+    assert(input.caret() == 1);
+    tc_ui_text_event insert {};
+    insert.text = "\xf0\x9f\x99\x82";
+    assert(document.dispatch_text_event(insert) == TC_UI_EVENT_HANDLED);
+    assert(input.text() == "a\xf0\x9f\x99\x82\xc3\xa9");
+    assert(input.caret() == 5);
+
+    tc_ui_text_event invalid {};
+    invalid.text = "\xc3(";
+    assert(document.dispatch_text_event(invalid) == TC_UI_EVENT_IGNORED);
+    assert(input.text() == "a\xf0\x9f\x99\x82\xc3\xa9");
+}
+
+void test_text_input_scrolls_to_keep_caret_inside_clip() {
+    Document document;
+    install_test_text_measurer(document);
+    DocumentBuilder ui(document);
+    auto& input = ui.make_root<TextInput>("WWWWWWWWWWWW");
+    assert(document.set_focus(input));
+    document.layout_roots(tc_ui_rect {20.0f, 30.0f, 80.0f, 34.0f});
+    assert(input.scroll_x() > 0.0f);
+
+    tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
+    tc_ui_paint_context* paint_context = tc_ui_paint_context_create(draw_list);
+    document.paint_roots(paint_context);
+
+    const float clip_left = input.bounds().x + 8.0f;
+    const float clip_right = input.bounds().x + input.bounds().width - 8.0f;
+    bool saw_shifted_text = false;
+    bool saw_visible_caret = false;
+    for (size_t index = 0; index < tc_ui_draw_list_command_count(draw_list); ++index) {
+        const tc_ui_draw_command* command = tc_ui_draw_list_command_at(draw_list, index);
+        if (!command) {
+            continue;
+        }
+        if (command->type == TC_UI_DRAW_TEXT && command->p0.x < clip_left) {
+            saw_shifted_text = true;
+        }
+        if (command->type == TC_UI_DRAW_LINE && near(command->p0.x, command->p1.x) &&
+            command->p0.x >= clip_left && command->p0.x <= clip_right) {
+            saw_visible_caret = true;
+        }
+    }
+    assert(saw_shifted_text);
+    assert(saw_visible_caret);
 
     tc_ui_paint_context_destroy(paint_context);
     tc_ui_draw_list_destroy(draw_list);
@@ -1154,6 +1301,9 @@ int main() {
     test_separator_layout_and_paint_command();
     test_text_input_focus_text_edit_and_submit();
     test_text_widgets_clip_text_paint();
+    test_text_measurement_uses_proportional_metrics();
+    test_text_input_edits_utf8_at_codepoint_boundaries();
+    test_text_input_scrolls_to_keep_caret_inside_clip();
     test_widget_signals_are_emitted_from_interactions();
     test_containers_register_and_replace_canonical_children();
     test_common_visibility_enabled_and_mouse_transparent_state();

@@ -224,7 +224,9 @@ int run_showcase_window(const char* title) {
         UiDrawListRenderer renderer;
         const std::filesystem::path font_path = resolve_font();
         if (!font_path.empty()) {
-            renderer.set_default_font_path(font_path.string(), 15);
+            if (renderer.set_default_font_path(font_path.string(), 15)) {
+                renderer.bind_text_measurer(document.get());
+            }
         } else {
             std::fprintf(stderr, "termin-gui-native example: no UI font found; text commands will be skipped\n");
         }

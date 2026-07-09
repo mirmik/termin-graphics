@@ -69,6 +69,9 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     function(termin_gui_native_add_test target)
         add_executable(${target} ${ARGN})
         target_link_libraries(${target} PRIVATE termin_gui_native)
+        target_compile_definitions(${target} PRIVATE
+            TERMIN_GUI_NATIVE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+        )
         if(MSVC)
             target_compile_options(${target} PRIVATE /UNDEBUG)
         else()

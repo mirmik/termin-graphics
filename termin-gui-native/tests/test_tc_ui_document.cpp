@@ -10,6 +10,28 @@ struct TestWidget {
     int* paint_count = nullptr;
 };
 
+struct TextMeasureProbe {
+    size_t last_length = 0;
+    bool return_invalid_metrics = false;
+};
+
+static bool probe_text_measure(
+    void* user_data,
+    const char*,
+    size_t byte_length,
+    float font_size,
+    tc_ui_text_metrics* out_metrics
+) {
+    auto* probe = static_cast<TextMeasureProbe*>(user_data);
+    probe->last_length = byte_length;
+    out_metrics->width = probe->return_invalid_metrics ? -1.0f : font_size * static_cast<float>(byte_length);
+    out_metrics->height = font_size;
+    out_metrics->ascent = font_size * 0.8f;
+    out_metrics->descent = font_size * 0.2f;
+    out_metrics->line_height = font_size;
+    return true;
+}
+
 static TestWidget* from_widget(tc_widget* widget) {
     return static_cast<TestWidget*>(widget->body);
 }
@@ -279,6 +301,28 @@ static void test_roots_are_explicit_visible_paint_entrypoints() {
     assert(deleted == 2);
 }
 
+static void test_document_text_measurement_service_contract() {
+    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_text_metrics metrics {};
+    assert(!tc_ui_document_measure_text(document, "abc", 3, 12.0f, &metrics));
+
+    TextMeasureProbe probe;
+    tc_ui_document_set_text_measurer(document, &probe_text_measure, &probe);
+    const char bytes[] = {'a', '\0', 'b'};
+    assert(tc_ui_document_measure_text(document, bytes, sizeof(bytes), 10.0f, &metrics));
+    assert(probe.last_length == sizeof(bytes));
+    assert(metrics.width == 30.0f);
+    assert(metrics.ascent == 8.0f);
+
+    probe.return_invalid_metrics = true;
+    assert(!tc_ui_document_measure_text(document, "x", 1, 10.0f, &metrics));
+    assert(metrics.width == 0.0f);
+
+    tc_ui_document_set_text_measurer(document, nullptr, nullptr);
+    assert(!tc_ui_document_measure_text(document, "x", 1, 10.0f, &metrics));
+    tc_ui_document_destroy(document);
+}
+
 int main() {
     test_init_defaults_and_common_state();
     test_borrowed_widget_can_be_adopted_and_released();
@@ -287,5 +331,6 @@ int main() {
     test_plain_destroy_unlinks_tree_without_destroying_relatives();
     test_recursive_destroy_uses_canonical_tree();
     test_roots_are_explicit_visible_paint_entrypoints();
+    test_document_text_measurement_service_contract();
     return EXIT_SUCCESS;
 }

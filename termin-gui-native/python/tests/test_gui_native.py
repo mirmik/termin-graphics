@@ -1,5 +1,6 @@
 import gc
 import weakref
+from pathlib import Path
 
 import pytest
 
@@ -9,6 +10,7 @@ from termin.gui_native import (
     Document,
     DrawCommandType,
     DrawList,
+    DrawListRenderer,
     EventResult,
     KeyCode,
     KeyEvent,
@@ -320,3 +322,27 @@ def test_widget_ref_wraps_native_cpp_widgets_without_duplicate_state():
     assert not root.alive
     assert not panel.alive
     assert not label.alive
+
+
+def test_renderer_font_exposes_document_text_metrics():
+    font_path = (
+        Path(__file__).resolve().parents[3]
+        / "termin-thirdparty"
+        / "recastnavigation"
+        / "RecastDemo"
+        / "Bin"
+        / "DroidSans.ttf"
+    )
+    document = Document()
+    renderer = DrawListRenderer()
+    assert renderer.set_default_font_path(str(font_path), 14)
+    renderer.bind_text_measurer(document)
+
+    narrow = document.measure_text("iii", 18.0)
+    wide = document.measure_text("WWW", 18.0)
+    assert wide.width > narrow.width
+    assert wide.line_height > 0.0
+
+    del renderer
+    gc.collect()
+    assert document.measure_text("still alive", 14.0).width > 0.0

@@ -497,6 +497,13 @@ NB_MODULE(_gui_native, m) {
         .def_rw("min_size", &tc_ui_constraints::min_size)
         .def_rw("max_size", &tc_ui_constraints::max_size);
 
+    nb::class_<tc_ui_text_metrics>(m, "TextMetrics")
+        .def_ro("width", &tc_ui_text_metrics::width)
+        .def_ro("height", &tc_ui_text_metrics::height)
+        .def_ro("ascent", &tc_ui_text_metrics::ascent)
+        .def_ro("descent", &tc_ui_text_metrics::descent)
+        .def_ro("line_height", &tc_ui_text_metrics::line_height);
+
     nb::enum_<tc_ui_event_result>(m, "EventResult")
         .value("Ignored", TC_UI_EVENT_IGNORED)
         .value("Handled", TC_UI_EVENT_HANDLED);
@@ -807,6 +814,18 @@ NB_MODULE(_gui_native, m) {
             return WidgetHandle {tc_ui_document_root_at(self.get(), index)};
         }, nb::arg("index"))
         .def("ref", &Document::ref, nb::arg("handle"))
+        .def("measure_text", [](Document& self, const std::string& text, float font_size) {
+            tc_ui_text_metrics metrics {};
+            if (!tc_ui_document_measure_text(
+                    self.get(),
+                    text.data(),
+                    text.size(),
+                    font_size,
+                    &metrics)) {
+                throw std::runtime_error("text measurement failed");
+            }
+            return metrics;
+        }, nb::arg("text"), nb::arg("font_size"))
         .def("create_hstack", [](Document& self, const std::string& debug_name) {
             return self.make_native<termin::gui_native::HStack>(debug_name.c_str());
         }, nb::arg("debug_name") = "HStack")
@@ -887,6 +906,9 @@ NB_MODULE(_gui_native, m) {
         .def(nb::init<>())
         .def("set_default_font_path", &termin::gui_native::UiDrawListRenderer::set_default_font_path,
              nb::arg("path"), nb::arg("default_size_px") = 14)
+        .def("bind_text_measurer", [](termin::gui_native::UiDrawListRenderer& self, Document& document) {
+            self.bind_text_measurer(document.get());
+        }, nb::arg("document"), nb::keep_alive<2, 1>())
         .def("render", [](termin::gui_native::UiDrawListRenderer& self,
                           tgfx::RenderContext2& context,
                           const DrawList& draw_list,

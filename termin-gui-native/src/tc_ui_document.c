@@ -1,6 +1,7 @@
 #include <termin/gui_native/tc_ui_document.h>
 
 #include <limits.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -29,6 +30,11 @@ struct tc_ui_document {
     tc_widget_handle pointer_capture;
     tc_widget_handle focused_widget;
     size_t live_count;
+
+    tc_ui_text_measure_fn measure_text;
+    void* text_measurer_user_data;
+    bool missing_text_measurer_logged;
+    bool text_measure_failure_logged;
 };
 
 static bool same_handle(tc_widget_handle lhs, tc_widget_handle rhs) {
@@ -68,6 +74,10 @@ static bool reserve_array(void** data, size_t item_size, size_t* capacity, size_
     *data = next_data;
     *capacity = next_capacity;
     return true;
+}
+
+static bool valid_text_metric(float value) {
+    return isfinite(value) && value >= 0.0f;
 }
 
 static tc_widget_slot* resolve_slot(tc_ui_document* document, tc_widget_handle handle) {
@@ -745,6 +755,61 @@ bool tc_ui_document_destroy_widget_recursive(tc_ui_document* document, tc_widget
 
 size_t tc_ui_document_live_widget_count(const tc_ui_document* document) {
     return document ? document->live_count : 0;
+}
+
+void tc_ui_document_set_text_measurer(
+    tc_ui_document* document,
+    tc_ui_text_measure_fn measure,
+    void* user_data
+) {
+    if (!document) {
+        tc_log_error("[termin-gui-native] cannot configure text measurement on null document");
+        return;
+    }
+    document->measure_text = measure;
+    document->text_measurer_user_data = measure ? user_data : NULL;
+    document->missing_text_measurer_logged = false;
+    document->text_measure_failure_logged = false;
+}
+
+bool tc_ui_document_measure_text(
+    tc_ui_document* document,
+    const char* text_utf8,
+    size_t text_byte_length,
+    float font_size,
+    tc_ui_text_metrics* out_metrics
+) {
+    if (!document || !out_metrics || (!text_utf8 && text_byte_length > 0) || font_size <= 0.0f) {
+        tc_log_error("[termin-gui-native] invalid text measurement request");
+        return false;
+    }
+    memset(out_metrics, 0, sizeof(*out_metrics));
+    if (!document->measure_text) {
+        if (!document->missing_text_measurer_logged) {
+            tc_log_error("[termin-gui-native] UI document has no text measurement service");
+            document->missing_text_measurer_logged = true;
+        }
+        return false;
+    }
+    if (!document->measure_text(
+            document->text_measurer_user_data,
+            text_utf8 ? text_utf8 : "",
+            text_byte_length,
+            font_size,
+            out_metrics) ||
+        !valid_text_metric(out_metrics->width) ||
+        !valid_text_metric(out_metrics->height) ||
+        !valid_text_metric(out_metrics->ascent) ||
+        !valid_text_metric(out_metrics->descent) ||
+        !valid_text_metric(out_metrics->line_height)) {
+        if (!document->text_measure_failure_logged) {
+            tc_log_error("[termin-gui-native] text measurement service failed");
+            document->text_measure_failure_logged = true;
+        }
+        memset(out_metrics, 0, sizeof(*out_metrics));
+        return false;
+    }
+    return true;
 }
 
 bool tc_ui_document_add_root(tc_ui_document* document, tc_widget_handle handle) {
