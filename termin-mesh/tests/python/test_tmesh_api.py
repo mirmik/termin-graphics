@@ -1,4 +1,5 @@
 import uuid
+from array import array
 
 import numpy as np
 import tmesh
@@ -14,6 +15,10 @@ def _assert_vec3_approx(actual: Vec3, expected, abs: float = 1e-6) -> None:
     assert actual.x == pytest.approx(expected[0], abs=abs)
     assert actual.y == pytest.approx(expected[1], abs=abs)
     assert actual.z == pytest.approx(expected[2], abs=abs)
+
+
+def _typed_memoryview(values: array, format_code: str, shape: tuple[int, ...]):
+    return memoryview(values).cast("B").cast(format_code, shape=shape)
 
 
 def test_vertex_layout_building():
@@ -80,6 +85,44 @@ def test_mesh3_from_numpy_arrays():
     assert mesh.vertex_count == 3
     assert mesh.triangle_count == 1
     assert mesh.name == "tri"
+
+
+def test_mesh3_from_buffer_compatible_memoryviews():
+    vertices = _typed_memoryview(
+        array(
+            "f",
+            [
+                0.0, 0.0, 0.0,
+                1.0, 0.0, 0.0,
+                0.0, 1.0, 0.0,
+            ],
+        ),
+        "f",
+        (3, 3),
+    )
+    triangles = _typed_memoryview(array("I", [0, 1, 2]), "I", (1, 3))
+
+    mesh = tmesh.Mesh3(vertices=vertices, triangles=triangles, name="buffer-tri")
+
+    assert mesh.is_valid()
+    assert mesh.vertex_count == 3
+    assert mesh.triangle_count == 1
+    assert mesh.name == "buffer-tri"
+
+
+def test_mesh3_rejects_flat_vertex_buffer_shape():
+    vertices = array(
+        "f",
+        [
+            0.0, 0.0, 0.0,
+            1.0, 0.0, 0.0,
+            0.0, 1.0, 0.0,
+        ],
+    )
+    triangles = _typed_memoryview(array("I", [0, 1, 2]), "I", (1, 3))
+
+    with pytest.raises(TypeError):
+        tmesh.Mesh3(vertices=vertices, triangles=triangles, name="flat-tri")
 
 
 def test_mesh_registry_set_data_smoke():

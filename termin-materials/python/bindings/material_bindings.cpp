@@ -76,6 +76,10 @@ TcTexture optional_tc_texture(nb::object value, const std::string& context) {
     return require_tc_texture(value, context);
 }
 
+bool supports_python_buffer(nb::handle value) {
+    return PyObject_CheckBuffer(value.ptr()) != 0;
+}
+
 tc_shader_language shader_language_from_string(const std::string& language) {
     if (language == "glsl") {
         return TC_SHADER_LANGUAGE_GLSL;
@@ -850,8 +854,8 @@ void bind_tc_material(nb::module_& m) {
                 Vec4 v = nb::cast<Vec4>(value);
                 float arr[4] = {(float)v.x, (float)v.y, (float)v.z, (float)v.w};
                 tc_material_phase_set_uniform(&p, name.c_str(), TC_UNIFORM_VEC4, arr);
-            } else if (nb::ndarray_check(value)) {
-                nb::ndarray<nb::numpy, float> arr = nb::cast<nb::ndarray<nb::numpy, float>>(value);
+            } else if (supports_python_buffer(value)) {
+                auto arr = nb::cast<nb::ndarray<float, nb::c_contig, nb::device::cpu>>(value);
                 size_t size = arr.size();
                 float* ptr = arr.data();
                 if (size == 2) {
@@ -862,6 +866,13 @@ void bind_tc_material(nb::module_& m) {
                     tc_material_phase_set_uniform(&p, name.c_str(), TC_UNIFORM_VEC4, ptr);
                 } else if (size == 16) {
                     tc_material_phase_set_uniform(&p, name.c_str(), TC_UNIFORM_MAT4, ptr);
+                } else {
+                    tc::Log::error(
+                        "tc_material_phase.set_param('%s') expects float32 buffer size 2, 3, 4, or 16; got %zu",
+                        name.c_str(),
+                        size);
+                    throw std::runtime_error(
+                        "tc_material_phase.set_param expects float32 buffer size 2, 3, 4, or 16");
                 }
             }
         }, nb::arg("name"), nb::arg("value"));
@@ -937,8 +948,12 @@ void bind_tc_material(nb::module_& m) {
                 if (nb::isinstance<Vec4>(color_obj)) {
                     Vec4 c = nb::cast<Vec4>(color_obj);
                     tc_material_phase_set_color(phase, c.x, c.y, c.z, c.w);
-                } else if (nb::ndarray_check(color_obj)) {
-                    nb::ndarray<nb::numpy, float> arr = nb::cast<nb::ndarray<nb::numpy, float>>(color_obj);
+                } else if (supports_python_buffer(color_obj)) {
+                    auto arr = nb::cast<nb::ndarray<float, nb::c_contig, nb::device::cpu>>(color_obj);
+                    if (arr.size() != 4) {
+                        tc::Log::error("TcMaterial(color) expects float32 buffer size 4; got %zu", arr.size());
+                        throw std::runtime_error("TcMaterial(color) expects float32 buffer size 4");
+                    }
                     float* ptr = arr.data();
                     tc_material_phase_set_color(phase, ptr[0], ptr[1], ptr[2], ptr[3]);
                 } else if (nb::isinstance<nb::tuple>(color_obj) || nb::isinstance<nb::list>(color_obj)) {
