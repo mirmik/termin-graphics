@@ -423,7 +423,13 @@ static bool canonicalize_shader_abi_resources(
                 shader_resource_scope_layout_name(abi->scope);
             if (is_unscoped_resource_scope(resource.scope) ||
                 resource.scope == "unknown") {
-                resource.scope = expected_scope;
+                std::cerr
+                    << "termin_shaderc: shader ABI resource '" << resource.name
+                    << "' has no explicit scope, expected '"
+                    << expected_scope
+                    << "'; preserve [[TerminScope]] metadata or provide an "
+                    << "explicit imported scope\n";
+                return false;
             } else if (resource.scope != expected_scope) {
                 std::cerr
                     << "termin_shaderc: shader ABI resource '" << resource.name

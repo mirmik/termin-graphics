@@ -180,8 +180,8 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
     shader = tmp_path / "test.slang"
     shader.write_text(
         "struct MaterialParams { float u_strength; };\n"
-        "ConstantBuffer<MaterialParams> material;\n"
-        "[shader(\"fragment\")] float4 main() : SV_Target0 { return float4(material.u_strength); }\n",
+        "ConstantBuffer<MaterialParams> custom_params;\n"
+        "[shader(\"fragment\")] float4 main() : SV_Target0 { return float4(custom_params.u_strength); }\n",
         encoding="utf-8",
     )
     output = tmp_path / "out.spv"
@@ -204,13 +204,13 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
         "out.parent.mkdir(parents=True, exist_ok=True)\n"
         "resource_id = 17\n"
         "words = [0x07230203, 0x00010500, 0, 32, 0]\n"
-        "words += inst(OP_NAME, [resource_id] + string_words('material'))\n"
+        "words += inst(OP_NAME, [resource_id] + string_words('custom_params'))\n"
         "words += inst(OP_DECORATE, [resource_id, DECORATION_BINDING, 1])\n"
         "words += inst(OP_DECORATE, [resource_id, DECORATION_DESCRIPTOR_SET, 0])\n"
         "out.write_bytes(struct.pack('<' + 'I' * len(words), *words))\n"
         "reflection.write_text(json.dumps({\n"
         "    'parameters': [{\n"
-        "        'name': 'material',\n"
+        "        'name': 'custom_params',\n"
         "        'binding': {'kind': 'constantBuffer', 'index': 1},\n"
         "        'type': {\n"
         "            'kind': 'constantBuffer',\n"
@@ -259,14 +259,13 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
     assert layout["language"] == "slang"
     assert layout["target"] == "vulkan"
     assert layout["stage"] == "fragment"
-    material_binding = _expected_scoped_binding("material", "constant_buffer", "material")
     assert layout["resources"] == [
         {
-            "name": "material",
+            "name": "custom_params",
             "kind": "constant_buffer",
-            "scope": "material",
+            "scope": "unscoped",
             "set": 0,
-            "binding": material_binding,
+            "binding": 1,
             "stage_mask": 2,
             "size": 16,
             "fields": [
@@ -281,7 +280,7 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
     ]
 
 
-def test_termin_shaderc_writes_glsl_bone_block_resource_layout(tmp_path: Path) -> None:
+def test_termin_shaderc_rejects_glsl_bone_block_without_explicit_scope(tmp_path: Path) -> None:
     shader = tmp_path / "skinned.vert.glsl"
     shader.write_text(
         "#version 450 core\n"
@@ -313,18 +312,10 @@ def test_termin_shaderc_writes_glsl_bone_block_resource_layout(tmp_path: Path) -
         ]
     )
 
-    assert result.returncode == 0, result.stderr
-    layout = json.loads((tmp_path / "skinned.vert.spv.layout.json").read_text(encoding="utf-8"))
-    expected_binding = _expected_scoped_binding("bone_block", "constant_buffer", "draw")
-    assert {
-        "name": "bone_block",
-        "kind": "constant_buffer",
-        "scope": "draw",
-        "set": 0,
-        "binding": expected_binding,
-        "stage_mask": 1,
-        "size": 0,
-    } in layout["resources"]
+    assert result.returncode != 0
+    assert (
+        "shader ABI resource 'BoneBlock' has no explicit scope, expected 'draw'"
+    ) in result.stderr
 
 
 def test_termin_shaderc_rejects_shader_abi_scope_mismatch(tmp_path: Path) -> None:
@@ -385,6 +376,94 @@ def test_termin_shaderc_rejects_shader_abi_scope_mismatch(tmp_path: Path) -> Non
 
     assert result.returncode != 0
     assert "shader ABI resource 'draw_data' has scope 'material', expected 'draw'" in result.stderr
+
+
+def test_termin_shaderc_rejects_shader_abi_resources_without_explicit_scope(tmp_path: Path) -> None:
+    cases = [
+        (
+            "per_frame",
+            "vertex",
+            "ConstantBuffer<PerFrame> per_frame;\n",
+            "        {\n"
+            "            'name': 'per_frame',\n"
+            "            'binding': {'kind': 'constantBuffer', 'index': 0},\n"
+            "            'type': {\n"
+            "                'kind': 'constantBuffer',\n"
+            "                'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 64}},\n"
+            "            },\n"
+            "        },\n",
+            "frame",
+        ),
+        (
+            "shadow_maps",
+            "fragment",
+            "Sampler2DShadow shadow_maps[16];\n",
+            "        {\n"
+            "            'name': 'shadow_maps',\n"
+            "            'binding': {'kind': 'descriptorTableSlot', 'index': 0},\n"
+            "            'type': {\n"
+            "                'kind': 'array',\n"
+            "                'elementType': {'kind': 'resource', 'baseShape': 'texture2D', 'combined': True},\n"
+            "            },\n"
+            "        },\n",
+            "pass",
+        ),
+    ]
+
+    for resource_name, stage, declaration, parameter, expected_scope in cases:
+        case_dir = tmp_path / resource_name
+        case_dir.mkdir()
+        shader = case_dir / "test.slang"
+        shader.write_text(
+            declaration
+            + f"[shader(\"{stage}\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {{\n"
+            + "    return float4(1.0);\n"
+            + "}\n",
+            encoding="utf-8",
+        )
+        output = case_dir / "out.spv"
+        fake_slangc = case_dir / "fake_slangc.py"
+        fake_slangc.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, pathlib, sys\n"
+            "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+            "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+            "out.parent.mkdir(parents=True, exist_ok=True)\n"
+            "out.write_bytes(b'FAKE-spirv')\n"
+            "reflection.write_text(json.dumps({\n"
+            "    'parameters': [\n"
+            + parameter
+            + "    ]\n"
+            "}), encoding='utf-8')\n",
+            encoding="utf-8",
+        )
+        fake_slangc.chmod(0o755)
+
+        result = _run_shaderc(
+            [
+                "compile",
+                "--language",
+                "slang",
+                "--target",
+                "vulkan",
+                "--stage",
+                stage,
+                "--entry",
+                "main",
+                "--input",
+                str(shader),
+                "--output",
+                str(output),
+                "--slangc",
+                str(fake_slangc),
+            ]
+        )
+
+        assert result.returncode != 0
+        assert (
+            f"shader ABI resource '{resource_name}' has no explicit scope, "
+            f"expected '{expected_scope}'"
+        ) in result.stderr
 
 
 def test_termin_shaderc_drops_dead_slang_reflection_resources(tmp_path: Path) -> None:
@@ -585,10 +664,10 @@ def test_termin_shaderc_marks_missing_scope_as_unscoped(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(
         "struct MaterialParams { float4 color; };\n"
-        "ConstantBuffer<MaterialParams> material;\n"
+        "ConstantBuffer<MaterialParams> custom_params;\n"
         "Sampler2D albedo_texture;\n"
         "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
-        "    return material.color * albedo_texture.Sample(uv);\n"
+        "    return custom_params.color * albedo_texture.Sample(uv);\n"
         "}\n",
         encoding="utf-8",
     )
@@ -604,7 +683,7 @@ def test_termin_shaderc_marks_missing_scope_as_unscoped(tmp_path: Path) -> None:
         "reflection.write_text(json.dumps({\n"
         "    'parameters': [\n"
         "        {\n"
-        "            'name': 'material',\n"
+        "            'name': 'custom_params',\n"
         "            'binding': {'kind': 'descriptorTableSlot', 'index': 0},\n"
         "            'type': {'kind': 'constantBuffer', 'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 16}}},\n"
         "        },\n"
@@ -642,9 +721,8 @@ def test_termin_shaderc_marks_missing_scope_as_unscoped(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert "resource 'albedo_texture' has no scope" in result.stderr
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
-    material_binding = _expected_scoped_binding("material", "constant_buffer", "material")
     assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
-        ("material", "material", material_binding),
+        ("custom_params", "unscoped", 0),
         ("albedo_texture", "unscoped", 1),
     ]
 
@@ -653,10 +731,10 @@ def test_termin_shaderc_default_scope_material_resolves_unscoped_resources(tmp_p
     shader = tmp_path / "test.slang"
     shader.write_text(
         "struct MaterialParams { float4 color; };\n"
-        "ConstantBuffer<MaterialParams> material;\n"
+        "ConstantBuffer<MaterialParams> custom_params;\n"
         "Sampler2D albedo_texture;\n"
         "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {\n"
-        "    return material.color * albedo_texture.Sample(uv);\n"
+        "    return custom_params.color * albedo_texture.Sample(uv);\n"
         "}\n",
         encoding="utf-8",
     )
@@ -672,7 +750,7 @@ def test_termin_shaderc_default_scope_material_resolves_unscoped_resources(tmp_p
         "reflection.write_text(json.dumps({\n"
         "    'parameters': [\n"
         "        {\n"
-        "            'name': 'material',\n"
+        "            'name': 'custom_params',\n"
         "            'binding': {'kind': 'descriptorTableSlot', 'index': 0},\n"
         "            'type': {'kind': 'constantBuffer', 'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 16}}},\n"
         "        },\n"
@@ -714,12 +792,12 @@ def test_termin_shaderc_default_scope_material_resolves_unscoped_resources(tmp_p
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
     expected_bindings = _expected_scoped_bindings(
         [
-            ("material", "constant_buffer", "material"),
+            ("custom_params", "constant_buffer", "material"),
             ("albedo_texture", "texture", "material"),
         ]
     )
     assert [(r["name"], r["scope"], r["binding"]) for r in layout["resources"]] == [
-        ("material", "material", expected_bindings["material"]),
+        ("custom_params", "material", expected_bindings["custom_params"]),
         ("albedo_texture", "material", expected_bindings["albedo_texture"]),
     ]
 
