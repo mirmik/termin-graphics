@@ -138,6 +138,7 @@ public:
         tc_widget_set_max_size(c_widget(), size);
     }
     tc_ui_size max_size() const { return tc_widget_max_size(c_widget()); }
+    tc_ui_style computed_style(tc_ui_document* document, uint32_t extra_state_flags = 0) const;
 
     virtual tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints);
     virtual void layout(tc_ui_document* document, tc_ui_rect rect);
@@ -345,14 +346,10 @@ public:
     tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
 
 private:
-    tc_ui_rect content_rect() const;
+    tc_ui_rect content_rect(tc_ui_document* document) const;
 
     std::string title_;
-    EdgeInsets padding_ {10.0f, 8.0f, 10.0f, 10.0f};
     float header_height_ = 30.0f;
-    Color background_ {0.11f, 0.12f, 0.14f, 1.0f};
-    Color border_ {0.32f, 0.34f, 0.38f, 1.0f};
-    float border_thickness_ = 1.0f;
 };
 
 class Splitter : public NativeWidget {
@@ -458,17 +455,12 @@ public:
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
 
 private:
-    Color fill_ {0.16f, 0.17f, 0.19f, 1.0f};
-    Color border_ {0.32f, 0.34f, 0.38f, 1.0f};
-    float border_thickness_ = 1.0f;
 };
 
 class Button : public NativeWidget {
 public:
-    explicit Button(
-        std::string text = {},
-        Color fill = Color {0.20f, 0.38f, 0.64f, 1.0f}
-    );
+    explicit Button(std::string text = {});
+    Button(std::string text, Color fill);
     explicit Button(Color fill);
 
     Button& set_accent(Color color);
@@ -480,19 +472,15 @@ public:
 
 private:
     std::string text_;
-    Color fill_;
-    Color accent_ {0.80f, 0.88f, 1.0f, 1.0f};
     bool pressed_ = false;
     Signal<Button&> clicked_;
 };
 
 class Label : public NativeWidget {
 public:
-    explicit Label(
-        std::string text,
-        float font_size = 15.0f,
-        Color color = Color {0.90f, 0.92f, 0.96f, 1.0f}
-    );
+    explicit Label(std::string text);
+    Label(std::string text, float font_size);
+    Label(std::string text, float font_size, Color color);
 
     Label& set_text(std::string text);
     Label& set_color(Color color);
@@ -504,8 +492,6 @@ private:
     void update_unmeasured_size();
 
     std::string text_;
-    float font_size_ = 15.0f;
-    Color color_;
 };
 
 class Checkbox : public NativeWidget {
@@ -547,8 +533,6 @@ public:
 
 private:
     Orientation orientation_ = Orientation::Horizontal;
-    Color color_ {0.36f, 0.38f, 0.42f, 1.0f};
-    float thickness_ = 1.0f;
 };
 
 class TextInput : public NativeWidget {
@@ -573,8 +557,13 @@ public:
     tc_ui_event_result text_event(tc_ui_document* document, const tc_ui_text_event* event) override;
 
 private:
-    tc_ui_rect text_clip_rect() const;
-    bool measure_prefix(tc_ui_document* document, size_t byte_offset, float& width) const;
+    tc_ui_rect text_clip_rect(tc_ui_document* document) const;
+    bool measure_prefix(
+        tc_ui_document* document,
+        size_t byte_offset,
+        float font_size,
+        float& width
+    ) const;
     void ensure_caret_visible(tc_ui_document* document);
     size_t caret_from_content_x(tc_ui_document* document, float content_x) const;
     void update_unmeasured_size();
@@ -583,8 +572,6 @@ private:
     std::string text_;
     size_t caret_ = 0;
     float scroll_x_ = 0.0f;
-    float font_size_ = 14.0f;
-    Color text_color_ {0.94f, 0.96f, 0.98f, 1.0f};
     Signal<TextInput&, const std::string&> changed_;
     Signal<TextInput&, const std::string&> submitted_;
 };

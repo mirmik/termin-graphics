@@ -750,6 +750,102 @@ static void test_tooltip_rect_is_host_driven_and_clamped() {
     assert(rect.width == 14.0f && rect.height == 4.0f);
 }
 
+static void test_theme_style_resolution_inheritance_and_invalidation() {
+    tc_ui_document* document = tc_ui_document_create();
+    RouteWidget parent_a;
+    RouteWidget parent_b;
+    RouteWidget child;
+    tc_ui_style style {};
+    tc_ui_style_override inherited {};
+    tc_ui_style_override local {};
+    tc_ui_theme theme = *tc_ui_document_theme(document);
+    const uint64_t initial_revision = tc_ui_document_theme_revision(document);
+    const tc_widget_handle parent_a_handle = adopt_route_widget(document, parent_a, 1);
+    const tc_widget_handle parent_b_handle = adopt_route_widget(document, parent_b, 2);
+    const tc_widget_handle child_handle = adopt_route_widget(document, child, 3);
+    (void)parent_b_handle;
+
+    tc_widget_set_style_role(&child.widget, TC_UI_STYLE_BUTTON);
+    assert(tc_widget_append_child(&parent_a.widget, &child.widget));
+    assert(tc_ui_document_add_root(document, parent_a_handle));
+    assert(tc_ui_document_resolve_style(document, &child.widget, 0, &style));
+    assert(style.background.r == 0.20f);
+    assert(style.font_size == 14.0f);
+
+    inherited.fields = TC_UI_STYLE_FONT_SIZE | TC_UI_STYLE_FOREGROUND;
+    inherited.flags = TC_UI_STYLE_OVERRIDE_INHERIT;
+    inherited.value.font_size = 19.0f;
+    inherited.value.foreground = tc_ui_color {1.0f, 0.5f, 0.25f, 1.0f};
+    assert(tc_widget_set_style_override(&parent_a.widget, &inherited));
+    assert(tc_ui_document_resolve_style(document, &child.widget, 0, &style));
+    assert(style.font_size == 19.0f);
+    assert(style.foreground.g == 0.5f);
+
+    local.fields = TC_UI_STYLE_FONT_SIZE;
+    local.value.font_size = 23.0f;
+    assert(tc_widget_set_style_override(&child.widget, &local));
+    assert(tc_ui_document_resolve_style(document, &child.widget, 0, &style));
+    assert(style.font_size == 23.0f);
+    assert(style.foreground.g == 0.5f);
+
+    tc_widget_clear_dirty(&child.widget, TC_WIDGET_DIRTY_MASK);
+    assert(tc_widget_append_child(&parent_b.widget, &child.widget));
+    assert(tc_widget_has_dirty_flags(
+        &child.widget,
+        TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE
+    ));
+    assert(tc_ui_document_resolve_style(document, &child.widget, 0, &style));
+    assert(style.font_size == 23.0f);
+    assert(style.foreground.r == theme.roles[TC_UI_STYLE_BUTTON].base.foreground.r);
+
+    assert(tc_ui_document_resolve_style(
+        document,
+        &child.widget,
+        TC_UI_STYLE_STATE_HOVERED,
+        &style
+    ));
+    assert(style.background.r == theme.roles[TC_UI_STYLE_BUTTON].hovered.value.background.r);
+    assert(tc_ui_document_resolve_style(
+        document,
+        &child.widget,
+        TC_UI_STYLE_STATE_PRESSED | TC_UI_STYLE_STATE_FOCUSED,
+        &style
+    ));
+    assert(style.background.r == theme.roles[TC_UI_STYLE_BUTTON].pressed.value.background.r);
+    assert(style.border.r == theme.roles[TC_UI_STYLE_BUTTON].focused.value.border.r);
+
+    tc_widget_clear_dirty(&child.widget, TC_WIDGET_DIRTY_MASK);
+    tc_widget_set_enabled(&parent_b.widget, false);
+    assert(tc_widget_has_dirty_flags(
+        &child.widget,
+        TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE
+    ));
+    assert((tc_ui_document_widget_style_state(document, &child.widget) &
+        TC_UI_STYLE_STATE_DISABLED) != 0);
+    assert(tc_ui_document_resolve_style(document, &child.widget, 0, &style));
+    assert(style.background.r == theme.roles[TC_UI_STYLE_BUTTON].disabled.value.background.r);
+
+    theme.roles[TC_UI_STYLE_BUTTON].base.font_size = 17.0f;
+    tc_widget_clear_style_override(&child.widget);
+    tc_widget_clear_dirty(&child.widget, TC_WIDGET_DIRTY_MASK);
+    assert(tc_ui_document_set_theme(document, &theme));
+    assert(tc_ui_document_theme_revision(document) == initial_revision + 1);
+    assert(tc_widget_has_dirty_flags(
+        &child.widget,
+        TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE
+    ));
+    assert(tc_ui_document_resolve_style(document, &child.widget, 0, &style));
+    assert(style.font_size == 17.0f);
+
+    tc_ui_style_override invalid {};
+    invalid.fields = TC_UI_STYLE_FONT_SIZE;
+    invalid.value.font_size = -1.0f;
+    assert(!tc_widget_set_style_override(&child.widget, &invalid));
+    assert(tc_ui_document_resolve_style(document, &child.widget, TC_UI_STYLE_STATE_CHECKED, &style));
+    assert(tc_ui_document_is_alive(document, child_handle));
+    tc_ui_document_destroy(document);
+}
+
 int main() {
     test_init_defaults_and_common_state();
     test_borrowed_widget_can_be_adopted_and_released();
@@ -767,5 +863,6 @@ int main() {
     test_overlay_outside_escape_and_programmatic_dismissal();
     test_modal_overlay_blocks_lower_input_and_scopes_focus();
     test_tooltip_rect_is_host_driven_and_clamped();
+    test_theme_style_resolution_inheritance_and_invalidation();
     return EXIT_SUCCESS;
 }

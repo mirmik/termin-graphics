@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -66,6 +67,13 @@ public:
     bool has_dirty_flags(uint32_t dirty_flags) const {
         return tc_widget_has_dirty_flags(&_widget, dirty_flags);
     }
+    void set_style_role(tc_ui_style_role role) { tc_widget_set_style_role(&_widget, role); }
+    tc_ui_style_role style_role() const { return tc_widget_style_role(&_widget); }
+    bool set_style_override(const tc_ui_style_override& style_override) {
+        return tc_widget_set_style_override(&_widget, &style_override);
+    }
+    void clear_style_override() { tc_widget_clear_style_override(&_widget); }
+    tc_ui_style_override style_override() const { return tc_widget_style_override(&_widget); }
 
 protected:
     explicit Widget(const tc_widget_vtable* vtable, const char* debug_name = nullptr) {
@@ -215,6 +223,23 @@ public:
             font_size,
             &out_metrics
         );
+    }
+
+    const tc_ui_theme& theme() const { return *tc_ui_document_theme(_document); }
+    bool set_theme(const tc_ui_theme& theme) {
+        return tc_ui_document_set_theme(_document, &theme);
+    }
+    uint64_t theme_revision() const { return tc_ui_document_theme_revision(_document); }
+    tc_ui_style resolve_style(const Widget& widget, uint32_t extra_state_flags = 0) const {
+        tc_ui_style style {};
+        if (!tc_ui_document_resolve_style(
+                _document,
+                widget.c_widget(),
+                extra_state_flags,
+                &style)) {
+            throw std::runtime_error("failed to resolve native UI widget style");
+        }
+        return style;
     }
 
 private:

@@ -10,6 +10,16 @@ The current module is intentionally small:
 - `tc_widget` is an intrusive C ABI header embedded into concrete widgets;
 - common bounds, size constraints, visibility/enabled/input flags and the
   canonical parent/ordered-children tree live directly in `tc_widget`;
+- each `tc_widget` stores a semantic style role and one masked override by
+  value. An override may opt into canonical-tree inheritance; there is no
+  parallel style record or language-specific style cache;
+- `tc_ui_document` owns its `tc_ui_theme` by value and exposes a monotonic
+  revision. Replacing the theme invalidates layout, paint and state for every
+  live widget;
+- computed styles resolve role base, interaction layers, inherited ancestor
+  overrides and the local override in that order. Hover, press, focus and
+  effective disabled state come from the document; checked state is supplied
+  by widgets such as `Checkbox`;
 - canonical tree links use stable `tc_widget*` pointers inside a document while
   handles remain the external reference format;
 - widget implementations keep their own handle references;
@@ -70,5 +80,6 @@ The current module is intentionally small:
 - `examples/ui_rect_window.py` mirrors the C++ rectangle-window example.
 
 This module does not replace the existing Python `termin-gui` package yet. It
-is a place to test the ownership, handle and polyglot widget contracts before
-adding Python bindings or porting real widgets.
+is the native implementation under active parity work; ownership, handle,
+polyglot widget, input, overlay and theme/style contracts are already exercised
+through C, C++ and Python tests.

@@ -43,6 +43,9 @@ struct tc_ui_document {
     bool has_pointer_event;
     size_t live_count;
 
+    tc_ui_theme theme;
+    uint64_t theme_revision;
+
     tc_ui_text_measure_fn measure_text;
     void* text_measurer_user_data;
     bool missing_text_measurer_logged;
@@ -98,6 +101,243 @@ static bool reserve_array(void** data, size_t item_size, size_t* capacity, size_
 
 static bool valid_text_metric(float value) {
     return isfinite(value) && value >= 0.0f;
+}
+
+static tc_ui_color style_color(float r, float g, float b, float a) {
+    return (tc_ui_color){r, g, b, a};
+}
+
+static bool valid_style_color(tc_ui_color color) {
+    return isfinite(color.r) && isfinite(color.g) && isfinite(color.b) && isfinite(color.a) &&
+        color.r >= 0.0f && color.r <= 1.0f &&
+        color.g >= 0.0f && color.g <= 1.0f &&
+        color.b >= 0.0f && color.b <= 1.0f &&
+        color.a >= 0.0f && color.a <= 1.0f;
+}
+
+static bool valid_style(const tc_ui_style* style) {
+    return style &&
+        valid_style_color(style->background) &&
+        valid_style_color(style->foreground) &&
+        valid_style_color(style->border) &&
+        valid_style_color(style->accent) &&
+        isfinite(style->padding_left) && style->padding_left >= 0.0f &&
+        isfinite(style->padding_top) && style->padding_top >= 0.0f &&
+        isfinite(style->padding_right) && style->padding_right >= 0.0f &&
+        isfinite(style->padding_bottom) && style->padding_bottom >= 0.0f &&
+        isfinite(style->spacing) && style->spacing >= 0.0f &&
+        isfinite(style->border_width) && style->border_width >= 0.0f &&
+        isfinite(style->font_size) && style->font_size > 0.0f &&
+        isfinite(style->min_width) && style->min_width >= 0.0f &&
+        isfinite(style->min_height) && style->min_height >= 0.0f &&
+        style->font_role >= TC_UI_FONT_BODY && style->font_role <= TC_UI_FONT_MONOSPACE;
+}
+
+static bool valid_style_override(const tc_ui_style_override* style_override) {
+    tc_ui_style_field_mask fields;
+    if (!style_override || (style_override->fields & ~TC_UI_STYLE_ALL_FIELDS) != 0 ||
+        (style_override->flags & ~TC_UI_STYLE_OVERRIDE_INHERIT) != 0) {
+        return false;
+    }
+    fields = style_override->fields;
+    return
+        ((fields & TC_UI_STYLE_BACKGROUND) == 0 || valid_style_color(style_override->value.background)) &&
+        ((fields & TC_UI_STYLE_FOREGROUND) == 0 || valid_style_color(style_override->value.foreground)) &&
+        ((fields & TC_UI_STYLE_BORDER) == 0 || valid_style_color(style_override->value.border)) &&
+        ((fields & TC_UI_STYLE_ACCENT) == 0 || valid_style_color(style_override->value.accent)) &&
+        ((fields & TC_UI_STYLE_PADDING_LEFT) == 0 ||
+            (isfinite(style_override->value.padding_left) && style_override->value.padding_left >= 0.0f)) &&
+        ((fields & TC_UI_STYLE_PADDING_TOP) == 0 ||
+            (isfinite(style_override->value.padding_top) && style_override->value.padding_top >= 0.0f)) &&
+        ((fields & TC_UI_STYLE_PADDING_RIGHT) == 0 ||
+            (isfinite(style_override->value.padding_right) && style_override->value.padding_right >= 0.0f)) &&
+        ((fields & TC_UI_STYLE_PADDING_BOTTOM) == 0 ||
+            (isfinite(style_override->value.padding_bottom) && style_override->value.padding_bottom >= 0.0f)) &&
+        ((fields & TC_UI_STYLE_SPACING) == 0 ||
+            (isfinite(style_override->value.spacing) && style_override->value.spacing >= 0.0f)) &&
+        ((fields & TC_UI_STYLE_BORDER_WIDTH) == 0 ||
+            (isfinite(style_override->value.border_width) && style_override->value.border_width >= 0.0f)) &&
+        ((fields & TC_UI_STYLE_FONT_SIZE) == 0 ||
+            (isfinite(style_override->value.font_size) && style_override->value.font_size > 0.0f)) &&
+        ((fields & TC_UI_STYLE_MIN_WIDTH) == 0 ||
+            (isfinite(style_override->value.min_width) && style_override->value.min_width >= 0.0f)) &&
+        ((fields & TC_UI_STYLE_MIN_HEIGHT) == 0 ||
+            (isfinite(style_override->value.min_height) && style_override->value.min_height >= 0.0f)) &&
+        ((fields & TC_UI_STYLE_FONT_ROLE) == 0 ||
+            (style_override->value.font_role >= TC_UI_FONT_BODY &&
+                style_override->value.font_role <= TC_UI_FONT_MONOSPACE));
+}
+
+static bool valid_theme(const tc_ui_theme* theme) {
+    size_t index;
+    if (!theme) {
+        return false;
+    }
+    for (index = 0; index < TC_UI_STYLE_ROLE_COUNT; ++index) {
+        const tc_ui_role_style* role = &theme->roles[index];
+        if (!valid_style(&role->base) ||
+            !valid_style_override(&role->hovered) ||
+            !valid_style_override(&role->pressed) ||
+            !valid_style_override(&role->focused) ||
+            !valid_style_override(&role->disabled) ||
+            !valid_style_override(&role->checked)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void apply_style_override(tc_ui_style* style, const tc_ui_style_override* style_override) {
+    const tc_ui_style_field_mask fields = style_override->fields;
+    if ((fields & TC_UI_STYLE_BACKGROUND) != 0) style->background = style_override->value.background;
+    if ((fields & TC_UI_STYLE_FOREGROUND) != 0) style->foreground = style_override->value.foreground;
+    if ((fields & TC_UI_STYLE_BORDER) != 0) style->border = style_override->value.border;
+    if ((fields & TC_UI_STYLE_ACCENT) != 0) style->accent = style_override->value.accent;
+    if ((fields & TC_UI_STYLE_PADDING_LEFT) != 0) style->padding_left = style_override->value.padding_left;
+    if ((fields & TC_UI_STYLE_PADDING_TOP) != 0) style->padding_top = style_override->value.padding_top;
+    if ((fields & TC_UI_STYLE_PADDING_RIGHT) != 0) style->padding_right = style_override->value.padding_right;
+    if ((fields & TC_UI_STYLE_PADDING_BOTTOM) != 0) style->padding_bottom = style_override->value.padding_bottom;
+    if ((fields & TC_UI_STYLE_SPACING) != 0) style->spacing = style_override->value.spacing;
+    if ((fields & TC_UI_STYLE_BORDER_WIDTH) != 0) style->border_width = style_override->value.border_width;
+    if ((fields & TC_UI_STYLE_FONT_SIZE) != 0) style->font_size = style_override->value.font_size;
+    if ((fields & TC_UI_STYLE_MIN_WIDTH) != 0) style->min_width = style_override->value.min_width;
+    if ((fields & TC_UI_STYLE_MIN_HEIGHT) != 0) style->min_height = style_override->value.min_height;
+    if ((fields & TC_UI_STYLE_FONT_ROLE) != 0) style->font_role = style_override->value.font_role;
+}
+
+static tc_ui_style default_base_style(void) {
+    tc_ui_style style;
+    memset(&style, 0, sizeof(style));
+    style.background = style_color(0.0f, 0.0f, 0.0f, 0.0f);
+    style.foreground = style_color(0.90f, 0.92f, 0.96f, 1.0f);
+    style.border = style_color(0.32f, 0.34f, 0.38f, 1.0f);
+    style.accent = style_color(0.25f, 0.58f, 0.88f, 1.0f);
+    style.border_width = 1.0f;
+    style.font_size = 14.0f;
+    style.font_role = TC_UI_FONT_BODY;
+    return style;
+}
+
+static tc_ui_style_override color_override(
+    tc_ui_style_field_mask field,
+    tc_ui_color color
+) {
+    tc_ui_style_override result;
+    memset(&result, 0, sizeof(result));
+    result.value = default_base_style();
+    result.fields = field;
+    if (field == TC_UI_STYLE_BACKGROUND) result.value.background = color;
+    if (field == TC_UI_STYLE_FOREGROUND) result.value.foreground = color;
+    if (field == TC_UI_STYLE_BORDER) result.value.border = color;
+    if (field == TC_UI_STYLE_ACCENT) result.value.accent = color;
+    return result;
+}
+
+void tc_ui_theme_init_default(tc_ui_theme* theme) {
+    size_t index;
+    tc_ui_style base;
+    if (!theme) {
+        tc_log_error("[termin-gui-native] cannot initialize null UI theme");
+        return;
+    }
+    memset(theme, 0, sizeof(*theme));
+    base = default_base_style();
+    for (index = 0; index < TC_UI_STYLE_ROLE_COUNT; ++index) {
+        theme->roles[index].base = base;
+        theme->roles[index].disabled = color_override(
+            TC_UI_STYLE_FOREGROUND,
+            style_color(0.52f, 0.54f, 0.58f, 1.0f)
+        );
+    }
+
+    theme->roles[TC_UI_STYLE_PANEL].base.background = style_color(0.16f, 0.17f, 0.19f, 1.0f);
+    theme->roles[TC_UI_STYLE_PANEL].base.min_width = 96.0f;
+    theme->roles[TC_UI_STYLE_PANEL].base.min_height = 64.0f;
+
+    theme->roles[TC_UI_STYLE_LABEL].base.font_size = 15.0f;
+
+    theme->roles[TC_UI_STYLE_BUTTON].base.background = style_color(0.20f, 0.38f, 0.64f, 1.0f);
+    theme->roles[TC_UI_STYLE_BUTTON].base.foreground = style_color(0.94f, 0.97f, 1.0f, 1.0f);
+    theme->roles[TC_UI_STYLE_BUTTON].base.border = style_color(0.80f, 0.88f, 1.0f, 1.0f);
+    theme->roles[TC_UI_STYLE_BUTTON].base.padding_left = 12.0f;
+    theme->roles[TC_UI_STYLE_BUTTON].base.padding_top = 8.0f;
+    theme->roles[TC_UI_STYLE_BUTTON].base.padding_right = 12.0f;
+    theme->roles[TC_UI_STYLE_BUTTON].base.padding_bottom = 8.0f;
+    theme->roles[TC_UI_STYLE_BUTTON].base.border_width = 2.0f;
+    theme->roles[TC_UI_STYLE_BUTTON].base.min_width = 96.0f;
+    theme->roles[TC_UI_STYLE_BUTTON].base.min_height = 36.0f;
+    theme->roles[TC_UI_STYLE_BUTTON].hovered = color_override(
+        TC_UI_STYLE_BACKGROUND,
+        style_color(0.24f, 0.45f, 0.72f, 1.0f)
+    );
+    theme->roles[TC_UI_STYLE_BUTTON].pressed = color_override(
+        TC_UI_STYLE_BACKGROUND,
+        style_color(0.14f, 0.29f, 0.50f, 1.0f)
+    );
+    theme->roles[TC_UI_STYLE_BUTTON].focused = color_override(
+        TC_UI_STYLE_BORDER,
+        style_color(0.48f, 0.72f, 1.0f, 1.0f)
+    );
+    theme->roles[TC_UI_STYLE_BUTTON].disabled = color_override(
+        TC_UI_STYLE_BACKGROUND,
+        style_color(0.20f, 0.21f, 0.23f, 1.0f)
+    );
+    theme->roles[TC_UI_STYLE_BUTTON].disabled.fields |= TC_UI_STYLE_FOREGROUND;
+    theme->roles[TC_UI_STYLE_BUTTON].disabled.value.foreground = style_color(0.55f, 0.57f, 0.61f, 1.0f);
+
+    theme->roles[TC_UI_STYLE_TEXT_INPUT].base.background = style_color(0.08f, 0.09f, 0.11f, 1.0f);
+    theme->roles[TC_UI_STYLE_TEXT_INPUT].base.foreground = style_color(0.94f, 0.96f, 0.98f, 1.0f);
+    theme->roles[TC_UI_STYLE_TEXT_INPUT].base.padding_left = 8.0f;
+    theme->roles[TC_UI_STYLE_TEXT_INPUT].base.padding_top = 2.0f;
+    theme->roles[TC_UI_STYLE_TEXT_INPUT].base.padding_right = 8.0f;
+    theme->roles[TC_UI_STYLE_TEXT_INPUT].base.padding_bottom = 2.0f;
+    theme->roles[TC_UI_STYLE_TEXT_INPUT].base.min_width = 160.0f;
+    theme->roles[TC_UI_STYLE_TEXT_INPUT].base.min_height = 34.0f;
+    theme->roles[TC_UI_STYLE_TEXT_INPUT].focused = color_override(
+        TC_UI_STYLE_BORDER,
+        style_color(0.38f, 0.62f, 0.92f, 1.0f)
+    );
+    theme->roles[TC_UI_STYLE_TEXT_INPUT].focused.fields |= TC_UI_STYLE_BORDER_WIDTH;
+    theme->roles[TC_UI_STYLE_TEXT_INPUT].focused.value.border_width = 2.0f;
+
+    theme->roles[TC_UI_STYLE_GROUP_BOX].base.background = style_color(0.11f, 0.12f, 0.14f, 1.0f);
+    theme->roles[TC_UI_STYLE_GROUP_BOX].base.padding_left = 10.0f;
+    theme->roles[TC_UI_STYLE_GROUP_BOX].base.padding_top = 8.0f;
+    theme->roles[TC_UI_STYLE_GROUP_BOX].base.padding_right = 10.0f;
+    theme->roles[TC_UI_STYLE_GROUP_BOX].base.padding_bottom = 10.0f;
+    theme->roles[TC_UI_STYLE_GROUP_BOX].base.font_size = 13.0f;
+
+    theme->roles[TC_UI_STYLE_TAB].base.background = style_color(0.13f, 0.14f, 0.16f, 1.0f);
+    theme->roles[TC_UI_STYLE_TAB].base.foreground = style_color(0.88f, 0.91f, 0.96f, 1.0f);
+    theme->roles[TC_UI_STYLE_TAB].base.border = style_color(0.34f, 0.36f, 0.40f, 1.0f);
+    theme->roles[TC_UI_STYLE_TAB].base.padding_left = 8.0f;
+    theme->roles[TC_UI_STYLE_TAB].base.font_size = 13.0f;
+    theme->roles[TC_UI_STYLE_TAB].checked = color_override(
+        TC_UI_STYLE_BACKGROUND,
+        style_color(0.20f, 0.26f, 0.34f, 1.0f)
+    );
+
+    theme->roles[TC_UI_STYLE_CHECKBOX].base.background = style_color(0.10f, 0.11f, 0.13f, 1.0f);
+    theme->roles[TC_UI_STYLE_CHECKBOX].base.border = style_color(0.74f, 0.78f, 0.84f, 1.0f);
+    theme->roles[TC_UI_STYLE_CHECKBOX].base.accent = style_color(0.28f, 0.82f, 0.54f, 1.0f);
+    theme->roles[TC_UI_STYLE_CHECKBOX].base.min_width = 32.0f;
+    theme->roles[TC_UI_STYLE_CHECKBOX].base.min_height = 32.0f;
+    theme->roles[TC_UI_STYLE_CHECKBOX].checked = color_override(
+        TC_UI_STYLE_BACKGROUND,
+        style_color(0.12f, 0.18f, 0.15f, 1.0f)
+    );
+
+    theme->roles[TC_UI_STYLE_PROGRESS].base.background = style_color(0.09f, 0.10f, 0.12f, 1.0f);
+    theme->roles[TC_UI_STYLE_PROGRESS].base.min_width = 120.0f;
+    theme->roles[TC_UI_STYLE_PROGRESS].base.min_height = 20.0f;
+
+    theme->roles[TC_UI_STYLE_SLIDER].base.border = style_color(0.32f, 0.34f, 0.38f, 1.0f);
+    theme->roles[TC_UI_STYLE_SLIDER].base.accent = style_color(0.88f, 0.66f, 0.24f, 1.0f);
+    theme->roles[TC_UI_STYLE_SLIDER].base.foreground = style_color(0.96f, 0.88f, 0.64f, 1.0f);
+    theme->roles[TC_UI_STYLE_SLIDER].base.min_width = 140.0f;
+    theme->roles[TC_UI_STYLE_SLIDER].base.min_height = 28.0f;
+
+    theme->roles[TC_UI_STYLE_SEPARATOR].base.background = style_color(0.36f, 0.38f, 0.42f, 1.0f);
 }
 
 static tc_widget_slot* resolve_slot(tc_ui_document* document, tc_widget_handle handle) {
@@ -323,6 +563,17 @@ static bool widget_effectively_interactive(const tc_widget* widget) {
     const tc_widget* current = widget;
     while (current) {
         if (!tc_widget_is_visible(current) || !tc_widget_is_enabled(current)) {
+            return false;
+        }
+        current = current->parent;
+    }
+    return true;
+}
+
+static bool widget_effectively_enabled(const tc_widget* widget) {
+    const tc_widget* current = widget;
+    while (current) {
+        if (!tc_widget_is_enabled(current)) {
             return false;
         }
         current = current->parent;
@@ -696,6 +947,21 @@ void tc_widget_init(
     widget->native_language = native_language;
     widget->body = body;
     widget->flags = TC_WIDGET_VISIBLE | TC_WIDGET_ENABLED;
+    widget->style_role = TC_UI_STYLE_GENERIC;
+}
+
+static void mark_style_subtree_dirty(tc_widget* widget) {
+    size_t index;
+    if (!widget) {
+        return;
+    }
+    tc_widget_mark_dirty(
+        widget,
+        TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE
+    );
+    for (index = 0; index < widget->child_count; ++index) {
+        mark_style_subtree_dirty(widget->children[index]);
+    }
 }
 
 static void set_widget_flag(tc_widget* widget, uint32_t flag, bool enabled) {
@@ -806,7 +1072,7 @@ void tc_widget_set_enabled(tc_widget* widget, bool enabled) {
             ? tc_ui_document_resolve_widget(document, handle)
             : widget;
         if (live_widget) {
-            tc_widget_mark_dirty(live_widget, TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE);
+            mark_style_subtree_dirty(live_widget);
         }
     }
 }
@@ -982,6 +1248,7 @@ bool tc_widget_insert_child(tc_widget* parent, size_t index, tc_widget* child) {
         tc_widget_mark_dirty(old_parent, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
     }
     tc_widget_mark_dirty(parent, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+    mark_style_subtree_dirty(child);
     return true;
 }
 
@@ -1002,6 +1269,7 @@ bool tc_widget_remove_child(tc_widget* parent, tc_widget* child) {
     }
     remove_child_at(parent, index);
     tc_widget_mark_dirty(parent, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+    mark_style_subtree_dirty(child);
     return true;
 }
 
@@ -1015,6 +1283,7 @@ bool tc_widget_detach(tc_widget* widget) {
         return false;
     }
     tc_widget_mark_dirty(parent, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+    mark_style_subtree_dirty(widget);
     return true;
 }
 
@@ -1055,6 +1324,80 @@ bool tc_widget_has_dirty_flags(const tc_widget* widget, uint32_t dirty_flags) {
     return requested != 0 && (tc_widget_dirty_flags(widget) & requested) == requested;
 }
 
+void tc_widget_set_style_role(tc_widget* widget, tc_ui_style_role role) {
+    if (!widget) {
+        tc_log_error("[termin-gui-native] cannot set style role on null widget");
+        return;
+    }
+    if (role < TC_UI_STYLE_GENERIC || role >= TC_UI_STYLE_ROLE_COUNT) {
+        tc_log_error("[termin-gui-native] cannot set invalid widget style role");
+        return;
+    }
+    if (widget->style_role == role) {
+        return;
+    }
+    widget->style_role = role;
+    tc_widget_mark_dirty(
+        widget,
+        TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE
+    );
+}
+
+tc_ui_style_role tc_widget_style_role(const tc_widget* widget) {
+    return widget ? widget->style_role : TC_UI_STYLE_GENERIC;
+}
+
+bool tc_widget_set_style_override(
+    tc_widget* widget,
+    const tc_ui_style_override* style_override
+) {
+    bool inherited;
+    if (!widget || !style_override) {
+        tc_log_error("[termin-gui-native] cannot set null widget style override");
+        return false;
+    }
+    if (!valid_style_override(style_override)) {
+        tc_log_error("[termin-gui-native] rejected invalid widget style override");
+        return false;
+    }
+    inherited = ((widget->style_override.flags | style_override->flags) &
+        TC_UI_STYLE_OVERRIDE_INHERIT) != 0;
+    widget->style_override = *style_override;
+    if (inherited) {
+        mark_style_subtree_dirty(widget);
+    } else {
+        tc_widget_mark_dirty(
+            widget,
+            TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE
+        );
+    }
+    return true;
+}
+
+void tc_widget_clear_style_override(tc_widget* widget) {
+    bool inherited;
+    if (!widget) {
+        tc_log_error("[termin-gui-native] cannot clear style override on null widget");
+        return;
+    }
+    inherited = (widget->style_override.flags & TC_UI_STYLE_OVERRIDE_INHERIT) != 0;
+    memset(&widget->style_override, 0, sizeof(widget->style_override));
+    if (inherited) {
+        mark_style_subtree_dirty(widget);
+    } else {
+        tc_widget_mark_dirty(
+            widget,
+            TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE
+        );
+    }
+}
+
+tc_ui_style_override tc_widget_style_override(const tc_widget* widget) {
+    tc_ui_style_override result;
+    memset(&result, 0, sizeof(result));
+    return widget ? widget->style_override : result;
+}
+
 tc_ui_document* tc_ui_document_create(void) {
     tc_ui_document* document = (tc_ui_document*)calloc(1, sizeof(tc_ui_document));
     if (!document) {
@@ -1065,7 +1408,140 @@ tc_ui_document* tc_ui_document_create(void) {
     document->pointer_capture = tc_widget_handle_invalid();
     document->pressed_widget = tc_widget_handle_invalid();
     document->focused_widget = tc_widget_handle_invalid();
+    tc_ui_theme_init_default(&document->theme);
+    document->theme_revision = 1;
     return document;
+}
+
+const tc_ui_theme* tc_ui_document_theme(const tc_ui_document* document) {
+    return document ? &document->theme : NULL;
+}
+
+bool tc_ui_document_set_theme(tc_ui_document* document, const tc_ui_theme* theme) {
+    size_t index;
+    if (!document || !theme) {
+        tc_log_error("[termin-gui-native] cannot set null UI document theme");
+        return false;
+    }
+    if (!valid_theme(theme)) {
+        tc_log_error("[termin-gui-native] rejected invalid UI document theme");
+        return false;
+    }
+    document->theme = *theme;
+    document->theme_revision += 1;
+    if (document->theme_revision == 0) {
+        document->theme_revision = 1;
+    }
+    for (index = 0; index < document->slot_count; ++index) {
+        tc_widget_slot* slot = &document->slots[index];
+        if (slot->widget && !slot->destroying) {
+            tc_widget_mark_dirty(
+                slot->widget,
+                TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE
+            );
+        }
+    }
+    return true;
+}
+
+uint64_t tc_ui_document_theme_revision(const tc_ui_document* document) {
+    return document ? document->theme_revision : 0;
+}
+
+uint32_t tc_ui_document_widget_style_state(
+    const tc_ui_document* document,
+    const tc_widget* widget
+) {
+    uint32_t state = 0;
+    if (!document || !widget || widget->document != document || !widget_is_live_pointer(widget)) {
+        return 0;
+    }
+    if (same_handle(document->hovered_widget, widget->handle)) {
+        state |= TC_UI_STYLE_STATE_HOVERED;
+    }
+    if (same_handle(document->pressed_widget, widget->handle)) {
+        state |= TC_UI_STYLE_STATE_PRESSED;
+    }
+    if (same_handle(document->focused_widget, widget->handle)) {
+        state |= TC_UI_STYLE_STATE_FOCUSED;
+    }
+    if (!widget_effectively_enabled(widget)) {
+        state |= TC_UI_STYLE_STATE_DISABLED;
+    }
+    return state;
+}
+
+static bool apply_inherited_style_ancestors(
+    const tc_ui_document* document,
+    const tc_widget* ancestor,
+    size_t depth,
+    tc_ui_style* style
+) {
+    if (!ancestor) {
+        return true;
+    }
+    if (depth >= document->live_count || ancestor->document != document) {
+        tc_log_error("[termin-gui-native] invalid canonical tree while resolving widget style");
+        return false;
+    }
+    if (!apply_inherited_style_ancestors(
+            document,
+            ancestor->parent,
+            depth + 1,
+            style)) {
+        return false;
+    }
+    if ((ancestor->style_override.flags & TC_UI_STYLE_OVERRIDE_INHERIT) != 0) {
+        apply_style_override(style, &ancestor->style_override);
+    }
+    return true;
+}
+
+bool tc_ui_document_resolve_style(
+    const tc_ui_document* document,
+    const tc_widget* widget,
+    uint32_t extra_state_flags,
+    tc_ui_style* out_style
+) {
+    const uint32_t all_states = TC_UI_STYLE_STATE_HOVERED |
+        TC_UI_STYLE_STATE_PRESSED |
+        TC_UI_STYLE_STATE_FOCUSED |
+        TC_UI_STYLE_STATE_DISABLED |
+        TC_UI_STYLE_STATE_CHECKED;
+    const tc_ui_role_style* role;
+    uint32_t state;
+
+    if (!document || !widget || !out_style) {
+        tc_log_error("[termin-gui-native] cannot resolve style with null arguments");
+        return false;
+    }
+    if (widget->document != document || !widget_is_live_pointer(widget)) {
+        tc_log_error("[termin-gui-native] cannot resolve style for foreign or stale widget");
+        return false;
+    }
+    if (widget->style_role < TC_UI_STYLE_GENERIC || widget->style_role >= TC_UI_STYLE_ROLE_COUNT) {
+        tc_log_error("[termin-gui-native] cannot resolve invalid widget style role");
+        return false;
+    }
+    if ((extra_state_flags & ~all_states) != 0) {
+        tc_log_error("[termin-gui-native] cannot resolve unknown widget style state flags");
+        return false;
+    }
+
+    role = &document->theme.roles[widget->style_role];
+    *out_style = role->base;
+    state = tc_ui_document_widget_style_state(document, widget) | extra_state_flags;
+    if ((state & TC_UI_STYLE_STATE_HOVERED) != 0) apply_style_override(out_style, &role->hovered);
+    if ((state & TC_UI_STYLE_STATE_PRESSED) != 0) apply_style_override(out_style, &role->pressed);
+    if ((state & TC_UI_STYLE_STATE_FOCUSED) != 0) apply_style_override(out_style, &role->focused);
+    if ((state & TC_UI_STYLE_STATE_CHECKED) != 0) apply_style_override(out_style, &role->checked);
+    if ((state & TC_UI_STYLE_STATE_DISABLED) != 0) apply_style_override(out_style, &role->disabled);
+
+    if (!apply_inherited_style_ancestors(document, widget->parent, 0, out_style)) {
+        return false;
+    }
+    apply_style_override(out_style, &widget->style_override);
+    return true;
 }
 
 void tc_ui_document_destroy(tc_ui_document* document) {

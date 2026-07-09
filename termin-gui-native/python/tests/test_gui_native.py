@@ -24,6 +24,10 @@ from termin.gui_native import (
     PointerEventType,
     Rect,
     Size,
+    StyleField,
+    StyleOverride,
+    StyleRole,
+    StyleState,
     Widget,
     tooltip_rect,
 )
@@ -465,6 +469,46 @@ def test_widget_ref_wraps_native_cpp_widgets_without_duplicate_state():
     assert not root.alive
     assert not panel.alive
     assert not label.alive
+
+
+def test_theme_style_inheritance_state_and_runtime_update():
+    document = Document()
+    parent = Widget()
+    child = Widget()
+    document.adopt_root(parent, "style-parent")
+    document.adopt(child, "style-child")
+    assert parent.native.append_child(child.native)
+    child.native.style_role = StyleRole.Button
+
+    inherited = StyleOverride()
+    inherited.fields = StyleField.FontSize | StyleField.Foreground
+    inherited.flags = 1
+    inherited.value.font_size = 19.0
+    inherited.value.foreground = Color(1.0, 0.5, 0.25, 1.0)
+    parent.native.style_override = inherited
+
+    resolved = child.native.resolve_style()
+    assert resolved.font_size == 19.0
+    assert resolved.foreground.g == pytest.approx(0.5)
+
+    local = StyleOverride()
+    local.fields = StyleField.FontSize
+    local.value.font_size = 23.0
+    child.native.style_override = local
+    resolved = child.native.resolve_style(int(StyleState.Hovered))
+    assert resolved.font_size == 23.0
+    assert resolved.background.r > 0.20
+
+    initial_revision = document.theme_revision
+    theme = document.theme
+    theme.role(StyleRole.Button).base.font_size = 17.0
+    theme.role(StyleRole.Button).base.background = Color(0.44, 0.2, 0.1, 1.0)
+    child.native.clear_style_override()
+    document.theme = theme
+    assert document.theme_revision == initial_revision + 1
+    assert child.native.resolve_style().font_size == 19.0
+    assert child.native.resolve_style().background.r == pytest.approx(0.44)
+    assert child.native.dirty_flags != 0
 
 
 def test_renderer_font_exposes_document_text_metrics():

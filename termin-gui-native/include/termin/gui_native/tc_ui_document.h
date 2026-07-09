@@ -43,6 +43,96 @@ typedef struct tc_ui_color {
     float a;
 } tc_ui_color;
 
+typedef enum tc_ui_style_role {
+    TC_UI_STYLE_GENERIC = 0,
+    TC_UI_STYLE_PANEL = 1,
+    TC_UI_STYLE_LABEL = 2,
+    TC_UI_STYLE_BUTTON = 3,
+    TC_UI_STYLE_TEXT_INPUT = 4,
+    TC_UI_STYLE_GROUP_BOX = 5,
+    TC_UI_STYLE_TAB = 6,
+    TC_UI_STYLE_CHECKBOX = 7,
+    TC_UI_STYLE_PROGRESS = 8,
+    TC_UI_STYLE_SLIDER = 9,
+    TC_UI_STYLE_SEPARATOR = 10,
+    TC_UI_STYLE_ROLE_COUNT = 11
+} tc_ui_style_role;
+
+typedef enum tc_ui_font_role {
+    TC_UI_FONT_BODY = 0,
+    TC_UI_FONT_SMALL = 1,
+    TC_UI_FONT_TITLE = 2,
+    TC_UI_FONT_MONOSPACE = 3
+} tc_ui_font_role;
+
+typedef enum tc_ui_style_state_flag {
+    TC_UI_STYLE_STATE_HOVERED = 1u << 0,
+    TC_UI_STYLE_STATE_PRESSED = 1u << 1,
+    TC_UI_STYLE_STATE_FOCUSED = 1u << 2,
+    TC_UI_STYLE_STATE_DISABLED = 1u << 3,
+    TC_UI_STYLE_STATE_CHECKED = 1u << 4
+} tc_ui_style_state_flag;
+
+typedef uint64_t tc_ui_style_field_mask;
+
+enum {
+    TC_UI_STYLE_BACKGROUND = 1ull << 0,
+    TC_UI_STYLE_FOREGROUND = 1ull << 1,
+    TC_UI_STYLE_BORDER = 1ull << 2,
+    TC_UI_STYLE_ACCENT = 1ull << 3,
+    TC_UI_STYLE_PADDING_LEFT = 1ull << 4,
+    TC_UI_STYLE_PADDING_TOP = 1ull << 5,
+    TC_UI_STYLE_PADDING_RIGHT = 1ull << 6,
+    TC_UI_STYLE_PADDING_BOTTOM = 1ull << 7,
+    TC_UI_STYLE_SPACING = 1ull << 8,
+    TC_UI_STYLE_BORDER_WIDTH = 1ull << 9,
+    TC_UI_STYLE_FONT_SIZE = 1ull << 10,
+    TC_UI_STYLE_MIN_WIDTH = 1ull << 11,
+    TC_UI_STYLE_MIN_HEIGHT = 1ull << 12,
+    TC_UI_STYLE_FONT_ROLE = 1ull << 13,
+    TC_UI_STYLE_ALL_FIELDS = (1ull << 14) - 1ull
+};
+
+typedef enum tc_ui_style_override_flag {
+    TC_UI_STYLE_OVERRIDE_INHERIT = 1u << 0
+} tc_ui_style_override_flag;
+
+typedef struct tc_ui_style {
+    tc_ui_color background;
+    tc_ui_color foreground;
+    tc_ui_color border;
+    tc_ui_color accent;
+    float padding_left;
+    float padding_top;
+    float padding_right;
+    float padding_bottom;
+    float spacing;
+    float border_width;
+    float font_size;
+    float min_width;
+    float min_height;
+    tc_ui_font_role font_role;
+} tc_ui_style;
+
+typedef struct tc_ui_style_override {
+    tc_ui_style value;
+    tc_ui_style_field_mask fields;
+    uint32_t flags;
+} tc_ui_style_override;
+
+typedef struct tc_ui_role_style {
+    tc_ui_style base;
+    tc_ui_style_override hovered;
+    tc_ui_style_override pressed;
+    tc_ui_style_override focused;
+    tc_ui_style_override disabled;
+    tc_ui_style_override checked;
+} tc_ui_role_style;
+
+typedef struct tc_ui_theme {
+    tc_ui_role_style roles[TC_UI_STYLE_ROLE_COUNT];
+} tc_ui_theme;
+
 typedef struct tc_ui_constraints {
     tc_ui_size min_size;
     tc_ui_size max_size;
@@ -246,6 +336,8 @@ struct tc_widget {
     const char* name;
     const char* debug_name;
     uint32_t flags;
+    tc_ui_style_role style_role;
+    tc_ui_style_override style_override;
 };
 
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_widget_handle_invalid_value(void);
@@ -291,9 +383,34 @@ TERMIN_GUI_NATIVE_API void tc_widget_mark_dirty(tc_widget* widget, uint32_t dirt
 TERMIN_GUI_NATIVE_API void tc_widget_clear_dirty(tc_widget* widget, uint32_t dirty_flags);
 TERMIN_GUI_NATIVE_API uint32_t tc_widget_dirty_flags(const tc_widget* widget);
 TERMIN_GUI_NATIVE_API bool tc_widget_has_dirty_flags(const tc_widget* widget, uint32_t dirty_flags);
+TERMIN_GUI_NATIVE_API void tc_widget_set_style_role(tc_widget* widget, tc_ui_style_role role);
+TERMIN_GUI_NATIVE_API tc_ui_style_role tc_widget_style_role(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API bool tc_widget_set_style_override(
+    tc_widget* widget,
+    const tc_ui_style_override* style_override
+);
+TERMIN_GUI_NATIVE_API void tc_widget_clear_style_override(tc_widget* widget);
+TERMIN_GUI_NATIVE_API tc_ui_style_override tc_widget_style_override(const tc_widget* widget);
 
 TERMIN_GUI_NATIVE_API tc_ui_document* tc_ui_document_create(void);
 TERMIN_GUI_NATIVE_API void tc_ui_document_destroy(tc_ui_document* document);
+TERMIN_GUI_NATIVE_API void tc_ui_theme_init_default(tc_ui_theme* theme);
+TERMIN_GUI_NATIVE_API const tc_ui_theme* tc_ui_document_theme(const tc_ui_document* document);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_set_theme(
+    tc_ui_document* document,
+    const tc_ui_theme* theme
+);
+TERMIN_GUI_NATIVE_API uint64_t tc_ui_document_theme_revision(const tc_ui_document* document);
+TERMIN_GUI_NATIVE_API uint32_t tc_ui_document_widget_style_state(
+    const tc_ui_document* document,
+    const tc_widget* widget
+);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_resolve_style(
+    const tc_ui_document* document,
+    const tc_widget* widget,
+    uint32_t extra_state_flags,
+    tc_ui_style* out_style
+);
 
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_adopt_widget(
     tc_ui_document* document,

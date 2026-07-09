@@ -101,6 +101,41 @@ struct WidgetHandle {
     tc_widget_handle handle = tc_widget_handle_invalid();
 };
 
+enum class StyleField : uint64_t {
+    Background = TC_UI_STYLE_BACKGROUND,
+    Foreground = TC_UI_STYLE_FOREGROUND,
+    Border = TC_UI_STYLE_BORDER,
+    Accent = TC_UI_STYLE_ACCENT,
+    PaddingLeft = TC_UI_STYLE_PADDING_LEFT,
+    PaddingTop = TC_UI_STYLE_PADDING_TOP,
+    PaddingRight = TC_UI_STYLE_PADDING_RIGHT,
+    PaddingBottom = TC_UI_STYLE_PADDING_BOTTOM,
+    Spacing = TC_UI_STYLE_SPACING,
+    BorderWidth = TC_UI_STYLE_BORDER_WIDTH,
+    FontSize = TC_UI_STYLE_FONT_SIZE,
+    MinWidth = TC_UI_STYLE_MIN_WIDTH,
+    MinHeight = TC_UI_STYLE_MIN_HEIGHT,
+    FontRole = TC_UI_STYLE_FONT_ROLE,
+    All = TC_UI_STYLE_ALL_FIELDS,
+};
+
+struct Theme {
+    tc_ui_theme value {};
+
+    Theme() {
+        tc_ui_theme_init_default(&value);
+    }
+
+    explicit Theme(const tc_ui_theme& source) : value(source) {}
+
+    tc_ui_role_style& role(tc_ui_style_role role) {
+        if (role < TC_UI_STYLE_GENERIC || role >= TC_UI_STYLE_ROLE_COUNT) {
+            throw std::out_of_range("invalid native UI style role");
+        }
+        return value.roles[role];
+    }
+};
+
 struct DocumentState {
     tc_ui_document* document = nullptr;
     std::exception_ptr pending_exception;
@@ -524,6 +559,97 @@ NB_MODULE(_gui_native, m) {
         .def_rw("b", &tc_ui_color::b)
         .def_rw("a", &tc_ui_color::a);
 
+    nb::enum_<tc_ui_style_role>(m, "StyleRole")
+        .value("Generic", TC_UI_STYLE_GENERIC)
+        .value("Panel", TC_UI_STYLE_PANEL)
+        .value("Label", TC_UI_STYLE_LABEL)
+        .value("Button", TC_UI_STYLE_BUTTON)
+        .value("TextInput", TC_UI_STYLE_TEXT_INPUT)
+        .value("GroupBox", TC_UI_STYLE_GROUP_BOX)
+        .value("Tab", TC_UI_STYLE_TAB)
+        .value("Checkbox", TC_UI_STYLE_CHECKBOX)
+        .value("Progress", TC_UI_STYLE_PROGRESS)
+        .value("Slider", TC_UI_STYLE_SLIDER)
+        .value("Separator", TC_UI_STYLE_SEPARATOR);
+
+    nb::enum_<tc_ui_font_role>(m, "FontRole")
+        .value("Body", TC_UI_FONT_BODY)
+        .value("Small", TC_UI_FONT_SMALL)
+        .value("Title", TC_UI_FONT_TITLE)
+        .value("Monospace", TC_UI_FONT_MONOSPACE);
+
+    nb::enum_<tc_ui_style_state_flag>(m, "StyleState", nb::is_arithmetic())
+        .value("Hovered", TC_UI_STYLE_STATE_HOVERED)
+        .value("Pressed", TC_UI_STYLE_STATE_PRESSED)
+        .value("Focused", TC_UI_STYLE_STATE_FOCUSED)
+        .value("Disabled", TC_UI_STYLE_STATE_DISABLED)
+        .value("Checked", TC_UI_STYLE_STATE_CHECKED);
+
+    nb::enum_<StyleField>(m, "StyleField", nb::is_arithmetic())
+        .value("Background", StyleField::Background)
+        .value("Foreground", StyleField::Foreground)
+        .value("Border", StyleField::Border)
+        .value("Accent", StyleField::Accent)
+        .value("PaddingLeft", StyleField::PaddingLeft)
+        .value("PaddingTop", StyleField::PaddingTop)
+        .value("PaddingRight", StyleField::PaddingRight)
+        .value("PaddingBottom", StyleField::PaddingBottom)
+        .value("Spacing", StyleField::Spacing)
+        .value("BorderWidth", StyleField::BorderWidth)
+        .value("FontSize", StyleField::FontSize)
+        .value("MinWidth", StyleField::MinWidth)
+        .value("MinHeight", StyleField::MinHeight)
+        .value("FontRole", StyleField::FontRole)
+        .value("All", StyleField::All);
+
+    nb::enum_<tc_ui_style_override_flag>(m, "StyleOverrideFlag", nb::is_arithmetic())
+        .value("Inherit", TC_UI_STYLE_OVERRIDE_INHERIT);
+
+    nb::class_<tc_ui_style>(m, "Style")
+        .def(nb::init<>())
+        .def_rw("background", &tc_ui_style::background)
+        .def_rw("foreground", &tc_ui_style::foreground)
+        .def_rw("border", &tc_ui_style::border)
+        .def_rw("accent", &tc_ui_style::accent)
+        .def_rw("padding_left", &tc_ui_style::padding_left)
+        .def_rw("padding_top", &tc_ui_style::padding_top)
+        .def_rw("padding_right", &tc_ui_style::padding_right)
+        .def_rw("padding_bottom", &tc_ui_style::padding_bottom)
+        .def_rw("spacing", &tc_ui_style::spacing)
+        .def_rw("border_width", &tc_ui_style::border_width)
+        .def_rw("font_size", &tc_ui_style::font_size)
+        .def_rw("min_width", &tc_ui_style::min_width)
+        .def_rw("min_height", &tc_ui_style::min_height)
+        .def_rw("font_role", &tc_ui_style::font_role);
+
+    nb::class_<tc_ui_style_override>(m, "StyleOverride")
+        .def(nb::init<>())
+        .def_rw("value", &tc_ui_style_override::value)
+        .def_prop_rw("fields",
+            [](const tc_ui_style_override& self) {
+                return static_cast<StyleField>(self.fields);
+            },
+            [](tc_ui_style_override& self, uint64_t fields) {
+                self.fields = fields;
+            })
+        .def_rw("flags", &tc_ui_style_override::flags);
+
+    nb::class_<tc_ui_role_style>(m, "RoleStyle")
+        .def(nb::init<>())
+        .def_rw("base", &tc_ui_role_style::base)
+        .def_rw("hovered", &tc_ui_role_style::hovered)
+        .def_rw("pressed", &tc_ui_role_style::pressed)
+        .def_rw("focused", &tc_ui_role_style::focused)
+        .def_rw("disabled", &tc_ui_role_style::disabled)
+        .def_rw("checked", &tc_ui_role_style::checked);
+
+    nb::class_<Theme>(m, "Theme")
+        .def(nb::init<>())
+        .def("role", &Theme::role, nb::arg("role"), nb::rv_policy::reference_internal)
+        .def("set_role", [](Theme& self, tc_ui_style_role role, const tc_ui_role_style& value) {
+            self.role(role) = value;
+        }, nb::arg("role"), nb::arg("value"));
+
     nb::class_<tc_ui_constraints>(m, "Constraints")
         .def(nb::init<tc_ui_size, tc_ui_size>(),
              nb::arg("min_size") = tc_ui_size {0.0f, 0.0f},
@@ -664,6 +790,42 @@ NB_MODULE(_gui_native, m) {
             [](const WidgetRef& self, bool value) {
                 tc_widget_set_focusable(self.resolve_checked(), value);
             })
+        .def_prop_rw("style_role",
+            [](const WidgetRef& self) {
+                return tc_widget_style_role(self.resolve_checked());
+            },
+            [](const WidgetRef& self, tc_ui_style_role role) {
+                tc_widget_set_style_role(self.resolve_checked(), role);
+            })
+        .def_prop_rw("style_override",
+            [](const WidgetRef& self) {
+                return tc_widget_style_override(self.resolve_checked());
+            },
+            [](const WidgetRef& self, const tc_ui_style_override& style_override) {
+                if (!tc_widget_set_style_override(self.resolve_checked(), &style_override)) {
+                    throw std::invalid_argument("invalid native UI style override");
+                }
+            })
+        .def("clear_style_override", [](const WidgetRef& self) {
+            tc_widget_clear_style_override(self.resolve_checked());
+        })
+        .def("style_state", [](const WidgetRef& self) {
+            return tc_ui_document_widget_style_state(
+                self.state->document,
+                self.resolve_checked()
+            );
+        })
+        .def("resolve_style", [](const WidgetRef& self, uint32_t extra_state) {
+            tc_ui_style style {};
+            if (!tc_ui_document_resolve_style(
+                    self.state->document,
+                    self.resolve_checked(),
+                    extra_state,
+                    &style)) {
+                throw std::runtime_error("failed to resolve native UI widget style");
+            }
+            return style;
+        }, nb::arg("extra_state") = 0)
         .def_prop_ro("debug_name", [](const WidgetRef& self) {
             const char* name = tc_widget_debug_name(self.resolve_checked());
             return name ? std::string(name) : std::string();
@@ -830,6 +992,18 @@ NB_MODULE(_gui_native, m) {
 
     nb::class_<Document>(m, "Document")
         .def(nb::init<>())
+        .def_prop_rw("theme",
+            [](const Document& self) {
+                return Theme {*tc_ui_document_theme(self.get())};
+            },
+            [](Document& self, const Theme& theme) {
+                if (!tc_ui_document_set_theme(self.get(), &theme.value)) {
+                    throw std::invalid_argument("invalid native UI theme");
+                }
+            })
+        .def_prop_ro("theme_revision", [](const Document& self) {
+            return tc_ui_document_theme_revision(self.get());
+        })
         .def("adopt", [](Document& self, nb::object widget, const std::string& debug_name) {
             return self.adopt(std::move(widget), debug_name);
         }, nb::arg("widget"), nb::arg("debug_name") = "")

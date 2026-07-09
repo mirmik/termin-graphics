@@ -1267,6 +1267,43 @@ void test_common_visibility_enabled_and_mouse_transparent_state() {
     assert(tc_widget_handle_is_invalid(document.hit_test(20.0f, 20.0f)));
 }
 
+void test_cpp_theme_style_facade_inheritance_and_state() {
+    Document document;
+    DocumentBuilder ui(document);
+    auto& root = ui.make_root<HStack>("style-root");
+    auto& button = ui.make<Button>("Styled");
+    root.add_child(button);
+    assert(button.style_role() == TC_UI_STYLE_BUTTON);
+
+    tc_ui_style_override inherited {};
+    inherited.fields = TC_UI_STYLE_FONT_SIZE | TC_UI_STYLE_FOREGROUND;
+    inherited.flags = TC_UI_STYLE_OVERRIDE_INHERIT;
+    inherited.value.font_size = 18.0f;
+    inherited.value.foreground = tc_ui_color {0.8f, 0.7f, 0.6f, 1.0f};
+    assert(root.set_style_override(inherited));
+    tc_ui_style style = document.resolve_style(button);
+    assert(near(style.font_size, 18.0f));
+    assert(near(style.foreground.g, 0.7f));
+
+    button.set_enabled(false);
+    style = document.resolve_style(button);
+    assert(near(
+        style.background.r,
+        document.theme().roles[TC_UI_STYLE_BUTTON].disabled.value.background.r
+    ));
+
+    tc_ui_theme theme = document.theme();
+    theme.roles[TC_UI_STYLE_BUTTON].base.accent = tc_ui_color {0.91f, 0.2f, 0.1f, 1.0f};
+    const uint64_t revision = document.theme_revision();
+    button.clear_dirty(TC_WIDGET_DIRTY_MASK);
+    assert(document.set_theme(theme));
+    assert(document.theme_revision() == revision + 1);
+    assert(button.has_dirty_flags(
+        TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE
+    ));
+    assert(near(document.resolve_style(button).accent.r, 0.91f));
+}
+
 } // namespace
 
 int main() {
@@ -1307,5 +1344,6 @@ int main() {
     test_widget_signals_are_emitted_from_interactions();
     test_containers_register_and_replace_canonical_children();
     test_common_visibility_enabled_and_mouse_transparent_state();
+    test_cpp_theme_style_facade_inheritance_and_state();
     return EXIT_SUCCESS;
 }
