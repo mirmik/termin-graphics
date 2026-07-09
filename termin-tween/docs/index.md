@@ -6,5 +6,6 @@
 Пакет не зависит от editor/UI-слоя и не импортирует scene-компоненты при
 `import termin.tween`.
 
-Компонент `TweenManagerComponent` вынесен в `termin-components-tween` и
-сохраняет старый импортный путь `termin.tween.component`.
+Компонент `TweenManagerComponent` вынесен в `termin-components-tween`.
+Канонический прямой импорт — `termin.tween_components`, а ленивый публичный
+импорт `from termin.tween import TweenManagerComponent` сохраняется.

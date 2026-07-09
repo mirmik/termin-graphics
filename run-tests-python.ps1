@@ -172,19 +172,22 @@ function Invoke-TestSuite {
 if ($PytestTargets.Count -gt 0) {
     Invoke-TestSuite "selected python" (@("-m", "pytest") + $PytestMarkerArgs + $PytestTargets.ToArray() + (New-PytestSuiteArgs "selected-python") + @("-v"))
 } else {
-    Invoke-TestSuite "termin-base python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-base/tests/python/") + (New-PytestSuiteArgs "termin-base-python") + @("-v"))
+    $TestProfile = if ($Full) { "windows-d3d11" } else { "pr" }
+    $BuildToolsPath = Join-Path $ScriptDir "termin-build-tools"
+    $env:PYTHONPATH = if ($env:PYTHONPATH) {
+        "$BuildToolsPath$([IO.Path]::PathSeparator)$($env:PYTHONPATH)"
+    } else {
+        $BuildToolsPath
+    }
+
+    & $PythonBin -m termin_build.repository_control `
+        --repo-root $ScriptDir run $TestProfile `
+        --platform windows --python $PythonBin
+    if ($LASTEXITCODE -ne 0) {
+        $Failures.Add("manifest Python suites")
+    }
+
     Invoke-TestSuite "termin-modules import smoke" @("-c", "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())")
-    Invoke-TestSuite "termin-mesh python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-mesh/tests/python/") + (New-PytestSuiteArgs "termin-mesh-python") + @("-v"))
-    Invoke-TestSuite "termin-prefab python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-prefab/tests/") + (New-PytestSuiteArgs "termin-prefab-python") + @("-v"))
-    Invoke-TestSuite "termin-glb python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-glb/tests/") + (New-PytestSuiteArgs "termin-glb-python") + @("-v"))
-    Invoke-TestSuite "termin-default-assets python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-default-assets/tests/") + (New-PytestSuiteArgs "termin-default-assets-python") + @("-v"))
-    Invoke-TestSuite "termin-csg python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-csg/tests/") + (New-PytestSuiteArgs "termin-csg-python") + @("-v"))
-    Invoke-TestSuite "termin-graphics python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-graphics/tests/python/") + (New-PytestSuiteArgs "termin-graphics-python") + @("-v"))
-    Invoke-TestSuite "termin-gui python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-gui/python/tests/") + (New-PytestSuiteArgs "termin-gui-python") + @("-v"))
-    Invoke-TestSuite "termin-nodegraph python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-nodegraph/tests/") + (New-PytestSuiteArgs "termin-nodegraph-python") + @("-v"))
-    Invoke-TestSuite "termin-qopt python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-qopt/tests/") + (New-PytestSuiteArgs "termin-qopt-python") + @("-v"))
-    Invoke-TestSuite "termin-pga python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-pga/tests/") + (New-PytestSuiteArgs "termin-pga-python") + @("-v"))
-    Invoke-TestSuite "termin-app python" (@("-m", "pytest") + $PytestMarkerArgs + @("termin-app/tests/") + (New-PytestSuiteArgs "termin-app-python") + @("-v"))
     Invoke-TestSuite "Python lint" @("-m", "ruff", "check", $ScriptDir)
 }
 

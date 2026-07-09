@@ -50,7 +50,7 @@ __all__ = [
 
 def __getattr__(name: str):
     if name == "TweenManagerComponent":
-        from termin.tween.component import TweenManagerComponent
+        from termin.tween_components import TweenManagerComponent
 
         return TweenManagerComponent
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
