@@ -7,7 +7,6 @@
 #include <stdexcept>
 #include <sstream>
 #include <iostream>
-#include <functional>
 
 #include <termin/materials/termin_materials_api.h>
 
@@ -18,22 +17,9 @@ namespace termin {
  *
  * Include files must be registered before preprocessing.
  * Supports recursive includes with cycle detection.
- * Has a fallback loader callback for lazy-loading from Python.
  */
 class GlslPreprocessor {
 public:
-    // Callback type for fallback loading: takes include name, returns true if loaded
-    using FallbackLoader = std::function<bool(const std::string&)>;
-
-    /**
-     * Set fallback loader callback.
-     * Called when an include is not found in the registry.
-     * The callback should load the include and register it, then return true.
-     */
-    void set_fallback_loader(FallbackLoader loader) {
-        fallback_loader_ = std::move(loader);
-    }
-
     /**
      * Register an include file.
      *
@@ -125,16 +111,10 @@ private:
                 // Get include source
                 auto it = includes_.find(include_name);
                 if (it == includes_.end()) {
-                    // Try fallback loader
-                    if (fallback_loader_ && fallback_loader_(include_name)) {
-                        it = includes_.find(include_name);
-                    }
-                    if (it == includes_.end()) {
-                        throw std::runtime_error(
-                            "GLSL include not found: '" + include_name +
-                            "' (included from '" + source_name + "')"
-                        );
-                    }
+                    throw std::runtime_error(
+                        "GLSL include not found: '" + include_name +
+                        "' (included from '" + source_name + "')"
+                    );
                 }
 
                 // Recursively preprocess
@@ -157,7 +137,6 @@ private:
     }
 
     std::unordered_map<std::string, std::string> includes_;
-    FallbackLoader fallback_loader_;
 };
 
 /**
