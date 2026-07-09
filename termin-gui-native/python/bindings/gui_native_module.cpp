@@ -178,7 +178,6 @@ const tc_widget_vtable PythonWidget::VTABLE {
     nullptr,
     nullptr,
     nullptr,
-    nullptr,
 };
 
 class Document {

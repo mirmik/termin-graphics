@@ -125,22 +125,19 @@ public:
     explicit NativeWidget(const char* debug_name = nullptr);
     ~NativeWidget() override = default;
 
-    tc_ui_rect bounds() const { return bounds_; }
+    tc_ui_rect bounds() const { return tc_widget_bounds(c_widget()); }
     void set_min_size(tc_ui_size size) {
-        min_size_ = size;
-        mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+        tc_widget_set_min_size(c_widget(), size);
     }
-    tc_ui_size min_size() const { return min_size_; }
+    tc_ui_size min_size() const { return tc_widget_min_size(c_widget()); }
     void set_preferred_size(tc_ui_size size) {
-        preferred_size_ = size;
-        mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+        tc_widget_set_preferred_size(c_widget(), size);
     }
-    tc_ui_size preferred_size() const { return preferred_size_; }
+    tc_ui_size preferred_size() const { return tc_widget_preferred_size(c_widget()); }
     void set_max_size(tc_ui_size size) {
-        max_size_ = size;
-        mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+        tc_widget_set_max_size(c_widget(), size);
     }
-    tc_ui_size max_size() const { return max_size_; }
+    tc_ui_size max_size() const { return tc_widget_max_size(c_widget()); }
 
     virtual tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints);
     virtual void layout(tc_ui_document* document, tc_ui_rect rect);
@@ -149,18 +146,7 @@ public:
     virtual tc_widget_handle hit_test(tc_ui_document* document, float x, float y);
     virtual tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event);
     virtual tc_ui_event_result text_event(tc_ui_document* document, const tc_ui_text_event* event);
-    virtual void visit_recursive_destroy_targets(
-        tc_ui_document* document,
-        void* user_data,
-        tc_widget_visit_fn visit
-    );
     virtual void on_destroy(tc_ui_document* document);
-
-protected:
-    tc_ui_rect bounds_ {0.0f, 0.0f, 0.0f, 0.0f};
-    tc_ui_size min_size_ {0.0f, 0.0f};
-    tc_ui_size preferred_size_ {0.0f, 0.0f};
-    tc_ui_size max_size_ {0.0f, 0.0f};
 
 private:
     static tc_ui_size dispatch_measure(
@@ -190,12 +176,6 @@ private:
         tc_widget* widget,
         tc_ui_document* document,
         const tc_ui_text_event* event
-    );
-    static void dispatch_visit_recursive_destroy_targets(
-        tc_widget* widget,
-        tc_ui_document* document,
-        void* user_data,
-        tc_widget_visit_fn visit
     );
     static void dispatch_on_destroy(tc_widget* widget, tc_ui_document* document);
 
@@ -268,11 +248,6 @@ public:
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
     tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
     tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
-    void visit_recursive_destroy_targets(
-        tc_ui_document* document,
-        void* user_data,
-        tc_widget_visit_fn visit
-    ) override;
 
 private:
     Orientation orientation_;
@@ -321,11 +296,6 @@ public:
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
     tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
     tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
-    void visit_recursive_destroy_targets(
-        tc_ui_document* document,
-        void* user_data,
-        tc_widget_visit_fn visit
-    ) override;
 
 private:
     EdgeInsets padding_ {};
@@ -351,24 +321,18 @@ public:
     void set_content(const Widget& widget) { set_content(widget.handle()); }
 
     const std::string& title() const { return title_; }
-    tc_widget_handle content() const { return content_; }
+    tc_widget_handle content() const { return child_handle_at(0); }
 
     tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
     void layout(tc_ui_document* document, tc_ui_rect rect) override;
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
     tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
     tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
-    void visit_recursive_destroy_targets(
-        tc_ui_document* document,
-        void* user_data,
-        tc_widget_visit_fn visit
-    ) override;
 
 private:
     tc_ui_rect content_rect() const;
 
     std::string title_;
-    tc_widget_handle content_ = tc_widget_handle_invalid();
     EdgeInsets padding_ {10.0f, 8.0f, 10.0f, 10.0f};
     float header_height_ = 30.0f;
     Color background_ {0.11f, 0.12f, 0.14f, 1.0f};
@@ -388,8 +352,8 @@ public:
     Splitter& set_min_extents(float first_min, float second_min);
     Splitter& set_divider_thickness(float thickness);
 
-    tc_widget_handle first() const { return first_; }
-    tc_widget_handle second() const { return second_; }
+    tc_widget_handle first() const { return child_handle_at(0); }
+    tc_widget_handle second() const { return child_handle_at(1); }
     float split_fraction() const { return split_fraction_; }
 
     tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
@@ -397,11 +361,6 @@ public:
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
     tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
     tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
-    void visit_recursive_destroy_targets(
-        tc_ui_document* document,
-        void* user_data,
-        tc_widget_visit_fn visit
-    ) override;
 
 private:
     tc_ui_rect divider_rect() const;
@@ -409,8 +368,6 @@ private:
     float split_axis_extent() const;
 
     Orientation orientation_ = Orientation::Horizontal;
-    tc_widget_handle first_ = tc_widget_handle_invalid();
-    tc_widget_handle second_ = tc_widget_handle_invalid();
     float split_fraction_ = 0.5f;
     float first_min_extent_ = 32.0f;
     float second_min_extent_ = 32.0f;
@@ -424,7 +381,7 @@ public:
 
     void set_content(tc_widget_handle handle);
     void set_content(const Widget& widget) { set_content(widget.handle()); }
-    tc_widget_handle content() const { return content_; }
+    tc_widget_handle content() const { return child_handle_at(0); }
 
     void set_scroll(float x, float y);
     float scroll_x() const { return scroll_x_; }
@@ -436,16 +393,10 @@ public:
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
     tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
     tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
-    void visit_recursive_destroy_targets(
-        tc_ui_document* document,
-        void* user_data,
-        tc_widget_visit_fn visit
-    ) override;
 
 private:
     void clamp_scroll();
 
-    tc_widget_handle content_ = tc_widget_handle_invalid();
     tc_ui_size content_size_ {0.0f, 0.0f};
     float scroll_x_ = 0.0f;
     float scroll_y_ = 0.0f;
@@ -463,7 +414,7 @@ public:
 
     void add_page(std::string title, tc_widget_handle handle);
     void add_page(std::string title, const Widget& widget) { add_page(std::move(title), widget.handle()); }
-    size_t page_count() const { return pages_.size(); }
+    size_t page_count() const { return child_count(); }
     size_t selected_index() const { return selected_index_; }
     void set_selected_index(size_t index);
 
@@ -472,11 +423,6 @@ public:
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
     tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
     tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
-    void visit_recursive_destroy_targets(
-        tc_ui_document* document,
-        void* user_data,
-        tc_widget_visit_fn visit
-    ) override;
 
 private:
     tc_ui_rect page_rect() const;

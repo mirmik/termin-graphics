@@ -1022,6 +1022,104 @@ void test_widget_signals_are_emitted_from_interactions() {
     assert(tc_widget_handle_is_invalid(document.pointer_capture()));
 }
 
+void test_containers_register_and_replace_canonical_children() {
+    Document document;
+    DocumentBuilder ui(document);
+
+    auto& first_box = ui.make_root<HStack>("first-box");
+    auto& second_box = ui.make_root<HStack>("second-box");
+    auto& moving_panel = ui.make<Panel>("moving-panel");
+    first_box.add_child(moving_panel);
+    assert(first_box.child_count() == 1);
+    assert(first_box.child_at(0) == moving_panel.c_widget());
+    assert(moving_panel.parent_widget() == first_box.c_widget());
+
+    second_box.add_child(moving_panel);
+    assert(first_box.child_count() == 0);
+    assert(second_box.child_count() == 1);
+    assert(moving_panel.parent_widget() == second_box.c_widget());
+    document.layout_roots(tc_ui_rect {0.0f, 0.0f, 200.0f, 60.0f});
+    assert(near(moving_panel.bounds().width, 200.0f));
+
+    auto& grid = ui.make_root<GridLayout>("grid");
+    auto& grid_child = ui.make<Panel>("grid-child");
+    grid.add_child(grid_child, 0, 0);
+    assert(grid.child_count() == 1);
+    assert(grid_child.parent_widget() == grid.c_widget());
+
+    auto& group = ui.make_root<GroupBox>("group");
+    auto& group_first = ui.make<Panel>("group-first");
+    auto& group_second = ui.make<Panel>("group-second");
+    group.set_content(group_first);
+    group.set_content(group_second);
+    assert(group.child_count() == 1);
+    assert(group.child_at(0) == group_second.c_widget());
+    assert(group_first.parent_widget() == nullptr);
+    assert(group_second.parent_widget() == group.c_widget());
+
+    auto& splitter = ui.make_root<Splitter>(Orientation::Horizontal, "splitter");
+    auto& split_first = ui.make<Panel>("split-first");
+    auto& split_second = ui.make<Panel>("split-second");
+    auto& split_replacement = ui.make<Panel>("split-replacement");
+    splitter.set_first(split_first);
+    splitter.set_second(split_second);
+    splitter.set_first(split_replacement);
+    assert(splitter.child_count() == 2);
+    assert(splitter.child_at(0) == split_replacement.c_widget());
+    assert(splitter.child_at(1) == split_second.c_widget());
+    assert(split_first.parent_widget() == nullptr);
+
+    auto& scroll = ui.make_root<ScrollArea>("scroll");
+    auto& scroll_first = ui.make<Panel>("scroll-first");
+    auto& scroll_second = ui.make<Panel>("scroll-second");
+    scroll.set_content(scroll_first);
+    scroll.set_content(scroll_second);
+    assert(scroll.child_count() == 1);
+    assert(scroll.child_at(0) == scroll_second.c_widget());
+    assert(scroll_first.parent_widget() == nullptr);
+
+    auto& tabs = ui.make_root<TabView>("tabs");
+    auto& tab_first = ui.make<Panel>("tab-first");
+    auto& tab_second = ui.make<Panel>("tab-second");
+    tabs.add_page("First", tab_first);
+    tabs.add_page("Second", tab_second);
+    assert(tabs.child_count() == 2);
+    assert(tabs.child_at(0) == tab_first.c_widget());
+    assert(tabs.child_at(1) == tab_second.c_widget());
+}
+
+void test_common_visibility_enabled_and_mouse_transparent_state() {
+    Document document;
+    DocumentBuilder ui(document);
+    auto& root = ui.make_root<HStack>("root");
+    auto& hidden = ui.make<Panel>("hidden");
+    auto& button = ui.make<Button>("button");
+    hidden.set_preferred_size(tc_ui_size {40.0f, 30.0f});
+    root.add_preferred_child(hidden);
+    root.add_stretch_child(button);
+
+    hidden.set_visible(false);
+    button.set_enabled(false);
+    document.layout_roots(tc_ui_rect {0.0f, 0.0f, 160.0f, 40.0f});
+    assert(near(button.bounds().x, 0.0f));
+    assert(near(button.bounds().width, 160.0f));
+
+    tc_widget_handle hit = document.hit_test(20.0f, 20.0f);
+    assert(tc_widget_handle_eq(hit, button.handle()));
+    tc_ui_pointer_event event {};
+    event.type = TC_UI_POINTER_DOWN;
+    event.x = 20.0f;
+    event.y = 20.0f;
+    assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_IGNORED);
+    assert(tc_widget_handle_is_invalid(document.focused_widget()));
+
+    button.set_mouse_transparent(true);
+    hit = document.hit_test(20.0f, 20.0f);
+    assert(tc_widget_handle_eq(hit, root.handle()));
+    root.set_mouse_transparent(true);
+    assert(tc_widget_handle_is_invalid(document.hit_test(20.0f, 20.0f)));
+}
+
 } // namespace
 
 int main() {
@@ -1057,5 +1155,7 @@ int main() {
     test_text_input_focus_text_edit_and_submit();
     test_text_widgets_clip_text_paint();
     test_widget_signals_are_emitted_from_interactions();
+    test_containers_register_and_replace_canonical_children();
+    test_common_visibility_enabled_and_mouse_transparent_state();
     return EXIT_SUCCESS;
 }

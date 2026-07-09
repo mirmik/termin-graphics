@@ -85,6 +85,9 @@ typedef enum tc_widget_flag {
     TC_WIDGET_DIRTY_LAYOUT = 1u << 1,
     TC_WIDGET_DIRTY_PAINT = 1u << 2,
     TC_WIDGET_DIRTY_STATE = 1u << 3,
+    TC_WIDGET_VISIBLE = 1u << 4,
+    TC_WIDGET_ENABLED = 1u << 5,
+    TC_WIDGET_MOUSE_TRANSPARENT = 1u << 6,
     TC_WIDGET_DIRTY_MASK = TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE
 } tc_widget_flag;
 
@@ -129,7 +132,6 @@ typedef struct tc_ui_text_event {
 } tc_ui_text_event;
 
 typedef void (*tc_widget_deleter)(tc_widget* widget);
-typedef void (*tc_widget_visit_fn)(void* user_data, tc_widget_handle handle);
 
 typedef struct tc_widget_vtable {
     const char* type_name;
@@ -171,24 +173,27 @@ typedef struct tc_widget_vtable {
         const tc_ui_text_event* event
     );
 
-    // Explicit recursive-destroy policy hook. This is not a generic child list:
-    // it is consulted only by tc_ui_document_destroy_widget_recursive().
-    void (*visit_recursive_destroy_targets)(
-        tc_widget* widget,
-        tc_ui_document* document,
-        void* user_data,
-        tc_widget_visit_fn visit
-    );
-
     void (*on_destroy)(tc_widget* widget, tc_ui_document* document);
 } tc_widget_vtable;
 
 struct tc_widget {
     const tc_widget_vtable* vtable;
     tc_widget_deleter deleter;
+    tc_ui_document* document;
     tc_widget_handle handle;
     tc_language native_language;
     void* body;
+
+    tc_widget* parent;
+    tc_widget** children;
+    size_t child_count;
+    size_t child_capacity;
+
+    tc_ui_rect bounds;
+    tc_ui_size min_size;
+    tc_ui_size preferred_size;
+    tc_ui_size max_size;
+
     const char* stable_id;
     const char* name;
     const char* debug_name;
@@ -208,6 +213,29 @@ TERMIN_GUI_NATIVE_API void tc_widget_init(
 
 TERMIN_GUI_NATIVE_API void tc_widget_set_focusable(tc_widget* widget, bool focusable);
 TERMIN_GUI_NATIVE_API bool tc_widget_is_focusable(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API void tc_widget_set_visible(tc_widget* widget, bool visible);
+TERMIN_GUI_NATIVE_API bool tc_widget_is_visible(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API void tc_widget_set_enabled(tc_widget* widget, bool enabled);
+TERMIN_GUI_NATIVE_API bool tc_widget_is_enabled(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API void tc_widget_set_mouse_transparent(tc_widget* widget, bool mouse_transparent);
+TERMIN_GUI_NATIVE_API bool tc_widget_is_mouse_transparent(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API tc_ui_rect tc_widget_bounds(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API void tc_widget_set_bounds(tc_widget* widget, tc_ui_rect bounds);
+TERMIN_GUI_NATIVE_API tc_ui_size tc_widget_min_size(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API void tc_widget_set_min_size(tc_widget* widget, tc_ui_size size);
+TERMIN_GUI_NATIVE_API tc_ui_size tc_widget_preferred_size(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API void tc_widget_set_preferred_size(tc_widget* widget, tc_ui_size size);
+TERMIN_GUI_NATIVE_API tc_ui_size tc_widget_max_size(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API void tc_widget_set_max_size(tc_widget* widget, tc_ui_size size);
+TERMIN_GUI_NATIVE_API tc_widget* tc_widget_parent(tc_widget* widget);
+TERMIN_GUI_NATIVE_API const tc_widget* tc_widget_parent_const(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API size_t tc_widget_child_count(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API tc_widget* tc_widget_child_at(tc_widget* widget, size_t index);
+TERMIN_GUI_NATIVE_API const tc_widget* tc_widget_child_at_const(const tc_widget* widget, size_t index);
+TERMIN_GUI_NATIVE_API bool tc_widget_append_child(tc_widget* parent, tc_widget* child);
+TERMIN_GUI_NATIVE_API bool tc_widget_insert_child(tc_widget* parent, size_t index, tc_widget* child);
+TERMIN_GUI_NATIVE_API bool tc_widget_remove_child(tc_widget* parent, tc_widget* child);
+TERMIN_GUI_NATIVE_API bool tc_widget_detach(tc_widget* widget);
 TERMIN_GUI_NATIVE_API const char* tc_widget_stable_id(const tc_widget* widget);
 TERMIN_GUI_NATIVE_API const char* tc_widget_name(const tc_widget* widget);
 TERMIN_GUI_NATIVE_API const char* tc_widget_debug_name(const tc_widget* widget);

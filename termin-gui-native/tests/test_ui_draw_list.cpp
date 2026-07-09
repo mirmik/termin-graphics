@@ -56,7 +56,6 @@ const tc_widget_vtable TestPaintWidget::VTABLE {
     nullptr,
     nullptr,
     nullptr,
-    nullptr,
 };
 
 void test_widget_paint_builds_draw_list() {

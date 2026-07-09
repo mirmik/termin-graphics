@@ -45,17 +45,56 @@ tc_ui_constraints unconstrained() {
     };
 }
 
-tc_widget* resolve_child(tc_ui_document* document, tc_widget_handle handle, const char* owner) {
-    tc_widget* child = tc_ui_document_resolve_widget(document, handle);
+tc_widget* resolve_child(
+    tc_ui_document* document,
+    const tc_widget* expected_parent,
+    tc_widget_handle handle,
+    const char* owner
+) {
+    (void)owner;
+    if (!document || !expected_parent) {
+        return nullptr;
+    }
+    for (size_t index = 0; index < expected_parent->child_count; ++index) {
+        tc_widget* child = expected_parent->children[index];
+        if (child && tc_widget_handle_eq(child->handle, handle) &&
+            child->document == document && tc_widget_is_visible(child)) {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
+tc_widget* attach_child(
+    tc_widget* parent,
+    tc_widget_handle child_handle,
+    size_t index,
+    const char* owner
+) {
+    if (!parent || !parent->document) {
+        tc_log_error("[termin-gui-native] %s has not been adopted", owner ? owner : "widget");
+        return nullptr;
+    }
+    tc_widget* child = tc_ui_document_resolve_widget(parent->document, child_handle);
     if (!child) {
-        tc_log_error(
-            "[termin-gui-native] %s skipped stale child handle index=%u generation=%u",
-            owner ? owner : "widget",
-            handle.index,
-            handle.generation
-        );
+        tc_log_error("[termin-gui-native] %s cannot resolve child handle", owner ? owner : "widget");
+        return nullptr;
+    }
+    if (!tc_widget_insert_child(parent, index, child)) {
+        tc_log_error("[termin-gui-native] %s failed to attach child", owner ? owner : "widget");
+        return nullptr;
     }
     return child;
+}
+
+void detach_if_child(tc_widget* parent, tc_widget_handle child_handle) {
+    if (!parent || !parent->document || tc_widget_handle_is_invalid(child_handle)) {
+        return;
+    }
+    tc_widget* child = tc_ui_document_resolve_widget(parent->document, child_handle);
+    if (child && child->parent == parent) {
+        tc_widget_remove_child(parent, child);
+    }
 }
 
 tc_ui_size measure_widget(tc_widget* widget, tc_ui_document* document, tc_ui_constraints constraints) {
@@ -73,13 +112,13 @@ NativeWidget* native_widget_body(tc_widget* widget) {
 }
 
 void layout_widget(tc_widget* widget, tc_ui_document* document, tc_ui_rect rect) {
-    if (widget && widget->vtable && widget->vtable->layout) {
+    if (widget && tc_widget_is_visible(widget) && widget->vtable && widget->vtable->layout) {
         widget->vtable->layout(widget, document, rect);
     }
 }
 
 void paint_widget(tc_widget* widget, tc_ui_document* document, tc_ui_paint_context* context) {
-    if (widget && widget->vtable && widget->vtable->paint) {
+    if (widget && tc_widget_is_visible(widget) && widget->vtable && widget->vtable->paint) {
         widget->vtable->paint(widget, document, context);
     }
 }
@@ -223,6 +262,27 @@ void set_track_limits(GridTrack& track, float min_extent, float max_extent) {
     }
 }
 
+const LayoutItem* find_layout_item(
+    const std::vector<LayoutItem>& items,
+    tc_widget_handle handle
+) {
+    const auto found = std::find_if(
+        items.begin(),
+        items.end(),
+        [handle](const LayoutItem& item) { return tc_widget_handle_eq(item.handle, handle); }
+    );
+    return found != items.end() ? &*found : nullptr;
+}
+
+const TabPage* find_tab_page(const std::vector<TabPage>& pages, tc_widget_handle handle) {
+    const auto found = std::find_if(
+        pages.begin(),
+        pages.end(),
+        [handle](const TabPage& page) { return tc_widget_handle_eq(page.handle, handle); }
+    );
+    return found != pages.end() ? &*found : nullptr;
+}
+
 float track_base_extent(const GridTrack& track) {
     if (track.policy == LayoutPolicy::Fixed || track.policy == LayoutPolicy::Preferred) {
         return track.value;
@@ -290,6 +350,7 @@ struct GridAxisLayout {
 
 GridAxisLayout build_grid_axis(
     tc_ui_document* document,
+    const tc_widget* expected_parent,
     const std::vector<GridTrack>& tracks,
     const std::vector<GridItem>& items,
     bool columns,
@@ -317,7 +378,12 @@ GridAxisLayout build_grid_axis(
         if (start >= tracks.size()) {
             continue;
         }
-        tc_widget* child = resolve_child(document, item.handle, columns ? "GridLayout::measure(columns)" : "GridLayout::measure(rows)");
+        tc_widget* child = resolve_child(
+            document,
+            expected_parent,
+            item.handle,
+            columns ? "GridLayout::measure(columns)" : "GridLayout::measure(rows)"
+        );
         if (!child) {
             continue;
         }
@@ -356,7 +422,6 @@ const tc_widget_vtable NativeWidget::VTABLE {
     &NativeWidget::dispatch_hit_test,
     &NativeWidget::dispatch_key_event,
     &NativeWidget::dispatch_text_event,
-    &NativeWidget::dispatch_visit_recursive_destroy_targets,
     &NativeWidget::dispatch_on_destroy,
 };
 
@@ -366,23 +431,23 @@ NativeWidget::NativeWidget(const char* debug_name)
 tc_ui_size NativeWidget::measure(tc_ui_document*, tc_ui_constraints constraints) {
     const float constraint_max_width = effective_max(constraints.max_size.width);
     const float constraint_max_height = effective_max(constraints.max_size.height);
-    const float max_width = std::min(effective_max(max_size_.width), constraint_max_width);
-    const float max_height = std::min(effective_max(max_size_.height), constraint_max_height);
-    const float min_width = std::max(min_size_.width, constraints.min_size.width);
-    const float min_height = std::max(min_size_.height, constraints.min_size.height);
+    const float max_width = std::min(effective_max(max_size().width), constraint_max_width);
+    const float max_height = std::min(effective_max(max_size().height), constraint_max_height);
+    const float min_width = std::max(min_size().width, constraints.min_size.width);
+    const float min_height = std::max(min_size().height, constraints.min_size.height);
     const tc_ui_constraints effective_constraints {
         tc_ui_size {min_width, min_height},
         tc_ui_size {std::max(min_width, max_width), std::max(min_height, max_height)}
     };
     const tc_ui_size preferred {
-        preferred_size_.width > 0.0f ? preferred_size_.width : min_size_.width,
-        preferred_size_.height > 0.0f ? preferred_size_.height : min_size_.height
+        preferred_size().width > 0.0f ? preferred_size().width : min_size().width,
+        preferred_size().height > 0.0f ? preferred_size().height : min_size().height
     };
     return clamp_size(preferred, effective_constraints);
 }
 
 void NativeWidget::layout(tc_ui_document*, tc_ui_rect rect) {
-    bounds_ = rect;
+    tc_widget_set_bounds(c_widget(), rect);
     clear_dirty(TC_WIDGET_DIRTY_LAYOUT);
 }
 
@@ -393,7 +458,7 @@ tc_ui_event_result NativeWidget::pointer_event(tc_ui_document*, const tc_ui_poin
 }
 
 tc_widget_handle NativeWidget::hit_test(tc_ui_document*, float x, float y) {
-    if (!rect_contains(bounds_, x, y)) {
+    if (!visible() || !rect_contains(bounds(), x, y) || mouse_transparent()) {
         return tc_widget_handle_invalid();
     }
     return handle();
@@ -406,12 +471,6 @@ tc_ui_event_result NativeWidget::key_event(tc_ui_document*, const tc_ui_key_even
 tc_ui_event_result NativeWidget::text_event(tc_ui_document*, const tc_ui_text_event*) {
     return TC_UI_EVENT_IGNORED;
 }
-
-void NativeWidget::visit_recursive_destroy_targets(
-    tc_ui_document*,
-    void*,
-    tc_widget_visit_fn
-) {}
 
 void NativeWidget::on_destroy(tc_ui_document*) {}
 
@@ -479,18 +538,6 @@ tc_ui_event_result NativeWidget::dispatch_text_event(
     return self ? self->text_event(document, event) : TC_UI_EVENT_IGNORED;
 }
 
-void NativeWidget::dispatch_visit_recursive_destroy_targets(
-    tc_widget* widget,
-    tc_ui_document* document,
-    void* user_data,
-    tc_widget_visit_fn visit
-) {
-    auto* self = static_cast<NativeWidget*>(widget ? widget->body : nullptr);
-    if (self) {
-        self->visit_recursive_destroy_targets(document, user_data, visit);
-    }
-}
-
 void NativeWidget::dispatch_on_destroy(tc_widget* widget, tc_ui_document* document) {
     auto* self = static_cast<NativeWidget*>(widget ? widget->body : nullptr);
     if (self) {
@@ -535,6 +582,18 @@ void BoxLayout::add_child(tc_widget_handle handle, LayoutPolicy policy, float va
         tc_log_error("[termin-gui-native] cannot add invalid child handle to BoxLayout");
         return;
     }
+
+    if (!attach_child(c_widget(), handle, SIZE_MAX, "BoxLayout::add_child")) {
+        return;
+    }
+    items_.erase(
+        std::remove_if(
+            items_.begin(),
+            items_.end(),
+            [handle](const LayoutItem& existing) { return tc_widget_handle_eq(existing.handle, handle); }
+        ),
+        items_.end()
+    );
 
     LayoutItem item {};
     item.handle = handle;
@@ -593,9 +652,12 @@ bool BoxLayout::set_child_extent_limits(tc_widget_handle handle, float min_exten
 
 std::vector<tc_widget_handle> BoxLayout::children() const {
     std::vector<tc_widget_handle> handles;
-    handles.reserve(items_.size());
-    for (const LayoutItem& item : items_) {
-        handles.push_back(item.handle);
+    handles.reserve(child_count());
+    for (size_t index = 0; index < child_count(); ++index) {
+        const tc_widget* child = child_at(index);
+        if (child) {
+            handles.push_back(child->handle);
+        }
     }
     return handles;
 }
@@ -603,11 +665,14 @@ std::vector<tc_widget_handle> BoxLayout::children() const {
 tc_ui_size BoxLayout::measure(tc_ui_document* document, tc_ui_constraints constraints) {
     tc_ui_size content {0.0f, 0.0f};
     size_t live_children = 0;
-    for (const LayoutItem& item : items_) {
-        tc_widget* child = resolve_child(document, item.handle, "BoxLayout::measure");
-        if (!child) {
+    for (size_t index = 0; index < child_count(); ++index) {
+        tc_widget* child = child_at(index);
+        if (!child || !tc_widget_is_visible(child)) {
             continue;
         }
+        const LayoutItem* stored_item = find_layout_item(items_, child->handle);
+        const LayoutItem default_item {child->handle, LayoutPolicy::Stretch};
+        const LayoutItem& item = stored_item ? *stored_item : default_item;
         tc_ui_size child_size = measure_widget(child, document, unconstrained());
         const float child_primary = item_basis(item, child_size, orientation_);
         if (orientation_ == Orientation::Vertical) {
@@ -631,8 +696,8 @@ tc_ui_size BoxLayout::measure(tc_ui_document* document, tc_ui_constraints constr
 
     content.width += padding_.left + padding_.right;
     content.height += padding_.top + padding_.bottom;
-    content.width = std::max(content.width, min_size_.width);
-    content.height = std::max(content.height, min_size_.height);
+    content.width = std::max(content.width, min_size().width);
+    content.height = std::max(content.height, min_size().height);
     return clamp_size(content, constraints);
 }
 
@@ -649,13 +714,16 @@ void BoxLayout::layout(tc_ui_document* document, tc_ui_rect rect) {
     };
 
     std::vector<LiveItem> live_items;
-    live_items.reserve(items_.size());
+    live_items.reserve(child_count());
     float base_extent = 0.0f;
-    for (const LayoutItem& item : items_) {
-        tc_widget* child = resolve_child(document, item.handle, "BoxLayout::layout");
-        if (!child) {
+    for (size_t index = 0; index < child_count(); ++index) {
+        tc_widget* child = child_at(index);
+        if (!child || !tc_widget_is_visible(child)) {
             continue;
         }
+        const LayoutItem* stored_item = find_layout_item(items_, child->handle);
+        const LayoutItem default_item {child->handle, LayoutPolicy::Stretch};
+        const LayoutItem& item = stored_item ? *stored_item : default_item;
         NativeWidget* native = native_widget_body(child);
         tc_ui_size measured = measure_widget(child, document, unconstrained());
         const float min_extent = item_min_extent(item, native, orientation_);
@@ -718,16 +786,15 @@ void BoxLayout::layout(tc_ui_document* document, tc_ui_rect rect) {
 
 void BoxLayout::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     if (color_visible(background_)) {
-        tc_ui_painter_fill_rect(context, bounds_, background_.c_color());
+        tc_ui_painter_fill_rect(context, bounds(), background_.c_color());
     }
     if (color_visible(border_) && border_thickness_ > 0.0f) {
-        tc_ui_painter_stroke_rect(context, bounds_, border_.c_color(), border_thickness_);
+        tc_ui_painter_stroke_rect(context, bounds(), border_.c_color(), border_thickness_);
     }
 
-    tc_ui_painter_push_clip(context, bounds_);
-    for (const LayoutItem& item : items_) {
-        tc_widget* child = resolve_child(document, item.handle, "BoxLayout::paint");
-        paint_widget(child, document, context);
+    tc_ui_painter_push_clip(context, bounds());
+    for (size_t index = 0; index < child_count(); ++index) {
+        paint_widget(child_at(index), document, context);
     }
     tc_ui_painter_pop_clip(context);
 }
@@ -736,12 +803,13 @@ tc_ui_event_result BoxLayout::pointer_event(
     tc_ui_document* document,
     const tc_ui_pointer_event* event
 ) {
-    if (!event || !rect_contains(bounds_, event->x, event->y)) {
+    if (!event || !visible() || !enabled() || !rect_contains(bounds(), event->x, event->y)) {
         return TC_UI_EVENT_IGNORED;
     }
-    for (auto it = items_.rbegin(); it != items_.rend(); ++it) {
-        tc_widget* child = tc_ui_document_resolve_widget(document, it->handle);
-        if (!child || !child->vtable || !child->vtable->pointer_event) {
+    for (size_t index = child_count(); index > 0; --index) {
+        tc_widget* child = child_at(index - 1);
+        if (!child || !tc_widget_is_visible(child) || !tc_widget_is_enabled(child) ||
+            !child->vtable || !child->vtable->pointer_event) {
             continue;
         }
         if (child->vtable->pointer_event(child, document, event) == TC_UI_EVENT_HANDLED) {
@@ -752,12 +820,12 @@ tc_ui_event_result BoxLayout::pointer_event(
 }
 
 tc_widget_handle BoxLayout::hit_test(tc_ui_document* document, float x, float y) {
-    if (!rect_contains(bounds_, x, y)) {
+    if (!visible() || !rect_contains(bounds(), x, y)) {
         return tc_widget_handle_invalid();
     }
-    for (auto it = items_.rbegin(); it != items_.rend(); ++it) {
-        tc_widget* child = tc_ui_document_resolve_widget(document, it->handle);
-        if (!child || !child->vtable || !child->vtable->hit_test) {
+    for (size_t index = child_count(); index > 0; --index) {
+        tc_widget* child = child_at(index - 1);
+        if (!child || !tc_widget_is_visible(child) || !child->vtable || !child->vtable->hit_test) {
             continue;
         }
         tc_widget_handle hit = child->vtable->hit_test(child, document, x, y);
@@ -765,20 +833,7 @@ tc_widget_handle BoxLayout::hit_test(tc_ui_document* document, float x, float y)
             return hit;
         }
     }
-    return handle();
-}
-
-void BoxLayout::visit_recursive_destroy_targets(
-    tc_ui_document*,
-    void* user_data,
-    tc_widget_visit_fn visit
-) {
-    if (!visit) {
-        return;
-    }
-    for (const LayoutItem& item : items_) {
-        visit(user_data, item.handle);
-    }
+    return mouse_transparent() ? tc_widget_handle_invalid() : handle();
 }
 
 GridLayout::GridLayout(const char* debug_name)
@@ -837,6 +892,17 @@ void GridLayout::add_child(
         tc_log_error("[termin-gui-native] cannot add GridLayout child with zero span");
         return;
     }
+    if (!attach_child(c_widget(), handle, SIZE_MAX, "GridLayout::add_child")) {
+        return;
+    }
+    items_.erase(
+        std::remove_if(
+            items_.begin(),
+            items_.end(),
+            [handle](const GridItem& existing) { return tc_widget_handle_eq(existing.handle, handle); }
+        ),
+        items_.end()
+    );
     while (rows_.size() < row + row_span) {
         add_row(LayoutPolicy::Stretch);
     }
@@ -866,14 +932,14 @@ bool GridLayout::set_row_extent_limits(size_t row, float min_extent, float max_e
 }
 
 tc_ui_size GridLayout::measure(tc_ui_document* document, tc_ui_constraints constraints) {
-    GridAxisLayout columns = build_grid_axis(document, columns_, items_, true, column_spacing_);
-    GridAxisLayout rows = build_grid_axis(document, rows_, items_, false, row_spacing_);
+    GridAxisLayout columns = build_grid_axis(document, c_widget(), columns_, items_, true, column_spacing_);
+    GridAxisLayout rows = build_grid_axis(document, c_widget(), rows_, items_, false, row_spacing_);
     tc_ui_size measured {
         axis_total_extent(columns.extents, column_spacing_) + padding_.left + padding_.right,
         axis_total_extent(rows.extents, row_spacing_) + padding_.top + padding_.bottom
     };
-    measured.width = std::max(measured.width, min_size_.width);
-    measured.height = std::max(measured.height, min_size_.height);
+    measured.width = std::max(measured.width, min_size().width);
+    measured.height = std::max(measured.height, min_size().height);
     return clamp_size(measured, constraints);
 }
 
@@ -884,8 +950,8 @@ void GridLayout::layout(tc_ui_document* document, tc_ui_rect rect) {
     }
 
     tc_ui_rect content = inset_rect(rect, padding_);
-    GridAxisLayout columns = build_grid_axis(document, columns_, items_, true, column_spacing_);
-    GridAxisLayout rows = build_grid_axis(document, rows_, items_, false, row_spacing_);
+    GridAxisLayout columns = build_grid_axis(document, c_widget(), columns_, items_, true, column_spacing_);
+    GridAxisLayout rows = build_grid_axis(document, c_widget(), rows_, items_, false, row_spacing_);
 
     const float column_spacing_total = column_spacing_ * static_cast<float>(columns.extents.empty() ? 0 : columns.extents.size() - 1);
     const float row_spacing_total = row_spacing_ * static_cast<float>(rows.extents.empty() ? 0 : rows.extents.size() - 1);
@@ -917,7 +983,7 @@ void GridLayout::layout(tc_ui_document* document, tc_ui_rect rect) {
         if (item.column >= columns.extents.size() || item.row >= rows.extents.size()) {
             continue;
         }
-        tc_widget* child = resolve_child(document, item.handle, "GridLayout::layout");
+        tc_widget* child = resolve_child(document, c_widget(), item.handle, "GridLayout::layout");
         if (!child) {
             continue;
         }
@@ -943,27 +1009,27 @@ void GridLayout::layout(tc_ui_document* document, tc_ui_rect rect) {
 
 void GridLayout::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     if (color_visible(background_)) {
-        tc_ui_painter_fill_rect(context, bounds_, background_.c_color());
+        tc_ui_painter_fill_rect(context, bounds(), background_.c_color());
     }
     if (color_visible(border_) && border_thickness_ > 0.0f) {
-        tc_ui_painter_stroke_rect(context, bounds_, border_.c_color(), border_thickness_);
+        tc_ui_painter_stroke_rect(context, bounds(), border_.c_color(), border_thickness_);
     }
 
-    tc_ui_painter_push_clip(context, bounds_);
-    for (const GridItem& item : items_) {
-        tc_widget* child = resolve_child(document, item.handle, "GridLayout::paint");
-        paint_widget(child, document, context);
+    tc_ui_painter_push_clip(context, bounds());
+    for (size_t index = 0; index < child_count(); ++index) {
+        paint_widget(child_at(index), document, context);
     }
     tc_ui_painter_pop_clip(context);
 }
 
 tc_ui_event_result GridLayout::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
-    if (!event || !rect_contains(bounds_, event->x, event->y)) {
+    if (!event || !visible() || !enabled() || !rect_contains(bounds(), event->x, event->y)) {
         return TC_UI_EVENT_IGNORED;
     }
-    for (auto it = items_.rbegin(); it != items_.rend(); ++it) {
-        tc_widget* child = tc_ui_document_resolve_widget(document, it->handle);
-        if (!child || !child->vtable || !child->vtable->pointer_event) {
+    for (size_t index = child_count(); index > 0; --index) {
+        tc_widget* child = child_at(index - 1);
+        if (!child || !tc_widget_is_visible(child) || !tc_widget_is_enabled(child) ||
+            !child->vtable || !child->vtable->pointer_event) {
             continue;
         }
         if (child->vtable->pointer_event(child, document, event) == TC_UI_EVENT_HANDLED) {
@@ -974,12 +1040,12 @@ tc_ui_event_result GridLayout::pointer_event(tc_ui_document* document, const tc_
 }
 
 tc_widget_handle GridLayout::hit_test(tc_ui_document* document, float x, float y) {
-    if (!rect_contains(bounds_, x, y)) {
+    if (!visible() || !rect_contains(bounds(), x, y)) {
         return tc_widget_handle_invalid();
     }
-    for (auto it = items_.rbegin(); it != items_.rend(); ++it) {
-        tc_widget* child = tc_ui_document_resolve_widget(document, it->handle);
-        if (!child || !child->vtable || !child->vtable->hit_test) {
+    for (size_t index = child_count(); index > 0; --index) {
+        tc_widget* child = child_at(index - 1);
+        if (!child || !tc_widget_is_visible(child) || !child->vtable || !child->vtable->hit_test) {
             continue;
         }
         tc_widget_handle hit = child->vtable->hit_test(child, document, x, y);
@@ -987,26 +1053,13 @@ tc_widget_handle GridLayout::hit_test(tc_ui_document* document, float x, float y
             return hit;
         }
     }
-    return handle();
-}
-
-void GridLayout::visit_recursive_destroy_targets(
-    tc_ui_document*,
-    void* user_data,
-    tc_widget_visit_fn visit
-) {
-    if (!visit) {
-        return;
-    }
-    for (const GridItem& item : items_) {
-        visit(user_data, item.handle);
-    }
+    return mouse_transparent() ? tc_widget_handle_invalid() : handle();
 }
 
 GroupBox::GroupBox(std::string title, const char* debug_name)
     : NativeWidget(debug_name ? debug_name : "GroupBox"),
       title_(std::move(title)) {
-    preferred_size_ = tc_ui_size {240.0f, 140.0f};
+    set_preferred_size(tc_ui_size {240.0f, 140.0f});
 }
 
 GroupBox& GroupBox::set_title(std::string title) {
@@ -1039,17 +1092,24 @@ void GroupBox::set_content(tc_widget_handle handle) {
         tc_log_error("[termin-gui-native] cannot set invalid GroupBox content handle");
         return;
     }
-    content_ = handle;
+    const tc_widget_handle previous = this->content();
+    if (tc_widget_handle_eq(previous, handle)) {
+        return;
+    }
+    if (!attach_child(c_widget(), handle, 0, "GroupBox::set_content")) {
+        return;
+    }
+    detach_if_child(c_widget(), previous);
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
 tc_ui_size GroupBox::measure(tc_ui_document* document, tc_ui_constraints constraints) {
     tc_ui_size measured {
-        std::max(preferred_size_.width, static_cast<float>(title_.size()) * 8.0f + padding_.left + padding_.right),
-        preferred_size_.height
+        std::max(preferred_size().width, static_cast<float>(title_.size()) * 8.0f + padding_.left + padding_.right),
+        preferred_size().height
     };
-    if (!tc_widget_handle_is_invalid(content_)) {
-        if (tc_widget* content = resolve_child(document, content_, "GroupBox::measure")) {
+    if (!tc_widget_handle_is_invalid(this->content())) {
+        if (tc_widget* content = resolve_child(document, c_widget(), this->content(), "GroupBox::measure")) {
             const tc_ui_size content_size = measure_widget(content, document, unconstrained());
             measured.width = std::max(measured.width, content_size.width + padding_.left + padding_.right);
             measured.height = std::max(
@@ -1058,46 +1118,46 @@ tc_ui_size GroupBox::measure(tc_ui_document* document, tc_ui_constraints constra
             );
         }
     }
-    measured.width = std::max(measured.width, min_size_.width);
-    measured.height = std::max(measured.height, min_size_.height);
+    measured.width = std::max(measured.width, min_size().width);
+    measured.height = std::max(measured.height, min_size().height);
     return clamp_size(measured, constraints);
 }
 
 void GroupBox::layout(tc_ui_document* document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
-    if (tc_widget_handle_is_invalid(content_)) {
+    if (tc_widget_handle_is_invalid(this->content())) {
         return;
     }
-    tc_widget* content = resolve_child(document, content_, "GroupBox::layout");
+    tc_widget* content = resolve_child(document, c_widget(), this->content(), "GroupBox::layout");
     layout_widget(content, document, content_rect());
 }
 
 void GroupBox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     if (color_visible(background_)) {
-        tc_ui_painter_fill_rect(context, bounds_, background_.c_color());
+        tc_ui_painter_fill_rect(context, bounds(), background_.c_color());
     }
     if (color_visible(border_) && border_thickness_ > 0.0f) {
-        tc_ui_painter_stroke_rect(context, bounds_, border_.c_color(), border_thickness_);
+        tc_ui_painter_stroke_rect(context, bounds(), border_.c_color(), border_thickness_);
         tc_ui_painter_draw_line(
             context,
-            tc_ui_point {bounds_.x, bounds_.y + header_height_},
-            tc_ui_point {bounds_.x + bounds_.width, bounds_.y + header_height_},
+            tc_ui_point {bounds().x, bounds().y + header_height_},
+            tc_ui_point {bounds().x + bounds().width, bounds().y + header_height_},
             border_.c_color(),
             border_thickness_
         );
     }
     if (!title_.empty()) {
         tc_ui_rect title_clip {
-            bounds_.x + padding_.left,
-            bounds_.y,
-            std::max(0.0f, bounds_.width - padding_.left - padding_.right),
+            bounds().x + padding_.left,
+            bounds().y,
+            std::max(0.0f, bounds().width - padding_.left - padding_.right),
             header_height_
         };
         tc_ui_painter_push_clip(context, title_clip);
         tc_ui_painter_draw_text(
             context,
             title_.c_str(),
-            tc_ui_point {bounds_.x + padding_.left, bounds_.y + 20.0f},
+            tc_ui_point {bounds().x + padding_.left, bounds().y + 20.0f},
             13.0f,
             tc_ui_color {0.86f, 0.90f, 0.96f, 1.0f}
         );
@@ -1106,20 +1166,20 @@ void GroupBox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
 
     const tc_ui_rect clip = content_rect();
     tc_ui_painter_push_clip(context, clip);
-    if (!tc_widget_handle_is_invalid(content_)) {
-        tc_widget* content = resolve_child(document, content_, "GroupBox::paint");
+    if (!tc_widget_handle_is_invalid(this->content())) {
+        tc_widget* content = resolve_child(document, c_widget(), this->content(), "GroupBox::paint");
         paint_widget(content, document, context);
     }
     tc_ui_painter_pop_clip(context);
 }
 
 tc_ui_event_result GroupBox::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
-    if (!event || !rect_contains(bounds_, event->x, event->y)) {
+    if (!event || !visible() || !enabled() || !rect_contains(bounds(), event->x, event->y)) {
         return TC_UI_EVENT_IGNORED;
     }
-    if (!tc_widget_handle_is_invalid(content_) && rect_contains(content_rect(), event->x, event->y)) {
-        tc_widget* content = tc_ui_document_resolve_widget(document, content_);
-        if (content && content->vtable && content->vtable->pointer_event &&
+    if (!tc_widget_handle_is_invalid(this->content()) && rect_contains(content_rect(), event->x, event->y)) {
+        tc_widget* content = resolve_child(document, c_widget(), this->content(), "GroupBox::pointer_event");
+        if (content && tc_widget_is_enabled(content) && content->vtable && content->vtable->pointer_event &&
             content->vtable->pointer_event(content, document, event) == TC_UI_EVENT_HANDLED) {
             return TC_UI_EVENT_HANDLED;
         }
@@ -1128,11 +1188,11 @@ tc_ui_event_result GroupBox::pointer_event(tc_ui_document* document, const tc_ui
 }
 
 tc_widget_handle GroupBox::hit_test(tc_ui_document* document, float x, float y) {
-    if (!rect_contains(bounds_, x, y)) {
+    if (!visible() || !rect_contains(bounds(), x, y)) {
         return tc_widget_handle_invalid();
     }
-    if (!tc_widget_handle_is_invalid(content_) && rect_contains(content_rect(), x, y)) {
-        tc_widget* content = tc_ui_document_resolve_widget(document, content_);
+    if (!tc_widget_handle_is_invalid(this->content()) && rect_contains(content_rect(), x, y)) {
+        tc_widget* content = resolve_child(document, c_widget(), this->content(), "GroupBox::hit_test");
         if (content && content->vtable && content->vtable->hit_test) {
             tc_widget_handle hit = content->vtable->hit_test(content, document, x, y);
             if (!tc_widget_handle_is_invalid(hit)) {
@@ -1140,25 +1200,15 @@ tc_widget_handle GroupBox::hit_test(tc_ui_document* document, float x, float y) 
             }
         }
     }
-    return handle();
-}
-
-void GroupBox::visit_recursive_destroy_targets(
-    tc_ui_document*,
-    void* user_data,
-    tc_widget_visit_fn visit
-) {
-    if (visit && !tc_widget_handle_is_invalid(content_)) {
-        visit(user_data, content_);
-    }
+    return mouse_transparent() ? tc_widget_handle_invalid() : handle();
 }
 
 tc_ui_rect GroupBox::content_rect() const {
     tc_ui_rect rect {
-        bounds_.x + padding_.left,
-        bounds_.y + header_height_ + padding_.top,
-        std::max(0.0f, bounds_.width - padding_.left - padding_.right),
-        std::max(0.0f, bounds_.height - header_height_ - padding_.top - padding_.bottom)
+        bounds().x + padding_.left,
+        bounds().y + header_height_ + padding_.top,
+        std::max(0.0f, bounds().width - padding_.left - padding_.right),
+        std::max(0.0f, bounds().height - header_height_ - padding_.top - padding_.bottom)
     };
     return rect;
 }
@@ -1166,9 +1216,9 @@ tc_ui_rect GroupBox::content_rect() const {
 Splitter::Splitter(Orientation orientation, const char* debug_name)
     : NativeWidget(debug_name ? debug_name : "Splitter"),
       orientation_(orientation) {
-    preferred_size_ = orientation_ == Orientation::Horizontal
+    set_preferred_size(orientation_ == Orientation::Horizontal
         ? tc_ui_size {320.0f, 180.0f}
-        : tc_ui_size {240.0f, 260.0f};
+        : tc_ui_size {240.0f, 260.0f});
 }
 
 void Splitter::set_first(tc_widget_handle handle) {
@@ -1176,7 +1226,18 @@ void Splitter::set_first(tc_widget_handle handle) {
         tc_log_error("[termin-gui-native] cannot set invalid Splitter first handle");
         return;
     }
-    first_ = handle;
+    const tc_widget_handle previous = this->first();
+    if (tc_widget_handle_eq(previous, handle)) {
+        return;
+    }
+    if (tc_widget_handle_eq(this->second(), handle)) {
+        tc_log_error("[termin-gui-native] Splitter first and second widgets must be distinct");
+        return;
+    }
+    if (!attach_child(c_widget(), handle, 0, "Splitter::set_first")) {
+        return;
+    }
+    detach_if_child(c_widget(), previous);
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
@@ -1185,7 +1246,18 @@ void Splitter::set_second(tc_widget_handle handle) {
         tc_log_error("[termin-gui-native] cannot set invalid Splitter second handle");
         return;
     }
-    second_ = handle;
+    const tc_widget_handle previous = this->second();
+    if (tc_widget_handle_eq(previous, handle)) {
+        return;
+    }
+    if (tc_widget_handle_eq(this->first(), handle)) {
+        tc_log_error("[termin-gui-native] Splitter first and second widgets must be distinct");
+        return;
+    }
+    if (!attach_child(c_widget(), handle, 1, "Splitter::set_second")) {
+        return;
+    }
+    detach_if_child(c_widget(), previous);
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
@@ -1211,13 +1283,13 @@ Splitter& Splitter::set_divider_thickness(float thickness) {
 tc_ui_size Splitter::measure(tc_ui_document* document, tc_ui_constraints constraints) {
     tc_ui_size first_size {0.0f, 0.0f};
     tc_ui_size second_size {0.0f, 0.0f};
-    if (!tc_widget_handle_is_invalid(first_)) {
-        if (tc_widget* first = resolve_child(document, first_, "Splitter::measure(first)")) {
+    if (!tc_widget_handle_is_invalid(this->first())) {
+        if (tc_widget* first = resolve_child(document, c_widget(), this->first(), "Splitter::measure(first)")) {
             first_size = measure_widget(first, document, unconstrained());
         }
     }
-    if (!tc_widget_handle_is_invalid(second_)) {
-        if (tc_widget* second = resolve_child(document, second_, "Splitter::measure(second)")) {
+    if (!tc_widget_handle_is_invalid(this->second())) {
+        if (tc_widget* second = resolve_child(document, c_widget(), this->second(), "Splitter::measure(second)")) {
             second_size = measure_widget(second, document, unconstrained());
         }
     }
@@ -1230,8 +1302,8 @@ tc_ui_size Splitter::measure(tc_ui_document* document, tc_ui_constraints constra
         measured.width = std::max(first_size.width, second_size.width);
         measured.height = first_size.height + second_size.height + divider_thickness_;
     }
-    measured.width = std::max({measured.width, preferred_size_.width, min_size_.width});
-    measured.height = std::max({measured.height, preferred_size_.height, min_size_.height});
+    measured.width = std::max({measured.width, preferred_size().width, min_size().width});
+    measured.height = std::max({measured.height, preferred_size().height, min_size().height});
     return clamp_size(measured, constraints);
 }
 
@@ -1241,13 +1313,13 @@ void Splitter::layout(tc_ui_document* document, tc_ui_rect rect) {
 }
 
 void Splitter::paint(tc_ui_document* document, tc_ui_paint_context* context) {
-    tc_ui_painter_push_clip(context, bounds_);
-    if (!tc_widget_handle_is_invalid(first_)) {
-        tc_widget* first = resolve_child(document, first_, "Splitter::paint(first)");
+    tc_ui_painter_push_clip(context, bounds());
+    if (!tc_widget_handle_is_invalid(this->first())) {
+        tc_widget* first = resolve_child(document, c_widget(), this->first(), "Splitter::paint(first)");
         paint_widget(first, document, context);
     }
-    if (!tc_widget_handle_is_invalid(second_)) {
-        tc_widget* second = resolve_child(document, second_, "Splitter::paint(second)");
+    if (!tc_widget_handle_is_invalid(this->second())) {
+        tc_widget* second = resolve_child(document, c_widget(), this->second(), "Splitter::paint(second)");
         paint_widget(second, document, context);
     }
     tc_ui_painter_pop_clip(context);
@@ -1259,7 +1331,7 @@ tc_ui_event_result Splitter::pointer_event(tc_ui_document* document, const tc_ui
         return TC_UI_EVENT_IGNORED;
     }
     const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
-    if (!captured && !rect_contains(bounds_, event->x, event->y)) {
+    if (!captured && !rect_contains(bounds(), event->x, event->y)) {
         return TC_UI_EVENT_IGNORED;
     }
     if (event->type == TC_UI_POINTER_DOWN && rect_contains(divider_rect(), event->x, event->y)) {
@@ -1270,8 +1342,8 @@ tc_ui_event_result Splitter::pointer_event(tc_ui_document* document, const tc_ui
         const float axis = split_axis_extent();
         if (axis > 0.0f) {
             const float position = orientation_ == Orientation::Horizontal
-                ? event->x - bounds_.x
-                : event->y - bounds_.y;
+                ? event->x - bounds().x
+                : event->y - bounds().y;
             set_split_fraction(position / axis);
             layout_children(document);
         }
@@ -1282,58 +1354,42 @@ tc_ui_event_result Splitter::pointer_event(tc_ui_document* document, const tc_ui
         return TC_UI_EVENT_HANDLED;
     }
 
-    auto dispatch_child = [document, event](tc_widget_handle handle) {
-        tc_widget* child = tc_ui_document_resolve_widget(document, handle);
-        if (!child || !child->vtable || !child->vtable->pointer_event) {
+    auto dispatch_child = [this, document, event](tc_widget_handle handle) {
+        tc_widget* child = resolve_child(document, c_widget(), handle, "Splitter::pointer_event");
+        if (!child || !tc_widget_is_enabled(child) || !child->vtable || !child->vtable->pointer_event) {
             return TC_UI_EVENT_IGNORED;
         }
         return child->vtable->pointer_event(child, document, event);
     };
-    if (dispatch_child(second_) == TC_UI_EVENT_HANDLED) {
+    if (dispatch_child(this->second()) == TC_UI_EVENT_HANDLED) {
         return TC_UI_EVENT_HANDLED;
     }
-    return dispatch_child(first_);
+    return dispatch_child(this->first());
 }
 
 tc_widget_handle Splitter::hit_test(tc_ui_document* document, float x, float y) {
-    if (!rect_contains(bounds_, x, y)) {
+    if (!rect_contains(bounds(), x, y)) {
         return tc_widget_handle_invalid();
     }
     if (rect_contains(divider_rect(), x, y)) {
-        return handle();
+        return mouse_transparent() ? tc_widget_handle_invalid() : handle();
     }
-    auto hit_child = [document, x, y](tc_widget_handle handle) {
-        tc_widget* child = tc_ui_document_resolve_widget(document, handle);
+    auto hit_child = [this, document, x, y](tc_widget_handle handle) {
+        tc_widget* child = resolve_child(document, c_widget(), handle, "Splitter::hit_test");
         if (!child || !child->vtable || !child->vtable->hit_test) {
             return tc_widget_handle_invalid();
         }
         return child->vtable->hit_test(child, document, x, y);
     };
-    tc_widget_handle second_hit = hit_child(second_);
+    tc_widget_handle second_hit = hit_child(this->second());
     if (!tc_widget_handle_is_invalid(second_hit)) {
         return second_hit;
     }
-    tc_widget_handle first_hit = hit_child(first_);
+    tc_widget_handle first_hit = hit_child(this->first());
     if (!tc_widget_handle_is_invalid(first_hit)) {
         return first_hit;
     }
-    return handle();
-}
-
-void Splitter::visit_recursive_destroy_targets(
-    tc_ui_document*,
-    void* user_data,
-    tc_widget_visit_fn visit
-) {
-    if (!visit) {
-        return;
-    }
-    if (!tc_widget_handle_is_invalid(first_)) {
-        visit(user_data, first_);
-    }
-    if (!tc_widget_handle_is_invalid(second_)) {
-        visit(user_data, second_);
-    }
+    return mouse_transparent() ? tc_widget_handle_invalid() : handle();
 }
 
 tc_ui_rect Splitter::divider_rect() const {
@@ -1344,14 +1400,14 @@ tc_ui_rect Splitter::divider_rect() const {
             first_min_extent_,
             std::max(first_min_extent_, axis - second_min_extent_)
         );
-        return tc_ui_rect {bounds_.x + first_extent, bounds_.y, divider_thickness_, bounds_.height};
+        return tc_ui_rect {bounds().x + first_extent, bounds().y, divider_thickness_, bounds().height};
     }
     const float first_extent = clamp_float(
         axis * split_fraction_,
         first_min_extent_,
         std::max(first_min_extent_, axis - second_min_extent_)
     );
-    return tc_ui_rect {bounds_.x, bounds_.y + first_extent, bounds_.width, divider_thickness_};
+    return tc_ui_rect {bounds().x, bounds().y + first_extent, bounds().width, divider_thickness_};
 }
 
 void Splitter::layout_children(tc_ui_document* document) {
@@ -1362,26 +1418,26 @@ void Splitter::layout_children(tc_ui_document* document) {
         std::max(first_min_extent_, axis - second_min_extent_)
     );
     const float second_extent = std::max(0.0f, axis - first_extent);
-    if (!tc_widget_handle_is_invalid(first_)) {
-        tc_widget* first = resolve_child(document, first_, "Splitter::layout(first)");
+    if (!tc_widget_handle_is_invalid(this->first())) {
+        tc_widget* first = resolve_child(document, c_widget(), this->first(), "Splitter::layout(first)");
         tc_ui_rect first_rect = orientation_ == Orientation::Horizontal
-            ? tc_ui_rect {bounds_.x, bounds_.y, first_extent, bounds_.height}
-            : tc_ui_rect {bounds_.x, bounds_.y, bounds_.width, first_extent};
+            ? tc_ui_rect {bounds().x, bounds().y, first_extent, bounds().height}
+            : tc_ui_rect {bounds().x, bounds().y, bounds().width, first_extent};
         layout_widget(first, document, first_rect);
     }
-    if (!tc_widget_handle_is_invalid(second_)) {
-        tc_widget* second = resolve_child(document, second_, "Splitter::layout(second)");
+    if (!tc_widget_handle_is_invalid(this->second())) {
+        tc_widget* second = resolve_child(document, c_widget(), this->second(), "Splitter::layout(second)");
         tc_ui_rect second_rect = orientation_ == Orientation::Horizontal
             ? tc_ui_rect {
-                bounds_.x + first_extent + divider_thickness_,
-                bounds_.y,
+                bounds().x + first_extent + divider_thickness_,
+                bounds().y,
                 second_extent,
-                bounds_.height
+                bounds().height
             }
             : tc_ui_rect {
-                bounds_.x,
-                bounds_.y + first_extent + divider_thickness_,
-                bounds_.width,
+                bounds().x,
+                bounds().y + first_extent + divider_thickness_,
+                bounds().width,
                 second_extent
             };
         layout_widget(second, document, second_rect);
@@ -1389,13 +1445,13 @@ void Splitter::layout_children(tc_ui_document* document) {
 }
 
 float Splitter::split_axis_extent() const {
-    const float axis = orientation_ == Orientation::Horizontal ? bounds_.width : bounds_.height;
+    const float axis = orientation_ == Orientation::Horizontal ? bounds().width : bounds().height;
     return std::max(0.0f, axis - divider_thickness_);
 }
 
 ScrollArea::ScrollArea(const char* debug_name)
     : NativeWidget(debug_name ? debug_name : "ScrollArea") {
-    preferred_size_ = tc_ui_size {240.0f, 180.0f};
+    set_preferred_size(tc_ui_size {240.0f, 180.0f});
 }
 
 void ScrollArea::set_content(tc_widget_handle handle) {
@@ -1403,7 +1459,14 @@ void ScrollArea::set_content(tc_widget_handle handle) {
         tc_log_error("[termin-gui-native] cannot set invalid ScrollArea content handle");
         return;
     }
-    content_ = handle;
+    const tc_widget_handle previous = this->content();
+    if (tc_widget_handle_eq(previous, handle)) {
+        return;
+    }
+    if (!attach_child(c_widget(), handle, 0, "ScrollArea::set_content")) {
+        return;
+    }
+    detach_if_child(c_widget(), previous);
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
@@ -1415,26 +1478,26 @@ void ScrollArea::set_scroll(float x, float y) {
 }
 
 tc_ui_size ScrollArea::measure(tc_ui_document* document, tc_ui_constraints constraints) {
-    tc_ui_size measured = preferred_size_;
-    if (!tc_widget_handle_is_invalid(content_)) {
-        if (tc_widget* content = resolve_child(document, content_, "ScrollArea::measure")) {
+    tc_ui_size measured = preferred_size();
+    if (!tc_widget_handle_is_invalid(this->content())) {
+        if (tc_widget* content = resolve_child(document, c_widget(), this->content(), "ScrollArea::measure")) {
             tc_ui_size content_size = measure_widget(content, document, unconstrained());
-            measured.width = std::max(measured.width, std::min(content_size.width, preferred_size_.width));
-            measured.height = std::max(measured.height, std::min(content_size.height, preferred_size_.height));
+            measured.width = std::max(measured.width, std::min(content_size.width, preferred_size().width));
+            measured.height = std::max(measured.height, std::min(content_size.height, preferred_size().height));
         }
     }
-    measured.width = std::max(measured.width, min_size_.width);
-    measured.height = std::max(measured.height, min_size_.height);
+    measured.width = std::max(measured.width, min_size().width);
+    measured.height = std::max(measured.height, min_size().height);
     return clamp_size(measured, constraints);
 }
 
 void ScrollArea::layout(tc_ui_document* document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
     content_size_ = tc_ui_size {0.0f, 0.0f};
-    if (tc_widget_handle_is_invalid(content_)) {
+    if (tc_widget_handle_is_invalid(this->content())) {
         return;
     }
-    tc_widget* content = resolve_child(document, content_, "ScrollArea::layout");
+    tc_widget* content = resolve_child(document, c_widget(), this->content(), "ScrollArea::layout");
     if (!content) {
         return;
     }
@@ -1453,30 +1516,30 @@ void ScrollArea::layout(tc_ui_document* document, tc_ui_rect rect) {
 }
 
 void ScrollArea::paint(tc_ui_document* document, tc_ui_paint_context* context) {
-    tc_ui_painter_push_clip(context, bounds_);
-    if (!tc_widget_handle_is_invalid(content_)) {
-        tc_widget* content = resolve_child(document, content_, "ScrollArea::paint");
+    tc_ui_painter_push_clip(context, bounds());
+    if (!tc_widget_handle_is_invalid(this->content())) {
+        tc_widget* content = resolve_child(document, c_widget(), this->content(), "ScrollArea::paint");
         paint_widget(content, document, context);
     }
     tc_ui_painter_pop_clip(context);
 }
 
 tc_ui_event_result ScrollArea::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
-    if (!event || !rect_contains(bounds_, event->x, event->y)) {
+    if (!event || !rect_contains(bounds(), event->x, event->y)) {
         return TC_UI_EVENT_IGNORED;
     }
     if (event->type == TC_UI_POINTER_WHEEL) {
         const float delta_y = event->wheel_y != 0.0f ? -event->wheel_y * wheel_step_ : 0.0f;
         const float delta_x = event->wheel_x != 0.0f ? -event->wheel_x * wheel_step_ : 0.0f;
         set_scroll(scroll_x_ + delta_x, scroll_y_ + delta_y);
-        if (!tc_widget_handle_is_invalid(content_)) {
-            if (tc_widget* content = tc_ui_document_resolve_widget(document, content_)) {
+        if (!tc_widget_handle_is_invalid(this->content())) {
+            if (tc_widget* content = resolve_child(document, c_widget(), this->content(), "ScrollArea::wheel")) {
                 layout_widget(
                     content,
                     document,
                     tc_ui_rect {
-                        bounds_.x - scroll_x_,
-                        bounds_.y - scroll_y_,
+                        bounds().x - scroll_x_,
+                        bounds().y - scroll_y_,
                         content_size_.width,
                         content_size_.height
                     }
@@ -1485,22 +1548,22 @@ tc_ui_event_result ScrollArea::pointer_event(tc_ui_document* document, const tc_
         }
         return TC_UI_EVENT_HANDLED;
     }
-    if (tc_widget_handle_is_invalid(content_)) {
+    if (tc_widget_handle_is_invalid(this->content())) {
         return TC_UI_EVENT_IGNORED;
     }
-    tc_widget* content = tc_ui_document_resolve_widget(document, content_);
-    if (!content || !content->vtable || !content->vtable->pointer_event) {
+    tc_widget* content = resolve_child(document, c_widget(), this->content(), "ScrollArea::pointer_event");
+    if (!content || !tc_widget_is_enabled(content) || !content->vtable || !content->vtable->pointer_event) {
         return TC_UI_EVENT_IGNORED;
     }
     return content->vtable->pointer_event(content, document, event);
 }
 
 tc_widget_handle ScrollArea::hit_test(tc_ui_document* document, float x, float y) {
-    if (!rect_contains(bounds_, x, y)) {
+    if (!rect_contains(bounds(), x, y)) {
         return tc_widget_handle_invalid();
     }
-    if (!tc_widget_handle_is_invalid(content_)) {
-        tc_widget* content = tc_ui_document_resolve_widget(document, content_);
+    if (!tc_widget_handle_is_invalid(this->content())) {
+        tc_widget* content = resolve_child(document, c_widget(), this->content(), "ScrollArea::hit_test");
         if (content && content->vtable && content->vtable->hit_test) {
             tc_widget_handle hit = content->vtable->hit_test(content, document, x, y);
             if (!tc_widget_handle_is_invalid(hit)) {
@@ -1508,27 +1571,17 @@ tc_widget_handle ScrollArea::hit_test(tc_ui_document* document, float x, float y
             }
         }
     }
-    return handle();
-}
-
-void ScrollArea::visit_recursive_destroy_targets(
-    tc_ui_document*,
-    void* user_data,
-    tc_widget_visit_fn visit
-) {
-    if (visit && !tc_widget_handle_is_invalid(content_)) {
-        visit(user_data, content_);
-    }
+    return mouse_transparent() ? tc_widget_handle_invalid() : handle();
 }
 
 void ScrollArea::clamp_scroll() {
-    scroll_x_ = clamp_float(scroll_x_, 0.0f, std::max(0.0f, content_size_.width - bounds_.width));
-    scroll_y_ = clamp_float(scroll_y_, 0.0f, std::max(0.0f, content_size_.height - bounds_.height));
+    scroll_x_ = clamp_float(scroll_x_, 0.0f, std::max(0.0f, content_size_.width - bounds().width));
+    scroll_y_ = clamp_float(scroll_y_, 0.0f, std::max(0.0f, content_size_.height - bounds().height));
 }
 
 TabView::TabView(const char* debug_name)
     : NativeWidget(debug_name ? debug_name : "TabView") {
-    preferred_size_ = tc_ui_size {320.0f, 220.0f};
+    set_preferred_size(tc_ui_size {320.0f, 220.0f});
 }
 
 void TabView::add_page(std::string title, tc_widget_handle handle) {
@@ -1536,15 +1589,27 @@ void TabView::add_page(std::string title, tc_widget_handle handle) {
         tc_log_error("[termin-gui-native] cannot add invalid TabView page handle");
         return;
     }
+    const auto duplicate = std::find_if(
+        pages_.begin(),
+        pages_.end(),
+        [handle](const TabPage& page) { return tc_widget_handle_eq(page.handle, handle); }
+    );
+    if (duplicate != pages_.end()) {
+        tc_log_error("[termin-gui-native] cannot add the same widget to TabView twice");
+        return;
+    }
+    if (!attach_child(c_widget(), handle, SIZE_MAX, "TabView::add_page")) {
+        return;
+    }
     pages_.push_back(TabPage {std::move(title), handle});
-    if (pages_.size() == 1) {
+    if (child_count() == 1) {
         selected_index_ = 0;
     }
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
 void TabView::set_selected_index(size_t index) {
-    if (index >= pages_.size() || selected_index_ == index) {
+    if (index >= child_count() || selected_index_ == index) {
         return;
     }
     selected_index_ = index;
@@ -1552,10 +1617,10 @@ void TabView::set_selected_index(size_t index) {
 }
 
 tc_ui_size TabView::measure(tc_ui_document* document, tc_ui_constraints constraints) {
-    tc_ui_size content {preferred_size_.width, std::max(0.0f, preferred_size_.height - header_height_)};
-    for (const TabPage& page : pages_) {
-        tc_widget* child = resolve_child(document, page.handle, "TabView::measure");
-        if (!child) {
+    tc_ui_size content {preferred_size().width, std::max(0.0f, preferred_size().height - header_height_)};
+    for (size_t index = 0; index < child_count(); ++index) {
+        tc_widget* child = child_at(index);
+        if (!child || !tc_widget_is_visible(child)) {
             continue;
         }
         tc_ui_size child_size = measure_widget(child, document, unconstrained());
@@ -1567,22 +1632,24 @@ tc_ui_size TabView::measure(tc_ui_document* document, tc_ui_constraints constrai
 
 void TabView::layout(tc_ui_document* document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
-    if (pages_.empty() || selected_index_ >= pages_.size()) {
+    if (child_count() == 0 || selected_index_ >= child_count()) {
         return;
     }
-    tc_widget* selected = resolve_child(document, pages_[selected_index_].handle, "TabView::layout");
+    tc_widget* selected = child_at(selected_index_);
     layout_widget(selected, document, page_rect());
 }
 
 void TabView::paint(tc_ui_document* document, tc_ui_paint_context* context) {
-    tc_ui_painter_fill_rect(context, bounds_, tc_ui_color {0.10f, 0.11f, 0.13f, 1.0f});
-    const float tab_width = pages_.empty()
+    tc_ui_painter_fill_rect(context, bounds(), tc_ui_color {0.10f, 0.11f, 0.13f, 1.0f});
+    const float tab_width = child_count() == 0
         ? min_tab_width_
-        : std::max(min_tab_width_, bounds_.width / static_cast<float>(pages_.size()));
-    for (size_t i = 0; i < pages_.size(); ++i) {
+        : std::max(min_tab_width_, bounds().width / static_cast<float>(child_count()));
+    for (size_t i = 0; i < child_count(); ++i) {
+        const tc_widget* child = child_at(i);
+        const TabPage* page = child ? find_tab_page(pages_, child->handle) : nullptr;
         tc_ui_rect tab {
-            bounds_.x + tab_width * static_cast<float>(i),
-            bounds_.y,
+            bounds().x + tab_width * static_cast<float>(i),
+            bounds().y,
             tab_width,
             header_height_
         };
@@ -1596,7 +1663,7 @@ void TabView::paint(tc_ui_document* document, tc_ui_paint_context* context) {
         tc_ui_painter_push_clip(context, tab);
         tc_ui_painter_draw_text(
             context,
-            pages_[i].title.c_str(),
+            page ? page->title.c_str() : "",
             tc_ui_point {tab.x + 8.0f, tab.y + 21.0f},
             13.0f,
             tc_ui_color {0.88f, 0.91f, 0.96f, 1.0f}
@@ -1606,47 +1673,47 @@ void TabView::paint(tc_ui_document* document, tc_ui_paint_context* context) {
 
     tc_ui_rect body = page_rect();
     tc_ui_painter_push_clip(context, body);
-    if (!pages_.empty() && selected_index_ < pages_.size()) {
-        tc_widget* selected = resolve_child(document, pages_[selected_index_].handle, "TabView::paint");
+    if (child_count() > 0 && selected_index_ < child_count()) {
+        tc_widget* selected = child_at(selected_index_);
         paint_widget(selected, document, context);
     }
     tc_ui_painter_pop_clip(context);
 }
 
 tc_ui_event_result TabView::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
-    if (!event || !rect_contains(bounds_, event->x, event->y)) {
+    if (!event || !rect_contains(bounds(), event->x, event->y)) {
         return TC_UI_EVENT_IGNORED;
     }
-    if (event->type == TC_UI_POINTER_DOWN && event->y < bounds_.y + header_height_ && !pages_.empty()) {
-        const float tab_width = std::max(min_tab_width_, bounds_.width / static_cast<float>(pages_.size()));
-        const size_t index = static_cast<size_t>(std::max(0.0f, (event->x - bounds_.x) / tab_width));
-        if (index < pages_.size()) {
+    if (event->type == TC_UI_POINTER_DOWN && event->y < bounds().y + header_height_ && child_count() > 0) {
+        const float tab_width = std::max(min_tab_width_, bounds().width / static_cast<float>(child_count()));
+        const size_t index = static_cast<size_t>(std::max(0.0f, (event->x - bounds().x) / tab_width));
+        if (index < child_count()) {
             set_selected_index(index);
-            if (tc_widget* selected = tc_ui_document_resolve_widget(document, pages_[selected_index_].handle)) {
+            if (tc_widget* selected = child_at(selected_index_)) {
                 layout_widget(selected, document, page_rect());
             }
             return TC_UI_EVENT_HANDLED;
         }
     }
-    if (pages_.empty() || selected_index_ >= pages_.size() || !rect_contains(page_rect(), event->x, event->y)) {
+    if (child_count() == 0 || selected_index_ >= child_count() || !rect_contains(page_rect(), event->x, event->y)) {
         return TC_UI_EVENT_IGNORED;
     }
-    tc_widget* selected = tc_ui_document_resolve_widget(document, pages_[selected_index_].handle);
-    if (!selected || !selected->vtable || !selected->vtable->pointer_event) {
+    tc_widget* selected = child_at(selected_index_);
+    if (!selected || !tc_widget_is_enabled(selected) || !selected->vtable || !selected->vtable->pointer_event) {
         return TC_UI_EVENT_IGNORED;
     }
     return selected->vtable->pointer_event(selected, document, event);
 }
 
 tc_widget_handle TabView::hit_test(tc_ui_document* document, float x, float y) {
-    if (!rect_contains(bounds_, x, y)) {
+    if (!rect_contains(bounds(), x, y)) {
         return tc_widget_handle_invalid();
     }
-    if (y < bounds_.y + header_height_) {
-        return handle();
+    if (y < bounds().y + header_height_) {
+        return mouse_transparent() ? tc_widget_handle_invalid() : handle();
     }
-    if (!pages_.empty() && selected_index_ < pages_.size() && rect_contains(page_rect(), x, y)) {
-        tc_widget* selected = tc_ui_document_resolve_widget(document, pages_[selected_index_].handle);
+    if (child_count() > 0 && selected_index_ < child_count() && rect_contains(page_rect(), x, y)) {
+        tc_widget* selected = child_at(selected_index_);
         if (selected && selected->vtable && selected->vtable->hit_test) {
             tc_widget_handle hit = selected->vtable->hit_test(selected, document, x, y);
             if (!tc_widget_handle_is_invalid(hit)) {
@@ -1654,34 +1721,21 @@ tc_widget_handle TabView::hit_test(tc_ui_document* document, float x, float y) {
             }
         }
     }
-    return handle();
-}
-
-void TabView::visit_recursive_destroy_targets(
-    tc_ui_document*,
-    void* user_data,
-    tc_widget_visit_fn visit
-) {
-    if (!visit) {
-        return;
-    }
-    for (const TabPage& page : pages_) {
-        visit(user_data, page.handle);
-    }
+    return mouse_transparent() ? tc_widget_handle_invalid() : handle();
 }
 
 tc_ui_rect TabView::page_rect() const {
     return tc_ui_rect {
-        bounds_.x,
-        bounds_.y + header_height_,
-        bounds_.width,
-        std::max(0.0f, bounds_.height - header_height_)
+        bounds().x,
+        bounds().y + header_height_,
+        bounds().width,
+        std::max(0.0f, bounds().height - header_height_)
     };
 }
 
 Panel::Panel(const char* debug_name)
     : NativeWidget(debug_name) {
-    preferred_size_ = tc_ui_size {96.0f, 64.0f};
+    set_preferred_size(tc_ui_size {96.0f, 64.0f});
 }
 
 Panel& Panel::set_fill(Color color) {
@@ -1698,15 +1752,15 @@ Panel& Panel::set_border(Color color, float thickness) {
 }
 
 void Panel::paint(tc_ui_document*, tc_ui_paint_context* context) {
-    tc_ui_painter_fill_rect(context, bounds_, fill_.c_color());
+    tc_ui_painter_fill_rect(context, bounds(), fill_.c_color());
     if (border_thickness_ > 0.0f && color_visible(border_)) {
-        tc_ui_painter_stroke_rect(context, bounds_, border_.c_color(), border_thickness_);
+        tc_ui_painter_stroke_rect(context, bounds(), border_.c_color(), border_thickness_);
     }
 }
 
 Button::Button(std::string text, Color fill)
     : NativeWidget("Button"), text_(std::move(text)), fill_(fill) {
-    preferred_size_ = tc_ui_size {96.0f, 36.0f};
+    set_preferred_size(tc_ui_size {96.0f, 36.0f});
 }
 
 Button::Button(Color fill)
@@ -1725,22 +1779,22 @@ Button& Button::set_text(std::string text) {
 }
 
 void Button::paint(tc_ui_document*, tc_ui_paint_context* context) {
-    tc_ui_painter_fill_rect(context, bounds_, fill_.c_color());
-    tc_ui_painter_stroke_rect(context, bounds_, accent_.c_color(), 2.0f);
-    const float y = bounds_.y + bounds_.height * 0.5f;
+    tc_ui_painter_fill_rect(context, bounds(), fill_.c_color());
+    tc_ui_painter_stroke_rect(context, bounds(), accent_.c_color(), 2.0f);
+    const float y = bounds().y + bounds().height * 0.5f;
     tc_ui_painter_draw_line(
         context,
-        tc_ui_point {bounds_.x + 14.0f, y},
-        tc_ui_point {bounds_.x + bounds_.width - 14.0f, y},
+        tc_ui_point {bounds().x + 14.0f, y},
+        tc_ui_point {bounds().x + bounds().width - 14.0f, y},
         accent_.c_color(),
         2.0f
     );
     if (!text_.empty()) {
-        tc_ui_painter_push_clip(context, bounds_);
+        tc_ui_painter_push_clip(context, bounds());
         tc_ui_painter_draw_text(
             context,
             text_.c_str(),
-            tc_ui_point {bounds_.x + 12.0f, bounds_.y + bounds_.height * 0.5f + 5.0f},
+            tc_ui_point {bounds().x + 12.0f, bounds().y + bounds().height * 0.5f + 5.0f},
             14.0f,
             tc_ui_color {0.94f, 0.97f, 1.0f, 1.0f}
         );
@@ -1753,14 +1807,14 @@ tc_ui_event_result Button::pointer_event(tc_ui_document* document, const tc_ui_p
         return TC_UI_EVENT_IGNORED;
     }
     const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
-    if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds_, event->x, event->y)) {
+    if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
         pressed_ = true;
         tc_ui_document_set_pointer_capture(document, handle());
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
         return TC_UI_EVENT_HANDLED;
     }
     if (event->type == TC_UI_POINTER_UP && (pressed_ || captured)) {
-        const bool activate = pressed_ && rect_contains(bounds_, event->x, event->y);
+        const bool activate = pressed_ && rect_contains(bounds(), event->x, event->y);
         pressed_ = false;
         if (captured) {
             tc_ui_document_release_pointer_capture(document, handle());
@@ -1806,11 +1860,11 @@ Label& Label::set_font_size(float font_size) {
 }
 
 void Label::paint(tc_ui_document*, tc_ui_paint_context* context) {
-    tc_ui_painter_push_clip(context, bounds_);
+    tc_ui_painter_push_clip(context, bounds());
     tc_ui_painter_draw_text(
         context,
         text_.c_str(),
-        tc_ui_point {bounds_.x, bounds_.y + font_size_},
+        tc_ui_point {bounds().x, bounds().y + font_size_},
         font_size_,
         color_.c_color()
     );
@@ -1818,16 +1872,16 @@ void Label::paint(tc_ui_document*, tc_ui_paint_context* context) {
 }
 
 void Label::update_min_size() {
-    preferred_size_ = tc_ui_size {
+    set_preferred_size(tc_ui_size {
         std::max(1.0f, static_cast<float>(text_.size()) * font_size_ * 0.56f),
         font_size_ * 1.35f
-    };
+    });
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
 Checkbox::Checkbox(bool checked)
     : NativeWidget("Checkbox"), checked_(checked) {
-    preferred_size_ = tc_ui_size {32.0f, 32.0f};
+    set_preferred_size(tc_ui_size {32.0f, 32.0f});
 }
 
 void Checkbox::set_checked(bool checked) {
@@ -1840,10 +1894,10 @@ void Checkbox::set_checked(bool checked) {
 }
 
 void Checkbox::paint(tc_ui_document*, tc_ui_paint_context* context) {
-    const float side = std::min(bounds_.width, bounds_.height);
+    const float side = std::min(bounds().width, bounds().height);
     const tc_ui_rect box {
-        bounds_.x + (bounds_.width - side) * 0.5f,
-        bounds_.y + (bounds_.height - side) * 0.5f,
+        bounds().x + (bounds().width - side) * 0.5f,
+        bounds().y + (bounds().height - side) * 0.5f,
         side,
         side
     };
@@ -1872,14 +1926,14 @@ tc_ui_event_result Checkbox::pointer_event(tc_ui_document* document, const tc_ui
         return TC_UI_EVENT_IGNORED;
     }
     const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
-    if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds_, event->x, event->y)) {
+    if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
         pressed_ = true;
         tc_ui_document_set_pointer_capture(document, handle());
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
         return TC_UI_EVENT_HANDLED;
     }
     if (event->type == TC_UI_POINTER_UP && (pressed_ || captured)) {
-        const bool activate = pressed_ && rect_contains(bounds_, event->x, event->y);
+        const bool activate = pressed_ && rect_contains(bounds(), event->x, event->y);
         pressed_ = false;
         if (captured) {
             tc_ui_document_release_pointer_capture(document, handle());
@@ -1898,7 +1952,7 @@ tc_ui_event_result Checkbox::pointer_event(tc_ui_document* document, const tc_ui
 
 ProgressBar::ProgressBar(float value)
     : NativeWidget("ProgressBar") {
-    preferred_size_ = tc_ui_size {120.0f, 20.0f};
+    set_preferred_size(tc_ui_size {120.0f, 20.0f});
     set_value(value);
 }
 
@@ -1912,18 +1966,18 @@ void ProgressBar::set_value(float value) {
 }
 
 void ProgressBar::paint(tc_ui_document*, tc_ui_paint_context* context) {
-    tc_ui_painter_fill_rect(context, bounds_, tc_ui_color {0.09f, 0.10f, 0.12f, 1.0f});
-    tc_ui_rect fill = bounds_;
+    tc_ui_painter_fill_rect(context, bounds(), tc_ui_color {0.09f, 0.10f, 0.12f, 1.0f});
+    tc_ui_rect fill = bounds();
     fill.width *= value_;
     tc_ui_painter_fill_rect(context, fill, tc_ui_color {0.25f, 0.58f, 0.88f, 1.0f});
-    tc_ui_painter_stroke_rect(context, bounds_, tc_ui_color {0.38f, 0.42f, 0.48f, 1.0f}, 1.0f);
+    tc_ui_painter_stroke_rect(context, bounds(), tc_ui_color {0.38f, 0.42f, 0.48f, 1.0f}, 1.0f);
 }
 
 Separator::Separator(Orientation orientation)
     : NativeWidget("Separator"), orientation_(orientation) {
-    preferred_size_ = orientation_ == Orientation::Horizontal
+    set_preferred_size(orientation_ == Orientation::Horizontal
         ? tc_ui_size {24.0f, thickness_}
-        : tc_ui_size {thickness_, 24.0f};
+        : tc_ui_size {thickness_, 24.0f});
 }
 
 Separator& Separator::set_color(Color color) {
@@ -1934,15 +1988,15 @@ Separator& Separator::set_color(Color color) {
 
 Separator& Separator::set_thickness(float thickness) {
     thickness_ = std::max(1.0f, thickness);
-    preferred_size_ = orientation_ == Orientation::Horizontal
-        ? tc_ui_size {preferred_size_.width, thickness_}
-        : tc_ui_size {thickness_, preferred_size_.height};
+    set_preferred_size(orientation_ == Orientation::Horizontal
+        ? tc_ui_size {preferred_size().width, thickness_}
+        : tc_ui_size {thickness_, preferred_size().height});
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
     return *this;
 }
 
 void Separator::paint(tc_ui_document*, tc_ui_paint_context* context) {
-    tc_ui_rect rect = bounds_;
+    tc_ui_rect rect = bounds();
     if (orientation_ == Orientation::Horizontal) {
         rect.y += std::max(0.0f, (rect.height - thickness_) * 0.5f);
         rect.height = std::min(rect.height, thickness_);
@@ -1983,29 +2037,29 @@ void TextInput::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     const tc_ui_color border = focused
         ? tc_ui_color {0.38f, 0.62f, 0.92f, 1.0f}
         : tc_ui_color {0.36f, 0.38f, 0.42f, 1.0f};
-    tc_ui_painter_fill_rect(context, bounds_, tc_ui_color {0.08f, 0.09f, 0.11f, 1.0f});
-    tc_ui_painter_stroke_rect(context, bounds_, border, focused ? 2.0f : 1.0f);
+    tc_ui_painter_fill_rect(context, bounds(), tc_ui_color {0.08f, 0.09f, 0.11f, 1.0f});
+    tc_ui_painter_stroke_rect(context, bounds(), border, focused ? 2.0f : 1.0f);
     const tc_ui_rect text_clip {
-        bounds_.x + 8.0f,
-        bounds_.y + 2.0f,
-        std::max(0.0f, bounds_.width - 16.0f),
-        std::max(0.0f, bounds_.height - 4.0f)
+        bounds().x + 8.0f,
+        bounds().y + 2.0f,
+        std::max(0.0f, bounds().width - 16.0f),
+        std::max(0.0f, bounds().height - 4.0f)
     };
     tc_ui_painter_push_clip(context, text_clip);
     tc_ui_painter_draw_text(
         context,
         text_.c_str(),
-        tc_ui_point {bounds_.x + 8.0f, bounds_.y + bounds_.height * 0.5f + font_size_ * 0.35f},
+        tc_ui_point {bounds().x + 8.0f, bounds().y + bounds().height * 0.5f + font_size_ * 0.35f},
         font_size_,
         text_color_.c_color()
     );
     if (focused) {
         const float glyph_width = font_size_ * 0.56f;
-        const float caret_x = bounds_.x + 8.0f + glyph_width * static_cast<float>(caret_);
+        const float caret_x = bounds().x + 8.0f + glyph_width * static_cast<float>(caret_);
         tc_ui_painter_draw_line(
             context,
-            tc_ui_point {caret_x, bounds_.y + 7.0f},
-            tc_ui_point {caret_x, bounds_.y + bounds_.height - 7.0f},
+            tc_ui_point {caret_x, bounds().y + 7.0f},
+            tc_ui_point {caret_x, bounds().y + bounds().height - 7.0f},
             tc_ui_color {0.86f, 0.92f, 1.0f, 1.0f},
             1.0f
         );
@@ -2014,12 +2068,12 @@ void TextInput::paint(tc_ui_document* document, tc_ui_paint_context* context) {
 }
 
 tc_ui_event_result TextInput::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
-    if (!event || event->type != TC_UI_POINTER_DOWN || !rect_contains(bounds_, event->x, event->y)) {
+    if (!event || event->type != TC_UI_POINTER_DOWN || !rect_contains(bounds(), event->x, event->y)) {
         return TC_UI_EVENT_IGNORED;
     }
     tc_ui_document_set_focus(document, handle());
     const float glyph_width = std::max(1.0f, font_size_ * 0.56f);
-    const float local_x = std::max(0.0f, event->x - bounds_.x - 8.0f);
+    const float local_x = std::max(0.0f, event->x - bounds().x - 8.0f);
     set_caret(static_cast<size_t>(std::floor(local_x / glyph_width + 0.5f)));
     return TC_UI_EVENT_HANDLED;
 }
@@ -2076,10 +2130,10 @@ tc_ui_event_result TextInput::text_event(tc_ui_document*, const tc_ui_text_event
 }
 
 void TextInput::update_preferred_size() {
-    preferred_size_ = tc_ui_size {
+    set_preferred_size(tc_ui_size {
         std::max(160.0f, static_cast<float>(text_.size()) * font_size_ * 0.56f + 18.0f),
         34.0f
-    };
+    });
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
@@ -2090,7 +2144,7 @@ void TextInput::emit_changed() {
 
 Slider::Slider(float value)
     : NativeWidget("Slider") {
-    preferred_size_ = tc_ui_size {140.0f, 28.0f};
+    set_preferred_size(tc_ui_size {140.0f, 28.0f});
     set_value(value);
 }
 
@@ -2105,9 +2159,9 @@ void Slider::set_value(float value) {
 }
 
 void Slider::paint(tc_ui_document*, tc_ui_paint_context* context) {
-    const float center_y = bounds_.y + bounds_.height * 0.5f;
-    const float left = bounds_.x + 10.0f;
-    const float right = bounds_.x + bounds_.width - 10.0f;
+    const float center_y = bounds().y + bounds().height * 0.5f;
+    const float left = bounds().x + 10.0f;
+    const float right = bounds().x + bounds().width - 10.0f;
     const float knob_x = left + (right - left) * value_;
     tc_ui_painter_draw_line(
         context,
@@ -2135,7 +2189,7 @@ tc_ui_event_result Slider::pointer_event(tc_ui_document* document, const tc_ui_p
         return TC_UI_EVENT_IGNORED;
     }
     const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
-    if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds_, event->x, event->y)) {
+    if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
         dragging_ = true;
         tc_ui_document_set_pointer_capture(document, handle());
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
@@ -2153,8 +2207,8 @@ tc_ui_event_result Slider::pointer_event(tc_ui_document* document, const tc_ui_p
     } else if (event->type != TC_UI_POINTER_DOWN && event->type != TC_UI_POINTER_MOVE) {
         return TC_UI_EVENT_IGNORED;
     }
-    const float left = bounds_.x + 10.0f;
-    const float right = bounds_.x + bounds_.width - 10.0f;
+    const float left = bounds().x + 10.0f;
+    const float right = bounds().x + bounds().width - 10.0f;
     if (right <= left) {
         return TC_UI_EVENT_HANDLED;
     }
@@ -2164,17 +2218,17 @@ tc_ui_event_result Slider::pointer_event(tc_ui_document* document, const tc_ui_p
 
 Swatch::Swatch(Color color)
     : NativeWidget("Swatch"), color_(color) {
-    preferred_size_ = tc_ui_size {36.0f, 36.0f};
+    set_preferred_size(tc_ui_size {36.0f, 36.0f});
 }
 
 void Swatch::paint(tc_ui_document*, tc_ui_paint_context* context) {
-    tc_ui_painter_fill_rect(context, bounds_, color_.c_color());
-    tc_ui_painter_stroke_rect(context, bounds_, tc_ui_color {0.88f, 0.90f, 0.94f, 1.0f}, 1.0f);
+    tc_ui_painter_fill_rect(context, bounds(), color_.c_color());
+    tc_ui_painter_stroke_rect(context, bounds(), tc_ui_color {0.88f, 0.90f, 0.94f, 1.0f}, 1.0f);
 }
 
 Spacer::Spacer(tc_ui_size size)
     : NativeWidget("Spacer") {
-    preferred_size_ = size;
+    set_preferred_size(size);
 }
 
 } // namespace termin::gui_native

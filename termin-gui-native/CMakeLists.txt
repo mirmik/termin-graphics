@@ -28,7 +28,8 @@ include(TerminRpath)
 add_library(termin_gui_native SHARED
     src/draw_list_renderer.cpp
     src/showcase.cpp
-    src/tc_ui_document.cpp
+    src/tc_ui_document.c
+    src/tc_ui_draw_list.cpp
     src/widgets.cpp
 )
 add_library(termin_gui_native::termin_gui_native ALIAS termin_gui_native)

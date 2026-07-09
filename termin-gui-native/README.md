@@ -5,16 +5,23 @@ migration.
 
 The current module is intentionally small:
 
-- `tc_ui_document` owns widget objects and handle lifetime;
+- `tc_ui_document` is implemented in C and adopts widget objects while owning
+  handle slots and generations;
 - `tc_widget` is an intrusive C ABI header embedded into concrete widgets;
+- common bounds, size constraints, visibility/enabled/input flags and the
+  canonical parent/ordered-children tree live directly in `tc_widget`;
+- canonical tree links use stable `tc_widget*` pointers inside a document while
+  handles remain the external reference format;
 - widget implementations keep their own handle references;
 - plain destroy deletes only the requested widget;
-- recursive destroy is an explicit API and asks the widget vtable for recursive
-  destroy targets;
+- recursive destroy is an explicit API and walks the canonical widget tree;
+- the creator-provided deleter may be null for borrowed/static widgets;
 - roots are explicit paint entry points, not an implicit ownership tree.
 - `termin/gui_native/widgets.hpp` adds a first C++ widget layer:
-  `NativeWidget`, `BoxLayout`, `Panel`, `Button`, `Checkbox`, `ProgressBar`,
-  `Slider`, `Swatch`, `Label`, and `Spacer`;
+  `NativeWidget`, `BoxLayout`, `HStack`, `VStack`, `GridLayout`, `GroupBox`,
+  `Splitter`, `ScrollArea`, `TabView`, `Panel`, `Button`, `Checkbox`,
+  `ProgressBar`, `TextInput`, `Separator`, `Slider`, `Swatch`, `Label`, and
+  `Spacer`;
 - `tc_ui_document_layout_roots` and `tc_ui_document_dispatch_pointer_event`
   exercise layout and event dispatch without making ownership implicit;
 - widget `paint` writes backend-neutral commands into `tc_ui_draw_list` through
