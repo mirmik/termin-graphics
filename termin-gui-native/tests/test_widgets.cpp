@@ -1,11 +1,16 @@
 #include <termin/gui_native/widgets.hpp>
 
 #include <cassert>
+#include <cmath>
 #include <cstdlib>
 
 using namespace termin::gui_native;
 
 namespace {
+
+bool near(float a, float b, float epsilon = 0.001f) {
+    return std::fabs(a - b) <= epsilon;
+}
 
 void test_box_layout_sets_child_bounds_and_paints() {
     Document document;
@@ -39,6 +44,38 @@ void test_box_layout_sets_child_bounds_and_paints() {
 
     tc_ui_paint_context_destroy(paint_context);
     tc_ui_draw_list_destroy(draw_list);
+}
+
+void test_box_layout_child_policies_allocate_primary_axis() {
+    Document document;
+    DocumentBuilder ui(document);
+
+    auto& root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
+    auto& fixed = ui.make<Spacer>(tc_ui_size {10.0f, 12.0f});
+    auto& preferred = ui.make<Spacer>(tc_ui_size {30.0f, 18.0f});
+    auto& flex_one = ui.make<Panel>("flex-one");
+    auto& flex_two = ui.make<Panel>("flex-two");
+
+    root.add_fixed_child(fixed, 50.0f);
+    root.add_preferred_child(preferred);
+    root.add_flex_child(flex_one, 1.0f);
+    root.add_flex_child(flex_two, 2.0f);
+
+    assert(root.items().size() == 4);
+    assert(root.items()[0].policy == LayoutPolicy::Fixed);
+    assert(root.items()[1].policy == LayoutPolicy::Preferred);
+    assert(root.items()[2].policy == LayoutPolicy::Flex);
+
+    document.layout_roots(tc_ui_rect {0.0f, 0.0f, 300.0f, 40.0f});
+
+    assert(near(fixed.bounds().x, 0.0f));
+    assert(near(fixed.bounds().width, 50.0f));
+    assert(near(preferred.bounds().x, 50.0f));
+    assert(near(preferred.bounds().width, 30.0f));
+    assert(near(flex_one.bounds().x, 80.0f));
+    assert(near(flex_one.bounds().width, 220.0f / 3.0f));
+    assert(near(flex_two.bounds().x, 80.0f + 220.0f / 3.0f));
+    assert(near(flex_two.bounds().width, 440.0f / 3.0f));
 }
 
 void test_recursive_destroy_removes_container_children() {
@@ -85,6 +122,7 @@ void test_controls_handle_pointer_events() {
 
 int main() {
     test_box_layout_sets_child_bounds_and_paints();
+    test_box_layout_child_policies_allocate_primary_axis();
     test_recursive_destroy_removes_container_children();
     test_controls_handle_pointer_events();
     return EXIT_SUCCESS;

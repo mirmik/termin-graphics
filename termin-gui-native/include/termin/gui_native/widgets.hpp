@@ -23,6 +23,20 @@ struct EdgeInsets {
     float bottom = 0.0f;
 };
 
+enum class LayoutPolicy {
+    Fixed,
+    Preferred,
+    Flex,
+    Stretch,
+};
+
+struct LayoutItem {
+    tc_widget_handle handle {};
+    LayoutPolicy policy = LayoutPolicy::Stretch;
+    float fixed_extent = 0.0f;
+    float flex = 1.0f;
+};
+
 struct Color {
     float r = 0.0f;
     float g = 0.0f;
@@ -122,9 +136,22 @@ public:
     BoxLayout& set_border(Color color, float thickness = 1.0f);
 
     void add_child(tc_widget_handle handle);
+    void add_child(tc_widget_handle handle, LayoutPolicy policy, float value = 0.0f);
     void add_child(const Widget& widget) { add_child(widget.handle()); }
+    void add_child(const Widget& widget, LayoutPolicy policy, float value = 0.0f) {
+        add_child(widget.handle(), policy, value);
+    }
+    void add_fixed_child(tc_widget_handle handle, float extent);
+    void add_fixed_child(const Widget& widget, float extent) { add_fixed_child(widget.handle(), extent); }
+    void add_preferred_child(tc_widget_handle handle);
+    void add_preferred_child(const Widget& widget) { add_preferred_child(widget.handle()); }
+    void add_flex_child(tc_widget_handle handle, float flex = 1.0f);
+    void add_flex_child(const Widget& widget, float flex = 1.0f) { add_flex_child(widget.handle(), flex); }
+    void add_stretch_child(tc_widget_handle handle);
+    void add_stretch_child(const Widget& widget) { add_stretch_child(widget.handle()); }
 
-    const std::vector<tc_widget_handle>& children() const { return children_; }
+    const std::vector<LayoutItem>& items() const { return items_; }
+    std::vector<tc_widget_handle> children() const;
 
     tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
     void layout(tc_ui_document* document, tc_ui_rect rect) override;
@@ -143,7 +170,7 @@ private:
     Color background_ {0.0f, 0.0f, 0.0f, 0.0f};
     Color border_ {0.0f, 0.0f, 0.0f, 0.0f};
     float border_thickness_ = 0.0f;
-    std::vector<tc_widget_handle> children_;
+    std::vector<LayoutItem> items_;
 };
 
 class Panel : public NativeWidget {

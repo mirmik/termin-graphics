@@ -80,6 +80,27 @@ tc_ui_rect inset_rect(tc_ui_rect rect, EdgeInsets padding) {
     return rect;
 }
 
+float primary_size(tc_ui_size size, Orientation orientation) {
+    return orientation == Orientation::Vertical ? size.height : size.width;
+}
+
+float measured_or_fixed_extent(const LayoutItem& item, tc_ui_size measured, Orientation orientation) {
+    if (item.policy == LayoutPolicy::Fixed && item.fixed_extent > 0.0f) {
+        return item.fixed_extent;
+    }
+    return primary_size(measured, orientation);
+}
+
+float flexible_weight(const LayoutItem& item) {
+    if (item.policy == LayoutPolicy::Flex) {
+        return std::max(0.0f, item.flex);
+    }
+    if (item.policy == LayoutPolicy::Stretch) {
+        return 1.0f;
+    }
+    return 0.0f;
+}
+
 } // namespace
 
 const tc_widget_vtable NativeWidget::VTABLE {
@@ -197,27 +218,66 @@ BoxLayout& BoxLayout::set_border(Color color, float thickness) {
 }
 
 void BoxLayout::add_child(tc_widget_handle handle) {
+    add_child(handle, LayoutPolicy::Stretch);
+}
+
+void BoxLayout::add_child(tc_widget_handle handle, LayoutPolicy policy, float value) {
     if (tc_widget_handle_is_invalid(handle)) {
         tc_log_error("[termin-gui-native] cannot add invalid child handle to BoxLayout");
         return;
     }
-    children_.push_back(handle);
+
+    LayoutItem item {};
+    item.handle = handle;
+    item.policy = policy;
+    if (policy == LayoutPolicy::Fixed) {
+        item.fixed_extent = std::max(0.0f, value);
+    } else if (policy == LayoutPolicy::Flex) {
+        item.flex = value > 0.0f ? value : 1.0f;
+    }
+    items_.push_back(item);
+}
+
+void BoxLayout::add_fixed_child(tc_widget_handle handle, float extent) {
+    add_child(handle, LayoutPolicy::Fixed, extent);
+}
+
+void BoxLayout::add_preferred_child(tc_widget_handle handle) {
+    add_child(handle, LayoutPolicy::Preferred);
+}
+
+void BoxLayout::add_flex_child(tc_widget_handle handle, float flex) {
+    add_child(handle, LayoutPolicy::Flex, flex);
+}
+
+void BoxLayout::add_stretch_child(tc_widget_handle handle) {
+    add_child(handle, LayoutPolicy::Stretch);
+}
+
+std::vector<tc_widget_handle> BoxLayout::children() const {
+    std::vector<tc_widget_handle> handles;
+    handles.reserve(items_.size());
+    for (const LayoutItem& item : items_) {
+        handles.push_back(item.handle);
+    }
+    return handles;
 }
 
 tc_ui_size BoxLayout::measure(tc_ui_document* document, tc_ui_constraints constraints) {
     tc_ui_size content {0.0f, 0.0f};
     size_t live_children = 0;
-    for (tc_widget_handle handle : children_) {
-        tc_widget* child = resolve_child(document, handle, "BoxLayout::measure");
+    for (const LayoutItem& item : items_) {
+        tc_widget* child = resolve_child(document, item.handle, "BoxLayout::measure");
         if (!child) {
             continue;
         }
         tc_ui_size child_size = measure_widget(child, document, unconstrained());
+        const float child_primary = measured_or_fixed_extent(item, child_size, orientation_);
         if (orientation_ == Orientation::Vertical) {
             content.width = std::max(content.width, child_size.width);
-            content.height += child_size.height;
+            content.height += child_primary;
         } else {
-            content.width += child_size.width;
+            content.width += child_primary;
             content.height = std::max(content.height, child_size.height);
         }
         live_children += 1;
@@ -242,35 +302,60 @@ tc_ui_size BoxLayout::measure(tc_ui_document* document, tc_ui_constraints constr
 void BoxLayout::layout(tc_ui_document* document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
 
-    std::vector<tc_widget*> live_children;
-    live_children.reserve(children_.size());
-    for (tc_widget_handle handle : children_) {
-        if (tc_widget* child = resolve_child(document, handle, "BoxLayout::layout")) {
-            live_children.push_back(child);
+    struct LiveItem {
+        tc_widget* widget = nullptr;
+        tc_ui_size measured {0.0f, 0.0f};
+        float extent = 0.0f;
+        float weight = 0.0f;
+    };
+
+    std::vector<LiveItem> live_items;
+    live_items.reserve(items_.size());
+    float reserved_extent = 0.0f;
+    float total_weight = 0.0f;
+    for (const LayoutItem& item : items_) {
+        tc_widget* child = resolve_child(document, item.handle, "BoxLayout::layout");
+        if (!child) {
+            continue;
         }
+        LiveItem live {};
+        live.widget = child;
+        live.measured = measure_widget(child, document, unconstrained());
+        live.weight = flexible_weight(item);
+        if (live.weight <= 0.0f) {
+            live.extent = measured_or_fixed_extent(item, live.measured, orientation_);
+            reserved_extent += live.extent;
+        } else {
+            total_weight += live.weight;
+        }
+        live_items.push_back(live);
     }
-    if (live_children.empty()) {
+    if (live_items.empty()) {
         return;
     }
 
     tc_ui_rect content = inset_rect(rect, padding_);
-    const float total_spacing = spacing_ * static_cast<float>(live_children.size() - 1);
+    const float total_spacing = spacing_ * static_cast<float>(live_items.size() - 1);
     const float axis_extent = orientation_ == Orientation::Vertical ? content.height : content.width;
-    const float child_extent = std::max(
-        0.0f,
-        (axis_extent - total_spacing) / static_cast<float>(live_children.size())
-    );
+    const float flexible_extent = std::max(0.0f, axis_extent - total_spacing - reserved_extent);
+    if (total_weight > 0.0f) {
+        for (LiveItem& live : live_items) {
+            if (live.weight > 0.0f) {
+                live.extent = flexible_extent * (live.weight / total_weight);
+            }
+        }
+    }
 
     float cursor = orientation_ == Orientation::Vertical ? content.y : content.x;
-    for (tc_widget* child : live_children) {
+    for (const LiveItem& live : live_items) {
         tc_ui_rect child_rect {};
         if (orientation_ == Orientation::Vertical) {
-            child_rect = tc_ui_rect {content.x, cursor, content.width, child_extent};
+            child_rect = tc_ui_rect {content.x, cursor, content.width, live.extent};
         } else {
-            child_rect = tc_ui_rect {cursor, content.y, child_extent, content.height};
+            child_rect = tc_ui_rect {cursor, content.y, live.extent, content.height};
         }
-        layout_widget(child, document, child_rect);
-        cursor += child_extent + spacing_;
+        layout_widget(live.widget, document, child_rect);
+        cursor += live.extent + spacing_;
     }
 }
 
@@ -283,8 +368,8 @@ void BoxLayout::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     }
 
     tc_ui_painter_push_clip(context, bounds_);
-    for (tc_widget_handle handle : children_) {
-        tc_widget* child = resolve_child(document, handle, "BoxLayout::paint");
+    for (const LayoutItem& item : items_) {
+        tc_widget* child = resolve_child(document, item.handle, "BoxLayout::paint");
         paint_widget(child, document, context);
     }
     tc_ui_painter_pop_clip(context);
@@ -297,8 +382,8 @@ tc_ui_event_result BoxLayout::pointer_event(
     if (!event || !rect_contains(bounds_, event->x, event->y)) {
         return TC_UI_EVENT_IGNORED;
     }
-    for (auto it = children_.rbegin(); it != children_.rend(); ++it) {
-        tc_widget* child = tc_ui_document_resolve_widget(document, *it);
+    for (auto it = items_.rbegin(); it != items_.rend(); ++it) {
+        tc_widget* child = tc_ui_document_resolve_widget(document, it->handle);
         if (!child || !child->vtable || !child->vtable->pointer_event) {
             continue;
         }
@@ -317,8 +402,8 @@ void BoxLayout::visit_recursive_destroy_targets(
     if (!visit) {
         return;
     }
-    for (tc_widget_handle child : children_) {
-        visit(user_data, child);
+    for (const LayoutItem& item : items_) {
+        visit(user_data, item.handle);
     }
 }
 
