@@ -315,8 +315,8 @@ void test_group_box_lays_out_content_and_routes_hit_test() {
     tc_ui_paint_context* paint_context = tc_ui_paint_context_create(draw_list);
     document.paint_roots(paint_context);
     assert(count_commands(draw_list, TC_UI_DRAW_TEXT) == 1);
-    assert(count_commands(draw_list, TC_UI_DRAW_PUSH_CLIP) == 1);
-    assert(count_commands(draw_list, TC_UI_DRAW_POP_CLIP) == 1);
+    assert(count_commands(draw_list, TC_UI_DRAW_PUSH_CLIP) == 2);
+    assert(count_commands(draw_list, TC_UI_DRAW_POP_CLIP) == 2);
     tc_ui_paint_context_destroy(paint_context);
     tc_ui_draw_list_destroy(draw_list);
 }
@@ -793,14 +793,26 @@ void test_controls_handle_pointer_events() {
     checkbox_event.x = checkbox.bounds().x + 4.0f;
     checkbox_event.y = checkbox.bounds().y + 4.0f;
     assert(document.dispatch_pointer_event(checkbox_event) == TC_UI_EVENT_HANDLED);
+    assert(!checkbox.checked());
+    assert(tc_widget_handle_eq(document.pointer_capture(), checkbox.handle()));
+    checkbox_event.type = TC_UI_POINTER_UP;
+    assert(document.dispatch_pointer_event(checkbox_event) == TC_UI_EVENT_HANDLED);
     assert(checkbox.checked());
+    assert(tc_widget_handle_is_invalid(document.pointer_capture()));
 
     tc_ui_pointer_event slider_event {};
     slider_event.type = TC_UI_POINTER_DOWN;
-    slider_event.x = slider.bounds().x + slider.bounds().width;
+    slider_event.x = slider.bounds().x + 10.0f;
     slider_event.y = slider.bounds().y + slider.bounds().height * 0.5f;
     assert(document.dispatch_pointer_event(slider_event) == TC_UI_EVENT_HANDLED);
+    assert(tc_widget_handle_eq(document.pointer_capture(), slider.handle()));
+    slider_event.type = TC_UI_POINTER_MOVE;
+    slider_event.x = slider.bounds().x + slider.bounds().width + 80.0f;
+    assert(document.dispatch_pointer_event(slider_event) == TC_UI_EVENT_HANDLED);
     assert(slider.value() > 0.95f);
+    slider_event.type = TC_UI_POINTER_UP;
+    assert(document.dispatch_pointer_event(slider_event) == TC_UI_EVENT_HANDLED);
+    assert(tc_widget_handle_is_invalid(document.pointer_capture()));
 }
 
 void test_separator_layout_and_paint_command() {
@@ -889,6 +901,50 @@ void test_text_input_focus_text_edit_and_submit() {
     assert(submitted == 1);
 }
 
+void test_text_widgets_clip_text_paint() {
+    Document document;
+    DocumentBuilder ui(document);
+    auto& root = ui.make_root<BoxLayout>(Orientation::Vertical, "root");
+    auto& label = ui.make<Label>("Long label text that must stay inside its widget", 14.0f);
+    auto& input = ui.make<TextInput>("Long input text that must stay inside the edit box");
+    root.add_fixed_child(label, 20.0f);
+    root.add_fixed_child(input, 34.0f);
+
+    document.layout_roots(tc_ui_rect {10.0f, 20.0f, 180.0f, 80.0f});
+
+    tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
+    tc_ui_paint_context* paint_context = tc_ui_paint_context_create(draw_list);
+    document.paint_roots(paint_context);
+
+    bool saw_label_clip = false;
+    bool saw_input_inner_clip = false;
+    for (size_t i = 0; i < tc_ui_draw_list_command_count(draw_list); ++i) {
+        const tc_ui_draw_command* command = tc_ui_draw_list_command_at(draw_list, i);
+        if (!command || command->type != TC_UI_DRAW_PUSH_CLIP) {
+            continue;
+        }
+        if (near(command->rect.x, label.bounds().x) &&
+            near(command->rect.y, label.bounds().y) &&
+            near(command->rect.width, label.bounds().width) &&
+            near(command->rect.height, label.bounds().height)) {
+            saw_label_clip = true;
+        }
+        if (near(command->rect.x, input.bounds().x + 8.0f) &&
+            near(command->rect.y, input.bounds().y + 2.0f) &&
+            near(command->rect.width, input.bounds().width - 16.0f) &&
+            near(command->rect.height, input.bounds().height - 4.0f)) {
+            saw_input_inner_clip = true;
+        }
+    }
+
+    assert(saw_label_clip);
+    assert(saw_input_inner_clip);
+    assert(count_commands(draw_list, TC_UI_DRAW_PUSH_CLIP) == count_commands(draw_list, TC_UI_DRAW_POP_CLIP));
+
+    tc_ui_paint_context_destroy(paint_context);
+    tc_ui_draw_list_destroy(draw_list);
+}
+
 void test_widget_signals_are_emitted_from_interactions() {
     Document document;
     DocumentBuilder ui(document);
@@ -933,9 +989,18 @@ void test_widget_signals_are_emitted_from_interactions() {
     event.y = button.bounds().y + 4.0f;
     assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_HANDLED);
     assert(clicked_a == 0);
+    assert(clicked_b == 0);
+    assert(tc_widget_handle_eq(document.pointer_capture(), button.handle()));
+    event.type = TC_UI_POINTER_UP;
+    assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_HANDLED);
+    assert(clicked_a == 0);
     assert(clicked_b == 1);
 
+    event.type = TC_UI_POINTER_DOWN;
     event.x = checkbox.bounds().x + 4.0f;
+    assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_HANDLED);
+    assert(checkbox_changes == 0);
+    event.type = TC_UI_POINTER_UP;
     assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_HANDLED);
     assert(checkbox_changes == 1);
     assert(last_checked);
@@ -945,11 +1010,16 @@ void test_widget_signals_are_emitted_from_interactions() {
     assert(slider_changes == 1);
     assert(near(last_slider_value, 0.25f));
 
+    event.type = TC_UI_POINTER_DOWN;
     event.x = slider.bounds().x + slider.bounds().width;
     event.y = slider.bounds().y + slider.bounds().height * 0.5f;
     assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_HANDLED);
     assert(slider_changes == 2);
     assert(last_slider_value > 0.95f);
+    assert(tc_widget_handle_eq(document.pointer_capture(), slider.handle()));
+    event.type = TC_UI_POINTER_UP;
+    assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_HANDLED);
+    assert(tc_widget_handle_is_invalid(document.pointer_capture()));
 }
 
 } // namespace
@@ -985,6 +1055,7 @@ int main() {
     test_controls_handle_pointer_events();
     test_separator_layout_and_paint_command();
     test_text_input_focus_text_edit_and_submit();
+    test_text_widgets_clip_text_paint();
     test_widget_signals_are_emitted_from_interactions();
     return EXIT_SUCCESS;
 }

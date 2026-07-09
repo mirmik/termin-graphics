@@ -54,13 +54,13 @@ void test_showcase_builds_stable_headless_snapshot() {
     tc_ui_paint_context* paint_context = tc_ui_paint_context_create(draw_list);
     document.paint_roots(paint_context);
 
-    require_equal(tc_ui_draw_list_command_count(draw_list), 81, "showcase total commands");
+    require_equal(tc_ui_draw_list_command_count(draw_list), 99, "showcase total commands");
     require_equal(count_commands(draw_list, TC_UI_DRAW_FILL_RECT), 25, "showcase fill commands");
     require_equal(count_commands(draw_list, TC_UI_DRAW_STROKE_RECT), 19, "showcase stroke commands");
     require_equal(count_commands(draw_list, TC_UI_DRAW_LINE), 8, "showcase line commands");
     require_equal(count_commands(draw_list, TC_UI_DRAW_TEXT), 9, "showcase text commands");
-    require_equal(count_commands(draw_list, TC_UI_DRAW_PUSH_CLIP), 10, "showcase push clip commands");
-    require_equal(count_commands(draw_list, TC_UI_DRAW_POP_CLIP), 10, "showcase pop clip commands");
+    require_equal(count_commands(draw_list, TC_UI_DRAW_PUSH_CLIP), 19, "showcase push clip commands");
+    require_equal(count_commands(draw_list, TC_UI_DRAW_POP_CLIP), 19, "showcase pop clip commands");
 
     const tc_ui_draw_command* first = tc_ui_draw_list_command_at(draw_list, 0);
     const tc_ui_draw_command* last = tc_ui_draw_list_command_at(

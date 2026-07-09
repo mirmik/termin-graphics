@@ -1087,6 +1087,13 @@ void GroupBox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
         );
     }
     if (!title_.empty()) {
+        tc_ui_rect title_clip {
+            bounds_.x + padding_.left,
+            bounds_.y,
+            std::max(0.0f, bounds_.width - padding_.left - padding_.right),
+            header_height_
+        };
+        tc_ui_painter_push_clip(context, title_clip);
         tc_ui_painter_draw_text(
             context,
             title_.c_str(),
@@ -1094,6 +1101,7 @@ void GroupBox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
             13.0f,
             tc_ui_color {0.86f, 0.90f, 0.96f, 1.0f}
         );
+        tc_ui_painter_pop_clip(context);
     }
 
     const tc_ui_rect clip = content_rect();
@@ -1585,6 +1593,7 @@ void TabView::paint(tc_ui_document* document, tc_ui_paint_context* context) {
             selected ? tc_ui_color {0.20f, 0.26f, 0.34f, 1.0f} : tc_ui_color {0.13f, 0.14f, 0.16f, 1.0f}
         );
         tc_ui_painter_stroke_rect(context, tab, tc_ui_color {0.34f, 0.36f, 0.40f, 1.0f}, 1.0f);
+        tc_ui_painter_push_clip(context, tab);
         tc_ui_painter_draw_text(
             context,
             pages_[i].title.c_str(),
@@ -1592,6 +1601,7 @@ void TabView::paint(tc_ui_document* document, tc_ui_paint_context* context) {
             13.0f,
             tc_ui_color {0.88f, 0.91f, 0.96f, 1.0f}
         );
+        tc_ui_painter_pop_clip(context);
     }
 
     tc_ui_rect body = page_rect();
@@ -1726,6 +1736,7 @@ void Button::paint(tc_ui_document*, tc_ui_paint_context* context) {
         2.0f
     );
     if (!text_.empty()) {
+        tc_ui_painter_push_clip(context, bounds_);
         tc_ui_painter_draw_text(
             context,
             text_.c_str(),
@@ -1733,15 +1744,37 @@ void Button::paint(tc_ui_document*, tc_ui_paint_context* context) {
             14.0f,
             tc_ui_color {0.94f, 0.97f, 1.0f, 1.0f}
         );
+        tc_ui_painter_pop_clip(context);
     }
 }
 
-tc_ui_event_result Button::pointer_event(tc_ui_document*, const tc_ui_pointer_event* event) {
-    if (!event || event->type != TC_UI_POINTER_DOWN || !rect_contains(bounds_, event->x, event->y)) {
+tc_ui_event_result Button::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
+    if (!event) {
         return TC_UI_EVENT_IGNORED;
     }
-    clicked_.emit(*this);
-    return TC_UI_EVENT_HANDLED;
+    const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
+    if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds_, event->x, event->y)) {
+        pressed_ = true;
+        tc_ui_document_set_pointer_capture(document, handle());
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->type == TC_UI_POINTER_UP && (pressed_ || captured)) {
+        const bool activate = pressed_ && rect_contains(bounds_, event->x, event->y);
+        pressed_ = false;
+        if (captured) {
+            tc_ui_document_release_pointer_capture(document, handle());
+        }
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        if (activate) {
+            clicked_.emit(*this);
+        }
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->type == TC_UI_POINTER_MOVE && captured) {
+        return TC_UI_EVENT_HANDLED;
+    }
+    return TC_UI_EVENT_IGNORED;
 }
 
 Label::Label(std::string text, float font_size, Color color)
@@ -1773,6 +1806,7 @@ Label& Label::set_font_size(float font_size) {
 }
 
 void Label::paint(tc_ui_document*, tc_ui_paint_context* context) {
+    tc_ui_painter_push_clip(context, bounds_);
     tc_ui_painter_draw_text(
         context,
         text_.c_str(),
@@ -1780,6 +1814,7 @@ void Label::paint(tc_ui_document*, tc_ui_paint_context* context) {
         font_size_,
         color_.c_color()
     );
+    tc_ui_painter_pop_clip(context);
 }
 
 void Label::update_min_size() {
@@ -1832,12 +1867,33 @@ void Checkbox::paint(tc_ui_document*, tc_ui_paint_context* context) {
     }
 }
 
-tc_ui_event_result Checkbox::pointer_event(tc_ui_document*, const tc_ui_pointer_event* event) {
-    if (!event || event->type != TC_UI_POINTER_DOWN || !rect_contains(bounds_, event->x, event->y)) {
+tc_ui_event_result Checkbox::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
+    if (!event) {
         return TC_UI_EVENT_IGNORED;
     }
-    set_checked(!checked_);
-    return TC_UI_EVENT_HANDLED;
+    const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
+    if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds_, event->x, event->y)) {
+        pressed_ = true;
+        tc_ui_document_set_pointer_capture(document, handle());
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->type == TC_UI_POINTER_UP && (pressed_ || captured)) {
+        const bool activate = pressed_ && rect_contains(bounds_, event->x, event->y);
+        pressed_ = false;
+        if (captured) {
+            tc_ui_document_release_pointer_capture(document, handle());
+        }
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        if (activate) {
+            set_checked(!checked_);
+        }
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->type == TC_UI_POINTER_MOVE && captured) {
+        return TC_UI_EVENT_HANDLED;
+    }
+    return TC_UI_EVENT_IGNORED;
 }
 
 ProgressBar::ProgressBar(float value)
@@ -1929,6 +1985,13 @@ void TextInput::paint(tc_ui_document* document, tc_ui_paint_context* context) {
         : tc_ui_color {0.36f, 0.38f, 0.42f, 1.0f};
     tc_ui_painter_fill_rect(context, bounds_, tc_ui_color {0.08f, 0.09f, 0.11f, 1.0f});
     tc_ui_painter_stroke_rect(context, bounds_, border, focused ? 2.0f : 1.0f);
+    const tc_ui_rect text_clip {
+        bounds_.x + 8.0f,
+        bounds_.y + 2.0f,
+        std::max(0.0f, bounds_.width - 16.0f),
+        std::max(0.0f, bounds_.height - 4.0f)
+    };
+    tc_ui_painter_push_clip(context, text_clip);
     tc_ui_painter_draw_text(
         context,
         text_.c_str(),
@@ -1947,6 +2010,7 @@ void TextInput::paint(tc_ui_document* document, tc_ui_paint_context* context) {
             1.0f
         );
     }
+    tc_ui_painter_pop_clip(context);
 }
 
 tc_ui_event_result TextInput::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
@@ -2066,11 +2130,27 @@ void Slider::paint(tc_ui_document*, tc_ui_paint_context* context) {
     );
 }
 
-tc_ui_event_result Slider::pointer_event(tc_ui_document*, const tc_ui_pointer_event* event) {
-    if (!event || !rect_contains(bounds_, event->x, event->y)) {
+tc_ui_event_result Slider::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
+    if (!event) {
         return TC_UI_EVENT_IGNORED;
     }
-    if (event->type != TC_UI_POINTER_DOWN && event->type != TC_UI_POINTER_MOVE) {
+    const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
+    if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds_, event->x, event->y)) {
+        dragging_ = true;
+        tc_ui_document_set_pointer_capture(document, handle());
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+    } else if (event->type == TC_UI_POINTER_DOWN) {
+        return TC_UI_EVENT_IGNORED;
+    } else if (event->type == TC_UI_POINTER_MOVE && !(dragging_ || captured)) {
+        return TC_UI_EVENT_IGNORED;
+    } else if (event->type == TC_UI_POINTER_UP && (dragging_ || captured)) {
+        dragging_ = false;
+        if (captured) {
+            tc_ui_document_release_pointer_capture(document, handle());
+        }
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return TC_UI_EVENT_HANDLED;
+    } else if (event->type != TC_UI_POINTER_DOWN && event->type != TC_UI_POINTER_MOVE) {
         return TC_UI_EVENT_IGNORED;
     }
     const float left = bounds_.x + 10.0f;
