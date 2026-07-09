@@ -208,6 +208,16 @@ TERMIN_GUI_NATIVE_API void tc_ui_document_paint_roots(
     tc_ui_paint_context* context
 );
 
+TERMIN_GUI_NATIVE_API void tc_ui_document_layout_roots(
+    tc_ui_document* document,
+    tc_ui_rect rect
+);
+
+TERMIN_GUI_NATIVE_API tc_ui_event_result tc_ui_document_dispatch_pointer_event(
+    tc_ui_document* document,
+    const tc_ui_pointer_event* event
+);
+
 TERMIN_GUI_NATIVE_API tc_ui_draw_list* tc_ui_draw_list_create(void);
 TERMIN_GUI_NATIVE_API void tc_ui_draw_list_destroy(tc_ui_draw_list* draw_list);
 TERMIN_GUI_NATIVE_API void tc_ui_draw_list_clear(tc_ui_draw_list* draw_list);

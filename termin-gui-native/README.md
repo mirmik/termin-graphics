@@ -12,6 +12,11 @@ The current module is intentionally small:
 - recursive destroy is an explicit API and asks the widget vtable for recursive
   destroy targets;
 - roots are explicit paint entry points, not an implicit ownership tree.
+- `termin/gui_native/widgets.hpp` adds a first C++ widget layer:
+  `NativeWidget`, `BoxLayout`, `Panel`, `Button`, `Checkbox`, `ProgressBar`,
+  `Slider`, `Swatch`, and `Spacer`;
+- `tc_ui_document_layout_roots` and `tc_ui_document_dispatch_pointer_event`
+  exercise layout and event dispatch without making ownership implicit;
 - widget `paint` writes backend-neutral commands into `tc_ui_draw_list` through
   `tc_ui_paint_context`; no GPU renderer is required for unit tests.
 - `UiDrawListRenderer` can flush the command list through

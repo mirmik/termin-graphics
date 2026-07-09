@@ -28,6 +28,7 @@ include(TerminRpath)
 add_library(termin_gui_native SHARED
     src/draw_list_renderer.cpp
     src/tc_ui_document.cpp
+    src/widgets.cpp
 )
 add_library(termin_gui_native::termin_gui_native ALIAS termin_gui_native)
 
@@ -78,6 +79,9 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     )
     termin_gui_native_add_test(termin_gui_native_draw_list_test
         tests/test_ui_draw_list.cpp
+    )
+    termin_gui_native_add_test(termin_gui_native_widgets_test
+        tests/test_widgets.cpp
     )
 endif()
 

@@ -375,6 +375,52 @@ void tc_ui_document_paint_roots(tc_ui_document* document, tc_ui_paint_context* c
     }
 }
 
+void tc_ui_document_layout_roots(tc_ui_document* document, tc_ui_rect rect) {
+    if (!document) {
+        tc_log_error("[termin-gui-native] cannot layout roots of null document");
+        return;
+    }
+
+    const std::vector<tc_widget_handle> roots = document->roots;
+    for (tc_widget_handle root : roots) {
+        tc_widget* widget = tc_ui_document_resolve_widget(document, root);
+        if (!widget) {
+            tc_log_error(
+                "[termin-gui-native] skipping stale root handle index=%u generation=%u during layout",
+                root.index,
+                root.generation
+            );
+            continue;
+        }
+        if (widget->vtable && widget->vtable->layout) {
+            widget->vtable->layout(widget, document, rect);
+        }
+    }
+}
+
+tc_ui_event_result tc_ui_document_dispatch_pointer_event(
+    tc_ui_document* document,
+    const tc_ui_pointer_event* event
+) {
+    if (!document || !event) {
+        tc_log_error("[termin-gui-native] cannot dispatch pointer event without document/event");
+        return TC_UI_EVENT_IGNORED;
+    }
+
+    const std::vector<tc_widget_handle> roots = document->roots;
+    for (auto it = roots.rbegin(); it != roots.rend(); ++it) {
+        tc_widget* widget = tc_ui_document_resolve_widget(document, *it);
+        if (!widget) {
+            continue;
+        }
+        if (widget->vtable && widget->vtable->pointer_event &&
+            widget->vtable->pointer_event(widget, document, event) == TC_UI_EVENT_HANDLED) {
+            return TC_UI_EVENT_HANDLED;
+        }
+    }
+    return TC_UI_EVENT_IGNORED;
+}
+
 tc_ui_draw_list* tc_ui_draw_list_create(void) {
     return new (std::nothrow) tc_ui_draw_list();
 }

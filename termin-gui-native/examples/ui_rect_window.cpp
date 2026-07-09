@@ -9,7 +9,7 @@
 #include <vector>
 
 #include <termin/gui_native/draw_list_renderer.hpp>
-#include <termin/gui_native/widget.hpp>
+#include <termin/gui_native/widgets.hpp>
 #include <termin/platform/sdl_backend_window.hpp>
 
 #include <tgfx2/descriptors.hpp>
@@ -19,69 +19,91 @@
 #include <tgfx2/tc_shader_bridge.hpp>
 
 using termin::gui_native::Document;
+using termin::gui_native::DocumentBuilder;
 using termin::gui_native::UiDrawListRenderer;
-using termin::gui_native::Widget;
+using termin::gui_native::BoxLayout;
+using termin::gui_native::Button;
+using termin::gui_native::Checkbox;
+using termin::gui_native::Color;
+using termin::gui_native::EdgeInsets;
+using termin::gui_native::Orientation;
+using termin::gui_native::Panel;
+using termin::gui_native::ProgressBar;
+using termin::gui_native::Slider;
+using termin::gui_native::Spacer;
+using termin::gui_native::Swatch;
 
 namespace {
 
-class DemoWidget final : public Widget {
-public:
-    DemoWidget() : Widget(&VTABLE, "DemoWidget") {}
-
-private:
-    static void paint(tc_widget* widget, tc_ui_document*, tc_ui_paint_context* context) {
-        (void)widget;
-
-        tc_ui_painter_fill_rect(
-            context,
-            tc_ui_rect {0.0f, 0.0f, 800.0f, 600.0f},
-            tc_ui_color {0.08f, 0.09f, 0.11f, 1.0f}
-        );
-        tc_ui_painter_push_clip(context, tc_ui_rect {40.0f, 40.0f, 720.0f, 520.0f});
-        tc_ui_painter_fill_rect(
-            context,
-            tc_ui_rect {90.0f, 90.0f, 260.0f, 120.0f},
-            tc_ui_color {0.18f, 0.42f, 0.72f, 1.0f}
-        );
-        tc_ui_painter_stroke_rect(
-            context,
-            tc_ui_rect {90.0f, 90.0f, 260.0f, 120.0f},
-            tc_ui_color {0.85f, 0.92f, 1.0f, 1.0f},
-            3.0f
-        );
-        tc_ui_painter_fill_rect(
-            context,
-            tc_ui_rect {120.0f, 250.0f, 180.0f, 44.0f},
-            tc_ui_color {0.20f, 0.62f, 0.42f, 1.0f}
-        );
-        tc_ui_painter_stroke_rect(
-            context,
-            tc_ui_rect {120.0f, 250.0f, 180.0f, 44.0f},
-            tc_ui_color {0.75f, 1.0f, 0.86f, 1.0f},
-            2.0f
-        );
-        tc_ui_painter_draw_line(
-            context,
-            tc_ui_point {410.0f, 120.0f},
-            tc_ui_point {690.0f, 320.0f},
-            tc_ui_color {0.98f, 0.72f, 0.20f, 1.0f},
-            5.0f
-        );
-        tc_ui_painter_pop_clip(context);
-    }
-
-    static const tc_widget_vtable VTABLE;
+struct ShowcaseRefs {
+    ProgressBar* progress = nullptr;
+    Slider* slider = nullptr;
+    Checkbox* checkbox = nullptr;
 };
 
-const tc_widget_vtable DemoWidget::VTABLE {
-    "DemoWidget",
-    nullptr,
-    nullptr,
-    &DemoWidget::paint,
-    nullptr,
-    nullptr,
-    nullptr,
-};
+ShowcaseRefs build_showcase(Document& document) {
+    DocumentBuilder ui(document);
+    ShowcaseRefs refs;
+
+    auto& root = ui.make_root<BoxLayout>(Orientation::Vertical, "showcase-root");
+    root.set_padding(EdgeInsets {18.0f, 18.0f, 18.0f, 18.0f})
+        .set_spacing(14.0f)
+        .set_background(Color {0.055f, 0.060f, 0.070f, 1.0f});
+
+    auto& top = ui.make<BoxLayout>(Orientation::Horizontal, "showcase-top");
+    top.set_spacing(12.0f);
+    root.add_child(top);
+
+    auto& navigation = ui.make<BoxLayout>(Orientation::Vertical, "navigation");
+    navigation.set_padding(EdgeInsets {12.0f, 12.0f, 12.0f, 12.0f})
+        .set_spacing(8.0f)
+        .set_background(Color {0.10f, 0.11f, 0.13f, 1.0f})
+        .set_border(Color {0.28f, 0.30f, 0.34f, 1.0f}, 1.0f);
+    top.add_child(navigation);
+    navigation.add_child(ui.make<Button>(Color {0.18f, 0.32f, 0.54f, 1.0f}));
+    navigation.add_child(ui.make<Button>(Color {0.16f, 0.42f, 0.32f, 1.0f}));
+    navigation.add_child(ui.make<Button>(Color {0.48f, 0.28f, 0.20f, 1.0f}));
+
+    auto& content = ui.make<BoxLayout>(Orientation::Vertical, "content");
+    content.set_padding(EdgeInsets {14.0f, 14.0f, 14.0f, 14.0f})
+        .set_spacing(10.0f)
+        .set_background(Color {0.13f, 0.14f, 0.16f, 1.0f})
+        .set_border(Color {0.36f, 0.39f, 0.44f, 1.0f}, 1.0f);
+    top.add_child(content);
+
+    auto& hero_row = ui.make<BoxLayout>(Orientation::Horizontal, "hero-row");
+    hero_row.set_spacing(10.0f);
+    content.add_child(hero_row);
+    hero_row.add_child(ui.make<Panel>("preview-a").set_fill(Color {0.20f, 0.42f, 0.62f, 1.0f}));
+    hero_row.add_child(ui.make<Panel>("preview-b").set_fill(Color {0.26f, 0.48f, 0.34f, 1.0f}));
+
+    auto& controls = ui.make<BoxLayout>(Orientation::Horizontal, "controls");
+    controls.set_spacing(10.0f);
+    content.add_child(controls);
+    refs.checkbox = &ui.make<Checkbox>(true);
+    refs.slider = &ui.make<Slider>(0.62f);
+    refs.progress = &ui.make<ProgressBar>(0.35f);
+    controls.add_child(*refs.checkbox);
+    controls.add_child(*refs.slider);
+    controls.add_child(*refs.progress);
+
+    auto& palette = ui.make<BoxLayout>(Orientation::Horizontal, "palette");
+    palette.set_spacing(8.0f);
+    content.add_child(palette);
+    palette.add_child(ui.make<Swatch>(Color {0.90f, 0.22f, 0.24f, 1.0f}));
+    palette.add_child(ui.make<Swatch>(Color {0.95f, 0.72f, 0.28f, 1.0f}));
+    palette.add_child(ui.make<Swatch>(Color {0.24f, 0.68f, 0.48f, 1.0f}));
+    palette.add_child(ui.make<Swatch>(Color {0.28f, 0.52f, 0.92f, 1.0f}));
+
+    auto& bottom = ui.make<BoxLayout>(Orientation::Horizontal, "bottom");
+    bottom.set_spacing(12.0f);
+    root.add_child(bottom);
+    bottom.add_child(ui.make<Panel>("status-a").set_fill(Color {0.12f, 0.20f, 0.26f, 1.0f}));
+    bottom.add_child(ui.make<Panel>("status-b").set_fill(Color {0.22f, 0.17f, 0.28f, 1.0f}));
+    bottom.add_child(ui.make<Spacer>(tc_ui_size {32.0f, 32.0f}));
+
+    return refs;
+}
 
 tgfx::TextureHandle create_color_target(tgfx::IRenderDevice& device, int width, int height) {
     tgfx::TextureDesc desc;
@@ -243,12 +265,7 @@ int main() {
         }
 
         Document document;
-        auto* demo = new DemoWidget();
-        tc_widget_handle root = document.adopt(demo);
-        if (tc_widget_handle_is_invalid(root) || !tc_ui_document_add_root(document.get(), root)) {
-            std::fprintf(stderr, "termin-gui-native example: failed to create root widget\n");
-            return 1;
-        }
+        ShowcaseRefs showcase = build_showcase(document);
 
         tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
         tc_ui_paint_context* paint_context = tc_ui_paint_context_create(draw_list);
@@ -279,7 +296,16 @@ int main() {
             }
 
             tc_ui_draw_list_clear(draw_list);
-            tc_ui_document_paint_roots(document.get(), paint_context);
+            const auto now = std::chrono::steady_clock::now();
+            const double elapsed = std::chrono::duration<double>(now - start).count();
+            if (showcase.progress) {
+                showcase.progress->set_value(static_cast<float>((std::sin(elapsed) + 1.0) * 0.5));
+            }
+            if (showcase.slider && showcase.checkbox && showcase.checkbox->checked()) {
+                showcase.slider->set_value(static_cast<float>((std::sin(elapsed * 0.6) + 1.0) * 0.5));
+            }
+            document.layout_roots(tc_ui_rect {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)});
+            document.paint_roots(paint_context);
 
             context->begin_frame();
             const float clear_color[4] = {0.03f, 0.035f, 0.045f, 1.0f};
@@ -290,7 +316,6 @@ int main() {
             window.present(color_target);
 
             if (max_seconds > 0.0) {
-                const auto now = std::chrono::steady_clock::now();
                 const double elapsed = std::chrono::duration<double>(now - start).count();
                 if (elapsed >= max_seconds) {
                     break;

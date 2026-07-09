@@ -59,6 +59,26 @@ public:
         return tc_ui_document_adopt_widget(_document, widget ? widget->c_widget() : nullptr);
     }
 
+    bool add_root(const Widget& widget) {
+        return tc_ui_document_add_root(_document, widget.handle());
+    }
+
+    bool remove_root(const Widget& widget) {
+        return tc_ui_document_remove_root(_document, widget.handle());
+    }
+
+    void layout_roots(tc_ui_rect rect) {
+        tc_ui_document_layout_roots(_document, rect);
+    }
+
+    void paint_roots(tc_ui_paint_context* context) {
+        tc_ui_document_paint_roots(_document, context);
+    }
+
+    tc_ui_event_result dispatch_pointer_event(const tc_ui_pointer_event& event) {
+        return tc_ui_document_dispatch_pointer_event(_document, &event);
+    }
+
 private:
     tc_ui_document* _document = nullptr;
 };
