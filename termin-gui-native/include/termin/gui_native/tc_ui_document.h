@@ -80,6 +80,14 @@ typedef enum tc_ui_pointer_event_type {
     TC_UI_POINTER_WHEEL = 3
 } tc_ui_pointer_event_type;
 
+typedef enum tc_widget_flag {
+    TC_WIDGET_FOCUSABLE = 1u << 0,
+    TC_WIDGET_DIRTY_LAYOUT = 1u << 1,
+    TC_WIDGET_DIRTY_PAINT = 1u << 2,
+    TC_WIDGET_DIRTY_STATE = 1u << 3,
+    TC_WIDGET_DIRTY_MASK = TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE
+} tc_widget_flag;
+
 typedef struct tc_ui_pointer_event {
     tc_ui_pointer_event_type type;
     float x;
@@ -89,6 +97,36 @@ typedef struct tc_ui_pointer_event {
     float wheel_x;
     float wheel_y;
 } tc_ui_pointer_event;
+
+typedef enum tc_ui_key_event_type {
+    TC_UI_KEY_DOWN = 0,
+    TC_UI_KEY_UP = 1
+} tc_ui_key_event_type;
+
+typedef enum tc_ui_key_code {
+    TC_UI_KEY_UNKNOWN = 0,
+    TC_UI_KEY_BACKSPACE = 8,
+    TC_UI_KEY_TAB = 9,
+    TC_UI_KEY_ENTER = 13,
+    TC_UI_KEY_ESCAPE = 27,
+    TC_UI_KEY_DELETE = 127,
+    TC_UI_KEY_LEFT = 1000,
+    TC_UI_KEY_RIGHT = 1001,
+    TC_UI_KEY_HOME = 1002,
+    TC_UI_KEY_END = 1003
+} tc_ui_key_code;
+
+typedef struct tc_ui_key_event {
+    tc_ui_key_event_type type;
+    int32_t key;
+    int32_t scancode;
+    int32_t modifiers;
+    bool repeat;
+} tc_ui_key_event;
+
+typedef struct tc_ui_text_event {
+    const char* text;
+} tc_ui_text_event;
 
 typedef void (*tc_widget_deleter)(tc_widget* widget);
 typedef void (*tc_widget_visit_fn)(void* user_data, tc_widget_handle handle);
@@ -116,6 +154,22 @@ typedef struct tc_widget_vtable {
         tc_ui_document* document,
         const tc_ui_pointer_event* event
     );
+    tc_widget_handle (*hit_test)(
+        tc_widget* widget,
+        tc_ui_document* document,
+        float x,
+        float y
+    );
+    tc_ui_event_result (*key_event)(
+        tc_widget* widget,
+        tc_ui_document* document,
+        const tc_ui_key_event* event
+    );
+    tc_ui_event_result (*text_event)(
+        tc_widget* widget,
+        tc_ui_document* document,
+        const tc_ui_text_event* event
+    );
 
     // Explicit recursive-destroy policy hook. This is not a generic child list:
     // it is consulted only by tc_ui_document_destroy_widget_recursive().
@@ -135,6 +189,8 @@ struct tc_widget {
     tc_widget_handle handle;
     tc_language native_language;
     void* body;
+    const char* stable_id;
+    const char* name;
     const char* debug_name;
     uint32_t flags;
 };
@@ -149,6 +205,16 @@ TERMIN_GUI_NATIVE_API void tc_widget_init(
     tc_language native_language,
     void* body
 );
+
+TERMIN_GUI_NATIVE_API void tc_widget_set_focusable(tc_widget* widget, bool focusable);
+TERMIN_GUI_NATIVE_API bool tc_widget_is_focusable(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API const char* tc_widget_stable_id(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API const char* tc_widget_name(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API const char* tc_widget_debug_name(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API void tc_widget_mark_dirty(tc_widget* widget, uint32_t dirty_flags);
+TERMIN_GUI_NATIVE_API void tc_widget_clear_dirty(tc_widget* widget, uint32_t dirty_flags);
+TERMIN_GUI_NATIVE_API uint32_t tc_widget_dirty_flags(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API bool tc_widget_has_dirty_flags(const tc_widget* widget, uint32_t dirty_flags);
 
 TERMIN_GUI_NATIVE_API tc_ui_document* tc_ui_document_create(void);
 TERMIN_GUI_NATIVE_API void tc_ui_document_destroy(tc_ui_document* document);
@@ -219,6 +285,54 @@ TERMIN_GUI_NATIVE_API void tc_ui_document_layout_roots(
 TERMIN_GUI_NATIVE_API tc_ui_event_result tc_ui_document_dispatch_pointer_event(
     tc_ui_document* document,
     const tc_ui_pointer_event* event
+);
+
+TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_hit_test(
+    tc_ui_document* document,
+    float x,
+    float y
+);
+
+TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_hovered_widget(
+    const tc_ui_document* document
+);
+
+TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_pointer_capture(
+    const tc_ui_document* document
+);
+
+TERMIN_GUI_NATIVE_API bool tc_ui_document_set_pointer_capture(
+    tc_ui_document* document,
+    tc_widget_handle handle
+);
+
+TERMIN_GUI_NATIVE_API bool tc_ui_document_release_pointer_capture(
+    tc_ui_document* document,
+    tc_widget_handle handle
+);
+
+TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_focused_widget(
+    const tc_ui_document* document
+);
+
+TERMIN_GUI_NATIVE_API bool tc_ui_document_set_focus(
+    tc_ui_document* document,
+    tc_widget_handle handle
+);
+
+TERMIN_GUI_NATIVE_API bool tc_ui_document_clear_focus(
+    tc_ui_document* document,
+    tc_widget_handle handle
+);
+
+TERMIN_GUI_NATIVE_API tc_ui_event_result tc_ui_document_dispatch_key_event(
+    tc_ui_document* document,
+    const tc_ui_key_event* event
+);
+
+TERMIN_GUI_NATIVE_API tc_ui_event_result tc_ui_document_dispatch_text_event(
+    tc_ui_document* document,
+    const tc_ui_text_event* event
 );
 
 TERMIN_GUI_NATIVE_API tc_ui_draw_list* tc_ui_draw_list_create(void);

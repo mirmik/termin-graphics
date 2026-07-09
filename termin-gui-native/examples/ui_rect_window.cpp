@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <termin/gui_native/draw_list_renderer.hpp>
+#include <termin/gui_native/showcase.hpp>
 #include <termin/gui_native/widgets.hpp>
 #include <termin/platform/sdl_backend_window.hpp>
 
@@ -19,96 +20,14 @@
 #include <tgfx2/tc_shader_bridge.hpp>
 
 using termin::gui_native::Document;
-using termin::gui_native::DocumentBuilder;
+using termin::gui_native::ShowcaseRefs;
 using termin::gui_native::UiDrawListRenderer;
-using termin::gui_native::BoxLayout;
-using termin::gui_native::Button;
-using termin::gui_native::Checkbox;
-using termin::gui_native::Color;
-using termin::gui_native::EdgeInsets;
-using termin::gui_native::Label;
-using termin::gui_native::Orientation;
-using termin::gui_native::Panel;
-using termin::gui_native::ProgressBar;
 using termin::gui_native::Slider;
-using termin::gui_native::Spacer;
-using termin::gui_native::Swatch;
+using termin::gui_native::build_showcase;
 
 namespace {
 
-struct ShowcaseRefs {
-    ProgressBar* progress = nullptr;
-    Slider* slider = nullptr;
-    Checkbox* checkbox = nullptr;
-};
-
 bool is_existing_file(const std::filesystem::path& path);
-
-ShowcaseRefs build_showcase(Document& document) {
-    DocumentBuilder ui(document);
-    ShowcaseRefs refs;
-
-    auto& root = ui.make_root<BoxLayout>(Orientation::Vertical, "showcase-root");
-    root.set_padding(EdgeInsets {18.0f, 18.0f, 18.0f, 18.0f})
-        .set_spacing(14.0f)
-        .set_background(Color {0.055f, 0.060f, 0.070f, 1.0f});
-
-    auto& top = ui.make<BoxLayout>(Orientation::Horizontal, "showcase-top");
-    top.set_spacing(12.0f);
-    root.add_child(top);
-
-    auto& navigation = ui.make<BoxLayout>(Orientation::Vertical, "navigation");
-    navigation.set_padding(EdgeInsets {12.0f, 12.0f, 12.0f, 12.0f})
-        .set_spacing(8.0f)
-        .set_background(Color {0.10f, 0.11f, 0.13f, 1.0f})
-        .set_border(Color {0.28f, 0.30f, 0.34f, 1.0f}, 1.0f);
-    top.add_child(navigation);
-    navigation.add_child(ui.make<Label>("Native UI", 18.0f, Color {0.92f, 0.95f, 1.0f, 1.0f}));
-    navigation.add_child(ui.make<Button>("Scene", Color {0.18f, 0.32f, 0.54f, 1.0f}));
-    navigation.add_child(ui.make<Button>("Assets", Color {0.16f, 0.42f, 0.32f, 1.0f}));
-    navigation.add_child(ui.make<Button>("Build", Color {0.48f, 0.28f, 0.20f, 1.0f}));
-
-    auto& content = ui.make<BoxLayout>(Orientation::Vertical, "content");
-    content.set_padding(EdgeInsets {14.0f, 14.0f, 14.0f, 14.0f})
-        .set_spacing(10.0f)
-        .set_background(Color {0.13f, 0.14f, 0.16f, 1.0f})
-        .set_border(Color {0.36f, 0.39f, 0.44f, 1.0f}, 1.0f);
-    top.add_child(content);
-
-    auto& hero_row = ui.make<BoxLayout>(Orientation::Horizontal, "hero-row");
-    hero_row.set_spacing(10.0f);
-    content.add_child(hero_row);
-    hero_row.add_child(ui.make<Panel>("preview-a").set_fill(Color {0.20f, 0.42f, 0.62f, 1.0f}));
-    hero_row.add_child(ui.make<Panel>("preview-b").set_fill(Color {0.26f, 0.48f, 0.34f, 1.0f}));
-
-    auto& controls = ui.make<BoxLayout>(Orientation::Horizontal, "controls");
-    controls.set_spacing(10.0f);
-    content.add_child(controls);
-    refs.checkbox = &ui.make<Checkbox>(true);
-    refs.slider = &ui.make<Slider>(0.62f);
-    refs.progress = &ui.make<ProgressBar>(0.35f);
-    controls.add_child(ui.make<Label>("Live", 14.0f, Color {0.78f, 0.84f, 0.92f, 1.0f}));
-    controls.add_child(*refs.checkbox);
-    controls.add_child(*refs.slider);
-    controls.add_child(*refs.progress);
-
-    auto& palette = ui.make<BoxLayout>(Orientation::Horizontal, "palette");
-    palette.set_spacing(8.0f);
-    content.add_child(palette);
-    palette.add_child(ui.make<Swatch>(Color {0.90f, 0.22f, 0.24f, 1.0f}));
-    palette.add_child(ui.make<Swatch>(Color {0.95f, 0.72f, 0.28f, 1.0f}));
-    palette.add_child(ui.make<Swatch>(Color {0.24f, 0.68f, 0.48f, 1.0f}));
-    palette.add_child(ui.make<Swatch>(Color {0.28f, 0.52f, 0.92f, 1.0f}));
-
-    auto& bottom = ui.make<BoxLayout>(Orientation::Horizontal, "bottom");
-    bottom.set_spacing(12.0f);
-    root.add_child(bottom);
-    bottom.add_child(ui.make<Panel>("status-a").set_fill(Color {0.12f, 0.20f, 0.26f, 1.0f}));
-    bottom.add_child(ui.make<Panel>("status-b").set_fill(Color {0.22f, 0.17f, 0.28f, 1.0f}));
-    bottom.add_child(ui.make<Spacer>(tc_ui_size {32.0f, 32.0f}));
-
-    return refs;
-}
 
 std::filesystem::path resolve_font() {
     if (const char* configured = std::getenv("TERMIN_UI_FONT")) {

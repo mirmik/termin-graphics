@@ -56,6 +56,9 @@ static const tc_widget_vtable TEST_WIDGET_VTABLE {
     nullptr,
     test_widget_paint,
     nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
     test_widget_visit_recursive_targets,
     test_widget_on_destroy,
 };
