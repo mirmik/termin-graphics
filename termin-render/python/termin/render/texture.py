@@ -7,7 +7,7 @@ from typing import Optional
 
 import numpy as np
 
-from termin.render.texture_asset import TextureAsset
+from termin.default_assets.render.texture_asset import TextureAsset
 from tgfx import TcTexture
 
 

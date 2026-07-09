@@ -1,6 +1,5 @@
 from termin.skeleton import SkeletonAsset as PackageSkeletonAsset
 from termin.skeleton.asset import SkeletonAsset
-from termin.skeleton.skeleton_asset import SkeletonAsset as LegacySkeletonAsset
 
 
 class FakeSkeleton:
@@ -29,6 +28,5 @@ def test_skeleton_asset_wraps_tc_skeleton() -> None:
     }
 
 
-def test_skeleton_asset_domain_legacy_modules_reexport_canonical_class() -> None:
+def test_skeleton_asset_package_reexports_canonical_class() -> None:
     assert PackageSkeletonAsset is SkeletonAsset
-    assert LegacySkeletonAsset is SkeletonAsset
