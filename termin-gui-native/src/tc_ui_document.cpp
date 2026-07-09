@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <new>
+#include <string>
 #include <vector>
 
 #include <tcbase/tc_log.h>
@@ -36,6 +38,7 @@ struct tc_ui_document {
 
 struct tc_ui_draw_list {
     std::vector<tc_ui_draw_command> commands;
+    std::vector<std::unique_ptr<std::string>> text_storage;
 };
 
 struct tc_ui_paint_context {
@@ -435,6 +438,7 @@ void tc_ui_draw_list_clear(tc_ui_draw_list* draw_list) {
         return;
     }
     draw_list->commands.clear();
+    draw_list->text_storage.clear();
 }
 
 size_t tc_ui_draw_list_command_count(const tc_ui_draw_list* draw_list) {
@@ -522,6 +526,34 @@ void tc_ui_painter_draw_line(
     command.p1 = p1;
     command.color = color;
     command.thickness = thickness;
+    append_draw_command(context, command);
+}
+
+void tc_ui_painter_draw_text(
+    tc_ui_paint_context* context,
+    const char* text,
+    tc_ui_point position,
+    float font_size,
+    tc_ui_color color
+) {
+    if (!context || !context->draw_list) {
+        tc_log_error("[termin-gui-native] cannot append UI text command without paint context");
+        return;
+    }
+    if (!text || text[0] == '\0' || font_size <= 0.0f) {
+        return;
+    }
+
+    auto owned_text = std::make_unique<std::string>(text);
+    const char* stable_text = owned_text->c_str();
+    context->draw_list->text_storage.push_back(std::move(owned_text));
+
+    tc_ui_draw_command command {};
+    command.type = TC_UI_DRAW_TEXT;
+    command.p0 = position;
+    command.color = color;
+    command.text = stable_text;
+    command.font_size = font_size;
     append_draw_command(context, command);
 }
 

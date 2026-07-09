@@ -26,6 +26,7 @@ using termin::gui_native::Button;
 using termin::gui_native::Checkbox;
 using termin::gui_native::Color;
 using termin::gui_native::EdgeInsets;
+using termin::gui_native::Label;
 using termin::gui_native::Orientation;
 using termin::gui_native::Panel;
 using termin::gui_native::ProgressBar;
@@ -40,6 +41,8 @@ struct ShowcaseRefs {
     Slider* slider = nullptr;
     Checkbox* checkbox = nullptr;
 };
+
+bool is_existing_file(const std::filesystem::path& path);
 
 ShowcaseRefs build_showcase(Document& document) {
     DocumentBuilder ui(document);
@@ -60,9 +63,10 @@ ShowcaseRefs build_showcase(Document& document) {
         .set_background(Color {0.10f, 0.11f, 0.13f, 1.0f})
         .set_border(Color {0.28f, 0.30f, 0.34f, 1.0f}, 1.0f);
     top.add_child(navigation);
-    navigation.add_child(ui.make<Button>(Color {0.18f, 0.32f, 0.54f, 1.0f}));
-    navigation.add_child(ui.make<Button>(Color {0.16f, 0.42f, 0.32f, 1.0f}));
-    navigation.add_child(ui.make<Button>(Color {0.48f, 0.28f, 0.20f, 1.0f}));
+    navigation.add_child(ui.make<Label>("Native UI", 18.0f, Color {0.92f, 0.95f, 1.0f, 1.0f}));
+    navigation.add_child(ui.make<Button>("Scene", Color {0.18f, 0.32f, 0.54f, 1.0f}));
+    navigation.add_child(ui.make<Button>("Assets", Color {0.16f, 0.42f, 0.32f, 1.0f}));
+    navigation.add_child(ui.make<Button>("Build", Color {0.48f, 0.28f, 0.20f, 1.0f}));
 
     auto& content = ui.make<BoxLayout>(Orientation::Vertical, "content");
     content.set_padding(EdgeInsets {14.0f, 14.0f, 14.0f, 14.0f})
@@ -83,6 +87,7 @@ ShowcaseRefs build_showcase(Document& document) {
     refs.checkbox = &ui.make<Checkbox>(true);
     refs.slider = &ui.make<Slider>(0.62f);
     refs.progress = &ui.make<ProgressBar>(0.35f);
+    controls.add_child(ui.make<Label>("Live", 14.0f, Color {0.78f, 0.84f, 0.92f, 1.0f}));
     controls.add_child(*refs.checkbox);
     controls.add_child(*refs.slider);
     controls.add_child(*refs.progress);
@@ -103,6 +108,37 @@ ShowcaseRefs build_showcase(Document& document) {
     bottom.add_child(ui.make<Spacer>(tc_ui_size {32.0f, 32.0f}));
 
     return refs;
+}
+
+std::filesystem::path resolve_font() {
+    if (const char* configured = std::getenv("TERMIN_UI_FONT")) {
+        std::filesystem::path path(configured);
+        if (is_existing_file(path)) {
+            return path;
+        }
+        std::fprintf(stderr, "TERMIN_UI_FONT points to missing file: %s\n", configured);
+    }
+
+    std::vector<std::filesystem::path> candidates;
+    if (const char* sdk = std::getenv("TERMIN_SDK")) {
+        candidates.emplace_back(std::filesystem::path(sdk) / "share" / "termin" / "fonts" / "DroidSans.ttf");
+    }
+    candidates.emplace_back(
+        std::filesystem::current_path() /
+        "termin-thirdparty" / "recastnavigation" / "RecastDemo" / "Bin" / "DroidSans.ttf"
+    );
+    candidates.emplace_back(
+        std::filesystem::current_path() /
+        "termin-thirdparty" / "recastnavigation" / "RecastDemo" / "Contrib" /
+        "imgui" / "misc" / "fonts" / "Roboto-Medium.ttf"
+    );
+
+    for (const std::filesystem::path& candidate : candidates) {
+        if (is_existing_file(candidate)) {
+            return candidate;
+        }
+    }
+    return {};
 }
 
 tgfx::TextureHandle create_color_target(tgfx::IRenderDevice& device, int width, int height) {
@@ -270,6 +306,12 @@ int main() {
         tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
         tc_ui_paint_context* paint_context = tc_ui_paint_context_create(draw_list);
         UiDrawListRenderer renderer;
+        const std::filesystem::path font_path = resolve_font();
+        if (!font_path.empty()) {
+            renderer.set_default_font_path(font_path.string(), 15);
+        } else {
+            std::fprintf(stderr, "termin-gui-native example: no UI font found; text commands will be skipped\n");
+        }
 
         tgfx::TextureHandle color_target {};
         int target_width = 0;

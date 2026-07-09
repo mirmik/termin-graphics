@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cstdlib>
+#include <string>
 
 using termin::gui_native::Document;
 using termin::gui_native::Widget;
@@ -32,6 +33,13 @@ private:
             tc_ui_color {0.8f, 0.7f, 0.6f, 1.0f},
             2.0f
         );
+        tc_ui_painter_draw_text(
+            context,
+            "Hello",
+            tc_ui_point {8.0f, 9.0f},
+            13.0f,
+            tc_ui_color {0.9f, 0.9f, 0.7f, 1.0f}
+        );
         tc_ui_painter_pop_clip(context);
     }
 
@@ -61,12 +69,13 @@ void test_widget_paint_builds_draw_list() {
     tc_ui_document_paint_roots(document.get(), paint_context);
 
     assert(widget->paint_count == 1);
-    assert(tc_ui_draw_list_command_count(draw_list) == 4);
+    assert(tc_ui_draw_list_command_count(draw_list) == 5);
 
     const tc_ui_draw_command* clip = tc_ui_draw_list_command_at(draw_list, 0);
     const tc_ui_draw_command* fill = tc_ui_draw_list_command_at(draw_list, 1);
     const tc_ui_draw_command* line = tc_ui_draw_list_command_at(draw_list, 2);
-    const tc_ui_draw_command* pop = tc_ui_draw_list_command_at(draw_list, 3);
+    const tc_ui_draw_command* text = tc_ui_draw_list_command_at(draw_list, 3);
+    const tc_ui_draw_command* pop = tc_ui_draw_list_command_at(draw_list, 4);
 
     assert(clip && clip->type == TC_UI_DRAW_PUSH_CLIP);
     assert(clip->rect.width == 64.0f);
@@ -78,7 +87,14 @@ void test_widget_paint_builds_draw_list() {
     assert(line->p0.x == 4.0f);
     assert(line->p1.y == 7.0f);
     assert(line->thickness == 2.0f);
+    assert(text && text->type == TC_UI_DRAW_TEXT);
+    assert(text->text && std::string(text->text) == "Hello");
+    assert(text->font_size == 13.0f);
+    assert(text->p0.x == 8.0f);
     assert(pop && pop->type == TC_UI_DRAW_POP_CLIP);
+
+    tc_ui_draw_list_clear(draw_list);
+    assert(tc_ui_draw_list_command_count(draw_list) == 0);
 
     tc_ui_paint_context_destroy(paint_context);
     tc_ui_draw_list_destroy(draw_list);

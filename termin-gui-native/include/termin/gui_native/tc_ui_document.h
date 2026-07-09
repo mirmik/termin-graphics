@@ -53,7 +53,8 @@ typedef enum tc_ui_draw_command_type {
     TC_UI_DRAW_STROKE_RECT = 1,
     TC_UI_DRAW_LINE = 2,
     TC_UI_DRAW_PUSH_CLIP = 3,
-    TC_UI_DRAW_POP_CLIP = 4
+    TC_UI_DRAW_POP_CLIP = 4,
+    TC_UI_DRAW_TEXT = 5
 } tc_ui_draw_command_type;
 
 typedef struct tc_ui_draw_command {
@@ -63,6 +64,8 @@ typedef struct tc_ui_draw_command {
     tc_ui_point p1;
     tc_ui_color color;
     float thickness;
+    const char* text;
+    float font_size;
 } tc_ui_draw_command;
 
 typedef enum tc_ui_event_result {
@@ -252,6 +255,13 @@ TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_line(
     tc_ui_point p1,
     tc_ui_color color,
     float thickness
+);
+TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_text(
+    tc_ui_paint_context* context,
+    const char* text,
+    tc_ui_point position,
+    float font_size,
+    tc_ui_color color
 );
 TERMIN_GUI_NATIVE_API void tc_ui_painter_push_clip(
     tc_ui_paint_context* context,

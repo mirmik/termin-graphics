@@ -163,14 +163,41 @@ private:
 
 class Button : public NativeWidget {
 public:
-    explicit Button(Color fill = Color {0.20f, 0.38f, 0.64f, 1.0f});
+    explicit Button(
+        std::string text = {},
+        Color fill = Color {0.20f, 0.38f, 0.64f, 1.0f}
+    );
+    explicit Button(Color fill);
 
     Button& set_accent(Color color);
+    Button& set_text(std::string text);
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
 
 private:
+    std::string text_;
     Color fill_;
     Color accent_ {0.80f, 0.88f, 1.0f, 1.0f};
+};
+
+class Label : public NativeWidget {
+public:
+    explicit Label(
+        std::string text,
+        float font_size = 15.0f,
+        Color color = Color {0.90f, 0.92f, 0.96f, 1.0f}
+    );
+
+    Label& set_text(std::string text);
+    Label& set_color(Color color);
+    Label& set_font_size(float font_size);
+    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
+
+private:
+    void update_min_size();
+
+    std::string text_;
+    float font_size_ = 15.0f;
+    Color color_;
 };
 
 class Checkbox : public NativeWidget {

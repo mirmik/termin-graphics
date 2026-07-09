@@ -1,5 +1,7 @@
 #include <termin/gui_native/draw_list_renderer.hpp>
 
+#include <exception>
+
 #include <tcbase/tc_log.h>
 
 namespace termin::gui_native {
@@ -10,6 +12,20 @@ tgfx::CanvasColor canvas_color(tc_ui_color color) {
 }
 
 } // namespace
+
+bool UiDrawListRenderer::set_default_font_path(const std::string& path, int default_size_px) {
+    try {
+        owned_font_ = std::make_unique<tgfx::FontAtlas>(path, default_size_px);
+        canvas_.set_default_font(owned_font_.get());
+        missing_font_logged_ = false;
+        return true;
+    } catch (const std::exception& e) {
+        tc_log_error("[termin-gui-native] failed to load UI font '%s': %s", path.c_str(), e.what());
+        owned_font_.reset();
+        canvas_.set_default_font(nullptr);
+        return false;
+    }
+}
 
 void UiDrawListRenderer::render(
     tgfx::RenderContext2& context,
@@ -76,6 +92,20 @@ void UiDrawListRenderer::render(
         case TC_UI_DRAW_POP_CLIP:
             canvas_.end_clip();
             break;
+        case TC_UI_DRAW_TEXT:
+            if (canvas_.default_font()) {
+                canvas_.draw_text(
+                    command->text ? command->text : "",
+                    command->p0.x,
+                    command->p0.y,
+                    command->font_size,
+                    canvas_color(command->color)
+                );
+            } else if (!missing_font_logged_) {
+                tc_log_error("[termin-gui-native] skipping UI text commands because no default font is configured");
+                missing_font_logged_ = true;
+            }
+            break;
         default:
             tc_log_error("[termin-gui-native] unknown UI draw command type %d", static_cast<int>(command->type));
             break;
@@ -86,6 +116,9 @@ void UiDrawListRenderer::render(
 
 void UiDrawListRenderer::release_gpu() {
     canvas_.release_gpu();
+    if (owned_font_) {
+        owned_font_->release_gpu();
+    }
 }
 
 } // namespace termin::gui_native

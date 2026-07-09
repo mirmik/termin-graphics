@@ -14,11 +14,13 @@ The current module is intentionally small:
 - roots are explicit paint entry points, not an implicit ownership tree.
 - `termin/gui_native/widgets.hpp` adds a first C++ widget layer:
   `NativeWidget`, `BoxLayout`, `Panel`, `Button`, `Checkbox`, `ProgressBar`,
-  `Slider`, `Swatch`, and `Spacer`;
+  `Slider`, `Swatch`, `Label`, and `Spacer`;
 - `tc_ui_document_layout_roots` and `tc_ui_document_dispatch_pointer_event`
   exercise layout and event dispatch without making ownership implicit;
 - widget `paint` writes backend-neutral commands into `tc_ui_draw_list` through
   `tc_ui_paint_context`; no GPU renderer is required for unit tests.
+- text commands are stored with draw-list-owned string backing and rendered by
+  `UiDrawListRenderer` when a default `FontAtlas` is configured;
 - `UiDrawListRenderer` can flush the command list through
   `tgfx::Canvas2DRenderer`;
 - `TERMIN_GUI_NATIVE_BUILD_EXAMPLES=ON` builds a small SDL window example that

@@ -345,13 +345,21 @@ void Panel::paint(tc_ui_document*, tc_ui_paint_context* context) {
     }
 }
 
-Button::Button(Color fill)
-    : NativeWidget("Button"), fill_(fill) {
+Button::Button(std::string text, Color fill)
+    : NativeWidget("Button"), text_(std::move(text)), fill_(fill) {
     min_size_ = tc_ui_size {96.0f, 36.0f};
 }
 
+Button::Button(Color fill)
+    : Button(std::string {}, fill) {}
+
 Button& Button::set_accent(Color color) {
     accent_ = color;
+    return *this;
+}
+
+Button& Button::set_text(std::string text) {
+    text_ = std::move(text);
     return *this;
 }
 
@@ -366,6 +374,57 @@ void Button::paint(tc_ui_document*, tc_ui_paint_context* context) {
         accent_.c_color(),
         2.0f
     );
+    if (!text_.empty()) {
+        tc_ui_painter_draw_text(
+            context,
+            text_.c_str(),
+            tc_ui_point {bounds_.x + 12.0f, bounds_.y + bounds_.height * 0.5f + 5.0f},
+            14.0f,
+            tc_ui_color {0.94f, 0.97f, 1.0f, 1.0f}
+        );
+    }
+}
+
+Label::Label(std::string text, float font_size, Color color)
+    : NativeWidget("Label"),
+      text_(std::move(text)),
+      font_size_(std::max(1.0f, font_size)),
+      color_(color) {
+    update_min_size();
+}
+
+Label& Label::set_text(std::string text) {
+    text_ = std::move(text);
+    update_min_size();
+    return *this;
+}
+
+Label& Label::set_color(Color color) {
+    color_ = color;
+    return *this;
+}
+
+Label& Label::set_font_size(float font_size) {
+    font_size_ = std::max(1.0f, font_size);
+    update_min_size();
+    return *this;
+}
+
+void Label::paint(tc_ui_document*, tc_ui_paint_context* context) {
+    tc_ui_painter_draw_text(
+        context,
+        text_.c_str(),
+        tc_ui_point {bounds_.x, bounds_.y + font_size_},
+        font_size_,
+        color_.c_color()
+    );
+}
+
+void Label::update_min_size() {
+    min_size_ = tc_ui_size {
+        std::max(1.0f, static_cast<float>(text_.size()) * font_size_ * 0.56f),
+        font_size_ * 1.35f
+    };
 }
 
 Checkbox::Checkbox(bool checked)

@@ -294,7 +294,8 @@ NB_MODULE(_gui_native, m) {
         .value("StrokeRect", TC_UI_DRAW_STROKE_RECT)
         .value("Line", TC_UI_DRAW_LINE)
         .value("PushClip", TC_UI_DRAW_PUSH_CLIP)
-        .value("PopClip", TC_UI_DRAW_POP_CLIP);
+        .value("PopClip", TC_UI_DRAW_POP_CLIP)
+        .value("Text", TC_UI_DRAW_TEXT);
 
     nb::class_<tc_ui_draw_command>(m, "DrawCommand")
         .def_prop_ro("type", [](const tc_ui_draw_command& command) { return command.type; })
@@ -302,7 +303,13 @@ NB_MODULE(_gui_native, m) {
         .def_prop_ro("p0", [](const tc_ui_draw_command& command) { return command.p0; })
         .def_prop_ro("p1", [](const tc_ui_draw_command& command) { return command.p1; })
         .def_prop_ro("color", [](const tc_ui_draw_command& command) { return command.color; })
-        .def_prop_ro("thickness", [](const tc_ui_draw_command& command) { return command.thickness; });
+        .def_prop_ro("thickness", [](const tc_ui_draw_command& command) { return command.thickness; })
+        .def_prop_ro("text", [](const tc_ui_draw_command& command) {
+            return command.text ? std::string(command.text) : std::string();
+        })
+        .def_prop_ro("font_size", [](const tc_ui_draw_command& command) {
+            return command.font_size;
+        });
 
     nb::class_<DrawList>(m, "DrawList")
         .def(nb::init<>())
@@ -333,6 +340,9 @@ NB_MODULE(_gui_native, m) {
         .def("draw_line", [](PaintContext& self, tc_ui_point p0, tc_ui_point p1, tc_ui_color color, float thickness) {
             tc_ui_painter_draw_line(self.get(), p0, p1, color, thickness);
         }, nb::arg("p0"), nb::arg("p1"), nb::arg("color"), nb::arg("thickness"))
+        .def("draw_text", [](PaintContext& self, const std::string& text, tc_ui_point position, float font_size, tc_ui_color color) {
+            tc_ui_painter_draw_text(self.get(), text.c_str(), position, font_size, color);
+        }, nb::arg("text"), nb::arg("position"), nb::arg("font_size"), nb::arg("color"))
         .def("push_clip", [](PaintContext& self, tc_ui_rect rect) {
             tc_ui_painter_push_clip(self.get(), rect);
         }, nb::arg("rect"))
@@ -384,6 +394,8 @@ NB_MODULE(_gui_native, m) {
 
     nb::class_<termin::gui_native::UiDrawListRenderer>(m, "DrawListRenderer")
         .def(nb::init<>())
+        .def("set_default_font_path", &termin::gui_native::UiDrawListRenderer::set_default_font_path,
+             nb::arg("path"), nb::arg("default_size_px") = 14)
         .def("render", [](termin::gui_native::UiDrawListRenderer& self,
                           tgfx::RenderContext2& context,
                           const DrawList& draw_list,
