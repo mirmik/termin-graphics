@@ -346,6 +346,7 @@ public:
         tc_value_dict_set(&d, "uuid", tc_value_string(uuid()));
         tc_value_dict_set(&d, "name", tc_value_string(name()));
         tc_value_dict_set(&d, "type", tc_value_string("uuid"));
+        tc_value_dict_set(&d, "kind", tc_value_string("tc_material"));
         return d;
     }
 

@@ -153,12 +153,9 @@ void bind_tc_render_target(nb::module_& m) {
                     return;
                 } catch (...) {
                 }
-                // Fallback: extract from scene_handle() method
-                if (nb::hasattr(scene_obj, "scene_handle")) {
-                    nb::object handle_obj = scene_obj.attr("scene_handle")();
-                    tc_scene_handle s = nb::cast<tc_scene_handle>(handle_obj);
-                    tc_render_target_set_scene(h, s);
-                }
+                nb::object handle_obj = scene_obj.attr("scene_handle")();
+                tc_scene_handle s = nb::cast<tc_scene_handle>(handle_obj);
+                tc_render_target_set_scene(h, s);
             },
             nb::arg().none())
         .def_prop_rw("camera",

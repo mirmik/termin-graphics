@@ -315,8 +315,8 @@ void bind_render_framework(nb::module_& m) {
                 if (!s.is_none()) {
                     if (nb::isinstance<TcSceneRef>(s)) {
                         self->scene = nb::cast<TcSceneRef>(s);
-                    } else if (nb::hasattr(s, "scene_ref")) {
-                        self->scene = nb::cast<TcSceneRef>(s.attr("scene_ref")());
+                    } else {
+                        self->scene = nb::cast<TcSceneRef>(s);
                     }
                 }
             }
@@ -541,8 +541,8 @@ void bind_render_framework(nb::module_& m) {
                 if (!s.is_none()) {
                     if (nb::isinstance<TcSceneRef>(s)) {
                         self->scene = nb::cast<TcSceneRef>(s);
-                    } else if (nb::hasattr(s, "scene_ref")) {
-                        self->scene = nb::cast<TcSceneRef>(s.attr("scene_ref")());
+                    } else {
+                        self->scene = nb::cast<TcSceneRef>(s);
                     }
                 }
             }

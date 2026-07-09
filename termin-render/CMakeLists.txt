@@ -265,6 +265,13 @@ if(TERMIN_RENDER_BUILD_TESTS)
     target_link_libraries(termin_render_shader_abi_test PRIVATE termin_render)
     add_test(NAME termin_render_shader_abi_test COMMAND termin_render_shader_abi_test)
 
+    add_executable(termin_render_pass_ownership_test tests/test_pass_ownership.cpp)
+    target_include_directories(termin_render_pass_ownership_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_render_pass_ownership_test PRIVATE termin_render)
+    add_test(NAME termin_render_pass_ownership_test COMMAND termin_render_pass_ownership_test)
+
     add_executable(termin_render_item_submission_test tests/test_render_item_submission.cpp)
     target_include_directories(termin_render_item_submission_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
@@ -280,6 +287,7 @@ if(TERMIN_RENDER_BUILD_TESTS)
         termin_render_material_pipeline_shader_assembler_test
         termin_render_shader_contract_test
         termin_render_shader_abi_test
+        termin_render_pass_ownership_test
         termin_render_item_submission_test
         PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )

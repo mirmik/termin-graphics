@@ -24,7 +24,13 @@ struct tc_pipeline {
 TC_API tc_pipeline_handle tc_pipeline_create(const char* name);
 TC_API void tc_pipeline_destroy(tc_pipeline_handle h);
 TC_API tc_pipeline* tc_pipeline_get_ptr(tc_pipeline_handle h);
+// Retains pass for the pipeline. The caller keeps any reference it already owns.
 TC_API void tc_pipeline_add_pass(tc_pipeline_handle h, tc_pass* pass);
+
+// Adds a freshly-created owned pass reference to the pipeline, then releases
+// the caller's owned reference. Use for tc_pass_registry_create() results.
+TC_API void tc_pipeline_add_pass_take(tc_pipeline_handle h, tc_pass* pass);
+
 TC_API void tc_pipeline_insert_pass_before(tc_pipeline_handle h, tc_pass* pass, tc_pass* before);
 TC_API void tc_pipeline_remove_pass(tc_pipeline_handle h, tc_pass* pass);
 TC_API size_t tc_pipeline_remove_passes_by_name(tc_pipeline_handle h, const char* name);

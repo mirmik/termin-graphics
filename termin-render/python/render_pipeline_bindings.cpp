@@ -7,6 +7,7 @@
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/array.h>
 #include <tcbase/tc_log.hpp>
+#include <stdexcept>
 
 extern "C" {
 #include "render/tc_pass.h"
@@ -25,6 +26,25 @@ namespace nb = nanobind;
 namespace termin {
 
 namespace {
+
+TcPassRef tc_pass_ref_from_python_pass(nb::object pass_obj, const char* context) {
+    nb::object tc_pass_obj = pass_obj.attr("_tc_pass");
+    if (tc_pass_obj.is_none()) {
+        throw std::runtime_error(std::string(context) + ": _tc_pass is None");
+    }
+    if (!nb::isinstance<TcPassRef>(tc_pass_obj)) {
+        throw std::runtime_error(std::string(context) + ": _tc_pass must be TcPassRef");
+    }
+    return nb::cast<TcPassRef>(tc_pass_obj);
+}
+
+tc_pass* tc_pass_ptr_from_python_pass(nb::object pass_obj, const char* context) {
+    TcPassRef ref = tc_pass_ref_from_python_pass(pass_obj, context);
+    if (!ref.valid()) {
+        throw std::runtime_error(std::string(context) + ": _tc_pass is invalid");
+    }
+    return ref.ptr();
+}
 
 std::string resource_type_for_texture(const RenderPipeline& pipeline, const PipelineTextureEntry& entry) {
     for (const auto& spec : pipeline.collect_specs()) {
@@ -80,22 +100,7 @@ void bind_render_pipeline(nb::module_& m) {
             new (self) RenderPipeline(name);
             for (size_t i = 0; i < nb::len(init_passes); i++) {
                 nb::object pass_obj = init_passes[i];
-                if (nb::hasattr(pass_obj, "_tc_pass")) {
-                    nb::object tc_pass_obj = pass_obj.attr("_tc_pass");
-                    if (!tc_pass_obj.is_none()) {
-                        if (nb::isinstance<TcPassRef>(tc_pass_obj)) {
-                            TcPassRef ref = nb::cast<TcPassRef>(tc_pass_obj);
-                            if (ref.valid()) {
-                                self->add_pass(ref.ptr());
-                            }
-                        } else if (nb::isinstance<TcPass>(tc_pass_obj)) {
-                            TcPass* pass = nb::cast<TcPass*>(tc_pass_obj);
-                            if (pass && pass->ptr()) {
-                                self->add_pass(pass->ptr());
-                            }
-                        }
-                    }
-                }
+                self->add_pass(tc_pass_ptr_from_python_pass(pass_obj, "RenderPipeline.__init__"));
             }
             for (const auto& spec : init_specs) {
                 self->add_spec(spec);
@@ -123,30 +128,13 @@ void bind_render_pipeline(nb::module_& m) {
             if (pass && pass->ptr()) self.add_pass(pass->ptr());
         })
         .def("add_pass", [](RenderPipeline& self, nb::object pass_obj) {
-            if (nb::hasattr(pass_obj, "_tc_pass")) {
-                nb::object tc_pass_obj = pass_obj.attr("_tc_pass");
-                if (!tc_pass_obj.is_none()) {
-                    if (nb::isinstance<TcPassRef>(tc_pass_obj)) {
-                        TcPassRef ref = nb::cast<TcPassRef>(tc_pass_obj);
-                        if (ref.valid()) self.add_pass(ref.ptr());
-                    } else if (nb::isinstance<TcPass>(tc_pass_obj)) {
-                        TcPass* pass = nb::cast<TcPass*>(tc_pass_obj);
-                        if (pass && pass->ptr()) self.add_pass(pass->ptr());
-                    }
-                }
-            }
+            self.add_pass(tc_pass_ptr_from_python_pass(pass_obj, "RenderPipeline.add_pass"));
         })
         .def("remove_pass", [](RenderPipeline& self, TcPassRef pass_ref) {
             if (pass_ref.valid()) self.remove_pass(pass_ref.ptr());
         })
         .def("remove_pass", [](RenderPipeline& self, nb::object pass_obj) {
-            if (nb::hasattr(pass_obj, "_tc_pass")) {
-                nb::object tc_pass_obj = pass_obj.attr("_tc_pass");
-                if (!tc_pass_obj.is_none() && nb::isinstance<TcPassRef>(tc_pass_obj)) {
-                    TcPassRef ref = nb::cast<TcPassRef>(tc_pass_obj);
-                    if (ref.valid()) self.remove_pass(ref.ptr());
-                }
-            }
+            self.remove_pass(tc_pass_ptr_from_python_pass(pass_obj, "RenderPipeline.remove_pass"));
         })
         .def("remove_passes_by_name", &RenderPipeline::remove_passes_by_name, nb::arg("name"))
         .def("insert_pass_before", [](RenderPipeline& self, TcPassRef pass_ref, TcPassRef before_ref) {
@@ -155,23 +143,12 @@ void bind_render_pipeline(nb::module_& m) {
             }
         })
         .def("insert_pass_before", [](RenderPipeline& self, nb::object pass_obj, nb::object before_obj) {
-            tc_pass* pass_ptr = nullptr;
+            tc_pass* pass_ptr = tc_pass_ptr_from_python_pass(pass_obj, "RenderPipeline.insert_pass_before(pass)");
             tc_pass* before_ptr = nullptr;
-            if (nb::hasattr(pass_obj, "_tc_pass")) {
-                nb::object tc_pass_obj = pass_obj.attr("_tc_pass");
-                if (!tc_pass_obj.is_none() && nb::isinstance<TcPassRef>(tc_pass_obj)) {
-                    TcPassRef ref = nb::cast<TcPassRef>(tc_pass_obj);
-                    if (ref.valid()) pass_ptr = ref.ptr();
-                }
+            if (!before_obj.is_none()) {
+                before_ptr = tc_pass_ptr_from_python_pass(before_obj, "RenderPipeline.insert_pass_before(before)");
             }
-            if (!before_obj.is_none() && nb::hasattr(before_obj, "_tc_pass")) {
-                nb::object tc_pass_obj = before_obj.attr("_tc_pass");
-                if (!tc_pass_obj.is_none() && nb::isinstance<TcPassRef>(tc_pass_obj)) {
-                    TcPassRef ref = nb::cast<TcPassRef>(tc_pass_obj);
-                    if (ref.valid()) before_ptr = ref.ptr();
-                }
-            }
-            if (pass_ptr) self.insert_pass_before(pass_ptr, before_ptr);
+            self.insert_pass_before(pass_ptr, before_ptr);
         })
         .def("get_pass", [](RenderPipeline& self, const std::string& name) {
             return TcPassRef(self.get_pass(name));
@@ -326,17 +303,15 @@ void bind_render_pipeline(nb::module_& m) {
                                 nb::object native_ref_obj = nb::cast(native_ref);
                                 native_ref_obj.attr("deserialize_data")(pass_data["data"]);
                             }
-                            pipeline->add_pass(native_pass);
+                            tc_pipeline_add_pass_take(pipeline->handle(), native_pass);
                             continue;
                         }
 
                         nb::object frame_pass = deserialize_pass(pass_data, resource_manager);
-                        if (!frame_pass.is_none() && nb::hasattr(frame_pass, "_tc_pass")) {
-                            nb::object tc_pass_obj = frame_pass.attr("_tc_pass");
-                            if (!tc_pass_obj.is_none() && nb::isinstance<TcPassRef>(tc_pass_obj)) {
-                                TcPassRef ref = nb::cast<TcPassRef>(tc_pass_obj);
-                                if (ref.valid()) pipeline->add_pass(ref.ptr());
-                            }
+                        if (!frame_pass.is_none()) {
+                            pipeline->add_pass(
+                                tc_pass_ptr_from_python_pass(frame_pass, "RenderPipeline.deserialize")
+                            );
                         }
                     } catch (const std::exception& e) {
                         tc::Log::error("RenderPipeline::deserialize: failed to deserialize pass %zu: %s", i, e.what());

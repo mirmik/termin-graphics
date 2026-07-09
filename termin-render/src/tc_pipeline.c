@@ -293,6 +293,12 @@ void tc_pipeline_add_pass(tc_pipeline_handle h, tc_pass* pass) {
     p->dirty = true;
 }
 
+void tc_pipeline_add_pass_take(tc_pipeline_handle h, tc_pass* pass) {
+    if (!pass) return;
+    tc_pipeline_add_pass(h, pass);
+    tc_pass_release(pass);
+}
+
 void tc_pipeline_insert_pass_before(tc_pipeline_handle h, tc_pass* pass, tc_pass* before) {
     if (!pipeline_handle_alive(h) || !pass) return;
     tc_pipeline* p = &g_pipeline_pool->pipelines[h.index];
