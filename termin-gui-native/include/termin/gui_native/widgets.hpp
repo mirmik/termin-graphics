@@ -758,8 +758,8 @@ private:
     float spacing_ = 4.0f;
     float spin_box_width_ = 80.0f;
     std::string label_;
-    tc_widget_handle slider_handle_ {};
-    tc_widget_handle spin_box_handle_ {};
+    tc_widget_handle slider_handle_ = tc_widget_handle_invalid();
+    tc_widget_handle spin_box_handle_ = tc_widget_handle_invalid();
     size_t slider_connection_ = 0;
     size_t spin_box_connection_ = 0;
     bool syncing_ = false;
@@ -798,7 +798,7 @@ private:
     std::vector<std::string> items_;
     int selected_index_ = -1;
     bool open_ = false;
-    tc_widget_handle popup_handle_ {};
+    tc_widget_handle popup_handle_ = tc_widget_handle_invalid();
     float item_height_ = 24.0f;
     size_t max_visible_items_ = 8;
     Signal<ComboBox&, int, const std::string&> changed_;

@@ -1262,6 +1262,8 @@ void test_slider_edit_owns_canonical_children_and_syncs_values() {
     install_test_text_measurer(document);
     DocumentBuilder ui(document);
     auto& edit = ui.make_root<SliderEdit>(2.0f);
+    assert(tc_widget_handle_is_invalid(edit.slider_handle()));
+    assert(tc_widget_handle_is_invalid(edit.spin_box_handle()));
     edit.set_range(0.0f, 10.0f);
     edit.set_step(0.5f);
     edit.set_label("Exposure");
@@ -1293,6 +1295,13 @@ void test_combo_box_overlay_selection_and_destruction() {
     combo.add_item("First");
     combo.add_item("Second");
     combo.add_item("Third");
+    combo.add_item("Fourth");
+    combo.add_item("Fifth");
+    combo.add_item("Sixth");
+    combo.add_item("Seventh");
+    combo.add_item("Eighth");
+    combo.add_item("Ninth");
+    combo.add_item("Tenth");
     document.layout_roots(tc_ui_rect {10.0f, 10.0f, 180.0f, 34.0f});
     int changes = 0;
     combo.changed().connect([&changes](ComboBox&, int, const std::string&) { ++changes; });
@@ -1307,11 +1316,17 @@ void test_combo_box_overlay_selection_and_destruction() {
     const tc_widget_handle popup_handle = tc_ui_document_overlay_at(document.get(), 0);
     const tc_widget* popup = tc_ui_document_resolve_widget_const(document.get(), popup_handle);
     assert(popup);
+    pointer.type = TC_UI_POINTER_WHEEL;
     pointer.x = popup->bounds.x + 10.0f;
-    pointer.y = popup->bounds.y + 24.0f + 10.0f;
+    pointer.y = popup->bounds.y + 10.0f;
+    pointer.wheel_y = -1.0f;
     assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
-    assert(combo.selected_index() == 1);
-    assert(combo.selected_text() == "Second");
+    pointer.type = TC_UI_POINTER_DOWN;
+    pointer.x = popup->bounds.x + 10.0f;
+    pointer.y = popup->bounds.y + 10.0f;
+    assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+    assert(combo.selected_index() == 2);
+    assert(combo.selected_text() == "Third");
     assert(changes == 1);
     assert(!combo.open());
     assert(tc_ui_document_overlay_count(document.get()) == 0);
@@ -1388,6 +1403,9 @@ void test_icon_image_and_canvas_media_contracts() {
     assert(count_commands(draw_list, TC_UI_DRAW_LINE) >= 1);
     tc_ui_paint_context_destroy(context);
     tc_ui_draw_list_destroy(draw_list);
+
+    assert(tc_ui_document_destroy_widget_recursive(document.get(), root.handle()));
+    assert(tc_ui_document_live_widget_count(document.get()) == 0);
 }
 
 void test_widget_signals_are_emitted_from_interactions() {

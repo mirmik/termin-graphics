@@ -6,6 +6,8 @@ preload_sdk_libs("nanobind", "termin_base", "termin_graphics2", "termin_gui_nati
 
 from termin.gui_native._gui_native import (  # noqa: E402
     Color,
+    Canvas,
+    ComboBox,
     Constraints,
     Document,
     DrawCommand,
@@ -14,6 +16,8 @@ from termin.gui_native._gui_native import (  # noqa: E402
     DrawListRenderer,
     EventResult,
     FontRole,
+    IconButton,
+    ImageWidget,
     KeyCode,
     KeyEvent,
     KeyEventType,
@@ -26,6 +30,8 @@ from termin.gui_native._gui_native import (  # noqa: E402
     PointerEventType,
     Rect,
     Size,
+    SliderEdit,
+    SpinBox,
     Style,
     StyleField,
     StyleOverride,
@@ -166,6 +172,8 @@ class Widget:
 
 __all__ = [
     "Color",
+    "Canvas",
+    "ComboBox",
     "Constraints",
     "Document",
     "DrawCommand",
@@ -174,6 +182,8 @@ __all__ = [
     "DrawListRenderer",
     "EventResult",
     "FontRole",
+    "IconButton",
+    "ImageWidget",
     "KeyCode",
     "KeyEvent",
     "KeyEventType",
@@ -186,6 +196,8 @@ __all__ = [
     "PointerEventType",
     "Rect",
     "Size",
+    "SliderEdit",
+    "SpinBox",
     "Style",
     "StyleField",
     "StyleOverride",

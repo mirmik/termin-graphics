@@ -30,7 +30,8 @@ The current module is intentionally small:
 - `termin/gui_native/widgets.hpp` adds a first C++ widget layer:
   `NativeWidget`, `BoxLayout`, `HStack`, `VStack`, `GridLayout`, `GroupBox`,
   `Splitter`, `ScrollArea`, `TabView`, `Panel`, `Button`, `Checkbox`,
-  `ProgressBar`, `TextInput`, `TextArea`, `Separator`, `Slider`, `Swatch`, `Label`, and
+  `ProgressBar`, `TextInput`, `TextArea`, `SpinBox`, `SliderEdit`, `ComboBox`,
+  `IconButton`, `ImageWidget`, `Canvas`, `Separator`, `Slider`, `Swatch`, `Label`, and
   `Spacer`;
 - `tc_ui_document_layout_roots` and the input dispatch APIs exercise layout
   and event routing without making ownership implicit;
@@ -71,6 +72,18 @@ The current module is intentionally small:
   boundaries, selection, mouse/keyboard navigation and copy/cut/paste through
   document-level host clipboard callbacks. `TextInput` scrolls horizontally;
   the unwrapped multiline `TextArea` scrolls on both axes;
+- `Slider` supports arbitrary finite ranges and optional step quantization.
+  `SliderEdit` materializes a canonical `Slider` + `SpinBox` child pair on its
+  first document layout and keeps programmatic and interactive values in sync;
+- `ComboBox` uses one document-owned, reusable overlay widget with outside
+  dismissal, keyboard selection and wheel scrolling. The first native pass
+  omits the legacy draggable scrollbar thumb while preserving selection and
+  scroll behavior;
+- `IconButton` accepts either UTF-8 icon text or a texture id. `ImageWidget`
+  and `Canvas` accept non-owning tgfx2 texture ids and explicit image sizes;
+  file decoding, upload, update and destruction remain host responsibilities.
+  `Canvas` provides fit/zoom/pan transforms plus a backend-neutral custom paint
+  callback inside its clip;
 - `UiDrawListRenderer` can flush the command list through
   `tgfx::Canvas2DRenderer`;
 - `TERMIN_GUI_NATIVE_BUILD_EXAMPLES=ON` builds a small SDL window example that
@@ -82,9 +95,8 @@ The current module is intentionally small:
   They expose common state and canonical tree mutation without duplicating
   widget data or retaining the document itself;
 - the same `WidgetRef` wraps C++ widgets created by the initial native
-  `HStack`, `VStack`, `Panel`, `Label`, `Button`, `TextInput` and `TextArea`
-  document factories. The editor factories return typed references without
-  duplicating widget state;
+  native document factories. Stateful input/media factories return typed
+  references without duplicating widget state;
 - the document-owned Python shim retains its Python body until the C deleter
   runs under the GIL; stale refs remain safe after widget or document teardown;
 - `examples/ui_rect_window.py` mirrors the C++ rectangle-window example.

@@ -3514,6 +3514,11 @@ void SliderEdit::set_value(float value) {
     value_ = next;
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
     changed_.emit(*this, value_);
+    if (!syncing_ && document() &&
+        tc_ui_document_is_alive(document(), slider_handle_) &&
+        tc_ui_document_is_alive(document(), spin_box_handle_)) {
+        sync_children(document());
+    }
 }
 
 void SliderEdit::set_range(float min_value, float max_value) {
@@ -3524,6 +3529,11 @@ void SliderEdit::set_range(float min_value, float max_value) {
     min_value_ = min_value;
     max_value_ = max_value;
     set_value(value_);
+    if (!syncing_ && document() &&
+        tc_ui_document_is_alive(document(), slider_handle_) &&
+        tc_ui_document_is_alive(document(), spin_box_handle_)) {
+        sync_children(document());
+    }
 }
 
 void SliderEdit::set_step(float step) {
@@ -3532,6 +3542,11 @@ void SliderEdit::set_step(float step) {
         return;
     }
     step_ = step;
+    if (!syncing_ && document() &&
+        tc_ui_document_is_alive(document(), slider_handle_) &&
+        tc_ui_document_is_alive(document(), spin_box_handle_)) {
+        sync_children(document());
+    }
 }
 
 void SliderEdit::set_decimals(int decimals) {
@@ -3540,6 +3555,9 @@ void SliderEdit::set_decimals(int decimals) {
         return;
     }
     decimals_ = decimals;
+    if (!syncing_ && document() && tc_ui_document_is_alive(document(), spin_box_handle_)) {
+        sync_children(document());
+    }
 }
 
 void SliderEdit::set_label(std::string label) {

@@ -252,6 +252,23 @@ struct TextAreaRef {
     }
 };
 
+#define TERMIN_GUI_NATIVE_WIDGET_REF(Name, Type) \
+    struct Name { \
+        WidgetRef widget; \
+        termin::gui_native::Type& get() const { \
+            return native_widget_checked<termin::gui_native::Type>(widget, #Type); \
+        } \
+    }
+
+TERMIN_GUI_NATIVE_WIDGET_REF(SpinBoxRef, SpinBox);
+TERMIN_GUI_NATIVE_WIDGET_REF(SliderEditRef, SliderEdit);
+TERMIN_GUI_NATIVE_WIDGET_REF(ComboBoxRef, ComboBox);
+TERMIN_GUI_NATIVE_WIDGET_REF(IconButtonRef, IconButton);
+TERMIN_GUI_NATIVE_WIDGET_REF(ImageWidgetRef, ImageWidget);
+TERMIN_GUI_NATIVE_WIDGET_REF(CanvasRef, Canvas);
+
+#undef TERMIN_GUI_NATIVE_WIDGET_REF
+
 struct PythonWidget {
     uint32_t magic = PYTHON_WIDGET_MAGIC;
     tc_widget widget {};
@@ -1123,6 +1140,207 @@ NB_MODULE(_gui_native, m) {
         .def("select_all", [](const TextAreaRef& self) { self.get().select_all(); })
         .def("clear_selection", [](const TextAreaRef& self) { self.get().clear_selection(); });
 
+    nb::class_<SpinBoxRef>(m, "SpinBox")
+        .def_prop_ro("widget", [](const SpinBoxRef& self) { return self.widget; })
+        .def_prop_ro("handle", [](const SpinBoxRef& self) { return WidgetHandle {self.widget.handle}; })
+        .def_prop_rw("value",
+            [](const SpinBoxRef& self) { return self.get().value(); },
+            [](const SpinBoxRef& self, float value) {
+                self.get().set_value(value);
+                self.widget.throw_pending_exception();
+            })
+        .def_prop_ro("min_value", [](const SpinBoxRef& self) { return self.get().min_value(); })
+        .def_prop_ro("max_value", [](const SpinBoxRef& self) { return self.get().max_value(); })
+        .def_prop_rw("step",
+            [](const SpinBoxRef& self) { return self.get().step(); },
+            [](const SpinBoxRef& self, float value) { self.get().set_step(value); })
+        .def_prop_rw("decimals",
+            [](const SpinBoxRef& self) { return self.get().decimals(); },
+            [](const SpinBoxRef& self, int value) { self.get().set_decimals(value); })
+        .def_prop_ro("editing", [](const SpinBoxRef& self) { return self.get().editing(); })
+        .def("set_range", [](const SpinBoxRef& self, float minimum, float maximum) {
+            self.get().set_range(minimum, maximum);
+            self.widget.throw_pending_exception();
+        }, nb::arg("minimum"), nb::arg("maximum"))
+        .def("connect_changed", [](const SpinBoxRef& self, nb::object callback) {
+            auto state = self.widget.state;
+            return self.get().changed().connect([state, callback = std::move(callback)](
+                                                   termin::gui_native::SpinBox&,
+                                                   float value) {
+                try {
+                    nb::gil_scoped_acquire gil;
+                    callback(value);
+                } catch (...) {
+                    if (state && !state->pending_exception) state->pending_exception = std::current_exception();
+                    tc_log_error("[termin-gui-native/python] SpinBox changed callback failed");
+                }
+            });
+        }, nb::arg("callback"));
+
+    nb::class_<SliderEditRef>(m, "SliderEdit")
+        .def_prop_ro("widget", [](const SliderEditRef& self) { return self.widget; })
+        .def_prop_ro("handle", [](const SliderEditRef& self) { return WidgetHandle {self.widget.handle}; })
+        .def_prop_rw("value",
+            [](const SliderEditRef& self) { return self.get().value(); },
+            [](const SliderEditRef& self, float value) {
+                self.get().set_value(value);
+                self.widget.throw_pending_exception();
+            })
+        .def_prop_rw("label",
+            [](const SliderEditRef& self) { return self.get().label(); },
+            [](const SliderEditRef& self, const std::string& value) { self.get().set_label(value); })
+        .def_prop_ro("slider_handle", [](const SliderEditRef& self) {
+            return WidgetHandle {self.get().slider_handle()};
+        })
+        .def_prop_ro("spin_box_handle", [](const SliderEditRef& self) {
+            return WidgetHandle {self.get().spin_box_handle()};
+        })
+        .def("set_range", [](const SliderEditRef& self, float minimum, float maximum) {
+            self.get().set_range(minimum, maximum);
+            self.widget.throw_pending_exception();
+        }, nb::arg("minimum"), nb::arg("maximum"))
+        .def("set_step", [](const SliderEditRef& self, float step) { self.get().set_step(step); })
+        .def("set_decimals", [](const SliderEditRef& self, int decimals) {
+            self.get().set_decimals(decimals);
+        })
+        .def("connect_changed", [](const SliderEditRef& self, nb::object callback) {
+            auto state = self.widget.state;
+            return self.get().changed().connect([state, callback = std::move(callback)](
+                                                   termin::gui_native::SliderEdit&,
+                                                   float value) {
+                try {
+                    nb::gil_scoped_acquire gil;
+                    callback(value);
+                } catch (...) {
+                    if (state && !state->pending_exception) state->pending_exception = std::current_exception();
+                    tc_log_error("[termin-gui-native/python] SliderEdit changed callback failed");
+                }
+            });
+        }, nb::arg("callback"));
+
+    nb::class_<ComboBoxRef>(m, "ComboBox")
+        .def_prop_ro("widget", [](const ComboBoxRef& self) { return self.widget; })
+        .def_prop_ro("handle", [](const ComboBoxRef& self) { return WidgetHandle {self.widget.handle}; })
+        .def_prop_ro("item_count", [](const ComboBoxRef& self) { return self.get().item_count(); })
+        .def_prop_rw("selected_index",
+            [](const ComboBoxRef& self) { return self.get().selected_index(); },
+            [](const ComboBoxRef& self, int value) {
+                self.get().set_selected_index(value);
+                self.widget.throw_pending_exception();
+            })
+        .def_prop_ro("selected_text", [](const ComboBoxRef& self) { return self.get().selected_text(); })
+        .def_prop_ro("open", [](const ComboBoxRef& self) { return self.get().open(); })
+        .def("add_item", [](const ComboBoxRef& self, const std::string& item) {
+            self.get().add_item(item);
+        }, nb::arg("item"))
+        .def("item_text", [](const ComboBoxRef& self, size_t index) {
+            return self.get().item_text(index);
+        }, nb::arg("index"))
+        .def("clear", [](const ComboBoxRef& self) { self.get().clear_items(); })
+        .def("connect_changed", [](const ComboBoxRef& self, nb::object callback) {
+            auto state = self.widget.state;
+            return self.get().changed().connect([state, callback = std::move(callback)](
+                                                   termin::gui_native::ComboBox&,
+                                                   int index,
+                                                   const std::string& text) {
+                try {
+                    nb::gil_scoped_acquire gil;
+                    callback(index, text);
+                } catch (...) {
+                    if (state && !state->pending_exception) state->pending_exception = std::current_exception();
+                    tc_log_error("[termin-gui-native/python] ComboBox changed callback failed");
+                }
+            });
+        }, nb::arg("callback"));
+
+    nb::class_<IconButtonRef>(m, "IconButton")
+        .def_prop_ro("widget", [](const IconButtonRef& self) { return self.widget; })
+        .def_prop_ro("handle", [](const IconButtonRef& self) { return WidgetHandle {self.widget.handle}; })
+        .def_prop_rw("active",
+            [](const IconButtonRef& self) { return self.get().active(); },
+            [](const IconButtonRef& self, bool value) { self.get().set_active(value); })
+        .def("set_icon", [](const IconButtonRef& self, const std::string& icon) {
+            self.get().set_icon(icon);
+        }, nb::arg("icon"))
+        .def("set_texture", [](const IconButtonRef& self, tgfx::TextureHandle texture) {
+            self.get().set_texture(texture.id);
+        }, nb::arg("texture"))
+        .def("connect_clicked", [](const IconButtonRef& self, nb::object callback) {
+            auto state = self.widget.state;
+            return self.get().clicked().connect([state, callback = std::move(callback)](
+                                                   termin::gui_native::IconButton&) {
+                try {
+                    nb::gil_scoped_acquire gil;
+                    callback();
+                } catch (...) {
+                    if (state && !state->pending_exception) state->pending_exception = std::current_exception();
+                    tc_log_error("[termin-gui-native/python] IconButton click callback failed");
+                }
+            });
+        }, nb::arg("callback"));
+
+    nb::class_<ImageWidgetRef>(m, "ImageWidget")
+        .def_prop_ro("widget", [](const ImageWidgetRef& self) { return self.widget; })
+        .def_prop_ro("handle", [](const ImageWidgetRef& self) { return WidgetHandle {self.widget.handle}; })
+        .def_prop_ro("intrinsic_size", [](const ImageWidgetRef& self) {
+            return self.get().intrinsic_size();
+        })
+        .def("set_texture", [](const ImageWidgetRef& self,
+                                tgfx::TextureHandle texture,
+                                tc_ui_size intrinsic_size) {
+            self.get().set_texture(texture.id, intrinsic_size);
+        }, nb::arg("texture"), nb::arg("intrinsic_size") = tc_ui_size {})
+        .def("set_tint", [](const ImageWidgetRef& self, tc_ui_color tint) {
+            self.get().set_tint(termin::gui_native::Color {tint.r, tint.g, tint.b, tint.a});
+        }, nb::arg("tint"))
+        .def("set_preserve_aspect", [](const ImageWidgetRef& self, bool preserve) {
+            self.get().set_preserve_aspect(preserve);
+        }, nb::arg("preserve"));
+
+    nb::class_<CanvasRef>(m, "Canvas")
+        .def_prop_ro("widget", [](const CanvasRef& self) { return self.widget; })
+        .def_prop_ro("handle", [](const CanvasRef& self) { return WidgetHandle {self.widget.handle}; })
+        .def_prop_ro("zoom", [](const CanvasRef& self) { return self.get().zoom(); })
+        .def("set_texture", [](const CanvasRef& self,
+                                tgfx::TextureHandle texture,
+                                tc_ui_size image_size) {
+            self.get().set_texture(texture.id, image_size);
+        }, nb::arg("texture"), nb::arg("image_size") = tc_ui_size {})
+        .def("set_overlay_texture", [](const CanvasRef& self, tgfx::TextureHandle texture) {
+            self.get().set_overlay_texture(texture.id);
+        }, nb::arg("texture"))
+        .def("set_zoom", [](const CanvasRef& self, float zoom, tc_ui_point anchor) {
+            self.get().set_zoom(zoom, anchor);
+        }, nb::arg("zoom"), nb::arg("anchor"))
+        .def("fit_in_view", [](const CanvasRef& self) { self.get().fit_in_view(); })
+        .def("widget_to_image", [](const CanvasRef& self, tc_ui_point point) {
+            return self.get().widget_to_image(point);
+        }, nb::arg("point"))
+        .def("image_to_widget", [](const CanvasRef& self, tc_ui_point point) {
+            return self.get().image_to_widget(point);
+        }, nb::arg("point"))
+        .def("set_paint_callback", [](const CanvasRef& self, nb::object callback) {
+            if (callback.is_none()) {
+                self.get().set_paint_callback({});
+                return;
+            }
+            auto state = self.widget.state;
+            self.get().set_paint_callback(
+                [state, callback = std::move(callback)](
+                    termin::gui_native::Canvas&,
+                    tc_ui_paint_context* context) {
+                    try {
+                        nb::gil_scoped_acquire gil;
+                        PaintContext borrowed(context, false);
+                        callback(std::move(borrowed));
+                    } catch (...) {
+                        if (state && !state->pending_exception) state->pending_exception = std::current_exception();
+                        tc_log_error("[termin-gui-native/python] Canvas paint callback failed");
+                    }
+                }
+            );
+        }, nb::arg("callback"));
+
     nb::enum_<tc_ui_draw_command_type>(m, "DrawCommandType")
         .value("FillRect", TC_UI_DRAW_FILL_RECT)
         .value("StrokeRect", TC_UI_DRAW_STROKE_RECT)
@@ -1382,6 +1600,24 @@ NB_MODULE(_gui_native, m) {
         .def("create_text_area", [](Document& self, const std::string& text) {
             return TextAreaRef {self.make_native<termin::gui_native::TextArea>(text)};
         }, nb::arg("text") = "")
+        .def("create_spin_box", [](Document& self, float value) {
+            return SpinBoxRef {self.make_native<termin::gui_native::SpinBox>(value)};
+        }, nb::arg("value") = 0.0f)
+        .def("create_slider_edit", [](Document& self, float value) {
+            return SliderEditRef {self.make_native<termin::gui_native::SliderEdit>(value)};
+        }, nb::arg("value") = 0.0f)
+        .def("create_combo_box", [](Document& self) {
+            return ComboBoxRef {self.make_native<termin::gui_native::ComboBox>()};
+        })
+        .def("create_icon_button", [](Document& self, const std::string& icon) {
+            return IconButtonRef {self.make_native<termin::gui_native::IconButton>(icon)};
+        }, nb::arg("icon") = "")
+        .def("create_image_widget", [](Document& self) {
+            return ImageWidgetRef {self.make_native<termin::gui_native::ImageWidget>()};
+        })
+        .def("create_canvas", [](Document& self) {
+            return CanvasRef {self.make_native<termin::gui_native::Canvas>()};
+        })
         .def("layout_roots", [](Document& self, tc_ui_rect rect) {
             tc_ui_document_layout_roots(self.get(), rect);
             self.throw_pending_exception();

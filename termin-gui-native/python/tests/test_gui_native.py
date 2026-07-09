@@ -626,3 +626,107 @@ def test_native_text_area_multiline_selection_and_navigation():
     key.key = KeyCode.Home
     assert document.dispatch_key_event(key) == EventResult.Handled
     assert area.caret == 9
+
+
+def test_native_basic_input_and_media_widget_factories():
+    document = Document()
+
+    spin = document.create_spin_box(2.0)
+    spin_changes = []
+    spin.connect_changed(spin_changes.append)
+    spin.set_range(-5.0, 5.0)
+    spin.step = 0.5
+    spin.decimals = 1
+    spin.value = 3.5
+    assert spin.value == pytest.approx(3.5)
+    assert spin_changes == [pytest.approx(3.5)]
+
+    slider_edit = document.create_slider_edit(0.25)
+    slider_edit.set_range(0.0, 1.0)
+    slider_edit.set_step(0.05)
+    slider_edit.label = "Exposure"
+    slider_edit.widget.layout(Rect(0.0, 0.0, 300.0, 52.0))
+    assert slider_edit.slider_handle
+    assert slider_edit.spin_box_handle
+    assert len(slider_edit.widget.children) == 2
+
+    combo = document.create_combo_box()
+    combo.add_item("First")
+    combo.add_item("Second")
+    combo_changes = []
+    combo.connect_changed(lambda index, text: combo_changes.append((index, text)))
+    combo.selected_index = 1
+    assert combo.item_count == 2
+    assert combo.item_text(1) == "Second"
+    assert combo.selected_text == "Second"
+    assert combo_changes == [(1, "Second")]
+
+    icon = document.create_icon_button("I")
+    icon.widget.bounds = Rect(0.0, 0.0, 28.0, 28.0)
+    clicks = []
+    icon.connect_clicked(lambda: clicks.append(True))
+    pointer = PointerEvent()
+    pointer.type = PointerEventType.Down
+    pointer.x = 4.0
+    pointer.y = 4.0
+    assert icon.widget.dispatch_pointer_event(pointer) == EventResult.Handled
+    pointer.type = PointerEventType.Up
+    assert icon.widget.dispatch_pointer_event(pointer) == EventResult.Handled
+    assert clicks == [True]
+
+    image = document.create_image_widget()
+    assert image.intrinsic_size.width == pytest.approx(64.0)
+    image.set_preserve_aspect(False)
+
+    canvas = document.create_canvas()
+    canvas.widget.bounds = Rect(0.0, 0.0, 160.0, 100.0)
+    paints = []
+
+    def paint_overlay(context):
+        paints.append(True)
+        context.draw_line(
+            Point(0.0, 0.0),
+            Point(10.0, 10.0),
+            Color(1.0, 0.0, 0.0, 1.0),
+            1.0,
+        )
+
+    canvas.set_paint_callback(paint_overlay)
+    draw_list = DrawList()
+    canvas.widget.paint(PaintContext(draw_list))
+    assert paints == [True]
+    assert [command.type for command in draw_list.commands] == [
+        DrawCommandType.FillRect,
+        DrawCommandType.PushClip,
+        DrawCommandType.Line,
+        DrawCommandType.PopClip,
+    ]
+
+
+def test_native_value_setters_propagate_callback_exceptions_immediately():
+    document = Document()
+
+    def fail_spin(_value):
+        raise ValueError("spin callback failed")
+
+    spin = document.create_spin_box()
+    spin.connect_changed(fail_spin)
+    with pytest.raises(ValueError, match="spin callback failed"):
+        spin.value = 1.0
+
+    def fail_slider_edit(_value):
+        raise RuntimeError("slider edit callback failed")
+
+    slider_edit = document.create_slider_edit()
+    slider_edit.connect_changed(fail_slider_edit)
+    with pytest.raises(RuntimeError, match="slider edit callback failed"):
+        slider_edit.value = 0.5
+
+    def fail_combo(_index, _text):
+        raise LookupError("combo callback failed")
+
+    combo = document.create_combo_box()
+    combo.add_item("First")
+    combo.connect_changed(fail_combo)
+    with pytest.raises(LookupError, match="combo callback failed"):
+        combo.selected_index = 0
