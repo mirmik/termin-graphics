@@ -20,7 +20,7 @@ _normal_texture_handle: TcTexture | None = None
 def get_white_texture_handle() -> TcTexture:
     """Return the white 1x1 texture singleton."""
     global _white_texture_handle
-    if _white_texture_handle is None:
+    if _white_texture_handle is None or not _white_texture_handle.is_valid:
         _white_texture_handle = TcTexture.white_1x1()
     return _white_texture_handle
 
@@ -28,7 +28,7 @@ def get_white_texture_handle() -> TcTexture:
 def get_normal_texture_handle() -> TcTexture:
     """Return the flat normal 1x1 texture singleton."""
     global _normal_texture_handle
-    if _normal_texture_handle is None:
+    if _normal_texture_handle is None or not _normal_texture_handle.is_valid:
         data = np.array([[[128, 128, 255, 255]]], dtype=np.uint8)
         _normal_texture_handle = TcTexture.from_data(
             data=data,

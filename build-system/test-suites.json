@@ -69,6 +69,12 @@
       "roots": ["termin-animation/tests"]
     },
     {
+      "id": "termin-audio-tests",
+      "module": "termin-audio",
+      "executor": "pytest",
+      "roots": ["termin-audio/tests"]
+    },
+    {
       "id": "termin-app-tests",
       "module": "termin-app",
       "executor": "pytest",

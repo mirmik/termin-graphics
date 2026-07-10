@@ -1,5 +1,7 @@
 #include "widgets_internal.hpp"
 
+#include <stdexcept>
+
 namespace termin::gui_native {
 using namespace detail;
 
@@ -33,12 +35,63 @@ void TabView::add_page(std::string title, tc_widget_handle handle) {
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
+bool TabView::remove_page(size_t index) {
+  if (index >= pages_.size() || index >= child_count()) {
+    tc_log_error("[termin-gui-native] TabView remove_page index out of range");
+    return false;
+  }
+  const tc_widget_handle handle = pages_[index].handle;
+  const bool removed_selected = selected_index_ == index;
+  detach_if_child(c_widget(), handle);
+  pages_.erase(pages_.begin() + static_cast<std::ptrdiff_t>(index));
+  const size_t previous = selected_index_;
+  if (pages_.empty()) {
+    selected_index_ = 0;
+  } else if (selected_index_ > index) {
+    --selected_index_;
+  } else if (selected_index_ >= pages_.size()) {
+    selected_index_ = pages_.size() - 1;
+  }
+  mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_LAYOUT |
+             TC_WIDGET_DIRTY_PAINT);
+  if (!pages_.empty() && (selected_index_ != previous || removed_selected)) {
+    selection_changed_.emit(*this, selected_index_);
+  }
+  return true;
+}
+
+bool TabView::set_page_title(size_t index, std::string title) {
+  if (index >= pages_.size()) {
+    tc_log_error(
+        "[termin-gui-native] TabView set_page_title index out of range");
+    return false;
+  }
+  pages_[index].title = std::move(title);
+  mark_dirty(TC_WIDGET_DIRTY_PAINT);
+  return true;
+}
+
+const std::string &TabView::page_title(size_t index) const {
+  if (index >= pages_.size()) {
+    throw std::out_of_range("TabView page_title index out of range");
+  }
+  return pages_[index].title;
+}
+
+tc_widget_handle TabView::page_handle(size_t index) const {
+  if (index >= pages_.size()) {
+    return tc_widget_handle_invalid();
+  }
+  return pages_[index].handle;
+}
+
 void TabView::set_selected_index(size_t index) {
     if (index >= child_count() || selected_index_ == index) {
         return;
     }
     selected_index_ = index;
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+    selection_changed_.emit(*this, selected_index_);
 }
 
 tc_ui_size TabView::measure(tc_ui_document* document, tc_ui_constraints constraints) {

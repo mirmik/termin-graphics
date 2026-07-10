@@ -1169,6 +1169,25 @@ def test_native_basic_input_and_media_widget_factories():
     assert spin.value == pytest.approx(3.5)
     assert spin_changes == [pytest.approx(3.5)]
 
+    tabs = document.create_tab_view("python-tabs")
+    first_page = document.create_panel("first-page")
+    second_page = document.create_panel("second-page")
+    tab_changes = []
+    tabs.connect_selection_changed(tab_changes.append)
+    tabs.add_page("First", first_page)
+    tabs.add_page("Second", second_page)
+    assert tabs.page_count == 2
+    assert tabs.page_title(1) == "Second"
+    assert tabs.page_handle(0) == first_page.handle
+    tabs.selected_index = 1
+    assert tab_changes == [1]
+    tabs.set_page_title(1, "Renamed")
+    assert tabs.page_title(1) == "Renamed"
+    assert tabs.remove_page(1)
+    assert tabs.page_count == 1
+    assert tabs.selected_index == 0
+    assert tab_changes == [1, 0]
+
     slider_edit = document.create_slider_edit(0.25)
     slider_edit.set_range(0.0, 1.0)
     slider_edit.set_step(0.05)
@@ -2304,6 +2323,9 @@ def test_native_scene_view_model_transform_drag_callbacks_and_embedding():
     assert scene.remove_item(editor_item)
     document.layout_roots(Rect(100.0, 50.0, 400.0, 300.0))
     assert embedded.widget.parent is None
+    view.set_pointer_handler(None)
+    view.set_key_handler(None)
+    view.set_text_handler(None)
 
 
 def test_native_scene_transform_and_scene_view_handler_errors_propagate():

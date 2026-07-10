@@ -599,6 +599,31 @@ void test_tab_view_recursive_destroy_pages() {
   assert(tc_ui_document_live_widget_count(document.get()) == 0);
 }
 
+void test_tab_view_page_mutation_and_selection_signal() {
+  Document document;
+  DocumentBuilder ui(document);
+
+  auto &tabs = ui.make_root<TabView>("tabs");
+  auto &first = ui.make<Panel>("first-page");
+  auto &second = ui.make<Panel>("second-page");
+  tabs.add_page("First", first);
+  tabs.add_page("Second", second);
+  std::vector<size_t> selected;
+  tabs.selection_changed().connect(
+      [&selected](TabView &, size_t index) { selected.push_back(index); });
+
+  tabs.set_selected_index(1);
+  assert((selected == std::vector<size_t>{1}));
+  assert(tabs.set_page_title(1, "Renamed"));
+  assert(tabs.page_title(1) == "Renamed");
+  assert(tc_widget_handle_eq(tabs.page_handle(1), second.handle()));
+  assert(tabs.remove_page(1));
+  assert(tabs.page_count() == 1);
+  assert(tabs.selected_index() == 0);
+  assert(second.parent_widget() == nullptr);
+  assert((selected == std::vector<size_t>{1, 0}));
+}
+
 void test_box_layout_shrinks_flexible_children_before_overflowing() {
   Document document;
   DocumentBuilder ui(document);
@@ -3065,6 +3090,7 @@ int main() {
   test_scroll_area_wheel_clamps_and_recursive_destroy_content();
   test_tab_view_switches_selected_page_and_clips_paint();
   test_tab_view_recursive_destroy_pages();
+  test_tab_view_page_mutation_and_selection_signal();
   test_box_layout_shrinks_flexible_children_before_overflowing();
   test_box_layout_respects_child_extent_limits();
   test_box_layout_allows_preferred_overflow_when_no_child_can_shrink();

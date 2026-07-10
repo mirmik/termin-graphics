@@ -20,6 +20,16 @@ except ModuleNotFoundError as e:
     NodeGraphSceneAdapter = None
     NodeGraphView = None
 
+try:
+    from tcnodegraph.native_view import NativeNodeGraphView, build_native_node_graph_view
+except ModuleNotFoundError as e:
+    logging.getLogger(__name__).debug(
+        "Optional import tcnodegraph.native_view failed: %s — native GUI features unavailable",
+        e,
+    )
+    NativeNodeGraphView = None
+    build_native_node_graph_view = None
+
 __all__ = [
     "Socket",
     "Node",
@@ -39,4 +49,6 @@ __all__ = [
     "load_graph_json",
     "NodeGraphSceneAdapter",
     "NodeGraphView",
+    "NativeNodeGraphView",
+    "build_native_node_graph_view",
 ]

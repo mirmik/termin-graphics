@@ -360,6 +360,7 @@ TERMIN_GUI_NATIVE_WIDGET_REF(SliderEditRef, SliderEdit);
 TERMIN_GUI_NATIVE_WIDGET_REF(ButtonRef, Button);
 TERMIN_GUI_NATIVE_WIDGET_REF(CheckboxRef, Checkbox);
 TERMIN_GUI_NATIVE_WIDGET_REF(ScrollAreaRef, ScrollArea);
+TERMIN_GUI_NATIVE_WIDGET_REF(TabViewRef, TabView);
 TERMIN_GUI_NATIVE_WIDGET_REF(RichTextViewRef, RichTextView);
 TERMIN_GUI_NATIVE_WIDGET_REF(FrameTimeGraphRef, FrameTimeGraph);
 TERMIN_GUI_NATIVE_WIDGET_REF(Viewport3DRef, Viewport3D);
@@ -2174,6 +2175,87 @@ NB_MODULE(_gui_native, m) {
             },
             nb::arg("callback"));
 
+    nb::class_<TabViewRef>(m, "TabView")
+        .def_prop_ro("widget",
+                     [](const TabViewRef &self) { return self.widget; })
+        .def_prop_ro("handle",
+                     [](const TabViewRef &self) {
+                       return WidgetHandle{self.widget.handle};
+                     })
+        .def_prop_ro(
+            "page_count",
+            [](const TabViewRef &self) { return self.get().page_count(); })
+        .def_prop_rw(
+            "selected_index",
+            [](const TabViewRef &self) { return self.get().selected_index(); },
+            [](const TabViewRef &self, size_t index) {
+              if (index >= self.get().page_count()) {
+                throw std::out_of_range("TabView selected_index out of range");
+              }
+              self.get().set_selected_index(index);
+              self.widget.throw_pending_exception();
+            })
+        .def(
+            "add_page",
+            [](const TabViewRef &self, const std::string &title,
+               const WidgetRef &page) {
+              if (self.widget.state != page.state) {
+                throw std::invalid_argument(
+                    "TabView page belongs to another document");
+              }
+              self.get().add_page(title, page.handle);
+              self.widget.throw_pending_exception();
+            },
+            nb::arg("title"), nb::arg("page"))
+        .def(
+            "remove_page",
+            [](const TabViewRef &self, size_t index) {
+              const bool removed = self.get().remove_page(index);
+              self.widget.throw_pending_exception();
+              return removed;
+            },
+            nb::arg("index"))
+        .def(
+            "set_page_title",
+            [](const TabViewRef &self, size_t index, const std::string &title) {
+              if (!self.get().set_page_title(index, title)) {
+                throw std::out_of_range("TabView page index out of range");
+              }
+            },
+            nb::arg("index"), nb::arg("title"))
+        .def(
+            "page_title",
+            [](const TabViewRef &self, size_t index) {
+              return self.get().page_title(index);
+            },
+            nb::arg("index"))
+        .def(
+            "page_handle",
+            [](const TabViewRef &self, size_t index) {
+              return WidgetHandle{self.get().page_handle(index)};
+            },
+            nb::arg("index"))
+        .def(
+            "connect_selection_changed",
+            [](const TabViewRef &self, nb::object callback) {
+              auto state = self.widget.state;
+              return self.get().selection_changed().connect(
+                  [state, callback = std::move(callback)](
+                      termin::gui_native::TabView &, size_t index) {
+                    try {
+                      nb::gil_scoped_acquire gil;
+                      callback(index);
+                    } catch (...) {
+                      if (state && !state->pending_exception) {
+                        state->pending_exception = std::current_exception();
+                      }
+                      tc_log_error("[termin-gui-native/python] TabView "
+                                   "selection callback failed");
+                    }
+                  });
+            },
+            nb::arg("callback"));
+
     nb::class_<MenuRef>(m, "Menu")
         .def_prop_ro("widget", [](const MenuRef& self) { return self.widget; })
         .def_prop_ro("handle", [](const MenuRef& self) { return WidgetHandle{self.widget.handle}; })
@@ -3104,178 +3186,206 @@ NB_MODULE(_gui_native, m) {
             nb::arg("event"));
 
     nb::class_<SceneViewRef>(m, "SceneView")
-        .def_prop_ro("widget", [](const SceneViewRef& self) { return self.widget; })
+        .def_prop_ro("widget",
+                     [](const SceneViewRef &self) { return self.widget; })
         .def_prop_ro("handle",
-                     [](const SceneViewRef& self) { return WidgetHandle{self.widget.handle}; })
+                     [](const SceneViewRef &self) {
+                       return WidgetHandle{self.widget.handle};
+                     })
         .def_prop_rw(
-            "scene", [](const SceneViewRef& self) { return self.get().scene(); },
-            [](const SceneViewRef& self, std::shared_ptr<termin::gui_native::GraphicsScene> scene) {
-                self.get().set_scene(std::move(scene));
+            "scene",
+            [](const SceneViewRef &self) { return self.get().scene(); },
+            [](const SceneViewRef &self,
+               std::shared_ptr<termin::gui_native::GraphicsScene> scene) {
+              self.get().set_scene(std::move(scene));
             })
-        .def_prop_ro("transform", [](const SceneViewRef& self) { return self.get().transform(); })
+        .def_prop_ro(
+            "transform",
+            [](const SceneViewRef &self) { return self.get().transform(); })
         .def_prop_rw(
-            "offset", [](const SceneViewRef& self) { return self.get().offset(); },
-            [](const SceneViewRef& self, tc_ui_point offset) {
-                self.get().set_offset(offset);
-                self.widget.throw_pending_exception();
+            "offset",
+            [](const SceneViewRef &self) { return self.get().offset(); },
+            [](const SceneViewRef &self, tc_ui_point offset) {
+              self.get().set_offset(offset);
+              self.widget.throw_pending_exception();
             })
-        .def_prop_ro("zoom", [](const SceneViewRef& self) { return self.get().zoom(); })
-        .def_prop_ro("min_zoom", [](const SceneViewRef& self) { return self.get().min_zoom(); })
-        .def_prop_ro("max_zoom", [](const SceneViewRef& self) { return self.get().max_zoom(); })
+        .def_prop_ro("zoom",
+                     [](const SceneViewRef &self) { return self.get().zoom(); })
+        .def_prop_ro(
+            "min_zoom",
+            [](const SceneViewRef &self) { return self.get().min_zoom(); })
+        .def_prop_ro(
+            "max_zoom",
+            [](const SceneViewRef &self) { return self.get().max_zoom(); })
         .def_prop_rw(
-            "zoom_factor", [](const SceneViewRef& self) { return self.get().zoom_factor(); },
-            [](const SceneViewRef& self, float factor) { self.get().set_zoom_factor(factor); })
+            "zoom_factor",
+            [](const SceneViewRef &self) { return self.get().zoom_factor(); },
+            [](const SceneViewRef &self, float factor) {
+              self.get().set_zoom_factor(factor);
+            })
         .def_prop_rw(
-            "show_grid", [](const SceneViewRef& self) { return self.get().show_grid(); },
-            [](const SceneViewRef& self, bool show) { self.get().set_show_grid(show); })
+            "show_grid",
+            [](const SceneViewRef &self) { return self.get().show_grid(); },
+            [](const SceneViewRef &self, bool show) {
+              self.get().set_show_grid(show);
+            })
         .def_prop_rw(
-            "grid_step", [](const SceneViewRef& self) { return self.get().grid_step(); },
-            [](const SceneViewRef& self, float step) { self.get().set_grid_step(step); })
+            "grid_step",
+            [](const SceneViewRef &self) { return self.get().grid_step(); },
+            [](const SceneViewRef &self, float step) {
+              self.get().set_grid_step(step);
+            })
         .def(
             "set_zoom",
-            [](const SceneViewRef& self, float zoom, tc_ui_point anchor) {
-                self.get().set_zoom(zoom, anchor);
-                self.widget.throw_pending_exception();
+            [](const SceneViewRef &self, float zoom, tc_ui_point anchor) {
+              self.get().set_zoom(zoom, anchor);
+              self.widget.throw_pending_exception();
             },
             nb::arg("zoom"), nb::arg("anchor"))
         .def(
             "set_zoom_range",
-            [](const SceneViewRef& self, float minimum, float maximum) {
-                self.get().set_zoom_range(minimum, maximum);
-                self.widget.throw_pending_exception();
+            [](const SceneViewRef &self, float minimum, float maximum) {
+              self.get().set_zoom_range(minimum, maximum);
+              self.widget.throw_pending_exception();
             },
             nb::arg("minimum"), nb::arg("maximum"))
         .def(
             "set_scene_colors",
-            [](const SceneViewRef& self, tc_ui_color background, tc_ui_color grid,
-               tc_ui_color axes) {
-                self.get().set_scene_colors(
-                    termin::gui_native::Color{background.r, background.g, background.b,
-                                              background.a},
-                    termin::gui_native::Color{grid.r, grid.g, grid.b, grid.a},
-                    termin::gui_native::Color{axes.r, axes.g, axes.b, axes.a});
+            [](const SceneViewRef &self, tc_ui_color background,
+               tc_ui_color grid, tc_ui_color axes) {
+              self.get().set_scene_colors(
+                  termin::gui_native::Color{background.r, background.g,
+                                            background.b, background.a},
+                  termin::gui_native::Color{grid.r, grid.g, grid.b, grid.a},
+                  termin::gui_native::Color{axes.r, axes.g, axes.b, axes.a});
             },
             nb::arg("background"), nb::arg("grid"), nb::arg("axes"))
         .def(
             "world_to_screen",
-            [](const SceneViewRef& self, tc_ui_point point) {
-                return self.get().world_to_screen(point);
+            [](const SceneViewRef &self, tc_ui_point point) {
+              return self.get().world_to_screen(point);
             },
             nb::arg("point"))
         .def(
             "screen_to_world",
-            [](const SceneViewRef& self, tc_ui_point point) {
-                return self.get().screen_to_world(point);
+            [](const SceneViewRef &self, tc_ui_point point) {
+              return self.get().screen_to_world(point);
             },
             nb::arg("point"))
         .def(
             "set_pointer_handler",
-            [](const SceneViewRef& self, nb::object callback) {
-                if (callback.is_none()) {
-                    self.get().set_pointer_handler({});
-                    return;
-                }
-                const auto state = self.widget.state;
-                self.get().set_pointer_handler([state, callback = std::move(callback)](
-                                                   termin::gui_native::SceneView&,
-                                                   tc_ui_point world,
-                                                   const tc_ui_pointer_event& event) {
+            [](const SceneViewRef &self, nb::object callback) {
+              if (callback.is_none()) {
+                self.get().set_pointer_handler({});
+                return;
+              }
+              const auto state = self.widget.state;
+              self.get().set_pointer_handler(
+                  [state, callback = std::move(callback)](
+                      termin::gui_native::SceneView &, tc_ui_point world,
+                      const tc_ui_pointer_event &event) {
                     nb::gil_scoped_acquire gil;
                     try {
-                        return nb::cast<bool>(callback(world, event));
+                      return nb::cast<bool>(callback(world, event));
                     } catch (...) {
-                        if (state && !state->pending_exception)
-                            state->pending_exception = std::current_exception();
-                        tc_log_error("[termin-gui-native/python] SceneView pointer handler failed");
-                        throw;
+                      if (state && !state->pending_exception)
+                        state->pending_exception = std::current_exception();
+                      tc_log_error("[termin-gui-native/python] SceneView "
+                                   "pointer handler failed");
+                      throw;
                     }
-                });
+                  });
             },
-            nb::arg("callback"))
+            nb::arg("callback").none())
         .def(
             "set_key_handler",
-            [](const SceneViewRef& self, nb::object callback) {
-                if (callback.is_none()) {
-                    self.get().set_key_handler({});
-                    return;
-                }
-                const auto state = self.widget.state;
-                self.get().set_key_handler(
-                    [state, callback = std::move(callback)](termin::gui_native::SceneView&,
-                                                            const tc_ui_key_event& event) {
-                        nb::gil_scoped_acquire gil;
-                        try {
-                            return nb::cast<bool>(callback(event));
-                        } catch (...) {
-                            if (state && !state->pending_exception)
-                                state->pending_exception = std::current_exception();
-                            tc_log_error("[termin-gui-native/python] SceneView key handler failed");
-                            throw;
-                        }
-                    });
-            },
-            nb::arg("callback"))
-        .def(
-            "set_text_handler",
-            [](const SceneViewRef& self, nb::object callback) {
-                if (callback.is_none()) {
-                    self.get().set_text_handler({});
-                    return;
-                }
-                const auto state = self.widget.state;
-                self.get().set_text_handler([state, callback = std::move(callback)](
-                                                termin::gui_native::SceneView&,
-                                                const tc_ui_text_event& event) {
+            [](const SceneViewRef &self, nb::object callback) {
+              if (callback.is_none()) {
+                self.get().set_key_handler({});
+                return;
+              }
+              const auto state = self.widget.state;
+              self.get().set_key_handler(
+                  [state, callback = std::move(callback)](
+                      termin::gui_native::SceneView &,
+                      const tc_ui_key_event &event) {
                     nb::gil_scoped_acquire gil;
                     try {
-                        return nb::cast<bool>(callback(event.text ? event.text : ""));
+                      return nb::cast<bool>(callback(event));
                     } catch (...) {
-                        if (state && !state->pending_exception)
-                            state->pending_exception = std::current_exception();
-                        tc_log_error("[termin-gui-native/python] SceneView text handler failed");
-                        throw;
+                      if (state && !state->pending_exception)
+                        state->pending_exception = std::current_exception();
+                      tc_log_error("[termin-gui-native/python] SceneView key "
+                                   "handler failed");
+                      throw;
                     }
-                });
+                  });
             },
-            nb::arg("callback"))
+            nb::arg("callback").none())
+        .def(
+            "set_text_handler",
+            [](const SceneViewRef &self, nb::object callback) {
+              if (callback.is_none()) {
+                self.get().set_text_handler({});
+                return;
+              }
+              const auto state = self.widget.state;
+              self.get().set_text_handler([state,
+                                           callback = std::move(callback)](
+                                              termin::gui_native::SceneView &,
+                                              const tc_ui_text_event &event) {
+                nb::gil_scoped_acquire gil;
+                try {
+                  return nb::cast<bool>(callback(event.text ? event.text : ""));
+                } catch (...) {
+                  if (state && !state->pending_exception)
+                    state->pending_exception = std::current_exception();
+                  tc_log_error("[termin-gui-native/python] SceneView text "
+                               "handler failed");
+                  throw;
+                }
+              });
+            },
+            nb::arg("callback").none())
         .def(
             "connect_item_moved",
-            [](const SceneViewRef& self, nb::object callback) {
-                const auto state = self.widget.state;
-                return self.get().item_moved().connect(
-                    [state, callback = std::move(callback)](
-                        termin::gui_native::SceneView&,
-                        std::shared_ptr<termin::gui_native::GraphicsItem> item) {
-                        nb::gil_scoped_acquire gil;
-                        try {
-                            callback(std::move(item));
-                        } catch (...) {
-                            if (state && !state->pending_exception)
-                                state->pending_exception = std::current_exception();
-                            tc_log_error(
-                                "[termin-gui-native/python] SceneView item-moved callback failed");
-                        }
-                    });
+            [](const SceneViewRef &self, nb::object callback) {
+              const auto state = self.widget.state;
+              return self.get().item_moved().connect(
+                  [state, callback = std::move(callback)](
+                      termin::gui_native::SceneView &,
+                      std::shared_ptr<termin::gui_native::GraphicsItem> item) {
+                    nb::gil_scoped_acquire gil;
+                    try {
+                      callback(std::move(item));
+                    } catch (...) {
+                      if (state && !state->pending_exception)
+                        state->pending_exception = std::current_exception();
+                      tc_log_error("[termin-gui-native/python] SceneView "
+                                   "item-moved callback failed");
+                    }
+                  });
             },
             nb::arg("callback"))
         .def(
             "connect_transform_changed",
-            [](const SceneViewRef& self, nb::object callback) {
-                const auto state = self.widget.state;
-                return self.get().transform_changed().connect(
-                    [state, callback = std::move(callback)](
-                        termin::gui_native::SceneView&,
-                        const termin::gui_native::SceneTransform& transform) {
-                        nb::gil_scoped_acquire gil;
-                        try {
-                            callback(termin::gui_native::SceneTransform{transform});
-                        } catch (...) {
-                            if (state && !state->pending_exception)
-                                state->pending_exception = std::current_exception();
-                            tc_log_error("[termin-gui-native/python] SceneView transform callback "
-                                         "failed");
-                        }
-                    });
+            [](const SceneViewRef &self, nb::object callback) {
+              const auto state = self.widget.state;
+              return self.get().transform_changed().connect(
+                  [state, callback = std::move(callback)](
+                      termin::gui_native::SceneView &,
+                      const termin::gui_native::SceneTransform &transform) {
+                    nb::gil_scoped_acquire gil;
+                    try {
+                      callback(termin::gui_native::SceneTransform{transform});
+                    } catch (...) {
+                      if (state && !state->pending_exception)
+                        state->pending_exception = std::current_exception();
+                      tc_log_error("[termin-gui-native/python] SceneView "
+                                   "transform callback "
+                                   "failed");
+                    }
+                  });
             },
             nb::arg("callback"));
 
@@ -4593,6 +4703,13 @@ NB_MODULE(_gui_native, m) {
                       debug_name.c_str())};
             },
             nb::arg("debug_name") = "ScrollArea")
+        .def(
+            "create_tab_view",
+            [](Document &self, const std::string &debug_name) {
+              return TabViewRef{self.make_native<termin::gui_native::TabView>(
+                  debug_name.c_str())};
+            },
+            nb::arg("debug_name") = "TabView")
         .def(
             "create_text_input",
             [](Document &self, const std::string &text) {
