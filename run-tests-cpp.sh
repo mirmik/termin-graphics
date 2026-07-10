@@ -183,6 +183,33 @@ if ! cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     exit 1
 fi
 
+REPOSITORY_PROFILE="pr"
+REPOSITORY_CAPABILITIES=(--capability host)
+if [[ "$FULL" -eq 1 ]]; then
+    REPOSITORY_PROFILE="linux-full"
+fi
+if [[ "$TERMIN_BUILD_WINDOW_TESTS" == "ON" ]]; then
+    REPOSITORY_CAPABILITIES+=(--capability window)
+fi
+if [[ "$TERMIN_ENABLE_VULKAN" == "ON" ]]; then
+    REPOSITORY_CAPABILITIES+=(--capability vulkan)
+fi
+if [[ "$TERMIN_ENABLE_OPENGL" == "ON" ]]; then
+    REPOSITORY_CAPABILITIES+=(--capability opengl)
+fi
+if [[ -f "$BUILD_DIR/CMakeCache.txt" ]] \
+    && grep -q '^TERMIN_TGFX2_GLFW_AVAILABLE:INTERNAL=TRUE$' "$BUILD_DIR/CMakeCache.txt"; then
+    REPOSITORY_CAPABILITIES+=(--capability glfw)
+fi
+if ! "$SDK_PREFIX/bin/termin_python" -m termin_build.repository_control \
+    --repo-root "$SCRIPT_DIR" check-ctest \
+    --build-dir "$BUILD_DIR" \
+    --profile "$REPOSITORY_PROFILE" \
+    "${REPOSITORY_CAPABILITIES[@]}"; then
+    echo "ERROR: CTest inventory validation failed" >&2
+    exit 1
+fi
+
 if ! cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"; then
     echo "ERROR: C++ test build failed" >&2
     exit 1

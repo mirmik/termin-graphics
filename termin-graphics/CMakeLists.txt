@@ -488,35 +488,32 @@ if(BUILD_TGFX2_TESTS)
     set_tests_properties(tgfx2_sdf_test PROPERTIES TIMEOUT 10)
 
     if(BUILD_TGFX2_WINDOW_TESTS)
-        find_package(glfw3 QUIET)
-        if(NOT TARGET glfw)
-            include(FetchContent)
-            set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-            set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-            set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-            set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-            FetchContent_Declare(glfw
-                GIT_REPOSITORY https://github.com/glfw/glfw.git
-                GIT_TAG 3.4
-            )
-            FetchContent_MakeAvailable(glfw)
+        find_package(glfw3 CONFIG QUIET)
+        if(TARGET glfw)
+            set(TERMIN_TGFX2_GLFW_AVAILABLE TRUE CACHE INTERNAL
+                "Whether the active build environment provides GLFW")
+
+            add_executable(tgfx2_smoke tests/test_tgfx2_smoke.cpp)
+            target_link_libraries(tgfx2_smoke PRIVATE termin_graphics2 glfw)
+            termin_set_rpath_test(tgfx2_smoke)
+            add_test(NAME tgfx2_smoke COMMAND tgfx2_smoke)
+            set_tests_properties(tgfx2_smoke PROPERTIES
+                TIMEOUT 10
+                SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
+
+            add_executable(tgfx2_render_context_test tests/test_render_context2.cpp)
+            target_link_libraries(tgfx2_render_context_test PRIVATE termin_graphics2 glfw)
+            termin_set_rpath_test(tgfx2_render_context_test)
+            add_test(NAME tgfx2_render_context_test COMMAND tgfx2_render_context_test)
+            set_tests_properties(tgfx2_render_context_test PROPERTIES
+                TIMEOUT 10
+                SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
+        else()
+            set(TERMIN_TGFX2_GLFW_AVAILABLE FALSE CACHE INTERNAL
+                "Whether the active build environment provides GLFW")
+            message(STATUS
+                "tgfx2 GLFW window tests: GLFW was not found in the build environment; skipping")
         endif()
-
-        add_executable(tgfx2_smoke tests/test_tgfx2_smoke.cpp)
-        target_link_libraries(tgfx2_smoke PRIVATE termin_graphics2 glfw)
-        termin_set_rpath_test(tgfx2_smoke)
-        add_test(NAME tgfx2_smoke COMMAND tgfx2_smoke)
-        set_tests_properties(tgfx2_smoke PROPERTIES
-            TIMEOUT 10
-            SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
-
-        add_executable(tgfx2_render_context_test tests/test_render_context2.cpp)
-        target_link_libraries(tgfx2_render_context_test PRIVATE termin_graphics2 glfw)
-        termin_set_rpath_test(tgfx2_render_context_test)
-        add_test(NAME tgfx2_render_context_test COMMAND tgfx2_render_context_test)
-        set_tests_properties(tgfx2_render_context_test PROPERTIES
-            TIMEOUT 10
-            SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
     endif()
 
     add_executable(tgfx2_device_factory_test

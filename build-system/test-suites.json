@@ -16,7 +16,69 @@
     "patterns": ["test_*", "tests_*", "*_test.*"],
     "extensions": [".c", ".cc", ".cpp", ".cxx"],
     "exclude_roots": [".git", "build", "sdk", "termin-thirdparty"],
-    "exclude_directory_names": ["__pycache__", "build"]
+    "exclude_directory_names": ["__pycache__", "build"],
+    "source_classifications": [
+      {
+        "path": "termin-app/cpp/tests/tests_binding.cpp",
+        "profiles": ["pr", "linux-full", "windows-d3d11"],
+        "capabilities": ["python-bindings"],
+        "reason": "Compiled by termin_tests only when the C++ Python bindings are enabled."
+      },
+      {
+        "path": "termin-display/tests/test_backend_window_triangle.cpp",
+        "profiles": ["linux-full", "windows-d3d11"],
+        "capabilities": ["window"],
+        "reason": "Creates an SDL window and is deliberately outside the headless PR graph."
+      },
+      {
+        "path": "termin-display/tests/test_backend_window_d3d11_present.cpp",
+        "profiles": ["windows-d3d11"],
+        "capabilities": ["window", "d3d11"],
+        "reason": "Requires the Windows D3D11 presentation path."
+      },
+      {
+        "path": "termin-graphics/tests/test_render_context2.cpp",
+        "profiles": ["linux-full", "windows-d3d11"],
+        "capabilities": ["window", "glfw"],
+        "reason": "Creates a GLFW render context supplied by the build environment."
+      },
+      {
+        "path": "termin-graphics/tests/test_tgfx2_smoke.cpp",
+        "profiles": ["linux-full", "windows-d3d11"],
+        "capabilities": ["window", "glfw"],
+        "reason": "Creates a GLFW window supplied by the build environment."
+      },
+      {
+        "path": "termin-graphics/tests/test_tgfx2_opengl_bound_resource_set.cpp",
+        "profiles": ["linux-full"],
+        "capabilities": ["window", "opengl"],
+        "reason": "Requires an SDL OpenGL window and is not a Windows D3D11 gate."
+      },
+      {
+        "path": "termin-graphics/tests/test_tgfx2_vulkan_window.cpp",
+        "profiles": ["linux-full"],
+        "capabilities": ["window", "vulkan"],
+        "reason": "Requires an SDL Vulkan window."
+      },
+      {
+        "path": "termin-graphics/tests/test_tgfx2_d3d11_smoke.cpp",
+        "profiles": ["windows-d3d11"],
+        "capabilities": ["d3d11"],
+        "reason": "Exercises the Windows D3D11 backend."
+      },
+      {
+        "path": "termin-graphics/tests/test_tgfx2_d3d11_window.cpp",
+        "profiles": ["windows-d3d11"],
+        "capabilities": ["window", "d3d11"],
+        "reason": "Requires an SDL D3D11 window."
+      },
+      {
+        "path": "termin-inspect/tests/test_python_inspect.cpp",
+        "profiles": ["pr", "linux-full", "windows-d3d11"],
+        "capabilities": ["python-bindings"],
+        "reason": "CTest registration is conditional on the native Python binding build."
+      }
+    ]
   },
   "suite_defaults": {
     "pytest": {
