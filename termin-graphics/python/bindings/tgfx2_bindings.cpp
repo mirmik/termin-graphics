@@ -475,12 +475,6 @@ void bind_tgfx2(nb::module_& m) {
                  self.bind_shader(vs, fs, {});
              })
 
-        // Resource bindings
-        .def("bind_sampled_texture",
-             [](tgfx::RenderContext2& self, uint32_t slot, tgfx::TextureHandle tex) {
-                 self.bind_sampled_texture(slot, tex, {});
-             })
-
         // Draw
         .def("draw_fullscreen_quad", &tgfx::RenderContext2::draw_fullscreen_quad)
         .def("draw_arrays_instanced",

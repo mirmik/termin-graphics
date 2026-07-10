@@ -780,14 +780,22 @@ int main() {
         }
 
         auto sampler = device->create_sampler(tgfx::SamplerDesc{});
-        tgfx::ResourceSetDesc resource_set_desc;
-        tgfx::ResourceBinding sampled_texture;
-        sampled_texture.kind = tgfx::ResourceBinding::Kind::SampledTexture;
-        sampled_texture.binding = 0;
-        sampled_texture.texture = texture_gpu;
-        sampled_texture.sampler = sampler;
+        tgfx::BoundResourceSetDesc resource_set_desc;
+        resource_set_desc.resource_layout_token =
+            device->pipeline_resource_layout_token(textured_pipeline);
+        tgfx::BoundResourceBinding sampled_texture;
+        sampled_texture.slot.kind = tgfx::ShaderResourceKind::SampledTexture;
+        sampled_texture.slot.scope = tgfx::ShaderResourceScope::Material;
+        sampled_texture.slot.stage_mask = TC_SHADER_STAGE_FRAGMENT;
+        sampled_texture.slot.placement.kind = tgfx::BackendPlacementKind::D3D11Register;
+        sampled_texture.slot.placement.d3d11.register_class = tgfx::D3D11RegisterClass::T;
+        sampled_texture.slot.placement.d3d11.register_index = 0;
+        sampled_texture.slot.debug_name = "u_texture";
+        sampled_texture.value.kind = tgfx::BoundResourceKind::SampledTexture;
+        sampled_texture.value.texture = texture_gpu;
+        sampled_texture.value.sampler = sampler;
         resource_set_desc.bindings.push_back(sampled_texture);
-        auto resource_set = device->create_resource_set(resource_set_desc);
+        auto resource_set = device->create_bound_resource_set(resource_set_desc);
         if (!sampler || !resource_set) {
             std::fprintf(stderr, "D3D11 smoke: failed to create sampler/resource set\n");
             return 1;

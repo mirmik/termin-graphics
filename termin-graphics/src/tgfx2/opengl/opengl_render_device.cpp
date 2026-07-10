@@ -675,7 +675,7 @@ TextureHandle OpenGLRenderDevice::create_texture(const TextureDesc& desc) {
         }
         // Mandatory defaults: without these GL treats the texture as
         // incomplete (default MIN filter is NEAREST_MIPMAP_LINEAR,
-        // which requires a full mip chain). Any `bind_sampled_texture`
+        // which requires a full mip chain). Any sampled texture binding
         // call against an incomplete texture returns black.
         // Samplers bound at draw time override these per-unit, so
         // they're just a "valid baseline".
@@ -906,20 +906,11 @@ PipelineHandle OpenGLRenderDevice::create_pipeline(const PipelineDesc& desc) {
 
 // --- Resource set ---
 
-ResourceSetHandle OpenGLRenderDevice::create_resource_set(const ResourceSetDesc& desc) {
-    GLResourceSet rs;
-    rs.desc = desc;
-    return {resource_sets_.add(std::move(rs))};
-}
-
 ResourceSetHandle OpenGLRenderDevice::create_bound_resource_set(
-    const BoundResourceSetDesc& desc,
-    const std::vector<ResourceBinding>& legacy_numeric_bindings
+    const BoundResourceSetDesc& desc
 ) {
     GLResourceSet rs;
     rs.bound_desc = desc;
-    rs.legacy_numeric_bindings = legacy_numeric_bindings;
-    rs.has_bound_desc = true;
     return {resource_sets_.add(std::move(rs))};
 }
 

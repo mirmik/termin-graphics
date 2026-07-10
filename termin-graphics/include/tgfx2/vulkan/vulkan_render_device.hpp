@@ -80,10 +80,7 @@ struct VkPipelineResource {
 
 struct VkResourceSetResource {
     VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
-    ResourceSetDesc desc;
     BoundResourceSetDesc bound_desc;
-    std::vector<ResourceBinding> legacy_numeric_bindings;
-    bool has_bound_desc = false;
     bool descriptor_cache_owned = false;
     // Dynamic offsets emitted at bind time, in binding-number order.
     // Sized for the worst-case dynamic UBO count per layout.
@@ -279,7 +276,7 @@ private:
     uint32_t current_pool_idx_ = 0;
 
     // Per-pool descriptor-set cache keyed on the hash of
-    // ResourceSetDesc::bindings. A draw that binds the same UBOs and
+    // BoundResourceSetDesc bindings. A draw that binds the same UBOs and
     // samplers as an earlier draw in the same frame reuses the already-
     // allocated VkDescriptorSet instead of paying for another
     // vkAllocateDescriptorSets + vkUpdateDescriptorSets. Cleared when
@@ -350,7 +347,7 @@ private:
     uint32_t ring_ubo_slot_idx_ = 0;
     // BufferHandle that aliases ring_ubo_buffer_ in buffers_. Used by the
     // RenderContext2::bind_uniform_data() path and recognised by
-    // create_resource_set() / bind_resource_set() to emit a dynamic offset
+    // create_bound_resource_set() / bind_resource_set() to emit a dynamic offset
     // rather than update the descriptor on each bind.
     BufferHandle ring_ubo_handle_ = {};
     // Cached VkPhysicalDeviceLimits::minUniformBufferOffsetAlignment.
@@ -418,10 +415,8 @@ public:
     SamplerHandle create_sampler(const SamplerDesc& desc) override;
     ShaderHandle create_shader(const ShaderDesc& desc) override;
     PipelineHandle create_pipeline(const PipelineDesc& desc) override;
-    ResourceSetHandle create_resource_set(const ResourceSetDesc& desc) override;
     ResourceSetHandle create_bound_resource_set(
-        const BoundResourceSetDesc& desc,
-        const std::vector<ResourceBinding>& legacy_numeric_bindings = {}) override;
+        const BoundResourceSetDesc& desc) override;
 
     void destroy(BufferHandle handle) override;
     void destroy(TextureHandle handle) override;
@@ -537,8 +532,8 @@ public:
     // and an overflow is an error we log rather than silently wrap.
     uint32_t ring_ubo_write(const void* data, uint32_t size) override;
     VkBuffer ring_ubo_buffer() const { return ring_ubo_buffer_; }
-    // The ring buffer exposed as a normal BufferHandle. Both legacy numeric
-    // bindings and BoundResourceSetDesc values can reference this handle; the
+    // The ring buffer exposed as a normal BufferHandle. BoundResourceSetDesc
+    // values can reference this handle; the
     // descriptor-set creator recognises it and emits the offset as a dynamic
     // descriptor offset.
     BufferHandle ring_ubo_handle() const override { return ring_ubo_handle_; }

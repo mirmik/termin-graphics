@@ -372,73 +372,6 @@ bool validate_plan_conflicts(
     return true;
 }
 
-uint32_t d3d11_register_class_to_shader(D3D11RegisterClass register_class) {
-    switch (register_class) {
-        case D3D11RegisterClass::B:
-            return TC_SHADER_D3D11_REGISTER_B;
-        case D3D11RegisterClass::T:
-            return TC_SHADER_D3D11_REGISTER_T;
-        case D3D11RegisterClass::S:
-            return TC_SHADER_D3D11_REGISTER_S;
-        case D3D11RegisterClass::U:
-            return TC_SHADER_D3D11_REGISTER_U;
-        case D3D11RegisterClass::None:
-        default:
-            return TC_SHADER_D3D11_REGISTER_NONE;
-    }
-}
-
-ResourceBinding::Kind resource_binding_kind_from_bound(BoundResourceKind kind) {
-    switch (kind) {
-        case BoundResourceKind::UniformBuffer:
-            return ResourceBinding::Kind::UniformBuffer;
-        case BoundResourceKind::StorageBuffer:
-            return ResourceBinding::Kind::StorageBuffer;
-        case BoundResourceKind::SampledTexture:
-            return ResourceBinding::Kind::SampledTexture;
-        case BoundResourceKind::Sampler:
-            return ResourceBinding::Kind::Sampler;
-    }
-    return ResourceBinding::Kind::UniformBuffer;
-}
-
-void apply_backend_binding_plan_entry(
-    ResourceBinding& dst,
-    const BackendBoundResourceSlot& slot
-) {
-    dst.stage_mask = slot.stage_mask;
-    dst.d3d11 = {};
-
-    switch (slot.placement.kind) {
-        case BackendPlacementKind::VulkanDescriptor:
-            dst.set = slot.placement.vulkan.set;
-            dst.binding = slot.placement.vulkan.binding;
-            break;
-        case BackendPlacementKind::D3D11Register:
-            dst.set = 0;
-            dst.binding = slot.placement.d3d11.register_index;
-            dst.d3d11.has_placement = true;
-            dst.d3d11.register_class = d3d11_register_class_to_shader(
-                slot.placement.d3d11.register_class);
-            dst.d3d11.register_index = slot.placement.d3d11.register_index;
-            break;
-        case BackendPlacementKind::OpenGLBinding:
-            dst.set = 0;
-            if (slot.placement.opengl.binding_class == OpenGLBindingClass::TextureUnit ||
-                slot.placement.opengl.binding_class == OpenGLBindingClass::SamplerUnit) {
-                dst.binding = slot.placement.opengl.texture_unit;
-            } else {
-                dst.binding = slot.placement.opengl.binding_point;
-            }
-            break;
-        case BackendPlacementKind::None:
-        default:
-            dst.set = 0;
-            dst.binding = 0;
-            break;
-    }
-}
-
 } // namespace
 
 bool build_backend_binding_plan(
@@ -520,19 +453,6 @@ BackendBoundResourceSlot bound_resource_slot_from_plan_entry(
     return slot;
 }
 
-ResourceBinding resource_binding_from_bound(const BoundResourceBinding& binding) {
-    ResourceBinding out;
-    apply_backend_binding_plan_entry(out, binding.slot);
-    out.kind = resource_binding_kind_from_bound(binding.value.kind);
-    out.buffer = binding.value.buffer;
-    out.texture = binding.value.texture;
-    out.sampler = binding.value.sampler;
-    out.offset = binding.value.offset;
-    out.range = binding.value.range;
-    out.array_element = binding.value.array_element;
-    return out;
-}
-
 size_t bound_resource_binding_count(const BoundResourceSetDesc& desc) {
     if (!desc.groups.empty()) {
         size_t count = 0;
@@ -555,29 +475,6 @@ size_t dirty_bound_resource_binding_count(const BoundResourceSetDesc& desc) {
         return count;
     }
     return desc.bindings.size();
-}
-
-ResourceSetDesc legacy_resource_set_desc_from_bound(
-    const BoundResourceSetDesc& bound_desc,
-    const std::vector<ResourceBinding>& legacy_numeric_bindings
-) {
-    ResourceSetDesc legacy_desc;
-    legacy_desc.resource_layout_token = bound_desc.resource_layout_token;
-    // Compatibility adapter for custom/unported backends that still consume
-    // ResourceSetDesc. Concrete tgfx2 backends should prefer
-    // create_bound_resource_set() and read placement from BackendBindingPlan.
-    legacy_desc.descriptor_set_layout = bound_desc.resource_layout_token;
-
-    legacy_desc.bindings.reserve(
-        legacy_numeric_bindings.size() + bound_resource_binding_count(bound_desc));
-    legacy_desc.bindings.insert(
-        legacy_desc.bindings.end(),
-        legacy_numeric_bindings.begin(),
-        legacy_numeric_bindings.end());
-    for_each_bound_resource_binding(bound_desc, [&](const BoundResourceBinding& planned) {
-        legacy_desc.bindings.push_back(resource_binding_from_bound(planned));
-    });
-    return legacy_desc;
 }
 
 } // namespace tgfx

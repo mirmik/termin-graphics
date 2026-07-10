@@ -674,7 +674,7 @@ void VulkanRenderDevice::create_ring_ubo() {
     ring_ubo_slot_idx_ = 0;
 
     // Expose the ring as a BufferHandle so callers can route per-draw UBO
-    // bindings through it via the normal ResourceBinding path. The entry
+    // bindings through it via the resolved resource binding path. The entry
     // in buffers_ carries no allocation of its own (VK_NULL_HANDLE alloc),
     // and destroy(ring_ubo_handle_) is a no-op guarded below — the real
     // buffer lives until ~VulkanRenderDevice.

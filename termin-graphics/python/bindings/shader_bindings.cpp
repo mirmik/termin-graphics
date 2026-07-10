@@ -241,7 +241,7 @@ void bind_shader(nb::module_& m) {
             "Return resource layout entry by shader resource name, or None")
         .def("set_resource_layout",
             [](TcShader& self,
-               const std::vector<std::tuple<std::string, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t>>& entries
+               const std::vector<std::tuple<std::string, tc_shader_resource_kind, tc_shader_resource_scope, uint32_t, uint32_t, uint32_t, uint32_t>>& entries
             ) {
                 tc_shader* shader = self.get();
                 if (!shader) return;
@@ -256,8 +256,8 @@ void bind_shader(nb::module_& m) {
                     const std::string& name = std::get<0>(item);
                     std::strncpy(binding.name, name.c_str(), TC_SHADER_RESOURCE_NAME_MAX - 1);
                     binding.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
-                    binding.kind = std::get<1>(item);
-                    binding.scope = std::get<2>(item);
+                    binding.kind = static_cast<uint32_t>(std::get<1>(item));
+                    binding.scope = static_cast<uint32_t>(std::get<2>(item));
                     binding.set = std::get<3>(item);
                     binding.binding = std::get<4>(item);
                     binding.stage_mask = std::get<5>(item);

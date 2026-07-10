@@ -26,7 +26,7 @@ public:
     tgfx::SamplerHandle create_sampler(const tgfx::SamplerDesc&) override { return {}; }
     tgfx::ShaderHandle create_shader(const tgfx::ShaderDesc&) override { return {}; }
     tgfx::PipelineHandle create_pipeline(const tgfx::PipelineDesc&) override { return {}; }
-    tgfx::ResourceSetHandle create_resource_set(const tgfx::ResourceSetDesc&) override { return {}; }
+    tgfx::ResourceSetHandle create_bound_resource_set(const tgfx::BoundResourceSetDesc&) override { return {}; }
 
     void destroy(tgfx::BufferHandle) override {}
     void destroy(tgfx::TextureHandle) override {}

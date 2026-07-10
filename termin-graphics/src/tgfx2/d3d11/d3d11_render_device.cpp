@@ -1113,27 +1113,8 @@ PipelineHandle D3D11RenderDevice::create_pipeline(const PipelineDesc& desc) {
     return {pipelines_.add(std::move(out))};
 }
 
-ResourceSetHandle D3D11RenderDevice::create_resource_set(const ResourceSetDesc& desc) {
-    for (const ResourceBinding& binding : desc.bindings) {
-        if (binding.d3d11.has_placement &&
-            binding.d3d11.register_class == TC_SHADER_D3D11_REGISTER_U) {
-            tc::Log::error(
-                "D3D11RenderDevice::create_resource_set: UAV register placement is not supported "
-                "(set=%u binding=%u)",
-                binding.set,
-                binding.binding);
-            return {};
-        }
-    }
-
-    D3D11ResourceSet out;
-    out.desc = desc;
-    return {resource_sets_.add(std::move(out))};
-}
-
 ResourceSetHandle D3D11RenderDevice::create_bound_resource_set(
-    const BoundResourceSetDesc& desc,
-    const std::vector<ResourceBinding>& legacy_numeric_bindings
+    const BoundResourceSetDesc& desc
 ) {
     bool has_unsupported_uav = false;
     for_each_bound_resource_binding(desc, [&](const BoundResourceBinding& binding) {
@@ -1150,22 +1131,8 @@ ResourceSetHandle D3D11RenderDevice::create_bound_resource_set(
         return {};
     }
 
-    for (const ResourceBinding& binding : legacy_numeric_bindings) {
-        if (binding.d3d11.has_placement &&
-            binding.d3d11.register_class == TC_SHADER_D3D11_REGISTER_U) {
-            tc::Log::error(
-                "D3D11RenderDevice::create_bound_resource_set: legacy UAV register placement is not supported "
-                "(set=%u binding=%u)",
-                binding.set,
-                binding.binding);
-            return {};
-        }
-    }
-
     D3D11ResourceSet out;
     out.bound_desc = desc;
-    out.legacy_numeric_bindings = legacy_numeric_bindings;
-    out.has_bound_desc = true;
     return {resource_sets_.add(std::move(out))};
 }
 

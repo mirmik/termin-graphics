@@ -9,7 +9,7 @@
 //   ctx.set_depth_test(false);
 //   ctx.set_blend(false);
 //   ctx.bind_shader(vs, fs);
-//   ctx.bind_texture(0, tex);
+//   ctx.bind_texture("u_texture", tex);
 //   ctx.set_viewport(0, 0, w, h);
 //   ctx.draw_fullscreen_quad();
 //   ctx.end_pass();
@@ -101,14 +101,11 @@ private:
     };
 
     struct ResourceBindingBucket {
-        std::vector<ResourceBinding> numeric;
         std::vector<BoundResourceBinding> planned;
     };
 
-    // Pending resource bindings grouped by update scope. Named/resolved
-    // paths are emitted as BoundResourceSetDesc so backend command lists can
-    // apply their native placement model. Numeric entries remain as an explicit
-    // legacy side channel until low-level binding APIs are retired.
+    // Pending resource bindings grouped by update scope. Resolved paths are
+    // emitted as BoundResourceSetDesc so command lists can apply native placement.
     std::array<
         ResourceBindingBucket,
         static_cast<size_t>(ResourceScope::Count)
@@ -125,21 +122,13 @@ private:
 
     static ResourceScope scope_from_shader_resource(uint32_t shader_scope);
     static ShaderResourceScope shader_scope_from_resource_scope(ResourceScope scope);
-    static ResourceScope default_numeric_scope();
     void mark_binding_scope_dirty(ResourceScope scope);
     void mark_all_binding_scopes_dirty();
     void clear_dirty_binding_scopes();
-    ResourceBinding* find_pending_binding(
-        ResourceScope scope,
-        uint32_t binding,
-        ResourceBinding::Kind kind,
-        uint32_t set = 0,
-        uint32_t array_element = 0);
     static BoundResourceBinding* find_planned_binding(
         std::vector<BoundResourceBinding>& bindings,
         const BackendBoundResourceSlot& slot,
         const BoundResourceValue& value);
-    void upsert_pending_binding(ResourceScope scope, const ResourceBinding& binding);
     void upsert_pending_planned_binding(
         ResourceScope scope,
         const BackendBoundResourceSlot& slot,
@@ -260,16 +249,6 @@ public:
     void set_topology(PrimitiveTopology topo);
 
     // --- Resource bindings (UBOs, textures, samplers) ---
-    // Legacy numeric storage binding. The buffer is resolved into a
-    // ResourceSet lazily at draw time; call-sites do not manage
-    // ResourceSetHandle lifecycles. Migrated Slang paths should prefer
-    // bind_storage_buffer(name/rb). The `set` parameter is legacy numeric
-    // placement; migrated named/resolved paths get backend placement from
-    // BackendBindingPlan. Passing range=0 means "bind whole buffer".
-    void bind_storage_buffer(uint32_t binding, BufferHandle buffer,
-                             uint64_t offset = 0, uint64_t range = 0,
-                             uint32_t set = 0);
-
     // Named resource binding — resolved immediately to backend placement from the
     // shader layout set via use_shader_resource_layout().
     // Falls back to a logged warning + no-op when the name is not
@@ -309,7 +288,7 @@ public:
     // Set the shader resource layout used for named/resolved binding
     // resolution. Call once after bind_shader() when named/resolved
     // bind_uniform / bind_texture will be used later in the pass.
-    // Passing nullptr clears the layout (back to numeric-only mode).
+    // Passing nullptr clears the layout and any pending resource bindings.
     void use_shader_resource_layout(const struct ::tc_shader* shader);
     const struct ::tc_shader* active_shader_resource_layout() const {
         return active_shader_layout_;
@@ -331,20 +310,6 @@ public:
     // is removed.
     void defer_destroy(TextureHandle handle);
     void defer_destroy(BufferHandle handle);
-
-    // Register a sampled texture at the given binding slot. The sampler is
-    // optional; if omitted, the backend uses the texture's default sampling
-    // parameters (useful for GL 3.3 style shaders without separate samplers).
-    void bind_sampled_texture(uint32_t binding, TextureHandle tex,
-                              SamplerHandle sampler = {},
-                              uint32_t set = 0);
-    void bind_sampled_texture_array_element(
-        uint32_t binding,
-        uint32_t array_element,
-        TextureHandle tex,
-        SamplerHandle sampler = {},
-        uint32_t set = 0
-    );
 
     // Drop all pending resource bindings — next draw starts from an empty
     // resource set.
