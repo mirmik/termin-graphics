@@ -121,18 +121,10 @@ void TabView::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     const tc_ui_style selected_style = computed_style(document, TC_UI_STYLE_STATE_CHECKED);
     tc_ui_painter_fill_rect(context, bounds(), style.background);
-    const float tab_width = child_count() == 0
-        ? min_tab_width_
-        : std::max(min_tab_width_, bounds().width / static_cast<float>(child_count()));
     for (size_t i = 0; i < child_count(); ++i) {
         const tc_widget* child = child_at(i);
         const TabPage* page = child ? find_tab_page(pages_, child->handle) : nullptr;
-        tc_ui_rect tab {
-            bounds().x + tab_width * static_cast<float>(i),
-            bounds().y,
-            tab_width,
-            header_height_
-        };
+        const tc_ui_rect tab = tab_rect(document, i);
         const bool selected = i == selected_index_;
         tc_ui_painter_fill_rect(
             context,
@@ -173,9 +165,10 @@ tc_ui_event_result TabView::pointer_event(tc_ui_document* document, const tc_ui_
         return TC_UI_EVENT_IGNORED;
     }
     if (event->type == TC_UI_POINTER_DOWN && event->y < bounds().y + header_height_ && child_count() > 0) {
-        const float tab_width = std::max(min_tab_width_, bounds().width / static_cast<float>(child_count()));
-        const size_t index = static_cast<size_t>(std::max(0.0f, (event->x - bounds().x) / tab_width));
-        if (index < child_count()) {
+        for (size_t index = 0; index < child_count(); ++index) {
+            if (!rect_contains(tab_rect(document, index), event->x, event->y)) {
+                continue;
+            }
             set_selected_index(index);
             if (tc_widget* selected = child_at(selected_index_)) {
                 layout_widget(selected, document, page_rect());
@@ -212,6 +205,30 @@ tc_ui_rect TabView::page_rect() const {
         bounds().width,
         std::max(0.0f, bounds().height - header_height_)
     };
+}
+
+float TabView::tab_width(tc_ui_document* document, size_t index) const {
+    if (index >= pages_.size()) {
+        return min_tab_width_;
+    }
+    const tc_ui_style style = computed_style(document);
+    tc_ui_text_metrics metrics {};
+    const std::string& title = pages_[index].title;
+    if (!measure_text(document, title, style.font_size, metrics)) {
+        return min_tab_width_;
+    }
+    return std::max(
+        min_tab_width_,
+        metrics.width + style.padding_left + style.padding_right + 12.0f
+    );
+}
+
+tc_ui_rect TabView::tab_rect(tc_ui_document* document, size_t index) const {
+    float x = bounds().x;
+    for (size_t current = 0; current < index; ++current) {
+        x += tab_width(document, current);
+    }
+    return tc_ui_rect {x, bounds().y, tab_width(document, index), header_height_};
 }
 
 
