@@ -1,29 +1,66 @@
 """Experimental native Termin UI document bindings."""
 
+from typing import Protocol, runtime_checkable
+
 from termin_nanobind.runtime import preload_sdk_libs
 
 preload_sdk_libs("nanobind", "termin_base", "termin_graphics2", "termin_gui_native")
 
 from termin.gui_native._gui_native import (  # noqa: E402
+    Button,
+    Checkbox,
     Color,
+    ColorDialog,
+    ColorPicker,
+    ColorPickerModel,
+    ColorPickerSurface,
+    ColorPickerSurfaceKind,
+    ColorPickerTextureIds,
     Canvas,
     CollectionItem,
     CollectionModel,
+    Command,
+    CommandData,
+    CommandKind,
+    CommandModel,
     ComboBox,
     Constraints,
     Document,
+    Dialog,
+    DialogAction,
+    DialogDismissReason,
+    DialogResult,
     DrawCommand,
     DrawCommandType,
     DrawList,
     DrawListRenderer,
+    EdgeInsets,
     EventResult,
+    FileDialogConfirmResult,
+    FileDialogEntry,
+    FileDialogFilter,
+    FileDialogMode,
+    FileDialogModel,
+    FileDialogOverlay,
+    FileGridWidget,
+    FrameTimeGraph,
+    FrameTimeModel,
+    GraphicsItem,
+    GraphicsScene,
     FontRole,
     IconButton,
     ImageWidget,
+    InputDialog,
     KeyCode,
     KeyEvent,
     KeyEventType,
     ListWidget,
+    LayoutPolicy,
+    Menu,
+    MenuBar,
+    MenuBarEntry,
+    MessageBox,
+    MessageBoxKind,
     ModifierFlag,
     OverlayDismissReason,
     OverlayFlag,
@@ -32,6 +69,13 @@ from termin.gui_native._gui_native import (  # noqa: E402
     PointerEvent,
     PointerEventType,
     Rect,
+    RichTextModel,
+    RichTextSegment,
+    RichTextStyle,
+    RichTextView,
+    ScrollArea,
+    SceneTransform,
+    SceneView,
     SelectionMode,
     Size,
     SliderEdit,
@@ -42,16 +86,73 @@ from termin.gui_native._gui_native import (  # noqa: E402
     StyleOverrideFlag,
     StyleRole,
     StyleState,
+    StatusBar,
+    TableColumn,
+    TableColumnLayout,
+    TableColumnModel,
+    TableColumnPolicy,
+    TableModel,
+    TableRow,
+    TableRowData,
+    TableWidget,
+    ToolBar,
     TextArea,
     TextInput,
     TextMetrics,
     Theme,
+    TreeDropPosition,
+    TreeExpansionModel,
+    TreeModel,
+    TreeNode,
+    TreeVisibleRow,
+    TreeWidget,
+    Viewport3D,
+    ViewportExternalDragEvent,
+    ViewportExternalDragPhase,
+    ViewportSurfaceSize,
     WidgetFlag,
     WidgetHandle,
+    WidgetLanguage,
+    WidgetOwnerReloadPolicy,
+    WidgetOwnership,
     WidgetRef,
+    has_widget_type,
     invalid_widget_handle,
+    register_widget_type,
+    registered_widget_types,
     tooltip_rect,
+    unregister_widget_owner,
+    unregister_widget_type,
 )
+
+
+@runtime_checkable
+class ViewportSurfaceHost(Protocol):
+    """Backend-neutral offscreen surface contract consumed by ``Viewport3D``."""
+
+    def is_valid(self) -> bool: ...
+
+    def get_tgfx_color_tex_id(self) -> int: ...
+
+    def framebuffer_size(self) -> tuple[int, int]: ...
+
+    def resize(self, width: int, height: int) -> bool: ...
+
+    def dispatch_pointer_move(self, x: float, y: float) -> bool: ...
+
+    def dispatch_pointer_button(
+        self,
+        button: int,
+        action: int,
+        modifiers: int,
+        click_count: int,
+    ) -> bool: ...
+
+    def dispatch_scroll(self, x: float, y: float, modifiers: int) -> bool: ...
+
+    def dispatch_key(self, key: int, scancode: int, action: int, modifiers: int) -> bool: ...
+
+    def dispatch_text(self, codepoint: int) -> bool: ...
 
 
 class Widget:
@@ -144,10 +245,7 @@ class Widget:
 
     def hit_test(self, x: float, y: float) -> WidgetHandle:
         bounds = self.bounds
-        inside = (
-            bounds.x <= x < bounds.x + bounds.width
-            and bounds.y <= y < bounds.y + bounds.height
-        )
+        inside = bounds.x <= x < bounds.x + bounds.width and bounds.y <= y < bounds.y + bounds.height
         if not self.visible or not inside:
             return invalid_widget_handle()
         for child in reversed(self.native.children):
@@ -174,26 +272,64 @@ class Widget:
         pass
 
 
+from termin.gui_native.showcase import PythonShowcase, build_python_showcase  # noqa: E402
+
+
 __all__ = [
+    "Button",
+    "Checkbox",
     "Color",
+    "ColorDialog",
+    "ColorPicker",
+    "ColorPickerModel",
+    "ColorPickerSurface",
+    "ColorPickerSurfaceKind",
+    "ColorPickerTextureIds",
     "Canvas",
     "CollectionItem",
     "CollectionModel",
+    "Command",
+    "CommandData",
+    "CommandKind",
+    "CommandModel",
     "ComboBox",
     "Constraints",
     "Document",
+    "Dialog",
+    "DialogAction",
+    "DialogDismissReason",
+    "DialogResult",
     "DrawCommand",
     "DrawCommandType",
     "DrawList",
     "DrawListRenderer",
+    "EdgeInsets",
     "EventResult",
+    "FileDialogConfirmResult",
+    "FileDialogEntry",
+    "FileDialogFilter",
+    "FileDialogMode",
+    "FileDialogModel",
+    "FileDialogOverlay",
+    "FileGridWidget",
+    "FrameTimeGraph",
+    "FrameTimeModel",
+    "GraphicsItem",
+    "GraphicsScene",
     "FontRole",
     "IconButton",
     "ImageWidget",
+    "InputDialog",
     "KeyCode",
     "KeyEvent",
     "KeyEventType",
     "ListWidget",
+    "LayoutPolicy",
+    "Menu",
+    "MenuBar",
+    "MenuBarEntry",
+    "MessageBox",
+    "MessageBoxKind",
     "ModifierFlag",
     "OverlayDismissReason",
     "OverlayFlag",
@@ -201,7 +337,15 @@ __all__ = [
     "Point",
     "PointerEvent",
     "PointerEventType",
+    "PythonShowcase",
     "Rect",
+    "RichTextModel",
+    "RichTextSegment",
+    "RichTextStyle",
+    "RichTextView",
+    "ScrollArea",
+    "SceneTransform",
+    "SceneView",
     "SelectionMode",
     "Size",
     "SliderEdit",
@@ -212,14 +356,44 @@ __all__ = [
     "StyleOverrideFlag",
     "StyleRole",
     "StyleState",
+    "StatusBar",
+    "TableColumn",
+    "TableColumnLayout",
+    "TableColumnModel",
+    "TableColumnPolicy",
+    "TableModel",
+    "TableRow",
+    "TableRowData",
+    "TableWidget",
+    "ToolBar",
     "TextArea",
     "TextInput",
     "TextMetrics",
     "Theme",
+    "TreeDropPosition",
+    "TreeExpansionModel",
+    "TreeModel",
+    "TreeNode",
+    "TreeVisibleRow",
+    "TreeWidget",
+    "Viewport3D",
+    "ViewportExternalDragEvent",
+    "ViewportExternalDragPhase",
+    "ViewportSurfaceSize",
+    "ViewportSurfaceHost",
     "Widget",
     "WidgetFlag",
     "WidgetHandle",
+    "WidgetLanguage",
+    "WidgetOwnerReloadPolicy",
+    "WidgetOwnership",
     "WidgetRef",
+    "build_python_showcase",
+    "has_widget_type",
     "invalid_widget_handle",
+    "register_widget_type",
+    "registered_widget_types",
     "tooltip_rect",
+    "unregister_widget_owner",
+    "unregister_widget_type",
 ]

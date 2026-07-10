@@ -37,9 +37,29 @@ cannot launch the editor, run `./run-tests.sh --full --no-editor-smoke`.
 | Vulkan tgfx2 smoke | `ctest --test-dir build/Release-tests -R '^(tgfx2_vulkan_smoke|tgfx2_vulkan_window)$' --output-on-failure` | Vulkan offscreen/window paths, readback, resource binding, vertex formats, and optional Slang artifact path work. |
 | D3D11 bound path on Windows | `pwsh scripts/validate-tgfx2-d3d11-bound-path.ps1` | Windows D3D11 device smoke and backend-facing bound-resource-set path work. |
 | Backend window presentation | `ctest --test-dir build/Release-tests -R '^(backend_window_triangle|backend_window_d3d11_present)$' --output-on-failure` | SDLBackendWindow presentation works for the compiled backends, with unsupported window backends skipped by the test. |
+| Native UI headless QA | `ctest --test-dir build/Release-tests -R '^termin_gui_native_(showcase_test|renderer_pixel_smoke)$' --output-on-failure` | Stable C++ showcase structure plus real offscreen pixels for texture, text, rounded geometry and nested clipping on compiled Vulkan/D3D11 headless backends. |
+| Native UI Python showcase | `sdk/bin/termin_python --termin-overlay build/python-envs/test/overlay.json -m pytest termin-gui-native/python/tests/test_gui_native.py -q` | The Python-built native control tree has stable layout/paint totals, shared models, focus reachability, clipping and long UTF-8 fixtures. |
 | Built-in render pass shaders | `ctest --test-dir build/Release-tests -R '^termin_render_passes_builtin_shader_sources_test$' --output-on-failure` | Built-in shader sources/catalog entries and render-pass shader templates remain loadable. |
 | DebugTrianglePass pixel smoke | `ctest --test-dir build/Release-tests -R '^termin_render_passes_debug_triangle_pixel_smoke$' --output-on-failure` | Vulkan offscreen execution of a real `termin-render-passes` FramePass, built-in shader catalog lookup, RenderContext2 pass recording, texture output, and pixel readback work. |
 | ColorPass mesh/material pixel smoke | `ctest --test-dir build/Release-tests -R '^termin_render_passes_color_pass_pixel_smoke$' --output-on-failure` | Vulkan offscreen `ColorPass` rendering of a scene `MeshRenderer`, opaque material phase routing, material UBO color binding, mesh bridge draw, and pixel readback work. |
+
+For a deterministic native UI desktop capture, build the examples and request
+one frame. The output is a binary 800×600 PPM by default and the process exits
+after successful readback:
+
+```bash
+cmake -S termin-gui-native -B build/termin-gui-native-examples \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/sdk" \
+  -DTERMIN_GUI_NATIVE_BUILD_TESTS=OFF -DTERMIN_GUI_NATIVE_BUILD_EXAMPLES=ON
+cmake --build build/termin-gui-native-examples -j
+TERMIN_GUI_NATIVE_SCREENSHOT=/tmp/termin-gui-native-showcase.ppm \
+  build/termin-gui-native-examples/termin_gui_native_showcase
+```
+
+On a headless Linux host, set `SDL_VIDEODRIVER=offscreen` and
+`TERMIN_BACKEND=opengl`. A Vulkan-capable window driver or display should use
+the normal default backend; unsupported SDL/backend combinations return the
+example skip code `77` with an error message.
 
 ## Packaged Runtime Matrix
 

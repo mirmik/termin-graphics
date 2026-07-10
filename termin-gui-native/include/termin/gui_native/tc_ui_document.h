@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <inspect/tc_runtime_type_registry.h>
+
 #include <tcbase/tc_binding_types.h>
 #include <termin/gui_native/export.h>
 
@@ -246,6 +248,7 @@ typedef struct tc_ui_pointer_event {
     float x;
     float y;
     int32_t button;
+    uint32_t click_count;
     int32_t modifiers;
     float wheel_x;
     float wheel_y;
@@ -257,22 +260,67 @@ typedef enum tc_ui_key_event_type {
 } tc_ui_key_event_type;
 
 typedef enum tc_ui_key_code {
-    TC_UI_KEY_UNKNOWN = 0,
-    TC_UI_KEY_BACKSPACE = 8,
+    TC_UI_KEY_UNKNOWN = -1,
     TC_UI_KEY_TAB = 9,
     TC_UI_KEY_ENTER = 13,
-    TC_UI_KEY_ESCAPE = 27,
+    TC_UI_KEY_SPACE = 32,
+    TC_UI_KEY_0 = 48,
+    TC_UI_KEY_1 = 49,
+    TC_UI_KEY_2 = 50,
+    TC_UI_KEY_3 = 51,
+    TC_UI_KEY_4 = 52,
+    TC_UI_KEY_5 = 53,
+    TC_UI_KEY_6 = 54,
+    TC_UI_KEY_7 = 55,
+    TC_UI_KEY_8 = 56,
+    TC_UI_KEY_9 = 57,
     TC_UI_KEY_A = 65,
+    TC_UI_KEY_B = 66,
     TC_UI_KEY_C = 67,
+    TC_UI_KEY_D = 68,
+    TC_UI_KEY_E = 69,
+    TC_UI_KEY_F = 70,
+    TC_UI_KEY_G = 71,
+    TC_UI_KEY_H = 72,
+    TC_UI_KEY_I = 73,
+    TC_UI_KEY_J = 74,
+    TC_UI_KEY_K = 75,
+    TC_UI_KEY_L = 76,
+    TC_UI_KEY_M = 77,
+    TC_UI_KEY_N = 78,
+    TC_UI_KEY_O = 79,
+    TC_UI_KEY_P = 80,
+    TC_UI_KEY_Q = 81,
+    TC_UI_KEY_R = 82,
+    TC_UI_KEY_S = 83,
+    TC_UI_KEY_T = 84,
+    TC_UI_KEY_U = 85,
     TC_UI_KEY_V = 86,
+    TC_UI_KEY_W = 87,
     TC_UI_KEY_X = 88,
-    TC_UI_KEY_DELETE = 127,
-    TC_UI_KEY_LEFT = 1000,
-    TC_UI_KEY_RIGHT = 1001,
-    TC_UI_KEY_HOME = 1002,
-    TC_UI_KEY_END = 1003,
-    TC_UI_KEY_UP_ARROW = 1004,
-    TC_UI_KEY_DOWN_ARROW = 1005
+    TC_UI_KEY_Y = 89,
+    TC_UI_KEY_Z = 90,
+    TC_UI_KEY_ESCAPE = 256,
+    TC_UI_KEY_BACKSPACE = 259,
+    TC_UI_KEY_DELETE = 261,
+    TC_UI_KEY_RIGHT = 262,
+    TC_UI_KEY_LEFT = 263,
+    TC_UI_KEY_DOWN_ARROW = 264,
+    TC_UI_KEY_UP_ARROW = 265,
+    TC_UI_KEY_HOME = 268,
+    TC_UI_KEY_END = 269,
+    TC_UI_KEY_F1 = 290,
+    TC_UI_KEY_F2 = 291,
+    TC_UI_KEY_F3 = 292,
+    TC_UI_KEY_F4 = 293,
+    TC_UI_KEY_F5 = 294,
+    TC_UI_KEY_F6 = 295,
+    TC_UI_KEY_F7 = 296,
+    TC_UI_KEY_F8 = 297,
+    TC_UI_KEY_F9 = 298,
+    TC_UI_KEY_F10 = 299,
+    TC_UI_KEY_F11 = 300,
+    TC_UI_KEY_F12 = 301
 } tc_ui_key_code;
 
 typedef struct tc_ui_key_event {
@@ -288,6 +336,11 @@ typedef struct tc_ui_text_event {
 } tc_ui_text_event;
 
 typedef void (*tc_widget_deleter)(tc_widget* widget);
+
+typedef enum tc_widget_ownership_policy {
+    TC_WIDGET_OWNED = 0,
+    TC_WIDGET_BORROWED = 1
+} tc_widget_ownership_policy;
 
 typedef struct tc_widget_vtable {
     const char* type_name;
@@ -348,7 +401,9 @@ struct tc_widget {
     tc_ui_document* document;
     tc_widget_handle handle;
     tc_language native_language;
+    tc_widget_ownership_policy ownership_policy;
     void* body;
+    tc_runtime_type_instance_link runtime_type_link;
 
     tc_widget* parent;
     tc_widget** children;
@@ -363,6 +418,9 @@ struct tc_widget {
     const char* stable_id;
     const char* name;
     const char* debug_name;
+    char* owned_stable_id;
+    char* owned_name;
+    char* owned_debug_name;
     uint32_t flags;
     tc_ui_style_role style_role;
     tc_ui_style_override style_override;
@@ -407,6 +465,13 @@ TERMIN_GUI_NATIVE_API bool tc_widget_detach(tc_widget* widget);
 TERMIN_GUI_NATIVE_API const char* tc_widget_stable_id(const tc_widget* widget);
 TERMIN_GUI_NATIVE_API const char* tc_widget_name(const tc_widget* widget);
 TERMIN_GUI_NATIVE_API const char* tc_widget_debug_name(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API bool tc_widget_set_stable_id(tc_widget* widget, const char* stable_id);
+TERMIN_GUI_NATIVE_API bool tc_widget_set_name(tc_widget* widget, const char* name);
+TERMIN_GUI_NATIVE_API bool tc_widget_set_debug_name(tc_widget* widget, const char* debug_name);
+TERMIN_GUI_NATIVE_API const char* tc_widget_type_name(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API tc_widget_ownership_policy tc_widget_ownership(
+    const tc_widget* widget
+);
 TERMIN_GUI_NATIVE_API void tc_widget_mark_dirty(tc_widget* widget, uint32_t dirty_flags);
 TERMIN_GUI_NATIVE_API void tc_widget_clear_dirty(tc_widget* widget, uint32_t dirty_flags);
 TERMIN_GUI_NATIVE_API uint32_t tc_widget_dirty_flags(const tc_widget* widget);

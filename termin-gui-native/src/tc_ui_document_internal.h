@@ -76,6 +76,7 @@ TC_UI_INTERNAL const tc_widget_slot* tc_ui_internal_resolve_slot_const(
     tc_widget_handle handle
 );
 TC_UI_INTERNAL bool tc_ui_internal_widget_is_live_pointer(const tc_widget* widget);
+TC_UI_INTERNAL void tc_ui_internal_release_widget_metadata(tc_widget* widget);
 TC_UI_INTERNAL size_t tc_ui_internal_find_child_index(
     const tc_widget* parent,
     const tc_widget* child
