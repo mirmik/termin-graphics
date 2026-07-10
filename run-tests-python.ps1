@@ -154,7 +154,7 @@ if ($PytestTargets.Count -gt 0) {
     $TestProfile = if ($Full) { "windows-d3d11" } else { "pr" }
     & $PythonBin @PythonPrefixArgs -m termin_build.repository_control `
         --repo-root $ScriptDir run $TestProfile `
-        --platform windows --python $PythonBin `
+        --platform windows --executor pytest --python $PythonBin `
         --python-arg=--termin-overlay --python-arg=$OverlayManifest
     if ($LASTEXITCODE -ne 0) {
         $Failures.Add("manifest Python suites")

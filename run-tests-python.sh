@@ -119,7 +119,7 @@ else
 
     if ! "${PYTHON_COMMAND[@]}" -m termin_build.repository_control \
         --repo-root "$SCRIPT_DIR" run "$TEST_PROFILE" \
-        --platform linux --python "$PYTHON_BIN" \
+        --platform linux --executor pytest --python "$PYTHON_BIN" \
         --python-arg=--termin-overlay --python-arg="$OVERLAY_MANIFEST"; then
         failures+=("manifest Python suites")
     fi

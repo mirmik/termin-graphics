@@ -209,13 +209,45 @@ if ! "$SDK_PREFIX/bin/termin_python" -m termin_build.repository_control \
     echo "ERROR: CTest inventory validation failed" >&2
     exit 1
 fi
+CTEST_PLAN_COMMAND=(
+    "$SDK_PREFIX/bin/termin_python"
+    -m termin_build.repository_control
+    --repo-root "$SCRIPT_DIR"
+    ctest-plan
+    --build-dir "$BUILD_DIR"
+    --profile "$REPOSITORY_PROFILE"
+    --platform linux
+    "${REPOSITORY_CAPABILITIES[@]}"
+)
+CTEST_SELECTION_JSON="$BUILD_DIR/ctest-selection.json"
+if ! "${CTEST_PLAN_COMMAND[@]}" --json > "$CTEST_SELECTION_JSON"; then
+    echo "ERROR: CTest planner selection failed" >&2
+    exit 1
+fi
+CTEST_REGEX="$("${CTEST_PLAN_COMMAND[@]}" --regex)"
+if [[ "$CTEST_REGEX" == "^()$" ]]; then
+    echo "ERROR: CTest planner selected no tests" >&2
+    exit 1
+fi
 
 if ! cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"; then
     echo "ERROR: C++ test build failed" >&2
     exit 1
 fi
 
-if ! ctest --test-dir "$BUILD_DIR" --output-on-failure; then
+CTEST_JUNIT="$BUILD_DIR/ctest-results.xml"
+CTEST_EXIT=0
+ctest --test-dir "$BUILD_DIR" -R "$CTEST_REGEX" --output-on-failure \
+    --output-junit "$CTEST_JUNIT" || CTEST_EXIT=$?
+if ! "$SDK_PREFIX/bin/termin_python" -m termin_build.repository_control \
+    --repo-root "$SCRIPT_DIR" report-ctest \
+    --selection "$CTEST_SELECTION_JSON" \
+    --junit "$CTEST_JUNIT" \
+    --output "$BUILD_DIR/ctest-execution-manifest.json"; then
+    echo "ERROR: CTest execution manifest contains failed or unreported tests" >&2
+    exit 1
+fi
+if [[ "$CTEST_EXIT" -ne 0 ]]; then
     echo "ERROR: C++ tests failed" >&2
     exit 1
 fi

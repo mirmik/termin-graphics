@@ -65,7 +65,7 @@ if [[ "$FULL" -eq 1 && "$NO_EDITOR_SMOKE" -eq 0 ]]; then
     echo "========================================"
 
     if ! "$SCRIPT_DIR/sdk/bin/termin_python" -m termin_build.repository_control \
-        --repo-root "$SCRIPT_DIR" run editor-smoke; then
+        --repo-root "$SCRIPT_DIR" run editor-smoke --executor process-smoke; then
         failures+=("Editor smoke")
     fi
 else
