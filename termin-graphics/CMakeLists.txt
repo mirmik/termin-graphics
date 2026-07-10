@@ -688,6 +688,8 @@ install(DIRECTORY
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
+termin_label_tests_in_directory("termin-graphics")
+
 install(DIRECTORY resources/builtin_shaders
     DESTINATION ${CMAKE_INSTALL_DATADIR}/termin
 )

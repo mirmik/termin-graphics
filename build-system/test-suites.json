@@ -12,12 +12,24 @@
     ],
     "exclude_directory_names": ["__pycache__", "build"]
   },
+  "native_test_inventory": {
+    "patterns": ["test_*", "tests_*", "*_test.*"],
+    "extensions": [".c", ".cc", ".cpp", ".cxx"],
+    "exclude_roots": [".git", "build", "sdk", "termin-thirdparty"],
+    "exclude_directory_names": ["__pycache__", "build"]
+  },
   "suite_defaults": {
     "pytest": {
       "profiles": ["pr", "linux-full", "windows-d3d11"],
       "environment": "sdk-source-overlay",
       "platforms": ["linux", "windows"],
       "capabilities": []
+    },
+    "ctest": {
+      "profiles": ["pr", "linux-full", "windows-d3d11"],
+      "environment": "cmake-top-level",
+      "platforms": ["linux", "windows"],
+      "capabilities": ["host"]
     }
   },
   "profiles": [
@@ -56,6 +68,24 @@
     }
   ],
   "suites": [
+    {"id": "termin-app-cpp-tests", "module": "termin-app", "executor": "ctest", "roots": ["termin-app/cpp/tests"]},
+    {"id": "termin-base-tests-native", "module": "termin-base", "executor": "ctest", "roots": ["termin-base/tests"]},
+    {"id": "termin-collision-tests-native", "module": "termin-collision", "executor": "ctest", "roots": ["termin-collision/tests"]},
+    {"id": "termin-components-foliage-tests-native", "module": "termin-components-foliage", "executor": "ctest", "roots": ["termin-components/termin-components-foliage/tests"]},
+    {"id": "termin-components-render-tests-native", "module": "termin-components-render", "executor": "ctest", "roots": ["termin-components/termin-components-render/tests"]},
+    {"id": "termin-csg-tests-native", "module": "termin-csg", "executor": "ctest", "roots": ["termin-csg/tests"]},
+    {"id": "termin-display-tests-native", "module": "termin-display", "executor": "ctest", "roots": ["termin-display/tests"]},
+    {"id": "termin-engine-tests-native", "module": "termin-engine", "executor": "ctest", "roots": ["termin-engine/tests"]},
+    {"id": "termin-graphics-tests-native", "module": "termin-graphics", "executor": "ctest", "roots": ["termin-graphics/tests"]},
+    {"id": "termin-gui-native-tests", "module": "termin-gui-native", "executor": "ctest", "roots": ["termin-gui-native/tests"]},
+    {"id": "termin-input-tests-native", "module": "termin-input", "executor": "ctest", "roots": ["termin-input/tests"]},
+    {"id": "termin-inspect-tests-native", "module": "termin-inspect", "executor": "ctest", "roots": ["termin-inspect/tests"]},
+    {"id": "termin-modules-tests-native", "module": "termin-modules", "executor": "ctest", "roots": ["termin-modules/tests"]},
+    {"id": "termin-navmesh-tests-native", "module": "termin-navmesh", "executor": "ctest", "roots": ["termin-navmesh/tests"]},
+    {"id": "termin-render-passes-tests-native", "module": "termin-render-passes", "executor": "ctest", "roots": ["termin-render-passes/tests"]},
+    {"id": "termin-render-tests-native", "module": "termin-render", "executor": "ctest", "roots": ["termin-render/tests"]},
+    {"id": "termin-runtime-tests-native", "module": "termin-runtime", "executor": "ctest", "roots": ["termin-runtime/tests"]},
+    {"id": "termin-scene-tests-native", "module": "termin-scene", "executor": "ctest", "roots": ["termin-scene/tests"]},
     {
       "id": "tcplot-tests-python",
       "module": "tcplot",
