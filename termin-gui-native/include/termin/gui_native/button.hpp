@@ -8,7 +8,7 @@
 
 namespace termin::gui_native {
 class Button : public NativeWidget {
-public:
+  public:
     explicit Button(std::string text = {});
     Button(std::string text, Color fill);
     explicit Button(Color fill);
@@ -17,8 +17,11 @@ public:
     Signal<Button&>& clicked() { return clicked_; }
     const Signal<Button&>& clicked() const { return clicked_; }
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
-private:
+    tc_ui_event_result pointer_event(tc_ui_document* document,
+                                     const tc_ui_pointer_event* event) override;
+    tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event) override;
+
+  private:
     std::string text_;
     bool pressed_ = false;
     Signal<Button&> clicked_;

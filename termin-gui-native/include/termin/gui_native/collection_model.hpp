@@ -7,7 +7,13 @@
 #include <termin/gui_native/signal.hpp>
 
 namespace termin::gui_native {
-struct CollectionItem { std::string stable_id; std::string text; std::string subtitle; bool enabled = true; };
+struct CollectionItem {
+    std::string stable_id;
+    std::string text;
+    std::string subtitle;
+    bool enabled = true;
+    uint32_t texture_id = 0;
+};
 enum class CollectionChangeKind { Reset, Insert, Update, Erase };
 struct CollectionChange { CollectionChangeKind kind = CollectionChangeKind::Reset; size_t index = 0; size_t count = 0; };
 class CollectionModel {

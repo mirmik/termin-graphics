@@ -268,37 +268,41 @@ void bind_tgfx2(nb::module_& m) {
     // The device is owned by the application host (typically
     // BackendWindow). Python code only passes the pointer around.
     nb::class_<tgfx::IRenderDevice>(m, "Tgfx2Device")
+        .def("wait_idle", &tgfx::IRenderDevice::wait_idle, nb::call_guard<nb::gil_scoped_release>())
         // Backend-neutral shader compile. GLSL input; internally
         // glCompileShader on OpenGL, shaderc GLSL→SPIR-V on Vulkan
         // (both paths run the same preprocessor first, see V.3).
         // `stage` maps to tgfx::ShaderStage: 0=Vertex, 1=Fragment,
         // 2=Geometry, 3=Compute.
-        .def("create_shader",
-             [](tgfx::IRenderDevice& self, int stage, const std::string& src) {
-                 tgfx::ShaderDesc d;
-                 d.stage = static_cast<tgfx::ShaderStage>(stage);
-                 d.source = src;
-                 return self.create_shader(d);
-             },
-             nb::arg("stage"), nb::arg("source"))
+        .def(
+            "create_shader",
+            [](tgfx::IRenderDevice& self, int stage, const std::string& src) {
+                tgfx::ShaderDesc d;
+                d.stage = static_cast<tgfx::ShaderStage>(stage);
+                d.source = src;
+                return self.create_shader(d);
+            },
+            nb::arg("stage"), nb::arg("source"))
         .def("destroy_shader",
              [](tgfx::IRenderDevice& self, tgfx::ShaderHandle h) { self.destroy(h); })
-        .def("texture_sample_count",
-             [](tgfx::IRenderDevice& self, tgfx::TextureHandle h) {
-                 return self.texture_desc(h).sample_count;
-             },
-             nb::arg("texture"))
+        .def(
+            "texture_sample_count",
+            [](tgfx::IRenderDevice& self, tgfx::TextureHandle h) {
+                return self.texture_desc(h).sample_count;
+            },
+            nb::arg("texture"))
         // Thin tcgui-only hosts need to read whole
         // render targets back to the CPU without dragging in the editor
         // runtime. Delegates to IRenderDevice::read_texture_rgba_float
         // with backend-normalized top-left row order. Caller supplies a
         // pre-sized float numpy array of width*height*4 elements.
-        .def("read_texture_rgba_float",
-             [](tgfx::IRenderDevice& self, tgfx::TextureHandle tex,
-                nb::ndarray<float, nb::c_contig, nb::device::cpu> buf) {
-                 return self.read_texture_rgba_float(tex, buf.data());
-             },
-             nb::arg("texture"), nb::arg("out"));
+        .def(
+            "read_texture_rgba_float",
+            [](tgfx::IRenderDevice& self, tgfx::TextureHandle tex,
+               nb::ndarray<float, nb::c_contig, nb::device::cpu> buf) {
+                return self.read_texture_rgba_float(tex, buf.data());
+            },
+            nb::arg("texture"), nb::arg("out"));
 
     nb::enum_<tgfx::ShaderStage>(m, "Tgfx2ShaderStage", nb::is_arithmetic())
         .value("Vertex",   tgfx::ShaderStage::Vertex)

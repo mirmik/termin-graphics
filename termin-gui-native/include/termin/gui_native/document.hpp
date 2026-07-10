@@ -3,6 +3,8 @@
 #include <stdexcept>
 #include <utility>
 
+#include <tcbase/tc_trent.hpp>
+#include <termin/gui_native/tc_ui_serialization.h>
 #include <termin/gui_native/widget.hpp>
 
 namespace termin::gui_native {
@@ -52,6 +54,19 @@ public:
     const tc_ui_theme& theme() const { return *tc_ui_document_theme(_document); }
     bool set_theme(const tc_ui_theme& theme) { return tc_ui_document_set_theme(_document, &theme); }
     uint64_t theme_revision() const { return tc_ui_document_theme_revision(_document); }
+    tc::trent serialize() const {
+        tc_value value = tc_ui_document_serialize(_document);
+        if (value.type != TC_VALUE_DICT) {
+            tc_value_free(&value);
+            throw std::runtime_error("failed to serialize native UI document");
+        }
+        return tc::trent::adopt(value);
+    }
+    void restore(const tc::trent& serialized) {
+        if (!tc_ui_document_restore(_document, serialized.raw())) {
+            throw std::runtime_error("failed to restore native UI document");
+        }
+    }
     tc_ui_style resolve_style(const Widget& widget, uint32_t extra_state_flags = 0) const {
         tc_ui_style style {};
         if (!tc_ui_document_resolve_style(_document, widget.c_widget(), extra_state_flags, &style)) throw std::runtime_error("failed to resolve native UI widget style");

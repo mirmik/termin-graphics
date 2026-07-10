@@ -21,6 +21,11 @@ if(COMMAND termin_require_package)
 else()
     find_package(termin_graphics REQUIRED)
 endif()
+if(COMMAND termin_require_package)
+    termin_require_package(termin_inspect termin_inspect::termin_inspect)
+else()
+    find_package(termin_inspect REQUIRED)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
@@ -29,16 +34,21 @@ add_library(termin_gui_native SHARED
     src/draw_list_renderer.cpp
     src/showcase.cpp
     src/tc_ui_document.c
+    src/tc_ui_snapshot.c
+    src/tc_ui_serialization.c
     src/tc_widget.c
+    src/tc_widget_registry.c
     src/tc_ui_interaction.c
     src/tc_ui_draw_list.cpp
     src/widgets_helpers.cpp
     src/native_widget.cpp
     src/box_layout.cpp
     src/grid_layout.cpp
+    src/graphics_scene.cpp
     src/group_box.cpp
     src/splitter.cpp
     src/scroll_area.cpp
+    src/scene_view.cpp
     src/tab_view.cpp
     src/panel.cpp
     src/button.cpp
@@ -48,12 +58,34 @@ add_library(termin_gui_native SHARED
     src/separator.cpp
     src/text_input.cpp
     src/text_area.cpp
+    src/rich_text_model.cpp
+    src/rich_text_view.cpp
+    src/frame_time_graph.cpp
+    src/viewport3d.cpp
     src/slider.cpp
     src/spin_box.cpp
     src/slider_edit.cpp
     src/collection_model.cpp
+    src/color_picker_model.cpp
+    src/color_picker.cpp
+    src/color_dialog.cpp
+    src/command_model.cpp
+    src/tool_bar.cpp
+    src/status_bar.cpp
+    src/dialog.cpp
+    src/message_box.cpp
+    src/input_dialog.cpp
+    src/menu.cpp
+    src/menu_bar.cpp
     src/selection_model.cpp
     src/list_widget.cpp
+    src/file_grid_widget.cpp
+    src/file_dialog_model.cpp
+    src/file_dialog_overlay.cpp
+    src/tree_model.cpp
+    src/tree_widget.cpp
+    src/table_model.cpp
+    src/table_widget.cpp
     src/combo_box.cpp
     src/icon_button.cpp
     src/image_widget.cpp
@@ -75,6 +107,7 @@ target_link_libraries(termin_gui_native
     PUBLIC
         tcbase::termin_base
         tgfx::termin_graphics2
+        termin_inspect::termin_inspect
 )
 
 termin_set_rpath_lib(termin_gui_native)
@@ -130,6 +163,33 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     )
     termin_gui_native_add_test(termin_gui_native_showcase_test
         tests/test_showcase.cpp
+    )
+    termin_gui_native_add_test(termin_gui_native_file_dialog_test
+        tests/test_file_dialog.cpp
+    )
+    termin_gui_native_add_test(termin_gui_native_color_dialog_test
+        tests/test_color_dialog.cpp
+    )
+    termin_gui_native_add_test(termin_gui_native_widget_registry_test
+        tests/test_widget_registry.cpp
+    )
+    termin_gui_native_add_test(termin_gui_native_ui_snapshot_test
+        tests/test_ui_snapshot.cpp
+    )
+    termin_gui_native_add_test(termin_gui_native_ui_serialization_test
+        tests/test_ui_serialization.cpp
+    )
+    termin_gui_native_add_test(termin_gui_native_rich_text_view_test
+        tests/test_rich_text_view.cpp
+    )
+    termin_gui_native_add_test(termin_gui_native_frame_time_graph_test
+        tests/test_frame_time_graph.cpp
+    )
+    termin_gui_native_add_test(termin_gui_native_viewport3d_test
+        tests/test_viewport3d.cpp
+    )
+    termin_gui_native_add_test(termin_gui_native_scene_view_test
+        tests/test_scene_view.cpp
     )
     termin_gui_native_add_test(termin_gui_native_renderer_pixel_smoke
         tests/test_draw_list_renderer_pixel_smoke.cpp
@@ -220,6 +280,11 @@ install(TARGETS termin_gui_native
 
 install(DIRECTORY include/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf"
+    DESTINATION share/termin/fonts
 )
 
 install(EXPORT termin_gui_nativeTargets

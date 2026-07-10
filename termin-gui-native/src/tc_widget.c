@@ -1,6 +1,7 @@
 #include "tc_ui_document_internal.h"
 
 #include <limits.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <tcbase/tc_log.h>
@@ -11,6 +12,38 @@ tc_widget_handle tc_widget_handle_invalid_value(void) {
 
 bool tc_widget_handle_valid_value(tc_widget_handle handle) {
     return !tc_widget_handle_is_invalid(handle);
+}
+
+static bool replace_owned_string(const char* value, const char** view, char** owned) {
+    char* replacement = NULL;
+    if (value && value[0]) {
+        const size_t length = strlen(value);
+        replacement = (char*)malloc(length + 1);
+        if (!replacement) {
+            tc_log_error("[termin-gui-native] failed to allocate widget metadata string");
+            return false;
+        }
+        memcpy(replacement, value, length + 1);
+    }
+    free(*owned);
+    *owned = replacement;
+    *view = replacement;
+    return true;
+}
+
+void tc_ui_internal_release_widget_metadata(tc_widget* widget) {
+    if (!widget) {
+        return;
+    }
+    free(widget->owned_stable_id);
+    free(widget->owned_name);
+    free(widget->owned_debug_name);
+    widget->owned_stable_id = NULL;
+    widget->owned_name = NULL;
+    widget->owned_debug_name = NULL;
+    widget->stable_id = NULL;
+    widget->name = NULL;
+    widget->debug_name = NULL;
 }
 
 void tc_widget_init(
@@ -29,7 +62,9 @@ void tc_widget_init(
     widget->deleter = deleter;
     widget->handle = tc_widget_handle_invalid();
     widget->native_language = native_language;
+    widget->ownership_policy = deleter ? TC_WIDGET_OWNED : TC_WIDGET_BORROWED;
     widget->body = body;
+    tc_runtime_type_instance_link_init(&widget->runtime_type_link);
     widget->flags = TC_WIDGET_VISIBLE | TC_WIDGET_ENABLED;
     widget->style_role = TC_UI_STYLE_GENERIC;
 }
@@ -116,6 +151,30 @@ void tc_widget_set_focusable(tc_widget* widget, bool focusable) {
 
 bool tc_widget_is_focusable(const tc_widget* widget) {
     return widget && (widget->flags & TC_WIDGET_FOCUSABLE) != 0;
+}
+
+bool tc_widget_set_stable_id(tc_widget* widget, const char* stable_id) {
+    if (!widget) {
+        tc_log_error("[termin-gui-native] cannot set stable id on null widget");
+        return false;
+    }
+    return replace_owned_string(stable_id, &widget->stable_id, &widget->owned_stable_id);
+}
+
+bool tc_widget_set_name(tc_widget* widget, const char* name) {
+    if (!widget) {
+        tc_log_error("[termin-gui-native] cannot set name on null widget");
+        return false;
+    }
+    return replace_owned_string(name, &widget->name, &widget->owned_name);
+}
+
+bool tc_widget_set_debug_name(tc_widget* widget, const char* debug_name) {
+    if (!widget) {
+        tc_log_error("[termin-gui-native] cannot set debug name on null widget");
+        return false;
+    }
+    return replace_owned_string(debug_name, &widget->debug_name, &widget->owned_debug_name);
 }
 
 void tc_widget_set_visible(tc_widget* widget, bool visible) {
@@ -381,6 +440,20 @@ const char* tc_widget_name(const tc_widget* widget) {
 
 const char* tc_widget_debug_name(const tc_widget* widget) {
     return widget ? widget->debug_name : NULL;
+}
+
+const char* tc_widget_type_name(const tc_widget* widget) {
+    if (!widget) {
+        return NULL;
+    }
+    if (widget->runtime_type_link.type_name) {
+        return widget->runtime_type_link.type_name;
+    }
+    return widget->vtable ? widget->vtable->type_name : NULL;
+}
+
+tc_widget_ownership_policy tc_widget_ownership(const tc_widget* widget) {
+    return widget ? widget->ownership_policy : TC_WIDGET_BORROWED;
 }
 
 void tc_widget_mark_dirty(tc_widget* widget, uint32_t dirty_flags) {

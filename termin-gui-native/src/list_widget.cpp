@@ -302,9 +302,14 @@ tc_ui_event_result ListWidget::pointer_event(tc_ui_document* document, const tc_
     if (event->type == TC_UI_POINTER_DOWN) {
         tc_ui_document_set_focus(document, handle());
         const size_t index = index_at(event->x, event->y);
-        return index != SelectionModel::npos && apply_selection(index, event->modifiers)
-            ? TC_UI_EVENT_HANDLED
-            : TC_UI_EVENT_IGNORED;
+        if (index == SelectionModel::npos || !model_->item(index).enabled)
+            return TC_UI_EVENT_IGNORED;
+        const bool selected = apply_selection(index, event->modifiers);
+        if (event->button == 0 && event->click_count == 2) {
+            activated_.emit(*this, index, model_->item(index));
+            return TC_UI_EVENT_HANDLED;
+        }
+        return selected ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
     }
     return TC_UI_EVENT_IGNORED;
 }
