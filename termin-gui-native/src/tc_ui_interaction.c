@@ -218,12 +218,15 @@ typedef struct tc_ui_hit_resolution {
     bool dismissed;
 } tc_ui_hit_resolution;
 
+static bool handle_is_root(const tc_ui_document* document, tc_widget_handle handle);
+
 static tc_widget_handle hit_test_entry(
     tc_ui_document* document,
     tc_widget_handle entry,
     float x,
     float y,
-    const char* kind
+    const char* kind,
+    bool allow_root_hit
 ) {
     tc_widget* widget = tc_ui_document_resolve_widget(document, entry);
     tc_widget_handle hit;
@@ -237,7 +240,15 @@ static tc_widget_handle hit_test_entry(
     }
     {
         tc_widget* hit_widget = tc_ui_document_resolve_widget(document, hit);
-        if (!hit_widget || !tc_ui_internal_widget_is_descendant_of(hit_widget, widget)) {
+        tc_widget* hit_root = hit_widget;
+        while (hit_root && hit_root->parent) {
+            hit_root = hit_root->parent;
+        }
+        const bool allowed_root_hit = allow_root_hit && hit_root &&
+            handle_is_root(document, hit_root->handle);
+        if (!hit_widget ||
+            (!tc_ui_internal_widget_is_descendant_of(hit_widget, widget) &&
+             !allowed_root_hit)) {
             tc_log_error(
                 "[termin-gui-native] %s hit-test returned a foreign or stale handle",
                 kind
@@ -289,7 +300,14 @@ static tc_ui_hit_resolution resolve_document_hit(
             continue;
         }
         if ((overlay.flags & (TC_UI_OVERLAY_POINTER_TRANSPARENT | TC_UI_OVERLAY_TOOLTIP)) == 0) {
-            result.target = hit_test_entry(document, overlay.handle, x, y, "overlay");
+            result.target = hit_test_entry(
+                document,
+                overlay.handle,
+                x,
+                y,
+                "overlay",
+                (overlay.flags & TC_UI_OVERLAY_ALLOW_ROOT_HIT) != 0
+            );
             if (!tc_widget_handle_is_invalid(result.target)) {
                 free(overlays);
                 return result;
@@ -319,7 +337,7 @@ static tc_ui_hit_resolution resolve_document_hit(
     free(overlays);
     for (index = document->root_count; index > 0; --index) {
         tc_widget_handle root = document->roots[index - 1];
-        result.target = hit_test_entry(document, root, x, y, "root");
+        result.target = hit_test_entry(document, root, x, y, "root", false);
         if (!tc_widget_handle_is_invalid(result.target)) {
             return result;
         }
@@ -410,7 +428,8 @@ bool tc_ui_document_show_overlay(
     const uint32_t known_flags = TC_UI_OVERLAY_MODAL |
         TC_UI_OVERLAY_DISMISS_ON_OUTSIDE |
         TC_UI_OVERLAY_POINTER_TRANSPARENT |
-        TC_UI_OVERLAY_TOOLTIP;
+        TC_UI_OVERLAY_TOOLTIP |
+        TC_UI_OVERLAY_ALLOW_ROOT_HIT;
     tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
     size_t existing;
     if (!widget || widget->parent || handle_is_root(document, handle)) {
@@ -427,6 +446,11 @@ bool tc_ui_document_show_overlay(
     }
     if ((flags & TC_UI_OVERLAY_TOOLTIP) != 0 && (flags & TC_UI_OVERLAY_MODAL) != 0) {
         tc_log_error("[termin-gui-native] tooltip overlay cannot be modal");
+        return false;
+    }
+    if ((flags & TC_UI_OVERLAY_ALLOW_ROOT_HIT) != 0 &&
+        (flags & TC_UI_OVERLAY_MODAL) != 0) {
+        tc_log_error("[termin-gui-native] modal overlay cannot route hits to root widgets");
         return false;
     }
     existing = tc_ui_internal_find_overlay_index(document, handle);

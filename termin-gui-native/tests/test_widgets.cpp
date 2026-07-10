@@ -2530,9 +2530,11 @@ void test_menu_bar_adjacent_switching_shortcuts_and_overlay_lifetime() {
                                                   false,
                                                   0,
                                                   {}});
-  auto &bar = ui.make_root<MenuBar>();
+  auto &root = ui.make_root<BoxLayout>(Orientation::Vertical, "menu-bar-root");
+  auto &bar = ui.make<MenuBar>();
+  root.add_fixed_child(bar, 30.0f);
   bar.set_entries({{"file", "File", file}, {"edit", "Edit", edit}});
-  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 400.0f, 30.0f});
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 400.0f, 300.0f});
   assert(bar.item_rects().size() == 2);
   std::vector<std::string> activated;
   bar.activated().connect(
@@ -2548,10 +2550,23 @@ void test_menu_bar_adjacent_switching_shortcuts_and_overlay_lifetime() {
   assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
   assert(bar.open_index() == 0);
   assert(document.overlay_count() == 1);
-  pointer.type = TC_UI_POINTER_MOVE;
+  assert((tc_ui_document_overlay_flags_at(document.get(), 0) &
+          TC_UI_OVERLAY_ALLOW_ROOT_HIT) != 0);
+  const tc_widget_handle anchor_hit =
+      tc_ui_document_hit_test(document.get(), bar.item_rects()[1].x + 2.0f, 10.0f);
+  assert(!tc_widget_handle_is_invalid(anchor_hit));
+  assert(tc_widget_handle_eq(anchor_hit, bar.handle()));
+  pointer.type = TC_UI_POINTER_UP;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_IGNORED);
+  pointer.type = TC_UI_POINTER_DOWN;
   pointer.x = bar.item_rects()[1].x + 2.0f;
   assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
   assert(bar.open_index() == 1);
+  assert(document.overlay_count() == 1);
+  pointer.type = TC_UI_POINTER_MOVE;
+  pointer.x = bar.item_rects()[0].x + 2.0f;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+  assert(bar.open_index() == 0);
   assert(document.overlay_count() == 1);
 
   tc_ui_key_event escape{};

@@ -146,8 +146,10 @@ bool Menu::show(tc_ui_document* document, tc_ui_point position, tc_ui_rect viewp
     x = std::max(viewport.x, x);
     y = std::max(viewport.y, y);
     layout(document, tc_ui_rect{x, y, wanted.width, wanted.height});
-    open_ = tc_ui_document_show_overlay(document, handle(),
-                                        dismiss_on_outside ? TC_UI_OVERLAY_DISMISS_ON_OUTSIDE : 0);
+    uint32_t flags = dismiss_on_outside ? TC_UI_OVERLAY_DISMISS_ON_OUTSIDE : 0;
+    if (!tc_widget_handle_is_invalid(anchor_owner_))
+        flags |= TC_UI_OVERLAY_ALLOW_ROOT_HIT;
+    open_ = tc_ui_document_show_overlay(document, handle(), flags);
     if (open_)
         tc_ui_document_set_focus(document, handle());
     return open_;

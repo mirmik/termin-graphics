@@ -1245,7 +1245,8 @@ NB_MODULE(_gui_native, m) {
         .value("Modal", TC_UI_OVERLAY_MODAL)
         .value("DismissOnOutside", TC_UI_OVERLAY_DISMISS_ON_OUTSIDE)
         .value("PointerTransparent", TC_UI_OVERLAY_POINTER_TRANSPARENT)
-        .value("Tooltip", TC_UI_OVERLAY_TOOLTIP);
+        .value("Tooltip", TC_UI_OVERLAY_TOOLTIP)
+        .value("AllowRootHit", TC_UI_OVERLAY_ALLOW_ROOT_HIT);
 
     nb::enum_<tc_ui_overlay_dismiss_reason>(m, "OverlayDismissReason")
         .value("Programmatic", TC_UI_OVERLAY_DISMISS_PROGRAMMATIC)
