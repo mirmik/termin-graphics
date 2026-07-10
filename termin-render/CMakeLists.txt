@@ -67,6 +67,7 @@ set(TERMIN_RENDER_SOURCES
     src/drawable.cpp
     src/fbo_pool.cpp
     src/frame_pass.cpp
+    src/builtin_passes.cpp
     src/frame_uniforms.cpp
     src/frame_debug_capture_pass.cpp
     src/frame_graph_debugger_core.cpp
@@ -131,6 +132,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/unknown_pass.hpp
     include/termin/render/unknown_pass_ops.hpp
     include/termin/render/frame_pass.hpp
+    include/termin/render/builtin_passes.hpp
     include/termin/render/frame_uniforms.hpp
     include/termin/render/frame_debug_capture_pass.hpp
     include/termin/render/frame_graph_debugger_core.hpp

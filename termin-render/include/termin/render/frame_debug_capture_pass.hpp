@@ -19,6 +19,7 @@ private:
 
 public:
     explicit FrameDebugCapturePass(const std::string& pass_name = "FrameDebugger");
+    static void register_type();
 
     void set_source_resource(const std::string& resource);
     void set_source_type(const std::string& type);

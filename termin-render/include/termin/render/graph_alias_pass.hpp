@@ -25,6 +25,7 @@ public:
         std::vector<std::string> aliases = {},
         const std::string& pass_name = "GraphAliasPass"
     );
+    static void register_type();
 
     std::set<const char*> compute_reads() const override;
     std::set<const char*> compute_writes() const override;

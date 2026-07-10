@@ -282,7 +282,7 @@ private:
     void _cleanup_tc_pass();
 };
 
-#define TC_REGISTER_FRAME_PASS(PassClass)                                    \
+#define TC_DEFINE_FRAME_PASS_FACTORY(PassClass)                              \
     static tc_pass* _factory_##PassClass(void* /*userdata*/) {               \
         auto* pass = new PassClass();                                        \
         pass->retain();                                                      \
@@ -290,14 +290,13 @@ private:
         tc_pass_link_registered_type(c, #PassClass);                         \
         return c;                                                            \
     }                                                                        \
-    static struct _reg_##PassClass {                                         \
-        _reg_##PassClass() {                                                 \
-            tc_pass_registry_register(                                       \
-                #PassClass, _factory_##PassClass, nullptr, TC_NATIVE_PASS);  \
-        }                                                                    \
-    } _reg_instance_##PassClass
+    void register_frame_pass_##PassClass() {                                 \
+        if (tc_pass_registry_has(#PassClass)) return;                        \
+        tc_pass_registry_register(                                           \
+            #PassClass, _factory_##PassClass, nullptr, TC_NATIVE_PASS);      \
+    }
 
-#define TC_REGISTER_FRAME_PASS_DERIVED(PassClass, ParentClass)               \
+#define TC_DEFINE_FRAME_PASS_FACTORY_DERIVED(PassClass, ParentClass)         \
     static tc_pass* _factory_##PassClass(void* /*userdata*/) {               \
         auto* pass = new PassClass();                                        \
         pass->retain();                                                      \
@@ -305,13 +304,12 @@ private:
         tc_pass_link_registered_type(c, #PassClass);                         \
         return c;                                                            \
     }                                                                        \
-    static struct _reg_##PassClass {                                         \
-        _reg_##PassClass() {                                                 \
-            tc_pass_registry_register(                                       \
-                #PassClass, _factory_##PassClass, nullptr, TC_NATIVE_PASS);  \
-            tc::InspectRegistry::instance().set_type_parent(                 \
-                #PassClass, #ParentClass);                                   \
-        }                                                                    \
-    } _reg_instance_##PassClass
+    void register_frame_pass_##PassClass() {                                 \
+        if (tc_pass_registry_has(#PassClass)) return;                        \
+        tc_pass_registry_register(                                           \
+            #PassClass, _factory_##PassClass, nullptr, TC_NATIVE_PASS);      \
+        tc::InspectRegistry::instance().set_type_parent(                     \
+            #PassClass, #ParentClass);                                       \
+    }
 
 } // namespace termin
