@@ -1183,6 +1183,19 @@ def test_native_basic_input_and_media_widget_factories():
     assert tab_changes == [1]
     tabs.set_page_title(1, "Renamed")
     assert tabs.page_title(1) == "Renamed"
+
+    splitter = document.create_splitter(True, "python-splitter")
+    split_first = document.create_panel("split-first")
+    split_second = document.create_panel("split-second")
+    splitter.set_first(split_first)
+    splitter.set_second(split_second)
+    splitter.set_min_extents(40.0, 50.0)
+    splitter.set_divider_thickness(6.0)
+    splitter.split_fraction = 0.25
+    splitter.widget.layout(Rect(0.0, 0.0, 200.0, 80.0))
+    assert splitter.split_fraction == pytest.approx(0.25)
+    assert split_first.bounds.width == pytest.approx(48.5)
+    assert split_second.bounds.width == pytest.approx(145.5)
     assert tabs.remove_page(1)
     assert tabs.page_count == 1
     assert tabs.selected_index == 0

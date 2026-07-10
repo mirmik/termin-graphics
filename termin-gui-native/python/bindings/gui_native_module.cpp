@@ -360,6 +360,7 @@ TERMIN_GUI_NATIVE_WIDGET_REF(SliderEditRef, SliderEdit);
 TERMIN_GUI_NATIVE_WIDGET_REF(ButtonRef, Button);
 TERMIN_GUI_NATIVE_WIDGET_REF(CheckboxRef, Checkbox);
 TERMIN_GUI_NATIVE_WIDGET_REF(ScrollAreaRef, ScrollArea);
+TERMIN_GUI_NATIVE_WIDGET_REF(SplitterRef, Splitter);
 TERMIN_GUI_NATIVE_WIDGET_REF(TabViewRef, TabView);
 TERMIN_GUI_NATIVE_WIDGET_REF(RichTextViewRef, RichTextView);
 TERMIN_GUI_NATIVE_WIDGET_REF(FrameTimeGraphRef, FrameTimeGraph);
@@ -2052,6 +2053,41 @@ NB_MODULE(_gui_native, m) {
               self.widget.throw_pending_exception();
             },
             nb::arg("content"));
+
+    nb::class_<SplitterRef>(m, "Splitter")
+        .def_prop_ro("widget", [](const SplitterRef& self) { return self.widget; })
+        .def_prop_ro("handle", [](const SplitterRef& self) {
+            return WidgetHandle{self.widget.handle};
+        })
+        .def_prop_rw(
+            "split_fraction",
+            [](const SplitterRef& self) { return self.get().split_fraction(); },
+            [](const SplitterRef& self, float value) {
+                self.get().set_split_fraction(value);
+            })
+        .def("set_split_fraction", [](const SplitterRef& self, float value) {
+            self.get().set_split_fraction(value);
+        }, nb::arg("value"))
+        .def("set_first", [](const SplitterRef& self, const WidgetRef& widget) {
+            if (self.widget.state != widget.state) {
+                throw std::invalid_argument("Splitter first widget belongs to another document");
+            }
+            self.get().set_first(widget.handle);
+            self.widget.throw_pending_exception();
+        }, nb::arg("widget"))
+        .def("set_second", [](const SplitterRef& self, const WidgetRef& widget) {
+            if (self.widget.state != widget.state) {
+                throw std::invalid_argument("Splitter second widget belongs to another document");
+            }
+            self.get().set_second(widget.handle);
+            self.widget.throw_pending_exception();
+        }, nb::arg("widget"))
+        .def("set_min_extents", [](const SplitterRef& self, float first, float second) {
+            self.get().set_min_extents(first, second);
+        }, nb::arg("first"), nb::arg("second"))
+        .def("set_divider_thickness", [](const SplitterRef& self, float thickness) {
+            self.get().set_divider_thickness(thickness);
+        }, nb::arg("thickness"));
 
     nb::enum_<termin::gui_native::CommandKind>(m, "CommandKind")
         .value("Action", termin::gui_native::CommandKind::Action)
@@ -4704,6 +4740,18 @@ NB_MODULE(_gui_native, m) {
                       debug_name.c_str())};
             },
             nb::arg("debug_name") = "ScrollArea")
+        .def(
+            "create_splitter",
+            [](Document& self, bool horizontal, const std::string& debug_name) {
+              return SplitterRef{
+                  self.make_native<termin::gui_native::Splitter>(
+                      horizontal
+                          ? termin::gui_native::Orientation::Horizontal
+                          : termin::gui_native::Orientation::Vertical,
+                      debug_name.c_str())};
+            },
+            nb::arg("horizontal") = true,
+            nb::arg("debug_name") = "Splitter")
         .def(
             "create_tab_view",
             [](Document &self, const std::string &debug_name) {
