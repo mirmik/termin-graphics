@@ -330,6 +330,42 @@ jobs:
           path: build/python-execution-manifest.json
           retention-days: 7
 
+  verify-pr-linux-plan:
+    needs: [test-cpp-libs, test-pip-packages]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: ci-plans
+          path: build/ci-plans/
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: ctest-execution-manifest
+          path: build/ci-results/ctest/
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: python-execution-manifest
+          path: build/ci-results/python/
+
+      - name: Verify PR inventory coverage
+        env:
+          PYTHONPATH: ${{ github.workspace }}/termin-build-tools
+        run: |
+          python -m termin_build.repository_control verify-plan-execution \
+            --plan build/ci-plans/pr-linux.json \
+            --ctest build/ci-results/ctest/ctest-execution-manifest.json \
+            --python build/ci-results/python/python-execution-manifest.json
+
   # ── 5. Build & test termin ───────────────────────────────────────
   test-termin:
     needs: [build-bindings, plan-pr-linux]
