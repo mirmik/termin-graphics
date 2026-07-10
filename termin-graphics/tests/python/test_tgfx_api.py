@@ -21,6 +21,10 @@ def test_render_state_transparent():
     assert rs.blend is True
 
 
+def test_device_exposes_wait_idle_for_synchronous_readback():
+    assert callable(tgfx.Tgfx2Device.wait_idle)
+
+
 def test_shader_metadata_binding_smoke():
     shader = tgfx.TcShader.from_sources(
         "#version 330 core\nvoid main(){gl_Position=vec4(0.0);}",
@@ -63,10 +67,10 @@ def test_shader_from_sources_accepts_explicit_entries():
     shader = tgfx.TcShader.from_sources(
         "import termin_prelude;\n"
         "struct VertexOutput { float4 position : SV_Position; };\n"
-        "[shader(\"vertex\")] VertexOutput vs_main() { "
+        '[shader("vertex")] VertexOutput vs_main() { '
         "VertexOutput o; o.position = float4(0, 0, 0, 1); return o; }",
         "struct FragmentOutput { float4 color : SV_Target0; };\n"
-        "[shader(\"fragment\")] FragmentOutput fs_main() { "
+        '[shader("fragment")] FragmentOutput fs_main() { '
         "FragmentOutput o; o.color = float4(1); return o; }",
         "",
         "python_shader_entry_smoke",
@@ -183,12 +187,12 @@ def test_slang_material_add_phase_accepts_explicit_stage_entries():
     phase = material.add_phase_from_sources(
         vertex_source=(
             "struct VertexOutput { float4 position : SV_Position; };\n"
-            "[shader(\"vertex\")] VertexOutput vs_main() { "
+            '[shader("vertex")] VertexOutput vs_main() { '
             "VertexOutput output; output.position = float4(0, 0, 0, 1); return output; }"
         ),
         fragment_source=(
             "struct FragmentOutput { float4 color : SV_Target0; };\n"
-            "[shader(\"fragment\")] FragmentOutput fs_main() { "
+            '[shader("fragment")] FragmentOutput fs_main() { '
             "FragmentOutput output; output.color = float4(1); return output; }"
         ),
         geometry_source="",
@@ -244,10 +248,7 @@ def test_screen_space_line_binding_smoke():
     assert style.round_segments == 10
 
     params = tgfx.ScreenSpaceLineParams()
-    params.view_projection = tuple(
-        1.0 if i in (0, 5, 10, 15) else 0.0
-        for i in range(16)
-    )
+    params.view_projection = tuple(1.0 if i in (0, 5, 10, 15) else 0.0 for i in range(16))
     params.viewport_width = 640.0
     params.viewport_height = 480.0
 
@@ -271,10 +272,7 @@ def test_world_space_line_binding_smoke():
     assert style.round_segments == 12
 
     params = tgfx.WorldSpaceLineParams()
-    params.view_projection = tuple(
-        1.0 if i in (0, 5, 10, 15) else 0.0
-        for i in range(16)
-    )
+    params.view_projection = tuple(1.0 if i in (0, 5, 10, 15) else 0.0 for i in range(16))
     params.camera_position = Vec3f(1.0, 2.0, 3.0)
     params.lighting_enabled = True
 

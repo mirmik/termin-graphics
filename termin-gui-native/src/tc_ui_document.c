@@ -522,7 +522,9 @@ static bool destroy_widget_inner(tc_ui_document* document, tc_widget_handle hand
     tc_ui_internal_clear_document_state_references(document, handle);
 
     deleter = widget->deleter;
+    tc_runtime_type_registry_unlink_instance(&widget->runtime_type_link);
     free(widget->children);
+    tc_ui_internal_release_widget_metadata(widget);
     widget->children = NULL;
     widget->child_count = 0;
     widget->child_capacity = 0;

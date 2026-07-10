@@ -35,13 +35,15 @@ bool existing_file(const std::filesystem::path& path) {
 void configure_shader_artifacts(const char* argv0, const std::filesystem::path& root) {
     std::vector<std::filesystem::path> candidates;
     if (const char* configured = std::getenv("TERMIN_SHADERC")) {
-        if (configured[0] != '\0') candidates.emplace_back(configured);
+        if (configured[0] != '\0')
+            candidates.emplace_back(configured);
     }
     if (argv0 && argv0[0] != '\0') {
         std::error_code error;
         const std::filesystem::path executable_directory =
             std::filesystem::absolute(argv0, error).parent_path();
-        if (!error) candidates.push_back(executable_directory / "termin_shaderc");
+        if (!error)
+            candidates.push_back(executable_directory / "termin_shaderc");
     }
     if (const char* sdk = std::getenv("TERMIN_SDK")) {
         if (sdk[0] != '\0') {
@@ -93,19 +95,19 @@ const float* pixel_at(const std::vector<float>& pixels, uint32_t x, uint32_t y) 
     return &pixels[(static_cast<size_t>(y) * kWidth + x) * 4u];
 }
 
-int run_smoke(const char* argv0) {
+int run_smoke(const char* argv0, tgfx::BackendType backend) {
     const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
-    const ScopedTempDirectory artifacts {
+    const ScopedTempDirectory artifacts{
         std::filesystem::temp_directory_path() /
-        ("termin-gui-native-renderer-smoke-" + std::to_string(unique))
-    };
+        ("termin-gui-native-renderer-smoke-" + std::to_string(unique))};
     configure_shader_artifacts(argv0, artifacts.path);
 
     std::unique_ptr<tgfx::IRenderDevice> device;
     try {
-        device = tgfx::create_device(tgfx::BackendType::Vulkan);
+        device = tgfx::create_device(backend);
     } catch (const std::exception& error) {
-        std::fprintf(stderr, "Failed to create Vulkan device: %s\n", error.what());
+        std::fprintf(stderr, "Failed to create %s device: %s\n", tgfx::backend_name(backend),
+                     error.what());
         return 1;
     }
 
@@ -126,62 +128,40 @@ int run_smoke(const char* argv0) {
         std::fprintf(stderr, "Failed to create renderer smoke textures\n");
         return 1;
     }
-    const uint8_t green_pixels[] {
-        20, 230, 30, 255, 20, 230, 30, 255,
-        20, 230, 30, 255, 20, 230, 30, 255,
+    const uint8_t green_pixels[]{
+        20, 230, 30, 255, 20, 230, 30, 255, 20, 230, 30, 255, 20, 230, 30, 255,
     };
     device->upload_texture(image, std::span<const uint8_t>(green_pixels, sizeof(green_pixels)));
 
     tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
     tc_ui_paint_context* painter = tc_ui_paint_context_create(draw_list);
-    tc_ui_painter_draw_texture(
-        painter,
-        image.id,
-        tc_ui_rect {8.0f, 8.0f, 16.0f, 16.0f},
-        tc_ui_color {1.0f, 1.0f, 1.0f, 1.0f},
-        false
-    );
-    tc_ui_painter_push_clip(painter, tc_ui_rect {40.0f, 8.0f, 24.0f, 24.0f});
-    tc_ui_painter_push_clip(painter, tc_ui_rect {48.0f, 12.0f, 8.0f, 8.0f});
-    tc_ui_painter_fill_rect(
-        painter,
-        tc_ui_rect {36.0f, 4.0f, 40.0f, 40.0f},
-        tc_ui_color {0.9f, 0.05f, 0.05f, 1.0f}
-    );
+    tc_ui_painter_draw_texture(painter, image.id, tc_ui_rect{8.0f, 8.0f, 16.0f, 16.0f},
+                               tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}, false);
+    tc_ui_painter_push_clip(painter, tc_ui_rect{40.0f, 8.0f, 24.0f, 24.0f});
+    tc_ui_painter_push_clip(painter, tc_ui_rect{48.0f, 12.0f, 8.0f, 8.0f});
+    tc_ui_painter_fill_rect(painter, tc_ui_rect{36.0f, 4.0f, 40.0f, 40.0f},
+                            tc_ui_color{0.9f, 0.05f, 0.05f, 1.0f});
     tc_ui_painter_pop_clip(painter);
     tc_ui_painter_pop_clip(painter);
-    tc_ui_painter_fill_rounded_rect(
-        painter,
-        tc_ui_rect {8.0f, 40.0f, 24.0f, 20.0f},
-        8.0f,
-        tc_ui_color {0.05f, 0.15f, 0.9f, 1.0f}
-    );
-    tc_ui_painter_fill_circle(
-        painter,
-        tc_ui_point {48.0f, 50.0f},
-        8.0f,
-        tc_ui_color {0.9f, 0.85f, 0.05f, 1.0f},
-        24
-    );
-    tc_ui_painter_draw_text(
-        painter,
-        "Native",
-        tc_ui_point {72.0f, 8.0f},
-        20.0f,
-        tc_ui_color {1.0f, 1.0f, 1.0f, 1.0f}
-    );
+    tc_ui_painter_fill_rounded_rect(painter, tc_ui_rect{8.0f, 40.0f, 24.0f, 20.0f}, 8.0f,
+                                    tc_ui_color{0.05f, 0.15f, 0.9f, 1.0f});
+    tc_ui_painter_fill_circle(painter, tc_ui_point{48.0f, 50.0f}, 8.0f,
+                              tc_ui_color{0.9f, 0.85f, 0.05f, 1.0f}, 24);
+    tc_ui_painter_draw_text(painter, "Native", tc_ui_point{72.0f, 8.0f}, 20.0f,
+                            tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f});
 
     tgfx::PipelineCache cache(*device);
     tgfx::RenderContext2 context(*device, cache);
     termin::gui_native::UiDrawListRenderer renderer;
-    const std::string font_path = std::string(TERMIN_GUI_NATIVE_SOURCE_DIR) +
+    const std::string font_path =
+        std::string(TERMIN_GUI_NATIVE_SOURCE_DIR) +
         "/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf";
     if (!renderer.set_default_font_path(font_path, 14)) {
         std::fprintf(stderr, "Failed to configure renderer smoke font\n");
         return 1;
     }
 
-    const float clear[] {0.0f, 0.0f, 0.0f, 1.0f};
+    const float clear[]{0.0f, 0.0f, 0.0f, 1.0f};
     context.begin_frame();
     context.begin_pass(target, {}, clear, 1.0f, false);
     renderer.render(context, draw_list, static_cast<int>(kWidth), static_cast<int>(kHeight));
@@ -216,16 +196,14 @@ int run_smoke(const char* argv0) {
     device->destroy(image);
     device->destroy(target);
 
-    if (!read_ok || !image_ok || !nested_clip_inside_ok ||
-        !nested_clip_outside_ok || !rounded_center_ok ||
-        !rounded_corner_ok || !circle_ok || !text_ok) {
-        std::fprintf(
-            stderr,
-            "UI renderer pixel smoke failed: read=%d image=%d clip_in=%d clip_out=%d "
-            "round_center=%d round_corner=%d circle=%d text=%d signal=%zu\n",
-            read_ok, image_ok, nested_clip_inside_ok, nested_clip_outside_ok,
-            rounded_center_ok, rounded_corner_ok, circle_ok, text_ok, text_signal
-        );
+    if (!read_ok || !image_ok || !nested_clip_inside_ok || !nested_clip_outside_ok ||
+        !rounded_center_ok || !rounded_corner_ok || !circle_ok || !text_ok) {
+        std::fprintf(stderr,
+                     "UI renderer %s pixel smoke failed: read=%d image=%d clip_in=%d clip_out=%d "
+                     "round_center=%d round_corner=%d circle=%d text=%d signal=%zu\n",
+                     tgfx::backend_name(backend), read_ok, image_ok, nested_clip_inside_ok,
+                     nested_clip_outside_ok, rounded_center_ok, rounded_corner_ok, circle_ok,
+                     text_ok, text_signal);
         return 1;
     }
     return 0;
@@ -234,12 +212,21 @@ int run_smoke(const char* argv0) {
 } // namespace
 
 int main(int argc, char** argv) {
-    if (!tgfx::backend_is_compiled(tgfx::BackendType::Vulkan)) {
-        std::printf("Vulkan backend not compiled, skipping UI renderer pixel smoke\n");
-        return 0;
-    }
     tc_shader_init();
-    const int result = run_smoke(argc > 0 ? argv[0] : nullptr);
+    int result = 0;
+    size_t tested_backends = 0;
+    for (const tgfx::BackendType backend : {tgfx::BackendType::Vulkan, tgfx::BackendType::D3D11}) {
+        if (!tgfx::backend_is_compiled(backend))
+            continue;
+        ++tested_backends;
+        if (run_smoke(argc > 0 ? argv[0] : nullptr, backend) != 0) {
+            result = 1;
+            break;
+        }
+    }
+    if (tested_backends == 0) {
+        std::printf("No headless UI renderer backend compiled; desktop OpenGL smoke is separate\n");
+    }
     tc_shader_shutdown();
     return result;
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdexcept>
 #include <string>
 
 #include <termin/gui_native/tc_ui_document.h>
@@ -20,18 +21,21 @@ public:
     const char* name() const { return tc_widget_name(&_widget); }
     const char* debug_name() const { return tc_widget_debug_name(&_widget); }
     Widget& set_stable_id(std::string stable_id) {
-        stable_id_ = std::move(stable_id);
-        _widget.stable_id = stable_id_.empty() ? nullptr : stable_id_.c_str();
+        if (!tc_widget_set_stable_id(&_widget, stable_id.c_str())) {
+            throw std::runtime_error("failed to set widget stable id");
+        }
         return *this;
     }
     Widget& set_name(std::string name) {
-        name_ = std::move(name);
-        _widget.name = name_.empty() ? nullptr : name_.c_str();
+        if (!tc_widget_set_name(&_widget, name.c_str())) {
+            throw std::runtime_error("failed to set widget name");
+        }
         return *this;
     }
     Widget& set_debug_name(std::string debug_name) {
-        debug_name_ = std::move(debug_name);
-        _widget.debug_name = debug_name_.empty() ? nullptr : debug_name_.c_str();
+        if (!tc_widget_set_debug_name(&_widget, debug_name.c_str())) {
+            throw std::runtime_error("failed to set widget debug name");
+        }
         return *this;
     }
     void set_focusable(bool focusable) { tc_widget_set_focusable(&_widget, focusable); }
@@ -86,9 +90,6 @@ private:
         delete static_cast<Widget*>(widget->body);
     }
 
-    std::string stable_id_;
-    std::string name_;
-    std::string debug_name_;
     tc_widget _widget {};
 };
 
