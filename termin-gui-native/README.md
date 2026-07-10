@@ -6,6 +6,13 @@ The current foundation includes:
 
 - `tc_ui_document` is implemented in C and adopts widget objects while owning
   handle slots and generations;
+- the C implementation keeps its single private document state in
+  `tc_ui_document_internal.h`. Lifecycle, slot ownership, roots and services
+  live in `tc_ui_document.c`; common `tc_widget` state and canonical-tree
+  mutation live in `tc_widget.c`; paint composition, overlays, hit testing,
+  focus and input routing live in `tc_ui_interaction.c`. These translation
+  units share no public state and internal helper symbols remain hidden from
+  the shared-library ABI;
 - `tc_widget` is an intrusive C ABI header embedded into concrete widgets;
 - common bounds, size constraints, visibility/enabled/input flags and the
   canonical parent/ordered-children tree live directly in `tc_widget`;

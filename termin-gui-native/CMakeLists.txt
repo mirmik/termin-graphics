@@ -29,6 +29,8 @@ add_library(termin_gui_native SHARED
     src/draw_list_renderer.cpp
     src/showcase.cpp
     src/tc_ui_document.c
+    src/tc_widget.c
+    src/tc_ui_interaction.c
     src/tc_ui_draw_list.cpp
     src/widgets_helpers.cpp
     src/native_widget.cpp
