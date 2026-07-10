@@ -2665,6 +2665,25 @@ void test_dialog_modal_stack_focus_actions_and_exactly_once_results() {
   assert(!dialog.close(document.get()));
   assert(results.size() == 2);
 
+  assert(dialog.show(document.get(), tc_ui_rect{0.0f, 0.0f, 800.0f, 600.0f}));
+  tc_widget* apply_widget =
+      tc_ui_document_resolve_widget(document.get(), dialog.button_handles()[0]);
+  assert(apply_widget);
+  tc_ui_pointer_event click{};
+  click.type = TC_UI_POINTER_DOWN;
+  click.button = 0;
+  click.x = apply_widget->bounds.x + apply_widget->bounds.width * 0.5f;
+  click.y = apply_widget->bounds.y + apply_widget->bounds.height * 0.5f;
+  assert(tc_widget_handle_eq(document.hit_test(click.x, click.y),
+                             dialog.button_handles()[0]));
+  assert(document.dispatch_pointer_event(click) == TC_UI_EVENT_HANDLED);
+  click.type = TC_UI_POINTER_UP;
+  assert(document.dispatch_pointer_event(click) == TC_UI_EVENT_HANDLED);
+  assert(results.size() == 3);
+  assert(results[2].action_id == "apply");
+  assert(results[2].reason == DialogDismissReason::Action);
+  assert(document.overlay_count() == 0);
+
   const tc_widget_handle dialog_handle = dialog.handle();
   assert(tc_ui_document_destroy_widget(document.get(), dialog_handle));
   assert(!tc_ui_document_is_alive(document.get(), content_handle));

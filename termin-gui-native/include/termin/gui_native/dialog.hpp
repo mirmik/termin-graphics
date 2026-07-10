@@ -45,6 +45,7 @@ class Dialog : public NativeWidget {
     tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
     void layout(tc_ui_document* document, tc_ui_rect rect) override;
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
+    tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
     tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event) override;
     void overlay_dismissed(tc_ui_document* document, tc_ui_overlay_dismiss_reason reason) override;
     void on_destroy(tc_ui_document* document) override;
