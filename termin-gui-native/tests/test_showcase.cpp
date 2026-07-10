@@ -36,11 +36,13 @@ void test_showcase_builds_stable_headless_snapshot() {
     assert(refs.progress);
     assert(refs.slider);
     assert(refs.checkbox);
+    assert(refs.list);
     assert(refs.content_scroll);
     assert(refs.text_area);
     assert(refs.text_input);
     assert(refs.tabs);
     assert(refs.tabs->page_count() == 2);
+    assert((refs.list->selection().selected_indices() == std::vector<size_t> {1}));
     assert(tc_ui_document_root_count(document.get()) == 1);
     assert(tc_ui_document_live_widget_count(document.get()) >= 25);
 
@@ -56,13 +58,13 @@ void test_showcase_builds_stable_headless_snapshot() {
     tc_ui_paint_context* paint_context = tc_ui_paint_context_create(draw_list);
     document.paint_roots(paint_context);
 
-    require_equal(tc_ui_draw_list_command_count(draw_list), 106, "showcase total commands");
-    require_equal(count_commands(draw_list, TC_UI_DRAW_FILL_RECT), 26, "showcase fill commands");
-    require_equal(count_commands(draw_list, TC_UI_DRAW_STROKE_RECT), 20, "showcase stroke commands");
+    require_equal(tc_ui_draw_list_command_count(draw_list), 115, "showcase total commands");
+    require_equal(count_commands(draw_list, TC_UI_DRAW_FILL_RECT), 27, "showcase fill commands");
+    require_equal(count_commands(draw_list, TC_UI_DRAW_STROKE_RECT), 21, "showcase stroke commands");
     require_equal(count_commands(draw_list, TC_UI_DRAW_LINE), 8, "showcase line commands");
-    require_equal(count_commands(draw_list, TC_UI_DRAW_TEXT), 12, "showcase text commands");
-    require_equal(count_commands(draw_list, TC_UI_DRAW_PUSH_CLIP), 20, "showcase push clip commands");
-    require_equal(count_commands(draw_list, TC_UI_DRAW_POP_CLIP), 20, "showcase pop clip commands");
+    require_equal(count_commands(draw_list, TC_UI_DRAW_TEXT), 16, "showcase text commands");
+    require_equal(count_commands(draw_list, TC_UI_DRAW_PUSH_CLIP), 21, "showcase push clip commands");
+    require_equal(count_commands(draw_list, TC_UI_DRAW_POP_CLIP), 21, "showcase pop clip commands");
 
     const tc_ui_draw_command* first = tc_ui_draw_list_command_at(draw_list, 0);
     const tc_ui_draw_command* last = tc_ui_draw_list_command_at(

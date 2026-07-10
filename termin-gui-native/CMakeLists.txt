@@ -39,6 +39,7 @@ add_library(termin_gui_native SHARED
     src/widgets_text_input.cpp
     src/widgets_text_area.cpp
     src/widgets_value_controls.cpp
+    src/widgets_list.cpp
     src/widgets_combo_box.cpp
     src/widgets_visual_widgets.cpp
 )

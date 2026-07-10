@@ -1,5 +1,6 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/shared_ptr.h>
 #include <nanobind/stl/vector.h>
 
 #include <exception>
@@ -262,6 +263,7 @@ struct TextAreaRef {
 
 TERMIN_GUI_NATIVE_WIDGET_REF(SpinBoxRef, SpinBox);
 TERMIN_GUI_NATIVE_WIDGET_REF(SliderEditRef, SliderEdit);
+TERMIN_GUI_NATIVE_WIDGET_REF(ListWidgetRef, ListWidget);
 TERMIN_GUI_NATIVE_WIDGET_REF(ComboBoxRef, ComboBox);
 TERMIN_GUI_NATIVE_WIDGET_REF(IconButtonRef, IconButton);
 TERMIN_GUI_NATIVE_WIDGET_REF(ImageWidgetRef, ImageWidget);
@@ -1218,6 +1220,130 @@ NB_MODULE(_gui_native, m) {
             });
         }, nb::arg("callback"));
 
+    nb::class_<termin::gui_native::CollectionItem>(m, "CollectionItem")
+        .def(nb::init<>())
+        .def("__init__", [](termin::gui_native::CollectionItem* self,
+                            std::string stable_id,
+                            std::string text,
+                            std::string subtitle,
+                            bool enabled) {
+            new (self) termin::gui_native::CollectionItem {
+                std::move(stable_id), std::move(text), std::move(subtitle), enabled
+            };
+        }, nb::arg("stable_id"), nb::arg("text"),
+           nb::arg("subtitle") = "", nb::arg("enabled") = true)
+        .def_rw("stable_id", &termin::gui_native::CollectionItem::stable_id)
+        .def_rw("text", &termin::gui_native::CollectionItem::text)
+        .def_rw("subtitle", &termin::gui_native::CollectionItem::subtitle)
+        .def_rw("enabled", &termin::gui_native::CollectionItem::enabled);
+
+    nb::class_<termin::gui_native::CollectionModel>(m, "CollectionModel")
+        .def(nb::init<>())
+        .def_prop_ro("item_count", &termin::gui_native::CollectionModel::size)
+        .def_prop_ro("revision", &termin::gui_native::CollectionModel::revision)
+        .def_prop_ro("items", [](const termin::gui_native::CollectionModel& self) {
+            return self.items();
+        })
+        .def("item", [](const termin::gui_native::CollectionModel& self, size_t index) {
+            return self.item(index);
+        }, nb::arg("index"))
+        .def("set_items", &termin::gui_native::CollectionModel::set_items, nb::arg("items"))
+        .def("append", &termin::gui_native::CollectionModel::append, nb::arg("item"))
+        .def("update", &termin::gui_native::CollectionModel::update,
+             nb::arg("index"), nb::arg("item"))
+        .def("erase", &termin::gui_native::CollectionModel::erase, nb::arg("index"))
+        .def("clear", &termin::gui_native::CollectionModel::clear);
+
+    nb::enum_<termin::gui_native::SelectionMode>(m, "SelectionMode")
+        .value("Single", termin::gui_native::SelectionMode::Single)
+        .value("Multiple", termin::gui_native::SelectionMode::Multiple);
+
+    nb::class_<ListWidgetRef>(m, "ListWidget")
+        .def_prop_ro("widget", [](const ListWidgetRef& self) { return self.widget; })
+        .def_prop_ro("handle", [](const ListWidgetRef& self) { return WidgetHandle {self.widget.handle}; })
+        .def_prop_rw("model",
+            [](const ListWidgetRef& self) { return self.get().model(); },
+            [](const ListWidgetRef& self, std::shared_ptr<termin::gui_native::CollectionModel> model) {
+                self.get().set_model(std::move(model));
+            })
+        .def_prop_rw("selection_mode",
+            [](const ListWidgetRef& self) { return self.get().selection().mode(); },
+            [](const ListWidgetRef& self, termin::gui_native::SelectionMode mode) {
+                self.get().set_selection_mode(mode);
+            })
+        .def_prop_ro("selected_indices", [](const ListWidgetRef& self) {
+            return self.get().selection().selected_indices();
+        })
+        .def_prop_ro("current_index", [](const ListWidgetRef& self) -> int64_t {
+            const size_t index = self.get().selection().current();
+            return index == termin::gui_native::SelectionModel::npos
+                ? -1
+                : static_cast<int64_t>(index);
+        })
+        .def_prop_rw("scroll_y",
+            [](const ListWidgetRef& self) { return self.get().scroll_y(); },
+            [](const ListWidgetRef& self, float value) { self.get().set_scroll_y(value); })
+        .def_prop_ro("content_height", [](const ListWidgetRef& self) {
+            return self.get().content_height();
+        })
+        .def_prop_ro("visible_range", [](const ListWidgetRef& self) {
+            const auto [first, last] = self.get().visible_range();
+            return std::vector<size_t> {first, last};
+        })
+        .def("set_row_height", [](const ListWidgetRef& self, float height) {
+            self.get().set_row_height(height);
+        }, nb::arg("height"))
+        .def("set_row_spacing", [](const ListWidgetRef& self, float spacing) {
+            self.get().set_row_spacing(spacing);
+        }, nb::arg("spacing"))
+        .def("select", [](const ListWidgetRef& self, size_t index, bool toggle, bool extend, bool additive) {
+            const bool changed = self.get().select_index(index, toggle, extend, additive);
+            self.widget.throw_pending_exception();
+            return changed;
+        }, nb::arg("index"), nb::arg("toggle") = false,
+           nb::arg("extend") = false, nb::arg("additive") = false)
+        .def("clear_selection", [](const ListWidgetRef& self) {
+            const bool changed = self.get().clear_selection();
+            self.widget.throw_pending_exception();
+            return changed;
+        })
+        .def("ensure_visible", [](const ListWidgetRef& self, size_t index) {
+            self.get().ensure_visible(index);
+        }, nb::arg("index"))
+        .def("connect_selection_changed", [](const ListWidgetRef& self, nb::object callback) {
+            auto state = self.widget.state;
+            return self.get().selection_changed().connect(
+                [state, callback = std::move(callback)](
+                    termin::gui_native::ListWidget&,
+                    const std::vector<size_t>& selected) {
+                    try {
+                        nb::gil_scoped_acquire gil;
+                        callback(selected);
+                    } catch (...) {
+                        if (state && !state->pending_exception) state->pending_exception = std::current_exception();
+                        tc_log_error("[termin-gui-native/python] ListWidget selection callback failed");
+                    }
+                }
+            );
+        }, nb::arg("callback"))
+        .def("connect_activated", [](const ListWidgetRef& self, nb::object callback) {
+            auto state = self.widget.state;
+            return self.get().activated().connect(
+                [state, callback = std::move(callback)](
+                    termin::gui_native::ListWidget&,
+                    size_t index,
+                    const termin::gui_native::CollectionItem& item) {
+                    try {
+                        nb::gil_scoped_acquire gil;
+                        callback(index, item);
+                    } catch (...) {
+                        if (state && !state->pending_exception) state->pending_exception = std::current_exception();
+                        tc_log_error("[termin-gui-native/python] ListWidget activation callback failed");
+                    }
+                }
+            );
+        }, nb::arg("callback"));
+
     nb::class_<ComboBoxRef>(m, "ComboBox")
         .def_prop_ro("widget", [](const ComboBoxRef& self) { return self.widget; })
         .def_prop_ro("handle", [](const ComboBoxRef& self) { return WidgetHandle {self.widget.handle}; })
@@ -1606,6 +1732,12 @@ NB_MODULE(_gui_native, m) {
         .def("create_slider_edit", [](Document& self, float value) {
             return SliderEditRef {self.make_native<termin::gui_native::SliderEdit>(value)};
         }, nb::arg("value") = 0.0f)
+        .def("create_list_widget", [](Document& self,
+                                      std::shared_ptr<termin::gui_native::CollectionModel> model) {
+            return ListWidgetRef {
+                self.make_native<termin::gui_native::ListWidget>(std::move(model))
+            };
+        }, nb::arg("model") = nullptr)
         .def("create_combo_box", [](Document& self) {
             return ComboBoxRef {self.make_native<termin::gui_native::ComboBox>()};
         })

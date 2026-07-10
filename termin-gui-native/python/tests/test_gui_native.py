@@ -6,6 +6,8 @@ import pytest
 
 from termin.gui_native import (
     Color,
+    CollectionItem,
+    CollectionModel,
     Constraints,
     Document,
     DrawCommandType,
@@ -15,6 +17,7 @@ from termin.gui_native import (
     KeyCode,
     KeyEvent,
     KeyEventType,
+    SelectionMode,
     ModifierFlag,
     OverlayDismissReason,
     OverlayFlag,
@@ -730,3 +733,113 @@ def test_native_value_setters_propagate_callback_exceptions_immediately():
     combo.connect_changed(fail_combo)
     with pytest.raises(LookupError, match="combo callback failed"):
         combo.selected_index = 0
+
+
+def _collection_item(index, *, enabled=True, subtitle=""):
+    return CollectionItem(f"item-{index}", f"Item {index}", subtitle, enabled)
+
+
+def test_native_list_widget_model_selection_and_virtualized_paint():
+    document = Document()
+    model = CollectionModel()
+    model.set_items([
+        _collection_item(index, subtitle="even" if index % 2 == 0 else "odd")
+        for index in range(10_000)
+    ])
+    revision = model.revision
+    widget = document.create_list_widget(model)
+    assert widget.model is model
+    assert widget.model.item_count == 10_000
+    assert widget.model.item(7).stable_id == "item-7"
+    assert document.add_root(widget.handle)
+    widget.selection_mode = SelectionMode.Multiple
+    widget.set_row_height(32.0)
+    widget.set_row_spacing(2.0)
+    document.layout_roots(Rect(0.0, 0.0, 320.0, 110.0))
+
+    first, last = widget.visible_range
+    assert first == 0
+    assert last <= 6
+    assert widget.content_height > 300_000.0
+
+    draw_list = DrawList()
+    document.paint_roots(PaintContext(draw_list))
+    assert sum(command.type == DrawCommandType.Text for command in draw_list.commands) <= 12
+
+    changes = []
+    widget.connect_selection_changed(lambda selected: changes.append(list(selected)))
+    assert widget.select(2)
+    assert widget.select(4, extend=True)
+    assert widget.selected_indices == [2, 3, 4]
+    assert changes == [[2], [2, 3, 4]]
+    model.erase(0)
+    assert widget.selected_indices == [1, 2, 3]
+    assert changes[-1] == [1, 2, 3]
+    widget.ensure_visible(9998)
+    assert widget.visible_range[0] > 9990
+
+    model.erase(model.item_count - 1)
+    assert model.revision == revision + 2
+    document.layout_roots(Rect(0.0, 0.0, 320.0, 110.0))
+    assert widget.model.item_count == 9998
+
+
+def test_native_list_widget_input_callbacks_and_model_lifetime():
+    document = Document()
+    model = CollectionModel()
+    model.set_items([
+        _collection_item(0),
+        _collection_item(1),
+        _collection_item(2, enabled=False),
+        _collection_item(3),
+    ])
+    widget = document.create_list_widget(model)
+    widget.selection_mode = SelectionMode.Multiple
+    widget.set_row_height(30.0)
+    assert document.add_root(widget.handle)
+    document.layout_roots(Rect(0.0, 0.0, 200.0, 60.0))
+
+    del model
+    gc.collect()
+    assert widget.model.item_count == 4
+
+    pointer = PointerEvent()
+    pointer.type = PointerEventType.Down
+    pointer.x = 10.0
+    pointer.y = 15.0
+    assert document.dispatch_pointer_event(pointer) == EventResult.Handled
+    assert widget.selected_indices == [0]
+
+    activated = []
+    widget.connect_activated(lambda index, item: activated.append((index, item.stable_id)))
+    key = KeyEvent()
+    key.type = KeyEventType.Down
+    key.key = KeyCode.Down
+    assert document.dispatch_key_event(key) == EventResult.Handled
+    assert widget.selected_indices == [1]
+    key.key = KeyCode.Down
+    assert document.dispatch_key_event(key) == EventResult.Handled
+    assert widget.selected_indices == [3]
+    key.key = KeyCode.Enter
+    assert document.dispatch_key_event(key) == EventResult.Handled
+    assert activated == [(3, "item-3")]
+
+    retained_model = widget.model
+    assert document.destroy_widget(widget.handle)
+    with pytest.raises(RuntimeError, match="stale"):
+        _ = widget.selected_indices
+    assert retained_model.item_count == 4
+
+
+def test_native_list_widget_callback_exceptions_propagate():
+    document = Document()
+    model = CollectionModel()
+    model.append(_collection_item(0))
+    widget = document.create_list_widget(model)
+
+    def fail_selection(_selected):
+        raise RuntimeError("list selection failed")
+
+    widget.connect_selection_changed(fail_selection)
+    with pytest.raises(RuntimeError, match="list selection failed"):
+        widget.select(0)

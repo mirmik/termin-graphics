@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -45,7 +46,8 @@ public:
     }
 
     void emit(Args... args) const {
-        for (const Slot& slot : slots_) {
+        const std::vector<Slot> snapshot = slots_;
+        for (const Slot& slot : snapshot) {
             slot.callback(args...);
         }
     }
@@ -764,6 +766,142 @@ private:
     size_t spin_box_connection_ = 0;
     bool syncing_ = false;
     Signal<SliderEdit&, float> changed_;
+};
+
+struct CollectionItem {
+    std::string stable_id;
+    std::string text;
+    std::string subtitle;
+    bool enabled = true;
+};
+
+enum class CollectionChangeKind {
+    Reset,
+    Insert,
+    Update,
+    Erase,
+};
+
+struct CollectionChange {
+    CollectionChangeKind kind = CollectionChangeKind::Reset;
+    size_t index = 0;
+    size_t count = 0;
+};
+
+class CollectionModel {
+public:
+    size_t size() const { return items_.size(); }
+    bool empty() const { return items_.empty(); }
+    uint64_t revision() const { return revision_; }
+    const CollectionItem& item(size_t index) const;
+    const std::vector<CollectionItem>& items() const { return items_; }
+    Signal<CollectionModel&, const CollectionChange&>& changed() { return changed_; }
+
+    void set_items(std::vector<CollectionItem> items);
+    void append(CollectionItem item);
+    void update(size_t index, CollectionItem item);
+    void erase(size_t index);
+    void clear();
+
+private:
+    static void validate_item(const CollectionItem& item);
+    void notify(CollectionChange change);
+
+    std::vector<CollectionItem> items_;
+    uint64_t revision_ = 1;
+    Signal<CollectionModel&, const CollectionChange&> changed_;
+};
+
+enum class SelectionMode {
+    Single,
+    Multiple,
+};
+
+class SelectionModel {
+public:
+    static constexpr size_t npos = static_cast<size_t>(-1);
+
+    explicit SelectionModel(SelectionMode mode = SelectionMode::Single) : mode_(mode) {}
+
+    SelectionMode mode() const { return mode_; }
+    void set_mode(SelectionMode mode);
+    size_t current() const { return current_; }
+    size_t anchor() const { return anchor_; }
+    const std::vector<size_t>& selected_indices() const { return selected_; }
+    bool contains(size_t index) const;
+
+    bool reconcile(size_t item_count);
+    bool clear();
+    bool select_only(size_t index);
+    bool toggle(size_t index);
+    bool extend_to(size_t index, bool additive = false);
+    bool select_all(size_t item_count);
+    bool items_inserted(size_t index, size_t count);
+    bool items_erased(size_t index, size_t count, size_t remaining_count);
+    void set_current(size_t index) { current_ = index; }
+
+private:
+    void normalize();
+
+    SelectionMode mode_ = SelectionMode::Single;
+    std::vector<size_t> selected_;
+    size_t current_ = npos;
+    size_t anchor_ = npos;
+};
+
+class ListWidget : public NativeWidget {
+public:
+    explicit ListWidget(std::shared_ptr<CollectionModel> model = {});
+    ~ListWidget() override;
+
+    const std::shared_ptr<CollectionModel>& model() const { return model_; }
+    void set_model(std::shared_ptr<CollectionModel> model);
+    SelectionModel& selection() { return selection_; }
+    const SelectionModel& selection() const { return selection_; }
+    void set_selection_mode(SelectionMode mode);
+    void set_row_height(float height);
+    void set_row_spacing(float spacing);
+    void set_scroll_y(float offset);
+    float scroll_y() const { return scroll_y_; }
+    float content_height() const;
+    size_t hovered_index() const { return hovered_; }
+    std::pair<size_t, size_t> visible_range() const;
+    void ensure_visible(size_t index);
+    bool select_index(size_t index, bool toggle = false, bool extend = false, bool additive = false);
+    bool clear_selection();
+
+    Signal<ListWidget&, const std::vector<size_t>&>& selection_changed() { return selection_changed_; }
+    Signal<ListWidget&, size_t, const CollectionItem&>& activated() { return activated_; }
+
+    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document* document, tc_ui_rect rect) override;
+    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
+    tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event) override;
+
+private:
+    void sync_model();
+    void clamp_scroll();
+    size_t index_at(float x, float y) const;
+    size_t next_enabled(size_t from, int direction) const;
+    bool apply_selection(size_t index, int32_t modifiers);
+    void emit_selection_changed();
+    void connect_model();
+    void disconnect_model();
+    void on_model_changed(const CollectionChange& change);
+
+    std::shared_ptr<CollectionModel> model_;
+    SelectionModel selection_;
+    uint64_t observed_revision_ = 0;
+    size_t model_connection_ = 0;
+    float row_height_ = 40.0f;
+    float row_spacing_ = 2.0f;
+    float scroll_y_ = 0.0f;
+    float wheel_rows_ = 3.0f;
+    float item_padding_ = 10.0f;
+    size_t hovered_ = SelectionModel::npos;
+    Signal<ListWidget&, const std::vector<size_t>&> selection_changed_;
+    Signal<ListWidget&, size_t, const CollectionItem&> activated_;
 };
 
 class ComboBoxPopup;

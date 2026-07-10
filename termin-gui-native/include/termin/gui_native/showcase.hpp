@@ -5,6 +5,7 @@
 namespace termin::gui_native {
 
 class Checkbox;
+class ListWidget;
 class ProgressBar;
 class ScrollArea;
 class Slider;
@@ -16,6 +17,7 @@ struct ShowcaseRefs {
     ProgressBar* progress = nullptr;
     Slider* slider = nullptr;
     Checkbox* checkbox = nullptr;
+    ListWidget* list = nullptr;
     ScrollArea* content_scroll = nullptr;
     TextArea* text_area = nullptr;
     TextInput* text_input = nullptr;

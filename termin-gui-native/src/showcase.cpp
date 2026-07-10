@@ -70,6 +70,18 @@ ShowcaseRefs build_showcase(Document& document) {
     );
     content.add_fixed_child(*refs.text_area, 96.0f);
 
+    auto list_model = std::make_shared<CollectionModel>();
+    list_model->set_items({
+        CollectionItem {"scene", "Scene hierarchy", "Reusable collection model", true},
+        CollectionItem {"assets", "Asset browser", {}, true},
+        CollectionItem {"disabled", "Unavailable source", "Disabled item", false},
+        CollectionItem {"build", "Build output", {}, true},
+    });
+    refs.list = &ui.make<ListWidget>(std::move(list_model));
+    refs.list->set_selection_mode(SelectionMode::Multiple);
+    refs.list->select_index(1);
+    content.add_fixed_child(*refs.list, 112.0f);
+
     auto& palette = ui.make<GridLayout>("palette-grid");
     palette.set_padding(EdgeInsets {8.0f, 8.0f, 8.0f, 8.0f})
         .set_spacing(8.0f, 8.0f)

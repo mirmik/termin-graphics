@@ -1,9 +1,8 @@
 # termin-gui-native
 
-Experimental native UI document prototype for the future `termin-gui`
-migration.
+Native UI document implementation under active `termin-gui` migration.
 
-The current module is intentionally small:
+The current foundation includes:
 
 - `tc_ui_document` is implemented in C and adopts widget objects while owning
   handle slots and generations;
@@ -31,8 +30,8 @@ The current module is intentionally small:
   `NativeWidget`, `BoxLayout`, `HStack`, `VStack`, `GridLayout`, `GroupBox`,
   `Splitter`, `ScrollArea`, `TabView`, `Panel`, `Button`, `Checkbox`,
   `ProgressBar`, `TextInput`, `TextArea`, `SpinBox`, `SliderEdit`, `ComboBox`,
-  `IconButton`, `ImageWidget`, `Canvas`, `Separator`, `Slider`, `Swatch`, `Label`, and
-  `Spacer`;
+  `IconButton`, `ImageWidget`, `Canvas`, `ListWidget`, `Separator`, `Slider`,
+  `Swatch`, `Label`, and `Spacer`;
 - `tc_ui_document_layout_roots` and the input dispatch APIs exercise layout
   and event routing without making ownership implicit;
 - pointer, key and text input route from target to root over a snapshot of
@@ -84,6 +83,13 @@ The current module is intentionally small:
   file decoding, upload, update and destruction remain host responsibilities.
   `Canvas` provides fit/zoom/pan transforms plus a backend-neutral custom paint
   callback inside its clip;
+- `CollectionModel` owns flat item data and emits typed reset/insert/update/erase
+  changes. `SelectionModel` provides reusable single, multiple and anchored
+  range selection while preserving indices across structural insert/erase;
+- `ListWidget` retains a shared collection model, paints only its computed
+  visible row range, scrolls without materializing per-row widgets, skips
+  disabled rows during direct/keyboard navigation and exposes the same model,
+  selection, activation and lifetime contract to C++ and Python;
 - `UiDrawListRenderer` can flush the command list through
   `tgfx::Canvas2DRenderer`;
 - `TERMIN_GUI_NATIVE_BUILD_EXAMPLES=ON` builds a small SDL window example that

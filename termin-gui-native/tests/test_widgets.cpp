@@ -1620,6 +1620,202 @@ void test_cpp_theme_style_facade_inheritance_and_state() {
     assert(near(document.resolve_style(button).accent.r, 0.91f));
 }
 
+void test_collection_and_selection_models_are_reusable() {
+    CollectionModel model;
+    model.set_items({
+        CollectionItem {"a", "Alpha", "First", true},
+        CollectionItem {"b", "Beta", "Second", true},
+        CollectionItem {"c", "Gamma", "Third", true},
+        CollectionItem {"d", "Delta", "Fourth", true},
+    });
+    const uint64_t revision = model.revision();
+    model.update(1, CollectionItem {"b", "Beta 2", "Updated", true});
+    assert(model.revision() == revision + 1);
+    assert(model.item(1).text == "Beta 2");
+
+    SelectionModel selection(SelectionMode::Multiple);
+    assert(selection.select_only(1));
+    assert(selection.extend_to(3));
+    assert((selection.selected_indices() == std::vector<size_t> {1, 2, 3}));
+    assert(selection.toggle(2));
+    assert((selection.selected_indices() == std::vector<size_t> {1, 3}));
+    assert(selection.select_all(model.size()));
+    assert(selection.selected_indices().size() == 4);
+    model.erase(3);
+    assert(selection.items_erased(3, 1, model.size()));
+    assert((selection.selected_indices() == std::vector<size_t> {0, 1, 2}));
+
+    assert(selection.select_only(2));
+    assert(selection.items_inserted(1, 2));
+    assert((selection.selected_indices() == std::vector<size_t> {4}));
+
+    bool rejected = false;
+    try {
+        model.append(CollectionItem {"bad", std::string("\xff", 1), {}, true});
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    assert(rejected);
+}
+
+void test_list_widget_virtualizes_large_models_and_reconciles_selection() {
+    Document document;
+    install_test_text_measurer(document);
+    DocumentBuilder ui(document);
+    auto model = std::make_shared<CollectionModel>();
+    std::vector<CollectionItem> items;
+    items.reserve(10000);
+    for (size_t index = 0; index < 10000; ++index) {
+        items.push_back(CollectionItem {
+            "item-" + std::to_string(index),
+            "Item " + std::to_string(index),
+            index % 2 == 0 ? "Even" : "Odd",
+            true,
+        });
+    }
+    model->set_items(std::move(items));
+    auto& list = ui.make_root<ListWidget>(model);
+    list.set_row_height(40.0f);
+    list.set_row_spacing(2.0f);
+    document.layout_roots(tc_ui_rect {0.0f, 0.0f, 320.0f, 126.0f});
+
+    const auto [first, last] = list.visible_range();
+    assert(first == 0);
+    assert(last <= 5);
+    assert(list.content_height() > 400000.0f);
+    assert(list.child_count() == 0);
+
+    tc_ui_pointer_event wheel {};
+    wheel.type = TC_UI_POINTER_WHEEL;
+    wheel.x = 10.0f;
+    wheel.y = 10.0f;
+    wheel.wheel_y = 1.0f;
+    assert(list.pointer_event(document.get(), &wheel) == TC_UI_EVENT_IGNORED);
+    wheel.wheel_y = -1.0f;
+    assert(list.pointer_event(document.get(), &wheel) == TC_UI_EVENT_HANDLED);
+    assert(list.scroll_y() > 0.0f);
+    list.set_scroll_y(0.0f);
+
+    tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
+    tc_ui_paint_context* context = tc_ui_paint_context_create(draw_list);
+    document.paint_roots(context);
+    assert(count_commands(draw_list, TC_UI_DRAW_TEXT) <= 10);
+    assert(count_commands(draw_list, TC_UI_DRAW_TEXT) >= 6);
+    tc_ui_paint_context_destroy(context);
+    tc_ui_draw_list_destroy(draw_list);
+
+    list.selection().select_only(9999);
+    list.ensure_visible(9999);
+    assert(list.scroll_y() > 400000.0f);
+    const auto [scrolled_first, scrolled_last] = list.visible_range();
+    assert(scrolled_first > 9990);
+    assert(scrolled_last == 10000);
+
+    model->set_items({CollectionItem {"only", "Only", {}, true}});
+    list.layout(document.get(), list.bounds());
+    assert(list.selection().selected_indices().empty());
+    assert(near(list.scroll_y(), 0.0f));
+}
+
+void test_list_widget_pointer_keyboard_and_multi_selection() {
+    Document document;
+    install_test_text_measurer(document);
+    DocumentBuilder ui(document);
+    auto model = std::make_shared<CollectionModel>();
+    model->set_items({
+        CollectionItem {"0", "Zero", {}, true},
+        CollectionItem {"1", "One", {}, true},
+        CollectionItem {"2", "Disabled", {}, false},
+        CollectionItem {"3", "Three", {}, true},
+        CollectionItem {"4", "Four", {}, true},
+        CollectionItem {"5", "Five", {}, true},
+    });
+    auto& list = ui.make_root<ListWidget>(model);
+    list.set_selection_mode(SelectionMode::Multiple);
+    list.set_row_height(30.0f);
+    list.set_row_spacing(0.0f);
+    document.layout_roots(tc_ui_rect {0.0f, 0.0f, 240.0f, 90.0f});
+
+    std::vector<std::vector<size_t>> changes;
+    list.selection_changed().connect([&changes](ListWidget&, const std::vector<size_t>& selected) {
+        changes.push_back(selected);
+    });
+    size_t activated = SelectionModel::npos;
+    list.activated().connect([&activated](ListWidget&, size_t index, const CollectionItem&) {
+        activated = index;
+    });
+
+    tc_ui_pointer_event pointer {};
+    pointer.type = TC_UI_POINTER_DOWN;
+    pointer.x = 10.0f;
+    pointer.y = 15.0f;
+    assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+    assert((list.selection().selected_indices() == std::vector<size_t> {0}));
+
+    pointer.y = 45.0f;
+    pointer.modifiers = TC_UI_MOD_CTRL;
+    assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+    assert((list.selection().selected_indices() == std::vector<size_t> {0, 1}));
+
+    list.set_scroll_y(60.0f);
+    pointer.y = 75.0f;
+    pointer.modifiers = TC_UI_MOD_SHIFT;
+    assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+    assert((list.selection().selected_indices() == std::vector<size_t> {1, 2, 3, 4}));
+
+    tc_ui_key_event key {};
+    key.type = TC_UI_KEY_DOWN;
+    key.key = TC_UI_KEY_UP_ARROW;
+    key.modifiers = 0;
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    assert((list.selection().selected_indices() == std::vector<size_t> {3}));
+    key.key = TC_UI_KEY_ENTER;
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    assert(activated == 3);
+    key.key = TC_UI_KEY_A;
+    key.modifiers = TC_UI_MOD_CTRL;
+    assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+    assert(list.selection().selected_indices().size() == model->size() - 1);
+    assert(changes.size() >= 5);
+}
+
+void test_list_widget_model_notifications_preserve_lifetime_and_shift_selection() {
+    Document document;
+    DocumentBuilder ui(document);
+    auto model = std::make_shared<CollectionModel>();
+    model->set_items({
+        CollectionItem {"0", "Zero", {}, true},
+        CollectionItem {"1", "One", {}, true},
+        CollectionItem {"2", "Two", {}, true},
+    });
+    std::weak_ptr<CollectionModel> weak_model = model;
+    auto& list = ui.make_root<ListWidget>(model);
+    assert(list.select_index(2));
+    model->erase(0);
+    assert((list.selection().selected_indices() == std::vector<size_t> {1}));
+    model.reset();
+    assert(!weak_model.expired());
+    const tc_widget_handle handle = list.handle();
+    assert(tc_ui_document_destroy_widget(document.get(), handle));
+    assert(weak_model.expired());
+
+    auto destroying_model = std::make_shared<CollectionModel>();
+    destroying_model->set_items({
+        CollectionItem {"0", "Zero", {}, true},
+        CollectionItem {"1", "One", {}, true},
+    });
+    auto& destroying_list = ui.make_root<ListWidget>(destroying_model);
+    assert(destroying_list.select_index(1));
+    const tc_widget_handle destroying_handle = destroying_list.handle();
+    destroying_list.selection_changed().connect(
+        [&document, destroying_handle](ListWidget&, const std::vector<size_t>&) {
+            assert(tc_ui_document_destroy_widget(document.get(), destroying_handle));
+        }
+    );
+    destroying_model->erase(0);
+    assert(!tc_ui_document_is_alive(document.get(), destroying_handle));
+}
+
 } // namespace
 
 int main() {
@@ -1667,5 +1863,9 @@ int main() {
     test_containers_register_and_replace_canonical_children();
     test_common_visibility_enabled_and_mouse_transparent_state();
     test_cpp_theme_style_facade_inheritance_and_state();
+    test_collection_and_selection_models_are_reusable();
+    test_list_widget_virtualizes_large_models_and_reconciles_selection();
+    test_list_widget_pointer_keyboard_and_multi_selection();
+    test_list_widget_model_notifications_preserve_lifetime_and_shift_selection();
     return EXIT_SUCCESS;
 }
