@@ -204,10 +204,16 @@ void UiDrawListRenderer::render(
             break;
         case TC_UI_DRAW_TEXT:
             if (canvas_.default_font()) {
+                // tc_ui draw commands use a baseline origin, while Canvas2DRenderer's
+                // left anchor uses the top of the font line. Keep that difference at
+                // this backend boundary instead of leaking canvas semantics into every
+                // widget's layout code.
+                const float line_top = command->p0.y
+                    - static_cast<float>(owned_font_->ascent_px(command->font_size));
                 canvas_.draw_text(
                     command->text ? command->text : "",
                     command->p0.x,
-                    command->p0.y,
+                    line_top,
                     command->font_size,
                     canvas_color(command->color)
                 );

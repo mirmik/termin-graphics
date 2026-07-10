@@ -782,6 +782,7 @@ TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_texture(
 TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_text(
     tc_ui_paint_context* context,
     const char* text,
+    // The position is the left end of the text baseline, not its top-left corner.
     tc_ui_point position,
     float font_size,
     tc_ui_color color

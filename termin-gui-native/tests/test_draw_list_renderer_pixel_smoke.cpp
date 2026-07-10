@@ -11,6 +11,7 @@ extern "C" {
 #include <tgfx/resources/tc_shader_registry.h>
 }
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -147,8 +148,14 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
                                     tc_ui_color{0.05f, 0.15f, 0.9f, 1.0f});
     tc_ui_painter_fill_circle(painter, tc_ui_point{48.0f, 50.0f}, 8.0f,
                               tc_ui_color{0.9f, 0.85f, 0.05f, 1.0f}, 24);
-    tc_ui_painter_draw_text(painter, "Native", tc_ui_point{72.0f, 8.0f}, 20.0f,
-                            tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f});
+    constexpr uint32_t text_baseline = 30;
+    tc_ui_painter_draw_text(
+        painter,
+        "Native",
+        tc_ui_point{72.0f, static_cast<float>(text_baseline)},
+        20.0f,
+        tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}
+    );
 
     tgfx::PipelineCache cache(*device);
     tgfx::RenderContext2 context(*device, cache);
@@ -178,17 +185,24 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
     const bool rounded_corner_ok = read_ok && looks_black(pixel_at(pixels, 9, 41));
     const bool circle_ok = read_ok && looks_yellow(pixel_at(pixels, 48, 50));
     size_t text_signal = 0;
+    uint32_t text_min_y = kHeight;
+    uint32_t text_max_y = 0;
     if (read_ok) {
         for (uint32_t y = 0; y < 40; ++y) {
             for (uint32_t x = 68; x < kWidth; ++x) {
                 const float* pixel = pixel_at(pixels, x, y);
                 if (pixel[0] > 0.15f || pixel[1] > 0.15f || pixel[2] > 0.15f) {
                     ++text_signal;
+                    text_min_y = std::min(text_min_y, y);
+                    text_max_y = std::max(text_max_y, y);
                 }
             }
         }
     }
-    const bool text_ok = text_signal >= 8;
+    // The painter position is a baseline. Most ink must therefore be above it;
+    // this catches accidentally forwarding the baseline as Canvas2D's line top.
+    const bool text_ok = text_signal >= 8 && text_min_y < text_baseline
+        && text_max_y <= text_baseline + 5;
 
     renderer.release_gpu();
     tc_ui_paint_context_destroy(painter);
@@ -200,10 +214,10 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
         !rounded_center_ok || !rounded_corner_ok || !circle_ok || !text_ok) {
         std::fprintf(stderr,
                      "UI renderer %s pixel smoke failed: read=%d image=%d clip_in=%d clip_out=%d "
-                     "round_center=%d round_corner=%d circle=%d text=%d signal=%zu\n",
+                     "round_center=%d round_corner=%d circle=%d text=%d signal=%zu y=[%u,%u]\n",
                      tgfx::backend_name(backend), read_ok, image_ok, nested_clip_inside_ok,
                      nested_clip_outside_ok, rounded_center_ok, rounded_corner_ok, circle_ok,
-                     text_ok, text_signal);
+                     text_ok, text_signal, text_min_y, text_max_y);
         return 1;
     }
     return 0;
