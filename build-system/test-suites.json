@@ -130,6 +130,10 @@
       "description": "Windows and D3D11-specific suites."
     },
     {
+      "id": "windows-d3d11-bound",
+      "description": "Focused Windows D3D11 bound-resource smoke."
+    },
+    {
       "id": "editor-smoke",
       "description": "Isolated editor-process smoke suites."
     },
@@ -175,6 +179,17 @@
       "platforms": ["linux"],
       "capabilities": ["installed-sdk", "termin-app-bundle"],
       "reason": "Proves imports and tests against termin-app's installed bundle rather than the checkout source overlay."
+    },
+    {
+      "id": "tgfx2-d3d11-bound-smoke",
+      "module": "termin-graphics",
+      "executor": "process-smoke",
+      "roots": ["scripts/validate-tgfx2-d3d11-bound-path.ps1"],
+      "profiles": ["windows-d3d11-bound"],
+      "environment": "windows-d3d11-build",
+      "platforms": ["windows"],
+      "capabilities": ["d3d11"],
+      "reason": "Focused Windows build-and-run smoke for the D3D11 bound-resource and optional present paths."
     },
     {
       "id": "android-apk-build-gate",

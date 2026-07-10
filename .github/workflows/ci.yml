@@ -35,6 +35,8 @@ jobs:
             plan pr --platform linux --json > build/ci-plans/pr-linux.json
           python -m termin_build.repository_control --repo-root . \
             plan sdk-installed --platform linux --json > build/ci-plans/sdk-installed-linux.json
+          python -m termin_build.repository_control --repo-root . \
+            plan windows-d3d11-bound --platform windows --json > build/ci-plans/windows-d3d11-bound.json
 
       - uses: actions/upload-artifact@v5
         with:
@@ -125,6 +127,7 @@ jobs:
 
   # ── 0d. D3D11 tgfx2 smoke ─────────────────────────────────────
   tgfx2-d3d11-bound-windows:
+    needs: plan-pr-linux
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -136,9 +139,28 @@ jobs:
         with:
           python-version: "3.10"
 
+      - uses: actions/download-artifact@v5
+        with:
+          name: ci-plans
+          path: build/ci-plans/
+
       - name: Validate D3D11 bound resource path
         shell: pwsh
-        run: .\scripts\validate-tgfx2-d3d11-bound-path.ps1
+        env:
+          PYTHONPATH: ${{ github.workspace }}\termin-build-tools
+        run: |
+          python -m termin_build.repository_control --repo-root . \
+            run windows-d3d11-bound --platform windows \
+            --executor process-smoke \
+            --plan-file build/ci-plans/windows-d3d11-bound.json \
+            --report-output build/d3d11-execution-manifest.json
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: d3d11-execution-manifest
+          path: build/d3d11-execution-manifest.json
+          retention-days: 7
 
   # ── 1. Build C++ libraries ───────────────────────────────────────
   build-cpp-libs:
