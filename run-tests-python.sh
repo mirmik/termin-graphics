@@ -117,10 +117,18 @@ else
         TEST_PROFILE="linux-full"
     fi
 
+    PLANNER_PLAN_ARGS=()
+    if [[ -n "${TERMIN_TEST_PLAN:-}" ]]; then
+        PLANNER_PLAN_ARGS+=(--plan-file "${TERMIN_TEST_PLAN}")
+    fi
+    if [[ -n "${TERMIN_TEST_EXECUTION_MANIFEST:-}" ]]; then
+        PLANNER_PLAN_ARGS+=(--report-output "${TERMIN_TEST_EXECUTION_MANIFEST}")
+    fi
     if ! "${PYTHON_COMMAND[@]}" -m termin_build.repository_control \
         --repo-root "$SCRIPT_DIR" run "$TEST_PROFILE" \
         --platform linux --executor pytest --python "$PYTHON_BIN" \
-        --python-arg=--termin-overlay --python-arg="$OVERLAY_MANIFEST"; then
+        --python-arg=--termin-overlay --python-arg="$OVERLAY_MANIFEST" \
+        "${PLANNER_PLAN_ARGS[@]}"; then
         failures+=("manifest Python suites")
     fi
 

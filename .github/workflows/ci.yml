@@ -14,6 +14,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── Planner inventory ──────────────────────────────────────────
+  plan-pr-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Validate manifests and generate PR plan
+        env:
+          PYTHONPATH: ${{ github.workspace }}/termin-build-tools
+        run: |
+          python -m termin_build.repository_control --repo-root . check
+          mkdir -p build/ci-plans
+          python -m termin_build.repository_control --repo-root . \
+            plan pr --platform linux --json > build/ci-plans/pr-linux.json
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: ci-plans
+          path: build/ci-plans/
+          retention-days: 1
+
   # ── 0. Python lint ─────────────────────────────────────────────
   lint-python:
     runs-on: ubuntu-latest
@@ -136,7 +162,7 @@ jobs:
 
   # ── 2. Test C++ libraries ────────────────────────────────────────
   test-cpp-libs:
-    needs: build-cpp-libs
+    needs: [build-cpp-libs, plan-pr-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -153,11 +179,28 @@ jobs:
           name: sdk-cpp
           path: sdk/
 
+      - uses: actions/download-artifact@v5
+        with:
+          name: ci-plans
+          path: build/ci-plans/
+
       - name: Restore SDK executable permissions
         run: chmod +x sdk/bin/*
 
       - name: Run C++ tests
+        env:
+          TERMIN_TEST_PLAN: ${{ github.workspace }}/build/ci-plans/pr-linux.json
         run: ./run-tests-cpp.sh
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: ctest-execution-manifest
+          path: |
+            build/Release-tests/ctest-selection.json
+            build/Release-tests/ctest-execution-manifest.json
+            build/Release-tests/ctest-results.xml
+          retention-days: 7
 
   # ── 3. Build nanobind SDK + Python bindings ────────────────────
   build-bindings:
@@ -206,7 +249,7 @@ jobs:
 
   # ── 4. Test pip packages ───────────────────────────────────────
   test-pip-packages:
-    needs: build-bindings
+    needs: [build-bindings, plan-pr-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -225,6 +268,11 @@ jobs:
         with:
           name: sdk-full
           path: sdk/
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: ci-plans
+          path: build/ci-plans/
 
       - name: Restore SDK executable permissions
         run: chmod +x sdk/bin/*
@@ -246,11 +294,17 @@ jobs:
           TERMIN_SDK: ${{ github.workspace }}/sdk
           LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
         run: |
-          python -c "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())"
-          pytest termin-base/tests/python/ -v
-          pytest termin-graphics/tests/python/ -v
-          pytest termin-gui/python/tests/ -v
-          pytest termin-nodegraph/tests/ -v
+          ./setup-sdk-python-env.sh
+          TERMIN_TEST_PLAN=${{ github.workspace }}/build/ci-plans/pr-linux.json \
+          TERMIN_TEST_EXECUTION_MANIFEST=${{ github.workspace }}/build/python-execution-manifest.json \
+            ./run-tests-python.sh
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: python-execution-manifest
+          path: build/python-execution-manifest.json
+          retention-days: 7
 
   # ── 5. Build & test termin ───────────────────────────────────────
   test-termin:
