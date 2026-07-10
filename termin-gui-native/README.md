@@ -26,12 +26,11 @@ The current foundation includes:
 - recursive destroy is an explicit API and walks the canonical widget tree;
 - the creator-provided deleter may be null for borrowed/static widgets;
 - roots are explicit paint entry points, not an implicit ownership tree.
-- `termin/gui_native/widgets.hpp` adds a first C++ widget layer:
-  `NativeWidget`, `BoxLayout`, `HStack`, `VStack`, `GridLayout`, `GroupBox`,
-  `Splitter`, `ScrollArea`, `TabView`, `Panel`, `Button`, `Checkbox`,
-  `ProgressBar`, `TextInput`, `TextArea`, `SpinBox`, `SliderEdit`, `ComboBox`,
-  `IconButton`, `ImageWidget`, `Canvas`, `ListWidget`, `Separator`, `Slider`,
-  `Swatch`, `Label`, and `Spacer`;
+- the C++ widget layer keeps one public header per concrete class and, where
+  behavior is not inline, a matching implementation file
+  (`button.hpp`/`button.cpp`, `grid_layout.hpp`/`grid_layout.cpp`, and so on).
+  `termin/gui_native/widgets.hpp` is the compatibility umbrella for consumers
+  that want the complete widget set;
 - `tc_ui_document_layout_roots` and the input dispatch APIs exercise layout
   and event routing without making ownership implicit;
 - pointer, key and text input route from target to root over a snapshot of

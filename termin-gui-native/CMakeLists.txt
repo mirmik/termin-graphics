@@ -31,17 +31,33 @@ add_library(termin_gui_native SHARED
     src/tc_ui_document.c
     src/tc_ui_draw_list.cpp
     src/widgets_helpers.cpp
-    src/widgets_native.cpp
-    src/widgets_box_layout.cpp
-    src/widgets_grid_layout.cpp
-    src/widgets_containers.cpp
-    src/widgets_controls.cpp
-    src/widgets_text_input.cpp
-    src/widgets_text_area.cpp
-    src/widgets_value_controls.cpp
-    src/widgets_list.cpp
-    src/widgets_combo_box.cpp
-    src/widgets_visual_widgets.cpp
+    src/native_widget.cpp
+    src/box_layout.cpp
+    src/grid_layout.cpp
+    src/group_box.cpp
+    src/splitter.cpp
+    src/scroll_area.cpp
+    src/tab_view.cpp
+    src/panel.cpp
+    src/button.cpp
+    src/label.cpp
+    src/checkbox.cpp
+    src/progress_bar.cpp
+    src/separator.cpp
+    src/text_input.cpp
+    src/text_area.cpp
+    src/slider.cpp
+    src/spin_box.cpp
+    src/slider_edit.cpp
+    src/collection_model.cpp
+    src/selection_model.cpp
+    src/list_widget.cpp
+    src/combo_box.cpp
+    src/icon_button.cpp
+    src/image_widget.cpp
+    src/canvas.cpp
+    src/swatch.cpp
+    src/spacer.cpp
 )
 add_library(termin_gui_native::termin_gui_native ALIAS termin_gui_native)
 
