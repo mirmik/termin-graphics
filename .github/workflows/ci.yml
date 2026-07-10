@@ -33,6 +33,8 @@ jobs:
           mkdir -p build/ci-plans
           python -m termin_build.repository_control --repo-root . \
             plan pr --platform linux --json > build/ci-plans/pr-linux.json
+          python -m termin_build.repository_control --repo-root . \
+            plan sdk-installed --platform linux --json > build/ci-plans/sdk-installed-linux.json
 
       - uses: actions/upload-artifact@v5
         with:
@@ -308,7 +310,7 @@ jobs:
 
   # ── 5. Build & test termin ───────────────────────────────────────
   test-termin:
-    needs: build-bindings
+    needs: [build-bindings, plan-pr-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -329,6 +331,11 @@ jobs:
         with:
           name: sdk-full
           path: sdk/
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: ci-plans
+          path: build/ci-plans/
 
       - name: Restore SDK executable permissions
         run: chmod +x sdk/bin/*
@@ -358,9 +365,18 @@ jobs:
           LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
           PYTHONPATH: ${{ github.workspace }}/termin-app/install/lib/python:${{ github.workspace }}/sdk-python-staging:${{ github.workspace }}/sdk/lib/python
         run: |
-          python -c "from pathlib import Path; import termin.voxels.voxel_shader as vs; path = Path(vs.__file__).resolve(); expected = Path('${{ github.workspace }}/termin-app/install/lib/python').resolve(); print(f'termin.voxels.voxel_shader={path}'); assert expected in path.parents, f'expected termin-app install path first, got {path}'"
-          python -c "from tgfx import TcShader; shader = TcShader.from_builtin_catalog('termin-engine-voxel-display'); assert shader.is_valid, 'termin-engine-voxel-display failed preflight'"
-          pytest termin-app/tests/ -v
+          sdk/bin/termin_python -m termin_build.repository_control \
+            --repo-root . run sdk-installed --platform linux \
+            --executor process-smoke \
+            --plan-file ${{ github.workspace }}/build/ci-plans/sdk-installed-linux.json \
+            --report-output build/termin-app-installed-execution-manifest.json
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: termin-app-installed-execution-manifest
+          path: build/termin-app-installed-execution-manifest.json
+          retention-days: 7
 
   # ── 6. Build termin-csharp ──────────────────────────────────────
   test-csharp:

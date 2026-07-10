@@ -134,6 +134,10 @@
       "description": "Isolated editor-process smoke suites."
     },
     {
+      "id": "sdk-installed",
+      "description": "Installed SDK and application-bundle acceptance suites."
+    },
+    {
       "id": "device-android",
       "description": "Android device build, deploy, and runtime gates."
     },
@@ -160,6 +164,17 @@
       "executor": "process-smoke",
       "roots": ["scripts/smoke-cpp-module-cascade-hot-reload"],
       "reason": "Runs a real editor process and verifies C++ cascade module reload."
+    },
+    {
+      "id": "termin-app-installed-bundle-acceptance",
+      "module": "termin-app",
+      "executor": "process-smoke",
+      "roots": ["scripts/smoke-termin-app-installed-bundle"],
+      "profiles": ["sdk-installed"],
+      "environment": "installed-termin-app",
+      "platforms": ["linux"],
+      "capabilities": ["installed-sdk", "termin-app-bundle"],
+      "reason": "Proves imports and tests against termin-app's installed bundle rather than the checkout source overlay."
     },
     {
       "id": "android-apk-build-gate",
