@@ -198,9 +198,6 @@ void bind_texture(nb::module_& m) {
             },
             nb::arg("index"), nb::arg("generation"));
 
-    // Alias for backwards compatibility
-    m.attr("TextureData") = m.attr("TcTexture");
-
     // Registry functions
     m.def("tc_texture_count", []() { return tc_texture_count(); });
 

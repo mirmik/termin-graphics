@@ -553,7 +553,7 @@ void bind_tgfx2(nb::module_& m) {
         // metadata set via use_shader_resource_layout().
         .def("use_shader_resource_layout",
              [](tgfx::RenderContext2& self, const termin::TcShader& shader) {
-                 self.use_shader_resource_layout(shader.shader_ptr());
+                 self.use_shader_resource_layout(shader.get());
              },
              nb::arg("shader"))
         .def("bind_uniform_by_name",

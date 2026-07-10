@@ -109,9 +109,6 @@ public:
     // Get raw pointer (may return nullptr if handle is stale)
     tc_texture* get() const { return tc_texture_get(handle); }
 
-    // For backwards compatibility
-    tc_texture* texture_ptr() const { return get(); }
-
     // Query (safe - returns defaults if handle is stale)
     bool is_valid() const { return tc_texture_is_valid(handle); }
 

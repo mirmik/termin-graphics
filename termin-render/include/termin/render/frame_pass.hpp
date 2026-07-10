@@ -24,7 +24,7 @@ extern "C" {
 
 #include "tc_inspect_cpp.hpp"
 
-#include "tgfx/handles.hpp"
+#include "tgfx/frame_graph_resource.hpp"
 #include <termin/geom/rect2.hpp>
 #include <termin/render/resource_spec.hpp>
 #include <termin/render/render_export.hpp>

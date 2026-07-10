@@ -121,9 +121,6 @@ public:
     // Get raw pointer (may return nullptr if handle is stale)
     tc_shader* get() const { return tc_shader_get(handle); }
 
-    // For backwards compatibility
-    tc_shader* shader_ptr() const { return get(); }
-
     // Query (safe - returns defaults if handle is stale)
     bool is_valid() const { return tc_shader_is_valid(handle); }
 

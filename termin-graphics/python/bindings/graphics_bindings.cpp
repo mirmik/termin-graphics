@@ -1,20 +1,9 @@
-// graphics_bindings.cpp - GraphicsBackend, GPU handles, render types
+// graphics_bindings.cpp - Common graphics value types and render state
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
-#include <nanobind/stl/unique_ptr.h>
-#include <nanobind/stl/shared_ptr.h>
-#include <nanobind/stl/array.h>
-#include <nanobind/ndarray.h>
 
-#include "tgfx/handles.hpp"
 #include "tgfx/render_state.hpp"
 #include "tgfx/types.hpp"
-#include "tgfx/opengl/opengl_backend.hpp"
-#include <tcbase/tc_log.hpp>
-
-extern "C" {
-#include <tgfx/resources/tc_mesh.h>
-}
 
 namespace nb = nanobind;
 
@@ -168,78 +157,6 @@ void bind_render_state(nb::module_& m) {
         .def_static("opaque", &RenderState::opaque)
         .def_static("transparent", &RenderState::transparent)
         .def_static("wireframe", &RenderState::wireframe);
-}
-
-void bind_gpu_handles(nb::module_& m) {
-    // ShaderHandle
-    nb::class_<ShaderHandle>(m, "ShaderHandle")
-        .def("use", &ShaderHandle::use)
-        .def("stop", &ShaderHandle::stop)
-        .def("release", &ShaderHandle::release)
-        .def("set_uniform_int", &ShaderHandle::set_uniform_int)
-        .def("set_uniform_float", &ShaderHandle::set_uniform_float)
-        .def("set_uniform_vec2", &ShaderHandle::set_uniform_vec2)
-        .def("set_uniform_vec2", [](ShaderHandle& self, const char* name, nb::ndarray<float, nb::c_contig, nb::device::cpu> v) {
-            const float* ptr = v.data();
-            self.set_uniform_vec2(name, ptr[0], ptr[1]);
-        })
-        .def("set_uniform_vec2", [](ShaderHandle& self, const char* name, nb::tuple t) {
-            self.set_uniform_vec2(name, nb::cast<float>(t[0]), nb::cast<float>(t[1]));
-        })
-        .def("set_uniform_vec3", &ShaderHandle::set_uniform_vec3)
-        .def("set_uniform_vec3", [](ShaderHandle& self, const char* name, nb::ndarray<float, nb::c_contig, nb::device::cpu> v) {
-            const float* ptr = v.data();
-            self.set_uniform_vec3(name, ptr[0], ptr[1], ptr[2]);
-        })
-        .def("set_uniform_vec3", [](ShaderHandle& self, const char* name, nb::tuple t) {
-            self.set_uniform_vec3(name, nb::cast<float>(t[0]), nb::cast<float>(t[1]), nb::cast<float>(t[2]));
-        })
-        .def("set_uniform_vec4", &ShaderHandle::set_uniform_vec4)
-        .def("set_uniform_vec4", [](ShaderHandle& self, const char* name, nb::ndarray<float, nb::c_contig, nb::device::cpu> v) {
-            const float* ptr = v.data();
-            self.set_uniform_vec4(name, ptr[0], ptr[1], ptr[2], ptr[3]);
-        })
-        .def("set_uniform_vec4", [](ShaderHandle& self, const char* name, nb::tuple t) {
-            self.set_uniform_vec4(name, nb::cast<float>(t[0]), nb::cast<float>(t[1]), nb::cast<float>(t[2]), nb::cast<float>(t[3]));
-        })
-        .def("set_uniform_matrix4", [](ShaderHandle& self, const char* name, nb::ndarray<float, nb::c_contig, nb::device::cpu> matrix, bool transpose) {
-            if (matrix.size() < 16) {
-                throw std::runtime_error("Matrix must have at least 16 elements");
-            }
-            self.set_uniform_matrix4(name, const_cast<float*>(matrix.data()), transpose);
-        }, nb::arg("name"), nb::arg("matrix"), nb::arg("transpose") = true)
-        .def("set_uniform_matrix4_array", [](ShaderHandle& self, const char* name, nb::ndarray<float, nb::c_contig, nb::device::cpu> matrices, int count, bool transpose) {
-            self.set_uniform_matrix4_array(name, const_cast<float*>(matrices.data()), count, transpose);
-        }, nb::arg("name"), nb::arg("matrices"), nb::arg("count"), nb::arg("transpose") = true);
-
-    // GPUMeshHandle
-    nb::class_<GPUMeshHandle>(m, "GPUMeshHandle")
-        .def("draw", &GPUMeshHandle::draw)
-        .def("release", &GPUMeshHandle::release)
-        .def("delete", &GPUMeshHandle::release);
-
-    // GPUTextureHandle
-    nb::class_<GPUTextureHandle>(m, "GPUTextureHandle")
-        .def("bind", &GPUTextureHandle::bind, nb::arg("unit") = 0)
-        .def("release", &GPUTextureHandle::release)
-        .def("delete", &GPUTextureHandle::release)
-        .def("get_id", &GPUTextureHandle::get_id)
-        .def("get_width", &GPUTextureHandle::get_width)
-        .def("get_height", &GPUTextureHandle::get_height)
-        .def("is_valid", &GPUTextureHandle::is_valid);
-
-    // FramebufferHandle
-}
-
-void bind_graphics_backend(nb::module_& m) {
-    nb::enum_<DrawMode>(m, "DrawMode")
-        .value("Triangles", DrawMode::Triangles)
-        .value("Lines", DrawMode::Lines);
-
-
-    // init_opengl function
-    m.def("init_opengl", &init_opengl, "Initialize OpenGL via glad. Call after context creation.");
-
 }
 
 } // namespace tgfx_bindings
