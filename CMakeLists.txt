@@ -88,6 +88,10 @@ function(termin_label_tests_in_directory module)
     endforeach()
 endfunction()
 
+function(termin_add_test_labels test)
+    set_property(TEST "${test}" APPEND PROPERTY LABELS ${ARGN})
+endfunction()
+
 if(TERMIN_ENABLE_UNITY_BUILD)
     message(STATUS "Termin: unity build enabled for selected targets")
 endif()

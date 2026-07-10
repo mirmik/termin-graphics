@@ -92,6 +92,23 @@
       "environment": "cmake-top-level",
       "platforms": ["linux", "windows"],
       "capabilities": ["host"]
+    },
+    "process-smoke": {
+      "profiles": ["editor-smoke"],
+      "environment": "sdk-installed",
+      "platforms": ["linux", "windows"],
+      "capabilities": ["editor"]
+    },
+    "device": {
+      "environment": "device-toolchain",
+      "platforms": ["android", "quest"],
+      "capabilities": ["device"]
+    },
+    "manual": {
+      "profiles": ["manual"],
+      "environment": "human",
+      "platforms": ["linux", "windows", "android", "quest"],
+      "capabilities": ["human"]
     }
   },
   "profiles": [
@@ -130,6 +147,49 @@
     }
   ],
   "suites": [
+    {
+      "id": "editor-python-module-reload-smoke",
+      "module": "termin-app",
+      "executor": "process-smoke",
+      "roots": ["scripts/smoke-python-module-hot-reload"],
+      "reason": "Runs a real editor process and verifies explicit Python module reload."
+    },
+    {
+      "id": "editor-cpp-module-cascade-reload-smoke",
+      "module": "termin-app",
+      "executor": "process-smoke",
+      "roots": ["scripts/smoke-cpp-module-cascade-hot-reload"],
+      "reason": "Runs a real editor process and verifies C++ cascade module reload."
+    },
+    {
+      "id": "android-apk-build-gate",
+      "module": "termin-android",
+      "executor": "device",
+      "roots": ["build-android-apk.sh"],
+      "profiles": ["device-android"],
+      "platforms": ["android"],
+      "capabilities": ["android-sdk"],
+      "environment": "android-build",
+      "reason": "Build-only Android gate; deployment/runtime requires a separately attached device."
+    },
+    {
+      "id": "quest-openxr-apk-build-gate",
+      "module": "termin-openxr",
+      "executor": "device",
+      "roots": ["build-quest-openxr-apk.sh"],
+      "profiles": ["device-quest"],
+      "platforms": ["quest"],
+      "capabilities": ["android-sdk", "openxr-sdk", "quest-device"],
+      "environment": "quest-build",
+      "reason": "Quest/OpenXR package gate; a connected headset is required for runtime execution."
+    },
+    {
+      "id": "manual-smoke-check-catalog",
+      "module": "termin-app",
+      "executor": "manual",
+      "roots": ["docs/smoke-checks.md"],
+      "reason": "Human-facing desktop/backend smoke procedures are recorded here until each has an automated process or device executor."
+    },
     {"id": "termin-app-cpp-tests", "module": "termin-app", "executor": "ctest", "roots": ["termin-app/cpp/tests"]},
     {"id": "termin-base-tests-native", "module": "termin-base", "executor": "ctest", "roots": ["termin-base/tests"]},
     {"id": "termin-collision-tests-native", "module": "termin-collision", "executor": "ctest", "roots": ["termin-collision/tests"]},

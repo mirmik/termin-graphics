@@ -500,6 +500,9 @@ if(BUILD_TGFX2_TESTS)
             set_tests_properties(tgfx2_smoke PROPERTIES
                 TIMEOUT 10
                 SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
+            termin_add_test_labels(tgfx2_smoke
+                "termin:capability:window"
+                "termin:capability:glfw")
 
             add_executable(tgfx2_render_context_test tests/test_render_context2.cpp)
             target_link_libraries(tgfx2_render_context_test PRIVATE termin_graphics2 glfw)
@@ -508,6 +511,9 @@ if(BUILD_TGFX2_TESTS)
             set_tests_properties(tgfx2_render_context_test PROPERTIES
                 TIMEOUT 10
                 SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
+            termin_add_test_labels(tgfx2_render_context_test
+                "termin:capability:window"
+                "termin:capability:glfw")
         else()
             set(TERMIN_TGFX2_GLFW_AVAILABLE FALSE CACHE INTERNAL
                 "Whether the active build environment provides GLFW")
@@ -557,6 +563,9 @@ if(BUILD_TGFX2_TESTS)
             set_tests_properties(tgfx2_opengl_bound_resource_set PROPERTIES
                 TIMEOUT 10
                 SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
+            termin_add_test_labels(tgfx2_opengl_bound_resource_set
+                "termin:capability:window"
+                "termin:capability:opengl")
         endif()
     endif()
 
@@ -570,6 +579,8 @@ if(BUILD_TGFX2_TESTS)
         set_tests_properties(tgfx2_per_pipeline_layout_test PROPERTIES
             TIMEOUT 20
             SKIP_REGULAR_EXPRESSION "${TGFX2_VULKAN_RUNTIME_SKIP_RE}")
+        termin_add_test_labels(tgfx2_per_pipeline_layout_test
+            "termin:capability:vulkan")
 
         add_executable(tgfx2_vulkan_smoke tests/test_tgfx2_vulkan_smoke.cpp)
         target_compile_definitions(tgfx2_vulkan_smoke
@@ -582,6 +593,7 @@ if(BUILD_TGFX2_TESTS)
         set_tests_properties(tgfx2_vulkan_smoke PROPERTIES
             TIMEOUT 20
             SKIP_REGULAR_EXPRESSION "${TGFX2_VULKAN_RUNTIME_SKIP_RE}")
+        termin_add_test_labels(tgfx2_vulkan_smoke "termin:capability:vulkan")
     endif()
 
     if(TGFX2_ENABLE_VULKAN AND BUILD_TGFX2_WINDOW_TESTS)
@@ -611,6 +623,9 @@ if(BUILD_TGFX2_TESTS)
             set_tests_properties(tgfx2_vulkan_window PROPERTIES
                 TIMEOUT 10
                 SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
+            termin_add_test_labels(tgfx2_vulkan_window
+                "termin:capability:window"
+                "termin:capability:vulkan")
         endif()
     endif()
 
@@ -623,6 +638,7 @@ if(BUILD_TGFX2_TESTS)
         set_tests_properties(tgfx2_d3d11_smoke PROPERTIES
             TIMEOUT 10
             SKIP_REGULAR_EXPRESSION "D3D11CreateDevice failed|No D3D11")
+        termin_add_test_labels(tgfx2_d3d11_smoke "termin:capability:d3d11")
 
         if(BUILD_TGFX2_D3D11_WINDOW_TEST)
             set(SDL2_SMOKE_FOUND FALSE)
@@ -655,9 +671,12 @@ if(BUILD_TGFX2_TESTS)
                 endif()
                 termin_set_rpath_test(tgfx2_d3d11_window)
                 add_test(NAME tgfx2_d3d11_window COMMAND tgfx2_d3d11_window)
-                set_tests_properties(tgfx2_d3d11_window PROPERTIES
-                    TIMEOUT 10
-                    SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}|D3D11CreateDevice failed")
+            set_tests_properties(tgfx2_d3d11_window PROPERTIES
+                TIMEOUT 10
+                SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}|D3D11CreateDevice failed")
+            termin_add_test_labels(tgfx2_d3d11_window
+                "termin:capability:window"
+                "termin:capability:d3d11")
             endif()
         endif()
     endif()
