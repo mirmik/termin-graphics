@@ -94,6 +94,8 @@ set(TERMIN_RENDER_SOURCES
     src/tc_project_settings.c
     src/tc_inspect_pass_adapter.cpp
     src/tc_pass_ref.cpp
+    src/unknown_pass.cpp
+    src/unknown_pass_ops.cpp
 )
 
 set(TERMIN_RENDER_HEADERS
@@ -126,6 +128,8 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/execute_context.hpp
     include/termin/render/drawable.hpp
     include/termin/render/tc_pass.hpp
+    include/termin/render/unknown_pass.hpp
+    include/termin/render/unknown_pass_ops.hpp
     include/termin/render/frame_pass.hpp
     include/termin/render/frame_uniforms.hpp
     include/termin/render/frame_debug_capture_pass.hpp
@@ -272,6 +276,13 @@ if(TERMIN_RENDER_BUILD_TESTS)
     target_link_libraries(termin_render_pass_ownership_test PRIVATE termin_render)
     add_test(NAME termin_render_pass_ownership_test COMMAND termin_render_pass_ownership_test)
 
+    add_executable(termin_render_unknown_pass_test tests/test_unknown_pass.cpp)
+    target_include_directories(termin_render_unknown_pass_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_render_unknown_pass_test PRIVATE termin_render)
+    add_test(NAME termin_render_unknown_pass_test COMMAND termin_render_unknown_pass_test)
+
     add_executable(termin_render_item_submission_test tests/test_render_item_submission.cpp)
     target_include_directories(termin_render_item_submission_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
@@ -288,6 +299,7 @@ if(TERMIN_RENDER_BUILD_TESTS)
         termin_render_shader_contract_test
         termin_render_shader_abi_test
         termin_render_pass_ownership_test
+        termin_render_unknown_pass_test
         termin_render_item_submission_test
         PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )

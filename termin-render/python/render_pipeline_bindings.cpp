@@ -18,6 +18,9 @@ extern "C" {
 #include "termin/render/tc_pass.hpp"
 #include "termin/render/graph_compiler.hpp"
 #include "termin/render/fbo_pool.hpp"
+#include "termin/render/unknown_pass.hpp"
+#include "termin/bindings/tc_value_helpers.hpp"
+#include "unknown_pass_serialization.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/pixel_format_utils.hpp"
 
@@ -44,6 +47,61 @@ tc_pass* tc_pass_ptr_from_python_pass(nb::object pass_obj, const char* context) 
         throw std::runtime_error(std::string(context) + ": _tc_pass is invalid");
     }
     return ref.ptr();
+}
+
+tc_pass* make_unknown_pass_from_serialized(const std::string& original_type, nb::dict data) {
+    ensure_unknown_pass_registered();
+    tc_pass* raw = tc_pass_registry_create("UnknownPass");
+    if (!raw) throw std::runtime_error("failed to create UnknownPass");
+    auto* unknown = dynamic_cast<UnknownPass*>(CxxFramePass::from_tc(raw));
+    if (!unknown) {
+        tc_pass_release(raw);
+        throw std::runtime_error("UnknownPass registry returned incompatible object");
+    }
+
+    unknown->original_type = original_type;
+    tc_value_free(&unknown->original_data);
+    unknown->original_data = data.contains("data")
+        ? py_to_tc_value(data["data"])
+        : tc_value_dict_new();
+    if (data.contains("pass_name")) tc_pass_set_name(raw, nb::cast<std::string>(data["pass_name"]).c_str());
+    if (data.contains("enabled")) raw->enabled = nb::cast<bool>(data["enabled"]);
+    if (data.contains("passthrough")) raw->passthrough = nb::cast<bool>(data["passthrough"]);
+    if (data.contains("viewport_name") && !data["viewport_name"].is_none()) {
+        tc_pass_set_viewport_name(raw, nb::cast<std::string>(data["viewport_name"]).c_str());
+    }
+
+    if (data.contains("_unknown_graph")) {
+        nb::dict graph = nb::cast<nb::dict>(data["_unknown_graph"]);
+        if (graph.contains("reads")) unknown->original_reads = nb::cast<std::vector<std::string>>(graph["reads"]);
+        if (graph.contains("writes")) unknown->original_writes = nb::cast<std::vector<std::string>>(graph["writes"]);
+        if (graph.contains("inplace_aliases")) {
+            unknown->original_inplace_aliases =
+                nb::cast<std::vector<std::pair<std::string, std::string>>>(graph["inplace_aliases"]);
+        }
+        if (graph.contains("internal_symbols")) {
+            unknown->original_internal_symbols =
+                nb::cast<std::vector<std::string>>(graph["internal_symbols"]);
+        }
+        if (graph.contains("resource_specs")) {
+            for (nb::handle value : nb::cast<nb::list>(graph["resource_specs"])) {
+                nb::dict item = nb::cast<nb::dict>(value);
+                ResourceSpec spec;
+                if (item.contains("resource")) spec.resource = nb::cast<std::string>(item["resource"]);
+                if (item.contains("resource_type")) spec.resource_type = nb::cast<std::string>(item["resource_type"]);
+                if (item.contains("size")) spec.size = nb::cast<std::pair<int, int>>(item["size"]);
+                if (item.contains("clear_color")) spec.clear_color = nb::cast<std::array<double, 4>>(item["clear_color"]);
+                if (item.contains("clear_depth")) spec.clear_depth = nb::cast<float>(item["clear_depth"]);
+                if (item.contains("format")) spec.format = nb::cast<std::string>(item["format"]);
+                if (item.contains("samples")) spec.samples = nb::cast<int>(item["samples"]);
+                if (item.contains("viewport_name")) spec.viewport_name = nb::cast<std::string>(item["viewport_name"]);
+                if (item.contains("scale")) spec.scale = nb::cast<float>(item["scale"]);
+                if (item.contains("filter")) spec.filter = static_cast<TextureFilter>(nb::cast<int>(item["filter"]));
+                unknown->original_resource_specs.push_back(std::move(spec));
+            }
+        }
+    }
+    return raw;
 }
 
 std::string resource_type_for_texture(const RenderPipeline& pipeline, const PipelineTextureEntry& entry) {
@@ -235,6 +293,10 @@ void bind_render_pipeline(nb::module_& m) {
             for (size_t i = 0; i < self.pass_count(); i++) {
                 tc_pass* p = self.get_pass_at(i);
                 if (!p) continue;
+                if (std::string(tc_pass_type_name(p)) == "UnknownPass") {
+                    passes_list.append(serialize_unknown_pass_envelope(p));
+                    continue;
+                }
                 TcPassRef ref(p);
                 nb::object serialized = nb::cast(ref).attr("serialize")();
                 if (!serialized.is_none()) passes_list.append(serialized);
@@ -304,6 +366,12 @@ void bind_render_pipeline(nb::module_& m) {
                                 native_ref_obj.attr("deserialize_data")(pass_data["data"]);
                             }
                             tc_pipeline_add_pass_take(pipeline->handle(), native_pass);
+                            continue;
+                        }
+
+                        if (!pass_type.empty() && !tc_pass_registry_has(pass_type.c_str())) {
+                            tc_pass* unknown = make_unknown_pass_from_serialized(pass_type, pass_data);
+                            tc_pipeline_add_pass_take(pipeline->handle(), unknown);
                             continue;
                         }
 

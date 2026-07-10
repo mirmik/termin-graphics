@@ -202,8 +202,14 @@ static inline void tc_pass_release(tc_pass* p) {
 TC_API void tc_pass_set_name(tc_pass* p, const char* name);
 TC_API void tc_pass_set_enabled(tc_pass* p, bool enabled);
 TC_API void tc_pass_set_passthrough(tc_pass* p, bool passthrough);
+TC_API void tc_pass_set_viewport_name(tc_pass* p, const char* viewport_name);
 
 typedef tc_pass* (*tc_pass_factory)(void* userdata);
+typedef bool (*tc_pass_prepare_unload_fn)(
+    const char* type_name,
+    void* context,
+    void* user_data
+);
 
 TC_API void tc_pass_registry_register(
     const char* type_name,
@@ -223,6 +229,10 @@ TC_API const char* tc_pass_registry_type_at(size_t index);
 TC_API tc_pass_kind tc_pass_registry_get_kind(const char* type_name);
 TC_API tc_type_entry* tc_pass_registry_get_entry(const char* type_name);
 TC_API size_t tc_pass_registry_instance_count(const char* type_name);
+TC_API void tc_pass_registry_set_prepare_unload_callback(
+    tc_pass_prepare_unload_fn callback,
+    void* user_data
+);
 TC_API bool tc_pass_link_registered_type(tc_pass* p, const char* type_name);
 TC_API void tc_pass_unlink_from_registry(tc_pass* p);
 
