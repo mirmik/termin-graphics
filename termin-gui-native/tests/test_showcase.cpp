@@ -3,12 +3,52 @@
 
 #include <array>
 #include <cassert>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 
 using namespace termin::gui_native;
 
 namespace {
+
+bool measure_test_text(void *, const char *text, size_t byte_length,
+                       float font_size, tc_ui_text_metrics *out_metrics) {
+  if (!text || !out_metrics || font_size <= 0.0f) {
+    return false;
+  }
+
+  float width = 0.0f;
+  size_t offset = 0;
+  while (offset < byte_length) {
+    const uint8_t first = static_cast<uint8_t>(text[offset]);
+    if (first < 0x80u) {
+      if (first == static_cast<uint8_t>('i')) {
+        width += font_size * 0.25f;
+      } else {
+        width += font_size * 0.50f;
+      }
+      offset += 1;
+    } else if ((first & 0xe0u) == 0xc0u && offset + 2 <= byte_length) {
+      width += font_size * 0.60f;
+      offset += 2;
+    } else if ((first & 0xf0u) == 0xe0u && offset + 3 <= byte_length) {
+      width += font_size * 0.70f;
+      offset += 3;
+    } else if ((first & 0xf8u) == 0xf0u && offset + 4 <= byte_length) {
+      width += font_size;
+      offset += 4;
+    } else {
+      return false;
+    }
+  }
+
+  out_metrics->width = width;
+  out_metrics->height = font_size;
+  out_metrics->ascent = font_size * 0.8f;
+  out_metrics->descent = font_size * 0.2f;
+  out_metrics->line_height = font_size * 1.2f;
+  return true;
+}
 
 size_t count_commands(const tc_ui_draw_list *draw_list,
                       tc_ui_draw_command_type type) {
@@ -33,6 +73,7 @@ void require_equal(size_t actual, size_t expected, const char *label) {
 
 void test_showcase_builds_stable_headless_snapshot() {
   Document document;
+  document.set_text_measurer(&measure_test_text, nullptr);
   ShowcaseRefs refs = build_showcase(document);
 
   assert(refs.progress);
@@ -85,13 +126,13 @@ void test_showcase_builds_stable_headless_snapshot() {
   tc_ui_paint_context *paint_context = tc_ui_paint_context_create(draw_list);
   document.paint(paint_context);
 
-  require_equal(tc_ui_draw_list_command_count(draw_list), 240,
+  require_equal(tc_ui_draw_list_command_count(draw_list), 231,
                 "showcase total commands");
-  require_equal(count_commands(draw_list, TC_UI_DRAW_FILL_RECT), 42,
+  require_equal(count_commands(draw_list, TC_UI_DRAW_FILL_RECT), 33,
                 "showcase fill commands");
-  require_equal(count_commands(draw_list, TC_UI_DRAW_STROKE_RECT), 27,
+  require_equal(count_commands(draw_list, TC_UI_DRAW_STROKE_RECT), 18,
                 "showcase stroke commands");
-  require_equal(count_commands(draw_list, TC_UI_DRAW_LINE), 15,
+  require_equal(count_commands(draw_list, TC_UI_DRAW_LINE), 12,
                 "showcase line commands");
   require_equal(count_commands(draw_list, TC_UI_DRAW_TEXT), 56,
                 "showcase text commands");
