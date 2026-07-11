@@ -37,6 +37,7 @@ struct ShaderResourceBinding {
 };
 
 bool read_file(const std::string& path, std::string& out);
+bool ensure_parent_directory(const std::filesystem::path& path, const char* label);
 bool write_spirv(const std::string& path, const std::vector<uint32_t>& words);
 std::string regex_escape(const std::string& value);
 bool is_identifier_char(char ch);
