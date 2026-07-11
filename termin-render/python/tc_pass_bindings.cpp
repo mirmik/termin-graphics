@@ -1,5 +1,6 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/set.h>
+#include <nanobind/stl/pair.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
@@ -26,6 +27,8 @@ extern "C" {
 #include "termin/render/frame_pass.hpp"
 #include "termin/render/resource_spec.hpp"
 #include "termin/render/tc_pass.hpp"
+#include "termin/render/unknown_pass.hpp"
+#include "unknown_pass_serialization.hpp"
 
 namespace nb = nanobind;
 
@@ -383,6 +386,16 @@ void bind_tc_pass_runtime(nb::module_& m) {
         .def("valid", &TcPassRef::valid)
         .def_prop_rw("pass_name", &TcPassRef::pass_name, &TcPassRef::set_pass_name)
         .def_prop_ro("type_name", &TcPassRef::type_name)
+        .def_prop_ro("is_placeholder", [](TcPassRef& self) {
+            return self.ptr() && std::string(tc_pass_type_name(self.ptr())) == "UnknownPass";
+        })
+        .def_prop_ro("original_type", [](TcPassRef& self) -> nb::object {
+            if (!self.ptr() || std::string(tc_pass_type_name(self.ptr())) != "UnknownPass") {
+                return nb::none();
+            }
+            auto* unknown = dynamic_cast<UnknownPass*>(CxxFramePass::from_tc(self.ptr()));
+            return unknown ? nb::cast(unknown->original_type) : nb::none();
+        })
         .def_prop_rw("enabled", &TcPassRef::enabled, &TcPassRef::set_enabled)
         .def_prop_rw("passthrough", &TcPassRef::passthrough, &TcPassRef::set_passthrough)
         .def("is_inplace", &TcPassRef::is_inplace)
@@ -545,6 +558,10 @@ void bind_tc_pass_runtime(nb::module_& m) {
             tc_pass* p = self.ptr();
             if (!p) {
                 return nb::none();
+            }
+
+            if (std::string(tc_pass_type_name(p)) == "UnknownPass") {
+                return serialize_unknown_pass_envelope(p);
             }
 
             if (p->kind == TC_EXTERNAL_PASS && p->body && p->native_language == TC_LANGUAGE_PYTHON) {
@@ -987,6 +1004,10 @@ void bind_tc_pass_runtime(nb::module_& m) {
                 nb::dict info;
                 info["pass_name"] = infos[i].pass_name ? nb::str(infos[i].pass_name) : nb::none();
                 info["type_name"] = infos[i].type_name ? nb::str(infos[i].type_name) : nb::none();
+                if (infos[i].ptr && std::string(tc_pass_type_name(infos[i].ptr)) == "UnknownPass") {
+                    auto* unknown = dynamic_cast<UnknownPass*>(CxxFramePass::from_tc(infos[i].ptr));
+                    if (unknown) info["original_type"] = unknown->original_type;
+                }
                 info["pipeline_handle"] = nb::make_tuple(infos[i].pipeline_handle.index, infos[i].pipeline_handle.generation);
                 info["pipeline_name"] = infos[i].pipeline_name ? nb::str(infos[i].pipeline_name) : nb::none();
                 info["enabled"] = infos[i].enabled;

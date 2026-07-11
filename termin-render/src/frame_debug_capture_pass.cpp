@@ -99,6 +99,10 @@ bool FrameDebugCapturePass::source_is_depth() const {
            source_resource == "RT_DEPTH";
 }
 
-TC_REGISTER_FRAME_PASS_DERIVED(FrameDebugCapturePass, CxxFramePass);
+TC_DEFINE_FRAME_PASS_FACTORY_DERIVED(FrameDebugCapturePass, CxxFramePass);
+
+void FrameDebugCapturePass::register_type() {
+    register_frame_pass_FrameDebugCapturePass();
+}
 
 } // namespace termin

@@ -15,6 +15,8 @@
 #endif
 
 static tc_type_registry* g_pass_registry = NULL;
+static tc_pass_prepare_unload_fn g_prepare_unload_callback = NULL;
+static void* g_prepare_unload_user_data = NULL;
 
 #define TC_RUNTIME_TYPE_FACET_FRAME_PASS "termin.render.frame_pass"
 
@@ -30,6 +32,33 @@ static void destroy_pass_facet(void* payload) {
         return;
     }
     tc_type_registry_unregister(g_pass_registry, entry->type_name);
+}
+
+static bool prepare_pass_facet_unload(
+    const char* type_name,
+    void* payload,
+    void* context
+) {
+    (void)payload;
+    const size_t instance_count = tc_runtime_type_registry_instance_count(type_name);
+    if (!type_name || instance_count == 0) {
+        return true;
+    }
+    if (!g_prepare_unload_callback) {
+        tc_log(
+            TC_LOG_ERROR,
+            "[tc_pass] refusing to unload pass type '%s' with %zu live instance(s): "
+            "no prepare-unload callback is installed",
+            type_name,
+            instance_count
+        );
+        return false;
+    }
+    return g_prepare_unload_callback(
+        type_name,
+        context,
+        g_prepare_unload_user_data
+    );
 }
 
 typedef struct pass_type_collect_ctx {
@@ -117,6 +146,14 @@ void tc_pass_set_passthrough(tc_pass* p, bool passthrough) {
     if (p) p->passthrough = passthrough;
 }
 
+void tc_pass_set_viewport_name(tc_pass* p, const char* viewport_name) {
+    if (!p) return;
+    free(p->viewport_name);
+    p->viewport_name = viewport_name && viewport_name[0]
+        ? tc_strdup(viewport_name)
+        : NULL;
+}
+
 void tc_pass_registry_register(
     const char* type_name,
     tc_pass_factory factory,
@@ -134,11 +171,12 @@ void tc_pass_registry_register(
     );
     if (entry) {
         tc_runtime_type_registry_ensure_type(type_name);
-        tc_runtime_type_registry_set_facet(
+        tc_runtime_type_registry_set_facet_with_lifecycle(
             type_name,
             TC_RUNTIME_TYPE_FACET_FRAME_PASS,
             entry,
             destroy_pass_facet,
+            prepare_pass_facet_unload,
             1
         );
     }
@@ -198,6 +236,14 @@ size_t tc_pass_registry_instance_count(const char* type_name) {
     return tc_runtime_type_registry_instance_count(type_name);
 }
 
+void tc_pass_registry_set_prepare_unload_callback(
+    tc_pass_prepare_unload_fn callback,
+    void* user_data
+) {
+    g_prepare_unload_callback = callback;
+    g_prepare_unload_user_data = user_data;
+}
+
 void tc_pass_unlink_from_registry(tc_pass* p) {
     if (!p) return;
     tc_runtime_type_registry_unlink_instance(&p->runtime_type_link);
@@ -206,6 +252,8 @@ void tc_pass_unlink_from_registry(tc_pass* p) {
 }
 
 void tc_pass_registry_cleanup(void) {
+    g_prepare_unload_callback = NULL;
+    g_prepare_unload_user_data = NULL;
     pass_type_collect_ctx ctx = { NULL, 0, 0 };
     tc_runtime_type_registry_foreach_type_with_facet(
         TC_RUNTIME_TYPE_FACET_FRAME_PASS,

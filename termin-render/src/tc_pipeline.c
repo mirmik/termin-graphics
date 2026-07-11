@@ -395,6 +395,31 @@ tc_pass* tc_pipeline_get_pass_at(tc_pipeline_handle h, size_t index) {
     return p->passes[index];
 }
 
+bool tc_pipeline_replace_pass_at_take(
+    tc_pipeline_handle h,
+    size_t index,
+    tc_pass* replacement
+) {
+    if (!pipeline_handle_alive(h) || !replacement) return false;
+    tc_pipeline* pipeline = &g_pipeline_pool->pipelines[h.index];
+    if (index >= pipeline->pass_count) return false;
+    if (pipeline->passes[index] == replacement) return false;
+    if (tc_pipeline_handle_valid(replacement->owner_pipeline)) {
+        tc_log(TC_LOG_ERROR, "tc_pipeline_replace_pass_at_take: replacement already belongs to a pipeline");
+        return false;
+    }
+
+    tc_pass* previous = pipeline->passes[index];
+    replacement->owner_pipeline = h;
+    pipeline->passes[index] = replacement;
+    if (previous) {
+        previous->owner_pipeline = TC_PIPELINE_HANDLE_INVALID;
+        tc_pass_release(previous);
+    }
+    pipeline->dirty = true;
+    return true;
+}
+
 size_t tc_pipeline_pass_count(tc_pipeline_handle h) {
     if (!pipeline_handle_alive(h)) return 0;
     return g_pipeline_pool->pipelines[h.index].pass_count;
