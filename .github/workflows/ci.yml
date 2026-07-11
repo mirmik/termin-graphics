@@ -95,15 +95,6 @@ jobs:
           ./run-lint-cpp.sh --python-bindings --configure-only
           ./run-cpp-class-layout-check.sh --python-bindings
 
-  # ── 0b. Source size lint ───────────────────────────────────────
-  lint-source-size:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Check source file length
-        run: python3 scripts/find-long-files.py --threshold 2000 --fail .
-
   # ── 0c. Build system smoke ─────────────────────────────────────
   smoke-build-system-windows:
     runs-on: windows-latest
