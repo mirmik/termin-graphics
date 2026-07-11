@@ -1,7 +1,5 @@
 // text3d_renderer.cpp - World-space plane text on tgfx2.
 //
-// Port of termin-graphics/python/tgfx/text3d.py.
-//
 // Vertex layout is explicit:
 //   POSITION  = glyph anchor point in world space
 //   TEXCOORD0 = (offset_x, offset_y, u, v)

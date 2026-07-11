@@ -273,12 +273,6 @@ TEST_CASE("bound resource groups are preferred over flat compatibility bindings"
         grouped_value,
     });
 
-    tgfx::ResourceBinding legacy_numeric;
-    legacy_numeric.kind = tgfx::ResourceBinding::Kind::UniformBuffer;
-    legacy_numeric.binding = 4;
-    legacy_numeric.buffer = tgfx::BufferHandle{22};
-    legacy_numeric.range = 32;
-
     CHECK(tgfx::bound_resource_binding_count(grouped_desc) == 2u);
     CHECK(tgfx::dirty_bound_resource_binding_count(grouped_desc) == 1u);
     uint32_t dirty_binding_sum = 0;
@@ -289,20 +283,6 @@ TEST_CASE("bound resource groups are preferred over flat compatibility bindings"
         });
     CHECK(dirty_binding_sum == 2u);
 
-    tgfx::ResourceSetDesc legacy_desc =
-        tgfx::legacy_resource_set_desc_from_bound(
-            grouped_desc,
-            std::vector<tgfx::ResourceBinding>{legacy_numeric});
-
-    CHECK(legacy_desc.resource_layout_token == grouped_desc.resource_layout_token);
-    CHECK(legacy_desc.descriptor_set_layout == grouped_desc.resource_layout_token);
-    REQUIRE(legacy_desc.bindings.size() == 3u);
-    CHECK(legacy_desc.bindings[0].binding == 4u);
-    CHECK(legacy_desc.bindings[0].buffer == tgfx::BufferHandle{22});
-    CHECK(legacy_desc.bindings[1].binding == 2u);
-    CHECK(legacy_desc.bindings[1].buffer == tgfx::BufferHandle{11});
-    CHECK(legacy_desc.bindings[1].range == 64u);
-    CHECK(legacy_desc.bindings[2].binding == 3u);
 }
 
 TEST_CASE("backend binding plan validates D3D11 register class and stage conflicts") {

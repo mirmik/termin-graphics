@@ -310,3 +310,5 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/termin_gui_nativeConfigVersion.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/termin_gui_native
 )
+
+termin_label_tests_in_directory("termin-gui-native")

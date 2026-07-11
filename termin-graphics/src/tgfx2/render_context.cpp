@@ -417,21 +417,6 @@ void RenderContext2::ensure_cached_vertex_buffer_slots(uint32_t count) {
 // Resource bindings (UBOs, textures, samplers)
 // ============================================================================
 
-static ResourceBinding* find_binding(
-    std::vector<ResourceBinding>& bindings,
-    uint32_t binding,
-    ResourceBinding::Kind kind,
-    uint32_t set = 0,
-    uint32_t array_element = 0
-) {
-    for (auto& b : bindings) {
-        if (b.set == set && b.binding == binding && b.kind == kind && b.array_element == array_element) {
-            return &b;
-        }
-    }
-    return nullptr;
-}
-
 RenderContext2::ResourceScope RenderContext2::scope_from_shader_resource(
     uint32_t shader_scope
 ) {
@@ -462,10 +447,6 @@ ShaderResourceScope RenderContext2::shader_scope_from_resource_scope(
         default:
             return ShaderResourceScope::Unknown;
     }
-}
-
-RenderContext2::ResourceScope RenderContext2::default_numeric_scope() {
-    return ResourceScope::Unknown;
 }
 
 void RenderContext2::mark_binding_scope_dirty(ResourceScope scope) {
@@ -524,17 +505,6 @@ bool same_bound_resource_value(
         a.array_element == b.array_element;
 }
 
-ResourceBinding* RenderContext2::find_pending_binding(
-    ResourceScope scope,
-    uint32_t binding,
-    ResourceBinding::Kind kind,
-    uint32_t set,
-    uint32_t array_element
-) {
-    auto& bucket = pending_binding_buckets_[static_cast<size_t>(scope)];
-    return find_binding(bucket.numeric, binding, kind, set, array_element);
-}
-
 BoundResourceBinding* RenderContext2::find_planned_binding(
     std::vector<BoundResourceBinding>& bindings,
     const BackendBoundResourceSlot& slot,
@@ -548,24 +518,6 @@ BoundResourceBinding* RenderContext2::find_planned_binding(
         }
     }
     return nullptr;
-}
-
-void RenderContext2::upsert_pending_binding(
-    ResourceScope scope,
-    const ResourceBinding& binding
-) {
-    auto& bucket = pending_binding_buckets_[static_cast<size_t>(scope)];
-    ResourceBinding* existing = find_binding(
-        bucket.numeric,
-        binding.binding,
-        binding.kind,
-        binding.set,
-        binding.array_element);
-    if (existing) {
-        *existing = binding;
-    } else {
-        bucket.numeric.push_back(binding);
-    }
 }
 
 void RenderContext2::upsert_pending_planned_binding(
@@ -591,8 +543,7 @@ void RenderContext2::upsert_pending_planned_binding(
 
 bool RenderContext2::pending_binding_buckets_empty() const {
     for (const ResourceBindingBucket& bucket : pending_binding_buckets_) {
-        if (!bucket.numeric.empty() ||
-            !bucket.planned.empty()) {
+        if (!bucket.planned.empty()) {
             return false;
         }
     }
@@ -601,7 +552,6 @@ bool RenderContext2::pending_binding_buckets_empty() const {
 
 void RenderContext2::clear_pending_binding_buckets() {
     for (ResourceBindingBucket& bucket : pending_binding_buckets_) {
-        bucket.numeric.clear();
         bucket.planned.clear();
     }
     mark_all_binding_scopes_dirty();
@@ -750,75 +700,6 @@ const BackendBindingPlanEntry* RenderContext2::active_backend_binding_for(
     return nullptr;
 }
 
-void RenderContext2::bind_storage_buffer(uint32_t binding, BufferHandle buffer,
-                                          uint64_t offset, uint64_t range,
-                                          uint32_t set) {
-    ResourceBinding* existing =
-        find_pending_binding(
-            default_numeric_scope(),
-            binding,
-            ResourceBinding::Kind::StorageBuffer,
-            set);
-    if (existing) {
-        if (existing->buffer == buffer && existing->offset == offset &&
-            existing->range == range) {
-            return;
-        }
-        existing->buffer = buffer;
-        existing->offset = offset;
-        existing->range = range;
-    } else {
-        ResourceBinding b;
-        b.set = set;
-        b.kind = ResourceBinding::Kind::StorageBuffer;
-        b.binding = binding;
-        b.buffer = buffer;
-        b.offset = offset;
-        b.range = range;
-        upsert_pending_binding(default_numeric_scope(), b);
-    }
-    mark_binding_scope_dirty(default_numeric_scope());
-}
-
-void RenderContext2::bind_sampled_texture(uint32_t binding, TextureHandle tex,
-                                           SamplerHandle sampler, uint32_t set) {
-    bind_sampled_texture_array_element(binding, 0, tex, sampler, set);
-}
-
-void RenderContext2::bind_sampled_texture_array_element(
-    uint32_t binding,
-    uint32_t array_element,
-    TextureHandle tex,
-    SamplerHandle sampler,
-    uint32_t set
-) {
-    ResourceBinding* existing =
-        find_pending_binding(
-            default_numeric_scope(),
-            binding,
-            ResourceBinding::Kind::SampledTexture,
-            set,
-            array_element
-        );
-    if (existing) {
-        if (existing->texture == tex && existing->sampler == sampler) {
-            return;
-        }
-        existing->texture = tex;
-        existing->sampler = sampler;
-    } else {
-        ResourceBinding b;
-        b.set = set;
-        b.kind = ResourceBinding::Kind::SampledTexture;
-        b.binding = binding;
-        b.array_element = array_element;
-        b.texture = tex;
-        b.sampler = sampler;
-        upsert_pending_binding(default_numeric_scope(), b);
-    }
-    mark_binding_scope_dirty(default_numeric_scope());
-}
-
 void RenderContext2::clear_resource_bindings() {
     if (pending_binding_buckets_empty()) return;
     clear_pending_binding_buckets();
@@ -856,11 +737,8 @@ void RenderContext2::use_shader_resource_layout(const struct ::tc_shader* shader
                render_context_backend_name(device_.backend_type()),
                plan_error.empty() ? "unknown error" : plan_error.c_str());
     }
-    // When the layout changes, resolved bindings and per-draw numeric leftovers
-    // must not be flushed against the new shader.
-    // Frame/pass/material numeric buckets are kept for legacy compatibility;
-    // migrated resources should enter those buckets through resource layout
-    // resolution after this call.
+    // Bindings resolved for the previous layout must not be flushed against
+    // the new shader.
     bool cleared = false;
     for (size_t i = 0; i < pending_binding_buckets_.size(); ++i) {
         ResourceBindingBucket& bucket = pending_binding_buckets_[i];
@@ -868,18 +746,6 @@ void RenderContext2::use_shader_resource_layout(const struct ::tc_shader* shader
             bucket.planned.clear();
             mark_binding_scope_dirty(static_cast<ResourceScope>(i));
             cleared = true;
-        }
-    }
-    if (layout_changed) {
-        for (ResourceScope scope :
-             {ResourceScope::Unknown, ResourceScope::Draw, ResourceScope::Transient}) {
-            ResourceBindingBucket& bucket =
-                pending_binding_buckets_[static_cast<size_t>(scope)];
-            if (!bucket.numeric.empty()) {
-                bucket.numeric.clear();
-                mark_binding_scope_dirty(scope);
-                cleared = true;
-            }
         }
     }
     if (cleared) {
@@ -1221,31 +1087,15 @@ void RenderContext2::flush_resource_set() {
             device_.pipeline_resource_layout_token(last_bound_pipeline_);
     }
 
-    std::vector<ResourceBinding> legacy_numeric_bindings;
-    size_t numeric_count = 0;
-    for (const ResourceBindingBucket& bucket : pending_binding_buckets_) {
-        numeric_count += bucket.numeric.size();
-    }
-    legacy_numeric_bindings.reserve(numeric_count);
-    for (const ResourceBindingBucket& bucket : pending_binding_buckets_) {
-        legacy_numeric_bindings.insert(
-            legacy_numeric_bindings.end(),
-            bucket.numeric.begin(),
-            bucket.numeric.end());
-    }
-
     BoundResourceSetDesc bound_desc =
         build_pending_bound_resource_set(resource_layout_token);
     if (bound_desc.resource_layout_token != 0) {
-        current_resource_set_ = device_.create_bound_resource_set(
-            bound_desc,
-            legacy_numeric_bindings);
+        current_resource_set_ = device_.create_bound_resource_set(bound_desc);
         if (current_resource_set_) {
             cmd_->bind_resource_set(current_resource_set_, 0);
         }
     } else {
-        const size_t pending_binding_count =
-            legacy_numeric_bindings.size() + bound_resource_binding_count(bound_desc);
+        const size_t pending_binding_count = bound_resource_binding_count(bound_desc);
         if (pending_binding_count != 0) {
             tc_log(TC_LOG_WARN,
                    "RenderContext2: flush_resource_set skipping pipeline=%u "

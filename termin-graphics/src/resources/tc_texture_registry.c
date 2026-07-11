@@ -344,21 +344,6 @@ size_t tc_texture_count(void) {
 }
 
 // ============================================================================
-// Legacy pointer-based API
-// ============================================================================
-
-tc_texture* tc_texture_add(const char* uuid) {
-    tc_texture_handle h = tc_texture_create(uuid);
-    return tc_texture_get(h);
-}
-
-bool tc_texture_remove(const char* uuid) {
-    tc_texture_handle h = tc_texture_find(uuid);
-    if (tc_texture_handle_is_invalid(h)) return false;
-    return tc_texture_destroy(h);
-}
-
-// ============================================================================
 // Helper functions
 // ============================================================================
 

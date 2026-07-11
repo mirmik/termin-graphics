@@ -42,6 +42,27 @@ def test_shader_metadata_binding_smoke():
     assert shader.requires_artifacts is True
 
 
+def test_shader_resource_layout_accepts_typed_kind_and_scope():
+    shader = tgfx.TcShader.get_or_create("python-typed-resource-layout-smoke")
+    shader.set_resource_layout([
+        (
+            "u_texture",
+            tgfx.ShaderResourceKind.TEXTURE,
+            tgfx.ShaderResourceScope.TRANSIENT,
+            0,
+            4,
+            2,
+            0,
+        ),
+    ])
+
+    binding = shader.find_resource_binding("u_texture")
+    assert binding is not None
+    assert binding["kind_name"] == "texture"
+    assert binding["scope_name"] == "transient"
+    assert not hasattr(tgfx.Tgfx2RenderContext, "bind_sampled_texture")
+
+
 def test_shader_from_sources_accepts_explicit_entries():
     shader = tgfx.TcShader.from_sources(
         "import termin_prelude;\n"

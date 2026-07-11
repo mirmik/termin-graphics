@@ -41,7 +41,7 @@ public:
         return tgfx::PipelineHandle{next_pipeline_id_++};
     }
 
-    tgfx::ResourceSetHandle create_resource_set(const tgfx::ResourceSetDesc&) override {
+    tgfx::ResourceSetHandle create_bound_resource_set(const tgfx::BoundResourceSetDesc&) override {
         return {};
     }
 

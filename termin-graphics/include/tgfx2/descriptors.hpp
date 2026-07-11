@@ -93,49 +93,4 @@ struct RenderPassDesc {
     bool has_depth = false;
 };
 
-// --- Legacy numeric resource binding ---
-//
-// ResourceBinding is the low-level compatibility path for callers that already
-// know backend numeric placement. Migrated shader/material code should bind by
-// semantic resource name and let BackendBindingPlan + BoundResourceSetDesc carry
-// backend placement. Do not add new backend-specific fields here unless a
-// legacy API explicitly needs them.
-
-struct ResourceBinding {
-    uint32_t set = 0;
-    uint32_t binding = 0;
-    uint32_t array_element = 0;
-    uint32_t stage_mask = 0;
-    struct D3D11Placement {
-        bool has_placement = false;
-        uint32_t register_class = 0;
-        uint32_t register_index = 0;
-    } d3d11;
-    enum class Kind {
-        UniformBuffer, StorageBuffer, SampledTexture, Sampler,
-    } kind = Kind::UniformBuffer;
-    BufferHandle buffer;
-    TextureHandle texture;
-    SamplerHandle sampler;
-    uint64_t offset = 0;
-    uint64_t range = 0;
-};
-
-struct ResourceSetDesc {
-    std::vector<ResourceBinding> bindings;
-    // Per-pipeline backend resource layout token. Vulkan currently maps this
-    // to a VkDescriptorSetLayout; OpenGL and D3D11 use pipeline-local tokens
-    // because they do not have descriptor set layout objects.
-    uintptr_t resource_layout_token = 0;
-
-    // Legacy Vulkan compatibility field. New code should use
-    // resource_layout_token plus create_bound_resource_set(); concrete tgfx2
-    // backends consume BoundResourceSetDesc directly.
-    uintptr_t descriptor_set_layout = 0;
-
-    uintptr_t effective_resource_layout_token() const {
-        return resource_layout_token != 0 ? resource_layout_token : descriptor_set_layout;
-    }
-};
-
 } // namespace tgfx

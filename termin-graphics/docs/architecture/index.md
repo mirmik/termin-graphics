@@ -4,4 +4,4 @@
 
 - [Pipeline Layout Architecture](pipeline-layout.md) — current shader-reflected pipeline layouts and the scope-first binding target.
 - [Shader Resource Contracts](shader-resource-contracts.md) — Termin shader ABI, semantic resource ownership, alias policy, and layer responsibilities.
-- [tgfx2 Backend Binding Plan](backend-binding-plan.md) — live contract for semantic resources, backend placement plans, bound resource values, and legacy numeric compatibility.
+- [tgfx2 Backend Binding Plan](backend-binding-plan.md) — live contract for semantic resources, backend placement plans, and bound resource values.

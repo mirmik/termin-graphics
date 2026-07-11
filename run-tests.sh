@@ -58,35 +58,15 @@ if ! bash "$SCRIPT_DIR/run-tests-python.sh" "${PYTHON_ARGS[@]}"; then
     failures+=("Python")
 fi
 
-run_editor_smoke() {
-    local name="$1"
-    local script="$2"
-
-    echo ""
-    echo "----------------------------------------"
-    echo "  $name"
-    echo "----------------------------------------"
-
-    if [[ ! -x "$script" ]]; then
-        echo "ERROR: smoke script is not executable: $script" >&2
-        return 1
-    fi
-
-    "$script"
-}
-
 if [[ "$FULL" -eq 1 && "$NO_EDITOR_SMOKE" -eq 0 ]]; then
     echo ""
     echo "========================================"
     echo "  Editor smoke tests"
     echo "========================================"
 
-    if ! run_editor_smoke "Python module explicit reload smoke" "$SCRIPT_DIR/scripts/smoke-python-module-hot-reload"; then
-        failures+=("Editor smoke: Python module explicit reload")
-    fi
-
-    if ! run_editor_smoke "C++ module cascade explicit reload smoke" "$SCRIPT_DIR/scripts/smoke-cpp-module-cascade-hot-reload"; then
-        failures+=("Editor smoke: C++ module cascade explicit reload")
+    if ! "$SCRIPT_DIR/sdk/bin/termin_python" -m termin_build.repository_control \
+        --repo-root "$SCRIPT_DIR" run editor-smoke --executor process-smoke; then
+        failures+=("Editor smoke")
     fi
 else
     echo ""

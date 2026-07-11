@@ -10,6 +10,7 @@
 #include <memory>
 #include <vector>
 
+#include "tgfx/resources/tc_shader.h"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/i_render_device.hpp"
@@ -122,18 +123,23 @@ int main() {
         reinterpret_cast<const uint8_t*>(identity_mvp.data()),
         sizeof(float) * identity_mvp.size()));
 
-    tgfx::ResourceBinding rb;
-    rb.kind = tgfx::ResourceBinding::Kind::UniformBuffer;
-    rb.binding = 0;
-    rb.buffer = ubo;
-    rb.range = 64;
-
-    tgfx::ResourceSetDesc rs_desc;
+    tgfx::BoundResourceSetDesc rs_desc;
+    rs_desc.resource_layout_token = device->pipeline_resource_layout_token(pipeline);
+    tgfx::BoundResourceBinding rb;
+    rb.slot.kind = tgfx::ShaderResourceKind::ConstantBuffer;
+    rb.slot.scope = tgfx::ShaderResourceScope::Draw;
+    rb.slot.stage_mask = TC_SHADER_STAGE_VERTEX;
+    rb.slot.placement.kind = tgfx::BackendPlacementKind::VulkanDescriptor;
+    rb.slot.placement.vulkan.set = 0;
+    rb.slot.placement.vulkan.binding = 0;
+    rb.slot.placement.vulkan.descriptor_kind = tgfx::BackendDescriptorKind::UniformBuffer;
+    rb.slot.debug_name = "mvp";
+    rb.value.kind = tgfx::BoundResourceKind::UniformBuffer;
+    rb.value.buffer = ubo;
+    rb.value.range = 64;
     rs_desc.bindings.push_back(rb);
-    rs_desc.resource_layout_token =
-        device->pipeline_resource_layout_token(pipeline);
 
-    auto rset = device->create_resource_set(rs_desc);
+    auto rset = device->create_bound_resource_set(rs_desc);
     printf("Resource set: id=%u\n", rset.id);
     printf("Resource set handle valid: %s\n", rset.id != 0 ? "yes" : "no");
 

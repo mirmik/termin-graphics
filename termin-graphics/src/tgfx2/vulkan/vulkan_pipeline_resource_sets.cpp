@@ -582,48 +582,6 @@ static uint64_t hash_resolved_resource_bindings(
     return h;
 }
 
-static VkDescriptorType legacy_expected_descriptor_type(ResourceBinding::Kind kind) {
-    switch (kind) {
-        case ResourceBinding::Kind::UniformBuffer:
-            return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-        case ResourceBinding::Kind::StorageBuffer:
-            return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        case ResourceBinding::Kind::SampledTexture:
-            return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        case ResourceBinding::Kind::Sampler:
-            return VK_DESCRIPTOR_TYPE_SAMPLER;
-    }
-    return VK_DESCRIPTOR_TYPE_MAX_ENUM;
-}
-
-static BoundResourceKind bound_kind_from_legacy(ResourceBinding::Kind kind) {
-    switch (kind) {
-        case ResourceBinding::Kind::UniformBuffer:
-            return BoundResourceKind::UniformBuffer;
-        case ResourceBinding::Kind::StorageBuffer:
-            return BoundResourceKind::StorageBuffer;
-        case ResourceBinding::Kind::SampledTexture:
-            return BoundResourceKind::SampledTexture;
-        case ResourceBinding::Kind::Sampler:
-            return BoundResourceKind::Sampler;
-    }
-    return BoundResourceKind::UniformBuffer;
-}
-
-static ResourceBinding::Kind legacy_kind_from_bound(BoundResourceKind kind) {
-    switch (kind) {
-        case BoundResourceKind::UniformBuffer:
-            return ResourceBinding::Kind::UniformBuffer;
-        case BoundResourceKind::StorageBuffer:
-            return ResourceBinding::Kind::StorageBuffer;
-        case BoundResourceKind::SampledTexture:
-            return ResourceBinding::Kind::SampledTexture;
-        case BoundResourceKind::Sampler:
-            return ResourceBinding::Kind::Sampler;
-    }
-    return ResourceBinding::Kind::UniformBuffer;
-}
-
 static bool descriptor_kind_matches_layout(
     BackendDescriptorKind descriptor_kind,
     VkDescriptorType layout_type
@@ -892,98 +850,8 @@ ResourceSetHandle VulkanRenderDevice::create_resolved_resource_set(
     return handle;
 }
 
-ResourceSetHandle VulkanRenderDevice::create_resource_set(const ResourceSetDesc& desc) {
-    VkDescriptorSetLayout layout = VK_NULL_HANDLE;
-    if (desc.effective_resource_layout_token() != 0) {
-        layout = reinterpret_cast<VkDescriptorSetLayout>(
-            desc.effective_resource_layout_token());
-    }
-    if (!layout) {
-        tc_log(TC_LOG_ERROR,
-               "VulkanRenderDevice: create_resource_set called without resource_layout_token");
-        return {};
-    }
-
-    const auto layout_it = descriptor_layout_bindings_.find(layout);
-    if (layout_it == descriptor_layout_bindings_.end()) {
-        tc_log(TC_LOG_ERROR,
-               "VulkanRenderDevice: create_resource_set called with unknown resource_layout_token=%p",
-               static_cast<void*>(layout));
-        return {};
-    }
-    const std::vector<VkDescriptorSetLayoutBinding>& layout_bindings = layout_it->second;
-
-    std::vector<VulkanResolvedResourceBinding> resolved_bindings;
-    resolved_bindings.reserve(desc.bindings.size());
-    for (const ResourceBinding& b : desc.bindings) {
-        const VkDescriptorSetLayoutBinding* lb =
-            find_layout_binding(layout_bindings, b.binding);
-        if (!lb) {
-            continue;
-        }
-        const VkDescriptorType expected = legacy_expected_descriptor_type(b.kind);
-        if (lb->descriptorType != expected) {
-            tc_log(TC_LOG_WARN,
-                   "VulkanRenderDevice: skipping resource binding %u[%u], descriptor type mismatch layout=%u binding=%u",
-                   b.binding,
-                   b.array_element,
-                   static_cast<unsigned>(lb->descriptorType),
-                   static_cast<unsigned>(expected));
-            continue;
-        }
-        if (b.array_element >= lb->descriptorCount) {
-            tc_log(TC_LOG_WARN,
-                   "VulkanRenderDevice: skipping resource binding %u[%u], descriptor array count is %u",
-                   b.binding,
-                   b.array_element,
-                   lb->descriptorCount);
-            continue;
-        }
-        VulkanResolvedResourceBinding value;
-        value.binding = b.binding;
-        value.array_element = b.array_element;
-        value.expected_descriptor_type = expected;
-        value.kind = bound_kind_from_legacy(b.kind);
-        value.buffer = b.buffer;
-        value.texture = b.texture;
-        value.sampler = b.sampler;
-        value.offset = b.offset;
-        value.range = b.range;
-        resolved_bindings.push_back(value);
-    }
-    sort_resolved_bindings(resolved_bindings);
-
-    VkResourceSetResource res;
-    res.desc = desc;
-    ResourceSetDesc sorted_desc = desc;
-    sorted_desc.bindings.clear();
-    sorted_desc.bindings.reserve(resolved_bindings.size());
-    for (const VulkanResolvedResourceBinding& value : resolved_bindings) {
-        ResourceBinding b;
-        b.binding = value.binding;
-        b.array_element = value.array_element;
-        b.kind = legacy_kind_from_bound(value.kind);
-        b.buffer = value.buffer;
-        b.texture = value.texture;
-        b.sampler = value.sampler;
-        b.offset = value.offset;
-        b.range = value.range;
-        sorted_desc.bindings.push_back(b);
-    }
-    res.desc = sorted_desc;
-
-    return create_resolved_resource_set(
-        layout,
-        layout_bindings,
-        desc.effective_resource_layout_token(),
-        resolved_bindings,
-        std::move(res),
-        0x6c65676163790001ull);
-}
-
 ResourceSetHandle VulkanRenderDevice::create_bound_resource_set(
-    const BoundResourceSetDesc& desc,
-    const std::vector<ResourceBinding>& legacy_numeric_bindings
+    const BoundResourceSetDesc& desc
 ) {
     VkDescriptorSetLayout layout = VK_NULL_HANDLE;
     if (desc.resource_layout_token != 0) {
@@ -1005,31 +873,7 @@ ResourceSetHandle VulkanRenderDevice::create_bound_resource_set(
     const std::vector<VkDescriptorSetLayoutBinding>& layout_bindings = layout_it->second;
 
     std::vector<VulkanResolvedResourceBinding> resolved_bindings;
-    resolved_bindings.reserve(
-        legacy_numeric_bindings.size() + bound_resource_binding_count(desc));
-
-    for (const ResourceBinding& b : legacy_numeric_bindings) {
-        const VkDescriptorSetLayoutBinding* lb =
-            find_layout_binding(layout_bindings, b.binding);
-        if (!lb) {
-            continue;
-        }
-        const VkDescriptorType expected = legacy_expected_descriptor_type(b.kind);
-        if (lb->descriptorType != expected || b.array_element >= lb->descriptorCount) {
-            continue;
-        }
-        VulkanResolvedResourceBinding value;
-        value.binding = b.binding;
-        value.array_element = b.array_element;
-        value.expected_descriptor_type = expected;
-        value.kind = bound_kind_from_legacy(b.kind);
-        value.buffer = b.buffer;
-        value.texture = b.texture;
-        value.sampler = b.sampler;
-        value.offset = b.offset;
-        value.range = b.range;
-        resolved_bindings.push_back(value);
-    }
+    resolved_bindings.reserve(bound_resource_binding_count(desc));
 
     bool bound_ok = true;
     for_each_bound_resource_binding(desc, [&](const BoundResourceBinding& b) {
@@ -1119,8 +963,6 @@ ResourceSetHandle VulkanRenderDevice::create_bound_resource_set(
 
     VkResourceSetResource res;
     res.bound_desc = desc;
-    res.legacy_numeric_bindings = legacy_numeric_bindings;
-    res.has_bound_desc = true;
 
     return create_resolved_resource_set(
         layout,

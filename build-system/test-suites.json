@@ -12,12 +12,103 @@
     ],
     "exclude_directory_names": ["__pycache__", "build"]
   },
+  "native_test_inventory": {
+    "patterns": ["test_*", "tests_*", "*_test.*"],
+    "extensions": [".c", ".cc", ".cpp", ".cxx"],
+    "exclude_roots": [".git", "build", "sdk", "termin-thirdparty"],
+    "exclude_directory_names": ["__pycache__", "build"],
+    "source_classifications": [
+      {
+        "path": "termin-app/cpp/tests/tests_binding.cpp",
+        "profiles": ["pr", "linux-full", "windows-d3d11"],
+        "capabilities": ["python-bindings"],
+        "reason": "Compiled by termin_tests only when the C++ Python bindings are enabled."
+      },
+      {
+        "path": "termin-display/tests/test_backend_window_triangle.cpp",
+        "profiles": ["linux-full", "windows-d3d11"],
+        "capabilities": ["window"],
+        "reason": "Creates an SDL window and is deliberately outside the headless PR graph."
+      },
+      {
+        "path": "termin-display/tests/test_backend_window_d3d11_present.cpp",
+        "profiles": ["windows-d3d11"],
+        "capabilities": ["window", "d3d11"],
+        "reason": "Requires the Windows D3D11 presentation path."
+      },
+      {
+        "path": "termin-graphics/tests/test_render_context2.cpp",
+        "profiles": ["linux-full", "windows-d3d11"],
+        "capabilities": ["window", "glfw"],
+        "reason": "Creates a GLFW render context supplied by the build environment."
+      },
+      {
+        "path": "termin-graphics/tests/test_tgfx2_smoke.cpp",
+        "profiles": ["linux-full", "windows-d3d11"],
+        "capabilities": ["window", "glfw"],
+        "reason": "Creates a GLFW window supplied by the build environment."
+      },
+      {
+        "path": "termin-graphics/tests/test_tgfx2_opengl_bound_resource_set.cpp",
+        "profiles": ["linux-full"],
+        "capabilities": ["window", "opengl"],
+        "reason": "Requires an SDL OpenGL window and is not a Windows D3D11 gate."
+      },
+      {
+        "path": "termin-graphics/tests/test_tgfx2_vulkan_window.cpp",
+        "profiles": ["linux-full"],
+        "capabilities": ["window", "vulkan"],
+        "reason": "Requires an SDL Vulkan window."
+      },
+      {
+        "path": "termin-graphics/tests/test_tgfx2_d3d11_smoke.cpp",
+        "profiles": ["windows-d3d11"],
+        "capabilities": ["d3d11"],
+        "reason": "Exercises the Windows D3D11 backend."
+      },
+      {
+        "path": "termin-graphics/tests/test_tgfx2_d3d11_window.cpp",
+        "profiles": ["windows-d3d11"],
+        "capabilities": ["window", "d3d11"],
+        "reason": "Requires an SDL D3D11 window."
+      },
+      {
+        "path": "termin-inspect/tests/test_python_inspect.cpp",
+        "profiles": ["pr", "linux-full", "windows-d3d11"],
+        "capabilities": ["python-bindings"],
+        "reason": "CTest registration is conditional on the native Python binding build."
+      }
+    ]
+  },
   "suite_defaults": {
     "pytest": {
       "profiles": ["pr", "linux-full", "windows-d3d11"],
       "environment": "sdk-source-overlay",
       "platforms": ["linux", "windows"],
       "capabilities": []
+    },
+    "ctest": {
+      "profiles": ["pr", "linux-full", "windows-d3d11"],
+      "environment": "cmake-top-level",
+      "platforms": ["linux", "windows"],
+      "capabilities": ["host"]
+    },
+    "process-smoke": {
+      "profiles": ["editor-smoke"],
+      "environment": "sdk-installed",
+      "platforms": ["linux", "windows"],
+      "capabilities": ["editor"]
+    },
+    "device": {
+      "environment": "device-toolchain",
+      "platforms": ["android", "quest"],
+      "capabilities": ["device"]
+    },
+    "manual": {
+      "profiles": ["manual"],
+      "environment": "human",
+      "platforms": ["linux", "windows", "android", "quest"],
+      "capabilities": ["human"]
     }
   },
   "profiles": [
@@ -39,8 +130,16 @@
       "description": "Windows and D3D11-specific suites."
     },
     {
+      "id": "windows-d3d11-bound",
+      "description": "Focused Windows D3D11 bound-resource smoke."
+    },
+    {
       "id": "editor-smoke",
       "description": "Isolated editor-process smoke suites."
+    },
+    {
+      "id": "sdk-installed",
+      "description": "Installed SDK and application-bundle acceptance suites."
     },
     {
       "id": "device-android",
@@ -56,6 +155,89 @@
     }
   ],
   "suites": [
+    {
+      "id": "editor-python-module-reload-smoke",
+      "module": "termin-app",
+      "executor": "process-smoke",
+      "roots": ["scripts/smoke-python-module-hot-reload"],
+      "reason": "Runs a real editor process and verifies explicit Python module reload."
+    },
+    {
+      "id": "editor-cpp-module-cascade-reload-smoke",
+      "module": "termin-app",
+      "executor": "process-smoke",
+      "roots": ["scripts/smoke-cpp-module-cascade-hot-reload"],
+      "reason": "Runs a real editor process and verifies C++ cascade module reload."
+    },
+    {
+      "id": "termin-app-installed-bundle-acceptance",
+      "module": "termin-app",
+      "executor": "process-smoke",
+      "roots": ["scripts/smoke-termin-app-installed-bundle"],
+      "profiles": ["sdk-installed"],
+      "environment": "installed-termin-app",
+      "platforms": ["linux"],
+      "capabilities": ["installed-sdk", "termin-app-bundle"],
+      "reason": "Proves imports and tests against termin-app's installed bundle rather than the checkout source overlay."
+    },
+    {
+      "id": "tgfx2-d3d11-bound-smoke",
+      "module": "termin-graphics",
+      "executor": "process-smoke",
+      "roots": ["scripts/validate-tgfx2-d3d11-bound-path.ps1"],
+      "profiles": ["windows-d3d11-bound"],
+      "environment": "windows-d3d11-build",
+      "platforms": ["windows"],
+      "capabilities": ["d3d11"],
+      "reason": "Focused Windows build-and-run smoke for the D3D11 bound-resource and optional present paths."
+    },
+    {
+      "id": "android-apk-build-gate",
+      "module": "termin-android",
+      "executor": "device",
+      "roots": ["build-android-apk.sh"],
+      "profiles": ["device-android"],
+      "platforms": ["android"],
+      "capabilities": ["android-sdk"],
+      "environment": "android-build",
+      "reason": "Build-only Android gate; deployment/runtime requires a separately attached device."
+    },
+    {
+      "id": "quest-openxr-apk-build-gate",
+      "module": "termin-openxr",
+      "executor": "device",
+      "roots": ["build-quest-openxr-apk.sh"],
+      "profiles": ["device-quest"],
+      "platforms": ["quest"],
+      "capabilities": ["android-sdk", "openxr-sdk", "quest-device"],
+      "environment": "quest-build",
+      "reason": "Quest/OpenXR package gate; a connected headset is required for runtime execution."
+    },
+    {
+      "id": "manual-smoke-check-catalog",
+      "module": "termin-app",
+      "executor": "manual",
+      "roots": ["docs/smoke-checks.md"],
+      "reason": "Human-facing desktop/backend smoke procedures are recorded here until each has an automated process or device executor."
+    },
+    {"id": "termin-app-cpp-tests", "module": "termin-app", "executor": "ctest", "roots": ["termin-app/cpp/tests"]},
+    {"id": "termin-base-tests-native", "module": "termin-base", "executor": "ctest", "roots": ["termin-base/tests"]},
+    {"id": "termin-collision-tests-native", "module": "termin-collision", "executor": "ctest", "roots": ["termin-collision/tests"]},
+    {"id": "termin-components-foliage-tests-native", "module": "termin-components-foliage", "executor": "ctest", "roots": ["termin-components/termin-components-foliage/tests"]},
+    {"id": "termin-components-render-tests-native", "module": "termin-components-render", "executor": "ctest", "roots": ["termin-components/termin-components-render/tests"]},
+    {"id": "termin-csg-tests-native", "module": "termin-csg", "executor": "ctest", "roots": ["termin-csg/tests"]},
+    {"id": "termin-display-tests-native", "module": "termin-display", "executor": "ctest", "roots": ["termin-display/tests"]},
+    {"id": "termin-engine-tests-native", "module": "termin-engine", "executor": "ctest", "roots": ["termin-engine/tests"]},
+    {"id": "termin-graphics-tests-native", "module": "termin-graphics", "executor": "ctest", "roots": ["termin-graphics/tests"]},
+    {"id": "termin-gui-native-tests", "module": "termin-gui-native", "executor": "ctest", "roots": ["termin-gui-native/tests"]},
+    {"id": "termin-input-tests-native", "module": "termin-input", "executor": "ctest", "roots": ["termin-input/tests"]},
+    {"id": "termin-inspect-tests-native", "module": "termin-inspect", "executor": "ctest", "roots": ["termin-inspect/tests"]},
+    {"id": "termin-modules-tests-native", "module": "termin-modules", "executor": "ctest", "roots": ["termin-modules/tests"]},
+    {"id": "termin-navmesh-tests-native", "module": "termin-navmesh", "executor": "ctest", "roots": ["termin-navmesh/tests"]},
+    {"id": "termin-render-passes-tests-native", "module": "termin-render-passes", "executor": "ctest", "roots": ["termin-render-passes/tests"]},
+    {"id": "termin-render-tests-native", "module": "termin-render", "executor": "ctest", "roots": ["termin-render/tests"]},
+    {"id": "termin-runtime-tests-native", "module": "termin-runtime", "executor": "ctest", "roots": ["termin-runtime/tests"]},
+    {"id": "termin-scene-tests-native", "module": "termin-scene", "executor": "ctest", "roots": ["termin-scene/tests"]},
     {
       "id": "tcplot-tests-python",
       "module": "tcplot",

@@ -163,6 +163,7 @@ fi
 
 if ! cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
     -DCMAKE_PREFIX_PATH="$SDK_PREFIX" \
     -DCMAKE_INSTALL_PREFIX="$SDK_PREFIX" \
     -DCMAKE_BUILD_RPATH="${BUILD_DIR}/bin;${SDK_PREFIX}/lib" \
@@ -182,12 +183,74 @@ if ! cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     exit 1
 fi
 
+REPOSITORY_PROFILE="pr"
+REPOSITORY_CAPABILITIES=(--capability host)
+if [[ "$FULL" -eq 1 ]]; then
+    REPOSITORY_PROFILE="linux-full"
+fi
+if [[ "$TERMIN_BUILD_WINDOW_TESTS" == "ON" ]]; then
+    REPOSITORY_CAPABILITIES+=(--capability window)
+fi
+if [[ "$TERMIN_ENABLE_VULKAN" == "ON" ]]; then
+    REPOSITORY_CAPABILITIES+=(--capability vulkan)
+fi
+if [[ "$TERMIN_ENABLE_OPENGL" == "ON" ]]; then
+    REPOSITORY_CAPABILITIES+=(--capability opengl)
+fi
+if [[ -f "$BUILD_DIR/CMakeCache.txt" ]] \
+    && grep -q '^TERMIN_TGFX2_GLFW_AVAILABLE:INTERNAL=TRUE$' "$BUILD_DIR/CMakeCache.txt"; then
+    REPOSITORY_CAPABILITIES+=(--capability glfw)
+fi
+if ! "$SDK_PREFIX/bin/termin_python" -m termin_build.repository_control \
+    --repo-root "$SCRIPT_DIR" check-ctest \
+    --build-dir "$BUILD_DIR" \
+    --profile "$REPOSITORY_PROFILE" \
+    "${REPOSITORY_CAPABILITIES[@]}"; then
+    echo "ERROR: CTest inventory validation failed" >&2
+    exit 1
+fi
+CTEST_PLAN_COMMAND=(
+    "$SDK_PREFIX/bin/termin_python"
+    -m termin_build.repository_control
+    --repo-root "$SCRIPT_DIR"
+    ctest-plan
+    --build-dir "$BUILD_DIR"
+    --profile "$REPOSITORY_PROFILE"
+    --platform linux
+    "${REPOSITORY_CAPABILITIES[@]}"
+)
+if [[ -n "${TERMIN_TEST_PLAN:-}" ]]; then
+    CTEST_PLAN_COMMAND+=(--plan-file "${TERMIN_TEST_PLAN}")
+fi
+CTEST_SELECTION_JSON="$BUILD_DIR/ctest-selection.json"
+if ! "${CTEST_PLAN_COMMAND[@]}" --json > "$CTEST_SELECTION_JSON"; then
+    echo "ERROR: CTest planner selection failed" >&2
+    exit 1
+fi
+CTEST_REGEX="$("${CTEST_PLAN_COMMAND[@]}" --regex)"
+if [[ "$CTEST_REGEX" == "^()$" ]]; then
+    echo "ERROR: CTest planner selected no tests" >&2
+    exit 1
+fi
+
 if ! cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"; then
     echo "ERROR: C++ test build failed" >&2
     exit 1
 fi
 
-if ! ctest --test-dir "$BUILD_DIR" --output-on-failure; then
+CTEST_JUNIT="$BUILD_DIR/ctest-results.xml"
+CTEST_EXIT=0
+ctest --test-dir "$BUILD_DIR" -R "$CTEST_REGEX" --output-on-failure \
+    --output-junit "$CTEST_JUNIT" || CTEST_EXIT=$?
+if ! "$SDK_PREFIX/bin/termin_python" -m termin_build.repository_control \
+    --repo-root "$SCRIPT_DIR" report-ctest \
+    --selection "$CTEST_SELECTION_JSON" \
+    --junit "$CTEST_JUNIT" \
+    --output "$BUILD_DIR/ctest-execution-manifest.json"; then
+    echo "ERROR: CTest execution manifest contains failed or unreported tests" >&2
+    exit 1
+fi
+if [[ "$CTEST_EXIT" -ne 0 ]]; then
     echo "ERROR: C++ tests failed" >&2
     exit 1
 fi

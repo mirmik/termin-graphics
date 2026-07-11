@@ -275,55 +275,6 @@ void OpenGLCommandList::apply_pending_push_constants() {
 
 // --- Resource binding ---
 
-void bind_legacy_resource_binding(OpenGLRenderDevice& device, const ResourceBinding& b) {
-    switch (b.kind) {
-        case ResourceBinding::Kind::UniformBuffer: {
-            auto* buf = device.get_buffer(b.buffer);
-            if (buf) {
-                if (b.range > 0) {
-                    glBindBufferRange(GL_UNIFORM_BUFFER, b.binding, buf->gl_id,
-                                      static_cast<GLintptr>(b.offset),
-                                      static_cast<GLsizeiptr>(b.range));
-                } else {
-                    glBindBufferBase(GL_UNIFORM_BUFFER, b.binding, buf->gl_id);
-                }
-            }
-            break;
-        }
-        case ResourceBinding::Kind::StorageBuffer: {
-            auto* buf = device.get_buffer(b.buffer);
-            if (buf) {
-                if (b.range > 0) {
-                    glBindBufferRange(0x90D2 /*GL_SHADER_STORAGE_BUFFER*/, b.binding, buf->gl_id,
-                                      static_cast<GLintptr>(b.offset),
-                                      static_cast<GLsizeiptr>(b.range));
-                } else {
-                    glBindBufferBase(0x90D2 /*GL_SHADER_STORAGE_BUFFER*/, b.binding, buf->gl_id);
-                }
-            }
-            break;
-        }
-        case ResourceBinding::Kind::SampledTexture: {
-            auto* tex = device.get_texture(b.texture);
-            if (tex) {
-                const GLuint unit = b.binding + b.array_element;
-                glActiveTexture(GL_TEXTURE0 + unit);
-                glBindTexture(tex->target, tex->gl_id);
-                auto* samp = device.get_sampler(b.sampler);
-                glBindSampler(unit, samp ? samp->gl_id : 0);
-            }
-            break;
-        }
-        case ResourceBinding::Kind::Sampler: {
-            auto* samp = device.get_sampler(b.sampler);
-            if (samp) {
-                glBindSampler(b.binding, samp->gl_id);
-            }
-            break;
-        }
-    }
-}
-
 void bind_bound_resource_binding(
     OpenGLRenderDevice& device,
     const BoundResourceBinding& binding
@@ -403,24 +354,9 @@ void OpenGLCommandList::bind_resource_set(ResourceSetHandle set,
     auto* rs = device_.get_resource_set(set);
     if (!rs) return;
 
-    // OpenGL doesn't have Vulkan-style dynamic descriptor offsets — each
-    // UBO binding carries its own offset via glBindBufferRange baked into
-    // ResourceBinding::offset. The Vulkan-only `dynamic_offsets` argument
-    // is ignored here.
-
-    if (rs->has_bound_desc) {
-        for (const ResourceBinding& b : rs->legacy_numeric_bindings) {
-            bind_legacy_resource_binding(device_, b);
-        }
-        for_each_dirty_bound_resource_binding(rs->bound_desc, [&](const BoundResourceBinding& b) {
-            bind_bound_resource_binding(device_, b);
-        });
-        return;
-    }
-
-    for (const ResourceBinding& b : rs->desc.bindings) {
-        bind_legacy_resource_binding(device_, b);
-    }
+    for_each_dirty_bound_resource_binding(rs->bound_desc, [&](const BoundResourceBinding& b) {
+        bind_bound_resource_binding(device_, b);
+    });
 }
 
 // --- Vertex / index buffers ---

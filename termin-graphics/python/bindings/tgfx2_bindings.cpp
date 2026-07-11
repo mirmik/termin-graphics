@@ -479,12 +479,6 @@ void bind_tgfx2(nb::module_& m) {
                  self.bind_shader(vs, fs, {});
              })
 
-        // Resource bindings
-        .def("bind_sampled_texture",
-             [](tgfx::RenderContext2& self, uint32_t slot, tgfx::TextureHandle tex) {
-                 self.bind_sampled_texture(slot, tex, {});
-             })
-
         // Draw
         .def("draw_fullscreen_quad", &tgfx::RenderContext2::draw_fullscreen_quad)
         .def("draw_arrays_instanced",
@@ -557,7 +551,7 @@ void bind_tgfx2(nb::module_& m) {
         // metadata set via use_shader_resource_layout().
         .def("use_shader_resource_layout",
              [](tgfx::RenderContext2& self, const termin::TcShader& shader) {
-                 self.use_shader_resource_layout(shader.shader_ptr());
+                 self.use_shader_resource_layout(shader.get());
              },
              nb::arg("shader"))
         .def("bind_uniform_by_name",

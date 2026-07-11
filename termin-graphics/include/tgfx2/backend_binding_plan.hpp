@@ -333,14 +333,4 @@ TGFX2_API bool build_backend_binding_plan(
 TGFX2_API BackendBoundResourceSlot bound_resource_slot_from_plan_entry(
     const BackendBindingPlanEntry& entry);
 
-TGFX2_API ResourceBinding resource_binding_from_bound(
-    const BoundResourceBinding& binding);
-
-// Compatibility adapter for custom/unported backends that still implement only
-// create_resource_set(ResourceSetDesc). Concrete tgfx2 backends should override
-// create_bound_resource_set() and consume compact bound slots directly.
-TGFX2_API ResourceSetDesc legacy_resource_set_desc_from_bound(
-    const BoundResourceSetDesc& bound_desc,
-    const std::vector<ResourceBinding>& legacy_numeric_bindings = {});
-
 } // namespace tgfx

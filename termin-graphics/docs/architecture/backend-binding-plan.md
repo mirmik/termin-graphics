@@ -139,7 +139,7 @@ resource name -> BackendBindingPlanEntry -> BoundResourceValue
 
 It then calls `IRenderDevice::create_bound_resource_set()`. Migrated symbolic
 paths must not construct backend placement themselves and must not rely on
-`ResourceBinding::set/binding`.
+caller-authored descriptor set/binding numbers.
 
 Pending symbolic resources are bucketed by shader scope and emitted as
 `BoundResourceGroup` entries. Backends therefore receive scope information
@@ -149,27 +149,11 @@ marks all scopes dirty when pass or pipeline resource layout changes.
 Repeated symbolic binds with the same resolved value do not dirty the scope or
 recreate the current resource set.
 
-Numeric storage/texture APIs remain as an explicit legacy/low-level side
-channel. They are carried as `legacy_numeric_bindings` beside planned bindings
-during the migration. Numeric uniform binding has been removed from
-`RenderContext2`; migrated uniform uploads go through
-`bind_uniform_data(name/rb, ...)` so placement comes from the active shader
-resource layout.
-
-## Legacy Numeric API
-
-`ResourceBinding` and `ResourceSetDesc` are compatibility types for callers that
-already know numeric backend placement. They are not the preferred shader
-resource contract.
-
-Allowed uses:
-
-- low-level tests and backend smoke tests that intentionally bind numeric slots;
-- compatibility paths for custom/unported backends;
-- transitional numeric APIs on `RenderContext2`.
-
-New migrated shader/material code should bind by semantic resource name and use
-`BackendBindingPlan` / `BoundResourceSetDesc`.
+Numeric runtime binding has been retired. Uniforms, storage buffers, textures,
+and samplers enter `RenderContext2` through semantic names or resolved
+`tc_shader_resource_binding` records. `BoundResourceSetDesc` is the only public
+resource-set creation contract; backend numeric placement is always supplied by
+`BackendBindingPlan` rather than authored by the caller.
 
 ## Validation
 
@@ -191,8 +175,8 @@ unsupported descriptor sets.
 
 ## Transitional State
 
-The live contract is bound-first and scope-preserving, but two pieces are still
-transitional:
+The live contract is bound-first and scope-preserving. Remaining transitional
+pieces are:
 
 - `BoundResourceSetDesc::bindings` remains as flat compatibility input for old
   tests and custom/unported backends. Concrete tgfx2 backends consume

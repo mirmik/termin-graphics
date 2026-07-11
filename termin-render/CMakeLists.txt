@@ -386,3 +386,5 @@ if(MSVC AND TERMIN_RENDER_BUILD_SHARED)
             "try { Copy-Item -Force '$<TARGET_FILE:termin_render>' '${CMAKE_CURRENT_SOURCE_DIR}/../sdk/bin/termin_render.dll' -ErrorAction Stop } catch { Write-Host $_.Exception.Message }"
     )
 endif()
+
+termin_label_tests_in_directory("termin-render")

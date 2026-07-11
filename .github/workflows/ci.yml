@@ -14,6 +14,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── Planner inventory ──────────────────────────────────────────
+  plan-pr-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Validate manifests and generate PR plan
+        env:
+          PYTHONPATH: ${{ github.workspace }}/termin-build-tools
+        run: |
+          python -m termin_build.repository_control --repo-root . check
+          mkdir -p build/ci-plans
+          python -m termin_build.repository_control --repo-root . \
+            plan pr --platform linux --json > build/ci-plans/pr-linux.json
+          python -m termin_build.repository_control --repo-root . \
+            plan sdk-installed --platform linux --json > build/ci-plans/sdk-installed-linux.json
+          python -m termin_build.repository_control --repo-root . \
+            plan windows-d3d11-bound --platform windows --json > build/ci-plans/windows-d3d11-bound.json
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: ci-plans
+          path: build/ci-plans/
+          retention-days: 1
+
   # ── 0. Python lint ─────────────────────────────────────────────
   lint-python:
     runs-on: ubuntu-latest
@@ -97,6 +127,7 @@ jobs:
 
   # ── 0d. D3D11 tgfx2 smoke ─────────────────────────────────────
   tgfx2-d3d11-bound-windows:
+    needs: plan-pr-linux
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -108,9 +139,28 @@ jobs:
         with:
           python-version: "3.10"
 
+      - uses: actions/download-artifact@v5
+        with:
+          name: ci-plans
+          path: build/ci-plans/
+
       - name: Validate D3D11 bound resource path
         shell: pwsh
-        run: .\scripts\validate-tgfx2-d3d11-bound-path.ps1
+        env:
+          PYTHONPATH: ${{ github.workspace }}\termin-build-tools
+        run: |
+          python -m termin_build.repository_control --repo-root . \
+            run windows-d3d11-bound --platform windows \
+            --executor process-smoke \
+            --plan-file build/ci-plans/windows-d3d11-bound.json \
+            --report-output build/d3d11-execution-manifest.json
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: d3d11-execution-manifest
+          path: build/d3d11-execution-manifest.json
+          retention-days: 7
 
   # ── 1. Build C++ libraries ───────────────────────────────────────
   build-cpp-libs:
@@ -136,7 +186,7 @@ jobs:
 
   # ── 2. Test C++ libraries ────────────────────────────────────────
   test-cpp-libs:
-    needs: build-cpp-libs
+    needs: [build-cpp-libs, plan-pr-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -153,11 +203,28 @@ jobs:
           name: sdk-cpp
           path: sdk/
 
+      - uses: actions/download-artifact@v5
+        with:
+          name: ci-plans
+          path: build/ci-plans/
+
       - name: Restore SDK executable permissions
         run: chmod +x sdk/bin/*
 
       - name: Run C++ tests
+        env:
+          TERMIN_TEST_PLAN: ${{ github.workspace }}/build/ci-plans/pr-linux.json
         run: ./run-tests-cpp.sh
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: ctest-execution-manifest
+          path: |
+            build/Release-tests/ctest-selection.json
+            build/Release-tests/ctest-execution-manifest.json
+            build/Release-tests/ctest-results.xml
+          retention-days: 7
 
   # ── 3. Build nanobind SDK + Python bindings ────────────────────
   build-bindings:
@@ -206,7 +273,7 @@ jobs:
 
   # ── 4. Test pip packages ───────────────────────────────────────
   test-pip-packages:
-    needs: build-bindings
+    needs: [build-bindings, plan-pr-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -225,6 +292,11 @@ jobs:
         with:
           name: sdk-full
           path: sdk/
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: ci-plans
+          path: build/ci-plans/
 
       - name: Restore SDK executable permissions
         run: chmod +x sdk/bin/*
@@ -246,15 +318,57 @@ jobs:
           TERMIN_SDK: ${{ github.workspace }}/sdk
           LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
         run: |
-          python -c "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())"
-          pytest termin-base/tests/python/ -v
-          pytest termin-graphics/tests/python/ -v
-          pytest termin-gui/python/tests/ -v
-          pytest termin-nodegraph/tests/ -v
+          ./setup-sdk-python-env.sh
+          TERMIN_TEST_PLAN=${{ github.workspace }}/build/ci-plans/pr-linux.json \
+          TERMIN_TEST_EXECUTION_MANIFEST=${{ github.workspace }}/build/python-execution-manifest.json \
+            ./run-tests-python.sh
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: python-execution-manifest
+          path: build/python-execution-manifest.json
+          retention-days: 7
+
+  verify-pr-linux-plan:
+    needs: [test-cpp-libs, test-pip-packages]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: ci-plans
+          path: build/ci-plans/
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: ctest-execution-manifest
+          path: build/ci-results/ctest/
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: python-execution-manifest
+          path: build/ci-results/python/
+
+      - name: Verify PR inventory coverage
+        env:
+          PYTHONPATH: ${{ github.workspace }}/termin-build-tools
+        run: |
+          python -m termin_build.repository_control verify-plan-execution \
+            --plan build/ci-plans/pr-linux.json \
+            --ctest build/ci-results/ctest/ctest-execution-manifest.json \
+            --python build/ci-results/python/python-execution-manifest.json
 
   # ── 5. Build & test termin ───────────────────────────────────────
   test-termin:
-    needs: build-bindings
+    needs: [build-bindings, plan-pr-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -275,6 +389,11 @@ jobs:
         with:
           name: sdk-full
           path: sdk/
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: ci-plans
+          path: build/ci-plans/
 
       - name: Restore SDK executable permissions
         run: chmod +x sdk/bin/*
@@ -304,9 +423,18 @@ jobs:
           LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
           PYTHONPATH: ${{ github.workspace }}/termin-app/install/lib/python:${{ github.workspace }}/sdk-python-staging:${{ github.workspace }}/sdk/lib/python
         run: |
-          python -c "from pathlib import Path; import termin.voxels.voxel_shader as vs; path = Path(vs.__file__).resolve(); expected = Path('${{ github.workspace }}/termin-app/install/lib/python').resolve(); print(f'termin.voxels.voxel_shader={path}'); assert expected in path.parents, f'expected termin-app install path first, got {path}'"
-          python -c "from tgfx import TcShader; shader = TcShader.from_builtin_catalog('termin-engine-voxel-display'); assert shader.is_valid, 'termin-engine-voxel-display failed preflight'"
-          pytest termin-app/tests/ -v
+          sdk/bin/termin_python -m termin_build.repository_control \
+            --repo-root . run sdk-installed --platform linux \
+            --executor process-smoke \
+            --plan-file ${{ github.workspace }}/build/ci-plans/sdk-installed-linux.json \
+            --report-output build/termin-app-installed-execution-manifest.json
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: termin-app-installed-execution-manifest
+          path: build/termin-app-installed-execution-manifest.json
+          retention-days: 7
 
   # ── 6. Build termin-csharp ──────────────────────────────────────
   test-csharp:

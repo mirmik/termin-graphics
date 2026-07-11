@@ -172,15 +172,15 @@ void bind_shader(nb::module_& m) {
         .def_prop_ro("fragment_source", [](const TcShader& s) { return std::string(s.fragment_source()); })
         .def_prop_ro("geometry_source", [](const TcShader& s) { return std::string(s.geometry_source()); })
         .def_prop_ro("vertex_entry", [](const TcShader& s) {
-            const tc_shader* shader = s.shader_ptr();
+            const tc_shader* shader = s.get();
             return std::string(shader && shader->vertex_entry ? shader->vertex_entry : "");
         })
         .def_prop_ro("fragment_entry", [](const TcShader& s) {
-            const tc_shader* shader = s.shader_ptr();
+            const tc_shader* shader = s.get();
             return std::string(shader && shader->fragment_entry ? shader->fragment_entry : "");
         })
         .def_prop_ro("geometry_entry", [](const TcShader& s) {
-            const tc_shader* shader = s.shader_ptr();
+            const tc_shader* shader = s.get();
             return std::string(shader && shader->geometry_entry ? shader->geometry_entry : "");
         })
         .def_prop_ro("has_geometry", &TcShader::has_geometry)
@@ -191,11 +191,11 @@ void bind_shader(nb::module_& m) {
         .def_prop_ro("artifact_policy", &TcShader::artifact_policy)
         .def_prop_ro("requires_artifacts", &TcShader::requires_artifacts)
         .def_prop_ro("has_contract", [](const TcShader& s) {
-            return tc_shader_has_contract(s.shader_ptr());
+            return tc_shader_has_contract(s.get());
         })
         .def_prop_ro("contract", [](const TcShader& s) -> nb::object {
             tc_shader_contract_view view{};
-            if (!tc_shader_get_contract_view(s.shader_ptr(), &view)) {
+            if (!tc_shader_get_contract_view(s.get(), &view)) {
                 return nb::none();
             }
 
@@ -227,7 +227,7 @@ void bind_shader(nb::module_& m) {
             return result;
         })
         .def_prop_ro("_raw_ptr", [](const TcShader& s) -> const ::tc_shader* {
-            return s.shader_ptr();
+            return s.get();
         })
         .def_prop_ro("resource_binding_count", &TcShader::resource_binding_count)
         .def("find_resource_binding",
@@ -241,7 +241,7 @@ void bind_shader(nb::module_& m) {
             "Return resource layout entry by shader resource name, or None")
         .def("set_resource_layout",
             [](TcShader& self,
-               const std::vector<std::tuple<std::string, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t>>& entries
+               const std::vector<std::tuple<std::string, tc_shader_resource_kind, tc_shader_resource_scope, uint32_t, uint32_t, uint32_t, uint32_t>>& entries
             ) {
                 tc_shader* shader = self.get();
                 if (!shader) return;
@@ -256,8 +256,8 @@ void bind_shader(nb::module_& m) {
                     const std::string& name = std::get<0>(item);
                     std::strncpy(binding.name, name.c_str(), TC_SHADER_RESOURCE_NAME_MAX - 1);
                     binding.name[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
-                    binding.kind = std::get<1>(item);
-                    binding.scope = std::get<2>(item);
+                    binding.kind = static_cast<uint32_t>(std::get<1>(item));
+                    binding.scope = static_cast<uint32_t>(std::get<2>(item));
                     binding.set = std::get<3>(item);
                     binding.binding = std::get<4>(item);
                     binding.stage_mask = std::get<5>(item);

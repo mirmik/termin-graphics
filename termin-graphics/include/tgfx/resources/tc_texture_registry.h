@@ -112,13 +112,6 @@ static inline void tc_texture_bump_version(tc_texture* tex) {
     if (tex) tex->header.version++;
 }
 
-// ============================================================================
-// Name-based API (deprecated)
-// ============================================================================
-
-TGFX_API tc_texture* tc_texture_add(const char* uuid);
-TGFX_API bool tc_texture_remove(const char* uuid);
-
 #ifdef __cplusplus
 }
 #endif
