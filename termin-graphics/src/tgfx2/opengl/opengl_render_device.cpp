@@ -1749,9 +1749,10 @@ void OpenGLRenderDevice::ring_ubo_reset_frame() {
     ring_ubo_offset_ = 0;
 }
 
-uint32_t OpenGLRenderDevice::ring_ubo_write(const void* data, uint32_t size) {
+bool OpenGLRenderDevice::ring_ubo_write(const void* data, uint32_t size,
+                                        uint32_t& out_offset) {
     if (!data || size == 0) {
-        return 0;
+        return false;
     }
 
     ensure_ring_ubo();
@@ -1760,7 +1761,7 @@ uint32_t OpenGLRenderDevice::ring_ubo_write(const void* data, uint32_t size) {
         tc::Log::error("OpenGLRenderDevice::ring_ubo_write: payload %u exceeds ring capacity %lld",
                        size,
                        static_cast<long long>(ring_ubo_size_));
-        return 0;
+        return false;
     }
 
     const GLintptr align = static_cast<GLintptr>(ring_ubo_alignment_);
@@ -1781,7 +1782,8 @@ uint32_t OpenGLRenderDevice::ring_ubo_write(const void* data, uint32_t size) {
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
     ring_ubo_offset_ = offset + padded;
-    return static_cast<uint32_t>(offset);
+    out_offset = static_cast<uint32_t>(offset);
+    return true;
 }
 
 } // namespace tgfx

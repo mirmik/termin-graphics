@@ -558,6 +558,7 @@ int main(int argc, char** argv) {
     tgfx::VulkanDeviceCreateInfo info;
     const char* validation_env = std::getenv("TGFX2_VULKAN_VALIDATION");
     info.enable_validation = validation_env && validation_env[0] == '1';
+    info.ring_ubo_slot_size = 256;
 
     std::unique_ptr<tgfx::IRenderDevice> device;
     try {
@@ -840,6 +841,7 @@ int main(int argc, char** argv) {
 
     // --- Generated Slang artifact smoke ---
     bool slang_artifact_ok = true;
+    bool ring_ubo_overflow_ok = false;
     auto slangc = resolve_slangc();
     auto shaderc = resolve_termin_shaderc(argc > 0 ? argv[0] : nullptr);
     if (!slangc || !shaderc) {
@@ -994,6 +996,26 @@ int main(int argc, char** argv) {
                     slang_ctx.bind_shader(slang_vs, slang_fs);
                     slang_ctx.set_vertex_layout(slang_layout);
                     slang_ctx.use_shader_resource_layout(slang_shader);
+
+                    // Exhaust the deliberately tiny per-frame ring and make
+                    // the following real shader binding take the standalone
+                    // transient-UBO fallback. Its rendered pixel verifies the
+                    // last payload remains correct through command submission.
+                    std::vector<uint8_t> ring_fill(device->ubo_alignment(), 0x5a);
+                    uint32_t ring_offset = 0;
+                    while (device->ring_ubo_write(
+                        ring_fill.data(),
+                        static_cast<uint32_t>(ring_fill.size()),
+                        ring_offset)) {
+                    }
+                    const uint32_t untouched_offset = 0xdeadbeefu;
+                    ring_offset = untouched_offset;
+                    ring_ubo_overflow_ok =
+                        !device->ring_ubo_write(
+                            ring_fill.data(),
+                            static_cast<uint32_t>(ring_fill.size()),
+                            ring_offset) &&
+                        ring_offset == untouched_offset;
                     slang_ctx.bind_uniform_data(
                         "u_transform",
                         mvp_column_major.data(),
@@ -1058,9 +1080,12 @@ int main(int argc, char** argv) {
     device->destroy(fs);
     device.reset();
 
-    printf("\nCenter drawn: %d, Corner is blue: %d, Bound resources: %d, Slang artifacts: %d\n",
-           center_drawn, corner_is_blue, bound_resource_ok, slang_artifact_ok);
-    if (center_drawn && corner_is_blue && bound_resource_ok && slang_artifact_ok) {
+    printf("\nCenter drawn: %d, Corner is blue: %d, Bound resources: %d, "
+           "Slang artifacts: %d, Ring overflow fallback: %d\n",
+           center_drawn, corner_is_blue, bound_resource_ok, slang_artifact_ok,
+           ring_ubo_overflow_ok);
+    if (center_drawn && corner_is_blue && bound_resource_ok && slang_artifact_ok &&
+        ring_ubo_overflow_ok) {
         printf("VULKAN SMOKE TEST PASSED\n");
         return 0;
     } else {

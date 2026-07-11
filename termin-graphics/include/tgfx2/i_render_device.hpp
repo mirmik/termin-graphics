@@ -234,18 +234,18 @@ public:
     //
     // A backend-managed host-visible ring buffer used by
     // `RenderContext2::bind_uniform_data()`. Pass/material code writes
-    // per-draw UBO data into the ring via `ring_ubo_write(data, size)`
-    // which returns an aligned byte offset; the offset is then attached
+    // per-draw UBO data into the ring via `ring_ubo_write(data, size, offset)`.
+    // A successful write returns an aligned byte offset; the offset is then attached
     // to a resolved UniformBuffer binding on `ring_ubo_handle()`, letting
     // one shared backing store replace a per-draw `vkCreateBuffer` +
     // `vkUpdateDescriptorSets` pair.
     //
-    // Default returns on backends without a ring implementation are safe
-    // ({}/0) — callers should treat `ring_ubo_handle().id == 0` as "no
-    // ring, fall back to the classic per-draw UBO path".
+    // Defaults on backends without a ring implementation are safe: an empty
+    // handle and a failed write make callers use the classic per-draw UBO path.
     virtual BufferHandle ring_ubo_handle() const { return {}; }
-    virtual uint32_t ring_ubo_write(const void* /*data*/, uint32_t /*size*/) {
-        return 0;
+    virtual bool ring_ubo_write(const void* /*data*/, uint32_t /*size*/,
+                                uint32_t& /*offset*/) {
+        return false;
     }
     virtual uint32_t ubo_alignment() const { return 1; }
 
