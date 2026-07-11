@@ -8,11 +8,35 @@
 #include <tgfx2/render_context.hpp>
 
 #include <cstdint>
+#include <cstring>
 #include <mutex>
 #include <string>
 #include <unordered_map>
 
 namespace termin {
+
+bool set_render_item_inline_uniform(
+    tc_render_item& item,
+    const char* name,
+    const void* data,
+    uint32_t size)
+{
+    if (!name || name[0] == '\0' || !data || size == 0u ||
+        size > TC_RENDER_ITEM_INLINE_UNIFORM_DATA_CAPACITY) {
+        return false;
+    }
+    const size_t name_length = std::strlen(name);
+    if (name_length >= TC_RENDER_ITEM_INLINE_UNIFORM_NAME_CAPACITY) {
+        return false;
+    }
+    item.inline_uniform = {};
+    std::memcpy(item.inline_uniform.name, name, name_length + 1u);
+    std::memcpy(item.inline_uniform.data, data, size);
+    item.inline_uniform.size = size;
+    item.flags |= TC_RENDER_ITEM_FLAG_HAS_INLINE_UNIFORM;
+    return true;
+}
+
 namespace {
 
 struct RegisteredRenderItemDrawEncoder {
@@ -187,6 +211,14 @@ bool mesh_render_item_draw_encoder(
             entity_name)) {
         return false;
     }
+    if (!bind_render_item_inline_uniform(
+            ctx,
+            item,
+            shader,
+            pass_name,
+            entity_name)) {
+        return false;
+    }
 
     MeshRenderItemEncodeRequest mesh_request{};
     mesh_request.shader = shader;
@@ -347,6 +379,41 @@ bool bind_render_item_common_resources(
         shader,
         pass_name,
         entity_name);
+}
+
+bool bind_render_item_inline_uniform(
+    tgfx::RenderContext2& ctx,
+    const tc_render_item& item,
+    const tc_shader* shader,
+    const char* debug_pass_name,
+    const char* debug_entity_name)
+{
+    if ((item.flags & TC_RENDER_ITEM_FLAG_HAS_INLINE_UNIFORM) == 0u) {
+        return true;
+    }
+    const char* pass_name = debug_pass_name ? debug_pass_name : "RenderItemSubmit";
+    const char* entity_name = debug_entity_name ? debug_entity_name : "<unnamed>";
+    const tc_render_item_inline_uniform& uniform = item.inline_uniform;
+    if (!shader) {
+        tc::Log::error(
+            "[%s] cannot bind inline uniform '%s' for '%s': shader layout is null",
+            pass_name,
+            uniform.name,
+            entity_name);
+        return false;
+    }
+    const tc_shader_resource_binding* binding =
+        tc_shader_find_resource_binding(shader, uniform.name);
+    if (!binding || binding->kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
+        tc::Log::error(
+            "[%s] cannot bind inline uniform '%s' for '%s': shader has no matching constant buffer",
+            pass_name,
+            uniform.name,
+            entity_name);
+        return false;
+    }
+    ctx.bind_uniform_data(uniform.name, uniform.data, uniform.size);
+    return true;
 }
 
 bool submit_render_item_draw(

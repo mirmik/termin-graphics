@@ -4,6 +4,9 @@ GUARD_TEST_MAIN();
 
 #include <termin/render/render_item_submission.hpp>
 
+#include <array>
+#include <cstring>
+
 namespace {
 
 bool test_encoder(
@@ -129,4 +132,25 @@ TEST_CASE("RenderItem draw encoder registry stores custom capabilities") {
 
     CHECK(termin::unregister_render_item_draw_encoder(test_kind, test_encoder, nullptr));
     CHECK(!termin::get_render_item_encoder_capabilities(test_kind, capabilities));
+}
+
+TEST_CASE("RenderItem inline uniform owns validated item-local bytes") {
+    tc_render_item item{};
+    const std::array<uint32_t, 4> payload{{1u, 2u, 3u, 4u}};
+    REQUIRE(termin::set_render_item_inline_uniform(
+        item,
+        "chrono_effect_draw",
+        payload.data(),
+        static_cast<uint32_t>(sizeof(payload))));
+    CHECK((item.flags & TC_RENDER_ITEM_FLAG_HAS_INLINE_UNIFORM) != 0u);
+    CHECK(std::strcmp(item.inline_uniform.name, "chrono_effect_draw") == 0);
+    CHECK(item.inline_uniform.size == sizeof(payload));
+    CHECK(std::memcmp(item.inline_uniform.data, payload.data(), sizeof(payload)) == 0);
+
+    std::array<uint8_t, TC_RENDER_ITEM_INLINE_UNIFORM_DATA_CAPACITY + 1u> oversized{};
+    CHECK(!termin::set_render_item_inline_uniform(
+        item,
+        "too_large",
+        oversized.data(),
+        static_cast<uint32_t>(oversized.size())));
 }

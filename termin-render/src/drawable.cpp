@@ -220,6 +220,25 @@ bool validate_render_item(
         return false;
     }
 
+    if ((item.flags & TC_RENDER_ITEM_FLAG_HAS_INLINE_UNIFORM) != 0u &&
+        (item.inline_uniform.name[0] == '\0' ||
+         std::memchr(
+             item.inline_uniform.name,
+             '\0',
+             TC_RENDER_ITEM_INLINE_UNIFORM_NAME_CAPACITY) == nullptr ||
+         item.inline_uniform.size == 0u ||
+         item.inline_uniform.size > TC_RENDER_ITEM_INLINE_UNIFORM_DATA_CAPACITY)) {
+        tc::Log::error(
+            "[RenderItemSink] malformed %s item: pass='%s' phase='%s' component='%s' geometry=%d has invalid inline uniform name/size (%u)",
+            render_item_kind_name(item.kind),
+            pass_name,
+            phase_mark,
+            component_type,
+            item.geometry_id,
+            item.inline_uniform.size);
+        return false;
+    }
+
     return true;
 }
 
