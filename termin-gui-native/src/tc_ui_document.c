@@ -289,7 +289,14 @@ void tc_ui_theme_init_default(tc_ui_theme* theme) {
     theme->roles[TC_UI_STYLE_SLIDER].base.min_width = 140.0f;
     theme->roles[TC_UI_STYLE_SLIDER].base.min_height = 28.0f;
 
-    theme->roles[TC_UI_STYLE_SEPARATOR].base.background = style_color(0.36f, 0.38f, 0.42f, 1.0f);
+    theme->roles[TC_UI_STYLE_SEPARATOR].base.background = style_color(0.24f, 0.25f, 0.28f, 1.0f);
+    theme->roles[TC_UI_STYLE_SEPARATOR].base.border_width = 1.0f;
+    theme->roles[TC_UI_STYLE_SEPARATOR].hovered = color_override(
+        TC_UI_STYLE_BACKGROUND,
+        style_color(0.25f, 0.58f, 0.88f, 1.0f)
+    );
+    theme->roles[TC_UI_STYLE_SEPARATOR].hovered.fields |= TC_UI_STYLE_BORDER_WIDTH;
+    theme->roles[TC_UI_STYLE_SEPARATOR].hovered.value.border_width = 2.0f;
 }
 
 tc_widget_slot* tc_ui_internal_resolve_slot(tc_ui_document* document, tc_widget_handle handle) {

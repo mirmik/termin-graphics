@@ -6,6 +6,7 @@ using namespace detail;
 Splitter::Splitter(Orientation orientation, const char* debug_name)
     : NativeWidget(debug_name ? debug_name : "Splitter"),
       orientation_(orientation) {
+    set_style_role(TC_UI_STYLE_SEPARATOR);
     set_preferred_size(orientation_ == Orientation::Horizontal
         ? tc_ui_size {320.0f, 180.0f}
         : tc_ui_size {240.0f, 260.0f});
@@ -113,7 +114,14 @@ void Splitter::paint(tc_ui_document* document, tc_ui_paint_context* context) {
         paint_widget(second, document, context);
     }
     tc_ui_painter_pop_clip(context);
-    tc_ui_painter_fill_rect(context, divider_rect(), divider_color_.c_color());
+    const bool active = tc_widget_handle_eq(
+        tc_ui_document_pointer_capture(document), handle());
+    const tc_ui_style style = computed_style(
+        document, active ? TC_UI_STYLE_STATE_HOVERED : 0);
+    tc_ui_painter_fill_rect(
+        context,
+        divider_line_rect(style.border_width),
+        style.background);
 }
 
 tc_ui_event_result Splitter::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
@@ -121,11 +129,16 @@ tc_ui_event_result Splitter::pointer_event(tc_ui_document* document, const tc_ui
         return TC_UI_EVENT_IGNORED;
     }
     const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
+    if ((event->type == TC_UI_POINTER_ENTER || event->type == TC_UI_POINTER_LEAVE) && !captured) {
+        mark_dirty(TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE);
+        return TC_UI_EVENT_HANDLED;
+    }
     if (!captured && !rect_contains(bounds(), event->x, event->y)) {
         return TC_UI_EVENT_IGNORED;
     }
-    if (event->type == TC_UI_POINTER_DOWN && rect_contains(divider_rect(), event->x, event->y)) {
+    if (event->type == TC_UI_POINTER_DOWN && rect_contains(divider_hit_rect(), event->x, event->y)) {
         tc_ui_document_set_pointer_capture(document, handle());
+        mark_dirty(TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE);
         return TC_UI_EVENT_HANDLED;
     }
     if (event->type == TC_UI_POINTER_MOVE && captured) {
@@ -141,6 +154,7 @@ tc_ui_event_result Splitter::pointer_event(tc_ui_document* document, const tc_ui
     }
     if (event->type == TC_UI_POINTER_UP && captured) {
         tc_ui_document_release_pointer_capture(document, handle());
+        mark_dirty(TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE);
         return TC_UI_EVENT_HANDLED;
     }
 
@@ -151,7 +165,7 @@ tc_widget_handle Splitter::hit_test(tc_ui_document* document, float x, float y) 
     if (!rect_contains(bounds(), x, y)) {
         return tc_widget_handle_invalid();
     }
-    if (rect_contains(divider_rect(), x, y)) {
+    if (rect_contains(divider_hit_rect(), x, y)) {
         return mouse_transparent() ? tc_widget_handle_invalid() : handle();
     }
     auto hit_child = [this, document, x, y](tc_widget_handle handle) {
@@ -188,6 +202,41 @@ tc_ui_rect Splitter::divider_rect() const {
         std::max(first_min_extent_, axis - second_min_extent_)
     );
     return tc_ui_rect {bounds().x, bounds().y + first_extent, bounds().width, divider_thickness_};
+}
+
+tc_ui_rect Splitter::divider_hit_rect() const {
+    const tc_ui_rect divider = divider_rect();
+    const float expansion = std::max(
+        0.0f, (divider_hit_thickness_ - divider_thickness_) * 0.5f);
+    if (orientation_ == Orientation::Horizontal) {
+        const float x = std::max(bounds().x, divider.x - expansion);
+        const float right = std::min(
+            bounds().x + bounds().width,
+            divider.x + divider.width + expansion);
+        return tc_ui_rect {x, divider.y, std::max(0.0f, right - x), divider.height};
+    }
+    const float y = std::max(bounds().y, divider.y - expansion);
+    const float bottom = std::min(
+        bounds().y + bounds().height,
+        divider.y + divider.height + expansion);
+    return tc_ui_rect {divider.x, y, divider.width, std::max(0.0f, bottom - y)};
+}
+
+tc_ui_rect Splitter::divider_line_rect(float line_thickness) const {
+    const tc_ui_rect divider = divider_rect();
+    const float thickness = clamp_float(line_thickness, 1.0f, divider_thickness_);
+    if (orientation_ == Orientation::Horizontal) {
+        return tc_ui_rect {
+            divider.x + (divider.width - thickness) * 0.5f,
+            divider.y,
+            thickness,
+            divider.height};
+    }
+    return tc_ui_rect {
+        divider.x,
+        divider.y + (divider.height - thickness) * 0.5f,
+        divider.width,
+        thickness};
 }
 
 void Splitter::layout_children(tc_ui_document* document) {

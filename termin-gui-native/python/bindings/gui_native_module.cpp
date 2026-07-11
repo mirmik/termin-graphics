@@ -2076,6 +2076,9 @@ NB_MODULE(_gui_native, m) {
             [](const SplitterRef& self, float value) {
                 self.get().set_split_fraction(value);
             })
+        .def_prop_ro(
+            "divider_thickness",
+            [](const SplitterRef& self) { return self.get().divider_thickness(); })
         .def("set_split_fraction", [](const SplitterRef& self, float value) {
             self.get().set_split_fraction(value);
         }, nb::arg("value"))

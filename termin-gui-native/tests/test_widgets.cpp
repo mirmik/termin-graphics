@@ -433,9 +433,24 @@ void test_splitter_layout_drag_and_hit_test() {
   assert(tc_widget_handle_eq(document.hit_test(100.0f, 10.0f), right.handle()));
 
   tc_ui_pointer_event event{};
-  event.type = TC_UI_POINTER_DOWN;
+  event.type = TC_UI_POINTER_MOVE;
   event.x = 54.0f;
   event.y = 10.0f;
+  assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_IGNORED);
+  assert(tc_widget_handle_eq(document.hovered_widget(), splitter.handle()));
+
+  tc_ui_draw_list *draw_list = tc_ui_draw_list_create();
+  tc_ui_paint_context *context = tc_ui_paint_context_create(draw_list);
+  document.paint_roots(context);
+  const tc_ui_draw_command *divider_command = tc_ui_draw_list_command_at(
+      draw_list, tc_ui_draw_list_command_count(draw_list) - 1);
+  assert(divider_command && divider_command->type == TC_UI_DRAW_FILL_RECT);
+  assert(near(divider_command->rect.width, 2.0f));
+  assert(near(divider_command->color.b, 0.88f));
+  tc_ui_paint_context_destroy(context);
+  tc_ui_draw_list_destroy(draw_list);
+
+  event.type = TC_UI_POINTER_DOWN;
   assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_HANDLED);
   assert(tc_widget_handle_eq(document.pointer_capture(), splitter.handle()));
 

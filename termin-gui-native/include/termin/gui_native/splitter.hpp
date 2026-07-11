@@ -10,8 +10,8 @@ private:
     float split_fraction_ = 0.5f;
     float first_min_extent_ = 32.0f;
     float second_min_extent_ = 32.0f;
-    float divider_thickness_ = 6.0f;
-    Color divider_color_ {0.30f, 0.33f, 0.38f, 1.0f};
+    float divider_thickness_ = 4.0f;
+    float divider_hit_thickness_ = 10.0f;
 
 public:
     explicit Splitter(Orientation orientation = Orientation::Horizontal, const char* debug_name = nullptr);
@@ -25,6 +25,7 @@ public:
     tc_widget_handle first() const { return child_handle_at(0); }
     tc_widget_handle second() const { return child_handle_at(1); }
     float split_fraction() const { return split_fraction_; }
+    float divider_thickness() const { return divider_thickness_; }
     tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
     void layout(tc_ui_document* document, tc_ui_rect rect) override;
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
@@ -32,6 +33,8 @@ public:
     tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
 private:
     tc_ui_rect divider_rect() const;
+    tc_ui_rect divider_hit_rect() const;
+    tc_ui_rect divider_line_rect(float line_thickness) const;
     void layout_children(tc_ui_document* document);
     float split_axis_extent() const;
 };

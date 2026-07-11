@@ -1189,6 +1189,7 @@ def test_native_basic_input_and_media_widget_factories():
     split_second = document.create_panel("split-second")
     splitter.set_first(split_first)
     splitter.set_second(split_second)
+    assert splitter.divider_thickness == pytest.approx(4.0)
     splitter.set_min_extents(40.0, 50.0)
     splitter.set_divider_thickness(6.0)
     splitter.split_fraction = 0.25
