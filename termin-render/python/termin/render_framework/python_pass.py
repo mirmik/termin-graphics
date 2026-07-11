@@ -75,6 +75,35 @@ def _inspect_registry():
     return InspectRegistry.instance()
 
 
+def _register_python_pass_class(cls: type) -> None:
+    registered_python = _register_python_pass_type(cls.__name__, cls)
+    if not registered_python:
+        return
+
+    registry = _inspect_registry()
+    own_fields = cls.__dict__.get("inspect_fields", {})
+    if own_fields:
+        registry.register_python_fields(cls.__name__, own_fields)
+
+    metadata = registry.get_type_metadata(cls.__name__)
+    if not isinstance(metadata, dict):
+        metadata = {}
+    metadata["graph"] = _collect_graph_socket_metadata(cls)
+    registry.set_type_metadata(cls.__name__, metadata)
+
+    parent_name = None
+    for klass in cls.__mro__[1:]:
+        if klass.__name__ in ("PythonFramePass", "FramePass", "RenderFramePass"):
+            parent_name = "PythonFramePass"
+            break
+        if "inspect_fields" in klass.__dict__:
+            parent_name = klass.__name__
+            break
+
+    if parent_name:
+        registry.set_type_parent(cls.__name__, parent_name)
+
+
 class PythonFramePass:
     """
     Base class for Python-authored render pipeline passes.
@@ -184,34 +213,7 @@ class PythonFramePass:
         if cls.__name__ in ("PythonFramePass", "FramePass", "RenderFramePass"):
             return
 
-        registered_python = _register_python_pass_type(cls.__name__, cls)
-
-        registry = _inspect_registry()
-
-        if not registered_python:
-            return
-
-        own_fields = cls.__dict__.get("inspect_fields", {})
-        if own_fields:
-            registry.register_python_fields(cls.__name__, own_fields)
-
-        metadata = registry.get_type_metadata(cls.__name__)
-        if not isinstance(metadata, dict):
-            metadata = {}
-        metadata["graph"] = _collect_graph_socket_metadata(cls)
-        registry.set_type_metadata(cls.__name__, metadata)
-
-        parent_name = None
-        for klass in cls.__mro__[1:]:
-            if klass.__name__ in ("PythonFramePass", "FramePass", "RenderFramePass"):
-                parent_name = "PythonFramePass"
-                break
-            if "inspect_fields" in klass.__dict__:
-                parent_name = klass.__name__
-                break
-
-        if parent_name:
-            registry.set_type_parent(cls.__name__, parent_name)
+        _register_python_pass_class(cls)
 
     def __repr__(self) -> str:
         return f"PythonFramePass({self.pass_name!r})"
@@ -295,11 +297,27 @@ def deserialize_pass(data: dict, resource_manager=None):
 FramePass = PythonFramePass
 RenderFramePass = PythonFramePass
 
-_register_python_pass_type("PythonFramePass", PythonFramePass)
+
+def register_loaded_python_passes() -> None:
+    """Re-register loaded pass classes after a complete runtime shutdown."""
+    _register_python_pass_type("PythonFramePass", PythonFramePass)
+    pending = list(PythonFramePass.__subclasses__())
+    seen: set[type] = set()
+    while pending:
+        cls = pending.pop()
+        if cls in seen:
+            continue
+        seen.add(cls)
+        pending.extend(cls.__subclasses__())
+        _register_python_pass_class(cls)
+
+
+register_loaded_python_passes()
 
 __all__ = [
     "PythonFramePass",
     "FramePass",
     "RenderFramePass",
     "deserialize_pass",
+    "register_loaded_python_passes",
 ]
