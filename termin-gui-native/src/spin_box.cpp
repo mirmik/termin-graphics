@@ -3,6 +3,18 @@
 namespace termin::gui_native {
 using namespace detail;
 
+namespace {
+std::string numeric_edit_characters(std::string_view text) {
+    std::string filtered;
+    for (const char ch : text) {
+        if ((ch >= '0' && ch <= '9') || ch == '.' || ch == '-' || ch == '+' || ch == 'e' || ch == 'E') {
+            filtered.push_back(ch);
+        }
+    }
+    return filtered;
+}
+} // namespace
+
 SpinBox::SpinBox(float value)
     : NativeWidget("SpinBox") {
     set_style_role(TC_UI_STYLE_TEXT_INPUT);
@@ -276,7 +288,7 @@ tc_ui_event_result SpinBox::pointer_event(tc_ui_document* document, const tc_ui_
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_ui_event_result SpinBox::key_event(tc_ui_document*, const tc_ui_key_event* event) {
+tc_ui_event_result SpinBox::key_event(tc_ui_document* document, const tc_ui_key_event* event) {
     if (!event || event->type != TC_UI_KEY_DOWN) return TC_UI_EVENT_IGNORED;
     if (event->key == TC_UI_KEY_UP_ARROW) {
         set_value(value_ + step_);
@@ -288,6 +300,39 @@ tc_ui_event_result SpinBox::key_event(tc_ui_document*, const tc_ui_key_event* ev
     }
     if (!editing_) return TC_UI_EVENT_IGNORED;
     const bool extend = (event->modifiers & TC_UI_MOD_SHIFT) != 0;
+    if (command_modifier(event->modifiers) && key_matches_ascii(event->key, 'a')) {
+        selection_anchor_ = 0;
+        caret_ = edit_text_.size();
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (command_modifier(event->modifiers) && key_matches_ascii(event->key, 'c')) {
+        if (has_selection()) {
+            const std::string selected = selected_text();
+            tc_ui_document_set_clipboard_text(document, selected.data(), selected.size());
+        }
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (command_modifier(event->modifiers) && key_matches_ascii(event->key, 'x')) {
+        if (has_selection()) {
+            const std::string selected = selected_text();
+            tc_ui_document_set_clipboard_text(document, selected.data(), selected.size());
+            delete_selection();
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        }
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (command_modifier(event->modifiers) && key_matches_ascii(event->key, 'v')) {
+        const char* clipboard = tc_ui_document_clipboard_text(document);
+        if (clipboard) {
+            const std::string filtered = numeric_edit_characters(clipboard);
+            if (!filtered.empty()) {
+                replace_selection(filtered);
+                mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+            }
+        }
+        return TC_UI_EVENT_HANDLED;
+    }
     switch (event->key) {
     case TC_UI_KEY_LEFT:
         if (!extend && has_selection()) move_caret(selection_start(), false);
@@ -316,12 +361,7 @@ tc_ui_event_result SpinBox::key_event(tc_ui_document*, const tc_ui_key_event* ev
 tc_ui_event_result SpinBox::text_event(tc_ui_document*, const tc_ui_text_event* event) {
     if (!event || !event->text || event->text[0] == '\0') return TC_UI_EVENT_IGNORED;
     if (!editing_) begin_edit();
-    std::string filtered;
-    for (const char ch : std::string_view(event->text)) {
-        if ((ch >= '0' && ch <= '9') || ch == '.' || ch == '-' || ch == '+' || ch == 'e' || ch == 'E') {
-            filtered.push_back(ch);
-        }
-    }
+    const std::string filtered = numeric_edit_characters(event->text);
     if (!filtered.empty()) {
         replace_selection(filtered);
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);

@@ -1279,6 +1279,8 @@ void test_text_area_multiline_utf8_editing_navigation_and_scroll() {
 void test_spin_box_numeric_edit_buttons_and_keys() {
   Document document;
   install_test_text_measurer(document);
+  TestClipboard clipboard;
+  install_test_clipboard(document, clipboard);
   DocumentBuilder ui(document);
   auto &spin = ui.make_root<SpinBox>(5.0f);
   spin.set_range(-10.0f, 10.0f);
@@ -1311,6 +1313,21 @@ void test_spin_box_numeric_edit_buttons_and_keys() {
 
   tc_ui_key_event key{};
   key.type = TC_UI_KEY_DOWN;
+  key.modifiers = TC_UI_MOD_CTRL;
+  key.key = 'a';
+  assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+  key.key = 'c';
+  assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+  assert(clipboard.text == spin.edit_text());
+  key.key = 'x';
+  assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+  assert(spin.edit_text().empty());
+  clipboard.text = "6.5";
+  key.key = 'v';
+  assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+  assert(spin.edit_text() == "6.5");
+
+  key.modifiers = 0;
   key.key = TC_UI_KEY_HOME;
   assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
   const size_t initial_length = spin.edit_text().size();
