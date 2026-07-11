@@ -425,6 +425,29 @@ void bind_tgfx2(nb::module_& m) {
                  if (h) self.device().destroy(h);
              })
 
+        // Create and upload a sampled RGBA8 texture through the context's
+        // device. This is the canonical helper for Python UI code that owns
+        // a RenderContext2 but intentionally has no direct IRenderDevice
+        // texture-allocation surface.
+        .def("create_texture_rgba8",
+             [](tgfx::RenderContext2& self, uint32_t w, uint32_t h,
+                nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data)
+             -> tgfx::TextureHandle {
+                 tgfx::TextureDesc desc;
+                 desc.width = w;
+                 desc.height = h;
+                 desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+                 desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
+                 const tgfx::TextureHandle texture = self.device().create_texture(desc);
+                 if (texture && data.size() > 0) {
+                     self.device().upload_texture(
+                         texture,
+                         std::span<const uint8_t>(data.data(), data.size()));
+                 }
+                 return texture;
+             },
+             nb::arg("width"), nb::arg("height"), nb::arg("data"))
+
         // Create an offscreen color attachment via the context's
         // device. Mirrors Tgfx2Context.create_color_attachment for
         // callers that only hold a RenderContext2 (effects running
