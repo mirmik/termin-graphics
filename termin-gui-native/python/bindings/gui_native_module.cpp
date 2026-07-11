@@ -1222,9 +1222,14 @@ NB_MODULE(_gui_native, m) {
         }, nb::arg("role"), nb::arg("value"));
 
     nb::class_<tc_ui_constraints>(m, "Constraints")
-        .def(nb::init<tc_ui_size, tc_ui_size>(),
-             nb::arg("min_size") = tc_ui_size {0.0f, 0.0f},
-             nb::arg("max_size") = tc_ui_size {0.0f, 0.0f})
+        .def("__init__", [](tc_ui_constraints* self,
+                             std::optional<tc_ui_size> min_size,
+                             std::optional<tc_ui_size> max_size) {
+            new (self) tc_ui_constraints{
+                min_size.value_or(tc_ui_size{0.0f, 0.0f}),
+                max_size.value_or(tc_ui_size{0.0f, 0.0f})};
+        }, nb::arg("min_size").none() = nb::none(),
+           nb::arg("max_size").none() = nb::none())
         .def_rw("min_size", &tc_ui_constraints::min_size)
         .def_rw("max_size", &tc_ui_constraints::max_size);
 
@@ -1357,9 +1362,14 @@ NB_MODULE(_gui_native, m) {
         .def_rw("modifiers", &tc_ui_key_event::modifiers)
         .def_rw("repeat", &tc_ui_key_event::repeat);
 
-    m.def("tooltip_rect", &tc_ui_tooltip_rect,
-          nb::arg("viewport"), nb::arg("anchor"), nb::arg("preferred_size"),
-          nb::arg("offset") = tc_ui_point {12.0f, 18.0f}, nb::arg("margin") = 4.0f);
+    m.def("tooltip_rect", [](tc_ui_rect viewport, tc_ui_point anchor,
+                              tc_ui_size preferred_size,
+                              std::optional<tc_ui_point> offset, float margin) {
+        return tc_ui_tooltip_rect(
+            viewport, anchor, preferred_size,
+            offset.value_or(tc_ui_point{12.0f, 18.0f}), margin);
+    }, nb::arg("viewport"), nb::arg("anchor"), nb::arg("preferred_size"),
+       nb::arg("offset").none() = nb::none(), nb::arg("margin") = 4.0f);
 
     nb::enum_<tc_widget_flag>(m, "WidgetFlag", nb::is_arithmetic())
         .value("Focusable", TC_WIDGET_FOCUSABLE)
@@ -2688,11 +2698,15 @@ NB_MODULE(_gui_native, m) {
         .def_rw("alpha", &termin::gui_native::ColorPickerTextureIds::alpha);
 
     nb::class_<termin::gui_native::ColorPickerModel>(m, "ColorPickerModel")
-        .def("__init__", [](termin::gui_native::ColorPickerModel* self, tc_ui_color initial,
+        .def("__init__", [](termin::gui_native::ColorPickerModel* self,
+                            std::optional<tc_ui_color> initial,
                             bool show_alpha) {
+            const tc_ui_color resolved_initial = initial.value_or(
+                tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f});
             new (self) termin::gui_native::ColorPickerModel(
-                termin::gui_native::Color{initial.r, initial.g, initial.b, initial.a}, show_alpha);
-        }, nb::arg("initial") = tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+                termin::gui_native::Color{resolved_initial.r, resolved_initial.g,
+                                          resolved_initial.b, resolved_initial.a}, show_alpha);
+        }, nb::arg("initial").none() = nb::none(),
            nb::arg("show_alpha") = true)
         .def_prop_rw("color", [](const termin::gui_native::ColorPickerModel& self) {
             return self.color().c_color();
@@ -3009,11 +3023,11 @@ NB_MODULE(_gui_native, m) {
         .def(
             "__init__",
             [](termin::gui_native::RichTextSegment* self, std::string text,
-               termin::gui_native::RichTextStyle style) {
-                new (self)
-                    termin::gui_native::RichTextSegment{std::move(text), std::move(style)};
+               std::optional<termin::gui_native::RichTextStyle> style) {
+                new (self) termin::gui_native::RichTextSegment{
+                    std::move(text), style.value_or(termin::gui_native::RichTextStyle{})};
             },
-            nb::arg("text"), nb::arg("style") = termin::gui_native::RichTextStyle{})
+            nb::arg("text"), nb::arg("style").none() = nb::none())
         .def_rw("text", &termin::gui_native::RichTextSegment::text)
         .def_rw("style", &termin::gui_native::RichTextSegment::style);
 
@@ -4404,9 +4418,9 @@ NB_MODULE(_gui_native, m) {
         })
         .def("set_texture", [](const ImageWidgetRef& self,
                                 tgfx::TextureHandle texture,
-                                tc_ui_size intrinsic_size) {
-            self.get().set_texture(texture.id, intrinsic_size);
-        }, nb::arg("texture"), nb::arg("intrinsic_size") = tc_ui_size {})
+                                std::optional<tc_ui_size> intrinsic_size) {
+            self.get().set_texture(texture.id, intrinsic_size.value_or(tc_ui_size{}));
+        }, nb::arg("texture"), nb::arg("intrinsic_size").none() = nb::none())
         .def("set_tint", [](const ImageWidgetRef& self, tc_ui_color tint) {
             self.get().set_tint(termin::gui_native::Color {tint.r, tint.g, tint.b, tint.a});
         }, nb::arg("tint"))
@@ -4420,9 +4434,9 @@ NB_MODULE(_gui_native, m) {
         .def_prop_ro("zoom", [](const CanvasRef& self) { return self.get().zoom(); })
         .def("set_texture", [](const CanvasRef& self,
                                 tgfx::TextureHandle texture,
-                                tc_ui_size image_size) {
-            self.get().set_texture(texture.id, image_size);
-        }, nb::arg("texture"), nb::arg("image_size") = tc_ui_size {})
+                                std::optional<tc_ui_size> image_size) {
+            self.get().set_texture(texture.id, image_size.value_or(tc_ui_size{}));
+        }, nb::arg("texture"), nb::arg("image_size").none() = nb::none())
         .def("set_overlay_texture", [](const CanvasRef& self, tgfx::TextureHandle texture) {
             self.get().set_overlay_texture(texture.id);
         }, nb::arg("texture"))
@@ -4592,20 +4606,24 @@ NB_MODULE(_gui_native, m) {
         .def("draw_texture", [](PaintContext& self,
                                  tgfx::TextureHandle texture,
                                  tc_ui_rect rect,
-                                 tc_ui_color tint,
+                                 std::optional<tc_ui_color> tint,
                                  bool flip_v) {
-            tc_ui_painter_draw_texture(self.get(), texture.id, rect, tint, flip_v);
+            tc_ui_painter_draw_texture(
+                self.get(), texture.id, rect,
+                tint.value_or(tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}), flip_v);
         }, nb::arg("texture"), nb::arg("rect"),
-           nb::arg("tint") = tc_ui_color {1.0f, 1.0f, 1.0f, 1.0f},
+           nb::arg("tint").none() = nb::none(),
            nb::arg("flip_v") = false)
         .def("draw_image", [](PaintContext& self,
                                tgfx::TextureHandle texture,
                                tc_ui_rect rect,
-                               tc_ui_color tint,
+                               std::optional<tc_ui_color> tint,
                                bool flip_v) {
-            tc_ui_painter_draw_texture(self.get(), texture.id, rect, tint, flip_v);
+            tc_ui_painter_draw_texture(
+                self.get(), texture.id, rect,
+                tint.value_or(tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}), flip_v);
         }, nb::arg("texture"), nb::arg("rect"),
-           nb::arg("tint") = tc_ui_color {1.0f, 1.0f, 1.0f, 1.0f},
+           nb::arg("tint").none() = nb::none(),
            nb::arg("flip_v") = false)
         .def("draw_text", [](PaintContext& self, const std::string& text, tc_ui_point position, float font_size, tc_ui_color color) {
             tc_ui_painter_draw_text(self.get(), text.c_str(), position, font_size, color);
@@ -4956,15 +4974,17 @@ NB_MODULE(_gui_native, m) {
             nb::arg("model") = nullptr)
         .def(
             "create_color_dialog",
-            [](Document &self, tc_ui_color initial, bool show_alpha,
+            [](Document &self, std::optional<tc_ui_color> initial, bool show_alpha,
                const std::string &title) {
+              const tc_ui_color resolved_initial = initial.value_or(
+                  tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f});
               return ColorDialogRef{
                   self.make_native<termin::gui_native::ColorDialog>(
-                      termin::gui_native::Color{initial.r, initial.g, initial.b,
-                                                initial.a},
+                      termin::gui_native::Color{resolved_initial.r, resolved_initial.g,
+                                                resolved_initial.b, resolved_initial.a},
                       show_alpha, title)};
             },
-            nb::arg("initial") = tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+            nb::arg("initial").none() = nb::none(),
             nb::arg("show_alpha") = true, nb::arg("title") = "Color Picker")
         .def(
             "create_tree_widget",

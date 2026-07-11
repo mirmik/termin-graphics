@@ -14,10 +14,12 @@
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/array.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/ndarray.h>
 
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 
 #include <tgfx2/render_context.hpp>
@@ -360,19 +362,19 @@ void bind_tgfx2(nb::module_& m) {
         .def("begin_pass",
              [](tgfx::RenderContext2& self,
                 tgfx::TextureHandle color,
-                tgfx::TextureHandle depth,
+                std::optional<tgfx::TextureHandle> depth,
                 bool clear_color_enabled,
                 float r, float g, float b, float a,
                 float clear_depth,
                 bool clear_depth_enabled) {
                  float clear_rgba[4] = {r, g, b, a};
-                 self.begin_pass(color, depth,
+                 self.begin_pass(color, depth.value_or(tgfx::TextureHandle{}),
                                  clear_color_enabled ? clear_rgba : nullptr,
                                  clear_depth,
                                  clear_depth_enabled);
              },
              nb::arg("color"),
-             nb::arg("depth") = tgfx::TextureHandle{},
+             nb::arg("depth").none() = nb::none(),
              nb::arg("clear_color_enabled") = false,
              nb::arg("r") = 0.0f, nb::arg("g") = 0.0f,
              nb::arg("b") = 0.0f, nb::arg("a") = 1.0f,
@@ -1136,26 +1138,32 @@ void bind_tgfx2(nb::module_& m) {
                                     color, thickness);
              },
              nb::arg("points"), nb::arg("color"), nb::arg("thickness") = 1.0f)
-        .def("draw_texture", &tgfx::Canvas2DRenderer::draw_texture,
-             nb::arg("texture"),
-             nb::arg("x"), nb::arg("y"), nb::arg("w"), nb::arg("h"),
-             nb::arg("tint") = tgfx::CanvasColor::white(),
-             nb::arg("flip_v") = false)
+        .def("draw_texture", [](tgfx::Canvas2DRenderer& self,
+                                 tgfx::TextureHandle texture,
+                                 float x, float y, float w, float h,
+                                 std::optional<tgfx::CanvasColor> tint,
+                                 bool flip_v) {
+            self.draw_texture(texture, x, y, w, h,
+                              tint.value_or(tgfx::CanvasColor::white()), flip_v);
+        }, nb::arg("texture"), nb::arg("x"), nb::arg("y"), nb::arg("w"),
+           nb::arg("h"), nb::arg("tint").none() = nb::none(),
+           nb::arg("flip_v") = false)
         .def("draw_text",
              [resolve_text2d_anchor](tgfx::Canvas2DRenderer& self,
                 const std::string& text,
                 float x, float y,
                 float size_px,
-                tgfx::CanvasColor color,
+                std::optional<tgfx::CanvasColor> color,
                 tgfx::FontAtlas* font,
                 nb::object anchor) {
-                 self.draw_text(text, x, y, size_px, color, font,
+                 self.draw_text(text, x, y, size_px,
+                                color.value_or(tgfx::CanvasColor::white()), font,
                                 resolve_text2d_anchor(anchor));
              },
              nb::arg("text"),
              nb::arg("x"), nb::arg("y"),
              nb::arg("size_px"),
-             nb::arg("color") = tgfx::CanvasColor::white(),
+             nb::arg("color").none() = nb::none(),
              nb::arg("font").none() = nb::none(),
              nb::arg("anchor") = "left",
              nb::keep_alive<1, 7>())
