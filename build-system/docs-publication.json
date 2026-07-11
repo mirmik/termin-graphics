@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "description": "Documentation publication inventory joined to repository module identities. Every repository-owned docs root is public or explicitly internal.",
+  "inventory": {
+    "exclude_roots": ["build", "sdk", "termin-thirdparty"],
+    "exclude_directory_names": [".git", ".venv", "__pycache__", "node_modules"]
+  },
+  "public_sites": [
+    {
+      "module": null,
+      "root": "docs",
+      "config": "mkdocs.yml",
+      "site_path": "."
+    },
+    {
+      "module": "termin-app",
+      "root": "termin-app/docs",
+      "config": "termin-app/mkdocs.yml",
+      "site_path": "termin-app"
+    },
+    {
+      "module": "termin-collision",
+      "root": "termin-collision/docs",
+      "config": "termin-collision/mkdocs.yml",
+      "site_path": "termin-collision"
+    },
+    {
+      "module": "termin-gui",
+      "root": "termin-gui/docs",
+      "config": "termin-gui/mkdocs.yml",
+      "site_path": "termin-gui"
+    },
+    {
+      "module": "termin-inspect",
+      "root": "termin-inspect/docs",
+      "config": "termin-inspect/mkdocs.yml",
+      "site_path": "termin-inspect"
+    },
+    {
+      "module": "termin-scene",
+      "root": "termin-scene/docs",
+      "config": "termin-scene/mkdocs.yml",
+      "site_path": "termin-scene"
+    },
+    {
+      "module": "termin-modules",
+      "root": "termin-modules/docs",
+      "config": "termin-modules/mkdocs.yml",
+      "site_path": "termin-modules"
+    }
+  ],
+  "internal_roots": [
+    "tcplot/docs",
+    "termin-animation/docs",
+    "termin-audio/docs",
+    "termin-base/docs",
+    "termin-build-tools/docs",
+    "termin-components/docs",
+    "termin-components/termin-components-animation/docs",
+    "termin-components/termin-components-collision/docs",
+    "termin-components/termin-components-kinematic/docs",
+    "termin-components/termin-components-mesh/docs",
+    "termin-components/termin-components-physics/docs",
+    "termin-components/termin-components-render/docs",
+    "termin-components/termin-components-skeleton/docs",
+    "termin-components/termin-components-tween/docs",
+    "termin-components/termin-components-voxels/docs",
+    "termin-csharp/docs",
+    "termin-default-assets/docs",
+    "termin-display/docs",
+    "termin-engine/docs",
+    "termin-glb/docs",
+    "termin-graphics/docs",
+    "termin-input/docs",
+    "termin-lighting/docs",
+    "termin-mesh/docs",
+    "termin-nanobind-sdk/docs",
+    "termin-navmesh/docs",
+    "termin-nodegraph/docs",
+    "termin-physics-fem/docs",
+    "termin-physics/docs",
+    "termin-prefab/docs",
+    "termin-render-passes/docs",
+    "termin-render/docs",
+    "termin-skeleton/docs",
+    "termin-stdlib/docs",
+    "termin-tween/docs",
+    "termin-voxels/docs"
+  ]
+}
