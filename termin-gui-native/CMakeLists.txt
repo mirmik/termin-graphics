@@ -160,6 +160,8 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     )
     termin_gui_native_add_test(termin_gui_native_widgets_test
         tests/test_widgets.cpp
+        tests/test_widgets_layout.cpp
+        tests/test_widgets_collections.cpp
     )
     termin_gui_native_add_test(termin_gui_native_showcase_test
         tests/test_showcase.cpp
@@ -252,6 +254,11 @@ if(TERMIN_BUILD_PYTHON)
 
     nanobind_add_module(_gui_native NB_SHARED
         python/bindings/gui_native_module.cpp
+        python/bindings/gui_native_bindings_core.cpp
+        python/bindings/gui_native_bindings_widgets.cpp
+        python/bindings/gui_native_bindings_commands.cpp
+        python/bindings/gui_native_bindings_views.cpp
+        python/bindings/gui_native_bindings_document.cpp
     )
     target_link_libraries(_gui_native
         PRIVATE

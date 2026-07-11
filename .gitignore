@@ -129,6 +129,7 @@ doxygen/html
 doxygen/latex
 docs/_build/
 docs/doxygen_xml/
+_site/
 target/
 /site
 .webassets-cache

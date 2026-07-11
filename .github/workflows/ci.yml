@@ -163,6 +163,11 @@ jobs:
             --executor process-smoke \
             --plan-file build/ci-plans/windows-d3d11-bound.json \
             --report-output build/d3d11-execution-manifest.json
+          python -m termin_build.repository_control \
+            verify-suite-execution \
+            --plan build/ci-plans/windows-d3d11-bound.json \
+            --manifest build/d3d11-execution-manifest.json \
+            --executor process-smoke
 
       - uses: actions/upload-artifact@v5
         if: always()
@@ -437,6 +442,11 @@ jobs:
             --executor process-smoke \
             --plan-file ${{ github.workspace }}/build/ci-plans/sdk-installed-linux.json \
             --report-output build/termin-app-installed-execution-manifest.json
+          sdk/bin/termin_python -m termin_build.repository_control \
+            verify-suite-execution \
+            --plan ${{ github.workspace }}/build/ci-plans/sdk-installed-linux.json \
+            --manifest build/termin-app-installed-execution-manifest.json \
+            --executor process-smoke
 
       - uses: actions/upload-artifact@v5
         if: always()
