@@ -142,6 +142,11 @@ public:
 struct VulkanDeviceCreateInfo {
     bool enable_validation = true;
 
+    // Host-visible dynamic UBO budget per in-flight frame. Keeping this in
+    // device configuration makes the memory/performance tradeoff explicit
+    // and lets stress tests exercise the overflow path deterministically.
+    uint64_t ring_ubo_slot_size = 8u * 1024u * 1024u;
+
     // Required instance extensions. The typical SDL / GLFW flow fills
     // this from SDL_Vulkan_GetInstanceExtensions / glfwGetRequiredInstanceExtensions.
     std::vector<const char*> instance_extensions;
@@ -339,6 +344,7 @@ private:
     void*         ring_ubo_mapped_     = nullptr;
     uint64_t      ring_ubo_size_       = 0;  // total (all frame slots)
     uint64_t      ring_ubo_slot_size_  = 0;  // = ring_ubo_size_ / kFrameSlotCount
+    uint64_t      requested_ring_ubo_slot_size_ = 8u * 1024u * 1024u;
     // Per-slot head — advances with every write into that slot, reset to
     // 0 when we flip INTO the slot in submit(). Atomic for forward-compat
     // with multi-threaded recording; only the render thread writes today,
@@ -359,7 +365,7 @@ private:
     // removes ~1 function call × hundreds of writes/frame from the hot
     // path. Queried once in create_ring_ubo().
     bool ring_ubo_coherent_ = false;
-    bool ring_ubo_overflow_warned_ = false;
+    std::atomic_bool ring_ubo_overflow_warned_{false};
 
     // Transient vertex ring for immediate draws. Same frame-slot lifetime
     // model as ring_ubo_: frame N records into one half while the other
@@ -517,7 +523,7 @@ public:
     // A single large host-visible, persistently-mapped VkBuffer that
     // accumulates per-draw UBO data across one frame. Callers (render-pass
     // code, SkinnedMeshRenderer, material params) write their block via
-    // `ring_ubo_write(data, size)` which returns an aligned byte offset;
+    // `ring_ubo_write(data, size, offset)` which returns an aligned byte offset;
     // the offset is then handed to `vkCmdBindDescriptorSets` as a dynamic
     // offset for bindings declared UNIFORM_BUFFER_DYNAMIC.
     //
@@ -530,7 +536,7 @@ public:
     // previous contents). Wraparound mid-frame would corrupt in-flight
     // data, so the buffer is sized generously (16 MB ≈ 10 KB × 1600 draws)
     // and an overflow is an error we log rather than silently wrap.
-    uint32_t ring_ubo_write(const void* data, uint32_t size) override;
+    bool ring_ubo_write(const void* data, uint32_t size, uint32_t& offset) override;
     VkBuffer ring_ubo_buffer() const { return ring_ubo_buffer_; }
     // The ring buffer exposed as a normal BufferHandle. BoundResourceSetDesc
     // values can reference this handle; the

@@ -573,6 +573,62 @@ static void test_world_space_lines_depth(tgfx::IRenderDevice& device, tgfx::Pipe
     device.destroy(depth);
 }
 
+static void test_clear_scissor_uses_current_render_extent(
+    tgfx::IRenderDevice& device,
+    tgfx::PipelineCache& cache) {
+    printf("\n--- Clear scissor render extent ---\n");
+
+    tgfx::TextureDesc color_desc;
+    color_desc.width = 73;
+    color_desc.height = 41;
+    color_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    color_desc.usage = tgfx::TextureUsage::ColorAttachment;
+    const auto color = device.create_texture(color_desc);
+
+    tgfx::RenderContext2 ctx(device, cache);
+    ctx.begin_frame();
+    ctx.begin_pass(color, {}, nullptr, 1.0f, false);
+    ctx.set_scissor(2, 3, 5, 7);
+    ctx.clear_scissor();
+
+    GLint scissor[4] = {};
+    glGetIntegerv(GL_SCISSOR_BOX, scissor);
+    CHECK(scissor[0] == 0 && scissor[1] == 0 &&
+              scissor[2] == 73 && scissor[3] == 41,
+          "clear_scissor uses the current color target extent");
+
+    ctx.set_viewport(0, 0, 29, 17);
+    ctx.set_scissor(1, 1, 2, 2);
+    ctx.clear_scissor();
+    glGetIntegerv(GL_SCISSOR_BOX, scissor);
+    CHECK(scissor[0] == 0 && scissor[1] == 24 &&
+              scissor[2] == 29 && scissor[3] == 17,
+          "clear_scissor follows a changed viewport extent");
+
+    ctx.end_pass();
+    ctx.end_frame();
+    device.destroy(color);
+
+    tgfx::TextureDesc depth_desc;
+    depth_desc.width = 37;
+    depth_desc.height = 23;
+    depth_desc.format = tgfx::PixelFormat::D32F;
+    depth_desc.usage = tgfx::TextureUsage::DepthStencilAttachment;
+    const auto depth = device.create_texture(depth_desc);
+
+    ctx.begin_frame();
+    ctx.begin_pass({}, depth, nullptr, 1.0f, false);
+    ctx.set_scissor(1, 1, 2, 2);
+    ctx.clear_scissor();
+    glGetIntegerv(GL_SCISSOR_BOX, scissor);
+    CHECK(scissor[0] == 0 && scissor[1] == 0 &&
+              scissor[2] == 37 && scissor[3] == 23,
+          "clear_scissor uses a depth-only target extent");
+    ctx.end_pass();
+    ctx.end_frame();
+    device.destroy(depth);
+}
+
 int main() {
     if (!glfwInit()) {
         fprintf(stderr, "Failed to init GLFW\n");
@@ -635,6 +691,11 @@ int main() {
         tgfx::OpenGLRenderDevice device;
         tgfx::PipelineCache cache(device);
         test_world_space_lines_depth(device, cache);
+    }
+    {
+        tgfx::OpenGLRenderDevice device;
+        tgfx::PipelineCache cache(device);
+        test_clear_scissor_uses_current_render_extent(device, cache);
     }
 
     printf("\n=== Results: %d/%d passed ===\n", pass_count, test_count);

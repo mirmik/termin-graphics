@@ -10,6 +10,7 @@
 #include "tgfx2/internal/process_runner.hpp"
 #include <tcbase/trent/json.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -19,8 +20,11 @@
 #include <iterator>
 #include <limits>
 #include <optional>
+#include <regex>
 #include <sstream>
 #include <string>
+#include <string_view>
+#include <unordered_set>
 #include <vector>
 
 extern "C" {
@@ -38,7 +42,7 @@ static bool g_shader_dev_compile_enabled = false;
 // Bump when termin_shaderc reflected resource placement or sidecar semantics
 // change in a way that requires recompiling cached shader artifacts.
 static constexpr uint32_t kShaderArtifactLayoutSchemaVersion = 4;
-static constexpr uint32_t kShaderArtifactMetadataSchemaVersion = 1;
+static constexpr uint32_t kShaderArtifactMetadataSchemaVersion = 2;
 static constexpr const char* kShaderArtifactMetadataSuffix = ".artifact";
 static constexpr const char* kLegacyShaderArtifactMetadataSuffix = ".meta";
 
@@ -277,6 +281,102 @@ static std::string fnv1a_hash_text(const char* text) {
     return std::string(out);
 }
 
+static void fnv1a_update(uint64_t& hash, std::string_view text) {
+    for (const unsigned char value : text) {
+        hash ^= static_cast<uint64_t>(value);
+        hash *= 1099511628211ULL;
+    }
+}
+
+static bool collect_slang_dependency_hash(
+    std::string_view source,
+    const std::vector<std::filesystem::path>& include_roots,
+    std::unordered_set<std::string>& visited,
+    uint64_t& hash,
+    std::string& error
+) {
+    static const std::regex import_re(
+        R"(\bimport\s+([A-Za-z_][A-Za-z0-9_\.]*)\s*;)");
+    const std::string source_text(source);
+    for (std::sregex_iterator it(source_text.begin(), source_text.end(), import_re), end;
+         it != end;
+         ++it) {
+        const std::string module_name = (*it)[1].str();
+        std::string module_path = module_name;
+        std::replace(module_path.begin(), module_path.end(), '.', '/');
+
+        std::filesystem::path resolved;
+        for (const auto& root : include_roots) {
+            for (const std::string& candidate_name :
+                 {module_name + ".slang", module_path + ".slang"}) {
+                std::error_code ec;
+                const std::filesystem::path candidate = root / candidate_name;
+                if (std::filesystem::is_regular_file(candidate, ec)) {
+                    resolved = candidate;
+                    break;
+                }
+            }
+            if (!resolved.empty()) break;
+        }
+        if (resolved.empty()) {
+            error = "unresolved Slang import '" + module_name + "'";
+            return false;
+        }
+
+        std::error_code ec;
+        const std::filesystem::path canonical =
+            std::filesystem::weakly_canonical(resolved, ec);
+        const std::string key = (ec ? resolved.lexically_normal() : canonical).string();
+        if (!visited.insert(key).second) continue;
+
+        std::ifstream in(resolved, std::ios::binary);
+        if (!in) {
+            error = "failed to read Slang import '" + module_name + "' at '" +
+                resolved.string() + "'";
+            return false;
+        }
+        const std::string dependency{
+            std::istreambuf_iterator<char>(in),
+            std::istreambuf_iterator<char>()};
+        fnv1a_update(hash, module_name);
+        fnv1a_update(hash, "\0");
+        fnv1a_update(hash, dependency);
+        fnv1a_update(hash, "\0");
+        if (!collect_slang_dependency_hash(
+                dependency, include_roots, visited, hash, error)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool shader_dependency_fingerprint(
+    tc_shader_language language,
+    std::string_view source,
+    std::string& out
+) {
+    if (language != TC_SHADER_LANGUAGE_SLANG) {
+        out = "none";
+        return true;
+    }
+    const auto roots = tgfx::builtin_shader_roots();
+    std::unordered_set<std::string> visited;
+    uint64_t hash = 1469598103934665603ULL;
+    std::string error;
+    if (!collect_slang_dependency_hash(source, roots, visited, hash, error)) {
+        tc_log(TC_LOG_ERROR,
+               "tgfx2 shader dependency scan: %s; include roots=%zu",
+               error.c_str(),
+               roots.size());
+        return false;
+    }
+    char encoded[17];
+    std::snprintf(encoded, sizeof(encoded), "%016llx",
+                  static_cast<unsigned long long>(hash));
+    out = encoded;
+    return true;
+}
+
 static std::filesystem::path shader_cache_source_path(
     const tc_shader* shader,
     tgfx::ShaderStage stage
@@ -298,7 +398,8 @@ static std::string artifact_metadata_text(
     const tc_shader* shader,
     tgfx::BackendType backend,
     tgfx::ShaderStage stage,
-    const std::string& compiler_fingerprint
+    const std::string& compiler_fingerprint,
+    const std::string& dependency_fingerprint
 ) {
     const char* entry = "main";
     if (stage == tgfx::ShaderStage::Vertex && shader->vertex_entry && shader->vertex_entry[0]) {
@@ -313,6 +414,7 @@ static std::string artifact_metadata_text(
     out << "artifact_metadata_schema=" << kShaderArtifactMetadataSchemaVersion << "\n";
     out << "layout_schema=" << kShaderArtifactLayoutSchemaVersion << "\n";
     out << "shader_compiler=" << compiler_fingerprint << "\n";
+    out << "dependency_hash=" << dependency_fingerprint << "\n";
     out << "source_hash=" << shader->source_hash << "\n";
     out << "language=" << shader_language_name((tc_shader_language)shader->language) << "\n";
     out << "target=" << backend_name(backend) << "\n";
@@ -327,12 +429,14 @@ static std::string engine_shader_artifact_metadata_text(
     const tgfx::EngineShaderStageSource& shader,
     const std::string& source_hash,
     tgfx::BackendType backend,
-    const std::string& compiler_fingerprint
+    const std::string& compiler_fingerprint,
+    const std::string& dependency_fingerprint
 ) {
     std::ostringstream out;
     out << "artifact_metadata_schema=" << kShaderArtifactMetadataSchemaVersion << "\n";
     out << "layout_schema=" << kShaderArtifactLayoutSchemaVersion << "\n";
     out << "shader_compiler=" << compiler_fingerprint << "\n";
+    out << "dependency_hash=" << dependency_fingerprint << "\n";
     out << "source_hash=" << source_hash << "\n";
     out << "language=" << (shader.language ? shader.language : "") << "\n";
     out << "target=" << backend_name(backend) << "\n";
@@ -382,7 +486,8 @@ static bool artifact_metadata_current(
     const tc_shader* shader,
     tgfx::BackendType backend,
     tgfx::ShaderStage stage,
-    const std::string& compiler_fingerprint
+    const std::string& compiler_fingerprint,
+    const std::string& dependency_fingerprint
 ) {
     std::ifstream in(shader_artifact_metadata_path(artifact_path), std::ios::binary);
     if (!in) {
@@ -391,7 +496,8 @@ static bool artifact_metadata_current(
     std::string text{
         std::istreambuf_iterator<char>(in),
         std::istreambuf_iterator<char>()};
-    return text == artifact_metadata_text(shader, backend, stage, compiler_fingerprint);
+    return text == artifact_metadata_text(
+        shader, backend, stage, compiler_fingerprint, dependency_fingerprint);
 }
 
 static bool engine_shader_artifact_metadata_current(
@@ -399,7 +505,8 @@ static bool engine_shader_artifact_metadata_current(
     const tgfx::EngineShaderStageSource& shader,
     const std::string& source_hash,
     tgfx::BackendType backend,
-    const std::string& compiler_fingerprint
+    const std::string& compiler_fingerprint,
+    const std::string& dependency_fingerprint
 ) {
     std::ifstream in(shader_artifact_metadata_path(artifact_path), std::ios::binary);
     if (!in) {
@@ -412,7 +519,8 @@ static bool engine_shader_artifact_metadata_current(
         shader,
         source_hash,
         backend,
-        compiler_fingerprint);
+        compiler_fingerprint,
+        dependency_fingerprint);
 }
 
 static bool write_artifact_metadata(
@@ -420,7 +528,8 @@ static bool write_artifact_metadata(
     const tc_shader* shader,
     tgfx::BackendType backend,
     tgfx::ShaderStage stage,
-    const std::string& compiler_fingerprint
+    const std::string& compiler_fingerprint,
+    const std::string& dependency_fingerprint
 ) {
     std::ofstream out(shader_artifact_metadata_path(artifact_path), std::ios::binary);
     if (!out) {
@@ -429,7 +538,8 @@ static bool write_artifact_metadata(
                artifact_path.string().c_str());
         return false;
     }
-    out << artifact_metadata_text(shader, backend, stage, compiler_fingerprint);
+    out << artifact_metadata_text(
+        shader, backend, stage, compiler_fingerprint, dependency_fingerprint);
     std::error_code ec;
     std::filesystem::remove(legacy_shader_artifact_metadata_path(artifact_path), ec);
     return static_cast<bool>(out);
@@ -440,7 +550,8 @@ static bool write_engine_shader_artifact_metadata(
     const tgfx::EngineShaderStageSource& shader,
     const std::string& source_hash,
     tgfx::BackendType backend,
-    const std::string& compiler_fingerprint
+    const std::string& compiler_fingerprint,
+    const std::string& dependency_fingerprint
 ) {
     std::ofstream out(shader_artifact_metadata_path(artifact_path), std::ios::binary);
     if (!out) {
@@ -453,7 +564,8 @@ static bool write_engine_shader_artifact_metadata(
         shader,
         source_hash,
         backend,
-        compiler_fingerprint);
+        compiler_fingerprint,
+        dependency_fingerprint);
     std::error_code ec;
     std::filesystem::remove(legacy_shader_artifact_metadata_path(artifact_path), ec);
     return static_cast<bool>(out);
@@ -981,7 +1093,8 @@ static bool compile_shader_artifact(
     tgfx::ShaderStage stage,
     const std::filesystem::path& artifact_path,
     const std::filesystem::path& compiler,
-    const std::string& compiler_fingerprint
+    const std::string& compiler_fingerprint,
+    const std::string& dependency_fingerprint
 ) {
     const tc_shader_language language = (tc_shader_language)shader->language;
     if (!shader_language_target_supported(language, backend)) {
@@ -1072,7 +1185,8 @@ static bool compile_shader_artifact(
         shader,
         backend,
         stage,
-        compiler_fingerprint);
+        compiler_fingerprint,
+        dependency_fingerprint);
 }
 
 static std::string builtin_source_filename(const char* source_resource_path) {
@@ -1113,6 +1227,7 @@ struct EngineShaderStageCompileRequest {
     const std::filesystem::path& artifact_path;
     const std::filesystem::path& compiler;
     const std::string& compiler_fingerprint;
+    const std::string& dependency_fingerprint;
 };
 
 static bool compile_engine_shader_stage_artifact(
@@ -1158,6 +1273,11 @@ static bool compile_engine_shader_stage_artifact(
         std::string(request.shader.name ? request.shader.name : request.shader.uuid) +
             ":" + stage_name(request.shader.stage),
     };
+    if (request.language == TC_SHADER_LANGUAGE_SLANG) {
+        for (const auto& root : tgfx::builtin_shader_roots()) {
+            args.insert(args.end(), {"-I", root.string()});
+        }
+    }
 
     const int rc = run_shader_tool(args, "tgfx2 engine shader dev compile");
     if (rc != 0) {
@@ -1181,7 +1301,8 @@ static bool compile_engine_shader_stage_artifact(
         request.shader,
         request.source_hash,
         request.backend,
-        request.compiler_fingerprint);
+        request.compiler_fingerprint,
+        request.dependency_fingerprint);
 }
 
 bool tgfx2_shader_artifact_path(
@@ -1268,6 +1389,14 @@ bool tgfx2_load_or_compile_shader_artifact_for_backend(
 
     const tc_shader_language language = (tc_shader_language)shader->language;
     const bool supported = shader_language_target_supported(language, backend);
+    const char* stage_source = shader_stage_source(shader, stage);
+    std::string dependency_fingerprint;
+    if (!shader_dependency_fingerprint(
+            language,
+            stage_source ? std::string_view(stage_source) : std::string_view(),
+            dependency_fingerprint)) {
+        return false;
+    }
     std::optional<std::filesystem::path> compiler;
     std::string compiler_fingerprint;
     if (supported) {
@@ -1283,7 +1412,8 @@ bool tgfx2_load_or_compile_shader_artifact_for_backend(
                 shader,
                 backend,
                 stage,
-                compiler_fingerprint)) {
+                compiler_fingerprint,
+                dependency_fingerprint)) {
             return apply_shader_resource_layout_sidecar(shader, artifact_path);
         }
         if (!supported) {
@@ -1310,7 +1440,8 @@ bool tgfx2_load_or_compile_shader_artifact_for_backend(
             stage,
             artifact_path,
             *compiler,
-            compiler_fingerprint)) {
+            compiler_fingerprint,
+            dependency_fingerprint)) {
         return false;
     }
     if (!read_binary_file(artifact_path, out)) {
@@ -1352,6 +1483,10 @@ bool tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
         return false;
     }
     const std::string source_hash = fnv1a_hash_text(source.c_str());
+    std::string dependency_fingerprint;
+    if (!shader_dependency_fingerprint(language, source, dependency_fingerprint)) {
+        return false;
+    }
     const bool supported = shader_language_target_supported(language, backend);
     std::optional<std::filesystem::path> compiler;
     std::string compiler_fingerprint;
@@ -1369,7 +1504,8 @@ bool tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
                 shader,
                 source_hash,
                 backend,
-                compiler_fingerprint)) {
+                compiler_fingerprint,
+                dependency_fingerprint)) {
             return true;
         }
         if (!supported) {
@@ -1396,7 +1532,8 @@ bool tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
         source_hash,
         artifact_path,
         *compiler,
-        compiler_fingerprint
+        compiler_fingerprint,
+        dependency_fingerprint
     };
     if (!compile_engine_shader_stage_artifact(compile_request)) {
         return false;

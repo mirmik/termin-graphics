@@ -129,6 +129,7 @@ static bool contains_extension(
 VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     validation_enabled_ = info.enable_validation;
     device_extensions_ = info.device_extensions;
+    requested_ring_ubo_slot_size_ = info.ring_ubo_slot_size;
     init_instance(info);
 
     // Resolve the surface. Two supply paths:
@@ -634,12 +635,12 @@ void VulkanRenderDevice::create_ring_ubo() {
     ubo_alignment_ = static_cast<uint32_t>(
         std::max<VkDeviceSize>(props.limits.minUniformBufferOffsetAlignment, 1));
 
-    // 8 MB per submit slot. Budget ~10 KB UBO data per draw ×
-    // 1600 worst-case draws/frame = 16 MB needed, so per-slot headroom is
-    // tight on adversarial scenes; logged (rare) overflow falls back to offset 0.
-    // If that ever fires in practice, grow the ring or shrink per-pass UBOs.
-    ring_ubo_size_ = static_cast<uint64_t>(kFrameSlotCount) * 8 * 1024 * 1024;
-    ring_ubo_slot_size_ = ring_ubo_size_ / kFrameSlotCount;
+    // Round the requested per-frame budget up to the device's dynamic-offset
+    // alignment so every frame slot starts at a legal UBO offset.
+    const uint64_t requested = std::max<uint64_t>(requested_ring_ubo_slot_size_, 1);
+    ring_ubo_slot_size_ =
+        ((requested + ubo_alignment_ - 1) / ubo_alignment_) * ubo_alignment_;
+    ring_ubo_size_ = static_cast<uint64_t>(kFrameSlotCount) * ring_ubo_slot_size_;
 
     VkBufferCreateInfo bi{};
     bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -688,7 +689,8 @@ void VulkanRenderDevice::create_ring_ubo() {
     ring_ubo_handle_.id = buffers_.add(std::move(ring_res));
 }
 
-uint32_t VulkanRenderDevice::ring_ubo_write(const void* data, uint32_t size) {
+bool VulkanRenderDevice::ring_ubo_write(const void* data, uint32_t size,
+                                        uint32_t& out_offset) {
     // Reserve an aligned slice at the head. fetch_add returns the pre-update
     // value → that's our offset within the slot. The advance is aligned(size)
     // so the NEXT allocation starts on a legal dynamic-offset boundary.
@@ -702,18 +704,16 @@ uint32_t VulkanRenderDevice::ring_ubo_write(const void* data, uint32_t size) {
         ring_ubo_heads_[slot].fetch_add(padded, std::memory_order_relaxed);
 
     if (offset_in_slot + padded > ring_ubo_slot_size_) {
-        // Per-slot overflow: rest of the frame's UBO writes are invalid.
-        // Log once so it's obvious in a profile run; return the slot base
-        // so the caller still gets a legal (but stale) offset instead of
-        // crashing. A real fix either raises ring_ubo_size_ or trims a pass.
-        if (!ring_ubo_overflow_warned_) {
+        // Do not publish an offset for a slice that was not written. The
+        // caller can preserve correctness with a standalone transient UBO.
+        if (!ring_ubo_overflow_warned_.exchange(true, std::memory_order_relaxed)) {
             tc_log(TC_LOG_ERROR,
-                   "[RingUBO] slot %u overflow: head=%llu size=%u slot_cap=%llu — raise ring_ubo_size_",
+                   "[RingUBO] slot %u overflow: head=%llu size=%u slot_cap=%llu; "
+                   "using standalone transient UBO fallback",
                    slot, (unsigned long long)offset_in_slot, size,
                    (unsigned long long)ring_ubo_slot_size_);
-            ring_ubo_overflow_warned_ = true;
         }
-        return static_cast<uint32_t>(base);
+        return false;
     }
 
     const uint64_t offset = base + offset_in_slot;
@@ -725,7 +725,8 @@ uint32_t VulkanRenderDevice::ring_ubo_write(const void* data, uint32_t size) {
     if (!ring_ubo_coherent_) {
         vmaFlushAllocation(allocator_, ring_ubo_allocation_, offset, size);
     }
-    return static_cast<uint32_t>(offset);
+    out_offset = static_cast<uint32_t>(offset);
+    return true;
 }
 
 // --- Transient vertex ring ---

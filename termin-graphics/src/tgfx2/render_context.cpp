@@ -896,10 +896,11 @@ void RenderContext2::bind_uniform_data(const tc_shader_resource_binding* rb,
     if (!plan_entry) return;
 
     BufferHandle buffer = device_.ring_ubo_handle();
-    uint64_t offset = 0;
-    if (buffer.id != 0) {
-        offset = device_.ring_ubo_write(data, size);
-    } else {
+    uint32_t ring_offset = 0;
+    const bool ring_write_succeeded =
+        buffer.id != 0 && device_.ring_ubo_write(data, size, ring_offset);
+    uint64_t offset = ring_offset;
+    if (!ring_write_succeeded) {
         BufferDesc bd;
         bd.size = size;
         bd.usage = BufferUsage::Uniform;
@@ -973,9 +974,10 @@ void RenderContext2::set_scissor(int x, int y, int w, int h) {
 }
 
 void RenderContext2::clear_scissor() {
-    // Reset scissor to full viewport — effectively disabling it.
-    // Actual implementation depends on backend; for now set a large rect.
-    cmd_->set_scissor(0, 0, 16384, 16384);
+    // Keep scissoring enabled, but restore it to the active render extent.
+    // The cached extent is synchronized from color or depth attachments in
+    // begin_pass() and from explicit viewport changes in set_viewport().
+    cmd_->set_scissor(0, 0, viewport_w_, viewport_h_);
 }
 
 // ============================================================================

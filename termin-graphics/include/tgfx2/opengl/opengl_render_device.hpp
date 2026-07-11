@@ -328,7 +328,7 @@ public:
     uint64_t transient_vertex_write(const void* data, uint32_t size) override;
 
     BufferHandle ring_ubo_handle() const override { return ring_ubo_handle_; }
-    uint32_t ring_ubo_write(const void* data, uint32_t size) override;
+    bool ring_ubo_write(const void* data, uint32_t size, uint32_t& offset) override;
     uint32_t ubo_alignment() const override {
         return static_cast<uint32_t>(ring_ubo_alignment_ > 0 ? ring_ubo_alignment_ : 1);
     }
