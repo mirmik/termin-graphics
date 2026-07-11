@@ -35,6 +35,7 @@ void set_style_metric(Widget& widget, tc_ui_style_field_mask field, float value)
     tc_ui_style_override style_override = widget.style_override();
     style_override.fields |= field;
     if (field == TC_UI_STYLE_BORDER_WIDTH) style_override.value.border_width = value;
+    else if (field == TC_UI_STYLE_CORNER_RADIUS) style_override.value.corner_radius = value;
     else if (field == TC_UI_STYLE_FONT_SIZE) style_override.value.font_size = value;
     else throw std::invalid_argument("unsupported native UI metric style field");
     if (!widget.set_style_override(style_override)) {

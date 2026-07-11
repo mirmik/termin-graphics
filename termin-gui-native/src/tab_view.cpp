@@ -126,12 +126,20 @@ void TabView::paint(tc_ui_document* document, tc_ui_paint_context* context) {
         const TabPage* page = child ? find_tab_page(pages_, child->handle) : nullptr;
         const tc_ui_rect tab = tab_rect(document, i);
         const bool selected = i == selected_index_;
-        tc_ui_painter_fill_rect(
+        tc_ui_painter_fill_rounded_rect(
             context,
             tab,
+            style.corner_radius,
             selected ? selected_style.background : style.background
         );
-        tc_ui_painter_stroke_rect(context, tab, style.border, style.border_width);
+        if (selected) {
+            tc_ui_painter_draw_line(
+                context,
+                tc_ui_point {tab.x + style.corner_radius, tab.y + tab.height - 1.0f},
+                tc_ui_point {tab.x + tab.width - style.corner_radius, tab.y + tab.height - 1.0f},
+                style.accent,
+                2.0f);
+        }
         tc_ui_painter_push_clip(context, tab);
         tc_ui_painter_draw_text(
             context,

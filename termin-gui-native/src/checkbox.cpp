@@ -6,7 +6,7 @@ using namespace detail;
 Checkbox::Checkbox(bool checked)
     : NativeWidget("Checkbox"), checked_(checked) {
     set_style_role(TC_UI_STYLE_CHECKBOX);
-    set_preferred_size(tc_ui_size {32.0f, 32.0f});
+    set_preferred_size(tc_ui_size {18.0f, 18.0f});
 }
 
 void Checkbox::set_checked(bool checked) {
@@ -30,22 +30,25 @@ void Checkbox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
         side,
         side
     };
-    tc_ui_painter_fill_rect(context, box, style.background);
-    tc_ui_painter_stroke_rect(context, box, style.border, std::max(2.0f, style.border_width));
+    tc_ui_painter_fill_rounded_rect(context, box, style.corner_radius, style.background);
+    if (style.border_width > 0.0f && color_visible(style.border)) {
+        tc_ui_painter_stroke_rounded_rect(
+            context, box, style.corner_radius, style.border, style.border_width);
+    }
     if (checked_) {
         tc_ui_painter_draw_line(
             context,
             tc_ui_point {box.x + side * 0.22f, box.y + side * 0.55f},
             tc_ui_point {box.x + side * 0.43f, box.y + side * 0.74f},
             style.accent,
-            3.0f
+            2.0f
         );
         tc_ui_painter_draw_line(
             context,
             tc_ui_point {box.x + side * 0.43f, box.y + side * 0.74f},
             tc_ui_point {box.x + side * 0.78f, box.y + side * 0.26f},
             style.accent,
-            3.0f
+            2.0f
         );
     }
 }

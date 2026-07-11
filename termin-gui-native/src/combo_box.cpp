@@ -126,8 +126,12 @@ tc_ui_size ComboBox::measure(tc_ui_document* document, tc_ui_constraints constra
 void ComboBox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     const std::string text = selected_text().empty() ? "Select..." : selected_text();
-    tc_ui_painter_fill_rect(context, bounds(), style.background);
-    tc_ui_painter_stroke_rect(context, bounds(), open_ ? style.accent : style.border, style.border_width);
+    tc_ui_painter_fill_rounded_rect(context, bounds(), style.corner_radius, style.background);
+    if (style.border_width > 0.0f) {
+        tc_ui_painter_stroke_rounded_rect(
+            context, bounds(), style.corner_radius, open_ ? style.accent : style.border,
+            style.border_width);
+    }
     tc_ui_painter_draw_text(context, text.c_str(), tc_ui_point {bounds().x + 8.0f, bounds().y + bounds().height * 0.68f}, style.font_size, style.foreground);
     tc_ui_painter_draw_text(context, open_ ? "^" : "v", tc_ui_point {bounds().x + bounds().width - 18.0f, bounds().y + bounds().height * 0.68f}, style.font_size, style.foreground);
 }

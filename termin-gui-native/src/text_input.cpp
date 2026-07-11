@@ -107,8 +107,11 @@ void TextInput::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     ensure_caret_visible(document);
     const tc_ui_style style = computed_style(document);
     const bool focused = tc_widget_handle_eq(tc_ui_document_focused_widget(document), handle());
-    tc_ui_painter_fill_rect(context, bounds(), style.background);
-    tc_ui_painter_stroke_rect(context, bounds(), style.border, style.border_width);
+    tc_ui_painter_fill_rounded_rect(context, bounds(), style.corner_radius, style.background);
+    if (style.border_width > 0.0f && color_visible(style.border)) {
+        tc_ui_painter_stroke_rounded_rect(
+            context, bounds(), style.corner_radius, style.border, style.border_width);
+    }
     const tc_ui_rect text_clip = text_clip_rect(document);
     tc_ui_text_metrics metrics {};
     const bool has_metrics = measure_text(document, text_, style.font_size, metrics);

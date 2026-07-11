@@ -48,6 +48,7 @@ static tc_value serialize_style(tc_ui_style value) {
     tc_value_dict_set(&result, "font_size", tc_value_double(value.font_size));
     tc_value_dict_set(&result, "min_width", tc_value_double(value.min_width));
     tc_value_dict_set(&result, "min_height", tc_value_double(value.min_height));
+    tc_value_dict_set(&result, "corner_radius", tc_value_double(value.corner_radius));
     tc_value_dict_set(&result, "font_role", tc_value_int(value.font_role));
     return result;
 }
@@ -277,6 +278,7 @@ static bool read_style(const tc_value* data, tc_ui_style* out) {
     READ_STYLE_FLOAT(font_size);
     READ_STYLE_FLOAT(min_width);
     READ_STYLE_FLOAT(min_height);
+    READ_STYLE_FLOAT(corner_radius);
     value = required_value(data, "font_role", TC_VALUE_INT);
     if (!value || value->data.i < TC_UI_FONT_BODY || value->data.i > TC_UI_FONT_MONOSPACE) {
         return false;

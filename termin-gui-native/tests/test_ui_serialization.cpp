@@ -99,10 +99,12 @@ void test_document_round_trip_preserves_structure_common_and_type_state() {
     tc_widget_set_enabled(child_widget, false);
     tc_widget_set_style_role(child_widget, TC_UI_STYLE_BUTTON);
     tc_ui_style_override style{};
-    style.fields = TC_UI_STYLE_BACKGROUND | TC_UI_STYLE_FONT_SIZE;
+    style.fields = TC_UI_STYLE_BACKGROUND | TC_UI_STYLE_FONT_SIZE |
+                   TC_UI_STYLE_CORNER_RADIUS;
     style.flags = TC_UI_STYLE_OVERRIDE_INHERIT;
     style.value.background = tc_ui_color{0.1f, 0.2f, 0.3f, 1.0f};
     style.value.font_size = 19.0f;
+    style.value.corner_radius = 7.0f;
     assert(tc_widget_set_style_override(child_widget, &style));
     assert(tc_widget_append_child(root_widget, child_widget));
     assert(tc_ui_document_add_root(source, root));
@@ -141,6 +143,7 @@ void test_document_round_trip_preserves_structure_common_and_type_state() {
     assert(restored_style.fields == style.fields);
     assert(restored_style.flags == style.flags);
     assert(restored_style.value.font_size == 19.0f);
+    assert(restored_style.value.corner_radius == 7.0f);
     assert(tc_ui_document_overlay_flags_at(restored, 0) ==
            (TC_UI_OVERLAY_TOOLTIP | TC_UI_OVERLAY_POINTER_TRANSPARENT));
     const tc::trent reserialized = restored_owner.serialize();

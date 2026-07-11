@@ -175,6 +175,7 @@ enum class StyleField : uint64_t {
     MinWidth = TC_UI_STYLE_MIN_WIDTH,
     MinHeight = TC_UI_STYLE_MIN_HEIGHT,
     FontRole = TC_UI_STYLE_FONT_ROLE,
+    CornerRadius = TC_UI_STYLE_CORNER_RADIUS,
     All = TC_UI_STYLE_ALL_FIELDS,
 };
 
@@ -1160,6 +1161,7 @@ NB_MODULE(_gui_native, m) {
         .value("MinWidth", StyleField::MinWidth)
         .value("MinHeight", StyleField::MinHeight)
         .value("FontRole", StyleField::FontRole)
+        .value("CornerRadius", StyleField::CornerRadius)
         .value("All", StyleField::All);
 
     nb::enum_<tc_ui_style_override_flag>(m, "StyleOverrideFlag", nb::is_arithmetic())
@@ -1180,6 +1182,7 @@ NB_MODULE(_gui_native, m) {
         .def_rw("font_size", &tc_ui_style::font_size)
         .def_rw("min_width", &tc_ui_style::min_width)
         .def_rw("min_height", &tc_ui_style::min_height)
+        .def_rw("corner_radius", &tc_ui_style::corner_radius)
         .def_rw("font_role", &tc_ui_style::font_role);
 
     nb::class_<tc_ui_style_override>(m, "StyleOverride")

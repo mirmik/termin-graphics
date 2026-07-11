@@ -205,8 +205,11 @@ void Dialog::layout(tc_ui_document* document, tc_ui_rect rect) {
 
 void Dialog::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
-    tc_ui_painter_fill_rect(context, bounds(), style.background);
-    tc_ui_painter_stroke_rect(context, bounds(), style.border, style.border_width);
+    tc_ui_painter_fill_rounded_rect(context, bounds(), style.corner_radius, style.background);
+    if (style.border_width > 0.0f && color_visible(style.border)) {
+        tc_ui_painter_stroke_rounded_rect(
+            context, bounds(), style.corner_radius, style.border, style.border_width);
+    }
     tc_ui_color title_background = style.accent;
     title_background.a *= 0.22f;
     tc_ui_painter_fill_rect(context,

@@ -1214,7 +1214,8 @@ void test_text_input_utf8_selection_and_host_clipboard() {
   tc_ui_draw_list *draw_list = tc_ui_draw_list_create();
   tc_ui_paint_context *context = tc_ui_paint_context_create(draw_list);
   document.paint_roots(context);
-  assert(count_commands(draw_list, TC_UI_DRAW_FILL_RECT) >= 2);
+  assert(count_commands(draw_list, TC_UI_DRAW_FILL_ROUNDED_RECT) >= 1);
+  assert(count_commands(draw_list, TC_UI_DRAW_FILL_RECT) >= 1);
   tc_ui_paint_context_destroy(context);
   tc_ui_draw_list_destroy(draw_list);
 }

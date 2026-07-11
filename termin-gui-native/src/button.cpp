@@ -6,7 +6,7 @@ using namespace detail;
 Button::Button(std::string text) : NativeWidget("Button"), text_(std::move(text)) {
     set_style_role(TC_UI_STYLE_BUTTON);
     set_focusable(true);
-    set_preferred_size(tc_ui_size{96.0f, 36.0f});
+    set_preferred_size(tc_ui_size{64.0f, 28.0f});
 }
 
 tc_ui_event_result Button::key_event(tc_ui_document*, const tc_ui_key_event* event) {
@@ -38,8 +38,11 @@ Button& Button::set_text(std::string text) {
 
 void Button::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
-    tc_ui_painter_fill_rounded_rect(context, bounds(), 4.0f, style.background);
-    tc_ui_painter_stroke_rounded_rect(context, bounds(), 4.0f, style.border, style.border_width);
+    tc_ui_painter_fill_rounded_rect(context, bounds(), style.corner_radius, style.background);
+    if (style.border_width > 0.0f && color_visible(style.border)) {
+        tc_ui_painter_stroke_rounded_rect(
+            context, bounds(), style.corner_radius, style.border, style.border_width);
+    }
     if (!text_.empty()) {
         tc_ui_text_metrics metrics{};
         const bool has_metrics = measure_text(document, text_, style.font_size, metrics);

@@ -214,8 +214,11 @@ void SpinBox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     measure_text(document, display, style.font_size, metrics);
     const float ascent = metrics.ascent > 0.0f ? metrics.ascent : style.font_size;
     const float line_height_value = metrics.line_height > 0.0f ? metrics.line_height : style.font_size;
-    tc_ui_painter_fill_rect(context, bounds(), style.background);
-    tc_ui_painter_stroke_rect(context, bounds(), style.border, style.border_width);
+    tc_ui_painter_fill_rounded_rect(context, bounds(), style.corner_radius, style.background);
+    if (style.border_width > 0.0f && color_visible(style.border)) {
+        tc_ui_painter_stroke_rounded_rect(
+            context, bounds(), style.corner_radius, style.border, style.border_width);
+    }
     tc_ui_painter_fill_rect(context, up_button_rect(), style.border);
     tc_ui_painter_fill_rect(context, down_button_rect(), style.border);
     tc_ui_painter_draw_text(

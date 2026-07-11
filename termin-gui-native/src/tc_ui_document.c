@@ -74,6 +74,7 @@ static bool valid_style(const tc_ui_style* style) {
         isfinite(style->padding_bottom) && style->padding_bottom >= 0.0f &&
         isfinite(style->spacing) && style->spacing >= 0.0f &&
         isfinite(style->border_width) && style->border_width >= 0.0f &&
+        isfinite(style->corner_radius) && style->corner_radius >= 0.0f &&
         isfinite(style->font_size) && style->font_size > 0.0f &&
         isfinite(style->min_width) && style->min_width >= 0.0f &&
         isfinite(style->min_height) && style->min_height >= 0.0f &&
@@ -104,6 +105,8 @@ bool tc_ui_internal_valid_style_override(const tc_ui_style_override* style_overr
             (isfinite(style_override->value.spacing) && style_override->value.spacing >= 0.0f)) &&
         ((fields & TC_UI_STYLE_BORDER_WIDTH) == 0 ||
             (isfinite(style_override->value.border_width) && style_override->value.border_width >= 0.0f)) &&
+        (!(fields & TC_UI_STYLE_CORNER_RADIUS) ||
+            (isfinite(style_override->value.corner_radius) && style_override->value.corner_radius >= 0.0f)) &&
         ((fields & TC_UI_STYLE_FONT_SIZE) == 0 ||
             (isfinite(style_override->value.font_size) && style_override->value.font_size > 0.0f)) &&
         ((fields & TC_UI_STYLE_MIN_WIDTH) == 0 ||
@@ -149,6 +152,7 @@ static void apply_style_override(tc_ui_style* style, const tc_ui_style_override*
     if ((fields & TC_UI_STYLE_FONT_SIZE) != 0) style->font_size = style_override->value.font_size;
     if ((fields & TC_UI_STYLE_MIN_WIDTH) != 0) style->min_width = style_override->value.min_width;
     if ((fields & TC_UI_STYLE_MIN_HEIGHT) != 0) style->min_height = style_override->value.min_height;
+    if ((fields & TC_UI_STYLE_CORNER_RADIUS) != 0) style->corner_radius = style_override->value.corner_radius;
     if ((fields & TC_UI_STYLE_FONT_ROLE) != 0) style->font_role = style_override->value.font_role;
 }
 
@@ -160,6 +164,7 @@ static tc_ui_style default_base_style(void) {
     style.border = style_color(0.32f, 0.34f, 0.38f, 1.0f);
     style.accent = style_color(0.25f, 0.58f, 0.88f, 1.0f);
     style.border_width = 1.0f;
+    style.corner_radius = 4.0f;
     style.font_size = 14.0f;
     style.font_role = TC_UI_FONT_BODY;
     return style;
@@ -203,23 +208,23 @@ void tc_ui_theme_init_default(tc_ui_theme* theme) {
 
     theme->roles[TC_UI_STYLE_LABEL].base.font_size = 15.0f;
 
-    theme->roles[TC_UI_STYLE_BUTTON].base.background = style_color(0.20f, 0.38f, 0.64f, 1.0f);
-    theme->roles[TC_UI_STYLE_BUTTON].base.foreground = style_color(0.94f, 0.97f, 1.0f, 1.0f);
-    theme->roles[TC_UI_STYLE_BUTTON].base.border = style_color(0.80f, 0.88f, 1.0f, 1.0f);
-    theme->roles[TC_UI_STYLE_BUTTON].base.padding_left = 12.0f;
-    theme->roles[TC_UI_STYLE_BUTTON].base.padding_top = 8.0f;
-    theme->roles[TC_UI_STYLE_BUTTON].base.padding_right = 12.0f;
-    theme->roles[TC_UI_STYLE_BUTTON].base.padding_bottom = 8.0f;
-    theme->roles[TC_UI_STYLE_BUTTON].base.border_width = 2.0f;
-    theme->roles[TC_UI_STYLE_BUTTON].base.min_width = 96.0f;
-    theme->roles[TC_UI_STYLE_BUTTON].base.min_height = 36.0f;
+    theme->roles[TC_UI_STYLE_BUTTON].base.background = style_color(0.24f, 0.25f, 0.28f, 1.0f);
+    theme->roles[TC_UI_STYLE_BUTTON].base.foreground = style_color(0.88f, 0.89f, 0.91f, 1.0f);
+    theme->roles[TC_UI_STYLE_BUTTON].base.border = style_color(0.0f, 0.0f, 0.0f, 0.0f);
+    theme->roles[TC_UI_STYLE_BUTTON].base.padding_left = 9.0f;
+    theme->roles[TC_UI_STYLE_BUTTON].base.padding_top = 5.0f;
+    theme->roles[TC_UI_STYLE_BUTTON].base.padding_right = 9.0f;
+    theme->roles[TC_UI_STYLE_BUTTON].base.padding_bottom = 5.0f;
+    theme->roles[TC_UI_STYLE_BUTTON].base.border_width = 0.0f;
+    theme->roles[TC_UI_STYLE_BUTTON].base.min_width = 0.0f;
+    theme->roles[TC_UI_STYLE_BUTTON].base.min_height = 28.0f;
     theme->roles[TC_UI_STYLE_BUTTON].hovered = color_override(
         TC_UI_STYLE_BACKGROUND,
-        style_color(0.24f, 0.45f, 0.72f, 1.0f)
+        style_color(0.29f, 0.30f, 0.34f, 1.0f)
     );
     theme->roles[TC_UI_STYLE_BUTTON].pressed = color_override(
         TC_UI_STYLE_BACKGROUND,
-        style_color(0.14f, 0.29f, 0.50f, 1.0f)
+        style_color(0.18f, 0.34f, 0.54f, 1.0f)
     );
     theme->roles[TC_UI_STYLE_BUTTON].focused = color_override(
         TC_UI_STYLE_BORDER,
@@ -240,12 +245,11 @@ void tc_ui_theme_init_default(tc_ui_theme* theme) {
     theme->roles[TC_UI_STYLE_TEXT_INPUT].base.padding_bottom = 2.0f;
     theme->roles[TC_UI_STYLE_TEXT_INPUT].base.min_width = 160.0f;
     theme->roles[TC_UI_STYLE_TEXT_INPUT].base.min_height = 34.0f;
+    theme->roles[TC_UI_STYLE_TEXT_INPUT].base.corner_radius = 3.0f;
     theme->roles[TC_UI_STYLE_TEXT_INPUT].focused = color_override(
         TC_UI_STYLE_BORDER,
         style_color(0.38f, 0.62f, 0.92f, 1.0f)
     );
-    theme->roles[TC_UI_STYLE_TEXT_INPUT].focused.fields |= TC_UI_STYLE_BORDER_WIDTH;
-    theme->roles[TC_UI_STYLE_TEXT_INPUT].focused.value.border_width = 2.0f;
 
     theme->roles[TC_UI_STYLE_GROUP_BOX].base.background = style_color(0.11f, 0.12f, 0.14f, 1.0f);
     theme->roles[TC_UI_STYLE_GROUP_BOX].base.padding_left = 10.0f;
@@ -264,14 +268,15 @@ void tc_ui_theme_init_default(tc_ui_theme* theme) {
         style_color(0.20f, 0.26f, 0.34f, 1.0f)
     );
 
-    theme->roles[TC_UI_STYLE_CHECKBOX].base.background = style_color(0.10f, 0.11f, 0.13f, 1.0f);
-    theme->roles[TC_UI_STYLE_CHECKBOX].base.border = style_color(0.74f, 0.78f, 0.84f, 1.0f);
-    theme->roles[TC_UI_STYLE_CHECKBOX].base.accent = style_color(0.28f, 0.82f, 0.54f, 1.0f);
-    theme->roles[TC_UI_STYLE_CHECKBOX].base.min_width = 32.0f;
-    theme->roles[TC_UI_STYLE_CHECKBOX].base.min_height = 32.0f;
+    theme->roles[TC_UI_STYLE_CHECKBOX].base.background = style_color(0.15f, 0.16f, 0.18f, 1.0f);
+    theme->roles[TC_UI_STYLE_CHECKBOX].base.border = style_color(0.36f, 0.38f, 0.42f, 1.0f);
+    theme->roles[TC_UI_STYLE_CHECKBOX].base.accent = style_color(0.88f, 0.96f, 0.91f, 1.0f);
+    theme->roles[TC_UI_STYLE_CHECKBOX].base.min_width = 18.0f;
+    theme->roles[TC_UI_STYLE_CHECKBOX].base.min_height = 18.0f;
+    theme->roles[TC_UI_STYLE_CHECKBOX].base.corner_radius = 3.0f;
     theme->roles[TC_UI_STYLE_CHECKBOX].checked = color_override(
         TC_UI_STYLE_BACKGROUND,
-        style_color(0.12f, 0.18f, 0.15f, 1.0f)
+        style_color(0.18f, 0.58f, 0.34f, 1.0f)
     );
 
     theme->roles[TC_UI_STYLE_PROGRESS].base.background = style_color(0.09f, 0.10f, 0.12f, 1.0f);

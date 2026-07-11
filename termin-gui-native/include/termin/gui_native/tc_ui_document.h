@@ -92,7 +92,8 @@ enum {
     TC_UI_STYLE_MIN_WIDTH = 1ull << 11,
     TC_UI_STYLE_MIN_HEIGHT = 1ull << 12,
     TC_UI_STYLE_FONT_ROLE = 1ull << 13,
-    TC_UI_STYLE_ALL_FIELDS = (1ull << 14) - 1ull
+    TC_UI_STYLE_CORNER_RADIUS = 1ull << 14,
+    TC_UI_STYLE_ALL_FIELDS = (1ull << 15) - 1ull
 };
 
 typedef enum tc_ui_style_override_flag {
@@ -113,6 +114,7 @@ typedef struct tc_ui_style {
     float font_size;
     float min_width;
     float min_height;
+    float corner_radius;
     tc_ui_font_role font_role;
 } tc_ui_style;
 

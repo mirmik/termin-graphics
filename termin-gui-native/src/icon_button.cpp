@@ -32,7 +32,7 @@ void IconButton::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     const uint32_t extra = (active_ ? TC_UI_STYLE_STATE_CHECKED : 0) |
         (pressed_ ? TC_UI_STYLE_STATE_PRESSED : 0);
     const tc_ui_style style = computed_style(document, extra);
-    tc_ui_painter_fill_rounded_rect(context, bounds(), 4.0f, style.background);
+    tc_ui_painter_fill_rounded_rect(context, bounds(), style.corner_radius, style.background);
     if (texture_id_ != 0) {
         const float inset = 5.0f;
         tc_ui_painter_draw_texture(context, texture_id_, tc_ui_rect {bounds().x + inset, bounds().y + inset, bounds().width - inset * 2.0f, bounds().height - inset * 2.0f}, style.foreground, false);
