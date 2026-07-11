@@ -705,9 +705,20 @@ TEST_CASE("tgfx2 shader runtime lazily compiles stale artifacts in dev mode") {
         / ("termin_tgfx2_lazy_shader_" + std::to_string(unique));
     const fs::path artifact_root = root / "assets";
     const fs::path cache_root = root / "cache";
+    const fs::path include_root = root / "include";
     const fs::path compiler = root / "fake_termin_shaderc.sh";
-    fs::create_directories(root);
+    fs::create_directories(include_root);
     ShaderRuntimeTestGuard runtime_config_guard{root};
+    setenv("TERMIN_BUILTIN_SHADER_ROOT", include_root.string().c_str(), 1);
+
+    {
+        std::ofstream out(include_root / "test_direct.slang", std::ios::binary);
+        out << "import test_transitive;\n";
+    }
+    {
+        std::ofstream out(include_root / "test_transitive.slang", std::ios::binary);
+        out << "static const float imported_value = 1.0;\n";
+    }
 
     {
         std::ofstream out(compiler, std::ios::binary);
@@ -726,7 +737,8 @@ TEST_CASE("tgfx2 shader runtime lazily compiles stale artifacts in dev mode") {
             << "if [ -f \"$count_file\" ]; then count=$(cat \"$count_file\"); fi\n"
             << "count=$((count + 1))\n"
             << "printf '%s' \"$count\" > \"$count_file\"\n"
-            << "printf 'SPIRV' > \"$out\"\n";
+            << "printf 'SPIRV' > \"$out\"\n"
+            << "printf '{\"version\":1,\"resources\":[],\"compile_count\":%s}' \"$count\" > \"$out.layout.json\"\n";
     }
     fs::permissions(
         compiler,
@@ -734,6 +746,7 @@ TEST_CASE("tgfx2 shader runtime lazily compiles stale artifacts in dev mode") {
         fs::perm_options::add);
 
     const char* vs = R"(
+import test_direct;
 struct VSOut {
     float4 position : SV_Position;
 };
@@ -784,9 +797,10 @@ float4 main() : SV_Target {
     CHECK(fs::exists(metadata));
     CHECK(!fs::exists(legacy_metadata));
     CHECK(fs::exists(source));
-    CHECK(read_test_text_file(metadata).find("artifact_metadata_schema=1\n") != std::string::npos);
+    CHECK(read_test_text_file(metadata).find("artifact_metadata_schema=2\n") != std::string::npos);
     CHECK(read_test_text_file(metadata).find("layout_schema=4\n") != std::string::npos);
     CHECK(read_test_text_file(metadata).find("shader_compiler=") != std::string::npos);
+    CHECK(read_test_text_file(metadata).find("dependency_hash=") != std::string::npos);
 
     bytes.clear();
     CHECK(termin::tgfx2_load_or_compile_shader_artifact_for_backend(
@@ -799,6 +813,46 @@ float4 main() : SV_Target {
     CHECK(read_test_text_file(root / "compile_args.txt").find("--layout-scheme") == std::string::npos);
     CHECK(read_test_text_file(source).find("VSOut main") != std::string::npos);
 
+    {
+        std::ofstream out(include_root / "test_transitive.slang", std::ios::binary);
+        out << "static const float imported_value = 2.0;\n";
+    }
+    bytes.clear();
+    CHECK(termin::tgfx2_load_or_compile_shader_artifact_for_backend(
+        shader,
+        tgfx::BackendType::Vulkan,
+        tgfx::ShaderStage::Vertex,
+        bytes));
+    CHECK(read_test_text_file(root / "compile_count.txt") == "2");
+    CHECK(read_test_text_file(fs::path(artifact.string() + ".layout.json")).find(
+              "\"compile_count\":2") != std::string::npos);
+
+    {
+        std::ofstream out(include_root / "test_direct.slang", std::ios::binary);
+        out << "import test_transitive;\n// direct dependency changed\n";
+    }
+    bytes.clear();
+    CHECK(termin::tgfx2_load_or_compile_shader_artifact_for_backend(
+        shader,
+        tgfx::BackendType::Vulkan,
+        tgfx::ShaderStage::Vertex,
+        bytes));
+    CHECK(read_test_text_file(root / "compile_count.txt") == "3");
+
+    fs::remove(include_root / "test_transitive.slang");
+    bytes.clear();
+    CHECK_FALSE(termin::tgfx2_load_or_compile_shader_artifact_for_backend(
+        shader,
+        tgfx::BackendType::Vulkan,
+        tgfx::ShaderStage::Vertex,
+        bytes));
+    CHECK(bytes.empty());
+    CHECK(read_test_text_file(root / "compile_count.txt") == "3");
+    {
+        std::ofstream out(include_root / "test_transitive.slang", std::ios::binary);
+        out << "static const float imported_value = 2.0;\n";
+    }
+
     const auto compiler_mtime = fs::last_write_time(compiler);
     fs::last_write_time(compiler, compiler_mtime + std::chrono::seconds(1));
     bytes.clear();
@@ -808,9 +862,10 @@ float4 main() : SV_Target {
         tgfx::ShaderStage::Vertex,
         bytes));
     CHECK(bytes == std::vector<uint8_t>({'S', 'P', 'I', 'R', 'V'}));
-    CHECK(read_test_text_file(root / "compile_count.txt") == "2");
+    CHECK(read_test_text_file(root / "compile_count.txt") == "4");
 
     tc_shader_destroy(handle);
+    unsetenv("TERMIN_BUILTIN_SHADER_ROOT");
 }
 #endif
 
@@ -823,8 +878,9 @@ TEST_CASE("tgfx2 engine shader artifact metadata invalidates stale layout schema
         / ("termin_tgfx2_engine_schema_" + std::to_string(unique));
     const fs::path artifact_root = root / "assets";
     const fs::path cache_root = root / "cache";
+    const fs::path include_root = root / "include";
     const fs::path compiler = root / "fake_termin_shaderc.sh";
-    fs::create_directories(root);
+    fs::create_directories(include_root);
     ShaderRuntimeTestGuard runtime_config_guard{root};
 
     {
@@ -852,6 +908,24 @@ TEST_CASE("tgfx2 engine shader artifact metadata invalidates stale layout schema
 
     const tgfx::EngineShaderStageSource& shader =
         tgfx::engine_fullscreen_quad_vertex_shader();
+    std::string source_filename = shader.source_resource_path;
+    const std::string builtin_prefix = "builtin_shaders/";
+    if (source_filename.rfind(builtin_prefix, 0) == 0) {
+        source_filename.erase(0, builtin_prefix.size());
+    }
+    {
+        std::ofstream out(include_root / source_filename, std::ios::binary);
+        out << "import engine_direct;\nvoid main() {}\n";
+    }
+    {
+        std::ofstream out(include_root / "engine_direct.slang", std::ios::binary);
+        out << "import engine_transitive;\n";
+    }
+    {
+        std::ofstream out(include_root / "engine_transitive.slang", std::ios::binary);
+        out << "static const float engine_value = 1.0;\n";
+    }
+    setenv("TERMIN_BUILTIN_SHADER_ROOT", include_root.string().c_str(), 1);
     const fs::path artifact = artifact_root / "shaders" / "vulkan"
         / (std::string(shader.uuid) + ".vert.spv");
     const fs::path metadata = fs::path(artifact.string() + ".artifact");
@@ -867,8 +941,20 @@ TEST_CASE("tgfx2 engine shader artifact metadata invalidates stale layout schema
         tgfx::BackendType::Vulkan,
         bytes));
     CHECK(bytes == std::vector<uint8_t>({'S', 'P', 'I', 'R', 'V', '1'}));
-    CHECK(read_test_text_file(metadata).find("artifact_metadata_schema=1\n") != std::string::npos);
+    CHECK(read_test_text_file(metadata).find("artifact_metadata_schema=2\n") != std::string::npos);
     CHECK(read_test_text_file(metadata).find("layout_schema=4\n") != std::string::npos);
+
+    {
+        std::ofstream out(include_root / "engine_transitive.slang", std::ios::binary);
+        out << "static const float engine_value = 2.0;\n";
+    }
+    bytes.clear();
+    REQUIRE(termin::tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
+        shader,
+        tgfx::BackendType::Vulkan,
+        bytes));
+    CHECK(bytes == std::vector<uint8_t>({'S', 'P', 'I', 'R', 'V', '2'}));
+    CHECK(read_test_text_file(root / "compile_count.txt") == "2");
 
     {
         std::string stale_metadata = read_test_text_file(metadata);
@@ -885,8 +971,9 @@ TEST_CASE("tgfx2 engine shader artifact metadata invalidates stale layout schema
         shader,
         tgfx::BackendType::Vulkan,
         bytes));
-    CHECK(bytes == std::vector<uint8_t>({'S', 'P', 'I', 'R', 'V', '2'}));
-    CHECK(read_test_text_file(root / "compile_count.txt") == "2");
+    CHECK(bytes == std::vector<uint8_t>({'S', 'P', 'I', 'R', 'V', '3'}));
+    CHECK(read_test_text_file(root / "compile_count.txt") == "3");
+    unsetenv("TERMIN_BUILTIN_SHADER_ROOT");
 }
 #endif
 
