@@ -2128,19 +2128,22 @@ def test_native_viewport3d_surface_protocol_input_drag_and_lifetime():
             (previous.width, previous.height, next_size.width, next_size.height)
         )
     )
-    document.layout_roots(Rect(10.0, 20.0, 300.8, 180.9))
+    document.layout_roots(Rect(10.2, 20.3, 300.8, 180.9))
     viewport.set_surface_host(surface)
-    assert ordering == [(64, 64, 300, 180)]
-    assert surface.calls == [("resize", 300, 180)]
+    assert ordering == [(64, 64, 301, 181)]
+    assert surface.calls == [("resize", 301, 181)]
     assert viewport.has_surface
     assert viewport.surface_valid
-    assert viewport.surface_size.width == 300
+    assert viewport.surface_size.width == 301
 
     draw_list = DrawList()
     document.paint_roots(PaintContext(draw_list))
     texture_commands = [command for command in draw_list.commands if command.type == DrawCommandType.Texture]
     assert len(texture_commands) == 1
     assert texture_commands[0].texture_id == 91
+    destination = texture_commands[0].rect
+    assert (destination.x, destination.y) == (10.0, 20.0)
+    assert (destination.width, destination.height) == (301.0, 181.0)
 
     pointer = PointerEvent()
     pointer.type = PointerEventType.Down

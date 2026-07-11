@@ -81,13 +81,13 @@ void test_surface_resize_paint_input_and_drag_contract() {
     viewport->before_resize().connect(
         [trace](Viewport3D&, ViewportSurfaceSize previous, ViewportSurfaceSize next) {
             assert((previous == ViewportSurfaceSize{64, 64}));
-            assert((next == ViewportSurfaceSize{300, 180}));
+            assert((next == ViewportSurfaceSize{301, 181}));
             trace->ordering.emplace_back("before");
         });
-    document.layout_roots(tc_ui_rect{10.0f, 20.0f, 300.8f, 180.9f});
+    document.layout_roots(tc_ui_rect{10.2f, 20.3f, 300.8f, 180.9f});
     viewport->set_surface_host(host);
     assert((trace->ordering == std::vector<std::string>{"before", "resize"}));
-    assert((trace->size == ViewportSurfaceSize{300, 180}));
+    assert((trace->size == ViewportSurfaceSize{301, 181}));
 
     tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
     tc_ui_paint_context* context = tc_ui_paint_context_create(draw_list);
@@ -96,6 +96,10 @@ void test_surface_resize_paint_input_and_drag_contract() {
     assert(textures.size() == 1);
     assert(textures[0]->texture_id == 73);
     assert(!textures[0]->flip_v);
+    assert(textures[0]->rect.x == 10.0f);
+    assert(textures[0]->rect.y == 20.0f);
+    assert(textures[0]->rect.width == 301.0f);
+    assert(textures[0]->rect.height == 181.0f);
 
     assert(document.dispatch_pointer_event(tc_ui_pointer_event{
                TC_UI_POINTER_DOWN, 42.0f, 65.0f, 1, 2, 7, 0.0f, 0.0f}) == TC_UI_EVENT_HANDLED);

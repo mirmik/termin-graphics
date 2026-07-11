@@ -16,15 +16,38 @@ constexpr int kInputRelease = 0;
 constexpr int kInputPress = 1;
 constexpr int kInputRepeat = 2;
 
-ViewportSurfaceSize layout_surface_size(tc_ui_rect rect) {
-    if (!std::isfinite(rect.width) || !std::isfinite(rect.height) || rect.width <= 0.0f ||
-        rect.height <= 0.0f) {
+struct ViewportPixelGeometry {
+    tc_ui_rect rect{};
+    ViewportSurfaceSize surface_size{};
+};
+
+ViewportPixelGeometry pixel_aligned_geometry(tc_ui_rect layout_rect) {
+    if (!std::isfinite(layout_rect.x) || !std::isfinite(layout_rect.y) ||
+        !std::isfinite(layout_rect.width) || !std::isfinite(layout_rect.height) ||
+        layout_rect.width <= 0.0f || layout_rect.height <= 0.0f) {
         return {};
     }
+
+    const double left = std::round(static_cast<double>(layout_rect.x));
+    const double top = std::round(static_cast<double>(layout_rect.y));
+    const double right = std::round(static_cast<double>(layout_rect.x) +
+                                    static_cast<double>(layout_rect.width));
+    const double bottom = std::round(static_cast<double>(layout_rect.y) +
+                                     static_cast<double>(layout_rect.height));
+    const double width = right - left;
+    const double height = bottom - top;
+    if (!std::isfinite(width) || !std::isfinite(height) || width <= 0.0 || height <= 0.0) {
+        return {};
+    }
+
     const double max_dimension = static_cast<double>(std::numeric_limits<int>::max());
+    const int pixel_width = static_cast<int>(std::min(width, max_dimension));
+    const int pixel_height = static_cast<int>(std::min(height, max_dimension));
     return {
-        static_cast<int>(std::floor(std::min(static_cast<double>(rect.width), max_dimension))),
-        static_cast<int>(std::floor(std::min(static_cast<double>(rect.height), max_dimension)))};
+        tc_ui_rect{static_cast<float>(left), static_cast<float>(top),
+                   static_cast<float>(pixel_width), static_cast<float>(pixel_height)},
+        ViewportSurfaceSize{pixel_width, pixel_height},
+    };
 }
 
 } // namespace
@@ -104,7 +127,7 @@ ViewportSurfaceSize Viewport3D::surface_size() const {
 bool Viewport3D::sync_surface_size() {
     if (!surface_valid())
         return false;
-    const ViewportSurfaceSize next = layout_surface_size(bounds());
+    const ViewportSurfaceSize next = pixel_aligned_geometry(bounds()).surface_size;
     if (next.width <= 0 || next.height <= 0)
         return false;
     ViewportSurfaceSize previous{};
@@ -182,15 +205,18 @@ void Viewport3D::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     tc_ui_painter_fill_rect(context, bounds(), style.background);
     const uint32_t texture = texture_id();
     if (texture != 0) {
-        tc_ui_painter_draw_texture(context, texture, bounds(), tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
-                                   false);
+        const tc_ui_rect destination = pixel_aligned_geometry(bounds()).rect;
+        if (destination.width > 0.0f && destination.height > 0.0f) {
+            tc_ui_painter_draw_texture(context, texture, destination,
+                                       tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}, false);
+        }
     }
 }
 
 bool Viewport3D::sync_pointer_position(const tc_ui_pointer_event& event) {
     if (!surface_valid())
         return false;
-    const tc_ui_rect rect = bounds();
+    const tc_ui_rect rect = pixel_aligned_geometry(bounds()).rect;
     try {
         return surface_host_->pointer_move(static_cast<double>(event.x - rect.x),
                                            static_cast<double>(event.y - rect.y));
