@@ -88,6 +88,12 @@ struct RenderItemDrawEncoderDesc {
     RenderItemEncoderCapabilities capabilities{};
 };
 
+RENDER_API bool set_render_item_inline_uniform(
+    tc_render_item& item,
+    const char* name,
+    const void* data,
+    uint32_t size);
+
 // Registers an encoder for a non-mesh RenderItem kind owned by another package.
 // Passes bind pass/material resources before submit; encoders bind only
 // payload-kind-specific resources and issue backend draw commands.
@@ -112,6 +118,16 @@ RENDER_API bool bind_render_item_common_resources(
     tgfx::RenderContext2& ctx,
     const tc_shader* shader,
     const RenderItemDrawSubmitRequest& request);
+
+// Bind small item-local constant-buffer data carried directly by a typed
+// RenderItem. This replaces backend-specific Drawable upload callbacks while
+// keeping the payload valid across deferred collection and submission.
+RENDER_API bool bind_render_item_inline_uniform(
+    tgfx::RenderContext2& ctx,
+    const tc_render_item& item,
+    const tc_shader* shader,
+    const char* debug_pass_name,
+    const char* debug_entity_name);
 
 RENDER_API bool submit_render_item_draw(
     tgfx::RenderContext2& ctx,

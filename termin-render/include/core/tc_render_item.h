@@ -29,7 +29,17 @@ typedef enum tc_render_item_flags {
     TC_RENDER_ITEM_FLAG_HAS_MATERIAL_PHASE = 1u << 1,
     TC_RENDER_ITEM_FLAG_HAS_SKINNING_MATRICES = 1u << 2,
     TC_RENDER_ITEM_FLAG_HAS_OVERRIDE_COLOR = 1u << 3,
+    TC_RENDER_ITEM_FLAG_HAS_INLINE_UNIFORM = 1u << 4,
 } tc_render_item_flags;
+
+#define TC_RENDER_ITEM_INLINE_UNIFORM_NAME_CAPACITY 64u
+#define TC_RENDER_ITEM_INLINE_UNIFORM_DATA_CAPACITY 256u
+
+typedef struct tc_render_item_inline_uniform {
+    char name[TC_RENDER_ITEM_INLINE_UNIFORM_NAME_CAPACITY];
+    uint32_t size;
+    uint8_t data[TC_RENDER_ITEM_INLINE_UNIFORM_DATA_CAPACITY];
+} tc_render_item_inline_uniform;
 
 typedef enum tc_render_item_collect_flags {
     TC_RENDER_ITEM_COLLECT_FLAG_NONE = 0,
@@ -105,6 +115,7 @@ typedef struct tc_render_item {
     size_t material_phase_index;
     float model_matrix[16];
     tc_render_item_vec4 override_color;
+    tc_render_item_inline_uniform inline_uniform;
     tc_render_item_payload payload;
 } tc_render_item;
 
