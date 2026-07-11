@@ -1296,9 +1296,19 @@ void test_spin_box_numeric_edit_buttons_and_keys() {
   assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
   assert(near(spin.value(), 5.5f));
 
-  pointer.x = spin.bounds().x + 10.0f;
+  pointer.x = spin.bounds().x + 18.0f;
   assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
   assert(spin.editing());
+  assert(spin.caret() < spin.edit_text().size());
+
+  pointer.type = TC_UI_POINTER_MOVE;
+  pointer.x = spin.bounds().x + 34.0f;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+  assert(spin.has_selection());
+  assert(!spin.selected_text().empty());
+  pointer.type = TC_UI_POINTER_UP;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+
   tc_ui_key_event key{};
   key.type = TC_UI_KEY_DOWN;
   key.key = TC_UI_KEY_HOME;

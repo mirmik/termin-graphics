@@ -16,6 +16,11 @@ public:
     int decimals() const { return decimals_; }
     bool editing() const { return editing_; }
     const std::string& edit_text() const { return edit_text_; }
+    size_t caret() const { return caret_; }
+    bool has_selection() const;
+    size_t selection_start() const;
+    size_t selection_end() const;
+    std::string selected_text() const;
     void set_value(float value);
     void set_range(float min_value, float max_value);
     void set_step(float step);
@@ -35,6 +40,12 @@ private:
     void cancel_edit();
     tc_ui_rect up_button_rect() const;
     tc_ui_rect down_button_rect() const;
+    tc_ui_rect text_clip_rect(tc_ui_document* document) const;
+    size_t caret_from_content_x(tc_ui_document* document, float content_x) const;
+    float prefix_width(tc_ui_document* document, size_t offset, float font_size) const;
+    void move_caret(size_t next, bool extend_selection);
+    bool delete_selection();
+    void replace_selection(std::string_view text);
     float value_ = 0.0f;
     float min_value_ = -1000000000.0f;
     float max_value_ = 1000000000.0f;
@@ -43,6 +54,8 @@ private:
     bool editing_ = false;
     std::string edit_text_;
     size_t caret_ = 0;
+    size_t selection_anchor_ = SIZE_MAX;
+    bool selecting_ = false;
     float button_width_ = 18.0f;
     Signal<SpinBox&, float> changed_;
 };

@@ -11,6 +11,24 @@ SpinBox::SpinBox(float value)
     set_value(value);
 }
 
+bool SpinBox::has_selection() const {
+    return selection_anchor_ != SIZE_MAX && selection_anchor_ != caret_;
+}
+
+size_t SpinBox::selection_start() const {
+    return has_selection() ? std::min(selection_anchor_, caret_) : caret_;
+}
+
+size_t SpinBox::selection_end() const {
+    return has_selection() ? std::max(selection_anchor_, caret_) : caret_;
+}
+
+std::string SpinBox::selected_text() const {
+    return has_selection()
+        ? edit_text_.substr(selection_start(), selection_end() - selection_start())
+        : std::string {};
+}
+
 void SpinBox::set_value(float value) {
     if (!std::isfinite(value)) {
         tc_log_error("[termin-gui-native] SpinBox rejected non-finite value");
@@ -22,6 +40,7 @@ void SpinBox::set_value(float value) {
     if (editing_) {
         edit_text_ = formatted_value();
         caret_ = edit_text_.size();
+        selection_anchor_ = SIZE_MAX;
     }
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
     changed_.emit(*this, value_);
@@ -69,6 +88,7 @@ void SpinBox::begin_edit() {
     editing_ = true;
     edit_text_ = formatted_value();
     caret_ = edit_text_.size();
+    selection_anchor_ = SIZE_MAX;
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
@@ -91,6 +111,7 @@ void SpinBox::cancel_edit() {
     editing_ = false;
     edit_text_.clear();
     caret_ = 0;
+    selection_anchor_ = SIZE_MAX;
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
@@ -107,6 +128,60 @@ tc_ui_rect SpinBox::down_button_rect() const {
     tc_ui_rect result = up_button_rect();
     result.y += result.height;
     return result;
+}
+
+tc_ui_rect SpinBox::text_clip_rect(tc_ui_document* document) const {
+    const tc_ui_style style = computed_style(document);
+    return tc_ui_rect {
+        bounds().x + style.padding_left,
+        bounds().y + style.padding_top,
+        std::max(0.0f, bounds().width - button_width_ - style.padding_left - 2.0f),
+        std::max(0.0f, bounds().height - style.padding_top - style.padding_bottom)
+    };
+}
+
+float SpinBox::prefix_width(tc_ui_document* document, size_t offset, float font_size) const {
+    tc_ui_text_metrics metrics {};
+    measure_text(document, std::string_view(edit_text_).substr(0, std::min(offset, edit_text_.size())), font_size, metrics);
+    return metrics.width;
+}
+
+size_t SpinBox::caret_from_content_x(tc_ui_document* document, float content_x) const {
+    const float font_size = computed_style(document).font_size;
+    float current_width = 0.0f;
+    for (size_t current = 0; current < edit_text_.size(); ++current) {
+        const float next_width = prefix_width(document, current + 1, font_size);
+        if (content_x < (current_width + next_width) * 0.5f) return current;
+        current_width = next_width;
+    }
+    return edit_text_.size();
+}
+
+void SpinBox::move_caret(size_t next, bool extend_selection) {
+    next = std::min(next, edit_text_.size());
+    if (extend_selection) {
+        if (selection_anchor_ == SIZE_MAX) selection_anchor_ = caret_;
+    } else {
+        selection_anchor_ = SIZE_MAX;
+    }
+    caret_ = next;
+    if (selection_anchor_ == caret_) selection_anchor_ = SIZE_MAX;
+}
+
+bool SpinBox::delete_selection() {
+    if (!has_selection()) return false;
+    const size_t start = selection_start();
+    edit_text_.erase(start, selection_end() - start);
+    caret_ = start;
+    selection_anchor_ = SIZE_MAX;
+    return true;
+}
+
+void SpinBox::replace_selection(std::string_view text) {
+    delete_selection();
+    edit_text_.insert(caret_, text);
+    caret_ += text.size();
+    selection_anchor_ = SIZE_MAX;
 }
 
 tc_ui_size SpinBox::measure(tc_ui_document* document, tc_ui_constraints constraints) {
@@ -141,37 +216,64 @@ void SpinBox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
         tc_ui_point {down_button_rect().x + 6.0f, down_button_rect().y + down_button_rect().height - 3.0f},
         style.font_size, style.foreground
     );
-    const tc_ui_rect clip {
-        bounds().x + style.padding_left,
-        bounds().y + style.padding_top,
-        std::max(0.0f, bounds().width - button_width_ - style.padding_left - 2.0f),
-        std::max(0.0f, bounds().height - style.padding_top - style.padding_bottom)
-    };
+    const tc_ui_rect clip = text_clip_rect(document);
     const float baseline = clip.y + std::max(0.0f, (clip.height - line_height_value) * 0.5f) + ascent;
     tc_ui_painter_push_clip(context, clip);
+    if (editing_ && has_selection()) {
+        tc_ui_color selection_color = style.accent;
+        selection_color.a *= 0.45f;
+        const float start_x = prefix_width(document, selection_start(), style.font_size);
+        const float end_x = prefix_width(document, selection_end(), style.font_size);
+        tc_ui_painter_fill_rect(
+            context,
+            tc_ui_rect {clip.x + start_x, clip.y, end_x - start_x, clip.height},
+            selection_color
+        );
+    }
     tc_ui_painter_draw_text(context, display.c_str(), tc_ui_point {clip.x, baseline}, style.font_size, style.foreground);
     if (editing_ && tc_widget_handle_eq(tc_ui_document_focused_widget(document), handle())) {
-        tc_ui_text_metrics prefix {};
-        measure_text(document, std::string_view(edit_text_).substr(0, caret_), style.font_size, prefix);
-        const float x = clip.x + prefix.width;
+        const float x = clip.x + prefix_width(document, caret_, style.font_size);
         tc_ui_painter_draw_line(context, tc_ui_point {x, clip.y + 3.0f}, tc_ui_point {x, clip.y + clip.height - 3.0f}, style.accent, 1.0f);
     }
     tc_ui_painter_pop_clip(context);
 }
 
 tc_ui_event_result SpinBox::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
-    if (!event || event->type != TC_UI_POINTER_DOWN || !rect_contains(bounds(), event->x, event->y)) {
-        return TC_UI_EVENT_IGNORED;
+    if (!event) return TC_UI_EVENT_IGNORED;
+    if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
+        tc_ui_document_set_focus(document, handle());
+        if (rect_contains(up_button_rect(), event->x, event->y)) {
+            set_value(value_ + step_);
+        } else if (rect_contains(down_button_rect(), event->x, event->y)) {
+            set_value(value_ - step_);
+        } else {
+            begin_edit();
+            const tc_ui_rect clip = text_clip_rect(document);
+            const size_t next = caret_from_content_x(document, std::max(0.0f, event->x - clip.x));
+            if ((event->modifiers & TC_UI_MOD_SHIFT) != 0) move_caret(next, true);
+            else {
+                caret_ = next;
+                selection_anchor_ = caret_;
+            }
+            selecting_ = true;
+            tc_ui_document_set_pointer_capture(document, handle());
+        }
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return TC_UI_EVENT_HANDLED;
     }
-    tc_ui_document_set_focus(document, handle());
-    if (rect_contains(up_button_rect(), event->x, event->y)) {
-        set_value(value_ + step_);
-    } else if (rect_contains(down_button_rect(), event->x, event->y)) {
-        set_value(value_ - step_);
-    } else {
-        begin_edit();
+    if (event->type == TC_UI_POINTER_MOVE && selecting_) {
+        const tc_ui_rect clip = text_clip_rect(document);
+        caret_ = caret_from_content_x(document, std::max(0.0f, event->x - clip.x));
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return TC_UI_EVENT_HANDLED;
     }
-    return TC_UI_EVENT_HANDLED;
+    if (event->type == TC_UI_POINTER_UP && selecting_) {
+        selecting_ = false;
+        tc_ui_document_release_pointer_capture(document, handle());
+        if (selection_anchor_ == caret_) selection_anchor_ = SIZE_MAX;
+        return TC_UI_EVENT_HANDLED;
+    }
+    return TC_UI_EVENT_IGNORED;
 }
 
 tc_ui_event_result SpinBox::key_event(tc_ui_document*, const tc_ui_key_event* event) {
@@ -185,16 +287,23 @@ tc_ui_event_result SpinBox::key_event(tc_ui_document*, const tc_ui_key_event* ev
         return TC_UI_EVENT_HANDLED;
     }
     if (!editing_) return TC_UI_EVENT_IGNORED;
+    const bool extend = (event->modifiers & TC_UI_MOD_SHIFT) != 0;
     switch (event->key) {
-    case TC_UI_KEY_LEFT: if (caret_ > 0) --caret_; break;
-    case TC_UI_KEY_RIGHT: if (caret_ < edit_text_.size()) ++caret_; break;
-    case TC_UI_KEY_HOME: caret_ = 0; break;
-    case TC_UI_KEY_END: caret_ = edit_text_.size(); break;
+    case TC_UI_KEY_LEFT:
+        if (!extend && has_selection()) move_caret(selection_start(), false);
+        else move_caret(caret_ > 0 ? caret_ - 1 : 0, extend);
+        break;
+    case TC_UI_KEY_RIGHT:
+        if (!extend && has_selection()) move_caret(selection_end(), false);
+        else move_caret(std::min(caret_ + 1, edit_text_.size()), extend);
+        break;
+    case TC_UI_KEY_HOME: move_caret(0, extend); break;
+    case TC_UI_KEY_END: move_caret(edit_text_.size(), extend); break;
     case TC_UI_KEY_BACKSPACE:
-        if (caret_ > 0) edit_text_.erase(--caret_, 1);
+        if (!delete_selection() && caret_ > 0) edit_text_.erase(--caret_, 1);
         break;
     case TC_UI_KEY_DELETE:
-        if (caret_ < edit_text_.size()) edit_text_.erase(caret_, 1);
+        if (!delete_selection() && caret_ < edit_text_.size()) edit_text_.erase(caret_, 1);
         break;
     case TC_UI_KEY_ENTER: commit_edit(); break;
     case TC_UI_KEY_ESCAPE: cancel_edit(); break;
@@ -214,8 +323,7 @@ tc_ui_event_result SpinBox::text_event(tc_ui_document*, const tc_ui_text_event* 
         }
     }
     if (!filtered.empty()) {
-        edit_text_.insert(caret_, filtered);
-        caret_ += filtered.size();
+        replace_selection(filtered);
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
     }
     return TC_UI_EVENT_HANDLED;
