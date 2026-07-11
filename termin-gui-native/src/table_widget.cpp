@@ -458,14 +458,14 @@ tc_ui_event_result TableWidget::pointer_event(tc_ui_document* document,
         return TC_UI_EVENT_IGNORED;
     }
     const size_t row = row_index_at(event->x, event->y);
-    if (event->button == 1) {
+    if (event->button == pointer_button_value(PointerButton::Right)) {
         if (row != SIZE_MAX && model_->row_at(row).data.enabled)
             apply_selection(row, event->modifiers);
         context_menu_requested_.emit(*this, row == SIZE_MAX ? -1 : static_cast<int64_t>(row),
                                      event->x, event->y);
         return TC_UI_EVENT_HANDLED;
     }
-    if (event->button != 0)
+    if (event->button != pointer_button_value(PointerButton::Left))
         return TC_UI_EVENT_IGNORED;
     if (row == SIZE_MAX || !model_->row_at(row).data.enabled)
         return TC_UI_EVENT_IGNORED;

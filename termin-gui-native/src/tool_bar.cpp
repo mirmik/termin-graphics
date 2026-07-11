@@ -78,6 +78,13 @@ void ToolBar::set_padding(float padding) {
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
+void ToolBar::set_centered(bool centered) {
+    if (centered_ == centered)
+        return;
+    centered_ = centered;
+    mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+}
+
 std::string ToolBar::hovered_tooltip() const {
     if (hovered_ >= model_->size())
         return {};
@@ -128,6 +135,15 @@ void ToolBar::compute_item_rects(tc_ui_document* document) {
         }
         item_rects_.push_back(tc_ui_rect{x, y, width, item_height_});
         x += width + (command.data.kind == CommandKind::Action ? padding_ : 0.0f);
+    }
+    if (centered_ && !item_rects_.empty()) {
+        const float content_left = item_rects_.front().x;
+        const tc_ui_rect& last_rect = item_rects_.back();
+        const float content_right = last_rect.x + last_rect.width;
+        const float offset = bounds().x + (bounds().width - (content_right - content_left)) * 0.5f -
+                             content_left;
+        for (tc_ui_rect& item_rect : item_rects_)
+            item_rect.x += offset;
     }
 }
 
@@ -235,7 +251,7 @@ tc_ui_event_result ToolBar::pointer_event(tc_ui_document* document,
         return rect_contains(bounds(), event->x, event->y) ? TC_UI_EVENT_HANDLED
                                                            : TC_UI_EVENT_IGNORED;
     }
-    if (event->type == TC_UI_POINTER_DOWN && event->button == 0) {
+    if (event->type == TC_UI_POINTER_DOWN && event->button == pointer_button_value(PointerButton::Left)) {
         const size_t index = index_at(event->x, event->y);
         if (index == SIZE_MAX || !model_->command_at(index).data.enabled) {
             return TC_UI_EVENT_IGNORED;

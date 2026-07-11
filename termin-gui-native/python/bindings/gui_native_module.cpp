@@ -2189,6 +2189,9 @@ NB_MODULE(_gui_native, m) {
         .def_prop_rw(
             "padding", [](const ToolBarRef& self) { return self.get().padding(); },
             [](const ToolBarRef& self, float value) { self.get().set_padding(value); })
+        .def_prop_rw(
+            "centered", [](const ToolBarRef& self) { return self.get().centered(); },
+            [](const ToolBarRef& self, bool value) { self.get().set_centered(value); })
         .def(
             "connect_activated",
             [](const ToolBarRef& self, nb::object callback) {
@@ -2743,6 +2746,13 @@ NB_MODULE(_gui_native, m) {
         .def_prop_ro("handle",
                      [](const ColorDialogRef& self) { return WidgetHandle{self.widget.handle}; })
         .def_prop_ro("model", [](const ColorDialogRef& self) { return self.get().model(); })
+        .def_prop_ro("picker", [](const ColorDialogRef& self) -> nb::object {
+            const tc_widget_handle handle = self.get().picker_handle();
+            if (tc_widget_handle_is_invalid(handle)) {
+                return nb::none();
+            }
+            return nb::cast(ColorPickerRef{WidgetRef{self.widget.state, handle}});
+        })
         .def_prop_rw(
             "color", [](const ColorDialogRef& self) { return self.get().color().c_color(); },
             [](const ColorDialogRef& self, tc_ui_color color) {
@@ -3430,6 +3440,11 @@ NB_MODULE(_gui_native, m) {
         .value("Single", termin::gui_native::SelectionMode::Single)
         .value("Multiple", termin::gui_native::SelectionMode::Multiple);
 
+    nb::enum_<termin::gui_native::PointerButton>(m, "PointerButton")
+        .value("Left", termin::gui_native::PointerButton::Left)
+        .value("Right", termin::gui_native::PointerButton::Right)
+        .value("Middle", termin::gui_native::PointerButton::Middle);
+
     nb::class_<ListWidgetRef>(m, "ListWidget")
         .def_prop_ro("widget", [](const ListWidgetRef& self) { return self.widget; })
         .def_prop_ro("handle",
@@ -3508,6 +3523,25 @@ NB_MODULE(_gui_native, m) {
                                 state->pending_exception = std::current_exception();
                             tc_log_error(
                                 "[termin-gui-native/python] ListWidget selection callback failed");
+                        }
+                    });
+            },
+            nb::arg("callback"))
+        .def(
+            "connect_context_menu_requested",
+            [](const ListWidgetRef& self, nb::object callback) {
+                auto state = self.widget.state;
+                return self.get().context_menu_requested().connect(
+                    [state, callback = std::move(callback)](
+                        termin::gui_native::ListWidget&, int64_t index, float x, float y) {
+                        try {
+                            nb::gil_scoped_acquire gil;
+                            callback(index, x, y);
+                        } catch (...) {
+                            if (state && !state->pending_exception)
+                                state->pending_exception = std::current_exception();
+                            tc_log_error(
+                                "[termin-gui-native/python] ListWidget context callback failed");
                         }
                     });
             },
@@ -5118,6 +5152,15 @@ NB_MODULE(_gui_native, m) {
         .def("bind_text_measurer", [](termin::gui_native::UiDrawListRenderer& self, Document& document) {
             self.bind_text_measurer(document.get());
         }, nb::arg("document"), nb::keep_alive<2, 1>())
+        .def("sync_color_picker_surfaces", [](termin::gui_native::UiDrawListRenderer& self,
+                                                tgfx::RenderContext2& context,
+                                                const ColorPickerRef& picker) {
+            self.sync_color_picker_surfaces(context, picker.get());
+        }, nb::arg("context"), nb::arg("picker"))
+        .def("release_color_picker_surfaces", [](termin::gui_native::UiDrawListRenderer& self,
+                                                   const ColorPickerRef& picker) {
+            self.release_color_picker_surfaces(picker.get());
+        }, nb::arg("picker"))
         .def("render", [](termin::gui_native::UiDrawListRenderer& self,
                           tgfx::RenderContext2& context,
                           const DrawList& draw_list,

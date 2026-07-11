@@ -16,6 +16,7 @@ class ColorDialog final : public Dialog {
     const std::shared_ptr<ColorPickerModel>& model() const { return model_; }
     Color color() const { return model_->color(); }
     void set_color(Color color) { model_->set_color(color); }
+    tc_widget_handle picker_handle() const { return picker_handle_; }
     bool show(tc_ui_document* document, tc_ui_rect viewport);
     Signal<ColorDialog&, const std::optional<Color>&>& color_finished() { return color_finished_; }
 

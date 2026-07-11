@@ -1,9 +1,14 @@
 #include <termin/gui_native/draw_list_renderer.hpp>
+#include <termin/gui_native/color_picker.hpp>
 
 #include <exception>
 #include <string_view>
 
 #include <tcbase/tc_log.h>
+#include <tgfx/tgfx2_interop.h>
+#include <tgfx2/descriptors.hpp>
+#include <tgfx2/i_render_device.hpp>
+#include <tgfx2/render_context.hpp>
 
 namespace termin::gui_native {
 namespace {
@@ -13,6 +18,59 @@ tgfx::CanvasColor canvas_color(tc_ui_color color) {
 }
 
 } // namespace
+
+void UiDrawListRenderer::destroy_picker_surface_texture(
+    tgfx::IRenderDevice* device,
+    ColorPickerSurfaceTexture& surface
+) {
+    if (device && surface.texture) {
+        device->destroy(surface.texture);
+    }
+    surface = {};
+}
+
+void UiDrawListRenderer::destroy_picker_textures(
+    tgfx::IRenderDevice* device,
+    ColorPickerTextures& textures
+) {
+    destroy_picker_surface_texture(device, textures.saturation_value);
+    destroy_picker_surface_texture(device, textures.hue);
+    destroy_picker_surface_texture(device, textures.alpha);
+}
+
+bool UiDrawListRenderer::sync_picker_surface(
+    tgfx::IRenderDevice& device,
+    const ColorPickerSurface& source,
+    ColorPickerSurfaceTexture& target
+) {
+    if (source.width == 0 || source.height == 0 || source.rgba.empty()) {
+        tc_log_error("[termin-gui-native] ColorPicker generated an empty surface");
+        return false;
+    }
+    if (target.texture && target.width == source.width && target.height == source.height &&
+        target.revision == source.revision) {
+        return true;
+    }
+    if (target.texture) {
+        device.destroy(target.texture);
+        target = {};
+    }
+    tgfx::TextureDesc desc{};
+    desc.width = source.width;
+    desc.height = source.height;
+    desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
+    target.texture = device.create_texture(desc);
+    if (!target.texture) {
+        tc_log_error("[termin-gui-native] failed to create ColorPicker surface texture");
+        return false;
+    }
+    device.upload_texture(target.texture, source.rgba);
+    target.width = source.width;
+    target.height = source.height;
+    target.revision = source.revision;
+    return true;
+}
 
 bool UiDrawListRenderer::set_default_font_path(const std::string& path, int default_size_px) {
     try {
@@ -30,6 +88,60 @@ bool UiDrawListRenderer::set_default_font_path(const std::string& path, int defa
 
 void UiDrawListRenderer::bind_text_measurer(tc_ui_document* document) {
     tc_ui_document_set_text_measurer(document, &UiDrawListRenderer::measure_text, this);
+}
+
+void UiDrawListRenderer::sync_color_picker_surfaces(
+    tgfx::RenderContext2& context,
+    ColorPicker& picker
+) {
+    tgfx::IRenderDevice& device = context.device();
+    if (color_picker_device_ != &device) {
+        const bool device_is_live = color_picker_device_ != nullptr &&
+            tgfx2_interop_get_device() == color_picker_device_;
+        if (device_is_live) {
+            for (auto& [_, textures] : color_picker_textures_) {
+                destroy_picker_textures(color_picker_device_, textures);
+            }
+        }
+        color_picker_textures_.clear();
+        color_picker_device_ = &device;
+    }
+
+    ColorPickerTextures& textures = color_picker_textures_[&picker];
+    const bool has_sv = sync_picker_surface(
+        device, picker.surface(ColorPickerSurfaceKind::SaturationValue), textures.saturation_value);
+    const bool has_hue = sync_picker_surface(
+        device, picker.surface(ColorPickerSurfaceKind::Hue), textures.hue);
+    bool has_alpha = true;
+    if (picker.model()->show_alpha()) {
+        has_alpha = sync_picker_surface(
+            device, picker.surface(ColorPickerSurfaceKind::Alpha), textures.alpha);
+    } else {
+        destroy_picker_surface_texture(color_picker_device_, textures.alpha);
+    }
+
+    if (has_sv && has_hue && has_alpha) {
+        picker.set_texture_ids(ColorPickerTextureIds{
+            textures.saturation_value.texture.id,
+            textures.hue.texture.id,
+            textures.alpha.texture.id,
+        });
+    } else {
+        picker.set_texture_ids({});
+    }
+}
+
+void UiDrawListRenderer::release_color_picker_surfaces(ColorPicker& picker) {
+    const auto found = color_picker_textures_.find(&picker);
+    if (found == color_picker_textures_.end()) {
+        return;
+    }
+    const bool device_is_live = color_picker_device_ != nullptr &&
+        tgfx2_interop_get_device() == color_picker_device_;
+    if (device_is_live) {
+        destroy_picker_textures(color_picker_device_, found->second);
+    }
+    color_picker_textures_.erase(found);
 }
 
 bool UiDrawListRenderer::measure_text(
@@ -241,6 +353,15 @@ void UiDrawListRenderer::release_gpu() {
     if (owned_font_) {
         owned_font_->release_gpu();
     }
+    const bool device_is_live = color_picker_device_ != nullptr &&
+        tgfx2_interop_get_device() == color_picker_device_;
+    if (device_is_live) {
+        for (auto& [_, textures] : color_picker_textures_) {
+            destroy_picker_textures(color_picker_device_, textures);
+        }
+    }
+    color_picker_textures_.clear();
+    color_picker_device_ = nullptr;
 }
 
 } // namespace termin::gui_native

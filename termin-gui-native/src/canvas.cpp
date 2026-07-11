@@ -95,7 +95,9 @@ tc_ui_event_result Canvas::pointer_event(tc_ui_document* document, const tc_ui_p
         set_zoom(zoom_ * factor, tc_ui_point {event->x, event->y});
         return TC_UI_EVENT_HANDLED;
     }
-    if (event->type == TC_UI_POINTER_DOWN && event->button == 2 && rect_contains(bounds(), event->x, event->y)) {
+    if (event->type == TC_UI_POINTER_DOWN &&
+        event->button == pointer_button_value(PointerButton::Middle) &&
+        rect_contains(bounds(), event->x, event->y)) {
         panning_ = true;
         pan_start_ = tc_ui_point {event->x, event->y};
         pan_start_offset_ = offset_;

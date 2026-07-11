@@ -55,6 +55,7 @@ class Dialog : public NativeWidget {
 
   private:
     static void validate_actions(const std::vector<DialogAction>& actions);
+    static tc_ui_size action_button_size(tc_ui_document* document, const DialogAction& action);
     bool ensure_buttons(tc_ui_document* document);
     void destroy_buttons(tc_ui_document* document);
     const DialogAction* default_action() const;

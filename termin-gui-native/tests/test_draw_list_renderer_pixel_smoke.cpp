@@ -1,4 +1,5 @@
 #include <termin/gui_native/draw_list_renderer.hpp>
+#include <termin/gui_native/color_picker.hpp>
 
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/device_factory.hpp>
@@ -168,8 +169,23 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
         return 1;
     }
 
+    termin::gui_native::ColorPicker color_picker;
+
     const float clear[]{0.0f, 0.0f, 0.0f, 1.0f};
     context.begin_frame();
+    renderer.sync_color_picker_surfaces(context, color_picker);
+    const auto picker_textures = color_picker.texture_ids();
+    const bool picker_textures_ready = picker_textures.saturation_value != 0 &&
+        picker_textures.hue != 0 && picker_textures.alpha != 0;
+    if (picker_textures_ready) {
+        tc_ui_painter_draw_texture(
+            painter,
+            picker_textures.saturation_value,
+            tc_ui_rect{90.0f, 40.0f, 28.0f, 20.0f},
+            tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+            false
+        );
+    }
     context.begin_pass(target, {}, clear, 1.0f, false);
     renderer.render(context, draw_list, static_cast<int>(kWidth), static_cast<int>(kHeight));
     context.end_pass();
@@ -184,6 +200,9 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
     const bool rounded_center_ok = read_ok && looks_blue(pixel_at(pixels, 20, 50));
     const bool rounded_corner_ok = read_ok && looks_black(pixel_at(pixels, 9, 41));
     const bool circle_ok = read_ok && looks_yellow(pixel_at(pixels, 48, 50));
+    const float* picker_pixel = pixel_at(pixels, 96, 48);
+    const bool picker_texture_ok = read_ok && picker_textures_ready &&
+        (picker_pixel[0] > 0.1f || picker_pixel[1] > 0.1f || picker_pixel[2] > 0.1f);
     size_t text_signal = 0;
     uint32_t text_min_y = kHeight;
     uint32_t text_max_y = 0;
@@ -204,6 +223,7 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
     const bool text_ok = text_signal >= 8 && text_min_y < text_baseline
         && text_max_y <= text_baseline + 5;
 
+    renderer.release_color_picker_surfaces(color_picker);
     renderer.release_gpu();
     tc_ui_paint_context_destroy(painter);
     tc_ui_draw_list_destroy(draw_list);
@@ -211,13 +231,13 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
     device->destroy(target);
 
     if (!read_ok || !image_ok || !nested_clip_inside_ok || !nested_clip_outside_ok ||
-        !rounded_center_ok || !rounded_corner_ok || !circle_ok || !text_ok) {
+        !rounded_center_ok || !rounded_corner_ok || !circle_ok || !picker_texture_ok || !text_ok) {
         std::fprintf(stderr,
                      "UI renderer %s pixel smoke failed: read=%d image=%d clip_in=%d clip_out=%d "
-                     "round_center=%d round_corner=%d circle=%d text=%d signal=%zu y=[%u,%u]\n",
+                     "round_center=%d round_corner=%d circle=%d picker=%d text=%d signal=%zu y=[%u,%u]\n",
                      tgfx::backend_name(backend), read_ok, image_ok, nested_clip_inside_ok,
                      nested_clip_outside_ok, rounded_center_ok, rounded_corner_ok, circle_ok,
-                     text_ok, text_signal, text_min_y, text_max_y);
+                     picker_texture_ok, text_ok, text_signal, text_min_y, text_max_y);
         return 1;
     }
     return 0;

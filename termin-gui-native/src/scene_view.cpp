@@ -333,7 +333,8 @@ tc_ui_event_result SceneView::pointer_event(tc_ui_document* document,
         set_zoom(zoom_ * factor, {event->x, event->y});
         return TC_UI_EVENT_HANDLED;
     }
-    if (event->type == TC_UI_POINTER_DOWN && event->button == 2 &&
+    if (event->type == TC_UI_POINTER_DOWN &&
+        event->button == pointer_button_value(PointerButton::Middle) &&
         detail::rect_contains(bounds(), event->x, event->y)) {
         panning_ = true;
         pan_start_ = {event->x, event->y};
@@ -342,7 +343,8 @@ tc_ui_event_result SceneView::pointer_event(tc_ui_document* document,
         tc_ui_document_set_pointer_capture(document, handle());
         return TC_UI_EVENT_HANDLED;
     }
-    if (event->type == TC_UI_POINTER_DOWN && event->button == 0 &&
+    if (event->type == TC_UI_POINTER_DOWN &&
+        event->button == pointer_button_value(PointerButton::Left) &&
         detail::rect_contains(bounds(), event->x, event->y)) {
         tc_ui_document_set_focus(document, handle());
         const auto hit = scene_->hit_test(world.x, world.y);

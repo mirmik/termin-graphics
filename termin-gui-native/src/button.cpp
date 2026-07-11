@@ -38,17 +38,18 @@ Button& Button::set_text(std::string text) {
 
 void Button::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
-    tc_ui_painter_fill_rect(context, bounds(), style.background);
-    tc_ui_painter_stroke_rect(context, bounds(), style.border, style.border_width);
-    const float y = bounds().y + bounds().height * 0.5f;
-    tc_ui_painter_draw_line(context, tc_ui_point{bounds().x + 14.0f, y},
-                            tc_ui_point{bounds().x + bounds().width - 14.0f, y}, style.accent,
-                            style.border_width);
+    tc_ui_painter_fill_rounded_rect(context, bounds(), 4.0f, style.background);
+    tc_ui_painter_stroke_rounded_rect(context, bounds(), 4.0f, style.border, style.border_width);
     if (!text_.empty()) {
+        tc_ui_text_metrics metrics{};
+        const bool has_metrics = measure_text(document, text_, style.font_size, metrics);
+        const float text_x = has_metrics
+                                 ? bounds().x + std::max(0.0f, (bounds().width - metrics.width) * 0.5f)
+                                 : bounds().x + style.padding_left;
         tc_ui_painter_push_clip(context, bounds());
         tc_ui_painter_draw_text(
             context, text_.c_str(),
-            tc_ui_point{bounds().x + style.padding_left,
+            tc_ui_point{text_x,
                         centered_text_baseline(document, text_, style.font_size, bounds())},
             style.font_size, style.foreground);
         tc_ui_painter_pop_clip(context);

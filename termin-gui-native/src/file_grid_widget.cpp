@@ -468,7 +468,7 @@ tc_ui_event_result FileGridWidget::pointer_event(tc_ui_document* document,
     if (event->type != TC_UI_POINTER_DOWN)
         return TC_UI_EVENT_IGNORED;
     tc_ui_document_set_focus(document, handle());
-    if (event->button == 0 && scrollbar_hit(event->x, event->y)) {
+    if (event->button == pointer_button_value(PointerButton::Left) && scrollbar_hit(event->x, event->y)) {
         dragging_scrollbar_ = true;
         drag_start_y_ = event->y;
         drag_start_scroll_ = scroll_y_;
@@ -476,7 +476,7 @@ tc_ui_event_result FileGridWidget::pointer_event(tc_ui_document* document,
         return TC_UI_EVENT_HANDLED;
     }
     const size_t index = index_at(event->x, event->y);
-    if (event->button == 1) {
+    if (event->button == pointer_button_value(PointerButton::Right)) {
         if (index != SelectionModel::npos)
             apply_selection(index, event->modifiers);
         context_menu_requested_.emit(
@@ -484,7 +484,7 @@ tc_ui_event_result FileGridWidget::pointer_event(tc_ui_document* document,
             event->y);
         return TC_UI_EVENT_HANDLED;
     }
-    if (event->button != 0 || index == SelectionModel::npos || !model_->item(index).enabled)
+    if (event->button != pointer_button_value(PointerButton::Left) || index == SelectionModel::npos || !model_->item(index).enabled)
         return TC_UI_EVENT_IGNORED;
     const bool selected = apply_selection(index, event->modifiers);
     if (event->click_count == 2) {

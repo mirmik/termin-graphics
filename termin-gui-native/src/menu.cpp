@@ -409,7 +409,7 @@ tc_ui_event_result Menu::pointer_event(tc_ui_document* document, const tc_ui_poi
     }
     if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y))
         return TC_UI_EVENT_HANDLED;
-    if (event->type == TC_UI_POINTER_UP && event->button == 0) {
+    if (event->type == TC_UI_POINTER_UP && event->button == pointer_button_value(PointerButton::Left)) {
         const size_t index = index_at(event->x, event->y);
         return activate_index(document, index) ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
     }

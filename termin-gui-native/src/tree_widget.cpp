@@ -493,11 +493,11 @@ tc_ui_event_result TreeWidget::pointer_event(tc_ui_document* document,
     if (!node.item.enabled)
         return TC_UI_EVENT_IGNORED;
     const bool selected = select_node(node.id, false) || selected_ == node.id;
-    if (event->button == 1) {
+    if (event->button == pointer_button_value(PointerButton::Right)) {
         context_menu_requested_.emit(*this, node.id, event->x, event->y);
         return TC_UI_EVENT_HANDLED;
     }
-    if (event->button != 0)
+    if (event->button != pointer_button_value(PointerButton::Left))
         return TC_UI_EVENT_IGNORED;
     if (draggable_) {
         pressed_ = node.id;
@@ -505,7 +505,7 @@ tc_ui_event_result TreeWidget::pointer_event(tc_ui_document* document,
         press_y_ = event->y;
         tc_ui_document_set_pointer_capture(document, handle());
     }
-    if (event->button == 0 && event->click_count == 2) {
+    if (event->button == pointer_button_value(PointerButton::Left) && event->click_count == 2) {
         activated_.emit(*this, node.id, node.item);
         return TC_UI_EVENT_HANDLED;
     }

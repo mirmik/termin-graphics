@@ -483,7 +483,8 @@ tc_ui_event_result RichTextView::pointer_event(tc_ui_document* document,
         clamp_scroll(content.height);
         return TC_UI_EVENT_HANDLED;
     }
-    if (event->type == TC_UI_POINTER_DOWN && event->button == 0 &&
+    if (event->type == TC_UI_POINTER_DOWN &&
+        event->button == pointer_button_value(PointerButton::Left) &&
         rect_contains(bounds(), event->x, event->y)) {
         if (scrollbar.visible && rect_contains(scrollbar.track, event->x, event->y)) {
             dragging_scrollbar_ = true;

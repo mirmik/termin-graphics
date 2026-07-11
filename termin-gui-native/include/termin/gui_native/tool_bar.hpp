@@ -23,6 +23,8 @@ class ToolBar final : public NativeWidget {
     float item_height() const { return item_height_; }
     void set_padding(float padding);
     float padding() const { return padding_; }
+    void set_centered(bool centered);
+    bool centered() const { return centered_; }
 
     Signal<ToolBar&, size_t, CommandId, const CommandData&>& activated() { return activated_; }
 
@@ -50,6 +52,7 @@ class ToolBar final : public NativeWidget {
     float separator_margin_ = 6.0f;
     float separator_width_ = 1.0f;
     float icon_gap_ = 4.0f;
+    bool centered_ = false;
     size_t hovered_ = SIZE_MAX;
     size_t pressed_ = SIZE_MAX;
     Signal<ToolBar&, size_t, CommandId, const CommandData&> activated_;

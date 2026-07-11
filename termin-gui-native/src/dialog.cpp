@@ -83,6 +83,13 @@ void Dialog::set_content(NativeWidget& content) {
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
+tc_ui_size Dialog::action_button_size(tc_ui_document* document, const DialogAction& action) {
+    tc_ui_text_metrics metrics{};
+    const bool has_metrics = measure_text(document, action.label, 14.0f, metrics);
+    const float label_width = has_metrics ? metrics.width : static_cast<float>(action.label.size()) * 7.0f;
+    return tc_ui_size{std::max(40.0f, label_width + 24.0f), 30.0f};
+}
+
 const DialogAction* Dialog::default_action() const {
     for (const DialogAction& action : actions_)
         if (action.is_default)
@@ -153,11 +160,8 @@ tc_ui_size Dialog::measure(tc_ui_document* document, tc_ui_constraints constrain
         content_height = measured.height;
     }
     float button_width = 0.0f;
-    for (size_t index = 0; index < button_handles_.size(); ++index) {
-        tc_widget* button = tc_ui_document_resolve_widget(document, button_handles_[index]);
-        if (button)
-            button_width += measure_widget(button, document, unconstrained()).width;
-    }
+    for (const DialogAction& action : actions_)
+        button_width += action_button_size(document, action).width;
     if (button_handles_.size() > 1)
         button_width += button_spacing_ * static_cast<float>(button_handles_.size() - 1);
     const tc_ui_size wanted{
@@ -180,10 +184,8 @@ void Dialog::layout(tc_ui_document* document, tc_ui_rect rect) {
     float total_width = 0.0f;
     std::vector<tc_ui_size> sizes;
     sizes.reserve(button_handles_.size());
-    for (tc_widget_handle handle : button_handles_) {
-        tc_widget* button = tc_ui_document_resolve_widget(document, handle);
-        const tc_ui_size size =
-            button ? measure_widget(button, document, unconstrained()) : tc_ui_size{};
+    for (const DialogAction& action : actions_) {
+        const tc_ui_size size = action_button_size(document, action);
         sizes.push_back(size);
         total_width += size.width;
     }

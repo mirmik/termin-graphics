@@ -188,6 +188,8 @@ void ColorPicker::paint_checker(tc_ui_paint_context* context, tc_ui_rect rect) c
 
 void ColorPicker::paint_fallback_surfaces(tc_ui_paint_context* context) const {
     const tc_ui_rect sv = sv_rect();
+    // The fallback renderer emits one UI draw per cell. Keep it bounded until
+    // ColorPickerSurface is uploaded and drawn as a texture by the UI host.
     constexpr int divisions = 24;
     for (int row = 0; row < divisions; ++row) {
         for (int column = 0; column < divisions; ++column) {

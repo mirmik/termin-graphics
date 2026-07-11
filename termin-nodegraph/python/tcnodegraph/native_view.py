@@ -15,6 +15,7 @@ from termin.gui_native import (
     KeyCode,
     KeyEventType,
     Point,
+    PointerButton,
     PointerEventType,
     Rect,
     Size,
@@ -426,13 +427,13 @@ class NativeNodeGraphView:
         self.param_widgets.clear()
 
     def _pointer(self, world: Point, event) -> bool:
-        if event.type == PointerEventType.Down and event.button == 1:
+        if event.type == PointerEventType.Down and event.button == PointerButton.Right.value:
             if self.on_context_requested is not None:
                 hit = self.scene.hit_test(world.x, world.y)
                 self.on_context_requested(world, None if hit is None else hit.stable_id)
                 return True
             return False
-        if event.type == PointerEventType.Down and event.button == 0:
+        if event.type == PointerEventType.Down and event.button == PointerButton.Left.value:
             socket = self._hit_socket(world)
             if socket is None:
                 return False
@@ -447,7 +448,9 @@ class NativeNodeGraphView:
                 self._pending_item.position = Point(world.x, world.y)
             self.request_render()
             return True
-        if event.type == PointerEventType.Up and event.button == 0 and self._pending_connection is not None:
+        if (event.type == PointerEventType.Up and
+                event.button == PointerButton.Left.value and
+                self._pending_connection is not None):
             start = self._pending_connection
             target = self._hit_socket(world)
             self._clear_pending()

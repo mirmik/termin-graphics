@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <tuple>
 
 using namespace termin::gui_native;
 
@@ -1841,6 +1842,19 @@ void test_list_widget_pointer_keyboard_and_multi_selection() {
   assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
   assert((list.selection().selected_indices() == std::vector<size_t>{0}));
 
+  std::vector<std::tuple<int64_t, float, float>> context_requests;
+  list.context_menu_requested().connect(
+      [&context_requests](ListWidget &, int64_t index, float x, float y) {
+        context_requests.emplace_back(index, x, y);
+      });
+  pointer.button = 1;
+  pointer.x = 10.0f;
+  pointer.y = 15.0f;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+  assert((list.selection().selected_indices() == std::vector<size_t>{0}));
+  assert((context_requests == std::vector<std::tuple<int64_t, float, float>>{{0, 10.0f, 15.0f}}));
+  pointer.button = 0;
+
   pointer.y = 45.0f;
   pointer.modifiers = TC_UI_MOD_CTRL;
   assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
@@ -2356,6 +2370,15 @@ void test_tool_bar_layout_activation_capture_and_model_lifetime() {
   assert(toolbar.item_rects().size() == 4);
   assert(toolbar.item_rects()[0].width > toolbar.item_height());
   assert(toolbar.item_rects()[1].width < toolbar.item_height());
+  toolbar.set_centered(true);
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 360.0f, 40.0f});
+  const auto& centered_rects = toolbar.item_rects();
+  const float content_center =
+      (centered_rects.front().x + centered_rects.back().x + centered_rects.back().width) *
+      0.5f;
+  assert(std::abs(content_center - 180.0f) < 0.01f);
+  toolbar.set_centered(false);
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 360.0f, 40.0f});
 
   std::vector<CommandId> activated;
   toolbar.activated().connect(

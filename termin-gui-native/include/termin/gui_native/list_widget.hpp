@@ -29,6 +29,9 @@ public:
     bool clear_selection();
     Signal<ListWidget&, const std::vector<size_t>&>& selection_changed() { return selection_changed_; }
     Signal<ListWidget&, size_t, const CollectionItem&>& activated() { return activated_; }
+    Signal<ListWidget&, int64_t, float, float>& context_menu_requested() {
+        return context_menu_requested_;
+    }
     tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
     void layout(tc_ui_document* document, tc_ui_rect rect) override;
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
@@ -56,5 +59,6 @@ private:
     size_t hovered_ = SelectionModel::npos;
     Signal<ListWidget&, const std::vector<size_t>&> selection_changed_;
     Signal<ListWidget&, size_t, const CollectionItem&> activated_;
+    Signal<ListWidget&, int64_t, float, float> context_menu_requested_;
 };
 } // namespace termin::gui_native
