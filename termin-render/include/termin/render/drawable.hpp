@@ -103,29 +103,6 @@ public:
         tc_render_item_sink& sink
     );
 
-    // Upload any per-draw uniforms that aren't derivable from the
-    // material UBO / push-constant path. Called by tgfx2 pass draw
-    // loops (ShadowPass, ColorPass, ...) right before the draw, after
-    // the tgfx2 shader has been bound on ctx2 but before ctx2->draw().
-    // SkinnedMeshRenderer overrides this to push u_bone_matrices.
-    // Default: no-op.
-    virtual void upload_per_draw_uniforms_tgfx2(
-        tgfx::RenderContext2& ctx2,
-        int geometry_id
-    ) {
-        (void)ctx2;
-        (void)geometry_id;
-    }
-
-    virtual bool needs_lighting_ubo_tgfx2(
-        const std::string& phase_mark,
-        int geometry_id
-    ) const {
-        (void)phase_mark;
-        (void)geometry_id;
-        return false;
-    }
-
     virtual Mat44f get_model_matrix(const Entity& entity) const;
 
     bool has_phase(const std::string& phase_mark) const {
