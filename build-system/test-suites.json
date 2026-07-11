@@ -170,6 +170,13 @@
       "reason": "Runs a real editor process and verifies C++ cascade module reload."
     },
     {
+      "id": "editor-sdk-shader-smoke",
+      "module": "termin-app",
+      "executor": "process-smoke",
+      "roots": ["scripts/smoke-sdk-editor-shaders"],
+      "reason": "Runs the installed editor with an empty OpenGL shader cache and verifies built-in engine shader sources and artifacts."
+    },
+    {
       "id": "termin-app-installed-bundle-acceptance",
       "module": "termin-app",
       "executor": "process-smoke",
