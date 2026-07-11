@@ -222,6 +222,7 @@
     },
     {"id": "termin-app-cpp-tests", "module": "termin-app", "executor": "ctest", "roots": ["termin-app/cpp/tests"]},
     {"id": "termin-base-tests-native", "module": "termin-base", "executor": "ctest", "roots": ["termin-base/tests"]},
+    {"id": "termin-bootstrap-tests-native", "module": "termin-bootstrap", "executor": "ctest", "roots": ["termin-bootstrap/tests"]},
     {"id": "termin-collision-tests-native", "module": "termin-collision", "executor": "ctest", "roots": ["termin-collision/tests"]},
     {"id": "termin-components-foliage-tests-native", "module": "termin-components-foliage", "executor": "ctest", "roots": ["termin-components/termin-components-foliage/tests"]},
     {"id": "termin-components-render-tests-native", "module": "termin-components-render", "executor": "ctest", "roots": ["termin-components/termin-components-render/tests"]},

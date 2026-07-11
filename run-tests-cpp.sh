@@ -12,6 +12,7 @@ BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 BUILD_DIR=""
 FULL=0
 VULKAN_MODE="on"
+OPENGL_MODE="on"
 SDL_MODE="on"
 WINDOW_TESTS_MODE="off"
 CCACHE_MODE="on"
@@ -25,6 +26,8 @@ for arg in "$@"; do
         --full)      FULL=1; WINDOW_TESTS_MODE="on" ;;
         --no-vulkan) VULKAN_MODE="off" ;;
         --vulkan)    VULKAN_MODE="on" ;;
+        --no-opengl) OPENGL_MODE="off" ;;
+        --opengl)    OPENGL_MODE="on" ;;
         --no-sdl)    SDL_MODE="off" ;;
         --sdl)       SDL_MODE="on" ;;
         --ccache)    CCACHE_MODE="on" ;;
@@ -47,6 +50,8 @@ for arg in "$@"; do
             echo "  --full            Include window/full C++ tests"
             echo "  --no-vulkan       Disable Vulkan support"
             echo "  --vulkan          Enable Vulkan support (default)"
+            echo "  --no-opengl       Disable OpenGL support"
+            echo "  --opengl          Enable OpenGL support (default)"
             echo "  --no-sdl          Disable SDL2 support"
             echo "  --sdl             Enable SDL2 support (default)"
             echo "  --ccache          Use ccache if available (default)"
@@ -82,6 +87,11 @@ fi
 case "$VULKAN_MODE" in
     off) TERMIN_ENABLE_VULKAN=OFF ;;
     on)  TERMIN_ENABLE_VULKAN=ON ;;
+esac
+
+case "$OPENGL_MODE" in
+    off) TERMIN_ENABLE_OPENGL=OFF ;;
+    on)  TERMIN_ENABLE_OPENGL=ON ;;
 esac
 
 case "$SDL_MODE" in
@@ -132,6 +142,7 @@ echo "Source dir:  $SCRIPT_DIR"
 echo "Build dir:   $BUILD_DIR"
 echo "SDK prefix:  $SDK_PREFIX"
 echo "Vulkan:      $TERMIN_ENABLE_VULKAN"
+echo "OpenGL:      $TERMIN_ENABLE_OPENGL"
 echo "SDL2:        $TERMIN_ENABLE_SDL"
 echo "Window tests:$TERMIN_BUILD_WINDOW_TESTS ($WINDOW_TESTS_MODE)"
 echo "Full set:    $FULL"
@@ -176,6 +187,7 @@ if ! cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     -DTERMIN_BUILD_TGFX2_TESTS=ON \
     -DTERMIN_BUILD_WINDOW_TESTS="$TERMIN_BUILD_WINDOW_TESTS" \
     -DTERMIN_ENABLE_VULKAN="$TERMIN_ENABLE_VULKAN" \
+    -DTERMIN_ENABLE_OPENGL="$TERMIN_ENABLE_OPENGL" \
     -DTERMIN_ENABLE_SDL="$TERMIN_ENABLE_SDL" \
     -DTERMIN_BUILD_EDITOR_MINIMAL=OFF \
     -DTERMIN_BUILD_LAUNCHER=OFF; then
