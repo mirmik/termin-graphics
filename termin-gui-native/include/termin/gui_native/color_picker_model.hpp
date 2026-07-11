@@ -14,6 +14,16 @@ enum class ColorPickerChange : uint32_t {
 };
 
 class ColorPickerModel {
+  private:
+    Color initial_color_;
+    float hue_ = 0.0f;
+    float saturation_ = 0.0f;
+    float value_ = 1.0f;
+    float alpha_ = 1.0f;
+    bool show_alpha_ = true;
+    uint64_t revision_ = 1;
+    Signal<ColorPickerModel&, uint32_t> changed_;
+
   public:
     explicit ColorPickerModel(Color initial = Color{1.0f, 1.0f, 1.0f, 1.0f},
                               bool show_alpha = true);
@@ -44,14 +54,6 @@ class ColorPickerModel {
     static void validate_color(Color color);
     void emit_change(uint32_t flags);
 
-    Color initial_color_;
-    float hue_ = 0.0f;
-    float saturation_ = 0.0f;
-    float value_ = 1.0f;
-    float alpha_ = 1.0f;
-    bool show_alpha_ = true;
-    uint64_t revision_ = 1;
-    Signal<ColorPickerModel&, uint32_t> changed_;
 };
 
 constexpr uint32_t color_picker_change_mask(ColorPickerChange change) {

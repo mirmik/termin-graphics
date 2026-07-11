@@ -10,6 +10,17 @@
 
 namespace termin::gui_native {
 class TextArea : public NativeWidget {
+private:
+    struct Line { size_t start; size_t end; };
+    std::string text_;
+    size_t caret_ = 0;
+    size_t selection_anchor_ = SIZE_MAX;
+    bool selecting_ = false;
+    float scroll_x_ = 0.0f;
+    float scroll_y_ = 0.0f;
+    float desired_x_ = -1.0f;
+    Signal<TextArea&, const std::string&> changed_;
+
 public:
     explicit TextArea(std::string text = {});
     const std::string& text() const { return text_; }
@@ -34,7 +45,6 @@ public:
     tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event) override;
     tc_ui_event_result text_event(tc_ui_document* document, const tc_ui_text_event* event) override;
 private:
-    struct Line { size_t start; size_t end; };
     std::vector<Line> lines() const;
     tc_ui_rect text_clip_rect(tc_ui_document* document) const;
     float line_height(tc_ui_document* document) const;
@@ -48,13 +58,5 @@ private:
     bool delete_selection();
     bool replace_selection(std::string_view inserted);
     void emit_changed();
-    std::string text_;
-    size_t caret_ = 0;
-    size_t selection_anchor_ = SIZE_MAX;
-    bool selecting_ = false;
-    float scroll_x_ = 0.0f;
-    float scroll_y_ = 0.0f;
-    float desired_x_ = -1.0f;
-    Signal<TextArea&, const std::string&> changed_;
 };
 } // namespace termin::gui_native

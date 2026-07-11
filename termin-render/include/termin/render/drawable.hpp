@@ -159,17 +159,17 @@ RENDER_API void collect_drawable_shader_usages_with_context(
     const std::function<void(TcShader)>& emit);
 
 struct RENDER_API RenderItemCollection {
+    std::vector<tc_render_item> items;
+    std::vector<std::vector<tc_render_item_vec3>> line_batch_points;
+    std::vector<std::unique_ptr<std::string>> text_batch_strings;
+    std::vector<std::unique_ptr<std::string>> foliage_batch_strings;
+
     RenderItemCollection() = default;
     ~RenderItemCollection() = default;
     RenderItemCollection(RenderItemCollection&&) noexcept = default;
     RenderItemCollection& operator=(RenderItemCollection&&) noexcept = default;
     RenderItemCollection(const RenderItemCollection&) = delete;
     RenderItemCollection& operator=(const RenderItemCollection&) = delete;
-
-    std::vector<tc_render_item> items;
-    std::vector<std::vector<tc_render_item_vec3>> line_batch_points;
-    std::vector<std::unique_ptr<std::string>> text_batch_strings;
-    std::vector<std::unique_ptr<std::string>> foliage_batch_strings;
 
     void clear() {
         items.clear();

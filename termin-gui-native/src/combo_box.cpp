@@ -3,6 +3,11 @@
 namespace termin::gui_native {
 using namespace detail;
 class ComboBoxPopup final : public NativeWidget {
+private:
+    ComboBox& owner_;
+    int hovered_ = -1;
+    float scroll_y_ = 0.0f;
+
 public:
     explicit ComboBoxPopup(ComboBox& owner)
         : NativeWidget("ComboBoxPopup"), owner_(owner) {}
@@ -63,9 +68,6 @@ public:
     }
 
 private:
-    ComboBox& owner_;
-    int hovered_ = -1;
-    float scroll_y_ = 0.0f;
 };
 ComboBox::ComboBox()
     : NativeWidget("ComboBox") {

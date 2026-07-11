@@ -27,6 +27,10 @@ class FontAtlas;
 namespace tcplot {
 
 class TCPLOT_API GpuHost {
+private:
+    std::unique_ptr<tgfx::RenderRuntime> runtime_;
+    std::unique_ptr<tgfx::FontAtlas>      font_;
+
 public:
     // Create the full tgfx2 stack. Backend is picked by env
     // TERMIN_BACKEND (same rules as `tgfx::default_backend_from_env`).
@@ -45,9 +49,6 @@ public:
     tgfx::RenderContext2& ctx();
     tgfx::FontAtlas&      font()   { return *font_;   }
 
-private:
-    std::unique_ptr<tgfx::RenderRuntime> runtime_;
-    std::unique_ptr<tgfx::FontAtlas>      font_;
 };
 
 }  // namespace tcplot

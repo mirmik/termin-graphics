@@ -10,6 +10,9 @@
 namespace termin::gui_native {
 
 class DocumentBuilder {
+private:
+    Document& document_;
+
 public:
     explicit DocumentBuilder(Document& document) : document_(document) {}
     template<typename T, typename... Args> T& make(Args&&... args) {
@@ -25,8 +28,6 @@ public:
         if (!document_.add_root(widget)) throw std::runtime_error("failed to add native UI root widget");
         return widget;
     }
-private:
-    Document& document_;
 };
 
 } // namespace termin::gui_native

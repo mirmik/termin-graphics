@@ -23,6 +23,26 @@ struct DialogResult {
 };
 
 class Dialog : public NativeWidget {
+  private:
+    std::string title_;
+    std::vector<DialogAction> actions_{{"ok", "OK", true, false}};
+    tc_widget_handle content_handle_ = tc_widget_handle_invalid();
+    std::vector<tc_widget_handle> button_handles_;
+    std::vector<size_t> button_connections_;
+    tc_widget_handle previous_focus_ = tc_widget_handle_invalid();
+    tc_ui_rect viewport_{};
+    DialogResult pending_result_{};
+    DialogResult result_{};
+    float title_height_ = 38.0f;
+    float button_bar_height_ = 52.0f;
+    float padding_ = 16.0f;
+    float button_spacing_ = 8.0f;
+    float min_width_ = 300.0f;
+    bool has_pending_result_ = false;
+    bool has_result_ = false;
+    bool open_ = false;
+    Signal<Dialog&, const DialogResult&> finished_;
+
   public:
     explicit Dialog(std::string title = {});
     ~Dialog() override = default;
@@ -62,24 +82,6 @@ class Dialog : public NativeWidget {
     const DialogAction* cancel_action() const;
     void deliver_result(tc_ui_document* document, DialogResult result);
 
-    std::string title_;
-    std::vector<DialogAction> actions_{{"ok", "OK", true, false}};
-    tc_widget_handle content_handle_ = tc_widget_handle_invalid();
-    std::vector<tc_widget_handle> button_handles_;
-    std::vector<size_t> button_connections_;
-    tc_widget_handle previous_focus_ = tc_widget_handle_invalid();
-    tc_ui_rect viewport_{};
-    DialogResult pending_result_{};
-    DialogResult result_{};
-    float title_height_ = 38.0f;
-    float button_bar_height_ = 52.0f;
-    float padding_ = 16.0f;
-    float button_spacing_ = 8.0f;
-    float min_width_ = 300.0f;
-    bool has_pending_result_ = false;
-    bool has_result_ = false;
-    bool open_ = false;
-    Signal<Dialog&, const DialogResult&> finished_;
 };
 
 } // namespace termin::gui_native

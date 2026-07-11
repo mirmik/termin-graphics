@@ -9,6 +9,15 @@
 
 namespace termin::gui_native {
 class TextInput : public NativeWidget {
+private:
+    std::string text_;
+    size_t caret_ = 0;
+    size_t selection_anchor_ = SIZE_MAX;
+    bool selecting_ = false;
+    float scroll_x_ = 0.0f;
+    Signal<TextInput&, const std::string&> changed_;
+    Signal<TextInput&, const std::string&> submitted_;
+
 public:
     explicit TextInput(std::string text = {});
     const std::string& text() const { return text_; }
@@ -43,12 +52,5 @@ private:
     void move_caret(size_t next, bool extend_selection);
     bool delete_selection();
     bool replace_selection(std::string_view inserted);
-    std::string text_;
-    size_t caret_ = 0;
-    size_t selection_anchor_ = SIZE_MAX;
-    bool selecting_ = false;
-    float scroll_x_ = 0.0f;
-    Signal<TextInput&, const std::string&> changed_;
-    Signal<TextInput&, const std::string&> submitted_;
 };
 } // namespace termin::gui_native

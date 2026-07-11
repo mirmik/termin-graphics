@@ -4,6 +4,12 @@
 
 namespace termin::gui_native {
 class ScrollArea : public NativeWidget {
+private:
+    tc_ui_size content_size_ {0.0f, 0.0f};
+    float scroll_x_ = 0.0f;
+    float scroll_y_ = 0.0f;
+    float wheel_step_ = 48.0f;
+
 public:
     explicit ScrollArea(const char* debug_name = nullptr);
     void set_content(tc_widget_handle handle);
@@ -20,9 +26,5 @@ public:
     tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
 private:
     void clamp_scroll();
-    tc_ui_size content_size_ {0.0f, 0.0f};
-    float scroll_x_ = 0.0f;
-    float scroll_y_ = 0.0f;
-    float wheel_step_ = 48.0f;
 };
 } // namespace termin::gui_native

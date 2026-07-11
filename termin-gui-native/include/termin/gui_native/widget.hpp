@@ -8,6 +8,9 @@
 namespace termin::gui_native {
 
 class Widget {
+private:
+    tc_widget _widget {};
+
 public:
     Widget(const Widget&) = delete;
     Widget& operator=(const Widget&) = delete;
@@ -90,7 +93,6 @@ private:
         delete static_cast<Widget*>(widget->body);
     }
 
-    tc_widget _widget {};
 };
 
 } // namespace termin::gui_native

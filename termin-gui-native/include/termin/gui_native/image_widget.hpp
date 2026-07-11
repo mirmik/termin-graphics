@@ -8,6 +8,12 @@
 namespace termin::gui_native {
 class ImageWidget : public NativeWidget {
 public:
+private:
+    uint32_t texture_id_ = 0;
+    tc_ui_size intrinsic_size_ {64.0f, 64.0f};
+    Color tint_ {1.0f, 1.0f, 1.0f, 1.0f};
+    bool preserve_aspect_ = true;
+public:
     ImageWidget();
     void set_texture(uint32_t texture_id, tc_ui_size intrinsic_size = {});
     uint32_t texture_id() const { return texture_id_; }
@@ -16,10 +22,5 @@ public:
     void set_preserve_aspect(bool preserve) { preserve_aspect_ = preserve; }
     tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-private:
-    uint32_t texture_id_ = 0;
-    tc_ui_size intrinsic_size_ {64.0f, 64.0f};
-    Color tint_ {1.0f, 1.0f, 1.0f, 1.0f};
-    bool preserve_aspect_ = true;
 };
 } // namespace termin::gui_native

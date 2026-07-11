@@ -34,6 +34,13 @@ struct TableChange {
 };
 
 class TableModel {
+  private:
+    std::vector<TableRow> rows_;
+    std::unordered_map<TableRowId, size_t> indices_;
+    TableRowId next_id_ = 1;
+    uint64_t revision_ = 1;
+    Signal<TableModel&, const TableChange&> changed_;
+
   public:
     size_t size() const { return rows_.size(); }
     bool empty() const { return rows_.empty(); }
@@ -57,11 +64,6 @@ class TableModel {
     void rebuild_indices(size_t first = 0);
     void notify(TableChange change);
 
-    std::vector<TableRow> rows_;
-    std::unordered_map<TableRowId, size_t> indices_;
-    TableRowId next_id_ = 1;
-    uint64_t revision_ = 1;
-    Signal<TableModel&, const TableChange&> changed_;
 };
 
 enum class TableColumnPolicy { Fixed, Stretch };
@@ -86,6 +88,11 @@ struct TableColumnChange {
 };
 
 class TableColumnModel {
+  private:
+    std::vector<TableColumn> columns_;
+    uint64_t revision_ = 1;
+    Signal<TableColumnModel&, const TableColumnChange&> changed_;
+
   public:
     size_t size() const { return columns_.size(); }
     bool empty() const { return columns_.empty(); }
@@ -107,9 +114,6 @@ class TableColumnModel {
     static void validate_unique_ids(const std::vector<TableColumn>& columns);
     void notify(TableColumnChange change);
 
-    std::vector<TableColumn> columns_;
-    uint64_t revision_ = 1;
-    Signal<TableColumnModel&, const TableColumnChange&> changed_;
 };
 
 } // namespace termin::gui_native

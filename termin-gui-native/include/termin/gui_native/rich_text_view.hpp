@@ -11,6 +11,47 @@
 namespace termin::gui_native {
 
 class RichTextView : public NativeWidget {
+  private:
+    struct VisualRun {
+        std::string text;
+        RichTextStyle style;
+        size_t source_start = 0;
+        size_t source_end = 0;
+        float width = 0.0f;
+    };
+    struct VisualRow {
+        std::vector<VisualRun> runs;
+        size_t source_start = 0;
+        size_t source_end = 0;
+        float width = 0.0f;
+    };
+    struct ScrollbarGeometry {
+        bool visible = false;
+        tc_ui_rect track{};
+        tc_ui_rect thumb{};
+        float max_scroll = 0.0f;
+    };
+    std::shared_ptr<RichTextModel> model_;
+    size_t model_connection_ = 0;
+    std::string placeholder_;
+    bool word_wrap_ = true;
+    bool show_scrollbar_ = true;
+    float line_height_ = 0.0f;
+    float scroll_y_ = 0.0f;
+    float scrollbar_width_ = 8.0f;
+    float minimum_thumb_height_ = 20.0f;
+    bool selecting_ = false;
+    bool dragging_scrollbar_ = false;
+    float drag_start_y_ = 0.0f;
+    float drag_start_scroll_ = 0.0f;
+    size_t selection_anchor_ = SIZE_MAX;
+    size_t selection_cursor_ = 0;
+    std::vector<VisualRow> rows_;
+    uint64_t cached_revision_ = 0;
+    float cached_width_ = -1.0f;
+    float cached_font_size_ = -1.0f;
+    float cached_line_height_ = 0.0f;
+
   public:
     explicit RichTextView(std::shared_ptr<RichTextModel> model = {});
     ~RichTextView() override;
@@ -46,29 +87,6 @@ class RichTextView : public NativeWidget {
                                      const tc_ui_pointer_event* event) override;
     tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event) override;
 
-  private:
-    struct VisualRun {
-        std::string text;
-        RichTextStyle style;
-        size_t source_start = 0;
-        size_t source_end = 0;
-        float width = 0.0f;
-    };
-
-    struct VisualRow {
-        std::vector<VisualRun> runs;
-        size_t source_start = 0;
-        size_t source_end = 0;
-        float width = 0.0f;
-    };
-
-    struct ScrollbarGeometry {
-        bool visible = false;
-        tc_ui_rect track{};
-        tc_ui_rect thumb{};
-        float max_scroll = 0.0f;
-    };
-
     void connect_model();
     void disconnect_model();
     void on_model_changed();
@@ -87,26 +105,6 @@ class RichTextView : public NativeWidget {
     void append_run(VisualRow& row, std::string text, const RichTextStyle& style,
                     size_t source_start, size_t source_end, float width);
 
-    std::shared_ptr<RichTextModel> model_;
-    size_t model_connection_ = 0;
-    std::string placeholder_;
-    bool word_wrap_ = true;
-    bool show_scrollbar_ = true;
-    float line_height_ = 0.0f;
-    float scroll_y_ = 0.0f;
-    float scrollbar_width_ = 8.0f;
-    float minimum_thumb_height_ = 20.0f;
-    bool selecting_ = false;
-    bool dragging_scrollbar_ = false;
-    float drag_start_y_ = 0.0f;
-    float drag_start_scroll_ = 0.0f;
-    size_t selection_anchor_ = SIZE_MAX;
-    size_t selection_cursor_ = 0;
-    std::vector<VisualRow> rows_;
-    uint64_t cached_revision_ = 0;
-    float cached_width_ = -1.0f;
-    float cached_font_size_ = -1.0f;
-    float cached_line_height_ = 0.0f;
 };
 
 } // namespace termin::gui_native

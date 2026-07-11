@@ -9,6 +9,12 @@
 namespace termin::gui_native {
 
 class FrameTimeModel {
+  private:
+    size_t max_samples_ = 120;
+    std::vector<float> samples_;
+    uint64_t revision_ = 1;
+    Signal<FrameTimeModel&> changed_;
+
   public:
     size_t max_samples() const { return max_samples_; }
     void set_max_samples(size_t count);
@@ -24,13 +30,16 @@ class FrameTimeModel {
     void trim();
     void notify();
 
-    size_t max_samples_ = 120;
-    std::vector<float> samples_;
-    uint64_t revision_ = 1;
-    Signal<FrameTimeModel&> changed_;
 };
 
 class FrameTimeGraph : public NativeWidget {
+  private:
+    std::shared_ptr<FrameTimeModel> model_;
+    size_t model_connection_ = 0;
+    float target_frame_ms_ = 1000.0f / 60.0f;
+    float warning_frame_ms_ = 1000.0f / 30.0f;
+    float scale_headroom_ms_ = 5.0f;
+
   public:
     explicit FrameTimeGraph(std::shared_ptr<FrameTimeModel> model = {});
     ~FrameTimeGraph() override;
@@ -46,11 +55,6 @@ class FrameTimeGraph : public NativeWidget {
     void connect_model();
     void disconnect_model();
     void on_model_changed();
-    std::shared_ptr<FrameTimeModel> model_;
-    size_t model_connection_ = 0;
-    float target_frame_ms_ = 1000.0f / 60.0f;
-    float warning_frame_ms_ = 1000.0f / 30.0f;
-    float scale_headroom_ms_ = 5.0f;
 };
 
 } // namespace termin::gui_native

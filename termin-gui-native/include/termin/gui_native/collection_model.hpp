@@ -17,6 +17,11 @@ struct CollectionItem {
 enum class CollectionChangeKind { Reset, Insert, Update, Erase };
 struct CollectionChange { CollectionChangeKind kind = CollectionChangeKind::Reset; size_t index = 0; size_t count = 0; };
 class CollectionModel {
+private:
+    std::vector<CollectionItem> items_;
+    uint64_t revision_ = 1;
+    Signal<CollectionModel&, const CollectionChange&> changed_;
+
 public:
     size_t size() const { return items_.size(); }
     bool empty() const { return items_.empty(); }
@@ -32,8 +37,5 @@ public:
 private:
     static void validate_item(const CollectionItem& item);
     void notify(CollectionChange change);
-    std::vector<CollectionItem> items_;
-    uint64_t revision_ = 1;
-    Signal<CollectionModel&, const CollectionChange&> changed_;
 };
 } // namespace termin::gui_native

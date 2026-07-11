@@ -52,6 +52,13 @@ class Viewport3D : public NativeWidget {
 public:
     using ExternalDragHandler = std::function<bool(const ViewportExternalDragEvent&)>;
 
+private:
+    std::shared_ptr<ViewportSurfaceHost> surface_host_;
+    Signal<Viewport3D&, ViewportSurfaceSize, ViewportSurfaceSize> before_resize_;
+    ExternalDragHandler external_drag_handler_;
+
+public:
+
     Viewport3D();
     ~Viewport3D() override;
 
@@ -85,9 +92,6 @@ private:
     bool sync_pointer_position(const tc_ui_pointer_event& event);
     void log_host_failure(const char* operation) const;
 
-    std::shared_ptr<ViewportSurfaceHost> surface_host_;
-    Signal<Viewport3D&, ViewportSurfaceSize, ViewportSurfaceSize> before_resize_;
-    ExternalDragHandler external_drag_handler_;
 };
 
 } // namespace termin::gui_native

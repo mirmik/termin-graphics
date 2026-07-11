@@ -7,6 +7,10 @@
 
 namespace termin::gui_native {
 class GroupBox : public NativeWidget {
+private:
+    std::string title_;
+    float header_height_ = 30.0f;
+
 public:
     explicit GroupBox(std::string title = {}, const char* debug_name = nullptr);
     GroupBox& set_title(std::string title);
@@ -24,7 +28,5 @@ public:
     tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
 private:
     tc_ui_rect content_rect(tc_ui_document* document) const;
-    std::string title_;
-    float header_height_ = 30.0f;
 };
 } // namespace termin::gui_native

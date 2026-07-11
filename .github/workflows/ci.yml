@@ -76,15 +76,24 @@ jobs:
             build-essential \
             clang-tidy \
             cmake \
+            libclang-18-dev \
             libgl1-mesa-dev \
             libglu1-mesa-dev \
             libshaderc-dev \
             libsdl2-dev \
             libvulkan-dev \
-            mesa-vulkan-drivers
+            mesa-vulkan-drivers \
+            llvm-18-dev
 
       - name: Run C/C++ lint
         run: ./run-lint-cpp.sh
+
+      - name: Check C++ class member order
+        run: |
+          ./run-cpp-class-layout-check.sh --self-test
+          ./run-cpp-class-layout-check.sh
+          ./run-lint-cpp.sh --python-bindings --configure-only
+          ./run-cpp-class-layout-check.sh --python-bindings
 
   # ── 0b. Source size lint ───────────────────────────────────────
   lint-source-size:

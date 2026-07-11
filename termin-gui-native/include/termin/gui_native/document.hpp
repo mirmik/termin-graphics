@@ -10,6 +10,9 @@
 namespace termin::gui_native {
 
 class Document {
+private:
+    tc_ui_document* _document = nullptr;
+
 public:
     Document() : _document(tc_ui_document_create()) {}
     ~Document() { tc_ui_document_destroy(_document); }
@@ -72,8 +75,6 @@ public:
         if (!tc_ui_document_resolve_style(_document, widget.c_widget(), extra_state_flags, &style)) throw std::runtime_error("failed to resolve native UI widget style");
         return style;
     }
-private:
-    tc_ui_document* _document = nullptr;
 };
 
 } // namespace termin::gui_native

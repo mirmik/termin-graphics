@@ -7,6 +7,12 @@
 namespace termin::gui_native {
 
 class StatusBar final : public NativeWidget {
+  private:
+    std::string text_;
+    std::string message_;
+    float padding_x_ = 8.0f;
+    float padding_y_ = 4.0f;
+
   public:
     explicit StatusBar(std::string text = "Ready");
 
@@ -21,11 +27,6 @@ class StatusBar final : public NativeWidget {
     tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
 
-  private:
-    std::string text_;
-    std::string message_;
-    float padding_x_ = 8.0f;
-    float padding_y_ = 4.0f;
 };
 
 } // namespace termin::gui_native

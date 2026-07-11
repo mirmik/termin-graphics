@@ -14,6 +14,24 @@ class ColorPicker;
 struct ColorPickerSurface;
 
 class UiDrawListRenderer {
+private:
+    struct ColorPickerSurfaceTexture {
+        tgfx::TextureHandle texture;
+        uint32_t width = 0;
+        uint32_t height = 0;
+        uint64_t revision = 0;
+    };
+    struct ColorPickerTextures {
+        ColorPickerSurfaceTexture saturation_value;
+        ColorPickerSurfaceTexture hue;
+        ColorPickerSurfaceTexture alpha;
+    };
+    std::unique_ptr<tgfx::FontAtlas> owned_font_;
+    tgfx::Canvas2DRenderer canvas_;
+    std::unordered_map<ColorPicker*, ColorPickerTextures> color_picker_textures_;
+    tgfx::IRenderDevice* color_picker_device_ = nullptr;
+    bool missing_font_logged_ = false;
+
 public:
     bool set_default_font_path(const std::string& path, int default_size_px = 14);
     void bind_text_measurer(tc_ui_document* document);
@@ -34,19 +52,6 @@ private:
         tc_ui_text_metrics* out_metrics
     );
 
-    std::unique_ptr<tgfx::FontAtlas> owned_font_;
-    tgfx::Canvas2DRenderer canvas_;
-    struct ColorPickerSurfaceTexture {
-        tgfx::TextureHandle texture;
-        uint32_t width = 0;
-        uint32_t height = 0;
-        uint64_t revision = 0;
-    };
-    struct ColorPickerTextures {
-        ColorPickerSurfaceTexture saturation_value;
-        ColorPickerSurfaceTexture hue;
-        ColorPickerSurfaceTexture alpha;
-    };
     static void destroy_picker_surface_texture(
         tgfx::IRenderDevice* device,
         ColorPickerSurfaceTexture& surface
@@ -60,9 +65,6 @@ private:
         const ColorPickerSurface& source,
         ColorPickerSurfaceTexture& target
     );
-    std::unordered_map<ColorPicker*, ColorPickerTextures> color_picker_textures_;
-    tgfx::IRenderDevice* color_picker_device_ = nullptr;
-    bool missing_font_logged_ = false;
 };
 
 } // namespace termin::gui_native

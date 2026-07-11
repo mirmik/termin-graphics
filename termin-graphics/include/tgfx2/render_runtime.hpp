@@ -14,6 +14,14 @@ struct PipelineCacheStats;
 class RenderContext2;
 
 class TGFX2_TYPE_API RenderRuntime {
+private:
+    std::unique_ptr<IRenderDevice> owned_device_;
+    IRenderDevice* device_ = nullptr;
+    std::unique_ptr<PipelineCache> owned_cache_;
+    std::unique_ptr<RenderContext2> owned_ctx_;
+    RenderContext2* borrowed_ctx_ = nullptr;
+    bool interop_published_by_us_ = false;
+
 public:
     explicit RenderRuntime(std::unique_ptr<IRenderDevice> device);
     explicit RenderRuntime(IRenderDevice& borrowed_device);
@@ -41,14 +49,6 @@ public:
     void close();
 
 private:
-    std::unique_ptr<IRenderDevice> owned_device_;
-    IRenderDevice* device_ = nullptr;
-
-    std::unique_ptr<PipelineCache> owned_cache_;
-    std::unique_ptr<RenderContext2> owned_ctx_;
-    RenderContext2* borrowed_ctx_ = nullptr;
-    bool interop_published_by_us_ = false;
-
     void ensure_context_();
 };
 

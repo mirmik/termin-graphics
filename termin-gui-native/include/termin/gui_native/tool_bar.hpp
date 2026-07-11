@@ -10,6 +10,21 @@
 namespace termin::gui_native {
 
 class ToolBar final : public NativeWidget {
+  private:
+    std::shared_ptr<CommandModel> model_;
+    uint64_t observed_revision_ = 0;
+    size_t model_connection_ = 0;
+    std::vector<tc_ui_rect> item_rects_;
+    float item_height_ = 32.0f;
+    float padding_ = 4.0f;
+    float separator_margin_ = 6.0f;
+    float separator_width_ = 1.0f;
+    float icon_gap_ = 4.0f;
+    bool centered_ = false;
+    size_t hovered_ = SIZE_MAX;
+    size_t pressed_ = SIZE_MAX;
+    Signal<ToolBar&, size_t, CommandId, const CommandData&> activated_;
+
   public:
     explicit ToolBar(std::shared_ptr<CommandModel> model = {});
     ~ToolBar() override;
@@ -43,19 +58,6 @@ class ToolBar final : public NativeWidget {
     size_t index_at(float x, float y) const;
     bool activate(size_t index);
 
-    std::shared_ptr<CommandModel> model_;
-    uint64_t observed_revision_ = 0;
-    size_t model_connection_ = 0;
-    std::vector<tc_ui_rect> item_rects_;
-    float item_height_ = 32.0f;
-    float padding_ = 4.0f;
-    float separator_margin_ = 6.0f;
-    float separator_width_ = 1.0f;
-    float icon_gap_ = 4.0f;
-    bool centered_ = false;
-    size_t hovered_ = SIZE_MAX;
-    size_t pressed_ = SIZE_MAX;
-    Signal<ToolBar&, size_t, CommandId, const CommandData&> activated_;
 };
 
 } // namespace termin::gui_native

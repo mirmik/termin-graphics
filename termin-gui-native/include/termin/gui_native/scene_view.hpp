@@ -16,6 +16,35 @@ public:
     using KeyHandler = std::function<bool(SceneView&, const tc_ui_key_event&)>;
     using TextHandler = std::function<bool(SceneView&, const tc_ui_text_event&)>;
 
+private:
+    std::shared_ptr<GraphicsScene> scene_;
+    size_t scene_connection_ = 0;
+    float zoom_ = 1.0f;
+    float min_zoom_ = 0.1f;
+    float max_zoom_ = 4.0f;
+    float zoom_factor_ = 1.15f;
+    tc_ui_point offset_{};
+    bool show_grid_ = true;
+    float grid_step_ = 40.0f;
+    Color background_{0.10f, 0.11f, 0.13f, 1.0f};
+    Color grid_{0.17f, 0.19f, 0.24f, 1.0f};
+    Color axes_{0.30f, 0.33f, 0.42f, 1.0f};
+    bool panning_ = false;
+    tc_ui_point pan_start_{};
+    tc_ui_point pan_start_offset_{};
+    std::shared_ptr<GraphicsItem> drag_item_;
+    tc_ui_point drag_item_start_{};
+    tc_ui_point drag_pointer_start_{};
+    std::shared_ptr<GraphicsItem> hovered_item_;
+    std::vector<tc_widget_handle> embedded_widgets_;
+    PointerHandler pointer_handler_;
+    KeyHandler key_handler_;
+    TextHandler text_handler_;
+    Signal<SceneView&, std::shared_ptr<GraphicsItem>> item_moved_;
+    Signal<SceneView&, const SceneTransform&> transform_changed_;
+
+public:
+
     explicit SceneView(std::shared_ptr<GraphicsScene> scene = nullptr);
     ~SceneView() override;
 
@@ -77,31 +106,6 @@ private:
     void set_hovered_item(std::shared_ptr<GraphicsItem> item);
     void emit_transform_changed();
 
-    std::shared_ptr<GraphicsScene> scene_;
-    size_t scene_connection_ = 0;
-    float zoom_ = 1.0f;
-    float min_zoom_ = 0.1f;
-    float max_zoom_ = 4.0f;
-    float zoom_factor_ = 1.15f;
-    tc_ui_point offset_{};
-    bool show_grid_ = true;
-    float grid_step_ = 40.0f;
-    Color background_{0.10f, 0.11f, 0.13f, 1.0f};
-    Color grid_{0.17f, 0.19f, 0.24f, 1.0f};
-    Color axes_{0.30f, 0.33f, 0.42f, 1.0f};
-    bool panning_ = false;
-    tc_ui_point pan_start_{};
-    tc_ui_point pan_start_offset_{};
-    std::shared_ptr<GraphicsItem> drag_item_;
-    tc_ui_point drag_item_start_{};
-    tc_ui_point drag_pointer_start_{};
-    std::shared_ptr<GraphicsItem> hovered_item_;
-    std::vector<tc_widget_handle> embedded_widgets_;
-    PointerHandler pointer_handler_;
-    KeyHandler key_handler_;
-    TextHandler text_handler_;
-    Signal<SceneView&, std::shared_ptr<GraphicsItem>> item_moved_;
-    Signal<SceneView&, const SceneTransform&> transform_changed_;
 };
 
 } // namespace termin::gui_native

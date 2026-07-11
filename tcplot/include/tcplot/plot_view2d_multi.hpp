@@ -44,6 +44,36 @@ class GpuHost;
 class PlotEngine2D;
 
 class TCPLOT_API PlotView2DMulti {
+private:
+    struct Rect { float x, y, w, h; };
+    // Borrowed, non-owning. Lifetime is the host's responsibility.
+    tgfx::IRenderDevice* device_ = nullptr;
+    tgfx::PipelineCache* cache_ = nullptr;
+    tgfx::RenderContext2* ctx_ = nullptr;
+    tgfx::FontAtlas* font_ = nullptr;
+    std::vector<std::unique_ptr<PlotEngine2D>> panels_;
+    // Cached panel viewport rects (filled by layout_panels_).
+    std::vector<Rect> panel_rects_;
+    // --- Shared X view ---
+    bool have_shared_x_ = false;
+    double shared_x_min_ = 0.0;
+    double shared_x_max_ = 1.0;
+    bool autoscroll_ = false;
+    double autoscroll_window_ = 10.0;
+    std::string x_label_;
+    // Interaction state: which panel owns the current drag, if any.
+    int dragging_panel_ = -1;
+    // Offscreen + MSAA (same pattern as PlotView2D).
+    tgfx::TextureHandle offscreen_color_{};
+    int offscreen_w_ = 0;
+    int offscreen_h_ = 0;
+    int msaa_samples_ = 4;
+    // Virtual scrolling state.
+    float panel_height_ = 0.0f;
+    float scroll_offset_ = 0.0f;
+    // Cached visibility: indices of panels whose rect intersects render area.
+    std::vector<int> visible_panels_;
+
 public:
     // Borrow device/cache/ctx/font from the caller. Host must guarantee
     // they outlive this view (typical lifecycle: application-level
@@ -208,46 +238,6 @@ private:
     // individual engines render.
     void update_shared_x_();
 
-    // Borrowed, non-owning. Lifetime is the host's responsibility.
-    tgfx::IRenderDevice*  device_ = nullptr;
-    tgfx::PipelineCache*  cache_  = nullptr;
-    tgfx::RenderContext2* ctx_    = nullptr;
-    tgfx::FontAtlas*      font_   = nullptr;
-
-    std::vector<std::unique_ptr<PlotEngine2D>> panels_;
-
-    // Cached panel viewport rects (filled by layout_panels_).
-    struct Rect { float x, y, w, h; };
-    std::vector<Rect> panel_rects_;
-
-    // --- Shared X view ---
-    bool   have_shared_x_ = false;
-    double shared_x_min_ = 0.0;
-    double shared_x_max_ = 1.0;
-    bool   autoscroll_ = false;
-    double autoscroll_window_ = 10.0;
-
-    std::string x_label_;
-
-    // Interaction state: which panel owns the current drag, if any.
-    int dragging_panel_ = -1;
-
-    // Offscreen + MSAA (same pattern as PlotView2D).
-    tgfx::TextureHandle offscreen_color_{};
-    int offscreen_w_ = 0;
-    int offscreen_h_ = 0;
-    int msaa_samples_ = 4;
-
-    // Virtual scrolling state.
-    // panel_height_ > 0 enables virtualised layout; 0 falls back to
-    // classic "equal strips over full render height".
-    float panel_height_  = 0.0f;
-    float scroll_offset_ = 0.0f;
-
-    // Cached visibility: indices of panels whose rect intersects the
-    // current render area. Filled by layout_panels_; render/mouse use
-    // this to skip off-screen panels without touching their engines.
-    std::vector<int> visible_panels_;
 };
 
 }  // namespace tcplot

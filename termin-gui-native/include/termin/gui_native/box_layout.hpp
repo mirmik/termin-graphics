@@ -8,6 +8,15 @@
 namespace termin::gui_native {
 
 class BoxLayout : public NativeWidget {
+private:
+    Orientation orientation_;
+    EdgeInsets padding_ {};
+    float spacing_ = 0.0f;
+    Color background_ {0.0f, 0.0f, 0.0f, 0.0f};
+    Color border_ {0.0f, 0.0f, 0.0f, 0.0f};
+    float border_thickness_ = 0.0f;
+    std::vector<LayoutItem> items_;
+
 public:
     explicit BoxLayout(Orientation orientation, const char* debug_name = nullptr);
     BoxLayout& set_padding(EdgeInsets padding);
@@ -35,14 +44,6 @@ public:
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
     tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
     tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
-private:
-    Orientation orientation_;
-    EdgeInsets padding_ {};
-    float spacing_ = 0.0f;
-    Color background_ {0.0f, 0.0f, 0.0f, 0.0f};
-    Color border_ {0.0f, 0.0f, 0.0f, 0.0f};
-    float border_thickness_ = 0.0f;
-    std::vector<LayoutItem> items_;
 };
 
 } // namespace termin::gui_native

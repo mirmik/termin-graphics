@@ -7,6 +7,9 @@
 
 namespace termin::gui_native {
 class Label : public NativeWidget {
+private:
+    std::string text_;
+
 public:
     explicit Label(std::string text);
     Label(std::string text, float font_size);
@@ -18,6 +21,5 @@ public:
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
 private:
     void update_unmeasured_size();
-    std::string text_;
 };
 } // namespace termin::gui_native

@@ -201,6 +201,10 @@ std::string decode_html_entities(std::string_view text) {
 }
 
 class RichHtmlParser {
+  private:
+    std::vector<RichTextLine> lines_{RichTextLine{}};
+    std::vector<RichTextStyle> styles_{RichTextStyle{}};
+
   public:
     std::vector<RichTextLine> parse(std::string_view html) {
         size_t offset = 0;
@@ -284,8 +288,6 @@ class RichHtmlParser {
         styles_.push_back(style);
     }
 
-    std::vector<RichTextLine> lines_{RichTextLine{}};
-    std::vector<RichTextStyle> styles_{RichTextStyle{}};
 };
 
 } // namespace

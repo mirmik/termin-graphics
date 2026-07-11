@@ -9,6 +9,15 @@
 namespace termin::gui_native {
 class ComboBoxPopup;
 class ComboBox : public NativeWidget {
+private:
+    std::vector<std::string> items_;
+    int selected_index_ = -1;
+    bool open_ = false;
+    tc_widget_handle popup_handle_ = tc_widget_handle_invalid();
+    float item_height_ = 24.0f;
+    size_t max_visible_items_ = 8;
+    Signal<ComboBox&, int, const std::string&> changed_;
+
 public:
     ComboBox();
     size_t item_count() const { return items_.size(); }
@@ -31,12 +40,5 @@ private:
     bool show_popup(tc_ui_document* document);
     void hide_popup(tc_ui_document* document);
     void popup_dismissed();
-    std::vector<std::string> items_;
-    int selected_index_ = -1;
-    bool open_ = false;
-    tc_widget_handle popup_handle_ = tc_widget_handle_invalid();
-    float item_height_ = 24.0f;
-    size_t max_visible_items_ = 8;
-    Signal<ComboBox&, int, const std::string&> changed_;
 };
 } // namespace termin::gui_native

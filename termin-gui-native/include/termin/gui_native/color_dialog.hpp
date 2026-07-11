@@ -9,6 +9,13 @@
 namespace termin::gui_native {
 
 class ColorDialog final : public Dialog {
+  private:
+    std::shared_ptr<ColorPickerModel> model_;
+    tc_widget_handle picker_handle_ = tc_widget_handle_invalid();
+    std::optional<Color> accepted_color_;
+    size_t finished_connection_ = 0;
+    Signal<ColorDialog&, const std::optional<Color>&> color_finished_;
+
   public:
     explicit ColorDialog(Color initial = Color{1.0f, 1.0f, 1.0f, 1.0f}, bool show_alpha = true,
                          std::string title = "Color Picker");
@@ -25,12 +32,6 @@ class ColorDialog final : public Dialog {
 
   private:
     bool ensure_content(tc_ui_document* document);
-
-    std::shared_ptr<ColorPickerModel> model_;
-    tc_widget_handle picker_handle_ = tc_widget_handle_invalid();
-    std::optional<Color> accepted_color_;
-    size_t finished_connection_ = 0;
-    Signal<ColorDialog&, const std::optional<Color>&> color_finished_;
 };
 
 } // namespace termin::gui_native

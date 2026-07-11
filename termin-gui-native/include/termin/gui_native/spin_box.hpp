@@ -7,6 +7,20 @@
 
 namespace termin::gui_native {
 class SpinBox : public NativeWidget {
+private:
+    float value_ = 0.0f;
+    float min_value_ = -1000000000.0f;
+    float max_value_ = 1000000000.0f;
+    float step_ = 1.0f;
+    int decimals_ = 2;
+    bool editing_ = false;
+    std::string edit_text_;
+    size_t caret_ = 0;
+    size_t selection_anchor_ = SIZE_MAX;
+    bool selecting_ = false;
+    float button_width_ = 18.0f;
+    Signal<SpinBox&, float> changed_;
+
 public:
     explicit SpinBox(float value = 0.0f);
     float value() const { return value_; }
@@ -46,17 +60,5 @@ private:
     void move_caret(size_t next, bool extend_selection);
     bool delete_selection();
     void replace_selection(std::string_view text);
-    float value_ = 0.0f;
-    float min_value_ = -1000000000.0f;
-    float max_value_ = 1000000000.0f;
-    float step_ = 1.0f;
-    int decimals_ = 2;
-    bool editing_ = false;
-    std::string edit_text_;
-    size_t caret_ = 0;
-    size_t selection_anchor_ = SIZE_MAX;
-    bool selecting_ = false;
-    float button_width_ = 18.0f;
-    Signal<SpinBox&, float> changed_;
 };
 } // namespace termin::gui_native

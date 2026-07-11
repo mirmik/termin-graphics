@@ -42,20 +42,6 @@ struct WorldTubeLineParams {
 };
 
 class TGFX2_TYPE_API WorldTubeLineRenderer {
-public:
-    WorldTubeLineRenderer() = default;
-    ~WorldTubeLineRenderer() = default;
-
-    WorldTubeLineRenderer(const WorldTubeLineRenderer&) = delete;
-    WorldTubeLineRenderer& operator=(const WorldTubeLineRenderer&) = delete;
-
-    void draw_polyline(RenderContext2& ctx,
-                       std::span<const LinePoint3> points,
-                       const WorldTubeLineStyle& style,
-                       const WorldTubeLineParams& params);
-
-    void release(RenderContext2& ctx);
-
 private:
     BufferHandle body_corner_vbo_;
     BufferHandle cap_corner_vbo_;
@@ -72,6 +58,21 @@ private:
     int template_sides_ = 0;
     bool resources_failed_ = false;
 
+public:
+    WorldTubeLineRenderer() = default;
+    ~WorldTubeLineRenderer() = default;
+
+    WorldTubeLineRenderer(const WorldTubeLineRenderer&) = delete;
+    WorldTubeLineRenderer& operator=(const WorldTubeLineRenderer&) = delete;
+
+    void draw_polyline(RenderContext2& ctx,
+                       std::span<const LinePoint3> points,
+                       const WorldTubeLineStyle& style,
+                       const WorldTubeLineParams& params);
+
+    void release(RenderContext2& ctx);
+
+private:
     bool ensure_resources(RenderContext2& ctx, int sides);
 };
 

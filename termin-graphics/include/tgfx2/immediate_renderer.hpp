@@ -58,6 +58,13 @@ public:
     std::vector<float> line_vertices_depth;
     std::vector<float> tri_vertices_depth;
 
+private:
+    // Shader lives on the tc_shader registry (hash-based dedup across
+    // RenderContext2 re-creations) — see the comment in _ensure_shader
+    // and the broader pattern in ShadowPass.
+    tc_shader_handle _shader_handle = tc_shader_handle_invalid();
+    tgfx::IRenderDevice* _device = nullptr;
+
 public:
     ImmediateRenderer() = default;
     ~ImmediateRenderer() = default;
@@ -254,11 +261,6 @@ private:
         bool blend
     );
 
-    // Shader lives on the tc_shader registry (hash-based dedup across
-    // RenderContext2 re-creations) — see the comment in _ensure_shader
-    // and the broader pattern in ShadowPass.
-    tc_shader_handle _shader_handle = tc_shader_handle_invalid();
-    tgfx::IRenderDevice* _device = nullptr;
 };
 
 } // namespace termin

@@ -42,6 +42,23 @@ struct PickResult3D {
 };
 
 class TCPLOT_API PlotEngine3D {
+private:
+    struct MeshGpu { tgfx::BufferHandle vbo{}; tgfx::BufferHandle ibo{}; uint32_t index_count = 0; tgfx::PrimitiveTopology topology = tgfx::PrimitiveTopology::TriangleList; };
+    float vx_ = 0.0f, vy_ = 0.0f, vw_ = 0.0f, vh_ = 0.0f;
+    tgfx::IRenderDevice* shader_device_ = nullptr;
+    uint32_t shader_vs_id_ = 0, shader_fs_id_ = 0;
+    tgfx::IRenderDevice* mesh_device_ = nullptr;
+    std::optional<MeshGpu> lines_mesh_, scatter_mesh_, grid_mesh_;
+    std::vector<MeshGpu> surface_meshes_;
+    std::vector<SurfaceSeries> surface_mesh_styles_;
+    std::vector<MeshGpu> wireframe_meshes_;
+    std::unique_ptr<tgfx::Text3DRenderer> text3d_;
+    bool dirty_ = true, dragging_ = false;
+    tcbase::MouseButton drag_button_{tcbase::MouseButton::LEFT};
+    float drag_start_x_ = 0.0f, drag_start_y_ = 0.0f;
+    bool has_marker_ = false;
+    double marker_x_ = 0.0, marker_y_ = 0.0, marker_z_ = 0.0;
+
 public:
     // --- Scene ---
     PlotData data;
@@ -115,14 +132,6 @@ public:
     void on_mouse_up(float x, float y, tcbase::MouseButton button);
     bool on_mouse_wheel(float x, float y, float dy);
 
-private:
-    struct MeshGpu {
-        tgfx::BufferHandle vbo{};
-        tgfx::BufferHandle ibo{};
-        uint32_t index_count = 0;
-        tgfx::PrimitiveTopology topology = tgfx::PrimitiveTopology::TriangleList;
-    };
-
     // Build a (4x4) TerminClip MVP from camera state into out16.
     void compute_mvp_(float aspect,
                       float out16[16],
@@ -148,41 +157,6 @@ private:
     // Ensure the 3D plot shader is compiled for the current device.
     void ensure_shader_(tgfx::IRenderDevice& device);
 
-    // --- Viewport rect ---
-    float vx_ = 0.0f, vy_ = 0.0f, vw_ = 0.0f, vh_ = 0.0f;
-
-    // --- GPU resources (lazy) ---
-    // Shader handles live with this device; dropped on device change.
-    tgfx::IRenderDevice* shader_device_ = nullptr;
-    // ShaderHandle is a plain id in tgfx2; use uint32_t storage to keep
-    // the header free of tgfx2/handles.hpp dependency cycles.
-    uint32_t shader_vs_id_ = 0;
-    uint32_t shader_fs_id_ = 0;
-
-    tgfx::IRenderDevice* mesh_device_ = nullptr;
-    std::optional<MeshGpu> lines_mesh_;
-    std::optional<MeshGpu> scatter_mesh_;
-    std::optional<MeshGpu> grid_mesh_;
-    std::vector<MeshGpu> surface_meshes_;
-    std::vector<SurfaceSeries> surface_mesh_styles_;
-    std::vector<MeshGpu> wireframe_meshes_;
-
-    // Text renderer for billboard tick/marker labels. Owned here; the
-    // pimpl-style unique_ptr keeps the engine header free of Text3D
-    // header includes.
-    std::unique_ptr<tgfx::Text3DRenderer> text3d_;
-
-    bool dirty_ = true;
-
-    // --- Interaction ---
-    bool dragging_ = false;
-    tcbase::MouseButton drag_button_{tcbase::MouseButton::LEFT};
-    float drag_start_x_ = 0.0f;
-    float drag_start_y_ = 0.0f;
-
-    // --- Marker ---
-    bool has_marker_ = false;
-    double marker_x_ = 0.0, marker_y_ = 0.0, marker_z_ = 0.0;
 };
 
 }  // namespace tcplot

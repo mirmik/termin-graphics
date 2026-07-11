@@ -32,6 +32,9 @@ struct RenderSceneItemCollectRequest {
 };
 
 class RENDER_API RenderSceneItemCollector {
+private:
+    RenderItemCollection storage_;
+
 public:
     void clear_keep_capacity();
 
@@ -60,8 +63,6 @@ public:
         return &storage_.items[index];
     }
 
-private:
-    RenderItemCollection storage_;
 };
 
 } // namespace termin

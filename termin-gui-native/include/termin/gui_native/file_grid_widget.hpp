@@ -11,6 +11,29 @@
 namespace termin::gui_native {
 
 class FileGridWidget final : public NativeWidget {
+  private:
+    std::shared_ptr<CollectionModel> model_;
+    SelectionModel selection_;
+    uint64_t observed_revision_ = 0;
+    size_t model_connection_ = 0;
+    float tile_width_ = 86.0f;
+    float tile_height_ = 82.0f;
+    float tile_spacing_ = 8.0f;
+    float padding_ = 8.0f;
+    float icon_size_ = 34.0f;
+    float scrollbar_width_ = 8.0f;
+    float scroll_y_ = 0.0f;
+    bool show_scrollbar_ = true;
+    bool dragging_scrollbar_ = false;
+    float drag_start_y_ = 0.0f;
+    float drag_start_scroll_ = 0.0f;
+    size_t hovered_ = SelectionModel::npos;
+    std::string empty_text_ = "No items";
+    Signal<FileGridWidget&, const std::vector<size_t>&> selection_changed_;
+    Signal<FileGridWidget&, size_t, const CollectionItem&> activated_;
+    Signal<FileGridWidget&, size_t, const CollectionItem&> delete_requested_;
+    Signal<FileGridWidget&, int64_t, float, float> context_menu_requested_;
+
   public:
     explicit FileGridWidget(std::shared_ptr<CollectionModel> model = {});
     ~FileGridWidget() override;
@@ -82,27 +105,6 @@ class FileGridWidget final : public NativeWidget {
     bool apply_selection(size_t index, int32_t modifiers);
     void emit_selection_changed();
 
-    std::shared_ptr<CollectionModel> model_;
-    SelectionModel selection_;
-    uint64_t observed_revision_ = 0;
-    size_t model_connection_ = 0;
-    float tile_width_ = 86.0f;
-    float tile_height_ = 82.0f;
-    float tile_spacing_ = 8.0f;
-    float padding_ = 8.0f;
-    float icon_size_ = 34.0f;
-    float scrollbar_width_ = 8.0f;
-    float scroll_y_ = 0.0f;
-    bool show_scrollbar_ = true;
-    bool dragging_scrollbar_ = false;
-    float drag_start_y_ = 0.0f;
-    float drag_start_scroll_ = 0.0f;
-    size_t hovered_ = SelectionModel::npos;
-    std::string empty_text_ = "No items";
-    Signal<FileGridWidget&, const std::vector<size_t>&> selection_changed_;
-    Signal<FileGridWidget&, size_t, const CollectionItem&> activated_;
-    Signal<FileGridWidget&, size_t, const CollectionItem&> delete_requested_;
-    Signal<FileGridWidget&, int64_t, float, float> context_menu_requested_;
 };
 
 } // namespace termin::gui_native

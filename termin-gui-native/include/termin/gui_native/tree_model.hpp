@@ -32,6 +32,13 @@ struct TreeChange {
 };
 
 class TreeModel {
+  private:
+    std::unordered_map<TreeNodeId, TreeNode> nodes_;
+    std::vector<TreeNodeId> roots_;
+    TreeNodeId next_id_ = 1;
+    uint64_t revision_ = 1;
+    Signal<TreeModel&, const TreeChange&> changed_;
+
   public:
     size_t size() const { return nodes_.size(); }
     bool empty() const { return nodes_.empty(); }
@@ -58,14 +65,14 @@ class TreeModel {
     void erase_subtree(TreeNodeId id, size_t& count);
     void notify(TreeChange change);
 
-    std::unordered_map<TreeNodeId, TreeNode> nodes_;
-    std::vector<TreeNodeId> roots_;
-    TreeNodeId next_id_ = 1;
-    uint64_t revision_ = 1;
-    Signal<TreeModel&, const TreeChange&> changed_;
 };
 
 class TreeExpansionModel {
+  private:
+    std::unordered_set<TreeNodeId> expanded_;
+    uint64_t revision_ = 1;
+    Signal<TreeExpansionModel&, TreeNodeId, bool> changed_;
+
   public:
     uint64_t revision() const { return revision_; }
     bool expanded(TreeNodeId id) const;
@@ -76,9 +83,6 @@ class TreeExpansionModel {
     Signal<TreeExpansionModel&, TreeNodeId, bool>& changed() { return changed_; }
 
   private:
-    std::unordered_set<TreeNodeId> expanded_;
-    uint64_t revision_ = 1;
-    Signal<TreeExpansionModel&, TreeNodeId, bool> changed_;
 };
 
 } // namespace termin::gui_native

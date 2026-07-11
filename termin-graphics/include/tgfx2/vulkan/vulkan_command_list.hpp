@@ -12,6 +12,15 @@
 namespace tgfx {
 
 class TGFX2_TYPE_API VulkanCommandList : public ICommandList {
+private:
+    VulkanRenderDevice& device_;
+    VkCommandBuffer cmd_ = VK_NULL_HANDLE;
+    VkPipelineLayout current_layout_ = VK_NULL_HANDLE;
+    bool in_render_pass_ = false;
+    std::vector<TextureHandle> current_pass_color_attachments_;
+    TextureHandle current_pass_depth_attachment_{};
+    std::chrono::steady_clock::time_point record_start_{};
+
 public:
     explicit VulkanCommandList(VulkanRenderDevice& device);
     ~VulkanCommandList() override;
@@ -54,24 +63,14 @@ public:
 
     VkCommandBuffer command_buffer() const { return cmd_; }
 
-private:
-    VulkanRenderDevice& device_;
-    VkCommandBuffer cmd_ = VK_NULL_HANDLE;
-    VkPipelineLayout current_layout_ = VK_NULL_HANDLE;
-    bool in_render_pass_ = false;
-
     // Color attachments of the currently-open render pass. Stashed in
     // begin_render_pass, drained in end_render_pass — where each is
     // transitioned from COLOR_ATTACHMENT_OPTIMAL to SHADER_READ_ONLY_
     // OPTIMAL so the next pass can sample from it without the layout
     // mismatch validation error. Cheap even when the texture is not
     // sampled next — one barrier per attachment.
-    std::vector<TextureHandle> current_pass_color_attachments_;
-    TextureHandle current_pass_depth_attachment_{};
-
     // Timestamp of the most recent begin(); subtracted in end() to feed
     // the cumulative cmd-recording counter in the Vulkan hot-path summary.
-    std::chrono::steady_clock::time_point record_start_{};
 };
 
 } // namespace tgfx

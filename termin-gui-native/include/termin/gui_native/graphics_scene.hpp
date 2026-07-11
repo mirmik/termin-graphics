@@ -29,6 +29,27 @@ public:
         std::function<void(GraphicsItem&, tc_ui_paint_context*, const SceneTransform&)>;
     using HitTestCallback = std::function<bool(const GraphicsItem&, float, float)>;
 
+private:
+    uint64_t id_ = 0;
+    std::string stable_id_;
+    std::weak_ptr<GraphicsItem> parent_;
+    std::vector<std::shared_ptr<GraphicsItem>> children_;
+    GraphicsScene* scene_ = nullptr;
+    tc_ui_point position_{};
+    tc_ui_size size_{100.0f, 60.0f};
+    float z_index_ = 0.0f;
+    bool visible_ = true;
+    bool enabled_ = true;
+    bool selectable_ = true;
+    bool draggable_ = false;
+    bool selected_ = false;
+    bool hovered_ = false;
+    PaintCallback paint_callback_;
+    HitTestCallback hit_test_callback_;
+    tc_widget_handle embedded_widget_ = tc_widget_handle_invalid();
+
+public:
+
     explicit GraphicsItem(std::string stable_id = {});
     ~GraphicsItem();
 
@@ -85,26 +106,16 @@ private:
     void set_selected_internal(bool selected);
     void set_hovered_internal(bool hovered);
 
-    uint64_t id_ = 0;
-    std::string stable_id_;
-    std::weak_ptr<GraphicsItem> parent_;
-    std::vector<std::shared_ptr<GraphicsItem>> children_;
-    GraphicsScene* scene_ = nullptr;
-    tc_ui_point position_{};
-    tc_ui_size size_{100.0f, 60.0f};
-    float z_index_ = 0.0f;
-    bool visible_ = true;
-    bool enabled_ = true;
-    bool selectable_ = true;
-    bool draggable_ = false;
-    bool selected_ = false;
-    bool hovered_ = false;
-    PaintCallback paint_callback_;
-    HitTestCallback hit_test_callback_;
-    tc_widget_handle embedded_widget_ = tc_widget_handle_invalid();
 };
 
 class GraphicsScene : public std::enable_shared_from_this<GraphicsScene> {
+private:
+    std::vector<std::shared_ptr<GraphicsItem>> items_;
+    std::vector<std::shared_ptr<GraphicsItem>> selected_items_;
+    uint64_t revision_ = 1;
+    Signal<GraphicsScene&> changed_;
+    Signal<GraphicsScene&, const std::vector<std::shared_ptr<GraphicsItem>>&> selection_changed_;
+
 public:
     GraphicsScene() = default;
     ~GraphicsScene();
@@ -141,11 +152,6 @@ private:
     void clear_selected_recursive(const std::shared_ptr<GraphicsItem>& item);
     void notify_selection_changed();
 
-    std::vector<std::shared_ptr<GraphicsItem>> items_;
-    std::vector<std::shared_ptr<GraphicsItem>> selected_items_;
-    uint64_t revision_ = 1;
-    Signal<GraphicsScene&> changed_;
-    Signal<GraphicsScene&, const std::vector<std::shared_ptr<GraphicsItem>>&> selection_changed_;
 };
 
 } // namespace termin::gui_native

@@ -257,6 +257,23 @@ private:
         bool         has_vs = false;
     };
 
+    enum class PixelReadbackKind : uint8_t {
+        Rgba8,
+        DepthF32,
+    };
+
+    struct PendingPixelReadback {
+        uint64_t request_id = 0;
+        PixelReadbackKind kind = PixelReadbackKind::Rgba8;
+        VkBuffer staging = VK_NULL_HANDLE;
+        VmaAllocation allocation = VK_NULL_HANDLE;
+    };
+
+    struct CompletedPixelReadback {
+        PixelReadbackKind kind = PixelReadbackKind::Rgba8;
+        std::array<uint8_t, 4> bytes = {0, 0, 0, 0};
+    };
+
     VkInstance instance_ = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT debug_messenger_ = VK_NULL_HANDLE;
     VkSurfaceKHR surface_ = VK_NULL_HANDLE;
@@ -401,6 +418,10 @@ private:
     std::mutex                                         tc_mesh_cache_mtx_;
     std::unordered_map<uint32_t, CachedTcShaderEntry>  tc_shader_cache_;
     std::mutex                                         tc_shader_cache_mtx_;
+    uint64_t next_pixel_readback_id_ = 1;
+    std::vector<PendingPixelReadback> pixel_readbacks_current_;
+    std::array<std::vector<PendingPixelReadback>, kFrameSlotCount> pixel_readbacks_slots_;
+    std::unordered_map<uint64_t, CompletedPixelReadback> completed_pixel_readbacks_;
 
 public:
     explicit VulkanRenderDevice(const VulkanDeviceCreateInfo& info);
@@ -616,23 +637,6 @@ public:
     void          invalidate_tc_shader_cache(uint32_t pool_index) override;
 
 private:
-    enum class PixelReadbackKind : uint8_t {
-        Rgba8,
-        DepthF32,
-    };
-
-    struct PendingPixelReadback {
-        uint64_t request_id = 0;
-        PixelReadbackKind kind = PixelReadbackKind::Rgba8;
-        VkBuffer staging = VK_NULL_HANDLE;
-        VmaAllocation allocation = VK_NULL_HANDLE;
-    };
-
-    struct CompletedPixelReadback {
-        PixelReadbackKind kind = PixelReadbackKind::Rgba8;
-        std::array<uint8_t, 4> bytes = {0, 0, 0, 0};
-    };
-
     void invalidate_descriptor_cache();
     void init_instance(const VulkanDeviceCreateInfo& info);
     void pick_physical_device();
@@ -669,10 +673,6 @@ private:
     void destroy_pixel_readbacks(std::vector<PendingPixelReadback>& pending);
     void prepare_frame_slot(uint32_t slot);
 
-    uint64_t next_pixel_readback_id_ = 1;
-    std::vector<PendingPixelReadback> pixel_readbacks_current_;
-    std::array<std::vector<PendingPixelReadback>, kFrameSlotCount> pixel_readbacks_slots_;
-    std::unordered_map<uint64_t, CompletedPixelReadback> completed_pixel_readbacks_;
 };
 
 } // namespace tgfx

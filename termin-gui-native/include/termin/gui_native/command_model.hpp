@@ -46,6 +46,13 @@ struct CommandChange {
 };
 
 class CommandModel {
+  private:
+    std::vector<Command> commands_;
+    std::unordered_map<CommandId, size_t> indices_;
+    CommandId next_id_ = 1;
+    uint64_t revision_ = 1;
+    Signal<CommandModel&, const CommandChange&> changed_;
+
   public:
     size_t size() const { return commands_.size(); }
     bool empty() const { return commands_.empty(); }
@@ -72,11 +79,6 @@ class CommandModel {
     void rebuild_indices(size_t first = 0);
     void notify(CommandChange change);
 
-    std::vector<Command> commands_;
-    std::unordered_map<CommandId, size_t> indices_;
-    CommandId next_id_ = 1;
-    uint64_t revision_ = 1;
-    Signal<CommandModel&, const CommandChange&> changed_;
 };
 
 } // namespace termin::gui_native

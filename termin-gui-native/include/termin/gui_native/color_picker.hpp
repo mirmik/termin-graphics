@@ -25,6 +25,23 @@ struct ColorPickerTextureIds {
 };
 
 class ColorPicker : public NativeWidget {
+  private:
+    enum class DragTarget { None, SaturationValue, Hue, Alpha };
+    std::shared_ptr<ColorPickerModel> model_;
+    size_t model_connection_ = 0;
+    ColorPickerSurface sv_surface_;
+    ColorPickerSurface hue_surface_;
+    ColorPickerSurface alpha_surface_;
+    ColorPickerTextureIds texture_ids_;
+    DragTarget dragging_ = DragTarget::None;
+    tc_ui_rect content_rect_{};
+    float surface_size_ = 180.0f;
+    float bar_width_ = 20.0f;
+    float gap_ = 10.0f;
+    float preview_height_ = 26.0f;
+    float label_height_ = 20.0f;
+    Signal<ColorPicker&, uint32_t> surfaces_invalidated_;
+
   public:
     explicit ColorPicker(std::shared_ptr<ColorPickerModel> model = {});
     ~ColorPicker() override;
@@ -44,8 +61,6 @@ class ColorPicker : public NativeWidget {
     void on_destroy(tc_ui_document* document) override;
 
   private:
-    enum class DragTarget { None, SaturationValue, Hue, Alpha };
-
     void connect_model();
     void disconnect_model();
     void on_model_changed(uint32_t flags);
@@ -58,20 +73,6 @@ class ColorPicker : public NativeWidget {
     void paint_checker(tc_ui_paint_context* context, tc_ui_rect rect) const;
     void paint_fallback_surfaces(tc_ui_paint_context* context) const;
 
-    std::shared_ptr<ColorPickerModel> model_;
-    size_t model_connection_ = 0;
-    ColorPickerSurface sv_surface_;
-    ColorPickerSurface hue_surface_;
-    ColorPickerSurface alpha_surface_;
-    ColorPickerTextureIds texture_ids_;
-    DragTarget dragging_ = DragTarget::None;
-    tc_ui_rect content_rect_{};
-    float surface_size_ = 180.0f;
-    float bar_width_ = 20.0f;
-    float gap_ = 10.0f;
-    float preview_height_ = 26.0f;
-    float label_height_ = 20.0f;
-    Signal<ColorPicker&, uint32_t> surfaces_invalidated_;
 };
 
 } // namespace termin::gui_native

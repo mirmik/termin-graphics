@@ -25,6 +25,12 @@ struct RichTextSegment {
 using RichTextLine = std::vector<RichTextSegment>;
 
 class RichTextModel {
+  private:
+    std::vector<RichTextLine> lines_;
+    std::string text_;
+    uint64_t revision_ = 1;
+    Signal<RichTextModel&> changed_;
+
   public:
     RichTextModel();
 
@@ -43,10 +49,6 @@ class RichTextModel {
     static void validate_lines(const std::vector<RichTextLine>& lines);
     void replace_lines(std::vector<RichTextLine> lines);
 
-    std::vector<RichTextLine> lines_;
-    std::string text_;
-    uint64_t revision_ = 1;
-    Signal<RichTextModel&> changed_;
 };
 
 } // namespace termin::gui_native

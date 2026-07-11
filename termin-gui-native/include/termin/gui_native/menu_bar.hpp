@@ -16,6 +16,19 @@ struct MenuBarEntry {
 };
 
 class MenuBar final : public NativeWidget {
+  private:
+    std::vector<MenuBarEntry> entries_;
+    std::vector<tc_ui_rect> item_rects_;
+    tc_widget_handle popup_handle_ = tc_widget_handle_invalid();
+    size_t popup_activated_connection_ = 0;
+    size_t popup_dismissed_connection_ = 0;
+    size_t popup_adjacent_connection_ = 0;
+    float item_height_ = 30.0f;
+    float padding_x_ = 11.0f;
+    size_t hovered_ = SIZE_MAX;
+    size_t open_index_ = SIZE_MAX;
+    Signal<MenuBar&, size_t, CommandId, const CommandData&> activated_;
+
   public:
     MenuBar();
 
@@ -49,17 +62,6 @@ class MenuBar final : public NativeWidget {
                               int32_t modifiers, std::unordered_set<const CommandModel*>& visited,
                               size_t menu_index);
 
-    std::vector<MenuBarEntry> entries_;
-    std::vector<tc_ui_rect> item_rects_;
-    tc_widget_handle popup_handle_ = tc_widget_handle_invalid();
-    size_t popup_activated_connection_ = 0;
-    size_t popup_dismissed_connection_ = 0;
-    size_t popup_adjacent_connection_ = 0;
-    float item_height_ = 30.0f;
-    float padding_x_ = 11.0f;
-    size_t hovered_ = SIZE_MAX;
-    size_t open_index_ = SIZE_MAX;
-    Signal<MenuBar&, size_t, CommandId, const CommandData&> activated_;
 };
 
 } // namespace termin::gui_native

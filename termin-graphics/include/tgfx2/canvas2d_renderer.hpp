@@ -37,6 +37,25 @@ struct CanvasVec2 {
 };
 
 class TGFX2_TYPE_API Canvas2DRenderer {
+private:
+    enum class BatchMode { None, Solid, Texture };
+    struct ClipRect { int x = 0; int y = 0; int w = 0; int h = 0; };
+    RenderContext2* ctx_ = nullptr;
+    FontAtlas* default_font_ = nullptr;
+    Text2DRenderer text2d_;
+    int viewport_x_ = 0;
+    int viewport_y_ = 0;
+    int viewport_w_ = 0;
+    int viewport_h_ = 0;
+    float projection_[16]{};
+    IRenderDevice* compiled_on_ = nullptr;
+    ShaderHandle solid_vs_{}, solid_fs_{}, texture_vs_{}, texture_fs_{};
+    std::vector<ClipRect> clip_stack_;
+    BatchMode batch_mode_ = BatchMode::None;
+    CanvasColor batch_color_{};
+    TextureHandle batch_texture_{};
+    std::vector<float> batch_vertices_;
+
 public:
     explicit Canvas2DRenderer(FontAtlas* default_font = nullptr);
     ~Canvas2DRenderer();
@@ -91,42 +110,6 @@ public:
     void release_gpu();
 
 private:
-    enum class BatchMode {
-        None,
-        Solid,
-        Texture,
-    };
-
-    struct ClipRect {
-        int x = 0;
-        int y = 0;
-        int w = 0;
-        int h = 0;
-    };
-
-    RenderContext2* ctx_ = nullptr;
-    FontAtlas* default_font_ = nullptr;
-    Text2DRenderer text2d_;
-
-    int viewport_x_ = 0;
-    int viewport_y_ = 0;
-    int viewport_w_ = 0;
-    int viewport_h_ = 0;
-    float projection_[16]{};
-
-    IRenderDevice* compiled_on_ = nullptr;
-    ShaderHandle solid_vs_{};
-    ShaderHandle solid_fs_{};
-    ShaderHandle texture_vs_{};
-    ShaderHandle texture_fs_{};
-
-    std::vector<ClipRect> clip_stack_;
-
-    BatchMode batch_mode_ = BatchMode::None;
-    CanvasColor batch_color_{};
-    TextureHandle batch_texture_{};
-    std::vector<float> batch_vertices_;
-
     void ensure_shaders_(IRenderDevice& device);
     void build_projection_();
     void flush_();

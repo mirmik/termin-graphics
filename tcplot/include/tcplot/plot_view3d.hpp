@@ -46,6 +46,18 @@ class PlotEngine3D;
 class GpuHost;
 
 class TCPLOT_API PlotView3D {
+private:
+    tgfx::IRenderDevice*  device_ = nullptr;
+    tgfx::PipelineCache*  cache_  = nullptr;
+    tgfx::RenderContext2* ctx_    = nullptr;
+    tgfx::FontAtlas*      font_   = nullptr;
+    std::unique_ptr<PlotEngine3D> engine_;
+    tgfx::TextureHandle offscreen_color_{};
+    tgfx::TextureHandle offscreen_depth_{};
+    int offscreen_w_ = 0;
+    int offscreen_h_ = 0;
+    int msaa_samples_ = 4;
+
 public:
     PlotView3D(tgfx::IRenderDevice& device,
                tgfx::PipelineCache& cache,
@@ -137,22 +149,6 @@ public:
 
 private:
     void ensure_offscreen_(int w, int h);
-
-    // Font path captured so we can re-create the atlas on release_gpu
-    // → reuse cycle if the host re-enters render after a context drop.
-    tgfx::IRenderDevice*  device_ = nullptr;
-    tgfx::PipelineCache*  cache_  = nullptr;
-    tgfx::RenderContext2* ctx_    = nullptr;
-    tgfx::FontAtlas*      font_   = nullptr;
-    std::unique_ptr<PlotEngine3D> engine_;
-
-    // Offscreen color + depth are plain tgfx2 textures; begin_pass owns
-    // the backend render target they compose into.
-    tgfx::TextureHandle offscreen_color_{};
-    tgfx::TextureHandle offscreen_depth_{};
-    int offscreen_w_ = 0;
-    int offscreen_h_ = 0;
-    int msaa_samples_ = 4;
 };
 
 }  // namespace tcplot

@@ -12,6 +12,22 @@ namespace termin::gui_native {
 class CollectionModel;
 
 class FileDialogOverlay final : public Dialog {
+  private:
+    FileDialogModel model_;
+    std::shared_ptr<CollectionModel> entries_model_;
+    std::string initial_directory_;
+    std::optional<std::string> accepted_path_;
+    tc_widget_handle path_input_handle_ = tc_widget_handle_invalid();
+    tc_widget_handle back_button_handle_ = tc_widget_handle_invalid();
+    tc_widget_handle forward_button_handle_ = tc_widget_handle_invalid();
+    tc_widget_handle up_button_handle_ = tc_widget_handle_invalid();
+    tc_widget_handle list_handle_ = tc_widget_handle_invalid();
+    tc_widget_handle filter_handle_ = tc_widget_handle_invalid();
+    tc_widget_handle name_input_handle_ = tc_widget_handle_invalid();
+    tc_widget_handle error_label_handle_ = tc_widget_handle_invalid();
+    size_t finished_connection_ = 0;
+    Signal<FileDialogOverlay&, const std::optional<std::string>&> path_finished_;
+
   public:
     explicit FileDialogOverlay(FileDialogMode mode,
                                std::shared_ptr<FileDialogFileSystem> file_system = {});
@@ -38,20 +54,6 @@ class FileDialogOverlay final : public Dialog {
     void on_entry_selected(const std::vector<size_t>& indices);
     void on_entry_activated(size_t index);
 
-    FileDialogModel model_;
-    std::shared_ptr<CollectionModel> entries_model_;
-    std::string initial_directory_;
-    std::optional<std::string> accepted_path_;
-    tc_widget_handle path_input_handle_ = tc_widget_handle_invalid();
-    tc_widget_handle back_button_handle_ = tc_widget_handle_invalid();
-    tc_widget_handle forward_button_handle_ = tc_widget_handle_invalid();
-    tc_widget_handle up_button_handle_ = tc_widget_handle_invalid();
-    tc_widget_handle list_handle_ = tc_widget_handle_invalid();
-    tc_widget_handle filter_handle_ = tc_widget_handle_invalid();
-    tc_widget_handle name_input_handle_ = tc_widget_handle_invalid();
-    tc_widget_handle error_label_handle_ = tc_widget_handle_invalid();
-    size_t finished_connection_ = 0;
-    Signal<FileDialogOverlay&, const std::optional<std::string>&> path_finished_;
 };
 
 } // namespace termin::gui_native

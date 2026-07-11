@@ -11,6 +11,32 @@
 namespace termin::gui_native {
 
 class Menu final : public NativeWidget {
+  private:
+    std::shared_ptr<CommandModel> model_;
+    uint64_t observed_revision_ = 0;
+    size_t model_connection_ = 0;
+    std::vector<float> item_tops_;
+    Menu* parent_menu_ = nullptr;
+    tc_widget_handle child_handle_ = tc_widget_handle_invalid();
+    size_t child_index_ = SIZE_MAX;
+    tc_widget_handle anchor_owner_ = tc_widget_handle_invalid();
+    std::unordered_set<const CommandModel*> ancestors_;
+    tc_ui_rect viewport_{};
+    float item_height_ = 28.0f;
+    float separator_height_ = 9.0f;
+    float padding_x_ = 10.0f;
+    float padding_y_ = 5.0f;
+    float column_gap_ = 18.0f;
+    float min_width_ = 150.0f;
+    float max_visible_height_ = 420.0f;
+    float content_height_ = 0.0f;
+    float scroll_offset_ = 0.0f;
+    size_t current_ = SIZE_MAX;
+    bool open_ = false;
+    Signal<Menu&, size_t, CommandId, const CommandData&> activated_;
+    Signal<Menu&, tc_ui_overlay_dismiss_reason> dismissed_;
+    Signal<Menu&, int> adjacent_requested_;
+
   public:
     explicit Menu(std::shared_ptr<CommandModel> model = {});
     ~Menu() override;
@@ -61,30 +87,6 @@ class Menu final : public NativeWidget {
     void close_submenu(tc_ui_document* document);
     Menu* root_menu();
 
-    std::shared_ptr<CommandModel> model_;
-    uint64_t observed_revision_ = 0;
-    size_t model_connection_ = 0;
-    std::vector<float> item_tops_;
-    Menu* parent_menu_ = nullptr;
-    tc_widget_handle child_handle_ = tc_widget_handle_invalid();
-    size_t child_index_ = SIZE_MAX;
-    tc_widget_handle anchor_owner_ = tc_widget_handle_invalid();
-    std::unordered_set<const CommandModel*> ancestors_;
-    tc_ui_rect viewport_{};
-    float item_height_ = 28.0f;
-    float separator_height_ = 9.0f;
-    float padding_x_ = 10.0f;
-    float padding_y_ = 5.0f;
-    float column_gap_ = 18.0f;
-    float min_width_ = 150.0f;
-    float max_visible_height_ = 420.0f;
-    float content_height_ = 0.0f;
-    float scroll_offset_ = 0.0f;
-    size_t current_ = SIZE_MAX;
-    bool open_ = false;
-    Signal<Menu&, size_t, CommandId, const CommandData&> activated_;
-    Signal<Menu&, tc_ui_overlay_dismiss_reason> dismissed_;
-    Signal<Menu&, int> adjacent_requested_;
 };
 
 } // namespace termin::gui_native

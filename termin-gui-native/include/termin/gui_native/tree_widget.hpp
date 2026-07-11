@@ -17,6 +17,37 @@ struct TreeVisibleRow {
 enum class TreeDropPosition { Before, Inside, After, Root };
 
 class TreeWidget final : public NativeWidget {
+private:
+    std::shared_ptr<TreeModel> model_;
+    std::shared_ptr<TreeExpansionModel> expansion_;
+    std::vector<TreeVisibleRow> visible_;
+    uint64_t observed_model_revision_ = 0;
+    uint64_t observed_expansion_revision_ = 0;
+    size_t model_connection_ = 0;
+    size_t expansion_connection_ = 0;
+    TreeNodeId selected_ = kInvalidTreeNodeId;
+    TreeNodeId hovered_ = kInvalidTreeNodeId;
+    TreeNodeId pressed_ = kInvalidTreeNodeId;
+    TreeNodeId drag_target_ = kInvalidTreeNodeId;
+    TreeDropPosition drag_position_ = TreeDropPosition::Root;
+    float press_x_ = 0.0f;
+    float press_y_ = 0.0f;
+    bool draggable_ = false;
+    bool dragging_ = false;
+    float row_height_ = 28.0f;
+    float row_spacing_ = 0.0f;
+    float indent_size_ = 16.0f;
+    float toggle_size_ = 16.0f;
+    float item_padding_ = 4.0f;
+    float scroll_y_ = 0.0f;
+    float wheel_rows_ = 3.0f;
+    Signal<TreeWidget&, TreeNodeId> selection_changed_;
+    Signal<TreeWidget&, TreeNodeId, bool> expansion_changed_;
+    Signal<TreeWidget&, TreeNodeId, const CollectionItem&> activated_;
+    Signal<TreeWidget&, TreeNodeId, const CollectionItem&> delete_requested_;
+    Signal<TreeWidget&, TreeNodeId, float, float> context_menu_requested_;
+    Signal<TreeWidget&, TreeNodeId, TreeNodeId, TreeDropPosition> drop_requested_;
+
 public:
     explicit TreeWidget(std::shared_ptr<TreeModel> model = {},
                         std::shared_ptr<TreeExpansionModel> expansion = {});
@@ -89,35 +120,6 @@ private:
     TreeDropPosition drop_position_at(size_t index, float y) const;
     void clear_drag_state();
 
-    std::shared_ptr<TreeModel> model_;
-    std::shared_ptr<TreeExpansionModel> expansion_;
-    std::vector<TreeVisibleRow> visible_;
-    uint64_t observed_model_revision_ = 0;
-    uint64_t observed_expansion_revision_ = 0;
-    size_t model_connection_ = 0;
-    size_t expansion_connection_ = 0;
-    TreeNodeId selected_ = kInvalidTreeNodeId;
-    TreeNodeId hovered_ = kInvalidTreeNodeId;
-    TreeNodeId pressed_ = kInvalidTreeNodeId;
-    TreeNodeId drag_target_ = kInvalidTreeNodeId;
-    TreeDropPosition drag_position_ = TreeDropPosition::Root;
-    float press_x_ = 0.0f;
-    float press_y_ = 0.0f;
-    bool draggable_ = false;
-    bool dragging_ = false;
-    float row_height_ = 28.0f;
-    float row_spacing_ = 0.0f;
-    float indent_size_ = 16.0f;
-    float toggle_size_ = 16.0f;
-    float item_padding_ = 4.0f;
-    float scroll_y_ = 0.0f;
-    float wheel_rows_ = 3.0f;
-    Signal<TreeWidget&, TreeNodeId> selection_changed_;
-    Signal<TreeWidget&, TreeNodeId, bool> expansion_changed_;
-    Signal<TreeWidget&, TreeNodeId, const CollectionItem&> activated_;
-    Signal<TreeWidget&, TreeNodeId, const CollectionItem&> delete_requested_;
-    Signal<TreeWidget&, TreeNodeId, float, float> context_menu_requested_;
-    Signal<TreeWidget&, TreeNodeId, TreeNodeId, TreeDropPosition> drop_requested_;
 };
 
 } // namespace termin::gui_native

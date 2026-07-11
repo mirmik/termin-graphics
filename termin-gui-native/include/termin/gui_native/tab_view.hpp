@@ -9,6 +9,13 @@
 namespace termin::gui_native {
 struct TabPage { std::string title; tc_widget_handle handle = tc_widget_handle_invalid(); };
 class TabView : public NativeWidget {
+private:
+    std::vector<TabPage> pages_;
+    size_t selected_index_ = 0;
+    float header_height_ = 32.0f;
+    float min_tab_width_ = 72.0f;
+    Signal<TabView &, size_t> selection_changed_;
+
 public:
     explicit TabView(const char* debug_name = nullptr);
     void add_page(std::string title, tc_widget_handle handle);
@@ -32,10 +39,5 @@ private:
     tc_ui_rect page_rect() const;
     float tab_width(tc_ui_document* document, size_t index) const;
     tc_ui_rect tab_rect(tc_ui_document* document, size_t index) const;
-    std::vector<TabPage> pages_;
-    size_t selected_index_ = 0;
-    float header_height_ = 32.0f;
-    float min_tab_width_ = 72.0f;
-    Signal<TabView &, size_t> selection_changed_;
 };
 } // namespace termin::gui_native

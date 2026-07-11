@@ -7,6 +7,11 @@ namespace termin::gui_native {
 enum class MessageBoxKind { Information, Warning, Error, Question };
 
 class MessageBox final : public Dialog {
+private:
+    std::string message_;
+    MessageBoxKind kind_ = MessageBoxKind::Information;
+    tc_widget_handle message_content_handle_ = tc_widget_handle_invalid();
+
   public:
     MessageBox(std::string title, std::string message,
                MessageBoxKind kind = MessageBoxKind::Information);
@@ -18,9 +23,6 @@ class MessageBox final : public Dialog {
   private:
     bool ensure_content(tc_ui_document* document);
 
-    std::string message_;
-    MessageBoxKind kind_ = MessageBoxKind::Information;
-    tc_widget_handle message_content_handle_ = tc_widget_handle_invalid();
 };
 
 } // namespace termin::gui_native

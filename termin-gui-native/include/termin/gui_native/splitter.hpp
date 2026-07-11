@@ -5,6 +5,14 @@
 
 namespace termin::gui_native {
 class Splitter : public NativeWidget {
+private:
+    Orientation orientation_ = Orientation::Horizontal;
+    float split_fraction_ = 0.5f;
+    float first_min_extent_ = 32.0f;
+    float second_min_extent_ = 32.0f;
+    float divider_thickness_ = 6.0f;
+    Color divider_color_ {0.30f, 0.33f, 0.38f, 1.0f};
+
 public:
     explicit Splitter(Orientation orientation = Orientation::Horizontal, const char* debug_name = nullptr);
     void set_first(tc_widget_handle handle);
@@ -26,11 +34,5 @@ private:
     tc_ui_rect divider_rect() const;
     void layout_children(tc_ui_document* document);
     float split_axis_extent() const;
-    Orientation orientation_ = Orientation::Horizontal;
-    float split_fraction_ = 0.5f;
-    float first_min_extent_ = 32.0f;
-    float second_min_extent_ = 32.0f;
-    float divider_thickness_ = 6.0f;
-    Color divider_color_ {0.30f, 0.33f, 0.38f, 1.0f};
 };
 } // namespace termin::gui_native

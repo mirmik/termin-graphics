@@ -16,6 +16,31 @@ struct TableColumnLayout {
 };
 
 class TableWidget final : public NativeWidget {
+  private:
+    std::shared_ptr<TableModel> model_;
+    std::shared_ptr<TableColumnModel> columns_;
+    SelectionModel selection_;
+    std::vector<TableColumnLayout> column_layout_;
+    uint64_t observed_model_revision_ = 0;
+    uint64_t observed_column_revision_ = 0;
+    size_t model_connection_ = 0;
+    size_t column_connection_ = 0;
+    float row_height_ = 26.0f;
+    float header_height_ = 28.0f;
+    float cell_padding_ = 6.0f;
+    float scroll_y_ = 0.0f;
+    float wheel_rows_ = 3.0f;
+    float resize_zone_ = 4.0f;
+    size_t hovered_ = SelectionModel::npos;
+    size_t resizing_column_ = SelectionModel::npos;
+    float resize_start_x_ = 0.0f;
+    float resize_start_width_ = 0.0f;
+    Signal<TableWidget&, const std::vector<size_t>&> selection_changed_;
+    Signal<TableWidget&, size_t, TableRowId, const TableRowData&> activated_;
+    Signal<TableWidget&, size_t, const TableColumn&> header_clicked_;
+    Signal<TableWidget&, size_t, float> column_resized_;
+    Signal<TableWidget&, int64_t, float, float> context_menu_requested_;
+
   public:
     explicit TableWidget(std::shared_ptr<TableModel> model = {},
                          std::shared_ptr<TableColumnModel> columns = {});
@@ -77,29 +102,6 @@ class TableWidget final : public NativeWidget {
     bool apply_selection(size_t index, int32_t modifiers);
     void emit_selection_changed();
 
-    std::shared_ptr<TableModel> model_;
-    std::shared_ptr<TableColumnModel> columns_;
-    SelectionModel selection_;
-    std::vector<TableColumnLayout> column_layout_;
-    uint64_t observed_model_revision_ = 0;
-    uint64_t observed_column_revision_ = 0;
-    size_t model_connection_ = 0;
-    size_t column_connection_ = 0;
-    float row_height_ = 26.0f;
-    float header_height_ = 28.0f;
-    float cell_padding_ = 6.0f;
-    float scroll_y_ = 0.0f;
-    float wheel_rows_ = 3.0f;
-    float resize_zone_ = 4.0f;
-    size_t hovered_ = SelectionModel::npos;
-    size_t resizing_column_ = SelectionModel::npos;
-    float resize_start_x_ = 0.0f;
-    float resize_start_width_ = 0.0f;
-    Signal<TableWidget&, const std::vector<size_t>&> selection_changed_;
-    Signal<TableWidget&, size_t, TableRowId, const TableRowData&> activated_;
-    Signal<TableWidget&, size_t, const TableColumn&> header_clicked_;
-    Signal<TableWidget&, size_t, float> column_resized_;
-    Signal<TableWidget&, int64_t, float, float> context_menu_requested_;
 };
 
 } // namespace termin::gui_native

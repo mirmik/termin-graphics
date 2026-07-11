@@ -30,20 +30,6 @@ struct ScreenSpaceLineParams {
 };
 
 class TGFX2_TYPE_API ScreenSpaceLineRenderer {
-public:
-    ScreenSpaceLineRenderer() = default;
-    ~ScreenSpaceLineRenderer() = default;
-
-    ScreenSpaceLineRenderer(const ScreenSpaceLineRenderer&) = delete;
-    ScreenSpaceLineRenderer& operator=(const ScreenSpaceLineRenderer&) = delete;
-
-    void draw_polyline(RenderContext2& ctx,
-                       std::span<const LinePoint3> points,
-                       const ScreenSpaceLineStyle& style,
-                       const ScreenSpaceLineParams& params);
-
-    void release(RenderContext2& ctx);
-
 private:
     BufferHandle corner_vbo_;
     BufferHandle cap_corner_vbo_;
@@ -66,6 +52,21 @@ private:
     int cap_round_segments_ = 0;
     int round_join_segments_ = 0;
 
+public:
+    ScreenSpaceLineRenderer() = default;
+    ~ScreenSpaceLineRenderer() = default;
+
+    ScreenSpaceLineRenderer(const ScreenSpaceLineRenderer&) = delete;
+    ScreenSpaceLineRenderer& operator=(const ScreenSpaceLineRenderer&) = delete;
+
+    void draw_polyline(RenderContext2& ctx,
+                       std::span<const LinePoint3> points,
+                       const ScreenSpaceLineStyle& style,
+                       const ScreenSpaceLineParams& params);
+
+    void release(RenderContext2& ctx);
+
+private:
     void ensure_resources(RenderContext2& ctx);
     void ensure_cap_template(RenderContext2& ctx, int round_segments);
     void ensure_round_join_template(RenderContext2& ctx, int round_segments);

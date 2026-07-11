@@ -19,6 +19,9 @@ namespace termin {
  * Supports recursive includes with cycle detection.
  */
 class GlslPreprocessor {
+private:
+    std::unordered_map<std::string, std::string> includes_;
+
 public:
     /**
      * Register an include file.
@@ -136,7 +139,6 @@ private:
         return result;
     }
 
-    std::unordered_map<std::string, std::string> includes_;
 };
 
 /**

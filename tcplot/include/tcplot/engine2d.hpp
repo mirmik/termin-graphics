@@ -32,6 +32,26 @@ class Canvas2DRenderer;
 namespace tcplot {
 
 class TCPLOT_API PlotEngine2D {
+private:
+    struct Rect { float x, y, w, h; };
+    struct ViewRange { double x_min, x_max, y_min, y_max; };
+    struct LineGpuState { tgfx::BufferHandle vbo{}; uint32_t capacity = 0; uint32_t gpu_count = 0; };
+    struct StyledLineGpuState { tgfx::BufferHandle vbo{}; uint32_t capacity = 0; uint32_t gpu_count = 0; uint64_t data_version = 0; };
+    float vx_ = 0.0f, vy_ = 0.0f, vw_ = 0.0f, vh_ = 0.0f;
+    float fbo_height_ = 0.0f;
+    std::optional<double> view_x_min_, view_x_max_, view_y_min_, view_y_max_;
+    bool panning_ = false;
+    float pan_start_mx_ = 0.0f, pan_start_my_ = 0.0f;
+    double pan_start_view_[4] = {0, 1, 0, 1};
+    tgfx::IRenderDevice* line_shader_device_ = nullptr;
+    uint32_t line_shader_vs_id_ = 0, line_shader_fs_id_ = 0;
+    tgfx::IRenderDevice* styled_line_shader_device_ = nullptr;
+    uint32_t styled_line_shader_vs_id_ = 0, styled_line_shader_fs_id_ = 0;
+    std::vector<LineGpuState> line_gpu_;
+    std::vector<StyledLineGpuState> styled_line_gpu_;
+    uint64_t data_version_ = 1;
+    std::unique_ptr<tgfx::Canvas2DRenderer> canvas_;
+
 public:
     PlotData data;
 
@@ -160,81 +180,18 @@ public:
     // Zoom X axis only (shared-X multi-panel UX: Ctrl+wheel).
     bool on_mouse_wheel_x(float x, float y, float dy);
 
-private:
     // Plot area in viewport pixel coords.
-    struct Rect { float x, y, w, h; };
     Rect plot_area_() const;
     // Current view range; auto-fits on first access if unset.
-    struct ViewRange { double x_min, x_max, y_min, y_max; };
     ViewRange view_range_();
     // data ↔ pixel transforms.
     void data_to_pixel_(double dx, double dy, float& out_x, float& out_y);
     void pixel_to_data_(float wx, float wy, double& out_x, double& out_y);
-
-    // Build a data-space-only VS + uniform-color FS shader used for
-    // persistent-VBO line series. Cached per device.
     void ensure_line_shader_(tgfx::IRenderDevice& device);
     void ensure_styled_line_shader_(tgfx::IRenderDevice& device);
-
-    // Ensure series `idx` has a GPU buffer big enough for its current
-    // point count and that the tail (gpu_count..x.size()) has been
-    // uploaded. Grows the VBO (doubling) when capacity is exceeded.
     void ensure_line_gpu_(tgfx::IRenderDevice& device, size_t idx);
     void ensure_styled_line_gpu_(tgfx::IRenderDevice& device, size_t idx);
-
-    // Compose the data-space → NDC matrix (4x4 column-major) for the
-    // current plot area, view range, and viewport. Used as a uniform
-    // by the line shader — panning / zooming only changes this matrix.
     void compute_data_to_clip_(float out16[16]);
-
-    // --- Viewport rect ---
-    float vx_ = 0.0f, vy_ = 0.0f, vw_ = 0.0f, vh_ = 0.0f;
-    // 0 = unset → treat as single-strip (no y-flip for GL). Otherwise
-    // used to compute glViewport/glScissor y from bottom.
-    float fbo_height_ = 0.0f;
-
-    // --- View range (nullopt = auto-fit on first use) ---
-    std::optional<double> view_x_min_;
-    std::optional<double> view_x_max_;
-    std::optional<double> view_y_min_;
-    std::optional<double> view_y_max_;
-
-    // --- Pan state ---
-    bool panning_ = false;
-    float pan_start_mx_ = 0.0f;
-    float pan_start_my_ = 0.0f;
-    double pan_start_view_[4] = {0, 1, 0, 1};
-
-    // --- Cached shader (line series — data-space pos + uniform color). ---
-    tgfx::IRenderDevice* line_shader_device_ = nullptr;
-    uint32_t line_shader_vs_id_ = 0;
-    uint32_t line_shader_fs_id_ = 0;
-    tgfx::IRenderDevice* styled_line_shader_device_ = nullptr;
-    uint32_t styled_line_shader_vs_id_ = 0;
-    uint32_t styled_line_shader_fs_id_ = 0;
-
-    // Per-line-series persistent GPU state, parallel to `data.lines`.
-    // capacity is measured in vertices; each vertex is a vec2 float
-    // (8 bytes). gpu_count <= x.size(); the render path tops it up
-    // with glBufferSubData to the tail on each frame.
-    struct LineGpuState {
-        tgfx::BufferHandle vbo{};
-        uint32_t capacity = 0;
-        uint32_t gpu_count = 0;
-    };
-    std::vector<LineGpuState> line_gpu_;
-
-    struct StyledLineGpuState {
-        tgfx::BufferHandle vbo{};
-        uint32_t capacity = 0;
-        uint32_t gpu_count = 0;
-        uint64_t data_version = 0;
-    };
-    std::vector<StyledLineGpuState> styled_line_gpu_;
-    uint64_t data_version_ = 1;
-
-    // --- Shared 2D primitive/text renderer ---
-    std::unique_ptr<tgfx::Canvas2DRenderer> canvas_;
 };
 
 }  // namespace tcplot

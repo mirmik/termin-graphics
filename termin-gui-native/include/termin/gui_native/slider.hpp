@@ -5,6 +5,14 @@
 
 namespace termin::gui_native {
 class Slider : public NativeWidget {
+private:
+    float value_ = 0.0f;
+    float min_value_ = 0.0f;
+    float max_value_ = 1.0f;
+    float step_ = 0.0f;
+    bool dragging_ = false;
+    Signal<Slider&, float> changed_;
+
 public:
     explicit Slider(float value = 0.0f);
     void set_value(float value);
@@ -19,11 +27,5 @@ public:
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
     tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
 private:
-    float value_ = 0.0f;
-    float min_value_ = 0.0f;
-    float max_value_ = 1.0f;
-    float step_ = 0.0f;
-    bool dragging_ = false;
-    Signal<Slider&, float> changed_;
 };
 } // namespace termin::gui_native

@@ -9,6 +9,9 @@
 namespace termin::gui_native {
 
 class DocumentSnapshot {
+  private:
+    tc_ui_document_inspect_snapshot snapshot_{};
+
   public:
     explicit DocumentSnapshot(const tc_ui_document* document) {
         if (!tc_ui_document_capture_snapshot(document, &snapshot_)) {
@@ -63,8 +66,6 @@ class DocumentSnapshot {
         return nullptr;
     }
 
-  private:
-    tc_ui_document_inspect_snapshot snapshot_{};
 };
 
 } // namespace termin::gui_native

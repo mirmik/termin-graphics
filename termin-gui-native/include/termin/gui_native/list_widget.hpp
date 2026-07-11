@@ -9,6 +9,21 @@
 
 namespace termin::gui_native {
 class ListWidget : public NativeWidget {
+private:
+    std::shared_ptr<CollectionModel> model_;
+    SelectionModel selection_;
+    uint64_t observed_revision_ = 0;
+    size_t model_connection_ = 0;
+    float row_height_ = 40.0f;
+    float row_spacing_ = 2.0f;
+    float scroll_y_ = 0.0f;
+    float wheel_rows_ = 3.0f;
+    float item_padding_ = 10.0f;
+    size_t hovered_ = SelectionModel::npos;
+    Signal<ListWidget&, const std::vector<size_t>&> selection_changed_;
+    Signal<ListWidget&, size_t, const CollectionItem&> activated_;
+    Signal<ListWidget&, int64_t, float, float> context_menu_requested_;
+
 public:
     explicit ListWidget(std::shared_ptr<CollectionModel> model = {});
     ~ListWidget() override;
@@ -47,18 +62,5 @@ private:
     void connect_model();
     void disconnect_model();
     void on_model_changed(const CollectionChange& change);
-    std::shared_ptr<CollectionModel> model_;
-    SelectionModel selection_;
-    uint64_t observed_revision_ = 0;
-    size_t model_connection_ = 0;
-    float row_height_ = 40.0f;
-    float row_spacing_ = 2.0f;
-    float scroll_y_ = 0.0f;
-    float wheel_rows_ = 3.0f;
-    float item_padding_ = 10.0f;
-    size_t hovered_ = SelectionModel::npos;
-    Signal<ListWidget&, const std::vector<size_t>&> selection_changed_;
-    Signal<ListWidget&, size_t, const CollectionItem&> activated_;
-    Signal<ListWidget&, int64_t, float, float> context_menu_requested_;
 };
 } // namespace termin::gui_native

@@ -53,6 +53,19 @@ class NativeFileDialogFileSystem final : public FileDialogFileSystem {
 };
 
 class FileDialogModel {
+  private:
+    FileDialogMode mode_;
+    std::shared_ptr<FileDialogFileSystem> file_system_;
+    std::string current_directory_;
+    std::vector<FileDialogEntry> entries_;
+    std::vector<FileDialogFilter> filters_{{"All files", {"*"}}};
+    std::vector<std::string> back_stack_;
+    std::vector<std::string> forward_stack_;
+    size_t selected_filter_ = 0;
+    size_t selected_index_ = SIZE_MAX;
+    std::string file_name_;
+    std::string error_;
+
   public:
     explicit FileDialogModel(FileDialogMode mode,
                              std::shared_ptr<FileDialogFileSystem> file_system = {});
@@ -88,17 +101,6 @@ class FileDialogModel {
     bool accepts_file(std::string_view name) const;
     void set_error(std::string error);
 
-    FileDialogMode mode_;
-    std::shared_ptr<FileDialogFileSystem> file_system_;
-    std::string current_directory_;
-    std::vector<FileDialogEntry> entries_;
-    std::vector<FileDialogFilter> filters_{{"All files", {"*"}}};
-    std::vector<std::string> back_stack_;
-    std::vector<std::string> forward_stack_;
-    size_t selected_filter_ = 0;
-    size_t selected_index_ = SIZE_MAX;
-    std::string file_name_;
-    std::string error_;
 };
 
 } // namespace termin::gui_native

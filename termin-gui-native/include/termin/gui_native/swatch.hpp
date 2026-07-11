@@ -5,10 +5,11 @@
 
 namespace termin::gui_native {
 class Swatch : public NativeWidget {
+private:
+    Color color_;
+
 public:
     explicit Swatch(Color color);
     void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-private:
-    Color color_;
 };
 } // namespace termin::gui_native

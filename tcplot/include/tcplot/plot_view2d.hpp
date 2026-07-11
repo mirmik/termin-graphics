@@ -27,6 +27,17 @@ class PlotEngine2D;
 class GpuHost;
 
 class TCPLOT_API PlotView2D {
+private:
+    tgfx::IRenderDevice*  device_ = nullptr;
+    tgfx::PipelineCache*  cache_  = nullptr;
+    tgfx::RenderContext2* ctx_    = nullptr;
+    tgfx::FontAtlas*      font_   = nullptr;
+    std::unique_ptr<PlotEngine2D> engine_;
+    tgfx::TextureHandle offscreen_color_{};
+    int offscreen_w_ = 0;
+    int offscreen_h_ = 0;
+    int msaa_samples_ = 4;
+
 public:
     PlotView2D(tgfx::IRenderDevice& device,
                tgfx::PipelineCache& cache,
@@ -78,17 +89,6 @@ public:
 
 private:
     void ensure_offscreen_(int w, int h);
-
-    tgfx::IRenderDevice*  device_ = nullptr;
-    tgfx::PipelineCache*  cache_  = nullptr;
-    tgfx::RenderContext2* ctx_    = nullptr;
-    tgfx::FontAtlas*      font_   = nullptr;
-    std::unique_ptr<PlotEngine2D> engine_;
-
-    tgfx::TextureHandle offscreen_color_{};
-    int offscreen_w_ = 0;
-    int offscreen_h_ = 0;
-    int msaa_samples_ = 4;
 };
 
 }  // namespace tcplot

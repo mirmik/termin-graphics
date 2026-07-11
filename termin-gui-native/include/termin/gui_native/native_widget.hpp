@@ -7,6 +7,9 @@
 namespace termin::gui_native {
 
 class NativeWidget : public Widget {
+private:
+    static const tc_widget_vtable VTABLE;
+
 public:
     explicit NativeWidget(const char* debug_name = nullptr);
     ~NativeWidget() override = default;
@@ -39,7 +42,6 @@ private:
     static void dispatch_focus_event(tc_widget* widget, tc_ui_document* document, bool focused);
     static void dispatch_overlay_dismissed(tc_widget* widget, tc_ui_document* document, tc_ui_overlay_dismiss_reason reason);
     static void dispatch_on_destroy(tc_widget* widget, tc_ui_document* document);
-    static const tc_widget_vtable VTABLE;
 };
 
 } // namespace termin::gui_native

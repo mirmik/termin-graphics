@@ -26,6 +26,9 @@ namespace termin {
 namespace {
 
 class SceneRenderState {
+private:
+    tc_scene_handle h_;
+
 public:
     explicit SceneRenderState(tc_scene_handle h) : h_(h) {}
 
@@ -33,11 +36,12 @@ public:
         return h_;
     }
 
-private:
-    tc_scene_handle h_;
 };
 
 class SceneRenderMount {
+private:
+    tc_scene_handle h_;
+
 public:
     explicit SceneRenderMount(tc_scene_handle h) : h_(h) {}
 
@@ -45,11 +49,12 @@ public:
         return h_;
     }
 
-private:
-    tc_scene_handle h_;
 };
 
 class TcSceneLighting {
+private:
+    tc_scene_lighting* ptr_ = nullptr;
+
 public:
     explicit TcSceneLighting(uintptr_t ptr)
         : ptr_(reinterpret_cast<tc_scene_lighting*>(ptr)) {}
@@ -95,8 +100,6 @@ public:
         ptr_->shadow_bias = static_cast<float>(nb::cast<double>(value.attr("bias")));
     }
 
-private:
-    tc_scene_lighting* ptr_ = nullptr;
 };
 
 nb::object scene_to_python(tc_scene_handle h) {

@@ -26,6 +26,9 @@ namespace {
 constexpr uint32_t PYTHON_WIDGET_MAGIC = 0x54475549u; // "TGUI"
 
 class DrawList {
+private:
+    tc_ui_draw_list* draw_list_ = nullptr;
+
 public:
     DrawList() : draw_list_(tc_ui_draw_list_create()) {
         if (!draw_list_) {
@@ -44,8 +47,6 @@ public:
         return draw_list_;
     }
 
-private:
-    tc_ui_draw_list* draw_list_ = nullptr;
 };
 
 struct DrawCommand {
@@ -101,6 +102,10 @@ private:
 };
 
 class PaintContext {
+private:
+    tc_ui_paint_context* context_ = nullptr;
+    bool owns_ = false;
+
 public:
     explicit PaintContext(DrawList& draw_list)
         : context_(tc_ui_paint_context_create(draw_list.get())),
@@ -149,9 +154,6 @@ public:
         return context_;
     }
 
-private:
-    tc_ui_paint_context* context_ = nullptr;
-    bool owns_ = false;
 };
 
 class Document;
@@ -389,6 +391,10 @@ TERMIN_GUI_NATIVE_WIDGET_REF(CanvasRef, Canvas);
 #undef TERMIN_GUI_NATIVE_WIDGET_REF
 
 class PythonViewportSurfaceHost final : public termin::gui_native::ViewportSurfaceHost {
+private:
+    nb::object object_;
+    std::shared_ptr<DocumentState> state_;
+
 public:
     PythonViewportSurfaceHost(nb::object object, std::shared_ptr<DocumentState> state)
         : object_(std::move(object)), state_(std::move(state)) {}
@@ -461,8 +467,6 @@ private:
         }
     }
 
-    nb::object object_;
-    std::shared_ptr<DocumentState> state_;
 };
 
 struct PythonWidget {
@@ -471,6 +475,7 @@ struct PythonWidget {
     nb::object object;
     std::shared_ptr<DocumentState> state;
     bool callbacks_enabled = false;
+    static const tc_widget_vtable VTABLE;
 
     explicit PythonWidget(nb::object object_, std::string debug_name_,
                           std::shared_ptr<DocumentState> state_)
@@ -700,7 +705,6 @@ struct PythonWidget {
         }
     }
 
-    static const tc_widget_vtable VTABLE;
 };
 
 const tc_widget_vtable PythonWidget::VTABLE {
@@ -830,6 +834,12 @@ bool deserialize_python_registered_widget(tc_widget* widget, const tc_value* sta
 }
 
 class Document {
+private:
+    std::shared_ptr<DocumentState> state_;
+    nb::object clipboard_getter_;
+    nb::object clipboard_setter_;
+    std::string clipboard_buffer_;
+
 public:
     Document()
         : state_(std::make_shared<DocumentState>()),
@@ -976,10 +986,6 @@ private:
         }
     }
 
-    std::shared_ptr<DocumentState> state_;
-    nb::object clipboard_getter_;
-    nb::object clipboard_setter_;
-    std::string clipboard_buffer_;
 };
 
 nb::object snapshot_handle_or_none(tc_widget_handle handle) {

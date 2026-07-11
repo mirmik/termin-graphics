@@ -8,6 +8,14 @@ enum class SelectionMode { Single, Multiple };
 class SelectionModel {
 public:
     static constexpr size_t npos = static_cast<size_t>(-1);
+
+private:
+    SelectionMode mode_ = SelectionMode::Single;
+    std::vector<size_t> selected_;
+    size_t current_ = npos;
+    size_t anchor_ = npos;
+
+public:
     explicit SelectionModel(SelectionMode mode = SelectionMode::Single) : mode_(mode) {}
     SelectionMode mode() const { return mode_; }
     void set_mode(SelectionMode mode);
@@ -26,9 +34,5 @@ public:
     void set_current(size_t index) { current_ = index; }
 private:
     void normalize();
-    SelectionMode mode_ = SelectionMode::Single;
-    std::vector<size_t> selected_;
-    size_t current_ = npos;
-    size_t anchor_ = npos;
 };
 } // namespace termin::gui_native
