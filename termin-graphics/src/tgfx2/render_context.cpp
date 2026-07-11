@@ -973,9 +973,10 @@ void RenderContext2::set_scissor(int x, int y, int w, int h) {
 }
 
 void RenderContext2::clear_scissor() {
-    // Reset scissor to full viewport — effectively disabling it.
-    // Actual implementation depends on backend; for now set a large rect.
-    cmd_->set_scissor(0, 0, 16384, 16384);
+    // Keep scissoring enabled, but restore it to the active render extent.
+    // The cached extent is synchronized from color or depth attachments in
+    // begin_pass() and from explicit viewport changes in set_viewport().
+    cmd_->set_scissor(0, 0, viewport_w_, viewport_h_);
 }
 
 // ============================================================================
