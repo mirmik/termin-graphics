@@ -39,6 +39,36 @@ static std::unordered_map<std::string, std::shared_ptr<nb::object>>& python_pass
     return classes;
 }
 
+static void py_owned_pass_deleter(tc_pass* p) {
+    if (!p || !p->body) return;
+    PyObject* body = reinterpret_cast<PyObject*>(p->body);
+    nb::gil_scoped_acquire gil;
+    Py_DECREF(body);
+}
+
+static bool adopt_pass_from_python_api(
+    tc_pipeline_handle pipeline,
+    tc_pass* pass,
+    tc_pass* before = nullptr
+) {
+    if (!pass) return false;
+    if (pass->native_language == TC_LANGUAGE_PYTHON && pass->body) {
+        Py_INCREF(reinterpret_cast<PyObject*>(pass->body));
+        const bool adopted = before
+            ? tc_pipeline_adopt_pass_before(
+                pipeline, pass, &py_owned_pass_deleter, before)
+            : tc_pipeline_adopt_pass(
+                pipeline, pass, &py_owned_pass_deleter);
+        if (!adopted) {
+            Py_DECREF(reinterpret_cast<PyObject*>(pass->body));
+        }
+        return adopted;
+    }
+    return before
+        ? tc_pipeline_adopt_pass_before(pipeline, pass, pass->deleter, before)
+        : tc_pipeline_adopt_pass(pipeline, pass, pass->deleter);
+}
+
 static tc_pass* python_pass_factory(void* userdata) {
     const char* type_name = static_cast<const char*>(userdata);
 
@@ -58,6 +88,7 @@ static tc_pass* python_pass_factory(void* userdata) {
             tc_pass* p = ref.ptr();
             if (p) {
                 Py_INCREF(py_obj.ptr());
+                p->deleter = &py_owned_pass_deleter;
                 p->bindings[TC_LANGUAGE_PYTHON] = py_obj.ptr();
                 return p;
             }
@@ -334,33 +365,6 @@ static tc_external_pass_callbacks g_py_pass_callbacks = {
     .get_resource_specs = py_pass_get_resource_specs,
     .get_internal_symbols = py_pass_get_internal_symbols,
     .destroy = py_pass_destroy,
-};
-
-static void py_pass_ref_retain(tc_pass* p) {
-    if (p && p->body) {
-        nb::gil_scoped_acquire gil;
-        Py_INCREF(reinterpret_cast<PyObject*>(p->body));
-    }
-}
-
-static void py_pass_ref_release(tc_pass* p) {
-    if (p && p->body) {
-        nb::gil_scoped_acquire gil;
-        Py_DECREF(reinterpret_cast<PyObject*>(p->body));
-    }
-}
-
-static void py_pass_ref_drop(tc_pass* p) {
-    if (!p) {
-        return;
-    }
-    tc_pass_free_external(p);
-}
-
-static const tc_pass_ref_vtable g_py_pass_ref_vtable = {
-    py_pass_ref_retain,
-    py_pass_ref_release,
-    py_pass_ref_drop,
 };
 
 static bool g_py_callbacks_registered = false;
@@ -684,7 +688,7 @@ void bind_tc_pass_runtime(nb::module_& m) {
     nb::class_<TcPass>(m, "TcPass")
         .def("__init__", [](TcPass* self, nb::object py_self, const std::string& type_name) {
             ensure_py_callbacks_registered();
-            tc_pass* c = tc_pass_new_external(py_self.ptr(), type_name.c_str(), &g_py_pass_ref_vtable);
+            tc_pass* c = tc_pass_new_external(py_self.ptr(), type_name.c_str());
             if (c) {
                 c->native_language = TC_LANGUAGE_PYTHON;
             }
@@ -726,14 +730,18 @@ void bind_tc_pass_runtime(nb::module_& m) {
     m.def("tc_pipeline_add_pass", [](std::tuple<uint32_t, uint32_t> h, TcPassRef pass_ref) {
         tc_pipeline_handle handle = {std::get<0>(h), std::get<1>(h)};
         if (pass_ref.valid()) {
-            tc_pipeline_add_pass(handle, pass_ref.ptr());
+            if (!adopt_pass_from_python_api(handle, pass_ref.ptr())) {
+                throw std::runtime_error("failed to adopt pass into pipeline");
+            }
         }
     });
 
     m.def("tc_pipeline_add_pass", [](std::tuple<uint32_t, uint32_t> h, TcPass* pass) {
         tc_pipeline_handle handle = {std::get<0>(h), std::get<1>(h)};
         if (pass && pass->ptr()) {
-            tc_pipeline_add_pass(handle, pass->ptr());
+            if (!adopt_pass_from_python_api(handle, pass->ptr())) {
+                throw std::runtime_error("failed to adopt pass into pipeline");
+            }
         }
     });
 
@@ -759,14 +767,18 @@ void bind_tc_pass_runtime(nb::module_& m) {
     m.def("tc_pipeline_insert_pass_before", [](std::tuple<uint32_t, uint32_t> h, TcPassRef pass_ref, TcPassRef before_ref) {
         tc_pipeline_handle handle = {std::get<0>(h), std::get<1>(h)};
         if (pass_ref.valid()) {
-            tc_pipeline_insert_pass_before(handle, pass_ref.ptr(), before_ref.ptr());
+            if (!adopt_pass_from_python_api(handle, pass_ref.ptr(), before_ref.ptr())) {
+                throw std::runtime_error("failed to adopt pass into pipeline");
+            }
         }
     });
 
     m.def("tc_pipeline_insert_pass_before", [](std::tuple<uint32_t, uint32_t> h, TcPass* pass, TcPassRef before_ref) {
         tc_pipeline_handle handle = {std::get<0>(h), std::get<1>(h)};
         if (pass && pass->ptr()) {
-            tc_pipeline_insert_pass_before(handle, pass->ptr(), before_ref.ptr());
+            if (!adopt_pass_from_python_api(handle, pass->ptr(), before_ref.ptr())) {
+                throw std::runtime_error("failed to adopt pass into pipeline");
+            }
         }
     });
 

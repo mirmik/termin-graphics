@@ -114,7 +114,8 @@ bool Dialog::ensure_buttons(tc_ui_document* document) {
         auto button = std::make_unique<Button>(actions_[index].label);
         if (actions_[index].is_default)
             button->set_accent(Color{0.22f, 0.48f, 0.86f, 1.0f});
-        const tc_widget_handle handle = tc_ui_document_adopt_widget(document, button->c_widget());
+        const tc_widget_handle handle = tc_ui_document_adopt_widget(
+            document, button->c_widget(), &Widget::delete_owned_widget);
         if (tc_widget_handle_is_invalid(handle)) {
             tc_log_error("[termin-gui-native] Dialog failed to adopt action button");
             destroy_buttons(document);

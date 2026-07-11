@@ -432,10 +432,9 @@ struct tc_widget {
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_widget_handle_invalid_value(void);
 TERMIN_GUI_NATIVE_API bool tc_widget_handle_valid_value(tc_widget_handle handle);
 
-TERMIN_GUI_NATIVE_API void tc_widget_init(
+TERMIN_GUI_NATIVE_API void tc_widget_init_unowned(
     tc_widget* widget,
     const tc_widget_vtable* vtable,
-    tc_widget_deleter deleter,
     tc_language native_language,
     void* body
 );
@@ -509,6 +508,12 @@ TERMIN_GUI_NATIVE_API bool tc_ui_document_resolve_style(
 );
 
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_adopt_widget(
+    tc_ui_document* document,
+    tc_widget* widget,
+    tc_widget_deleter deleter
+);
+
+TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_attach_borrowed_widget(
     tc_ui_document* document,
     tc_widget* widget
 );

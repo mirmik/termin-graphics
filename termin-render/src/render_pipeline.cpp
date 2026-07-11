@@ -27,7 +27,9 @@ void RenderPipeline::set_name(const std::string& name) {
 }
 
 void RenderPipeline::add_pass(tc_pass* pass) {
-    tc_pipeline_add_pass(handle_, pass);
+    if (pass) {
+        tc_pipeline_adopt_pass(handle_, pass, pass->deleter);
+    }
 }
 
 void RenderPipeline::remove_pass(tc_pass* pass) {
@@ -39,7 +41,13 @@ size_t RenderPipeline::remove_passes_by_name(const std::string& name) {
 }
 
 void RenderPipeline::insert_pass_before(tc_pass* pass, tc_pass* before) {
-    tc_pipeline_insert_pass_before(handle_, pass, before);
+    if (pass) {
+        tc_pipeline_adopt_pass_before(handle_, pass, pass->deleter, before);
+    }
+}
+
+bool RenderPipeline::move_pass_before(tc_pass* pass, tc_pass* before) {
+    return tc_pipeline_move_pass_before(handle_, pass, before);
 }
 
 tc_pass* RenderPipeline::get_pass(const std::string& name) {

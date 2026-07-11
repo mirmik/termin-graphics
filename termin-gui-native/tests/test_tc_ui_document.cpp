@@ -82,10 +82,9 @@ static TestWidget* make_test_widget(
     widget->destroy_count = destroy_count;
     widget->delete_count = delete_count;
     widget->paint_count = paint_count;
-    tc_widget_init(
+    tc_widget_init_unowned(
         &widget->widget,
         &TEST_WIDGET_VTABLE,
-        test_widget_delete,
         TC_LANGUAGE_CXX,
         widget
     );
@@ -210,18 +209,18 @@ static tc_widget_handle adopt_route_widget(
     int id
 ) {
     widget.id = id;
-    tc_widget_init(
+    tc_widget_init_unowned(
         &widget.widget,
         &ROUTE_WIDGET_VTABLE,
-        nullptr,
         TC_LANGUAGE_CXX,
         &widget
     );
-    return tc_ui_document_adopt_widget(document, &widget.widget);
+    return tc_ui_document_attach_borrowed_widget(document, &widget.widget);
 }
 
 static tc_widget_handle adopt(tc_ui_document* document, TestWidget* widget) {
-    tc_widget_handle handle = tc_ui_document_adopt_widget(document, &widget->widget);
+    tc_widget_handle handle = tc_ui_document_adopt_widget(
+        document, &widget->widget, &test_widget_delete);
     assert(!tc_widget_handle_is_invalid(handle));
     assert(widget->widget.document == document);
     assert(tc_widget_handle_eq(widget->widget.handle, handle));
@@ -230,7 +229,8 @@ static tc_widget_handle adopt(tc_ui_document* document, TestWidget* widget) {
 
 static void test_init_defaults_and_common_state() {
     TestWidget borrowed;
-    tc_widget_init(&borrowed.widget, &TEST_WIDGET_VTABLE, nullptr, TC_LANGUAGE_CXX, &borrowed);
+    tc_widget_init_unowned(
+        &borrowed.widget, &TEST_WIDGET_VTABLE, TC_LANGUAGE_CXX, &borrowed);
 
     assert(borrowed.widget.document == nullptr);
     assert(tc_widget_handle_is_invalid(borrowed.widget.handle));
@@ -270,15 +270,50 @@ static void test_borrowed_widget_can_be_adopted_and_released() {
     int destroyed = 0;
     TestWidget borrowed;
     borrowed.destroy_count = &destroyed;
-    tc_widget_init(&borrowed.widget, &TEST_WIDGET_VTABLE, nullptr, TC_LANGUAGE_CXX, &borrowed);
+    tc_widget_init_unowned(
+        &borrowed.widget, &TEST_WIDGET_VTABLE, TC_LANGUAGE_CXX, &borrowed);
 
     tc_ui_document* document = tc_ui_document_create();
-    tc_widget_handle handle = tc_ui_document_adopt_widget(document, &borrowed.widget);
+    tc_widget_handle handle = tc_ui_document_attach_borrowed_widget(document, &borrowed.widget);
     assert(!tc_widget_handle_is_invalid(handle));
     assert(tc_ui_document_destroy_widget(document, handle));
     assert(destroyed == 1);
     assert(borrowed.widget.document == nullptr);
     assert(tc_widget_handle_is_invalid(borrowed.widget.handle));
+    tc_ui_document_destroy(document);
+}
+
+static void test_owned_adoption_requires_deleter_and_is_atomic() {
+    TestWidget borrowed;
+    tc_widget_init_unowned(
+        &borrowed.widget, &TEST_WIDGET_VTABLE, TC_LANGUAGE_CXX, &borrowed);
+    tc_ui_document* document = tc_ui_document_create();
+
+    const tc_widget_handle rejected =
+        tc_ui_document_adopt_widget(document, &borrowed.widget, nullptr);
+    assert(tc_widget_handle_is_invalid(rejected));
+    assert(borrowed.widget.document == nullptr);
+    assert(tc_widget_handle_is_invalid(borrowed.widget.handle));
+    assert(borrowed.widget.deleter == nullptr);
+    assert(tc_widget_ownership(&borrowed.widget) == TC_WIDGET_BORROWED);
+
+    const tc_widget_handle attached =
+        tc_ui_document_attach_borrowed_widget(document, &borrowed.widget);
+    assert(!tc_widget_handle_is_invalid(attached));
+    assert(tc_widget_ownership(&borrowed.widget) == TC_WIDGET_BORROWED);
+    assert(tc_ui_document_destroy_widget(document, attached));
+    tc_ui_document_destroy(document);
+
+    int deletes = 0;
+    TestWidget* owned = make_test_widget(nullptr, &deletes);
+    document = tc_ui_document_create();
+    const tc_widget_handle adopted =
+        tc_ui_document_adopt_widget(document, &owned->widget, &test_widget_delete);
+    assert(!tc_widget_handle_is_invalid(adopted));
+    assert(tc_widget_ownership(&owned->widget) == TC_WIDGET_OWNED);
+    assert(owned->widget.deleter == &test_widget_delete);
+    assert(tc_ui_document_destroy_widget(document, adopted));
+    assert(deletes == 1);
     tc_ui_document_destroy(document);
 }
 
@@ -850,6 +885,7 @@ static void test_theme_style_resolution_inheritance_and_invalidation() {
 int main() {
     test_init_defaults_and_common_state();
     test_borrowed_widget_can_be_adopted_and_released();
+    test_owned_adoption_requires_deleter_and_is_atomic();
     test_tree_order_reparent_and_root_invariants();
     test_tree_rejects_self_cycles_and_cross_document_links();
     test_plain_destroy_unlinks_tree_without_destroying_relatives();

@@ -75,10 +75,12 @@ bool SliderEdit::ensure_children(tc_ui_document* document) {
     }
     auto slider = std::make_unique<Slider>(value_);
     auto spin_box = std::make_unique<SpinBox>(value_);
-    slider_handle_ = tc_ui_document_adopt_widget(document, slider->c_widget());
+    slider_handle_ = tc_ui_document_adopt_widget(
+        document, slider->c_widget(), &Widget::delete_owned_widget);
     if (tc_widget_handle_is_invalid(slider_handle_)) return false;
     slider.release();
-    spin_box_handle_ = tc_ui_document_adopt_widget(document, spin_box->c_widget());
+    spin_box_handle_ = tc_ui_document_adopt_widget(
+        document, spin_box->c_widget(), &Widget::delete_owned_widget);
     if (tc_widget_handle_is_invalid(spin_box_handle_)) {
         tc_ui_document_destroy_widget(document, slider_handle_);
         slider_handle_ = tc_widget_handle_invalid();

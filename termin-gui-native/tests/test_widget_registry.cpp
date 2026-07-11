@@ -43,13 +43,12 @@ bool create_factory_widget(tc_ui_document*, void* userdata, tc_widget_factory_re
     if (state->borrowed) {
         body = &state->borrowed_widget;
         body->state = state;
-        tc_widget_init(&body->widget, &FACTORY_WIDGET_VTABLE, nullptr, TC_LANGUAGE_CXX, body);
+        tc_widget_init_unowned(&body->widget, &FACTORY_WIDGET_VTABLE, TC_LANGUAGE_CXX, body);
         *result = tc_widget_factory_result{&body->widget, nullptr, TC_WIDGET_BORROWED};
     } else {
         body = new FactoryWidget();
         body->state = state;
-        tc_widget_init(&body->widget, &FACTORY_WIDGET_VTABLE, &delete_factory_widget,
-                       TC_LANGUAGE_CXX, body);
+        tc_widget_init_unowned(&body->widget, &FACTORY_WIDGET_VTABLE, TC_LANGUAGE_CXX, body);
         *result = tc_widget_factory_result{
             &body->widget,
             &delete_factory_widget,

@@ -142,7 +142,8 @@ bool ComboBox::show_popup(tc_ui_document* document) {
     if (items_.empty()) return false;
     if (tc_widget_handle_is_invalid(popup_handle_)) {
         auto popup = std::make_unique<ComboBoxPopup>(*this);
-        popup_handle_ = tc_ui_document_adopt_widget(document, popup->c_widget());
+        popup_handle_ = tc_ui_document_adopt_widget(
+            document, popup->c_widget(), &Widget::delete_owned_widget);
         if (tc_widget_handle_is_invalid(popup_handle_)) return false;
         popup.release();
     }

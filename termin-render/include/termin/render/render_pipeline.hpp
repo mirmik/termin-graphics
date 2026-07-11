@@ -73,6 +73,7 @@ public:
     void remove_pass(tc_pass* pass);
     size_t remove_passes_by_name(const std::string& name);
     void insert_pass_before(tc_pass* pass, tc_pass* before);
+    bool move_pass_before(tc_pass* pass, tc_pass* before);
     tc_pass* get_pass(const std::string& name);
     tc_pass* get_pass_at(size_t index);
     const tc_pass* get_pass_at(size_t index) const;

@@ -19,17 +19,32 @@ def build_pipeline(passes: Iterable[PythonFramePass]) -> RenderPipeline:
 
 
 def build_schedule(passes: Iterable[PythonFramePass]) -> list[PythonFramePass]:
-    with PipelineFrameGraphView(build_pipeline(passes)) as graph:
-        return graph.schedule()
+    pipeline = build_pipeline(passes)
+    graph = PipelineFrameGraphView(pipeline)
+    try:
+        with graph:
+            return graph.schedule()
+    finally:
+        # RenderPipeline is deliberately a non-owning handle wrapper. Destroy
+        # the temporary pool object explicitly so its passes become unowned
+        # before a test builds another temporary pipeline from the same doubles.
+        graph.close()
+        pipeline.destroy()
 
 
 def build_alias_groups(passes: Iterable[PythonFramePass]) -> dict[str, set[str]]:
-    with PipelineFrameGraphView(build_pipeline(passes)) as graph:
-        graph.schedule()
-        return {
-            canonical: set(aliases)
-            for canonical, aliases in graph.alias_groups().items()
-        }
+    pipeline = build_pipeline(passes)
+    graph = PipelineFrameGraphView(pipeline)
+    try:
+        with graph:
+            graph.schedule()
+            return {
+                canonical: set(aliases)
+                for canonical, aliases in graph.alias_groups().items()
+            }
+    finally:
+        graph.close()
+        pipeline.destroy()
 
 
 class DummyFramePass(PythonFramePass):

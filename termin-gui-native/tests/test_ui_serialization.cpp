@@ -30,8 +30,7 @@ bool create_serializable(tc_ui_document*, void* userdata, tc_widget_factory_resu
     auto* state = static_cast<FactoryState*>(userdata);
     auto* body = new SerializableWidget();
     body->value = state->next_value++;
-    tc_widget_init(&body->widget, &SERIALIZABLE_VTABLE, &delete_serializable, TC_LANGUAGE_CXX,
-                   body);
+    tc_widget_init_unowned(&body->widget, &SERIALIZABLE_VTABLE, TC_LANGUAGE_CXX, body);
     *result = tc_widget_factory_result{&body->widget, &delete_serializable, TC_WIDGET_OWNED};
     return true;
 }

@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <any>
-#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
@@ -83,7 +82,6 @@ public:
     tc_pass _c;
 
 private:
-    std::atomic<int> _ref_count{0};
     mutable std::vector<std::string> _cached_aliases;
     mutable std::vector<std::string> _cached_symbols;
     static const tc_pass_vtable _cpp_vtable;
@@ -130,6 +128,10 @@ public:
 #endif
     }
 
+    static void delete_owned_pass(tc_pass* p) {
+        delete from_tc(p);
+    }
+
     void link_to_type_registry(const char* type_name) {
         if (!type_name) return;
         if (!tc_pass_registry_has(type_name)) {
@@ -138,13 +140,9 @@ public:
         tc_pass_link_registered_type(&_c, type_name);
     }
 
-    void set_owner_ref(void* owner, const tc_pass_ref_vtable* ref_vt) {
-        _c.body = owner;
-        if (ref_vt) _c.ref_vtable = ref_vt;
-    }
-
-    void set_python_ref(void* body, const tc_pass_ref_vtable* ref_vt) {
-        set_owner_ref(body, ref_vt);
+    void set_language_body(void* body, tc_language language) {
+        _c.body = body;
+        _c.native_language = language;
     }
 
     std::string pass_name_get() const { return _c.pass_name ? _c.pass_name : ""; }
@@ -264,19 +262,6 @@ public:
         return result;
     }
 
-    void retain() { _ref_count.fetch_add(1, std::memory_order_relaxed); }
-
-    void release() {
-        int old = _ref_count.fetch_sub(1, std::memory_order_acq_rel);
-        if (old <= 1) {
-            delete this;
-        }
-    }
-
-    int ref_count() const {
-        return _ref_count.load(std::memory_order_relaxed);
-    }
-
 private:
     void _init_tc_pass();
     void _cleanup_tc_pass();
@@ -285,8 +270,8 @@ private:
 #define TC_DEFINE_FRAME_PASS_FACTORY(PassClass)                              \
     static tc_pass* _factory_##PassClass(void* /*userdata*/) {               \
         auto* pass = new PassClass();                                        \
-        pass->retain();                                                      \
         tc_pass* c = pass->tc_pass_ptr();                                    \
+        c->deleter = &termin::CxxFramePass::delete_owned_pass;               \
         tc_pass_link_registered_type(c, #PassClass);                         \
         return c;                                                            \
     }                                                                        \
@@ -299,8 +284,8 @@ private:
 #define TC_DEFINE_FRAME_PASS_FACTORY_DERIVED(PassClass, ParentClass)         \
     static tc_pass* _factory_##PassClass(void* /*userdata*/) {               \
         auto* pass = new PassClass();                                        \
-        pass->retain();                                                      \
         tc_pass* c = pass->tc_pass_ptr();                                    \
+        c->deleter = &termin::CxxFramePass::delete_owned_pass;               \
         tc_pass_link_registered_type(c, #PassClass);                         \
         return c;                                                            \
     }                                                                        \

@@ -13,6 +13,7 @@ typedef struct tc_pipeline tc_pipeline;
 struct tc_pipeline {
     char* name;
     tc_pass** passes;
+    tc_pass_deleter* pass_deleters;
     size_t pass_count;
     size_t pass_capacity;
     void* cached_frame_graph;
@@ -24,23 +25,31 @@ struct tc_pipeline {
 TC_API tc_pipeline_handle tc_pipeline_create(const char* name);
 TC_API void tc_pipeline_destroy(tc_pipeline_handle h);
 TC_API tc_pipeline* tc_pipeline_get_ptr(tc_pipeline_handle h);
-// Retains pass for the pipeline. The caller keeps any reference it already owns.
-TC_API void tc_pipeline_add_pass(tc_pipeline_handle h, tc_pass* pass);
-
-// Adds a freshly-created owned pass reference to the pipeline, then releases
-// the caller's owned reference. Use for tc_pass_registry_create() results.
-TC_API void tc_pipeline_add_pass_take(tc_pipeline_handle h, tc_pass* pass);
-
-TC_API void tc_pipeline_insert_pass_before(tc_pipeline_handle h, tc_pass* pass, tc_pass* before);
+TC_API bool tc_pipeline_adopt_pass(
+    tc_pipeline_handle h,
+    tc_pass* pass,
+    tc_pass_deleter deleter
+);
+TC_API bool tc_pipeline_adopt_pass_before(
+    tc_pipeline_handle h,
+    tc_pass* pass,
+    tc_pass_deleter deleter,
+    tc_pass* before
+);
+TC_API bool tc_pipeline_move_pass_before(
+    tc_pipeline_handle h,
+    tc_pass* pass,
+    tc_pass* before
+);
 TC_API void tc_pipeline_remove_pass(tc_pipeline_handle h, tc_pass* pass);
 TC_API size_t tc_pipeline_remove_passes_by_name(tc_pipeline_handle h, const char* name);
 TC_API tc_pass* tc_pipeline_get_pass(tc_pipeline_handle h, const char* name);
 TC_API tc_pass* tc_pipeline_get_pass_at(tc_pipeline_handle h, size_t index);
-// Replaces a pass in-place and consumes replacement's owned reference.
-TC_API bool tc_pipeline_replace_pass_at_take(
+TC_API bool tc_pipeline_replace_pass_at(
     tc_pipeline_handle h,
     size_t index,
-    tc_pass* replacement
+    tc_pass* replacement,
+    tc_pass_deleter deleter
 );
 TC_API size_t tc_pipeline_pass_count(tc_pipeline_handle h);
 TC_API const char* tc_pipeline_get_name(tc_pipeline_handle h);

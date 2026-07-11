@@ -34,29 +34,11 @@ namespace nb = nanobind;
 
 namespace termin {
 
-static void py_cxx_pass_ref_retain(tc_pass* p) {
-    if (p && p->body) {
-        Py_INCREF(reinterpret_cast<PyObject*>(p->body));
-    }
-}
-
-static void py_cxx_pass_ref_release(tc_pass* p) {
-    if (p && p->body) {
-        Py_DECREF(reinterpret_cast<PyObject*>(p->body));
-    }
-}
-
-static const tc_pass_ref_vtable g_py_cxx_pass_ref_vtable = {
-    py_cxx_pass_ref_retain,
-    py_cxx_pass_ref_release,
-    nullptr,
-};
-
 template<typename T>
 void init_render_pass_from_python(T* self, const char* type_name) {
     self->link_to_type_registry(type_name);
     nb::object wrapper = nb::cast(self, nb::rv_policy::reference);
-    self->set_python_ref(wrapper.ptr(), &g_py_cxx_pass_ref_vtable);
+    self->set_language_body(wrapper.ptr(), TC_LANGUAGE_PYTHON);
 }
 
 void bind_tc_pass_runtime(nb::module_& m);

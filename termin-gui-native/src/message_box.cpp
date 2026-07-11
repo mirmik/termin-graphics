@@ -35,11 +35,14 @@ bool MessageBox::ensure_content(tc_ui_document* document) {
     row->set_spacing(14.0f);
     auto icon_label = std::make_unique<Label>(icon, 28.0f, color);
     auto message_label = std::make_unique<Label>(message_);
-    const tc_widget_handle row_handle = tc_ui_document_adopt_widget(document, row->c_widget());
+    const tc_widget_handle row_handle = tc_ui_document_adopt_widget(
+        document, row->c_widget(), &Widget::delete_owned_widget);
     const tc_widget_handle icon_handle =
-        tc_ui_document_adopt_widget(document, icon_label->c_widget());
+        tc_ui_document_adopt_widget(
+            document, icon_label->c_widget(), &Widget::delete_owned_widget);
     const tc_widget_handle message_handle =
-        tc_ui_document_adopt_widget(document, message_label->c_widget());
+        tc_ui_document_adopt_widget(
+            document, message_label->c_widget(), &Widget::delete_owned_widget);
     if (tc_widget_handle_is_invalid(row_handle) || tc_widget_handle_is_invalid(icon_handle) ||
         tc_widget_handle_is_invalid(message_handle)) {
         tc_log_error("[termin-gui-native] MessageBox failed to adopt content widgets");

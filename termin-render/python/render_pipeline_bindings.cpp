@@ -30,6 +30,34 @@ namespace termin {
 
 namespace {
 
+void python_pipeline_pass_deleter(tc_pass* pass) {
+    if (!pass || !pass->body) return;
+    PyObject* body = reinterpret_cast<PyObject*>(pass->body);
+    nb::gil_scoped_acquire gil;
+    Py_DECREF(body);
+}
+
+void adopt_python_pass(
+    tc_pipeline_handle pipeline,
+    tc_pass* pass,
+    nb::handle owner,
+    tc_pass* before = nullptr
+) {
+    if (!pass || owner.is_none()) {
+        throw std::runtime_error("cannot adopt an invalid Python pass");
+    }
+    Py_INCREF(owner.ptr());
+    const bool adopted = before
+        ? tc_pipeline_adopt_pass_before(
+            pipeline, pass, &python_pipeline_pass_deleter, before)
+        : tc_pipeline_adopt_pass(
+            pipeline, pass, &python_pipeline_pass_deleter);
+    if (!adopted) {
+        Py_DECREF(owner.ptr());
+        throw std::runtime_error("failed to adopt Python pass into pipeline");
+    }
+}
+
 TcPassRef tc_pass_ref_from_python_pass(nb::object pass_obj, const char* context) {
     nb::object tc_pass_obj = pass_obj.attr("_tc_pass");
     if (tc_pass_obj.is_none()) {
@@ -55,7 +83,7 @@ tc_pass* make_unknown_pass_from_serialized(const std::string& original_type, nb:
     if (!raw) throw std::runtime_error("failed to create UnknownPass");
     auto* unknown = dynamic_cast<UnknownPass*>(CxxFramePass::from_tc(raw));
     if (!unknown) {
-        tc_pass_release(raw);
+        tc_pass_delete_unowned(raw);
         throw std::runtime_error("UnknownPass registry returned incompatible object");
     }
 
@@ -158,7 +186,11 @@ void bind_render_pipeline(nb::module_& m) {
             new (self) RenderPipeline(name);
             for (size_t i = 0; i < nb::len(init_passes); i++) {
                 nb::object pass_obj = init_passes[i];
-                self->add_pass(tc_pass_ptr_from_python_pass(pass_obj, "RenderPipeline.__init__"));
+                adopt_python_pass(
+                    self->handle(),
+                    tc_pass_ptr_from_python_pass(pass_obj, "RenderPipeline.__init__"),
+                    pass_obj
+                );
             }
             for (const auto& spec : init_specs) {
                 self->add_spec(spec);
@@ -180,13 +212,34 @@ void bind_render_pipeline(nb::module_& m) {
         .def_prop_ro("pass_count", &RenderPipeline::pass_count)
 
         .def("add_pass", [](RenderPipeline& self, TcPassRef pass_ref) {
-            if (pass_ref.valid()) self.add_pass(pass_ref.ptr());
+            if (!pass_ref.valid()) return;
+            tc_pass* pass = pass_ref.ptr();
+            if (pass->native_language == TC_LANGUAGE_PYTHON && pass->body) {
+                adopt_python_pass(
+                    self.handle(),
+                    pass,
+                    nb::handle(reinterpret_cast<PyObject*>(pass->body))
+                );
+            } else {
+                self.add_pass(pass);
+            }
         })
         .def("add_pass", [](RenderPipeline& self, TcPass* pass) {
-            if (pass && pass->ptr()) self.add_pass(pass->ptr());
+            if (pass && pass->ptr()) {
+                tc_pass* raw = pass->ptr();
+                adopt_python_pass(
+                    self.handle(),
+                    raw,
+                    nb::handle(reinterpret_cast<PyObject*>(raw->body))
+                );
+            }
         })
         .def("add_pass", [](RenderPipeline& self, nb::object pass_obj) {
-            self.add_pass(tc_pass_ptr_from_python_pass(pass_obj, "RenderPipeline.add_pass"));
+            adopt_python_pass(
+                self.handle(),
+                tc_pass_ptr_from_python_pass(pass_obj, "RenderPipeline.add_pass"),
+                pass_obj
+            );
         })
         .def("remove_pass", [](RenderPipeline& self, TcPassRef pass_ref) {
             if (pass_ref.valid()) self.remove_pass(pass_ref.ptr());
@@ -197,7 +250,18 @@ void bind_render_pipeline(nb::module_& m) {
         .def("remove_passes_by_name", &RenderPipeline::remove_passes_by_name, nb::arg("name"))
         .def("insert_pass_before", [](RenderPipeline& self, TcPassRef pass_ref, TcPassRef before_ref) {
             if (pass_ref.valid()) {
-                self.insert_pass_before(pass_ref.ptr(), before_ref.valid() ? before_ref.ptr() : nullptr);
+                tc_pass* pass = pass_ref.ptr();
+                tc_pass* before = before_ref.valid() ? before_ref.ptr() : nullptr;
+                if (pass->native_language == TC_LANGUAGE_PYTHON && pass->body) {
+                    adopt_python_pass(
+                        self.handle(),
+                        pass,
+                        nb::handle(reinterpret_cast<PyObject*>(pass->body)),
+                        before
+                    );
+                } else {
+                    self.insert_pass_before(pass, before);
+                }
             }
         })
         .def("insert_pass_before", [](RenderPipeline& self, nb::object pass_obj, nb::object before_obj) {
@@ -206,8 +270,20 @@ void bind_render_pipeline(nb::module_& m) {
             if (!before_obj.is_none()) {
                 before_ptr = tc_pass_ptr_from_python_pass(before_obj, "RenderPipeline.insert_pass_before(before)");
             }
-            self.insert_pass_before(pass_ptr, before_ptr);
+            adopt_python_pass(self.handle(), pass_ptr, pass_obj, before_ptr);
         })
+        .def("move_pass_before", [](RenderPipeline& self, nb::object pass_obj, nb::object before_obj) {
+            tc_pass* pass_ptr = tc_pass_ptr_from_python_pass(
+                pass_obj, "RenderPipeline.move_pass_before(pass)");
+            tc_pass* before_ptr = nullptr;
+            if (!before_obj.is_none()) {
+                before_ptr = tc_pass_ptr_from_python_pass(
+                    before_obj, "RenderPipeline.move_pass_before(before)");
+            }
+            if (!self.move_pass_before(pass_ptr, before_ptr)) {
+                throw std::runtime_error("failed to move pass inside pipeline");
+            }
+        }, nb::arg("pass_obj"), nb::arg("before_obj") = nb::none())
         .def("get_pass", [](RenderPipeline& self, const std::string& name) {
             return TcPassRef(self.get_pass(name));
         })
@@ -365,20 +441,31 @@ void bind_render_pipeline(nb::module_& m) {
                                 nb::object native_ref_obj = nb::cast(native_ref);
                                 native_ref_obj.attr("deserialize_data")(pass_data["data"]);
                             }
-                            tc_pipeline_add_pass_take(pipeline->handle(), native_pass);
+                            if (!tc_pipeline_adopt_pass(
+                                    pipeline->handle(), native_pass, native_pass->deleter)) {
+                                tc_pass_delete_unowned(native_pass);
+                                throw std::runtime_error("failed to adopt native pass '" + pass_type + "'");
+                            }
                             continue;
                         }
 
                         if (!pass_type.empty() && !tc_pass_registry_has(pass_type.c_str())) {
                             tc_pass* unknown = make_unknown_pass_from_serialized(pass_type, pass_data);
-                            tc_pipeline_add_pass_take(pipeline->handle(), unknown);
+                            if (!tc_pipeline_adopt_pass(
+                                    pipeline->handle(), unknown, unknown->deleter)) {
+                                tc_pass_delete_unowned(unknown);
+                                throw std::runtime_error("failed to adopt UnknownPass");
+                            }
                             continue;
                         }
 
                         nb::object frame_pass = deserialize_pass(pass_data, resource_manager);
                         if (!frame_pass.is_none()) {
-                            pipeline->add_pass(
-                                tc_pass_ptr_from_python_pass(frame_pass, "RenderPipeline.deserialize")
+                            adopt_python_pass(
+                                pipeline->handle(),
+                                tc_pass_ptr_from_python_pass(
+                                    frame_pass, "RenderPipeline.deserialize"),
+                                frame_pass
                             );
                         }
                     } catch (const std::exception& e) {

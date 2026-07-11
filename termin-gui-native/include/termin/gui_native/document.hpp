@@ -28,7 +28,13 @@ public:
     }
     tc_ui_document* get() { return _document; }
     const tc_ui_document* get() const { return _document; }
-    tc_widget_handle adopt(Widget* widget) { return tc_ui_document_adopt_widget(_document, widget ? widget->c_widget() : nullptr); }
+    tc_widget_handle adopt(Widget* widget) {
+        return tc_ui_document_adopt_widget(
+            _document,
+            widget ? widget->c_widget() : nullptr,
+            &Widget::delete_owned_widget
+        );
+    }
     bool add_root(const Widget& widget) { return tc_ui_document_add_root(_document, widget.handle()); }
     bool remove_root(const Widget& widget) { return tc_ui_document_remove_root(_document, widget.handle()); }
     void layout_roots(tc_ui_rect rect) { tc_ui_document_layout_roots(_document, rect); }

@@ -14,7 +14,8 @@ template <typename T> T* resolve(tc_ui_document* document, tc_widget_handle hand
 
 template <typename T>
 T* adopt(tc_ui_document* document, std::unique_ptr<T> widget, tc_widget_handle& handle) {
-    handle = tc_ui_document_adopt_widget(document, widget->c_widget());
+    handle = tc_ui_document_adopt_widget(
+        document, widget->c_widget(), &Widget::delete_owned_widget);
     if (tc_widget_handle_is_invalid(handle))
         return nullptr;
     return widget.release();

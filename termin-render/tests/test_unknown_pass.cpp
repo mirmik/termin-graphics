@@ -39,7 +39,6 @@ public:
 
 tc_pass* create_probe(void*) {
     auto* pass = new UnknownPassProbe();
-    pass->retain();
     return pass->tc_pass_ptr();
 }
 
@@ -74,7 +73,7 @@ TEST_CASE("UnknownPass preserves pipeline slot payload and graph contract") {
     tc_pass_set_enabled(raw, false);
     tc_pass_set_passthrough(raw, true);
     tc_pass_set_viewport_name(raw, "main");
-    tc_pipeline_add_pass_take(pipeline, raw);
+    REQUIRE(tc_pipeline_adopt_pass(pipeline, raw, raw->deleter));
 
     const termin::UnknownPassStats degraded =
         termin::degrade_passes_to_unknown({kProbeType});
@@ -146,7 +145,7 @@ TEST_CASE("UnknownPass keeps placeholder on schema drift") {
     auto* probe = dynamic_cast<UnknownPassProbe*>(termin::CxxFramePass::from_tc(raw));
     REQUIRE(probe != nullptr);
     probe->exposure = 31;
-    tc_pipeline_add_pass_take(pipeline, raw);
+    REQUIRE(tc_pipeline_adopt_pass(pipeline, raw, raw->deleter));
     REQUIRE_EQ(termin::degrade_passes_to_unknown({kProbeType}).degraded, 1u);
 
     tc_pass* placeholder_raw = tc_pipeline_get_pass_at(pipeline, 0);
@@ -178,5 +177,5 @@ TEST_CASE("UnknownPass registration survives registry rebootstrap") {
     tc_pass* placeholder = tc_pass_registry_create("UnknownPass");
     REQUIRE(placeholder != nullptr);
     CHECK_EQ(std::string(tc_pass_type_name(placeholder)), "UnknownPass");
-    tc_pass_release(placeholder);
+    tc_pass_delete_unowned(placeholder);
 }

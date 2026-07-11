@@ -28,9 +28,12 @@ bool InputDialog::ensure_content(tc_ui_document* document) {
     auto label = std::make_unique<Label>(message_);
     auto input = std::make_unique<TextInput>(initial_value_);
     const tc_widget_handle column_handle =
-        tc_ui_document_adopt_widget(document, column->c_widget());
-    const tc_widget_handle label_handle = tc_ui_document_adopt_widget(document, label->c_widget());
-    const tc_widget_handle input_handle = tc_ui_document_adopt_widget(document, input->c_widget());
+        tc_ui_document_adopt_widget(
+            document, column->c_widget(), &Widget::delete_owned_widget);
+    const tc_widget_handle label_handle = tc_ui_document_adopt_widget(
+        document, label->c_widget(), &Widget::delete_owned_widget);
+    const tc_widget_handle input_handle = tc_ui_document_adopt_widget(
+        document, input->c_widget(), &Widget::delete_owned_widget);
     if (tc_widget_handle_is_invalid(column_handle) || tc_widget_handle_is_invalid(label_handle) ||
         tc_widget_handle_is_invalid(input_handle)) {
         tc_log_error("[termin-gui-native] InputDialog failed to adopt content widgets");

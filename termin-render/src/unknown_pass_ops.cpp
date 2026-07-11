@@ -101,7 +101,7 @@ bool degrade_at(
     }
     auto* unknown = dynamic_cast<UnknownPass*>(CxxFramePass::from_tc(unknown_tc));
     if (!unknown) {
-        tc_pass_release(unknown_tc);
+        tc_pass_delete_unowned(unknown_tc);
         error = "UnknownPass factory returned incompatible object";
         return false;
     }
@@ -123,8 +123,8 @@ bool degrade_at(
         pass->debug_internal_symbol ? pass->debug_internal_symbol : ""
     );
 
-    if (!tc_pipeline_replace_pass_at_take(pipeline, index, unknown_tc)) {
-        tc_pass_release(unknown_tc);
+    if (!tc_pipeline_replace_pass_at(pipeline, index, unknown_tc, unknown_tc->deleter)) {
+        tc_pass_delete_unowned(unknown_tc);
         error = "failed to replace pass in pipeline";
         return false;
     }
@@ -154,7 +154,7 @@ bool upgrade_at(
     }
     void* object = pass_object_ptr(restored);
     if (!object) {
-        tc_pass_release(restored);
+        tc_pass_delete_unowned(restored);
         error = "restored pass has no inspect object";
         return false;
     }
@@ -169,7 +169,7 @@ bool upgrade_at(
         const std::string field = applied.field_path
             ? " at field '" + std::string(applied.field_path) + "'"
             : std::string();
-        tc_pass_release(restored);
+        tc_pass_delete_unowned(restored);
         error = "failed to restore pass payload" + field;
         return false;
     }
@@ -184,8 +184,8 @@ bool upgrade_at(
         );
     }
 
-    if (!tc_pipeline_replace_pass_at_take(pipeline, index, restored)) {
-        tc_pass_release(restored);
+    if (!tc_pipeline_replace_pass_at(pipeline, index, restored, restored->deleter)) {
+        tc_pass_delete_unowned(restored);
         error = "failed to replace UnknownPass in pipeline";
         return false;
     }

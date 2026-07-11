@@ -536,6 +536,8 @@ static bool destroy_widget_inner(tc_ui_document* document, tc_widget_handle hand
     widget->parent = NULL;
     widget->document = NULL;
     widget->handle = tc_widget_handle_invalid();
+    widget->deleter = NULL;
+    widget->ownership_policy = TC_WIDGET_BORROWED;
 
     slot->widget = NULL;
     slot->destroying = false;
@@ -728,12 +730,17 @@ void tc_ui_document_destroy(tc_ui_document* document) {
     free(document);
 }
 
-tc_widget_handle tc_ui_document_adopt_widget(tc_ui_document* document, tc_widget* widget) {
+static tc_widget_handle attach_widget(
+    tc_ui_document* document,
+    tc_widget* widget,
+    tc_widget_deleter deleter,
+    tc_widget_ownership_policy ownership
+) {
     uint32_t index;
     tc_widget_slot* slot;
     tc_widget_handle handle;
     if (!document || !widget) {
-        tc_log_error("[termin-gui-native] cannot adopt widget without document/widget");
+        tc_log_error("[termin-gui-native] cannot attach widget without document/widget");
         return tc_widget_handle_invalid();
     }
     if (widget->document || !tc_widget_handle_is_invalid(widget->handle)) {
@@ -770,8 +777,29 @@ tc_widget_handle tc_ui_document_adopt_widget(tc_ui_document* document, tc_widget
     handle = (tc_widget_handle){index, slot->generation};
     widget->document = document;
     widget->handle = handle;
+    widget->deleter = deleter;
+    widget->ownership_policy = ownership;
     document->live_count += 1;
     return handle;
+}
+
+tc_widget_handle tc_ui_document_adopt_widget(
+    tc_ui_document* document,
+    tc_widget* widget,
+    tc_widget_deleter deleter
+) {
+    if (!deleter) {
+        tc_log_error("[termin-gui-native] owned widget adoption requires a deleter");
+        return tc_widget_handle_invalid();
+    }
+    return attach_widget(document, widget, deleter, TC_WIDGET_OWNED);
+}
+
+tc_widget_handle tc_ui_document_attach_borrowed_widget(
+    tc_ui_document* document,
+    tc_widget* widget
+) {
+    return attach_widget(document, widget, NULL, TC_WIDGET_BORROWED);
 }
 
 bool tc_ui_document_is_alive(const tc_ui_document* document, tc_widget_handle handle) {

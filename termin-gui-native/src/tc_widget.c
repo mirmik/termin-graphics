@@ -46,23 +46,21 @@ void tc_ui_internal_release_widget_metadata(tc_widget* widget) {
     widget->debug_name = NULL;
 }
 
-void tc_widget_init(
+void tc_widget_init_unowned(
     tc_widget* widget,
     const tc_widget_vtable* vtable,
-    tc_widget_deleter deleter,
     tc_language native_language,
     void* body
 ) {
     if (!widget) {
-        tc_log_error("[termin-gui-native] tc_widget_init called with null widget");
+        tc_log_error("[termin-gui-native] tc_widget_init_unowned called with null widget");
         return;
     }
     memset(widget, 0, sizeof(*widget));
     widget->vtable = vtable;
-    widget->deleter = deleter;
     widget->handle = tc_widget_handle_invalid();
     widget->native_language = native_language;
-    widget->ownership_policy = deleter ? TC_WIDGET_OWNED : TC_WIDGET_BORROWED;
+    widget->ownership_policy = TC_WIDGET_BORROWED;
     widget->body = body;
     tc_runtime_type_instance_link_init(&widget->runtime_type_link);
     widget->flags = TC_WIDGET_VISIBLE | TC_WIDGET_ENABLED;

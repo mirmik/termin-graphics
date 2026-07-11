@@ -480,7 +480,7 @@ struct PythonWidget {
     explicit PythonWidget(nb::object object_, std::string debug_name_,
                           std::shared_ptr<DocumentState> state_)
         : object(std::move(object_)), state(std::move(state_)) {
-        tc_widget_init(&widget, &VTABLE, &PythonWidget::delete_widget, TC_LANGUAGE_PYTHON, this);
+        tc_widget_init_unowned(&widget, &VTABLE, TC_LANGUAGE_PYTHON, this);
         if (!tc_widget_set_debug_name(&widget, debug_name_.c_str())) {
             throw std::runtime_error("failed to set Python widget debug name");
         }
@@ -870,7 +870,8 @@ public:
 
     WidgetHandle adopt(nb::object object, const std::string& debug_name) {
         auto widget = std::make_unique<PythonWidget>(object, debug_name, state_);
-        tc_widget_handle handle = tc_ui_document_adopt_widget(get(), &widget->widget);
+        tc_widget_handle handle = tc_ui_document_adopt_widget(
+            get(), &widget->widget, &PythonWidget::delete_widget);
         if (tc_widget_handle_is_invalid(handle)) {
             throw std::runtime_error("failed to adopt Python widget");
         }
@@ -928,7 +929,8 @@ public:
     template<typename T, typename... Args>
     WidgetRef make_native(Args&&... args) {
         auto widget = std::make_unique<T>(std::forward<Args>(args)...);
-        tc_widget_handle handle = tc_ui_document_adopt_widget(get(), widget->c_widget());
+        tc_widget_handle handle = tc_ui_document_adopt_widget(
+            get(), widget->c_widget(), &termin::gui_native::Widget::delete_owned_widget);
         if (tc_widget_handle_is_invalid(handle)) {
             throw std::runtime_error("failed to adopt native widget");
         }

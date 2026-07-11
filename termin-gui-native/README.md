@@ -34,7 +34,10 @@ The current foundation includes:
 - widget implementations keep their own handle references;
 - plain destroy deletes only the requested widget;
 - recursive destroy is an explicit API and walks the canonical widget tree;
-- the creator-provided deleter may be null for borrowed/static widgets;
+- owned adoption is atomic: `tc_ui_document_adopt_widget` requires the
+  creator-provided deleter in the adoption call;
+- borrowed/static widgets use the separate
+  `tc_ui_document_attach_borrowed_widget` API and never carry a deleter;
 - multilingual widget factories are registered as lifecycle-managed facets in
   the common `tc_runtime_type_registry`, rather than in a parallel UI-only
   registry. Each factory declares its ABI, implementation language, owner and

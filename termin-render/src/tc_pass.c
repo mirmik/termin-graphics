@@ -154,6 +154,30 @@ void tc_pass_set_viewport_name(tc_pass* p, const char* viewport_name) {
         : NULL;
 }
 
+void tc_pass_delete_unowned(tc_pass* p) {
+    if (!p) return;
+    if (tc_pipeline_handle_valid(p->owner_pipeline)) {
+        tc_log(
+            TC_LOG_ERROR,
+            "[tc_pass] refusing to delete pass '%s' while it belongs to a pipeline",
+            p->pass_name ? p->pass_name : "<unnamed>"
+        );
+        return;
+    }
+    tc_pass_deleter deleter = p->deleter;
+    if (!deleter) {
+        tc_log(
+            TC_LOG_ERROR,
+            "[tc_pass] cannot delete unowned pass '%s': no deleter is installed",
+            p->pass_name ? p->pass_name : "<unnamed>"
+        );
+        return;
+    }
+    p->deleter = NULL;
+    tc_pass_destroy(p);
+    deleter(p);
+}
+
 void tc_pass_registry_register(
     const char* type_name,
     tc_pass_factory factory,
@@ -338,13 +362,12 @@ void tc_pass_set_external_callbacks(const tc_external_pass_callbacks* callbacks)
     }
 }
 
-tc_pass* tc_pass_new_external(void* body, const char* type_name, const tc_pass_ref_vtable* ref_vtable) {
+tc_pass* tc_pass_new_external(void* body, const char* type_name) {
     tc_pass* p = (tc_pass*)calloc(1, sizeof(tc_pass));
     if (!p) return NULL;
 
-    tc_pass_init(p, &g_external_vtable);
+    tc_pass_init_unowned(p, &g_external_vtable);
     p->body = body;
-    p->ref_vtable = ref_vtable;
     p->kind = TC_EXTERNAL_PASS;
 
     if (!type_name) {
@@ -368,6 +391,14 @@ tc_pass* tc_pass_new_external(void* body, const char* type_name, const tc_pass_r
 
 void tc_pass_free_external(tc_pass* p) {
     if (!p) return;
+    if (tc_pipeline_handle_valid(p->owner_pipeline)) {
+        tc_log(
+            TC_LOG_ERROR,
+            "[tc_pass] refusing to free external pass '%s' while it belongs to a pipeline",
+            p->pass_name ? p->pass_name : "<unnamed>"
+        );
+        return;
+    }
     tc_pass_unlink_from_registry(p);
     if (p->pass_name) free(p->pass_name);
     if (p->viewport_name) free(p->viewport_name);

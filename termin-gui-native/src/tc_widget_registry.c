@@ -289,10 +289,10 @@ tc_widget_handle tc_ui_document_create_registered_widget(tc_ui_document* documen
         return handle;
     }
 
-    result.widget->deleter = result.deleter;
-    result.widget->ownership_policy = result.ownership;
     result.widget->native_language = record->descriptor.language;
-    handle = tc_ui_document_adopt_widget(document, result.widget);
+    handle = result.ownership == TC_WIDGET_OWNED
+        ? tc_ui_document_adopt_widget(document, result.widget, result.deleter)
+        : tc_ui_document_attach_borrowed_widget(document, result.widget);
     if (tc_widget_handle_is_invalid(handle)) {
         release_unadopted_result(&result);
         return handle;

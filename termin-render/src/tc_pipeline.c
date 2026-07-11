@@ -23,6 +23,31 @@ typedef struct {
 static PipelinePool* g_pipeline_pool = NULL;
 static bool g_pipeline_registry_initialized = false;
 
+static void destroy_owned_pass(tc_pass* pass, tc_pass_deleter deleter) {
+    if (!pass) return;
+    pass->owner_pipeline = TC_PIPELINE_HANDLE_INVALID;
+    pass->deleter = NULL;
+    tc_pass_destroy(pass);
+    if (deleter) {
+        deleter(pass);
+    } else {
+        tc_log_error("[tc_pipeline] owned pass has no deleter");
+    }
+}
+
+static void destroy_all_pipeline_passes(tc_pipeline* pipeline) {
+    if (!pipeline) return;
+    const size_t count = pipeline->pass_count;
+    pipeline->pass_count = 0;
+    for (size_t i = 0; i < count; ++i) {
+        tc_pass* pass = pipeline->passes[i];
+        tc_pass_deleter deleter = pipeline->pass_deleters[i];
+        pipeline->passes[i] = NULL;
+        pipeline->pass_deleters[i] = NULL;
+        destroy_owned_pass(pass, deleter);
+    }
+}
+
 static char* tc_pipeline_strdup(const char* s) {
     if (s == NULL) return NULL;
     size_t len = strlen(s) + 1;
@@ -85,14 +110,9 @@ void tc_pipeline_pool_shutdown(void) {
                 tc_frame_graph_destroy((tc_frame_graph*)p->cached_frame_graph);
                 p->cached_frame_graph = NULL;
             }
-            for (size_t j = 0; j < p->pass_count; j++) {
-                tc_pass* pass = p->passes[j];
-                if (pass) {
-                    pass->owner_pipeline = TC_PIPELINE_HANDLE_INVALID;
-                    tc_pass_release(pass);
-                }
-            }
+            destroy_all_pipeline_passes(p);
             free(p->passes);
+            free(p->pass_deleters);
             free(p->name);
         }
     }
@@ -161,6 +181,7 @@ tc_pipeline_handle tc_pipeline_pool_alloc(const char* name) {
     tc_pipeline* p = &g_pipeline_pool->pipelines[idx];
     p->name = name ? tc_pipeline_strdup(name) : tc_pipeline_strdup("default");
     p->passes = NULL;
+    p->pass_deleters = NULL;
     p->pass_count = 0;
     p->pass_capacity = 0;
     p->cached_frame_graph = NULL;
@@ -194,15 +215,10 @@ void tc_pipeline_pool_free(tc_pipeline_handle h) {
         p->cached_frame_graph = NULL;
     }
 
-    for (size_t i = 0; i < p->pass_count; i++) {
-        tc_pass* pass = p->passes[i];
-        if (pass) {
-            pass->owner_pipeline = TC_PIPELINE_HANDLE_INVALID;
-            tc_pass_release(pass);
-        }
-    }
+    destroy_all_pipeline_passes(p);
 
     free(p->passes);
+    free(p->pass_deleters);
     free(p->name);
     memset(p, 0, sizeof(tc_pipeline));
 
@@ -262,72 +278,175 @@ void tc_pipeline_set_render_cache(tc_pipeline_handle h, void* cache, void (*dest
     p->render_cache_destructor = destructor;
 }
 
-static void pipeline_ensure_capacity(tc_pipeline* p) {
+static bool pipeline_ensure_capacity(tc_pipeline* p) {
     if (p->pass_count >= p->pass_capacity) {
         size_t new_capacity = p->pass_capacity == 0 ? PIPELINE_INITIAL_PASS_CAPACITY : p->pass_capacity * 2;
-        p->passes = (tc_pass**)realloc(p->passes, new_capacity * sizeof(tc_pass*));
+        tc_pass** passes = (tc_pass**)realloc(p->passes, new_capacity * sizeof(tc_pass*));
+        if (!passes) {
+            tc_log_error("[tc_pipeline] failed to grow pass storage");
+            return false;
+        }
+        p->passes = passes;
+        tc_pass_deleter* deleters = (tc_pass_deleter*)realloc(
+            p->pass_deleters,
+            new_capacity * sizeof(tc_pass_deleter)
+        );
+        if (!deleters) {
+            tc_log_error("[tc_pipeline] failed to grow pass deleter storage");
+            return false;
+        }
+        p->pass_deleters = deleters;
         p->pass_capacity = new_capacity;
     }
+    return true;
 }
 
-void tc_pipeline_add_pass(tc_pipeline_handle h, tc_pass* pass) {
-    if (!pipeline_handle_alive(h) || !pass) return;
+bool tc_pipeline_adopt_pass(
+    tc_pipeline_handle h,
+    tc_pass* pass,
+    tc_pass_deleter deleter
+) {
+    if (!pipeline_handle_alive(h) || !pass || !deleter) {
+        tc_log_error("[tc_pipeline] pass adoption requires a live pipeline, pass and deleter");
+        return false;
+    }
     tc_pipeline* p = &g_pipeline_pool->pipelines[h.index];
 
     if (tc_pipeline_handle_valid(pass->owner_pipeline)) {
         if (tc_pipeline_handle_eq(pass->owner_pipeline, h)) {
-            tc_log(TC_LOG_WARN, "tc_pipeline_add_pass: pass '%s' is already in this pipeline",
+            tc_log(TC_LOG_ERROR, "tc_pipeline_adopt_pass: pass '%s' is already in this pipeline",
                    pass->pass_name ? pass->pass_name : "(unnamed)");
-            return;
+            return false;
         } else {
-            tc_log(TC_LOG_WARN, "tc_pipeline_add_pass: pass '%s' is already in another pipeline",
+            tc_log(TC_LOG_ERROR, "tc_pipeline_adopt_pass: pass '%s' is already in another pipeline",
                    pass->pass_name ? pass->pass_name : "(unnamed)");
-            tc_pipeline_remove_pass(pass->owner_pipeline, pass);
+            return false;
         }
     }
 
-    pipeline_ensure_capacity(p);
-    tc_pass_retain(pass);
+    if (!pipeline_ensure_capacity(p)) return false;
     pass->owner_pipeline = h;
+    pass->deleter = deleter;
     p->passes[p->pass_count++] = pass;
+    p->pass_deleters[p->pass_count - 1] = deleter;
     p->dirty = true;
+    return true;
 }
 
-void tc_pipeline_add_pass_take(tc_pipeline_handle h, tc_pass* pass) {
-    if (!pass) return;
-    tc_pipeline_add_pass(h, pass);
-    tc_pass_release(pass);
-}
-
-void tc_pipeline_insert_pass_before(tc_pipeline_handle h, tc_pass* pass, tc_pass* before) {
-    if (!pipeline_handle_alive(h) || !pass) return;
+bool tc_pipeline_adopt_pass_before(
+    tc_pipeline_handle h,
+    tc_pass* pass,
+    tc_pass_deleter deleter,
+    tc_pass* before
+) {
+    if (!pipeline_handle_alive(h) || !pass || !deleter) {
+        tc_log_error("[tc_pipeline] pass adoption requires a live pipeline, pass and deleter");
+        return false;
+    }
+    if (tc_pipeline_handle_valid(pass->owner_pipeline)) {
+        tc_log_error("[tc_pipeline] cannot adopt a pass that already belongs to a pipeline");
+        return false;
+    }
     tc_pipeline* p = &g_pipeline_pool->pipelines[h.index];
 
-    pipeline_ensure_capacity(p);
-    tc_pass_retain(pass);
+    size_t insert_idx = 0;
+    if (before) {
+        insert_idx = p->pass_count;
+        for (size_t i = 0; i < p->pass_count; i++) {
+            if (p->passes[i] == before) {
+                insert_idx = i;
+                break;
+            }
+        }
+        if (insert_idx == p->pass_count) {
+            tc_log_error("[tc_pipeline] adoption target does not belong to the pipeline");
+            return false;
+        }
+    }
+
+    if (!pipeline_ensure_capacity(p)) return false;
     pass->owner_pipeline = h;
+    pass->deleter = deleter;
 
     if (!before) {
         memmove(&p->passes[1], &p->passes[0], p->pass_count * sizeof(tc_pass*));
+        memmove(&p->pass_deleters[1], &p->pass_deleters[0],
+                p->pass_count * sizeof(tc_pass_deleter));
         p->passes[0] = pass;
+        p->pass_deleters[0] = deleter;
         p->pass_count++;
         p->dirty = true;
-        return;
-    }
-
-    size_t insert_idx = p->pass_count;
-    for (size_t i = 0; i < p->pass_count; i++) {
-        if (p->passes[i] == before) {
-            insert_idx = i;
-            break;
-        }
+        return true;
     }
 
     memmove(&p->passes[insert_idx + 1], &p->passes[insert_idx],
             (p->pass_count - insert_idx) * sizeof(tc_pass*));
+    memmove(&p->pass_deleters[insert_idx + 1], &p->pass_deleters[insert_idx],
+            (p->pass_count - insert_idx) * sizeof(tc_pass_deleter));
     p->passes[insert_idx] = pass;
+    p->pass_deleters[insert_idx] = deleter;
     p->pass_count++;
     p->dirty = true;
+    return true;
+}
+
+bool tc_pipeline_move_pass_before(
+    tc_pipeline_handle h,
+    tc_pass* pass,
+    tc_pass* before
+) {
+    if (!pipeline_handle_alive(h) || !pass) return false;
+    tc_pipeline* pipeline = &g_pipeline_pool->pipelines[h.index];
+    size_t source = pipeline->pass_count;
+    for (size_t i = 0; i < pipeline->pass_count; ++i) {
+        if (pipeline->passes[i] == pass) {
+            source = i;
+            break;
+        }
+    }
+    if (source == pipeline->pass_count) {
+        tc_log_error("[tc_pipeline] cannot move a pass not owned by the pipeline");
+        return false;
+    }
+    if (before == pass) return true;
+
+    tc_pass_deleter deleter = pipeline->pass_deleters[source];
+    memmove(&pipeline->passes[source], &pipeline->passes[source + 1],
+            (pipeline->pass_count - source - 1) * sizeof(tc_pass*));
+    memmove(&pipeline->pass_deleters[source], &pipeline->pass_deleters[source + 1],
+            (pipeline->pass_count - source - 1) * sizeof(tc_pass_deleter));
+    pipeline->pass_count--;
+
+    size_t destination = pipeline->pass_count;
+    if (before) {
+        for (size_t i = 0; i < pipeline->pass_count; ++i) {
+            if (pipeline->passes[i] == before) {
+                destination = i;
+                break;
+            }
+        }
+        if (destination == pipeline->pass_count) {
+            tc_log_error("[tc_pipeline] move target does not belong to the pipeline");
+            memmove(&pipeline->passes[source + 1], &pipeline->passes[source],
+                    (pipeline->pass_count - source) * sizeof(tc_pass*));
+            memmove(&pipeline->pass_deleters[source + 1], &pipeline->pass_deleters[source],
+                    (pipeline->pass_count - source) * sizeof(tc_pass_deleter));
+            pipeline->passes[source] = pass;
+            pipeline->pass_deleters[source] = deleter;
+            pipeline->pass_count++;
+            return false;
+        }
+    }
+
+    memmove(&pipeline->passes[destination + 1], &pipeline->passes[destination],
+            (pipeline->pass_count - destination) * sizeof(tc_pass*));
+    memmove(&pipeline->pass_deleters[destination + 1], &pipeline->pass_deleters[destination],
+            (pipeline->pass_count - destination) * sizeof(tc_pass_deleter));
+    pipeline->passes[destination] = pass;
+    pipeline->pass_deleters[destination] = deleter;
+    pipeline->pass_count++;
+    pipeline->dirty = true;
+    return true;
 }
 
 void tc_pipeline_remove_pass(tc_pipeline_handle h, tc_pass* pass) {
@@ -345,10 +464,12 @@ void tc_pipeline_remove_pass(tc_pipeline_handle h, tc_pass* pass) {
 
     memmove(&p->passes[idx], &p->passes[idx + 1],
             (p->pass_count - idx - 1) * sizeof(tc_pass*));
+    tc_pass_deleter deleter = p->pass_deleters[idx];
+    memmove(&p->pass_deleters[idx], &p->pass_deleters[idx + 1],
+            (p->pass_count - idx - 1) * sizeof(tc_pass_deleter));
     p->pass_count--;
-    pass->owner_pipeline = TC_PIPELINE_HANDLE_INVALID;
-    tc_pass_release(pass);
     p->dirty = true;
+    destroy_owned_pass(pass, deleter);
 }
 
 size_t tc_pipeline_remove_passes_by_name(tc_pipeline_handle h, const char* name) {
@@ -362,9 +483,11 @@ size_t tc_pipeline_remove_passes_by_name(tc_pipeline_handle h, const char* name)
             size_t idx = i - 1;
             memmove(&p->passes[idx], &p->passes[idx + 1],
                     (p->pass_count - idx - 1) * sizeof(tc_pass*));
+            tc_pass_deleter deleter = p->pass_deleters[idx];
+            memmove(&p->pass_deleters[idx], &p->pass_deleters[idx + 1],
+                    (p->pass_count - idx - 1) * sizeof(tc_pass_deleter));
             p->pass_count--;
-            pass->owner_pipeline = TC_PIPELINE_HANDLE_INVALID;
-            tc_pass_release(pass);
+            destroy_owned_pass(pass, deleter);
             removed_count++;
         }
     }
@@ -395,28 +518,29 @@ tc_pass* tc_pipeline_get_pass_at(tc_pipeline_handle h, size_t index) {
     return p->passes[index];
 }
 
-bool tc_pipeline_replace_pass_at_take(
+bool tc_pipeline_replace_pass_at(
     tc_pipeline_handle h,
     size_t index,
-    tc_pass* replacement
+    tc_pass* replacement,
+    tc_pass_deleter deleter
 ) {
-    if (!pipeline_handle_alive(h) || !replacement) return false;
+    if (!pipeline_handle_alive(h) || !replacement || !deleter) return false;
     tc_pipeline* pipeline = &g_pipeline_pool->pipelines[h.index];
     if (index >= pipeline->pass_count) return false;
     if (pipeline->passes[index] == replacement) return false;
     if (tc_pipeline_handle_valid(replacement->owner_pipeline)) {
-        tc_log(TC_LOG_ERROR, "tc_pipeline_replace_pass_at_take: replacement already belongs to a pipeline");
+        tc_log(TC_LOG_ERROR, "tc_pipeline_replace_pass_at: replacement already belongs to a pipeline");
         return false;
     }
 
     tc_pass* previous = pipeline->passes[index];
+    tc_pass_deleter previous_deleter = pipeline->pass_deleters[index];
     replacement->owner_pipeline = h;
+    replacement->deleter = deleter;
     pipeline->passes[index] = replacement;
-    if (previous) {
-        previous->owner_pipeline = TC_PIPELINE_HANDLE_INVALID;
-        tc_pass_release(previous);
-    }
+    pipeline->pass_deleters[index] = deleter;
     pipeline->dirty = true;
+    destroy_owned_pass(previous, previous_deleter);
     return true;
 }
 

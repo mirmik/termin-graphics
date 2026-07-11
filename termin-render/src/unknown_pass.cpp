@@ -38,7 +38,6 @@ namespace {
 
 tc_pass* create_unknown_pass(void*) {
     auto* pass = new UnknownPass();
-    pass->retain();
     return pass->tc_pass_ptr();
 }
 

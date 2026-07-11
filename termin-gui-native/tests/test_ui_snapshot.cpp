@@ -35,7 +35,7 @@ struct SnapshotWidget {
     tc_widget widget{};
 
     explicit SnapshotWidget(const char* debug_name) {
-        tc_widget_init(&widget, &SNAPSHOT_WIDGET_VTABLE, nullptr, TC_LANGUAGE_CXX, this);
+        tc_widget_init_unowned(&widget, &SNAPSHOT_WIDGET_VTABLE, TC_LANGUAGE_CXX, this);
         widget.debug_name = debug_name;
     }
 };
@@ -66,11 +66,12 @@ void test_snapshot_copies_topology_metadata_and_interaction_state() {
     tc_widget_set_preferred_size(&child.widget, tc_ui_size{40.0f, 30.0f});
     tc_widget_set_focusable(&child.widget, true);
 
-    const tc_widget_handle root_handle = tc_ui_document_adopt_widget(document.get(), &root.widget);
+    const tc_widget_handle root_handle =
+        tc_ui_document_attach_borrowed_widget(document.get(), &root.widget);
     const tc_widget_handle child_handle =
-        tc_ui_document_adopt_widget(document.get(), &child.widget);
+        tc_ui_document_attach_borrowed_widget(document.get(), &child.widget);
     const tc_widget_handle overlay_handle =
-        tc_ui_document_adopt_widget(document.get(), &overlay.widget);
+        tc_ui_document_attach_borrowed_widget(document.get(), &overlay.widget);
     assert(!tc_widget_handle_is_invalid(root_handle));
     assert(!tc_widget_handle_is_invalid(child_handle));
     assert(!tc_widget_handle_is_invalid(overlay_handle));

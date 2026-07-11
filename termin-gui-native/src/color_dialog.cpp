@@ -20,7 +20,8 @@ bool ColorDialog::ensure_content(tc_ui_document* document) {
         tc_ui_document_is_alive(document, picker_handle_))
         return true;
     auto picker = std::make_unique<ColorPicker>(model_);
-    picker_handle_ = tc_ui_document_adopt_widget(document, picker->c_widget());
+    picker_handle_ = tc_ui_document_adopt_widget(
+        document, picker->c_widget(), &Widget::delete_owned_widget);
     if (tc_widget_handle_is_invalid(picker_handle_)) {
         tc_log_error("[termin-gui-native] ColorDialog failed to adopt picker content");
         return false;

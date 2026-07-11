@@ -258,7 +258,8 @@ bool Menu::open_submenu(tc_ui_document* document, size_t index, bool select_firs
     }
     close_submenu(document);
     auto child = std::unique_ptr<Menu>(new Menu(data.submenu, this, ancestors_));
-    const tc_widget_handle handle = tc_ui_document_adopt_widget(document, child->c_widget());
+    const tc_widget_handle handle = tc_ui_document_adopt_widget(
+        document, child->c_widget(), &Widget::delete_owned_widget);
     if (tc_widget_handle_is_invalid(handle))
         return false;
     child_handle_ = handle;

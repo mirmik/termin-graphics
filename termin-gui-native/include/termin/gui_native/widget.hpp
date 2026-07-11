@@ -17,6 +17,9 @@ public:
 
     tc_widget* c_widget() { return &_widget; }
     const tc_widget* c_widget() const { return &_widget; }
+    static void delete_owned_widget(tc_widget* widget) {
+        delete static_cast<Widget*>(widget->body);
+    }
     tc_ui_document* document() { return _widget.document; }
     const tc_ui_document* document() const { return _widget.document; }
     tc_widget_handle handle() const { return _widget.handle; }
@@ -82,16 +85,11 @@ public:
 
 protected:
     explicit Widget(const tc_widget_vtable* vtable, const char* debug_name = nullptr) {
-        tc_widget_init(&_widget, vtable, &Widget::delete_widget, TC_LANGUAGE_CXX, this);
+        tc_widget_init_unowned(&_widget, vtable, TC_LANGUAGE_CXX, this);
         set_debug_name(debug_name ? debug_name : std::string {});
     }
 
     virtual ~Widget() = default;
-
-private:
-    static void delete_widget(tc_widget* widget) {
-        delete static_cast<Widget*>(widget->body);
-    }
 
 };
 

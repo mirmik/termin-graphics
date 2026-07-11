@@ -2,27 +2,6 @@
 
 namespace termin {
 
-static void cxx_pass_ref_retain(tc_pass* p) {
-    auto* self = CxxFramePass::from_tc(p);
-    if (self) self->retain();
-}
-
-static void cxx_pass_ref_release(tc_pass* p) {
-    auto* self = CxxFramePass::from_tc(p);
-    if (self) self->release();
-}
-
-static void cxx_pass_ref_drop(tc_pass* p) {
-    auto* self = CxxFramePass::from_tc(p);
-    if (self) delete self;
-}
-
-static const tc_pass_ref_vtable g_cxx_pass_ref_vtable = {
-    cxx_pass_ref_retain,
-    cxx_pass_ref_release,
-    cxx_pass_ref_drop,
-};
-
 void CxxFramePass::_cb_execute(tc_pass* p, void* ctx) {
     CxxFramePass* self = from_tc(p);
     if (!self || !ctx) return;
@@ -135,8 +114,8 @@ CxxFramePass::~CxxFramePass() {
 }
 
 void CxxFramePass::_init_tc_pass() {
-    tc_pass_init(&_c, &_cpp_vtable);
-    _c.ref_vtable = &g_cxx_pass_ref_vtable;
+    tc_pass_init_unowned(&_c, &_cpp_vtable);
+    _c.deleter = &CxxFramePass::delete_owned_pass;
     _c.kind = TC_NATIVE_PASS;
 }
 

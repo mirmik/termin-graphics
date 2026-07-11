@@ -18,8 +18,8 @@ extern "C" {
 
 typedef struct tc_pass tc_pass;
 typedef struct tc_pass_vtable tc_pass_vtable;
-typedef struct tc_pass_ref_vtable tc_pass_ref_vtable;
 typedef struct tc_execute_context tc_execute_context;
+typedef void (*tc_pass_deleter)(tc_pass* pass);
 
 typedef enum tc_pass_kind {
     TC_NATIVE_PASS = 0,
@@ -43,12 +43,6 @@ struct tc_execute_context {
     uint64_t layer_mask;
 };
 
-struct tc_pass_ref_vtable {
-    void (*retain)(tc_pass* self);
-    void (*release)(tc_pass* self);
-    void (*drop)(tc_pass* self);
-};
-
 struct tc_pass_vtable {
     void (*execute)(tc_pass* self, void* ctx);
     size_t (*get_reads)(tc_pass* self, const char** out_reads, size_t max_count);
@@ -63,7 +57,6 @@ struct tc_pass_vtable {
 
 struct tc_pass {
     const tc_pass_vtable* vtable;
-    const tc_pass_ref_vtable* ref_vtable;
     char* pass_name;
     bool enabled;
     bool passthrough;
@@ -75,6 +68,7 @@ struct tc_pass {
     void* body;
     void* bindings[TC_LANGUAGE_MAX];
     tc_pipeline_handle owner_pipeline;
+    tc_pass_deleter deleter;
     tc_type_entry* type_entry;
     uint32_t type_version;
     tc_runtime_type_instance_link runtime_type_link;
@@ -82,9 +76,8 @@ struct tc_pass {
     tc_dlist_node registry_node;
 };
 
-static inline void tc_pass_init(tc_pass* p, const tc_pass_vtable* vtable) {
+static inline void tc_pass_init_unowned(tc_pass* p, const tc_pass_vtable* vtable) {
     p->vtable = vtable;
-    p->ref_vtable = NULL;
     p->pass_name = NULL;
     p->enabled = true;
     p->passthrough = false;
@@ -98,6 +91,7 @@ static inline void tc_pass_init(tc_pass* p, const tc_pass_vtable* vtable) {
         p->bindings[i] = NULL;
     }
     p->owner_pipeline = TC_PIPELINE_HANDLE_INVALID;
+    p->deleter = NULL;
     p->type_entry = NULL;
     p->type_version = 0;
     tc_runtime_type_instance_link_init(&p->runtime_type_link);
@@ -181,23 +175,7 @@ static inline void tc_pass_destroy(tc_pass* p) {
     }
 }
 
-static inline void tc_pass_drop(tc_pass* p) {
-    if (p && p->ref_vtable && p->ref_vtable->drop) {
-        p->ref_vtable->drop(p);
-    }
-}
-
-static inline void tc_pass_retain(tc_pass* p) {
-    if (p && p->ref_vtable && p->ref_vtable->retain) {
-        p->ref_vtable->retain(p);
-    }
-}
-
-static inline void tc_pass_release(tc_pass* p) {
-    if (p && p->ref_vtable && p->ref_vtable->release) {
-        p->ref_vtable->release(p);
-    }
-}
+TC_API void tc_pass_delete_unowned(tc_pass* p);
 
 TC_API void tc_pass_set_name(tc_pass* p, const char* name);
 TC_API void tc_pass_set_enabled(tc_pass* p, bool enabled);
@@ -220,8 +198,8 @@ TC_API void tc_pass_registry_register(
 
 TC_API void tc_pass_registry_unregister(const char* type_name);
 TC_API bool tc_pass_registry_has(const char* type_name);
-// Returns a new owned pass reference. Call tc_pass_release() if the pass is not
-// transferred with tc_pipeline_add_pass_take() or another owner-retaining API.
+// Returns a new unowned pass. Transfer it to exactly one pipeline or call
+// tc_pass_delete_unowned() on failure.
 TC_API tc_pass* tc_pass_registry_create(const char* type_name);
 TC_API void tc_pass_registry_cleanup(void);
 TC_API size_t tc_pass_registry_type_count(void);
@@ -252,7 +230,7 @@ typedef struct {
 } tc_external_pass_callbacks;
 
 TC_API void tc_pass_set_external_callbacks(const tc_external_pass_callbacks* callbacks);
-TC_API tc_pass* tc_pass_new_external(void* body, const char* type_name, const tc_pass_ref_vtable* ref_vtable);
+TC_API tc_pass* tc_pass_new_external(void* body, const char* type_name);
 TC_API void tc_pass_free_external(tc_pass* p);
 
 #ifdef __cplusplus

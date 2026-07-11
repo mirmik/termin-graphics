@@ -192,7 +192,8 @@ bool MenuBar::open_menu(tc_ui_document* document, size_t index, bool select_firs
     if (!tc_widget_handle_is_invalid(popup_handle_))
         close_menu(document);
     auto popup = std::make_unique<Menu>(entries_[index].menu);
-    const tc_widget_handle handle = tc_ui_document_adopt_widget(document, popup->c_widget());
+    const tc_widget_handle handle = tc_ui_document_adopt_widget(
+        document, popup->c_widget(), &Widget::delete_owned_widget);
     if (tc_widget_handle_is_invalid(handle))
         return false;
     popup_handle_ = handle;
