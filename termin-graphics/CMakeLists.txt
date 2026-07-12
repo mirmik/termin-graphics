@@ -104,6 +104,7 @@ termin_set_rpath_lib(termin_graphics)
 # --- termin_graphics2 (new backend-neutral API) ---
 set(TGFX2_SOURCES
     src/tgfx2/backend_binding_plan.cpp
+    src/tgfx2/internal/process_runner.cpp
     src/tgfx2/builtin_shader_sources.cpp
     src/tgfx2/device_factory.cpp
     src/tgfx2/canvas2d_renderer.cpp
@@ -331,7 +332,9 @@ if((TGFX2_ENABLE_D3D11 OR (TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC)) AND NO
     target_compile_features(termin_shaderc PRIVATE cxx_std_20)
     target_include_directories(termin_shaderc PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_link_libraries(termin_shaderc PRIVATE termin_base termin_graphics)
+    # ProcessRunner is implemented by termin_graphics2; linking that target
+    # also brings in termin_graphics transitively through its public API.
+    target_link_libraries(termin_shaderc PRIVATE termin_base termin_graphics2)
     if(TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC)
         target_compile_definitions(termin_shaderc PRIVATE TERMIN_SHADERC_HAS_SHADERC)
         target_include_directories(termin_shaderc PRIVATE ${Vulkan_INCLUDE_DIR})
