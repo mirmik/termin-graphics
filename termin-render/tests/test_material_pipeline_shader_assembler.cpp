@@ -241,10 +241,10 @@ termin::VertexOutputAdapter modular_shadow_adapter()
     adapter.consumed_world_semantics = world_position_interface();
     adapter.produced_output_semantics.semantics.push_back(
         {"clip_position", termin::MaterialPipelineValueType::Float4});
-    adapter.resources = termin::material_pipeline_common_vertex_resources("shadow_draw");
-    for (termin::MaterialPipelineResourceDecl& resource : adapter.resources) {
-        resource.owner = termin::MaterialPipelineResourceOwner::Pass;
-    }
+    adapter.resources.push_back(termin::material_pipeline_abi_resource_decl(
+        termin::ShaderAbiResourceId::PerFrame,
+        TC_SHADER_STAGE_VERTEX,
+        termin::MaterialPipelineResourceOwner::Pass));
     return adapter;
 }
 
@@ -255,7 +255,43 @@ termin::MaterialPipelinePassContract modular_shadow_pass_contract()
     pass.uses_material_fragment = true;
     pass.vertex_output_adapter = modular_shadow_adapter();
     pass.static_vertex_transform = modular_shadow_provider(false);
+    pass.static_vertex_transform->resources.push_back(
+        termin::material_pipeline_draw_resource_decl(
+            "shadow_draw",
+            TC_SHADER_STAGE_VERTEX,
+            64u));
     pass.skinned_vertex_transform = modular_shadow_provider(true);
+    pass.skinned_vertex_transform->resources.push_back(
+        termin::material_pipeline_draw_resource_decl(
+            "shadow_draw",
+            TC_SHADER_STAGE_VERTEX,
+            64u));
+    pass.foliage_vertex_transform =
+        termin::material_pipeline_make_foliage_vertex_transform_contract(
+            termin::VertexTransformKind::FoliageShadow,
+            "foliage_shadow_provider",
+            "termin-engine-foliage-shadow",
+            termin::material_pipeline_position_mesh_input(),
+            termin::MaterialFragmentInterface{},
+            termin::material_pipeline_foliage_vertex_resources());
+    pass.foliage_vertex_transform->template_uuid.reset();
+    std::erase_if(
+        pass.foliage_vertex_transform->resources,
+        [](const termin::MaterialPipelineResourceDecl& resource) {
+            return resource.requirement.name == "per_frame";
+        });
+    pass.foliage_vertex_transform->source_module = {
+        "termin_shadow_foliage_transform",
+        "builtin_shaders/termin_shadow_foliage_transform.slang"};
+    pass.foliage_vertex_transform->entry_input_declaration = R"(
+struct VertexInput {
+    float3 position : POSITION;
+    uint instance_id : SV_InstanceID;
+};)";
+    pass.foliage_vertex_transform->adapter_input_expression =
+        "termin_shadow_foliage_world_position(input.position, input.instance_id)";
+    pass.foliage_vertex_transform->produced_world_semantics =
+        world_position_interface();
     return pass;
 }
 
@@ -481,8 +517,34 @@ TEST_CASE("material pipeline assembler composes shadow providers with one output
     REQUIRE(bone != nullptr);
     CHECK_EQ(bone->scope, TC_SHADER_RESOURCE_SCOPE_DRAW);
 
+    request.vertex_transform = *request.pass.foliage_vertex_transform;
+    request.shader_name = "assembler-modular-foliage-shadow";
+    request.shader_uuid = "assembler-modular-foliage-shadow";
+    termin::MaterialPipelineShaderAssemblyResult foliage_result =
+        termin::material_pipeline_assemble_shader(request);
+    REQUIRE(foliage_result.ok());
+    const std::string foliage_source = foliage_result.shader.vertex_source();
+    CHECK(foliage_source.find(
+              "import termin_shadow_foliage_transform;") != std::string::npos);
+    CHECK(foliage_source.find(
+              "termin_shadow_foliage_world_position(input.position, input.instance_id)") !=
+          std::string::npos);
+    CHECK(foliage_source.find("instance_id : SV_InstanceID") != std::string::npos);
+
+    tc_shader_contract_view foliage_view{};
+    REQUIRE(tc_shader_get_contract_view(foliage_result.shader.get(), &foliage_view));
+    REQUIRE(contract_resource(foliage_view, "per_frame") != nullptr);
+    CHECK(contract_resource(foliage_view, "shadow_draw") == nullptr);
+    REQUIRE(contract_resource(foliage_view, "foliage_draw") != nullptr);
+    const tc_shader_resource_requirement* instances =
+        contract_resource(foliage_view, "foliage_instances");
+    REQUIRE(instances != nullptr);
+    CHECK_EQ(instances->scope, TC_SHADER_RESOURCE_SCOPE_DRAW);
+    CHECK_EQ(instances->element_stride, 32u);
+
     tc_shader_destroy(static_result.shader.handle);
     tc_shader_destroy(skinned_result.shader.handle);
+    tc_shader_destroy(foliage_result.shader.handle);
     tc_shader_shutdown();
 }
 
