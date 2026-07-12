@@ -124,21 +124,9 @@ TGFX_API tc_shader_handle tc_shader_register_static_uuid_ex(
     tc_shader_artifact_policy artifact_policy
 );
 
-// Same ownership semantics as tc_shader_register_static_uuid_ex(), but keeps
-// explicit stage entry points for shaders whose public functions are not named
-// "main".
-TGFX_API tc_shader_handle tc_shader_register_static_uuid_with_entries_ex(
-    const char* vertex_source,
-    const char* fragment_source,
-    const char* geometry_source,
-    const char* name,
-    const char* uuid,
-    tc_shader_language language,
-    tc_shader_artifact_policy artifact_policy,
-    const char* vertex_entry,
-    const char* fragment_entry,
-    const char* geometry_entry
-);
+// Same ownership semantics as tc_shader_register_static_uuid_ex(), with a
+// complete source descriptor including optional explicit stage entry points.
+TGFX_API tc_shader_handle tc_shader_register_static_desc(const tc_shader_create_desc* desc);
 
 // ============================================================================
 // Variant support

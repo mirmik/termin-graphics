@@ -36,6 +36,27 @@ struct CanvasVec2 {
     float y = 0.0f;
 };
 
+struct CanvasArc {
+    CanvasVec2 center;
+    float radius = 0.0f;
+    float start_radians = 0.0f;
+    float end_radians = 0.0f;
+    CanvasColor color;
+    float thickness = 1.0f;
+    int segments = 0;
+};
+
+struct CanvasRoundedRectOutline {
+    float x = 0.0f;
+    float y = 0.0f;
+    float width = 0.0f;
+    float height = 0.0f;
+    float radius = 0.0f;
+    CanvasColor color;
+    float thickness = 1.0f;
+    int corner_segments = 6;
+};
+
 class TGFX2_TYPE_API Canvas2DRenderer {
 private:
     enum class BatchMode { None, Solid, Texture };
@@ -77,16 +98,10 @@ public:
     void draw_circle_outline(float cx, float cy, float radius,
                              CanvasColor color, float thickness = 1.0f,
                              int segments = 24);
-    void draw_arc(float cx, float cy, float radius,
-                  float start_radians, float end_radians,
-                  CanvasColor color, float thickness = 1.0f,
-                  int segments = 0);
+    void draw_arc(const CanvasArc& arc);
     void draw_rect_outline(float x, float y, float w, float h,
                            CanvasColor color, float thickness = 1.0f);
-    void draw_rounded_rect_outline(float x, float y, float w, float h,
-                                   float radius, CanvasColor color,
-                                   float thickness = 1.0f,
-                                   int corner_segments = 6);
+    void draw_rounded_rect_outline(const CanvasRoundedRectOutline& outline);
     void draw_line(float x0, float y0, float x1, float y1,
                    CanvasColor color, float thickness = 1.0f);
     void draw_polyline(std::span<const CanvasVec2> points,

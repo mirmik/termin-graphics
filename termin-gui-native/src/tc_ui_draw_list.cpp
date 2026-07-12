@@ -207,29 +207,23 @@ void tc_ui_painter_stroke_circle(
 
 void tc_ui_painter_draw_arc(
     tc_ui_paint_context* context,
-    tc_ui_point center,
-    float radius,
-    float start_radians,
-    float end_radians,
-    tc_ui_color color,
-    float thickness,
-    int32_t segments
+    const tc_ui_arc_draw_desc* desc
 ) {
-    if (!finite_point(center) || !std::isfinite(radius) || radius <= 0.0f ||
-        !std::isfinite(start_radians) || !std::isfinite(end_radians) ||
-        !std::isfinite(thickness) || thickness <= 0.0f || segments < 0) {
+    if (!desc || !finite_point(desc->center) || !std::isfinite(desc->radius) || desc->radius <= 0.0f ||
+        !std::isfinite(desc->start_radians) || !std::isfinite(desc->end_radians) ||
+        !std::isfinite(desc->thickness) || desc->thickness <= 0.0f || desc->segments < 0) {
         tc_log_error("[termin-gui-native] rejected invalid arc command");
         return;
     }
     tc_ui_draw_command command {};
     command.type = TC_UI_DRAW_ARC;
-    command.p0 = center;
-    command.radius = radius;
-    command.start_radians = start_radians;
-    command.end_radians = end_radians;
-    command.color = color;
-    command.thickness = thickness;
-    command.segments = segments;
+    command.p0 = desc->center;
+    command.radius = desc->radius;
+    command.start_radians = desc->start_radians;
+    command.end_radians = desc->end_radians;
+    command.color = desc->color;
+    command.thickness = desc->thickness;
+    command.segments = desc->segments;
     append_draw_command(context, command);
 }
 

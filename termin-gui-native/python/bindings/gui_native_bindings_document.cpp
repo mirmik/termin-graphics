@@ -101,10 +101,9 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
                              tc_ui_color color,
                              float thickness,
                              int32_t segments) {
-            tc_ui_painter_draw_arc(
-                self.get(), center, radius, start_radians, end_radians,
-                color, thickness, segments
-            );
+            const tc_ui_arc_draw_desc desc{
+                center, radius, start_radians, end_radians, color, thickness, segments};
+            tc_ui_painter_draw_arc(self.get(), &desc);
         }, nb::arg("center"), nb::arg("radius"), nb::arg("start_radians"),
            nb::arg("end_radians"), nb::arg("color"),
            nb::arg("thickness") = 1.0f, nb::arg("segments") = 0)

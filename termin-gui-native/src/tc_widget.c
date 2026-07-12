@@ -326,12 +326,14 @@ const tc_widget* tc_widget_child_at_const(const tc_widget* widget, size_t index)
 
 bool tc_widget_insert_child(tc_widget* parent, size_t index, tc_widget* child) {
     tc_widget* ancestor;
-    tc_widget* old_parent = child ? child->parent : NULL;
+    tc_widget* old_parent;
     size_t old_index = SIZE_MAX;
-    if (!tc_ui_internal_widget_is_live_pointer(parent) || !tc_ui_internal_widget_is_live_pointer(child)) {
+    if (!parent || !child || !tc_ui_internal_widget_is_live_pointer(parent) ||
+        !tc_ui_internal_widget_is_live_pointer(child)) {
         tc_log_error("[termin-gui-native] cannot attach unadopted or stale widgets");
         return false;
     }
+    old_parent = child->parent;
     if (parent->document != child->document) {
         tc_log_error("[termin-gui-native] cannot attach widgets from different documents");
         return false;

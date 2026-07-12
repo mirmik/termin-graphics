@@ -45,6 +45,16 @@ typedef struct tc_ui_color {
     float a;
 } tc_ui_color;
 
+typedef struct tc_ui_arc_draw_desc {
+    tc_ui_point center;
+    float radius;
+    float start_radians;
+    float end_radians;
+    tc_ui_color color;
+    float thickness;
+    int32_t segments;
+} tc_ui_arc_draw_desc;
+
 typedef enum tc_ui_style_role {
     TC_UI_STYLE_GENERIC = 0,
     TC_UI_STYLE_PANEL = 1,
@@ -758,13 +768,7 @@ TERMIN_GUI_NATIVE_API void tc_ui_painter_stroke_circle(
 );
 TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_arc(
     tc_ui_paint_context* context,
-    tc_ui_point center,
-    float radius,
-    float start_radians,
-    float end_radians,
-    tc_ui_color color,
-    float thickness,
-    int32_t segments
+    const tc_ui_arc_draw_desc* desc
 );
 TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_line(
     tc_ui_paint_context* context,

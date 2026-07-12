@@ -173,10 +173,12 @@ tc_ui_rect ColorPicker::preview_rect() const {
 
 void ColorPicker::paint_checker(tc_ui_paint_context* context, tc_ui_rect rect) const {
     constexpr float cell = 8.0f;
-    for (float y = rect.y; y < rect.y + rect.height; y += cell) {
-        for (float x = rect.x; x < rect.x + rect.width; x += cell) {
-            const int column = static_cast<int>((x - rect.x) / cell);
-            const int row = static_cast<int>((y - rect.y) / cell);
+    const int rows = static_cast<int>(std::ceil(rect.height / cell));
+    const int columns = static_cast<int>(std::ceil(rect.width / cell));
+    for (int row = 0; row < rows; ++row) {
+        const float y = rect.y + static_cast<float>(row) * cell;
+        for (int column = 0; column < columns; ++column) {
+            const float x = rect.x + static_cast<float>(column) * cell;
             const float shade = ((column + row) & 1) == 0 ? 0.32f : 0.52f;
             tc_ui_painter_fill_rect(context,
                                     tc_ui_rect{x, y, std::min(cell, rect.x + rect.width - x),

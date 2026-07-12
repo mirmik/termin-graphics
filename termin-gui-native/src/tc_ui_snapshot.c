@@ -40,11 +40,13 @@ void tc_ui_document_snapshot_destroy(tc_ui_document_inspect_snapshot* snapshot) 
     if (!snapshot) {
         return;
     }
-    for (index = 0; index < snapshot->widget_count; ++index) {
-        free(snapshot->widgets[index].type_name);
-        free(snapshot->widgets[index].stable_id);
-        free(snapshot->widgets[index].name);
-        free(snapshot->widgets[index].debug_name);
+    if (snapshot->widgets) {
+        for (index = 0; index < snapshot->widget_count; ++index) {
+            free(snapshot->widgets[index].type_name);
+            free(snapshot->widgets[index].stable_id);
+            free(snapshot->widgets[index].name);
+            free(snapshot->widgets[index].debug_name);
+        }
     }
     free(snapshot->widgets);
     free(snapshot->children);
@@ -147,6 +149,11 @@ bool tc_ui_document_capture_snapshot(const tc_ui_document* document,
             if (!child || child->document != document ||
                 tc_widget_handle_is_invalid(child->handle)) {
                 tc_log_error("[termin-gui-native] invalid canonical child during snapshot");
+                tc_ui_document_snapshot_destroy(&snapshot);
+                return false;
+            }
+            if (child_index >= snapshot.child_count || !snapshot.children) {
+                tc_log_error("[termin-gui-native] document child topology changed during snapshot");
                 tc_ui_document_snapshot_destroy(&snapshot);
                 return false;
             }

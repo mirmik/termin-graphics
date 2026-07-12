@@ -268,26 +268,18 @@ void Canvas2DRenderer::draw_circle_outline(
     int segments
 ) {
     constexpr float kTau = 6.2831853071795864769f;
-    draw_arc(cx, cy, radius, 0.0f, kTau, color, thickness, segments);
+    draw_arc(CanvasArc{{cx, cy}, radius, 0.0f, kTau, color, thickness, segments});
 }
 
-void Canvas2DRenderer::draw_arc(
-    float cx,
-    float cy,
-    float radius,
-    float start_radians,
-    float end_radians,
-    CanvasColor color,
-    float thickness,
-    int segments
-) {
-    if (ctx_ == nullptr || radius <= 0.0f || thickness <= 0.0f ||
-        !std::isfinite(start_radians) || !std::isfinite(end_radians)) {
+void Canvas2DRenderer::draw_arc(const CanvasArc& arc) {
+    if (ctx_ == nullptr || arc.radius <= 0.0f || arc.thickness <= 0.0f ||
+        !std::isfinite(arc.start_radians) || !std::isfinite(arc.end_radians)) {
         return;
     }
     constexpr float kTau = 6.2831853071795864769f;
-    const float sweep = end_radians - start_radians;
+    const float sweep = arc.end_radians - arc.start_radians;
     if (std::fabs(sweep) <= 0.0001f) return;
+    int segments = arc.segments;
     if (segments <= 0) {
         segments = static_cast<int>(std::ceil(24.0f * std::fabs(sweep) / kTau));
     }
@@ -296,13 +288,13 @@ void Canvas2DRenderer::draw_arc(
     points.reserve(static_cast<size_t>(segments) + 1);
     for (int segment = 0; segment <= segments; ++segment) {
         const float t = static_cast<float>(segment) / static_cast<float>(segments);
-        const float angle = start_radians + sweep * t;
+        const float angle = arc.start_radians + sweep * t;
         points.push_back(CanvasVec2 {
-            cx + std::cos(angle) * radius,
-            cy + std::sin(angle) * radius,
+            arc.center.x + std::cos(angle) * arc.radius,
+            arc.center.y + std::sin(angle) * arc.radius,
         });
     }
-    draw_polyline(points, color, thickness);
+    draw_polyline(points, arc.color, arc.thickness);
 }
 
 void Canvas2DRenderer::draw_rect_outline(float x, float y, float w, float h,
@@ -315,16 +307,14 @@ void Canvas2DRenderer::draw_rect_outline(float x, float y, float w, float h,
     draw_rect(x + w - t, y, t, h, color);
 }
 
-void Canvas2DRenderer::draw_rounded_rect_outline(
-    float x,
-    float y,
-    float w,
-    float h,
-    float radius,
-    CanvasColor color,
-    float thickness,
-    int corner_segments
-) {
+void Canvas2DRenderer::draw_rounded_rect_outline(const CanvasRoundedRectOutline& outline) {
+    const float x = outline.x;
+    const float y = outline.y;
+    const float w = outline.width;
+    const float h = outline.height;
+    const CanvasColor color = outline.color;
+    const float thickness = outline.thickness;
+    float radius = outline.radius;
     if (w <= 0.0f || h <= 0.0f || thickness <= 0.0f) return;
     radius = std::clamp(radius, 0.0f, std::min(w, h) * 0.5f);
     if (radius <= 0.0f) {
@@ -332,19 +322,19 @@ void Canvas2DRenderer::draw_rounded_rect_outline(
         return;
     }
     constexpr float kPi = 3.14159265358979323846f;
-    corner_segments = std::clamp(corner_segments, 2, 48);
+    const int corner_segments = std::clamp(outline.corner_segments, 2, 48);
     draw_line(x + radius, y, x + w - radius, y, color, thickness);
     draw_line(x + w, y + radius, x + w, y + h - radius, color, thickness);
     draw_line(x + w - radius, y + h, x + radius, y + h, color, thickness);
     draw_line(x, y + h - radius, x, y + radius, color, thickness);
-    draw_arc(x + radius, y + radius, radius, kPi, kPi * 1.5f,
-             color, thickness, corner_segments);
-    draw_arc(x + w - radius, y + radius, radius, kPi * 1.5f, kPi * 2.0f,
-             color, thickness, corner_segments);
-    draw_arc(x + w - radius, y + h - radius, radius, 0.0f, kPi * 0.5f,
-             color, thickness, corner_segments);
-    draw_arc(x + radius, y + h - radius, radius, kPi * 0.5f, kPi,
-             color, thickness, corner_segments);
+    draw_arc(CanvasArc{{x + radius, y + radius}, radius, kPi, kPi * 1.5f,
+                       color, thickness, corner_segments});
+    draw_arc(CanvasArc{{x + w - radius, y + radius}, radius, kPi * 1.5f, kPi * 2.0f,
+                       color, thickness, corner_segments});
+    draw_arc(CanvasArc{{x + w - radius, y + h - radius}, radius, 0.0f, kPi * 0.5f,
+                       color, thickness, corner_segments});
+    draw_arc(CanvasArc{{x + radius, y + h - radius}, radius, kPi * 0.5f, kPi,
+                       color, thickness, corner_segments});
 }
 
 void Canvas2DRenderer::draw_line(float x0, float y0, float x1, float y1,

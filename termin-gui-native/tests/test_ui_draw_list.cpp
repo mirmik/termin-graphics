@@ -152,16 +152,9 @@ void test_extended_commands_own_variable_data_and_preserve_legacy_values() {
     );
     tc_ui_painter_fill_circle(context, tc_ui_point {10.0f, 11.0f}, 5.0f, white, 20);
     tc_ui_painter_stroke_circle(context, tc_ui_point {12.0f, 13.0f}, 6.0f, white, 1.5f, 24);
-    tc_ui_painter_draw_arc(
-        context,
-        tc_ui_point {14.0f, 15.0f},
-        7.0f,
-        0.25f,
-        2.5f,
-        white,
-        2.0f,
-        12
-    );
+    const tc_ui_arc_draw_desc arc{
+        tc_ui_point {14.0f, 15.0f}, 7.0f, 0.25f, 2.5f, white, 2.0f, 12};
+    tc_ui_painter_draw_arc(context, &arc);
     tc_ui_painter_draw_polyline(context, points, 3, white, 3.0f);
     tc_ui_painter_draw_texture(
         context,

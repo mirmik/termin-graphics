@@ -222,7 +222,7 @@ void UiDrawListRenderer::render(
             );
             break;
         case TC_UI_DRAW_STROKE_ROUNDED_RECT:
-            canvas_.draw_rounded_rect_outline(
+            canvas_.draw_rounded_rect_outline(tgfx::CanvasRoundedRectOutline{
                 command->rect.x,
                 command->rect.y,
                 command->rect.width,
@@ -230,8 +230,8 @@ void UiDrawListRenderer::render(
                 command->radius,
                 canvas_color(command->color),
                 command->thickness,
-                command->segments > 0 ? command->segments : 6
-            );
+                command->segments > 0 ? command->segments : 6,
+            });
             break;
         case TC_UI_DRAW_FILL_CIRCLE:
             canvas_.draw_circle(
@@ -253,16 +253,15 @@ void UiDrawListRenderer::render(
             );
             break;
         case TC_UI_DRAW_ARC:
-            canvas_.draw_arc(
-                command->p0.x,
-                command->p0.y,
+            canvas_.draw_arc(tgfx::CanvasArc{
+                {command->p0.x, command->p0.y},
                 command->radius,
                 command->start_radians,
                 command->end_radians,
                 canvas_color(command->color),
                 command->thickness,
-                command->segments
-            );
+                command->segments,
+            });
             break;
         case TC_UI_DRAW_LINE:
             canvas_.draw_line(
