@@ -84,6 +84,7 @@ set(TERMIN_RENDER_SOURCES
     src/render_item_mesh.cpp
     src/render_scene_item_collector.cpp
     src/render_item_submission.cpp
+    src/render_task.cpp
     src/shader_abi.cpp
     src/shader_usage_collector.cpp
     src/shader_resource_apply.cpp

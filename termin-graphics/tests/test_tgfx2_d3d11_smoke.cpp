@@ -264,7 +264,7 @@ int main() {
         tgfx::BoundResourceValue unsupported_storage_value;
         unsupported_storage_value.kind = tgfx::BoundResourceKind::SampledTexture;
         const tgfx::BoundResourceBinding unsupported_storage_binding = {
-            unsupported_storage_plan, unsupported_storage_value};
+            tgfx::bound_resource_slot_from_plan_entry(unsupported_storage_plan), unsupported_storage_value};
         tgfx::BoundResourceSetStorage unsupported_storage_set_storage;
         unsupported_storage_set_storage.append_group(
             tgfx::ShaderResourceScope::Pass,
@@ -788,7 +788,7 @@ int main() {
 
         auto sampler = device->create_sampler(tgfx::SamplerDesc{});
         tgfx::BoundResourceBinding sampled_texture;
-        sampled_texture.slot.kind = tgfx::ShaderResourceKind::SampledTexture;
+        sampled_texture.slot.kind = tgfx::ShaderResourceKind::Texture;
         sampled_texture.slot.scope = tgfx::ShaderResourceScope::Material;
         sampled_texture.slot.stage_mask = TC_SHADER_STAGE_FRAGMENT;
         sampled_texture.slot.placement.kind = tgfx::BackendPlacementKind::D3D11Register;
@@ -981,8 +981,8 @@ int main() {
         draw_data_value.buffer = draw_data_cb;
         draw_data_value.range = sizeof(identity);
 
-        const tgfx::BoundResourceBinding frame_binding = {per_frame_plan, per_frame_value};
-        const tgfx::BoundResourceBinding draw_binding = {draw_data_plan, draw_data_value};
+        const tgfx::BoundResourceBinding frame_binding = {tgfx::bound_resource_slot_from_plan_entry(per_frame_plan), per_frame_value};
+        const tgfx::BoundResourceBinding draw_binding = {tgfx::bound_resource_slot_from_plan_entry(draw_data_plan), draw_data_value};
         tgfx::BoundResourceSetStorage normal_resource_set_storage;
         normal_resource_set_storage.set_resource_layout_token(
             device->pipeline_resource_layout_token(normal_pipeline));
@@ -1040,7 +1040,7 @@ int main() {
         shadow_maps_value.array_element = 15;
 
         const tgfx::BoundResourceBinding shadow_maps_binding = {
-            shadow_maps_plan, shadow_maps_value};
+            tgfx::bound_resource_slot_from_plan_entry(shadow_maps_plan), shadow_maps_value};
         tgfx::BoundResourceSetStorage shadow_maps_resource_set_storage;
         shadow_maps_resource_set_storage.set_resource_layout_token(
             device->pipeline_resource_layout_token(normal_pipeline));

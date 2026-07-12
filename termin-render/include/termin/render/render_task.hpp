@@ -36,35 +36,17 @@ private:
     std::vector<RenderItemNamedTextureBinding> named_textures_;
 
 public:
-    void set_resources(
-        const MaterialPipelineResourceView* material_resources,
-        std::span<const RenderItemNamedUniformBinding> named_uniforms,
-        std::span<const RenderItemNamedTextureBinding> named_textures = {})
-    {
-        named_uniforms_.clear();
-        named_uniforms_.reserve(named_uniforms.size());
-        for (const RenderItemNamedUniformBinding& binding : named_uniforms) {
-            named_uniforms_.push_back(binding);
-        }
-        named_textures_.clear();
-        named_textures_.reserve(named_textures.size());
-        for (const RenderItemNamedTextureBinding& binding : named_textures) {
-            named_textures_.push_back(binding);
-        }
-        resources = {};
-        resources.material_resources = material_resources;
-        resources.named_uniforms = named_uniforms_.data();
-        resources.named_uniform_count = static_cast<uint32_t>(named_uniforms_.size());
-        resources.named_textures = named_textures_.data();
-        resources.named_texture_count = static_cast<uint32_t>(named_textures_.size());
-    }
+    void set_resources(const MaterialPipelineResourceView* material_resources,
+                       std::span<const RenderItemNamedUniformBinding> named_uniforms,
+                       std::span<const RenderItemNamedTextureBinding> named_textures = {});
 };
 
 // Pass-specific, typed UBO payloads are owned here on the heap so pointers in
 // RenderTask resource packets cannot be invalidated when task vectors grow.
 class RENDER_API RenderTaskExtension {
 public:
-    virtual ~RenderTaskExtension() = default;
+    RenderTaskExtension();
+    virtual ~RenderTaskExtension();
 };
 
 class RENDER_API RenderTaskList {
@@ -72,17 +54,14 @@ class RENDER_API RenderTaskList {
     std::vector<std::unique_ptr<RenderTaskExtension>> extensions_;
 
 public:
-    RenderTaskList() = default;
+    RenderTaskList();
     RenderTaskList(const RenderTaskList&) = delete;
     RenderTaskList& operator=(const RenderTaskList&) = delete;
-    RenderTaskList(RenderTaskList&&) noexcept = default;
-    RenderTaskList& operator=(RenderTaskList&&) noexcept = default;
+    RenderTaskList(RenderTaskList&&) noexcept;
+    RenderTaskList& operator=(RenderTaskList&&) noexcept;
 
-    void reserve(size_t count) { tasks_.reserve(count); }
-    RenderTask& append() {
-        tasks_.emplace_back();
-        return tasks_.back();
-    }
+    void reserve(size_t count);
+    RenderTask& append();
 
     template <typename T, typename... Args>
     T& emplace_extension(Args&&... args) {
@@ -93,12 +72,12 @@ public:
         return result;
     }
 
-    bool empty() const { return tasks_.empty(); }
-    size_t size() const { return tasks_.size(); }
-    std::vector<RenderTask>::iterator begin() { return tasks_.begin(); }
-    std::vector<RenderTask>::iterator end() { return tasks_.end(); }
-    std::vector<RenderTask>::const_iterator begin() const { return tasks_.begin(); }
-    std::vector<RenderTask>::const_iterator end() const { return tasks_.end(); }
+    bool empty() const;
+    size_t size() const;
+    std::vector<RenderTask>::iterator begin();
+    std::vector<RenderTask>::iterator end();
+    std::vector<RenderTask>::const_iterator begin() const;
+    std::vector<RenderTask>::const_iterator end() const;
 };
 
 } // namespace termin
