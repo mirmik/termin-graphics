@@ -454,27 +454,76 @@ BackendBoundResourceSlot bound_resource_slot_from_plan_entry(
 }
 
 size_t bound_resource_binding_count(const BoundResourceSetDesc& desc) {
-    if (!desc.groups.empty()) {
-        size_t count = 0;
-        for (const BoundResourceGroup& group : desc.groups) {
-            count += group.bindings.size();
-        }
-        return count;
+    size_t count = 0;
+    for (uint32_t group_index = 0; group_index < desc.group_count; ++group_index) {
+        count += desc.groups[group_index].binding_count;
     }
-    return desc.bindings.size();
+    return count;
 }
 
 size_t dirty_bound_resource_binding_count(const BoundResourceSetDesc& desc) {
-    if (!desc.groups.empty()) {
-        size_t count = 0;
-        for (const BoundResourceGroup& group : desc.groups) {
-            if (group.dirty) {
-                count += group.bindings.size();
-            }
+    size_t count = 0;
+    for (uint32_t group_index = 0; group_index < desc.group_count; ++group_index) {
+        const BoundResourceGroupView& group = desc.groups[group_index];
+        if (group.dirty) {
+            count += group.binding_count;
         }
-        return count;
     }
-    return desc.bindings.size();
+    return count;
+}
+
+void BoundResourceSetStorage::rebuild_views() {
+    group_views_.clear();
+    group_views_.reserve(groups_.size());
+    for (const GroupStorage& group : groups_) {
+        group_views_.push_back({
+            group.scope,
+            group.dirty,
+            group.bindings.data(),
+            static_cast<uint32_t>(group.bindings.size()),
+        });
+    }
+}
+
+void BoundResourceSetStorage::assign(const BoundResourceSetDesc& desc) {
+    resource_layout_token_ = desc.resource_layout_token;
+    groups_.clear();
+    groups_.reserve(desc.group_count);
+    for (uint32_t group_index = 0; group_index < desc.group_count; ++group_index) {
+        const BoundResourceGroupView& source = desc.groups[group_index];
+        GroupStorage& destination = groups_.emplace_back();
+        destination.scope = source.scope;
+        destination.dirty = source.dirty;
+        if (source.binding_count != 0) {
+            destination.bindings.assign(
+                source.bindings,
+                source.bindings + source.binding_count);
+        }
+    }
+    rebuild_views();
+}
+
+void BoundResourceSetStorage::append_group(
+    ShaderResourceScope scope,
+    bool dirty,
+    const BoundResourceBinding* bindings,
+    uint32_t binding_count
+) {
+    GroupStorage& destination = groups_.emplace_back();
+    destination.scope = scope;
+    destination.dirty = dirty;
+    if (binding_count != 0) {
+        destination.bindings.assign(bindings, bindings + binding_count);
+    }
+    rebuild_views();
+}
+
+BoundResourceSetDesc BoundResourceSetStorage::view() const {
+    return {
+        resource_layout_token_,
+        group_views_.data(),
+        static_cast<uint32_t>(group_views_.size()),
+    };
 }
 
 } // namespace tgfx

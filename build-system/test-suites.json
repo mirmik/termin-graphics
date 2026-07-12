@@ -55,6 +55,12 @@
         "reason": "Requires an SDL OpenGL window and is not a Windows D3D11 gate."
       },
       {
+        "path": "termin-graphics/tests/test_tgfx2_opengl_navmesh_overlay.cpp",
+        "profiles": ["linux-full"],
+        "capabilities": ["window", "opengl"],
+        "reason": "Requires an SDL OpenGL window for the navmesh depth-ordering pixel regression."
+      },
+      {
         "path": "termin-graphics/tests/test_tgfx2_vulkan_window.cpp",
         "profiles": ["linux-full"],
         "capabilities": ["window", "vulkan"],

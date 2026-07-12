@@ -910,7 +910,7 @@ ResourceSetHandle OpenGLRenderDevice::create_bound_resource_set(
     const BoundResourceSetDesc& desc
 ) {
     GLResourceSet rs;
-    rs.bound_desc = desc;
+    rs.bound_resources.assign(desc);
     return {resource_sets_.add(std::move(rs))};
 }
 

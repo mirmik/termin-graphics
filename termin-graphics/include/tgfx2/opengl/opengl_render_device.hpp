@@ -75,7 +75,7 @@ struct GLProgramKeyHash {
 };
 
 struct GLResourceSet {
-    BoundResourceSetDesc bound_desc;
+    BoundResourceSetStorage bound_resources;
 };
 
 // Handle pool: maps uint32_t id -> T

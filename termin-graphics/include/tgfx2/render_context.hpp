@@ -19,6 +19,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -176,7 +177,9 @@ private:
         const BackendBoundResourceSlot& slot, const BoundResourceValue& value);
     void upsert_pending_planned_binding(ResourceScope scope, const BackendBoundResourceSlot& slot,
         const BoundResourceValue& value);
-    BoundResourceSetDesc build_pending_bound_resource_set(uintptr_t resource_layout_token) const;
+    BoundResourceSetDesc build_pending_bound_resource_set(
+        uintptr_t resource_layout_token,
+        std::span<BoundResourceGroupView> group_views) const;
     const BackendBindingPlanEntry* active_backend_binding_for(const struct ::tc_shader_resource_binding* rb,
         const char* action) const;
     const struct ::tc_shader_resource_binding* active_resource_binding_by_name(std::string_view name,

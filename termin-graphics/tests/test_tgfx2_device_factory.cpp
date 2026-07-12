@@ -226,7 +226,7 @@ TEST_CASE("backend binding plan separates semantic resources from backend placem
     CHECK(opengl_plan.entries[0].placement.opengl.binding_point == 1u);
 }
 
-TEST_CASE("bound resource groups are preferred over flat compatibility bindings") {
+TEST_CASE("bound resource group views preserve dirty scopes and owned storage") {
     tgfx::BackendBindingPlanEntry grouped_entry;
     grouped_entry.resource.name = "frame_data";
     grouped_entry.resource.kind = tgfx::ShaderResourceKind::ConstantBuffer;
@@ -242,36 +242,26 @@ TEST_CASE("bound resource groups are preferred over flat compatibility bindings"
     grouped_value.buffer = tgfx::BufferHandle{11};
     grouped_value.range = 64;
 
-    tgfx::BoundResourceSetDesc grouped_desc;
-    grouped_desc.resource_layout_token = 0x1234u;
-    tgfx::BoundResourceGroup frame_group;
-    frame_group.scope = tgfx::ShaderResourceScope::Frame;
-    frame_group.bindings.push_back({
+    const tgfx::BoundResourceBinding frame_binding = {
         tgfx::bound_resource_slot_from_plan_entry(grouped_entry),
         grouped_value,
-    });
-    grouped_desc.groups.push_back(frame_group);
+    };
 
     tgfx::BackendBindingPlanEntry clean_entry = grouped_entry;
     clean_entry.resource.name = "material_data";
     clean_entry.resource.scope = tgfx::ShaderResourceScope::Material;
     clean_entry.placement.opengl.binding_point = 3;
-    tgfx::BoundResourceGroup clean_group;
-    clean_group.scope = tgfx::ShaderResourceScope::Material;
-    clean_group.dirty = false;
-    clean_group.bindings.push_back({
+    const tgfx::BoundResourceBinding clean_binding = {
         tgfx::bound_resource_slot_from_plan_entry(clean_entry),
         grouped_value,
-    });
-    grouped_desc.groups.push_back(clean_group);
-
-    tgfx::BackendBindingPlanEntry ignored_flat_entry = grouped_entry;
-    ignored_flat_entry.resource.name = "ignored_flat";
-    ignored_flat_entry.placement.opengl.binding_point = 7;
-    grouped_desc.bindings.push_back({
-        tgfx::bound_resource_slot_from_plan_entry(ignored_flat_entry),
-        grouped_value,
-    });
+    };
+    tgfx::BoundResourceSetStorage storage;
+    storage.set_resource_layout_token(0x1234u);
+    storage.append_group(
+        tgfx::ShaderResourceScope::Frame, true, &frame_binding, 1);
+    storage.append_group(
+        tgfx::ShaderResourceScope::Material, false, &clean_binding, 1);
+    const tgfx::BoundResourceSetDesc grouped_desc = storage.view();
 
     CHECK(tgfx::bound_resource_binding_count(grouped_desc) == 2u);
     CHECK(tgfx::dirty_bound_resource_binding_count(grouped_desc) == 1u);
@@ -283,6 +273,16 @@ TEST_CASE("bound resource groups are preferred over flat compatibility bindings"
         });
     CHECK(dirty_binding_sum == 2u);
 
+    tgfx::BoundResourceBinding mutable_source = frame_binding;
+    const tgfx::BoundResourceGroupView source_group = {
+        tgfx::ShaderResourceScope::Frame, true, &mutable_source, 1,
+    };
+    const tgfx::BoundResourceSetDesc source_desc = {0x5678u, &source_group, 1};
+    tgfx::BoundResourceSetStorage deferred_storage;
+    deferred_storage.assign(source_desc);
+    mutable_source.slot.placement.opengl.binding_point = 7;
+    CHECK(deferred_storage.view().resource_layout_token == 0x5678u);
+    CHECK(deferred_storage.view().groups[0].bindings[0].slot.placement.opengl.binding_point == 2u);
 }
 
 TEST_CASE("backend binding plan validates D3D11 register class and stage conflicts") {
