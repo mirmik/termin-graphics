@@ -961,15 +961,12 @@ ResourceSetHandle VulkanRenderDevice::create_bound_resource_set(
     }
     sort_resolved_bindings(resolved_bindings);
 
-    VkResourceSetResource res;
-    res.bound_desc = desc;
-
     return create_resolved_resource_set(
         layout,
         layout_bindings,
         desc.resource_layout_token,
         resolved_bindings,
-        std::move(res),
+        {},
         0x626f756e64000001ull);
 }
 

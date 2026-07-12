@@ -186,15 +186,15 @@ int main() {
     value.buffer = ubo;
     value.range = sizeof(color_block);
 
-    tgfx::BoundResourceSetDesc bound_desc;
-    bound_desc.resource_layout_token = resource_layout_token;
-    tgfx::BoundResourceGroup material_group;
-    material_group.scope = tgfx::ShaderResourceScope::Material;
-    material_group.bindings.push_back({
+    const tgfx::BoundResourceBinding material_binding = {
         tgfx::bound_resource_slot_from_plan_entry(plan_entry),
         value,
-    });
-    bound_desc.groups.push_back(std::move(material_group));
+    };
+    tgfx::BoundResourceSetStorage bound_storage;
+    bound_storage.set_resource_layout_token(resource_layout_token);
+    bound_storage.append_group(
+        tgfx::ShaderResourceScope::Material, true, &material_binding, 1);
+    const tgfx::BoundResourceSetDesc bound_desc = bound_storage.view();
     tgfx::ResourceSetHandle resource_set =
         device->create_bound_resource_set(bound_desc);
 

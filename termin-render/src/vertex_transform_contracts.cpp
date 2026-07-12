@@ -72,6 +72,15 @@ const char* material_pipeline_value_type_name(MaterialPipelineValueType type)
     return "unknown";
 }
 
+bool vertex_transform_provider_is_modular(
+    const VertexTransformProvider& provider)
+{
+    return !provider.source_module.module_name.empty() &&
+           !provider.source_module.source_identity.empty() &&
+           !provider.entry_input_declaration.empty() &&
+           !provider.adapter_input_expression.empty();
+}
+
 MaterialFragmentInterface material_pipeline_standard_material_fragment_interface()
 {
     MaterialFragmentInterface interface;
@@ -225,7 +234,7 @@ VertexTransformContract material_pipeline_make_static_vertex_transform_contract(
 VertexTransformContract material_pipeline_make_skinned_vertex_transform_contract(
     const VertexTransformContract& static_contract,
     std::string debug_name,
-    std::string template_uuid,
+    std::optional<std::string> template_uuid,
     VertexInputContract vertex_inputs)
 {
     VertexTransformContract contract = static_contract;

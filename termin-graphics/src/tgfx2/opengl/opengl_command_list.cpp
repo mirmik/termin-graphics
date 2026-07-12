@@ -354,7 +354,7 @@ void OpenGLCommandList::bind_resource_set(ResourceSetHandle set,
     auto* rs = device_.get_resource_set(set);
     if (!rs) return;
 
-    for_each_dirty_bound_resource_binding(rs->bound_desc, [&](const BoundResourceBinding& b) {
+    for_each_dirty_bound_resource_binding(rs->bound_resources.view(), [&](const BoundResourceBinding& b) {
         bind_bound_resource_binding(device_, b);
     });
 }

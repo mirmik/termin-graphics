@@ -49,17 +49,21 @@ entry contains:
 `BoundResourceSetDesc` is the backend boundary for migrated paths. It contains:
 
 - `resource_layout_token`: the current pipeline resource layout identity;
-- `groups`: scope-preserving `BoundResourceGroup` entries for frame/pass/
-  material/draw/transient bindings;
-- `bindings`: transitional flat compatibility entries used only when `groups`
-  is empty.
+- `groups` plus `group_count`: a non-owning contiguous range of
+  scope-preserving `BoundResourceGroupView` packets for frame/pass/material/
+  draw/transient bindings.
 
-Each `BoundResourceGroup` contains:
+Each `BoundResourceGroupView` contains:
 
 - `scope`: the shader resource scope preserved to the backend boundary;
 - `dirty`: whether this scope changed since the last emitted resource set for
   the current pass/pipeline;
-- `bindings`: pairs of `BackendBindingPlanEntry` and `BoundResourceValue`.
+- `bindings` plus `binding_count`: a non-owning range of resolved bindings.
+
+Both view packet types are standard-layout and trivially-copyable. The view is
+valid for `create_bound_resource_set()` only. Backends that defer consumption
+(OpenGL/D3D11) copy it into backend-local storage; Vulkan resolves descriptor
+writes immediately.
 
 `BoundResourceValue` contains only values:
 
@@ -106,8 +110,7 @@ while the texture remains arrayed; this is represented by
 names such as `shadow_maps`.
 
 Stage visibility comes from the plan entry's stage mask.
-When `BoundResourceSetDesc::groups` is present, clean groups are skipped so
-unchanged scopes do not rebind native D3D11 slots.
+Clean groups are skipped so unchanged scopes do not rebind native D3D11 slots.
 
 ### OpenGL
 
@@ -126,8 +129,7 @@ overflow into pass or transient texture units.
 
 Image bindings currently log unsupported diagnostics unless implemented by a
 specific path.
-When `BoundResourceSetDesc::groups` is present, clean groups are skipped so
-unchanged scopes do not rebind native OpenGL slots.
+Clean groups are skipped so unchanged scopes do not rebind native OpenGL slots.
 
 ## RenderContext2 Responsibilities
 
@@ -142,7 +144,7 @@ paths must not construct backend placement themselves and must not rely on
 caller-authored descriptor set/binding numbers.
 
 Pending symbolic resources are bucketed by shader scope and emitted as
-`BoundResourceGroup` entries. Backends therefore receive scope information
+`BoundResourceGroupView` entries. Backends therefore receive scope information
 without inferring it from names or numeric slots.
 `RenderContext2` tracks dirty scopes separately from desired binding state and
 marks all scopes dirty when pass or pipeline resource layout changes.
@@ -173,17 +175,11 @@ required. For example, Vulkan rejects wrong backend placement kind,
 descriptor-kind mismatch, value-kind mismatch, missing layout binding, and
 unsupported descriptor sets.
 
-## Transitional State
+## Remaining State
 
-The live contract is bound-first and scope-preserving. Remaining transitional
-pieces are:
-
-- `BoundResourceSetDesc::bindings` remains as flat compatibility input for old
-  tests and custom/unported backends. Concrete tgfx2 backends consume
-  `BoundResourceSetDesc::groups` when present.
-- Scope groups preserve structure at the backend boundary, and OpenGL/D3D11 use
-  dirty flags to avoid rebinding clean scopes. Vulkan still processes the full
-  grouped state to create a complete descriptor set.
-- `pipeline_resource_layout_token()` is an opaque token. A named
-  `PipelineResourceLayout` handle may replace it once layout ownership is
-  formalized.
+The live contract is bound-first and scope-preserving. Scope groups preserve
+structure at the backend boundary, OpenGL/D3D11 use dirty flags to avoid
+rebinding clean scopes, and Vulkan processes the full grouped state to create a
+complete descriptor set. `pipeline_resource_layout_token()` remains an opaque
+token; a named `PipelineResourceLayout` handle may replace it once layout
+ownership is formalized.

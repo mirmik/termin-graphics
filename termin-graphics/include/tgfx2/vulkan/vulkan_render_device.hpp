@@ -80,7 +80,6 @@ struct VkPipelineResource {
 
 struct VkResourceSetResource {
     VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
-    BoundResourceSetDesc bound_desc;
     bool descriptor_cache_owned = false;
     // Dynamic offsets emitted at bind time, in binding-number order.
     // Sized for the worst-case dynamic UBO count per layout.

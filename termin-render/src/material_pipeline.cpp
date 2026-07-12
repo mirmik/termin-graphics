@@ -123,6 +123,41 @@ void append_vertex_transform_to_hash(
         hash = fnv1a_append_u32(stream.stride, hash);
         hash = fnv1a_append(";", hash);
     }
+    hash = fnv1a_append(":source_module:", hash);
+    hash = fnv1a_append(vertex_transform.source_module.module_name.c_str(), hash);
+    hash = fnv1a_append(":source_identity:", hash);
+    hash = fnv1a_append(vertex_transform.source_module.source_identity.c_str(), hash);
+    hash = fnv1a_append(":entry_input:", hash);
+    hash = fnv1a_append(vertex_transform.entry_input_declaration.c_str(), hash);
+    hash = fnv1a_append(":adapter_input:", hash);
+    hash = fnv1a_append(vertex_transform.adapter_input_expression.c_str(), hash);
+    hash = fnv1a_append(":world_semantics:", hash);
+    append_semantics_to_hash(vertex_transform.produced_world_semantics.semantics, hash);
+}
+
+void append_vertex_output_adapter_to_hash(
+    const std::optional<VertexOutputAdapter>& adapter,
+    uint64_t& hash)
+{
+    if (!adapter.has_value()) {
+        hash = fnv1a_append("none", hash);
+        return;
+    }
+    hash = fnv1a_append(adapter->debug_name.c_str(), hash);
+    hash = fnv1a_append(":module:", hash);
+    hash = fnv1a_append(adapter->source_module.module_name.c_str(), hash);
+    hash = fnv1a_append(":identity:", hash);
+    hash = fnv1a_append(adapter->source_module.source_identity.c_str(), hash);
+    hash = fnv1a_append(":output_type:", hash);
+    hash = fnv1a_append(adapter->output_type_name.c_str(), hash);
+    hash = fnv1a_append(":output_function:", hash);
+    hash = fnv1a_append(adapter->output_function.c_str(), hash);
+    hash = fnv1a_append(":consumes:", hash);
+    append_semantics_to_hash(adapter->consumed_world_semantics.semantics, hash);
+    hash = fnv1a_append(":produces:", hash);
+    append_semantics_to_hash(adapter->produced_output_semantics.semantics, hash);
+    hash = fnv1a_append(":resources:", hash);
+    append_resources_to_hash(adapter->resources, hash);
 }
 
 bool material_shader_override_supported(VertexTransformKind kind)
@@ -277,6 +312,8 @@ std::string material_pipeline_shader_intent_fingerprint(
         hash);
     hash = fnv1a_append(":resources:", hash);
     append_resources_to_hash(pass_contract.resources, hash);
+    hash = fnv1a_append(":vertex_output_adapter:", hash);
+    append_vertex_output_adapter_to_hash(pass_contract.vertex_output_adapter, hash);
 
     char buffer[32];
     std::snprintf(buffer, sizeof(buffer), "shv_%016llx",

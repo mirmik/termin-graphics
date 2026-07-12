@@ -409,15 +409,15 @@ static bool render_bound_resource_set_smoke(tgfx::IRenderDevice& device) {
     value.buffer = ubo;
     value.range = sizeof(color_block);
 
-    tgfx::BoundResourceSetDesc bound_desc;
-    bound_desc.resource_layout_token = resource_layout_token;
-    tgfx::BoundResourceGroup material_group;
-    material_group.scope = tgfx::ShaderResourceScope::Material;
-    material_group.bindings.push_back({
+    const tgfx::BoundResourceBinding material_binding = {
         tgfx::bound_resource_slot_from_plan_entry(plan_entry),
         value,
-    });
-    bound_desc.groups.push_back(std::move(material_group));
+    };
+    tgfx::BoundResourceSetStorage bound_storage;
+    bound_storage.set_resource_layout_token(resource_layout_token);
+    bound_storage.append_group(
+        tgfx::ShaderResourceScope::Material, true, &material_binding, 1);
+    const tgfx::BoundResourceSetDesc bound_desc = bound_storage.view();
     tgfx::ResourceSetHandle resource_set =
         device.create_bound_resource_set(bound_desc);
     if (!resource_set) {
@@ -425,17 +425,29 @@ static bool render_bound_resource_set_smoke(tgfx::IRenderDevice& device) {
         return false;
     }
 
-    tgfx::BoundResourceSetDesc wrong_backend_desc = bound_desc;
-    wrong_backend_desc.groups[0].bindings[0].slot.placement.kind =
+    tgfx::BoundResourceBinding wrong_backend_binding = material_binding;
+    wrong_backend_binding.slot.placement.kind =
         tgfx::BackendPlacementKind::OpenGLBinding;
+    const tgfx::BoundResourceGroupView wrong_backend_group = {
+        tgfx::ShaderResourceScope::Material, true, &wrong_backend_binding, 1,
+    };
+    const tgfx::BoundResourceSetDesc wrong_backend_desc = {
+        resource_layout_token, &wrong_backend_group, 1,
+    };
     if (device.create_bound_resource_set(wrong_backend_desc)) {
         fprintf(stderr, "Vulkan bound smoke: accepted non-Vulkan placement\n");
         return false;
     }
 
-    tgfx::BoundResourceSetDesc wrong_descriptor_desc = bound_desc;
-    wrong_descriptor_desc.groups[0].bindings[0].slot.placement.vulkan.descriptor_kind =
+    tgfx::BoundResourceBinding wrong_descriptor_binding = material_binding;
+    wrong_descriptor_binding.slot.placement.vulkan.descriptor_kind =
         tgfx::BackendDescriptorKind::Sampler;
+    const tgfx::BoundResourceGroupView wrong_descriptor_group = {
+        tgfx::ShaderResourceScope::Material, true, &wrong_descriptor_binding, 1,
+    };
+    const tgfx::BoundResourceSetDesc wrong_descriptor_desc = {
+        resource_layout_token, &wrong_descriptor_group, 1,
+    };
     if (device.create_bound_resource_set(wrong_descriptor_desc)) {
         fprintf(stderr, "Vulkan bound smoke: accepted wrong descriptor kind\n");
         return false;

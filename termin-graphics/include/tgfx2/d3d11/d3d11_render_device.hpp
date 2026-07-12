@@ -57,7 +57,7 @@ struct D3D11Pipeline {
 };
 
 struct D3D11ResourceSet {
-    BoundResourceSetDesc bound_desc;
+    BoundResourceSetStorage bound_resources;
 };
 
 template<typename T>

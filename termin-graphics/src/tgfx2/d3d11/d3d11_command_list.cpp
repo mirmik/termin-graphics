@@ -372,7 +372,7 @@ void D3D11CommandList::bind_resource_set(ResourceSetHandle set,
     auto* rs = device_.get_resource_set(set);
     if (!rs) return;
 
-    for_each_dirty_bound_resource_binding(rs->bound_desc, [&](const BoundResourceBinding& binding) {
+    for_each_dirty_bound_resource_binding(rs->bound_resources.view(), [&](const BoundResourceBinding& binding) {
         bind_bound_resource_binding(device_, ctx_, binding);
     });
 }

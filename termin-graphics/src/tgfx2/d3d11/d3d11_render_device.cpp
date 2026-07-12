@@ -1068,7 +1068,7 @@ ResourceSetHandle D3D11RenderDevice::create_bound_resource_set(
     }
 
     D3D11ResourceSet out;
-    out.bound_desc = desc;
+    out.bound_resources.assign(desc);
     return {resource_sets_.add(std::move(out))};
 }
 

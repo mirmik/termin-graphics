@@ -123,8 +123,6 @@ int main() {
         reinterpret_cast<const uint8_t*>(identity_mvp.data()),
         sizeof(float) * identity_mvp.size()));
 
-    tgfx::BoundResourceSetDesc rs_desc;
-    rs_desc.resource_layout_token = device->pipeline_resource_layout_token(pipeline);
     tgfx::BoundResourceBinding rb;
     rb.slot.kind = tgfx::ShaderResourceKind::ConstantBuffer;
     rb.slot.scope = tgfx::ShaderResourceScope::Draw;
@@ -137,7 +135,11 @@ int main() {
     rb.value.kind = tgfx::BoundResourceKind::UniformBuffer;
     rb.value.buffer = ubo;
     rb.value.range = 64;
-    rs_desc.bindings.push_back(rb);
+    tgfx::BoundResourceSetStorage rs_storage;
+    rs_storage.set_resource_layout_token(
+        device->pipeline_resource_layout_token(pipeline));
+    rs_storage.append_group(tgfx::ShaderResourceScope::Draw, true, &rb, 1);
+    const tgfx::BoundResourceSetDesc rs_desc = rs_storage.view();
 
     auto rset = device->create_bound_resource_set(rs_desc);
     printf("Resource set: id=%u\n", rset.id);

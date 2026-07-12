@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -19,14 +20,14 @@ namespace tgfx {
 
 class IRenderDevice;
 
-// Key that uniquely identifies a pipeline configuration.
-// Hash is computed incrementally for fast lookup.
-struct PipelineCacheKey {
+// State shared by a transient lookup view and a cache-owned key.  Vertex
+// layouts deliberately live outside this structure: callers borrow them for
+// lookup, while PipelineCache owns them after a miss.
+struct PipelineCacheKeyState {
     ShaderHandle vertex_shader;
     ShaderHandle fragment_shader;
     ShaderHandle geometry_shader;
 
-    std::vector<VertexLayoutDesc> vertex_layouts;
     // Precomputed hash of `vertex_layouts` filled by the caller
     // (RenderContext2 caches it on set_vertex_layout* and writes it here
     // on every flush_pipeline). Lets PipelineCacheKeyHash skip iterating
@@ -43,12 +44,36 @@ struct PipelineCacheKey {
     PixelFormat color_format = PixelFormat::RGBA8_UNorm;
     PixelFormat depth_format = PixelFormat::D32F;
     uint32_t sample_count = 1;
+};
 
-    bool operator==(const PipelineCacheKey& o) const;
+// Non-owning pipeline-cache request. Its vertex-layout view need only remain
+// valid for the get() call; cache misses copy it into PipelineCacheKey.
+struct PipelineCacheLookupKey : PipelineCacheKeyState {
+    std::span<const VertexLayoutDesc> vertex_layouts;
+};
+
+// Canonical cache-owned pipeline identity. It is never constructed on a cache
+// hit, so RenderContext2's pending vertex-layout vector is not copied per draw.
+struct PipelineCacheKey : PipelineCacheKeyState {
+    std::vector<VertexLayoutDesc> vertex_layouts;
+
+    PipelineCacheKey() = default;
+    explicit PipelineCacheKey(const PipelineCacheLookupKey& lookup);
 };
 
 struct PipelineCacheKeyHash {
+    using is_transparent = void;
+
     size_t operator()(const PipelineCacheKey& k) const;
+    size_t operator()(const PipelineCacheLookupKey& k) const;
+};
+
+struct PipelineCacheKeyEqual {
+    using is_transparent = void;
+
+    bool operator()(const PipelineCacheKey& a, const PipelineCacheKey& b) const;
+    bool operator()(const PipelineCacheKey& a, const PipelineCacheLookupKey& b) const;
+    bool operator()(const PipelineCacheLookupKey& a, const PipelineCacheKey& b) const;
 };
 
 struct PipelineCacheStats {
@@ -63,7 +88,12 @@ struct PipelineCacheStats {
 class TGFX2_TYPE_API PipelineCache {
 private:
     IRenderDevice& device_;
-    std::unordered_map<PipelineCacheKey, PipelineHandle, PipelineCacheKeyHash> cache_;
+    std::unordered_map<
+        PipelineCacheKey,
+        PipelineHandle,
+        PipelineCacheKeyHash,
+        PipelineCacheKeyEqual
+    > cache_;
     std::unordered_set<size_t> observed_vertex_layout_hashes_;
     uint64_t hit_count_ = 0;
     uint64_t miss_count_ = 0;
@@ -74,7 +104,7 @@ public:
     ~PipelineCache();
 
     // Get or create a pipeline matching the given key.
-    PipelineHandle get(const PipelineCacheKey& key);
+    PipelineHandle get(const PipelineCacheLookupKey& key);
 
     // Clear all cached pipelines (e.g. on device lost).
     void clear();

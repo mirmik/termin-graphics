@@ -567,25 +567,29 @@ bool RenderContext2::any_dirty_binding_scope() const {
 }
 
 BoundResourceSetDesc RenderContext2::build_pending_bound_resource_set(
-    uintptr_t resource_layout_token
+    uintptr_t resource_layout_token,
+    std::span<BoundResourceGroupView> group_views
 ) const {
-    BoundResourceSetDesc bound_desc;
-    bound_desc.resource_layout_token = resource_layout_token;
-
-    bound_desc.groups.reserve(pending_binding_buckets_.size());
+    uint32_t group_count = 0;
     for (size_t i = 0; i < pending_binding_buckets_.size(); ++i) {
         const ResourceBindingBucket& bucket = pending_binding_buckets_[i];
         if (bucket.planned.empty()) {
             continue;
         }
-        BoundResourceGroup group;
-        group.scope = shader_scope_from_resource_scope(
-            static_cast<ResourceScope>(i));
-        group.dirty = dirty_binding_scopes_[i];
-        group.bindings = bucket.planned;
-        bound_desc.groups.push_back(std::move(group));
+        if (group_count >= group_views.size()) {
+            tc_log(TC_LOG_ERROR,
+                   "RenderContext2: resource-group view capacity %zu is too small",
+                   group_views.size());
+            break;
+        }
+        group_views[group_count++] = {
+            shader_scope_from_resource_scope(static_cast<ResourceScope>(i)),
+            dirty_binding_scopes_[i],
+            bucket.planned.data(),
+            static_cast<uint32_t>(bucket.planned.size()),
+        };
     }
-    return bound_desc;
+    return {resource_layout_token, group_views.data(), group_count};
 }
 
 const tc_shader_resource_binding* RenderContext2::active_resource_binding_by_name(
@@ -998,7 +1002,7 @@ bool RenderContext2::flush_pipeline() {
         return true;
     }
 
-    PipelineCacheKey key;
+    PipelineCacheLookupKey key;
     key.vertex_shader = bound_vs_;
     key.fragment_shader = bound_fs_;
     key.geometry_shader = bound_gs_;
@@ -1095,8 +1099,13 @@ void RenderContext2::flush_resource_set() {
             device_.pipeline_resource_layout_token(last_bound_pipeline_);
     }
 
-    BoundResourceSetDesc bound_desc =
-        build_pending_bound_resource_set(resource_layout_token);
+    std::array<
+        BoundResourceGroupView,
+        static_cast<size_t>(ResourceScope::Count)
+    > group_views{};
+    const BoundResourceSetDesc bound_desc = build_pending_bound_resource_set(
+        resource_layout_token,
+        group_views);
     if (bound_desc.resource_layout_token != 0) {
         current_resource_set_ = device_.create_bound_resource_set(bound_desc);
         if (current_resource_set_) {

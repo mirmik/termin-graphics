@@ -266,57 +266,86 @@ inline const char* bound_resource_debug_name(const BoundResourceBinding& binding
     return binding.slot.debug_name ? binding.slot.debug_name : "<unnamed>";
 }
 
-struct BoundResourceGroup {
+// Flat, non-owning packet that crosses the render-runtime/device boundary.
+// The backing bindings are retained by RenderContext2 or a backend resource set.
+struct BoundResourceGroupView {
     ShaderResourceScope scope = ShaderResourceScope::Unknown;
     // True when this scope changed since the last emitted resource set for the
     // current pass/pipeline. Backends that retain native binding state
     // (OpenGL/D3D11) can skip clean groups; descriptor-set backends may still
     // consume all groups to build a complete backend resource object.
     bool dirty = true;
-    std::vector<BoundResourceBinding> bindings;
+    const BoundResourceBinding* bindings = nullptr;
+    uint32_t binding_count = 0;
 };
 
 struct BoundResourceSetDesc {
     uintptr_t resource_layout_token = 0;
-    // Preferred representation for migrated paths. Groups preserve the shader
-    // resource scope at the backend boundary so frame/pass/material/draw
-    // bindings do not need to be inferred from names or numeric slots.
-    std::vector<BoundResourceGroup> groups;
-    // Transitional flat compatibility representation. If groups is non-empty,
-    // concrete tgfx2 backends and adapters consume groups and ignore this list.
-    std::vector<BoundResourceBinding> bindings;
+    // Groups preserve the shader resource scope at the backend boundary so
+    // frame/pass/material/draw bindings do not need inferred names or slots.
+    const BoundResourceGroupView* groups = nullptr;
+    uint32_t group_count = 0;
+};
+
+static_assert(std::is_standard_layout_v<BoundResourceGroupView>);
+static_assert(std::is_trivially_copyable_v<BoundResourceGroupView>);
+static_assert(std::is_standard_layout_v<BoundResourceSetDesc>);
+static_assert(std::is_trivially_copyable_v<BoundResourceSetDesc>);
+
+// Backend-local owning storage for packets consumed after create_bound_resource_set
+// returns. It deliberately stays behind the device boundary; only view packets
+// above are exposed to IRenderDevice.
+class TGFX2_API BoundResourceSetStorage {
+private:
+    struct GroupStorage {
+        ShaderResourceScope scope = ShaderResourceScope::Unknown;
+        bool dirty = true;
+        std::vector<BoundResourceBinding> bindings;
+    };
+
+    uintptr_t resource_layout_token_ = 0;
+    std::vector<GroupStorage> groups_;
+    std::vector<BoundResourceGroupView> group_views_;
+
+    void rebuild_views();
+
+public:
+    void set_resource_layout_token(uintptr_t resource_layout_token) {
+        resource_layout_token_ = resource_layout_token;
+    }
+    void append_group(
+        ShaderResourceScope scope,
+        bool dirty,
+        const BoundResourceBinding* bindings,
+        uint32_t binding_count);
+    void assign(const BoundResourceSetDesc& desc);
+    BoundResourceSetDesc view() const;
 };
 
 template <typename Fn>
 void for_each_bound_resource_binding(const BoundResourceSetDesc& desc, Fn&& fn) {
-    if (!desc.groups.empty()) {
-        for (const BoundResourceGroup& group : desc.groups) {
-            for (const BoundResourceBinding& binding : group.bindings) {
-                fn(binding);
-            }
+    for (uint32_t group_index = 0; group_index < desc.group_count; ++group_index) {
+        const BoundResourceGroupView& group = desc.groups[group_index];
+        for (uint32_t binding_index = 0;
+             binding_index < group.binding_count;
+             ++binding_index) {
+            fn(group.bindings[binding_index]);
         }
-        return;
-    }
-    for (const BoundResourceBinding& binding : desc.bindings) {
-        fn(binding);
     }
 }
 
 template <typename Fn>
 void for_each_dirty_bound_resource_binding(const BoundResourceSetDesc& desc, Fn&& fn) {
-    if (!desc.groups.empty()) {
-        for (const BoundResourceGroup& group : desc.groups) {
-            if (!group.dirty) {
-                continue;
-            }
-            for (const BoundResourceBinding& binding : group.bindings) {
-                fn(binding);
-            }
+    for (uint32_t group_index = 0; group_index < desc.group_count; ++group_index) {
+        const BoundResourceGroupView& group = desc.groups[group_index];
+        if (!group.dirty) {
+            continue;
         }
-        return;
-    }
-    for (const BoundResourceBinding& binding : desc.bindings) {
-        fn(binding);
+        for (uint32_t binding_index = 0;
+             binding_index < group.binding_count;
+             ++binding_index) {
+            fn(group.bindings[binding_index]);
+        }
     }
 }
 

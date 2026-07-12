@@ -3,6 +3,7 @@
 #include <memory>
 #include <span>
 #include <utility>
+#include <vector>
 
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/pipeline_cache.hpp>
@@ -115,10 +116,13 @@ TEST_CASE("PipelineCache exposes backend-neutral hit miss and layout stats") {
     PipelineCacheStatsDevice device;
     tgfx::PipelineCache cache(device);
 
-    tgfx::PipelineCacheKey key;
+    tgfx::PipelineCacheLookupKey key;
     key.vertex_shader = tgfx::ShaderHandle{1};
     key.fragment_shader = tgfx::ShaderHandle{2};
-    key.vertex_layouts = {make_layout(12, "position")};
+    std::vector<tgfx::VertexLayoutDesc> position_layouts = {
+        make_layout(12, "position"),
+    };
+    key.vertex_layouts = position_layouts;
     key.vertex_layouts_hash = 0x1111;
 
     tgfx::PipelineHandle first = cache.get(key);
@@ -153,7 +157,10 @@ TEST_CASE("PipelineCache exposes backend-neutral hit miss and layout stats") {
     CHECK(stats.cached_pipeline_count == 2u);
     CHECK(stats.unique_vertex_layout_signature_count == 1u);
 
-    key.vertex_layouts = {make_layout(24, "normal")};
+    std::vector<tgfx::VertexLayoutDesc> normal_layouts = {
+        make_layout(24, "normal"),
+    };
+    key.vertex_layouts = normal_layouts;
     key.vertex_layouts_hash = 0x2222;
     tgfx::PipelineHandle fourth = cache.get(key);
     CHECK(fourth.id == 3u);
@@ -173,10 +180,13 @@ TEST_CASE("PipelineCache retries a failed creation instead of caching an invalid
     device.pipeline_failures_remaining = 1;
     tgfx::PipelineCache cache(device);
 
-    tgfx::PipelineCacheKey key;
+    tgfx::PipelineCacheLookupKey key;
     key.vertex_shader = tgfx::ShaderHandle{1};
     key.fragment_shader = tgfx::ShaderHandle{2};
-    key.vertex_layouts = {make_layout(12, "position")};
+    std::vector<tgfx::VertexLayoutDesc> position_layouts = {
+        make_layout(12, "position"),
+    };
+    key.vertex_layouts = position_layouts;
     key.vertex_layouts_hash = 0x3333;
 
     CHECK_FALSE(cache.get(key));
@@ -189,6 +199,57 @@ TEST_CASE("PipelineCache retries a failed creation instead of caching an invalid
     CHECK(device.create_pipeline_count == 2u);
     CHECK(cache.get(key) == recovered);
     CHECK(device.create_pipeline_count == 2u);
+}
+
+TEST_CASE("PipelineCache owns layouts after a lookup view expires") {
+    PipelineCacheStatsDevice device;
+    tgfx::PipelineCache cache(device);
+
+    tgfx::PipelineCacheLookupKey key;
+    key.vertex_shader = tgfx::ShaderHandle{1};
+    key.fragment_shader = tgfx::ShaderHandle{2};
+    key.vertex_layouts_hash = 0x4444;
+    {
+        std::vector<tgfx::VertexLayoutDesc> transient_layouts = {
+            make_layout(12, "position"),
+        };
+        key.vertex_layouts = transient_layouts;
+        CHECK(cache.get(key).id == 1u);
+    }
+
+    std::vector<tgfx::VertexLayoutDesc> equivalent_layouts = {
+        make_layout(12, "position"),
+    };
+    key.vertex_layouts = equivalent_layouts;
+    CHECK(cache.get(key).id == 1u);
+    CHECK(device.create_pipeline_count == 1u);
+}
+
+TEST_CASE("PipelineCache compares complete layouts when lookup hashes collide") {
+    PipelineCacheStatsDevice device;
+    tgfx::PipelineCache cache(device);
+
+    tgfx::PipelineCacheLookupKey key;
+    key.vertex_shader = tgfx::ShaderHandle{1};
+    key.fragment_shader = tgfx::ShaderHandle{2};
+    key.vertex_layouts_hash = 0x5555;
+
+    std::vector<tgfx::VertexLayoutDesc> position_layouts = {
+        make_layout(12, "position"),
+    };
+    key.vertex_layouts = position_layouts;
+    const tgfx::PipelineHandle position_pipeline = cache.get(key);
+    CHECK(position_pipeline.id == 1u);
+
+    std::vector<tgfx::VertexLayoutDesc> normal_layouts = {
+        make_layout(24, "normal"),
+    };
+    key.vertex_layouts = normal_layouts;
+    const tgfx::PipelineHandle normal_pipeline = cache.get(key);
+    CHECK(normal_pipeline.id == 2u);
+    CHECK(cache.get(key) == normal_pipeline);
+    CHECK(device.create_pipeline_count == 2u);
+    CHECK(cache.size() == 2u);
 }
 
 TEST_CASE("texture pools retry failed allocations using the same key and descriptor") {

@@ -263,9 +263,16 @@ int main() {
         unsupported_storage_plan.placement.d3d11.register_index = 0;
         tgfx::BoundResourceValue unsupported_storage_value;
         unsupported_storage_value.kind = tgfx::BoundResourceKind::SampledTexture;
-        tgfx::BoundResourceSetDesc unsupported_storage_set_desc;
-        unsupported_storage_set_desc.bindings.push_back(
-            {unsupported_storage_plan, unsupported_storage_value});
+        const tgfx::BoundResourceBinding unsupported_storage_binding = {
+            unsupported_storage_plan, unsupported_storage_value};
+        tgfx::BoundResourceSetStorage unsupported_storage_set_storage;
+        unsupported_storage_set_storage.append_group(
+            tgfx::ShaderResourceScope::Pass,
+            true,
+            &unsupported_storage_binding,
+            1);
+        const tgfx::BoundResourceSetDesc unsupported_storage_set_desc =
+            unsupported_storage_set_storage.view();
         if (device->create_bound_resource_set(unsupported_storage_set_desc)) {
             std::fprintf(stderr, "D3D11 smoke: storage texture resource set should fail explicitly\n");
             return 1;
@@ -780,9 +787,6 @@ int main() {
         }
 
         auto sampler = device->create_sampler(tgfx::SamplerDesc{});
-        tgfx::BoundResourceSetDesc resource_set_desc;
-        resource_set_desc.resource_layout_token =
-            device->pipeline_resource_layout_token(textured_pipeline);
         tgfx::BoundResourceBinding sampled_texture;
         sampled_texture.slot.kind = tgfx::ShaderResourceKind::SampledTexture;
         sampled_texture.slot.scope = tgfx::ShaderResourceScope::Material;
@@ -794,7 +798,12 @@ int main() {
         sampled_texture.value.kind = tgfx::BoundResourceKind::SampledTexture;
         sampled_texture.value.texture = texture_gpu;
         sampled_texture.value.sampler = sampler;
-        resource_set_desc.bindings.push_back(sampled_texture);
+        tgfx::BoundResourceSetStorage resource_set_storage;
+        resource_set_storage.set_resource_layout_token(
+            device->pipeline_resource_layout_token(textured_pipeline));
+        resource_set_storage.append_group(
+            tgfx::ShaderResourceScope::Material, true, &sampled_texture, 1);
+        const tgfx::BoundResourceSetDesc resource_set_desc = resource_set_storage.view();
         auto resource_set = device->create_bound_resource_set(resource_set_desc);
         if (!sampler || !resource_set) {
             std::fprintf(stderr, "D3D11 smoke: failed to create sampler/resource set\n");
@@ -972,17 +981,17 @@ int main() {
         draw_data_value.buffer = draw_data_cb;
         draw_data_value.range = sizeof(identity);
 
-        tgfx::BoundResourceSetDesc normal_resource_set_desc;
-        normal_resource_set_desc.resource_layout_token =
-            device->pipeline_resource_layout_token(normal_pipeline);
-        tgfx::BoundResourceGroup frame_group;
-        frame_group.scope = tgfx::ShaderResourceScope::Frame;
-        frame_group.bindings.push_back({per_frame_plan, per_frame_value});
-        normal_resource_set_desc.groups.push_back(std::move(frame_group));
-        tgfx::BoundResourceGroup draw_group;
-        draw_group.scope = tgfx::ShaderResourceScope::Draw;
-        draw_group.bindings.push_back({draw_data_plan, draw_data_value});
-        normal_resource_set_desc.groups.push_back(std::move(draw_group));
+        const tgfx::BoundResourceBinding frame_binding = {per_frame_plan, per_frame_value};
+        const tgfx::BoundResourceBinding draw_binding = {draw_data_plan, draw_data_value};
+        tgfx::BoundResourceSetStorage normal_resource_set_storage;
+        normal_resource_set_storage.set_resource_layout_token(
+            device->pipeline_resource_layout_token(normal_pipeline));
+        normal_resource_set_storage.append_group(
+            tgfx::ShaderResourceScope::Frame, true, &frame_binding, 1);
+        normal_resource_set_storage.append_group(
+            tgfx::ShaderResourceScope::Draw, true, &draw_binding, 1);
+        const tgfx::BoundResourceSetDesc normal_resource_set_desc =
+            normal_resource_set_storage.view();
         auto normal_resource_set = device->create_bound_resource_set(normal_resource_set_desc);
         if (!normal_vbo || !per_frame_cb || !draw_data_cb || !normal_resource_set) {
             std::fprintf(stderr, "D3D11 smoke: normal material resources failed\n");
@@ -1030,13 +1039,15 @@ int main() {
         shadow_maps_value.sampler = sampler;
         shadow_maps_value.array_element = 15;
 
-        tgfx::BoundResourceSetDesc shadow_maps_resource_set_desc;
-        shadow_maps_resource_set_desc.resource_layout_token =
-            device->pipeline_resource_layout_token(normal_pipeline);
-        tgfx::BoundResourceGroup shadow_maps_group;
-        shadow_maps_group.scope = tgfx::ShaderResourceScope::Pass;
-        shadow_maps_group.bindings.push_back({shadow_maps_plan, shadow_maps_value});
-        shadow_maps_resource_set_desc.groups.push_back(std::move(shadow_maps_group));
+        const tgfx::BoundResourceBinding shadow_maps_binding = {
+            shadow_maps_plan, shadow_maps_value};
+        tgfx::BoundResourceSetStorage shadow_maps_resource_set_storage;
+        shadow_maps_resource_set_storage.set_resource_layout_token(
+            device->pipeline_resource_layout_token(normal_pipeline));
+        shadow_maps_resource_set_storage.append_group(
+            tgfx::ShaderResourceScope::Pass, true, &shadow_maps_binding, 1);
+        const tgfx::BoundResourceSetDesc shadow_maps_resource_set_desc =
+            shadow_maps_resource_set_storage.view();
         auto shadow_maps_resource_set =
             device->create_bound_resource_set(shadow_maps_resource_set_desc);
         if (!shadow_maps_resource_set) {

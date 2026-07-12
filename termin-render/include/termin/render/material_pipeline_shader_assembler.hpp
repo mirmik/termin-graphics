@@ -29,6 +29,7 @@ struct MaterialPipelinePassContract {
     std::string fragment_source_override;
     std::string fragment_entry_override = "fs_main";
     std::vector<MaterialPipelineResourceDecl> resources;
+    std::optional<VertexOutputAdapter> vertex_output_adapter;
     std::optional<VertexTransformContract> static_vertex_transform;
     std::optional<VertexTransformContract> skinned_vertex_transform;
     std::optional<VertexTransformContract> foliage_vertex_transform;

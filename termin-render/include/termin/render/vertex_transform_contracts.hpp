@@ -45,16 +45,56 @@ struct InstanceStreamDecl {
     uint32_t stride = 0;
 };
 
+// Identifies a Slang module consumed by a composed shader stage.  The module
+// name is what Slang imports; source_identity is deliberately explicit so a
+// provider/adapter change also changes the assembled shader identity before a
+// backend attempts to reuse an artifact.
+struct ShaderSourceModuleIdentity {
+    std::string module_name;
+    std::string source_identity;
+};
+
 struct VertexTransformContract {
     VertexTransformKind kind = VertexTransformKind::StaticMesh;
     std::string debug_name;
+    // Legacy whole-stage source selection.  New passes must use the modular
+    // provider fields below; this remains while non-migrated passes are moved
+    // to the composition substrate.
     std::optional<std::string> template_uuid;
     std::string vertex_entry = "vs_main";
     VertexInputContract vertex_inputs;
     MaterialFragmentInterface produced_fragment_input;
+    // World-space values produced by the transform module and consumed by a
+    // pass-owned output adapter.  This is separate from the material-fragment
+    // interface because depth/shadow adapters have no material fragment.
+    MaterialFragmentInterface produced_world_semantics;
     std::vector<MaterialPipelineResourceDecl> resources;
     std::vector<InstanceStreamDecl> instance_streams;
+
+    // A modular provider owns its transform code and any transform-specific
+    // resources (for example bone_block).  The assembler only emits imports,
+    // input declaration, and this provider-owned invocation expression.
+    ShaderSourceModuleIdentity source_module;
+    std::string entry_input_declaration;
+    std::string adapter_input_expression;
 };
+
+// Name the architectural role explicitly at new call sites without forcing a
+// flag-day rename of existing pass contracts.
+using VertexTransformProvider = VertexTransformContract;
+
+struct VertexOutputAdapter {
+    std::string debug_name;
+    ShaderSourceModuleIdentity source_module;
+    std::string output_type_name;
+    std::string output_function;
+    MaterialFragmentInterface consumed_world_semantics;
+    MaterialFragmentInterface produced_output_semantics;
+    std::vector<MaterialPipelineResourceDecl> resources;
+};
+
+RENDER_API bool vertex_transform_provider_is_modular(
+    const VertexTransformProvider& provider);
 
 RENDER_API const char* vertex_transform_kind_name(VertexTransformKind kind);
 RENDER_API const char* material_pipeline_value_type_name(MaterialPipelineValueType type);
@@ -89,7 +129,7 @@ RENDER_API VertexTransformContract material_pipeline_make_static_vertex_transfor
 RENDER_API VertexTransformContract material_pipeline_make_skinned_vertex_transform_contract(
     const VertexTransformContract& static_contract,
     std::string debug_name,
-    std::string template_uuid,
+    std::optional<std::string> template_uuid,
     VertexInputContract vertex_inputs);
 
 RENDER_API VertexTransformContract material_pipeline_make_foliage_vertex_transform_contract(
