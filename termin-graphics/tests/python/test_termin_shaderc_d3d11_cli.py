@@ -139,6 +139,81 @@ def test_termin_shaderc_compiles_slang_to_d3d11_cso_with_fake_tools(tmp_path: Pa
     ]
 
 
+def test_d3d11_program_sources_keep_shared_registers_stable_across_stages(
+    tmp_path: Path,
+) -> None:
+    vertex = tmp_path / "program.vert.slang"
+    fragment = tmp_path / "program.frag.slang"
+    vertex.write_text(
+        'struct BoneBlock { float4 bone; };\n'
+        '[[TerminScope("draw")]] ConstantBuffer<BoneBlock> bone_block;\n'
+        'struct PerFrame { float4 frame; };\n'
+        '[[TerminScope("frame")]] ConstantBuffer<PerFrame> per_frame;\n'
+        'struct ShadowDraw { float4 draw; };\n'
+        '[[TerminScope("draw")]] ConstantBuffer<ShadowDraw> shadow_draw;\n'
+        '[shader("vertex")] float4 main() : SV_Position {\n'
+        '    return bone_block.bone + per_frame.frame + shadow_draw.draw;\n'
+        '}\n',
+        encoding="utf-8",
+    )
+    fragment.write_text(
+        'struct PerFrame { float4 frame; };\n'
+        '[[TerminScope("frame")]] ConstantBuffer<PerFrame> per_frame;\n'
+        'struct ShadowDraw { float4 draw; };\n'
+        '[[TerminScope("draw")]] ConstantBuffer<ShadowDraw> shadow_draw;\n'
+        '[shader("fragment")] float4 main() : SV_Target0 {\n'
+        '    return per_frame.frame + shadow_draw.draw;\n'
+        '}\n',
+        encoding="utf-8",
+    )
+    fake_slangc = tmp_path / "fake_program_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "source = pathlib.Path(sys.argv[1])\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "is_vertex = source.name.endswith('.vert.slang')\n"
+        "resources = [('bone_block', 'draw')] if is_vertex else []\n"
+        "resources += [('per_frame', 'frame'), ('shadow_draw', 'draw')]\n"
+        "hlsl = []\n"
+        "for index, (name, _) in enumerate(resources):\n"
+        "    hlsl.append(f'cbuffer {name}_0 : register(b{index}) {{ float4 value; }};')\n"
+        "hlsl.append('float4 main() : ' + ('SV_Position' if is_vertex else 'SV_Target0') + ' { return 1; }')\n"
+        "out.write_text('\\n'.join(hlsl) + '\\n', encoding='utf-8')\n"
+        "reflection.write_text(json.dumps({'parameters': [\n"
+        "    {'name': name, 'userAttribs': [{'name': 'TerminScope', 'arguments': [scope]}],\n"
+        "     'binding': {'kind': 'descriptorTableSlot', 'index': index},\n"
+        "     'type': {'kind': 'constantBuffer', 'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 16}}}}\n"
+        "    for index, (name, scope) in enumerate(resources)\n"
+        "]}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+    fake_fxc = _write_fake_fxc(tmp_path / "fake_fxc.py")
+
+    layouts: dict[str, dict] = {}
+    for stage, source, suffix in (
+        ("vertex", vertex, "vs"),
+        ("fragment", fragment, "ps"),
+    ):
+        output = tmp_path / f"program.{suffix}.cso"
+        result = _run_shaderc([
+            "compile", "--language", "slang", "--target", "d3d11",
+            "--stage", stage, "--input", str(source), "--output", str(output),
+            "--slangc", str(fake_slangc), "--fxc", str(fake_fxc),
+            "--program-source", str(vertex),
+            "--program-source", str(fragment),
+        ])
+        assert result.returncode == 0, result.stderr
+        layout = json.loads(Path(str(output) + ".layout.json").read_text(encoding="utf-8"))
+        layouts[stage] = {resource["name"]: resource for resource in layout["resources"]}
+
+    assert layouts["vertex"]["bone_block"]["d3d11"]["register_index"] == 1
+    assert layouts["vertex"]["per_frame"]["d3d11"] == layouts["fragment"]["per_frame"]["d3d11"]
+    assert layouts["vertex"]["shadow_draw"]["d3d11"] == layouts["fragment"]["shadow_draw"]["d3d11"]
+
+
 def test_termin_shaderc_maps_slang_structured_buffer_to_d3d11_srv_register(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(

@@ -30,6 +30,9 @@ void print_help(std::ostream& out) {
         << "  --debug-name <name>  Name used in diagnostics and artifact metadata.\n"
         << "  -I <dir>             Add an include directory. Repeatable.\n"
         << "  --include-dir <dir>  Same as -I.\n"
+        << "  --program-source <path>\n"
+        << "                       Add a program stage source used for stable D3D11\n"
+        << "                       register allocation. Repeatable.\n"
         << "\n"
         << "Slang options:\n"
         << "  --slangc <path>          Explicit slangc executable path.\n"
@@ -178,6 +181,13 @@ ParsedCommandLine parse_command_line(int argc, char** argv) {
                 return parsed;
             }
             options.include_dirs.push_back(std::move(include_dir));
+        } else if (arg == "--program-source") {
+            std::string program_source;
+            if (!take_value(program_source)) {
+                parsed.exit_code = 2;
+                return parsed;
+            }
+            options.program_sources.push_back(std::move(program_source));
         } else {
             std::cerr << "termin_shaderc: unknown argument: " << arg << "\n";
             usage();

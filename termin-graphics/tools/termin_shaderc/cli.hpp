@@ -18,6 +18,7 @@ struct CompileOptions {
     std::string matrix_layout = "column";
     std::string default_scope;
     std::vector<std::string> include_dirs;
+    std::vector<std::string> program_sources;
 };
 
 struct ParsedCommandLine {

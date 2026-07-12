@@ -22,6 +22,7 @@
 #include <regex>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -1216,6 +1217,89 @@ static std::vector<ShaderResourceBinding> collect_declared_slang_resource_bindin
     return resources;
 }
 
+static bool assign_d3d11_program_register_placement(
+    const CompileOptions& options,
+    const std::vector<std::string>& include_dirs,
+    std::vector<ShaderResourceBinding>& stage_resources
+) {
+    constexpr uint32_t kD3D11PushConstantRegister = 13;
+    if (options.program_sources.empty()) {
+        return true;
+    }
+
+    std::vector<ShaderResourceBinding> program_resources;
+    for (const std::string& source_path : options.program_sources) {
+        std::string source;
+        if (!read_file(source_path, source)) {
+            std::cerr << "termin_shaderc: failed to read program source: "
+                      << source_path << "\n";
+            return false;
+        }
+        std::vector<ShaderResourceBinding> declared =
+            collect_declared_slang_resource_bindings(source, options, include_dirs);
+        for (ShaderResourceBinding& resource : declared) {
+            append_unique_resource(program_resources, std::move(resource));
+        }
+    }
+
+    if (!canonicalize_shader_abi_resources(program_resources)) {
+        return false;
+    }
+    assign_missing_resource_scopes(program_resources);
+    apply_default_resource_scope(program_resources, options.default_scope);
+    std::sort(
+        program_resources.begin(),
+        program_resources.end(),
+        [](const ShaderResourceBinding& a, const ShaderResourceBinding& b) {
+            return std::tie(a.scope, a.kind, a.name) <
+                std::tie(b.scope, b.kind, b.name);
+        });
+    normalize_scope_first_binding_slots(
+        program_resources,
+        true,
+        options.target);
+    std::sort(
+        program_resources.begin(),
+        program_resources.end(),
+        [](const ShaderResourceBinding& a, const ShaderResourceBinding& b) {
+            return std::tie(a.binding, a.kind, a.name) <
+                std::tie(b.binding, b.kind, b.name);
+        });
+    assign_d3d11_register_placement(program_resources);
+
+    for (const ShaderResourceBinding& program_resource : program_resources) {
+        if (program_resource.d3d11_register_class == "b" &&
+            program_resource.d3d11_register_index >=
+                kD3D11PushConstantRegister) {
+            std::cerr
+                << "termin_shaderc: shader program requires more than "
+                << kD3D11PushConstantRegister
+                << " D3D11 constant-buffer registers; b"
+                << kD3D11PushConstantRegister
+                << " is reserved for push constants\n";
+            return false;
+        }
+    }
+
+    for (ShaderResourceBinding& stage_resource : stage_resources) {
+        const auto placement = std::find_if(
+            program_resources.begin(),
+            program_resources.end(),
+            [&](const ShaderResourceBinding& candidate) {
+                return candidate.name == stage_resource.name &&
+                    candidate.kind == stage_resource.kind;
+            });
+        if (placement == program_resources.end()) {
+            std::cerr << "termin_shaderc: stage resource '" << stage_resource.name
+                      << "' is absent from the program resource universe\n";
+            return false;
+        }
+        stage_resource.d3d11_register_class = placement->d3d11_register_class;
+        stage_resource.d3d11_register_index = placement->d3d11_register_index;
+    }
+    return true;
+}
+
 static bool collect_resource_bindings(
     const CompileOptions& options,
     const std::string& source,
@@ -1875,6 +1959,19 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
                 options,
                 slang_output_path,
                 declared_slang_resources,
+                resources)) {
+            std::error_code ec;
+            std::filesystem::remove(options.output, ec);
+            std::filesystem::remove(options.output + ".layout.json", ec);
+            if (!std::getenv("TERMIN_SHADERC_KEEP_INTERMEDIATE")) {
+                std::filesystem::remove(slang_output_path, ec);
+            }
+            std::filesystem::remove(reflection_path, ec);
+            return false;
+        }
+        if (!assign_d3d11_program_register_placement(
+                options,
+                include_dirs,
                 resources)) {
             std::error_code ec;
             std::filesystem::remove(options.output, ec);

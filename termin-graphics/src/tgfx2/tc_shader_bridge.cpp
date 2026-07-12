@@ -41,7 +41,7 @@ static bool g_shader_dev_compile_enabled = false;
 
 // Bump when termin_shaderc reflected resource placement or sidecar semantics
 // change in a way that requires recompiling cached shader artifacts.
-static constexpr uint32_t kShaderArtifactLayoutSchemaVersion = 4;
+static constexpr uint32_t kShaderArtifactLayoutSchemaVersion = 5;
 static constexpr uint32_t kShaderArtifactMetadataSchemaVersion = 2;
 static constexpr const char* kShaderArtifactMetadataSuffix = ".artifact";
 static constexpr const char* kLegacyShaderArtifactMetadataSuffix = ".meta";
@@ -374,6 +374,47 @@ static bool shader_dependency_fingerprint(
     std::snprintf(encoded, sizeof(encoded), "%016llx",
                   static_cast<unsigned long long>(hash));
     out = encoded;
+    return true;
+}
+
+static bool shader_program_dependency_fingerprint(
+    const tc_shader* shader,
+    tgfx::BackendType backend,
+    tgfx::ShaderStage stage,
+    std::string& out
+) {
+    const tc_shader_language language = (tc_shader_language)shader->language;
+    if (backend != tgfx::BackendType::D3D11 ||
+        language != TC_SHADER_LANGUAGE_SLANG) {
+        const char* source = shader_stage_source(shader, stage);
+        return shader_dependency_fingerprint(
+            language,
+            source ? std::string_view(source) : std::string_view(),
+            out);
+    }
+
+    std::string program_dependencies;
+    for (const tgfx::ShaderStage program_stage : {
+             tgfx::ShaderStage::Vertex,
+             tgfx::ShaderStage::Fragment,
+             tgfx::ShaderStage::Geometry}) {
+        const char* source = shader_stage_source(shader, program_stage);
+        if (!source || source[0] == '\0') {
+            continue;
+        }
+        std::string stage_fingerprint;
+        if (!shader_dependency_fingerprint(
+                language,
+                source,
+                stage_fingerprint)) {
+            return false;
+        }
+        program_dependencies += stage_name(program_stage);
+        program_dependencies += '=';
+        program_dependencies += stage_fingerprint;
+        program_dependencies += ';';
+    }
+    out = fnv1a_hash_text(program_dependencies.c_str());
     return true;
 }
 
@@ -1120,6 +1161,27 @@ static bool compile_shader_artifact(
         return false;
     }
 
+    std::vector<std::filesystem::path> program_source_paths;
+    if (backend == tgfx::BackendType::D3D11 &&
+        language == TC_SHADER_LANGUAGE_SLANG) {
+        for (const tgfx::ShaderStage program_stage : {
+                 tgfx::ShaderStage::Vertex,
+                 tgfx::ShaderStage::Fragment,
+                 tgfx::ShaderStage::Geometry}) {
+            const char* program_source = shader_stage_source(shader, program_stage);
+            if (!program_source || program_source[0] == '\0') {
+                continue;
+            }
+            const std::filesystem::path program_source_path =
+                shader_cache_source_path(shader, program_stage);
+            if (program_source_path != source_path &&
+                !write_text_file(program_source_path, program_source)) {
+                return false;
+            }
+            program_source_paths.push_back(program_source_path);
+        }
+    }
+
     std::error_code ec;
     std::filesystem::create_directories(artifact_path.parent_path(), ec);
     if (ec) {
@@ -1152,6 +1214,9 @@ static bool compile_shader_artifact(
         for (const auto& root : tgfx::builtin_shader_roots()) {
             args.insert(args.end(), {"-I", root.string()});
         }
+    }
+    for (const std::filesystem::path& program_source_path : program_source_paths) {
+        args.insert(args.end(), {"--program-source", program_source_path.string()});
     }
     if (tgfx::internal::shader_verbose_logging_enabled()) {
         tc_log(TC_LOG_DEBUG,
@@ -1389,11 +1454,11 @@ bool tgfx2_load_or_compile_shader_artifact_for_backend(
 
     const tc_shader_language language = (tc_shader_language)shader->language;
     const bool supported = shader_language_target_supported(language, backend);
-    const char* stage_source = shader_stage_source(shader, stage);
     std::string dependency_fingerprint;
-    if (!shader_dependency_fingerprint(
-            language,
-            stage_source ? std::string_view(stage_source) : std::string_view(),
+    if (!shader_program_dependency_fingerprint(
+            shader,
+            backend,
+            stage,
             dependency_fingerprint)) {
         return false;
     }

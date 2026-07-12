@@ -825,7 +825,7 @@ float4 main() : SV_Target {
     CHECK(!fs::exists(legacy_metadata));
     CHECK(fs::exists(source));
     CHECK(read_test_text_file(metadata).find("artifact_metadata_schema=2\n") != std::string::npos);
-    CHECK(read_test_text_file(metadata).find("layout_schema=4\n") != std::string::npos);
+    CHECK(read_test_text_file(metadata).find("layout_schema=5\n") != std::string::npos);
     CHECK(read_test_text_file(metadata).find("shader_compiler=") != std::string::npos);
     CHECK(read_test_text_file(metadata).find("dependency_hash=") != std::string::npos);
 
@@ -969,7 +969,7 @@ TEST_CASE("tgfx2 engine shader artifact metadata invalidates stale layout schema
         bytes));
     CHECK(bytes == std::vector<uint8_t>({'S', 'P', 'I', 'R', 'V', '1'}));
     CHECK(read_test_text_file(metadata).find("artifact_metadata_schema=2\n") != std::string::npos);
-    CHECK(read_test_text_file(metadata).find("layout_schema=4\n") != std::string::npos);
+    CHECK(read_test_text_file(metadata).find("layout_schema=5\n") != std::string::npos);
 
     {
         std::ofstream out(include_root / "engine_transitive.slang", std::ios::binary);
@@ -985,7 +985,7 @@ TEST_CASE("tgfx2 engine shader artifact metadata invalidates stale layout schema
 
     {
         std::string stale_metadata = read_test_text_file(metadata);
-        const std::string schema_line = "layout_schema=4\n";
+        const std::string schema_line = "layout_schema=5\n";
         const size_t pos = stale_metadata.find(schema_line);
         REQUIRE(pos != std::string::npos);
         stale_metadata.erase(pos, schema_line.size());
