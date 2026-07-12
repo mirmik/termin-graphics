@@ -54,7 +54,17 @@ if ! bash "$SCRIPT_DIR/run-tests-cpp.sh" "${CPP_ARGS[@]}"; then
     failures+=("C/C++")
 fi
 
-if ! bash "$SCRIPT_DIR/run-tests-python.sh" "${PYTHON_ARGS[@]}"; then
+TEST_BUILD_TYPE="Release"
+for arg in "${CPP_ARGS[@]}"; do
+    if [[ "$arg" == "--debug" || "$arg" == "-d" ]]; then
+        TEST_BUILD_TYPE="Debug"
+    fi
+done
+TEST_SHADERC="${BUILD_DIR:-$SCRIPT_DIR/build/$TEST_BUILD_TYPE-tests}/bin/termin_shaderc"
+if [[ ! -x "$TEST_SHADERC" ]]; then
+    echo "ERROR: test-built termin_shaderc is missing: $TEST_SHADERC" >&2
+    failures+=("termin_shaderc provenance")
+elif ! TERMIN_SHADERC="$TEST_SHADERC" bash "$SCRIPT_DIR/run-tests-python.sh" "${PYTHON_ARGS[@]}"; then
     failures+=("Python")
 fi
 

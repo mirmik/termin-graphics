@@ -11,25 +11,13 @@ def _repo_root() -> Path:
 
 
 def _termin_shaderc() -> Path:
-    candidates: list[Path] = []
-    binary_names = ["termin_shaderc.exe", "termin_shaderc"] if os.name == "nt" else ["termin_shaderc"]
     explicit = os.environ.get("TERMIN_SHADERC")
-    if explicit:
-        candidates.append(Path(explicit))
-    root = _repo_root()
-    candidate_dirs = [
-        root / "build" / "Release" / "bin" / "Release",
-        root / "build" / "Release" / "bin",
-        root / "sdk" / "bin",
-    ]
-    candidates.extend(candidate_dir / name for candidate_dir in candidate_dirs for name in binary_names)
-    sdk = os.environ.get("TERMIN_SDK")
-    if sdk:
-        candidates.extend(Path(sdk) / "bin" / name for name in binary_names)
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    pytest.skip("termin_shaderc binary is not available in this test environment")
+    if not explicit:
+        pytest.fail("TERMIN_SHADERC must point to the compiler built by the current C++ test graph")
+    compiler = Path(explicit)
+    if not compiler.is_file() or not os.access(compiler, os.X_OK):
+        pytest.fail(f"TERMIN_SHADERC is not an executable file: {compiler}")
+    return compiler
 
 
 def _write_fake_slangc(path: Path, *, exit_code: int = 0) -> Path:

@@ -40,6 +40,7 @@ def test_tgfx_shader_runtime_resolves_sdk_windows_exe_suffix(
 
     monkeypatch.setenv("TERMIN_SDK", str(sdk))
     monkeypatch.setenv("PATH", "")
+    monkeypatch.delenv("TERMIN_SHADERC", raising=False)
 
     shader_runtime = _load_shader_runtime_module(monkeypatch)
 
