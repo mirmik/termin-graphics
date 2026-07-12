@@ -290,6 +290,13 @@ if(TERMIN_RENDER_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
     )
     target_link_libraries(termin_render_item_submission_test PRIVATE termin_render)
+
+    add_executable(termin_render_task_test tests/test_render_task.cpp)
+    target_include_directories(termin_render_task_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_render_task_test PRIVATE termin_render)
+    add_test(NAME termin_render_task_test COMMAND termin_render_task_test)
     add_test(NAME termin_render_item_submission_test COMMAND termin_render_item_submission_test)
 
     set_target_properties(
@@ -303,6 +310,7 @@ if(TERMIN_RENDER_BUILD_TESTS)
         termin_render_pass_ownership_test
         termin_render_unknown_pass_test
         termin_render_item_submission_test
+        termin_render_task_test
         PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
 endif()
