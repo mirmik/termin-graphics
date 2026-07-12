@@ -32,6 +32,59 @@ std::string elide_text(tc_ui_document* document, std::string_view text, float fo
     return std::string(text.substr(0, end)) + std::string(ellipsis);
 }
 
+tc_ui_color file_icon_color(std::string_view icon) {
+    if (icon == "folder") return tc_ui_color{0.80f, 0.67f, 0.24f, 1.0f};
+    if (icon == "image") return tc_ui_color{0.31f, 0.73f, 0.47f, 1.0f};
+    if (icon == "audio") return tc_ui_color{0.69f, 0.39f, 0.80f, 1.0f};
+    if (icon == "video") return tc_ui_color{0.86f, 0.39f, 0.31f, 1.0f};
+    if (icon == "archive") return tc_ui_color{0.75f, 0.53f, 0.24f, 1.0f};
+    if (icon == "exec") return tc_ui_color{0.31f, 0.78f, 0.57f, 1.0f};
+    if (icon == "code") return tc_ui_color{0.39f, 0.61f, 0.88f, 1.0f};
+    if (icon == "pdf") return tc_ui_color{0.86f, 0.29f, 0.29f, 1.0f};
+    if (icon == "spreadsheet") return tc_ui_color{0.31f, 0.75f, 0.39f, 1.0f};
+    return tc_ui_color{0.55f, 0.61f, 0.69f, 1.0f};
+}
+
+void draw_semantic_file_icon(tc_ui_paint_context* context, tc_ui_rect rect,
+                             std::string_view icon, tc_ui_color tint) {
+    if (icon.empty() || rect.width <= 0.0f || rect.height <= 0.0f)
+        return;
+    tc_ui_color color = file_icon_color(icon);
+    color.a *= tint.a;
+    if (icon == "folder") {
+        const float tab_height = rect.height * 0.27f;
+        tc_ui_painter_fill_rounded_rect(
+            context, tc_ui_rect{rect.x, rect.y + tab_height * 0.26f, rect.width * 0.52f, tab_height},
+            2.0f, color);
+        tc_ui_color highlight = color;
+        highlight.r = std::min(1.0f, highlight.r * 1.15f);
+        highlight.g = std::min(1.0f, highlight.g * 1.15f);
+        highlight.b = std::min(1.0f, highlight.b * 1.15f);
+        tc_ui_painter_fill_rounded_rect(
+            context, tc_ui_rect{rect.x, rect.y + tab_height, rect.width, rect.height - tab_height},
+            2.5f, highlight);
+        return;
+    }
+    tc_ui_painter_fill_rounded_rect(context, rect, 2.0f, color);
+    const float fold = std::min(rect.width, rect.height) * 0.28f;
+    tc_ui_color fold_color = color;
+    fold_color.r *= 0.58f;
+    fold_color.g *= 0.58f;
+    fold_color.b *= 0.58f;
+    tc_ui_painter_fill_rect(context, tc_ui_rect{rect.x + rect.width - fold, rect.y, fold, fold}, fold_color);
+    tc_ui_color line = color;
+    line.r = std::min(1.0f, line.r * 1.35f);
+    line.g = std::min(1.0f, line.g * 1.35f);
+    line.b = std::min(1.0f, line.b * 1.35f);
+    line.a *= 0.65f;
+    const float left = rect.x + rect.width * 0.20f;
+    const float right = rect.x + rect.width * 0.72f;
+    for (int row = 0; row != 3; ++row) {
+        const float y = rect.y + rect.height * (0.48f + 0.14f * static_cast<float>(row));
+        tc_ui_painter_draw_line(context, tc_ui_point{left, y}, tc_ui_point{right, y}, line, 1.0f);
+    }
+}
+
 } // namespace
 
 FileGridWidget::FileGridWidget(std::shared_ptr<CollectionModel> model)
@@ -335,11 +388,14 @@ void FileGridWidget::paint(tc_ui_document* document, tc_ui_paint_context* contex
             tc_ui_color foreground = style.foreground;
             if (!item.enabled)
                 foreground.a *= 0.45f;
-            if (item.texture_id != 0 && icon_size_ > 0.0f) {
-                tc_ui_painter_draw_texture(context, item.texture_id,
-                                           tc_ui_rect{tile.x + (tile.width - icon_size_) * 0.5f,
-                                                      tile.y + 8.0f, icon_size_, icon_size_},
-                                           foreground, false);
+            if (icon_size_ > 0.0f) {
+                const tc_ui_rect icon_rect{tile.x + (tile.width - icon_size_) * 0.5f,
+                                           tile.y + 8.0f, icon_size_, icon_size_};
+                if (item.texture_id != 0) {
+                    tc_ui_painter_draw_texture(context, item.texture_id, icon_rect, foreground, false);
+                } else {
+                    draw_semantic_file_icon(context, icon_rect, item.icon, foreground);
+                }
             }
             const float name_size = style.font_size;
             const float subtitle_size = std::max(9.0f, style.font_size - 2.0f);

@@ -156,18 +156,20 @@ void bind_gui_native_views_and_collections(nb::module_& m) {
         .def(
             "__init__",
             [](termin::gui_native::CollectionItem* self, std::string stable_id, std::string text,
-               std::string subtitle, bool enabled, uint32_t texture_id) {
+               std::string subtitle, bool enabled, uint32_t texture_id, std::string icon) {
                 new (self)
                     termin::gui_native::CollectionItem{std::move(stable_id), std::move(text),
-                                                       std::move(subtitle), enabled, texture_id};
+                                                       std::move(subtitle), enabled, texture_id,
+                                                       std::move(icon)};
             },
             nb::arg("stable_id"), nb::arg("text"), nb::arg("subtitle") = "",
-            nb::arg("enabled") = true, nb::arg("texture_id") = 0)
+            nb::arg("enabled") = true, nb::arg("texture_id") = 0, nb::arg("icon") = "")
         .def_rw("stable_id", &termin::gui_native::CollectionItem::stable_id)
         .def_rw("text", &termin::gui_native::CollectionItem::text)
         .def_rw("subtitle", &termin::gui_native::CollectionItem::subtitle)
         .def_rw("enabled", &termin::gui_native::CollectionItem::enabled)
-        .def_rw("texture_id", &termin::gui_native::CollectionItem::texture_id);
+        .def_rw("texture_id", &termin::gui_native::CollectionItem::texture_id)
+        .def_rw("icon", &termin::gui_native::CollectionItem::icon);
 
     nb::class_<termin::gui_native::CollectionModel>(m, "CollectionModel")
         .def(nb::init<>())

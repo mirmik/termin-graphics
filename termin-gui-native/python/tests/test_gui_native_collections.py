@@ -257,6 +257,20 @@ def test_native_file_grid_widget_virtualizes_responsive_layout_and_textures():
     assert widget.row_count == 5000
 
 
+def test_native_file_grid_widget_draws_semantic_icon_without_gpu_texture():
+    document = Document()
+    model = CollectionModel()
+    model.append(CollectionItem("folder", "Assets", "Folder", icon="folder"))
+    widget = document.create_file_grid_widget(model)
+    assert document.add_root(widget.handle)
+    document.layout_roots(Rect(0.0, 0.0, 120.0, 100.0))
+
+    draw_list = DrawList()
+    document.paint_roots(PaintContext(draw_list))
+    assert not [command for command in draw_list.commands if command.type == DrawCommandType.Texture]
+    assert len([command for command in draw_list.commands if command.type == DrawCommandType.FillRoundedRect]) >= 2
+
+
 def test_native_file_grid_widget_input_callbacks_lifetime_and_errors():
     document = Document()
     model = CollectionModel()
