@@ -128,6 +128,12 @@ TGFX_API tc_shader_handle tc_shader_register_static_uuid_ex(
 // complete source descriptor including optional explicit stage entry points.
 TGFX_API tc_shader_handle tc_shader_register_static_desc(const tc_shader_create_desc* desc);
 
+// Promote an already-registered shader to process-lifetime ownership.
+// Installs the registry-held ref exactly once and returns false for a stale or
+// invalid handle. This is the ownership counterpart for engine shaders whose
+// sources and contracts must be assembled before they can become static.
+TGFX_API bool tc_shader_retain_static(tc_shader_handle handle);
+
 // ============================================================================
 // Variant support
 // ============================================================================

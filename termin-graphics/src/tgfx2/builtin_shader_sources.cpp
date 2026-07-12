@@ -582,9 +582,8 @@ tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
             return tc_shader_handle_invalid();
         }
 
-        if (!shader->is_static) {
-            shader->is_static = 1;
-            tc_shader_add_ref(shader);
+        if (!tc_shader_retain_static(handle)) {
+            return tc_shader_handle_invalid();
         }
     }
 

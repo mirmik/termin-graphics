@@ -687,11 +687,7 @@ tc_shader_handle tc_shader_register_static(
         name, /*source_path=*/NULL, /*uuid=*/NULL);
     if (tc_shader_handle_is_invalid(h)) return h;
 
-    tc_shader* shader = tc_shader_get(h);
-    if (shader && !shader->is_static) {
-        shader->is_static = 1;
-        tc_shader_add_ref(shader);
-    }
+    tc_shader_retain_static(h);
     return h;
 }
 
@@ -712,11 +708,7 @@ tc_shader_handle tc_shader_register_static_uuid(
         name, /*source_path=*/NULL, uuid);
     if (tc_shader_handle_is_invalid(h)) return h;
 
-    tc_shader* shader = tc_shader_get(h);
-    if (shader && !shader->is_static) {
-        shader->is_static = 1;
-        tc_shader_add_ref(shader);
-    }
+    tc_shader_retain_static(h);
     return h;
 }
 
@@ -752,11 +744,7 @@ tc_shader_handle tc_shader_register_static_uuid_ex(
     tc_shader_handle h = tc_shader_from_sources_desc(&desc);
     if (tc_shader_handle_is_invalid(h)) return h;
 
-    tc_shader* shader = tc_shader_get(h);
-    if (shader && !shader->is_static) {
-        shader->is_static = 1;
-        tc_shader_add_ref(shader);
-    }
+    tc_shader_retain_static(h);
     return h;
 }
 
@@ -769,12 +757,24 @@ tc_shader_handle tc_shader_register_static_desc(const tc_shader_create_desc* des
     tc_shader_handle h = tc_shader_from_sources_desc(desc);
     if (tc_shader_handle_is_invalid(h)) return h;
 
-    tc_shader* shader = tc_shader_get(h);
-    if (shader && !shader->is_static) {
+    tc_shader_retain_static(h);
+    return h;
+}
+
+bool tc_shader_retain_static(tc_shader_handle handle) {
+    tc_shader* shader = tc_shader_get(handle);
+    if (!shader) {
+        tc_log(TC_LOG_ERROR,
+               "tc_shader_retain_static: invalid or stale handle (index=%u gen=%u)",
+               handle.index,
+               handle.generation);
+        return false;
+    }
+    if (!shader->is_static) {
         shader->is_static = 1;
         tc_shader_add_ref(shader);
     }
-    return h;
+    return true;
 }
 
 bool tc_shader_set_language(tc_shader* shader, tc_shader_language language) {

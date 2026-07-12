@@ -662,6 +662,33 @@ TEST_CASE("static uuid registration preserves non-default shader identity") {
     CHECK(tc_shader_get_artifact_policy(second_shader) == TC_SHADER_ARTIFACT_REQUIRED);
 }
 
+TEST_CASE("retaining an assembled shader as static survives transient owner release") {
+    const char* vs = "#version 330 core\nvoid main(){gl_Position=vec4(0.0);}";
+    const char* fs = "#version 330 core\nout vec4 c; void main(){c=vec4(1.0);}";
+    tc_shader_handle handle = tc_shader_from_sources(
+        vs,
+        fs,
+        nullptr,
+        "assembled_static_lifetime_test",
+        nullptr,
+        "assembled-static-lifetime-test");
+    REQUIRE(!tc_shader_handle_is_invalid(handle));
+
+    tc_shader* transient_owner = tc_shader_get(handle);
+    REQUIRE(transient_owner != nullptr);
+    tc_shader_add_ref(transient_owner);
+    REQUIRE(tc_shader_retain_static(handle));
+    const uint32_t retained_ref_count = transient_owner->ref_count;
+
+    // Repeated promotion is idempotent, and releasing the temporary owner
+    // leaves the registry's process-lifetime reference alive.
+    REQUIRE(tc_shader_retain_static(handle));
+    CHECK(transient_owner->ref_count == retained_ref_count);
+    CHECK(!tc_shader_release(transient_owner));
+    CHECK(tc_shader_is_valid(handle));
+    CHECK(tc_shader_get(handle) != nullptr);
+}
+
 TEST_CASE("tc_shader identity hash separates source languages") {
     const char* vs = "#version 330 core\nvoid main(){gl_Position=vec4(0.0);}";
     const char* fs = "#version 330 core\nout vec4 c; void main(){c=vec4(1.0);}";
