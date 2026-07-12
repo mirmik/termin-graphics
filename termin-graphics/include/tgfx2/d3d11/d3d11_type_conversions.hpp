@@ -22,6 +22,7 @@ DXGI_FORMAT to_dxgi_index_format(IndexType type);
 D3D11_PRIMITIVE_TOPOLOGY to_d3d_topology(PrimitiveTopology topology);
 D3D11_COMPARISON_FUNC to_d3d_compare(CompareOp op);
 D3D11_CULL_MODE to_d3d_cull(CullMode mode);
+bool to_d3d_front_counter_clockwise(FrontFace face);
 D3D11_FILL_MODE to_d3d_fill(PolygonMode mode);
 D3D11_BLEND to_d3d_blend_factor(BlendFactor factor);
 D3D11_BLEND_OP to_d3d_blend_op(BlendOp op);

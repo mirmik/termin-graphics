@@ -540,9 +540,11 @@ int main() {
         const char* vs_source =
             "struct VSOut { float4 pos : SV_Position; };\n"
             "VSOut main(uint vertex_id : SV_VertexID) {\n"
-            "    float2 p[3] = { float2(-1.0, -1.0), float2(-1.0, 3.0), float2(3.0, -1.0) };\n"
+            "    float2 p[3] = { float2(-1.0, -1.0), float2(3.0, -1.0), float2(-1.0, 3.0) };\n"
             "    VSOut o;\n"
-            "    o.pos = float4(p[vertex_id], 0.0, 1.0);\n"
+            // Raw HLSL bypasses termin_to_native_clip, so reproduce its D3D11
+            // Y adapter explicitly. The source array remains logical CCW.
+            "    o.pos = float4(p[vertex_id].x, -p[vertex_id].y, 0.0, 1.0);\n"
             "    return o;\n"
             "}\n";
         const char* ps_source =
@@ -594,7 +596,7 @@ int main() {
         pipeline_desc.color_formats.push_back(tgfx::PixelFormat::RGBA8_UNorm);
         pipeline_desc.depth_stencil.depth_test = false;
         pipeline_desc.depth_stencil.depth_write = false;
-        pipeline_desc.raster.cull = tgfx::CullMode::None;
+        pipeline_desc.raster.cull = tgfx::CullMode::Back;
         auto pipeline = device->create_pipeline(pipeline_desc);
         if (!pipeline) {
             std::fprintf(stderr, "D3D11 smoke: create_pipeline failed\n");

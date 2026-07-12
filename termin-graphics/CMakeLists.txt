@@ -484,6 +484,20 @@ if(BUILD_TGFX2_TESTS)
     set(TGFX2_VULKAN_RUNTIME_SKIP_RE
         "Failed to create Vulkan device: Failed to create Vulkan instance|Failed to create Vulkan device: No Vulkan-capable GPU found")
 
+    add_executable(tgfx2_front_face_contract_test
+        tests/test_tgfx2_front_face_contract.cpp)
+    target_link_libraries(tgfx2_front_face_contract_test PRIVATE termin_graphics2)
+    if(TGFX2_ENABLE_VULKAN)
+        target_compile_definitions(tgfx2_front_face_contract_test PRIVATE TGFX2_HAS_VULKAN)
+        target_link_libraries(tgfx2_front_face_contract_test PRIVATE Vulkan::Vulkan)
+    endif()
+    if(TGFX2_ENABLE_D3D11)
+        target_compile_definitions(tgfx2_front_face_contract_test PRIVATE TGFX2_HAS_D3D11)
+    endif()
+    termin_set_rpath_test(tgfx2_front_face_contract_test)
+    add_test(NAME tgfx2_front_face_contract_test COMMAND tgfx2_front_face_contract_test)
+    set_tests_properties(tgfx2_front_face_contract_test PROPERTIES TIMEOUT 10)
+
     add_executable(tgfx2_sdf_test tests/test_tgfx2_sdf.cpp)
     target_compile_definitions(tgfx2_sdf_test PRIVATE
         TGFX2_TEST_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf")

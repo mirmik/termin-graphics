@@ -111,6 +111,12 @@ D3D11_CULL_MODE to_d3d_cull(CullMode mode) {
     return D3D11_CULL_BACK;
 }
 
+bool to_d3d_front_counter_clockwise(FrontFace face) {
+    // termin_to_native_clip flips Y at the D3D11 shader-output boundary, so
+    // native rasterizer winding is opposite to the logical authoring winding.
+    return face == FrontFace::CW;
+}
+
 D3D11_FILL_MODE to_d3d_fill(PolygonMode mode) {
     switch (mode) {
         case PolygonMode::Fill: return D3D11_FILL_SOLID;

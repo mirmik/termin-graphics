@@ -353,7 +353,10 @@ static bool render_bound_resource_set_smoke(tgfx::IRenderDevice& device) {
     pipeline_desc.depth_stencil.depth_test = false;
     pipeline_desc.depth_stencil.depth_write = false;
     pipeline_desc.depth_format = tgfx::PixelFormat::Undefined;
-    pipeline_desc.raster.cull = tgfx::CullMode::None;
+    // The vertices below are logical CCW authoring data. Keep back-face
+    // culling enabled so this smoke verifies the frontend winding contract,
+    // not only shader/resource binding.
+    pipeline_desc.raster.cull = tgfx::CullMode::Back;
     pipeline_desc.color_formats = {tgfx::PixelFormat::RGBA8_UNorm};
 
     tgfx::VertexBufferLayout layout;

@@ -1009,7 +1009,8 @@ PipelineHandle D3D11RenderDevice::create_pipeline(const PipelineDesc& desc) {
     // tgfx2::FrontFace is a logical/view-space convention. The D3D11
     // projection adapter flips Y before the shader value reaches native D3D
     // clip space, so the native rasterizer winding is opposite to the API enum.
-    rd.FrontCounterClockwise = desc.raster.front_face == FrontFace::CW;
+    rd.FrontCounterClockwise = d3d11::to_d3d_front_counter_clockwise(
+        desc.raster.front_face);
     rd.DepthBias = static_cast<INT>(desc.raster.depth_bias_constant);
     rd.DepthBiasClamp = desc.raster.depth_bias_clamp;
     rd.SlopeScaledDepthBias = desc.raster.depth_bias_slope;

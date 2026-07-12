@@ -6,13 +6,10 @@ namespace tgfx {
 
 struct RasterState {
     CullMode cull = CullMode::Back;
-    // Y-flip in projection matrices (Vulkan-native clip, Y+ down — see
-    // docs/coord_system.md §2) reverses the visual winding of every
-    // triangle in clip space. A mesh whose triangles are authored CCW
-    // in view space now rasterises CW; using CCW as the front face
-    // would hide every front-facing polygon and render the scene
-    // inside-out. Default here is CW so meshes look right out of the box.
-    FrontFace front_face = FrontFace::CW;
+    // Logical mesh-authoring winding before backend clip/viewport adapters.
+    // Native rasterizer mappings own any Y-convention inversion; callers and
+    // render passes must not compensate for it (docs/coord_system.md §4a).
+    FrontFace front_face = FrontFace::CCW;
     PolygonMode polygon_mode = PolygonMode::Fill;
     bool depth_bias_enabled = false;
     float depth_bias_constant = 0.0f;
