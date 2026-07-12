@@ -445,6 +445,33 @@ tc_ui_event_result FileGridWidget::pointer_event(tc_ui_document* document,
             return TC_UI_EVENT_HANDLED;
         }
     }
+    if (pressed_item_ != SelectionModel::npos) {
+        if (event->type == TC_UI_POINTER_DOWN) {
+            pressed_item_ = SelectionModel::npos;
+            dragging_item_ = false;
+            tc_ui_document_release_pointer_capture(document, handle());
+        }
+        if (event->type == TC_UI_POINTER_MOVE) {
+            const float dx = event->x - item_press_x_;
+            const float dy = event->y - item_press_y_;
+            if (!dragging_item_ && dx * dx + dy * dy >= 16.0f) {
+                dragging_item_ = true;
+                mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+            }
+            return TC_UI_EVENT_HANDLED;
+        }
+        if (event->type == TC_UI_POINTER_UP) {
+            const size_t dragged = pressed_item_;
+            const bool was_dragging = dragging_item_;
+            pressed_item_ = SelectionModel::npos;
+            dragging_item_ = false;
+            tc_ui_document_release_pointer_capture(document, handle());
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+            if (was_dragging && dragged < model_->size())
+                drag_requested_.emit(*this, dragged, event->x, event->y, event->modifiers);
+            return TC_UI_EVENT_HANDLED;
+        }
+    }
     if (event->type == TC_UI_POINTER_LEAVE) {
         hovered_ = SelectionModel::npos;
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
@@ -486,12 +513,17 @@ tc_ui_event_result FileGridWidget::pointer_event(tc_ui_document* document,
     }
     if (event->button != pointer_button_value(PointerButton::Left) || index == SelectionModel::npos || !model_->item(index).enabled)
         return TC_UI_EVENT_IGNORED;
-    const bool selected = apply_selection(index, event->modifiers);
+    apply_selection(index, event->modifiers);
     if (event->click_count == 2) {
         activated_.emit(*this, index, model_->item(index));
         return TC_UI_EVENT_HANDLED;
     }
-    return selected ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
+    pressed_item_ = index;
+    dragging_item_ = false;
+    item_press_x_ = event->x;
+    item_press_y_ = event->y;
+    tc_ui_document_set_pointer_capture(document, handle());
+    return TC_UI_EVENT_HANDLED;
 }
 
 tc_ui_event_result FileGridWidget::key_event(tc_ui_document*, const tc_ui_key_event* event) {

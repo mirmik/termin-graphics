@@ -273,9 +273,13 @@ def test_native_file_grid_widget_input_callbacks_lifetime_and_errors():
     activated = []
     deleted = []
     contexts = []
+    drags = []
     widget.connect_activated(lambda index, item: activated.append((index, item.stable_id)))
     widget.connect_delete_requested(lambda index, item: deleted.append((index, item.stable_id)))
     widget.connect_context_menu_requested(lambda index, x, y: contexts.append((index, x, y)))
+    widget.connect_drag_requested(
+        lambda index, x, y, modifiers: drags.append((index, x, y, modifiers))
+    )
 
     pointer = PointerEvent()
     pointer.type = PointerEventType.Down
@@ -283,6 +287,9 @@ def test_native_file_grid_widget_input_callbacks_lifetime_and_errors():
     pointer.y = 10.0
     assert document.dispatch_pointer_event(pointer) == EventResult.Handled
     assert widget.current_index == 0
+    pointer.type = PointerEventType.Up
+    assert document.dispatch_pointer_event(pointer) == EventResult.Handled
+    pointer.type = PointerEventType.Down
     key = KeyEvent()
     key.type = KeyEventType.Down
     key.key = KeyCode.Down
@@ -305,6 +312,20 @@ def test_native_file_grid_widget_input_callbacks_lifetime_and_errors():
     assert contexts[-1][0] == -1
 
     pointer.button = 0
+    pointer.type = PointerEventType.Down
+    pointer.x = 10.0
+    pointer.y = 10.0
+    assert document.dispatch_pointer_event(pointer) == EventResult.Handled
+    pointer.type = PointerEventType.Move
+    pointer.x = 160.0
+    pointer.y = 140.0
+    assert document.dispatch_pointer_event(pointer) == EventResult.Handled
+    pointer.type = PointerEventType.Up
+    assert document.dispatch_pointer_event(pointer) == EventResult.Handled
+    assert drags == [(0, 160.0, 140.0, 0)]
+
+    pointer.button = 0
+    pointer.type = PointerEventType.Down
     pointer.x = 118.0
     pointer.y = 5.0
     assert document.dispatch_pointer_event(pointer) == EventResult.Handled

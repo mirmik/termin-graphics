@@ -25,6 +25,10 @@ class FileGridWidget final : public NativeWidget {
     float scroll_y_ = 0.0f;
     bool show_scrollbar_ = true;
     bool dragging_scrollbar_ = false;
+    size_t pressed_item_ = SelectionModel::npos;
+    bool dragging_item_ = false;
+    float item_press_x_ = 0.0f;
+    float item_press_y_ = 0.0f;
     float drag_start_y_ = 0.0f;
     float drag_start_scroll_ = 0.0f;
     size_t hovered_ = SelectionModel::npos;
@@ -33,6 +37,7 @@ class FileGridWidget final : public NativeWidget {
     Signal<FileGridWidget&, size_t, const CollectionItem&> activated_;
     Signal<FileGridWidget&, size_t, const CollectionItem&> delete_requested_;
     Signal<FileGridWidget&, int64_t, float, float> context_menu_requested_;
+    Signal<FileGridWidget&, size_t, float, float, int32_t> drag_requested_;
 
   public:
     explicit FileGridWidget(std::shared_ptr<CollectionModel> model = {});
@@ -83,6 +88,9 @@ class FileGridWidget final : public NativeWidget {
     }
     Signal<FileGridWidget&, int64_t, float, float>& context_menu_requested() {
         return context_menu_requested_;
+    }
+    Signal<FileGridWidget&, size_t, float, float, int32_t>& drag_requested() {
+        return drag_requested_;
     }
 
     tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;

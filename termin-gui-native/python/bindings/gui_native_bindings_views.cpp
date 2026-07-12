@@ -969,6 +969,26 @@ void bind_gui_native_views_and_collections(nb::module_& m) {
                     }
                 });
             },
+            nb::arg("callback"))
+        .def(
+            "connect_drag_requested",
+            [](const FileGridWidgetRef& self, nb::object callback) {
+                auto state = self.widget.state;
+                return self.get().drag_requested().connect(
+                    [state, callback = std::move(callback)](
+                        termin::gui_native::FileGridWidget&, size_t index, float x, float y,
+                        int32_t modifiers) {
+                        try {
+                            nb::gil_scoped_acquire gil;
+                            callback(index, x, y, modifiers);
+                        } catch (...) {
+                            if (state && !state->pending_exception)
+                                state->pending_exception = std::current_exception();
+                            tc_log_error(
+                                "[termin-gui-native/python] FileGridWidget drag callback failed");
+                        }
+                    });
+            },
             nb::arg("callback"));
 
     nb::class_<termin::gui_native::TreeNode>(m, "TreeNode")

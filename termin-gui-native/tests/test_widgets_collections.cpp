@@ -1251,6 +1251,9 @@ void test_file_grid_widget_input_scrollbar_signals_and_lifetime() {
   pointer.y = 10.0f;
   assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
   assert(grid.selection().current() == 0);
+  pointer.type = TC_UI_POINTER_UP;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+  pointer.type = TC_UI_POINTER_DOWN;
 
   tc_ui_key_event key{};
   key.type = TC_UI_KEY_DOWN;
@@ -1277,7 +1280,29 @@ void test_file_grid_widget_input_scrollbar_signals_and_lifetime() {
   assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
   assert(contexts.back() == -1);
 
+  std::vector<std::tuple<size_t, float, float, int32_t>> drags;
+  grid.drag_requested().connect(
+      [&drags](FileGridWidget &, size_t index, float x, float y, int32_t modifiers) {
+        drags.emplace_back(index, x, y, modifiers);
+      });
   pointer.button = 0;
+  pointer.type = TC_UI_POINTER_DOWN;
+  pointer.modifiers = TC_UI_MOD_CTRL;
+  pointer.x = 10.0f;
+  pointer.y = 10.0f;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+  pointer.type = TC_UI_POINTER_MOVE;
+  pointer.x = 160.0f;
+  pointer.y = 140.0f;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+  pointer.type = TC_UI_POINTER_UP;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+  assert((drags == std::vector<std::tuple<size_t, float, float, int32_t>>{
+                       {0, 160.0f, 140.0f, TC_UI_MOD_CTRL}}));
+
+  pointer.button = 0;
+  pointer.modifiers = 0;
+  pointer.type = TC_UI_POINTER_DOWN;
   pointer.x = 118.0f;
   pointer.y = 5.0f;
   assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
