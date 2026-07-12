@@ -98,6 +98,64 @@ bool validate_fragment_interface(
     return ok;
 }
 
+bool validate_adapter_interface(
+    const VertexTransformProvider& provider,
+    const VertexOutputAdapter& adapter,
+    std::vector<MaterialPipelineDiagnostic>& diagnostics)
+{
+    bool ok = true;
+    for (const MaterialPipelineSemantic& semantic :
+         adapter.consumed_world_semantics.semantics) {
+        if (!material_pipeline_interface_produces(
+                provider.produced_world_semantics,
+                semantic.name,
+                semantic.type)) {
+            ok = false;
+            diagnostics.push_back(diagnostic(
+                MaterialPipelineDiagnosticCode::MissingVertexOutputSemantic,
+                "vertex transform provider '" + provider.debug_name +
+                    "' does not produce adapter semantic '" +
+                    semantic.name + "' required by '" + adapter.debug_name +
+                    "'"));
+        }
+    }
+    return ok;
+}
+
+std::string compose_modular_vertex_source(
+    const VertexTransformProvider& provider,
+    const VertexOutputAdapter& adapter,
+    const std::string& entry_point)
+{
+    std::string source;
+    source.reserve(
+        provider.source_module.module_name.size() +
+        adapter.source_module.module_name.size() +
+        provider.entry_input_declaration.size() +
+        provider.adapter_input_expression.size() + 320u);
+    source += "// Termin material pipeline vertex glue.\n";
+    source += "// provider=";
+    source += provider.source_module.source_identity;
+    source += "\n// adapter=";
+    source += adapter.source_module.source_identity;
+    source += "\nimport ";
+    source += provider.source_module.module_name;
+    source += ";\nimport ";
+    source += adapter.source_module.module_name;
+    source += ";\n\n";
+    source += provider.entry_input_declaration;
+    source += "\n\n[shader(\"vertex\")]\n";
+    source += adapter.output_type_name;
+    source += " ";
+    source += entry_point;
+    source += "(VertexInput input) {\n    return ";
+    source += adapter.output_function;
+    source += "(";
+    source += provider.adapter_input_expression;
+    source += ");\n}\n";
+    return source;
+}
+
 bool append_contract_inputs(
     const VertexTransformContract& vertex_transform,
     std::vector<tc_shader_contract_vertex_input>& out)
@@ -197,7 +255,20 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
         return result;
     }
 
+    const bool has_modular_provider =
+        vertex_transform_provider_is_modular(request.vertex_transform);
+    const bool has_output_adapter = request.pass.vertex_output_adapter.has_value();
+
     std::string vertex_source = request.vertex_source_override;
+    if (vertex_source.empty() && has_modular_provider && has_output_adapter) {
+        const std::string& entry = request.vertex_entry_override.empty()
+            ? request.vertex_transform.vertex_entry
+            : request.vertex_entry_override;
+        vertex_source = compose_modular_vertex_source(
+            request.vertex_transform,
+            *request.pass.vertex_output_adapter,
+            entry);
+    }
     if (vertex_source.empty() && request.vertex_transform.template_uuid.has_value()) {
         vertex_source = tgfx::load_builtin_shader_stage_source_from_catalog(
             request.vertex_transform.template_uuid->c_str(),
@@ -225,10 +296,26 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
         request.material,
         request.vertex_transform,
         result.diagnostics);
+    if (has_modular_provider != has_output_adapter) {
+        result.diagnostics.push_back(diagnostic(
+            MaterialPipelineDiagnosticCode::MissingVertexTransformTemplate,
+            "pass '" + request.pass.debug_name +
+                "' must provide both a modular vertex transform provider and "
+                "a vertex output adapter"));
+    }
+    if (has_modular_provider && has_output_adapter) {
+        validate_adapter_interface(
+            request.vertex_transform,
+            *request.pass.vertex_output_adapter,
+            result.diagnostics);
+    }
 
     std::vector<MaterialPipelineResourceDecl> resource_decls;
     append_resources(resource_decls, request.material.resources);
     append_resources(resource_decls, request.vertex_transform.resources);
+    if (has_output_adapter) {
+        append_resources(resource_decls, request.pass.vertex_output_adapter->resources);
+    }
     append_resources(resource_decls, request.pass.resources);
 
     MaterialPipelineResourceMergeResult merged =
