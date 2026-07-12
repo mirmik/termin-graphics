@@ -485,6 +485,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 tc::Log::error(
                     "RenderEngine::render_scene_pipeline_offscreen: failed to allocate color_texture '%s'",
                     canon);
+                tc_profiler_end_section();
+                return;
             }
 
             const char* aliases[64];
@@ -520,6 +522,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 tc::Log::error(
                     "RenderEngine::render_scene_pipeline_offscreen: failed to allocate depth_texture '%s'",
                     canon);
+                tc_profiler_end_section();
+                return;
             }
 
             const char* aliases[64];
@@ -572,7 +576,13 @@ void RenderEngine::render_scene_pipeline_offscreen(
         target_desc.has_depth = true;
         target_desc.depth_format = tgfx::PixelFormat::D32F;
 
-        fbo_pool.ensure_native(*device, canon, target_desc);
+        if (!fbo_pool.ensure_native(*device, canon, target_desc)) {
+            tc::Log::error(
+                "RenderEngine::render_scene_pipeline_offscreen: failed to allocate fbo '%s'",
+                canon);
+            tc_profiler_end_section();
+            return;
+        }
         (void)filter;
 
         const char* aliases[64];

@@ -6,6 +6,7 @@
 
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/pipeline_cache.hpp>
+#include <tgfx2/texture_pool.hpp>
 
 namespace {
 
@@ -26,7 +27,12 @@ public:
     }
 
     tgfx::TextureHandle create_texture(const tgfx::TextureDesc&) override {
-        return {};
+        ++create_texture_count;
+        if (texture_failures_remaining > 0) {
+            --texture_failures_remaining;
+            return {};
+        }
+        return tgfx::TextureHandle{next_texture_id_++};
     }
 
     tgfx::SamplerHandle create_sampler(const tgfx::SamplerDesc&) override {
@@ -38,6 +44,11 @@ public:
     }
 
     tgfx::PipelineHandle create_pipeline(const tgfx::PipelineDesc&) override {
+        ++create_pipeline_count;
+        if (pipeline_failures_remaining > 0) {
+            --pipeline_failures_remaining;
+            return {};
+        }
         return tgfx::PipelineHandle{next_pipeline_id_++};
     }
 
@@ -76,7 +87,13 @@ public:
     void submit(tgfx::ICommandList&) override {}
     void present() override {}
 
+    int texture_failures_remaining = 0;
+    int pipeline_failures_remaining = 0;
+    uint32_t create_texture_count = 0;
+    uint32_t create_pipeline_count = 0;
+
 private:
+    uint32_t next_texture_id_ = 1;
     uint32_t next_pipeline_id_ = 1;
 };
 
@@ -149,4 +166,56 @@ TEST_CASE("PipelineCache exposes backend-neutral hit miss and layout stats") {
     REQUIRE(stats.vertex_layout_signature_hashes.size() == 2u);
     CHECK(stats.vertex_layout_signature_hashes[0] == 0x1111u);
     CHECK(stats.vertex_layout_signature_hashes[1] == 0x2222u);
+}
+
+TEST_CASE("PipelineCache retries a failed creation instead of caching an invalid handle") {
+    PipelineCacheStatsDevice device;
+    device.pipeline_failures_remaining = 1;
+    tgfx::PipelineCache cache(device);
+
+    tgfx::PipelineCacheKey key;
+    key.vertex_shader = tgfx::ShaderHandle{1};
+    key.fragment_shader = tgfx::ShaderHandle{2};
+    key.vertex_layouts = {make_layout(12, "position")};
+    key.vertex_layouts_hash = 0x3333;
+
+    CHECK_FALSE(cache.get(key));
+    CHECK(cache.size() == 0u);
+    CHECK(device.create_pipeline_count == 1u);
+
+    const tgfx::PipelineHandle recovered = cache.get(key);
+    CHECK(recovered.id == 1u);
+    CHECK(cache.size() == 1u);
+    CHECK(device.create_pipeline_count == 2u);
+    CHECK(cache.get(key) == recovered);
+    CHECK(device.create_pipeline_count == 2u);
+}
+
+TEST_CASE("texture pools retry failed allocations using the same key and descriptor") {
+    PipelineCacheStatsDevice device;
+    tgfx::TextureDesc texture_desc;
+    texture_desc.width = 32;
+    texture_desc.height = 16;
+    texture_desc.usage = tgfx::TextureUsage::Sampled;
+
+    tgfx::TexturePool textures;
+    device.texture_failures_remaining = 1;
+    CHECK_FALSE(textures.ensure(device, "color", texture_desc));
+    CHECK_FALSE(textures.get("color"));
+    CHECK(textures.ensure(device, "color", texture_desc));
+    CHECK(textures.get("color"));
+    CHECK(device.create_texture_count == 2u);
+
+    tgfx::RenderTargetPool targets;
+    tgfx::RenderTargetPoolDesc target_desc;
+    target_desc.width = 32;
+    target_desc.height = 16;
+    target_desc.has_depth = true;
+    device.texture_failures_remaining = 1;
+    CHECK_FALSE(targets.ensure(device, "main", target_desc));
+    CHECK_FALSE(targets.color("main"));
+    CHECK(targets.ensure(device, "main", target_desc));
+    CHECK(targets.color("main"));
+    CHECK(targets.depth("main"));
+    CHECK(device.create_texture_count == 6u);
 }

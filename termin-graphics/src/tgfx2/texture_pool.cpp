@@ -2,6 +2,8 @@
 
 #include "tgfx2/i_render_device.hpp"
 
+#include <tcbase/tc_log.h>
+
 namespace tgfx {
 
 namespace {
@@ -61,7 +63,8 @@ bool TexturePool::ensure(IRenderDevice& device,
         }
 
         const bool needs_recreate = entry.device != &device ||
-                                    !texture_desc_equal(entry.desc, desc);
+                                    !texture_desc_equal(entry.desc, desc) ||
+                                    !entry.handle;
         if (!needs_recreate) {
             return true;
         }
@@ -71,7 +74,13 @@ bool TexturePool::ensure(IRenderDevice& device,
         entry.device = &device;
         entry.desc = desc;
         entry.handle = device.create_texture(desc);
-        return static_cast<bool>(entry.handle);
+        if (!entry.handle) {
+            tc_log(TC_LOG_ERROR,
+                   "TexturePool: failed to create texture '%s'; request will be retried",
+                   entry.key.c_str());
+            return false;
+        }
+        return true;
     }
 
     TexturePoolEntry entry;
@@ -80,6 +89,11 @@ bool TexturePool::ensure(IRenderDevice& device,
     entry.desc = desc;
     entry.handle = device.create_texture(desc);
     const bool ok = static_cast<bool>(entry.handle);
+    if (!ok) {
+        tc_log(TC_LOG_ERROR,
+               "TexturePool: failed to create texture '%s'; request will be retried",
+               entry.key.c_str());
+    }
     entries.push_back(std::move(entry));
     return ok;
 }
@@ -139,7 +153,9 @@ bool RenderTargetPool::ensure(IRenderDevice& device,
         }
 
         const bool needs_recreate = entry.native_device != &device ||
-                                    !render_target_desc_equal(entry.desc, desc);
+                                    !render_target_desc_equal(entry.desc, desc) ||
+                                    !entry.color_tgfx2 ||
+                                    (desc.has_depth && !entry.depth_tgfx2);
         if (!needs_recreate) {
             return true;
         }
@@ -149,8 +165,14 @@ bool RenderTargetPool::ensure(IRenderDevice& device,
         entry.native_device = &device;
         entry.desc = desc;
         alloc_textures(entry);
-        return static_cast<bool>(entry.color_tgfx2) &&
-               (!desc.has_depth || static_cast<bool>(entry.depth_tgfx2));
+        const bool ok = static_cast<bool>(entry.color_tgfx2) &&
+                        (!desc.has_depth || static_cast<bool>(entry.depth_tgfx2));
+        if (!ok) {
+            tc_log(TC_LOG_ERROR,
+                   "RenderTargetPool: failed to create target '%s'; request will be retried",
+                   entry.key.c_str());
+        }
+        return ok;
     }
 
     RenderTargetEntry entry;
@@ -160,6 +182,11 @@ bool RenderTargetPool::ensure(IRenderDevice& device,
     alloc_textures(entry);
     const bool ok = static_cast<bool>(entry.color_tgfx2) &&
                     (!desc.has_depth || static_cast<bool>(entry.depth_tgfx2));
+    if (!ok) {
+        tc_log(TC_LOG_ERROR,
+               "RenderTargetPool: failed to create target '%s'; request will be retried",
+               entry.key.c_str());
+    }
     entries.push_back(std::move(entry));
     return ok;
 }

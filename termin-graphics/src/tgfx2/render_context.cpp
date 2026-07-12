@@ -984,7 +984,7 @@ void RenderContext2::clear_scissor() {
 // Pipeline resolution
 // ============================================================================
 
-void RenderContext2::flush_pipeline() {
+bool RenderContext2::flush_pipeline() {
     if (!pipeline_dirty_) {
         // Pipeline wasn't touched, but push-constants might still be
         // pending from a set_push_constants() call that came after the
@@ -995,7 +995,7 @@ void RenderContext2::flush_pipeline() {
                                      pending_push_constants_size_);
             push_constants_dirty_ = false;
         }
-        return;
+        return true;
     }
 
     PipelineCacheKey key;
@@ -1018,6 +1018,11 @@ void RenderContext2::flush_pipeline() {
     key.sample_count = sample_count_;
 
     auto pipeline = cache_.get(key);
+    if (!pipeline) {
+        tc_log(TC_LOG_ERROR,
+               "RenderContext2: pipeline creation failed; skipping draw until the backend recovers");
+        return false;
+    }
     // Redundant-bind culling at the pipeline level. Pass code often
     // calls set_depth_test/set_blend/set_cull/bind_shader per draw, which
     // flips pipeline_dirty_ even when the final pipeline ends up
@@ -1060,6 +1065,7 @@ void RenderContext2::flush_pipeline() {
                                  pending_push_constants_size_);
         push_constants_dirty_ = false;
     }
+    return true;
 }
 
 void RenderContext2::flush_resource_set() {
@@ -1192,7 +1198,7 @@ void RenderContext2::draw_fullscreen_quad() {
         bind_shader(fsq_vs_, bound_fs_, bound_gs_);
     }
 
-    flush_pipeline();
+    if (!flush_pipeline()) return;
     flush_resource_set();
 
     cmd_->bind_vertex_buffer(0, fsq_vbo_);
@@ -1206,7 +1212,7 @@ void RenderContext2::draw_fullscreen_quad_with_bound_shader() {
     set_vertex_layout(fullscreen_quad_vertex_layout_desc());
     set_topology(PrimitiveTopology::TriangleList);
 
-    flush_pipeline();
+    if (!flush_pipeline()) return;
     flush_resource_set();
 
     cmd_->bind_vertex_buffer(0, fsq_vbo_);
@@ -1218,7 +1224,7 @@ void RenderContext2::draw(
     BufferHandle vbo, BufferHandle ibo,
     uint32_t index_count, IndexType idx_type
 ) {
-    flush_pipeline();
+    if (!flush_pipeline()) return;
     flush_resource_set();
     // Redundant-bind culling: a pipeline-compatible sequence of draws
     // over the same mesh (think: several chronosquad enemies rendered
@@ -1251,7 +1257,7 @@ void RenderContext2::draw(
     int32_t vertex_offset,
     IndexType idx_type
 ) {
-    flush_pipeline();
+    if (!flush_pipeline()) return;
     flush_resource_set();
     ensure_cached_vertex_buffer_slots(1);
     if (vbo != last_bound_vbos_[0] || last_bound_vbo_offsets_[0] != 0) {
@@ -1271,7 +1277,7 @@ void RenderContext2::draw(
 }
 
 void RenderContext2::draw_indexed_instanced(const IndexedInstancedDraw& draw) {
-    flush_pipeline();
+    if (!flush_pipeline()) return;
     flush_resource_set();
     ensure_cached_vertex_buffer_slots(2);
     if (draw.vertex_buffer != last_bound_vbos_[0]
@@ -1304,7 +1310,7 @@ void RenderContext2::draw_arrays(BufferHandle vbo, uint32_t vertex_count) {
 void RenderContext2::draw_arrays(BufferHandle vbo,
                                  uint64_t vertex_offset,
                                  uint32_t vertex_count) {
-    flush_pipeline();
+    if (!flush_pipeline()) return;
     flush_resource_set();
     ensure_cached_vertex_buffer_slots(1);
     if (vbo != last_bound_vbos_[0] || last_bound_vbo_offsets_[0] != vertex_offset) {
@@ -1318,7 +1324,7 @@ void RenderContext2::draw_arrays(BufferHandle vbo,
 void RenderContext2::draw_arrays_instanced(BufferHandle vbo,
                                            uint32_t vertex_count,
                                            uint32_t instance_count) {
-    flush_pipeline();
+    if (!flush_pipeline()) return;
     flush_resource_set();
     ensure_cached_vertex_buffer_slots(1);
     if (vbo != last_bound_vbos_[0] || last_bound_vbo_offsets_[0] != 0) {
@@ -1333,7 +1339,7 @@ void RenderContext2::draw_arrays_instanced(BufferHandle vertex_vbo,
                                            BufferHandle instance_vbo,
                                            uint32_t vertex_count,
                                            uint32_t instance_count) {
-    flush_pipeline();
+    if (!flush_pipeline()) return;
     flush_resource_set();
     ensure_cached_vertex_buffer_slots(2);
     if (vertex_vbo != last_bound_vbos_[0] || last_bound_vbo_offsets_[0] != 0) {
@@ -1355,7 +1361,7 @@ void RenderContext2::draw_arrays_instanced(BufferHandle vertex_vbo,
                                            uint64_t instance_offset,
                                            uint32_t vertex_count,
                                            uint32_t instance_count) {
-    flush_pipeline();
+    if (!flush_pipeline()) return;
     flush_resource_set();
     ensure_cached_vertex_buffer_slots(2);
     if (vertex_vbo != last_bound_vbos_[0]

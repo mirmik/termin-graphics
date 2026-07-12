@@ -390,7 +390,10 @@ private:
                                 PrimitiveTopology topo);
 
     void ensure_fsq_resources();
-    void flush_pipeline();
+    // Returns false when the backend cannot create the requested pipeline.
+    // Callers must not issue a draw in that case: an old bound pipeline may
+    // still be active on the command list.
+    bool flush_pipeline();
     void flush_resource_set();
 };
 

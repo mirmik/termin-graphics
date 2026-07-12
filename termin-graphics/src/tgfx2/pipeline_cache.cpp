@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <functional>
 
+#include <tcbase/tc_log.h>
+
 namespace tgfx {
 
 // ============================================================================
@@ -153,6 +155,11 @@ PipelineHandle PipelineCache::get(const PipelineCacheKey& key) {
 
     auto handle = device_.create_pipeline(desc);
     ++create_pipeline_count_;
+    if (!handle) {
+        tc_log(TC_LOG_ERROR,
+               "PipelineCache: backend failed to create a graphics pipeline; request will be retried");
+        return {};
+    }
     cache_[key] = handle;
     return handle;
 }
