@@ -42,7 +42,7 @@ if [[ $FORCE -eq 1 ]]; then
 fi
 mkdir -p "$TOOLS_SITE"
 
-if [[ $FORCE -eq 1 || ! -d "$TOOLS_SITE/pytest" || ! -f "$TOOLS_STAMP" ]] \
+if [[ $FORCE -eq 1 || ! -d "$TOOLS_SITE/ruff" || ! -f "$TOOLS_STAMP" ]] \
     || ! cmp -s "$TOOLS_REQUIREMENTS" "$TOOLS_STAMP"; then
     echo "Installing test-only tools into: $TOOLS_SITE"
     "$BOOTSTRAP_PYTHON" -I -m pip install \

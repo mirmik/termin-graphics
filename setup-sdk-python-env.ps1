@@ -34,7 +34,7 @@ if ($Force -and (Test-Path $ToolsSite)) {
 }
 New-Item -ItemType Directory -Force -Path $ToolsSite | Out-Null
 
-$ToolsCurrent = (Test-Path (Join-Path $ToolsSite "pytest")) -and `
+$ToolsCurrent = (Test-Path (Join-Path $ToolsSite "ruff")) -and `
     (Test-Path $ToolsStamp) -and `
     ((Get-FileHash $ToolsRequirements).Hash -eq (Get-FileHash $ToolsStamp).Hash)
 if ($Force -or -not $ToolsCurrent) {
