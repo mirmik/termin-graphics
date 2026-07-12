@@ -73,8 +73,9 @@ example skip code `77` with an error message.
 
 The GitHub Actions workflow keeps the same checks split by cost and platform:
 
-- `lint-cpp` and `lint-source-size` keep the static-analysis/source-size gates
-  from regressing.
+- `lint-cpp` keeps the native static-analysis gate from regressing;
+  `plan-pr-linux` runs the repository check profile, including source-size
+  policy, manifest validation, and orphan detection.
 - `build-cpp-libs`, `test-cpp-libs`, `build-bindings`, `test-termin`, and
   `test-pip-packages` cover the Linux SDK build and test path.
 - `tgfx2-d3d11-bound-windows` covers the Windows D3D11 backend smoke.

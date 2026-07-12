@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "source_size": {
+    "threshold": 2000,
+    "extensions": [".c", ".cc", ".cpp", ".cs", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".py"],
+    "exclude_roots": [
+      ".git",
+      ".venv",
+      "build",
+      "dist",
+      "node_modules",
+      "sdk",
+      "termin-csharp/Termin.Native/Generated",
+      "termin-thirdparty",
+      "thirdparty"
+    ]
+  }
+}
