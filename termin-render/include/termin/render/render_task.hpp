@@ -72,6 +72,12 @@ class RENDER_API RenderTaskList {
     std::vector<std::unique_ptr<RenderTaskExtension>> extensions_;
 
 public:
+    RenderTaskList() = default;
+    RenderTaskList(const RenderTaskList&) = delete;
+    RenderTaskList& operator=(const RenderTaskList&) = delete;
+    RenderTaskList(RenderTaskList&&) noexcept = default;
+    RenderTaskList& operator=(RenderTaskList&&) noexcept = default;
+
     void reserve(size_t count) { tasks_.reserve(count); }
     RenderTask& append() {
         tasks_.emplace_back();

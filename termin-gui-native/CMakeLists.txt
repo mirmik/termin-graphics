@@ -95,6 +95,12 @@ add_library(termin_gui_native SHARED
 )
 add_library(termin_gui_native::termin_gui_native ALIAS termin_gui_native)
 
+# The installed C++ widget headers are the library API and the Python bindings
+# are built as a separate DLL. Export their complete symbol surface on Windows.
+if(WIN32)
+    set_target_properties(termin_gui_native PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
+
 target_compile_definitions(termin_gui_native PRIVATE TERMIN_GUI_NATIVE_EXPORTS)
 
 target_include_directories(termin_gui_native

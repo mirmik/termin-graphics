@@ -363,10 +363,6 @@ bool validate_d3d11_texture_upload(
     return true;
 }
 
-    const size_t bytes = pixel_count * tc_texture_format_bpp(format);
-    return std::vector<uint8_t>(src, src + bytes);
-}
-
 } // namespace
 
 D3D11RenderDevice::D3D11RenderDevice() {

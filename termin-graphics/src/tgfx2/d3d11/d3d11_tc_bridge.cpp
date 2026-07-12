@@ -85,7 +85,12 @@ std::vector<uint8_t> normalize_tc_texture_pixels(const tc_texture* tex, PixelFor
     }
 
     out_format = tc_format_to_tgfx2(format);
+    const size_t bytes = pixel_count * tc_texture_format_bpp(format);
+    return std::vector<uint8_t>(src, src + bytes);
+}
+
 } // namespace
+
 bool D3D11RenderDevice::ensure_tc_shader(
     tc_shader* shader,
     ShaderHandle* out_vs,

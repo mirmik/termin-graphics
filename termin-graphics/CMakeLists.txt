@@ -101,10 +101,19 @@ set_target_properties(termin_graphics PROPERTIES
 )
 termin_set_rpath_lib(termin_graphics)
 
+# Shared by the runtime and the host-side shader compiler. Keeping it out of
+# termin_graphics2 prevents the compiler used for SDK shader artifacts from
+# depending on the library whose artifacts it generates.
+add_library(termin_graphics_process_runner STATIC
+    src/tgfx2/internal/process_runner.cpp
+)
+target_include_directories(termin_graphics_process_runner PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
 # --- termin_graphics2 (new backend-neutral API) ---
 set(TGFX2_SOURCES
     src/tgfx2/backend_binding_plan.cpp
-    src/tgfx2/internal/process_runner.cpp
     src/tgfx2/builtin_shader_sources.cpp
     src/tgfx2/device_factory.cpp
     src/tgfx2/canvas2d_renderer.cpp
@@ -304,6 +313,7 @@ target_link_libraries(termin_graphics2 PUBLIC
     termin_graphics
     tmesh::termin_mesh
 )
+target_link_libraries(termin_graphics2 PRIVATE termin_graphics_process_runner)
 if(TGFX2_ENABLE_OPENGL)
     target_link_libraries(termin_graphics2 PUBLIC glad OpenGL::GL)
 else()
@@ -332,9 +342,13 @@ if((TGFX2_ENABLE_D3D11 OR (TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC)) AND NO
     target_compile_features(termin_shaderc PRIVATE cxx_std_20)
     target_include_directories(termin_shaderc PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    # ProcessRunner is implemented by termin_graphics2; linking that target
-    # also brings in termin_graphics transitively through its public API.
-    target_link_libraries(termin_shaderc PRIVATE termin_base termin_graphics2)
+    # The shader compiler must not depend on termin_graphics2: it produces
+    # the built-in artifacts required by that shared library.
+    target_link_libraries(termin_shaderc PRIVATE
+        termin_base
+        termin_graphics
+        termin_graphics_process_runner
+    )
     if(TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC)
         target_compile_definitions(termin_shaderc PRIVATE TERMIN_SHADERC_HAS_SHADERC)
         target_include_directories(termin_shaderc PRIVATE ${Vulkan_INCLUDE_DIR})

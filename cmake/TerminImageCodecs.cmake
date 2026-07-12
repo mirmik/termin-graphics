@@ -73,6 +73,10 @@ function(_termin_configure_bundled_image_codecs)
     endif()
     set(ZLIB_INCLUDE_DIR "${TERMIN_ZLIB_SOURCE_DIR}" CACHE PATH "" FORCE)
     set(ZLIB_INCLUDE_DIRS "${TERMIN_ZLIB_SOURCE_DIR}")
+    # libpng's upstream CMake runs FindZLIB even though the bundled target exists.
+    # A target-valued library variable keeps that lookup self-contained until zlibstatic is built.
+    set(ZLIB_LIBRARY ZLIB::ZLIB)
+    set(ZLIB_LIBRARIES ZLIB::ZLIB)
 
     set(PNG_SHARED OFF CACHE BOOL "" FORCE)
     set(PNG_STATIC ON CACHE BOOL "" FORCE)
@@ -154,6 +158,9 @@ function(_termin_configure_bundled_image_codecs)
             "${CMAKE_BINARY_DIR}/termin-thirdparty/libwebp"
         )
     endif()
+    # The upstream target does not publish its source-tree API directory.
+    # Consumers of the bundled decoder include <webp/decode.h> from this path.
+    target_include_directories(webpdecoder INTERFACE "${TERMIN_LIBWEBP_SOURCE_DIR}/src")
 
     set(TERMIN_IMAGE_CODEC_TARGETS
         png_static
