@@ -144,14 +144,19 @@ def TexturedCubeMesh(size: float = 1.0, y: float = None, z: float = None) -> Mes
 
 def UVSphereMesh(radius: float = 1.0, n_meridians: int = 16, n_parallels: int = 16) -> Mesh3:
     """Create a UV sphere mesh with UV coordinates."""
+    if n_meridians < 3:
+        raise ValueError("UVSphereMesh requires at least 3 meridians")
+    if n_parallels < 2:
+        raise ValueError("UVSphereMesh requires at least 2 parallels")
+
     uuid = _primitive_uuid("UVSphereMesh", radius, n_meridians, n_parallels)
     rings = n_parallels
     segments = n_meridians
 
-    vertices = []
-    uvs = []
+    vertices = [[0.0, 0.0, radius]]
+    uvs = [[0.5, 0.0]]
     triangles = []
-    for r in range(rings + 1):
+    for r in range(1, rings):
         theta = r * np.pi / rings
         sin_theta = np.sin(theta)
         cos_theta = np.cos(theta)
@@ -163,12 +168,26 @@ def UVSphereMesh(radius: float = 1.0, n_meridians: int = 16, n_parallels: int = 
             z = radius * cos_theta
             vertices.append([x, y, z])
             uvs.append([s / segments, v_coord])
-    for r in range(rings):
+    south_pole = len(vertices)
+    vertices.append([0.0, 0.0, -radius])
+    uvs.append([0.5, 1.0])
+
+    for s in range(segments):
+        next_s = (s + 1) % segments
+        triangles.append([0, 1 + s, 1 + next_s])
+
+    for r in range(rings - 2):
         for s in range(segments):
-            next_r = r + 1
             next_s = (s + 1) % segments
-            triangles.append([r * segments + s, next_r * segments + s, next_r * segments + next_s])
-            triangles.append([r * segments + s, next_r * segments + next_s, r * segments + next_s])
+            current = 1 + r * segments
+            next_ring = current + segments
+            triangles.append([current + s, next_ring + s, next_ring + next_s])
+            triangles.append([current + s, next_ring + next_s, current + next_s])
+
+    last_ring = 1 + (rings - 2) * segments
+    for s in range(segments):
+        next_s = (s + 1) % segments
+        triangles.append([last_ring + s, south_pole, last_ring + next_s])
 
     mesh = Mesh3(
         vertices=np.array(vertices, dtype=np.float32),

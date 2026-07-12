@@ -87,6 +87,27 @@ def test_mesh3_from_numpy_arrays():
     assert mesh.name == "tri"
 
 
+@pytest.mark.parametrize("meridians, parallels", [(16, 16), (3, 2), (5, 3)])
+def test_uv_sphere_has_non_degenerate_outward_faces_and_finite_vertex_data(
+    meridians: int,
+    parallels: int,
+):
+    mesh = tmesh.UVSphereMesh(n_meridians=meridians, n_parallels=parallels)
+    vertices = mesh.vertices
+    triangles = mesh.triangles
+    assert len(triangles) == 2 * meridians * (parallels - 1)
+    assert np.all(np.diff(np.sort(triangles, axis=1), axis=1) != 0)
+
+    face_points = vertices[triangles]
+    face_normals = np.cross(face_points[:, 1] - face_points[:, 0], face_points[:, 2] - face_points[:, 0])
+    areas_twice = np.linalg.norm(face_normals, axis=1)
+    assert np.all(areas_twice > 1e-6)
+    centroids = face_points.mean(axis=1)
+    assert np.all(np.einsum("ij,ij->i", face_normals, centroids) > 0.0)
+    assert np.isfinite(mesh.vertex_normals).all()
+    assert np.isfinite(mesh.tangents).all()
+
+
 def test_mesh3_from_buffer_compatible_memoryviews():
     vertices = _typed_memoryview(
         array(
