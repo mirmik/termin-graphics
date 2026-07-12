@@ -151,8 +151,10 @@ def test_d3d11_program_sources_keep_shared_registers_stable_across_stages(
         '[[TerminScope("frame")]] ConstantBuffer<PerFrame> per_frame;\n'
         'struct ShadowDraw { float4 draw; };\n'
         '[[TerminScope("draw")]] ConstantBuffer<ShadowDraw> shadow_draw;\n'
+        'struct FoliageInstance { float4 value; };\n'
+        '[[TerminScope("draw")]] StructuredBuffer<FoliageInstance> foliage_instances;\n'
         '[shader("vertex")] float4 main() : SV_Position {\n'
-        '    return bone_block.bone + per_frame.frame + shadow_draw.draw;\n'
+        '    return bone_block.bone + per_frame.frame + shadow_draw.draw + foliage_instances[0].value;\n'
         '}\n',
         encoding="utf-8",
     )
@@ -161,8 +163,10 @@ def test_d3d11_program_sources_keep_shared_registers_stable_across_stages(
         '[[TerminScope("frame")]] ConstantBuffer<PerFrame> per_frame;\n'
         'struct ShadowDraw { float4 draw; };\n'
         '[[TerminScope("draw")]] ConstantBuffer<ShadowDraw> shadow_draw;\n'
+        'struct MaterialParams { float4 color; };\n'
+        '[[TerminScope("material")]] ConstantBuffer<MaterialParams> material;\n'
         '[shader("fragment")] float4 main() : SV_Target0 {\n'
-        '    return per_frame.frame + shadow_draw.draw;\n'
+        '    return per_frame.frame + shadow_draw.draw + material.color;\n'
         '}\n',
         encoding="utf-8",
     )
@@ -174,18 +178,23 @@ def test_d3d11_program_sources_keep_shared_registers_stable_across_stages(
         "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
         "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
         "is_vertex = source.name.endswith('.vert.slang')\n"
-        "resources = [('bone_block', 'draw')] if is_vertex else []\n"
-        "resources += [('per_frame', 'frame'), ('shadow_draw', 'draw')]\n"
+        "resources = [('bone_block', 'draw', 'constantBuffer')] if is_vertex else []\n"
+        "resources += [('per_frame', 'frame', 'constantBuffer'), ('shadow_draw', 'draw', 'constantBuffer')]\n"
+        "resources += [('foliage_instances', 'draw', 'structuredBuffer')] if is_vertex else [('material', 'material', 'constantBuffer')]\n"
         "hlsl = []\n"
-        "for index, (name, _) in enumerate(resources):\n"
-        "    hlsl.append(f'cbuffer {name}_0 : register(b{index}) {{ float4 value; }};')\n"
+        "for index, (name, _, kind) in enumerate(resources):\n"
+        "    if kind == 'structuredBuffer':\n"
+        "        hlsl.append(f'StructuredBuffer<float4> {name}_0 : register(t0);')\n"
+        "    else:\n"
+        "        hlsl.append(f'cbuffer {name}_0 : register(b{index}) {{ float4 value; }};')\n"
         "hlsl.append('float4 main() : ' + ('SV_Position' if is_vertex else 'SV_Target0') + ' { return 1; }')\n"
         "out.write_text('\\n'.join(hlsl) + '\\n', encoding='utf-8')\n"
         "reflection.write_text(json.dumps({'parameters': [\n"
         "    {'name': name, 'userAttribs': [{'name': 'TerminScope', 'arguments': [scope]}],\n"
         "     'binding': {'kind': 'descriptorTableSlot', 'index': index},\n"
-        "     'type': {'kind': 'constantBuffer', 'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 16}}}}\n"
-        "    for index, (name, scope) in enumerate(resources)\n"
+        "     'type': ({'kind': 'resource', 'baseShape': kind} if kind == 'structuredBuffer' else\n"
+        "              {'kind': 'constantBuffer', 'elementVarLayout': {'binding': {'kind': 'uniform', 'size': 16}}})}\n"
+        "    for index, (name, scope, kind) in enumerate(resources)\n"
         "]}), encoding='utf-8')\n",
         encoding="utf-8",
     )
@@ -209,7 +218,9 @@ def test_d3d11_program_sources_keep_shared_registers_stable_across_stages(
         layout = json.loads(Path(str(output) + ".layout.json").read_text(encoding="utf-8"))
         layouts[stage] = {resource["name"]: resource for resource in layout["resources"]}
 
-    assert layouts["vertex"]["bone_block"]["d3d11"]["register_index"] == 1
+    assert layouts["vertex"]["bone_block"]["d3d11"] != layouts["vertex"]["per_frame"]["d3d11"]
+    assert layouts["vertex"]["foliage_instances"]["scope"] == "draw"
+    assert layouts["fragment"]["material"]["scope"] == "material"
     assert layouts["vertex"]["per_frame"]["d3d11"] == layouts["fragment"]["per_frame"]["d3d11"]
     assert layouts["vertex"]["shadow_draw"]["d3d11"] == layouts["fragment"]["shadow_draw"]["d3d11"]
 

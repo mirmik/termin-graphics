@@ -974,29 +974,6 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
     const uint32_t stage_mask = stage_mask_for_stage(options.stage);
 
     if (options.language == "slang") {
-        static const std::regex material_buffer_re(
-            R"(ConstantBuffer\s*<\s*MaterialParams\s*>\s*material\s*:\s*register\s*\(\s*b([0-9]+)\s*,\s*space([0-9]+)\s*\))");
-        std::smatch match;
-        if (std::regex_search(source, match, material_buffer_re)) {
-            ShaderResourceBinding binding;
-            binding.name = "material";
-            binding.kind = "constant_buffer";
-            binding.binding = static_cast<uint32_t>(std::stoul(match[1].str()));
-            binding.set = static_cast<uint32_t>(std::stoul(match[2].str()));
-            binding.stage_mask = stage_mask;
-            append_unique_resource(resources, std::move(binding));
-        }
-        static const std::regex material_buffer_clean_re(
-            R"(ConstantBuffer\s*<\s*MaterialParams\s*>\s*material\s*;)");
-        if (std::regex_search(source, material_buffer_clean_re)) {
-            ShaderResourceBinding binding;
-            binding.name = "material";
-            binding.kind = "constant_buffer";
-            binding.set = 1;
-            binding.binding = 0;
-            binding.stage_mask = stage_mask;
-            append_unique_resource(resources, std::move(binding));
-        }
         static const std::regex slang_constant_buffer_re(
             R"REGEX((?:\[\[\s*(?:TerminScope|Scope)\s*\(\s*"([^"]+)"\s*\)\s*\]\]\s*)?(?:(?:public|extern|static|uniform)\s+)*ConstantBuffer\s*<\s*[^>]+\s*>\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*register\s*\(\s*b([0-9]+)\s*,\s*space([0-9]+)\s*\))?\s*;)REGEX");
         for (std::sregex_iterator it(source.begin(), source.end(), slang_constant_buffer_re), end;
@@ -1007,9 +984,6 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
             const std::string scope = match[1].str();
             binding.name = match[2].str();
             binding.kind = "constant_buffer";
-            if (binding.name == "material" && !match[3].matched) {
-                continue;
-            }
             if (!scope.empty() && is_valid_explicit_resource_scope(scope)) {
                 binding.scope = scope;
             }
@@ -1040,7 +1014,7 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
             append_unique_resource(resources, std::move(binding));
         }
         static const std::regex bare_resource_re(
-            R"REGEX((?:\[\[\s*(?:TerminScope|Scope)\s*\(\s*"([^"]+)"\s*\)\s*\]\]\s*)?(?:(?:public|extern|static|uniform)\s+)*(Sampler[0-9A-Za-z_]*|Texture[A-Za-z0-9_<>, \t]*|RWTexture[A-Za-z0-9_<>, \t]*|SamplerState|SamplerComparisonState)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[[^\]]+\]\s*)*(?::\s*register\s*\(\s*([tus])([0-9]+)\s*,\s*space([0-9]+)\s*\))?\s*;)REGEX");
+            R"REGEX((?:\[\[\s*(?:TerminScope|Scope)\s*\(\s*"([^"]+)"\s*\)\s*\]\]\s*)?(?:(?:public|extern|static|uniform)\s+)*(Sampler[0-9A-Za-z_]*|Texture[A-Za-z0-9_<>, \t]*|RWTexture[A-Za-z0-9_<>, \t]*|StructuredBuffer\s*<[^>]+>|RWStructuredBuffer\s*<[^>]+>|ByteAddressBuffer|RWByteAddressBuffer|SamplerState|SamplerComparisonState)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[[^\]]+\]\s*)*(?::\s*register\s*\(\s*([tus])([0-9]+)\s*,\s*space([0-9]+)\s*\))?\s*;)REGEX");
         for (std::sregex_iterator it(source.begin(), source.end(), bare_resource_re), end;
              it != end;
              ++it) {
@@ -1059,6 +1033,11 @@ static std::vector<ShaderResourceBinding> infer_resource_bindings(
             if (type == "SamplerState" || type == "SamplerComparisonState") {
                 binding.kind = "sampler";
                 binding.slang_separate_sampler = true;
+            } else if (type.rfind("StructuredBuffer", 0) == 0 ||
+                       type.rfind("RWStructuredBuffer", 0) == 0 ||
+                       type == "ByteAddressBuffer" ||
+                       type == "RWByteAddressBuffer") {
+                binding.kind = "storage_buffer";
             } else if (type.rfind("RWTexture", 0) == 0) {
                 binding.kind = "storage_texture";
                 binding.slang_storage_texture = true;
