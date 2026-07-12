@@ -270,12 +270,6 @@ jobs:
           path: sdk/
           retention-days: 1
 
-      - uses: actions/upload-artifact@v5
-        with:
-          name: sdk-python-staging
-          path: build/${{ env.BUILD_TYPE }}/sdk-install-staging/lib/python/
-          retention-days: 1
-
   # ── 4. Test pip packages ───────────────────────────────────────
   test-pip-packages:
     needs: [build-bindings, plan-pr-linux]
@@ -298,6 +292,12 @@ jobs:
           name: sdk-full
           path: sdk/
 
+      - name: Resolve canonical SDK site-packages
+        run: |
+          sdk_site_packages="$(find "$GITHUB_WORKSPACE/sdk/lib" -mindepth 2 -maxdepth 3 -type d -path '*/python*/site-packages' -print -quit)"
+          test -n "$sdk_site_packages"
+          echo "SDK_SITE_PACKAGES=$sdk_site_packages" >> "$GITHUB_ENV"
+
       - uses: actions/download-artifact@v5
         with:
           name: ci-plans
@@ -306,14 +306,9 @@ jobs:
       - name: Restore SDK executable permissions
         run: chmod +x sdk/bin/*
 
-      - uses: actions/download-artifact@v5
-        with:
-          name: sdk-python-staging
-          path: sdk-python-staging/
-
       - name: Install pip packages
         env:
-          TERMIN_BINDINGS_DIR: ${{ github.workspace }}/sdk-python-staging
+          TERMIN_BINDINGS_DIR: ${{ env.SDK_SITE_PACKAGES }}
         run: |
           pip install nanobind numpy Pillow PyYAML pytest
           ./install-pip-packages.sh
@@ -422,11 +417,34 @@ jobs:
           cd termin-app
           SDK_PREFIX=${{ github.workspace }}/sdk CMAKE_PREFIX_PATH=${{ github.workspace }}/sdk ./build.sh
 
+      - name: Verify relocated installed Python layout
+        run: |
+          bundle_root="$RUNNER_TEMP/termin-installed"
+          cp -a termin-app/install "$bundle_root"
+          site_packages="$(find "$bundle_root/lib" -mindepth 2 -maxdepth 3 -type d -path '*/python*/site-packages' -print -quit)"
+          test -n "$site_packages"
+          test ! -e "$bundle_root/lib/python"
+          env -u PYTHONPATH -u PYTHONHOME -u PYTHONUSERBASE \
+            LD_LIBRARY_PATH="$bundle_root/lib" \
+            "$bundle_root/bin/termin_launcher" --termin-python-layout-smoke > "$RUNNER_TEMP/termin-python-layout.json"
+          python3 - "$RUNNER_TEMP/termin-python-layout.json" "$site_packages" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          report = pathlib.Path(sys.argv[1])
+          expected = pathlib.Path(sys.argv[2]).resolve()
+          payload = json.loads(report.read_text(encoding="utf-8").splitlines()[-1])
+          for module, location in payload.items():
+              resolved = pathlib.Path(location).resolve()
+              if not resolved.is_relative_to(expected):
+                  raise SystemExit(f"{module} imported outside canonical site-packages: {resolved}")
+          PY
+
       - name: Run tests
         env:
           TERMIN_SDK: ${{ github.workspace }}/sdk
           LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
-          PYTHONPATH: ${{ github.workspace }}/termin-app/install/lib/python:${{ github.workspace }}/sdk-python-staging:${{ github.workspace }}/sdk/lib/python
         run: |
           sdk/bin/termin_python -m termin_build.repository_control \
             --repo-root . run sdk-installed --platform linux \
