@@ -124,6 +124,10 @@ typedef struct tc_render_item_collect_context {
     uint32_t flags;
     uint64_t layer_mask;
     uint64_t render_category_mask;
+    // RenderItemPassSemantic numeric value from render_item_submission.hpp.
+    // Producers use it for pass behavior that cannot be inferred from a
+    // material phase (for example entity picking).
+    uint32_t pass_semantic;
     const char* debug_pass_name;
     const void* pass_contract;
     const void* scene;
