@@ -95,11 +95,13 @@ GLenum to_gl_cull_mode(CullMode mode) {
 }
 
 GLenum to_gl_front_face(FrontFace face) {
+    // GL_UPPER_LEFT reverses glFrontFace interpretation, so compensate at the
+    // backend boundary and keep RasterState in logical authoring space.
     switch (face) {
-        case FrontFace::CCW: return GL_CCW;
-        case FrontFace::CW:  return GL_CW;
+        case FrontFace::CCW: return GL_CW;
+        case FrontFace::CW:  return GL_CCW;
     }
-    return GL_CCW;
+    return GL_CW;
 }
 
 GLenum to_gl_polygon_mode(PolygonMode mode) {

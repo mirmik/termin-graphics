@@ -85,14 +85,14 @@ VkFrontFace to_vk_front_face(FrontFace face) {
     // reverses glFrontFace semantics relative to the default LOWER_LEFT
     // convention. Vulkan's own winding rule stays as in the spec.
     //
-    // Net effect: for the same API enum, the two backends need
-    // opposite native constants. The mapping below swaps on Vulkan;
-    // OpenGL keeps the direct enum→GL_* match.
+    // RasterState names the authoring winding, while this conversion owns the
+    // projection/viewport convention. With the canonical Vulkan path the
+    // native constant matches the logical enum.
     switch (face) {
-        case FrontFace::CCW: return VK_FRONT_FACE_CLOCKWISE;
-        case FrontFace::CW:  return VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        case FrontFace::CCW: return VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        case FrontFace::CW:  return VK_FRONT_FACE_CLOCKWISE;
     }
-    return VK_FRONT_FACE_CLOCKWISE;
+    return VK_FRONT_FACE_COUNTER_CLOCKWISE;
 }
 
 VkPolygonMode to_vk_polygon_mode(PolygonMode mode) {

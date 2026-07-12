@@ -112,9 +112,9 @@ D3D11_CULL_MODE to_d3d_cull(CullMode mode) {
 }
 
 bool to_d3d_front_counter_clockwise(FrontFace face) {
-    // termin_to_native_clip flips Y at the D3D11 shader-output boundary, so
-    // native rasterizer winding is opposite to the logical authoring winding.
-    return face == FrontFace::CW;
+    // D3D11's native flag is expressed in render-target coordinates. The
+    // shader/output adapter is backend-owned, so logical CCW maps to TRUE.
+    return face == FrontFace::CCW;
 }
 
 D3D11_FILL_MODE to_d3d_fill(PolygonMode mode) {
