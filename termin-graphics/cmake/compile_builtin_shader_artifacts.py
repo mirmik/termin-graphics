@@ -26,6 +26,68 @@ TARGET_EXTENSIONS = {
 }
 
 
+def validate_catalog(catalog: object, source_dir: pathlib.Path) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(catalog, dict):
+        return ["catalog root must be an object"]
+    shaders = catalog.get("shaders")
+    if not isinstance(shaders, list):
+        return ["catalog 'shaders' must be an array"]
+
+    seen_uuids: set[str] = set()
+    for index, shader in enumerate(shaders):
+        where = f"shaders[{index}]"
+        if not isinstance(shader, dict):
+            errors.append(f"{where} must be an object")
+            continue
+        uuid = shader.get("uuid")
+        name = shader.get("name")
+        language = shader.get("language")
+        if not isinstance(uuid, str) or not uuid:
+            errors.append(f"{where}.uuid must be a non-empty string")
+            continue
+        if uuid in seen_uuids:
+            errors.append(f"duplicate shader uuid: {uuid}")
+        seen_uuids.add(uuid)
+        if not isinstance(name, str) or not name:
+            errors.append(f"shader '{uuid}' has no non-empty name")
+        if language == "shader":
+            program = shader.get("program")
+            path = program.get("path") if isinstance(program, dict) else None
+            if not isinstance(path, str) or not path:
+                errors.append(f"shader program '{uuid}' has no path")
+            elif not (source_dir / path).is_file():
+                errors.append(f"shader program '{uuid}' source does not exist: {path}")
+            if "stages" in shader:
+                errors.append(f"shader program '{uuid}' must not also declare stages")
+            continue
+        if language not in {"slang", "glsl"}:
+            errors.append(f"shader '{uuid}' has unsupported language: {language!r}")
+            continue
+        stages = shader.get("stages")
+        if not isinstance(stages, dict) or not stages:
+            errors.append(f"shader '{uuid}' must declare at least one stage")
+            continue
+        if "program" in shader:
+            errors.append(f"stage shader '{uuid}' must not also declare a program")
+        for stage, spec in stages.items():
+            if stage not in STAGE_EXTENSIONS:
+                errors.append(f"shader '{uuid}' has unsupported stage: {stage}")
+                continue
+            if not isinstance(spec, dict):
+                errors.append(f"shader '{uuid}' stage '{stage}' must be an object")
+                continue
+            path = spec.get("path")
+            entry = spec.get("entry")
+            if not isinstance(path, str) or not path:
+                errors.append(f"shader '{uuid}' stage '{stage}' has no path")
+            elif not (source_dir / path).is_file():
+                errors.append(f"shader '{uuid}' stage '{stage}' source does not exist: {path}")
+            if not isinstance(entry, str) or not entry:
+                errors.append(f"shader '{uuid}' stage '{stage}' has no entry")
+    return errors
+
+
 def artifact_name(uuid: str, target: str, stage: str) -> str:
     if target == "d3d11":
         stage_ext = D3D11_STAGE_EXTENSIONS[stage]
@@ -69,6 +131,12 @@ def main() -> int:
 
     with catalog_path.open("r", encoding="utf-8") as f:
         catalog = json.load(f)
+
+    validation_errors = validate_catalog(catalog, source_dir)
+    if validation_errors:
+        for error in validation_errors:
+            print(f"termin-graphics: invalid shader catalog: {error}", file=sys.stderr)
+        return 2
 
     compiled = 0
     skipped = 0

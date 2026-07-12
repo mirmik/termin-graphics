@@ -92,7 +92,7 @@ def test_builtin_catalog_shader_binding_smoke():
 
     assert shader.is_valid
     assert shader.uuid == "termin-engine-present-blit"
-    assert shader.name == "termin-engine-present-blit"
+    assert shader.name == "PresentBlitVSFS"
     assert shader.vertex_entry == "vs_main"
     assert shader.fragment_entry == "fs_main"
     assert "POSITION" in shader.vertex_source
