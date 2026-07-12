@@ -17,6 +17,16 @@ void ImageWidget::set_texture(uint32_t texture_id, tc_ui_size intrinsic_size) {
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
+void ImageWidget::clear_texture() {
+    if (texture_id_ == 0) {
+        return;
+    }
+    texture_id_ = 0;
+    // Do not reset intrinsic_size_: an image preview must keep its allocated
+    // slot while the producer is waiting for the next frame.
+    mark_dirty(TC_WIDGET_DIRTY_PAINT);
+}
+
 void ImageWidget::set_tint(Color tint) {
     tint_ = tint;
     mark_dirty(TC_WIDGET_DIRTY_PAINT);

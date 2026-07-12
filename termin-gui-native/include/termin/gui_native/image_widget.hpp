@@ -16,6 +16,10 @@ private:
 public:
     ImageWidget();
     void set_texture(uint32_t texture_id, tc_ui_size intrinsic_size = {});
+    // Remove the sampled image while retaining its intrinsic layout size.  This
+    // is important for asynchronous previews: hiding the widget would make a
+    // parent BoxLayout reflow and shift neighbouring controls.
+    void clear_texture();
     uint32_t texture_id() const { return texture_id_; }
     tc_ui_size intrinsic_size() const { return intrinsic_size_; }
     void set_tint(Color tint);

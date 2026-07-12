@@ -1625,6 +1625,9 @@ void bind_gui_native_views_and_collections(nb::module_& m) {
                                 std::optional<tc_ui_size> intrinsic_size) {
             self.get().set_texture(texture.id, intrinsic_size.value_or(tc_ui_size{}));
         }, nb::arg("texture"), nb::arg("intrinsic_size").none() = nb::none())
+        .def("clear_texture", [](const ImageWidgetRef& self) {
+            self.get().clear_texture();
+        })
         .def("set_tint", [](const ImageWidgetRef& self, tc_ui_color tint) {
             self.get().set_tint(termin::gui_native::Color {tint.r, tint.g, tint.b, tint.a});
         }, nb::arg("tint"))
