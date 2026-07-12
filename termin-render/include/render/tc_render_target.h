@@ -14,6 +14,11 @@
 extern "C" {
 #endif
 
+// Render targets are backed by 2D GPU textures. Keep the public C boundary
+// within the maximum 2D extent supported by our portable render-target
+// contract; individual backends still enforce their device-specific limit.
+#define TC_RENDER_TARGET_MAX_DIMENSION 16384
+
 typedef enum tc_render_target_kind {
     TC_RENDER_TARGET_TEXTURE_2D = 0,
     TC_RENDER_TARGET_XR_STEREO = 1,

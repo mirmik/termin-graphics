@@ -65,6 +65,23 @@ typedef struct {
 
 static RenderTargetPool* g_render_target_pool = NULL;
 
+static bool rt_dimensions_valid(int width, int height, const char* operation) {
+    if (width > 0 && height > 0 &&
+        width <= TC_RENDER_TARGET_MAX_DIMENSION &&
+        height <= TC_RENDER_TARGET_MAX_DIMENSION) {
+        return true;
+    }
+
+    tc_log_error(
+        "[tc_render_target] rejected %s dimensions %dx%d; expected 1..%d",
+        operation,
+        width,
+        height,
+        TC_RENDER_TARGET_MAX_DIMENSION
+    );
+    return false;
+}
+
 static char* rt_strdup(const char* s) {
     if (s == NULL) return NULL;
     size_t len = strlen(s) + 1;
@@ -441,6 +458,8 @@ static void rt_reformat_owned_texture(
 
 void tc_render_target_set_width(tc_render_target_handle h, int width) {
     if (!render_target_handle_alive(h)) return;
+    const int height = g_render_target_pool->slots[h.index].height;
+    if (!rt_dimensions_valid(width, height, "width update")) return;
     if (g_render_target_pool->slots[h.index].width == width) return;  // No-op on same size — skips
                                                     // a needless version bump that
                                                     // would force a per-frame
@@ -459,6 +478,8 @@ int tc_render_target_get_width(tc_render_target_handle h) {
 
 void tc_render_target_set_height(tc_render_target_handle h, int height) {
     if (!render_target_handle_alive(h)) return;
+    const int width = g_render_target_pool->slots[h.index].width;
+    if (!rt_dimensions_valid(width, height, "height update")) return;
     if (g_render_target_pool->slots[h.index].height == height) return;  // No-op on same size.
     g_render_target_pool->slots[h.index].height = height;
     rt_resize_owned_texture(g_render_target_pool->slots[h.index].color_texture,
@@ -586,6 +607,13 @@ void tc_render_target_ensure_textures(tc_render_target_handle h) {
     if (g_render_target_pool->slots[idx].kind != TC_RENDER_TARGET_TEXTURE_2D) {
         tc_log_warn("[tc_render_target] ensure_textures skipped for non-texture render target '%s'",
                     g_render_target_pool->slots[idx].name ? g_render_target_pool->slots[idx].name : "(unnamed)");
+        return;
+    }
+
+    if (!rt_dimensions_valid(
+            g_render_target_pool->slots[idx].width,
+            g_render_target_pool->slots[idx].height,
+            "texture allocation")) {
         return;
     }
 
