@@ -71,7 +71,7 @@ private:
     ShaderHandle bound_vs_, bound_fs_, bound_gs_;
     std::vector<VertexLayoutDesc> vertex_layouts_;
     // Hash of `vertex_layouts_`, recomputed only when set_vertex_layout* is
-    // called. Fed into PipelineCacheKey so flush_pipeline's lookup skips
+    // called. Fed into PipelineCacheLookupKey so flush_pipeline's lookup skips
     // re-hashing vertex attributes on every draw.
     size_t vertex_layouts_hash_ = 0;
     PrimitiveTopology topology_ = PrimitiveTopology::TriangleList;

@@ -17,8 +17,8 @@ namespace tgfx {
 // Key equality
 // ============================================================================
 
-static bool layout_vectors_equal(const std::vector<VertexLayoutDesc>& a,
-                                 const std::vector<VertexLayoutDesc>& b) {
+static bool layout_ranges_equal(std::span<const VertexLayoutDesc> a,
+                                std::span<const VertexLayoutDesc> b) {
     if (a.size() != b.size()) {
         return false;
     }
@@ -30,36 +30,57 @@ static bool layout_vectors_equal(const std::vector<VertexLayoutDesc>& a,
     return true;
 }
 
-bool PipelineCacheKey::operator==(const PipelineCacheKey& o) const {
-    return vertex_shader == o.vertex_shader
-        && fragment_shader == o.fragment_shader
-        && geometry_shader == o.geometry_shader
-        && layout_vectors_equal(vertex_layouts, o.vertex_layouts)
-        && topology == o.topology
-        && raster.cull == o.raster.cull
-        && raster.front_face == o.raster.front_face
-        && raster.polygon_mode == o.raster.polygon_mode
-        && raster.depth_bias_enabled == o.raster.depth_bias_enabled
-        && raster.depth_bias_constant == o.raster.depth_bias_constant
-        && raster.depth_bias_slope == o.raster.depth_bias_slope
-        && raster.depth_bias_clamp == o.raster.depth_bias_clamp
-        && depth_stencil.depth_test == o.depth_stencil.depth_test
-        && depth_stencil.depth_write == o.depth_stencil.depth_write
-        && depth_stencil.depth_compare == o.depth_stencil.depth_compare
-        && blend.enabled == o.blend.enabled
-        && blend.src_color == o.blend.src_color
-        && blend.dst_color == o.blend.dst_color
-        && blend.color_op == o.blend.color_op
-        && blend.src_alpha == o.blend.src_alpha
-        && blend.dst_alpha == o.blend.dst_alpha
-        && blend.alpha_op == o.blend.alpha_op
-        && color_mask.r == o.color_mask.r
-        && color_mask.g == o.color_mask.g
-        && color_mask.b == o.color_mask.b
-        && color_mask.a == o.color_mask.a
-        && color_format == o.color_format
-        && depth_format == o.depth_format
-        && sample_count == o.sample_count;
+static bool pipeline_cache_key_state_equal(const PipelineCacheKeyState& a,
+                                           const PipelineCacheKeyState& b) {
+    return a.vertex_shader == b.vertex_shader
+        && a.fragment_shader == b.fragment_shader
+        && a.geometry_shader == b.geometry_shader
+        && a.topology == b.topology
+        && a.raster.cull == b.raster.cull
+        && a.raster.front_face == b.raster.front_face
+        && a.raster.polygon_mode == b.raster.polygon_mode
+        && a.raster.depth_bias_enabled == b.raster.depth_bias_enabled
+        && a.raster.depth_bias_constant == b.raster.depth_bias_constant
+        && a.raster.depth_bias_slope == b.raster.depth_bias_slope
+        && a.raster.depth_bias_clamp == b.raster.depth_bias_clamp
+        && a.depth_stencil.depth_test == b.depth_stencil.depth_test
+        && a.depth_stencil.depth_write == b.depth_stencil.depth_write
+        && a.depth_stencil.depth_compare == b.depth_stencil.depth_compare
+        && a.blend.enabled == b.blend.enabled
+        && a.blend.src_color == b.blend.src_color
+        && a.blend.dst_color == b.blend.dst_color
+        && a.blend.color_op == b.blend.color_op
+        && a.blend.src_alpha == b.blend.src_alpha
+        && a.blend.dst_alpha == b.blend.dst_alpha
+        && a.blend.alpha_op == b.blend.alpha_op
+        && a.color_mask.r == b.color_mask.r
+        && a.color_mask.g == b.color_mask.g
+        && a.color_mask.b == b.color_mask.b
+        && a.color_mask.a == b.color_mask.a
+        && a.color_format == b.color_format
+        && a.depth_format == b.depth_format
+        && a.sample_count == b.sample_count;
+}
+
+PipelineCacheKey::PipelineCacheKey(const PipelineCacheLookupKey& lookup)
+    : PipelineCacheKeyState(lookup)
+    , vertex_layouts(lookup.vertex_layouts.begin(), lookup.vertex_layouts.end()) {}
+
+bool PipelineCacheKeyEqual::operator()(const PipelineCacheKey& a,
+                                       const PipelineCacheKey& b) const {
+    return pipeline_cache_key_state_equal(a, b) &&
+        layout_ranges_equal(a.vertex_layouts, b.vertex_layouts);
+}
+
+bool PipelineCacheKeyEqual::operator()(const PipelineCacheKey& a,
+                                       const PipelineCacheLookupKey& b) const {
+    return pipeline_cache_key_state_equal(a, b) &&
+        layout_ranges_equal(a.vertex_layouts, b.vertex_layouts);
+}
+
+bool PipelineCacheKeyEqual::operator()(const PipelineCacheLookupKey& a,
+                                       const PipelineCacheKey& b) const {
+    return (*this)(b, a);
 }
 
 // ============================================================================
@@ -70,7 +91,7 @@ static void hash_combine(size_t& seed, size_t v) {
     seed ^= v + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 
-size_t PipelineCacheKeyHash::operator()(const PipelineCacheKey& k) const {
+static size_t pipeline_cache_key_hash(const PipelineCacheKeyState& k) {
     size_t h = 0;
     hash_combine(h, std::hash<uint32_t>{}(k.vertex_shader.id));
     hash_combine(h, std::hash<uint32_t>{}(k.fragment_shader.id));
@@ -102,6 +123,14 @@ size_t PipelineCacheKeyHash::operator()(const PipelineCacheKey& k) const {
     return h;
 }
 
+size_t PipelineCacheKeyHash::operator()(const PipelineCacheKey& k) const {
+    return pipeline_cache_key_hash(k);
+}
+
+size_t PipelineCacheKeyHash::operator()(const PipelineCacheLookupKey& k) const {
+    return pipeline_cache_key_hash(k);
+}
+
 // ============================================================================
 // PipelineCache
 // ============================================================================
@@ -112,7 +141,7 @@ PipelineCache::~PipelineCache() {
     clear();
 }
 
-PipelineHandle PipelineCache::get(const PipelineCacheKey& key) {
+PipelineHandle PipelineCache::get(const PipelineCacheLookupKey& key) {
     auto it = cache_.find(key);
     if (it != cache_.end()) {
         ++hit_count_;
@@ -160,7 +189,7 @@ PipelineHandle PipelineCache::get(const PipelineCacheKey& key) {
                "PipelineCache: backend failed to create a graphics pipeline; request will be retried");
         return {};
     }
-    cache_[key] = handle;
+    cache_.emplace(PipelineCacheKey(key), handle);
     return handle;
 }
 

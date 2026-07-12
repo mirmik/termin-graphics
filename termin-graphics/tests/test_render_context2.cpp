@@ -440,7 +440,7 @@ static void test_pipeline_cache_reuse(tgfx::IRenderDevice& device, tgfx::Pipelin
     auto fs = device.create_shader(fs_desc);
 
     // First pipeline lookup
-    tgfx::PipelineCacheKey key;
+    tgfx::PipelineCacheLookupKey key;
     key.vertex_shader = vs;
     key.fragment_shader = fs;
     auto p1 = cache.get(key);

@@ -998,7 +998,7 @@ bool RenderContext2::flush_pipeline() {
         return true;
     }
 
-    PipelineCacheKey key;
+    PipelineCacheLookupKey key;
     key.vertex_shader = bound_vs_;
     key.fragment_shader = bound_fs_;
     key.geometry_shader = bound_gs_;
