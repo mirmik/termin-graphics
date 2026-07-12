@@ -1,6 +1,7 @@
 // Skinned transform provider for modular shadow vertex stages.  bone_block
 // intentionally belongs here rather than to the shadow output adapter.
 
+import termin_prelude;
 import termin_vertex_transform;
 
 [[TerminScope("draw")]]
