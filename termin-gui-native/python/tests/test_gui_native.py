@@ -1237,6 +1237,16 @@ def test_native_basic_input_and_media_widget_factories():
     assert image.intrinsic_size.width == pytest.approx(64.0)
     image.set_preserve_aspect(False)
 
+    label = document.create_label("Loading")
+    assert label.text == "Loading"
+    label.text = "Complete"
+    assert label.text == "Complete"
+
+    progress = document.create_progress_bar(0.25)
+    assert progress.value == pytest.approx(0.25)
+    progress.value = 0.75
+    assert progress.value == pytest.approx(0.75)
+
     canvas = document.create_canvas()
     canvas.widget.bounds = Rect(0.0, 0.0, 160.0, 100.0)
     paints = []

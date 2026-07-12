@@ -495,6 +495,15 @@ def test_native_dialog_message_box_and_input_dialog_contracts():
     assert results == [("cancel", DialogDismissReason.Escape)]
     assert not dialog.open
 
+    progress_dialog = document.create_dialog("Loading")
+    progress_dialog.actions = []
+    progress_dialog.dismiss_on_escape = False
+    assert progress_dialog.show(Rect(0.0, 0.0, 640.0, 480.0))
+    assert document.dispatch_key_event(escape) == EventResult.Handled
+    assert progress_dialog.open
+    assert document.overlay_count == 1
+    assert progress_dialog.close()
+
     message = document.create_message_box("Delete", "Delete selected entity?", MessageBoxKind.Question)
     message_results = []
     message.connect_finished(lambda result: message_results.append(result.action_id))

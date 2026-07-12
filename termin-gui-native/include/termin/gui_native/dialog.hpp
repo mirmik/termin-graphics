@@ -38,6 +38,7 @@ class Dialog : public NativeWidget {
     float padding_ = 16.0f;
     float button_spacing_ = 8.0f;
     float min_width_ = 300.0f;
+    bool dismiss_on_escape_ = true;
     bool has_pending_result_ = false;
     bool has_result_ = false;
     bool open_ = false;
@@ -51,6 +52,8 @@ class Dialog : public NativeWidget {
     void set_title(std::string title);
     const std::vector<DialogAction>& actions() const { return actions_; }
     void set_actions(std::vector<DialogAction> actions);
+    bool dismiss_on_escape() const { return dismiss_on_escape_; }
+    void set_dismiss_on_escape(bool enabled) { dismiss_on_escape_ = enabled; }
     void set_content(NativeWidget& content);
     tc_widget_handle content_handle() const { return content_handle_; }
     bool show(tc_ui_document* document, tc_ui_rect viewport);

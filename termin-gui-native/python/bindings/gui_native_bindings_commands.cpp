@@ -418,6 +418,11 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                         std::vector<termin::gui_native::DialogAction> actions) {
                          self.get().set_actions(std::move(actions));
                      })
+        .def_prop_rw("dismiss_on_escape",
+                     [](const DialogRef& self) { return self.get().dismiss_on_escape(); },
+                     [](const DialogRef& self, bool enabled) {
+                         self.get().set_dismiss_on_escape(enabled);
+                     })
         .def_prop_ro("open", [](const DialogRef& self) { return self.get().open(); })
         .def("set_content", [](const DialogRef& self, const WidgetRef& content) {
             self.get().set_content(

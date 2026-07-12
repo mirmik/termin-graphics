@@ -535,6 +535,13 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
                   self.make_native<termin::gui_native::IconButton>(icon)};
             },
             nb::arg("icon") = "")
+        .def(
+            "create_progress_bar",
+            [](Document &self, float value) {
+              return ProgressBarRef{
+                  self.make_native<termin::gui_native::ProgressBar>(value)};
+            },
+            nb::arg("value") = 0.0f)
         .def("create_image_widget",
              [](Document &self) {
                return ImageWidgetRef{

@@ -21,10 +21,6 @@ void Dialog::set_title(std::string title) {
 }
 
 void Dialog::validate_actions(const std::vector<DialogAction>& actions) {
-    if (actions.empty()) {
-        tc_log_error("[termin-gui-native] Dialog requires at least one action");
-        throw std::invalid_argument("dialog requires at least one action");
-    }
     std::unordered_set<std::string> identifiers;
     size_t defaults = 0;
     size_t cancels = 0;
@@ -165,9 +161,10 @@ tc_ui_size Dialog::measure(tc_ui_document* document, tc_ui_constraints constrain
         button_width += action_button_size(document, action).width;
     if (button_handles_.size() > 1)
         button_width += button_spacing_ * static_cast<float>(button_handles_.size() - 1);
+    const float action_bar_height = actions_.empty() ? 0.0f : button_bar_height_;
     const tc_ui_size wanted{
         std::max(min_width_, std::max(content_width, button_width) + padding_ * 2),
-        title_height_ + content_height + padding_ + button_bar_height_};
+        title_height_ + content_height + padding_ + action_bar_height};
     return clamp_size(wanted, constraints);
 }
 
@@ -176,7 +173,8 @@ void Dialog::layout(tc_ui_document* document, tc_ui_rect rect) {
     if (!ensure_buttons(document))
         return;
     const float content_y = rect.y + title_height_;
-    const float content_height = std::max(0.0f, rect.height - title_height_ - button_bar_height_);
+    const float action_bar_height = actions_.empty() ? 0.0f : button_bar_height_;
+    const float content_height = std::max(0.0f, rect.height - title_height_ - action_bar_height);
     if (tc_widget* content = tc_ui_document_resolve_widget(document, content_handle_)) {
         layout_widget(content, document,
                       tc_ui_rect{rect.x + padding_, content_y, rect.width - padding_ * 2,
@@ -197,8 +195,8 @@ void Dialog::layout(tc_ui_document* document, tc_ui_rect rect) {
         tc_widget* button = tc_ui_document_resolve_widget(document, button_handles_[index]);
         if (!button)
             continue;
-        const float y = rect.y + rect.height - button_bar_height_ +
-                        (button_bar_height_ - sizes[index].height) * 0.5f;
+        const float y = rect.y + rect.height - action_bar_height +
+                        (action_bar_height - sizes[index].height) * 0.5f;
         layout_widget(button, document, tc_ui_rect{x, y, sizes[index].width, sizes[index].height});
         x += sizes[index].width + button_spacing_;
     }
@@ -261,7 +259,10 @@ bool Dialog::show(tc_ui_document* document, tc_ui_rect viewport) {
     const float height = std::min(wanted.height, viewport.height);
     layout(document, tc_ui_rect{viewport.x + (viewport.width - width) * 0.5f,
                                 viewport.y + (viewport.height - height) * 0.5f, width, height});
-    open_ = tc_ui_document_show_overlay(document, handle(), TC_UI_OVERLAY_MODAL);
+    uint32_t overlay_flags = TC_UI_OVERLAY_MODAL;
+    if (!dismiss_on_escape_)
+        overlay_flags |= TC_UI_OVERLAY_BLOCK_ESCAPE;
+    open_ = tc_ui_document_show_overlay(document, handle(), overlay_flags);
     if (!open_)
         return false;
     const DialogAction* selected = default_action();

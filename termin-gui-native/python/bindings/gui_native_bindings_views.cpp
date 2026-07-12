@@ -1614,6 +1614,16 @@ void bind_gui_native_views_and_collections(nb::module_& m) {
             });
         }, nb::arg("callback"));
 
+    nb::class_<ProgressBarRef>(m, "ProgressBar")
+        .def_prop_ro("widget", [](const ProgressBarRef& self) { return self.widget; })
+        .def_prop_ro("handle", [](const ProgressBarRef& self) {
+            return WidgetHandle {self.widget.handle};
+        })
+        .def_prop_rw("value", [](const ProgressBarRef& self) { return self.get().value(); },
+                     [](const ProgressBarRef& self, float value) {
+                         self.get().set_value(value);
+                     });
+
     nb::class_<ImageWidgetRef>(m, "ImageWidget")
         .def_prop_ro("widget", [](const ImageWidgetRef& self) { return self.widget; })
         .def_prop_ro("handle", [](const ImageWidgetRef& self) { return WidgetHandle {self.widget.handle}; })

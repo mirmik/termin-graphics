@@ -385,6 +385,7 @@ TERMIN_GUI_NATIVE_WIDGET_REF(TreeWidgetRef, TreeWidget);
 TERMIN_GUI_NATIVE_WIDGET_REF(TableWidgetRef, TableWidget);
 TERMIN_GUI_NATIVE_WIDGET_REF(ComboBoxRef, ComboBox);
 TERMIN_GUI_NATIVE_WIDGET_REF(IconButtonRef, IconButton);
+TERMIN_GUI_NATIVE_WIDGET_REF(ProgressBarRef, ProgressBar);
 TERMIN_GUI_NATIVE_WIDGET_REF(ImageWidgetRef, ImageWidget);
 TERMIN_GUI_NATIVE_WIDGET_REF(CanvasRef, Canvas);
 

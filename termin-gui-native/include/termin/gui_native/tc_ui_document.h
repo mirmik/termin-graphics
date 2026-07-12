@@ -226,7 +226,8 @@ typedef enum tc_ui_overlay_flag {
     TC_UI_OVERLAY_DISMISS_ON_OUTSIDE = 1u << 1,
     TC_UI_OVERLAY_POINTER_TRANSPARENT = 1u << 2,
     TC_UI_OVERLAY_TOOLTIP = 1u << 3,
-    TC_UI_OVERLAY_ALLOW_ROOT_HIT = 1u << 4
+    TC_UI_OVERLAY_ALLOW_ROOT_HIT = 1u << 4,
+    TC_UI_OVERLAY_BLOCK_ESCAPE = 1u << 5
 } tc_ui_overlay_flag;
 
 typedef enum tc_ui_overlay_dismiss_reason {

@@ -14,6 +14,7 @@ public:
     explicit Label(std::string text);
     Label(std::string text, float font_size);
     Label(std::string text, float font_size, Color color);
+    const std::string& text() const { return text_; }
     Label& set_text(std::string text);
     Label& set_color(Color color);
     Label& set_font_size(float font_size);

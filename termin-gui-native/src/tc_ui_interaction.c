@@ -429,7 +429,8 @@ bool tc_ui_document_show_overlay(
         TC_UI_OVERLAY_DISMISS_ON_OUTSIDE |
         TC_UI_OVERLAY_POINTER_TRANSPARENT |
         TC_UI_OVERLAY_TOOLTIP |
-        TC_UI_OVERLAY_ALLOW_ROOT_HIT;
+        TC_UI_OVERLAY_ALLOW_ROOT_HIT |
+        TC_UI_OVERLAY_BLOCK_ESCAPE;
     tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
     size_t existing;
     if (!widget || widget->parent || handle_is_root(document, handle)) {
@@ -941,10 +942,13 @@ tc_ui_event_result tc_ui_document_dispatch_key_event(
     }
     if (event->type == TC_UI_KEY_DOWN && event->key == TC_UI_KEY_ESCAPE &&
         document->overlay_count > 0) {
-        tc_widget_handle top = document->overlays[document->overlay_count - 1].handle;
+        const tc_ui_overlay_entry top = document->overlays[document->overlay_count - 1];
+        if ((top.flags & TC_UI_OVERLAY_BLOCK_ESCAPE) != 0) {
+            return TC_UI_EVENT_HANDLED;
+        }
         return tc_ui_document_dismiss_overlay(
             document,
-            top,
+            top.handle,
             TC_UI_OVERLAY_DISMISS_ESCAPE
         ) ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
     }

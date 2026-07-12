@@ -8,6 +8,15 @@ void bind_gui_native_widgets(nb::module_& m) {
         .def_prop_ro("alive", &WidgetRef::alive)
         .def("__bool__", &WidgetRef::alive)
         .def_prop_rw(
+            "text",
+            [](const WidgetRef& self) {
+                return native_widget_checked<termin::gui_native::Label>(self, "Label").text();
+            },
+            [](const WidgetRef& self, const std::string& value) {
+                native_widget_checked<termin::gui_native::Label>(self, "Label")
+                    .set_text(value);
+            })
+        .def_prop_rw(
             "bounds",
             [](const WidgetRef& self) { return tc_widget_bounds(self.resolve_checked()); },
             [](const WidgetRef& self, tc_ui_rect value) {
