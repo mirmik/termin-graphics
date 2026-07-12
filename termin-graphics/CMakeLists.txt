@@ -568,6 +568,22 @@ if(BUILD_TGFX2_TESTS)
             termin_add_test_labels(tgfx2_opengl_bound_resource_set
                 "termin:capability:window"
                 "termin:capability:opengl")
+
+            add_executable(tgfx2_opengl_navmesh_overlay
+                tests/test_tgfx2_opengl_navmesh_overlay.cpp)
+            target_include_directories(tgfx2_opengl_navmesh_overlay
+                PRIVATE ${SDL2_OPENGL_SMOKE_INCLUDE_DIR})
+            target_link_libraries(tgfx2_opengl_navmesh_overlay
+                PRIVATE termin_graphics2 ${SDL2_OPENGL_SMOKE_LIBRARY})
+            termin_set_rpath_test(tgfx2_opengl_navmesh_overlay)
+            add_test(NAME tgfx2_opengl_navmesh_overlay
+                COMMAND tgfx2_opengl_navmesh_overlay)
+            set_tests_properties(tgfx2_opengl_navmesh_overlay PROPERTIES
+                TIMEOUT 10
+                SKIP_REGULAR_EXPRESSION "${TGFX2_WINDOW_SKIP_RE}")
+            termin_add_test_labels(tgfx2_opengl_navmesh_overlay
+                "termin:capability:window"
+                "termin:capability:opengl")
         endif()
     endif()
 
