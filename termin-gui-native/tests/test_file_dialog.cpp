@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <set>
@@ -11,6 +12,15 @@
 using namespace termin::gui_native;
 
 namespace {
+
+std::string native_path_string(const std::filesystem::path& path) {
+#if defined(_WIN32)
+    const std::u8string value = path.u8string();
+    return std::string(reinterpret_cast<const char*>(value.data()), value.size());
+#else
+    return path.string();
+#endif
+}
 
 bool measure_text(void*, const char*, size_t byte_length, float font_size,
                   tc_ui_text_metrics* metrics) {
@@ -92,7 +102,8 @@ class FakeFileSystem final : public FileDialogFileSystem {
     }
 
     bool create_directory(std::string_view path, std::string& error) override {
-        const std::string value(path);
+        std::string value(path);
+        std::replace(value.begin(), value.end(), '\\', '/');
         error.clear();
         if (directories_.contains(value) || files_.contains(value)) {
             error = "path already exists";
@@ -175,7 +186,8 @@ void test_modes_creation_and_failed_navigation_are_transactional() {
     FileDialogModel save(FileDialogMode::SaveFile, file_system);
     assert(save.navigate("/root"));
     save.set_file_name(" output.bin ");
-    assert(save.confirm().path == "/root/output.bin");
+    assert(save.confirm().path == native_path_string(
+        std::filesystem::path("/root") / "output.bin"));
     save.set_file_name("folder/output.bin");
     assert(!save.confirm().path);
     assert(save.create_directory("created"));

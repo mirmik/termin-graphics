@@ -12,6 +12,10 @@
 //   9. Frame pacing via per-in-flight fences & semaphores.
 //
 // Auto-exits after ~3 seconds so it can run unattended.
+#ifndef SDL_MAIN_HANDLED
+#define SDL_MAIN_HANDLED
+#endif
+
 #include <cstdio>
 #include <cstdlib>
 #include <chrono>
@@ -21,8 +25,8 @@
 #include <vector>
 
 #ifdef TGFX2_HAS_VULKAN
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_vulkan.h>
+#include <SDL.h>
+#include <SDL_vulkan.h>
 #include <vulkan/vulkan.h>
 
 #include "tgfx2/descriptors.hpp"

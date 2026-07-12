@@ -579,6 +579,15 @@ if(BUILD_TGFX2_TESTS)
         set(SDL2_OPENGL_SMOKE_FOUND FALSE)
         find_path(SDL2_OPENGL_SMOKE_INCLUDE_DIR SDL.h PATH_SUFFIXES SDL2)
         find_library(SDL2_OPENGL_SMOKE_LIBRARY SDL2)
+        if(WIN32 AND SDL2_OPENGL_SMOKE_LIBRARY)
+            get_filename_component(SDL2_OPENGL_SMOKE_LIBRARY_DIR
+                "${SDL2_OPENGL_SMOKE_LIBRARY}" DIRECTORY)
+            find_file(SDL2_OPENGL_SMOKE_DLL SDL2.dll
+                PATHS
+                    "${SDL2_OPENGL_SMOKE_LIBRARY_DIR}"
+                    "${SDL2_OPENGL_SMOKE_LIBRARY_DIR}/../bin"
+                NO_DEFAULT_PATH)
+        endif()
         if(SDL2_OPENGL_SMOKE_INCLUDE_DIR AND SDL2_OPENGL_SMOKE_LIBRARY)
             set(SDL2_OPENGL_SMOKE_FOUND TRUE)
             message(STATUS "tgfx2 OpenGL bound resource set smoke: SDL2 at ${SDL2_OPENGL_SMOKE_LIBRARY}")
@@ -592,6 +601,12 @@ if(BUILD_TGFX2_TESTS)
                 PRIVATE ${SDL2_OPENGL_SMOKE_INCLUDE_DIR})
             target_link_libraries(tgfx2_opengl_bound_resource_set
                 PRIVATE termin_graphics2 ${SDL2_OPENGL_SMOKE_LIBRARY})
+            if(SDL2_OPENGL_SMOKE_DLL)
+                add_custom_command(TARGET tgfx2_opengl_bound_resource_set POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${SDL2_OPENGL_SMOKE_DLL}"
+                        "$<TARGET_FILE_DIR:tgfx2_opengl_bound_resource_set>")
+            endif()
             termin_set_rpath_test(tgfx2_opengl_bound_resource_set)
             add_test(NAME tgfx2_opengl_bound_resource_set
                 COMMAND tgfx2_opengl_bound_resource_set)
@@ -608,6 +623,12 @@ if(BUILD_TGFX2_TESTS)
                 PRIVATE ${SDL2_OPENGL_SMOKE_INCLUDE_DIR})
             target_link_libraries(tgfx2_opengl_navmesh_overlay
                 PRIVATE termin_graphics2 ${SDL2_OPENGL_SMOKE_LIBRARY})
+            if(SDL2_OPENGL_SMOKE_DLL)
+                add_custom_command(TARGET tgfx2_opengl_navmesh_overlay POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${SDL2_OPENGL_SMOKE_DLL}"
+                        "$<TARGET_FILE_DIR:tgfx2_opengl_navmesh_overlay>")
+            endif()
             termin_set_rpath_test(tgfx2_opengl_navmesh_overlay)
             add_test(NAME tgfx2_opengl_navmesh_overlay
                 COMMAND tgfx2_opengl_navmesh_overlay)
@@ -654,6 +675,15 @@ if(BUILD_TGFX2_TESTS)
         set(SDL2_SMOKE_FOUND FALSE)
         find_path(SDL2_SMOKE_INCLUDE_DIR SDL.h PATH_SUFFIXES SDL2)
         find_library(SDL2_SMOKE_LIBRARY SDL2)
+        if(WIN32 AND SDL2_SMOKE_LIBRARY)
+            get_filename_component(SDL2_SMOKE_LIBRARY_DIR
+                "${SDL2_SMOKE_LIBRARY}" DIRECTORY)
+            find_file(SDL2_SMOKE_DLL SDL2.dll
+                PATHS
+                    "${SDL2_SMOKE_LIBRARY_DIR}"
+                    "${SDL2_SMOKE_LIBRARY_DIR}/../bin"
+                NO_DEFAULT_PATH)
+        endif()
         if(SDL2_SMOKE_INCLUDE_DIR AND SDL2_SMOKE_LIBRARY)
             set(SDL2_SMOKE_FOUND TRUE)
             message(STATUS "tgfx2 Vulkan window smoke: SDL2 at ${SDL2_SMOKE_LIBRARY}")
@@ -669,6 +699,12 @@ if(BUILD_TGFX2_TESTS)
             target_compile_definitions(tgfx2_vulkan_window PRIVATE TGFX2_HAS_VULKAN)
             target_link_libraries(tgfx2_vulkan_window
                 PRIVATE termin_graphics2 Vulkan::Vulkan ${SDL2_SMOKE_LIBRARY})
+            if(SDL2_SMOKE_DLL)
+                add_custom_command(TARGET tgfx2_vulkan_window POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${SDL2_SMOKE_DLL}"
+                        "$<TARGET_FILE_DIR:tgfx2_vulkan_window>")
+            endif()
             termin_set_rpath_test(tgfx2_vulkan_window)
             add_test(NAME tgfx2_vulkan_window COMMAND tgfx2_vulkan_window)
             set_tests_properties(tgfx2_vulkan_window PROPERTIES

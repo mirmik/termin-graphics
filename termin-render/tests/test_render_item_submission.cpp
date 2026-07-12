@@ -32,7 +32,9 @@ bool other_test_encoder(
     (void)item;
     (void)request;
     (void)user_data;
-    return true;
+    // Keep this callback observably different from test_encoder: MSVC's
+    // identical COMDAT folding otherwise aliases their function pointers.
+    return false;
 }
 
 } // namespace

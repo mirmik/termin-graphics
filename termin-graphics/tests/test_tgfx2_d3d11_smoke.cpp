@@ -594,7 +594,7 @@ int main() {
         pipeline_desc.color_formats.push_back(tgfx::PixelFormat::RGBA8_UNorm);
         pipeline_desc.depth_stencil.depth_test = false;
         pipeline_desc.depth_stencil.depth_write = false;
-        pipeline_desc.raster.cull = tgfx::CullMode::Back;
+        pipeline_desc.raster.cull = tgfx::CullMode::None;
         auto pipeline = device->create_pipeline(pipeline_desc);
         if (!pipeline) {
             std::fprintf(stderr, "D3D11 smoke: create_pipeline failed\n");

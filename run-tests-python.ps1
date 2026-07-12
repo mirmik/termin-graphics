@@ -106,9 +106,9 @@ Write-Host "========================================"
 Set-Location $ScriptDir
 $Failures = New-Object System.Collections.Generic.List[string]
 
-$PytestTempRoot = Join-Path (Join-Path $ScriptDir "build") "pytest-temp"
+$PytestTempRoot = Join-Path (Join-Path $ScriptDir "build") "pt"
 $PytestCacheRoot = Join-Path (Join-Path $ScriptDir "build") "pytest-cache"
-$PytestRunTempDir = Join-Path $PytestTempRoot ([System.Guid]::NewGuid().ToString("N"))
+$PytestRunTempDir = Join-Path $PytestTempRoot ([System.Guid]::NewGuid().ToString("N").Substring(0, 8))
 New-Item -ItemType Directory -Path $PytestRunTempDir -Force | Out-Null
 New-Item -ItemType Directory -Path $PytestCacheRoot -Force | Out-Null
 $env:TEMP = $PytestRunTempDir
@@ -124,7 +124,10 @@ function New-PytestSuiteArgs {
     param([string]$Name)
 
     $safeName = $Name -replace "[^A-Za-z0-9_.-]", "-"
-    $suiteTempDir = Join-Path $PytestRunTempDir $safeName
+    $suiteTempName = [Convert]::ToHexString(
+        [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($safeName))
+    ).Substring(0, 8).ToLowerInvariant()
+    $suiteTempDir = Join-Path $PytestRunTempDir $suiteTempName
     $suiteCacheDir = Join-Path $PytestCacheRoot $safeName
     New-Item -ItemType Directory -Path $suiteTempDir -Force | Out-Null
     New-Item -ItemType Directory -Path $suiteCacheDir -Force | Out-Null

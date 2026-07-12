@@ -91,6 +91,13 @@ bool create_context(SDLGLContext& out) {
         std::fprintf(stderr, "Navmesh overlay smoke: OpenGL context creation failed: %s\n", SDL_GetError());
         return false;
     }
+    // glad is linked statically into both this executable and termin_graphics2.
+    // The device initializes its own function table; direct GL calls below use
+    // the executable's separate table and therefore must initialize it too.
+    if (!gladLoaderLoadGL()) {
+        std::fprintf(stderr, "Navmesh overlay smoke: glad initialization failed\n");
+        return false;
+    }
     return true;
 }
 
@@ -255,6 +262,7 @@ int main() {
             cmd->bind_vertex_buffer(0, navmesh_vbo);
             cmd->draw(3);
             cmd->bind_pipeline(contour_pipeline);
+            cmd->bind_vertex_buffer(0, navmesh_vbo);
             cmd->draw(3);
             cmd->bind_pipeline(transparent_pipeline);
             cmd->bind_vertex_buffer(0, transparent_vbo);

@@ -865,6 +865,7 @@ int main(int argc, char** argv) {
         printf("Slang Vulkan artifact smoke: skipped (termin_shaderc=%s, slangc=%s)\n",
                shaderc ? shaderc->string().c_str() : "<missing>",
                slangc ? slangc->string().c_str() : "<missing>");
+        ring_ubo_overflow_ok = true;
     } else {
         printf("Slang Vulkan artifact smoke: termin_shaderc=%s, slangc=%s\n",
                shaderc->string().c_str(), slangc->string().c_str());
