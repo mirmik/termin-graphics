@@ -231,13 +231,23 @@ void Text2DRenderer::draw(std::string_view text_utf8, const DrawOptions& options
         ? static_cast<float>(font_->sdf_spread()) * sdf_scale
         : 0.0f;
 
+    const ShaderHandle selected_vs = use_sdf ? vs_sdf_ : vs_;
+    const ShaderHandle selected_fs = use_sdf ? fs_sdf_ : fs_;
+    if (selected_vs.id == 0 || selected_fs.id == 0) {
+        tc::Log::error(
+            "[Text2DRenderer] %s shader is unavailable; skipping text draw",
+            use_sdf ? "SDF" : "bitmap"
+        );
+        return;
+    }
+
     if (profile) tc_profiler_begin_section("text.bind_shader");
     tc_shader* raw = nullptr;
     if (use_sdf) {
-        ctx.bind_shader(vs_sdf_, fs_sdf_);
+        ctx.bind_shader(selected_vs, selected_fs);
         raw = tc_shader_get(sdf_shader_handle_);
     } else {
-        ctx.bind_shader(vs_, fs_);
+        ctx.bind_shader(selected_vs, selected_fs);
         raw = tc_shader_get(shader_handle_);
     }
     ctx.use_shader_resource_layout(raw);

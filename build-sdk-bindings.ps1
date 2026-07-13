@@ -230,6 +230,9 @@ if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
 & cmake --install $BuildDir --config $BuildType
 if ($LASTEXITCODE -ne 0) { throw "cmake install failed" }
 
+& $pythonExec -m termin_build.sdk --repo-root $ScriptDir publish-cmake-python --install-dir $SdkPrefix --sdk-prefix $SdkPrefix
+if ($LASTEXITCODE -ne 0) { throw "failed to publish CMake Python install" }
+
 & $pythonExec -m termin_build.sdk --repo-root $ScriptDir write-artifacts --build-dir $BuildDir --sdk-prefix $SdkPrefix
 if ($LASTEXITCODE -ne 0) { throw "failed to write SDK artifact manifest" }
 

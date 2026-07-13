@@ -142,6 +142,13 @@ PipelineCache::~PipelineCache() {
 }
 
 PipelineHandle PipelineCache::get(const PipelineCacheLookupKey& key) {
+    if (key.vertex_shader.id == 0 || key.fragment_shader.id == 0) {
+        tc_log(TC_LOG_ERROR,
+               "PipelineCache: graphics pipeline requires valid vertex and fragment shaders; "
+               "backend call skipped");
+        return {};
+    }
+
     auto it = cache_.find(key);
     if (it != cache_.end()) {
         ++hit_count_;

@@ -201,6 +201,26 @@ TEST_CASE("PipelineCache retries a failed creation instead of caching an invalid
     CHECK(device.create_pipeline_count == 2u);
 }
 
+TEST_CASE("PipelineCache rejects missing required shaders before backend creation") {
+    PipelineCacheStatsDevice device;
+    tgfx::PipelineCache cache(device);
+
+    tgfx::PipelineCacheLookupKey key;
+    key.vertex_shader = tgfx::ShaderHandle{1};
+    CHECK_FALSE(cache.get(key));
+
+    key.vertex_shader = {};
+    key.fragment_shader = tgfx::ShaderHandle{2};
+    CHECK_FALSE(cache.get(key));
+
+    CHECK(device.create_pipeline_count == 0u);
+    CHECK(cache.size() == 0u);
+    const tgfx::PipelineCacheStats stats = cache.stats();
+    CHECK(stats.hit_count == 0u);
+    CHECK(stats.miss_count == 0u);
+    CHECK(stats.create_pipeline_count == 0u);
+}
+
 TEST_CASE("PipelineCache owns layouts after a lookup view expires") {
     PipelineCacheStatsDevice device;
     tgfx::PipelineCache cache(device);

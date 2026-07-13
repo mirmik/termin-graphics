@@ -218,10 +218,15 @@ PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
     --sdk-prefix "$SDK_PREFIX"
 
 PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
+    "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" publish-cmake-python \
+    --install-dir "$INSTALL_STAGING_DIR" \
+    --sdk-prefix "$SDK_PREFIX"
+
+PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
     "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" write-artifacts \
     --build-dir "$BUILD_DIR" \
     --sdk-prefix "$SDK_PREFIX" \
-    --install-dir "$INSTALL_STAGING_DIR"
+    --install-dir "$SDK_PREFIX"
 
 echo ""
 echo "========================================"
