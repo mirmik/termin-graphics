@@ -60,6 +60,19 @@ inline bool type_is(const char* type, const char* expected) {
     return type && std::strcmp(type, expected) == 0;
 }
 
+const char* uniform_type_name(uint8_t type) {
+    switch (type) {
+        case TC_UNIFORM_BOOL: return "Bool";
+        case TC_UNIFORM_INT: return "Int";
+        case TC_UNIFORM_FLOAT: return "Float";
+        case TC_UNIFORM_VEC2: return "Vec2";
+        case TC_UNIFORM_VEC3: return "Vec3";
+        case TC_UNIFORM_VEC4: return "Vec4";
+        case TC_UNIFORM_MAT4: return "Mat4";
+        default: return "<unknown>";
+    }
+}
+
 inline void write_float(uint8_t* dst, float value) {
     std::memcpy(dst, &value, sizeof(value));
 }
@@ -143,8 +156,20 @@ bool pack_material_uniform_value_to_std140_field(
     uint8_t* dst)
 {
     if (!field_type || !dst) {
+        tc::Log::error(
+            "Cannot pack material uniform '%s': field type or destination is null",
+            uniform.name[0] != '\0' ? uniform.name : "<unnamed>");
         return false;
     }
+    const auto incompatible_type = [&]() {
+        tc::Log::error(
+            "Cannot pack material uniform '%s': uniform type %s is incompatible with "
+            "reflected field type %s",
+            uniform.name[0] != '\0' ? uniform.name : "<unnamed>",
+            uniform_type_name(uniform.type),
+            field_type);
+        return false;
+    };
     if (type_is(field_type, "Float")) {
         if (uniform.type == TC_UNIFORM_FLOAT) {
             write_float(dst, uniform.data.f);
@@ -154,7 +179,7 @@ bool pack_material_uniform_value_to_std140_field(
             write_float(dst, static_cast<float>(uniform.data.i));
             return true;
         }
-        return false;
+        return incompatible_type();
     }
     if (type_is(field_type, "Int")) {
         if (uniform.type == TC_UNIFORM_INT) {
@@ -165,7 +190,7 @@ bool pack_material_uniform_value_to_std140_field(
             write_int(dst, static_cast<int32_t>(uniform.data.f));
             return true;
         }
-        return false;
+        return incompatible_type();
     }
     if (type_is(field_type, "Bool")) {
         if (uniform.type == TC_UNIFORM_BOOL) {
@@ -176,42 +201,42 @@ bool pack_material_uniform_value_to_std140_field(
             write_int(dst, uniform.data.i != 0 ? 1 : 0);
             return true;
         }
-        return false;
+        return incompatible_type();
     }
     if (type_is(field_type, "Vec2")) {
         if (uniform.type == TC_UNIFORM_VEC2) {
             write_float_array(dst, uniform.data.v2, 2);
             return true;
         }
-        return false;
+        return incompatible_type();
     }
     if (type_is(field_type, "Vec3")) {
         if (uniform.type == TC_UNIFORM_VEC3) {
             write_float_array(dst, uniform.data.v3, 3);
             return true;
         }
-        return false;
+        return incompatible_type();
     }
     if (type_is(field_type, "Vec4") || type_is(field_type, "Color")) {
         if (uniform.type == TC_UNIFORM_VEC4) {
             write_float_array(dst, uniform.data.v4, 4);
             return true;
         }
-        return false;
+        return incompatible_type();
     }
     if (type_is(field_type, "Mat4")) {
         if (uniform.type == TC_UNIFORM_MAT4) {
             write_float_array(dst, uniform.data.m4, 16);
             return true;
         }
-        return false;
+        return incompatible_type();
     }
-    return false;
+    return incompatible_type();
 }
 
 namespace {
 
-void pack_material_ubo_entry(
+bool pack_material_ubo_entry(
     const tc_material_phase* phase,
     const tc_shader* shader,
     const char* field_name,
@@ -226,13 +251,13 @@ void pack_material_ubo_entry(
             field_type,
             field_offset,
             block_size)) {
-        return;
+        return false;
     }
     const tc_uniform_value* uniform = find_phase_uniform(phase, field_name);
     if (!uniform) {
-        return;
+        return true;
     }
-    pack_material_uniform_value_to_std140_field(
+    return pack_material_uniform_value_to_std140_field(
         *uniform,
         field_type,
         out_buffer + field_offset);
@@ -249,14 +274,16 @@ bool pack_material_ubo_from_legacy_entries(
     }
     for (uint32_t i = 0; i < shader->material_ubo_entry_count; ++i) {
         const tc_material_ubo_entry& entry = shader->material_ubo_entries[i];
-        pack_material_ubo_entry(
+        if (!pack_material_ubo_entry(
             phase,
             shader,
             entry.name,
             entry.property_type,
             entry.offset,
             block_size,
-            out_buffer);
+            out_buffer)) {
+            return false;
+        }
     }
     return true;
 }
@@ -293,14 +320,16 @@ bool pack_material_ubo_from_reflected_fields(
     }
     for (uint32_t i = 0; i < material_rb->field_count; ++i) {
         const tc_shader_resource_field& field = material_rb->fields[i];
-        pack_material_ubo_entry(
+        if (!pack_material_ubo_entry(
             phase,
             shader,
             field.name,
             field.type,
             field.offset,
             block_size,
-            out_buffer);
+            out_buffer)) {
+            return false;
+        }
     }
     return true;
 }
@@ -347,8 +376,10 @@ bool apply_material_phase_ubo(
                 block_size);
 
         if (!packed_layout) {
-            // Invalid reflected metadata was logged above. Leave the old
-            // behavior for "no usable layout": do not bind a material UBO.
+            tc::Log::error(
+                "[MaterialPipeline] failed to pack material UBO for shader '%s'; "
+                "the invalid buffer will not be bound",
+                shader_debug_name(shader));
         } else if (material_rb && material_rb->kind == TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
             ctx.bind_uniform_data(
                 material_rb,

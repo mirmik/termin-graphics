@@ -44,14 +44,19 @@
 #include <windows.h>
 typedef void (APIENTRY *PFN_glClipControl)(GLenum, GLenum);
 static PFN_glClipControl s_glClipControl = nullptr;
-static void load_clip_control_win32() {
-    if (s_glClipControl) return;
-    s_glClipControl = reinterpret_cast<PFN_glClipControl>(
-        wglGetProcAddress("glClipControl"));
-}
-static void glClipControl(GLenum origin, GLenum depth) {
-    load_clip_control_win32();
-    if (s_glClipControl) s_glClipControl(origin, depth);
+static bool load_clip_control_win32() {
+    if (s_glClipControl) return true;
+    PROC proc = wglGetProcAddress("glClipControl");
+    // wglGetProcAddress documents these sentinel values as failures in
+    // addition to NULL. Never turn a missing capability into a no-op.
+    if (!proc || proc == reinterpret_cast<PROC>(1) ||
+        proc == reinterpret_cast<PROC>(2) ||
+        proc == reinterpret_cast<PROC>(3) ||
+        proc == reinterpret_cast<PROC>(-1)) {
+        return false;
+    }
+    s_glClipControl = reinterpret_cast<PFN_glClipControl>(proc);
+    return true;
 }
 #else
 extern "C" void glClipControl(GLenum origin, GLenum depth);
@@ -108,7 +113,7 @@ OpenGLRenderDevice::OpenGLRenderDevice() {
     // All our projection matrices (termin-base/geom/mat44.hpp) target
     // this convention; shaders write clip-space Y pointing down already.
     // Requires GL 4.5 or ARB_clip_control (ubiquitous on desktop GL).
-    glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE);
+    enforce_clip_space_contract();
 
     query_capabilities();
     ensure_ring_ubo();
@@ -119,6 +124,51 @@ OpenGLRenderDevice::OpenGLRenderDevice() {
         &opengl_invalidate_tc_mesh_trampoline, this);
     tc_shader_registry_add_destroy_hook(
         &opengl_invalidate_tc_shader_trampoline, this);
+}
+
+void OpenGLRenderDevice::enforce_clip_space_contract() {
+    // Do not attribute an error left by unrelated host rendering to
+    // glClipControl. Preserve visibility of it before checking our call.
+    for (GLenum stale_error = glGetError(); stale_error != GL_NO_ERROR;
+         stale_error = glGetError()) {
+        tc_log_warn(
+            "OpenGL clip-space setup observed a pre-existing GL error: 0x%04x",
+            static_cast<unsigned>(stale_error));
+    }
+
+#if defined(_WIN32)
+    if (!load_clip_control_win32()) {
+        const char* message =
+            "OpenGL backend requires OpenGL 4.5 or ARB_clip_control, but "
+            "wglGetProcAddress(glClipControl) failed";
+        tc_log_error("%s", message);
+        throw std::runtime_error(message);
+    }
+    s_glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE);
+#else
+    glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE);
+#endif
+
+    const GLenum apply_error = glGetError();
+    GLint origin = 0;
+    GLint depth_mode = 0;
+    glGetIntegerv(GL_CLIP_ORIGIN, &origin);
+    glGetIntegerv(GL_CLIP_DEPTH_MODE, &depth_mode);
+    const GLenum query_error = glGetError();
+    if (apply_error != GL_NO_ERROR || query_error != GL_NO_ERROR ||
+        origin != GL_UPPER_LEFT || depth_mode != GL_ZERO_TO_ONE) {
+        tc_log_error(
+            "OpenGL clip-space contract failed: apply_error=0x%04x "
+            "query_error=0x%04x origin=0x%04x depth_mode=0x%04x "
+            "(required origin=GL_UPPER_LEFT depth=GL_ZERO_TO_ONE)",
+            static_cast<unsigned>(apply_error),
+            static_cast<unsigned>(query_error),
+            static_cast<unsigned>(origin),
+            static_cast<unsigned>(depth_mode));
+        throw std::runtime_error(
+            "OpenGL backend could not establish the required upper-left, "
+            "zero-to-one clip-space contract");
+    }
 }
 
 OpenGLRenderDevice::~OpenGLRenderDevice() {

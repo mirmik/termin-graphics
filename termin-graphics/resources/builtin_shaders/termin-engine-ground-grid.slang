@@ -57,15 +57,19 @@ float4 grid(float3 pos, float scale, float4 color) {
 
 float compute_depth(float3 pos) {
     float4 clip = mul(GridParams.u_projection, mul(GridParams.u_view, float4(pos, 1.0)));
-    return (clip.z / clip.w) * 0.5 + 0.5;
+    // Termin clip depth is already [0, 1]. The old [-1, 1] OpenGL
+    // remapping pushed the near plane to 0.5 and broke depth testing.
+    return clip.z / clip.w;
 }
 
 float compute_fade(float3 pos) {
     float4 clip = mul(GridParams.u_projection, mul(GridParams.u_view, float4(pos, 1.0)));
     float ndc_depth = clip.z / clip.w;
+    // Inverse of the perspective Z mapping used by Mat44f::perspective:
+    // depth = far / (far - near) - far*near / ((far - near) * view_depth).
     float linear_depth =
-        (2.0 * GridParams.u_near * GridParams.u_far) /
-        (GridParams.u_far + GridParams.u_near - ndc_depth * (GridParams.u_far - GridParams.u_near));
+        (GridParams.u_near * GridParams.u_far) /
+        (GridParams.u_far - ndc_depth * (GridParams.u_far - GridParams.u_near));
     return max(0.0, 1.0 - linear_depth / GridParams.u_far);
 }
 

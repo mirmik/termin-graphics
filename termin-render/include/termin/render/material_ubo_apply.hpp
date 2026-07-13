@@ -20,7 +20,8 @@ namespace termin {
 // Pack one material uniform value into a std140 field. Scalar numeric
 // compatibility is intentionally narrow: Float<->Int follow existing material
 // coercion, and Bool fields accept either TC_UNIFORM_BOOL or TC_UNIFORM_INT,
-// normalized to int32 0/1. Returns false without touching dst on mismatch.
+// normalized to int32 0/1. Returns false without touching dst on mismatch and
+// logs the incompatible uniform/reflected field types.
 RENDER_API bool pack_material_uniform_value_to_std140_field(
     const tc_uniform_value& uniform,
     const char* field_type,

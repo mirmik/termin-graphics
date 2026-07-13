@@ -94,6 +94,12 @@ void put_uniform_value(nb::dict& result, const std::string& name, tc_uniform_val
         case TC_UNIFORM_VEC4:
             result[nb::cast(name)] = Vec4{u.data.v4[0], u.data.v4[1], u.data.v4[2], u.data.v4[3]};
             break;
+        case TC_UNIFORM_MAT4: {
+            Mat44f value;
+            std::memcpy(value.data, u.data.m4, sizeof(value.data));
+            result[nb::cast(name)] = value;
+            break;
+        }
         default:
             break;
     }
@@ -678,6 +684,12 @@ void bind_tc_material(nb::module_& m) {
                     case TC_UNIFORM_VEC4:
                         result[nb::cast(name)] = Vec4{u.data.v4[0], u.data.v4[1], u.data.v4[2], u.data.v4[3]};
                         break;
+                    case TC_UNIFORM_MAT4: {
+                        Mat44f value;
+                        std::memcpy(value.data, u.data.m4, sizeof(value.data));
+                        result[nb::cast(name)] = value;
+                        break;
+                    }
                     default:
                         break;
                 }
@@ -753,6 +765,14 @@ void bind_tc_material(nb::module_& m) {
                 Vec4 v = nb::cast<Vec4>(value);
                 float arr[4] = {(float)v.x, (float)v.y, (float)v.z, (float)v.w};
                 tc_material_phase_set_uniform(&p, name.c_str(), TC_UNIFORM_VEC4, arr);
+            } else if (nb::isinstance<Mat44f>(value)) {
+                const Mat44f matrix = nb::cast<Mat44f>(value);
+                tc_material_phase_set_uniform(
+                    &p, name.c_str(), TC_UNIFORM_MAT4, matrix.data);
+            } else if (nb::isinstance<Mat44>(value)) {
+                const Mat44f matrix = nb::cast<Mat44>(value).to_float();
+                tc_material_phase_set_uniform(
+                    &p, name.c_str(), TC_UNIFORM_MAT4, matrix.data);
             } else if (supports_python_buffer(value)) {
                 auto arr = nb::cast<nb::ndarray<float, nb::c_contig, nb::device::cpu>>(value);
                 size_t size = arr.size();
@@ -764,17 +784,27 @@ void bind_tc_material(nb::module_& m) {
                 } else if (size == 4) {
                     tc_material_phase_set_uniform(&p, name.c_str(), TC_UNIFORM_VEC4, ptr);
                 } else if (size == 16) {
-                    tc_material_phase_set_uniform(&p, name.c_str(), TC_UNIFORM_MAT4, ptr);
+                    tc::Log::error(
+                        "tc_material_phase.set_param('%s') rejects raw 16-element buffers: "
+                        "Mat4 GPU data is column-major; pass termin.geombase.Mat44f or Mat44",
+                        name.c_str());
+                    throw std::runtime_error(
+                        "tc_material_phase.set_param rejects raw 16-element buffers for Mat4; "
+                        "pass Mat44f or Mat44");
                 } else {
                     tc::Log::error(
-                        "tc_material_phase.set_param('%s') expects float32 buffer size 2, 3, 4, or 16; got %zu",
+                        "tc_material_phase.set_param('%s') expects float32 buffer size 2, 3, or 4; got %zu",
                         name.c_str(),
                         size);
                     throw std::runtime_error(
-                        "tc_material_phase.set_param expects float32 buffer size 2, 3, 4, or 16");
+                        "tc_material_phase.set_param expects float32 buffer size 2, 3, or 4; "
+                        "Mat4 requires Mat44f or Mat44");
                 }
             }
-        }, nb::arg("name"), nb::arg("value"));
+        }, nb::arg("name"), nb::arg("value"),
+        "Set a phase uniform. Mat4 values must be Mat44f or Mat44 and are uploaded "
+        "in GPU/Slang column-major order; raw 16-element buffers are rejected because "
+        "their matrix order is ambiguous.");
 
     nb::class_<TcMaterial>(m, "TcMaterial")
         .def(nb::init<>())

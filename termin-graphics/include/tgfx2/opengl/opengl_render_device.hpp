@@ -212,6 +212,11 @@ public:
     void submit(ICommandList& cmd) override;
     void present() override;
 
+    // Establish and validate Termin's OpenGL clip-space contract. Called
+    // during device construction and at each render-pass boundary because
+    // embedding hosts may modify global GL state between passes.
+    void enforce_clip_space_contract();
+
     // Internal access for command list
     GLBuffer* get_buffer(BufferHandle h) { return buffers_.get(h.id); }
     GLTexture* get_texture(TextureHandle h) { return textures_.get(h.id); }

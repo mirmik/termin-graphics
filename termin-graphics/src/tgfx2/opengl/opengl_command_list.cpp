@@ -6,45 +6,6 @@
 
 #include <tcbase/tc_log.hpp>
 
-// GL 4.5 enums missing from our glad-3.3 header.
-#ifndef GL_UPPER_LEFT
-#define GL_UPPER_LEFT 0x8CA2
-#endif
-#ifndef GL_ZERO_TO_ONE
-#define GL_ZERO_TO_ONE 0x935F
-#endif
-
-// Platform-specific dynamic resolve for glClipControl. Matches the
-// pattern in opengl_render_device.cpp so both call sites use the same
-// loader. On Linux libGL exports the symbol natively.
-#if defined(_WIN32)
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-namespace {
-using PFN_glClipControl = void (APIENTRY *)(GLenum, GLenum);
-PFN_glClipControl s_glClipControl = nullptr;
-inline void reapply_clip_control_upper_left() {
-    if (!s_glClipControl) {
-        s_glClipControl = reinterpret_cast<PFN_glClipControl>(
-            wglGetProcAddress("glClipControl"));
-    }
-    if (s_glClipControl) s_glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE);
-}
-}  // namespace
-#else
-extern "C" void glClipControl(GLenum origin, GLenum depth);
-namespace {
-inline void reapply_clip_control_upper_left() {
-    glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE);
-}
-}  // namespace
-#endif
-
 namespace tgfx {
 
 OpenGLCommandList::OpenGLCommandList(OpenGLRenderDevice& device)
@@ -91,7 +52,7 @@ void OpenGLCommandList::begin_render_pass(const RenderPassDesc& pass) {
     // pass self-contained. Safe if the driver actually honoured the
     // first call (a no-op at negligible cost) and helps on drivers
     // where the first call's effect is lost.
-    reapply_clip_control_upper_left();
+    device_.enforce_clip_space_contract();
 
     // Reset GL scissor — it is global state and survives across passes
     // and frames. If a previous pass (a UI widget with a begin_clip,

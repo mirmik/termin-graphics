@@ -6,10 +6,21 @@ GUARD_TEST_MAIN();
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <string>
 
 #include <termin/render/material_ubo_apply.hpp>
+#include <tcbase/tc_log.h>
 
 namespace {
+
+std::string captured_log;
+
+void capture_log(tc_log_level level, const char* message)
+{
+    if (level == TC_LOG_ERROR && message) {
+        captured_log = message;
+    }
+}
 
 int32_t read_int_at(const std::array<uint8_t, 16>& buffer, size_t offset)
 {
@@ -88,13 +99,21 @@ TEST_CASE("material UBO Bool field rejects non-integral uniforms")
     buffer[3] = 0xCD;
     const tc_uniform_value value = uniform_float("u_enabled", 1.0f);
 
-    CHECK(!termin::pack_material_uniform_value_to_std140_field(
+    captured_log.clear();
+    tc_log_set_callback(capture_log);
+    const bool packed = termin::pack_material_uniform_value_to_std140_field(
         value,
         "Bool",
-        buffer.data()));
+        buffer.data());
+    tc_log_set_callback(nullptr);
+
+    CHECK(!packed);
 
     CHECK_EQ(buffer[0], 0xCD);
     CHECK_EQ(buffer[1], 0xCD);
     CHECK_EQ(buffer[2], 0xCD);
     CHECK_EQ(buffer[3], 0xCD);
+    CHECK(captured_log.find("u_enabled") != std::string::npos);
+    CHECK(captured_log.find("Float") != std::string::npos);
+    CHECK(captured_log.find("Bool") != std::string::npos);
 }
