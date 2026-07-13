@@ -216,6 +216,28 @@ TYPE_NUM_COMPONENTS = {
     "MAT4": 16,
 }
 
+_NORMALIZED_COMPONENT_MAX = {
+    5120: 127.0,          # BYTE
+    5121: 255.0,          # UNSIGNED_BYTE
+    5122: 32767.0,        # SHORT
+    5123: 65535.0,        # UNSIGNED_SHORT
+}
+
+_UNSIGNED_INDEX_COMPONENT_TYPES = {5121, 5123, 5125}
+_UNSIGNED_JOINT_COMPONENT_TYPES = {5121, 5123}
+
+
+def _normalize_accessor_components(data: np.ndarray, component_type: int) -> np.ndarray:
+    """Apply glTF normalized-integer conversion to accessor components."""
+    if component_type not in _NORMALIZED_COMPONENT_MAX:
+        raise ValueError(f"glTF normalized accessor has unsupported componentType {component_type}")
+
+    normalized = data.astype(np.float32)
+    normalized /= _NORMALIZED_COMPONENT_MAX[component_type]
+    if component_type in (5120, 5122):
+        np.maximum(normalized, -1.0, out=normalized)
+    return normalized
+
 
 def _read_data_uri(uri: str) -> tuple[bytes, str | None]:
     """Read a data URI payload."""
@@ -275,42 +297,251 @@ def _get_buffer_view_bytes(buffers: list[bytes], buffer_view: dict) -> bytes:
     return buffers[buffer_index]
 
 
-def _read_accessor(gltf: dict, buffers: list[bytes], accessor_index: int) -> np.ndarray:
-    """Read data from an accessor."""
-    accessor = gltf["accessors"][accessor_index]
-    buffer_view = gltf["bufferViews"][accessor["bufferView"]]
+def _read_accessor(
+    gltf: dict,
+    buffers: list[bytes],
+    accessor_index: int,
+) -> np.ndarray:
+    """Read one non-sparse accessor, preserving its declared component representation."""
+    accessors = gltf.get("accessors", [])
+    if accessor_index < 0 or accessor_index >= len(accessors):
+        raise ValueError(f"accessor index {accessor_index} is out of range")
+    accessor = accessors[accessor_index]
+    if "sparse" in accessor:
+        raise ValueError(f"sparse accessor {accessor_index} is not supported")
+    if "bufferView" not in accessor:
+        raise ValueError(f"accessor {accessor_index} has no bufferView")
+
+    buffer_view_index = int(accessor["bufferView"])
+    buffer_views = gltf.get("bufferViews", [])
+    if buffer_view_index < 0 or buffer_view_index >= len(buffer_views):
+        raise ValueError(f"accessor {accessor_index} references missing bufferView {buffer_view_index}")
+    buffer_view = buffer_views[buffer_view_index]
     bin_data = _get_buffer_view_bytes(buffers, buffer_view)
 
-    component_type = accessor["componentType"]
+    component_type = int(accessor["componentType"])
     accessor_type = accessor["type"]
-    count = accessor["count"]
+    count = int(accessor["count"])
+    if count < 0:
+        raise ValueError(f"accessor {accessor_index} has a negative count")
+    if component_type not in COMPONENT_TYPE_DTYPE:
+        raise ValueError(f"accessor {accessor_index} has unsupported componentType {component_type}")
+    if accessor_type not in TYPE_NUM_COMPONENTS:
+        raise ValueError(f"accessor {accessor_index} has unsupported type {accessor_type}")
+    if accessor_type.startswith("MAT") and component_type != 5126:
+        raise ValueError(
+            f"accessor {accessor_index} uses unsupported packed integer matrix representation"
+        )
 
-    dtype = COMPONENT_TYPE_DTYPE[component_type]
+    dtype = np.dtype(COMPONENT_TYPE_DTYPE[component_type]).newbyteorder("<")
     num_components = TYPE_NUM_COMPONENTS[accessor_type]
 
-    byte_offset = buffer_view.get("byteOffset", 0) + accessor.get("byteOffset", 0)
-    byte_stride = buffer_view.get("byteStride", 0)
+    buffer_view_offset = int(buffer_view.get("byteOffset", 0))
+    buffer_view_length = int(buffer_view.get("byteLength", len(bin_data) - buffer_view_offset))
+    accessor_offset = int(accessor.get("byteOffset", 0))
+    byte_offset = buffer_view_offset + accessor_offset
+    byte_stride = int(buffer_view.get("byteStride", 0))
 
     element_size = COMPONENT_TYPE_SIZE[component_type] * num_components
+    if buffer_view_offset < 0 or accessor_offset < 0 or buffer_view_length < 0:
+        raise ValueError(f"accessor {accessor_index} has a negative byte offset or bufferView length")
+    if buffer_view_offset + buffer_view_length > len(bin_data):
+        raise ValueError(f"accessor {accessor_index} bufferView exceeds its buffer bounds")
+    if byte_stride and byte_stride < element_size:
+        raise ValueError(f"accessor {accessor_index} byteStride is smaller than its element size")
+    effective_stride = byte_stride or element_size
+    required_end = byte_offset
+    if count:
+        required_end += (count - 1) * effective_stride + element_size
+    buffer_view_end = buffer_view_offset + buffer_view_length
+    if required_end > buffer_view_end or required_end > len(bin_data):
+        raise ValueError(f"accessor {accessor_index} exceeds its bufferView bounds")
 
     if byte_stride == 0 or byte_stride == element_size:
-        # Tightly packed
         data = np.frombuffer(
-            bin_data, dtype=dtype,
+            bin_data,
+            dtype=dtype,
             offset=byte_offset,
-            count=count * num_components
+            count=count * num_components,
         )
         if num_components > 1:
             data = data.reshape(count, num_components)
     else:
-        # Strided data
         data = np.zeros((count, num_components), dtype=dtype)
         for i in range(count):
             offset = byte_offset + i * byte_stride
-            element = np.frombuffer(bin_data, dtype=dtype, offset=offset, count=num_components)
-            data[i] = element
+            data[i] = np.frombuffer(bin_data, dtype=dtype, offset=offset, count=num_components)
 
-    return data.astype(np.float32) if dtype != np.float32 else data
+    if accessor.get("normalized", False):
+        if component_type == 5126:
+            raise ValueError(f"accessor {accessor_index} sets normalized on FLOAT components")
+        return _normalize_accessor_components(data, component_type)
+    return data
+
+
+def _read_integral_accessor(
+    gltf: dict,
+    buffers: list[bytes],
+    accessor_index: int,
+    allowed_component_types: set[int],
+    usage: str,
+    required_type: str,
+) -> np.ndarray:
+    """Read an accessor that glTF requires to remain in an integer domain."""
+    accessor = gltf["accessors"][accessor_index]
+    component_type = int(accessor["componentType"])
+    if component_type not in allowed_component_types:
+        raise ValueError(f"{usage} accessor {accessor_index} must use an unsigned integer component type")
+    if accessor.get("normalized", False):
+        raise ValueError(f"{usage} accessor {accessor_index} must not be normalized")
+    if accessor.get("type") != required_type:
+        raise ValueError(f"{usage} accessor {accessor_index} must have type {required_type}")
+    return _read_accessor(gltf, buffers, accessor_index)
+
+
+def _read_weight_accessor(gltf: dict, buffers: list[bytes], accessor_index: int) -> np.ndarray:
+    """Read WEIGHTS_0 while enforcing glTF's integer normalization contract."""
+    accessor = gltf["accessors"][accessor_index]
+    component_type = int(accessor["componentType"])
+    if accessor.get("type") != "VEC4":
+        raise ValueError(f"WEIGHTS_0 accessor {accessor_index} must have type VEC4")
+    if component_type != 5126 and not accessor.get("normalized", False):
+        raise ValueError(f"integer WEIGHTS_0 accessor {accessor_index} must be normalized")
+    return _read_accessor(gltf, buffers, accessor_index).astype(np.float32)
+
+
+def _read_float_vertex_attribute(
+    gltf: dict,
+    buffers: list[bytes],
+    accessor_index: int,
+    semantic: str,
+) -> np.ndarray:
+    """Read a mesh vertex attribute into the engine's float representation."""
+    accessor = gltf["accessors"][accessor_index]
+    if int(accessor["componentType"]) != 5126:
+        extensions_used = gltf.get("extensionsUsed", [])
+        if "KHR_mesh_quantization" not in extensions_used:
+            raise ValueError(
+                f"{semantic} accessor {accessor_index} uses integer components without KHR_mesh_quantization"
+            )
+    return _read_accessor(gltf, buffers, accessor_index).astype(np.float32)
+
+
+def _quaternion_from_rotation_matrix(rotation: np.ndarray) -> np.ndarray:
+    """Convert a proper 3x3 rotation matrix to a normalized xyzw quaternion."""
+    trace = float(np.trace(rotation))
+    if trace > 0.0:
+        root = np.sqrt(trace + 1.0) * 2.0
+        quaternion = np.array([
+            (rotation[2, 1] - rotation[1, 2]) / root,
+            (rotation[0, 2] - rotation[2, 0]) / root,
+            (rotation[1, 0] - rotation[0, 1]) / root,
+            0.25 * root,
+        ], dtype=np.float64)
+    else:
+        axis = int(np.argmax(np.diag(rotation)))
+        next_axis = (axis + 1) % 3
+        last_axis = (axis + 2) % 3
+        root = np.sqrt(
+            1.0 + rotation[axis, axis] - rotation[next_axis, next_axis] - rotation[last_axis, last_axis]
+        ) * 2.0
+        quaternion = np.zeros(4, dtype=np.float64)
+        quaternion[axis] = 0.25 * root
+        quaternion[next_axis] = (rotation[next_axis, axis] + rotation[axis, next_axis]) / root
+        quaternion[last_axis] = (rotation[last_axis, axis] + rotation[axis, last_axis]) / root
+        quaternion[3] = (rotation[last_axis, next_axis] - rotation[next_axis, last_axis]) / root
+
+    quaternion /= np.linalg.norm(quaternion)
+    if quaternion[3] < 0.0:
+        quaternion = -quaternion
+    return quaternion.astype(np.float32)
+
+
+def _complete_rotation_basis(columns: np.ndarray, nonzero_axes: list[int]) -> np.ndarray:
+    """Complete the nonzero rotation columns of a rank-deficient TRS matrix."""
+    rotation = np.zeros((3, 3), dtype=np.float64)
+    for axis in nonzero_axes:
+        rotation[:, axis] = columns[:, axis]
+
+    if len(nonzero_axes) == 3:
+        return rotation
+    if len(nonzero_axes) == 2:
+        missing_axis = next(axis for axis in range(3) if axis not in nonzero_axes)
+        if missing_axis == 0:
+            rotation[:, 0] = np.cross(rotation[:, 1], rotation[:, 2])
+        elif missing_axis == 1:
+            rotation[:, 1] = np.cross(rotation[:, 2], rotation[:, 0])
+        else:
+            rotation[:, 2] = np.cross(rotation[:, 0], rotation[:, 1])
+        return rotation
+    if len(nonzero_axes) == 1:
+        known_axis = nonzero_axes[0]
+        known_column = rotation[:, known_axis]
+        candidate_axis = int(np.argmin(np.abs(known_column)))
+        candidate = np.zeros(3, dtype=np.float64)
+        candidate[candidate_axis] = 1.0
+        if known_axis == 0:
+            rotation[:, 1] = np.cross(known_column, candidate)
+            rotation[:, 1] /= np.linalg.norm(rotation[:, 1])
+            rotation[:, 2] = np.cross(rotation[:, 0], rotation[:, 1])
+        elif known_axis == 1:
+            rotation[:, 2] = np.cross(known_column, candidate)
+            rotation[:, 2] /= np.linalg.norm(rotation[:, 2])
+            rotation[:, 0] = np.cross(rotation[:, 1], rotation[:, 2])
+        else:
+            rotation[:, 0] = np.cross(candidate, known_column)
+            rotation[:, 0] /= np.linalg.norm(rotation[:, 0])
+            rotation[:, 1] = np.cross(rotation[:, 2], rotation[:, 0])
+        return rotation
+    return np.eye(3, dtype=np.float64)
+
+
+def _decompose_node_matrix(matrix_values: Any, node_index: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Decompose a glTF column-major affine matrix into translation, rotation and scale."""
+    matrix_data = np.asarray(matrix_values, dtype=np.float64)
+    if matrix_data.shape != (16,) or not np.all(np.isfinite(matrix_data)):
+        raise ValueError(f"node {node_index} matrix must contain 16 finite values")
+
+    matrix = matrix_data.reshape((4, 4), order="F")
+    if not np.allclose(matrix[3], [0.0, 0.0, 0.0, 1.0], atol=1.0e-6, rtol=0.0):
+        raise ValueError(f"node {node_index} matrix must be affine")
+
+    translation = matrix[:3, 3].astype(np.float32)
+    linear = matrix[:3, :3]
+    scale = np.linalg.norm(linear, axis=0)
+    nonzero_axes = [axis for axis, value in enumerate(scale) if value > 1.0e-8]
+    normalized_columns = np.zeros((3, 3), dtype=np.float64)
+    for axis in nonzero_axes:
+        normalized_columns[:, axis] = linear[:, axis] / scale[axis]
+
+    for first_index, first_axis in enumerate(nonzero_axes):
+        for second_axis in nonzero_axes[first_index + 1:]:
+            if not np.isclose(
+                np.dot(normalized_columns[:, first_axis], normalized_columns[:, second_axis]),
+                0.0,
+                atol=1.0e-5,
+                rtol=1.0e-5,
+            ):
+                raise ValueError(f"node {node_index} matrix contains shear and cannot be represented as TRS")
+
+    rotation = _complete_rotation_basis(normalized_columns, nonzero_axes)
+
+    if not np.allclose(rotation.T @ rotation, np.eye(3), atol=1.0e-5, rtol=1.0e-5):
+        raise ValueError(f"node {node_index} matrix contains shear and cannot be represented as TRS")
+
+    determinant = float(np.linalg.det(rotation))
+    if determinant < 0.0:
+        reflection_axis = int(np.argmax(np.abs(scale)))
+        scale[reflection_axis] *= -1.0
+        rotation[:, reflection_axis] *= -1.0
+        determinant = float(np.linalg.det(rotation))
+    if not np.isclose(determinant, 1.0, atol=1.0e-5, rtol=1.0e-5):
+        raise ValueError(f"node {node_index} matrix has an invalid rotation basis")
+
+    if not np.allclose(rotation @ np.diag(scale), linear, atol=1.0e-5, rtol=1.0e-5):
+        raise ValueError(f"node {node_index} matrix cannot be reconstructed as TRS")
+
+    return translation, _quaternion_from_rotation_matrix(rotation), scale.astype(np.float32)
 
 
 # ---------- PARSING FUNCTIONS ----------
@@ -339,39 +570,53 @@ def _parse_meshes(gltf: dict, buffers: list[bytes], scene_data: GLBSceneData):
             # Vertices (required)
             if "POSITION" not in attributes:
                 continue
-            vertices = _read_accessor(gltf, buffers, attributes["POSITION"]).astype(np.float32)
+            vertices = _read_float_vertex_attribute(gltf, buffers, attributes["POSITION"], "POSITION")
 
             # Normals (optional)
             normals = None
             if "NORMAL" in attributes:
-                normals = _read_accessor(gltf, buffers, attributes["NORMAL"]).astype(np.float32)
+                normals = _read_float_vertex_attribute(gltf, buffers, attributes["NORMAL"], "NORMAL")
                 has_normals = True
 
             # UVs (optional)
             uvs = None
             if "TEXCOORD_0" in attributes:
-                uvs = _read_accessor(gltf, buffers, attributes["TEXCOORD_0"]).astype(np.float32)
+                uvs = _read_float_vertex_attribute(gltf, buffers, attributes["TEXCOORD_0"], "TEXCOORD_0")
                 has_uvs = True
 
             # Tangents (optional) - vec4 with w = handedness
             tangents = None
             if "TANGENT" in attributes:
-                tangents = _read_accessor(gltf, buffers, attributes["TANGENT"]).astype(np.float32)
+                tangents = _read_float_vertex_attribute(gltf, buffers, attributes["TANGENT"], "TANGENT")
                 has_tangents = True
 
             # Skinning data (optional)
             joint_indices = None
             joint_weights = None
             if "JOINTS_0" in attributes:
-                joint_indices = _read_accessor(gltf, buffers, attributes["JOINTS_0"]).astype(np.float32)
+                joint_indices = _read_integral_accessor(
+                    gltf,
+                    buffers,
+                    attributes["JOINTS_0"],
+                    _UNSIGNED_JOINT_COMPONENT_TYPES,
+                    "JOINTS_0",
+                    "VEC4",
+                ).astype(np.uint32)
                 has_joints = True
             if "WEIGHTS_0" in attributes:
-                joint_weights = _read_accessor(gltf, buffers, attributes["WEIGHTS_0"]).astype(np.float32)
+                joint_weights = _read_weight_accessor(gltf, buffers, attributes["WEIGHTS_0"])
                 has_weights = True
 
             # Indices
             if "indices" in primitive:
-                indices = _read_accessor(gltf, buffers, primitive["indices"]).astype(np.uint32)
+                indices = _read_integral_accessor(
+                    gltf,
+                    buffers,
+                    primitive["indices"],
+                    _UNSIGNED_INDEX_COMPONENT_TYPES,
+                    "indices",
+                    "SCALAR",
+                ).astype(np.uint32)
                 if indices.ndim > 1:
                     indices = indices.flatten()
             else:
@@ -489,7 +734,7 @@ def _parse_meshes(gltf: dict, buffers: list[bytes], scene_data: GLBSceneData):
         normals = np.asarray(normal_out, dtype=np.float32) if has_normals else None
         uvs = np.asarray(uv_out, dtype=np.float32) if has_uvs else None
         tangents = np.asarray(tangent_out, dtype=np.float32) if has_tangents else None
-        joint_indices = np.asarray(joint_out, dtype=np.float32) if has_joints else None
+        joint_indices = np.asarray(joint_out, dtype=np.uint32) if has_joints else None
         joint_weights = np.asarray(weight_out, dtype=np.float32) if has_weights else None
         indices = np.concatenate(index_chunks, axis=0).astype(np.uint32)
 
@@ -613,6 +858,12 @@ def _parse_textures(
 
 def _parse_nodes(gltf: dict, scene_data: GLBSceneData):
     """Parse node hierarchy."""
+    matrix_animation_targets = {
+        channel["target"]["node"]
+        for animation in gltf.get("animations", [])
+        for channel in animation.get("channels", [])
+        if "target" in channel and "node" in channel["target"]
+    }
     for node_idx, node in enumerate(gltf.get("nodes", [])):
         name = node.get("name", f"Node_{node_idx}")
         children = node.get("children", [])
@@ -624,10 +875,12 @@ def _parse_nodes(gltf: dict, scene_data: GLBSceneData):
         rotation = np.array(node.get("rotation", [0, 0, 0, 1]), dtype=np.float32)  # xyzw
         scale = np.array(node.get("scale", [1, 1, 1]), dtype=np.float32)
 
-        # If matrix is provided, decompose it (simplified - just use TRS if available)
-        if "matrix" in node and "translation" not in node:
-            # TODO: decompose matrix if needed
-            pass
+        if "matrix" in node:
+            if any(field in node for field in ("translation", "rotation", "scale")):
+                raise ValueError(f"node {node_idx} must not define both matrix and TRS properties")
+            if node_idx in matrix_animation_targets:
+                raise ValueError(f"node {node_idx} uses matrix and must not be an animation target")
+            translation, rotation, scale = _decompose_node_matrix(node["matrix"], node_idx)
 
         scene_data.nodes.append(GLBNodeData(
             name=name,

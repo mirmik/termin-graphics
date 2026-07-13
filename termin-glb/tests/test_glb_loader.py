@@ -13,8 +13,11 @@ from termin.glb.loader import (
     GLBNodeData,
     GLBSceneData,
     GLBSkinData,
+    _build_scene_data,
+    _read_accessor,
     apply_blender_z_up_fix,
     load_glb_file,
+    load_glb_file_normalized,
     normalize_glb_scale,
 )
 
@@ -461,3 +464,142 @@ def test_glb_asset_loads_gltf_from_source_path(tmp_path):
     assert asset.ensure_loaded()
     assert asset.scene_data is not None
     assert len(asset.scene_data.meshes) == 1
+
+
+def _matrix_to_gltf_values(matrix: np.ndarray) -> list[float]:
+    return matrix.T.reshape(-1).tolist()
+
+
+def _matrix_from_node_trs(node: GLBNodeData) -> np.ndarray:
+    x, y, z, w = node.rotation
+    rotation = np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ], dtype=np.float32)
+    matrix = np.eye(4, dtype=np.float32)
+    matrix[:3, :3] = rotation @ np.diag(node.scale)
+    matrix[:3, 3] = node.translation
+    return matrix
+
+
+def test_load_gltf_decomposes_column_major_matrix_before_coordinate_conversion(tmp_path):
+    rotation_z_90 = np.array([
+        [0.0, -1.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ], dtype=np.float32)
+    source_matrix = np.eye(4, dtype=np.float32)
+    source_matrix[:3, :3] = rotation_z_90 @ np.diag([2.0, 3.0, 4.0])
+    source_matrix[:3, 3] = [1.0, 2.0, 3.0]
+    gltf = {
+        "asset": {"version": "2.0"},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [{"matrix": _matrix_to_gltf_values(source_matrix)}],
+    }
+    path = tmp_path / "matrix-node.gltf"
+    path.write_text(json.dumps(gltf), encoding="utf-8")
+
+    raw_node = load_glb_file(path).nodes[0]
+    np.testing.assert_allclose(_matrix_from_node_trs(raw_node), source_matrix, atol=1e-5)
+
+    converted_node = load_glb_file_normalized(path).nodes[0]
+    coordinate_conversion = np.array([
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, -1.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ], dtype=np.float32)
+    expected_converted_matrix = coordinate_conversion @ source_matrix @ coordinate_conversion.T
+    np.testing.assert_allclose(
+        _matrix_from_node_trs(converted_node), expected_converted_matrix, atol=1e-5
+    )
+
+
+@pytest.mark.parametrize("scale", [[-2.0, 3.0, 4.0], [0.0, 3.0, 4.0]])
+def test_load_gltf_decomposes_reflected_and_zero_scale_matrix_nodes(scale):
+    source_matrix = np.eye(4, dtype=np.float32)
+    source_matrix[:3, :3] = np.diag(scale)
+    source_matrix[:3, 3] = [4.0, 5.0, 6.0]
+
+    scene_data = _build_scene_data({
+        "nodes": [{"matrix": _matrix_to_gltf_values(source_matrix)}],
+    }, [])
+
+    np.testing.assert_allclose(_matrix_from_node_trs(scene_data.nodes[0]), source_matrix, atol=1e-5)
+
+
+@pytest.mark.parametrize(
+    ("node", "message"),
+    [
+        ({"matrix": [1.0] * 16, "translation": [0.0, 0.0, 0.0]}, "both matrix and TRS"),
+        ({"matrix": [1.0, 0.0, 0.0, 0.0] * 4}, "matrix must be affine"),
+        ({"matrix": [1.0, 0.5, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]}, "contains shear"),
+    ],
+)
+def test_load_gltf_rejects_nonrepresentable_matrix_nodes(node, message):
+    with pytest.raises(ValueError, match=message):
+        _build_scene_data({"nodes": [node]}, [])
+
+
+def test_load_gltf_rejects_matrix_animation_target():
+    with pytest.raises(ValueError, match="must not be an animation target"):
+        _build_scene_data({
+            "nodes": [{"matrix": _matrix_to_gltf_values(np.eye(4, dtype=np.float32))}],
+            "animations": [{"channels": [{"target": {"node": 0, "path": "translation"}}]}],
+        }, [])
+
+
+def test_load_gltf_normalizes_quantized_attributes_without_normalizing_joints_or_indices():
+    positions = struct.pack("<9f", 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+    normals = struct.pack("<12b", *([-128, 0, 127, 99] * 3))
+    uvs = struct.pack("<6H", 0, 65535, 32768, 16384, 65535, 0)
+    joints = struct.pack("<12B", *(range(12)))
+    weights = struct.pack("<12B", *([0, 64, 128, 255] * 3))
+    indices = struct.pack("<3H", 0, 1, 2)
+    chunks = [positions, normals, uvs, joints, weights, indices]
+    payload = b"".join(chunks)
+    offsets = []
+    offset = 0
+    for chunk in chunks:
+        offsets.append(offset)
+        offset += len(chunk)
+
+    gltf = {
+        "asset": {"version": "2.0"},
+        "extensionsUsed": ["KHR_mesh_quantization"],
+        "meshes": [{"primitives": [{
+            "attributes": {"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2, "JOINTS_0": 3, "WEIGHTS_0": 4},
+            "indices": 5,
+        }]}],
+        "accessors": [
+            {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+            {"bufferView": 1, "componentType": 5120, "count": 3, "type": "VEC3", "normalized": True},
+            {"bufferView": 2, "componentType": 5123, "count": 3, "type": "VEC2", "normalized": True},
+            {"bufferView": 3, "componentType": 5121, "count": 3, "type": "VEC4"},
+            {"bufferView": 4, "componentType": 5121, "count": 3, "type": "VEC4", "normalized": True},
+            {"bufferView": 5, "componentType": 5123, "count": 3, "type": "SCALAR"},
+        ],
+        "bufferViews": [
+            {"buffer": 0, "byteOffset": offset, "byteLength": len(chunk), **({"byteStride": 4} if index == 1 else {})}
+            for index, (offset, chunk) in enumerate(zip(offsets, chunks))
+        ],
+    }
+
+    mesh = _build_scene_data(gltf, [payload]).meshes[0]
+    np.testing.assert_allclose(mesh.normals[0], [-1.0, 0.0, 1.0], atol=1e-6)
+    np.testing.assert_allclose(mesh.uvs[0], [0.0, 1.0], atol=1e-6)
+    np.testing.assert_allclose(mesh.joint_weights[0], [0.0, 64.0 / 255.0, 128.0 / 255.0, 1.0], atol=1e-6)
+    assert mesh.normals.dtype == np.float32
+    assert mesh.uvs.dtype == np.float32
+    assert mesh.joint_weights.dtype == np.float32
+    assert mesh.joint_indices.dtype == np.uint32
+    assert mesh.joint_indices[2].tolist() == [8, 9, 10, 11]
+    assert mesh.indices.dtype == np.uint32
+    assert mesh.indices.tolist() == [0, 1, 2]
+
+
+def test_read_accessor_rejects_sparse_data_without_buffer_view():
+    with pytest.raises(ValueError, match="sparse accessor 0 is not supported"):
+        _read_accessor({"accessors": [{"sparse": {}}]}, [], 0)
