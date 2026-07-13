@@ -2,6 +2,8 @@
 
 #include <csetjmp>
 #include <cstring>
+#include <exception>
+#include <memory>
 #include <stdexcept>
 
 #include <jpeglib.h>
@@ -58,6 +60,34 @@ struct JpegErrorManager {
     char message[JMSG_LENGTH_MAX];
 };
 
+struct JpegDecodeState {
+    jpeg_decompress_struct cinfo{};
+    JpegErrorManager error{};
+    DecodedImage result;
+    std::vector<std::uint8_t> row;
+    bool decompressor_created = false;
+
+    ~JpegDecodeState() {
+        if (decompressor_created) {
+            jpeg_destroy_decompress(&cinfo);
+        }
+    }
+
+    void destroy_after_codec_error() {
+        // libjpeg's documented error-recovery pattern destroys the
+        // decompressor even when the error occurred while creating it.
+        jpeg_destroy_decompress(&cinfo);
+        decompressor_created = false;
+    }
+
+    void destroy() {
+        if (decompressor_created) {
+            jpeg_destroy_decompress(&cinfo);
+            decompressor_created = false;
+        }
+    }
+};
+
 void jpeg_error_exit(j_common_ptr cinfo) {
     auto* manager = reinterpret_cast<JpegErrorManager*>(cinfo->err);
     (*cinfo->err->format_message)(cinfo, manager->message);
@@ -65,56 +95,62 @@ void jpeg_error_exit(j_common_ptr cinfo) {
 }
 
 DecodedImage decode_jpeg_rgba8(std::span<const std::uint8_t> bytes) {
-    jpeg_decompress_struct cinfo;
-    JpegErrorManager jerr;
-    cinfo.err = jpeg_std_error(&jerr.pub);
-    jerr.pub.error_exit = jpeg_error_exit;
-    jerr.message[0] = '\0';
+    // libjpeg reports failures with longjmp. Keep all non-trivial state on the
+    // heap before installing that jump target, so a codec error cannot bypass
+    // a C++ destructor or leave an automatic object indeterminate.
+    auto state = std::make_unique<JpegDecodeState>();
+    state->cinfo.err = jpeg_std_error(&state->error.pub);
+    state->error.pub.error_exit = jpeg_error_exit;
+    state->error.message[0] = '\0';
 
-    if (setjmp(jerr.jump) != 0) {
-        jpeg_destroy_decompress(&cinfo);
-        throw std::runtime_error(std::string("libjpeg failed to decode image: ") + jerr.message);
+    if (setjmp(state->error.jump) != 0) {
+        state->destroy_after_codec_error();
+        throw std::runtime_error(
+            std::string("libjpeg failed to decode image: ") + state->error.message
+        );
     }
 
-    jpeg_create_decompress(&cinfo);
-    jpeg_mem_src(&cinfo, bytes.data(), static_cast<unsigned long>(bytes.size()));
-    jpeg_read_header(&cinfo, TRUE);
-    cinfo.out_color_space = JCS_RGB;
-    jpeg_start_decompress(&cinfo);
+    jpeg_create_decompress(&state->cinfo);
+    state->decompressor_created = true;
+    jpeg_mem_src(&state->cinfo, bytes.data(), static_cast<unsigned long>(bytes.size()));
+    jpeg_read_header(&state->cinfo, TRUE);
+    state->cinfo.out_color_space = JCS_RGB;
+    jpeg_start_decompress(&state->cinfo);
 
-    const int width = static_cast<int>(cinfo.output_width);
-    const int height = static_cast<int>(cinfo.output_height);
-    const int components = static_cast<int>(cinfo.output_components);
+    const int width = static_cast<int>(state->cinfo.output_width);
+    const int height = static_cast<int>(state->cinfo.output_height);
+    const int components = static_cast<int>(state->cinfo.output_components);
     if (width <= 0 || height <= 0 || components != 3) {
-        jpeg_finish_decompress(&cinfo);
-        jpeg_destroy_decompress(&cinfo);
+        jpeg_finish_decompress(&state->cinfo);
+        state->destroy();
         throw std::runtime_error("libjpeg produced unsupported output layout");
     }
 
-    DecodedImage result;
-    result.width = width;
-    result.height = height;
-    result.channels = 4;
-    result.format = "jpeg";
-    result.pixels.resize(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4);
+    state->result.width = width;
+    state->result.height = height;
+    state->result.channels = 4;
+    state->result.format = "jpeg";
+    state->result.pixels.resize(
+        static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4
+    );
 
-    std::vector<std::uint8_t> row(static_cast<std::size_t>(width) * 3);
-    JSAMPROW rows[1] = {row.data()};
-    while (cinfo.output_scanline < cinfo.output_height) {
-        const std::size_t y = cinfo.output_scanline;
-        jpeg_read_scanlines(&cinfo, rows, 1);
-        std::uint8_t* dst = result.pixels.data() + y * static_cast<std::size_t>(width) * 4;
+    state->row.resize(static_cast<std::size_t>(width) * 3);
+    JSAMPROW rows[1] = {state->row.data()};
+    while (state->cinfo.output_scanline < state->cinfo.output_height) {
+        const std::size_t y = state->cinfo.output_scanline;
+        jpeg_read_scanlines(&state->cinfo, rows, 1);
+        std::uint8_t* dst = state->result.pixels.data() + y * static_cast<std::size_t>(width) * 4;
         for (int x = 0; x < width; ++x) {
-            dst[x * 4 + 0] = row[x * 3 + 0];
-            dst[x * 4 + 1] = row[x * 3 + 1];
-            dst[x * 4 + 2] = row[x * 3 + 2];
+            dst[x * 4 + 0] = state->row[x * 3 + 0];
+            dst[x * 4 + 1] = state->row[x * 3 + 1];
+            dst[x * 4 + 2] = state->row[x * 3 + 2];
             dst[x * 4 + 3] = 255;
         }
     }
 
-    jpeg_finish_decompress(&cinfo);
-    jpeg_destroy_decompress(&cinfo);
-    return result;
+    jpeg_finish_decompress(&state->cinfo);
+    state->destroy();
+    return std::move(state->result);
 }
 
 DecodedImage decode_webp_rgba8(std::span<const std::uint8_t> bytes) {
@@ -146,12 +182,20 @@ DecodedImage decode_webp_rgba8(std::span<const std::uint8_t> bytes) {
 
 struct PngWriteState {
     std::vector<std::uint8_t> bytes;
+    std::exception_ptr callback_exception;
 };
 
 void png_write_callback(png_structp png_ptr, png_bytep data, png_size_t length) {
     auto* state = static_cast<PngWriteState*>(png_get_io_ptr(png_ptr));
-    const std::uint8_t* begin = reinterpret_cast<const std::uint8_t*>(data);
-    state->bytes.insert(state->bytes.end(), begin, begin + length);
+    try {
+        const std::uint8_t* begin = reinterpret_cast<const std::uint8_t*>(data);
+        state->bytes.insert(state->bytes.end(), begin, begin + length);
+    } catch (...) {
+        // C++ exceptions must not unwind through libpng's C stack frames.
+        // png_error returns through the setjmp checkpoint in the caller.
+        state->callback_exception = std::current_exception();
+        png_error(png_ptr, "termin-image PNG output callback failed");
+    }
 }
 
 void png_flush_callback(png_structp) {}
@@ -195,6 +239,16 @@ std::vector<std::uint8_t> encode_png_rgba8(std::span<const std::uint8_t> rgba, i
         throw std::runtime_error("PNG encode input size does not match RGBA8 dimensions");
     }
 
+    // Allocate all C++ state before libpng resources exist. This gives normal
+    // C++ unwinding full ownership of allocation failures.
+    auto state = std::make_unique<PngWriteState>();
+    auto rows = std::make_unique<std::vector<png_bytep>>(static_cast<std::size_t>(height));
+    for (int y = 0; y < height; ++y) {
+        (*rows)[static_cast<std::size_t>(y)] = const_cast<png_bytep>(
+            rgba.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(width) * 4
+        );
+    }
+
     png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
     if (png_ptr == nullptr) {
         throw std::runtime_error("libpng failed to create write struct");
@@ -205,13 +259,18 @@ std::vector<std::uint8_t> encode_png_rgba8(std::span<const std::uint8_t> rgba, i
         throw std::runtime_error("libpng failed to create info struct");
     }
 
+    // libpng's error path uses longjmp. State that callbacks modify and the
+    // row vector are dynamically allocated before installing that jump target.
+
     if (setjmp(png_jmpbuf(png_ptr)) != 0) {
         png_destroy_write_struct(&png_ptr, &info_ptr);
+        if (state->callback_exception) {
+            std::rethrow_exception(state->callback_exception);
+        }
         throw std::runtime_error("libpng failed to encode PNG");
     }
 
-    PngWriteState state;
-    png_set_write_fn(png_ptr, &state, png_write_callback, png_flush_callback);
+    png_set_write_fn(png_ptr, state.get(), png_write_callback, png_flush_callback);
     png_set_IHDR(
         png_ptr,
         info_ptr,
@@ -225,16 +284,10 @@ std::vector<std::uint8_t> encode_png_rgba8(std::span<const std::uint8_t> rgba, i
     );
     png_write_info(png_ptr, info_ptr);
 
-    std::vector<png_bytep> rows(static_cast<std::size_t>(height));
-    for (int y = 0; y < height; ++y) {
-        rows[static_cast<std::size_t>(y)] = const_cast<png_bytep>(
-            rgba.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(width) * 4
-        );
-    }
-    png_write_image(png_ptr, rows.data());
+    png_write_image(png_ptr, rows->data());
     png_write_end(png_ptr, info_ptr);
     png_destroy_write_struct(&png_ptr, &info_ptr);
-    return state.bytes;
+    return std::move(state->bytes);
 }
 
 } // namespace termin::image

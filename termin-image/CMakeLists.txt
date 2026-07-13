@@ -45,6 +45,22 @@ if(TERMIN_BUILD_PYTHON)
     add_subdirectory(python)
 endif()
 
+if(TERMIN_BUILD_TESTS)
+    add_executable(termin_image_codec_test
+        tests/image_decode_test.cpp
+    )
+    target_include_directories(termin_image_codec_test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_image_codec_test PRIVATE termin_image)
+    set_target_properties(termin_image_codec_test PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    )
+    termin_set_rpath_test(termin_image_codec_test)
+    add_test(NAME termin_image_codec_test COMMAND termin_image_codec_test)
+    termin_label_tests_in_directory("termin-image")
+endif()
+
 include(GNUInstallDirs)
 
 install(TARGETS termin_image

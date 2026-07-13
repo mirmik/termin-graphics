@@ -251,6 +251,7 @@
     {"id": "termin-engine-tests-native", "module": "termin-engine", "executor": "ctest", "roots": ["termin-engine/tests"]},
     {"id": "termin-graphics-tests-native", "module": "termin-graphics", "executor": "ctest", "roots": ["termin-graphics/tests"]},
     {"id": "termin-gui-native-tests", "module": "termin-gui-native", "executor": "ctest", "roots": ["termin-gui-native/tests"]},
+    {"id": "termin-image-tests-native", "module": "termin-image", "executor": "ctest", "roots": ["termin-image/tests"]},
     {"id": "termin-input-tests-native", "module": "termin-input", "executor": "ctest", "roots": ["termin-input/tests"]},
     {"id": "termin-inspect-tests-native", "module": "termin-inspect", "executor": "ctest", "roots": ["termin-inspect/tests"]},
     {"id": "termin-modules-tests-native", "module": "termin-modules", "executor": "ctest", "roots": ["termin-modules/tests"]},
