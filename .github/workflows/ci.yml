@@ -317,8 +317,13 @@ jobs:
       - name: Run Python tests
         env:
           TERMIN_SDK: ${{ github.workspace }}/sdk
+          TERMIN_SHADERC: ${{ github.workspace }}/sdk/bin/termin_shaderc
           LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
         run: |
+          if [[ ! -x "$TERMIN_SHADERC" ]]; then
+            echo "ERROR: SDK shader compiler is missing or not executable: $TERMIN_SHADERC" >&2
+            exit 1
+          fi
           ./setup-sdk-python-env.sh
           TERMIN_TEST_PLAN=${{ github.workspace }}/build/ci-plans/pr-linux.json \
           TERMIN_TEST_EXECUTION_MANIFEST=${{ github.workspace }}/build/python-execution-manifest.json \

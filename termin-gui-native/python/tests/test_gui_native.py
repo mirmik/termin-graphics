@@ -1,4 +1,5 @@
 import gc
+import os
 import weakref
 from pathlib import Path
 
@@ -47,6 +48,19 @@ from termin.gui_native import (
     unregister_widget_owner,
     unregister_widget_type,
 )
+
+
+def _bundled_font_path() -> Path:
+    sdk_root = os.environ.get("TERMIN_SDK")
+    if not sdk_root:
+        pytest.fail("TERMIN_SDK must point to the SDK used by the native GUI tests")
+
+    font_path = Path(sdk_root) / "share" / "termin" / "fonts" / "DroidSans.ttf"
+    if not font_path.is_file():
+        pytest.fail(f"Bundled native GUI test font is missing: {font_path}")
+    return font_path
+
+
 class DemoWidget(Widget):
     def __init__(self):
         self.paint_count = 0
@@ -70,15 +84,7 @@ def test_python_native_showcase_builds_stable_headless_snapshot():
     document = Document()
     showcase = build_python_showcase(document)
     renderer = DrawListRenderer()
-    font = (
-        Path(__file__).resolve().parents[3]
-        / "termin-thirdparty"
-        / "recastnavigation"
-        / "RecastDemo"
-        / "Bin"
-        / "DroidSans.ttf"
-    )
-    assert renderer.set_default_font_path(str(font), 14)
+    assert renderer.set_default_font_path(str(_bundled_font_path()), 14)
     renderer.bind_text_measurer(document)
 
     document.layout_roots(Rect(0.0, 0.0, 800.0, 600.0))
@@ -919,17 +925,9 @@ def test_theme_style_inheritance_state_and_runtime_update():
 
 
 def test_renderer_font_exposes_document_text_metrics():
-    font_path = (
-        Path(__file__).resolve().parents[3]
-        / "termin-thirdparty"
-        / "recastnavigation"
-        / "RecastDemo"
-        / "Bin"
-        / "DroidSans.ttf"
-    )
     document = Document()
     renderer = DrawListRenderer()
-    assert renderer.set_default_font_path(str(font_path), 14)
+    assert renderer.set_default_font_path(str(_bundled_font_path()), 14)
     renderer.bind_text_measurer(document)
 
     narrow = document.measure_text("iii", 18.0)
@@ -943,14 +941,6 @@ def test_renderer_font_exposes_document_text_metrics():
 
 
 def test_native_rich_text_model_view_wrap_selection_and_lifetime():
-    font_path = (
-        Path(__file__).resolve().parents[3]
-        / "termin-thirdparty"
-        / "recastnavigation"
-        / "RecastDemo"
-        / "Bin"
-        / "DroidSans.ttf"
-    )
     model = RichTextModel()
     model.set_html("<pre>A<br><span style='color:#50fa7b; font-weight:bold; font-style:italic'>B &amp; λ</span></pre>")
     assert model.text == "A\nB & λ"
@@ -962,7 +952,7 @@ def test_native_rich_text_model_view_wrap_selection_and_lifetime():
     model.set_lines([[RichTextSegment("alpha beta gamma", RichTextStyle(Color(0.2, 0.8, 0.3, 1.0), True))]])
     document = Document()
     renderer = DrawListRenderer()
-    assert renderer.set_default_font_path(str(font_path), 14)
+    assert renderer.set_default_font_path(str(_bundled_font_path()), 14)
     renderer.bind_text_measurer(document)
     clipboard = {"text": ""}
     document.set_clipboard_handlers(

@@ -8,6 +8,7 @@
       ".venv",
       "build",
       "sdk",
+      "termin-app/install",
       "termin-thirdparty"
     ],
     "exclude_directory_names": ["__pycache__", "build"]
@@ -15,7 +16,13 @@
   "native_test_inventory": {
     "patterns": ["test_*", "tests_*", "*_test.*"],
     "extensions": [".c", ".cc", ".cpp", ".cxx"],
-    "exclude_roots": [".git", "build", "sdk", "termin-thirdparty"],
+    "exclude_roots": [
+      ".git",
+      "build",
+      "sdk",
+      "termin-app/install",
+      "termin-thirdparty"
+    ],
     "exclude_directory_names": ["__pycache__", "build"],
     "source_classifications": [
       {
