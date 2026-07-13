@@ -440,6 +440,12 @@
       "roots": ["termin-nodegraph/tests"]
     },
     {
+      "id": "termin-nanobind-tests",
+      "module": "termin-nanobind-sdk",
+      "executor": "pytest",
+      "roots": ["termin-nanobind-sdk/tests"]
+    },
+    {
       "id": "termin-pga-tests",
       "module": "termin-pga",
       "executor": "pytest",
