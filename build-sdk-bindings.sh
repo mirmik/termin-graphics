@@ -115,7 +115,12 @@ case "$PCH_MODE" in
     on)  TERMIN_ENABLE_PCH=ON ;;
 esac
 
-PY_EXEC="$(command -v python3 || command -v python || true)"
+PY_EXEC="${PYTHON_BIN:-${PYTHON_EXECUTABLE:-}}"
+if [[ -z "$PY_EXEC" ]]; then
+    PY_EXEC="$(command -v python3 || command -v python || true)"
+elif command -v "$PY_EXEC" >/dev/null 2>&1; then
+    PY_EXEC="$(command -v "$PY_EXEC")"
+fi
 if [[ -z "$PY_EXEC" ]]; then
     echo "ERROR: python3 not found"
     exit 1

@@ -1,6 +1,4 @@
 #include <array>
-#include <atomic>
-#include <cstdlib>
 #include <cstdint>
 #include <new>
 #include <stdexcept>
@@ -12,10 +10,6 @@
 
 namespace {
 
-std::atomic_size_t tracked_allocations = 0;
-std::atomic_size_t failing_allocation = 0;
-std::atomic_bool track_allocations = false;
-
 bool decode_throws(std::span<const std::uint8_t> bytes) {
     try {
         (void)termin::image::decode_rgba8(bytes, "malformed-image");
@@ -25,41 +19,11 @@ bool decode_throws(std::span<const std::uint8_t> bytes) {
     return false;
 }
 
-} // namespace
-
-void* operator new(std::size_t size) {
-    if (track_allocations.load(std::memory_order_relaxed)) {
-        const std::size_t allocation = tracked_allocations.fetch_add(1, std::memory_order_relaxed) + 1;
-        if (allocation == failing_allocation.load(std::memory_order_relaxed)) {
-            throw std::bad_alloc();
-        }
-    }
-
-    if (void* memory = std::malloc(size)) {
-        return memory;
-    }
+void fail_png_write(void*, std::span<const std::uint8_t>) {
     throw std::bad_alloc();
 }
 
-void* operator new[](std::size_t size) {
-    return ::operator new(size);
-}
-
-void operator delete(void* memory) noexcept {
-    std::free(memory);
-}
-
-void operator delete[](void* memory) noexcept {
-    std::free(memory);
-}
-
-void operator delete(void* memory, std::size_t) noexcept {
-    std::free(memory);
-}
-
-void operator delete[](void* memory, std::size_t) noexcept {
-    std::free(memory);
-}
+} // namespace
 
 TEST_CASE("image codecs reject truncated JPEG without escaping through C++ frames") {
     constexpr std::array<std::uint8_t, 4> truncated_jpeg = {0xFF, 0xD8, 0xFF, 0xDB};
@@ -98,26 +62,12 @@ TEST_CASE("PNG write callback reports allocation failure without crossing C fram
         0x50, 0x60, 0x70, 0x80,
     };
 
-    tracked_allocations.store(0, std::memory_order_relaxed);
-    failing_allocation.store(0, std::memory_order_relaxed);
-    track_allocations.store(true, std::memory_order_relaxed);
-    const std::vector<std::uint8_t> encoded = termin::image::encode_png_rgba8(pixels, 2, 1);
-    track_allocations.store(false, std::memory_order_relaxed);
-    CHECK_FALSE(encoded.empty());
-
-    const std::size_t allocation_count = tracked_allocations.load(std::memory_order_relaxed);
-    REQUIRE(allocation_count > 0);
-
-    tracked_allocations.store(0, std::memory_order_relaxed);
-    failing_allocation.store(allocation_count, std::memory_order_relaxed);
-    track_allocations.store(true, std::memory_order_relaxed);
     bool caught_bad_alloc = false;
     try {
-        (void)termin::image::encode_png_rgba8(pixels, 2, 1);
+        termin::image::encode_png_rgba8_to(pixels, 2, 1, fail_png_write, nullptr);
     } catch (const std::bad_alloc&) {
         caught_bad_alloc = true;
     }
-    track_allocations.store(false, std::memory_order_relaxed);
 
     CHECK(caught_bad_alloc);
 }

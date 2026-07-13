@@ -204,6 +204,9 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     )
     if(TARGET termin_shaderc)
         add_dependencies(termin_gui_native_renderer_pixel_smoke termin_shaderc)
+        set_property(TEST termin_gui_native_renderer_pixel_smoke PROPERTY
+            ENVIRONMENT "TERMIN_SHADERC=$<TARGET_FILE:termin_shaderc>"
+        )
     endif()
 endif()
 

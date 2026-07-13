@@ -583,7 +583,7 @@ def test_load_gltf_normalizes_quantized_attributes_without_normalizing_joints_or
         ],
         "bufferViews": [
             {"buffer": 0, "byteOffset": offset, "byteLength": len(chunk), **({"byteStride": 4} if index == 1 else {})}
-            for index, (offset, chunk) in enumerate(zip(offsets, chunks))
+            for index, (offset, chunk) in enumerate(zip(offsets, chunks, strict=True))
         ],
     }
 

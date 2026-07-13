@@ -73,6 +73,20 @@ echo "Overlay: $OVERLAY_MANIFEST"
 SDK_PREFIX="${SDK_PREFIX:-$TERMIN_SDK}"
 export LD_LIBRARY_PATH="${SDK_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
+# Shader compiler tests must exercise the executable produced by the current
+# C++ test graph, never a potentially stale SDK copy.
+if [[ -z "${TERMIN_SHADERC:-}" ]]; then
+    for shader_compiler in \
+        "$SCRIPT_DIR/build/Release-tests/bin/termin_shaderc" \
+        "$SCRIPT_DIR/build/Release-tests/bin/Release/termin_shaderc.exe"; do
+        if [[ -x "$shader_compiler" ]]; then
+            export TERMIN_SHADERC="$shader_compiler"
+            echo "TERMIN_SHADERC: $TERMIN_SHADERC"
+            break
+        fi
+    done
+fi
+
 # The launcher deliberately ignores ambient Python configuration.
 unset PYTHONHOME PYTHONPATH PYTHONUSERBASE
 

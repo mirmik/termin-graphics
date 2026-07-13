@@ -181,7 +181,8 @@ DecodedImage decode_webp_rgba8(std::span<const std::uint8_t> bytes) {
 }
 
 struct PngWriteState {
-    std::vector<std::uint8_t> bytes;
+    PngWriteCallback write = nullptr;
+    void* context = nullptr;
     std::exception_ptr callback_exception;
 };
 
@@ -189,7 +190,7 @@ void png_write_callback(png_structp png_ptr, png_bytep data, png_size_t length) 
     auto* state = static_cast<PngWriteState*>(png_get_io_ptr(png_ptr));
     try {
         const std::uint8_t* begin = reinterpret_cast<const std::uint8_t*>(data);
-        state->bytes.insert(state->bytes.end(), begin, begin + length);
+        state->write(state->context, std::span<const std::uint8_t>(begin, length));
     } catch (...) {
         // C++ exceptions must not unwind through libpng's C stack frames.
         // png_error returns through the setjmp checkpoint in the caller.
@@ -230,7 +231,13 @@ DecodedImage decode_rgba8(std::span<const std::uint8_t> bytes, const std::string
     throw std::runtime_error("unsupported image format");
 }
 
-std::vector<std::uint8_t> encode_png_rgba8(std::span<const std::uint8_t> rgba, int width, int height) {
+void encode_png_rgba8_to(
+    std::span<const std::uint8_t> rgba,
+    int width,
+    int height,
+    PngWriteCallback write,
+    void* context
+) {
     if (width <= 0 || height <= 0) {
         throw std::runtime_error("PNG encode requires positive width and height");
     }
@@ -238,10 +245,15 @@ std::vector<std::uint8_t> encode_png_rgba8(std::span<const std::uint8_t> rgba, i
     if (rgba.size() != expected) {
         throw std::runtime_error("PNG encode input size does not match RGBA8 dimensions");
     }
+    if (write == nullptr) {
+        throw std::invalid_argument("PNG encode output callback must not be null");
+    }
 
     // Allocate all C++ state before libpng resources exist. This gives normal
     // C++ unwinding full ownership of allocation failures.
     auto state = std::make_unique<PngWriteState>();
+    state->write = write;
+    state->context = context;
     auto rows = std::make_unique<std::vector<png_bytep>>(static_cast<std::size_t>(height));
     for (int y = 0; y < height; ++y) {
         (*rows)[static_cast<std::size_t>(y)] = const_cast<png_bytep>(
@@ -287,7 +299,21 @@ std::vector<std::uint8_t> encode_png_rgba8(std::span<const std::uint8_t> rgba, i
     png_write_image(png_ptr, rows->data());
     png_write_end(png_ptr, info_ptr);
     png_destroy_write_struct(&png_ptr, &info_ptr);
-    return std::move(state->bytes);
+}
+
+std::vector<std::uint8_t> encode_png_rgba8(std::span<const std::uint8_t> rgba, int width, int height) {
+    std::vector<std::uint8_t> bytes;
+    encode_png_rgba8_to(
+        rgba,
+        width,
+        height,
+        [](void* context, std::span<const std::uint8_t> chunk) {
+            auto& output = *static_cast<std::vector<std::uint8_t>*>(context);
+            output.insert(output.end(), chunk.begin(), chunk.end());
+        },
+        &bytes
+    );
+    return bytes;
 }
 
 } // namespace termin::image

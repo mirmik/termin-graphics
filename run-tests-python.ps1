@@ -83,6 +83,23 @@ if ($pathEntries.Count -gt 0) {
     $env:PATH = ($pathEntries -join [IO.Path]::PathSeparator) + [IO.Path]::PathSeparator + $env:PATH
 }
 
+# Shader compiler tests must exercise the executable produced by the current
+# C++ test graph, never a potentially stale SDK copy.
+if (-not $env:TERMIN_SHADERC) {
+    $shaderCompilerCandidates = @(
+        (Join-Path $ScriptDir "build\Release-tests\bin\Release\termin_shaderc.exe"),
+        (Join-Path $ScriptDir "build\Release-tests\bin\termin_shaderc.exe"),
+        (Join-Path $ScriptDir "build\Release-tests\bin\termin_shaderc")
+    )
+    $shaderCompiler = $shaderCompilerCandidates |
+        Where-Object { Test-Path $_ -PathType Leaf } |
+        Select-Object -First 1
+    if ($shaderCompiler) {
+        $env:TERMIN_SHADERC = (Resolve-Path $shaderCompiler).Path
+        Write-Host "TERMIN_SHADERC: $($env:TERMIN_SHADERC)"
+    }
+}
+
 $sdkLib = Join-Path $SdkPrefix "lib"
 if ($env:LD_LIBRARY_PATH) {
     $env:LD_LIBRARY_PATH = "$sdkLib$([IO.Path]::PathSeparator)$($env:LD_LIBRARY_PATH)"

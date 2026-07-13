@@ -23,6 +23,7 @@ $ToolsSite = Join-Path $EnvRoot "site-packages"
 $ToolsRequirements = Join-Path $ScriptDir "build-system\python-test-requirements.txt"
 $ToolsStamp = Join-Path $EnvRoot "python-test-requirements.txt"
 $OverlayManifest = Join-Path $EnvRoot "overlay.json"
+$BuildToolsRoot = Join-Path $ScriptDir "termin-build-tools"
 
 if (-not (Test-Path $SdkPython -PathType Leaf)) {
     throw "Isolated SDK Python launcher is missing: $SdkPython. Run .\build-sdk.ps1 --no-wheels first."
@@ -52,7 +53,8 @@ if ($Force -or -not $ToolsCurrent) {
 }
 
 Write-Host "Generating checkout overlay: $OverlayManifest"
-& $SdkPython -m termin_build.python_overlay `
+$OverlayBootstrap = "import sys; sys.path.insert(0, sys.argv.pop(1)); from termin_build.python_overlay import main; raise SystemExit(main())"
+& $SdkPython -c $OverlayBootstrap $BuildToolsRoot `
     --repo-root $ScriptDir `
     --sdk-root $SdkRoot `
     --output $OverlayManifest `

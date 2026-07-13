@@ -28,6 +28,16 @@ TERMIN_IMAGE_API DecodedImage decode_rgba8(
     const std::string& source_hint = {}
 );
 
+using PngWriteCallback = void (*)(void* context, std::span<const std::uint8_t> bytes);
+
+TERMIN_IMAGE_API void encode_png_rgba8_to(
+    std::span<const std::uint8_t> rgba,
+    int width,
+    int height,
+    PngWriteCallback write,
+    void* context
+);
+
 TERMIN_IMAGE_API std::vector<std::uint8_t> encode_png_rgba8(
     std::span<const std::uint8_t> rgba,
     int width,

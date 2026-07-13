@@ -11,6 +11,7 @@ TOOLS_STAMP="$ENV_ROOT/python-test-requirements.txt"
 OVERLAY_MANIFEST="$ENV_ROOT/overlay.json"
 SDK_ROOT="${TERMIN_SDK:-$SCRIPT_DIR/sdk}"
 SDK_PYTHON="$SDK_ROOT/bin/termin_python"
+BUILD_TOOLS_ROOT="$SCRIPT_DIR/termin-build-tools"
 FORCE=0
 
 for arg in "$@"; do
@@ -57,7 +58,8 @@ else
 fi
 
 echo "Generating checkout overlay: $OVERLAY_MANIFEST"
-"$SDK_PYTHON" -m termin_build.python_overlay \
+OVERLAY_BOOTSTRAP='import sys; sys.path.insert(0, sys.argv.pop(1)); from termin_build.python_overlay import main; raise SystemExit(main())'
+"$SDK_PYTHON" -c "$OVERLAY_BOOTSTRAP" "$BUILD_TOOLS_ROOT" \
     --repo-root "$SCRIPT_DIR" \
     --sdk-root "$SDK_ROOT" \
     --output "$OVERLAY_MANIFEST" \

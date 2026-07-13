@@ -135,7 +135,16 @@ $TerminUseCcache = if ($CcacheMode -eq "on") { "ON" } else { "OFF" }
 $TerminEnableUnityBuild = if ($UnityMode -eq "on") { "ON" } else { "OFF" }
 $TerminEnablePch = if ($PchMode -eq "on") { "ON" } else { "OFF" }
 
-$pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+$pythonCommand = $null
+if ($env:PYTHON_BIN) {
+    $pythonCommand = Get-Command $env:PYTHON_BIN -ErrorAction SilentlyContinue
+}
+if (-not $pythonCommand -and $env:PYTHON_EXECUTABLE) {
+    $pythonCommand = Get-Command $env:PYTHON_EXECUTABLE -ErrorAction SilentlyContinue
+}
+if (-not $pythonCommand) {
+    $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+}
 if (-not $pythonCommand) {
     $pythonCommand = Get-Command python3 -ErrorAction SilentlyContinue
 }

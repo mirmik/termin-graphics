@@ -15,7 +15,7 @@
 ## Сборка и тестирование
 Под Linux полная сборка SDK выполняется скриптом `./build-sdk.sh`. В SDK входит приложение редактора и bundled Python-библиотеки, используемые редактором.
 Во избежание проблем лучше собирать SDK штатным скриптом (лучше с флагом `--no-wheels`). Оно не так долго собирается, чтобы вручную копировать либы.
-Тесты собираются и исполняются через центральную точку `./run-tests.sh`. Python-тесты запускаются bundled Python из SDK через `sdk/bin/termin_python`; test-only зависимости и checkout source overlay создаются в `build/python-envs/test` скриптом `./setup-sdk-python-env.sh`. Старый `./setup-test-venv.sh` временно оставлен только как совместимый wrapper.
+Тесты собираются и исполняются через центральную точку `./run-tests.sh`. Python-тесты запускаются bundled Python из SDK через `sdk/bin/termin_python`; test-only зависимости и checkout source overlay создаются в `build/python-envs/test` скриптом `./setup-sdk-python-env.sh`. Старый root `.venv` workflow и `setup-test-venv.*` удалены.
 Под Windows используются соответствующие `.ps1`-версии этих скриптов.
 
 После пересборки Python/C++ биндингов native `.so`/`.pyd` берутся непосредственно из SDK. Копировать их в исходники и пересоздавать editable venv не требуется; `./setup-sdk-python-env.sh` нужно повторить только для обновления overlay fingerprint после изменения SDK.
