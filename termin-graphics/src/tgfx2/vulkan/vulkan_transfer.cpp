@@ -233,10 +233,33 @@ void VulkanRenderDevice::upload_buffer(BufferHandle dst, std::span<const uint8_t
 
 void VulkanRenderDevice::upload_texture(TextureHandle dst, std::span<const uint8_t> data, uint32_t mip) {
     auto* res = textures_.get(dst.id);
-    if (!res) return;
+    if (!res) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::upload_texture: invalid texture handle %u", dst.id);
+        return;
+    }
+    if (mip >= res->desc.mip_levels) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::upload_texture: mip %u out of range for texture %u (mips=%u)",
+               mip, dst.id, res->desc.mip_levels);
+        return;
+    }
 
     uint32_t w = std::max(1u, res->desc.width >> mip);
     uint32_t h = std::max(1u, res->desc.height >> mip);
+    const uint32_t bytes_per_pixel = pixel_format_byte_size(res->desc.format);
+    if (bytes_per_pixel == 0) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::upload_texture: unsupported texture format for texture %u", dst.id);
+        return;
+    }
+    const size_t expected_size = static_cast<size_t>(w) * h * bytes_per_pixel;
+    if (data.size() != expected_size) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::upload_texture: data size mismatch for texture %u mip %u (%zu bytes, expected %zu)",
+               dst.id, mip, data.size(), expected_size);
+        return;
+    }
 
     // Staging buffer
     VkBufferCreateInfo stage_ci{};
@@ -322,10 +345,10 @@ void VulkanRenderDevice::upload_texture_region(TextureHandle dst,
     }
 
     const size_t expected_size = static_cast<size_t>(w) * h * bytes_per_pixel;
-    if (data.size() < expected_size) {
+    if (data.size() != expected_size) {
         tc_log(TC_LOG_ERROR,
-               "VulkanRenderDevice::upload_texture_region: data too small for texture %u region (%u bytes, expected %zu)",
-               dst.id, static_cast<unsigned>(data.size()), expected_size);
+               "VulkanRenderDevice::upload_texture_region: data size mismatch for texture %u region (%zu bytes, expected %zu)",
+               dst.id, data.size(), expected_size);
         return;
     }
 

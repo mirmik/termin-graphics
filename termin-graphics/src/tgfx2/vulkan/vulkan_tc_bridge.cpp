@@ -39,31 +39,60 @@ PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
         case TC_TEXTURE_DEPTH24: return PixelFormat::D24_UNorm_S8_UInt;
         case TC_TEXTURE_DEPTH32F: return PixelFormat::D32F;
     }
-    return PixelFormat::RGBA8_UNorm;
+    return PixelFormat::Undefined;
 }
 
-// Normalise tc_texture pixel data so Vulkan can upload it. RGB8 isn't a
-// universal VkFormat, so expand it to RGBA8 (alpha = 255) here. Everything
-// else is passed through.
+// Normalise tc_texture pixel data to formats with an unambiguous Vulkan
+// upload layout. RGB formats are expanded to their RGBA counterparts.
 std::vector<uint8_t> normalize_pixels(const tc_texture* tex, PixelFormat& out_fmt) {
+    if (!tex || !tex->data) {
+        return {};
+    }
+
     const auto fmt = static_cast<tc_texture_format>(tex->format);
+    const size_t pixel_count = static_cast<size_t>(tex->width) * static_cast<size_t>(tex->height);
+    const size_t bytes_per_pixel = tc_texture_format_bpp(fmt);
     const size_t src_bytes = tc_texture_data_size(tex);
     const auto* src = static_cast<const uint8_t*>(tex->data);
+    if (bytes_per_pixel == 0 || src_bytes == 0) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::ensure_tc_texture: tc_texture '%s' has unsupported format %u",
+               tex->header.name ? tex->header.name : tex->header.uuid,
+               static_cast<unsigned>(tex->format));
+        return {};
+    }
 
     std::vector<uint8_t> pixels;
     if (fmt == TC_TEXTURE_RGB8) {
         out_fmt = PixelFormat::RGBA8_UNorm;
-        pixels.resize(size_t(tex->width) * tex->height * 4);
-        for (size_t i = 0, j = 0; i < src_bytes; i += 3, j += 4) {
-            pixels[j + 0] = src[i + 0];
-            pixels[j + 1] = src[i + 1];
-            pixels[j + 2] = src[i + 2];
-            pixels[j + 3] = 0xFF;
+        pixels.resize(pixel_count * 4u);
+        for (size_t i = 0; i < pixel_count; ++i) {
+            pixels[i * 4u + 0u] = src[i * 3u + 0u];
+            pixels[i * 4u + 1u] = src[i * 3u + 1u];
+            pixels[i * 4u + 2u] = src[i * 3u + 2u];
+            pixels[i * 4u + 3u] = 0xffu;
+        }
+        return pixels;
+    }
+
+    if (fmt == TC_TEXTURE_RGB16F) {
+        out_fmt = PixelFormat::RGBA16F;
+        pixels.resize(pixel_count * 8u);
+        for (size_t i = 0; i < pixel_count; ++i) {
+            std::memcpy(&pixels[i * 8u], &src[i * 6u], 6u);
+            pixels[i * 8u + 6u] = 0x00u;
+            pixels[i * 8u + 7u] = 0x3cu; // IEEE-754 half 1.0, little endian.
         }
         return pixels;
     }
 
     out_fmt = tc_format_to_tgfx2(fmt);
+    if (out_fmt == PixelFormat::Undefined) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::ensure_tc_texture: tc_texture '%s' maps to no Vulkan format",
+               tex->header.name ? tex->header.name : tex->header.uuid);
+        return {};
+    }
     pixels.assign(src, src + src_bytes);
     return pixels;
 }
@@ -135,6 +164,13 @@ TextureHandle VulkanRenderDevice::ensure_tc_texture(tc_texture* tex) {
         // CopyDst is always added because the staging upload path uses
         // it and so do `blit_to_texture` / `clear_texture`.
         desc.format = tc_format_to_tgfx2(static_cast<tc_texture_format>(tex->format));
+        if (desc.format == PixelFormat::Undefined) {
+            tc_log(TC_LOG_ERROR,
+                   "VulkanRenderDevice::ensure_tc_texture: GPU-only tc_texture '%s' has unsupported format %u",
+                   tex->header.name ? tex->header.name : tex->header.uuid,
+                   static_cast<unsigned>(tex->format));
+            return {};
+        }
         desc.usage = tc_usage_to_tgfx(tex->usage) | TextureUsage::CopyDst;
 
         TextureHandle handle = create_texture(desc);

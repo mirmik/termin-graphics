@@ -360,7 +360,7 @@ size_t tc_texture_format_bpp(tc_texture_format format) {
         case TC_TEXTURE_R16F: return 2;
         case TC_TEXTURE_R32F: return 4;
     }
-    return 4;
+    return 0;
 }
 
 uint8_t tc_texture_format_channels(tc_texture_format format) {
@@ -376,7 +376,7 @@ uint8_t tc_texture_format_channels(tc_texture_format format) {
         case TC_TEXTURE_DEPTH24:
         case TC_TEXTURE_DEPTH32F: return 1;
     }
-    return 4;
+    return 0;
 }
 
 // ============================================================================

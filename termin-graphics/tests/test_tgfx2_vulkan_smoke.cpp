@@ -27,6 +27,7 @@
 extern "C" {
 #include "tgfx/resources/tc_shader.h"
 #include "tgfx/resources/tc_shader_registry.h"
+#include "tgfx/resources/tc_texture.h"
 }
 
 #ifdef TGFX2_HAS_VULKAN
@@ -590,6 +591,42 @@ int main(int argc, char** argv) {
            caps.max_texture_dimension_2d,
            caps.supports_compute ? "yes" : "no",
            caps.supports_geometry_shaders ? "yes" : "no");
+
+    // tc_texture RGB16F has no direct Vulkan image format in the bridge.
+    // It must be expanded to RGBA16F with an alpha half-float of 1.0.
+    const uint16_t rgb16f_pixel[] = {0x3800u, 0x3c00u, 0x0000u}; // 0.5, 1.0, 0.0
+    tc_texture rgb16f_texture{};
+    rgb16f_texture.header.pool_index = 0x52474216u;
+    rgb16f_texture.header.version = 1;
+    rgb16f_texture.data = const_cast<uint16_t*>(rgb16f_pixel);
+    rgb16f_texture.width = 1;
+    rgb16f_texture.height = 1;
+    rgb16f_texture.format = TC_TEXTURE_RGB16F;
+    auto* vulkan_device = static_cast<tgfx::VulkanRenderDevice*>(device.get());
+    const tgfx::TextureHandle rgb16f_handle = vulkan_device->ensure_tc_texture(&rgb16f_texture);
+    if (!rgb16f_handle) {
+        fprintf(stderr, "Vulkan tc_texture RGB16F bridge upload failed\n");
+        return 1;
+    }
+    auto rgb16f_cmd = device->create_command_list();
+    rgb16f_cmd->begin();
+    rgb16f_cmd->end();
+    device->submit(*rgb16f_cmd);
+    rgb16f_cmd.reset();
+
+    float rgb16f_readback[4] = {};
+    const bool rgb16f_ok = device->read_texture_rgba_float(rgb16f_handle, rgb16f_readback) &&
+        rgb16f_readback[0] > 0.49f && rgb16f_readback[0] < 0.51f &&
+        rgb16f_readback[1] > 0.99f && rgb16f_readback[1] < 1.01f &&
+        rgb16f_readback[2] > -0.01f && rgb16f_readback[2] < 0.01f &&
+        rgb16f_readback[3] > 0.99f && rgb16f_readback[3] < 1.01f;
+    if (!rgb16f_ok) {
+        fprintf(stderr,
+                "Vulkan tc_texture RGB16F readback mismatch: %.3f %.3f %.3f %.3f\n",
+                rgb16f_readback[0], rgb16f_readback[1], rgb16f_readback[2], rgb16f_readback[3]);
+        return 1;
+    }
+    vulkan_device->invalidate_tc_texture_cache(rgb16f_texture.header.pool_index);
 
     // --- Texture region upload parity check ---
     tgfx::TextureDesc upload_desc;

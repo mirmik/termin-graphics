@@ -95,9 +95,13 @@ TGFX_API size_t tc_texture_format_bpp(tc_texture_format format);
 // Get channel count for format
 TGFX_API uint8_t tc_texture_format_channels(tc_texture_format format);
 
-// Calculate texture data size in bytes
+// Calculate the base-mip CPU payload size in bytes. tc_texture represents a
+// single-layer 2D image; generated mip levels and GPU-only texture storage do
+// not have a CPU payload here.
 static inline size_t tc_texture_data_size(const tc_texture* tex) {
-    return tex->width * tex->height * tex->channels;
+    if (!tex) return 0;
+    return (size_t)tex->width * (size_t)tex->height *
+           tc_texture_format_bpp((tc_texture_format)tex->format);
 }
 
 // ============================================================================

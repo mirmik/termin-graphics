@@ -461,6 +461,7 @@ if(BUILD_TESTS)
 
     add_executable(tgfx_tests
         tests/main.cpp
+        tests/tests_tc_texture.cpp
         tests/tests_vertex_layout.cpp
         tests/tests_log.cpp
         tests/tests_shader_resource_layout.cpp
