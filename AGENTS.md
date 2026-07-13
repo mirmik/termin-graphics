@@ -18,6 +18,8 @@
 Тесты собираются и исполняются через центральную точку `./run-tests.sh`. Python-тесты запускаются bundled Python из SDK через `sdk/bin/termin_python`; test-only зависимости и checkout source overlay создаются в `build/python-envs/test` скриптом `./setup-sdk-python-env.sh`. Старый root `.venv` workflow и `setup-test-venv.*` удалены.
 Под Windows используются соответствующие `.ps1`-версии этих скриптов.
 
+При запуске долгих команд через Codex на Windows shell-инструмент может вернуть stdout/stderr только после завершения процесса, хотя в обычном PowerShell вывод идёт в реальном времени. Для сборок и длинных тестов, за прогрессом которых нужно следить, запускай процесс в фоне с выводом в лог-файлы и периодически читай их прирост вместе с проверкой состояния процесса и итогового exit code. Не следует диагностировать это как буферизацию build-скрипта без отдельного воспроизведения в интерактивном терминале.
+
 После пересборки Python/C++ биндингов native `.so`/`.pyd` берутся непосредственно из SDK. Копировать их в исходники и пересоздавать editable venv не требуется; `./setup-sdk-python-env.sh` нужно повторить только для обновления overlay fingerprint после изменения SDK.
 
 Python runtime SDK формируется из exact lock `build-system/python-runtime-lock.txt`. Build frontend живёт отдельно в `build/python-runtime/build-env`, а установка SDK выполняется offline из подготовленных wheelhouse. Для проверки без сетевого доступа после заполнения wheelhouse можно задать `TERMIN_PYTHON_RUNTIME_OFFLINE=1` при вызове `termin_build.sdk install-python`.
