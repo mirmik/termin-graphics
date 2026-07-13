@@ -335,6 +335,7 @@ termin_set_rpath_lib(termin_graphics2)
 if((TGFX2_ENABLE_D3D11 OR (TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC)) AND NOT ANDROID)
     add_executable(termin_shaderc
         tools/termin_shaderc.cpp
+        tools/termin_shaderc/compiler_support.cpp
         tools/termin_shaderc/file_io.cpp
         tools/termin_shaderc/backend_patchers.cpp
         tools/termin_shaderc/cli.cpp
