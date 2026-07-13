@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tcnodegraph import Graph, GraphController, load_graph_json, save_graph_json
+from tcnodegraph import Graph, GraphController, graph_from_dict, load_graph_json, save_graph_json
 
 
 class IoTests(unittest.TestCase):
@@ -28,6 +28,58 @@ class IoTests(unittest.TestCase):
         self.assertEqual(set(g2.edges.keys()), set(g.edges.keys()))
         self.assertEqual(set(g2.groups.keys()), set(g.groups.keys()))
         self.assertEqual(g2.nodes[n1.id].params.get("quality"), 2)
+
+    def test_load_rejects_duplicate_ids_and_dangling_endpoints(self):
+        valid_node = {
+            "id": "node",
+            "kind": "Test",
+            "title": "Test",
+            "inputs": [{"name": "in"}],
+            "outputs": [{"name": "out"}],
+        }
+        invalid_graphs = [
+            {"nodes": [valid_node, valid_node], "edges": [], "groups": []},
+            {
+                "nodes": [
+                    {
+                        **valid_node,
+                        "inputs": [{"name": "in"}, {"name": "in"}],
+                    }
+                ],
+                "edges": [],
+                "groups": [],
+            },
+            {
+                "nodes": [valid_node],
+                "edges": [
+                    {
+                        "id": "edge",
+                        "src_node_id": "node",
+                        "src_socket": "missing",
+                        "dst_node_id": "node",
+                        "dst_socket": "in",
+                    }
+                ],
+                "groups": [],
+            },
+            {
+                "nodes": [valid_node],
+                "edges": [
+                    {
+                        "id": "edge",
+                        "src_node_id": "node",
+                        "src_socket": "out",
+                        "dst_node_id": "missing",
+                        "dst_socket": "in",
+                    }
+                ],
+                "groups": [],
+            },
+        ]
+
+        for data in invalid_graphs:
+            with self.assertRaises(ValueError):
+                graph_from_dict(data)
 
 
 if __name__ == "__main__":

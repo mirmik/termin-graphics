@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from tcnodegraph.model import Edge, Graph, Group, Node, Socket
+
+
+_log = logging.getLogger(__name__)
 
 
 def graph_to_dict(graph: Graph) -> dict:
@@ -69,9 +73,16 @@ def graph_to_dict(graph: Graph) -> dict:
 
 def graph_from_dict(data: dict) -> Graph:
     g = Graph()
+    node_ids: set[str] = set()
     for raw in data.get("nodes", []):
+        node_id = raw["id"]
+        if node_id in node_ids:
+            raise _invalid_graph(f"duplicate node id: {node_id}")
+        node_ids.add(node_id)
+        inputs = _parse_sockets(raw.get("inputs", []), is_input=True, node_id=node_id)
+        outputs = _parse_sockets(raw.get("outputs", []), is_input=False, node_id=node_id)
         node = Node(
-            id=raw["id"],
+            id=node_id,
             kind=raw.get("kind", ""),
             title=raw.get("title", raw.get("kind", "")),
             x=float(raw.get("x", 0.0)),
@@ -80,40 +91,44 @@ def graph_from_dict(data: dict) -> Graph:
             height=float(raw.get("height", 120.0)),
             params=dict(raw.get("params", {})),
             data=dict(raw.get("data", {})),
-            inputs=[
-                Socket(
-                    name=s.get("name", ""),
-                    socket_type=s.get("socket_type", "any"),
-                    is_input=True,
-                    multi=bool(s.get("multi", False)),
-                )
-                for s in raw.get("inputs", [])
-            ],
-            outputs=[
-                Socket(
-                    name=s.get("name", ""),
-                    socket_type=s.get("socket_type", "any"),
-                    is_input=False,
-                    multi=bool(s.get("multi", True)),
-                )
-                for s in raw.get("outputs", [])
-            ],
+            inputs=inputs,
+            outputs=outputs,
         )
         g.nodes[node.id] = node
 
+    edge_ids: set[str] = set()
     for raw in data.get("edges", []):
+        edge_id = raw["id"]
+        if edge_id in edge_ids:
+            raise _invalid_graph(f"duplicate edge id: {edge_id}")
+        edge_ids.add(edge_id)
+        src_node_id = raw["src_node_id"]
+        dst_node_id = raw["dst_node_id"]
+        src_node = g.nodes.get(src_node_id)
+        dst_node = g.nodes.get(dst_node_id)
+        if src_node is None or dst_node is None:
+            raise _invalid_graph(f"edge {edge_id} references a missing node")
+        if not any(socket.name == raw["src_socket"] for socket in src_node.outputs):
+            raise _invalid_graph(f"edge {edge_id} references a missing output socket")
+        if not any(socket.name == raw["dst_socket"] for socket in dst_node.inputs):
+            raise _invalid_graph(f"edge {edge_id} references a missing input socket")
         edge = Edge(
-            id=raw["id"],
-            src_node_id=raw["src_node_id"],
+            id=edge_id,
+            src_node_id=src_node_id,
             src_socket=raw["src_socket"],
-            dst_node_id=raw["dst_node_id"],
+            dst_node_id=dst_node_id,
             dst_socket=raw["dst_socket"],
         )
         g.edges[edge.id] = edge
 
+    group_ids: set[str] = set()
     for raw in data.get("groups", []):
+        group_id = raw["id"]
+        if group_id in group_ids:
+            raise _invalid_graph(f"duplicate group id: {group_id}")
+        group_ids.add(group_id)
         group = Group(
-            id=raw["id"],
+            id=group_id,
             title=raw.get("title", ""),
             x=float(raw.get("x", 0.0)),
             y=float(raw.get("y", 0.0)),
@@ -123,6 +138,34 @@ def graph_from_dict(data: dict) -> Graph:
         )
         g.groups[group.id] = group
     return g
+
+
+def _parse_sockets(raw_sockets: object, *, is_input: bool, node_id: str) -> list[Socket]:
+    if not isinstance(raw_sockets, list):
+        raise _invalid_graph(f"node {node_id} sockets must be a list")
+    sockets: list[Socket] = []
+    names: set[str] = set()
+    for raw_socket in raw_sockets:
+        if not isinstance(raw_socket, dict):
+            raise _invalid_graph(f"node {node_id} socket must be an object")
+        name = raw_socket.get("name", "")
+        if not isinstance(name, str) or not name or name in names:
+            raise _invalid_graph(f"node {node_id} has a duplicate or empty socket id")
+        names.add(name)
+        sockets.append(
+            Socket(
+                name=name,
+                socket_type=raw_socket.get("socket_type", "any"),
+                is_input=is_input,
+                multi=bool(raw_socket.get("multi", not is_input)),
+            )
+        )
+    return sockets
+
+
+def _invalid_graph(message: str) -> ValueError:
+    _log.error("NodeGraph: rejected invalid graph: %s", message)
+    return ValueError(message)
 
 
 def save_graph_json(graph: Graph, path: str | Path) -> None:

@@ -48,6 +48,25 @@ class ControllerTests(unittest.TestCase):
         edge = next(iter(g.edges.values()))
         self.assertEqual(edge.src_node_id, n2.id)
 
+    def test_duplicate_ids_and_failed_connect_do_not_mutate_graph(self):
+        g = Graph()
+        c = GraphController(g)
+        source = c.create_node("Source", node_id="source")
+        target = c.create_node("Target", node_id="target")
+        c.add_output_socket(source.id, "out")
+        c.add_input_socket(target.id, "in", multi=False)
+        first = c.connect(source.id, "out", target.id, "in", edge_id="edge")
+        self.assertTrue(first.ok)
+
+        with self.assertRaisesRegex(ValueError, "duplicate node id"):
+            c.create_node("Replacement", node_id="source")
+        duplicate = c.connect(source.id, "out", target.id, "in", edge_id="edge")
+
+        self.assertFalse(duplicate.ok)
+        self.assertEqual(duplicate.reason, "duplicate edge id")
+        self.assertEqual(set(g.nodes), {"source", "target"})
+        self.assertEqual(set(g.edges), {"edge"})
+
 
 if __name__ == "__main__":
     unittest.main()

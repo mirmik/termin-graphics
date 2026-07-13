@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 
 from tcnodegraph.model import Edge, Graph, Group, Node, Socket
 from tcnodegraph.schema import (
@@ -10,6 +11,9 @@ from tcnodegraph.schema import (
     DefaultConnectionValidator,
     NodeSchemaProvider,
 )
+
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -61,8 +65,12 @@ class GraphController:
         y: float = 0.0,
         node_id: str | None = None,
     ) -> Node:
+        resolved_node_id = node_id or self._next_id("node")
+        if resolved_node_id in self.graph.nodes:
+            _log.error("NodeGraph: duplicate node id rejected: %s", resolved_node_id)
+            raise ValueError(f"duplicate node id: {resolved_node_id}")
         node = Node(
-            id=node_id or self._next_id("node"),
+            id=resolved_node_id,
             kind=kind,
             title=title or kind,
             x=x,
@@ -122,6 +130,7 @@ class GraphController:
         if node is None:
             return False
         if any(s.name == name for s in node.inputs):
+            _log.error("NodeGraph: duplicate input socket rejected: %s.%s", node_id, name)
             return False
         node.inputs.append(Socket(name, socket_type, is_input=True, multi=multi))
         return True
@@ -138,6 +147,7 @@ class GraphController:
         if node is None:
             return False
         if any(s.name == name for s in node.outputs):
+            _log.error("NodeGraph: duplicate output socket rejected: %s.%s", node_id, name)
             return False
         node.outputs.append(Socket(name, socket_type, is_input=False, multi=multi))
         return True
@@ -154,11 +164,13 @@ class GraphController:
         src_node = self.graph.nodes.get(src_node_id)
         dst_node = self.graph.nodes.get(dst_node_id)
         if src_node is None or dst_node is None:
+            _log.error("NodeGraph: connection references missing node")
             return ConnectResult(False, reason="node not found")
 
         src = next((s for s in src_node.outputs if s.name == src_socket), None)
         dst = next((s for s in dst_node.inputs if s.name == dst_socket), None)
         if src is None or dst is None:
+            _log.error("NodeGraph: connection references missing socket")
             return ConnectResult(False, reason="socket not found")
 
         if not self.validator.validate(
@@ -171,6 +183,11 @@ class GraphController:
         ):
             return ConnectResult(False, reason="type mismatch")
 
+        resolved_edge_id = edge_id or self._next_id("edge")
+        if resolved_edge_id in self.graph.edges:
+            _log.error("NodeGraph: duplicate edge id rejected: %s", resolved_edge_id)
+            return ConnectResult(False, reason="duplicate edge id")
+
         if not dst.multi:
             to_delete = [
                 eid
@@ -181,7 +198,7 @@ class GraphController:
                 del self.graph.edges[eid]
 
         e = Edge(
-            id=edge_id or self._next_id("edge"),
+            id=resolved_edge_id,
             src_node_id=src_node_id,
             src_socket=src_socket,
             dst_node_id=dst_node_id,
@@ -206,8 +223,12 @@ class GraphController:
         *,
         group_id: str | None = None,
     ) -> Group:
+        resolved_group_id = group_id or self._next_id("group")
+        if resolved_group_id in self.graph.groups:
+            _log.error("NodeGraph: duplicate group id rejected: %s", resolved_group_id)
+            raise ValueError(f"duplicate group id: {resolved_group_id}")
         g = Group(
-            id=group_id or self._next_id("group"),
+            id=resolved_group_id,
             title=title,
             x=x,
             y=y,
