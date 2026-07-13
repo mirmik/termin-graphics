@@ -263,6 +263,13 @@ jobs:
       - name: Build bindings
         run: ./build-sdk-bindings.sh
 
+      - name: Populate and verify bundled Python runtime
+        env:
+          PYTHONPATH: ${{ github.workspace }}/termin-build-tools
+        run: |
+          python -m termin_build.sdk --repo-root . install-python
+          python -m termin_build.sdk --repo-root . verify-sdk
+
       - uses: actions/upload-artifact@v5
         with:
           name: sdk-full
