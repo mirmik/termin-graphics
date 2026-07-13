@@ -69,6 +69,14 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Install nanobind
+        run: pip install nanobind
+
       - name: Install Linux build dependencies
         uses: ./.github/actions/setup-linux-build
         with:
@@ -163,6 +171,11 @@ jobs:
       - uses: actions/checkout@v5
         with:
           submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
 
       - name: Install Linux build dependencies
         uses: ./.github/actions/setup-linux-build

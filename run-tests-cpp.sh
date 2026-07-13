@@ -158,8 +158,13 @@ if [[ -z "$PY_EXEC" ]]; then
     echo "ERROR: python3 not found; cannot run build doctor" >&2
     exit 1
 fi
-if ! PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
-    "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" doctor \
+export PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}"
+REPOSITORY_CONTROL=(
+    "$PY_EXEC"
+    -m termin_build.repository_control
+    --repo-root "$SCRIPT_DIR"
+)
+if ! "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" doctor \
     --profile cpp-tests \
     --vulkan "$TERMIN_ENABLE_VULKAN" \
     --init-submodules; then
@@ -213,8 +218,7 @@ if [[ -f "$BUILD_DIR/CMakeCache.txt" ]] \
     && grep -q '^TERMIN_TGFX2_GLFW_AVAILABLE:INTERNAL=TRUE$' "$BUILD_DIR/CMakeCache.txt"; then
     REPOSITORY_CAPABILITIES+=(--capability glfw)
 fi
-if ! "$SDK_PREFIX/bin/termin_python" -m termin_build.repository_control \
-    --repo-root "$SCRIPT_DIR" check-ctest \
+if ! "${REPOSITORY_CONTROL[@]}" check-ctest \
     --build-dir "$BUILD_DIR" \
     --profile "$REPOSITORY_PROFILE" \
     "${REPOSITORY_CAPABILITIES[@]}"; then
@@ -222,9 +226,7 @@ if ! "$SDK_PREFIX/bin/termin_python" -m termin_build.repository_control \
     exit 1
 fi
 CTEST_PLAN_COMMAND=(
-    "$SDK_PREFIX/bin/termin_python"
-    -m termin_build.repository_control
-    --repo-root "$SCRIPT_DIR"
+    "${REPOSITORY_CONTROL[@]}"
     ctest-plan
     --build-dir "$BUILD_DIR"
     --profile "$REPOSITORY_PROFILE"
@@ -254,8 +256,7 @@ CTEST_JUNIT="$BUILD_DIR/ctest-results.xml"
 CTEST_EXIT=0
 ctest --test-dir "$BUILD_DIR" -R "$CTEST_REGEX" --output-on-failure \
     --output-junit "$CTEST_JUNIT" || CTEST_EXIT=$?
-if ! "$SDK_PREFIX/bin/termin_python" -m termin_build.repository_control \
-    --repo-root "$SCRIPT_DIR" report-ctest \
+if ! "${REPOSITORY_CONTROL[@]}" report-ctest \
     --selection "$CTEST_SELECTION_JSON" \
     --junit "$CTEST_JUNIT" \
     --output "$BUILD_DIR/ctest-execution-manifest.json"; then
