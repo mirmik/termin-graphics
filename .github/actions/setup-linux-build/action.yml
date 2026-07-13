@@ -1,0 +1,33 @@
+name: Setup Linux build dependencies
+description: Install the shared Ubuntu dependency set used by Termin CI build jobs.
+
+inputs:
+  extra-packages:
+    description: Additional apt packages required by a specific job.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install system dependencies
+      shell: bash
+      env:
+        EXTRA_PACKAGES: ${{ inputs.extra-packages }}
+      run: |
+        sudo apt-get update
+        # EXTRA_PACKAGES is a repository-controlled, whitespace-separated apt list.
+        # shellcheck disable=SC2086
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          libgl1-mesa-dev \
+          libglu1-mesa-dev \
+          libjpeg-dev \
+          libpng-dev \
+          libshaderc-dev \
+          libsdl2-dev \
+          libvulkan-dev \
+          libwebp-dev \
+          mesa-vulkan-drivers \
+          $EXTRA_PACKAGES

@@ -69,21 +69,10 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            clang-tidy \
-            cmake \
-            libclang-18-dev \
-            libgl1-mesa-dev \
-            libglu1-mesa-dev \
-            libshaderc-dev \
-            libsdl2-dev \
-            libvulkan-dev \
-            mesa-vulkan-drivers \
-            llvm-18-dev
+      - name: Install Linux build dependencies
+        uses: ./.github/actions/setup-linux-build
+        with:
+          extra-packages: clang-tidy libclang-18-dev llvm-18-dev
 
       - name: Run C/C++ lint
         run: ./run-lint-cpp.sh
@@ -149,15 +138,15 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}\termin-build-tools
         run: |
-          python -m termin_build.repository_control --repo-root . \
-            run windows-d3d11-bound --platform windows \
-            --executor process-smoke \
-            --plan-file build/ci-plans/windows-d3d11-bound.json \
+          python -m termin_build.repository_control --repo-root . `
+            run windows-d3d11-bound --platform windows `
+            --executor process-smoke `
+            --plan-file build/ci-plans/windows-d3d11-bound.json `
             --report-output build/d3d11-execution-manifest.json
-          python -m termin_build.repository_control \
-            verify-suite-execution \
-            --plan build/ci-plans/windows-d3d11-bound.json \
-            --manifest build/d3d11-execution-manifest.json \
+          python -m termin_build.repository_control `
+            verify-suite-execution `
+            --plan build/ci-plans/windows-d3d11-bound.json `
+            --manifest build/d3d11-execution-manifest.json `
             --executor process-smoke
 
       - uses: actions/upload-artifact@v5
@@ -175,10 +164,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev libvulkan-dev mesa-vulkan-drivers libshaderc-dev
+      - name: Install Linux build dependencies
+        uses: ./.github/actions/setup-linux-build
 
       - name: Build
         run: ./build-sdk-cpp.sh
@@ -198,10 +185,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev libvulkan-dev mesa-vulkan-drivers libshaderc-dev
+      - name: Install Linux build dependencies
+        uses: ./.github/actions/setup-linux-build
 
       - uses: actions/download-artifact@v5
         with:
@@ -245,10 +230,8 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev libvulkan-dev libshaderc-dev
+      - name: Install Linux build dependencies
+        uses: ./.github/actions/setup-linux-build
 
       - uses: actions/download-artifact@v5
         with:
@@ -282,21 +265,16 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libvulkan-dev libshaderc-dev
+      - name: Install Linux build dependencies
+        uses: ./.github/actions/setup-linux-build
 
       - uses: actions/download-artifact@v5
         with:
           name: sdk-full
           path: sdk/
 
-      - name: Resolve canonical SDK site-packages
-        run: |
-          sdk_site_packages="$(find "$GITHUB_WORKSPACE/sdk/lib" -mindepth 2 -maxdepth 3 -type d -path '*/python*/site-packages' -print -quit)"
-          test -n "$sdk_site_packages"
-          echo "SDK_SITE_PACKAGES=$sdk_site_packages" >> "$GITHUB_ENV"
+      - name: Resolve SDK Python layout
+        uses: ./.github/actions/resolve-sdk-python
 
       - uses: actions/download-artifact@v5
         with:
@@ -333,7 +311,7 @@ jobs:
   verify-pr-linux-plan:
     needs: [test-cpp-libs, test-pip-packages]
     runs-on: ubuntu-latest
-    if: always()
+    if: ${{ always() && needs.test-cpp-libs.result == 'success' && needs.test-pip-packages.result == 'success' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -380,15 +358,16 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev libvulkan-dev libshaderc-dev
+      - name: Install Linux build dependencies
+        uses: ./.github/actions/setup-linux-build
 
       - uses: actions/download-artifact@v5
         with:
           name: sdk-full
           path: sdk/
+
+      - name: Resolve SDK Python layout
+        uses: ./.github/actions/resolve-sdk-python
 
       - uses: actions/download-artifact@v5
         with:
@@ -398,14 +377,9 @@ jobs:
       - name: Restore SDK executable permissions
         run: chmod +x sdk/bin/*
 
-      - uses: actions/download-artifact@v5
-        with:
-          name: sdk-python-staging
-          path: sdk-python-staging/
-
       - name: Install pip packages
         env:
-          TERMIN_BINDINGS_DIR: ${{ github.workspace }}/sdk-python-staging
+          TERMIN_BINDINGS_DIR: ${{ env.SDK_SITE_PACKAGES }}
         run: |
           pip install nanobind numpy Pillow PyYAML pytest PyOpenGL glfw pysdl2 pysdl2-dll pyassimp scipy
           ./install-pip-packages.sh --editable
@@ -483,27 +457,25 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake build-essential libgl1-mesa-dev libglu1-mesa-dev libsdl2-dev libvulkan-dev libshaderc-dev swig
+      - name: Install Linux build dependencies
+        uses: ./.github/actions/setup-linux-build
+        with:
+          extra-packages: swig
 
       - uses: actions/download-artifact@v5
         with:
           name: sdk-full
           path: sdk/
 
+      - name: Resolve SDK Python layout
+        uses: ./.github/actions/resolve-sdk-python
+
       - name: Restore SDK executable permissions
         run: chmod +x sdk/bin/*
 
-      - uses: actions/download-artifact@v5
-        with:
-          name: sdk-python-staging
-          path: sdk-python-staging/
-
       - name: Install pip packages
         env:
-          TERMIN_BINDINGS_DIR: ${{ github.workspace }}/sdk-python-staging
+          TERMIN_BINDINGS_DIR: ${{ env.SDK_SITE_PACKAGES }}
         run: |
           pip install nanobind numpy Pillow PyYAML
           ./install-pip-packages.sh
