@@ -260,6 +260,8 @@
     {"id": "termin-render-tests-native", "module": "termin-render", "executor": "ctest", "roots": ["termin-render/tests"]},
     {"id": "termin-runtime-tests-native", "module": "termin-runtime", "executor": "ctest", "roots": ["termin-runtime/tests"]},
     {"id": "termin-scene-tests-native", "module": "termin-scene", "executor": "ctest", "roots": ["termin-scene/tests"]},
+    {"id": "termin-skeleton-tests-native", "module": "termin-skeleton", "executor": "ctest", "roots": ["termin-skeleton/tests"]},
+    {"id": "termin-lighting-tests-native", "module": "termin-lighting", "executor": "ctest", "roots": ["termin-lighting/tests"]},
     {
       "id": "tcplot-tests-python",
       "module": "tcplot",

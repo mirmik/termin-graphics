@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "termin/skeleton/bone.hpp"
+#include "termin/skeleton/termin_skeleton_api.hpp"
 
 namespace termin {
 
@@ -15,19 +16,13 @@ namespace termin {
  * This is the "template" loaded from GLB/FBX files.
  * SkeletonInstance (Python) holds mutable runtime state.
  */
-class SkeletonData {
+class TERMIN_SKELETON_API SkeletonData {
 public:
     SkeletonData() = default;
 
-    explicit SkeletonData(std::vector<Bone> bones)
-        : bones_(std::move(bones)) {
-        rebuild_maps();
-    }
+    explicit SkeletonData(std::vector<Bone> bones);
 
-    SkeletonData(std::vector<Bone> bones, std::vector<int> root_bone_indices)
-        : bones_(std::move(bones)), root_bone_indices_(std::move(root_bone_indices)) {
-        rebuild_name_map();
-    }
+    SkeletonData(std::vector<Bone> bones, std::vector<int> root_bone_indices);
 
     // Bone access
     const std::vector<Bone>& bones() const { return bones_; }
@@ -65,36 +60,15 @@ public:
     const std::vector<int>& root_bone_indices() const { return root_bone_indices_; }
 
     // Add bone
-    void add_bone(Bone bone) {
-        bone_name_map_[bone.name] = bones_.size();
-        if (bone.is_root()) {
-            root_bone_indices_.push_back(static_cast<int>(bones_.size()));
-        }
-        bones_.push_back(std::move(bone));
-    }
+    void add_bone(Bone bone);
 
     // Rebuild maps after external modification
-    void rebuild_maps() {
-        rebuild_name_map();
-        rebuild_root_indices();
-    }
+    void rebuild_maps();
 
 private:
-    void rebuild_name_map() {
-        bone_name_map_.clear();
-        for (size_t i = 0; i < bones_.size(); ++i) {
-            bone_name_map_[bones_[i].name] = i;
-        }
-    }
+    void rebuild_name_map();
 
-    void rebuild_root_indices() {
-        root_bone_indices_.clear();
-        for (size_t i = 0; i < bones_.size(); ++i) {
-            if (bones_[i].is_root()) {
-                root_bone_indices_.push_back(static_cast<int>(i));
-            }
-        }
-    }
+    void rebuild_root_indices();
 
     std::vector<Bone> bones_;
     std::vector<int> root_bone_indices_;

@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(TERMIN_BUILD_PYTHON "Build Python bindings (_skeleton_native)" OFF)
+option(TERMIN_SKELETON_BUILD_TESTS "Build termin-skeleton tests" ON)
 
 if(COMMAND termin_require_package)
     termin_require_package(termin_base tcbase::termin_base)
@@ -25,6 +26,7 @@ include(TerminRpath)
 
 add_library(termin_skeleton SHARED
     src/termin_skeleton_version.cpp
+    src/skeleton_data.cpp
     src/skeleton_instance.cpp
     src/tc_skeleton_registry.c
 )
@@ -34,6 +36,17 @@ target_compile_definitions(termin_skeleton PRIVATE TERMIN_SKELETON_EXPORTS TC_EX
 
 if(MSVC)
     target_compile_options(termin_skeleton PRIVATE /wd4251 /wd4275)
+endif()
+
+if(TERMIN_SKELETON_BUILD_TESTS)
+    enable_testing()
+
+    add_executable(termin_skeleton_data_test tests/test_skeleton_data.cpp)
+    target_include_directories(termin_skeleton_data_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_skeleton_data_test PRIVATE termin_skeleton)
+    add_test(NAME termin_skeleton_data_test COMMAND termin_skeleton_data_test)
 endif()
 
 target_include_directories(termin_skeleton PUBLIC
@@ -137,3 +150,5 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/termin_skeletonConfigVersion.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/termin_skeleton
 )
+
+termin_label_tests_in_directory("termin-skeleton")
