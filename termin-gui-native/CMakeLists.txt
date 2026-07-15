@@ -31,6 +31,8 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
 
 add_library(termin_gui_native SHARED
+    src/document.cpp
+    src/document_snapshot.cpp
     src/draw_list_renderer.cpp
     src/showcase.cpp
     src/tc_ui_document.c

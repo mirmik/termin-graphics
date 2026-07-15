@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
+#include <utility>
 
 namespace {
 
@@ -128,10 +129,33 @@ void test_snapshot_copies_topology_metadata_and_interaction_state() {
     assert(tc_widget_handle_eq(snapshot.children()[root_data->child_offset], child_handle));
 }
 
+void test_document_and_snapshot_move_lifetimes() {
+    termin::gui_native::Document source;
+    termin::gui_native::Document moved(std::move(source));
+    assert(source.get() == nullptr);
+    assert(moved.get() != nullptr);
+
+    termin::gui_native::Document replacement;
+    replacement = std::move(moved);
+    assert(moved.get() == nullptr);
+    assert(replacement.get() != nullptr);
+
+    termin::gui_native::DocumentSnapshot snapshot(replacement);
+    termin::gui_native::DocumentSnapshot moved_snapshot(std::move(snapshot));
+    assert(snapshot.widgets().empty());
+    assert(moved_snapshot.widgets().empty());
+
+    termin::gui_native::DocumentSnapshot replacement_snapshot(replacement);
+    replacement_snapshot = std::move(moved_snapshot);
+    assert(moved_snapshot.widgets().empty());
+    assert(replacement_snapshot.widgets().empty());
+}
+
 } // namespace
 
 int main() {
     test_empty_snapshot_has_explicit_empty_and_invalid_state();
     test_snapshot_copies_topology_metadata_and_interaction_state();
+    test_document_and_snapshot_move_lifetimes();
     return EXIT_SUCCESS;
 }

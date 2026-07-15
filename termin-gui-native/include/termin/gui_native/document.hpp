@@ -1,9 +1,7 @@
 #pragma once
 
-#include <stdexcept>
-#include <utility>
-
 #include <tcbase/tc_trent.hpp>
+#include <termin/gui_native/export.h>
 #include <termin/gui_native/tc_ui_serialization.h>
 #include <termin/gui_native/widget.hpp>
 
@@ -14,27 +12,15 @@ private:
     tc_ui_document* _document = nullptr;
 
 public:
-    Document() : _document(tc_ui_document_create()) {}
-    ~Document() { tc_ui_document_destroy(_document); }
+    TERMIN_GUI_NATIVE_API Document();
+    TERMIN_GUI_NATIVE_API ~Document();
     Document(const Document&) = delete;
     Document& operator=(const Document&) = delete;
-    Document(Document&& other) noexcept : _document(std::exchange(other._document, nullptr)) {}
-    Document& operator=(Document&& other) noexcept {
-        if (this != &other) {
-            tc_ui_document_destroy(_document);
-            _document = std::exchange(other._document, nullptr);
-        }
-        return *this;
-    }
+    TERMIN_GUI_NATIVE_API Document(Document&& other) noexcept;
+    TERMIN_GUI_NATIVE_API Document& operator=(Document&& other) noexcept;
     tc_ui_document* get() { return _document; }
     const tc_ui_document* get() const { return _document; }
-    tc_widget_handle adopt(Widget* widget) {
-        return tc_ui_document_adopt_widget(
-            _document,
-            widget ? widget->c_widget() : nullptr,
-            &Widget::delete_owned_widget
-        );
-    }
+    TERMIN_GUI_NATIVE_API tc_widget_handle adopt(Widget* widget);
     bool add_root(const Widget& widget) { return tc_ui_document_add_root(_document, widget.handle()); }
     bool remove_root(const Widget& widget) { return tc_ui_document_remove_root(_document, widget.handle()); }
     void layout_roots(tc_ui_rect rect) { tc_ui_document_layout_roots(_document, rect); }
@@ -63,24 +49,10 @@ public:
     const tc_ui_theme& theme() const { return *tc_ui_document_theme(_document); }
     bool set_theme(const tc_ui_theme& theme) { return tc_ui_document_set_theme(_document, &theme); }
     uint64_t theme_revision() const { return tc_ui_document_theme_revision(_document); }
-    tc::trent serialize() const {
-        tc_value value = tc_ui_document_serialize(_document);
-        if (value.type != TC_VALUE_DICT) {
-            tc_value_free(&value);
-            throw std::runtime_error("failed to serialize native UI document");
-        }
-        return tc::trent::adopt(value);
-    }
-    void restore(const tc::trent& serialized) {
-        if (!tc_ui_document_restore(_document, serialized.raw())) {
-            throw std::runtime_error("failed to restore native UI document");
-        }
-    }
-    tc_ui_style resolve_style(const Widget& widget, uint32_t extra_state_flags = 0) const {
-        tc_ui_style style {};
-        if (!tc_ui_document_resolve_style(_document, widget.c_widget(), extra_state_flags, &style)) throw std::runtime_error("failed to resolve native UI widget style");
-        return style;
-    }
+    TERMIN_GUI_NATIVE_API tc::trent serialize() const;
+    TERMIN_GUI_NATIVE_API void restore(const tc::trent& serialized);
+    TERMIN_GUI_NATIVE_API tc_ui_style resolve_style(const Widget& widget,
+                                                    uint32_t extra_state_flags = 0) const;
 };
 
 } // namespace termin::gui_native

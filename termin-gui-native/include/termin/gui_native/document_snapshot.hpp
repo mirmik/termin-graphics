@@ -1,8 +1,6 @@
 #pragma once
 
 #include <span>
-#include <stdexcept>
-
 #include <termin/gui_native/document.hpp>
 #include <termin/gui_native/tc_ui_snapshot.h>
 
@@ -13,31 +11,17 @@ class DocumentSnapshot {
     tc_ui_document_inspect_snapshot snapshot_{};
 
   public:
-    explicit DocumentSnapshot(const tc_ui_document* document) {
-        if (!tc_ui_document_capture_snapshot(document, &snapshot_)) {
-            throw std::runtime_error("failed to capture native UI document snapshot");
-        }
-    }
+    TERMIN_GUI_NATIVE_API explicit DocumentSnapshot(const tc_ui_document* document);
 
-    explicit DocumentSnapshot(const Document& document) : DocumentSnapshot(document.get()) {}
+    TERMIN_GUI_NATIVE_API explicit DocumentSnapshot(const Document& document);
 
-    ~DocumentSnapshot() { tc_ui_document_snapshot_destroy(&snapshot_); }
+    TERMIN_GUI_NATIVE_API ~DocumentSnapshot();
 
     DocumentSnapshot(const DocumentSnapshot&) = delete;
     DocumentSnapshot& operator=(const DocumentSnapshot&) = delete;
 
-    DocumentSnapshot(DocumentSnapshot&& other) noexcept : snapshot_(other.snapshot_) {
-        other.snapshot_ = {};
-    }
-
-    DocumentSnapshot& operator=(DocumentSnapshot&& other) noexcept {
-        if (this != &other) {
-            tc_ui_document_snapshot_destroy(&snapshot_);
-            snapshot_ = other.snapshot_;
-            other.snapshot_ = {};
-        }
-        return *this;
-    }
+    TERMIN_GUI_NATIVE_API DocumentSnapshot(DocumentSnapshot&& other) noexcept;
+    TERMIN_GUI_NATIVE_API DocumentSnapshot& operator=(DocumentSnapshot&& other) noexcept;
 
     const tc_ui_document_inspect_snapshot& data() const { return snapshot_; }
 
@@ -57,14 +41,7 @@ class DocumentSnapshot {
         return {snapshot_.overlays, snapshot_.overlay_count};
     }
 
-    const tc_ui_widget_snapshot* find(tc_widget_handle handle) const {
-        for (const tc_ui_widget_snapshot& widget : widgets()) {
-            if (tc_widget_handle_eq(widget.handle, handle)) {
-                return &widget;
-            }
-        }
-        return nullptr;
-    }
+    TERMIN_GUI_NATIVE_API const tc_ui_widget_snapshot* find(tc_widget_handle handle) const;
 
 };
 
