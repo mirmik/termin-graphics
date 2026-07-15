@@ -265,6 +265,7 @@ if(TERMIN_BUILD_PYTHON)
 
     nanobind_add_module(_gui_native NB_SHARED
         python/bindings/gui_native_module.cpp
+        python/bindings/gui_native_bindings_runtime.cpp
         python/bindings/gui_native_bindings_core.cpp
         python/bindings/gui_native_bindings_widgets.cpp
         python/bindings/gui_native_bindings_commands.cpp
