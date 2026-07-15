@@ -256,6 +256,7 @@
     {"id": "termin-inspect-tests-native", "module": "termin-inspect", "executor": "ctest", "roots": ["termin-inspect/tests"]},
     {"id": "termin-modules-tests-native", "module": "termin-modules", "executor": "ctest", "roots": ["termin-modules/tests"]},
     {"id": "termin-navmesh-tests-native", "module": "termin-navmesh", "executor": "ctest", "roots": ["termin-navmesh/tests"]},
+    {"id": "termin-prefab-tests-native", "module": "termin-prefab", "executor": "ctest", "roots": ["termin-prefab/tests"]},
     {"id": "termin-render-passes-tests-native", "module": "termin-render-passes", "executor": "ctest", "roots": ["termin-render-passes/tests"]},
     {"id": "termin-render-tests-native", "module": "termin-render", "executor": "ctest", "roots": ["termin-render/tests"]},
     {"id": "termin-runtime-tests-native", "module": "termin-runtime", "executor": "ctest", "roots": ["termin-runtime/tests"]},

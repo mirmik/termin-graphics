@@ -100,7 +100,10 @@
     },
     {
       "path": "termin-prefab",
-      "distribution": "termin-prefab"
+      "distribution": "termin-prefab",
+      "native_extensions": [
+        {"extension": "termin.prefab._prefab_native", "target": "_prefab_native"}
+      ]
     },
     {
       "path": "termin-display",
