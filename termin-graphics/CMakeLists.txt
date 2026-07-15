@@ -113,7 +113,6 @@ target_include_directories(termin_graphics_process_runner PRIVATE
 
 # --- termin_graphics2 (new backend-neutral API) ---
 set(TGFX2_SOURCES
-    src/tgfx2/backend_binding_plan.cpp
     src/tgfx2/builtin_shader_sources.cpp
     src/tgfx2/device_factory.cpp
     src/tgfx2/canvas2d_renderer.cpp
@@ -137,6 +136,21 @@ set(TGFX2_SOURCES
     src/tgfx2/texture_pool.cpp
     src/tgfx2/vertex_layout.cpp
 )
+
+# Binding policy is consumed both by the runtime library and by termin_shaderc.
+# Keep it in a small shared library so the compiler can use the same exported
+# policy without depending on termin_graphics2 and creating an artifact-build
+# cycle.
+add_library(termin_graphics_binding_policy SHARED
+    src/tgfx2/backend_binding_plan.cpp
+)
+target_compile_definitions(termin_graphics_binding_policy PRIVATE TGFX2_EXPORTS)
+target_include_directories(termin_graphics_binding_policy PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(termin_graphics_binding_policy PRIVATE termin_graphics)
+termin_set_rpath_lib(termin_graphics_binding_policy)
 
 if(TGFX2_ENABLE_OPENGL)
     list(APPEND TGFX2_SOURCES
@@ -312,6 +326,7 @@ target_include_directories(termin_graphics2 PRIVATE
 target_link_libraries(termin_graphics2 PUBLIC
     termin_graphics
     tmesh::termin_mesh
+    termin_graphics_binding_policy
 )
 target_link_libraries(termin_graphics2 PRIVATE termin_graphics_process_runner)
 if(TGFX2_ENABLE_OPENGL)
@@ -344,10 +359,12 @@ if((TGFX2_ENABLE_D3D11 OR (TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC)) AND NO
     target_include_directories(termin_shaderc PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     # The shader compiler must not depend on termin_graphics2: it produces
-    # the built-in artifacts required by that shared library.
+    # the built-in artifacts required by that shared library. Binding policy
+    # lives in its own shared library so both targets use the same mapping.
     target_link_libraries(termin_shaderc PRIVATE
         termin_base
         termin_graphics
+        termin_graphics_binding_policy
         termin_graphics_process_runner
     )
     if(TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC)
@@ -774,7 +791,11 @@ endif()
 # --- Install ---
 include(GNUInstallDirs)
 
-set(TERMIN_GRAPHICS_INSTALL_TARGETS termin_graphics termin_graphics2 glad)
+set(TERMIN_GRAPHICS_INSTALL_TARGETS
+    termin_graphics
+    termin_graphics_binding_policy
+    termin_graphics2
+    glad)
 
 install(TARGETS ${TERMIN_GRAPHICS_INSTALL_TARGETS}
     EXPORT termin_graphicsTargets

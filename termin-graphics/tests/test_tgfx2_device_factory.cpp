@@ -70,6 +70,56 @@ static tc_shader_resource_binding make_plan_test_binding(
     return out;
 }
 
+TEST_CASE("tgfx2 backend binding policy helpers keep stable mappings") {
+    using tgfx::BackendBindingConflictClass;
+    using tgfx::BackendType;
+    using tgfx::ShaderResourceKind;
+    using tgfx::ShaderResourceScope;
+
+    CHECK(tgfx::shader_resource_kind_is_constant_buffer(ShaderResourceKind::ConstantBuffer));
+    CHECK(!tgfx::shader_resource_kind_is_constant_buffer(ShaderResourceKind::StorageBuffer));
+    CHECK(tgfx::shader_resource_kind_is_texture_like(ShaderResourceKind::Texture));
+    CHECK(tgfx::shader_resource_kind_is_texture_like(ShaderResourceKind::Sampler));
+    CHECK(tgfx::shader_resource_kind_is_texture_like(ShaderResourceKind::StorageTexture));
+    CHECK(!tgfx::shader_resource_kind_is_texture_like(ShaderResourceKind::StorageBuffer));
+    CHECK(tgfx::shader_resource_scope_has_transitional_binding_range(ShaderResourceScope::Frame));
+    CHECK(tgfx::shader_resource_scope_has_transitional_binding_range(ShaderResourceScope::Transient));
+    CHECK(!tgfx::shader_resource_scope_has_transitional_binding_range(ShaderResourceScope::Unscoped));
+    CHECK(tgfx::stable_shader_resource_name_hash("hello") == 0x4f9f2cabu);
+
+    const auto vulkan_constant = tgfx::transitional_backend_binding_range(
+        BackendType::Vulkan, ShaderResourceKind::ConstantBuffer, ShaderResourceScope::Material);
+    CHECK(vulkan_constant.base == 8);
+    CHECK(vulkan_constant.size == 8);
+    const auto opengl_texture = tgfx::transitional_backend_binding_range(
+        BackendType::OpenGL, ShaderResourceKind::Texture, ShaderResourceScope::Pass);
+    CHECK(opengl_texture.base == 20);
+    CHECK(opengl_texture.size == 8);
+    const auto d3d_storage = tgfx::transitional_backend_binding_range(
+        BackendType::D3D11, ShaderResourceKind::StorageBuffer, ShaderResourceScope::Draw);
+    CHECK(d3d_storage.base == 40);
+    CHECK(d3d_storage.size == 16);
+    const auto unscoped = tgfx::transitional_backend_binding_range(
+        BackendType::Vulkan, ShaderResourceKind::Texture, ShaderResourceScope::Unscoped);
+    CHECK(unscoped.base == 0);
+    CHECK(unscoped.size == 0);
+
+    CHECK(tgfx::backend_binding_conflict_class(BackendType::Vulkan, ShaderResourceKind::Texture) ==
+          BackendBindingConflictClass::Descriptor);
+    CHECK(tgfx::backend_binding_conflict_class(BackendType::OpenGL, ShaderResourceKind::ConstantBuffer) ==
+          BackendBindingConflictClass::ConstantBuffer);
+    CHECK(tgfx::backend_binding_conflict_class(BackendType::OpenGL, ShaderResourceKind::StorageBuffer) ==
+          BackendBindingConflictClass::StorageBuffer);
+    CHECK(tgfx::backend_binding_conflict_class(BackendType::OpenGL, ShaderResourceKind::Texture) ==
+          BackendBindingConflictClass::Texture);
+    CHECK(tgfx::backend_binding_conflict_class(BackendType::OpenGL, ShaderResourceKind::Sampler) ==
+          BackendBindingConflictClass::Sampler);
+    CHECK(tgfx::backend_binding_conflict_class(BackendType::OpenGL, ShaderResourceKind::StorageTexture) ==
+          BackendBindingConflictClass::StorageTexture);
+    CHECK(tgfx::backend_binding_conflict_class(BackendType::OpenGL, ShaderResourceKind::None) ==
+          BackendBindingConflictClass::None);
+}
+
 TEST_CASE("tgfx2 device factory parses TERMIN_BACKEND aliases") {
     set_backend_env(nullptr);
     CHECK(tgfx::default_backend_from_env() == tgfx::compiled_default_backend());
