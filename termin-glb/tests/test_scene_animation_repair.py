@@ -10,12 +10,12 @@ class _ResourceManager(AssetRuntimeManager):
         super().__init__()
         self._skeleton_assets = AssetRegistry(
             asset_class=SkeletonAsset,
-            uuid_registry=self._assets_by_uuid,
+            asset_store=self._asset_store,
             data_from_asset=lambda asset: asset.cached_data,
         )
         self._animation_assets = AssetRegistry(
             asset_class=AnimationClipAsset,
-            uuid_registry=self._assets_by_uuid,
+            asset_store=self._asset_store,
             data_from_asset=lambda asset: asset.cached_data,
         )
         self.register_runtime_asset_registry("skeleton", self._skeleton_assets)
