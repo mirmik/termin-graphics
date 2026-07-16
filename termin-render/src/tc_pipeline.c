@@ -3,8 +3,12 @@
 #include <render/tc_frame_graph.h>
 #include <tc_pipeline_registry.h>
 #include <tcbase/tc_log.h>
+#ifdef TERMIN_RENDER_ENABLE_TEST_HOOKS
+#include "tc_pipeline_test_hooks.h"
+#endif
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #define MAX_PIPELINE_POOL_SIZE 256
 #define PIPELINE_INITIAL_POOL_CAPACITY 16
@@ -22,6 +26,40 @@ typedef struct {
 
 static PipelinePool* g_pipeline_pool = NULL;
 static bool g_pipeline_registry_initialized = false;
+
+#ifdef TERMIN_RENDER_ENABLE_TEST_HOOKS
+static size_t g_pipeline_storage_allocations_before_failure = SIZE_MAX;
+
+void tc_pipeline_test_fail_storage_allocation_after(size_t successful_allocations) {
+    g_pipeline_storage_allocations_before_failure = successful_allocations;
+}
+
+void tc_pipeline_test_reset_storage_allocator(void) {
+    g_pipeline_storage_allocations_before_failure = SIZE_MAX;
+}
+#endif
+
+static bool pipeline_storage_allocation_should_fail(void) {
+#ifdef TERMIN_RENDER_ENABLE_TEST_HOOKS
+    if (g_pipeline_storage_allocations_before_failure == 0) {
+        return true;
+    }
+    if (g_pipeline_storage_allocations_before_failure != SIZE_MAX) {
+        --g_pipeline_storage_allocations_before_failure;
+    }
+#endif
+    return false;
+}
+
+static void* pipeline_storage_malloc(size_t size) {
+    if (pipeline_storage_allocation_should_fail()) return NULL;
+    return malloc(size);
+}
+
+static void* pipeline_storage_calloc(size_t count, size_t size) {
+    if (pipeline_storage_allocation_should_fail()) return NULL;
+    return calloc(count, size);
+}
 
 static void destroy_owned_pass(tc_pass* pass, tc_pass_deleter deleter) {
     if (!pass) return;
@@ -46,6 +84,34 @@ static void destroy_all_pipeline_passes(tc_pipeline* pipeline) {
         pipeline->pass_deleters[i] = NULL;
         destroy_owned_pass(pass, deleter);
     }
+}
+
+static void destroy_pipeline_slot(tc_pipeline* pipeline) {
+    if (!pipeline) return;
+
+    void* render_cache = pipeline->render_cache;
+    void (*render_cache_destructor)(void*) = pipeline->render_cache_destructor;
+    pipeline->render_cache = NULL;
+    pipeline->render_cache_destructor = NULL;
+    if (render_cache) {
+        if (render_cache_destructor) {
+            render_cache_destructor(render_cache);
+        } else {
+            tc_log_error("[tc_pipeline] render cache has no destructor");
+        }
+    }
+
+    tc_frame_graph* frame_graph = (tc_frame_graph*)pipeline->cached_frame_graph;
+    pipeline->cached_frame_graph = NULL;
+    if (frame_graph) {
+        tc_frame_graph_destroy(frame_graph);
+    }
+
+    destroy_all_pipeline_passes(pipeline);
+    free(pipeline->passes);
+    free(pipeline->pass_deleters);
+    free(pipeline->name);
+    memset(pipeline, 0, sizeof(*pipeline));
 }
 
 static char* tc_pipeline_strdup(const char* s) {
@@ -77,24 +143,34 @@ void tc_pipeline_pool_init(void) {
         return;
     }
 
-    g_pipeline_pool = (PipelinePool*)calloc(1, sizeof(PipelinePool));
-    if (!g_pipeline_pool) {
+    PipelinePool* pool = (PipelinePool*)pipeline_storage_calloc(1, sizeof(PipelinePool));
+    if (!pool) {
         tc_log_error("[tc_pipeline_pool] allocation failed");
         return;
     }
 
     size_t cap = PIPELINE_INITIAL_POOL_CAPACITY;
-    g_pipeline_pool->generations = (uint32_t*)calloc(cap, sizeof(uint32_t));
-    g_pipeline_pool->alive = (bool*)calloc(cap, sizeof(bool));
-    g_pipeline_pool->pipelines = (tc_pipeline*)calloc(cap, sizeof(tc_pipeline));
-    g_pipeline_pool->free_stack = (uint32_t*)malloc(cap * sizeof(uint32_t));
-    for (size_t i = 0; i < cap; i++) {
-        g_pipeline_pool->free_stack[i] = (uint32_t)(cap - 1 - i);
+    pool->generations = (uint32_t*)pipeline_storage_calloc(cap, sizeof(uint32_t));
+    pool->alive = (bool*)pipeline_storage_calloc(cap, sizeof(bool));
+    pool->pipelines = (tc_pipeline*)pipeline_storage_calloc(cap, sizeof(tc_pipeline));
+    pool->free_stack = (uint32_t*)pipeline_storage_malloc(cap * sizeof(uint32_t));
+    if (!pool->generations || !pool->alive || !pool->pipelines || !pool->free_stack) {
+        tc_log_error("[tc_pipeline_pool] storage allocation failed");
+        free(pool->generations);
+        free(pool->alive);
+        free(pool->pipelines);
+        free(pool->free_stack);
+        free(pool);
+        return;
     }
-    g_pipeline_pool->free_count = cap;
-    g_pipeline_pool->capacity = cap;
-    g_pipeline_pool->count = 0;
+    for (size_t i = 0; i < cap; i++) {
+        pool->free_stack[i] = (uint32_t)(cap - 1 - i);
+    }
+    pool->free_count = cap;
+    pool->capacity = cap;
+    pool->count = 0;
 
+    g_pipeline_pool = pool;
     tc_pipeline_registry_init();
 }
 
@@ -105,15 +181,7 @@ void tc_pipeline_pool_shutdown(void) {
 
     for (size_t i = 0; i < g_pipeline_pool->capacity; i++) {
         if (g_pipeline_pool->alive[i]) {
-            tc_pipeline* p = &g_pipeline_pool->pipelines[i];
-            if (p->cached_frame_graph) {
-                tc_frame_graph_destroy((tc_frame_graph*)p->cached_frame_graph);
-                p->cached_frame_graph = NULL;
-            }
-            destroy_all_pipeline_passes(p);
-            free(p->passes);
-            free(p->pass_deleters);
-            free(p->name);
+            destroy_pipeline_slot(&g_pipeline_pool->pipelines[i]);
         }
     }
 
@@ -127,29 +195,50 @@ void tc_pipeline_pool_shutdown(void) {
     tc_pipeline_registry_shutdown();
 }
 
-static void pipeline_pool_grow(void) {
+static bool pipeline_pool_grow(void) {
     size_t old_cap = g_pipeline_pool->capacity;
     size_t new_cap = old_cap * 2;
     if (new_cap > MAX_PIPELINE_POOL_SIZE) new_cap = MAX_PIPELINE_POOL_SIZE;
     if (new_cap <= old_cap) {
         tc_log_error("[tc_pipeline_pool] max capacity reached");
-        return;
+        return false;
     }
 
-    g_pipeline_pool->generations = realloc(g_pipeline_pool->generations, new_cap * sizeof(uint32_t));
-    g_pipeline_pool->alive = realloc(g_pipeline_pool->alive, new_cap * sizeof(bool));
-    g_pipeline_pool->pipelines = realloc(g_pipeline_pool->pipelines, new_cap * sizeof(tc_pipeline));
-    g_pipeline_pool->free_stack = realloc(g_pipeline_pool->free_stack, new_cap * sizeof(uint32_t));
+    uint32_t* generations = (uint32_t*)pipeline_storage_calloc(new_cap, sizeof(uint32_t));
+    bool* alive = (bool*)pipeline_storage_calloc(new_cap, sizeof(bool));
+    tc_pipeline* pipelines = (tc_pipeline*)pipeline_storage_calloc(new_cap, sizeof(tc_pipeline));
+    uint32_t* free_stack = (uint32_t*)pipeline_storage_malloc(new_cap * sizeof(uint32_t));
+    if (!generations || !alive || !pipelines || !free_stack) {
+        tc_log_error("[tc_pipeline_pool] grow allocation failed");
+        free(generations);
+        free(alive);
+        free(pipelines);
+        free(free_stack);
+        return false;
+    }
 
-    memset(g_pipeline_pool->generations + old_cap, 0, (new_cap - old_cap) * sizeof(uint32_t));
-    memset(g_pipeline_pool->alive + old_cap, 0, (new_cap - old_cap) * sizeof(bool));
-    memset(g_pipeline_pool->pipelines + old_cap, 0, (new_cap - old_cap) * sizeof(tc_pipeline));
+    memcpy(generations, g_pipeline_pool->generations, old_cap * sizeof(uint32_t));
+    memcpy(alive, g_pipeline_pool->alive, old_cap * sizeof(bool));
+    memcpy(pipelines, g_pipeline_pool->pipelines, old_cap * sizeof(tc_pipeline));
+    memcpy(free_stack, g_pipeline_pool->free_stack,
+           g_pipeline_pool->free_count * sizeof(uint32_t));
 
+    size_t free_count = g_pipeline_pool->free_count;
     for (size_t i = old_cap; i < new_cap; i++) {
-        g_pipeline_pool->free_stack[g_pipeline_pool->free_count++] = (uint32_t)(new_cap - 1 - (i - old_cap));
+        free_stack[free_count++] = (uint32_t)(new_cap - 1 - (i - old_cap));
     }
 
+    free(g_pipeline_pool->generations);
+    free(g_pipeline_pool->alive);
+    free(g_pipeline_pool->pipelines);
+    free(g_pipeline_pool->free_stack);
+    g_pipeline_pool->generations = generations;
+    g_pipeline_pool->alive = alive;
+    g_pipeline_pool->pipelines = pipelines;
+    g_pipeline_pool->free_stack = free_stack;
+    g_pipeline_pool->free_count = free_count;
     g_pipeline_pool->capacity = new_cap;
+    return true;
 }
 
 static inline bool pipeline_handle_alive(tc_pipeline_handle h) {
@@ -165,10 +254,13 @@ bool tc_pipeline_pool_alive(tc_pipeline_handle h) {
 tc_pipeline_handle tc_pipeline_pool_alloc(const char* name) {
     if (!g_pipeline_pool) {
         tc_pipeline_pool_init();
+        if (!g_pipeline_pool) {
+            tc_log_error("[tc_pipeline_pool] unavailable after initialization failure");
+            return TC_PIPELINE_HANDLE_INVALID;
+        }
     }
     if (g_pipeline_pool->free_count == 0) {
-        pipeline_pool_grow();
-        if (g_pipeline_pool->free_count == 0) {
+        if (!pipeline_pool_grow()) {
             tc_log_error("[tc_pipeline_pool] no free slots");
             return TC_PIPELINE_HANDLE_INVALID;
         }
@@ -205,22 +297,7 @@ void tc_pipeline_pool_free(tc_pipeline_handle h) {
     uint32_t idx = h.index;
     tc_pipeline* p = &g_pipeline_pool->pipelines[idx];
 
-    if (p->render_cache && p->render_cache_destructor) {
-        p->render_cache_destructor(p->render_cache);
-        p->render_cache = NULL;
-    }
-
-    if (p->cached_frame_graph) {
-        tc_frame_graph_destroy((tc_frame_graph*)p->cached_frame_graph);
-        p->cached_frame_graph = NULL;
-    }
-
-    destroy_all_pipeline_passes(p);
-
-    free(p->passes);
-    free(p->pass_deleters);
-    free(p->name);
-    memset(p, 0, sizeof(tc_pipeline));
+    destroy_pipeline_slot(p);
 
     g_pipeline_pool->alive[idx] = false;
     g_pipeline_pool->generations[idx]++;

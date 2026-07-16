@@ -222,6 +222,7 @@ endif()
 
 if(TERMIN_RENDER_BUILD_TESTS)
     enable_testing()
+    target_compile_definitions(termin_render PRIVATE TERMIN_RENDER_ENABLE_TEST_HOOKS=1)
 
     add_executable(termin_render_drawable_test tests/test_drawable_capability.c)
     target_include_directories(termin_render_drawable_test PRIVATE
@@ -282,6 +283,7 @@ if(TERMIN_RENDER_BUILD_TESTS)
     add_executable(termin_render_pass_ownership_test tests/test_pass_ownership.cpp)
     target_include_directories(termin_render_pass_ownership_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
     target_link_libraries(termin_render_pass_ownership_test PRIVATE termin_render)
     add_test(NAME termin_render_pass_ownership_test COMMAND termin_render_pass_ownership_test)
