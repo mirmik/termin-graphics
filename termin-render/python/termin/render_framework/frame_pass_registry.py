@@ -5,8 +5,6 @@ from __future__ import annotations
 import importlib
 
 from tcbase import log
-from termin.render_framework.python_pass import PythonFramePass
-from termin.scene.class_scanner import scan_for_subclasses
 
 
 class FramePassRegistry:
@@ -64,7 +62,3 @@ class FramePassRegistry:
                 log.warning(f"Failed to register frame pass {class_name} from {module_name}: {e}")
 
         return registered
-
-    def scan(self, paths: list[str]) -> list[str]:
-        """Scan directories, modules or files and register PythonFramePass subclasses."""
-        return scan_for_subclasses(paths, PythonFramePass, self.classes, "_dynamic_frame_passes_")
