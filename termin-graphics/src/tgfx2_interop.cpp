@@ -20,7 +20,9 @@ extern "C" {
 #include <tcbase/tc_log.h>
 }
 
+static std::mutex g_tgfx2_device_mutex;
 static void* g_tgfx2_device = nullptr;
+static const void* g_tgfx2_device_owner = nullptr;
 #ifdef _WIN32
 namespace {
 
@@ -357,11 +359,55 @@ D3D11D3DImageBridge* bridge_from_void(void* bridge) {
 } // namespace
 #endif
 
-void tgfx2_interop_set_device(void* device) {
-    g_tgfx2_device = device;
+int tgfx2_interop_claim_device(void* device, const void* owner) {
+    if (!device || !owner) {
+        tc_log_error("[tgfx2_interop] device claim requires non-null device and owner");
+        return 0;
+    }
+    std::lock_guard<std::mutex> lock(g_tgfx2_device_mutex);
+    if (!g_tgfx2_device) {
+        g_tgfx2_device = device;
+        g_tgfx2_device_owner = owner;
+        return 1;
+    }
+    if (g_tgfx2_device == device && g_tgfx2_device_owner == owner) {
+        return 1;
+    }
+    tc_log_error(
+        "[tgfx2_interop] refusing a second application graphics device "
+        "(active=%p owner=%p, requested=%p owner=%p)",
+        g_tgfx2_device,
+        g_tgfx2_device_owner,
+        device,
+        owner
+    );
+    return 0;
+}
+
+int tgfx2_interop_release_device(void* device, const void* owner) {
+    if (!device || !owner) {
+        tc_log_error("[tgfx2_interop] device release requires non-null device and owner");
+        return 0;
+    }
+    std::lock_guard<std::mutex> lock(g_tgfx2_device_mutex);
+    if (g_tgfx2_device != device || g_tgfx2_device_owner != owner) {
+        tc_log_error(
+            "[tgfx2_interop] refusing device release by a non-owner "
+            "(active=%p owner=%p, requested=%p owner=%p)",
+            g_tgfx2_device,
+            g_tgfx2_device_owner,
+            device,
+            owner
+        );
+        return 0;
+    }
+    g_tgfx2_device = nullptr;
+    g_tgfx2_device_owner = nullptr;
+    return 1;
 }
 
 void* tgfx2_interop_get_device(void) {
+    std::lock_guard<std::mutex> lock(g_tgfx2_device_mutex);
     return g_tgfx2_device;
 }
 
@@ -379,7 +425,7 @@ uint32_t tgfx2_interop_register_external_gl_texture(
         return 0;
     }
 
-    auto* device = static_cast<tgfx::IRenderDevice*>(g_tgfx2_device);
+    auto* device = static_cast<tgfx::IRenderDevice*>(tgfx2_interop_get_device());
     if (!device) {
         tc_log(TC_LOG_ERROR,
                "[tgfx2_interop] cannot register external GL texture: no active tgfx2 device");
@@ -411,7 +457,7 @@ void tgfx2_interop_destroy_texture_handle(uint32_t handle_id) {
     if (handle_id == 0) {
         return;
     }
-    auto* device = static_cast<tgfx::IRenderDevice*>(g_tgfx2_device);
+    auto* device = static_cast<tgfx::IRenderDevice*>(tgfx2_interop_get_device());
     if (!device) {
         tc_log(TC_LOG_ERROR,
                "[tgfx2_interop] cannot destroy texture handle %u: no active tgfx2 device",
@@ -445,7 +491,7 @@ void tgfx2_interop_blit_texture(
         return;
     }
 
-    auto* device = static_cast<tgfx::IRenderDevice*>(g_tgfx2_device);
+    auto* device = static_cast<tgfx::IRenderDevice*>(tgfx2_interop_get_device());
     if (!device) {
         tc_log(TC_LOG_ERROR,
                "[tgfx2_interop] cannot blit texture: no active tgfx2 device");
@@ -481,7 +527,7 @@ void* tgfx2_interop_create_d3d11_swapchain(
         return nullptr;
     }
 
-    auto* device = static_cast<tgfx::IRenderDevice*>(g_tgfx2_device);
+    auto* device = static_cast<tgfx::IRenderDevice*>(tgfx2_interop_get_device());
     if (!device) {
         tc_log(TC_LOG_ERROR,
                "[tgfx2_interop] cannot create D3D11 swapchain: no active tgfx2 device");
@@ -612,7 +658,7 @@ void* tgfx2_interop_create_d3d11_d3dimage_bridge(
         return nullptr;
     }
 
-    auto* device = static_cast<tgfx::IRenderDevice*>(g_tgfx2_device);
+    auto* device = static_cast<tgfx::IRenderDevice*>(tgfx2_interop_get_device());
     if (!device) {
         tc_log(TC_LOG_ERROR,
                "[tgfx2_interop] cannot create D3DImage bridge: no active tgfx2 device");

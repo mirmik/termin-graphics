@@ -12,8 +12,14 @@ extern "C" {
 #include <stdint.h>
 #endif
 
-// Set the active tgfx2 render device used by C/Python interop helpers.
-TGFX2_API void tgfx2_interop_set_device(void* device);
+// Install the one application-owned tgfx2 device used by C/Python interop.
+// The owner token is opaque and must remain stable until release. Repeating
+// the same device/owner claim is idempotent; every conflicting claim fails.
+TGFX2_API int tgfx2_interop_claim_device(void* device, const void* owner);
+
+// Release the installed device. Both device and owner must match the active
+// claim; a non-owner cannot clear another application's graphics domain.
+TGFX2_API int tgfx2_interop_release_device(void* device, const void* owner);
 
 // Get the tgfx2 render device (returns NULL if not set).
 TGFX2_API void* tgfx2_interop_get_device(void);
@@ -109,8 +115,12 @@ TGFX2_API void* tgfx2_interop_get_d3d11_d3dimage_surface(void* bridge);
 // C++ typed accessors
 namespace tgfx {
 
-inline void set_tgfx2_device(tgfx::IRenderDevice* device) {
-    tgfx2_interop_set_device(static_cast<void*>(device));
+inline bool claim_tgfx2_device(tgfx::IRenderDevice* device, const void* owner) {
+    return tgfx2_interop_claim_device(static_cast<void*>(device), owner) != 0;
+}
+
+inline bool release_tgfx2_device(tgfx::IRenderDevice* device, const void* owner) {
+    return tgfx2_interop_release_device(static_cast<void*>(device), owner) != 0;
 }
 
 inline tgfx::IRenderDevice* get_tgfx2_device() {

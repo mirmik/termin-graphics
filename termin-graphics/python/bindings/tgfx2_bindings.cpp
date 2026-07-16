@@ -666,13 +666,14 @@ void bind_tgfx2(nb::module_& m) {
                 auto* dev = reinterpret_cast<tgfx::IRenderDevice*>(device_ptr);
                 auto* rctx = reinterpret_cast<tgfx::RenderContext2*>(ctx_ptr);
                 if (!dev || !rctx) return nullptr;
-                // Interop must be set for every backend — RenderEngine
-                // consults `tgfx2_interop_get_device()` and falls back
-                // to minting its own device when it's null. On Vulkan
-                // that produced a second HandlePool; blits between
-                // FBOSurface (device A) and scene RTs (device B) then
-                // resolve to unrelated textures (single→MSAA warnings).
-                tgfx2_interop_set_device(dev);
+                // The application host must install its device before it
+                // exposes observing wrappers. This factory never mutates the
+                // process-wide graphics domain.
+                if (tgfx2_interop_get_device() != dev) {
+                    throw std::runtime_error(
+                        "Tgfx2Context.from_window: host device is not the installed "
+                        "application graphics device");
+                }
                 return new Tgfx2ContextHolder(dev, rctx);
             },
             nb::arg("device_ptr"), nb::arg("ctx_ptr"),
@@ -683,14 +684,17 @@ void bind_tgfx2(nb::module_& m) {
         // Factory for in-scene helpers (UIComponent, etc.) that
         // only see a live RenderContext2 at draw time — the framegraph's
         // `ExecuteContext.ctx2`. The device is inferred from the ctx;
-        // interop setup is NOT re-run here (it was done by the host at
-        // from_window() time). If this fires before the host has run
-        // from_window(), nothing sets interop and upload paths break —
-        // but that would be a structural bug (in-scene helper without a
-        // host), not something to paper over.
+        // Interop setup is never performed by observing wrappers; the
+        // application host owns the one explicit device claim.
         .def_static("from_context",
             [](tgfx::RenderContext2& ctx) -> Tgfx2ContextHolder* {
-                return new Tgfx2ContextHolder(&ctx.device(), &ctx);
+                auto* dev = &ctx.device();
+                if (tgfx2_interop_get_device() != dev) {
+                    throw std::runtime_error(
+                        "Tgfx2Context.from_context: context device is not the "
+                        "installed application graphics device");
+                }
+                return new Tgfx2ContextHolder(dev, &ctx);
             },
             nb::arg("ctx"),
             nb::rv_policy::take_ownership,

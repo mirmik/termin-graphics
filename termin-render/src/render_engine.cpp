@@ -269,9 +269,9 @@ void RenderEngine::ensure_tgfx2() {
         return;
     }
 
-    // Prefer the host-owned device if it's already registered as the
-    // process-wide interop target (Tgfx2Context.from_window did this
-    // at editor startup). Creating a second device here would mint a
+    // Prefer the host-owned device if the application composition root has
+    // registered it as the process-wide interop target. Creating a second
+    // device here would mint a
     // new HandlePool — scene textures end up on one pool, the UI /
     // FBOSurface on another, and blit_to_texture silently drops
     // cross-pool calls. Symptom was an entirely grey viewport with
@@ -283,7 +283,9 @@ void RenderEngine::ensure_tgfx2() {
         // own device and register it as the interop target so any
         // later Python helper that checks interop lands on it.
         // Backend selected by TERMIN_BACKEND env-var (default Vulkan when compiled).
-        tgfx2_runtime_ = tgfx::RenderRuntime::create_from_env();
+        auto runtime = tgfx::RenderRuntime::create_from_env();
+        runtime->claim_interop();
+        tgfx2_runtime_ = std::move(runtime);
     }
 }
 

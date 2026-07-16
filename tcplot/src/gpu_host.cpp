@@ -14,6 +14,7 @@ GpuHost::GpuHost(const std::string& ttf_path)
 
 GpuHost::GpuHost(const std::string& ttf_path, tgfx::BackendType backend) {
     runtime_ = tgfx::RenderRuntime::create(backend);
+    runtime_->claim_interop();
     font_ = std::make_unique<tgfx::FontAtlas>(ttf_path);
 }
 

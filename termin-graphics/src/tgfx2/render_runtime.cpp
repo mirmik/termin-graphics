@@ -9,6 +9,7 @@
 
 extern "C" {
 #include "tgfx/tgfx2_interop.h"
+#include <tcbase/tc_log.h>
 }
 
 namespace tgfx {
@@ -18,7 +19,6 @@ RenderRuntime::RenderRuntime(std::unique_ptr<IRenderDevice> device)
     if (!device_) {
         throw std::invalid_argument("RenderRuntime: device is null");
     }
-    publish_interop();
 }
 
 RenderRuntime::RenderRuntime(IRenderDevice& borrowed_device)
@@ -80,23 +80,32 @@ RenderContext2& RenderRuntime::context() {
     return *owned_ctx_;
 }
 
-void RenderRuntime::publish_interop() {
+void RenderRuntime::claim_interop() {
     if (!device_) {
+        throw std::runtime_error("RenderRuntime: cannot claim interop without a device");
+    }
+    if (interop_claimed_) {
         return;
     }
-    tgfx2_interop_set_device(device_);
-    interop_published_by_us_ = true;
+    if (!tgfx2_interop_claim_device(device_, this)) {
+        throw std::runtime_error(
+            "RenderRuntime: another application graphics device is already installed");
+    }
+    interop_claimed_ = true;
 }
 
-void RenderRuntime::clear_interop_if_current() {
-    if (interop_published_by_us_ && device_ && tgfx2_interop_get_device() == device_) {
-        tgfx2_interop_set_device(nullptr);
+void RenderRuntime::release_interop() {
+    if (!interop_claimed_) {
+        return;
     }
-    interop_published_by_us_ = false;
+    if (!device_ || !tgfx2_interop_release_device(device_, this)) {
+        tc_log_error("RenderRuntime: failed to release owned interop device");
+    }
+    interop_claimed_ = false;
 }
 
 void RenderRuntime::close() {
-    clear_interop_if_current();
+    release_interop();
     borrowed_ctx_ = nullptr;
     owned_ctx_.reset();
     owned_cache_.reset();

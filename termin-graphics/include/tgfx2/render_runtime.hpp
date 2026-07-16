@@ -20,7 +20,7 @@ private:
     std::unique_ptr<PipelineCache> owned_cache_;
     std::unique_ptr<RenderContext2> owned_ctx_;
     RenderContext2* borrowed_ctx_ = nullptr;
-    bool interop_published_by_us_ = false;
+    bool interop_claimed_ = false;
 
 public:
     explicit RenderRuntime(std::unique_ptr<IRenderDevice> device);
@@ -44,8 +44,9 @@ public:
     bool owns_device() const { return static_cast<bool>(owned_device_); }
     bool owns_context() const { return owned_ctx_ != nullptr; }
 
-    void publish_interop();
-    void clear_interop_if_current();
+    void claim_interop();
+    void release_interop();
+    bool interop_claimed() const { return interop_claimed_; }
     void close();
 
 private:
