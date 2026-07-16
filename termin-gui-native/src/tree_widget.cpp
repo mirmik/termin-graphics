@@ -481,17 +481,27 @@ tc_ui_event_result TreeWidget::pointer_event(tc_ui_document* document,
         }
         return TC_UI_EVENT_HANDLED;
     }
-    if (event->type != TC_UI_POINTER_DOWN || index == SIZE_MAX)
+    if (event->type != TC_UI_POINTER_DOWN)
         return TC_UI_EVENT_IGNORED;
+    if (index == SIZE_MAX) {
+        if (event->button == pointer_button_value(PointerButton::Left))
+            activation_clicks_.clear();
+        return TC_UI_EVENT_IGNORED;
+    }
     tc_ui_document_set_focus(document, handle());
     const TreeVisibleRow row = visible_[index];
     const TreeNode& node = model_->node(row.node);
     if (!node.children.empty() && point_in_toggle(row, event->x)) {
+        if (event->button == pointer_button_value(PointerButton::Left))
+            activation_clicks_.clear();
         toggle(node.id);
         return TC_UI_EVENT_HANDLED;
     }
-    if (!node.item.enabled)
+    if (!node.item.enabled) {
+        if (event->button == pointer_button_value(PointerButton::Left))
+            activation_clicks_.clear();
         return TC_UI_EVENT_IGNORED;
+    }
     const bool selected = select_node(node.id, false) || selected_ == node.id;
     if (event->button == pointer_button_value(PointerButton::Right)) {
         context_menu_requested_.emit(*this, node.id, event->x, event->y);
@@ -505,7 +515,7 @@ tc_ui_event_result TreeWidget::pointer_event(tc_ui_document* document,
         press_y_ = event->y;
         tc_ui_document_set_pointer_capture(document, handle());
     }
-    if (event->button == pointer_button_value(PointerButton::Left) && event->click_count == 2) {
+    if (activation_clicks_.press(node.item.stable_id, event->click_count)) {
         activated_.emit(*this, node.id, node.item);
         return TC_UI_EVENT_HANDLED;
     }

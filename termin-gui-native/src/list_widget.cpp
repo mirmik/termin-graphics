@@ -310,10 +310,14 @@ tc_ui_event_result ListWidget::pointer_event(tc_ui_document* document, const tc_
                 event->y);
             return TC_UI_EVENT_HANDLED;
         }
-        if (index == SelectionModel::npos || !model_->item(index).enabled)
+        if (index == SelectionModel::npos || !model_->item(index).enabled) {
+            if (event->button == pointer_button_value(PointerButton::Left))
+                activation_clicks_.clear();
             return TC_UI_EVENT_IGNORED;
+        }
         const bool selected = apply_selection(index, event->modifiers);
-        if (event->button == pointer_button_value(PointerButton::Left) && event->click_count == 2) {
+        if (event->button == pointer_button_value(PointerButton::Left) &&
+            activation_clicks_.press(model_->item(index).stable_id, event->click_count)) {
             activated_.emit(*this, index, model_->item(index));
             return TC_UI_EVENT_HANDLED;
         }

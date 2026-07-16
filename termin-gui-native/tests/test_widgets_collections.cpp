@@ -1545,7 +1545,8 @@ void test_host_click_count_drives_collection_activation() {
     Document document;
     DocumentBuilder ui(document);
     auto model = std::make_shared<TreeModel>();
-    const TreeNodeId node = model->append_root(CollectionItem{"node", "Node"});
+    model->append_root(CollectionItem{"first", "First"});
+    const TreeNodeId node = model->append_root(CollectionItem{"second", "Second"});
     auto &tree = ui.make_root<TreeWidget>(model);
     document.layout_roots(tc_ui_rect{0.0f, 0.0f, 200.0f, 80.0f});
     TreeNodeId activated = kInvalidTreeNodeId;
@@ -1556,9 +1557,15 @@ void test_host_click_count_drives_collection_activation() {
     tc_ui_pointer_event pointer{};
     pointer.type = TC_UI_POINTER_DOWN;
     pointer.button = 0;
-    pointer.click_count = 2;
+    pointer.click_count = 1;
     pointer.x = 30.0f;
     pointer.y = 10.0f;
+    assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+    pointer.click_count = 2;
+    pointer.y = 38.0f;
+    assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+    assert(activated == kInvalidTreeNodeId);
+    pointer.click_count = 3;
     assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
     assert(activated == node);
   }
@@ -1579,9 +1586,11 @@ void test_host_click_count_drives_collection_activation() {
     tc_ui_pointer_event pointer{};
     pointer.type = TC_UI_POINTER_DOWN;
     pointer.button = 0;
-    pointer.click_count = 2;
+    pointer.click_count = 1;
     pointer.x = 10.0f;
     pointer.y = 40.0f;
+    assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+    pointer.click_count = 2;
     assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
     assert(activated == row);
   }
@@ -1600,9 +1609,11 @@ void test_host_click_count_drives_collection_activation() {
     tc_ui_pointer_event pointer{};
     pointer.type = TC_UI_POINTER_DOWN;
     pointer.button = 0;
-    pointer.click_count = 2;
+    pointer.click_count = 1;
     pointer.x = 20.0f;
     pointer.y = 20.0f;
+    assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+    pointer.click_count = 2;
     assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
     assert(activations == 1);
   }

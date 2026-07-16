@@ -467,11 +467,13 @@ tc_ui_event_result TableWidget::pointer_event(tc_ui_document* document,
     }
     if (event->button != pointer_button_value(PointerButton::Left))
         return TC_UI_EVENT_IGNORED;
-    if (row == SIZE_MAX || !model_->row_at(row).data.enabled)
+    if (row == SIZE_MAX || !model_->row_at(row).data.enabled) {
+        activation_clicks_.clear();
         return TC_UI_EVENT_IGNORED;
+    }
     const bool selected = apply_selection(row, event->modifiers);
-    if (event->click_count == 2) {
-        const TableRow& item = model_->row_at(row);
+    const TableRow& item = model_->row_at(row);
+    if (activation_clicks_.press(item.data.stable_id, event->click_count)) {
         activated_.emit(*this, row, item.id, item.data);
         return TC_UI_EVENT_HANDLED;
     }

@@ -567,10 +567,14 @@ tc_ui_event_result FileGridWidget::pointer_event(tc_ui_document* document,
             event->y);
         return TC_UI_EVENT_HANDLED;
     }
-    if (event->button != pointer_button_value(PointerButton::Left) || index == SelectionModel::npos || !model_->item(index).enabled)
+    if (event->button != pointer_button_value(PointerButton::Left))
         return TC_UI_EVENT_IGNORED;
+    if (index == SelectionModel::npos || !model_->item(index).enabled) {
+        activation_clicks_.clear();
+        return TC_UI_EVENT_IGNORED;
+    }
     apply_selection(index, event->modifiers);
-    if (event->click_count == 2) {
+    if (activation_clicks_.press(model_->item(index).stable_id, event->click_count)) {
         activated_.emit(*this, index, model_->item(index));
         return TC_UI_EVENT_HANDLED;
     }

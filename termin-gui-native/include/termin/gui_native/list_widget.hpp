@@ -1,9 +1,11 @@
 #pragma once
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include <termin/gui_native/collection_model.hpp>
+#include <termin/gui_native/logical_click_tracker.hpp>
 #include <termin/gui_native/native_widget.hpp>
 #include <termin/gui_native/selection_model.hpp>
 
@@ -20,6 +22,7 @@ private:
     float wheel_rows_ = 3.0f;
     float item_padding_ = 10.0f;
     size_t hovered_ = SelectionModel::npos;
+    LogicalClickTracker<std::string> activation_clicks_{std::string{}};
     Signal<ListWidget&, const std::vector<size_t>&> selection_changed_;
     Signal<ListWidget&, size_t, const CollectionItem&> activated_;
     Signal<ListWidget&, int64_t, float, float> context_menu_requested_;

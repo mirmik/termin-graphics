@@ -1,10 +1,12 @@
 #pragma once
 
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include <termin/gui_native/native_widget.hpp>
+#include <termin/gui_native/logical_click_tracker.hpp>
 #include <termin/gui_native/tree_model.hpp>
 
 namespace termin::gui_native {
@@ -28,6 +30,7 @@ private:
     TreeNodeId selected_ = kInvalidTreeNodeId;
     TreeNodeId hovered_ = kInvalidTreeNodeId;
     TreeNodeId pressed_ = kInvalidTreeNodeId;
+    LogicalClickTracker<std::string> activation_clicks_{std::string{}};
     TreeNodeId drag_target_ = kInvalidTreeNodeId;
     TreeDropPosition drag_position_ = TreeDropPosition::Root;
     float press_x_ = 0.0f;

@@ -1,10 +1,12 @@
 #pragma once
 
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include <termin/gui_native/native_widget.hpp>
+#include <termin/gui_native/logical_click_tracker.hpp>
 #include <termin/gui_native/selection_model.hpp>
 #include <termin/gui_native/table_model.hpp>
 
@@ -32,6 +34,7 @@ class TableWidget final : public NativeWidget {
     float wheel_rows_ = 3.0f;
     float resize_zone_ = 4.0f;
     size_t hovered_ = SelectionModel::npos;
+    LogicalClickTracker<std::string> activation_clicks_{std::string{}};
     size_t resizing_column_ = SelectionModel::npos;
     float resize_start_x_ = 0.0f;
     float resize_start_width_ = 0.0f;

@@ -5,6 +5,7 @@
 #include <utility>
 
 #include <termin/gui_native/collection_model.hpp>
+#include <termin/gui_native/logical_click_tracker.hpp>
 #include <termin/gui_native/native_widget.hpp>
 #include <termin/gui_native/selection_model.hpp>
 
@@ -32,6 +33,7 @@ class FileGridWidget final : public NativeWidget {
     float drag_start_y_ = 0.0f;
     float drag_start_scroll_ = 0.0f;
     size_t hovered_ = SelectionModel::npos;
+    LogicalClickTracker<std::string> activation_clicks_{std::string{}};
     std::string empty_text_ = "No items";
     Signal<FileGridWidget&, const std::vector<size_t>&> selection_changed_;
     Signal<FileGridWidget&, size_t, const CollectionItem&> activated_;
