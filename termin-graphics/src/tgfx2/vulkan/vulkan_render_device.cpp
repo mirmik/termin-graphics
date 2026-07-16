@@ -1669,8 +1669,8 @@ void VulkanRenderDevice::clear_texture(
         // offset-based mechanism — it does not natively support a
         // viewport subrect. For a subrect clear we'd need a render pass
         // with LoadOp::Clear + scissor. In practice callers pass the
-        // full texture extent here (PullRenderingManager clears the
-        // whole display before compositing viewports), so clearing the
+        // full texture extent here (display composition clears the whole
+        // display before compositing viewports), so clearing the
         // whole image is correct; if a future caller needs a true rect
         // clear, route through begin_pass + scissor instead.
         (void)viewport;
