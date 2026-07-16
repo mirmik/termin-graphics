@@ -732,7 +732,9 @@ static tc_component* rt_resolve_component(
     }
 
     tc_entity_pool* pool = tc_entity_pool_registry_get(entity.pool);
-    if (!pool || !tc_scene_handle_eq(tc_entity_pool_get_scene(pool), slot->scene)) {
+    tc_scene_handle owner_scene = tc_entity_pool_get_scene(pool);
+    if (!pool || (tc_scene_handle_valid(owner_scene)
+            && !tc_scene_handle_eq(owner_scene, slot->scene))) {
         if (!*error_reported) {
             tc_log_error(
                 "[tc_render_target] target '%s' cannot resolve %s: entity belongs to another scene",
@@ -803,7 +805,9 @@ static bool rt_validate_component_binding(
         return false;
     }
     tc_entity_pool* pool = tc_entity_pool_registry_get(component->owner.pool);
-    if (!pool || !tc_scene_handle_eq(tc_entity_pool_get_scene(pool), slot->scene)) {
+    tc_scene_handle owner_scene = tc_entity_pool_get_scene(pool);
+    if (!pool || (tc_scene_handle_valid(owner_scene)
+            && !tc_scene_handle_eq(owner_scene, slot->scene))) {
         tc_log_error(
             "[tc_render_target] target '%s' rejected %s: component belongs to another scene",
             target_name,
