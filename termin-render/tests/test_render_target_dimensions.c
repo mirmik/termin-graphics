@@ -1,6 +1,8 @@
 #include "guard_c.h"
 
 #include "render/tc_render_target.h"
+#include "core/tc_component.h"
+#include "core/tc_scene.h"
 #include "tgfx/resources/tc_texture.h"
 #include "tgfx/resources/tc_texture_registry.h"
 
@@ -42,8 +44,80 @@ GUARD_C_TEST(test_render_target_rejects_invalid_dimensions_without_mutation) {
     return 0;
 }
 
+static void init_test_component(tc_component* component, const char* type_name) {
+    if (!tc_component_registry_has(type_name)) {
+        tc_component_registry_register_abstract(type_name, TC_CXX_COMPONENT, NULL);
+    }
+    tc_component_init(component, NULL);
+    tc_component_set_declared_type_name(component, type_name);
+}
+
+GUARD_C_TEST(test_render_target_resolves_camera_replacement_from_entity_handle) {
+    tc_scene_handle scene = tc_scene_new_named("rt-camera-resolution");
+    GUARD_C_REQUIRE(tc_scene_alive(scene));
+    tc_entity_pool* pool = tc_scene_entity_pool(scene);
+    GUARD_C_REQUIRE(pool != NULL);
+    tc_entity_pool_handle pool_handle = tc_entity_pool_registry_find(pool);
+    GUARD_C_REQUIRE(tc_entity_pool_handle_valid(pool_handle));
+    tc_entity_id entity_id = tc_entity_pool_alloc(pool, "Camera");
+    GUARD_C_REQUIRE(tc_entity_pool_alive(pool, entity_id));
+
+    tc_component first_camera;
+    init_test_component(&first_camera, "CameraComponent");
+    tc_entity_pool_add_component(pool, entity_id, &first_camera);
+
+    tc_render_target_handle target = tc_render_target_new("stable-camera");
+    tc_render_target_set_scene(target, scene);
+    tc_render_target_set_camera(target, &first_camera);
+    GUARD_C_CHECK(tc_render_target_get_camera(target) == &first_camera);
+
+    tc_entity_pool_remove_component(pool, entity_id, &first_camera);
+    GUARD_C_CHECK(tc_render_target_get_camera(target) == NULL);
+
+    tc_component replacement_camera;
+    init_test_component(&replacement_camera, "CameraComponent");
+    tc_entity_pool_add_component(pool, entity_id, &replacement_camera);
+    GUARD_C_CHECK(tc_render_target_get_camera(target) == &replacement_camera);
+
+    tc_entity_pool_free(pool, entity_id);
+    GUARD_C_CHECK(tc_render_target_get_camera(target) == NULL);
+
+    tc_render_target_free(target);
+    tc_scene_free(scene);
+    return 0;
+}
+
+GUARD_C_TEST(test_render_target_resolves_xr_origin_and_rejects_stale_scene) {
+    tc_scene_handle scene = tc_scene_new_named("rt-xr-resolution");
+    GUARD_C_REQUIRE(tc_scene_alive(scene));
+    tc_entity_pool* pool = tc_scene_entity_pool(scene);
+    GUARD_C_REQUIRE(pool != NULL);
+    tc_entity_pool_handle pool_handle = tc_entity_pool_registry_find(pool);
+    GUARD_C_REQUIRE(tc_entity_pool_handle_valid(pool_handle));
+    tc_entity_id entity_id = tc_entity_pool_alloc(pool, "XR Origin");
+    GUARD_C_REQUIRE(tc_entity_pool_alive(pool, entity_id));
+
+    tc_component xr_origin;
+    init_test_component(&xr_origin, "XrOriginComponent");
+    tc_entity_pool_add_component(pool, entity_id, &xr_origin);
+
+    tc_render_target_handle target = tc_render_target_new("stable-xr-origin");
+    tc_render_target_set_scene(target, scene);
+    tc_render_target_set_xr_origin(target, &xr_origin);
+    GUARD_C_CHECK(tc_render_target_get_xr_origin(target) == &xr_origin);
+
+    tc_scene_free(scene);
+    GUARD_C_CHECK(tc_render_target_get_xr_origin(target) == NULL);
+
+    tc_render_target_free(target);
+    return 0;
+}
+
 int main(int argc, char** argv) {
     GUARD_C_BEGIN_ARGS(argc, argv);
     GUARD_C_RUN(test_render_target_rejects_invalid_dimensions_without_mutation);
+    GUARD_C_RUN(test_render_target_resolves_camera_replacement_from_entity_handle);
+    GUARD_C_RUN(test_render_target_resolves_xr_origin_and_rejects_stale_scene);
+    tc_component_registry_cleanup();
     return GUARD_C_END();
 }

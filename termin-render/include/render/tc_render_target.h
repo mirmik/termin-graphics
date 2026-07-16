@@ -87,6 +87,10 @@ TC_API tc_texture_handle tc_render_target_get_depth_texture(tc_render_target_han
 TC_API void tc_render_target_set_scene(tc_render_target_handle h, tc_scene_handle scene);
 TC_API tc_scene_handle tc_render_target_get_scene(tc_render_target_handle h);
 
+// Component pointers passed to setters are validated but never retained or
+// stored. The target stores the owning entity handle and resolves the current
+// component from that entity on every getter call. Changing scene clears both
+// component bindings.
 TC_API void tc_render_target_set_camera(tc_render_target_handle h, tc_component* camera);
 TC_API tc_component* tc_render_target_get_camera(tc_render_target_handle h);
 TC_API tc_entity_handle tc_render_target_get_camera_entity(tc_render_target_handle h);

@@ -3,6 +3,7 @@
 #include "render/tc_render_target_pool.h"
 #include "tc_value.h"
 #include "core/tc_component.h"
+#include "core/tc_scene.h"
 #include "tgfx/resources/tc_texture.h"
 #include "tgfx/resources/tc_texture_registry.h"
 #include <tcbase/tc_log.h>
@@ -27,10 +28,10 @@ typedef struct {
     bool clear_depth_enabled;
     float clear_depth_value;
     tc_scene_handle scene;
-    tc_component* camera;
     tc_entity_handle camera_entity;
-    tc_component* xr_origin;
+    bool camera_resolution_error_reported;
     tc_entity_handle xr_origin_entity;
+    bool xr_origin_resolution_error_reported;
     tc_pipeline_handle pipeline;
     uint64_t layer_mask;
     bool enabled;
@@ -678,7 +679,14 @@ tc_texture_handle tc_render_target_get_depth_texture(tc_render_target_handle h) 
 
 void tc_render_target_set_scene(tc_render_target_handle h, tc_scene_handle scene) {
     if (!render_target_handle_alive(h)) return;
-    g_render_target_pool->slots[h.index].scene = scene;
+    RenderTargetSlot* slot = &g_render_target_pool->slots[h.index];
+    if (!tc_scene_handle_eq(slot->scene, scene)) {
+        slot->camera_entity = TC_ENTITY_HANDLE_INVALID;
+        slot->camera_resolution_error_reported = false;
+        slot->xr_origin_entity = TC_ENTITY_HANDLE_INVALID;
+        slot->xr_origin_resolution_error_reported = false;
+    }
+    slot->scene = scene;
 }
 
 tc_scene_handle tc_render_target_get_scene(tc_render_target_handle h) {
@@ -686,15 +694,150 @@ tc_scene_handle tc_render_target_get_scene(tc_render_target_handle h) {
     return g_render_target_pool->slots[h.index].scene;
 }
 
+static bool rt_entity_binding_is_set(tc_entity_handle entity) {
+    return tc_entity_pool_handle_valid(entity.pool) && tc_entity_id_valid(entity.id);
+}
+
+static tc_component* rt_resolve_component(
+    RenderTargetSlot* slot,
+    tc_entity_handle entity,
+    const char* expected_type,
+    const char* role,
+    bool* error_reported
+) {
+    if (!slot || !rt_entity_binding_is_set(entity)) return NULL;
+
+    const char* target_name = slot->name ? slot->name : "(unnamed)";
+    if (!tc_scene_alive(slot->scene)) {
+        if (!*error_reported) {
+            tc_log_error(
+                "[tc_render_target] target '%s' cannot resolve %s: scene handle is stale",
+                target_name,
+                role
+            );
+            *error_reported = true;
+        }
+        return NULL;
+    }
+    if (!tc_entity_handle_valid(entity)) {
+        if (!*error_reported) {
+            tc_log_error(
+                "[tc_render_target] target '%s' cannot resolve %s: entity handle is stale",
+                target_name,
+                role
+            );
+            *error_reported = true;
+        }
+        return NULL;
+    }
+
+    tc_entity_pool* pool = tc_entity_pool_registry_get(entity.pool);
+    if (!pool || !tc_scene_handle_eq(tc_entity_pool_get_scene(pool), slot->scene)) {
+        if (!*error_reported) {
+            tc_log_error(
+                "[tc_render_target] target '%s' cannot resolve %s: entity belongs to another scene",
+                target_name,
+                role
+            );
+            *error_reported = true;
+        }
+        return NULL;
+    }
+
+    const size_t component_count = tc_entity_pool_component_count(pool, entity.id);
+    for (size_t index = 0; index < component_count; ++index) {
+        tc_component* component = tc_entity_pool_component_at(pool, entity.id, index);
+        if (!component) continue;
+        const char* type_name = tc_component_type_name(component);
+        if (tc_component_registry_is_a(type_name, expected_type)) {
+            *error_reported = false;
+            return component;
+        }
+    }
+
+    if (!*error_reported) {
+        tc_log_error(
+            "[tc_render_target] target '%s' cannot resolve %s: entity has no %s",
+            target_name,
+            role,
+            expected_type
+        );
+        *error_reported = true;
+    }
+    return NULL;
+}
+
+static bool rt_validate_component_binding(
+    const RenderTargetSlot* slot,
+    tc_component* component,
+    const char* expected_type,
+    const char* role
+) {
+    if (!slot || !component) return false;
+    const char* target_name = slot->name ? slot->name : "(unnamed)";
+    const char* type_name = tc_component_type_name(component);
+    if (!tc_component_registry_is_a(type_name, expected_type)) {
+        tc_log_error(
+            "[tc_render_target] target '%s' rejected %s component of type '%s'; expected %s",
+            target_name,
+            role,
+            type_name ? type_name : "(unknown)",
+            expected_type
+        );
+        return false;
+    }
+    if (!tc_scene_alive(slot->scene)) {
+        tc_log_error(
+            "[tc_render_target] target '%s' rejected %s: scene handle is invalid",
+            target_name,
+            role
+        );
+        return false;
+    }
+    if (!tc_entity_handle_valid(component->owner)) {
+        tc_log_error(
+            "[tc_render_target] target '%s' rejected %s: component owner is stale",
+            target_name,
+            role
+        );
+        return false;
+    }
+    tc_entity_pool* pool = tc_entity_pool_registry_get(component->owner.pool);
+    if (!pool || !tc_scene_handle_eq(tc_entity_pool_get_scene(pool), slot->scene)) {
+        tc_log_error(
+            "[tc_render_target] target '%s' rejected %s: component belongs to another scene",
+            target_name,
+            role
+        );
+        return false;
+    }
+    return true;
+}
+
 void tc_render_target_set_camera(tc_render_target_handle h, tc_component* camera) {
     if (!render_target_handle_alive(h)) return;
-    g_render_target_pool->slots[h.index].camera = camera;
-    g_render_target_pool->slots[h.index].camera_entity = camera ? camera->owner : TC_ENTITY_HANDLE_INVALID;
+    RenderTargetSlot* slot = &g_render_target_pool->slots[h.index];
+    if (!camera) {
+        slot->camera_entity = TC_ENTITY_HANDLE_INVALID;
+        slot->camera_resolution_error_reported = false;
+        return;
+    }
+    if (rt_validate_component_binding(slot, camera, "CameraComponent", "camera")) {
+        slot->camera_entity = camera->owner;
+        slot->camera_resolution_error_reported = false;
+    }
 }
 
 tc_component* tc_render_target_get_camera(tc_render_target_handle h) {
     if (!render_target_handle_alive(h)) return NULL;
-    return g_render_target_pool->slots[h.index].camera;
+    RenderTargetSlot* slot = &g_render_target_pool->slots[h.index];
+    return rt_resolve_component(
+        slot,
+        slot->camera_entity,
+        "CameraComponent",
+        "camera",
+        &slot->camera_resolution_error_reported
+    );
 }
 
 tc_entity_handle tc_render_target_get_camera_entity(tc_render_target_handle h) {
@@ -704,13 +847,32 @@ tc_entity_handle tc_render_target_get_camera_entity(tc_render_target_handle h) {
 
 void tc_render_target_set_xr_origin(tc_render_target_handle h, tc_component* xr_origin) {
     if (!render_target_handle_alive(h)) return;
-    g_render_target_pool->slots[h.index].xr_origin = xr_origin;
-    g_render_target_pool->slots[h.index].xr_origin_entity = xr_origin ? xr_origin->owner : TC_ENTITY_HANDLE_INVALID;
+    RenderTargetSlot* slot = &g_render_target_pool->slots[h.index];
+    if (!xr_origin) {
+        slot->xr_origin_entity = TC_ENTITY_HANDLE_INVALID;
+        slot->xr_origin_resolution_error_reported = false;
+        return;
+    }
+    if (rt_validate_component_binding(
+            slot,
+            xr_origin,
+            "XrOriginComponent",
+            "XR origin")) {
+        slot->xr_origin_entity = xr_origin->owner;
+        slot->xr_origin_resolution_error_reported = false;
+    }
 }
 
 tc_component* tc_render_target_get_xr_origin(tc_render_target_handle h) {
     if (!render_target_handle_alive(h)) return NULL;
-    return g_render_target_pool->slots[h.index].xr_origin;
+    RenderTargetSlot* slot = &g_render_target_pool->slots[h.index];
+    return rt_resolve_component(
+        slot,
+        slot->xr_origin_entity,
+        "XrOriginComponent",
+        "XR origin",
+        &slot->xr_origin_resolution_error_reported
+    );
 }
 
 tc_entity_handle tc_render_target_get_xr_origin_entity(tc_render_target_handle h) {
