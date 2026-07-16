@@ -1209,6 +1209,23 @@ def test_native_basic_input_and_media_widget_factories():
 
     canvas = document.create_canvas()
     canvas.widget.bounds = Rect(0.0, 0.0, 160.0, 100.0)
+    assert canvas.fit_mode
+    assert canvas.zoom == pytest.approx(1.0)
+    zooms = []
+    points = []
+    canvas.connect_zoom_changed(zooms.append)
+    canvas.connect_pointer_input(lambda point, _event: points.append(point))
+    canvas.set_zoom(2.0, Point(80.0, 50.0))
+    assert not canvas.fit_mode
+    assert zooms == [pytest.approx(2.0)]
+    pointer = PointerEvent()
+    pointer.type = PointerEventType.Move
+    pointer.x = 80.0
+    pointer.y = 50.0
+    assert canvas.widget.dispatch_pointer_event(pointer) == EventResult.Handled
+    assert points[-1].x == pytest.approx(80.0)
+    assert points[-1].y == pytest.approx(50.0)
+    canvas.clear_texture()
     paints = []
 
     def paint_overlay(context):

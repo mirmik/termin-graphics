@@ -1313,6 +1313,7 @@ void test_icon_image_and_canvas_media_contracts() {
   const tc_ui_point center{canvas.bounds().x + canvas.bounds().width * 0.5f,
                            canvas.bounds().y + canvas.bounds().height * 0.5f};
   canvas.fit_in_view();
+  assert(canvas.fit_mode());
   const tc_ui_point image_center = canvas.widget_to_image(center);
   assert(near(image_center.x, 50.0f));
   assert(near(image_center.y, 25.0f));
@@ -1325,9 +1326,18 @@ void test_icon_image_and_canvas_media_contracts() {
   const float old_zoom = canvas.zoom();
   assert(canvas.pointer_event(document.get(), &wheel) == TC_UI_EVENT_HANDLED);
   assert(canvas.zoom() > old_zoom);
+  assert(!canvas.fit_mode());
   const tc_ui_point anchored = canvas.widget_to_image(center);
   assert(near(anchored.x, image_center.x));
   assert(near(anchored.y, image_center.y));
+
+  canvas.fit_in_view();
+  const float fitted_zoom = canvas.zoom();
+  canvas.layout(document.get(), tc_ui_rect{canvas.bounds().x, canvas.bounds().y,
+                                           canvas.bounds().width * 0.5f,
+                                           canvas.bounds().height});
+  assert(canvas.fit_mode());
+  assert(canvas.zoom() < fitted_zoom);
 
   int clicks = 0;
   icon.clicked().connect([&clicks](IconButton &) { ++clicks; });
@@ -1346,6 +1356,7 @@ void test_icon_image_and_canvas_media_contracts() {
   assert(custom_paints == 1);
   assert(count_commands(draw_list, TC_UI_DRAW_TEXTURE) == 3);
   assert(count_commands(draw_list, TC_UI_DRAW_LINE) >= 1);
+  canvas.clear_texture();
   tc_ui_paint_context_destroy(context);
   tc_ui_draw_list_destroy(draw_list);
 

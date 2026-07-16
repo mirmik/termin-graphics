@@ -13,6 +13,13 @@ Canvas::Canvas()
 void Canvas::set_texture(uint32_t texture_id, tc_ui_size image_size) {
     texture_id_ = texture_id;
     image_size_ = image_size;
+    if (fit_mode_) fit_in_view();
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+}
+
+void Canvas::clear_texture() {
+    texture_id_ = 0;
+    image_size_ = {};
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
@@ -29,6 +36,7 @@ void Canvas::set_paint_callback(PaintCallback callback) {
 void Canvas::set_zoom(float zoom, tc_ui_point anchor) {
     const tc_ui_point image_anchor = widget_to_image(anchor);
     const float next = clamp_float(zoom, min_zoom_, max_zoom_);
+    fit_mode_ = false;
     if (std::fabs(next - zoom_) <= 0.000001f) return;
     zoom_ = next;
     offset_.x = anchor.x - bounds().x - image_anchor.x * zoom_;
@@ -38,6 +46,7 @@ void Canvas::set_zoom(float zoom, tc_ui_point anchor) {
 }
 
 void Canvas::fit_in_view() {
+    fit_mode_ = true;
     if (image_size_.width <= 0.0f || image_size_.height <= 0.0f || bounds().width <= 0.0f || bounds().height <= 0.0f) return;
     zoom_ = std::min(bounds().width / image_size_.width, bounds().height / image_size_.height) * 0.95f;
     zoom_ = clamp_float(zoom_, min_zoom_, max_zoom_);
@@ -62,9 +71,9 @@ tc_ui_point Canvas::image_to_widget(tc_ui_point point) const {
 }
 
 void Canvas::layout(tc_ui_document* document, tc_ui_rect rect) {
-    const bool first_layout = bounds().width <= 0.0f || bounds().height <= 0.0f;
+    const bool size_changed = bounds().width != rect.width || bounds().height != rect.height;
     NativeWidget::layout(document, rect);
-    if (first_layout && image_size_.width > 0.0f && image_size_.height > 0.0f) fit_in_view();
+    if (fit_mode_ && size_changed) fit_in_view();
 }
 
 void Canvas::paint(tc_ui_document* document, tc_ui_paint_context* context) {
@@ -105,6 +114,7 @@ tc_ui_event_result Canvas::pointer_event(tc_ui_document* document, const tc_ui_p
         return TC_UI_EVENT_HANDLED;
     }
     if (event->type == TC_UI_POINTER_MOVE && (panning_ || captured)) {
+        fit_mode_ = false;
         offset_.x = pan_start_offset_.x + event->x - pan_start_.x;
         offset_.y = pan_start_offset_.y + event->y - pan_start_.y;
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);

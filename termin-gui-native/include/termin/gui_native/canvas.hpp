@@ -18,6 +18,7 @@ private:
     float min_zoom_ = 0.01f;
     float max_zoom_ = 100.0f;
     tc_ui_point offset_ {};
+    bool fit_mode_ = true;
     bool panning_ = false;
     tc_ui_point pan_start_ {};
     tc_ui_point pan_start_offset_ {};
@@ -27,9 +28,11 @@ private:
 public:
     Canvas();
     void set_texture(uint32_t texture_id, tc_ui_size image_size = {});
+    void clear_texture();
     void set_overlay_texture(uint32_t texture_id);
     void set_paint_callback(PaintCallback callback);
     float zoom() const { return zoom_; }
+    bool fit_mode() const { return fit_mode_; }
     void set_zoom(float zoom, tc_ui_point anchor);
     void fit_in_view();
     tc_ui_point widget_to_image(tc_ui_point point) const;

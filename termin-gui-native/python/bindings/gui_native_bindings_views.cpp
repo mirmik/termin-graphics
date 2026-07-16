@@ -1651,11 +1651,13 @@ void bind_gui_native_views_and_collections(nb::module_& m) {
         .def_prop_ro("widget", [](const CanvasRef& self) { return self.widget; })
         .def_prop_ro("handle", [](const CanvasRef& self) { return WidgetHandle {self.widget.handle}; })
         .def_prop_ro("zoom", [](const CanvasRef& self) { return self.get().zoom(); })
+        .def_prop_ro("fit_mode", [](const CanvasRef& self) { return self.get().fit_mode(); })
         .def("set_texture", [](const CanvasRef& self,
                                 tgfx::TextureHandle texture,
                                 std::optional<tc_ui_size> image_size) {
             self.get().set_texture(texture.id, image_size.value_or(tc_ui_size{}));
         }, nb::arg("texture"), nb::arg("image_size").none() = nb::none())
+        .def("clear_texture", [](const CanvasRef& self) { self.get().clear_texture(); })
         .def("set_overlay_texture", [](const CanvasRef& self, tgfx::TextureHandle texture) {
             self.get().set_overlay_texture(texture.id);
         }, nb::arg("texture"))
@@ -1669,6 +1671,40 @@ void bind_gui_native_views_and_collections(nb::module_& m) {
         .def("image_to_widget", [](const CanvasRef& self, tc_ui_point point) {
             return self.get().image_to_widget(point);
         }, nb::arg("point"))
+        .def("connect_zoom_changed", [](const CanvasRef& self, nb::object callback) {
+            auto state = self.widget.state;
+            return self.get().zoom_changed().connect(
+                [state, callback = std::move(callback)](
+                    termin::gui_native::Canvas&, float zoom) {
+                    try {
+                        nb::gil_scoped_acquire gil;
+                        callback(zoom);
+                    } catch (...) {
+                        if (state && !state->pending_exception)
+                            state->pending_exception = std::current_exception();
+                        tc_log_error(
+                            "[termin-gui-native/python] Canvas zoom callback failed");
+                    }
+                });
+        }, nb::arg("callback"))
+        .def("connect_pointer_input", [](const CanvasRef& self, nb::object callback) {
+            auto state = self.widget.state;
+            return self.get().pointer_input().connect(
+                [state, callback = std::move(callback)](
+                    termin::gui_native::Canvas&,
+                    tc_ui_point image_point,
+                    const tc_ui_pointer_event& event) {
+                    try {
+                        nb::gil_scoped_acquire gil;
+                        callback(image_point, event);
+                    } catch (...) {
+                        if (state && !state->pending_exception)
+                            state->pending_exception = std::current_exception();
+                        tc_log_error(
+                            "[termin-gui-native/python] Canvas pointer callback failed");
+                    }
+                });
+        }, nb::arg("callback"))
         .def("set_paint_callback", [](const CanvasRef& self, nb::object callback) {
             if (callback.is_none()) {
                 self.get().set_paint_callback({});
