@@ -102,17 +102,6 @@ public:
 
 };
 
-nb::object scene_to_python(tc_scene_handle h) {
-    nb::module_ scene_module = nb::module_::import_("termin.scene._scene_native");
-    nb::object scene_cls = scene_module.attr("TcScene");
-    return scene_cls.attr("from_handle")(h.index, h.generation);
-}
-
-nb::object rendering_manager_instance() {
-    nb::module_ engine = nb::module_::import_("termin.engine");
-    return engine.attr("RenderingManager").attr("instance")();
-}
-
 } // namespace
 
 void bind_scene_render_extensions(nb::module_& m) {
@@ -335,16 +324,7 @@ void bind_scene_render_extensions(nb::module_& m) {
                 result.push_back(scene_pipeline_template_at(scene, i));
             }
             return result;
-        })
-        .def("get_pipeline", [](const SceneRenderMount& self, const std::string& name) {
-            return rendering_manager_instance().attr("get_scene_pipeline")(scene_to_python(self.handle()), name);
-        }, nb::arg("name"))
-        .def("get_pipeline_names", [](const SceneRenderMount& self) {
-            return rendering_manager_instance().attr("get_pipeline_names")(scene_to_python(self.handle()));
-        })
-        .def("get_pipeline_targets", [](const SceneRenderMount&, const std::string& name) {
-            return rendering_manager_instance().attr("get_pipeline_targets")(name);
-        }, nb::arg("name"));
+        });
 
     m.def("scene_render_state", [](const TcSceneRef& scene) {
         return SceneRenderState(scene.handle());
