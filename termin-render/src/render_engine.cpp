@@ -17,6 +17,7 @@
 #include "tgfx2/pipeline_cache.hpp"
 #include "tgfx2/render_context.hpp"
 #include "tgfx2/render_runtime.hpp"
+#include "tgfx2/shader_artifact_resolver.hpp"
 #include "tgfx/tgfx2_interop.h"
 #include "termin/render/tgfx2_bridge.hpp"
 
@@ -234,6 +235,23 @@ tgfx::IRenderDevice* RenderEngine::tgfx2_device() {
     return tgfx2_runtime_ ? &tgfx2_runtime_->device() : nullptr;
 }
 
+void RenderEngine::configure_shader_artifacts(
+    const std::string& artifact_root,
+    const std::string& cache_root,
+    const std::string& compiler_path,
+    bool dev_compile_enabled
+) {
+    shader_artifact_resolver_ = std::make_unique<ShaderArtifactResolver>(
+        artifact_root,
+        cache_root,
+        compiler_path,
+        dev_compile_enabled
+    );
+    if (tgfx2_runtime_) {
+        tgfx2_runtime_->configure_shader_artifacts(*shader_artifact_resolver_);
+    }
+}
+
 RenderPipelineCacheStats RenderEngine::pipeline_cache_stats() const {
     if (!tgfx2_runtime_) {
         return {};
@@ -286,6 +304,9 @@ void RenderEngine::ensure_tgfx2() {
         auto runtime = tgfx::RenderRuntime::create_from_env();
         runtime->claim_interop();
         tgfx2_runtime_ = std::move(runtime);
+    }
+    if (shader_artifact_resolver_) {
+        tgfx2_runtime_->configure_shader_artifacts(*shader_artifact_resolver_);
     }
 }
 

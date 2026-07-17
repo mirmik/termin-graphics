@@ -5,6 +5,7 @@
 
 #include "tgfx2/enums.hpp"
 #include "tgfx2/tgfx2_api.h"
+#include "tgfx2/shader_artifact_resolver.hpp"
 
 namespace tgfx {
 
@@ -21,6 +22,7 @@ private:
     std::unique_ptr<RenderContext2> owned_ctx_;
     RenderContext2* borrowed_ctx_ = nullptr;
     bool interop_claimed_ = false;
+    termin::ShaderArtifactResolver shader_artifacts_;
 
 public:
     explicit RenderRuntime(std::unique_ptr<IRenderDevice> device);
@@ -47,6 +49,8 @@ public:
     void claim_interop();
     void release_interop();
     bool interop_claimed() const { return interop_claimed_; }
+    void configure_shader_artifacts(const termin::ShaderArtifactResolver& resolver);
+    const termin::ShaderArtifactResolver& shader_artifact_resolver() const;
     void close();
 
 private:

@@ -1,4 +1,5 @@
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/string.h>
 #include <nanobind/stl/unordered_map.h>
 #include <nanobind/stl/vector.h>
 
@@ -16,6 +17,14 @@ void bind_render_engine(nb::module_& m) {
     nb::class_<RenderEngine>(m, "RenderEngine")
         .def(nb::init<>())
         .def("ensure_tgfx2", &RenderEngine::ensure_tgfx2)
+        .def(
+            "configure_shader_artifacts",
+            &RenderEngine::configure_shader_artifacts,
+            nb::arg("artifact_root"),
+            nb::arg("cache_root"),
+            nb::arg("compiler_path") = "",
+            nb::arg("dev_compile_enabled") = false
+        )
         .def_prop_ro("tgfx2_ctx", &RenderEngine::tgfx2_ctx,
                      nb::rv_policy::reference_internal)
         .def_prop_ro("tgfx2_device", &RenderEngine::tgfx2_device,

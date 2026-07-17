@@ -104,6 +104,25 @@ void RenderRuntime::release_interop() {
     interop_claimed_ = false;
 }
 
+void RenderRuntime::configure_shader_artifacts(
+    const termin::ShaderArtifactResolver& resolver
+) {
+    if (!device_) {
+        throw std::runtime_error(
+            "RenderRuntime: cannot configure shader artifacts without a device");
+    }
+    shader_artifacts_ = resolver;
+    device_->configure_shader_artifacts(shader_artifacts_);
+}
+
+const termin::ShaderArtifactResolver& RenderRuntime::shader_artifact_resolver() const {
+    if (!device_) {
+        throw std::runtime_error(
+            "RenderRuntime: shader artifact resolver is unavailable without a device");
+    }
+    return device_->shader_artifact_resolver();
+}
+
 void RenderRuntime::close() {
     release_interop();
     borrowed_ctx_ = nullptr;

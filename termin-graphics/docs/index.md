@@ -7,6 +7,7 @@
 - [Module Map](../../docs/modules.md#termin-graphics--tgfx)
 - [Architecture notes](architecture/index.md)
 - [Line rendering plan](line-rendering-plan.md)
+- [Shader artifact runtime](shader-artifact-runtime.md)
 - [Renderer facades plan](../../docs/plans/2026-05-12-tgfx-renderer-facades.md)
 
 ## Examples

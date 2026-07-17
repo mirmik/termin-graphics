@@ -314,6 +314,8 @@ bool VulkanRenderDevice::ensure_tc_shader(
     const auto shader_language = static_cast<tc_shader_language>(shader->language);
     const uint32_t pool_index = shader->pool_index;
     const uint32_t version = shader->version;
+    const auto& resolver = shader_artifact_resolver();
+    const uint64_t resolver_revision = resolver.revision();
     const bool resource_layout_ready =
         tc_shader_has_resource_layout(shader) ||
         (!artifacts_required && shader_language == TC_SHADER_LANGUAGE_GLSL);
@@ -322,6 +324,7 @@ bool VulkanRenderDevice::ensure_tc_shader(
         auto it = tc_shader_cache_.find(pool_index);
         if (it != tc_shader_cache_.end() &&
             it->second.version == version &&
+            it->second.resolver_revision == resolver_revision &&
             it->second.has_vs == has_vs &&
             it->second.fs &&
             (!has_vs || it->second.vs) &&
@@ -347,6 +350,7 @@ bool VulkanRenderDevice::ensure_tc_shader(
             vs_desc.entry_point = shader->vertex_entry;
         }
         if (!termin::tgfx2_load_or_compile_shader_artifact_for_backend(
+                resolver,
                 shader,
                 BackendType::Vulkan,
                 vs_desc.stage,
@@ -377,6 +381,7 @@ bool VulkanRenderDevice::ensure_tc_shader(
         fs_desc.entry_point = shader->fragment_entry;
     }
     if (!termin::tgfx2_load_or_compile_shader_artifact_for_backend(
+            resolver,
             shader,
             BackendType::Vulkan,
             fs_desc.stage,
@@ -412,6 +417,7 @@ bool VulkanRenderDevice::ensure_tc_shader(
     entry.vs = vs;
     entry.fs = fs;
     entry.version = version;
+    entry.resolver_revision = resolver_revision;
     entry.has_vs = has_vs;
     tc_shader_cache_.emplace(pool_index, entry);
 

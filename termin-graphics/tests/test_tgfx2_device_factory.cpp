@@ -15,6 +15,7 @@
 #include "tgfx2/enums.hpp"
 #include "tgfx2/engine_shader_catalog.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
+#include "tgfx2/shader_artifact_resolver.hpp"
 #include "tgfx/resources/tc_shader_registry.h"
 
 static void set_backend_env(const char* value) {
@@ -217,6 +218,35 @@ TEST_CASE("tgfx2 shader artifact paths are backend aware") {
 
     termin::tgfx2_set_shader_artifact_root("");
     fs::remove_all(root);
+}
+
+TEST_CASE("shader artifact resolvers isolate runtime roots") {
+    termin::ShaderArtifactResolver first("/runtime/first", "/cache/first", "", false);
+    termin::ShaderArtifactResolver second("/runtime/second", "/cache/second", "", false);
+
+    std::string first_path;
+    std::string second_path;
+    REQUIRE(termin::tgfx2_shader_artifact_path(
+        first,
+        "shared-shader",
+        tgfx::BackendType::Vulkan,
+        tgfx::ShaderStage::Fragment,
+        first_path
+    ));
+    REQUIRE(termin::tgfx2_shader_artifact_path(
+        second,
+        "shared-shader",
+        tgfx::BackendType::Vulkan,
+        tgfx::ShaderStage::Fragment,
+        second_path
+    ));
+
+    CHECK(first_path == "/runtime/first/shaders/vulkan/shared-shader.frag.spv");
+    CHECK(second_path == "/runtime/second/shaders/vulkan/shared-shader.frag.spv");
+    CHECK(first.revision() == second.revision());
+    first.set_artifact_root("/runtime/first-updated");
+    CHECK(first.revision() != second.revision());
+    CHECK(second.artifact_root() == "/runtime/second");
 }
 
 TEST_CASE("backend binding plan separates semantic resources from backend placement") {

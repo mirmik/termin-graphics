@@ -33,6 +33,8 @@ class RenderRuntime;
 
 namespace termin {
 
+class ShaderArtifactResolver;
+
 struct RenderPipelineCacheStats {
     uint64_t hit_count = 0;
     uint64_t miss_count = 0;
@@ -76,6 +78,7 @@ private:
     // Lazily constructed tgfx2 runtime. It either owns a standalone
     // device or borrows the host-owned process-wide interop device.
     std::unique_ptr<tgfx::RenderRuntime> tgfx2_runtime_;
+    std::unique_ptr<ShaderArtifactResolver> shader_artifact_resolver_;
 
 public:
     void ensure_tgfx2();
@@ -88,6 +91,13 @@ public:
     // Access the tgfx2 render device that owns all texture/buffer
     // handles used by the engine. Lifetime-tied to the RenderEngine.
     tgfx::IRenderDevice* tgfx2_device();
+
+    void configure_shader_artifacts(
+        const std::string& artifact_root,
+        const std::string& cache_root,
+        const std::string& compiler_path,
+        bool dev_compile_enabled
+    );
 
     RenderPipelineCacheStats pipeline_cache_stats() const;
 

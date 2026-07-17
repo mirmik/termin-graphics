@@ -34,6 +34,8 @@ class IRenderDevice;
 
 namespace termin {
 
+class ShaderArtifactResolver;
+
 // Ensure the tgfx2 vertex and fragment ShaderHandles for `shader` are live
 // and up to date for the given device. The device compiles on first call or
 // when the shader version has advanced past the cached one; stale handles
@@ -61,6 +63,12 @@ TGFX2_API bool tgfx2_shader_artifact_path(
     tgfx::BackendType backend,
     tgfx::ShaderStage stage,
     std::string& out);
+TGFX2_API bool tgfx2_shader_artifact_path(
+    const ShaderArtifactResolver& resolver,
+    const char* shader_uuid,
+    tgfx::BackendType backend,
+    tgfx::ShaderStage stage,
+    std::string& out);
 TGFX2_API bool tgfx2_load_shader_artifact_for_backend(
     const char* shader_uuid,
     tgfx::BackendType backend,
@@ -71,7 +79,18 @@ TGFX2_API bool tgfx2_load_or_compile_shader_artifact_for_backend(
     tgfx::BackendType backend,
     tgfx::ShaderStage stage,
     std::vector<uint8_t>& out);
+TGFX2_API bool tgfx2_load_or_compile_shader_artifact_for_backend(
+    const ShaderArtifactResolver& resolver,
+    ::tc_shader* shader,
+    tgfx::BackendType backend,
+    tgfx::ShaderStage stage,
+    std::vector<uint8_t>& out);
 TGFX2_API bool tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
+    const tgfx::EngineShaderStageSource& shader,
+    tgfx::BackendType backend,
+    std::vector<uint8_t>& out);
+TGFX2_API bool tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
+    const ShaderArtifactResolver& resolver,
     const tgfx::EngineShaderStageSource& shader,
     tgfx::BackendType backend,
     std::vector<uint8_t>& out);

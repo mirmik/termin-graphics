@@ -355,12 +355,14 @@ std::vector<uint8_t> normalize_tc_texture_pixels(const tc_texture* tex, PixelFor
 }
 
 bool load_opengl_shader_artifact_source(
+    const termin::ShaderArtifactResolver& resolver,
     tc_shader* shader,
     ShaderStage stage,
     std::string& out_source
 ) {
     std::vector<uint8_t> bytes;
     if (!termin::tgfx2_load_or_compile_shader_artifact_for_backend(
+            resolver,
             shader,
             BackendType::OpenGL,
             stage,
@@ -593,12 +595,15 @@ bool OpenGLRenderDevice::ensure_tc_shader(
     const auto shader_language = static_cast<tc_shader_language>(shader->language);
     const uint32_t pool_index = shader->pool_index;
     const uint32_t version = shader->version;
+    const auto& resolver = shader_artifact_resolver();
+    const uint64_t resolver_revision = resolver.revision();
     const bool resource_layout_ready =
         tc_shader_has_resource_layout(shader) ||
         (!artifacts_required && shader_language == TC_SHADER_LANGUAGE_GLSL);
     auto it = tc_shader_cache_.find(pool_index);
     if (it != tc_shader_cache_.end() &&
         it->second.version == version &&
+        it->second.resolver_revision == resolver_revision &&
         it->second.has_vs == has_vs &&
         it->second.fs &&
         (!has_vs || it->second.vs) &&
@@ -620,7 +625,7 @@ bool OpenGLRenderDevice::ensure_tc_shader(
         ShaderDesc vs_desc;
         vs_desc.stage = ShaderStage::Vertex;
         vs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":vertex";
-        if (!load_opengl_shader_artifact_source(shader, vs_desc.stage, vs_desc.source)) {
+        if (!load_opengl_shader_artifact_source(resolver, shader, vs_desc.stage, vs_desc.source)) {
             if (artifacts_required || shader_language != TC_SHADER_LANGUAGE_GLSL) {
                 tc_log_error(
                     "OpenGLRenderDevice::ensure_tc_shader: %s vertex artifact missing or dev compile failed for '%s' language=%u",
@@ -642,7 +647,7 @@ bool OpenGLRenderDevice::ensure_tc_shader(
     ShaderDesc fs_desc;
     fs_desc.stage = ShaderStage::Fragment;
     fs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":fragment";
-    if (!load_opengl_shader_artifact_source(shader, fs_desc.stage, fs_desc.source)) {
+    if (!load_opengl_shader_artifact_source(resolver, shader, fs_desc.stage, fs_desc.source)) {
         if (artifacts_required || shader_language != TC_SHADER_LANGUAGE_GLSL) {
             if (vs) destroy(vs);
             tc_log_error(
@@ -666,6 +671,7 @@ bool OpenGLRenderDevice::ensure_tc_shader(
     entry.vs = vs;
     entry.fs = fs;
     entry.version = version;
+    entry.resolver_revision = resolver_revision;
     entry.has_vs = has_vs;
     tc_shader_cache_.emplace(pool_index, entry);
 

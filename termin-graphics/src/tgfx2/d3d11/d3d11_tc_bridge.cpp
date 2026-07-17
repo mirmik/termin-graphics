@@ -114,12 +114,15 @@ bool D3D11RenderDevice::ensure_tc_shader(
     const bool has_vs = shader->vertex_source && shader->vertex_source[0] != '\0';
     const uint32_t pool_index = shader->pool_index;
     const uint32_t version = shader->version;
+    const auto& resolver = shader_artifact_resolver();
+    const uint64_t resolver_revision = resolver.revision();
     const bool resource_layout_ready = tc_shader_has_resource_layout(shader) ||
                                        !tc_shader_requires_artifacts(shader);
 
     auto it = tc_shader_cache_.find(pool_index);
     if (it != tc_shader_cache_.end() &&
         it->second.version == version &&
+        it->second.resolver_revision == resolver_revision &&
         it->second.has_vs == has_vs &&
         it->second.fs &&
         (!has_vs || it->second.vs) &&
@@ -143,6 +146,7 @@ bool D3D11RenderDevice::ensure_tc_shader(
             vs_desc.entry_point = shader->vertex_entry;
         }
         if (!termin::tgfx2_load_or_compile_shader_artifact_for_backend(
+                resolver,
                 shader,
                 BackendType::D3D11,
                 vs_desc.stage,
@@ -168,6 +172,7 @@ bool D3D11RenderDevice::ensure_tc_shader(
         fs_desc.entry_point = shader->fragment_entry;
     }
     if (!termin::tgfx2_load_or_compile_shader_artifact_for_backend(
+            resolver,
             shader,
             BackendType::D3D11,
             fs_desc.stage,
@@ -191,6 +196,7 @@ bool D3D11RenderDevice::ensure_tc_shader(
     entry.vs = vs;
     entry.fs = fs;
     entry.version = version;
+    entry.resolver_revision = resolver_revision;
     entry.has_vs = has_vs;
     tc_shader_cache_.emplace(pool_index, entry);
 

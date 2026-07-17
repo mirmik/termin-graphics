@@ -12,6 +12,7 @@
 #include "tgfx2/backend_binding_plan.hpp"
 #include "tgfx2/capabilities.hpp"
 #include "tgfx2/i_command_list.hpp"
+#include "tgfx2/shader_artifact_resolver.hpp"
 #include <termin/geom/color.hpp>
 #include <termin/geom/bounds2.hpp>
 
@@ -28,8 +29,28 @@ struct tc_shader;
 namespace tgfx {
 
 class IRenderDevice {
+private:
+    termin::ShaderArtifactResolver shader_artifact_resolver_;
+    bool shader_artifact_resolver_configured_ = false;
+
 public:
     virtual ~IRenderDevice() = default;
+
+    void configure_shader_artifacts(const termin::ShaderArtifactResolver& resolver) {
+        shader_artifact_resolver_.configure(
+            resolver.artifact_root(),
+            resolver.cache_root(),
+            resolver.compiler_path(),
+            resolver.dev_compile_enabled()
+        );
+        shader_artifact_resolver_configured_ = true;
+    }
+
+    const termin::ShaderArtifactResolver& shader_artifact_resolver() const {
+        return shader_artifact_resolver_configured_
+            ? shader_artifact_resolver_
+            : termin::tgfx2_legacy_shader_artifact_resolver();
+    }
 
     // Backend identity — lets callers branch on GL-only vs Vulkan-only
     // host integration (FBO invalidation, external texture handles, ...)

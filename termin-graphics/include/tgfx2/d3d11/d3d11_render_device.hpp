@@ -200,6 +200,7 @@ private:
         ShaderHandle vs;
         ShaderHandle fs;
         uint32_t version = 0;
+        uint64_t resolver_revision = 0;
         bool has_vs = false;
     };
     std::unordered_map<uint32_t, CachedTcShaderEntry> tc_shader_cache_;

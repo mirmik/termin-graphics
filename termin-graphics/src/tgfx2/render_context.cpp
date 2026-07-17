@@ -1160,6 +1160,7 @@ void RenderContext2::ensure_fsq_resources() {
     vs_desc.debug_name = std::string(fsq_shader.uuid) + ":vertex";
     std::vector<uint8_t> shader_artifact;
     if (!termin::tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
+            device_.shader_artifact_resolver(),
             fsq_shader,
             device_.backend_type(),
             shader_artifact)) {

@@ -69,7 +69,7 @@ def resolve_slangc(anchor_file: Path | None = None) -> Path | None:
     return resolve_path_tool("slangc")
 
 
-def configure_project_shader_runtime(project_root: Path, *, label: str) -> bool:
+def configure_project_shader_runtime(project_root: Path, *, label: str, render_engine) -> bool:
     """Configure dev shader compilation for source project rendering."""
 
     artifact_root = project_root / ".termin" / "shader-artifacts"
@@ -97,16 +97,14 @@ def configure_project_shader_runtime(project_root: Path, *, label: str) -> bool:
     os.environ["TERMIN_SLANGC"] = str(slangc)
 
     try:
-        import tgfx
-
-        tgfx.configure_shader_runtime(
+        render_engine.configure_shader_artifacts(
             artifact_root=str(artifact_root),
             cache_root=str(cache_root),
-            shader_compiler=str(compiler),
-            dev_compile=True,
+            compiler_path=str(compiler),
+            dev_compile_enabled=True,
         )
     except Exception as exc:
-        log.error(f"[ShaderRuntime] {label} configure_shader_runtime failed: {exc}")
+        log.error(f"[ShaderRuntime] {label} render engine shader configuration failed: {exc}")
         return False
 
     log.info(
