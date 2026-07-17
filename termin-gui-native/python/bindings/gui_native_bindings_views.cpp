@@ -384,6 +384,102 @@ void bind_gui_native_views_and_collections(nb::module_ &m) {
           },
           nb::arg("target_frame_ms"), nb::arg("warning_frame_ms"));
 
+  nb::class_<termin::gui_native::FrameTimelineSample>(m, "FrameTimelineSample")
+      .def(nb::init<>())
+      .def(
+          "__init__",
+          [](termin::gui_native::FrameTimelineSample *self, int64_t stable_id,
+             float interval_ms, float active_ms, float lateness_ms,
+             float target_ms, bool hitch, bool gap_before) {
+            new (self) termin::gui_native::FrameTimelineSample{
+                stable_id, interval_ms, active_ms, lateness_ms, target_ms,
+                hitch, gap_before};
+          },
+          nb::arg("stable_id"), nb::arg("interval_ms"), nb::arg("active_ms"),
+          nb::arg("lateness_ms") = 0.0f, nb::arg("target_ms") = 0.0f,
+          nb::arg("hitch") = false, nb::arg("gap_before") = false)
+      .def_rw("stable_id", &termin::gui_native::FrameTimelineSample::stable_id)
+      .def_rw("interval_ms", &termin::gui_native::FrameTimelineSample::interval_ms)
+      .def_rw("active_ms", &termin::gui_native::FrameTimelineSample::active_ms)
+      .def_rw("lateness_ms", &termin::gui_native::FrameTimelineSample::lateness_ms)
+      .def_rw("target_ms", &termin::gui_native::FrameTimelineSample::target_ms)
+      .def_rw("hitch", &termin::gui_native::FrameTimelineSample::hitch)
+      .def_rw("gap_before", &termin::gui_native::FrameTimelineSample::gap_before);
+
+  nb::class_<termin::gui_native::FrameTimelineModel>(m, "FrameTimelineModel")
+      .def(nb::init<>())
+      .def_prop_ro("samples",
+                   [](const termin::gui_native::FrameTimelineModel &self) {
+                     return self.samples();
+                   })
+      .def_prop_ro("revision", &termin::gui_native::FrameTimelineModel::revision)
+      .def("set_samples", &termin::gui_native::FrameTimelineModel::set_samples,
+           nb::arg("samples"))
+      .def("clear", &termin::gui_native::FrameTimelineModel::clear);
+
+  nb::class_<FrameTimelineWidgetRef>(m, "FrameTimelineWidget")
+      .def_prop_ro("widget", [](const FrameTimelineWidgetRef &self) { return self.widget; })
+      .def_prop_ro("handle", [](const FrameTimelineWidgetRef &self) {
+        return WidgetHandle{self.widget.handle};
+      })
+      .def_prop_rw("model",
+                   [](const FrameTimelineWidgetRef &self) { return self.get().model(); },
+                   [](const FrameTimelineWidgetRef &self,
+                      std::shared_ptr<termin::gui_native::FrameTimelineModel> model) {
+                     self.get().set_model(std::move(model));
+                   })
+      .def_prop_rw("window_size",
+                   [](const FrameTimelineWidgetRef &self) { return self.get().window_size(); },
+                   [](const FrameTimelineWidgetRef &self, size_t count) {
+                     self.get().set_window_size(count);
+                   })
+      .def_prop_rw("scroll_offset",
+                   [](const FrameTimelineWidgetRef &self) { return self.get().scroll_offset(); },
+                   [](const FrameTimelineWidgetRef &self, size_t count) {
+                     self.get().set_scroll_offset(count);
+                   })
+      .def_prop_rw("follow_latest",
+                   [](const FrameTimelineWidgetRef &self) { return self.get().follow_latest(); },
+                   [](const FrameTimelineWidgetRef &self, bool enabled) {
+                     self.get().set_follow_latest(enabled);
+                   })
+      .def_prop_ro("selected_id",
+                   [](const FrameTimelineWidgetRef &self) { return self.get().selected_id(); })
+      .def_prop_ro("visible_range", [](const FrameTimelineWidgetRef &self) {
+        const auto [first, last] = self.get().visible_range();
+        return std::vector<size_t>{first, last};
+      })
+      .def("select", [](const FrameTimelineWidgetRef &self, int64_t stable_id) {
+        const bool changed = self.get().select(stable_id);
+        self.widget.throw_pending_exception();
+        return changed;
+      }, nb::arg("stable_id"))
+      .def("clear_selection", [](const FrameTimelineWidgetRef &self) {
+        const bool changed = self.get().clear_selection();
+        self.widget.throw_pending_exception();
+        return changed;
+      })
+      .def("set_warning_ratio", [](const FrameTimelineWidgetRef &self, float ratio) {
+        self.get().set_warning_ratio(ratio);
+      }, nb::arg("ratio"))
+      .def("connect_selection_changed",
+           [](const FrameTimelineWidgetRef &self, nb::object callback) {
+             auto state = self.widget.state;
+             return self.get().selection_changed().connect(
+                 [state, callback = std::move(callback)](
+                     termin::gui_native::FrameTimelineWidget &, int64_t stable_id) {
+                   try {
+                     nb::gil_scoped_acquire gil;
+                     callback(stable_id);
+                   } catch (...) {
+                     if (state && !state->pending_exception)
+                       state->pending_exception = std::current_exception();
+                     tc_log_error("[termin-gui-native/python] FrameTimelineWidget "
+                                  "selection callback failed");
+                   }
+                 });
+           }, nb::arg("callback"));
+
   nb::class_<termin::gui_native::ViewportSurfaceSize>(m, "ViewportSurfaceSize")
       .def(nb::init<>())
       .def(

@@ -18,6 +18,7 @@
 #include <termin/gui_native/file_dialog_service.hpp>
 #include <termin/gui_native/file_grid_widget.hpp>
 #include <termin/gui_native/frame_time_graph.hpp>
+#include <termin/gui_native/frame_timeline.hpp>
 #include <termin/gui_native/graphics_scene.hpp>
 #include <termin/gui_native/grid_layout.hpp>
 #include <termin/gui_native/group_box.hpp>

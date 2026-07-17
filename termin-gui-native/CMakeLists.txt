@@ -63,6 +63,7 @@ add_library(termin_gui_native SHARED
     src/rich_text_model.cpp
     src/rich_text_view.cpp
     src/frame_time_graph.cpp
+    src/frame_timeline.cpp
     src/viewport3d.cpp
     src/slider.cpp
     src/spin_box.cpp
@@ -196,6 +197,9 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     )
     termin_gui_native_add_test(termin_gui_native_frame_time_graph_test
         tests/test_frame_time_graph.cpp
+    )
+    termin_gui_native_add_test(termin_gui_native_frame_timeline_test
+        tests/test_frame_timeline.cpp
     )
     termin_gui_native_add_test(termin_gui_native_viewport3d_test
         tests/test_viewport3d.cpp

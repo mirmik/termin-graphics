@@ -391,6 +391,15 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
                     std::move(model))};
           },
           nb::arg("model") = nullptr)
+      .def(
+          "create_frame_timeline",
+          [](Document &self,
+             std::shared_ptr<termin::gui_native::FrameTimelineModel> model) {
+            return FrameTimelineWidgetRef{
+                self.make_native<termin::gui_native::FrameTimelineWidget>(
+                    std::move(model))};
+          },
+          nb::arg("model") = nullptr)
       .def("create_viewport3d",
            [](Document &self) {
              return Viewport3DRef{

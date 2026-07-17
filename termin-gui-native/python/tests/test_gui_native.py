@@ -15,6 +15,8 @@ from termin.gui_native import (
     EdgeInsets,
     EventResult,
     FrameTimeModel,
+    FrameTimelineModel,
+    FrameTimelineSample,
     KeyCode,
     KeyEvent,
     KeyEventType,
@@ -1009,6 +1011,44 @@ def test_native_frame_time_graph_uses_bounded_injected_model():
     assert graph.model.samples == [15.0, 20.0, 40.0]
     with pytest.raises(ValueError, match="non-negative"):
         graph.model.add_sample(-1.0)
+
+
+def test_native_frame_timeline_selection_follow_and_projection():
+    model = FrameTimelineModel()
+    model.set_samples(
+        [
+            FrameTimelineSample(
+                index,
+                16.0 + index,
+                5.0,
+                max(0.0, index - 2.0),
+                16.0,
+                index == 8,
+            )
+            for index in range(1, 11)
+        ]
+    )
+    document = Document()
+    timeline = document.create_frame_timeline(model)
+    selected = []
+    timeline.connect_selection_changed(selected.append)
+    assert document.add_root(timeline.handle)
+    document.layout_roots(Rect(0.0, 0.0, 300.0, 180.0))
+    assert timeline.selected_id == 10
+    timeline.window_size = 8
+    timeline.scroll_offset = 2
+    assert timeline.visible_range == [0, 8]
+    assert timeline.select(4)
+    assert timeline.selected_id == 4
+    assert not timeline.follow_latest
+    assert selected[-1] == 4
+    timeline.follow_latest = True
+    assert timeline.selected_id == 10
+
+    model.set_samples([FrameTimelineSample(20, 20.0, 7.0, target_ms=16.0)])
+    assert timeline.selected_id == 20
+    with pytest.raises(ValueError, match="unique"):
+        model.set_samples([FrameTimelineSample(1, 1.0, 1.0), FrameTimelineSample(1, 2.0, 1.0)])
 
 
 def test_native_text_input_utf8_selection_uses_injected_clipboard():
