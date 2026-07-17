@@ -2,7 +2,6 @@
 #define TC_PASS_H
 
 #include <tc_types.h>
-#include <tc_type_registry.h>
 #include <core/tc_entity_pool.h>
 #include <core/tc_scene_pool.h>
 #include <core/tc_dlist.h>
@@ -69,11 +68,7 @@ struct tc_pass {
     void* bindings[TC_LANGUAGE_MAX];
     tc_pipeline_handle owner_pipeline;
     tc_pass_deleter deleter;
-    tc_type_entry* type_entry;
-    uint32_t type_version;
     tc_runtime_type_instance_link runtime_type_link;
-    // TODO: remove after old tc_type_entry instance tracking is fully retired.
-    tc_dlist_node registry_node;
 };
 
 static inline void tc_pass_init_unowned(tc_pass* p, const tc_pass_vtable* vtable) {
@@ -92,10 +87,7 @@ static inline void tc_pass_init_unowned(tc_pass* p, const tc_pass_vtable* vtable
     }
     p->owner_pipeline = TC_PIPELINE_HANDLE_INVALID;
     p->deleter = NULL;
-    p->type_entry = NULL;
-    p->type_version = 0;
     tc_runtime_type_instance_link_init(&p->runtime_type_link);
-    tc_dlist_init_node(&p->registry_node);
 }
 
 static inline void* tc_pass_get_binding(tc_pass* p, tc_language lang) {
@@ -123,10 +115,7 @@ static inline const char* tc_pass_type_name(const tc_pass* p) {
     if (p && p->runtime_type_link.type_name) {
         return p->runtime_type_link.type_name;
     }
-    if (p && p->type_entry && p->type_entry->type_name) {
-        return p->type_entry->type_name;
-    }
-    return "BrokenPass_NoTypeEntry";
+    return "BrokenPass_NoRuntimeTypeLink";
 }
 
 static inline size_t tc_pass_get_reads(tc_pass* p, const char** out, size_t max) {
@@ -205,7 +194,6 @@ TC_API void tc_pass_registry_cleanup(void);
 TC_API size_t tc_pass_registry_type_count(void);
 TC_API const char* tc_pass_registry_type_at(size_t index);
 TC_API tc_pass_kind tc_pass_registry_get_kind(const char* type_name);
-TC_API tc_type_entry* tc_pass_registry_get_entry(const char* type_name);
 TC_API size_t tc_pass_registry_instance_count(const char* type_name);
 TC_API void tc_pass_registry_set_prepare_unload_callback(
     tc_pass_prepare_unload_fn callback,
@@ -215,7 +203,7 @@ TC_API bool tc_pass_link_registered_type(tc_pass* p, const char* type_name);
 TC_API void tc_pass_unlink_from_registry(tc_pass* p);
 
 static inline bool tc_pass_type_is_current(const tc_pass* p) {
-    if (!p || (!p->type_entry && !p->runtime_type_link.type_name)) return true;
+    if (!p || !p->runtime_type_link.type_name) return true;
     return tc_runtime_type_registry_instance_is_current(&p->runtime_type_link);
 }
 
