@@ -19,6 +19,12 @@ enum class VertexTransformKind : uint8_t {
     FoliageShadow,
 };
 
+enum class MeshVertexTransformProfile : uint8_t {
+    Material,
+    Position,
+    PositionNormal,
+};
+
 enum class MaterialPipelineValueType : uint8_t {
     Float,
     Float2,
@@ -118,6 +124,10 @@ RENDER_API std::vector<MaterialPipelineResourceDecl> material_pipeline_common_ve
     std::string draw_resource_name,
     uint32_t draw_resource_size = 64u);
 
+RENDER_API std::vector<MaterialPipelineResourceDecl> material_pipeline_pass_vertex_resources(
+    std::string draw_resource_name,
+    uint32_t draw_resource_size = 64u);
+
 RENDER_API std::vector<MaterialPipelineResourceDecl> material_pipeline_foliage_vertex_resources();
 
 RENDER_API VertexTransformContract material_pipeline_make_static_vertex_transform_contract(
@@ -131,6 +141,21 @@ RENDER_API VertexTransformContract material_pipeline_make_skinned_vertex_transfo
     std::string debug_name,
     std::optional<std::string> template_uuid,
     VertexInputContract vertex_inputs);
+
+RENDER_API VertexTransformProvider material_pipeline_make_static_mesh_vertex_transform_provider(
+    std::string debug_name,
+    MeshVertexTransformProfile profile,
+    std::string model_expression);
+
+RENDER_API VertexTransformProvider material_pipeline_make_skinned_mesh_vertex_transform_provider(
+    std::string debug_name,
+    MeshVertexTransformProfile profile,
+    std::string model_expression);
+
+RENDER_API VertexOutputAdapter material_pipeline_standard_material_vertex_output_adapter();
+
+RENDER_API VertexTransformProvider material_pipeline_make_foliage_material_vertex_transform_provider(
+    std::string debug_name);
 
 RENDER_API VertexTransformContract material_pipeline_make_foliage_vertex_transform_contract(
     VertexTransformKind kind,

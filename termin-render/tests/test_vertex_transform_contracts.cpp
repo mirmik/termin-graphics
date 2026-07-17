@@ -43,40 +43,32 @@ struct CustomGeometryPassDescriptor {
 
 termin::VertexTransformContract material_static_transform()
 {
-    return termin::material_pipeline_make_static_vertex_transform_contract(
+    return termin::material_pipeline_make_static_mesh_vertex_transform_provider(
         "static",
-        termin::material_pipeline_full_material_mesh_input(),
-        termin::material_pipeline_standard_material_fragment_interface(),
-        termin::material_pipeline_common_vertex_resources("draw_data"));
+        termin::MeshVertexTransformProfile::Material,
+        "draw_data.u_model");
 }
 
 termin::VertexTransformContract compact_static_transform(const char* draw_resource)
 {
-    return termin::material_pipeline_make_static_vertex_transform_contract(
+    return termin::material_pipeline_make_static_mesh_vertex_transform_provider(
         "static_compact",
-        termin::material_pipeline_position_mesh_input(),
-        termin::material_pipeline_standard_material_fragment_interface(),
-        termin::material_pipeline_common_vertex_resources(draw_resource));
+        termin::MeshVertexTransformProfile::Position,
+        std::string(draw_resource) + ".u_model");
 }
 
 termin::VertexTransformContract normal_static_transform()
 {
-    return termin::material_pipeline_make_static_vertex_transform_contract(
+    return termin::material_pipeline_make_static_mesh_vertex_transform_provider(
         "static_position_normal",
-        termin::material_pipeline_position_normal_mesh_input(),
-        termin::material_pipeline_standard_material_fragment_interface(),
-        termin::material_pipeline_common_vertex_resources("normal_draw"));
+        termin::MeshVertexTransformProfile::PositionNormal,
+        "normal_draw.u_model");
 }
 
 termin::VertexTransformContract foliage_material_transform()
 {
-    return termin::material_pipeline_make_foliage_vertex_transform_contract(
-        termin::VertexTransformKind::Foliage,
-        "foliage",
-        "termin-engine-foliage-instanced",
-        termin::material_pipeline_foliage_material_mesh_input(),
-        termin::material_pipeline_standard_material_fragment_interface(),
-        termin::material_pipeline_foliage_vertex_resources());
+    return termin::material_pipeline_make_foliage_material_vertex_transform_provider(
+        "foliage");
 }
 
 termin::VertexTransformContract foliage_shadow_transform()
@@ -92,16 +84,16 @@ termin::VertexTransformContract foliage_shadow_transform()
 
 } // namespace
 
-TEST_CASE("Skinned transform builder declares template, inputs, and bone block") {
+TEST_CASE("Skinned material provider is modular and owns deformation resources") {
     termin::VertexTransformContract contract =
-        termin::material_pipeline_make_skinned_vertex_transform_contract(
-            material_static_transform(),
+        termin::material_pipeline_make_skinned_mesh_vertex_transform_provider(
             "skinned",
-            "termin-engine-skinned-material",
-            termin::material_pipeline_skinned_material_mesh_input());
+            termin::MeshVertexTransformProfile::Material,
+            "draw_data.u_model");
 
-    REQUIRE(contract.template_uuid.has_value());
-    CHECK_EQ(*contract.template_uuid, std::string("termin-engine-skinned-material"));
+    CHECK(!contract.template_uuid.has_value());
+    CHECK(termin::vertex_transform_provider_is_modular(contract));
+    CHECK_EQ(contract.source_module.module_name, std::string("termin_vertex_transform"));
     CHECK_EQ(contract.vertex_entry, std::string("vs_main"));
 
     CHECK(has_attribute(contract.vertex_inputs, "position", termin::MaterialPipelineValueType::Float3));
@@ -123,16 +115,15 @@ TEST_CASE("Skinned transform builder declares template, inputs, and bone block")
         termin::MaterialPipelineValueType::Float3));
 }
 
-TEST_CASE("Skinned compact transform uses position skinning input") {
+TEST_CASE("Skinned compact provider keeps position-only mesh input") {
     termin::VertexTransformContract contract =
-        termin::material_pipeline_make_skinned_vertex_transform_contract(
-            compact_static_transform("shadow_draw"),
+        termin::material_pipeline_make_skinned_mesh_vertex_transform_provider(
             "skinned_shadow",
-            "termin-engine-skinned-shadow",
-            termin::material_pipeline_skinned_position_mesh_input());
+            termin::MeshVertexTransformProfile::Position,
+            "shadow_draw.u_model");
 
-    REQUIRE(contract.template_uuid.has_value());
-    CHECK_EQ(*contract.template_uuid, std::string("termin-engine-skinned-shadow"));
+    CHECK(!contract.template_uuid.has_value());
+    CHECK(termin::vertex_transform_provider_is_modular(contract));
     CHECK(has_attribute(contract.vertex_inputs, "position", termin::MaterialPipelineValueType::Float3));
     CHECK(has_attribute(contract.vertex_inputs, "joints", termin::MaterialPipelineValueType::Float4));
     CHECK(has_attribute(contract.vertex_inputs, "weights", termin::MaterialPipelineValueType::Float4));
@@ -140,11 +131,14 @@ TEST_CASE("Skinned compact transform uses position skinning input") {
     CHECK(!has_attribute(contract.vertex_inputs, "uv", termin::MaterialPipelineValueType::Float2));
 }
 
-TEST_CASE("Foliage transform builder declares instanced resources") {
+TEST_CASE("Foliage material provider is modular and declares instanced resources") {
     termin::VertexTransformContract contract = foliage_material_transform();
 
-    REQUIRE(contract.template_uuid.has_value());
-    CHECK_EQ(*contract.template_uuid, std::string("termin-engine-foliage-instanced"));
+    CHECK(!contract.template_uuid.has_value());
+    CHECK(termin::vertex_transform_provider_is_modular(contract));
+    CHECK_EQ(
+        contract.source_module.module_name,
+        std::string("termin_foliage_material_transform"));
     CHECK(has_attribute(contract.vertex_inputs, "position", termin::MaterialPipelineValueType::Float3));
     CHECK(has_attribute(contract.vertex_inputs, "normal", termin::MaterialPipelineValueType::Float3));
     CHECK(has_attribute(contract.vertex_inputs, "uv", termin::MaterialPipelineValueType::Float2));
@@ -184,11 +178,8 @@ TEST_CASE("Static transform is descriptor-built") {
     CHECK(has_attribute(contract.vertex_inputs, "position", termin::MaterialPipelineValueType::Float3));
     CHECK(has_attribute(contract.vertex_inputs, "normal", termin::MaterialPipelineValueType::Float3));
     CHECK(has_attribute(contract.vertex_inputs, "uv", termin::MaterialPipelineValueType::Float2));
-
-    const termin::MaterialPipelineResourceDecl* draw_data =
-        find_resource(contract, "draw_data");
-    REQUIRE(draw_data != nullptr);
-    CHECK(draw_data->owner == termin::MaterialPipelineResourceOwner::VertexTransform);
+    CHECK(termin::vertex_transform_provider_is_modular(contract));
+    CHECK(contract.resources.empty());
 }
 
 TEST_CASE("Position-normal transform is data, not pass kind") {
@@ -197,7 +188,8 @@ TEST_CASE("Position-normal transform is data, not pass kind") {
     CHECK_EQ(contract.debug_name, std::string("static_position_normal"));
     CHECK(has_attribute(contract.vertex_inputs, "position", termin::MaterialPipelineValueType::Float3));
     CHECK(has_attribute(contract.vertex_inputs, "normal", termin::MaterialPipelineValueType::Float3));
-    CHECK(find_resource(contract, "normal_draw") != nullptr);
+    CHECK(contract.adapter_input_expression.find("normal_draw.u_model") !=
+          std::string::npos);
 }
 
 TEST_CASE("Pass contracts carry fragment input intent explicitly") {
@@ -221,7 +213,8 @@ TEST_CASE("Pass contracts carry fragment input intent explicitly") {
     auxiliary_pass.required_material_fragment_input = termin::MaterialFragmentInterface{};
     auxiliary_pass.static_vertex_transform = compact_static_transform("custom_draw");
     CHECK(auxiliary_pass.required_material_fragment_input.semantics.empty());
-    CHECK(find_resource(*auxiliary_pass.static_vertex_transform, "custom_draw") != nullptr);
+    CHECK(auxiliary_pass.static_vertex_transform->adapter_input_expression.find(
+              "custom_draw.u_model") != std::string::npos);
 }
 
 TEST_CASE("Custom geometry pass labels do not select vertex contracts") {
@@ -260,7 +253,16 @@ TEST_CASE("Custom geometry pass labels do not select vertex contracts") {
         compact_pass.shader_contract.static_vertex_transform->vertex_inputs,
         "normal",
         termin::MaterialPipelineValueType::Float3));
-    CHECK(find_resource(
-        *compact_pass.shader_contract.static_vertex_transform,
-        "actor_attribute_draw") != nullptr);
+    CHECK(compact_pass.shader_contract.static_vertex_transform->adapter_input_expression.find(
+              "actor_attribute_draw.u_model") != std::string::npos);
+}
+
+TEST_CASE("Pass vertex resources remain pass-owned") {
+    std::vector<termin::MaterialPipelineResourceDecl> resources =
+        termin::material_pipeline_pass_vertex_resources("normal_draw");
+    REQUIRE_EQ(resources.size(), 2u);
+    CHECK(resources[0].owner == termin::MaterialPipelineResourceOwner::Pass);
+    CHECK(resources[1].owner == termin::MaterialPipelineResourceOwner::Pass);
+    CHECK_EQ(resources[0].requirement.name, std::string(TC_SHADER_RESOURCE_PER_FRAME));
+    CHECK_EQ(resources[1].requirement.name, std::string("normal_draw"));
 }
