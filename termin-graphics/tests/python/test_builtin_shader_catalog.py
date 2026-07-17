@@ -30,7 +30,7 @@ def test_builtin_shader_manifest_is_complete_and_resolves_every_source() -> None
     catalog = json.loads((source_root / "engine-shader-catalog.json").read_text())
 
     assert _catalog_module().validate_catalog(catalog, source_root) == []
-    assert len(catalog["shaders"]) == 58
+    assert len(catalog["shaders"]) == 52
 
 
 def test_builtin_shader_manifest_rejects_duplicate_uuid_and_missing_source(tmp_path: Path) -> None:

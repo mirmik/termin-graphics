@@ -6,6 +6,7 @@ GUARD_TEST_MAIN();
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <utility>
 
 #include <termin/render/material_pipeline.hpp>
 #include <termin/render/material_pipeline_shader_assembler.hpp>
@@ -139,28 +140,31 @@ termin::MaterialPipelinePassContract material_pass_contract()
     contract.required_material_fragment_input =
         termin::material_pipeline_standard_material_fragment_interface();
     contract.uses_material_fragment = true;
+    contract.vertex_output_adapter =
+        termin::material_pipeline_standard_material_vertex_output_adapter();
     contract.static_vertex_transform =
-        termin::material_pipeline_make_static_vertex_transform_contract(
+        termin::material_pipeline_make_static_mesh_vertex_transform_provider(
             "static",
-            termin::material_pipeline_full_material_mesh_input(),
-            termin::material_pipeline_standard_material_fragment_interface(),
-            termin::material_pipeline_common_vertex_resources("draw_data"));
+            termin::MeshVertexTransformProfile::Material,
+            "draw_data.u_model");
     contract.skinned_vertex_transform =
-        termin::material_pipeline_make_skinned_vertex_transform_contract(
-            *contract.static_vertex_transform,
+        termin::material_pipeline_make_skinned_mesh_vertex_transform_provider(
             "skinned",
-            "termin-engine-skinned-material",
-            termin::material_pipeline_skinned_material_mesh_input());
+            termin::MeshVertexTransformProfile::Material,
+            "draw_data.u_model");
+    contract.static_vertex_transform->resources.push_back(
+        termin::material_pipeline_draw_resource_decl(
+            "draw_data", TC_SHADER_STAGE_VERTEX, 64u));
+    contract.skinned_vertex_transform->resources.push_back(
+        termin::material_pipeline_draw_resource_decl(
+            "draw_data", TC_SHADER_STAGE_VERTEX, 64u));
     contract.foliage_vertex_transform =
-        termin::material_pipeline_make_foliage_vertex_transform_contract(
-            termin::VertexTransformKind::Foliage,
-            "foliage",
-            "termin-engine-foliage-instanced",
-            termin::material_pipeline_foliage_material_mesh_input(),
-            termin::material_pipeline_standard_material_fragment_interface(),
-            termin::material_pipeline_foliage_vertex_resources());
+        termin::material_pipeline_make_foliage_material_vertex_transform_provider(
+            "foliage");
     return contract;
 }
+
+termin::VertexOutputAdapter modular_shadow_adapter();
 
 termin::MaterialPipelinePassContract compact_auxiliary_pass_contract()
 {
@@ -168,18 +172,23 @@ termin::MaterialPipelinePassContract compact_auxiliary_pass_contract()
     contract.debug_name = "assembler_compact_auxiliary_pass";
     contract.required_material_fragment_input = termin::MaterialFragmentInterface{};
     contract.uses_material_fragment = true;
+    contract.vertex_output_adapter = modular_shadow_adapter();
     contract.static_vertex_transform =
-        termin::material_pipeline_make_static_vertex_transform_contract(
+        termin::material_pipeline_make_static_mesh_vertex_transform_provider(
             "static_compact",
-            termin::material_pipeline_position_mesh_input(),
-            termin::material_pipeline_standard_material_fragment_interface(),
-            termin::material_pipeline_common_vertex_resources("compact_draw"));
+            termin::MeshVertexTransformProfile::Position,
+            "compact_draw.u_model");
     contract.skinned_vertex_transform =
-        termin::material_pipeline_make_skinned_vertex_transform_contract(
-            *contract.static_vertex_transform,
+        termin::material_pipeline_make_skinned_mesh_vertex_transform_provider(
             "skinned_compact",
-            "termin-engine-skinned-shadow",
-            termin::material_pipeline_skinned_position_mesh_input());
+            termin::MeshVertexTransformProfile::Position,
+            "compact_draw.u_model");
+    contract.static_vertex_transform->resources.push_back(
+        termin::material_pipeline_draw_resource_decl(
+            "compact_draw", TC_SHADER_STAGE_VERTEX, 64u));
+    contract.skinned_vertex_transform->resources.push_back(
+        termin::material_pipeline_draw_resource_decl(
+            "compact_draw", TC_SHADER_STAGE_VERTEX, 64u));
     return contract;
 }
 
@@ -191,42 +200,48 @@ termin::MaterialFragmentInterface world_position_interface()
     return interface;
 }
 
+termin::MaterialFragmentInterface world_position_normal_interface()
+{
+    termin::MaterialFragmentInterface interface = world_position_interface();
+    interface.semantics.push_back(
+        {"normal_world", termin::MaterialPipelineValueType::Float3});
+    return interface;
+}
+
+termin::VertexOutputAdapter auxiliary_output_adapter(
+    const char* module,
+    const char* function,
+    const char* draw_resource,
+    termin::MaterialFragmentInterface consumed_world,
+    uint32_t draw_size = 64u)
+{
+    termin::VertexOutputAdapter adapter;
+    adapter.debug_name = std::string(module) + "_test";
+    adapter.source_module = {
+        module,
+        std::string("builtin_shaders/") + module + ".slang"};
+    adapter.output_type_name = "VertexOutput";
+    adapter.output_function = function;
+    adapter.consumed_world_semantics = std::move(consumed_world);
+    adapter.produced_output_semantics.semantics.push_back(
+        {"clip_position", termin::MaterialPipelineValueType::Float4});
+    adapter.resources = termin::material_pipeline_pass_vertex_resources(
+        draw_resource,
+        draw_size);
+    return adapter;
+}
+
 termin::VertexTransformProvider modular_shadow_provider(bool skinned)
 {
-    termin::VertexTransformProvider provider =
-        termin::material_pipeline_make_static_vertex_transform_contract(
-            skinned ? "skinned_shadow_provider" : "static_shadow_provider",
-            skinned
-                ? termin::material_pipeline_skinned_position_mesh_input()
-                : termin::material_pipeline_position_mesh_input(),
-            termin::MaterialFragmentInterface{},
-            {});
-    provider.kind = skinned
-        ? termin::VertexTransformKind::SkinnedMesh
-        : termin::VertexTransformKind::StaticMesh;
-    provider.source_module = {
-        skinned ? "termin_shadow_skinned_transform" : "termin_shadow_static_transform",
-        skinned
-            ? "builtin_shaders/termin_shadow_skinned_transform.slang"
-            : "builtin_shaders/termin_shadow_static_transform.slang"};
-    provider.entry_input_declaration = skinned
-        ? R"(struct VertexInput {
-                float3 position : POSITION;
-                float4 joints : TEXCOORD0;
-                float4 weights : TEXCOORD1;
-            };)"
-        : R"(struct VertexInput { float3 position : POSITION; };)";
-    provider.adapter_input_expression = skinned
-        ? "termin_shadow_skinned_world_position(input.position, input.joints, input.weights, shadow_draw.u_model, bone_block)"
-        : "termin_shadow_static_world_position(input.position, shadow_draw.u_model)";
-    provider.produced_world_semantics = world_position_interface();
-    if (skinned) {
-        provider.resources.push_back(termin::material_pipeline_abi_resource_decl(
-            termin::ShaderAbiResourceId::BoneBlock,
-            TC_SHADER_STAGE_VERTEX,
-            termin::MaterialPipelineResourceOwner::VertexTransform));
-    }
-    return provider;
+    return skinned
+        ? termin::material_pipeline_make_skinned_mesh_vertex_transform_provider(
+              "skinned_shadow_provider",
+              termin::MeshVertexTransformProfile::Position,
+              "shadow_draw.u_model")
+        : termin::material_pipeline_make_static_mesh_vertex_transform_provider(
+              "static_shadow_provider",
+              termin::MeshVertexTransformProfile::Position,
+              "shadow_draw.u_model");
 }
 
 termin::VertexOutputAdapter modular_shadow_adapter()
@@ -352,7 +367,9 @@ TEST_CASE("material pipeline assembler keeps skinned debug normal material seman
     REQUIRE(result.shader.get() != nullptr);
     const std::string vertex_source = result.shader.vertex_source();
     const std::string fragment_source = result.shader.fragment_source();
-    CHECK(vertex_source.find("normal_world : TEXCOORD1") != std::string::npos);
+    CHECK(vertex_source.find(
+              "import termin_material_vertex_output_adapter;") != std::string::npos);
+    CHECK(vertex_source.find("termin_skinned_world_vertex") != std::string::npos);
     CHECK(fragment_source.find("normal_world : TEXCOORD1") != std::string::npos);
     CHECK(fragment_source.find("normal_world : NORMAL") == std::string::npos);
 
@@ -400,6 +417,7 @@ TEST_CASE("material mesh input selection follows static compact shader contract"
 
     termin::MaterialPipelineShaderAssemblyRequest request{};
     request.material = material_contract();
+    request.material.required_fragment_input = {};
     request.pass = compact_auxiliary_pass_contract();
     request.vertex_transform = *request.pass.static_vertex_transform;
     request.shader_name = "assembler-static-shadow-contract";
@@ -425,6 +443,7 @@ TEST_CASE("material mesh input selection follows skinned compact shader contract
 
     termin::MaterialPipelineShaderAssemblyRequest request{};
     request.material = material_contract();
+    request.material.required_fragment_input = {};
     request.pass = compact_auxiliary_pass_contract();
     request.vertex_transform = *request.pass.skinned_vertex_transform;
     request.shader_name = "assembler-skinned-shadow-contract";
@@ -470,6 +489,94 @@ TEST_CASE("material mesh input selection keeps full skinned material attributes"
     tc_shader_shutdown();
 }
 
+TEST_CASE("material pipeline composes one skinned provider across pass adapters") {
+    struct AdapterCase {
+        const char* name;
+        const char* module;
+        const char* function;
+        const char* draw_resource;
+        const char* model_expression;
+        termin::MeshVertexTransformProfile profile;
+        bool material;
+        bool normal_input;
+        uint32_t draw_size;
+    };
+    const AdapterCase cases[] = {
+        {"material", "termin_material_vertex_output_adapter",
+         "termin_material_vertex_output", "draw_data", "draw_data.u_model",
+         termin::MeshVertexTransformProfile::Material, true, true, 64u},
+        {"depth", "termin_depth_vertex_output_adapter",
+         "termin_depth_vertex_output", "depth_draw", "depth_draw.u_model",
+         termin::MeshVertexTransformProfile::Position, false, false, 64u},
+        {"id", "termin_id_vertex_output_adapter",
+         "termin_id_vertex_output", "id_draw", "id_draw.model",
+         termin::MeshVertexTransformProfile::Position, false, false, 80u},
+        {"normal", "termin_normal_vertex_output_adapter",
+         "termin_normal_vertex_output", "normal_draw", "normal_draw.u_model",
+         termin::MeshVertexTransformProfile::PositionNormal, false, true, 64u},
+    };
+
+    tc_shader_init();
+    for (const AdapterCase& adapter_case : cases) {
+        termin::MaterialPipelinePassContract pass;
+        pass.debug_name = std::string("modular_") + adapter_case.name;
+        pass.uses_material_fragment = true;
+        pass.vertex_output_adapter = adapter_case.material
+            ? termin::material_pipeline_standard_material_vertex_output_adapter()
+            : auxiliary_output_adapter(
+                  adapter_case.module,
+                  adapter_case.function,
+                  adapter_case.draw_resource,
+                  adapter_case.normal_input
+                      ? world_position_normal_interface()
+                      : world_position_interface(),
+                  adapter_case.draw_size);
+        pass.skinned_vertex_transform =
+            termin::material_pipeline_make_skinned_mesh_vertex_transform_provider(
+                std::string("skinned_") + adapter_case.name,
+                adapter_case.profile,
+                adapter_case.model_expression);
+        if (adapter_case.material) {
+            pass.skinned_vertex_transform->resources.push_back(
+                termin::material_pipeline_draw_resource_decl(
+                    adapter_case.draw_resource,
+                    TC_SHADER_STAGE_VERTEX,
+                    adapter_case.draw_size));
+        }
+
+        termin::MaterialPipelineShaderAssemblyRequest request{};
+        request.material = material_contract();
+        if (!adapter_case.material) {
+            request.material.required_fragment_input = {};
+        }
+        request.pass = pass;
+        request.vertex_transform = *pass.skinned_vertex_transform;
+        request.shader_name = std::string("adapter-") + adapter_case.name;
+        request.shader_uuid = std::string("adapter-") + adapter_case.name;
+
+        termin::MaterialPipelineShaderAssemblyResult result =
+            termin::material_pipeline_assemble_shader(request);
+        REQUIRE(result.ok());
+        const std::string source = result.shader.vertex_source();
+        CHECK(source.find("import termin_vertex_transform;") != std::string::npos);
+        CHECK(source.find(
+                  std::string("import ") + adapter_case.module + ";") !=
+              std::string::npos);
+        CHECK(source.find("termin_skinned_") != std::string::npos);
+        CHECK(source.find("template_uuid") == std::string::npos);
+
+        tc_shader_contract_view view{};
+        REQUIRE(tc_shader_get_contract_view(result.shader.get(), &view));
+        CHECK(contract_has_vertex_input(view, "joints"));
+        CHECK(contract_has_vertex_input(view, "normal") ==
+              adapter_case.normal_input);
+        REQUIRE(contract_resource(view, TC_SHADER_RESOURCE_BONE_BLOCK) != nullptr);
+        REQUIRE(contract_resource(view, adapter_case.draw_resource) != nullptr);
+        tc_shader_destroy(result.shader.handle);
+    }
+    tc_shader_shutdown();
+}
+
 TEST_CASE("material pipeline assembler composes shadow providers with one output adapter") {
     tc_shader_init();
 
@@ -486,13 +593,11 @@ TEST_CASE("material pipeline assembler composes shadow providers with one output
     REQUIRE(static_result.ok());
     const std::string static_source = static_result.shader.vertex_source();
     CHECK(static_source.find(
-              "import termin_shadow_static_transform;") != std::string::npos);
+              "import termin_vertex_transform;") != std::string::npos);
     CHECK(static_source.find(
               "import termin_shadow_vertex_output_adapter;") != std::string::npos);
     CHECK(static_source.find(
-              "termin_shadow_static_world_position") != std::string::npos);
-    CHECK(static_source.find(
-              "termin-engine-skinned-shadow") == std::string::npos);
+              "termin_static_world_position") != std::string::npos);
 
     tc_shader_contract_view static_view{};
     REQUIRE(tc_shader_get_contract_view(static_result.shader.get(), &static_view));
@@ -508,7 +613,9 @@ TEST_CASE("material pipeline assembler composes shadow providers with one output
     REQUIRE(skinned_result.ok());
     const std::string skinned_source = skinned_result.shader.vertex_source();
     CHECK(skinned_source.find(
-              "import termin_shadow_skinned_transform;") != std::string::npos);
+              "import termin_vertex_transform;") != std::string::npos);
+    CHECK(skinned_source.find(
+              "termin_skinned_world_position") != std::string::npos);
 
     tc_shader_contract_view skinned_view{};
     REQUIRE(tc_shader_get_contract_view(skinned_result.shader.get(), &skinned_view));
@@ -554,12 +661,7 @@ TEST_CASE("material shader intent fingerprint includes skinned vertex transform"
     termin::MaterialPipelineMaterialContract material = material_contract();
     termin::MaterialPipelinePassContract pass_a = compact_auxiliary_pass_contract();
     termin::MaterialPipelinePassContract pass_b = pass_a;
-    pass_b.skinned_vertex_transform =
-        termin::material_pipeline_make_skinned_vertex_transform_contract(
-            *pass_b.static_vertex_transform,
-            "skinned_compact",
-            "termin-engine-skinned-depth",
-            termin::material_pipeline_skinned_position_mesh_input());
+    pass_b.skinned_vertex_transform->adapter_input_expression += " ";
 
     const std::string fingerprint_a =
         termin::material_pipeline_shader_intent_fingerprint(
