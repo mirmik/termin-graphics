@@ -52,6 +52,10 @@ static void init_test_component(tc_component* component, const char* type_name) 
     tc_component_set_declared_type_name(component, type_name);
 }
 
+static void cleanup_test_component(tc_component* component) {
+    tc_component_unlink_from_registry(component);
+}
+
 GUARD_C_TEST(test_render_target_resolves_camera_replacement_from_entity_handle) {
     tc_scene_handle scene = tc_scene_new_named("rt-camera-resolution");
     GUARD_C_REQUIRE(tc_scene_alive(scene));
@@ -73,6 +77,7 @@ GUARD_C_TEST(test_render_target_resolves_camera_replacement_from_entity_handle) 
 
     tc_entity_pool_remove_component(pool, entity_id, &first_camera);
     GUARD_C_CHECK(tc_render_target_get_camera(target) == NULL);
+    cleanup_test_component(&first_camera);
 
     tc_component replacement_camera;
     init_test_component(&replacement_camera, "CameraComponent");
@@ -81,6 +86,11 @@ GUARD_C_TEST(test_render_target_resolves_camera_replacement_from_entity_handle) 
 
     tc_entity_pool_free(pool, entity_id);
     GUARD_C_CHECK(tc_render_target_get_camera(target) == NULL);
+    cleanup_test_component(&replacement_camera);
+    GUARD_C_CHECK_EQ_UINT(
+        0,
+        tc_component_registry_instance_count("CameraComponent")
+    );
 
     tc_render_target_free(target);
     tc_scene_free(scene);
@@ -110,6 +120,11 @@ GUARD_C_TEST(test_render_target_resolves_camera_from_scene_less_pool) {
 
     tc_entity_pool_free(pool, entity_id);
     GUARD_C_CHECK(tc_render_target_get_camera(target) == NULL);
+    cleanup_test_component(&camera);
+    GUARD_C_CHECK_EQ_UINT(
+        0,
+        tc_component_registry_instance_count("CameraComponent")
+    );
 
     tc_render_target_free(target);
     tc_entity_pool_registry_destroy(pool_handle);
@@ -139,6 +154,11 @@ GUARD_C_TEST(test_render_target_rejects_camera_from_another_scene) {
     tc_render_target_free(target);
     tc_scene_free(camera_scene);
     tc_scene_free(target_scene);
+    cleanup_test_component(&camera);
+    GUARD_C_CHECK_EQ_UINT(
+        0,
+        tc_component_registry_instance_count("CameraComponent")
+    );
     return 0;
 }
 
@@ -163,6 +183,11 @@ GUARD_C_TEST(test_render_target_resolves_xr_origin_and_rejects_stale_scene) {
 
     tc_scene_free(scene);
     GUARD_C_CHECK(tc_render_target_get_xr_origin(target) == NULL);
+    cleanup_test_component(&xr_origin);
+    GUARD_C_CHECK_EQ_UINT(
+        0,
+        tc_component_registry_instance_count("XrOriginComponent")
+    );
 
     tc_render_target_free(target);
     return 0;
