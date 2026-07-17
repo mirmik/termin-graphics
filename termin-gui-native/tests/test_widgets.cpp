@@ -71,6 +71,8 @@ int main() {
   test_table_models_preserve_row_ids_and_validate_columns();
   test_table_widget_virtualizes_large_model_and_lays_out_columns();
   test_table_widget_pointer_keyboard_resize_signals_and_lifetime();
+  test_tree_table_model_preserves_identity_and_validates_hierarchy();
+  test_tree_table_widget_expansion_navigation_and_columns();
   test_host_click_count_drives_collection_activation();
   return EXIT_SUCCESS;
 }
