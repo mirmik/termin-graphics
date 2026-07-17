@@ -35,6 +35,44 @@ namespace termin {
 
 static constexpr const char* RESOURCE_FORMAT_RENDER_TARGET = "render_target";
 
+using PassDependencyCollector = size_t (*)(tc_pass*, const char**, size_t);
+
+static std::vector<const char*> collect_pass_dependencies(
+    tc_pass* pass,
+    PassDependencyCollector collect
+) {
+    size_t count = collect(pass, nullptr, 0);
+    std::vector<const char*> values;
+    while (count > 0) {
+        values.resize(count);
+        size_t actual = collect(pass, values.data(), count);
+        if (actual <= count) {
+            values.resize(actual);
+            return values;
+        }
+        count = actual;
+    }
+    return values;
+}
+
+static std::vector<const char*> collect_canonical_resources(tc_frame_graph* fg) {
+    std::vector<const char*> values(tc_frame_graph_get_canonical_resources(fg, nullptr, 0));
+    size_t count = tc_frame_graph_get_canonical_resources(fg, values.data(), values.size());
+    values.resize(count);
+    return values;
+}
+
+static std::vector<const char*> collect_alias_group(
+    tc_frame_graph* fg,
+    const char* canonical
+) {
+    std::vector<const char*> values(tc_frame_graph_get_alias_group(fg, canonical, nullptr, 0));
+    size_t count = tc_frame_graph_get_alias_group(
+        fg, canonical, values.data(), values.size());
+    values.resize(count);
+    return values;
+}
+
 using RenderTimingClock = std::chrono::steady_clock;
 
 struct RenderPassTimingStats {
@@ -419,8 +457,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
     // native tgfx2 textures owned by the caller (ViewportRenderState)
     // and plumbed straight into tex2_writes below.
 
-    const char* canonical_names[256];
-    size_t canon_count = tc_frame_graph_get_canonical_resources(fg, canonical_names, 256);
+    std::vector<const char*> canonical_names = collect_canonical_resources(fg);
+    size_t canon_count = canonical_names.size();
 
     for (size_t i = 0; i < canon_count; i++) {
         const char* canon = canonical_names[i];
@@ -444,8 +482,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
         if (it != spec_map.end()) {
             spec = &it->second;
         } else {
-            const char* aliases[64];
-            size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
+            std::vector<const char*> aliases = collect_alias_group(fg, canon);
+            size_t alias_count = aliases.size();
             for (size_t j = 0; j < alias_count && !spec; j++) {
                 auto ait = spec_map.find(aliases[j]);
                 if (ait != spec_map.end()) {
@@ -469,8 +507,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 shadow_array = std::make_unique<ShadowMapArrayResource>(resolution);
             }
 
-            const char* aliases[64];
-            size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
+            std::vector<const char*> aliases = collect_alias_group(fg, canon);
+            size_t alias_count = aliases.size();
             for (size_t j = 0; j < alias_count; j++) {
                 resources[aliases[j]] = shadow_array.get();
             }
@@ -512,8 +550,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 return;
             }
 
-            const char* aliases[64];
-            size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
+            std::vector<const char*> aliases = collect_alias_group(fg, canon);
+            size_t alias_count = aliases.size();
             for (size_t j = 0; j < alias_count; j++) {
                 resources[aliases[j]] = nullptr;
                 if (std::string(aliases[j]) != canon) {
@@ -549,8 +587,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 return;
             }
 
-            const char* aliases[64];
-            size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
+            std::vector<const char*> aliases = collect_alias_group(fg, canon);
+            size_t alias_count = aliases.size();
             for (size_t j = 0; j < alias_count; j++) {
                 resources[aliases[j]] = nullptr;
                 if (std::string(aliases[j]) != canon) {
@@ -561,8 +599,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
 
         if (resource_type != "fbo") {
-            const char* aliases[64];
-            size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
+            std::vector<const char*> aliases = collect_alias_group(fg, canon);
+            size_t alias_count = aliases.size();
             for (size_t j = 0; j < alias_count; j++) {
                 resources[aliases[j]] = nullptr;
                 if (std::string(aliases[j]) != canon) {
@@ -608,8 +646,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
         (void)filter;
 
-        const char* aliases[64];
-        size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
+        std::vector<const char*> aliases = collect_alias_group(fg, canon);
+        size_t alias_count = aliases.size();
         for (size_t j = 0; j < alias_count; j++) {
             resources[aliases[j]] = nullptr;
             fbo_pool.add_alias(aliases[j], canon);
@@ -683,8 +721,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
             const tgfx::TextureDesc desc = device->texture_desc(handle);
             const bool depth_texture = tgfx::is_depth_format(desc.format);
 
-            const char* aliases[64];
-            size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, aliases, 64);
+            std::vector<const char*> aliases = collect_alias_group(fg, canon);
+            size_t alias_count = aliases.size();
             for (size_t j = 0; j < alias_count; j++) {
                 if (depth_texture) {
                     tex2_depth_resources[aliases[j]] = handle;
@@ -846,10 +884,10 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
         const RenderTargetContext& rt_ctx = rt_it->second;
 
-        const char* reads[16];
-        const char* writes[8];
-        size_t read_count = tc_pass_get_reads(pass, reads, 16);
-        size_t write_count = tc_pass_get_writes(pass, writes, 8);
+        std::vector<const char*> reads = collect_pass_dependencies(pass, tc_pass_get_reads);
+        std::vector<const char*> writes = collect_pass_dependencies(pass, tc_pass_get_writes);
+        size_t read_count = reads.size();
+        size_t write_count = writes.size();
 
         Tex2Map pass_tex2_reads;
         Tex2Map pass_tex2_writes;

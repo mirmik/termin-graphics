@@ -30,8 +30,18 @@ std::vector<std::string> collect_names(
     tc_pass* pass,
     size_t (*collector)(tc_pass*, const char**, size_t)
 ) {
-    std::vector<const char*> values(kMaxGraphEntries, nullptr);
-    const size_t count = collector(pass, values.data(), values.size());
+    size_t count = collector(pass, nullptr, 0);
+    std::vector<const char*> values;
+    while (count > 0) {
+        values.resize(count);
+        const size_t actual = collector(pass, values.data(), count);
+        if (actual <= count) {
+            values.resize(actual);
+            count = actual;
+            break;
+        }
+        count = actual;
+    }
     std::vector<std::string> result;
     result.reserve(count);
     for (size_t i = 0; i < count; ++i) {
@@ -41,12 +51,19 @@ std::vector<std::string> collect_names(
 }
 
 std::vector<std::pair<std::string, std::string>> collect_aliases(tc_pass* pass) {
-    std::vector<const char*> values(kMaxGraphEntries * 2, nullptr);
-    const size_t count = tc_pass_get_inplace_aliases(
-        pass,
-        values.data(),
-        kMaxGraphEntries
-    );
+    size_t count = tc_pass_get_inplace_aliases(pass, nullptr, 0);
+    std::vector<const char*> values;
+    while (count > 0) {
+        values.resize(count * 2);
+        const size_t actual = tc_pass_get_inplace_aliases(
+            pass, values.data(), count);
+        if (actual <= count) {
+            values.resize(actual * 2);
+            count = actual;
+            break;
+        }
+        count = actual;
+    }
     std::vector<std::pair<std::string, std::string>> result;
     result.reserve(count);
     for (size_t i = 0; i < count; ++i) {

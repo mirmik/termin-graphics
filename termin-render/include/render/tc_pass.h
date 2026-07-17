@@ -44,6 +44,8 @@ struct tc_execute_context {
 
 struct tc_pass_vtable {
     void (*execute)(tc_pass* self, void* ctx);
+    // Dependency enumeration uses a count/fill contract. Implementations return
+    // the complete item count even when out is NULL or max_count is smaller.
     size_t (*get_reads)(tc_pass* self, const char** out_reads, size_t max_count);
     size_t (*get_writes)(tc_pass* self, const char** out_writes, size_t max_count);
     size_t (*get_inplace_aliases)(tc_pass* self, const char** out_pairs, size_t max_pairs);
@@ -209,6 +211,8 @@ static inline bool tc_pass_type_is_current(const tc_pass* p) {
 
 typedef struct {
     void (*execute)(void* body, void* ctx);
+    // Reads, writes and inplace aliases follow the same complete count/fill
+    // contract as tc_pass_vtable.
     size_t (*get_reads)(void* body, const char** out, size_t max);
     size_t (*get_writes)(void* body, const char** out, size_t max);
     size_t (*get_inplace_aliases)(void* body, const char** out, size_t max);

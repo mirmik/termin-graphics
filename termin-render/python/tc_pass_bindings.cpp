@@ -34,6 +34,46 @@ namespace nb = nanobind;
 
 namespace termin {
 
+using PassStringCollector = size_t (*)(tc_pass*, const char**, size_t);
+
+static std::vector<const char*> collect_pass_strings(
+    tc_pass* pass,
+    PassStringCollector collect,
+    size_t values_per_item = 1
+) {
+    size_t count = collect(pass, nullptr, 0);
+    std::vector<const char*> values;
+    while (count > 0) {
+        values.resize(count * values_per_item);
+        size_t actual = collect(pass, values.data(), count);
+        if (actual <= count) {
+            values.resize(actual * values_per_item);
+            return values;
+        }
+        count = actual;
+    }
+    return values;
+}
+
+static std::vector<const char*> collect_frame_graph_canonical_names(tc_frame_graph* fg) {
+    size_t count = tc_frame_graph_get_canonical_resources(fg, nullptr, 0);
+    std::vector<const char*> values(count);
+    count = tc_frame_graph_get_canonical_resources(fg, values.data(), values.size());
+    values.resize(count);
+    return values;
+}
+
+static std::vector<const char*> collect_frame_graph_alias_names(
+    tc_frame_graph* fg,
+    const char* canonical
+) {
+    size_t count = tc_frame_graph_get_alias_group(fg, canonical, nullptr, 0);
+    std::vector<const char*> values(count);
+    count = tc_frame_graph_get_alias_group(fg, canonical, values.data(), values.size());
+    values.resize(count);
+    return values;
+}
+
 static std::unordered_map<std::string, std::shared_ptr<nb::object>>& python_pass_classes() {
     static std::unordered_map<std::string, std::shared_ptr<nb::object>> classes;
     return classes;
@@ -136,16 +176,11 @@ static bool lookup_py_method(nb::handle obj, const char* method_name, nb::object
 }
 
 static size_t export_cached_string_list(nb::handle cached, const char** out, size_t max) {
-    if (!out) {
-        return 0;
-    }
-
     size_t count = 0;
     for (nb::handle item : cached) {
-        if (count >= max) {
-            break;
+        if (out && count < max) {
+            out[count] = PyUnicode_AsUTF8(item.ptr());
         }
-        out[count] = PyUnicode_AsUTF8(item.ptr());
         count++;
     }
     return count;
@@ -159,13 +194,8 @@ static size_t cache_string_iterable(
     size_t max
 ) {
     nb::list cached;
-    size_t count = 0;
     for (nb::handle item : iterable) {
-        if (count >= max) {
-            break;
-        }
         cached.append(nb::cast<nb::str>(item));
-        count++;
     }
 
     py_pass.attr(cache_attr) = cached;
@@ -179,16 +209,9 @@ static size_t cache_string_pairs(
     const char** out,
     size_t max_pairs
 ) {
-    if (!out) {
-        return 0;
-    }
-
     nb::list cached;
     size_t pair_count = 0;
     for (nb::handle item : iterable) {
-        if (pair_count >= max_pairs) {
-            break;
-        }
         nb::tuple pair = nb::cast<nb::tuple>(item);
         cached.append(nb::cast<nb::str>(pair[0]));
         cached.append(nb::cast<nb::str>(pair[1]));
@@ -196,7 +219,7 @@ static size_t cache_string_pairs(
     }
 
     py_pass.attr(cache_attr) = cached;
-    export_cached_string_list(cached, out, pair_count * 2);
+    export_cached_string_list(cached, out, out ? max_pairs * 2 : 0);
     return pair_count;
 }
 
@@ -408,9 +431,8 @@ void bind_tc_pass_runtime(nb::module_& m) {
             std::set<std::string> result;
             tc_pass* p = self.ptr();
             if (p) {
-                const char* names[64];
-                size_t count = tc_pass_get_reads(p, names, 64);
-                for (size_t i = 0; i < count; ++i) {
+                std::vector<const char*> names = collect_pass_strings(p, tc_pass_get_reads);
+                for (size_t i = 0; i < names.size(); ++i) {
                     if (names[i]) {
                         result.insert(names[i]);
                     }
@@ -422,9 +444,8 @@ void bind_tc_pass_runtime(nb::module_& m) {
             std::set<std::string> result;
             tc_pass* p = self.ptr();
             if (p) {
-                const char* names[64];
-                size_t count = tc_pass_get_writes(p, names, 64);
-                for (size_t i = 0; i < count; ++i) {
+                std::vector<const char*> names = collect_pass_strings(p, tc_pass_get_writes);
+                for (size_t i = 0; i < names.size(); ++i) {
                     if (names[i]) {
                         result.insert(names[i]);
                     }
@@ -436,8 +457,9 @@ void bind_tc_pass_runtime(nb::module_& m) {
             std::vector<std::tuple<std::string, std::string>> result;
             tc_pass* p = self.ptr();
             if (p) {
-                const char* pairs[32];
-                size_t count = tc_pass_get_inplace_aliases(p, pairs, 32);
+                std::vector<const char*> pairs = collect_pass_strings(
+                    p, tc_pass_get_inplace_aliases, 2);
+                size_t count = pairs.size() / 2;
                 for (size_t i = 0; i < count; i++) {
                     result.emplace_back(
                         pairs[i * 2] ? pairs[i * 2] : "",
@@ -856,13 +878,13 @@ void bind_tc_pass_runtime(nb::module_& m) {
         tc_frame_graph* fg = reinterpret_cast<tc_frame_graph*>(fg_ptr);
         nb::dict result;
 
-        const char* canonical_names[256];
-        size_t canon_count = tc_frame_graph_get_canonical_resources(fg, canonical_names, 256);
+        std::vector<const char*> canonical_names = collect_frame_graph_canonical_names(fg);
+        size_t canon_count = canonical_names.size();
 
         for (size_t i = 0; i < canon_count; i++) {
             const char* canon = canonical_names[i];
-            const char* alias_names[64];
-            size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, alias_names, 64);
+            std::vector<const char*> alias_names = collect_frame_graph_alias_names(fg, canon);
+            size_t alias_count = alias_names.size();
 
             nb::list aliases;
             for (size_t j = 0; j < alias_count; j++) {
@@ -879,8 +901,8 @@ void bind_tc_pass_runtime(nb::module_& m) {
         tc_frame_graph* fg = reinterpret_cast<tc_frame_graph*>(fg_ptr);
         nb::dict result;
 
-        const char* canonical_names[256];
-        size_t canon_count = tc_frame_graph_get_canonical_resources(fg, canonical_names, 256);
+        std::vector<const char*> canonical_names = collect_frame_graph_canonical_names(fg);
+        size_t canon_count = canonical_names.size();
 
         result["OUTPUT"] = target_fbo;
         result["DISPLAY"] = target_fbo;
@@ -888,8 +910,8 @@ void bind_tc_pass_runtime(nb::module_& m) {
         for (size_t i = 0; i < canon_count; i++) {
             const char* canon = canonical_names[i];
 
-            const char* alias_names[64];
-            size_t alias_count = tc_frame_graph_get_alias_group(fg, canon, alias_names, 64);
+            std::vector<const char*> alias_names = collect_frame_graph_alias_names(fg, canon);
+            size_t alias_count = alias_names.size();
 
             bool is_display = (strcmp(canon, "DISPLAY") == 0 || strcmp(canon, "OUTPUT") == 0);
             if (is_display) {

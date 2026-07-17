@@ -3,10 +3,76 @@
 import unittest
 
 from framegraph_test_helpers import DummyFramePass as DummyPass
+from framegraph_test_helpers import build_alias_groups
 from framegraph_test_helpers import build_schedule
+from termin.render_framework.python_pass import PythonFramePass
+
+
+class ManyDependencyPass(PythonFramePass):
+    def __init__(self, name, reads=(), writes=(), aliases=()):
+        super().__init__(pass_name=name)
+        self._many_reads = list(reads)
+        self._many_writes = list(writes)
+        self._many_aliases = list(aliases)
+
+    def compute_reads(self):
+        return list(self._many_reads)
+
+    def compute_writes(self):
+        return list(self._many_writes)
+
+    def get_inplace_aliases(self):
+        return list(self._many_aliases)
+
+    def execute(self, *args, **kwargs):
+        return None
 
 
 class FrameGraphTests(unittest.TestCase):
+    def test_dependency_enumeration_exceeds_legacy_read_write_limits(self):
+        resources = [f"produced_{index}" for index in range(20)]
+        producer = ManyDependencyPass("Producer", writes=resources)
+        consumer = ManyDependencyPass(
+            "Consumer",
+            reads=[f"external_{index}" for index in range(17)] + [resources[-1]],
+        )
+
+        schedule = build_schedule([consumer, producer])
+        names = [frame_pass.pass_name for frame_pass in schedule]
+
+        self.assertLess(names.index("Producer"), names.index("Consumer"))
+        self.assertEqual(producer._tc_pass.writes, set(resources))
+        self.assertEqual(
+            consumer._tc_pass.reads,
+            set(consumer.compute_reads()),
+        )
+
+    def test_write_conflict_beyond_legacy_limit_is_rejected(self):
+        collision = "late_collision"
+        first = ManyDependencyPass(
+            "First",
+            writes=[f"unique_{index}" for index in range(9)] + [collision],
+        )
+        second = ManyDependencyPass("Second", writes=[collision])
+
+        with self.assertRaises(RuntimeError):
+            build_schedule([first, second])
+
+    def test_alias_chain_exceeds_legacy_pair_and_group_limits(self):
+        resources = [f"alias_{index}" for index in range(70)]
+        aliases = list(zip(resources[:-1], resources[1:], strict=True))
+        frame_pass = ManyDependencyPass(
+            "AliasChain",
+            reads=resources[:-1],
+            writes=resources[1:],
+            aliases=aliases,
+        )
+
+        groups = build_alias_groups([frame_pass])
+
+        self.assertIn(set(resources), groups.values())
+        self.assertEqual(len(frame_pass._tc_pass.get_inplace_aliases()), 69)
+
     def test_simple_linear_chain(self):
         # A -> B -> C
         a = DummyPass("A", writes={"g1"})

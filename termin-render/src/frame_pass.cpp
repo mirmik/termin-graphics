@@ -12,35 +12,35 @@ void CxxFramePass::_cb_execute(tc_pass* p, void* ctx) {
 
 size_t CxxFramePass::_cb_get_reads(tc_pass* p, const char** out, size_t max) {
     CxxFramePass* self = from_tc(p);
-    if (!self || !out) return 0;
+    if (!self) return 0;
 
     auto computed_reads = self->compute_reads();
-    size_t count = std::min(computed_reads.size(), max);
+    size_t count = out ? std::min(computed_reads.size(), max) : 0;
     size_t i = 0;
     for (const char* r : computed_reads) {
         if (i >= count) break;
         out[i++] = r;
     }
-    return count;
+    return computed_reads.size();
 }
 
 size_t CxxFramePass::_cb_get_writes(tc_pass* p, const char** out, size_t max) {
     CxxFramePass* self = from_tc(p);
-    if (!self || !out) return 0;
+    if (!self) return 0;
 
     auto computed_writes = self->compute_writes();
-    size_t count = std::min(computed_writes.size(), max);
+    size_t count = out ? std::min(computed_writes.size(), max) : 0;
     size_t i = 0;
     for (const char* w : computed_writes) {
         if (i >= count) break;
         out[i++] = w;
     }
-    return count;
+    return computed_writes.size();
 }
 
 size_t CxxFramePass::_cb_get_inplace_aliases(tc_pass* p, const char** out, size_t max) {
     CxxFramePass* self = from_tc(p);
-    if (!self || !out) return 0;
+    if (!self) return 0;
 
     auto aliases = self->get_inplace_aliases();
     self->_cached_aliases.clear();
@@ -51,12 +51,12 @@ size_t CxxFramePass::_cb_get_inplace_aliases(tc_pass* p, const char** out, size_
         self->_cached_aliases.push_back(write_name);
     }
 
-    size_t pair_count = std::min(aliases.size(), max);
+    size_t pair_count = out ? std::min(aliases.size(), max) : 0;
     for (size_t i = 0; i < pair_count; i++) {
         out[i * 2] = self->_cached_aliases[i * 2].c_str();
         out[i * 2 + 1] = self->_cached_aliases[i * 2 + 1].c_str();
     }
-    return pair_count;
+    return aliases.size();
 }
 
 size_t CxxFramePass::_cb_get_resource_specs(tc_pass* p, void* out, size_t max) {
@@ -76,14 +76,14 @@ size_t CxxFramePass::_cb_get_resource_specs(tc_pass* p, void* out, size_t max) {
 
 size_t CxxFramePass::_cb_get_internal_symbols(tc_pass* p, const char** out, size_t max) {
     CxxFramePass* self = from_tc(p);
-    if (!self || !out) return 0;
+    if (!self) return 0;
 
     self->_cached_symbols = self->get_internal_symbols();
-    size_t count = std::min(self->_cached_symbols.size(), max);
+    size_t count = out ? std::min(self->_cached_symbols.size(), max) : 0;
     for (size_t i = 0; i < count; i++) {
         out[i] = self->_cached_symbols[i].c_str();
     }
-    return count;
+    return self->_cached_symbols.size();
 }
 
 void CxxFramePass::_cb_destroy(tc_pass* p) {
