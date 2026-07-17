@@ -269,12 +269,43 @@ RenderItemTaskRejection mesh_render_item_task_shader_planner(
         out_detail = "mesh planner received a non-mesh item";
         return RenderItemTaskRejection::ShaderPlanningRejected;
     }
-    out_plan.final_shader = request.candidate_shader;
     out_plan.has_vertex_transform_kind = true;
     out_plan.vertex_transform_kind =
         (request.item->flags & TC_RENDER_ITEM_FLAG_HAS_SKINNING_MATRICES)
         ? VertexTransformKind::SkinnedMesh
         : VertexTransformKind::StaticMesh;
+    if (request.contract) {
+        const uint64_t transform_bit = render_item_vertex_transform_kind_bit(
+            out_plan.vertex_transform_kind);
+        if ((request.contract->accepted_vertex_transform_kind_mask & transform_bit) == 0u) {
+            out_detail = "pass contract does not accept the mesh vertex transform";
+            return RenderItemTaskRejection::PassVertexTransformUnsupported;
+        }
+    }
+    if (out_plan.vertex_transform_kind == VertexTransformKind::StaticMesh) {
+        out_plan.final_shader = request.candidate_shader;
+        out_detail = nullptr;
+        return RenderItemTaskRejection::None;
+    }
+    if (!request.contract || !request.contract->shader_contract) {
+        out_detail = "skinned mesh planning requires a pass shader contract";
+        return RenderItemTaskRejection::ShaderPlanningRejected;
+    }
+
+    MaterialShaderOverrideRequest override_request{};
+    override_request.original_shader = TcShader(request.candidate_shader);
+    override_request.vertex_transform_kind = VertexTransformKind::SkinnedMesh;
+    override_request.pass_contract = *request.contract->shader_contract;
+    override_request.shader_variant_op = TC_SHADER_VARIANT_SKINNING;
+    override_request.debug_context = request.contract->debug_pass_name
+        ? request.contract->debug_pass_name
+        : "MeshRenderItemPlanner";
+    TcShader planned = assemble_material_shader_override(override_request);
+    if (!planned.is_valid()) {
+        out_detail = "failed to assemble the skinned mesh shader";
+        return RenderItemTaskRejection::ShaderPlanningRejected;
+    }
+    out_plan.final_shader = planned.handle;
     out_detail = nullptr;
     return RenderItemTaskRejection::None;
 }
@@ -534,6 +565,12 @@ RenderItemTaskPlanningResult plan_render_item_task(
     }
 
     RenderItemTaskShaderPlan shader_plan{};
+    if (!shader_plan.add_shader_usage(request.candidate_shader)) {
+        result.rejection = RenderItemTaskRejection::ShaderPlanningRejected;
+        result.detail = "shader usage packet is full before encoder planning";
+        log_task_rejection(request, encoder.get(), result);
+        return result;
+    }
     const char* planner_detail = nullptr;
     RenderItemTaskRejection planner_rejection = encoder->plan_task_shader(
         request,
@@ -549,6 +586,12 @@ RenderItemTaskPlanningResult plan_render_item_task(
     if (tc_shader_handle_is_invalid(shader_plan.final_shader)) {
         result.rejection = RenderItemTaskRejection::ShaderPlanningRejected;
         result.detail = "encoder shader planner produced an invalid final shader";
+        log_task_rejection(request, encoder.get(), result);
+        return result;
+    }
+    if (!shader_plan.add_shader_usage(shader_plan.final_shader)) {
+        result.rejection = RenderItemTaskRejection::ShaderPlanningRejected;
+        result.detail = "encoder shader planner produced too many shader usages";
         log_task_rejection(request, encoder.get(), result);
         return result;
     }
@@ -576,6 +619,10 @@ RenderItemTaskPlanningResult plan_render_item_task(
     task.item = request.item;
     task.material_phase = request.material_phase;
     task.final_shader = shader_plan.final_shader;
+    task.shader_usage_count = shader_plan.shader_usage_count;
+    for (uint32_t i = 0; i < shader_plan.shader_usage_count; ++i) {
+        task.shader_usages[i] = shader_plan.shader_usages[i];
+    }
     task.pass_semantic = contract.pass_semantic;
     task.has_vertex_transform_kind = shader_plan.has_vertex_transform_kind;
     task.vertex_transform_kind = shader_plan.vertex_transform_kind;

@@ -16,13 +16,6 @@ static bool test_drawable_has_phase(tc_component* self, const char* phase_mark) 
     return phase_mark && strcmp(phase_mark, "opaque") == 0;
 }
 
-static tc_shader_handle test_drawable_override_shader(tc_component* self, const char* phase_mark, int geometry_id, tc_shader_handle original_shader) {
-    (void)self;
-    (void)phase_mark;
-    (void)geometry_id;
-    return original_shader;
-}
-
 static bool test_drawable_collect_render_items(tc_component* self, const tc_render_item_collect_context* context, tc_render_item_sink* sink) {
     (void)self;
     if (!context || !sink || !sink->emit) {
@@ -38,8 +31,6 @@ static bool test_drawable_collect_render_items(tc_component* self, const tc_rend
 
 static const tc_drawable_vtable g_test_drawable_vtable = {
     .has_phase = test_drawable_has_phase,
-    .override_shader = test_drawable_override_shader,
-    .collect_shader_usages = NULL,
     .collect_render_items = test_drawable_collect_render_items,
 };
 

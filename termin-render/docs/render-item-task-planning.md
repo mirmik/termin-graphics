@@ -28,30 +28,32 @@ defines:
 - the borrowed `MaterialPipelinePassContract` used by shader planning.
 
 `plan_render_item_task` validates the complete request, invokes the registered
-shader planner, and appends a `RenderTask` only after every check succeeds. A
-rejected request leaves the task list unchanged, returns a stable
-`RenderItemTaskRejection` code, and emits a diagnostic containing the pass,
-item kind, encoder, reason, and detail.
+shader planner, and appends a `RenderTask` only after every check succeeds. The
+task owns both the final draw shader and the deduplicated set of shader usages
+required to package or precompile that draw. A rejected request leaves the task
+list unchanged, returns a stable `RenderItemTaskRejection` code, and emits a
+diagnostic containing the pass, item kind, encoder, reason, and detail.
 
 The result identifies an accepted task by list index rather than a pointer;
 task-vector growth therefore cannot invalidate the planning result.
 
 ## Shader planning migration boundary
 
-Every encoder registration provides `plan_task_shader` explicitly. The current
-passthrough hook preserves a candidate shader for item kinds that have not yet
-migrated shader selection. Mesh already uses an item-aware hook to select its
-static or skinned transform kind, and foliage selects its color or shadow
-transform kind.
+Every encoder registration provides `plan_task_shader` explicitly. The
+passthrough hook is reserved for item kinds whose draw shader is exactly the
+pass candidate. Mesh selects static or skinned transforms, foliage assembles
+its instanced variant, and line batches select their mode-specific variant and
+enumerate auxiliary shaders such as tube caps.
 
-The hook is the migration boundary for removing Drawable shader callbacks: an
-encoder can select or assemble the final shader from the typed item and the
-pass-owned material-pipeline contract without adding another Drawable ABI.
-Backend draw behavior remains exclusively in the encoder's `encode` callback.
+The planner is the sole shader-selection boundary. It selects or assembles the
+final shader and enumerates all shader usages from the typed item and the
+pass-owned material-pipeline contract. `Drawable` only reports phase
+participation and collects typed items; its C ABI has no shader override or
+shader-usage callbacks. Backend draw behavior remains exclusively in the
+encoder's `encode` callback.
 
 Passes that build `RenderTask` records must not replace planning with item-kind
-switches or a `pass_semantic_mask` check. The older Geometry/Depth draw-call
-paths still use discovery checks until their #205 task/shader-planning
-migration. Unsupported combinations in the shared task path belong in the
-structured planning result; new compatibility dimensions belong in the pass
-contract or an item-kind planner, not in per-pass boolean matrices.
+switches or a `pass_semantic_mask` check. Color, shadow, geometry, normal, ID,
+and depth-only paths all use the shared planner. Unsupported combinations
+belong in the structured planning result; new compatibility dimensions belong
+in the pass contract or an item-kind planner, not in per-pass boolean matrices.

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <memory>
 #include <span>
 #include <string>
@@ -26,6 +27,9 @@ struct RENDER_API RenderTask {
     tc_component* component = nullptr;
     tc_material_phase* material_phase = nullptr;
     tc_shader_handle final_shader = tc_shader_handle_invalid();
+    std::array<tc_shader_handle, RenderItemTaskShaderPlan::MAX_SHADER_USAGES>
+        shader_usages{};
+    uint32_t shader_usage_count = 0;
     RenderItemPassSemantic pass_semantic = RenderItemPassSemantic::Color;
     VertexTransformKind vertex_transform_kind = VertexTransformKind::StaticMesh;
     bool has_vertex_transform_kind = false;

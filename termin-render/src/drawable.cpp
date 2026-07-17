@@ -15,89 +15,6 @@ bool Drawable::_cb_has_phase(tc_component* c, const char* phase_mark) {
     return drawable->has_phase(phase_mark ? phase_mark : "");
 }
 
-tc_shader_handle Drawable::_cb_override_shader(
-    tc_component* c,
-    const char* phase_mark,
-    int geometry_id,
-    tc_shader_handle original_shader
-) {
-    if (!c) return original_shader;
-
-    Drawable* drawable = static_cast<Drawable*>(tc_component_get_drawable_userdata(c));
-    if (!drawable) return original_shader;
-
-    TcShader result = drawable->override_shader(
-        phase_mark ? phase_mark : "",
-        geometry_id,
-        TcShader(original_shader)
-    );
-
-    return result.handle;
-}
-
-TcShader override_drawable_shader(
-    tc_component* component,
-    const ShaderOverrideContext& context)
-{
-    if (!component) {
-        return context.original_shader;
-    }
-
-    if (tc_component_get_drawable_vtable(component) == &Drawable::cxx_drawable_vtable()) {
-        Drawable* drawable = static_cast<Drawable*>(
-            tc_component_get_drawable_userdata(component));
-        if (drawable) {
-            return drawable->override_shader_with_context(context);
-        }
-    }
-
-    return TcShader(tc_component_override_shader(
-        component,
-        context.phase_mark.c_str(),
-        context.geometry_id,
-        context.original_shader.handle));
-}
-
-void collect_drawable_shader_usages_with_context(
-    tc_component* component,
-    const ShaderOverrideContext& context,
-    const std::function<void(TcShader)>& emit)
-{
-    if (!emit) {
-        return;
-    }
-
-    if (!component) {
-        if (context.original_shader.is_valid()) {
-            emit(context.original_shader);
-        }
-        return;
-    }
-
-    if (tc_component_get_drawable_vtable(component) == &Drawable::cxx_drawable_vtable()) {
-        Drawable* drawable = static_cast<Drawable*>(
-            tc_component_get_drawable_userdata(component));
-        if (drawable) {
-            drawable->collect_shader_usages_with_context(context, emit);
-            return;
-        }
-    }
-
-    if (context.original_shader.is_valid()) {
-        emit(context.original_shader);
-    }
-    TcShader override_shader(tc_component_override_shader(
-        component,
-        context.phase_mark.c_str(),
-        context.geometry_id,
-        context.original_shader.handle));
-    if (override_shader.is_valid() &&
-        (override_shader.handle.index != context.original_shader.handle.index ||
-         override_shader.handle.generation != context.original_shader.handle.generation)) {
-        emit(override_shader);
-    }
-}
-
 bool Drawable::collect_render_items(
     const tc_render_item_collect_context& context,
     tc_render_item_sink& sink
@@ -325,32 +242,6 @@ bool collect_drawable_render_items(
     return tc_component_collect_render_items(component, &context, &sink);
 }
 
-void Drawable::_cb_collect_shader_usages(
-    tc_component* c,
-    const char* phase_mark,
-    int geometry_id,
-    tc_shader_handle original_shader,
-    tc_shader_usage_emit_fn emit,
-    void* user_data
-) {
-    if (!c || !emit) return;
-
-    Drawable* drawable = static_cast<Drawable*>(tc_component_get_drawable_userdata(c));
-    if (!drawable) {
-        emit(c, original_shader, user_data);
-        return;
-    }
-
-    drawable->collect_shader_usages(
-        phase_mark ? phase_mark : "",
-        geometry_id,
-        TcShader(original_shader),
-        [c, emit, user_data](TcShader shader) {
-            emit(c, shader.handle, user_data);
-        }
-    );
-}
-
 bool Drawable::_cb_collect_render_items(
     tc_component* c,
     const tc_render_item_collect_context* context,
@@ -383,8 +274,6 @@ Mat44f Drawable::get_model_matrix(const Entity& entity) const {
 const tc_drawable_vtable& Drawable::cxx_drawable_vtable() {
     static const tc_drawable_vtable vtable = {
         &Drawable::_cb_has_phase,
-        &Drawable::_cb_override_shader,
-        &Drawable::_cb_collect_shader_usages,
         &Drawable::_cb_collect_render_items
     };
     return vtable;

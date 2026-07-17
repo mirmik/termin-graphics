@@ -20,8 +20,6 @@ static bool py_drawable_collect_render_items(tc_component* c, const tc_render_it
 
 static const tc_drawable_vtable g_python_drawable_vtable = {
     .has_phase = py_drawable_has_phase,
-    .override_shader = NULL,
-    .collect_shader_usages = NULL,
     .collect_render_items = py_drawable_collect_render_items,
 };
 
