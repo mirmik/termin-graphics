@@ -26,6 +26,9 @@ struct RENDER_API RenderTask {
     tc_component* component = nullptr;
     tc_material_phase* material_phase = nullptr;
     tc_shader_handle final_shader = tc_shader_handle_invalid();
+    RenderItemPassSemantic pass_semantic = RenderItemPassSemantic::Color;
+    VertexTransformKind vertex_transform_kind = VertexTransformKind::StaticMesh;
+    bool has_vertex_transform_kind = false;
     std::string entity_name;
     RenderContext draw_context;
     RenderItemResourceBinding resources{};
@@ -62,6 +65,8 @@ public:
 
     void reserve(size_t count);
     RenderTask& append();
+    RenderTask& at(size_t index);
+    const RenderTask& at(size_t index) const;
 
     template <typename T, typename... Args>
     T& emplace_extension(Args&&... args) {

@@ -18,6 +18,8 @@ class RenderContext2;
 namespace termin {
 
 struct RenderContext;
+struct RenderTask;
+class RenderTaskList;
 
 struct RenderItemNamedTextureBinding {
     const char* name = nullptr;
@@ -71,18 +73,104 @@ enum class RenderItemPassSemantic : uint32_t {
 
 constexpr uint64_t render_item_pass_semantic_bit(RenderItemPassSemantic semantic)
 {
-    return 1ull << static_cast<uint32_t>(semantic);
+    const uint32_t index = static_cast<uint32_t>(semantic);
+    return index < 64u ? (1ull << index) : 0u;
 }
 
 struct RenderItemEncoderCapabilities {
     uint64_t pass_semantic_mask = 0;
     uint64_t vertex_transform_kind_mask = 0;
+    uint32_t supported_task_input_mask = 0;
+    uint32_t required_task_input_mask = 0;
     bool requires_draw_context = false;
     bool consumes_common_resources = true;
 };
 
+enum class RenderItemMaterialPhasePolicy : uint8_t {
+    Forbidden,
+    Optional,
+    Required,
+};
+
+enum class RenderItemTaskInput : uint32_t {
+    DrawContext = 1u << 0,
+    ModelMatrix = 1u << 1,
+    OverrideColor = 1u << 2,
+    InlineUniform = 1u << 3,
+};
+
+constexpr uint32_t render_item_task_input_bit(RenderItemTaskInput input)
+{
+    return static_cast<uint32_t>(input);
+}
+
+constexpr uint64_t render_item_vertex_transform_kind_bit(VertexTransformKind kind)
+{
+    return 1ull << static_cast<uint32_t>(kind);
+}
+
+// A pass-owned ABI contract for planning one item. Capabilities remain coarse
+// discovery metadata; this packet is the authoritative compatibility request.
+// The material-pipeline contract is borrowed only for the duration of planning.
+struct RenderItemTaskPlanningContract {
+    RenderItemPassSemantic pass_semantic = RenderItemPassSemantic::Color;
+    RenderItemMaterialPhasePolicy material_phase_policy =
+        RenderItemMaterialPhasePolicy::Optional;
+    uint32_t provided_input_mask = 0;
+    uint32_t required_input_mask = 0;
+    uint64_t accepted_vertex_transform_kind_mask = UINT64_MAX;
+    const MaterialPipelinePassContract* shader_contract = nullptr;
+    const char* debug_pass_name = nullptr;
+};
+
+enum class RenderItemTaskRejection : uint8_t {
+    None,
+    InvalidRequest,
+    EncoderNotFound,
+    PassOutputUnsupported,
+    MaterialPhaseRequired,
+    MaterialPhaseForbidden,
+    RequiredInputUnsupported,
+    RequiredInputMissing,
+    VertexTransformUnsupported,
+    PassVertexTransformUnsupported,
+    ShaderPlanningRejected,
+};
+
+struct RenderItemTaskShaderPlan {
+    tc_shader_handle final_shader = tc_shader_handle_invalid();
+    VertexTransformKind vertex_transform_kind = VertexTransformKind::StaticMesh;
+    bool has_vertex_transform_kind = false;
+};
+
+struct RenderItemTaskPlanningRequest {
+    const tc_render_item* item = nullptr;
+    size_t item_index = SIZE_MAX;
+    size_t source_draw_index = SIZE_MAX;
+    tc_material_phase* material_phase = nullptr;
+    tc_shader_handle candidate_shader = tc_shader_handle_invalid();
+    const RenderItemTaskPlanningContract* contract = nullptr;
+};
+
+struct RenderItemTaskPlanningResult {
+    size_t task_index = SIZE_MAX;
+    RenderItemTaskRejection rejection = RenderItemTaskRejection::None;
+    const char* detail = nullptr;
+
+    bool accepted() const {
+        return task_index != SIZE_MAX && rejection == RenderItemTaskRejection::None;
+    }
+};
+
+using RenderItemTaskShaderPlannerFn = RenderItemTaskRejection (*)(
+    const RenderItemTaskPlanningRequest& request,
+    RenderItemTaskShaderPlan& out_plan,
+    const char*& out_detail,
+    void* user_data);
+
 struct RenderItemDrawEncoderDesc {
     RenderItemDrawEncoderFn encode = nullptr;
+    RenderItemTaskShaderPlannerFn plan_task_shader = nullptr;
     void* user_data = nullptr;
     const char* debug_name = nullptr;
     RenderItemEncoderCapabilities capabilities{};
@@ -113,6 +201,24 @@ RENDER_API bool get_render_item_encoder_capabilities(
 RENDER_API bool render_item_encoder_supports_pass(
     uint32_t item_kind,
     RenderItemPassSemantic semantic);
+
+// Explicit shader-planning hook for encoders whose current shader candidate is
+// already final. Registering this hook is intentional: #205 can replace it per
+// item kind without extending Drawable or introducing a second pass protocol.
+RENDER_API RenderItemTaskRejection plan_render_item_passthrough_shader(
+    const RenderItemTaskPlanningRequest& request,
+    RenderItemTaskShaderPlan& out_plan,
+    const char*& out_detail,
+    void* user_data);
+
+// Plan and append one owned task. A rejection never mutates out_tasks and is
+// always logged with pass, encoder, item kind and a structured reason.
+RENDER_API RenderItemTaskPlanningResult plan_render_item_task(
+    const RenderItemTaskPlanningRequest& request,
+    RenderTaskList& out_tasks);
+
+RENDER_API const char* render_item_task_rejection_name(
+    RenderItemTaskRejection rejection);
 
 RENDER_API bool bind_render_item_common_resources(
     tgfx::RenderContext2& ctx,
