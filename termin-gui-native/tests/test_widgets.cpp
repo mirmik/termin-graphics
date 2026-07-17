@@ -17,6 +17,7 @@ int main() {
   test_splitter_layout_drag_and_hit_test();
   test_splitter_recursive_destroy_children();
   test_scroll_area_lays_out_content_with_clip_and_scroll();
+  test_scroll_area_can_fit_content_to_disabled_scroll_axis();
   test_scroll_area_wheel_clamps_and_recursive_destroy_content();
   test_tab_view_switches_selected_page_and_clips_paint();
   test_tab_view_recursive_destroy_pages();

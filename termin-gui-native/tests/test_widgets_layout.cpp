@@ -365,6 +365,28 @@ void test_scroll_area_lays_out_content_with_clip_and_scroll() {
   tc_ui_draw_list_destroy(draw_list);
 }
 
+void test_scroll_area_can_fit_content_to_disabled_scroll_axis() {
+  Document document;
+  DocumentBuilder ui(document);
+
+  auto &scroll = ui.make_root<ScrollArea>("scroll");
+  auto &content = ui.make<VStack>("scroll-content");
+  content.set_preferred_size(tc_ui_size{200.0f, 180.0f});
+  scroll.set_content(content);
+  scroll.set_scroll_axes(false, true);
+
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 60.0f});
+
+  assert(!scroll.horizontal_scroll_enabled());
+  assert(scroll.vertical_scroll_enabled());
+  assert(near(scroll.content_size().width, 100.0f));
+  assert(near(content.bounds().width, 100.0f));
+  assert(near(scroll.content_size().height, 180.0f));
+  scroll.set_scroll(50.0f, 40.0f);
+  assert(near(scroll.scroll_x(), 0.0f));
+  assert(near(scroll.scroll_y(), 40.0f));
+}
+
 void test_scroll_area_wheel_clamps_and_recursive_destroy_content() {
   Document document;
   DocumentBuilder ui(document);

@@ -24,9 +24,22 @@ void ScrollArea::set_content(tc_widget_handle handle) {
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
+void ScrollArea::set_scroll_axes(bool horizontal, bool vertical) {
+    horizontal_scroll_enabled_ = horizontal;
+    vertical_scroll_enabled_ = vertical;
+    if (!horizontal_scroll_enabled_) {
+        scroll_x_ = 0.0f;
+    }
+    if (!vertical_scroll_enabled_) {
+        scroll_y_ = 0.0f;
+    }
+    clamp_scroll();
+    mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE);
+}
+
 void ScrollArea::set_scroll(float x, float y) {
-    scroll_x_ = std::max(0.0f, x);
-    scroll_y_ = std::max(0.0f, y);
+    scroll_x_ = horizontal_scroll_enabled_ ? std::max(0.0f, x) : 0.0f;
+    scroll_y_ = vertical_scroll_enabled_ ? std::max(0.0f, y) : 0.0f;
     clamp_scroll();
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
@@ -58,8 +71,8 @@ void ScrollArea::layout(tc_ui_document* document, tc_ui_rect rect) {
 
     tc_ui_size measured = measure_widget(content, document, unconstrained());
     content_size_ = tc_ui_size {
-        std::max(measured.width, rect.width),
-        std::max(measured.height, rect.height)
+        horizontal_scroll_enabled_ ? std::max(measured.width, rect.width) : rect.width,
+        vertical_scroll_enabled_ ? std::max(measured.height, rect.height) : rect.height
     };
     clamp_scroll();
     layout_widget(
@@ -83,8 +96,10 @@ tc_ui_event_result ScrollArea::pointer_event(tc_ui_document* document, const tc_
         return TC_UI_EVENT_IGNORED;
     }
     if (event->type == TC_UI_POINTER_WHEEL) {
-        const float delta_y = event->wheel_y != 0.0f ? -event->wheel_y * wheel_step_ : 0.0f;
-        const float delta_x = event->wheel_x != 0.0f ? -event->wheel_x * wheel_step_ : 0.0f;
+        const float delta_y = vertical_scroll_enabled_ && event->wheel_y != 0.0f
+            ? -event->wheel_y * wheel_step_ : 0.0f;
+        const float delta_x = horizontal_scroll_enabled_ && event->wheel_x != 0.0f
+            ? -event->wheel_x * wheel_step_ : 0.0f;
         set_scroll(scroll_x_ + delta_x, scroll_y_ + delta_y);
         if (!tc_widget_handle_is_invalid(this->content())) {
             if (tc_widget* content = resolve_child(document, c_widget(), this->content(), "ScrollArea::wheel")) {
@@ -122,8 +137,12 @@ tc_widget_handle ScrollArea::hit_test(tc_ui_document* document, float x, float y
 }
 
 void ScrollArea::clamp_scroll() {
-    scroll_x_ = clamp_float(scroll_x_, 0.0f, std::max(0.0f, content_size_.width - bounds().width));
-    scroll_y_ = clamp_float(scroll_y_, 0.0f, std::max(0.0f, content_size_.height - bounds().height));
+    scroll_x_ = horizontal_scroll_enabled_
+        ? clamp_float(scroll_x_, 0.0f, std::max(0.0f, content_size_.width - bounds().width))
+        : 0.0f;
+    scroll_y_ = vertical_scroll_enabled_
+        ? clamp_float(scroll_y_, 0.0f, std::max(0.0f, content_size_.height - bounds().height))
+        : 0.0f;
 }
 
 
