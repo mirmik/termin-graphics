@@ -31,6 +31,7 @@ class FrameTimelineModel {
     const std::vector<FrameTimelineSample>& samples() const { return samples_; }
     uint64_t revision() const { return revision_; }
     void set_samples(std::vector<FrameTimelineSample> samples);
+    void append_samples(std::vector<FrameTimelineSample> samples, size_t max_samples = 0);
     void clear();
     Signal<FrameTimelineModel&>& changed() { return changed_; }
 };

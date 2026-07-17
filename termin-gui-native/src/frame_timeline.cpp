@@ -5,12 +5,20 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <iterator>
 #include <stdexcept>
-#include <unordered_set>
 
 namespace termin::gui_native {
 
 namespace {
+bool valid_sample(const FrameTimelineSample& sample) {
+    return sample.stable_id >= 0 &&
+           std::isfinite(sample.interval_ms) && sample.interval_ms >= 0.0f &&
+           std::isfinite(sample.active_ms) && sample.active_ms >= 0.0f &&
+           std::isfinite(sample.lateness_ms) && sample.lateness_ms >= 0.0f &&
+           std::isfinite(sample.target_ms) && sample.target_ms >= 0.0f;
+}
+
 struct WidgetLifetimeToken {
     tc_ui_document* document = nullptr;
     tc_widget_handle handle = tc_widget_handle_invalid();
@@ -26,18 +34,42 @@ bool callback_target_alive(const WidgetLifetimeToken& token) {
 } // namespace
 
 void FrameTimelineModel::set_samples(std::vector<FrameTimelineSample> samples) {
-    std::unordered_set<int64_t> identifiers;
+    int64_t previous_id = -1;
     for (const FrameTimelineSample& sample : samples) {
-        if (sample.stable_id < 0 || !identifiers.insert(sample.stable_id).second ||
-            !std::isfinite(sample.interval_ms) || sample.interval_ms < 0.0f ||
-            !std::isfinite(sample.active_ms) || sample.active_ms < 0.0f ||
-            !std::isfinite(sample.lateness_ms) || sample.lateness_ms < 0.0f ||
-            !std::isfinite(sample.target_ms) || sample.target_ms < 0.0f) {
+        if (!valid_sample(sample) || sample.stable_id <= previous_id) {
             tc_log_error("[termin-gui-native] FrameTimelineModel rejected invalid sample");
-            throw std::invalid_argument("frame timeline samples require unique non-negative ids and timings");
+            throw std::invalid_argument(
+                "frame timeline samples require unique increasing non-negative ids and timings"
+            );
         }
+        previous_id = sample.stable_id;
     }
     samples_ = std::move(samples);
+    ++revision_;
+    changed_.emit(*this);
+}
+
+void FrameTimelineModel::append_samples(std::vector<FrameTimelineSample> samples,
+                                        size_t max_samples) {
+    int64_t previous_id = samples_.empty() ? -1 : samples_.back().stable_id;
+    for (const FrameTimelineSample& sample : samples) {
+        if (!valid_sample(sample) || sample.stable_id <= previous_id) {
+            tc_log_error("[termin-gui-native] FrameTimelineModel rejected invalid append");
+            throw std::invalid_argument(
+                "appended frame timeline samples must have increasing ids after existing samples"
+            );
+        }
+        previous_id = sample.stable_id;
+    }
+    if (samples.empty()) return;
+
+    samples_.insert(samples_.end(),
+                    std::make_move_iterator(samples.begin()),
+                    std::make_move_iterator(samples.end()));
+    if (max_samples > 0 && samples_.size() > max_samples) {
+        const size_t overflow = samples_.size() - max_samples;
+        samples_.erase(samples_.begin(), samples_.begin() + static_cast<std::ptrdiff_t>(overflow));
+    }
     ++revision_;
     changed_.emit(*this);
 }

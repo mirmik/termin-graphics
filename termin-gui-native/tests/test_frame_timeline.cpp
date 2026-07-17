@@ -88,10 +88,34 @@ void test_pointer_keyboard_zoom_and_visible_projection() {
     assert(timeline->window_size() == 22);
 }
 
+void test_model_incremental_append_and_capacity() {
+    auto model = std::make_shared<FrameTimelineModel>();
+    model->set_samples(samples(10, 3));
+    const uint64_t revision = model->revision();
+
+    model->append_samples(samples(13, 3), 4);
+    assert(model->revision() == revision + 1);
+    assert(model->samples().size() == 4);
+    assert(model->samples().front().stable_id == 12);
+    assert(model->samples().back().stable_id == 15);
+
+    model->append_samples({}, 4);
+    assert(model->revision() == revision + 1);
+
+    bool overlapping_rejected = false;
+    try {
+        model->append_samples(samples(15, 1), 4);
+    } catch (const std::invalid_argument&) {
+        overlapping_rejected = true;
+    }
+    assert(overlapping_rejected);
+}
+
 } // namespace
 
 int main() {
     test_model_validation_and_selection_reconciliation();
     test_pointer_keyboard_zoom_and_visible_projection();
+    test_model_incremental_append_and_capacity();
     return EXIT_SUCCESS;
 }

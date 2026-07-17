@@ -415,6 +415,8 @@ void bind_gui_native_views_and_collections(nb::module_ &m) {
       .def_prop_ro("revision", &termin::gui_native::FrameTimelineModel::revision)
       .def("set_samples", &termin::gui_native::FrameTimelineModel::set_samples,
            nb::arg("samples"))
+      .def("append_samples", &termin::gui_native::FrameTimelineModel::append_samples,
+           nb::arg("samples"), nb::arg("max_samples") = 0)
       .def("clear", &termin::gui_native::FrameTimelineModel::clear);
 
   nb::class_<FrameTimelineWidgetRef>(m, "FrameTimelineWidget")

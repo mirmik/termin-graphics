@@ -508,8 +508,6 @@ void ImmediateRenderer::_flush_buffers(
     if (!ctx2) return;
     if (lines.empty() && tris.empty()) return;
 
-    bool detailed = tc_profiler_detailed_rendering();
-
     _ensure_shader(&ctx2->device());
     tgfx::ShaderHandle imm_vs, imm_fs;
     tc_shader* imm_raw = nullptr;
@@ -520,7 +518,6 @@ void ImmediateRenderer::_flush_buffers(
         }
     }
 
-    if (detailed) tc_profiler_begin_section("Setup");
     ctx2->set_depth_test(depth_test);
     ctx2->set_depth_write(depth_test);
     ctx2->set_blend(blend);
@@ -541,22 +538,16 @@ void ImmediateRenderer::_flush_buffers(
         push.u_vp[i] = static_cast<float>(vp.data[i]);
     }
     ctx2->bind_uniform_data("u_push", &push, static_cast<uint32_t>(sizeof(push)));
-    if (detailed) tc_profiler_end_section();
-
     if (!lines.empty()) {
-        if (detailed) tc_profiler_begin_section("Lines");
         uint32_t vertex_count = static_cast<uint32_t>(lines.size() / 7);
         ctx2->draw_immediate_lines(lines.data(), vertex_count);
         lines.clear();
-        if (detailed) tc_profiler_end_section();
     }
 
     if (!tris.empty()) {
-        if (detailed) tc_profiler_begin_section("Triangles");
         uint32_t vertex_count = static_cast<uint32_t>(tris.size() / 7);
         ctx2->draw_immediate_triangles(tris.data(), vertex_count);
         tris.clear();
-        if (detailed) tc_profiler_end_section();
     }
 }
 
