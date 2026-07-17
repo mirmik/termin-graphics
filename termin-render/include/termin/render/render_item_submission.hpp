@@ -138,9 +138,29 @@ enum class RenderItemTaskRejection : uint8_t {
 };
 
 struct RenderItemTaskShaderPlan {
+    static constexpr uint32_t MAX_SHADER_USAGES = 4u;
+
     tc_shader_handle final_shader = tc_shader_handle_invalid();
+    tc_shader_handle shader_usages[MAX_SHADER_USAGES]{};
+    uint32_t shader_usage_count = 0;
     VertexTransformKind vertex_transform_kind = VertexTransformKind::StaticMesh;
     bool has_vertex_transform_kind = false;
+
+    bool add_shader_usage(tc_shader_handle shader) {
+        if (tc_shader_handle_is_invalid(shader)) {
+            return true;
+        }
+        for (uint32_t i = 0; i < shader_usage_count; ++i) {
+            if (tc_shader_handle_eq(shader_usages[i], shader)) {
+                return true;
+            }
+        }
+        if (shader_usage_count >= MAX_SHADER_USAGES) {
+            return false;
+        }
+        shader_usages[shader_usage_count++] = shader;
+        return true;
+    }
 };
 
 struct RenderItemTaskPlanningRequest {
