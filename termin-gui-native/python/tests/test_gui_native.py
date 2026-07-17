@@ -1111,9 +1111,15 @@ def test_native_basic_input_and_media_widget_factories():
     scroll_content = document.create_vstack("python-scroll-content")
     scroll_content.preferred_size = Size(200.0, 300.0)
     scroll.set_content(scroll_content)
+    scroll.set_scroll_axes(False, True)
     scroll.widget.layout(Rect(0.0, 0.0, 100.0, 80.0))
     assert scroll.content_handle == scroll_content.handle
+    assert not scroll.horizontal_scroll_enabled
+    assert scroll.vertical_scroll_enabled
+    assert scroll.content_size.width == pytest.approx(100.0)
     assert scroll.content_size.height == pytest.approx(300.0)
+    scroll.scroll_x = 48.0
+    assert scroll.scroll_x == pytest.approx(0.0)
     scroll.scroll_y = 48.0
     assert scroll.scroll_y == pytest.approx(48.0)
 

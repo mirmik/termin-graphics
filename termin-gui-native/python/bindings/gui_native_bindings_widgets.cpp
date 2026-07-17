@@ -612,6 +612,23 @@ void bind_gui_native_widgets(nb::module_& m) {
         .def_prop_ro(
             "content_size",
             [](const ScrollAreaRef &self) { return self.get().content_size(); })
+        .def_prop_ro(
+            "horizontal_scroll_enabled",
+            [](const ScrollAreaRef &self) {
+              return self.get().horizontal_scroll_enabled();
+            })
+        .def_prop_ro(
+            "vertical_scroll_enabled",
+            [](const ScrollAreaRef &self) {
+              return self.get().vertical_scroll_enabled();
+            })
+        .def(
+            "set_scroll_axes",
+            [](const ScrollAreaRef &self, bool horizontal, bool vertical) {
+              self.get().set_scroll_axes(horizontal, vertical);
+              self.widget.throw_pending_exception();
+            },
+            nb::arg("horizontal"), nb::arg("vertical"))
         .def(
             "set_content",
             [](const ScrollAreaRef &self, const WidgetRef &content) {

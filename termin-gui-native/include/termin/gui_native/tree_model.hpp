@@ -11,78 +11,80 @@
 
 namespace termin::gui_native {
 
+class TreeTableModel;
+
 using TreeNodeId = uint64_t;
 inline constexpr TreeNodeId kInvalidTreeNodeId = 0;
 
 struct TreeNode {
-    TreeNodeId id = kInvalidTreeNodeId;
-    CollectionItem item;
-    TreeNodeId parent = kInvalidTreeNodeId;
-    std::vector<TreeNodeId> children;
+  TreeNodeId id = kInvalidTreeNodeId;
+  CollectionItem item;
+  TreeNodeId parent = kInvalidTreeNodeId;
+  std::vector<TreeNodeId> children;
 };
 
 enum class TreeChangeKind { Reset, Insert, Update, Erase, Move };
 
 struct TreeChange {
-    TreeChangeKind kind = TreeChangeKind::Reset;
-    TreeNodeId node = kInvalidTreeNodeId;
-    TreeNodeId parent = kInvalidTreeNodeId;
-    size_t index = 0;
-    size_t count = 0;
+  TreeChangeKind kind = TreeChangeKind::Reset;
+  TreeNodeId node = kInvalidTreeNodeId;
+  TreeNodeId parent = kInvalidTreeNodeId;
+  size_t index = 0;
+  size_t count = 0;
 };
 
 class TreeModel {
-  private:
-    std::unordered_map<TreeNodeId, TreeNode> nodes_;
-    std::vector<TreeNodeId> roots_;
-    TreeNodeId next_id_ = 1;
-    uint64_t revision_ = 1;
-    Signal<TreeModel&, const TreeChange&> changed_;
+private:
+  std::unordered_map<TreeNodeId, TreeNode> nodes_;
+  std::vector<TreeNodeId> roots_;
+  TreeNodeId next_id_ = 1;
+  uint64_t revision_ = 1;
+  Signal<TreeModel &, const TreeChange &> changed_;
 
-  public:
-    size_t size() const { return nodes_.size(); }
-    bool empty() const { return nodes_.empty(); }
-    uint64_t revision() const { return revision_; }
-    bool contains(TreeNodeId id) const;
-    const TreeNode& node(TreeNodeId id) const;
-    const std::vector<TreeNodeId>& roots() const { return roots_; }
-    const std::vector<TreeNodeId>& children(TreeNodeId parent) const;
-    Signal<TreeModel&, const TreeChange&>& changed() { return changed_; }
+public:
+  size_t size() const { return nodes_.size(); }
+  bool empty() const { return nodes_.empty(); }
+  uint64_t revision() const { return revision_; }
+  bool contains(TreeNodeId id) const;
+  const TreeNode &node(TreeNodeId id) const;
+  const std::vector<TreeNodeId> &roots() const { return roots_; }
+  const std::vector<TreeNodeId> &children(TreeNodeId parent) const;
+  Signal<TreeModel &, const TreeChange &> &changed() { return changed_; }
 
-    TreeNodeId append_root(CollectionItem item);
-    TreeNodeId append_child(TreeNodeId parent, CollectionItem item);
-    TreeNodeId insert_child(TreeNodeId parent, size_t index, CollectionItem item);
-    void update(TreeNodeId id, CollectionItem item);
-    void move(TreeNodeId id, TreeNodeId new_parent, size_t index = SIZE_MAX);
-    void erase(TreeNodeId id);
-    void clear();
+  TreeNodeId append_root(CollectionItem item);
+  TreeNodeId append_child(TreeNodeId parent, CollectionItem item);
+  TreeNodeId insert_child(TreeNodeId parent, size_t index, CollectionItem item);
+  void update(TreeNodeId id, CollectionItem item);
+  void move(TreeNodeId id, TreeNodeId new_parent, size_t index = SIZE_MAX);
+  void erase(TreeNodeId id);
+  void clear();
 
-  private:
-    static void validate_item(const CollectionItem& item);
-    std::vector<TreeNodeId>& sibling_list(TreeNodeId parent);
-    const std::vector<TreeNodeId>& sibling_list(TreeNodeId parent) const;
-    bool is_descendant(TreeNodeId node, TreeNodeId ancestor) const;
-    void erase_subtree(TreeNodeId id, size_t& count);
-    void notify(TreeChange change);
-
+private:
+  static void validate_item(const CollectionItem &item);
+  std::vector<TreeNodeId> &sibling_list(TreeNodeId parent);
+  const std::vector<TreeNodeId> &sibling_list(TreeNodeId parent) const;
+  bool is_descendant(TreeNodeId node, TreeNodeId ancestor) const;
+  void erase_subtree(TreeNodeId id, size_t &count);
+  void notify(TreeChange change);
 };
 
 class TreeExpansionModel {
-  private:
-    std::unordered_set<TreeNodeId> expanded_;
-    uint64_t revision_ = 1;
-    Signal<TreeExpansionModel&, TreeNodeId, bool> changed_;
+private:
+  std::unordered_set<TreeNodeId> expanded_;
+  uint64_t revision_ = 1;
+  Signal<TreeExpansionModel &, TreeNodeId, bool> changed_;
 
-  public:
-    uint64_t revision() const { return revision_; }
-    bool expanded(TreeNodeId id) const;
-    bool set_expanded(TreeNodeId id, bool expanded);
-    bool toggle(TreeNodeId id);
-    bool clear();
-    bool reconcile(const TreeModel& model);
-    Signal<TreeExpansionModel&, TreeNodeId, bool>& changed() { return changed_; }
+public:
+  uint64_t revision() const { return revision_; }
+  bool expanded(TreeNodeId id) const;
+  bool set_expanded(TreeNodeId id, bool expanded);
+  bool toggle(TreeNodeId id);
+  bool clear();
+  bool reconcile(const TreeModel &model);
+  bool reconcile(const TreeTableModel &model);
+  Signal<TreeExpansionModel &, TreeNodeId, bool> &changed() { return changed_; }
 
-  private:
+private:
 };
 
 } // namespace termin::gui_native

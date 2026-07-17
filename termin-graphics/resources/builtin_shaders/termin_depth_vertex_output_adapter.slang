@@ -1,5 +1,6 @@
+// Depth pass projection and encoded-depth output.
+
 import termin_prelude;
-import termin_vertex_transform;
 
 struct PerFrame {
     column_major float4x4 u_view;
@@ -19,15 +20,6 @@ struct DepthPushData {
 [[TerminScope("draw")]]
 ConstantBuffer<DepthPushData> depth_draw;
 
-[[TerminScope("draw")]]
-ConstantBuffer<TerminBoneBlock> bone_block;
-
-struct VertexInput {
-    float3 position : POSITION;
-    float4 joints : TEXCOORD0;
-    float4 weights : TEXCOORD1;
-};
-
 struct VertexOutput {
     float4 position : SV_Position;
     float linear_depth : TEXCOORD0;
@@ -35,16 +27,12 @@ struct VertexOutput {
     float log_depth : TEXCOORD2;
 };
 
-[shader("vertex")]
-VertexOutput vs_main(VertexInput input) {
+VertexOutput termin_depth_vertex_output(float3 world_pos) {
     VertexOutput output;
-    float3 local_pos =
-        termin_skinned_position(input.position, input.joints, input.weights, bone_block);
-    float4 world_pos = mul(depth_draw.u_model, float4(local_pos, 1.0));
-    float4 view_pos = mul(per_frame.u_view, world_pos);
-
+    float4 view_pos = mul(per_frame.u_view, float4(world_pos, 1.0));
     float view_depth = view_pos.y;
-    float depth = (view_depth - per_frame.u_near) / (per_frame.u_far - per_frame.u_near);
+    float depth =
+        (view_depth - per_frame.u_near) / (per_frame.u_far - per_frame.u_near);
     float4 clip_pos = mul(per_frame.u_projection, view_pos);
     float ndc_depth = clip_pos.z / max(abs(clip_pos.w), 1.0e-6);
 

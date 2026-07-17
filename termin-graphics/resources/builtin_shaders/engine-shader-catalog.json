@@ -395,17 +395,6 @@
       }
     },
     {
-      "uuid": "termin-engine-foliage-instanced",
-      "name": "FoliageInstancedVariantVS",
-      "language": "slang",
-      "stages": {
-        "vertex": {
-          "path": "termin-engine-foliage-instanced.vert.slang",
-          "entry": "vs_main"
-        }
-      }
-    },
-    {
       "uuid": "termin-engine-navmesh-debug",
       "name": "NavMeshDebugVSFS",
       "language": "slang",
@@ -730,61 +719,6 @@
         "fragment": {
           "path": "termin-engine-tonemap.frag.slang",
           "entry": "fs_main"
-        }
-      }
-    },
-    {
-      "uuid": "termin-engine-skinned-material",
-      "name": "SkinnedMaterialVariantVS",
-      "language": "slang",
-      "stages": {
-        "vertex": {
-          "path": "termin-engine-skinned-material.vert.slang",
-          "entry": "vs_main"
-        }
-      }
-    },
-    {
-      "uuid": "termin-engine-skinned-shadow",
-      "name": "SkinnedShadowVariantVS",
-      "language": "slang",
-      "stages": {
-        "vertex": {
-          "path": "termin-engine-skinned-shadow.vert.slang",
-          "entry": "vs_main"
-        }
-      }
-    },
-    {
-      "uuid": "termin-engine-skinned-depth",
-      "name": "SkinnedDepthVariantVS",
-      "language": "slang",
-      "stages": {
-        "vertex": {
-          "path": "termin-engine-skinned-depth.vert.slang",
-          "entry": "vs_main"
-        }
-      }
-    },
-    {
-      "uuid": "termin-engine-skinned-id",
-      "name": "SkinnedIdVariantVS",
-      "language": "slang",
-      "stages": {
-        "vertex": {
-          "path": "termin-engine-skinned-id.vert.slang",
-          "entry": "vs_main"
-        }
-      }
-    },
-    {
-      "uuid": "termin-engine-skinned-normal",
-      "name": "SkinnedNormalVariantVS",
-      "language": "slang",
-      "stages": {
-        "vertex": {
-          "path": "termin-engine-skinned-normal.vert.slang",
-          "entry": "vs_main"
         }
       }
     }

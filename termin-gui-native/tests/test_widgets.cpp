@@ -17,6 +17,7 @@ int main() {
   test_splitter_layout_drag_and_hit_test();
   test_splitter_recursive_destroy_children();
   test_scroll_area_lays_out_content_with_clip_and_scroll();
+  test_scroll_area_can_fit_content_to_disabled_scroll_axis();
   test_scroll_area_wheel_clamps_and_recursive_destroy_content();
   test_tab_view_switches_selected_page_and_clips_paint();
   test_tab_view_recursive_destroy_pages();
@@ -70,6 +71,8 @@ int main() {
   test_table_models_preserve_row_ids_and_validate_columns();
   test_table_widget_virtualizes_large_model_and_lays_out_columns();
   test_table_widget_pointer_keyboard_resize_signals_and_lifetime();
+  test_tree_table_model_preserves_identity_and_validates_hierarchy();
+  test_tree_table_widget_expansion_navigation_and_columns();
   test_host_click_count_drives_collection_activation();
   return EXIT_SUCCESS;
 }

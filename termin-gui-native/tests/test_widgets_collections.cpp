@@ -279,7 +279,8 @@ void test_list_widget_pointer_keyboard_and_multi_selection() {
   pointer.y = 15.0f;
   assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
   assert((list.selection().selected_indices() == std::vector<size_t>{0}));
-  assert((context_requests == std::vector<std::tuple<int64_t, float, float>>{{0, 10.0f, 15.0f}}));
+  assert((context_requests ==
+          std::vector<std::tuple<int64_t, float, float>>{{0, 10.0f, 15.0f}}));
   pointer.button = 0;
 
   pointer.y = 45.0f;
@@ -642,6 +643,105 @@ void test_table_models_preserve_row_ids_and_validate_columns() {
   assert(rejected_duplicate);
 }
 
+void test_tree_table_model_preserves_identity_and_validates_hierarchy() {
+  TreeTableModel model;
+  model.set_rows({
+      TreeTableRowData{"render", "", {"Render", "12.0"}, true},
+      TreeTableRowData{"render/compose", "render", {"Compose", "8.0"}, true},
+      TreeTableRowData{"events", "", {"Events", "2.0"}, true},
+  });
+  const TreeTableNodeId render = model.find("render");
+  const TreeTableNodeId compose = model.find("render/compose");
+  assert(render != kInvalidTreeTableNodeId);
+  assert(model.roots() ==
+         std::vector<TreeTableNodeId>({render, model.find("events")}));
+  assert(model.node(render).children ==
+         std::vector<TreeTableNodeId>({compose}));
+  assert(model.node(compose).parent == render);
+
+  model.set_rows({
+      TreeTableRowData{"events", "", {"Events", "3.0"}, true},
+      TreeTableRowData{"render", "", {"Render", "10.0"}, true},
+      TreeTableRowData{"render/compose", "render", {"Compose", "6.0"}, true},
+  });
+  assert(model.find("render") == render);
+  assert(model.find("render/compose") == compose);
+  assert(model.roots().front() == model.find("events"));
+
+  bool rejected = false;
+  try {
+    model.set_rows({TreeTableRowData{"child", "missing", {"Child"}, true}});
+  } catch (const std::invalid_argument &) {
+    rejected = true;
+  }
+  assert(rejected);
+  assert(model.find("render") == render);
+
+  rejected = false;
+  try {
+    model.set_rows({TreeTableRowData{"a", "b", {"A"}, true},
+                    TreeTableRowData{"b", "a", {"B"}, true}});
+  } catch (const std::invalid_argument &) {
+    rejected = true;
+  }
+  assert(rejected);
+}
+
+void test_tree_table_widget_expansion_navigation_and_columns() {
+  Document document;
+  DocumentBuilder ui(document);
+  auto model = std::make_shared<TreeTableModel>();
+  model->set_rows({
+      TreeTableRowData{"render", "", {"Render", "12.0"}, true},
+      TreeTableRowData{"render/compose", "render", {"Compose", "8.0"}, true},
+      TreeTableRowData{
+          "render/compose/pass", "render/compose", {"Pass", "5.0"}, true},
+      TreeTableRowData{"events", "", {"Events", "2.0"}, true},
+  });
+  auto columns = std::make_shared<TableColumnModel>();
+  columns->set_columns({
+      TableColumn{"section", "Section", TableColumnPolicy::Stretch, 0.0f,
+                  100.0f},
+      TableColumn{"ms", "ms", TableColumnPolicy::Fixed, 60.0f, 40.0f},
+  });
+  auto expansion = std::make_shared<TreeExpansionModel>();
+  const TreeTableNodeId render = model->find("render");
+  const TreeTableNodeId compose = model->find("render/compose");
+  expansion->set_expanded(render, true);
+  expansion->set_expanded(compose, true);
+  auto &table = ui.make_root<TreeTableWidget>(model, columns, expansion);
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 320.0f, 180.0f});
+  assert(table.visible_count() == 4);
+  assert(table.visible_row(2).depth == 2);
+  assert(near(table.column_layout()[0].width, 260.0f));
+  assert(near(table.column_layout()[1].width, 60.0f));
+
+  table.select_node(compose);
+  tc_ui_key_event key{};
+  key.type = TC_UI_KEY_DOWN;
+  key.key = TC_UI_KEY_LEFT;
+  assert(table.key_event(nullptr, &key) == TC_UI_EVENT_HANDLED);
+  assert(!table.expanded(compose));
+  assert(table.visible_count() == 3);
+  key.key = TC_UI_KEY_RIGHT;
+  assert(table.key_event(nullptr, &key) == TC_UI_EVENT_HANDLED);
+  assert(table.expanded(compose));
+  assert(table.visible_count() == 4);
+
+  model->set_rows({
+      TreeTableRowData{"render", "", {"Render", "11.0"}, true},
+      TreeTableRowData{"render/compose", "render", {"Compose", "7.0"}, true},
+      TreeTableRowData{"events", "", {"Events", "3.0"}, true},
+  });
+  assert(table.selected_node() == compose);
+  assert(table.expanded(compose));
+  assert(table.visible_count() == 3);
+
+  table.set_expanded(render, false);
+  assert(table.visible_count() == 2);
+  assert(near(table.content_height(), table.row_height() * 2.0f));
+}
+
 void test_file_grid_widget_virtualizes_large_model_and_responsive_layout() {
   Document document;
   install_test_text_measurer(document);
@@ -799,9 +899,10 @@ void test_tool_bar_layout_activation_capture_and_model_lifetime() {
   assert(toolbar.item_rects()[1].width < toolbar.item_height());
   toolbar.set_centered(true);
   document.layout_roots(tc_ui_rect{0.0f, 0.0f, 360.0f, 40.0f});
-  const auto& centered_rects = toolbar.item_rects();
+  const auto &centered_rects = toolbar.item_rects();
   const float content_center =
-      (centered_rects.front().x + centered_rects.back().x + centered_rects.back().width) *
+      (centered_rects.front().x + centered_rects.back().x +
+       centered_rects.back().width) *
       0.5f;
   assert(std::abs(content_center - 180.0f) < 0.01f);
   toolbar.set_centered(false);
@@ -1029,8 +1130,8 @@ void test_menu_bar_adjacent_switching_shortcuts_and_overlay_lifetime() {
   assert(document.overlay_count() == 1);
   assert((tc_ui_document_overlay_flags_at(document.get(), 0) &
           TC_UI_OVERLAY_ALLOW_ROOT_HIT) != 0);
-  const tc_widget_handle anchor_hit =
-      tc_ui_document_hit_test(document.get(), bar.item_rects()[1].x + 2.0f, 10.0f);
+  const tc_widget_handle anchor_hit = tc_ui_document_hit_test(
+      document.get(), bar.item_rects()[1].x + 2.0f, 10.0f);
   assert(!tc_widget_handle_is_invalid(anchor_hit));
   assert(tc_widget_handle_eq(anchor_hit, bar.handle()));
   pointer.type = TC_UI_POINTER_UP;
@@ -1143,7 +1244,7 @@ void test_dialog_modal_stack_focus_actions_and_exactly_once_results() {
   assert(results.size() == 2);
 
   assert(dialog.show(document.get(), tc_ui_rect{0.0f, 0.0f, 800.0f, 600.0f}));
-  tc_widget* apply_widget =
+  tc_widget *apply_widget =
       tc_ui_document_resolve_widget(document.get(), dialog.button_handles()[0]);
   assert(apply_widget);
   tc_ui_pointer_event click{};
@@ -1281,10 +1382,10 @@ void test_file_grid_widget_input_scrollbar_signals_and_lifetime() {
   assert(contexts.back() == -1);
 
   std::vector<std::tuple<size_t, float, float, int32_t>> drags;
-  grid.drag_requested().connect(
-      [&drags](FileGridWidget &, size_t index, float x, float y, int32_t modifiers) {
-        drags.emplace_back(index, x, y, modifiers);
-      });
+  grid.drag_requested().connect([&drags](FileGridWidget &, size_t index,
+                                         float x, float y, int32_t modifiers) {
+    drags.emplace_back(index, x, y, modifiers);
+  });
   pointer.button = 0;
   pointer.type = TC_UI_POINTER_DOWN;
   pointer.modifiers = TC_UI_MOD_CTRL;
@@ -1546,7 +1647,8 @@ void test_host_click_count_drives_collection_activation() {
     DocumentBuilder ui(document);
     auto model = std::make_shared<TreeModel>();
     model->append_root(CollectionItem{"first", "First"});
-    const TreeNodeId node = model->append_root(CollectionItem{"second", "Second"});
+    const TreeNodeId node =
+        model->append_root(CollectionItem{"second", "Second"});
     auto &tree = ui.make_root<TreeWidget>(model);
     document.layout_roots(tc_ui_rect{0.0f, 0.0f, 200.0f, 80.0f});
     TreeNodeId activated = kInvalidTreeNodeId;

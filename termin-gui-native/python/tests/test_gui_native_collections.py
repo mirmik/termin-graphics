@@ -47,6 +47,8 @@ from termin.gui_native import (
     TreeExpansionModel,
     TreeDropPosition,
     TreeModel,
+    TreeTableModel,
+    TreeTableRowData,
     ViewportExternalDragEvent,
     ViewportExternalDragPhase,
     ViewportSurfaceHost,
@@ -732,6 +734,52 @@ def test_native_tree_widget_drag_drop_signal_reports_position():
     pointer.type = PointerEventType.Up
     assert document.dispatch_pointer_event(pointer) == EventResult.Handled
     assert drops == [(first, second, TreeDropPosition.Inside)]
+
+
+def test_native_tree_table_preserves_identity_expansion_and_columns():
+    model = TreeTableModel()
+    model.set_rows(
+        [
+            TreeTableRowData("root", "", ["Root", "12.0"]),
+            TreeTableRowData("child/with/slash", "root", ["Child/With/Slash", "8.0"]),
+            TreeTableRowData("other", "", ["Other", "2.0"]),
+        ]
+    )
+    root = model.find("root")
+    child = model.find("child/with/slash")
+    assert model.node(root).children == [child]
+
+    columns = TableColumnModel()
+    columns.set_columns(
+        [
+            TableColumn("section", "Section", min_width=120.0),
+            TableColumn("ms", "ms", TableColumnPolicy.Fixed, width=60.0),
+        ]
+    )
+    expansion = TreeExpansionModel()
+    expansion.set_expanded(root, True)
+    document = Document()
+    widget = document.create_tree_table_widget(model, columns, expansion)
+    assert document.add_root(widget.handle)
+    document.layout_roots(Rect(0.0, 0.0, 320.0, 150.0))
+    assert widget.visible_count == 3
+    assert widget.visible_row(1).depth == 1
+    assert widget.column_layout[1].width == pytest.approx(60.0)
+
+    assert widget.select(child)
+    model.set_rows(
+        [
+            TreeTableRowData("root", "", ["Root", "10.0"]),
+            TreeTableRowData("child/with/slash", "root", ["Child/With/Slash", "7.0"]),
+            TreeTableRowData("other", "", ["Other", "3.0"]),
+        ]
+    )
+    assert model.find("root") == root
+    assert model.find("child/with/slash") == child
+    assert widget.selected_node == child
+    assert widget.expanded(root)
+    widget.set_expanded(root, False)
+    assert widget.visible_count == 2
 
 
 def test_native_table_widget_models_layout_and_virtualized_paint():

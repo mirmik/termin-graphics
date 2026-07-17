@@ -86,6 +86,8 @@ add_library(termin_gui_native SHARED
     src/file_dialog_overlay.cpp
     src/tree_model.cpp
     src/tree_widget.cpp
+    src/tree_table_model.cpp
+    src/tree_table_widget.cpp
     src/table_model.cpp
     src/table_widget.cpp
     src/combo_box.cpp
