@@ -601,23 +601,52 @@ bool tc_pipeline_replace_pass_at(
     tc_pass* replacement,
     tc_pass_deleter deleter
 ) {
-    if (!pipeline_handle_alive(h) || !replacement || !deleter) return false;
+    tc_pass* previous = tc_pipeline_get_pass_at(h, index);
+    tc_pass_deleter previous_deleter = NULL;
+    if (!tc_pipeline_exchange_pass_at_checked(
+            h,
+            index,
+            previous,
+            replacement,
+            deleter,
+            &previous_deleter)) {
+        return false;
+    }
+    destroy_owned_pass(previous, previous_deleter);
+    return true;
+}
+
+bool tc_pipeline_exchange_pass_at_checked(
+    tc_pipeline_handle h,
+    size_t index,
+    tc_pass* expected,
+    tc_pass* replacement,
+    tc_pass_deleter replacement_deleter,
+    tc_pass_deleter* expected_deleter
+) {
+    if (!pipeline_handle_alive(h) || !expected || !replacement ||
+        !replacement_deleter || !expected_deleter) {
+        return false;
+    }
     tc_pipeline* pipeline = &g_pipeline_pool->pipelines[h.index];
-    if (index >= pipeline->pass_count) return false;
-    if (pipeline->passes[index] == replacement) return false;
-    if (tc_pipeline_handle_valid(replacement->owner_pipeline)) {
-        tc_log(TC_LOG_ERROR, "tc_pipeline_replace_pass_at: replacement already belongs to a pipeline");
+    if (index >= pipeline->pass_count || pipeline->passes[index] != expected ||
+        expected == replacement) {
+        return false;
+    }
+    if (!tc_pipeline_handle_eq(expected->owner_pipeline, h) ||
+        tc_pipeline_handle_valid(replacement->owner_pipeline)) {
+        tc_log(TC_LOG_ERROR, "tc_pipeline_exchange_pass_at_checked: stale source or owned replacement");
         return false;
     }
 
-    tc_pass* previous = pipeline->passes[index];
-    tc_pass_deleter previous_deleter = pipeline->pass_deleters[index];
+    *expected_deleter = pipeline->pass_deleters[index];
+    expected->owner_pipeline = TC_PIPELINE_HANDLE_INVALID;
+    expected->deleter = NULL;
     replacement->owner_pipeline = h;
-    replacement->deleter = deleter;
+    replacement->deleter = replacement_deleter;
     pipeline->passes[index] = replacement;
-    pipeline->pass_deleters[index] = deleter;
+    pipeline->pass_deleters[index] = replacement_deleter;
     pipeline->dirty = true;
-    destroy_owned_pass(previous, previous_deleter);
     return true;
 }
 

@@ -51,6 +51,18 @@ TC_API bool tc_pipeline_replace_pass_at(
     tc_pass* replacement,
     tc_pass_deleter deleter
 );
+// Publish a preconstructed replacement without destroying the previous pass.
+// No storage allocation or user pass callback occurs in this operation. The
+// caller owns the detached previous pass and must destroy it with the returned
+// deleter after the complete batch has been published.
+TC_API bool tc_pipeline_exchange_pass_at_checked(
+    tc_pipeline_handle h,
+    size_t index,
+    tc_pass* expected,
+    tc_pass* replacement,
+    tc_pass_deleter replacement_deleter,
+    tc_pass_deleter* expected_deleter
+);
 TC_API size_t tc_pipeline_pass_count(tc_pipeline_handle h);
 TC_API const char* tc_pipeline_get_name(tc_pipeline_handle h);
 TC_API void tc_pipeline_set_name(tc_pipeline_handle h, const char* name);

@@ -61,17 +61,19 @@ size_t CxxFramePass::_cb_get_inplace_aliases(tc_pass* p, const char** out, size_
 
 size_t CxxFramePass::_cb_get_resource_specs(tc_pass* p, void* out, size_t max) {
     CxxFramePass* self = from_tc(p);
-    if (!self || !out) return 0;
+    if (!self) return 0;
+
+    auto specs = self->get_resource_specs();
+    if (!out) return specs.size();
 
     ResourceSpec* out_specs = static_cast<ResourceSpec*>(out);
-    auto specs = self->get_resource_specs();
     size_t count = std::min(specs.size(), max);
 
     for (size_t i = 0; i < count; i++) {
         out_specs[i] = specs[i];
     }
 
-    return count;
+    return specs.size();
 }
 
 size_t CxxFramePass::_cb_get_internal_symbols(tc_pass* p, const char** out, size_t max) {

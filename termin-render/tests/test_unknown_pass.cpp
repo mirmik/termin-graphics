@@ -169,6 +169,101 @@ TEST_CASE("UnknownPass keeps placeholder on schema drift") {
     tc::InspectRegistry::instance().unregister_type(kProbeType);
 }
 
+TEST_CASE("UnknownPass preparation failures leave every pipeline unchanged") {
+    tc::init_cpp_inspect_vtable();
+    tc::register_builtin_cpp_kinds();
+    register_probe();
+
+    for (size_t failure_index = 0; failure_index < 3; ++failure_index) {
+        const tc_pipeline_handle first_pipeline = tc_pipeline_create("prepare-first");
+        const tc_pipeline_handle second_pipeline = tc_pipeline_create("prepare-second");
+        tc_pass* first = tc_pass_registry_create(kProbeType);
+        tc_pass* middle = tc_pass_registry_create(kProbeType);
+        tc_pass* last = tc_pass_registry_create(kProbeType);
+        REQUIRE(first != nullptr);
+        REQUIRE(middle != nullptr);
+        REQUIRE(last != nullptr);
+        REQUIRE(tc_pipeline_adopt_pass(first_pipeline, first, first->deleter));
+        REQUIRE(tc_pipeline_adopt_pass(first_pipeline, middle, middle->deleter));
+        REQUIRE(tc_pipeline_adopt_pass(second_pipeline, last, last->deleter));
+
+        size_t serialize_call = 0;
+        termin::UnknownPassPreparationHooks hooks;
+        hooks.serialize = [&](void* object, const char* type_name) {
+            if (serialize_call++ == failure_index) return tc_value_nil();
+            return tc_inspect_serialize(object, type_name);
+        };
+
+        termin::UnknownPassDegradationPlan plan;
+        std::string error;
+        CHECK(!termin::prepare_passes_to_unknown(
+            {kProbeType}, plan, &error, hooks));
+        CHECK_EQ(tc_pipeline_get_pass_at(first_pipeline, 0), first);
+        CHECK_EQ(tc_pipeline_get_pass_at(first_pipeline, 1), middle);
+        CHECK_EQ(tc_pipeline_get_pass_at(second_pipeline, 0), last);
+        CHECK_EQ(tc_pass_registry_instance_count(kProbeType), 3u);
+
+        tc_pipeline_destroy(first_pipeline);
+        tc_pipeline_destroy(second_pipeline);
+    }
+
+    tc_pass_registry_unregister(kProbeType);
+    tc::InspectRegistry::instance().unregister_type(kProbeType);
+}
+
+TEST_CASE("UnknownPass prepared plan rejects stale pipeline identity") {
+    tc::init_cpp_inspect_vtable();
+    tc::register_builtin_cpp_kinds();
+    register_probe();
+
+    const tc_pipeline_handle pipeline = tc_pipeline_create("prepare-stale");
+    tc_pass* first = tc_pass_registry_create(kProbeType);
+    tc_pass* second = tc_pass_registry_create(kProbeType);
+    REQUIRE(first != nullptr);
+    REQUIRE(second != nullptr);
+    REQUIRE(tc_pipeline_adopt_pass(pipeline, first, first->deleter));
+    REQUIRE(tc_pipeline_adopt_pass(pipeline, second, second->deleter));
+
+    termin::UnknownPassDegradationPlan plan;
+    std::string error;
+    REQUIRE(termin::prepare_passes_to_unknown({kProbeType}, plan, &error));
+    REQUIRE_EQ(plan.size(), 2u);
+    REQUIRE(tc_pipeline_move_pass_before(pipeline, second, first));
+
+    CHECK(!plan.commit(&error));
+    CHECK_EQ(tc_pipeline_get_pass_at(pipeline, 0), second);
+    CHECK_EQ(tc_pipeline_get_pass_at(pipeline, 1), first);
+    CHECK_EQ(tc_pass_registry_instance_count(kProbeType), 2u);
+
+    tc_pipeline_destroy(pipeline);
+    tc_pass_registry_unregister(kProbeType);
+    tc::InspectRegistry::instance().unregister_type(kProbeType);
+}
+
+TEST_CASE("UnknownPass preparation rejects external live instances") {
+    tc::init_cpp_inspect_vtable();
+    tc::register_builtin_cpp_kinds();
+    register_probe();
+
+    const tc_pipeline_handle pipeline = tc_pipeline_create("prepare-external");
+    tc_pass* attached = tc_pass_registry_create(kProbeType);
+    tc_pass* external = tc_pass_registry_create(kProbeType);
+    REQUIRE(attached != nullptr);
+    REQUIRE(external != nullptr);
+    REQUIRE(tc_pipeline_adopt_pass(pipeline, attached, attached->deleter));
+
+    termin::UnknownPassDegradationPlan plan;
+    std::string error;
+    CHECK(!termin::prepare_passes_to_unknown({kProbeType}, plan, &error));
+    CHECK_EQ(tc_pipeline_get_pass_at(pipeline, 0), attached);
+    CHECK_EQ(tc_pass_registry_instance_count(kProbeType), 2u);
+
+    tc_pass_delete_unowned(external);
+    tc_pipeline_destroy(pipeline);
+    tc_pass_registry_unregister(kProbeType);
+    tc::InspectRegistry::instance().unregister_type(kProbeType);
+}
+
 TEST_CASE("UnknownPass registration survives registry rebootstrap") {
     tc_pass_registry_cleanup();
     CHECK(!tc_pass_registry_has("UnknownPass"));

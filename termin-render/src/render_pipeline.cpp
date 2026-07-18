@@ -1,6 +1,8 @@
 // render_pipeline.cpp - Lightweight handle wrapper for tc_pipeline
 #include "termin/render/render_pipeline.hpp"
 
+#include <tcbase/tc_log.hpp>
+
 #include "termin/lighting/shadow.hpp"
 
 extern "C" {
@@ -134,11 +136,22 @@ std::vector<ResourceSpec> RenderPipeline::collect_specs() const {
     for (size_t i = 0; i < count; i++) {
         tc_pass* pass = tc_pipeline_get_pass_at(handle_, i);
         if (pass && pass->enabled) {
-            ResourceSpec pass_specs[16];
-            size_t pass_spec_count = tc_pass_get_resource_specs(pass, pass_specs, 16);
-            for (size_t j = 0; j < pass_spec_count; j++) {
-                result.push_back(pass_specs[j]);
+            const size_t pass_spec_count =
+                tc_pass_get_resource_specs(pass, nullptr, 0);
+            std::vector<ResourceSpec> pass_specs(pass_spec_count);
+            const size_t actual = tc_pass_get_resource_specs(
+                pass, pass_specs.data(), pass_specs.size());
+            if (actual != pass_spec_count) {
+                tc::Log::error(
+                    "RenderPipeline::collect_specs: pass '%s' changed its resource "
+                    "spec count during collection (%zu -> %zu)",
+                    pass->pass_name ? pass->pass_name : "<unnamed>",
+                    pass_spec_count,
+                    actual
+                );
+                continue;
             }
+            result.insert(result.end(), pass_specs.begin(), pass_specs.end());
         }
     }
 
