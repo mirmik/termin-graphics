@@ -402,7 +402,10 @@ private:
         uint64_t submits = 0;
         std::chrono::steady_clock::time_point window_start =
             std::chrono::steady_clock::now();
-        double last_fence_wait_us = 0.0;
+        double fence_wait_us = 0.0;
+        double readback_cleanup_us = 0.0;
+        double destroy_cleanup_us = 0.0;
+        double descriptor_cleanup_us = 0.0;
     };
     SubmitStats submit_stats_;
 
@@ -671,7 +674,7 @@ private:
     uint64_t request_pixel_readback(TextureHandle tex, int x, int y, PixelReadbackKind kind);
     void complete_pixel_readbacks(std::vector<PendingPixelReadback>& pending);
     void destroy_pixel_readbacks(std::vector<PendingPixelReadback>& pending);
-    void prepare_frame_slot(uint32_t slot);
+    void prepare_frame_slot(uint32_t slot, SubmitStats* stats);
 
 };
 

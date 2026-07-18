@@ -153,7 +153,7 @@ PipelineHandle PipelineCache::get(const PipelineCacheLookupKey& key) {
     if (it != cache_.end()) {
         ++hit_count_;
 #ifdef TGFX2_HAS_VULKAN
-        g_pipeline_cache_hit_count.fetch_add(1, std::memory_order_relaxed);
+        vulkan_stats_increment(g_pipeline_cache_hit_count);
 #endif
         return it->second;
     }
@@ -162,9 +162,9 @@ PipelineHandle PipelineCache::get(const PipelineCacheLookupKey& key) {
     const bool new_vertex_layout_signature =
         observed_vertex_layout_hashes_.insert(key.vertex_layouts_hash).second;
 #ifdef TGFX2_HAS_VULKAN
-    g_pipeline_cache_miss_count.fetch_add(1, std::memory_order_relaxed);
+    vulkan_stats_increment(g_pipeline_cache_miss_count);
     if (new_vertex_layout_signature) {
-        g_pipeline_cache_unique_vertex_layout_count.fetch_add(1, std::memory_order_relaxed);
+        vulkan_stats_increment(g_pipeline_cache_unique_vertex_layout_count);
     }
 #endif
 

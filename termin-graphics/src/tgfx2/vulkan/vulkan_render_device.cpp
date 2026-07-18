@@ -18,7 +18,6 @@
 #include <cstring>
 #include <algorithm>
 #include <chrono>
-#include <cstdlib>
 #include <iterator>
 #include <set>
 #include <sstream>
@@ -58,23 +57,6 @@ static void vulkan_invalidate_tc_shader_trampoline(uint32_t pool_index, void* us
 }
 
 namespace tgfx {
-
-namespace {
-
-bool vulkan_stats_enabled() {
-#ifdef __ANDROID__
-    return true;
-#else
-    static const bool enabled = [] {
-        const char* env = std::getenv("TGFX2_VULKAN_STATS");
-        return env && env[0] == '1';
-    }();
-    return enabled;
-#endif
-}
-
-
-} // namespace
 
 // --- Debug callback ---
 
@@ -1175,26 +1157,46 @@ std::unique_ptr<ICommandList> VulkanRenderDevice::create_command_list(QueueType 
     return std::make_unique<VulkanCommandList>(*this);
 }
 
-void VulkanRenderDevice::prepare_frame_slot(uint32_t slot) {
-    if (frame_fence_in_flight_[slot]) {
-        vkWaitForFences(device_, 1, &frame_fences_[slot], VK_TRUE, UINT64_MAX);
-        vkResetFences(device_, 1, &frame_fences_[slot]);
-        frame_fence_in_flight_[slot] = false;
-    }
-    complete_pixel_readbacks(pixel_readbacks_slots_[slot]);
-    drain_pending_destroy(pending_destroy_slots_[slot]);
+void VulkanRenderDevice::prepare_frame_slot(uint32_t slot, SubmitStats* stats) {
+    using Clock = std::chrono::steady_clock;
+    auto measured = [stats](double SubmitStats::*field, auto&& operation) {
+        if (!stats) {
+            operation();
+            return;
+        }
+        const auto start = Clock::now();
+        operation();
+        stats->*field += std::chrono::duration<double, std::micro>(
+            Clock::now() - start).count();
+    };
 
-    vkResetDescriptorPool(device_, descriptor_pools_[slot], 0);
-    for (const auto& [_, h] : descriptor_cache_[slot]) {
-        resource_sets_.remove(h.id);
-    }
-    descriptor_cache_[slot].clear();
+    measured(&SubmitStats::fence_wait_us, [&] {
+        if (frame_fence_in_flight_[slot]) {
+            vkWaitForFences(device_, 1, &frame_fences_[slot], VK_TRUE, UINT64_MAX);
+            vkResetFences(device_, 1, &frame_fences_[slot]);
+            frame_fence_in_flight_[slot] = false;
+        }
+    });
+    measured(&SubmitStats::readback_cleanup_us, [&] {
+        complete_pixel_readbacks(pixel_readbacks_slots_[slot]);
+    });
+    measured(&SubmitStats::destroy_cleanup_us, [&] {
+        drain_pending_destroy(pending_destroy_slots_[slot]);
+    });
+    measured(&SubmitStats::descriptor_cleanup_us, [&] {
+        vkResetDescriptorPool(device_, descriptor_pools_[slot], 0);
+        for (const auto& [_, h] : descriptor_cache_[slot]) {
+            resource_sets_.remove(h.id);
+        }
+        descriptor_cache_[slot].clear();
+    });
 
     ring_ubo_heads_[slot].store(0, std::memory_order_relaxed);
     transient_vb_heads_[slot].store(0, std::memory_order_relaxed);
 }
 
 void VulkanRenderDevice::submit(ICommandList& cmd) {
+    const bool stats_enabled = vulkan_stats_enabled();
     auto& vcmd = static_cast<VulkanCommandList&>(cmd);
     VkCommandBuffer main_cb = vcmd.command_buffer();
 
@@ -1229,12 +1231,16 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     si.commandBufferCount = cb_count;
     si.pCommandBuffers = cbs;
 
-    auto t_submit0 = std::chrono::steady_clock::now();
+    const auto t_submit0 = stats_enabled
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point{};
     vkQueueSubmit(graphics_queue_, 1, &si, frame_fences_[submitted_slot]);
-    auto t_submit1 = std::chrono::steady_clock::now();
-    g_submit_us.fetch_add(
-        std::chrono::duration_cast<std::chrono::microseconds>(t_submit1 - t_submit0).count(),
-        std::memory_order_relaxed);
+    if (stats_enabled) {
+        vulkan_stats_increment(
+            g_submit_us,
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - t_submit0).count());
+    }
     frame_fence_in_flight_[submitted_slot] = true;
 
     // Defer-free the immediate cb we just submitted — it's in-flight on
@@ -1257,20 +1263,21 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     pending_destroy_slots_[submitted_slot] = std::move(submitted_destroy);
 
     const uint32_t next_slot = (submitted_slot + 1) % kFrameSlotCount;
-    auto t_wait0 = std::chrono::steady_clock::now();
-    prepare_frame_slot(next_slot);
-    auto t_wait1 = std::chrono::steady_clock::now();
-    submit_stats_.last_fence_wait_us +=
-        std::chrono::duration<double, std::micro>(t_wait1 - t_wait0).count();
+    prepare_frame_slot(next_slot, stats_enabled ? &submit_stats_ : nullptr);
 
     current_pool_idx_ = next_slot;
     ring_ubo_slot_idx_ = next_slot;
     transient_vb_slot_idx_ = next_slot;
 
-    ++submit_stats_.submits;
+    if (stats_enabled) {
+        ++submit_stats_.submits;
+    }
 
-    auto now = std::chrono::steady_clock::now();
-    if (std::chrono::duration<double>(now - submit_stats_.window_start).count() >= 1.0) {
+    const auto now = stats_enabled
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point{};
+    if (stats_enabled &&
+        std::chrono::duration<double>(now - submit_stats_.window_start).count() >= 1.0) {
         uint64_t draws    = g_draw_count.exchange(0, std::memory_order_relaxed);
         uint64_t rsets    = g_resource_set_count.exchange(0, std::memory_order_relaxed);
         uint64_t pipes    = g_pipeline_count.exchange(0, std::memory_order_relaxed);
@@ -1292,13 +1299,14 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
         uint64_t sh_module_us = g_shader_module_us.exchange(0, std::memory_order_relaxed);
         uint64_t pipe_rp_us = g_pipeline_renderpass_us.exchange(0, std::memory_order_relaxed);
         uint64_t pipe_create_us = g_pipeline_create_us.exchange(0, std::memory_order_relaxed);
-        if (vulkan_stats_enabled()) {
-            tc_log(TC_LOG_INFO,
+        tc_log(TC_LOG_INFO,
                    "[tgfx2-vulkan] submit stats: submits=%llu draws=%llu "
                    "pipelines=%llu pipeline_cache_hit=%llu pipeline_cache_miss=%llu "
                    "new_vertex_layouts=%llu resource_sets=%llu bind_pipeline=%llu "
                    "bind_rset=%llu bind_vbo=%llu bind_ibo=%llu push_constants=%llu "
-                   "record_ms=%.3f submit_ms=%.3f fence_wait_ms=%.3f",
+                   "record_ms=%.3f submit_ms=%.3f fence_wait_ms=%.3f "
+                   "readback_cleanup_ms=%.3f destroy_cleanup_ms=%.3f "
+                   "descriptor_cleanup_ms=%.3f",
                    static_cast<unsigned long long>(submit_stats_.submits),
                    static_cast<unsigned long long>(draws),
                    static_cast<unsigned long long>(pipes),
@@ -1313,9 +1321,12 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
                    static_cast<unsigned long long>(bpc),
                    static_cast<double>(rec_us) / 1000.0,
                    static_cast<double>(subm_us) / 1000.0,
-                   submit_stats_.last_fence_wait_us / 1000.0);
-            if (shaders != 0 || pipes != 0) {
-                tc_log(TC_LOG_INFO,
+                   submit_stats_.fence_wait_us / 1000.0,
+                   submit_stats_.readback_cleanup_us / 1000.0,
+                   submit_stats_.destroy_cleanup_us / 1000.0,
+                   submit_stats_.descriptor_cleanup_us / 1000.0);
+        if (shaders != 0 || pipes != 0) {
+            tc_log(TC_LOG_INFO,
                        "[tgfx2-vulkan] cold stats: shaders=%llu shader_preprocess_ms=%.3f "
                        "shader_compile_ms=%.3f shader_reflect_ms=%.3f shader_module_ms=%.3f "
                        "pipeline_renderpass_ms=%.3f pipeline_create_ms=%.3f",
@@ -1326,10 +1337,12 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
                        static_cast<double>(sh_module_us) / 1000.0,
                        static_cast<double>(pipe_rp_us) / 1000.0,
                        static_cast<double>(pipe_create_us) / 1000.0);
-            }
         }
         submit_stats_.submits = 0;
-        submit_stats_.last_fence_wait_us = 0.0;
+        submit_stats_.fence_wait_us = 0.0;
+        submit_stats_.readback_cleanup_us = 0.0;
+        submit_stats_.destroy_cleanup_us = 0.0;
+        submit_stats_.descriptor_cleanup_us = 0.0;
         submit_stats_.window_start = now;
     }
 }

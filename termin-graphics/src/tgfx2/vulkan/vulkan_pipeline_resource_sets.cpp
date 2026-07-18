@@ -154,19 +154,18 @@ ShaderHandle VulkanRenderDevice::create_shader(const ShaderDesc& desc) {
             // preprocessor hook, then compile the GLSL to SPIR-V via
             // shaderc. OpenGL runs the same preprocess step — shaders
             // stay identical across backends.
-            auto t_pre0 = std::chrono::steady_clock::now();
-            std::string resolved = internal::preprocess_shader_source(desc.source);
-            auto t_pre1 = std::chrono::steady_clock::now();
-            g_shader_preprocess_us.fetch_add(
-                std::chrono::duration_cast<std::chrono::microseconds>(t_pre1 - t_pre0).count(),
-                std::memory_order_relaxed);
+            std::string resolved;
+            {
+                VulkanStatsTimer timer(g_shader_preprocess_us);
+                resolved = internal::preprocess_shader_source(desc.source);
+            }
 
-            auto t_compile0 = std::chrono::steady_clock::now();
-            auto result = vk::compile_glsl_to_spirv(resolved, desc.stage, desc.entry_point);
-            auto t_compile1 = std::chrono::steady_clock::now();
-            g_shader_compile_us.fetch_add(
-                std::chrono::duration_cast<std::chrono::microseconds>(t_compile1 - t_compile0).count(),
-                std::memory_order_relaxed);
+            vk::SpirvCompileResult result;
+            {
+                VulkanStatsTimer timer(g_shader_compile_us);
+                result = vk::compile_glsl_to_spirv(
+                    resolved, desc.stage, desc.entry_point);
+            }
             if (!result.success) {
                 throw std::runtime_error("Shader compilation failed: " + result.error_message);
             }
@@ -198,12 +197,11 @@ ShaderHandle VulkanRenderDevice::create_shader(const ShaderDesc& desc) {
             }
         }
         if (desc.stage == ShaderStage::Vertex) {
-            auto t_reflect0 = std::chrono::steady_clock::now();
-            SpirvVertexInputs inputs = reflect_spirv_vertex_inputs(spirv, res.entry_point);
-            auto t_reflect1 = std::chrono::steady_clock::now();
-            g_shader_reflect_us.fetch_add(
-                std::chrono::duration_cast<std::chrono::microseconds>(t_reflect1 - t_reflect0).count(),
-                std::memory_order_relaxed);
+            SpirvVertexInputs inputs;
+            {
+                VulkanStatsTimer timer(g_shader_reflect_us);
+                inputs = reflect_spirv_vertex_inputs(spirv, res.entry_point);
+            }
             res.vertex_input_locations_known = inputs.known;
             res.vertex_input_locations = std::move(inputs.locations);
         }
@@ -216,15 +214,13 @@ ShaderHandle VulkanRenderDevice::create_shader(const ShaderDesc& desc) {
         ci.codeSize = spirv.size() * sizeof(uint32_t);
         ci.pCode = spirv.data();
 
-        auto t_module0 = std::chrono::steady_clock::now();
-        if (vkCreateShaderModule(device_, &ci, nullptr, &res.module) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create shader module");
+        {
+            VulkanStatsTimer timer(g_shader_module_us);
+            if (vkCreateShaderModule(device_, &ci, nullptr, &res.module) != VK_SUCCESS) {
+                throw std::runtime_error("Failed to create shader module");
+            }
         }
-        auto t_module1 = std::chrono::steady_clock::now();
-        g_shader_module_us.fetch_add(
-            std::chrono::duration_cast<std::chrono::microseconds>(t_module1 - t_module0).count(),
-            std::memory_order_relaxed);
-        g_shader_count.fetch_add(1, std::memory_order_relaxed);
+        vulkan_stats_increment(g_shader_count);
 
         return {shaders_.add(std::move(res))};
     } catch (const std::bad_alloc& e) {
@@ -306,14 +302,12 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
                     PixelFormat::Undefined),
         color_fmts.end());
     bool needs_depth = desc.depth_format != PixelFormat::Undefined;
-    auto t_renderpass0 = std::chrono::steady_clock::now();
-    res.render_pass = get_or_create_render_pass(
-        color_fmts, desc.depth_format, needs_depth, desc.sample_count,
-        LoadOp::Clear, LoadOp::Clear);
-    auto t_renderpass1 = std::chrono::steady_clock::now();
-    g_pipeline_renderpass_us.fetch_add(
-        std::chrono::duration_cast<std::chrono::microseconds>(t_renderpass1 - t_renderpass0).count(),
-        std::memory_order_relaxed);
+    {
+        VulkanStatsTimer timer(g_pipeline_renderpass_us);
+        res.render_pass = get_or_create_render_pass(
+            color_fmts, desc.depth_format, needs_depth, desc.sample_count,
+            LoadOp::Clear, LoadOp::Clear);
+    }
 
     // Shader stages
     std::vector<VkPipelineShaderStageCreateInfo> stages;
@@ -529,15 +523,14 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
     pi.renderPass = res.render_pass;
     pi.subpass = 0;
 
-    auto t_pipeline0 = std::chrono::steady_clock::now();
-    if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pi, nullptr, &res.pipeline) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create graphics pipeline");
+    {
+        VulkanStatsTimer timer(g_pipeline_create_us);
+        if (vkCreateGraphicsPipelines(
+                device_, VK_NULL_HANDLE, 1, &pi, nullptr, &res.pipeline) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create graphics pipeline");
+        }
     }
-    auto t_pipeline1 = std::chrono::steady_clock::now();
-    g_pipeline_create_us.fetch_add(
-        std::chrono::duration_cast<std::chrono::microseconds>(t_pipeline1 - t_pipeline0).count(),
-        std::memory_order_relaxed);
-    g_pipeline_count.fetch_add(1, std::memory_order_relaxed);
+    vulkan_stats_increment(g_pipeline_count);
 
     return {pipelines_.add(std::move(res))};
 }
@@ -684,7 +677,7 @@ ResourceSetHandle VulkanRenderDevice::create_resolved_resource_set(
         }
     }
 
-    g_resource_set_count.fetch_add(1, std::memory_order_relaxed);
+    vulkan_stats_increment(g_resource_set_count);
 
     VkDescriptorSetAllocateInfo ai{};
     ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;

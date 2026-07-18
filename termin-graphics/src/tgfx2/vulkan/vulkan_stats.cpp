@@ -2,7 +2,18 @@
 
 #include "vulkan_stats.hpp"
 
+#include <cstdlib>
+
 namespace tgfx {
+
+const bool g_vulkan_stats_enabled = [] {
+#ifdef __ANDROID__
+    return true;
+#else
+    const char* env = std::getenv("TGFX2_VULKAN_STATS");
+    return env && env[0] == '1';
+#endif
+}();
 
 // Vulkan hot-path counters — swept once per second from submit().
 std::atomic<uint64_t> g_resource_set_count{0};

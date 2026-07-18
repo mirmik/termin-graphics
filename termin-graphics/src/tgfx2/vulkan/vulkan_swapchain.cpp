@@ -2,10 +2,10 @@
 
 #include "tgfx2/vulkan/vulkan_swapchain.hpp"
 #include "tgfx2/vulkan/vulkan_render_device.hpp"
+#include "vulkan_stats.hpp"
 
 #include <algorithm>
 #include <chrono>
-#include <cstdlib>
 #include <cstdio>
 #include <stdexcept>
 
@@ -16,14 +16,6 @@ extern "C" {
 namespace tgfx {
 
 namespace {
-
-bool vulkan_swapchain_stats_enabled() {
-    static const bool enabled = [] {
-        const char* env = std::getenv("TGFX2_VULKAN_STATS");
-        return env && env[0] == '1';
-    }();
-    return enabled;
-}
 
 double us_between(std::chrono::steady_clock::time_point a,
                   std::chrono::steady_clock::time_point b) {
@@ -303,20 +295,25 @@ void VulkanSwapchain::recreate(uint32_t width, uint32_t height) {
 // ---------------------------------------------------------------------------
 
 bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
-    const auto total0 = std::chrono::steady_clock::now();
+    using Clock = std::chrono::steady_clock;
+    const bool stats_enabled = vulkan_stats_enabled();
+    const auto timestamp = [stats_enabled] {
+        return stats_enabled ? Clock::now() : Clock::time_point{};
+    };
+    const auto total0 = timestamp();
 
     // 1. Wait until the command buffer + sync objects for this slot
     //    are free.
-    const auto wait0 = std::chrono::steady_clock::now();
+    const auto wait0 = timestamp();
     wait_for_current_frame();
-    const auto wait1 = std::chrono::steady_clock::now();
+    const auto wait1 = timestamp();
 
     // 2. Acquire an image from the swapchain.
     uint32_t image_idx = 0;
     VkSemaphore image_available = VK_NULL_HANDLE;
-    const auto acquire0 = std::chrono::steady_clock::now();
+    const auto acquire0 = timestamp();
     VkResult ar = acquire(&image_idx, &image_available);
-    const auto acquire1 = std::chrono::steady_clock::now();
+    const auto acquire1 = timestamp();
     if (ar == VK_ERROR_OUT_OF_DATE_KHR) {
         // Nothing submitted this frame — fence stays signalled after
         // we reset it above, so re-signal it to keep things balanced.
@@ -355,7 +352,7 @@ bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
 
     // 4. Record the compose command buffer: transitions + blit +
     //    present-src transition.
-    const auto record0 = std::chrono::steady_clock::now();
+    const auto record0 = timestamp();
     VkCommandBuffer cb = compose_command_buffers_[current_frame_];
     vkResetCommandBuffer(cb, 0);
 
@@ -435,7 +432,7 @@ bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
     rt->current_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
     vkEndCommandBuffer(cb);
-    const auto record1 = std::chrono::steady_clock::now();
+    const auto record1 = timestamp();
 
     // 5. Submit waiting on image_available, signalling render_finished
     //    for this slot and tripping the in-flight fence.
@@ -451,22 +448,26 @@ bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
     si.pCommandBuffers = &cb;
     si.signalSemaphoreCount = 1;
     si.pSignalSemaphores = &render_done;
-    const auto submit0 = std::chrono::steady_clock::now();
+    const auto submit0 = timestamp();
     vkQueueSubmit(device_.graphics_queue(), 1, &si,
                   in_flight_fences_[current_frame_]);
-    const auto submit1 = std::chrono::steady_clock::now();
+    const auto submit1 = timestamp();
 
     // 6. Present — returns OUT_OF_DATE / SUBOPTIMAL if the surface
     //    lost sync with the window (typical after resize).
-    const auto present0 = std::chrono::steady_clock::now();
+    const auto present0 = timestamp();
     VkResult pr = present(image_idx, render_done);
-    const auto present1 = std::chrono::steady_clock::now();
+    const auto present1 = timestamp();
     bool should_recreate = suboptimal ||
                            pr == VK_ERROR_OUT_OF_DATE_KHR ||
                            pr == VK_SUBOPTIMAL_KHR;
 
     advance_frame();
-    const auto total1 = std::chrono::steady_clock::now();
+    const auto total1 = timestamp();
+
+    if (!stats_enabled) {
+        return should_recreate;
+    }
 
     auto& stats = compose_stats_;
     ++stats.frames;
@@ -477,11 +478,10 @@ bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
     stats.present_us += us_between(present0, present1);
     stats.total_us += us_between(total0, total1);
 
-    auto now = std::chrono::steady_clock::now();
+    auto now = Clock::now();
     if (std::chrono::duration<double>(now - stats.window_start).count() >= 1.0) {
-        if (vulkan_swapchain_stats_enabled()) {
-            const double denom = stats.frames > 0 ? static_cast<double>(stats.frames) : 1.0;
-            tc_log(TC_LOG_INFO,
+        const double denom = stats.frames > 0 ? static_cast<double>(stats.frames) : 1.0;
+        tc_log(TC_LOG_INFO,
                    "[tgfx2-vulkan] swapchain stats: frames=%llu "
                    "avg_total_ms=%.3f avg_wait_ms=%.3f avg_acquire_ms=%.3f "
                    "avg_record_ms=%.3f avg_submit_ms=%.3f avg_present_ms=%.3f",
@@ -491,8 +491,7 @@ bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
                    (stats.acquire_us / denom) / 1000.0,
                    (stats.record_us / denom) / 1000.0,
                    (stats.submit_us / denom) / 1000.0,
-                   (stats.present_us / denom) / 1000.0);
-        }
+               (stats.present_us / denom) / 1000.0);
         stats.window_start = now;
         stats.frames = 0;
         stats.wait_us = 0.0;

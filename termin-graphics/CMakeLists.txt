@@ -663,6 +663,26 @@ if(BUILD_TGFX2_TESTS)
 
     # Vulkan smoke test (no GLFW needed — offscreen)
     if(TGFX2_ENABLE_VULKAN)
+        add_executable(tgfx2_vulkan_stats_test
+            tests/test_tgfx2_vulkan_stats.cpp)
+        target_include_directories(tgfx2_vulkan_stats_test PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/tgfx2/vulkan)
+        target_compile_definitions(tgfx2_vulkan_stats_test PRIVATE TGFX2_HAS_VULKAN)
+        target_link_libraries(tgfx2_vulkan_stats_test PRIVATE termin_graphics2)
+        termin_set_rpath_test(tgfx2_vulkan_stats_test)
+        add_test(NAME tgfx2_vulkan_stats_disabled
+            COMMAND tgfx2_vulkan_stats_test disabled)
+        set_tests_properties(tgfx2_vulkan_stats_disabled PROPERTIES
+            ENVIRONMENT "TGFX2_VULKAN_STATS=0")
+        add_test(NAME tgfx2_vulkan_stats_enabled
+            COMMAND tgfx2_vulkan_stats_test enabled)
+        set_tests_properties(tgfx2_vulkan_stats_enabled PROPERTIES
+            ENVIRONMENT "TGFX2_VULKAN_STATS=1")
+        termin_add_test_labels(tgfx2_vulkan_stats_disabled
+            "termin:capability:vulkan")
+        termin_add_test_labels(tgfx2_vulkan_stats_enabled
+            "termin:capability:vulkan")
+
         add_executable(tgfx2_per_pipeline_layout_test tests/test_per_pipeline_layout.cpp)
         target_compile_definitions(tgfx2_per_pipeline_layout_test PRIVATE TGFX2_HAS_VULKAN)
         target_link_libraries(tgfx2_per_pipeline_layout_test PRIVATE termin_graphics2 Vulkan::Vulkan)
