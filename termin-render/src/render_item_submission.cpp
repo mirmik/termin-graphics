@@ -237,13 +237,7 @@ bool mesh_render_item_draw_encoder(
 RenderItemEncoderCapabilities mesh_render_item_capabilities()
 {
     RenderItemEncoderCapabilities capabilities{};
-    capabilities.pass_semantic_mask =
-        render_item_pass_semantic_bit(RenderItemPassSemantic::Color)
-        | render_item_pass_semantic_bit(RenderItemPassSemantic::Shadow)
-        | render_item_pass_semantic_bit(RenderItemPassSemantic::Id)
-        | render_item_pass_semantic_bit(RenderItemPassSemantic::Depth)
-        | render_item_pass_semantic_bit(RenderItemPassSemantic::DepthOnly)
-        | render_item_pass_semantic_bit(RenderItemPassSemantic::Normal);
+    capabilities.phase_mask = TC_PHASE_ALL;
     capabilities.vertex_transform_kind_mask =
         render_item_vertex_transform_kind_bit(VertexTransformKind::StaticMesh)
         | render_item_vertex_transform_kind_bit(VertexTransformKind::SkinnedMesh);
@@ -422,15 +416,15 @@ bool get_render_item_encoder_capabilities(
     return true;
 }
 
-bool render_item_encoder_supports_pass(
+bool render_item_encoder_supports_phase(
     uint32_t item_kind,
-    RenderItemPassSemantic semantic)
+    tc_phase_mask phase)
 {
     RenderItemEncoderCapabilities capabilities{};
     if (!get_render_item_encoder_capabilities(item_kind, capabilities)) {
         return false;
     }
-    return (capabilities.pass_semantic_mask & render_item_pass_semantic_bit(semantic)) != 0;
+    return tc_phase_mask_contains(capabilities.phase_mask, phase);
 }
 
 const char* render_item_task_rejection_name(RenderItemTaskRejection rejection)
@@ -529,8 +523,7 @@ RenderItemTaskPlanningResult plan_render_item_task(
     }
 
     const RenderItemTaskPlanningContract& contract = *request.contract;
-    if ((encoder->capabilities.pass_semantic_mask &
-         render_item_pass_semantic_bit(contract.pass_semantic)) == 0u) {
+    if (!tc_phase_mask_contains(encoder->capabilities.phase_mask, contract.phase)) {
         result.rejection = RenderItemTaskRejection::PassOutputUnsupported;
         result.detail = "encoder does not advertise the requested pass output ABI";
         log_task_rejection(request, encoder.get(), result);
@@ -628,7 +621,7 @@ RenderItemTaskPlanningResult plan_render_item_task(
         task.owned_shader_usages[i] =
             std::move(shader_plan.owned_shader_usages[i]);
     }
-    task.pass_semantic = contract.pass_semantic;
+    task.phase = contract.phase;
     task.has_vertex_transform_kind = shader_plan.has_vertex_transform_kind;
     task.vertex_transform_kind = shader_plan.vertex_transform_kind;
     result.task_index = task_index;

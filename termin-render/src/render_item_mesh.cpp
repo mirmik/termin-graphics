@@ -192,12 +192,11 @@ bool encode_mesh_render_item_draw(
             static_cast<uint32_t>(bone_block.size()));
     }
 
-    draw_material_pipeline_submesh(
+    return draw_material_pipeline_submesh(
         ctx,
         mesh_geometry.mesh,
         mesh_geometry.submesh_index,
         material_mesh_vertex_input_for_shader(request.shader, request.vertex_input));
-    return true;
 }
 
 } // namespace termin

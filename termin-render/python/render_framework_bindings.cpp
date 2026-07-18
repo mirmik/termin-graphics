@@ -516,7 +516,20 @@ void bind_render_framework(nb::module_& m) {
             new (self) RenderContext();
 
             if (kwargs.contains("phase")) {
-                self->phase = nb::cast<std::string>(kwargs["phase"]);
+                nb::handle value = kwargs["phase"];
+                if (nb::isinstance<nb::str>(value)) {
+                    const std::string name = nb::cast<std::string>(value);
+                    const tc_phase_mask phase = tc_phase_find(name.c_str());
+                    if (phase == TC_PHASE_NONE) {
+                        throw nb::value_error(
+                            ("RenderContext phase '" + name
+                             + "' is not present in the project render-phase registry")
+                                .c_str());
+                    }
+                    self->phase = phase;
+                } else {
+                    self->phase = nb::cast<tc_phase_mask>(value);
+                }
             }
             if (kwargs.contains("scene")) {
                 nb::object s = nb::borrow<nb::object>(kwargs["scene"]);

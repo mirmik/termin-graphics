@@ -18,7 +18,7 @@ tc_render_item_vec3 g_points[] = {
     {1.0, 0.0, 0.0},
 };
 
-bool has_phase(tc_component*, const char*) { return true; }
+tc_phase_mask phase_mask(tc_component*) { return TC_PHASE_EDITOR_DEBUG; }
 
 bool collect_items(
     tc_component* component,
@@ -26,8 +26,7 @@ bool collect_items(
     tc_render_item_sink* sink)
 {
     assert(context);
-    assert(context->phase_mark);
-    assert(context->phase_mark[0] == '\0');
+    assert(context->phase == TC_PHASE_NONE || context->phase == TC_PHASE_EDITOR_DEBUG);
     ++g_collect_calls;
     for (int phase_variant = 0; phase_variant < 2; ++phase_variant) {
         tc_render_item item{};
@@ -44,7 +43,7 @@ bool collect_items(
 }
 
 const tc_drawable_vtable kDrawableVtable = {
-    &has_phase,
+    &phase_mask,
     &collect_items,
 };
 
@@ -87,6 +86,21 @@ int main()
     assert(second_view.collect(request));
     assert(g_collect_calls == 3);
     assert(second_view.counters().scene_traversals == 1);
+
+    // Editor-only geometry must be rejected before its producer is called for
+    // service phases that it does not advertise (notably the normal pass).
+    termin::RenderSceneItemCollector phase_filtered;
+    request.phase = TC_PHASE_NORMAL;
+    assert(phase_filtered.collect(request));
+    assert(g_collect_calls == 3);
+    assert(phase_filtered.item_count() == 0);
+    assert(phase_filtered.last_drawable_producers() == 0);
+
+    request.phase = TC_PHASE_EDITOR_DEBUG;
+    assert(phase_filtered.collect(request));
+    assert(g_collect_calls == 4);
+    assert(phase_filtered.item_count() == 2);
+    assert(phase_filtered.last_drawable_producers() == 1);
 
     tc_component_detach_capability(&component, tc_drawable_capability_id());
     tc_entity_pool_remove_component(pool, entity, &component);

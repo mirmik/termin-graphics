@@ -6,13 +6,13 @@
 
 namespace termin {
 
-bool Drawable::_cb_has_phase(tc_component* c, const char* phase_mark) {
-    if (!c) return false;
+tc_phase_mask Drawable::_cb_phase_mask(tc_component* c) {
+    if (!c) return TC_PHASE_NONE;
 
     Drawable* drawable = static_cast<Drawable*>(tc_component_get_drawable_userdata(c));
-    if (!drawable) return false;
+    if (!drawable) return TC_PHASE_NONE;
 
-    return drawable->has_phase(phase_mark ? phase_mark : "");
+    return drawable->get_phase_mask();
 }
 
 bool Drawable::collect_render_items(
@@ -67,7 +67,10 @@ bool validate_render_item(
     const tc_render_item_collect_context& context,
     tc_component* source_component)
 {
-    const char* phase_mark = context.phase_mark ? context.phase_mark : "";
+    const char* phase_mark = tc_phase_name(context.phase);
+    if (!phase_mark) {
+        phase_mark = context.phase == TC_PHASE_NONE ? "<snapshot>" : "<invalid>";
+    }
     const char* pass_name = context.debug_pass_name ? context.debug_pass_name : "<unknown>";
     tc_component* component = item.component ? item.component : source_component;
     const char* component_type = component_debug_name(component);
@@ -320,7 +323,7 @@ Mat44f Drawable::get_model_matrix(const Entity& entity) const {
 
 const tc_drawable_vtable& Drawable::cxx_drawable_vtable() {
     static const tc_drawable_vtable vtable = {
-        &Drawable::_cb_has_phase,
+        &Drawable::_cb_phase_mask,
         &Drawable::_cb_collect_render_items
     };
     return vtable;

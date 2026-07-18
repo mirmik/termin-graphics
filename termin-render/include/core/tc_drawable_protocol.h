@@ -10,7 +10,7 @@ extern "C" {
 #endif
 
 struct tc_drawable_vtable {
-    bool (*has_phase)(tc_component* self, const char* phase_mark);
+    tc_phase_mask (*phase_mask)(tc_component* self);
     bool (*collect_render_items)(tc_component* self, const tc_render_item_collect_context* context, tc_render_item_sink* sink);
 };
 
@@ -30,12 +30,12 @@ static inline void* tc_component_get_drawable_userdata(const tc_component* c) {
     return cap ? cap->userdata : NULL;
 }
 
-static inline bool tc_component_has_phase(tc_component* c, const char* phase_mark) {
+static inline tc_phase_mask tc_component_phase_mask(tc_component* c) {
     const tc_drawable_vtable* vt = tc_component_get_drawable_vtable(c);
-    if (c && vt && vt->has_phase) {
-        return vt->has_phase(c, phase_mark);
+    if (c && vt && vt->phase_mask) {
+        return vt->phase_mask(c);
     }
-    return false;
+    return TC_PHASE_NONE;
 }
 
 static inline bool tc_component_collect_render_items(tc_component* c, const tc_render_item_collect_context* context, tc_render_item_sink* sink) {

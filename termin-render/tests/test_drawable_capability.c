@@ -11,9 +11,9 @@
 
 static int g_render_item_emit_count = 0;
 
-static bool test_drawable_has_phase(tc_component* self, const char* phase_mark) {
+static tc_phase_mask test_drawable_phase_mask(tc_component* self) {
     (void)self;
-    return phase_mark && strcmp(phase_mark, "opaque") == 0;
+    return TC_PHASE_OPAQUE;
 }
 
 static bool test_drawable_collect_render_items(tc_component* self, const tc_render_item_collect_context* context, tc_render_item_sink* sink) {
@@ -30,7 +30,7 @@ static bool test_drawable_collect_render_items(tc_component* self, const tc_rend
 }
 
 static const tc_drawable_vtable g_test_drawable_vtable = {
-    .has_phase = test_drawable_has_phase,
+    .phase_mask = test_drawable_phase_mask,
     .collect_render_items = test_drawable_collect_render_items,
 };
 
@@ -70,12 +70,12 @@ GUARD_C_TEST(test_live_reindex_for_drawable_capability) {
     GUARD_C_CHECK_EQ_INT(1, tc_scene_capability_count(scene, drawable_cap));
     GUARD_C_CHECK(tc_component_is_drawable(&component));
     GUARD_C_CHECK_PTR_EQ((void*)0x1234, tc_component_get_drawable_userdata(&component));
-    GUARD_C_CHECK(tc_component_has_phase(&component, "opaque"));
+    GUARD_C_CHECK_EQ_INT(TC_PHASE_OPAQUE, tc_component_phase_mask(&component));
 
     g_render_item_emit_count = 0;
     tc_render_item_collect_context collect_context;
     memset(&collect_context, 0, sizeof(collect_context));
-    collect_context.phase_mark = "opaque";
+    collect_context.phase = TC_PHASE_OPAQUE;
     tc_render_item_sink sink;
     sink.emit = count_render_item_emit;
     sink.user_data = NULL;

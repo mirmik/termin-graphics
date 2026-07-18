@@ -10,12 +10,16 @@
 #include <termin/tc_scene.hpp>
 #include <tgfx/tgfx_shader_handle.hpp>
 
+extern "C" {
+#include <tgfx/resources/tc_phase.h>
+}
+
 namespace termin {
 
 struct RenderContext {
     Mat44f view;
     Mat44f projection;
-    std::string phase = "main";
+    tc_phase_mask phase = TC_PHASE_NONE;
     MaterialPipelinePassContract pass_contract;
     Mat44f model = Mat44f::identity();
     TcShader current_tc_shader;

@@ -4,8 +4,6 @@
 #include <memory>
 #include <cstddef>
 #include <cstdint>
-#include <set>
-#include <string>
 #include <vector>
 
 extern "C" {
@@ -34,7 +32,7 @@ class RENDER_API Drawable {
 public:
     virtual ~Drawable() = default;
 
-    virtual std::set<std::string> get_phase_marks() const = 0;
+    virtual tc_phase_mask get_phase_mask() const = 0;
 
     virtual bool collect_render_items(
         const tc_render_item_collect_context& context,
@@ -43,9 +41,8 @@ public:
 
     virtual Mat44f get_model_matrix(const Entity& entity) const;
 
-    bool has_phase(const std::string& phase_mark) const {
-        auto marks = get_phase_marks();
-        return marks.find(phase_mark) != marks.end();
+    bool has_phase(tc_phase_mask phase) const {
+        return tc_phase_mask_contains(get_phase_mask(), phase);
     }
 
     static const tc_drawable_vtable& cxx_drawable_vtable();
@@ -58,7 +55,7 @@ protected:
     }
 
 private:
-    static bool _cb_has_phase(tc_component* c, const char* phase_mark);
+    static tc_phase_mask _cb_phase_mask(tc_component* c);
     static bool _cb_collect_render_items(tc_component* c, const tc_render_item_collect_context* context, tc_render_item_sink* sink);
 };
 

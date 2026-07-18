@@ -53,7 +53,7 @@ struct RenderItemDrawSubmitRequest {
     MaterialMeshVertexInput mesh_vertex_input = MaterialMeshVertexInput::FullMaterial;
     const RenderContext* draw_context = nullptr;
     tc_material_phase* material_phase = nullptr;
-    const char* phase_mark = nullptr;
+    tc_phase_mask phase = TC_PHASE_NONE;
     const char* debug_pass_name = nullptr;
     const char* debug_entity_name = nullptr;
     const RenderItemResourceBinding* resources = nullptr;
@@ -65,23 +65,8 @@ using RenderItemDrawEncoderFn = bool (*)(
     const RenderItemDrawSubmitRequest& request,
     void* user_data);
 
-enum class RenderItemPassSemantic : uint32_t {
-    Color = 0,
-    Shadow = 1,
-    Id = 2,
-    Depth = 3,
-    DepthOnly = 4,
-    Normal = 5,
-};
-
-constexpr uint64_t render_item_pass_semantic_bit(RenderItemPassSemantic semantic)
-{
-    const uint32_t index = static_cast<uint32_t>(semantic);
-    return index < 64u ? (1ull << index) : 0u;
-}
-
 struct RenderItemEncoderCapabilities {
-    uint64_t pass_semantic_mask = 0;
+    tc_phase_mask phase_mask = TC_PHASE_NONE;
     uint64_t vertex_transform_kind_mask = 0;
     uint32_t supported_task_input_mask = 0;
     uint32_t required_task_input_mask = 0;
@@ -116,7 +101,7 @@ constexpr uint64_t render_item_vertex_transform_kind_bit(VertexTransformKind kin
 // discovery metadata; this packet is the authoritative compatibility request.
 // The material-pipeline contract is borrowed only for the duration of planning.
 struct RenderItemTaskPlanningContract {
-    RenderItemPassSemantic pass_semantic = RenderItemPassSemantic::Color;
+    tc_phase_mask phase = TC_PHASE_NONE;
     RenderItemMaterialPhasePolicy material_phase_policy =
         RenderItemMaterialPhasePolicy::Optional;
     uint32_t provided_input_mask = 0;
@@ -248,9 +233,9 @@ RENDER_API bool get_render_item_encoder_capabilities(
     uint32_t item_kind,
     RenderItemEncoderCapabilities& out);
 
-RENDER_API bool render_item_encoder_supports_pass(
+RENDER_API bool render_item_encoder_supports_phase(
     uint32_t item_kind,
-    RenderItemPassSemantic semantic);
+    tc_phase_mask phase);
 
 // Explicit shader-planning hook for encoders whose current shader candidate is
 // already final. Registering this hook is intentional: #205 can replace it per

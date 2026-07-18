@@ -34,8 +34,14 @@ bool collect_drawable_items_callback(tc_component* component, void* user_data)
         return true;
     }
 
+    if (data->request->phase != TC_PHASE_NONE &&
+        !tc_phase_mask_contains(
+            tc_component_phase_mask(component), data->request->phase)) {
+        return true;
+    }
+
     tc_render_item_collect_context context{};
-    context.phase_mark = data->request->phase_mark;
+    context.phase = data->request->phase;
     context.flags = data->request->flags;
     context.layer_mask = data->request->layer_mask;
     context.render_category_mask = data->request->render_category_mask;
@@ -89,7 +95,7 @@ bool RenderSceneItemCollector::collect(const RenderSceneItemCollectRequest& requ
 bool RenderSceneItemSnapshot::collect(const RenderSceneItemCollectRequest& request)
 {
     RenderSceneItemCollectRequest snapshot_request = request;
-    snapshot_request.phase_mark = "";
+    snapshot_request.phase = TC_PHASE_NONE;
     snapshot_request.flags |= TC_RENDER_ITEM_COLLECT_FLAG_ALLOW_MISSING_MATERIAL_PHASE;
     valid_ = collector_.collect(snapshot_request);
     counters_.scene_traversals = collector_.last_scene_traversals();
@@ -114,13 +120,13 @@ bool RenderSceneItemSnapshot::collect(const RenderSceneItemCollectRequest& reque
         if (!phase) {
             phase = item->material_phase;
         }
-        if (!phase || phase->phase_mark[0] == '\0') {
+        if (!phase || !tc_phase_is_single(phase->phase)) {
             continue;
         }
 
         RenderSceneItemPhaseBucket* selected = nullptr;
         for (RenderSceneItemPhaseBucket& bucket : phase_buckets_) {
-            if (std::strcmp(bucket.phase_mark, phase->phase_mark) == 0) {
+            if (bucket.phase == phase->phase) {
                 selected = &bucket;
                 break;
             }
@@ -128,11 +134,7 @@ bool RenderSceneItemSnapshot::collect(const RenderSceneItemCollectRequest& reque
         if (!selected) {
             phase_buckets_.emplace_back();
             selected = &phase_buckets_.back();
-            std::memcpy(
-                selected->phase_mark,
-                phase->phase_mark,
-                TC_PHASE_MARK_MAX);
-            selected->phase_mark[TC_PHASE_MARK_MAX - 1] = '\0';
+            selected->phase = phase->phase;
         }
         selected->item_indices.push_back(item_index);
     }
@@ -147,13 +149,13 @@ void RenderSceneItemSnapshot::invalidate_keep_capacity()
 }
 
 std::span<const size_t> RenderSceneItemSnapshot::phase_item_indices(
-    const char* phase_mark) const
+    tc_phase_mask phase) const
 {
-    if (!phase_mark || phase_mark[0] == '\0') {
+    if (!tc_phase_is_single(phase)) {
         return {};
     }
     for (const RenderSceneItemPhaseBucket& bucket : phase_buckets_) {
-        if (std::strcmp(bucket.phase_mark, phase_mark) == 0) {
+        if (bucket.phase == phase) {
             return bucket.item_indices;
         }
     }
@@ -188,9 +190,9 @@ RenderSceneItemSnapshot* ensure_render_item_snapshot(
     return context.render_item_snapshot;
 }
 
-bool render_item_matches_phase(const tc_render_item& item, const char* phase_mark)
+bool render_item_matches_phase(const tc_render_item& item, tc_phase_mask requested_phase)
 {
-    if (!phase_mark || phase_mark[0] == '\0') {
+    if (requested_phase == TC_PHASE_NONE) {
         return true;
     }
     tc_material_phase* phase = nullptr;
@@ -204,7 +206,7 @@ bool render_item_matches_phase(const tc_render_item& item, const char* phase_mar
     if (!phase) {
         phase = item.material_phase;
     }
-    return phase && std::strcmp(phase->phase_mark, phase_mark) == 0;
+    return phase && phase->phase == requested_phase;
 }
 
 } // namespace termin

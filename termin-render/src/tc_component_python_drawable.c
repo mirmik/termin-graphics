@@ -4,11 +4,11 @@
 
 static tc_python_drawable_callbacks g_py_drawable_callbacks = {0};
 
-static bool py_drawable_has_phase(tc_component* c, const char* phase_mark) {
-    if (g_py_drawable_callbacks.has_phase && c->body) {
-        return g_py_drawable_callbacks.has_phase(c->body, phase_mark);
+static tc_phase_mask py_drawable_phase_mask(tc_component* c) {
+    if (g_py_drawable_callbacks.phase_mask && c->body) {
+        return g_py_drawable_callbacks.phase_mask(c->body);
     }
-    return false;
+    return TC_PHASE_NONE;
 }
 
 static bool py_drawable_collect_render_items(tc_component* c, const tc_render_item_collect_context* context, tc_render_item_sink* sink) {
@@ -19,7 +19,7 @@ static bool py_drawable_collect_render_items(tc_component* c, const tc_render_it
 }
 
 static const tc_drawable_vtable g_python_drawable_vtable = {
-    .has_phase = py_drawable_has_phase,
+    .phase_mask = py_drawable_phase_mask,
     .collect_render_items = py_drawable_collect_render_items,
 };
 

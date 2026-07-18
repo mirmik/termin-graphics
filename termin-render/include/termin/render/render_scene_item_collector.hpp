@@ -18,7 +18,7 @@ namespace termin {
 
 struct RenderSceneItemCollectRequest {
     tc_scene_handle scene{};
-    const char* phase_mark = nullptr;
+    tc_phase_mask phase = TC_PHASE_NONE;
     uint32_t flags = TC_RENDER_ITEM_COLLECT_FLAG_NONE;
     uint64_t layer_mask = UINT64_MAX;
     uint64_t render_category_mask = UINT64_MAX;
@@ -39,7 +39,7 @@ struct RenderSceneItemSnapshotCounters {
 };
 
 struct RenderSceneItemPhaseBucket {
-    char phase_mark[TC_PHASE_MARK_MAX]{};
+    tc_phase_mask phase = TC_PHASE_NONE;
     std::vector<size_t> item_indices;
 };
 
@@ -83,7 +83,7 @@ public:
 };
 
 // Immutable after collect(). One instance belongs to one scene/view execution.
-// Producers are called with an empty phase mark and publish all of their phase
+// Producers are called with TC_PHASE_NONE and publish all of their phase
 // variants in one invocation; passes only route the resulting stable items.
 class RENDER_API RenderSceneItemSnapshot {
 private:
@@ -102,7 +102,7 @@ public:
     bool valid() const { return valid_; }
     size_t item_count() const { return collector_.item_count(); }
     const tc_render_item* item(size_t index) const { return collector_.item(index); }
-    std::span<const size_t> phase_item_indices(const char* phase_mark) const;
+    std::span<const size_t> phase_item_indices(tc_phase_mask phase) const;
 };
 
 struct ExecuteContext;
@@ -112,6 +112,6 @@ RENDER_API RenderSceneItemSnapshot* ensure_render_item_snapshot(
 
 RENDER_API bool render_item_matches_phase(
     const tc_render_item& item,
-    const char* phase_mark);
+    tc_phase_mask phase);
 
 } // namespace termin

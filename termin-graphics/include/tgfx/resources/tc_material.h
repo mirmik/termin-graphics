@@ -5,6 +5,7 @@
 #include "tgfx/tc_handle.h"
 #include <tcbase/tc_resource.h>
 #include "tgfx/resources/tc_shader.h"
+#include "tgfx/resources/tc_phase.h"
 #include "tgfx/resources/tc_texture.h"
 #include <stdint.h>
 #include <stdbool.h>
@@ -151,6 +152,8 @@ typedef struct tc_material_phase {
     size_t owner_phase_index;
     tc_shader_handle shader;
     tc_render_state state;
+    // Runtime routing identity. phase_mark is canonical asset/UI metadata.
+    tc_phase_mask phase;
     char phase_mark[TC_PHASE_MARK_MAX];
     int32_t priority;
 

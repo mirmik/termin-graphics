@@ -287,15 +287,17 @@ VertexLayoutDesc filter_vertex_layout_to_locations(
     return out;
 }
 
-VertexLayoutDesc filter_vertex_layout_to_semantics(
+bool try_filter_vertex_layout_to_semantics(
     const VertexLayoutDesc& layout,
     std::initializer_list<std::string_view> used_semantics,
+    VertexLayoutDesc& out,
     bool use_shader_input_locations
 ) {
-    VertexLayoutDesc out;
+    out = VertexLayoutDesc{};
     out.stride = layout.stride;
     out.per_instance = layout.per_instance;
     out.use_shader_input_locations = use_shader_input_locations;
+    bool compatible = true;
     const uint32_t attribute_count = std::min(
         layout.attribute_count,
         TGFX2_VERTEX_ATTRIBUTE_MAX);
@@ -305,7 +307,7 @@ VertexLayoutDesc filter_vertex_layout_to_semantics(
             if (out.attribute_count >= TGFX2_VERTEX_ATTRIBUTE_MAX) {
                 tc::Log::error(
                     "filter_vertex_layout_to_semantics: output attribute overflow");
-                return out;
+                return false;
             }
             out.attributes[out.attribute_count++] = attr;
         }
@@ -316,8 +318,23 @@ VertexLayoutDesc filter_vertex_layout_to_semantics(
                 "filter_vertex_layout_to_semantics: layout has no '%.*s' attribute",
                 static_cast<int>(semantic.size()),
                 semantic.data());
+            compatible = false;
         }
     }
+    return compatible;
+}
+
+VertexLayoutDesc filter_vertex_layout_to_semantics(
+    const VertexLayoutDesc& layout,
+    std::initializer_list<std::string_view> used_semantics,
+    bool use_shader_input_locations
+) {
+    VertexLayoutDesc out;
+    try_filter_vertex_layout_to_semantics(
+        layout,
+        used_semantics,
+        out,
+        use_shader_input_locations);
     return out;
 }
 
@@ -458,11 +475,15 @@ bool draw_tc_mesh(
     Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
     if (binding.index_count == 0) return false;
 
-    VertexLayoutDesc filtered =
-        filter_vertex_layout_to_semantics(
+    VertexLayoutDesc filtered;
+    if (!try_filter_vertex_layout_to_semantics(
             binding.layout_desc,
             used_semantics,
-            use_shader_input_locations);
+            filtered,
+            use_shader_input_locations)) {
+        release_mesh_binding(ctx.device(), binding);
+        return false;
+    }
     ctx.set_vertex_layout(filtered);
     ctx.set_topology(binding.topology);
     ctx.draw(binding.vertex_buffer, binding.index_buffer,
@@ -487,11 +508,15 @@ bool draw_tc_submesh(
     Tgfx2MeshBinding binding = wrap_mesh_as_tgfx2(ctx.device(), mesh);
     if (binding.index_count == 0) return false;
 
-    VertexLayoutDesc filtered =
-        filter_vertex_layout_to_semantics(
+    VertexLayoutDesc filtered;
+    if (!try_filter_vertex_layout_to_semantics(
             binding.layout_desc,
             used_semantics,
-            use_shader_input_locations);
+            filtered,
+            use_shader_input_locations)) {
+        release_mesh_binding(ctx.device(), binding);
+        return false;
+    }
     draw_tc_submesh_binding(ctx, binding, *submesh, &filtered);
     release_mesh_binding(ctx.device(), binding);
     return true;

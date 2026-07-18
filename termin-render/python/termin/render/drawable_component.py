@@ -18,8 +18,9 @@ class DrawableComponent(PythonComponent):
         super().__init_subclass__(**kwargs)
         ComponentRegistry.set_capability(cls.__name__, drawable_capability_id(), True)
 
-    def phase_marks(self):
-        return []
+    @property
+    def phase_mask(self) -> int:
+        return 0
 
     def collect_render_items(self, context: RenderItemCollectContext):
         raise NotImplementedError(

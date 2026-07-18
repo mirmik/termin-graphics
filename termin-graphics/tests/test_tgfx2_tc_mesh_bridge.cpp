@@ -104,6 +104,27 @@ TEST_CASE("semantic filter falls back to standard locations") {
     CHECK_EQ(filtered.attributes[1].location, 1u);
 }
 
+TEST_CASE("semantic filter rejects a layout missing a required attribute") {
+    tgfx::VertexLayoutDesc layout;
+    layout.stride = 12;
+    layout.attribute_count = 1;
+    layout.attributes[0] = {
+        0,
+        tgfx::VertexFormat::Float3,
+        0,
+        tgfx::intern_vertex_semantic("position")};
+
+    tgfx::VertexLayoutDesc filtered;
+    CHECK_FALSE(tgfx::try_filter_vertex_layout_to_semantics(
+        layout,
+        {"position", "normal"},
+        filtered));
+    CHECK_EQ(filtered.stride, 12u);
+    REQUIRE_EQ(filtered.attribute_count, 1u);
+    CHECK_EQ(filtered.attributes[0].semantic,
+             tgfx::intern_vertex_semantic("position"));
+}
+
 TEST_CASE("vertex semantic helpers prefer explicit names over standard locations") {
     tgfx::VertexAttributeDesc position{0, tgfx::VertexFormat::Float3, 0, nullptr};
     tgfx::VertexAttributeDesc custom{

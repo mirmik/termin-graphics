@@ -13,14 +13,14 @@ ownership boundaries:
 
 ## Discovery versus planning
 
-`RenderItemEncoderCapabilities` is immutable, coarse metadata. Its pass-output,
+`RenderItemEncoderCapabilities` is immutable, coarse metadata. Its phase,
 vertex-transform, and task-input masks allow tooling and passes to discover an
 encoder's broad shape, but a matching bit is not an acceptance decision.
 
 `RenderItemTaskPlanningContract` is the authoritative per-pass request. It
 defines:
 
-- the requested pass output ABI (`RenderItemPassSemantic`);
+- the requested single-bit render phase;
 - whether a material phase is required, optional, or forbidden;
 - pass-provided and pass-required task inputs, including draw context and
   override color;
@@ -53,7 +53,7 @@ shader-usage callbacks. Backend draw behavior remains exclusively in the
 encoder's `encode` callback.
 
 Passes that build `RenderTask` records must not replace planning with item-kind
-switches or a `pass_semantic_mask` check. Color, shadow, geometry, normal, ID,
+switches or a separate pass-semantic check. Color, shadow, geometry, normal, ID,
 and depth-only paths all use the shared planner. Unsupported combinations
 belong in the structured planning result; new compatibility dimensions belong
 in the pass contract or an item-kind planner, not in per-pass boolean matrices.

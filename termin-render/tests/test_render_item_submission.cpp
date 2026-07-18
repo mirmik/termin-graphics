@@ -121,24 +121,21 @@ TEST_CASE("RenderItem draw encoder registry exposes built-in mesh capabilities")
     REQUIRE(termin::get_render_item_encoder_capabilities(
         TC_RENDER_ITEM_KIND_MESH,
         capabilities));
-    CHECK(termin::render_item_encoder_supports_pass(
+    CHECK(termin::render_item_encoder_supports_phase(
         TC_RENDER_ITEM_KIND_MESH,
-        termin::RenderItemPassSemantic::Color));
-    CHECK(termin::render_item_encoder_supports_pass(
+        TC_PHASE_OPAQUE));
+    CHECK(termin::render_item_encoder_supports_phase(
         TC_RENDER_ITEM_KIND_MESH,
-        termin::RenderItemPassSemantic::Shadow));
-    CHECK(termin::render_item_encoder_supports_pass(
+        TC_PHASE_SHADOW));
+    CHECK(termin::render_item_encoder_supports_phase(
         TC_RENDER_ITEM_KIND_MESH,
-        termin::RenderItemPassSemantic::Id));
-    CHECK(termin::render_item_encoder_supports_pass(
+        TC_PHASE_ID));
+    CHECK(termin::render_item_encoder_supports_phase(
         TC_RENDER_ITEM_KIND_MESH,
-        termin::RenderItemPassSemantic::Depth));
-    CHECK(termin::render_item_encoder_supports_pass(
+        TC_PHASE_DEPTH));
+    CHECK(termin::render_item_encoder_supports_phase(
         TC_RENDER_ITEM_KIND_MESH,
-        termin::RenderItemPassSemantic::DepthOnly));
-    CHECK(termin::render_item_encoder_supports_pass(
-        TC_RENDER_ITEM_KIND_MESH,
-        termin::RenderItemPassSemantic::Normal));
+        TC_PHASE_NORMAL));
     CHECK(capabilities.requires_draw_context);
     CHECK(capabilities.consumes_common_resources);
 }
@@ -152,9 +149,7 @@ TEST_CASE("RenderItem draw encoder registry stores custom capabilities") {
     desc.encode = test_encoder;
     desc.plan_task_shader = termin::plan_render_item_passthrough_shader;
     desc.debug_name = "capability_test_encoder";
-    desc.capabilities.pass_semantic_mask =
-        termin::render_item_pass_semantic_bit(termin::RenderItemPassSemantic::Color)
-        | termin::render_item_pass_semantic_bit(termin::RenderItemPassSemantic::Shadow);
+    desc.capabilities.phase_mask = TC_PHASE_OPAQUE | TC_PHASE_SHADOW;
     desc.capabilities.requires_draw_context = true;
     desc.capabilities.consumes_common_resources = false;
     desc.capabilities.supported_task_input_mask =
@@ -166,15 +161,15 @@ TEST_CASE("RenderItem draw encoder registry stores custom capabilities") {
 
     termin::RenderItemEncoderCapabilities capabilities{};
     REQUIRE(termin::get_render_item_encoder_capabilities(test_kind, capabilities));
-    CHECK(termin::render_item_encoder_supports_pass(
+    CHECK(termin::render_item_encoder_supports_phase(
         test_kind,
-        termin::RenderItemPassSemantic::Color));
-    CHECK(termin::render_item_encoder_supports_pass(
+        TC_PHASE_OPAQUE));
+    CHECK(termin::render_item_encoder_supports_phase(
         test_kind,
-        termin::RenderItemPassSemantic::Shadow));
-    CHECK(!termin::render_item_encoder_supports_pass(
+        TC_PHASE_SHADOW));
+    CHECK(!termin::render_item_encoder_supports_phase(
         test_kind,
-        termin::RenderItemPassSemantic::Depth));
+        TC_PHASE_DEPTH));
     CHECK(capabilities.requires_draw_context);
     CHECK(!capabilities.consumes_common_resources);
 
@@ -190,7 +185,7 @@ TEST_CASE("RenderItem task planner accepts a supported mesh contract") {
 
     termin::MaterialPipelinePassContract shader_contract{};
     termin::RenderItemTaskPlanningContract contract{};
-    contract.pass_semantic = termin::RenderItemPassSemantic::Color;
+    contract.phase = TC_PHASE_OPAQUE;
     contract.material_phase_policy = termin::RenderItemMaterialPhasePolicy::Required;
     contract.provided_input_mask =
         termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
@@ -220,7 +215,7 @@ TEST_CASE("RenderItem task planner accepts a supported mesh contract") {
     CHECK(task.item_index == 7u);
     CHECK(task.source_draw_index == 3u);
     CHECK(task.material_phase == &phase);
-    CHECK(task.pass_semantic == termin::RenderItemPassSemantic::Color);
+    CHECK(task.phase == TC_PHASE_OPAQUE);
     CHECK(task.has_vertex_transform_kind);
     CHECK(task.vertex_transform_kind == termin::VertexTransformKind::StaticMesh);
 }
@@ -233,15 +228,14 @@ TEST_CASE("RenderItem task planner delegates final shader selection to the encod
     desc.encode = test_encoder;
     desc.plan_task_shader = selecting_test_shader_planner;
     desc.debug_name = "selecting_test_encoder";
-    desc.capabilities.pass_semantic_mask =
-        termin::render_item_pass_semantic_bit(termin::RenderItemPassSemantic::Color);
+    desc.capabilities.phase_mask = TC_PHASE_OPAQUE;
     REQUIRE(termin::register_render_item_draw_encoder(test_kind, desc));
 
     tc_render_item item{};
     item.kind = test_kind;
     termin::MaterialPipelinePassContract shader_contract{};
     termin::RenderItemTaskPlanningContract contract{};
-    contract.pass_semantic = termin::RenderItemPassSemantic::Color;
+    contract.phase = TC_PHASE_OPAQUE;
     contract.shader_contract = &shader_contract;
     contract.debug_pass_name = "shader_planner_hook_test";
 
@@ -274,14 +268,13 @@ TEST_CASE("RenderItem task shaders can be retained by pass draw-call caches") {
     desc.encode = test_encoder;
     desc.plan_task_shader = owning_test_shader_planner;
     desc.debug_name = "owning_test_encoder";
-    desc.capabilities.pass_semantic_mask =
-        termin::render_item_pass_semantic_bit(termin::RenderItemPassSemantic::Color);
+    desc.capabilities.phase_mask = TC_PHASE_OPAQUE;
     REQUIRE(termin::register_render_item_draw_encoder(test_kind, desc));
 
     tc_render_item item{};
     item.kind = test_kind;
     termin::RenderItemTaskPlanningContract contract{};
-    contract.pass_semantic = termin::RenderItemPassSemantic::Color;
+    contract.phase = TC_PHASE_OPAQUE;
     contract.debug_pass_name = "owned_shader_planner_test";
 
     termin::RenderItemTaskPlanningRequest request{};
@@ -315,7 +308,7 @@ TEST_CASE("RenderItem task planner rejects material input transform and output m
     item.flags = TC_RENDER_ITEM_FLAG_HAS_SKINNING_MATRICES;
 
     termin::RenderItemTaskPlanningContract contract{};
-    contract.pass_semantic = termin::RenderItemPassSemantic::Color;
+    contract.phase = TC_PHASE_OPAQUE;
     contract.material_phase_policy = termin::RenderItemMaterialPhasePolicy::Required;
     contract.provided_input_mask =
         termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
@@ -363,7 +356,7 @@ TEST_CASE("RenderItem task planner rejects material input transform and output m
 
     item.flags = 0u;
     contract.accepted_vertex_transform_kind_mask = UINT64_MAX;
-    contract.pass_semantic = static_cast<termin::RenderItemPassSemantic>(63u);
+    contract.phase = TC_PHASE_OPAQUE | TC_PHASE_SHADOW;
     auto unsupported_output = termin::plan_render_item_task(request, tasks);
     CHECK(unsupported_output.rejection == termin::RenderItemTaskRejection::PassOutputUnsupported);
     CHECK(tasks.empty());

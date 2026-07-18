@@ -648,6 +648,7 @@ void bind_tc_material(nb::module_& m) {
     // tc_material_phase struct (opaque pointer, limited access)
     nb::class_<tc_material_phase>(m, "TcMaterialPhase")
         .def_prop_ro("phase_mark", [](tc_material_phase& p) { return p.phase_mark; })
+        .def_prop_ro("phase", [](tc_material_phase& p) { return p.phase; })
         .def_prop_ro("priority", [](tc_material_phase& p) { return p.priority; })
         .def_prop_ro("texture_count", [](tc_material_phase& p) { return p.texture_count; })
         .def_prop_ro("uniform_count", [](tc_material_phase& p) { return p.uniform_count; })
@@ -743,6 +744,11 @@ void bind_tc_material(nb::module_& m) {
         })
         // set_phase_mark for Material API compatibility
         .def("set_phase_mark", [](tc_material_phase& p, const std::string& mark) {
+            const tc_phase_mask phase = tc_phase_find(mark.c_str());
+            if (phase == TC_PHASE_NONE) {
+                throw nb::value_error("phase is not present in the project registry");
+            }
+            p.phase = phase;
             strncpy(p.phase_mark, mark.c_str(), TC_PHASE_MARK_MAX - 1);
             p.phase_mark[TC_PHASE_MARK_MAX - 1] = '\0';
         }, nb::arg("mark"))

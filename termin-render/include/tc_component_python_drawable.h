@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-typedef bool (*tc_py_drawable_has_phase_fn)(void* py_self, const char* phase_mark);
+typedef tc_phase_mask (*tc_py_drawable_phase_mask_fn)(void* py_self);
 typedef bool (*tc_py_drawable_collect_render_items_fn)(
     void* py_self,
     tc_component* component,
@@ -16,7 +16,7 @@ typedef bool (*tc_py_drawable_collect_render_items_fn)(
     tc_render_item_sink* sink);
 
 typedef struct {
-    tc_py_drawable_has_phase_fn has_phase;
+    tc_py_drawable_phase_mask_fn phase_mask;
     tc_py_drawable_collect_render_items_fn collect_render_items;
 } tc_python_drawable_callbacks;
 

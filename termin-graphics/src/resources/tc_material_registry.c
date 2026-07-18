@@ -277,6 +277,15 @@ tc_material_phase* tc_material_add_phase(
         return NULL;
     }
 
+    const char* resolved_name = phase_mark ? phase_mark : "opaque";
+    tc_phase_mask resolved_phase = tc_phase_find(resolved_name);
+    if (resolved_phase == TC_PHASE_NONE) {
+        tc_log(TC_LOG_ERROR,
+               "tc_material_add_phase: phase '%s' is not present in the project registry",
+               resolved_name);
+        return NULL;
+    }
+
     // Add reference to shader (material owns it now)
     tc_shader* s = tc_shader_get(shader);
     if (s) {
@@ -289,14 +298,11 @@ tc_material_phase* tc_material_add_phase(
     phase->owner_phase_index = mat->phase_count;
 
     phase->shader = shader;
+    phase->phase = resolved_phase;
     phase->state = tc_render_state_opaque();
     phase->priority = priority;
 
-    if (phase_mark) {
-        strncpy(phase->phase_mark, phase_mark, TC_PHASE_MARK_MAX - 1);
-    } else {
-        strcpy(phase->phase_mark, "opaque");
-    }
+    strncpy(phase->phase_mark, resolved_name, TC_PHASE_MARK_MAX - 1);
 
     mat->phase_count++;
     mat->header.version++;
@@ -334,13 +340,23 @@ size_t tc_material_get_phases_for_mark(
     tc_material_phase** out_phases,
     size_t max_count
 ) {
-    if (!mat || !mark || !out_phases || max_count == 0) {
+    return tc_material_get_phases_for_phase(
+        mat, tc_phase_find(mark), out_phases, max_count);
+}
+
+size_t tc_material_get_phases_for_phase(
+    tc_material* mat,
+    tc_phase_mask phase,
+    tc_material_phase** out_phases,
+    size_t max_count
+) {
+    if (!mat || !tc_phase_is_single(phase) || !out_phases || max_count == 0) {
         return 0;
     }
 
     size_t count = 0;
     for (size_t i = 0; i < mat->phase_count && count < max_count; i++) {
-        if (strcmp(mat->phases[i].phase_mark, mark) == 0) {
+        if (mat->phases[i].phase == phase) {
             out_phases[count++] = &mat->phases[i];
         }
     }

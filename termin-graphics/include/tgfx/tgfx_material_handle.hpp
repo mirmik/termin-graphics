@@ -311,18 +311,18 @@ public:
         return result;
     }
 
-    std::vector<std::string> get_phase_marks() const {
-        std::vector<std::string> marks;
+    std::vector<std::string> get_phase_names() const {
+        std::vector<std::string> names;
         tc_material* m = get();
-        if (!m) return marks;
+        if (!m) return names;
 
         for (size_t i = 0; i < m->phase_count; i++) {
-            std::string mark = m->phases[i].phase_mark;
-            if (std::find(marks.begin(), marks.end(), mark) == marks.end()) {
-                marks.push_back(mark);
+            std::string name = m->phases[i].phase_mark;
+            if (std::find(names.begin(), names.end(), name) == names.end()) {
+                names.push_back(name);
             }
         }
-        return marks;
+        return names;
     }
 
     TcShader get_phase_shader(size_t phase_index) const {

@@ -63,6 +63,7 @@ set(TGFX_C_SOURCES
     src/resources/tc_material_registry.c
 )
 set(TGFX_CXX_SOURCES
+    src/resources/tc_phase.cpp
     src/tgfx_texture_handle.cpp
 )
 if(TGFX2_ENABLE_OPENGL)
@@ -481,6 +482,7 @@ if(BUILD_TESTS)
         tests/tests_tc_texture.cpp
         tests/tests_vertex_layout.cpp
         tests/tests_log.cpp
+        tests/tests_phase.cpp
         tests/tests_shader_resource_layout.cpp
     )
     target_include_directories(tgfx_tests PRIVATE

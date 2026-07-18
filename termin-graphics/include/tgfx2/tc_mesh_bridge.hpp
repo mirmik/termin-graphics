@@ -54,6 +54,16 @@ TGFX2_API VertexLayoutDesc filter_vertex_layout_to_semantics(
     bool use_shader_input_locations = false
 );
 
+// Builds a filtered layout and reports whether every requested semantic was
+// present. Callers that are about to draw should use this form so an
+// incompatible mesh never reaches backend pipeline creation.
+TGFX2_API bool try_filter_vertex_layout_to_semantics(
+    const VertexLayoutDesc& layout,
+    std::initializer_list<std::string_view> used_semantics,
+    VertexLayoutDesc& out,
+    bool use_shader_input_locations = false
+);
+
 TGFX2_API std::string_view standard_vertex_semantic_for_location(uint32_t location);
 
 TGFX2_API std::string_view vertex_attribute_semantic(const VertexAttributeDesc& attr);
