@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "tgfx2/tgfx2_api.h"
+#include "tgfx2/enums.hpp"
 #include "tgfx2/handles.hpp"
 
 namespace tgfx {
@@ -36,6 +37,7 @@ private:
     VkFormat format_ = VK_FORMAT_B8G8R8A8_UNORM;
     VkColorSpaceKHR color_space_ = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     VkPresentModeKHR present_mode_ = VK_PRESENT_MODE_FIFO_KHR;
+    PresentationMode requested_presentation_mode_ = PresentationMode::VSync;
     uint32_t width_ = 0;
     uint32_t height_ = 0;
 
@@ -70,7 +72,8 @@ private:
 public:
     VulkanSwapchain(VulkanRenderDevice& dev,
                     VkSurfaceKHR surface,
-                    uint32_t width, uint32_t height);
+                    uint32_t width, uint32_t height,
+                    PresentationMode presentation_mode = PresentationMode::VSync);
     ~VulkanSwapchain();
 
     VulkanSwapchain(const VulkanSwapchain&) = delete;
@@ -107,6 +110,7 @@ public:
     void wait_for_current_frame();
     void advance_frame();
     VkFence current_fence() const { return in_flight_fences_[current_frame_]; }
+    PresentationMode presentation_mode() const { return requested_presentation_mode_; }
 
     // One-shot helper: composite `color_tex` onto the next swapchain
     // image and publish the frame. Handles the full wait → acquire →

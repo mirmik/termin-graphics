@@ -140,6 +140,7 @@ public:
 // Initialization params
 struct VulkanDeviceCreateInfo {
     bool enable_validation = true;
+    PresentationMode presentation_mode = PresentationMode::VSync;
 
     // Host-visible dynamic UBO budget per in-flight frame. Keeping this in
     // device configuration makes the memory/performance tradeoff explicit

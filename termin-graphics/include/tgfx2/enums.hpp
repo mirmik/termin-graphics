@@ -7,6 +7,13 @@ namespace tgfx {
 enum class BackendType { OpenGL, Vulkan, Metal, D3D11, Null };
 enum class QueueType { Graphics, Compute, Transfer };
 
+// Presentation scheduling requested by a window host. This is intentionally
+// separate from render synchronization (flush/finish between passes).
+enum class PresentationMode {
+    VSync,
+    Immediate,
+};
+
 // --- Buffer / Texture usage flags ---
 
 enum class BufferUsage : uint32_t {

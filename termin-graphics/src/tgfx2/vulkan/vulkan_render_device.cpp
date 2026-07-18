@@ -166,7 +166,11 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
                 "VulkanRenderDevice: surface provided but swapchain_width/height is 0");
         }
         swapchain_ = std::make_unique<VulkanSwapchain>(
-            *this, surface_, info.swapchain_width, info.swapchain_height);
+            *this,
+            surface_,
+            info.swapchain_width,
+            info.swapchain_height,
+            info.presentation_mode);
     }
 
     // Query capabilities

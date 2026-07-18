@@ -22,14 +22,35 @@ double us_between(std::chrono::steady_clock::time_point a,
     return std::chrono::duration<double, std::micro>(b - a).count();
 }
 
-// Pick a present mode. FIFO is guaranteed available and effectively
-// vsync; MAILBOX would give lower latency but we take the safe default
-// for portability.
-VkPresentModeKHR pick_present_mode(const std::vector<VkPresentModeKHR>& modes) {
-    for (auto m : modes) {
-        if (m == VK_PRESENT_MODE_MAILBOX_KHR) return m;
+const char* presentation_mode_name(PresentationMode mode) {
+    switch (mode) {
+        case PresentationMode::VSync: return "vsync";
+        case PresentationMode::Immediate: return "immediate";
     }
-    return VK_PRESENT_MODE_FIFO_KHR;
+    return "unknown";
+}
+
+VkPresentModeKHR pick_present_mode(
+    PresentationMode requested,
+    const std::vector<VkPresentModeKHR>& supported) {
+    const VkPresentModeKHR required = requested == PresentationMode::VSync
+        ? VK_PRESENT_MODE_FIFO_KHR
+        : VK_PRESENT_MODE_IMMEDIATE_KHR;
+    if (std::find(supported.begin(), supported.end(), required) != supported.end()) {
+        return required;
+    }
+
+    tc_log_error(
+        "VulkanSwapchain: requested presentation mode '%s' is unsupported "
+        "(FIFO=%d IMMEDIATE=%d MAILBOX=%d FIFO_RELAXED=%d)",
+        presentation_mode_name(requested),
+        std::find(supported.begin(), supported.end(), VK_PRESENT_MODE_FIFO_KHR) != supported.end(),
+        std::find(supported.begin(), supported.end(), VK_PRESENT_MODE_IMMEDIATE_KHR) != supported.end(),
+        std::find(supported.begin(), supported.end(), VK_PRESENT_MODE_MAILBOX_KHR) != supported.end(),
+        std::find(supported.begin(), supported.end(), VK_PRESENT_MODE_FIFO_RELAXED_KHR) != supported.end());
+    throw std::runtime_error(
+        std::string("VulkanSwapchain: requested presentation mode '") +
+        presentation_mode_name(requested) + "' is unsupported");
 }
 
 // Pick a surface format. Prefer 8-bit sRGB; fall back to the first
@@ -53,8 +74,13 @@ VkSurfaceFormatKHR pick_surface_format(const std::vector<VkSurfaceFormatKHR>& fo
 
 VulkanSwapchain::VulkanSwapchain(VulkanRenderDevice& dev,
                                    VkSurfaceKHR surface,
-                                   uint32_t width, uint32_t height)
-    : device_(dev), surface_(surface), width_(width), height_(height)
+                                   uint32_t width, uint32_t height,
+                                   PresentationMode presentation_mode)
+    : device_(dev),
+      surface_(surface),
+      requested_presentation_mode_(presentation_mode),
+      width_(width),
+      height_(height)
 {
     create_swapchain();
     create_sync_objects();
@@ -126,7 +152,7 @@ void VulkanSwapchain::create_swapchain() {
     vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface_, &pm_count, nullptr);
     std::vector<VkPresentModeKHR> modes(pm_count);
     vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface_, &pm_count, modes.data());
-    present_mode_ = pick_present_mode(modes);
+    present_mode_ = pick_present_mode(requested_presentation_mode_, modes);
 
     // Aim for minImageCount + 1 so we always have an image ready for
     // the next frame while the current one is being presented. Clamp
