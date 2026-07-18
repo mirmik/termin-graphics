@@ -101,6 +101,9 @@ struct MaterialShaderOverrideRequest {
     const char* debug_context = nullptr;
 };
 
+// Returns a registry-owned canonical variant for the complete shader/pass/
+// transform intent. Equivalent requests reuse the same handle across frames;
+// changing the original shader version refreshes the stale variant in place.
 RENDER_API TcShader assemble_material_shader_override(const MaterialShaderOverrideRequest& request);
 
 RENDER_API std::string material_pipeline_shader_intent_fingerprint(

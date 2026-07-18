@@ -385,6 +385,47 @@ TcShader assemble_material_shader_override(const MaterialShaderOverrideRequest& 
         vertex_transform_contract,
         pass_contract);
 
+    // Material overrides are canonical shader assets, not frame-local task
+    // scratch.  Render-task planning asks for the same derived shader on every
+    // frame; allowing the last task owner to release it would destroy its
+    // device shaders and give the next frame fresh backend handles.  Those
+    // handles are part of PipelineCache identity, so the otherwise bounded
+    // cache would grow by one pipeline per variant per frame.
+    //
+    // The intent fingerprint includes the complete pass/transform contract.
+    // The registry therefore provides the natural lookup boundary.  Source
+    // shader edits are handled by the existing variant staleness metadata and
+    // rebuild the canonical entry in place below.
+    const tc_shader_handle cached_handle = tc_shader_find(variant_uuid.c_str());
+    if (!tc_shader_handle_is_invalid(cached_handle)) {
+        tc_shader* cached = tc_shader_get(cached_handle);
+        const bool matches_request =
+            cached &&
+            cached->is_variant &&
+            cached->variant_op == static_cast<uint8_t>(shader_variant_op) &&
+            tc_shader_handle_eq(cached->original_handle, original_shader.handle) &&
+            tc_shader_has_contract(cached);
+        const bool stale = tc_shader_variant_is_stale(cached_handle);
+        if (matches_request && !stale) {
+            if (!tc_shader_retain_static(cached_handle)) {
+                tc::Log::error(
+                    "[%s] failed to retain cached material shader override for '%s'",
+                    context,
+                    original_shader.name());
+                return TcShader();
+            }
+            return TcShader(cached_handle);
+        }
+        if (!stale) {
+            tc::Log::error(
+                "[%s] material shader override fingerprint collision for '%s' (%s)",
+                context,
+                original_shader.name(),
+                variant_uuid.c_str());
+            return TcShader();
+        }
+    }
+
     MaterialPipelineShaderAssemblyRequest assembly_request{};
     assembly_request.material = material_pipeline_material_contract_from_shader(
         original_shader,
@@ -415,6 +456,13 @@ TcShader assemble_material_shader_override(const MaterialShaderOverrideRequest& 
     if (!tc_shader_has_contract(assembly.shader.get())) {
         tc::Log::error(
             "[%s] material shader override for '%s' was created without tc_shader_contract",
+            context,
+            original_shader.name());
+        return TcShader();
+    }
+    if (!tc_shader_retain_static(assembly.shader.handle)) {
+        tc::Log::error(
+            "[%s] failed to retain canonical material shader override for '%s'",
             context,
             original_shader.name());
         return TcShader();

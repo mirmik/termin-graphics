@@ -709,3 +709,44 @@ TEST_CASE("material shader intent fingerprint includes modular source identities
     tc_shader_destroy(material.shader.handle);
     tc_shader_shutdown();
 }
+
+TEST_CASE("material shader overrides stay canonical across frame-local owners") {
+    tc_shader_init();
+
+    termin::MaterialPipelineMaterialContract material = material_contract();
+    termin::MaterialPipelinePassContract pass = compact_auxiliary_pass_contract();
+    termin::MaterialShaderOverrideRequest request{};
+    request.original_shader = material.shader;
+    request.vertex_transform_kind = termin::VertexTransformKind::SkinnedMesh;
+    request.pass_contract = pass;
+    request.shader_variant_op = TC_SHADER_VARIANT_SKINNING;
+    request.debug_context = "canonical-override-test";
+
+    tc_shader_handle first_handle = tc_shader_handle_invalid();
+    {
+        termin::TcShader first = termin::assemble_material_shader_override(request);
+        REQUIRE(first.is_valid());
+        first_handle = first.handle;
+        REQUIRE(first.get() != nullptr);
+        CHECK(first.get()->is_static != 0);
+        CHECK_FALSE(tc_shader_variant_is_stale(first_handle));
+    }
+
+    // The render task was the last temporary owner, but registry ownership
+    // keeps the derived shader and its device-handle identity alive.
+    REQUIRE(tc_shader_is_valid(first_handle));
+    termin::TcShader second = termin::assemble_material_shader_override(request);
+    REQUIRE(second.is_valid());
+    CHECK(tc_shader_handle_eq(second.handle, first_handle));
+
+    // Hot reload/version changes must bypass the fast path and refresh the
+    // canonical variant metadata rather than returning stale shader state.
+    tc_shader_bump_version(material.shader.get());
+    CHECK(tc_shader_variant_is_stale(first_handle));
+    termin::TcShader refreshed = termin::assemble_material_shader_override(request);
+    REQUIRE(refreshed.is_valid());
+    CHECK(tc_shader_handle_eq(refreshed.handle, first_handle));
+    CHECK_FALSE(tc_shader_variant_is_stale(refreshed.handle));
+
+    tc_shader_shutdown();
+}
