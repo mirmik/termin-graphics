@@ -145,6 +145,10 @@ typedef struct tc_material_texture {
 #define TC_MATERIAL_MAX_MARKS 8
 
 typedef struct tc_material_phase {
+    // Canonical owner identity. Maintained by the material registry whenever
+    // phases are inserted, removed, or copied; enables O(1) phase routing.
+    tc_material_handle owner_material;
+    size_t owner_phase_index;
     tc_shader_handle shader;
     tc_render_state state;
     char phase_mark[TC_PHASE_MARK_MAX];
@@ -176,6 +180,7 @@ typedef struct tc_material_phase {
 
 typedef struct tc_material {
     tc_resource_header header;
+    tc_material_handle self_handle;
 
     // Phases (different render passes: opaque, shadow, transparent, etc.)
     tc_material_phase phases[TC_MATERIAL_MAX_PHASES];

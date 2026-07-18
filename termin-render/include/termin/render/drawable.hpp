@@ -67,6 +67,9 @@ struct RENDER_API RenderItemCollection {
     std::vector<std::vector<tc_render_item_vec3>> line_batch_points;
     std::vector<std::unique_ptr<std::string>> text_batch_strings;
     std::vector<std::unique_ptr<std::string>> foliage_batch_strings;
+    size_t active_line_batch_points = 0;
+    size_t active_text_batch_strings = 0;
+    size_t active_foliage_batch_strings = 0;
 
     RenderItemCollection() = default;
     ~RenderItemCollection() = default;
@@ -77,9 +80,9 @@ struct RENDER_API RenderItemCollection {
 
     void clear() {
         items.clear();
-        line_batch_points.clear();
-        text_batch_strings.clear();
-        foliage_batch_strings.clear();
+        active_line_batch_points = 0;
+        active_text_batch_strings = 0;
+        active_foliage_batch_strings = 0;
     }
 };
 

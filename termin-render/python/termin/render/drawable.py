@@ -50,13 +50,16 @@ class Drawable(Protocol):
 
     Методы:
         collect_render_items: Возвращает RenderItems для указанного pass context.
+                              Пустой phase_mark означает pass-neutral snapshot
+                              и требует вернуть все phase-варианты за один вызов.
     """
 
     phase_marks: Set[str]
 
     def collect_render_items(self, context: RenderItemCollectContext) -> list[RenderItem]:
         """
-        Возвращает RenderItems для текущей фазы pass-а.
+        Возвращает RenderItems для текущей фазы pass-а или все варианты для
+        snapshot collection при пустом phase_mark.
         """
         ...
 

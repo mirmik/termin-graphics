@@ -20,6 +20,7 @@ class RenderContext2;
 namespace termin {
 
 class ShadowMapArrayResource;
+class RenderSceneItemSnapshot;
 
 // Per-resource tgfx2 texture map. Passes that draw through ctx2
 // consume entries from tex2_reads/tex2_writes (and the depth variants
@@ -54,6 +55,9 @@ public:
     std::vector<Light> lights;
     uint64_t layer_mask = 0xFFFFFFFFFFFFFFFFULL;
     uint64_t render_category_mask = 0xFFFFFFFFFFFFFFFFULL;
+    // Borrowed from RenderEngine for this scene/view execution. Immutable
+    // after its first successful collection and shared by all geometry passes.
+    RenderSceneItemSnapshot* render_item_snapshot = nullptr;
 };
 
 } // namespace termin

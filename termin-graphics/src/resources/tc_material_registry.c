@@ -105,6 +105,7 @@ tc_material_handle tc_material_create(const char* uuid, const char* name) {
     mat->header.version = 1;
     mat->header.ref_count = 0;
     mat->header.is_loaded = 1;
+    mat->self_handle = h;
 
     if (!tc_resource_map_add(g_material_uuid_to_index, mat->header.uuid, tc_pack_index(h.index))) {
         tc_log(TC_LOG_ERROR, "tc_material_create: failed to add to uuid map");
@@ -284,6 +285,8 @@ tc_material_phase* tc_material_add_phase(
 
     tc_material_phase* phase = &mat->phases[mat->phase_count];
     memset(phase, 0, sizeof(tc_material_phase));
+    phase->owner_material = mat->self_handle;
+    phase->owner_phase_index = mat->phase_count;
 
     phase->shader = shader;
     phase->state = tc_render_state_opaque();
@@ -315,6 +318,8 @@ bool tc_material_remove_phase(tc_material* mat, size_t index) {
 
     for (size_t i = index; i < mat->phase_count - 1; i++) {
         mat->phases[i] = mat->phases[i + 1];
+        mat->phases[i].owner_material = mat->self_handle;
+        mat->phases[i].owner_phase_index = i;
     }
 
     mat->phase_count--;
@@ -365,44 +370,23 @@ bool tc_material_find_phase_ref(
     if (out_phase_index) {
         *out_phase_index = 0;
     }
-    if (!g_material_initialized || !phase) {
+    if (!g_material_initialized || !phase ||
+        tc_material_handle_is_invalid(phase->owner_material)) {
         return false;
     }
 
-    for (uint32_t i = 0; i < g_material_pool.capacity; i++) {
-        if (g_material_pool.states[i] != TC_SLOT_OCCUPIED) {
-            continue;
-        }
-
-        tc_material* mat = (tc_material*)tc_pool_get_unchecked(&g_material_pool, i);
-        if (!mat) {
-            continue;
-        }
-
-        const tc_material_phase* begin = &mat->phases[0];
-        uintptr_t phase_addr = (uintptr_t)phase;
-        uintptr_t begin_addr = (uintptr_t)begin;
-        uintptr_t end_addr = begin_addr + mat->phase_count * sizeof(tc_material_phase);
-        if (phase_addr < begin_addr || phase_addr >= end_addr) {
-            continue;
-        }
-        if ((phase_addr - begin_addr) % sizeof(tc_material_phase) != 0) {
-            continue;
-        }
-
-        if (out_material) {
-            tc_material_handle h;
-            h.index = i;
-            h.generation = g_material_pool.generations[i];
-            *out_material = h;
-        }
-        if (out_phase_index) {
-            *out_phase_index = (size_t)((phase_addr - begin_addr) / sizeof(tc_material_phase));
-        }
-        return true;
+    tc_material* material = tc_material_get(phase->owner_material);
+    if (!material || phase->owner_phase_index >= material->phase_count ||
+        &material->phases[phase->owner_phase_index] != phase) {
+        return false;
     }
-
-    return false;
+    if (out_material) {
+        *out_material = phase->owner_material;
+    }
+    if (out_phase_index) {
+        *out_phase_index = phase->owner_phase_index;
+    }
+    return true;
 }
 
 // ============================================================================
@@ -696,6 +680,8 @@ tc_material_handle tc_material_copy(tc_material_handle src, const char* new_uuid
     dst_mat->phase_count = src_mat->phase_count;
     for (size_t i = 0; i < src_mat->phase_count; i++) {
         dst_mat->phases[i] = src_mat->phases[i];
+        dst_mat->phases[i].owner_material = dst;
+        dst_mat->phases[i].owner_phase_index = i;
         // Add reference to shader for the copied phase
         tc_shader* s = tc_shader_get(dst_mat->phases[i].shader);
         if (s) {

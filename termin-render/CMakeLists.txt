@@ -309,6 +309,16 @@ if(TERMIN_RENDER_BUILD_TESTS)
     add_test(NAME termin_render_task_test COMMAND termin_render_task_test)
     add_test(NAME termin_render_item_submission_test COMMAND termin_render_item_submission_test)
 
+    add_executable(
+        termin_render_scene_item_snapshot_test
+        tests/test_render_scene_item_snapshot.cpp)
+    target_link_libraries(
+        termin_render_scene_item_snapshot_test
+        PRIVATE termin_render)
+    add_test(
+        NAME termin_render_scene_item_snapshot_test
+        COMMAND termin_render_scene_item_snapshot_test)
+
     set_target_properties(
         termin_render_drawable_test
         termin_render_target_dimensions_test
@@ -322,6 +332,7 @@ if(TERMIN_RENDER_BUILD_TESTS)
         termin_render_unknown_pass_test
         termin_render_item_submission_test
         termin_render_task_test
+        termin_render_scene_item_snapshot_test
         PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
 endif()

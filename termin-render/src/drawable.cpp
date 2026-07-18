@@ -163,6 +163,15 @@ struct RenderItemVectorSinkData {
     RenderItemCollection* collection = nullptr;
     const tc_render_item_collect_context* context = nullptr;
     tc_component* component = nullptr;
+    const tc_render_item_vec3* last_line_source = nullptr;
+    size_t last_line_count = 0;
+    const tc_render_item_vec3* last_line_stored = nullptr;
+    const char* last_text_source = nullptr;
+    const char* last_text_stored = nullptr;
+    const char* last_font_source = nullptr;
+    const char* last_font_stored = nullptr;
+    const char* last_foliage_source = nullptr;
+    const char* last_foliage_stored = nullptr;
 };
 
 bool emit_render_item_to_vector(const tc_render_item* item, void* user_data) {
@@ -184,30 +193,75 @@ bool emit_render_item_to_vector(const tc_render_item* item, void* user_data) {
         copy.payload.line_batch.points &&
         copy.payload.line_batch.point_count > 0) {
         const tc_render_item_vec3* begin = copy.payload.line_batch.points;
-        const tc_render_item_vec3* end = begin + copy.payload.line_batch.point_count;
-        auto& stored_points = data->collection->line_batch_points.emplace_back(begin, end);
-        copy.payload.line_batch.points = stored_points.data();
+        const size_t count = copy.payload.line_batch.point_count;
+        if (begin == data->last_line_source && count == data->last_line_count) {
+            copy.payload.line_batch.points = data->last_line_stored;
+        } else {
+            const size_t storage_index = data->collection->active_line_batch_points++;
+            if (storage_index == data->collection->line_batch_points.size()) {
+                data->collection->line_batch_points.emplace_back();
+            }
+            auto& stored_points = data->collection->line_batch_points[storage_index];
+            stored_points.assign(begin, begin + count);
+            copy.payload.line_batch.points = stored_points.data();
+            data->last_line_source = begin;
+            data->last_line_count = count;
+            data->last_line_stored = stored_points.data();
+        }
     }
     if (copy.kind == TC_RENDER_ITEM_KIND_TEXT_BATCH) {
         if (copy.payload.text_batch.text) {
-            auto stored_text =
-                std::make_unique<std::string>(copy.payload.text_batch.text);
-            copy.payload.text_batch.text = stored_text->c_str();
-            data->collection->text_batch_strings.push_back(std::move(stored_text));
+            const char* source = copy.payload.text_batch.text;
+            if (source == data->last_text_source) {
+                copy.payload.text_batch.text = data->last_text_stored;
+            } else {
+                const size_t index = data->collection->active_text_batch_strings++;
+                if (index == data->collection->text_batch_strings.size()) {
+                    data->collection->text_batch_strings.push_back(
+                        std::make_unique<std::string>());
+                }
+                std::string& stored = *data->collection->text_batch_strings[index];
+                stored.assign(source);
+                copy.payload.text_batch.text = stored.c_str();
+                data->last_text_source = source;
+                data->last_text_stored = stored.c_str();
+            }
         }
         if (copy.payload.text_batch.font_path) {
-            auto stored_font_path =
-                std::make_unique<std::string>(copy.payload.text_batch.font_path);
-            copy.payload.text_batch.font_path = stored_font_path->c_str();
-            data->collection->text_batch_strings.push_back(std::move(stored_font_path));
+            const char* source = copy.payload.text_batch.font_path;
+            if (source == data->last_font_source) {
+                copy.payload.text_batch.font_path = data->last_font_stored;
+            } else {
+                const size_t index = data->collection->active_text_batch_strings++;
+                if (index == data->collection->text_batch_strings.size()) {
+                    data->collection->text_batch_strings.push_back(
+                        std::make_unique<std::string>());
+                }
+                std::string& stored = *data->collection->text_batch_strings[index];
+                stored.assign(source);
+                copy.payload.text_batch.font_path = stored.c_str();
+                data->last_font_source = source;
+                data->last_font_stored = stored.c_str();
+            }
         }
     }
     if (copy.kind == TC_RENDER_ITEM_KIND_FOLIAGE_BATCH &&
         copy.payload.foliage_batch.foliage_uuid) {
-        auto stored_uuid =
-            std::make_unique<std::string>(copy.payload.foliage_batch.foliage_uuid);
-        copy.payload.foliage_batch.foliage_uuid = stored_uuid->c_str();
-        data->collection->foliage_batch_strings.push_back(std::move(stored_uuid));
+        const char* source = copy.payload.foliage_batch.foliage_uuid;
+        if (source == data->last_foliage_source) {
+            copy.payload.foliage_batch.foliage_uuid = data->last_foliage_stored;
+        } else {
+            const size_t index = data->collection->active_foliage_batch_strings++;
+            if (index == data->collection->foliage_batch_strings.size()) {
+                data->collection->foliage_batch_strings.push_back(
+                    std::make_unique<std::string>());
+            }
+            std::string& stored = *data->collection->foliage_batch_strings[index];
+            stored.assign(source);
+            copy.payload.foliage_batch.foliage_uuid = stored.c_str();
+            data->last_foliage_source = source;
+            data->last_foliage_stored = stored.c_str();
+        }
     }
     data->collection->items.push_back(copy);
     return true;
@@ -224,13 +278,6 @@ bool collect_drawable_render_items(
         tc::Log::error("[RenderItemCollector] cannot collect from null component");
         return false;
     }
-    if (!context.phase_mark || context.phase_mark[0] == '\0') {
-        tc::Log::error(
-            "[RenderItemCollector] component '%s' collection requested with empty phase mark",
-            component_debug_name(component));
-        return false;
-    }
-
     RenderItemVectorSinkData sink_data;
     sink_data.collection = &out_collection;
     sink_data.context = &context;

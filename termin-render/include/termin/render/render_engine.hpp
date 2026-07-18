@@ -13,6 +13,7 @@
 #include "termin/render/render_camera.hpp"
 #include "termin/render/render_pipeline.hpp"
 #include "termin/render/render_export.hpp"
+#include "termin/render/render_scene_item_collector.hpp"
 #include <termin/lighting/light.hpp>
 #include "termin/lighting/shadow.hpp"
 #include <termin/tc_scene.hpp>
@@ -79,6 +80,9 @@ private:
     // device or borrows the host-owned process-wide interop device.
     std::unique_ptr<tgfx::RenderRuntime> tgfx2_runtime_;
     std::unique_ptr<ShaderArtifactResolver> shader_artifact_resolver_;
+    // Reused between executions. invalidate_keep_capacity() defines the
+    // frame/view ownership boundary while retaining payload allocations.
+    std::vector<RenderSceneItemSnapshot> render_item_snapshot_scratch_;
 
 public:
     void ensure_tgfx2();

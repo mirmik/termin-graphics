@@ -20,6 +20,7 @@
 #include "tgfx2/shader_artifact_resolver.hpp"
 #include "tgfx/tgfx2_interop.h"
 #include "termin/render/tgfx2_bridge.hpp"
+#include "termin/render/render_scene_item_collector.hpp"
 
 extern "C" {
 #include "render/tc_frame_graph.h"
@@ -93,6 +94,9 @@ struct RenderEngineTimingStats {
     double clear_resources_ms = 0.0;
     double pass_total_ms = 0.0;
     double end_frame_ms = 0.0;
+    uint64_t render_item_scene_traversals = 0;
+    uint64_t render_item_producers = 0;
+    uint64_t render_items = 0;
     std::unordered_map<std::string, RenderPassTimingStats> pass_stats;
 };
 
@@ -128,7 +132,7 @@ static void maybe_report_render_engine_timing() {
 
     const double inv_calls = 1.0 / static_cast<double>(stats.calls);
     tc::Log::info(
-        "[RenderEngine timing] calls=%llu callsPerSec=%.1f avgMs{total=%.2f frameGraph=%.2f specs=%.2f allocate=%.2f beginFrame=%.2f clearTargets=%.2f assemble=%.2f clearResources=%.2f passes=%.2f endFrame=%.2f}",
+        "[RenderEngine timing] calls=%llu callsPerSec=%.1f avgMs{total=%.2f frameGraph=%.2f specs=%.2f allocate=%.2f beginFrame=%.2f clearTargets=%.2f assemble=%.2f clearResources=%.2f passes=%.2f endFrame=%.2f} avgRenderItems{sceneTraversals=%.2f producers=%.2f items=%.2f}",
         static_cast<unsigned long long>(stats.calls),
         static_cast<double>(stats.calls) / window_seconds,
         stats.total_ms * inv_calls,
@@ -140,7 +144,10 @@ static void maybe_report_render_engine_timing() {
         stats.assemble_resources_ms * inv_calls,
         stats.clear_resources_ms * inv_calls,
         stats.pass_total_ms * inv_calls,
-        stats.end_frame_ms * inv_calls
+        stats.end_frame_ms * inv_calls,
+        static_cast<double>(stats.render_item_scene_traversals) * inv_calls,
+        static_cast<double>(stats.render_item_producers) * inv_calls,
+        static_cast<double>(stats.render_items) * inv_calls
     );
 
     std::vector<std::pair<std::string, RenderPassTimingStats>> passes;
@@ -858,6 +865,21 @@ void RenderEngine::render_scene_pipeline_offscreen(
     tc_profiler_end_section();
     clear_resources_ms = timing_ms(clear_resources_begin, RenderTimingClock::now());
 
+    // One lazy snapshot per logical render target/view. The map owns stable
+    // storage until every pass in this execution has completed.
+    render_item_snapshot_scratch_.resize(render_target_contexts.size());
+    std::unordered_map<const RenderTargetContext*, RenderSceneItemSnapshot*>
+        render_item_snapshots;
+    render_item_snapshots.reserve(render_target_contexts.size());
+    size_t snapshot_index = 0;
+    for (const auto& [name, target] : render_target_contexts) {
+        (void)name;
+        RenderSceneItemSnapshot& snapshot =
+            render_item_snapshot_scratch_[snapshot_index++];
+        snapshot.invalidate_keep_capacity();
+        render_item_snapshots.emplace(&target, &snapshot);
+    }
+
     tc_profiler_begin_section("Execute Passes");
     for (size_t i = 0; i < schedule_count; i++) {
         tc_pass* pass = tc_frame_graph_schedule_at(fg, i);
@@ -1054,6 +1076,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
         ctx.lights = lights;
         ctx.layer_mask = rt_ctx.layer_mask;
         ctx.render_category_mask = rt_ctx.render_category_mask;
+        ctx.render_item_snapshot = render_item_snapshots.at(&rt_ctx);
 
         tc_pass_execute(pass, &ctx);
 
@@ -1082,6 +1105,13 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
     if (collect_render_timing) {
         RenderEngineTimingStats& stats = render_engine_timing_stats();
+        for (const auto& [target, snapshot] : render_item_snapshots) {
+            (void)target;
+            const RenderSceneItemSnapshotCounters& counters = snapshot->counters();
+            stats.render_item_scene_traversals += counters.scene_traversals;
+            stats.render_item_producers += counters.drawable_producers;
+            stats.render_items += counters.emitted_items;
+        }
         stats.calls += 1;
         stats.total_ms += timing_ms(total_begin, RenderTimingClock::now());
         stats.frame_graph_ms += frame_graph_ms;
