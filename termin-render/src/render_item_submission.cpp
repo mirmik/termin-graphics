@@ -305,7 +305,10 @@ RenderItemTaskRejection mesh_render_item_task_shader_planner(
         out_detail = "failed to assemble the skinned mesh shader";
         return RenderItemTaskRejection::ShaderPlanningRejected;
     }
-    out_plan.final_shader = planned.handle;
+    if (!out_plan.set_final_shader(std::move(planned))) {
+        out_detail = "shader usage packet is full after planning the skinned mesh shader";
+        return RenderItemTaskRejection::ShaderPlanningRejected;
+    }
     out_detail = nullptr;
     return RenderItemTaskRejection::None;
 }
@@ -622,6 +625,8 @@ RenderItemTaskPlanningResult plan_render_item_task(
     task.shader_usage_count = shader_plan.shader_usage_count;
     for (uint32_t i = 0; i < shader_plan.shader_usage_count; ++i) {
         task.shader_usages[i] = shader_plan.shader_usages[i];
+        task.owned_shader_usages[i] =
+            std::move(shader_plan.owned_shader_usages[i]);
     }
     task.pass_semantic = contract.pass_semantic;
     task.has_vertex_transform_kind = shader_plan.has_vertex_transform_kind;

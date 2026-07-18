@@ -92,7 +92,7 @@ struct PhaseDrawCall {
     Entity entity;
     tc_component* component = nullptr;
     tc_material_phase* phase = nullptr;
-    tc_shader_handle final_shader;
+    TcShader final_shader;
     int priority = 0;
     int geometry_id = 0;
     size_t item_index = SIZE_MAX;

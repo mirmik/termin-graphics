@@ -55,6 +55,27 @@ termin::RenderItemTaskRejection selecting_test_shader_planner(
     return termin::RenderItemTaskRejection::None;
 }
 
+termin::RenderItemTaskRejection owning_test_shader_planner(
+    const termin::RenderItemTaskPlanningRequest& request,
+    termin::RenderItemTaskShaderPlan& out_plan,
+    const char*& out_detail,
+    void* user_data)
+{
+    (void)request;
+    (void)user_data;
+    termin::TcShaderCreateInfo create_info{};
+    create_info.sources.vertex = "void main() {}";
+    create_info.sources.fragment = "void main() {}";
+    create_info.sources.name = "RenderTaskOwnedShader";
+    create_info.uuid = "termin-render-task-owned-shader-test";
+    if (!out_plan.set_final_shader(termin::TcShader::from_sources(create_info))) {
+        out_detail = "could not retain the planned shader";
+        return termin::RenderItemTaskRejection::ShaderPlanningRejected;
+    }
+    out_detail = nullptr;
+    return termin::RenderItemTaskRejection::None;
+}
+
 } // namespace
 
 TEST_CASE("RenderItem draw encoder registry enforces ownership") {
@@ -236,6 +257,54 @@ TEST_CASE("RenderItem task planner delegates final shader selection to the encod
     const termin::RenderTask& task = tasks.at(result.task_index);
     CHECK(task.final_shader.index == 11u);
     CHECK(task.final_shader.generation == 3u);
+
+    CHECK(termin::unregister_render_item_draw_encoder(test_kind, test_encoder, nullptr));
+}
+
+TEST_CASE("RenderItem task shaders can be retained by pass draw-call caches") {
+    constexpr uint32_t test_kind = 0x7fff0005u;
+    constexpr const char* shader_uuid = "termin-render-task-owned-shader-test";
+    termin::unregister_render_item_draw_encoder(test_kind, test_encoder, nullptr);
+    tc_shader_handle stale = tc_shader_find(shader_uuid);
+    if (!tc_shader_handle_is_invalid(stale)) {
+        tc_shader_destroy(stale);
+    }
+
+    termin::RenderItemDrawEncoderDesc desc{};
+    desc.encode = test_encoder;
+    desc.plan_task_shader = owning_test_shader_planner;
+    desc.debug_name = "owning_test_encoder";
+    desc.capabilities.pass_semantic_mask =
+        termin::render_item_pass_semantic_bit(termin::RenderItemPassSemantic::Color);
+    REQUIRE(termin::register_render_item_draw_encoder(test_kind, desc));
+
+    tc_render_item item{};
+    item.kind = test_kind;
+    termin::RenderItemTaskPlanningContract contract{};
+    contract.pass_semantic = termin::RenderItemPassSemantic::Color;
+    contract.debug_pass_name = "owned_shader_planner_test";
+
+    termin::RenderItemTaskPlanningRequest request{};
+    request.item = &item;
+    request.contract = &contract;
+
+    tc_shader_handle planned_handle = tc_shader_handle_invalid();
+    termin::TcShader cached_shader;
+    {
+        termin::RenderTaskList tasks;
+        auto result = termin::plan_render_item_task(request, tasks);
+        REQUIRE(result.accepted());
+        planned_handle = tasks.at(result.task_index).final_shader;
+        CHECK(tc_shader_is_valid(planned_handle));
+        CHECK(tasks.at(result.task_index).shader_usage_count == 1u);
+        CHECK(tc_shader_handle_eq(
+            tasks.at(result.task_index).shader_usages[0],
+            planned_handle));
+        cached_shader = termin::TcShader(planned_handle);
+    }
+    CHECK(tc_shader_is_valid(planned_handle));
+    cached_shader = termin::TcShader();
+    CHECK(!tc_shader_is_valid(planned_handle));
 
     CHECK(termin::unregister_render_item_draw_encoder(test_kind, test_encoder, nullptr));
 }

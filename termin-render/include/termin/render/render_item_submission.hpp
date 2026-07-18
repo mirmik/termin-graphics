@@ -3,6 +3,9 @@
 #include <termin/render/material_pipeline.hpp>
 #include <termin/render/render_export.hpp>
 
+#include <array>
+#include <utility>
+
 extern "C" {
 #include <core/tc_render_item.h>
 #include <tgfx/resources/tc_shader.h>
@@ -142,6 +145,7 @@ struct RenderItemTaskShaderPlan {
 
     tc_shader_handle final_shader = tc_shader_handle_invalid();
     tc_shader_handle shader_usages[MAX_SHADER_USAGES]{};
+    std::array<TcShader, MAX_SHADER_USAGES> owned_shader_usages{};
     uint32_t shader_usage_count = 0;
     VertexTransformKind vertex_transform_kind = VertexTransformKind::StaticMesh;
     bool has_vertex_transform_kind = false;
@@ -160,6 +164,32 @@ struct RenderItemTaskShaderPlan {
         }
         shader_usages[shader_usage_count++] = shader;
         return true;
+    }
+
+    bool add_shader_usage(TcShader shader) {
+        if (!shader.is_valid()) {
+            return true;
+        }
+        for (uint32_t i = 0; i < shader_usage_count; ++i) {
+            if (tc_shader_handle_eq(shader_usages[i], shader.handle)) {
+                if (!owned_shader_usages[i].is_valid()) {
+                    owned_shader_usages[i] = std::move(shader);
+                }
+                return true;
+            }
+        }
+        if (shader_usage_count >= MAX_SHADER_USAGES) {
+            return false;
+        }
+        shader_usages[shader_usage_count] = shader.handle;
+        owned_shader_usages[shader_usage_count] = std::move(shader);
+        ++shader_usage_count;
+        return true;
+    }
+
+    bool set_final_shader(TcShader shader) {
+        final_shader = shader.handle;
+        return add_shader_usage(std::move(shader));
     }
 };
 

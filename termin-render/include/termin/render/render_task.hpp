@@ -29,6 +29,8 @@ struct RENDER_API RenderTask {
     tc_shader_handle final_shader = tc_shader_handle_invalid();
     std::array<tc_shader_handle, RenderItemTaskShaderPlan::MAX_SHADER_USAGES>
         shader_usages{};
+    std::array<TcShader, RenderItemTaskShaderPlan::MAX_SHADER_USAGES>
+        owned_shader_usages{};
     uint32_t shader_usage_count = 0;
     RenderItemPassSemantic pass_semantic = RenderItemPassSemantic::Color;
     VertexTransformKind vertex_transform_kind = VertexTransformKind::StaticMesh;
