@@ -66,7 +66,7 @@ example skip code `77` with an error message.
 
 | Area | Command | What It Proves |
 | --- | --- | --- |
-| Runtime package exporter | `./run-tests-python.sh --full termin-project-build/tests/test_runtime_package_exporter.py termin-player/tests/test_runtime_package_loader.py` | Runtime manifests, shader artifacts, assets, and loader behavior remain coherent. |
+| Runtime package exporter/loader | `./run-tests-python.sh --full termin-project-build/tests/test_runtime_package_exporter.py` and `ctest --test-dir build/Release-tests -R termin_runtime_package_loader_test --output-on-failure` | Runtime manifests, shader artifacts, assets, and the canonical native loader remain coherent. |
 | Desktop build profile path | `./run-tests-python.sh termin-project-build/tests/test_project_build_profile_backend.py termin-project-build/tests/test_project_build_target_common.py termin-project-build/tests/test_project_build_target_preflight.py` | Build profile dispatch, target preflight, and host/tool checks remain deterministic. |
 | Relocatable desktop bundle | Run the project-specific relocated bundle smoke, for example the Chess bundle smoke tracked separately. | The packaged host can run outside the source tree with bundled assets, Python packages, and shader artifacts. |
 
