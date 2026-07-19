@@ -50,7 +50,7 @@ def test_glb_runtime_plugin_registers_through_resource_manager_api():
         uuid="glb-test-uuid",
         spec_data={"uuid": "glb-test-uuid"},
     )
-    context = AssetContext(resource_manager=rm, name="robot")
+    context = AssetContext(resource_manager=rm, name="robot", uuid="glb-test-uuid")
 
     GLBRuntimePlugin().register(context, result)
 
