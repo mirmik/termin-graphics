@@ -181,6 +181,28 @@ cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"
 
 if [[ $INSTALL -eq 1 ]]; then
     cmake --install "$BUILD_DIR"
+
+    PY_EXEC="${PYTHON_BIN:-${PYTHON_EXECUTABLE:-}}"
+    if [[ -z "$PY_EXEC" ]]; then
+        PY_EXEC="$(command -v python3 || command -v python || true)"
+    fi
+    if [[ -z "$PY_EXEC" ]]; then
+        echo "ERROR: python3 not found; cannot record Android SDK capabilities" >&2
+        exit 1
+    fi
+    ANDROID_SDK_ROOT_VALUE="$(dirname "$SDK_PREFIX")"
+    if [[ "$(basename "$ANDROID_SDK_ROOT_VALUE")" == "android" ]]; then
+        SDK_ROOT_VALUE="$(dirname "$ANDROID_SDK_ROOT_VALUE")"
+    else
+        SDK_ROOT_VALUE="$ANDROID_SDK_ROOT_VALUE"
+    fi
+    PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
+        "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" \
+        write-android-capabilities \
+        --sdk-root "$SDK_ROOT_VALUE" \
+        --android-sdk-root "$ANDROID_SDK_ROOT_VALUE" \
+        --abi "$ANDROID_ABI_VALUE" \
+        --build-dir "$BUILD_DIR"
 fi
 
 echo ""
