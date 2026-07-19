@@ -1,4 +1,6 @@
 from termin.materials import TcMaterial
+import pytest
+from tgfx import ShaderLanguage
 
 
 VERTEX = """
@@ -13,6 +15,12 @@ FRAGMENT = """
 layout(location=0) out vec4 out_color;
 void main() { out_color = vec4(1.0); }
 """
+
+
+def test_add_phase_from_sources_requires_explicit_language() -> None:
+    material = TcMaterial.create("ExplicitShaderLanguageMaterial", "")
+    with pytest.raises(ValueError, match="requires an explicit shader language"):
+        material.add_phase_from_sources(VERTEX, FRAGMENT)
 
 
 def test_raw_glsl_phase_does_not_infer_engine_resource_layout() -> None:
@@ -35,6 +43,7 @@ void main() {
         "RawGlslEngineLayoutShader",
         "opaque",
         0,
+        language=ShaderLanguage.GLSL.value,
     )
     assert phase is not None
 
@@ -54,6 +63,7 @@ def test_material_copy_survives_registry_growth() -> None:
         "PoolGrowthShader",
         "opaque",
         0,
+        language=ShaderLanguage.GLSL.value,
     )
     assert phase is not None
 

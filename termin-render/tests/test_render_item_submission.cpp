@@ -68,6 +68,8 @@ termin::RenderItemTaskRejection owning_test_shader_planner(
     create_info.sources.fragment = "void main() {}";
     create_info.sources.name = "RenderTaskOwnedShader";
     create_info.uuid = "termin-render-task-owned-shader-test";
+    create_info.language = TC_SHADER_LANGUAGE_SLANG;
+    create_info.artifact_policy = TC_SHADER_ARTIFACT_REQUIRED;
     if (!out_plan.set_final_shader(termin::TcShader::from_sources(create_info))) {
         out_detail = "could not retain the planned shader";
         return termin::RenderItemTaskRejection::ShaderPlanningRejected;

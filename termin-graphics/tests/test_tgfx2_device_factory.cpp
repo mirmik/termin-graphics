@@ -627,14 +627,21 @@ TEST_CASE("tc_shader records language and artifact policy") {
     const char* vs = "#version 330 core\nvoid main(){gl_Position=vec4(0.0);}";
     const char* fs = "#version 330 core\nout vec4 c; void main(){c=vec4(1.0);}";
 
-    tc_shader_handle legacy = tc_shader_from_sources(
-        vs,
-        fs,
-        nullptr,
-        "legacy_shader_metadata_test",
-        nullptr,
-        "shader-metadata-legacy"
-    );
+    const tc_shader_create_desc missing_language_desc = {
+        {vs, fs, nullptr, "missing_language_shader", nullptr, nullptr, nullptr, nullptr},
+        "shader-metadata-missing-language",
+        TC_SHADER_LANGUAGE_UNSPECIFIED,
+        TC_SHADER_ARTIFACT_OPTIONAL
+    };
+    CHECK(tc_shader_handle_is_invalid(tc_shader_from_sources_desc(&missing_language_desc)));
+
+    const tc_shader_create_desc glsl_desc = {
+        {vs, fs, nullptr, "explicit_glsl_shader_metadata_test", nullptr, nullptr, nullptr, nullptr},
+        "shader-metadata-explicit-glsl",
+        TC_SHADER_LANGUAGE_GLSL,
+        TC_SHADER_ARTIFACT_OPTIONAL
+    };
+    tc_shader_handle legacy = tc_shader_from_sources_desc(&glsl_desc);
     CHECK(!tc_shader_handle_is_invalid(legacy));
     tc_shader* legacy_shader = tc_shader_get(legacy);
     CHECK(legacy_shader != nullptr);
@@ -665,14 +672,13 @@ TEST_CASE("tc_shader records language and artifact policy") {
     CHECK(tc_shader_get_language(slang_shader) == TC_SHADER_LANGUAGE_SLANG);
     CHECK(slang_shader->version == slang_version);
 
-    tc_shader_handle variant = tc_shader_from_sources(
-        vs,
-        fs,
-        nullptr,
-        "variant_shader_metadata_test",
-        nullptr,
-        "shader-metadata-variant"
-    );
+    const tc_shader_create_desc variant_desc = {
+        {vs, fs, nullptr, "variant_shader_metadata_test", nullptr, nullptr, nullptr, nullptr},
+        "shader-metadata-variant",
+        TC_SHADER_LANGUAGE_GLSL,
+        TC_SHADER_ARTIFACT_OPTIONAL
+    };
+    tc_shader_handle variant = tc_shader_from_sources_desc(&variant_desc);
     CHECK(!tc_shader_handle_is_invalid(variant));
     tc_shader* variant_shader = tc_shader_get(variant);
     CHECK(variant_shader != nullptr);
@@ -745,13 +751,13 @@ TEST_CASE("static uuid registration preserves non-default shader identity") {
 TEST_CASE("retaining an assembled shader as static survives transient owner release") {
     const char* vs = "#version 330 core\nvoid main(){gl_Position=vec4(0.0);}";
     const char* fs = "#version 330 core\nout vec4 c; void main(){c=vec4(1.0);}";
-    tc_shader_handle handle = tc_shader_from_sources(
-        vs,
-        fs,
-        nullptr,
-        "assembled_static_lifetime_test",
-        nullptr,
-        "assembled-static-lifetime-test");
+    const tc_shader_create_desc desc = {
+        {vs, fs, nullptr, "assembled_static_lifetime_test", nullptr, nullptr, nullptr, nullptr},
+        "assembled-static-lifetime-test",
+        TC_SHADER_LANGUAGE_GLSL,
+        TC_SHADER_ARTIFACT_OPTIONAL
+    };
+    tc_shader_handle handle = tc_shader_from_sources_desc(&desc);
     REQUIRE(!tc_shader_handle_is_invalid(handle));
 
     tc_shader* transient_owner = tc_shader_get(handle);

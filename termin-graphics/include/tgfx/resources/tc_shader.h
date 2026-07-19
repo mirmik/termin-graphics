@@ -54,6 +54,7 @@ typedef enum tc_shader_language {
     TC_SHADER_LANGUAGE_GLSL = 0,
     TC_SHADER_LANGUAGE_SLANG = 1,
     TC_SHADER_LANGUAGE_HLSL = 2,
+    TC_SHADER_LANGUAGE_UNSPECIFIED = 0xffffffffu,
 } tc_shader_language;
 
 typedef enum tc_shader_artifact_policy {

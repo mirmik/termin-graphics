@@ -3,6 +3,7 @@ import pytest
 
 from termin.geombase import Mat44, Mat44f
 from termin.materials import TcMaterial
+from tgfx import ShaderLanguage
 
 
 VERTEX = """
@@ -27,6 +28,7 @@ def _phase():
         "TypedMatrixParamShader",
         "opaque",
         0,
+        language=ShaderLanguage.GLSL.value,
     )
     assert phase is not None
     return phase

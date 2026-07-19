@@ -38,6 +38,28 @@ def test_termin_shaderc_compile_help_is_successful() -> None:
     assert "--layout-scheme" not in direct.stdout
 
 
+def test_termin_shaderc_requires_explicit_source_language(tmp_path: Path) -> None:
+    source = tmp_path / "shader.frag"
+    source.write_text("void main() {}\n", encoding="utf-8")
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--input",
+            str(source),
+            "--output",
+            str(tmp_path / "shader.frag.spv"),
+        ]
+    )
+
+    assert result.returncode == 2
+    assert "--language glsl|slang" in result.stderr
+
+
 def test_termin_shaderc_patches_d3d11_fragment_struct_input_with_sv_position(tmp_path: Path) -> None:
     shader = tmp_path / "test.slang"
     shader.write_text(

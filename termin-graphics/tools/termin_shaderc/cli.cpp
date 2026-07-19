@@ -21,7 +21,7 @@ void print_help(std::ostream& out) {
         << "  help [compile]       Show this help text.\n"
         << "\n"
         << "Compile options:\n"
-        << "  --language <name>    Source language: glsl or slang. Default: glsl.\n"
+        << "  --language <name>    Source language: glsl or slang. Required.\n"
         << "  --target <name>      Backend target: vulkan, opengl, or d3d11.\n"
         << "  --stage <name>       Shader stage: vertex, fragment, or geometry.\n"
         << "  --input <path>       Source file to compile.\n"
@@ -196,7 +196,7 @@ ParsedCommandLine parse_command_line(int argc, char** argv) {
         }
     }
 
-    if (options.target.empty() || options.stage.empty()
+    if (options.language.empty() || options.target.empty() || options.stage.empty()
         || options.input.empty() || options.output.empty()) {
         usage();
         parsed.exit_code = 2;

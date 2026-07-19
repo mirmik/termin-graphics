@@ -239,6 +239,7 @@ TEST_CASE("shader contract clears when shader sources change") {
     desc.vertex_input_count = 1;
     REQUIRE(tc_shader_set_contract(shader, &desc));
     CHECK(tc_shader_has_contract(shader));
+    REQUIRE(tc_shader_set_language(shader, TC_SHADER_LANGUAGE_GLSL));
 
     REQUIRE(tc_shader_set_sources(
         shader,

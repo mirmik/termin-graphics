@@ -42,7 +42,7 @@ struct TcShaderSources {
 struct TcShaderCreateInfo {
     TcShaderSources sources;
     std::string uuid;
-    tc_shader_language language = TC_SHADER_LANGUAGE_GLSL;
+    tc_shader_language language = TC_SHADER_LANGUAGE_UNSPECIFIED;
     tc_shader_artifact_policy artifact_policy = TC_SHADER_ARTIFACT_OPTIONAL;
 
     tc_shader_create_desc to_c_desc() const {

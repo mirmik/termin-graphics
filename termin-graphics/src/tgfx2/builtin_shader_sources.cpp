@@ -348,7 +348,14 @@ tc_shader_handle register_builtin_fragment_shader(
     if (source.empty()) {
         return tc_shader_handle_invalid();
     }
-    return tc_shader_register_static_uuid(nullptr, source.c_str(), nullptr, name, uuid);
+    return tc_shader_register_static_uuid_ex(
+        nullptr,
+        source.c_str(),
+        nullptr,
+        name,
+        uuid,
+        TC_SHADER_LANGUAGE_GLSL,
+        TC_SHADER_ARTIFACT_OPTIONAL);
 }
 
 tc_shader_handle register_builtin_vertex_fragment_shader(
@@ -367,8 +374,14 @@ tc_shader_handle register_builtin_vertex_fragment_shader(
         return tc_shader_handle_invalid();
     }
 
-    return tc_shader_register_static_uuid(
-        vertex_source.c_str(), fragment_source.c_str(), nullptr, name, uuid);
+    return tc_shader_register_static_uuid_ex(
+        vertex_source.c_str(),
+        fragment_source.c_str(),
+        nullptr,
+        name,
+        uuid,
+        TC_SHADER_LANGUAGE_GLSL,
+        TC_SHADER_ARTIFACT_OPTIONAL);
 }
 
 std::string load_builtin_shader_stage_source_from_catalog(

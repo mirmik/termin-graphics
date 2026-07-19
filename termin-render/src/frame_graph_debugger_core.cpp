@@ -202,8 +202,14 @@ void FrameGraphPresenter::release_tgfx2_resources() {
 void FrameGraphPresenter::ensure_fs(tgfx::IRenderDevice& device) {
     device2_ = &device;
     if (tc_shader_handle_is_invalid(shader_handle_)) {
-        shader_handle_ = tc_shader_register_static(
-            nullptr, PRESENTER_FRAG_SRC, nullptr, "FrameGraphPresenterFS");
+        shader_handle_ = tc_shader_register_static_uuid_ex(
+            nullptr,
+            PRESENTER_FRAG_SRC,
+            nullptr,
+            "FrameGraphPresenterFS",
+            "termin-frame-graph-presenter",
+            TC_SHADER_LANGUAGE_GLSL,
+            TC_SHADER_ARTIFACT_OPTIONAL);
         tc_shader* shader = tc_shader_get(shader_handle_);
         if (shader) {
             tc_shader_resource_binding u_tex{};

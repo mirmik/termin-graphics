@@ -1,4 +1,5 @@
 import tgfx
+import pytest
 from tcbase._geom_native import Vec3, Vec3f
 
 
@@ -40,6 +41,11 @@ def test_shader_metadata_binding_smoke():
     assert shader.language == tgfx.ShaderLanguage.SLANG
     assert shader.artifact_policy == tgfx.ShaderArtifactPolicy.REQUIRED
     assert shader.requires_artifacts is True
+
+
+def test_shader_from_sources_requires_explicit_language():
+    with pytest.raises(ValueError, match="requires an explicit shader language"):
+        tgfx.TcShader.from_sources("void main() {}", "void main() {}")
 
 
 def test_shader_resource_layout_accepts_typed_kind_and_scope():

@@ -1024,13 +1024,18 @@ void bind_tc_material(nb::module_& m) {
             int priority,
             const tc_render_state& state,
             const std::string& shader_uuid,
-            int language,
+            std::optional<int> language,
             int artifact_policy,
             const std::string& vertex_entry,
             const std::string& fragment_entry,
             const std::string& geometry_entry
         ) -> tc_material_phase* {
-            tc_shader_language shader_language = static_cast<tc_shader_language>(language);
+            if (!language.has_value()) {
+                tc::Log::error("TcMaterial.add_phase_from_sources requires an explicit shader language");
+                throw std::invalid_argument(
+                    "TcMaterial.add_phase_from_sources requires an explicit shader language");
+            }
+            tc_shader_language shader_language = static_cast<tc_shader_language>(*language);
             tc_shader_artifact_policy shader_artifact_policy =
                 static_cast<tc_shader_artifact_policy>(artifact_policy);
             std::string vs = vertex_source;
@@ -1066,7 +1071,7 @@ void bind_tc_material(nb::module_& m) {
            nb::arg("phase_mark") = "opaque", nb::arg("priority") = 0,
            nb::arg("state") = tc_render_state_opaque(),
            nb::arg("shader_uuid") = "",
-           nb::arg("language") = static_cast<int>(TC_SHADER_LANGUAGE_GLSL),
+           nb::arg("language") = nb::none(),
            nb::arg("artifact_policy") = static_cast<int>(TC_SHADER_ARTIFACT_OPTIONAL),
            nb::arg("vertex_entry") = "",
            nb::arg("fragment_entry") = "",

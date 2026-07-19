@@ -3,6 +3,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/tuple.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/ndarray.h>
 
 #include <cstring>
@@ -286,11 +287,15 @@ void bind_shader(nb::module_& m) {
                const std::string& geometry,
                const std::string& name,
                const std::string& source_path,
-               tc_shader_language language,
+               std::optional<tc_shader_language> language,
                tc_shader_artifact_policy artifact_policy,
                const std::string& vertex_entry,
                const std::string& fragment_entry,
                const std::string& geometry_entry) {
+                if (!language.has_value()) {
+                    throw std::invalid_argument(
+                        "TcShader.from_sources requires an explicit shader language");
+                }
                 TcShaderCreateInfo create_info{};
                 create_info.sources.vertex = vertex;
                 create_info.sources.fragment = fragment;
@@ -300,13 +305,13 @@ void bind_shader(nb::module_& m) {
                 create_info.sources.vertex_entry = vertex_entry;
                 create_info.sources.fragment_entry = fragment_entry;
                 create_info.sources.geometry_entry = geometry_entry;
-                create_info.language = language;
+                create_info.language = *language;
                 create_info.artifact_policy = artifact_policy;
                 return TcShader::from_sources(create_info);
             },
             nb::arg("vertex"), nb::arg("fragment"),
             nb::arg("geometry") = "", nb::arg("name") = "", nb::arg("source_path") = "",
-            nb::arg("language") = TC_SHADER_LANGUAGE_GLSL,
+            nb::arg("language") = nb::none(),
             nb::arg("artifact_policy") = TC_SHADER_ARTIFACT_OPTIONAL,
             nb::arg("vertex_entry") = "",
             nb::arg("fragment_entry") = "",

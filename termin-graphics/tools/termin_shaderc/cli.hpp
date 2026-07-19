@@ -6,7 +6,7 @@
 namespace termin_shaderc {
 
 struct CompileOptions {
-    std::string language = "glsl";
+    std::string language;
     std::string target;
     std::string stage;
     std::string input;

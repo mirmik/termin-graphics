@@ -65,15 +65,6 @@ TGFX_API bool tc_shader_set_sources_desc(
     const tc_shader_source_desc* desc
 );
 
-TGFX_API tc_shader_handle tc_shader_from_sources(
-    const char* vertex_source,
-    const char* fragment_source,
-    const char* geometry_source,
-    const char* name,
-    const char* source_path,
-    const char* uuid
-);
-
 TGFX_API tc_shader_handle tc_shader_from_sources_desc(
     const tc_shader_create_desc* desc
 );
@@ -91,29 +82,9 @@ TGFX_API tc_shader_handle tc_shader_from_sources_desc(
 //
 // NOT for material-authored shaders — those come from `.shader` files
 // and want normal ref-counted lifetime via TcShader wrappers.
-TGFX_API tc_shader_handle tc_shader_register_static(
-    const char* vertex_source,
-    const char* fragment_source,
-    const char* geometry_source,
-    const char* name
-);
-
-// Same ownership semantics as tc_shader_register_static(), but uses a stable
-// caller-provided UUID instead of an auto-generated shader-N UUID. Engine
-// shaders that need offline SPIR-V artifacts should use this API so build
-// tools can write artifacts under deterministic filenames.
-TGFX_API tc_shader_handle tc_shader_register_static_uuid(
-    const char* vertex_source,
-    const char* fragment_source,
-    const char* geometry_source,
-    const char* name,
-    const char* uuid
-);
-
-// Same as tc_shader_register_static_uuid(), but includes language and artifact
-// policy in the initial identity. Use this when registering non-default shader
-// languages so repeated registration does not transiently rewrite the shader
-// identity and invalidate existing artifacts.
+// Register a process-lifetime shader with an explicit source language and
+// artifact policy. Authored and engine shaders must never infer GLSL merely
+// because language metadata was omitted.
 TGFX_API tc_shader_handle tc_shader_register_static_uuid_ex(
     const char* vertex_source,
     const char* fragment_source,

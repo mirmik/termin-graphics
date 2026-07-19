@@ -1641,7 +1641,7 @@ bool tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
     }
     const std::filesystem::path artifact_path(path_text);
 
-    tc_shader_language language = TC_SHADER_LANGUAGE_GLSL;
+    tc_shader_language language = TC_SHADER_LANGUAGE_UNSPECIFIED;
     if (!shader_language_from_name(shader.language, language)) {
         tc_log(TC_LOG_ERROR,
                "tgfx2 engine shader dev compile: unsupported source language '%s' for shader '%s'",

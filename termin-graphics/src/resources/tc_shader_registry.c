@@ -300,7 +300,7 @@ tc_shader_handle tc_shader_create(const char* uuid) {
     tc_resource_copy_uuid(shader->uuid, sizeof(shader->uuid), final_uuid, "tc_shader_create");
     shader->version = 1;
     shader->ref_count = 0;
-    shader->language = TC_SHADER_LANGUAGE_GLSL;
+    shader->language = TC_SHADER_LANGUAGE_UNSPECIFIED;
     shader->artifact_policy = TC_SHADER_ARTIFACT_OPTIONAL;
     shader->pool_index = h.index;
     shader->original_handle = tc_shader_handle_invalid();
@@ -503,6 +503,12 @@ bool tc_shader_set_sources_desc(
     const tc_shader_source_desc* desc
 ) {
     if (!shader || !desc) return false;
+    if (!tc_shader_language_valid((tc_shader_language)shader->language)) {
+        tc_log(TC_LOG_ERROR,
+               "tc_shader_set_sources_desc: shader '%s' has no explicit source language",
+               shader->name ? shader->name : shader->uuid);
+        return false;
+    }
 
     const char* ve = (desc->vertex_entry && desc->vertex_entry[0]) ? desc->vertex_entry : "main";
     const char* fe = (desc->fragment_entry && desc->fragment_entry[0]) ? desc->fragment_entry : "main";
@@ -646,72 +652,6 @@ tc_shader_handle tc_shader_from_sources_desc(
     return h;
 }
 
-tc_shader_handle tc_shader_from_sources(
-    const char* vertex_source,
-    const char* fragment_source,
-    const char* geometry_source,
-    const char* name,
-    const char* source_path,
-    const char* uuid
-) {
-    const tc_shader_create_desc desc = {
-        {
-            vertex_source,
-            fragment_source,
-            geometry_source,
-            name,
-            source_path,
-            NULL,
-            NULL,
-            NULL
-        },
-        uuid,
-        TC_SHADER_LANGUAGE_GLSL,
-        TC_SHADER_ARTIFACT_OPTIONAL
-    };
-    return tc_shader_from_sources_desc(&desc);
-}
-
-tc_shader_handle tc_shader_register_static(
-    const char* vertex_source,
-    const char* fragment_source,
-    const char* geometry_source,
-    const char* name
-) {
-    // Re-use the normal creation / hash-dedup path, then mark the shader
-    // as static and install the registry-held ref. The `is_static` flag
-    // guards against double-ref on repeated calls with the same source
-    // (hash hit returns the already-static handle — no extra add_ref).
-    tc_shader_handle h = tc_shader_from_sources(
-        vertex_source, fragment_source, geometry_source,
-        name, /*source_path=*/NULL, /*uuid=*/NULL);
-    if (tc_shader_handle_is_invalid(h)) return h;
-
-    tc_shader_retain_static(h);
-    return h;
-}
-
-tc_shader_handle tc_shader_register_static_uuid(
-    const char* vertex_source,
-    const char* fragment_source,
-    const char* geometry_source,
-    const char* name,
-    const char* uuid
-) {
-    if (!uuid || uuid[0] == '\0') {
-        tc_log(TC_LOG_ERROR, "tc_shader_register_static_uuid: uuid required");
-        return tc_shader_handle_invalid();
-    }
-
-    tc_shader_handle h = tc_shader_from_sources(
-        vertex_source, fragment_source, geometry_source,
-        name, /*source_path=*/NULL, uuid);
-    if (tc_shader_handle_is_invalid(h)) return h;
-
-    tc_shader_retain_static(h);
-    return h;
-}
-
 tc_shader_handle tc_shader_register_static_uuid_ex(
     const char* vertex_source,
     const char* fragment_source,
@@ -803,7 +743,7 @@ bool tc_shader_set_language(tc_shader* shader, tc_shader_language language) {
 
 tc_shader_language tc_shader_get_language(const tc_shader* shader) {
     if (!shader || !tc_shader_language_valid((tc_shader_language)shader->language)) {
-        return TC_SHADER_LANGUAGE_GLSL;
+        return TC_SHADER_LANGUAGE_UNSPECIFIED;
     }
     return (tc_shader_language)shader->language;
 }
