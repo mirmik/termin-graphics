@@ -47,6 +47,11 @@
       "id": "termin-runtime",
       "path": "termin-runtime",
       "kinds": ["cmake", "runtime"]
+    },
+    {
+      "id": "termin-window",
+      "path": "termin-window",
+      "kinds": ["cmake", "platform"]
     }
   ]
 }

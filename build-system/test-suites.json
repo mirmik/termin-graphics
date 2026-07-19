@@ -32,13 +32,13 @@
         "reason": "Compiled by termin_tests only when the C++ Python bindings are enabled."
       },
       {
-        "path": "termin-display/tests/test_backend_window_triangle.cpp",
+        "path": "termin-window/tests/test_backend_window_triangle.cpp",
         "profiles": ["linux-full", "windows-d3d11"],
         "capabilities": ["window"],
         "reason": "Creates an SDL window and is deliberately outside the headless PR graph."
       },
       {
-        "path": "termin-display/tests/test_backend_window_d3d11_present.cpp",
+        "path": "termin-window/tests/test_backend_window_d3d11_present.cpp",
         "profiles": ["windows-d3d11"],
         "capabilities": ["window", "d3d11"],
         "reason": "Requires the Windows D3D11 presentation path."
@@ -248,6 +248,7 @@
     {"id": "termin-components-render-tests-native", "module": "termin-components-render", "executor": "ctest", "roots": ["termin-components/termin-components-render/tests"]},
     {"id": "termin-csg-tests-native", "module": "termin-csg", "executor": "ctest", "roots": ["termin-csg/tests"]},
     {"id": "termin-display-tests-native", "module": "termin-display", "executor": "ctest", "roots": ["termin-display/tests"]},
+    {"id": "termin-window-tests-native", "module": "termin-window", "executor": "ctest", "roots": ["termin-window/tests"]},
     {"id": "termin-engine-tests-native", "module": "termin-engine", "executor": "ctest", "roots": ["termin-engine/tests"]},
     {"id": "termin-graphics-tests-native", "module": "termin-graphics", "executor": "ctest", "roots": ["termin-graphics/tests"]},
     {"id": "termin-gui-native-tests", "module": "termin-gui-native", "executor": "ctest", "roots": ["termin-gui-native/tests"]},
