@@ -22,11 +22,25 @@ def _log_cleanup_error(message: str) -> None:
     log.error(message)
 
 
-def _register_python_pass_type(type_name: str, cls: type) -> bool:
+def _register_python_pass_type(
+    type_name: str,
+    cls: type,
+    *,
+    parent_name: str | None = None,
+    inspect_fields: dict | None = None,
+    metadata: dict | None = None,
+) -> bool:
     if tc_pass_registry_is_native(type_name):
         return False
     if not tc_pass_registry_has(type_name):
-        tc_pass_registry_register_python(type_name, cls)
+        if not tc_pass_registry_register_python(
+            type_name,
+            cls,
+            parent_name,
+            inspect_fields or {},
+            metadata or {},
+        ):
+            return False
     _registered_python_pass_types.add(type_name)
     return True
 
@@ -76,21 +90,6 @@ def _inspect_registry():
 
 
 def _register_python_pass_class(cls: type) -> None:
-    registered_python = _register_python_pass_type(cls.__name__, cls)
-    if not registered_python:
-        return
-
-    registry = _inspect_registry()
-    own_fields = cls.__dict__.get("inspect_fields", {})
-    if own_fields:
-        registry.register_python_fields(cls.__name__, own_fields)
-
-    metadata = registry.get_type_metadata(cls.__name__)
-    if not isinstance(metadata, dict):
-        metadata = {}
-    metadata["graph"] = _collect_graph_socket_metadata(cls)
-    registry.set_type_metadata(cls.__name__, metadata)
-
     parent_name = None
     for klass in cls.__mro__[1:]:
         if klass.__name__ in ("PythonFramePass", "FramePass", "RenderFramePass"):
@@ -100,8 +99,17 @@ def _register_python_pass_class(cls: type) -> None:
             parent_name = klass.__name__
             break
 
-    if parent_name:
-        registry.set_type_parent(cls.__name__, parent_name)
+    registered_python = _register_python_pass_type(
+        cls.__name__,
+        cls,
+        parent_name=parent_name,
+        inspect_fields=cls.__dict__.get("inspect_fields", {}),
+        metadata={"graph": _collect_graph_socket_metadata(cls)},
+    )
+    if not registered_python:
+        _log_cleanup_error(
+            f"[PythonFramePass] registration rejected for '{cls.__name__}'"
+        )
 
 
 class PythonFramePass:
@@ -300,7 +308,12 @@ RenderFramePass = PythonFramePass
 
 def register_loaded_python_passes() -> None:
     """Re-register loaded pass classes after a complete runtime shutdown."""
-    _register_python_pass_type("PythonFramePass", PythonFramePass)
+    _register_python_pass_type(
+        "PythonFramePass",
+        PythonFramePass,
+        inspect_fields=PythonFramePass.inspect_fields,
+        metadata={"graph": _collect_graph_socket_metadata(PythonFramePass)},
+    )
     pending = list(PythonFramePass.__subclasses__())
     seen: set[type] = set()
     while pending:

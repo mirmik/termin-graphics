@@ -52,14 +52,15 @@ void GraphAliasPass::execute(ExecuteContext& ctx) {
     (void)ctx;
 }
 
-TC_DEFINE_FRAME_PASS_FACTORY_DERIVED(GraphAliasPass, CxxFramePass);
-
 void GraphAliasPass::register_type() {
-    register_frame_pass_GraphAliasPass();
-    _register_inspect_read_resources();
-    _register_inspect_write_resources();
-    _register_inspect_alias_resources();
-    _register_inspect_metadata_graph();
+    auto descriptor = FramePassTypeDescriptorBuilder::native<GraphAliasPass>(
+        "GraphAliasPass", "termin-render");
+    auto& inspect = descriptor.inspect();
+    _register_inspect_read_resources(inspect);
+    _register_inspect_write_resources(inspect);
+    _register_inspect_alias_resources(inspect);
+    _register_inspect_metadata_graph(inspect);
+    (void)descriptor.commit();
 }
 
 } // namespace termin

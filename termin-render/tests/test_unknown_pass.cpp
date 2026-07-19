@@ -3,6 +3,7 @@
 GUARD_TEST_MAIN();
 
 #include <tc_inspect_cpp.hpp>
+#include <termin/render/builtin_passes.hpp>
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/unknown_pass.hpp>
 #include <termin/render/unknown_pass_ops.hpp>
@@ -37,22 +38,14 @@ public:
     }
 };
 
-tc_pass* create_probe(void*) {
-    auto* pass = new UnknownPassProbe();
-    return pass->tc_pass_ptr();
-}
-
 void register_probe() {
-    tc_pass_registry_register(kProbeType, create_probe, nullptr, TC_NATIVE_PASS);
-    if (!tc::InspectRegistry::instance().find_field(kProbeType, "exposure")) {
-        tc::InspectRegistry::instance().add<UnknownPassProbe, int>(
-            kProbeType,
-            &UnknownPassProbe::exposure,
-            "exposure",
-            "Exposure",
-            "int"
-        );
-    }
+    termin::register_builtin_render_pass_types();
+    auto descriptor = termin::FramePassTypeDescriptorBuilder::native<UnknownPassProbe>(
+        kProbeType, "termin-render-test");
+    (void)descriptor.inspect().add<UnknownPassProbe, int>(
+        &UnknownPassProbe::exposure,
+        tc::InspectFieldSpec{kProbeType, "exposure", "Exposure", "int"});
+    REQUIRE(descriptor.commit());
 }
 
 } // namespace
@@ -267,10 +260,28 @@ TEST_CASE("UnknownPass preparation rejects external live instances") {
 TEST_CASE("UnknownPass registration survives registry rebootstrap") {
     tc_pass_registry_cleanup();
     CHECK(!tc_pass_registry_has("UnknownPass"));
-    termin::ensure_unknown_pass_registered();
+    termin::register_builtin_render_pass_types();
     REQUIRE(tc_pass_registry_has("UnknownPass"));
     tc_pass* placeholder = tc_pass_registry_create("UnknownPass");
     REQUIRE(placeholder != nullptr);
     CHECK_EQ(std::string(tc_pass_type_name(placeholder)), "UnknownPass");
     tc_pass_delete_unowned(placeholder);
+}
+
+TEST_CASE("Frame pass descriptor failure publishes neither pass nor inspect facet") {
+    constexpr const char* rejected_type = "RejectedFramePassDescriptor";
+    tc_runtime_type_registry_unregister_type(rejected_type);
+
+    auto descriptor = termin::FramePassTypeDescriptorBuilder::native<UnknownPassProbe>(
+        rejected_type,
+        "termin-render-test",
+        "MissingFramePassParent");
+    (void)descriptor.inspect().add<UnknownPassProbe, int>(
+        &UnknownPassProbe::exposure,
+        tc::InspectFieldSpec{rejected_type, "exposure", "Exposure", "int"});
+
+    CHECK(!descriptor.commit());
+    CHECK(!tc_runtime_type_registry_has_type(rejected_type));
+    CHECK(!tc_pass_registry_has(rejected_type));
+    CHECK(!tc::InspectRegistry::instance().has_type(rejected_type));
 }
