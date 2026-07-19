@@ -39,21 +39,17 @@ class GLBRuntimePlugin:
 
         rm = context.resource_manager
         name = context.name
-        if result.uuid is None and rm.get_glb_asset(name) is not None:
-            return
-
         asset = None
-        if result.uuid:
-            candidate = rm.get_glb_asset_by_uuid(result.uuid)
-            if isinstance(candidate, GLBAsset):
-                asset = candidate
+        candidate = rm.get_glb_asset_by_uuid(context.uuid)
+        if isinstance(candidate, GLBAsset):
+            asset = candidate
 
         if asset is None:
             asset = GLBAsset(
                 scene_data=None,
                 name=name,
                 source_path=result.path,
-                uuid=result.uuid,
+                uuid=context.uuid,
             )
 
         asset.set_resource_manager(rm)
@@ -62,7 +58,7 @@ class GLBRuntimePlugin:
 
     def reload(self, context: "AssetContext", result: "PreLoadResult") -> None:
         rm = context.resource_manager
-        asset = rm.get_glb_asset_by_uuid(result.uuid) if result.uuid else rm.get_glb_asset(context.name)
+        asset = rm.get_runtime_asset_by_uuid(self.type_id, context.uuid)
         if asset is None:
             return
 
@@ -76,7 +72,7 @@ class GLBRuntimePlugin:
         asset.reload()
 
     def unregister(self, context: "AssetContext", result: "PreLoadResult") -> None:
-        context.resource_manager.unregister_runtime_asset(self.type_id, context.name, uuid=result.uuid)
+        context.resource_manager.unregister_runtime_asset_by_uuid(self.type_id, context.uuid)
 
 
 class GLBAssetPlugin(GLBImportPlugin, GLBRuntimePlugin):
