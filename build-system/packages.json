@@ -185,6 +185,14 @@
       ]
     },
     {
+      "path": "termin-navmesh",
+      "distribution": "termin-navmesh",
+      "features": ["recast"],
+      "native_extensions": [
+        {"extension": "termin.navmesh._navmesh_native", "target": "_navmesh_native", "features": ["recast"]}
+      ]
+    },
+    {
       "path": "termin-components/termin-components-voxels",
       "distribution": "termin-components-voxels"
     },
@@ -204,14 +212,6 @@
       "distribution": "termin-render-passes",
       "native_extensions": [
         {"extension": "termin.render_passes._render_passes_native", "target": "_render_passes_native"}
-      ]
-    },
-    {
-      "path": "termin-navmesh",
-      "distribution": "termin-navmesh",
-      "features": ["recast"],
-      "native_extensions": [
-        {"extension": "termin.navmesh._navmesh_native", "target": "_navmesh_native", "features": ["recast"]}
       ]
     },
     {

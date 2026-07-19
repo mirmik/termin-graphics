@@ -356,6 +356,12 @@
       "roots": ["termin-components/termin-components-render/tests/python"]
     },
     {
+      "id": "termin-components-voxels-tests",
+      "module": "termin-components-voxels",
+      "executor": "pytest",
+      "roots": ["termin-components/termin-components-voxels/tests"]
+    },
+    {
       "id": "termin-components-skeleton-tests",
       "module": "termin-components-skeleton",
       "executor": "pytest",
