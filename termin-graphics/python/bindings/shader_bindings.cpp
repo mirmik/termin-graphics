@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "tgfx/tgfx_shader_handle.hpp"
+#include "tgfx/tgfx_shader_program_handle.hpp"
 #include "tgfx/resources/tc_shader.h"
 #include "tgfx2/builtin_shader_sources.hpp"
 
@@ -95,6 +96,40 @@ nb::dict shader_resource_requirement_to_dict(
             fields.append(fd);
         }
         result["fields"] = fields;
+    }
+    return result;
+}
+
+nb::dict shader_program_render_state_to_dict(const tc_render_state& state) {
+    nb::dict result;
+    result["polygon_mode"] = state.polygon_mode;
+    result["cull"] = state.cull != 0;
+    result["depth_test"] = state.depth_test != 0;
+    result["depth_write"] = state.depth_write != 0;
+    result["blend"] = state.blend != 0;
+    result["blend_src"] = state.blend_src;
+    result["blend_dst"] = state.blend_dst;
+    result["depth_func"] = state.depth_func;
+    return result;
+}
+
+tc_render_state shader_program_render_state_from_dict(const nb::dict& values) {
+    tc_render_state result = tc_render_state_opaque();
+    if (values.contains("polygon_mode")) {
+        result.polygon_mode = nb::cast<uint8_t>(values["polygon_mode"]);
+    }
+    if (values.contains("cull")) result.cull = nb::cast<bool>(values["cull"]);
+    if (values.contains("depth_test")) result.depth_test = nb::cast<bool>(values["depth_test"]);
+    if (values.contains("depth_write")) result.depth_write = nb::cast<bool>(values["depth_write"]);
+    if (values.contains("blend")) result.blend = nb::cast<bool>(values["blend"]);
+    if (values.contains("blend_src")) {
+        result.blend_src = nb::cast<uint8_t>(values["blend_src"]);
+    }
+    if (values.contains("blend_dst")) {
+        result.blend_dst = nb::cast<uint8_t>(values["blend_dst"]);
+    }
+    if (values.contains("depth_func")) {
+        result.depth_func = nb::cast<uint8_t>(values["depth_func"]);
     }
     return result;
 }
@@ -423,8 +458,203 @@ void bind_shader(nb::module_& m) {
             return "<TcShader " + name + " v" + std::to_string(s.version()) + ">";
         });
 
+    nb::class_<TcShaderProgram>(m, "TcShaderProgram")
+        .def(nb::init<>())
+        .def_static("declare", &TcShaderProgram::declare, nb::arg("uuid"), nb::arg("name"))
+        .def_static("find", &TcShaderProgram::find, nb::arg("uuid"))
+        .def_prop_ro("is_valid", &TcShaderProgram::is_valid)
+        .def_prop_ro("uuid", [](const TcShaderProgram& value) {
+            return std::string(value.uuid());
+        })
+        .def_prop_ro("name", [](const TcShaderProgram& value) {
+            return std::string(value.name());
+        })
+        .def_prop_ro("version", &TcShaderProgram::version)
+        .def_prop_ro("source_path", [](const TcShaderProgram& value) {
+            const tc_shader_program* program = value.get();
+            return std::string(program && program->source_path ? program->source_path : "");
+        })
+        .def_prop_ro("language", [](const TcShaderProgram& value) {
+            const tc_shader_program* program = value.get();
+            return std::string(program && program->language ? program->language : "");
+        })
+        .def_prop_ro("features", [](const TcShaderProgram& value) {
+            const tc_shader_program* program = value.get();
+            return program ? program->features : 0u;
+        })
+        .def_prop_ro("properties", [](const TcShaderProgram& value) {
+            nb::list result;
+            const tc_shader_program* program = value.get();
+            if (!program) return result;
+            for (uint32_t i = 0; i < program->property_count; ++i) {
+                const tc_shader_program_property& property = program->properties[i];
+                nb::dict item;
+                item["name"] = std::string(property.name);
+                item["property_type"] = std::string(property.property_type);
+                item["label"] = std::string(property.label);
+                item["has_default"] = property.has_default != 0;
+                if (property.has_default) {
+                    switch ((tc_uniform_type)property.default_value.type) {
+                        case TC_UNIFORM_BOOL:
+                            item["default"] = property.default_value.data.i != 0;
+                            break;
+                        case TC_UNIFORM_INT:
+                            item["default"] = property.default_value.data.i;
+                            break;
+                        case TC_UNIFORM_FLOAT:
+                            item["default"] = property.default_value.data.f;
+                            break;
+                        default:
+                            item["default"] = nb::none();
+                            break;
+                    }
+                }
+                item["range_min"] = property.has_range_min
+                    ? nb::cast(property.range_min)
+                    : nb::none();
+                item["range_max"] = property.has_range_max
+                    ? nb::cast(property.range_max)
+                    : nb::none();
+                result.append(item);
+            }
+            return result;
+        })
+        .def_prop_ro("phases", [](const TcShaderProgram& value) {
+            nb::list result;
+            const tc_shader_program* program = value.get();
+            if (!program) return result;
+            for (uint32_t i = 0; i < program->phase_count; ++i) {
+                const tc_shader_program_phase& phase = program->phases[i];
+                nb::dict item;
+                item["phase_mark"] = std::string(phase.phase_mark);
+                item["priority"] = phase.priority;
+                item["state"] = shader_program_render_state_to_dict(phase.state);
+                item["shader"] = TcShader(phase.shader);
+                result.append(item);
+            }
+            return result;
+        })
+        .def("set_payload", [](
+            TcShaderProgram& value,
+            const std::string& name,
+            const std::string& source_path,
+            const std::string& language,
+            uint32_t features,
+            nb::list property_values,
+            nb::list phase_values
+        ) {
+            tc_shader_program* program = value.get();
+            if (!program) throw std::runtime_error("TcShaderProgram is stale");
+
+            std::vector<std::string> property_names;
+            std::vector<std::string> property_types;
+            std::vector<std::string> property_labels;
+            std::vector<tc_uniform_value> defaults;
+            std::vector<uint8_t> has_defaults;
+            std::vector<tc_shader_program_property_desc> properties;
+            const size_t property_count = nb::len(property_values);
+            property_names.reserve(property_count);
+            property_types.reserve(property_count);
+            property_labels.reserve(property_count);
+            defaults.resize(property_count);
+            has_defaults.resize(property_count);
+            properties.reserve(property_count);
+            for (size_t i = 0; i < property_count; ++i) {
+                nb::dict item = nb::cast<nb::dict>(property_values[i]);
+                property_names.push_back(nb::cast<std::string>(item["name"]));
+                property_types.push_back(nb::cast<std::string>(item["property_type"]));
+                property_labels.push_back(
+                    item.contains("label") ? nb::cast<std::string>(item["label"]) : std::string());
+                tc_uniform_value& default_value = defaults[i];
+                memset(&default_value, 0, sizeof(default_value));
+                if (item.contains("default") && !item["default"].is_none()) {
+                    nb::object object = nb::borrow<nb::object>(item["default"]);
+                    has_defaults[i] = 1;
+                    if (nb::isinstance<nb::bool_>(object)) {
+                        default_value.type = TC_UNIFORM_BOOL;
+                        default_value.data.i = nb::cast<bool>(object) ? 1 : 0;
+                    } else if (nb::isinstance<nb::int_>(object)) {
+                        default_value.type = TC_UNIFORM_INT;
+                        default_value.data.i = nb::cast<int32_t>(object);
+                    } else if (nb::isinstance<nb::float_>(object)) {
+                        default_value.type = TC_UNIFORM_FLOAT;
+                        default_value.data.f = nb::cast<float>(object);
+                    } else {
+                        throw std::invalid_argument(
+                            "TcShaderProgram property defaults currently require bool, int, or float");
+                    }
+                }
+                tc_shader_program_property_desc desc{};
+                desc.name = property_names.back().c_str();
+                desc.property_type = property_types.back().c_str();
+                desc.label = property_labels.back().empty() ? nullptr : property_labels.back().c_str();
+                desc.default_value = has_defaults[i] ? &defaults[i] : nullptr;
+                if (item.contains("range_min") && !item["range_min"].is_none()) {
+                    desc.range_min = nb::cast<double>(item["range_min"]);
+                    desc.has_range_min = 1;
+                }
+                if (item.contains("range_max") && !item["range_max"].is_none()) {
+                    desc.range_max = nb::cast<double>(item["range_max"]);
+                    desc.has_range_max = 1;
+                }
+                properties.push_back(desc);
+            }
+
+            std::vector<std::string> phase_marks;
+            std::vector<tc_shader_program_phase_desc> phases;
+            const size_t phase_count = nb::len(phase_values);
+            phase_marks.reserve(phase_count);
+            phases.reserve(phase_count);
+            for (size_t i = 0; i < phase_count; ++i) {
+                nb::dict item = nb::cast<nb::dict>(phase_values[i]);
+                phase_marks.push_back(nb::cast<std::string>(item["phase_mark"]));
+                tc_shader_program_phase_desc desc{};
+                desc.phase_mark = phase_marks.back().c_str();
+                desc.priority = item.contains("priority") ? nb::cast<int32_t>(item["priority"]) : 0;
+                desc.state = item.contains("state")
+                    ? shader_program_render_state_from_dict(nb::cast<nb::dict>(item["state"]))
+                    : tc_render_state_opaque();
+                phases.push_back(desc);
+            }
+
+            tc_shader_program_payload_desc desc{};
+            desc.name = name.c_str();
+            desc.source_path = source_path.empty() ? nullptr : source_path.c_str();
+            desc.language = language.empty() ? nullptr : language.c_str();
+            desc.features = features;
+            desc.properties = properties.empty() ? nullptr : properties.data();
+            desc.property_count = static_cast<uint32_t>(properties.size());
+            desc.phases = phases.empty() ? nullptr : phases.data();
+            desc.phase_count = static_cast<uint32_t>(phases.size());
+            if (!tc_shader_program_set_payload(program, &desc)) {
+                throw std::runtime_error("TcShaderProgram payload was rejected");
+            }
+        },
+        nb::arg("name"),
+        nb::arg("source_path") = "",
+        nb::arg("language") = "",
+        nb::arg("features") = 0,
+        nb::arg("properties") = nb::list(),
+        nb::arg("phases") = nb::list())
+        .def("find_phase", [](const TcShaderProgram& value, const std::string& mark) -> nb::object {
+            const tc_shader_program_phase* phase = tc_shader_program_find_phase(value.get(), mark.c_str());
+            if (!phase) return nb::none();
+            nb::dict result;
+            result["phase_mark"] = std::string(phase->phase_mark);
+            result["priority"] = phase->priority;
+            result["state"] = shader_program_render_state_to_dict(phase->state);
+            result["shader"] = TcShader(phase->shader);
+            return result;
+        })
+        .def("__repr__", [](const TcShaderProgram& value) {
+            if (!value.is_valid()) return std::string("<TcShaderProgram invalid>");
+            return std::string("<TcShaderProgram ") + value.uuid() + " v"
+                + std::to_string(value.version()) + ">";
+        });
+
     // Shader registry info functions
     m.def("shader_count", []() { return tc_shader_count(); });
+    m.def("shader_program_count", []() { return tc_shader_program_count(); });
     m.def("shader_get_all_info", []() {
         nb::list result;
         size_t count = 0;

@@ -58,6 +58,7 @@ target_link_libraries(glad PUBLIC ${CMAKE_DL_LIBS})
 set(TGFX_C_SOURCES
     src/resources/tc_shader_abi.c
     src/resources/tc_shader_registry.c
+    src/resources/tc_shader_program_registry.c
     src/resources/tc_texture_registry.c
     src/resources/tc_material_registry.c
 )
@@ -483,6 +484,7 @@ if(BUILD_TESTS)
         tests/tests_log.cpp
         tests/tests_phase.cpp
         tests/tests_shader_resource_layout.cpp
+        tests/tests_shader_program.cpp
     )
     target_include_directories(tgfx_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/tests

@@ -180,6 +180,62 @@ FragmentOutput fs_main(FragmentInput input) {
     assert shader.fragment_entry == "fs_main"
 
 
+def test_shader_program_registry_owns_canonical_multiphase_payload():
+    program = tgfx.TcShaderProgram.declare("python-shader-program", "Python Program")
+    same_program = tgfx.TcShaderProgram.find("python-shader-program")
+
+    assert program.is_valid
+    assert same_program.is_valid
+    assert same_program.uuid == program.uuid
+    assert program.version == 1
+
+    program.set_payload(
+        name="Python Program",
+        source_path="materials/python.shader",
+        language="slang",
+        features=3,
+        properties=[
+            {
+                "name": "roughness",
+                "property_type": "Float",
+                "label": "Roughness",
+                "default": 0.5,
+                "range_min": 0.0,
+                "range_max": 1.0,
+            }
+        ],
+        phases=[
+            {"phase_mark": "opaque", "priority": 4},
+            {
+                "phase_mark": "transparent",
+                "priority": 8,
+                "state": {"blend": True, "depth_write": False},
+            },
+        ],
+    )
+
+    assert program.version == 2
+    assert program.source_path == "materials/python.shader"
+    assert program.language == "slang"
+    assert program.features == 3
+    assert program.properties == [
+        {
+            "name": "roughness",
+            "property_type": "Float",
+            "label": "Roughness",
+            "has_default": True,
+            "default": 0.5,
+            "range_min": 0.0,
+            "range_max": 1.0,
+        }
+    ]
+    phases = program.phases
+    assert [phase["phase_mark"] for phase in phases] == ["opaque", "transparent"]
+    assert phases[0]["shader"].uuid != phases[1]["shader"].uuid
+    assert program.find_phase("transparent")["state"]["blend"] is True
+    assert program.find_phase("missing") is None
+
+
 def test_tc_material_does_not_expose_legacy_from_parsed_forwarder():
     from termin.materials import TcMaterial
 
