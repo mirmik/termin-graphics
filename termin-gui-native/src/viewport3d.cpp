@@ -217,10 +217,20 @@ void Viewport3D::paint(tc_ui_document* document, tc_ui_paint_context* context) {
 bool Viewport3D::sync_pointer_position(const tc_ui_pointer_event& event) {
     if (!surface_valid())
         return false;
-    const tc_ui_rect rect = pixel_aligned_geometry(bounds()).rect;
+    const ViewportPixelGeometry geometry = pixel_aligned_geometry(bounds());
+    if (geometry.rect.width <= 0.0f || geometry.rect.height <= 0.0f)
+        return false;
     try {
-        return surface_host_->pointer_move(static_cast<double>(event.x - rect.x),
-                                           static_cast<double>(event.y - rect.y));
+        const ViewportSurfaceSize pixels = surface_host_->framebuffer_size();
+        if (pixels.width <= 0 || pixels.height <= 0) {
+            tc_log_error("[termin-gui-native] Viewport3D cannot map input to an empty surface");
+            return false;
+        }
+        const double x = static_cast<double>(event.x - geometry.rect.x) *
+                         static_cast<double>(pixels.width) / geometry.rect.width;
+        const double y = static_cast<double>(event.y - geometry.rect.y) *
+                         static_cast<double>(pixels.height) / geometry.rect.height;
+        return surface_host_->pointer_move(x, y);
     } catch (const std::exception& error) {
         tc_log_error("[termin-gui-native] Viewport3D pointer move failed: %s", error.what());
     } catch (...) {

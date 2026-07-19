@@ -15,6 +15,7 @@ struct HostTrace {
     bool valid = true;
     uint32_t texture = 73;
     ViewportSurfaceSize size{64, 64};
+    bool resize_updates_size = true;
     std::vector<std::string> ordering;
     std::vector<std::tuple<double, double>> moves;
     std::vector<std::tuple<int, int, int, uint32_t>> buttons;
@@ -32,7 +33,8 @@ public:
     ViewportSurfaceSize framebuffer_size() const override { return trace_->size; }
     bool resize(int width, int height) override {
         trace_->ordering.emplace_back("resize");
-        trace_->size = {width, height};
+        if (trace_->resize_updates_size)
+            trace_->size = {width, height};
         return true;
     }
     bool pointer_move(double x, double y) override {
@@ -170,10 +172,30 @@ void test_detach_destroy_and_stale_surface_are_safe() {
     assert(weak_host2.expired());
 }
 
+void test_pointer_coordinates_scale_to_display_pixels() {
+    Document document;
+    auto trace = std::make_shared<HostTrace>();
+    trace->size = {200, 100};
+    trace->resize_updates_size = false;
+    auto host = std::make_shared<TestSurfaceHost>(trace);
+    auto* viewport = new Viewport3D();
+    const tc_widget_handle handle = document.adopt(viewport);
+    assert(document.add_root(*viewport));
+    document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 50.0f});
+    viewport->set_surface_host(host);
+
+    assert(document.dispatch_pointer_event(tc_ui_pointer_event{
+               TC_UI_POINTER_MOVE, 25.0f, 10.0f, 0, 0, 0, 0.0f, 0.0f}) ==
+           TC_UI_EVENT_HANDLED);
+    assert((trace->moves.back() == std::tuple<double, double>{50.0, 20.0}));
+    assert(tc_ui_document_destroy_widget(document.get(), handle));
+}
+
 } // namespace
 
 int main() {
     test_surface_resize_paint_input_and_drag_contract();
     test_detach_destroy_and_stale_surface_are_safe();
+    test_pointer_coordinates_scale_to_display_pixels();
     return EXIT_SUCCESS;
 }

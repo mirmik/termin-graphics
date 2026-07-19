@@ -1090,22 +1090,27 @@ def test_native_viewport3d_stale_surface_and_destroy_release_are_safe():
     assert weak_surface() is None
 
 
-def test_display_fbo_surface_implements_native_viewport_protocol():
-    from termin.display import FBOSurface
+def test_display_viewport_host_separates_surface_and_input_protocols():
+    from termin.display import DisplayViewportHost, FBOSurface
 
-    protocol_methods = (
+    surface_methods = (
         "is_valid",
         "get_tgfx_color_tex_id",
         "framebuffer_size",
         "resize",
+    )
+    input_methods = (
         "dispatch_pointer_move",
         "dispatch_pointer_button",
         "dispatch_scroll",
         "dispatch_key",
         "dispatch_text",
     )
-    for method_name in protocol_methods:
+    for method_name in surface_methods:
         assert callable(getattr(FBOSurface, method_name))
+    for method_name in input_methods:
+        assert method_name not in dir(FBOSurface)
+        assert callable(getattr(DisplayViewportHost, method_name))
 
 
 def test_native_scene_view_model_transform_drag_callbacks_and_embedding():
