@@ -12,27 +12,31 @@ class FramePassRegistry:
 
     def __init__(self) -> None:
         self.classes: dict[str, type] = {}
+        self.owners: dict[str, str] = {}
 
     def register(self, name: str, cls: type) -> None:
         self.classes[name] = cls
         try:
-            from termin_modules.module_context import record_frame_pass
+            from termin_modules.module_context import owner_for_python_module
         except ModuleNotFoundError as exc:
             if exc.name not in ("termin_modules", "termin_modules.module_context"):
                 log.error("Failed to load module ownership context", exc_info=True)
-            return
+            owner = "termin-render-python"
         except Exception:
             log.error("Failed to load module ownership context", exc_info=True)
-            return
-
-        try:
-            record_frame_pass(name)
-        except Exception:
-            log.error(f"Failed to record module ownership for frame pass class {name}", exc_info=True)
+            owner = "termin-render-python"
+        else:
+            owner = owner_for_python_module(cls.__module__) or "termin-render-python"
+        self.owners[name] = owner
 
     def unregister(self, name: str) -> None:
-        if name in self.classes:
-            del self.classes[name]
+        self.classes.pop(name, None)
+        self.owners.pop(name, None)
+
+    def unregister_owner(self, owner: str) -> None:
+        for name, registered_owner in tuple(self.owners.items()):
+            if registered_owner == owner:
+                self.unregister(name)
 
     def get(self, name: str) -> type | None:
         return self.classes.get(name)

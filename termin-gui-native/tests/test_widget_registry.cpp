@@ -97,7 +97,6 @@ tc_widget_factory_descriptor descriptor(FactoryState& state) {
 
 void test_owned_factory_identity_and_unload_invalidation() {
     tc_runtime_type_registry_clear();
-    tc_runtime_type_registry_set_registration_owner("ambient.owner.must.survive");
     FactoryState state;
     const tc_widget_factory_descriptor factory = descriptor(state);
     assert(tc_widget_registry_register("test.ui.OwnedWidget", "test.module", "termin.gui.Widget",
@@ -109,8 +108,6 @@ void test_owned_factory_identity_and_unload_invalidation() {
            0);
     assert(std::strcmp(tc_runtime_type_registry_get_parent("test.ui.OwnedWidget"),
                        "termin.gui.Widget") == 0);
-    assert(std::strcmp(tc_runtime_type_registry_get_registration_owner(),
-                       "ambient.owner.must.survive") == 0);
 
     tc_ui_document* document = tc_ui_document_create();
     assert(document);
@@ -139,7 +136,6 @@ void test_owned_factory_identity_and_unload_invalidation() {
     assert(!tc_widget_registry_has("test.ui.OwnedWidget"));
     tc_ui_document_destroy(document);
     tc_runtime_type_registry_clear();
-    tc_runtime_type_registry_set_registration_owner(nullptr);
 }
 
 void test_descriptor_validation_leaves_no_partial_widget_type() {

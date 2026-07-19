@@ -1078,14 +1078,15 @@ void bind_tc_pass_runtime(nb::module_& m) {
     m.def("tc_pass_registry_register_python", [](
         const std::string& type_name,
         nb::object cls,
+        const std::string& owner,
         nb::object parent,
         nb::dict fields,
         nb::dict metadata
     ) {
-        const char* ambient_owner = tc_runtime_type_registry_get_registration_owner();
-        const char* owner = ambient_owner && ambient_owner[0]
-            ? ambient_owner
-            : "termin-render-python";
+        if (owner.empty()) {
+            tc_log(TC_LOG_ERROR, "[PythonFramePass] refusing ownerless type '%s'", type_name.c_str());
+            return false;
+        }
         const char* parent_name = nullptr;
         std::string parent_storage;
         if (!parent.is_none()) {
@@ -1099,7 +1100,7 @@ void bind_tc_pass_runtime(nb::module_& m) {
         }
         auto descriptor = FramePassTypeDescriptorBuilder(
             type_name.c_str(),
-            owner,
+            owner.c_str(),
             parent_name,
             python_pass_factory,
             const_cast<char*>(stable_name),
@@ -1117,6 +1118,7 @@ void bind_tc_pass_runtime(nb::module_& m) {
     },
     nb::arg("type_name"),
     nb::arg("cls"),
+    nb::arg("owner"),
     nb::arg("parent") = nb::none(),
     nb::arg("fields") = nb::dict(),
     nb::arg("metadata") = nb::dict());
