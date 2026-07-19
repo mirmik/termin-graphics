@@ -281,6 +281,8 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
           nb::arg("text"), nb::arg("font_size"))
       .def("set_clipboard_handlers", &Document::set_clipboard_handlers,
            nb::arg("getter"), nb::arg("setter"))
+      .def("set_cursor_changed_handler", &Document::set_cursor_changed_handler,
+           nb::arg("handler").none())
       .def(
           "create_hstack",
           [](Document &self, const std::string &debug_name) {
@@ -699,6 +701,10 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
                    [](const Document &self) {
                      return WidgetHandle{
                          tc_ui_document_hovered_widget(self.get())};
+                   })
+      .def_prop_ro("cursor_intent",
+                   [](const Document &self) {
+                     return tc_ui_document_cursor_intent(self.get());
                    })
       .def_prop_ro("pointer_capture",
                    [](const Document &self) {

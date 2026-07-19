@@ -22,6 +22,7 @@ typedef struct tc_ui_widget_snapshot {
     tc_ui_size max_size;
     uint32_t flags;
     uint32_t dirty_flags;
+    tc_ui_cursor_intent cursor_intent;
     tc_ui_style_role style_role;
     tc_ui_style_override style_override;
     size_t child_offset;
@@ -46,6 +47,7 @@ typedef struct tc_ui_document_inspect_snapshot {
     tc_widget_handle pressed;
     tc_widget_handle pointer_capture;
     tc_widget_handle focused;
+    tc_ui_cursor_intent cursor_intent;
     uint64_t theme_revision;
 } tc_ui_document_inspect_snapshot;
 

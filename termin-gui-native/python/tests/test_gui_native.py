@@ -8,6 +8,7 @@ import pytest
 from termin.gui_native import (
     Color,
     Constraints,
+    CursorIntent,
     Document,
     DrawCommandType,
     DrawList,
@@ -304,6 +305,7 @@ def test_python_document_inspect_snapshot_is_neutral_and_independent():
     root.bounds = Rect(0.0, 0.0, 100.0, 60.0)
     child.bounds = Rect(5.0, 6.0, 40.0, 20.0)
     child.focusable = True
+    root.cursor_intent = CursorIntent.Hand
     assert document.set_focus(child_handle)
     assert document.set_pointer_capture(child_handle)
     assert document.show_overlay(
@@ -322,6 +324,7 @@ def test_python_document_inspect_snapshot_is_neutral_and_independent():
     ]
     assert snapshot["interaction"]["focused"] == child_handle
     assert snapshot["interaction"]["pointer_capture"] == child_handle
+    assert snapshot["interaction"]["cursor_intent"] == CursorIntent.Default
     assert "hovered" in snapshot["interaction"]
     assert "pressed" in snapshot["interaction"]
 
@@ -332,6 +335,7 @@ def test_python_document_inspect_snapshot_is_neutral_and_independent():
     assert root_data["debug_name"] == "snapshot-root"
     assert root_data["parent"] is None
     assert root_data["children"] == [child_handle]
+    assert root_data["cursor_intent"] == CursorIntent.Hand
     assert root_data["native_language"] == WidgetLanguage.Python
     assert root_data["ownership"] == WidgetOwnership.Owned
     assert child_data["parent"] == root_handle
@@ -386,13 +390,14 @@ def test_python_registered_widget_document_serialization_round_trip_and_rollback
         child.preferred_size = Size(70.0, 24.0)
         child.focusable = True
         child.enabled = False
+        child.cursor_intent = CursorIntent.Crosshair
         child.style_role = StyleRole.Button
         assert parent.append_child(child)
         assert source.add_root(parent.handle)
 
         serialized = source.serialize()
         assert serialized["$schema"] == "termin.gui.document"
-        assert serialized["version"] == 1
+        assert serialized["version"] == 2
         assert serialized["widgets"][0]["type"] == type_name
         assert serialized["widgets"][0]["state"]["value"] == 41
         assert serialized["widgets"][0]["children"] == [1]
@@ -412,6 +417,7 @@ def test_python_registered_widget_document_serialization_round_trip_and_rollback
         assert created[3].native.preferred_size.width == 70.0
         assert created[3].focusable
         assert not created[3].enabled
+        assert created[3].cursor_intent == CursorIntent.Crosshair
         assert created[3].native.style_role == StyleRole.Button
         restored_snapshot = restored.inspect_snapshot()
         assert restored_snapshot["roots"] == [created[2].handle]
@@ -629,6 +635,56 @@ def test_python_routing_bubbles_and_survives_target_destroy():
     ]
     assert not document.is_alive(child_handle)
     assert document.pressed_widget == parent_handle
+
+
+def test_python_cursor_intents_inherit_notify_and_reset():
+    changes = []
+    document = Document()
+    parent = Widget()
+    child = Widget()
+    document.adopt_root(parent, "cursor-parent")
+    child_handle = document.adopt(child, "cursor-child")
+    assert parent.native.append_child(child.native)
+    parent.bounds = Rect(0.0, 0.0, 100.0, 40.0)
+    child.bounds = Rect(0.0, 0.0, 100.0, 40.0)
+    parent.cursor_intent = CursorIntent.Hand
+    document.set_cursor_changed_handler(changes.append)
+
+    event = PointerEvent()
+    event.type = PointerEventType.Move
+    event.x = 10.0
+    event.y = 10.0
+    document.dispatch_pointer_event(event)
+    assert document.cursor_intent == CursorIntent.Hand
+    assert changes == [CursorIntent.Hand]
+
+    child.cursor_intent = CursorIntent.Crosshair
+    assert document.cursor_intent == CursorIntent.Crosshair
+    child.cursor_intent = CursorIntent.Default
+    assert document.cursor_intent == CursorIntent.Default
+    child.cursor_intent = CursorIntent.Text
+    child.visible = False
+    assert document.cursor_intent == CursorIntent.Default
+    assert changes[-1] == CursorIntent.Default
+
+    child.visible = True
+    document.dispatch_pointer_event(event)
+    assert document.cursor_intent == CursorIntent.Text
+    document.destroy_widget(child_handle)
+    assert document.cursor_intent == CursorIntent.Default
+
+    document.set_cursor_changed_handler(None)
+    parent.cursor_intent = CursorIntent.Move
+    assert changes[-1] == CursorIntent.Default
+
+
+def test_builtin_widgets_publish_semantic_cursor_intents():
+    document = Document()
+    assert document.create_text_input().widget.cursor_intent == CursorIntent.Text
+    assert document.create_text_area().widget.cursor_intent == CursorIntent.Text
+    assert document.create_button().widget.cursor_intent == CursorIntent.Hand
+    assert document.create_checkbox().widget.cursor_intent == CursorIntent.Hand
+    assert document.create_canvas().widget.cursor_intent == CursorIntent.Inherit
 
 
 def test_python_focus_events_and_tab_traversal():

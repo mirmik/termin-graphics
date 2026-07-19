@@ -882,6 +882,70 @@ static void test_theme_style_resolution_inheritance_and_invalidation() {
     tc_ui_document_destroy(document);
 }
 
+static void record_cursor_change(void* user_data, tc_ui_cursor_intent cursor) {
+    static_cast<std::vector<tc_ui_cursor_intent>*>(user_data)->push_back(cursor);
+}
+
+static void test_cursor_intent_inheritance_transitions_and_lifetime() {
+    tc_ui_document* document = tc_ui_document_create();
+    RouteWidget root;
+    RouteWidget child;
+    std::vector<tc_ui_cursor_intent> changes;
+    const tc_widget_handle root_handle = adopt_route_widget(document, root, 1);
+    const tc_widget_handle child_handle = adopt_route_widget(document, child, 2);
+    root.hit_target = child_handle;
+    assert(tc_widget_append_child(&root.widget, &child.widget));
+    assert(tc_ui_document_add_root(document, root_handle));
+    assert(tc_widget_set_cursor_intent(&root.widget, TC_UI_CURSOR_HAND));
+    assert(tc_widget_cursor_intent(&child.widget) == TC_UI_CURSOR_INHERIT);
+    assert(tc_ui_document_cursor_intent(document) == TC_UI_CURSOR_DEFAULT);
+    tc_ui_document_set_cursor_changed_callback(document, &record_cursor_change, &changes);
+
+    tc_ui_pointer_event pointer{};
+    pointer.type = TC_UI_POINTER_MOVE;
+    pointer.x = 10.0f;
+    pointer.y = 10.0f;
+    tc_ui_document_dispatch_pointer_event(document, &pointer);
+    assert(tc_widget_handle_eq(tc_ui_document_hovered_widget(document), child_handle));
+    assert(tc_ui_document_cursor_intent(document) == TC_UI_CURSOR_HAND);
+    assert((changes == std::vector<tc_ui_cursor_intent>{TC_UI_CURSOR_HAND}));
+
+    tc_ui_document_dispatch_pointer_event(document, &pointer);
+    assert(changes.size() == 1);
+    assert(tc_widget_set_cursor_intent(&child.widget, TC_UI_CURSOR_CROSSHAIR));
+    assert(changes.back() == TC_UI_CURSOR_CROSSHAIR);
+    assert(tc_widget_set_cursor_intent(&child.widget, TC_UI_CURSOR_DEFAULT));
+    assert(changes.back() == TC_UI_CURSOR_DEFAULT);
+    assert(tc_widget_set_cursor_intent(&child.widget, TC_UI_CURSOR_TEXT));
+    assert(changes.back() == TC_UI_CURSOR_TEXT);
+
+    tc_widget_set_enabled(&child.widget, false);
+    assert(tc_widget_handle_is_invalid(tc_ui_document_hovered_widget(document)));
+    assert(tc_ui_document_cursor_intent(document) == TC_UI_CURSOR_DEFAULT);
+    assert(changes.back() == TC_UI_CURSOR_DEFAULT);
+    tc_widget_set_enabled(&child.widget, true);
+    tc_ui_document_dispatch_pointer_event(document, &pointer);
+    assert(changes.back() == TC_UI_CURSOR_TEXT);
+    tc_widget_set_visible(&child.widget, false);
+    assert(changes.back() == TC_UI_CURSOR_DEFAULT);
+    tc_widget_set_visible(&child.widget, true);
+    tc_ui_document_dispatch_pointer_event(document, &pointer);
+    assert(changes.back() == TC_UI_CURSOR_TEXT);
+
+    pointer.type = TC_UI_POINTER_LEAVE;
+    tc_ui_document_dispatch_pointer_event(document, &pointer);
+    assert(tc_widget_handle_is_invalid(tc_ui_document_hovered_widget(document)));
+    assert(changes.back() == TC_UI_CURSOR_DEFAULT);
+
+    pointer.type = TC_UI_POINTER_MOVE;
+    tc_ui_document_dispatch_pointer_event(document, &pointer);
+    assert(changes.back() == TC_UI_CURSOR_TEXT);
+    assert(tc_ui_document_destroy_widget(document, child_handle));
+    assert(tc_ui_document_cursor_intent(document) == TC_UI_CURSOR_DEFAULT);
+    assert(changes.back() == TC_UI_CURSOR_DEFAULT);
+    tc_ui_document_destroy(document);
+}
+
 int main() {
     test_init_defaults_and_common_state();
     test_borrowed_widget_can_be_adopted_and_released();
@@ -901,5 +965,6 @@ int main() {
     test_modal_overlay_blocks_lower_input_and_scopes_focus();
     test_tooltip_rect_is_host_driven_and_clamped();
     test_theme_style_resolution_inheritance_and_invalidation();
+    test_cursor_intent_inheritance_transitions_and_lifetime();
     return EXIT_SUCCESS;
 }

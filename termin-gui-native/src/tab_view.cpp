@@ -188,6 +188,9 @@ tc_ui_event_result TabView::pointer_event(tc_ui_document* document, const tc_ui_
 }
 
 tc_widget_handle TabView::hit_test(tc_ui_document* document, float x, float y) {
+    c_widget()->cursor_intent = y >= bounds().y && y < bounds().y + header_height_
+        ? TC_UI_CURSOR_HAND
+        : TC_UI_CURSOR_INHERIT;
     if (!rect_contains(bounds(), x, y)) {
         return tc_widget_handle_invalid();
     }

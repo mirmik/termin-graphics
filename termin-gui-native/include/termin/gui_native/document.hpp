@@ -32,6 +32,10 @@ public:
     tc_ui_event_result dispatch_pointer_event(const tc_ui_pointer_event& event) { return tc_ui_document_dispatch_pointer_event(_document, &event); }
     tc_widget_handle hit_test(float x, float y) { return tc_ui_document_hit_test(_document, x, y); }
     tc_widget_handle hovered_widget() const { return tc_ui_document_hovered_widget(_document); }
+    tc_ui_cursor_intent cursor_intent() const { return tc_ui_document_cursor_intent(_document); }
+    void set_cursor_changed_callback(tc_ui_cursor_changed_fn callback, void* user_data) {
+        tc_ui_document_set_cursor_changed_callback(_document, callback, user_data);
+    }
     tc_widget_handle pointer_capture() const { return tc_ui_document_pointer_capture(_document); }
     tc_widget_handle pressed_widget() const { return tc_ui_document_pressed_widget(_document); }
     bool set_pointer_capture(const Widget& widget) { return tc_ui_document_set_pointer_capture(_document, widget.handle()); }

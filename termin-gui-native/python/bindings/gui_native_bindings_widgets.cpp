@@ -67,6 +67,17 @@ void bind_gui_native_widgets(nb::module_& m) {
                 tc_widget_set_focusable(self.resolve_checked(), value);
             })
         .def_prop_rw(
+            "cursor_intent",
+            [](const WidgetRef& self) {
+                return tc_widget_cursor_intent(self.resolve_checked());
+            },
+            [](const WidgetRef& self, tc_ui_cursor_intent cursor) {
+                if (!tc_widget_set_cursor_intent(self.resolve_checked(), cursor)) {
+                    throw std::invalid_argument("invalid native UI cursor intent");
+                }
+                self.throw_pending_exception();
+            })
+        .def_prop_rw(
             "style_role",
             [](const WidgetRef& self) { return tc_widget_style_role(self.resolve_checked()); },
             [](const WidgetRef& self, tc_ui_style_role role) {

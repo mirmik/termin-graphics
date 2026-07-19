@@ -66,6 +66,7 @@ void test_snapshot_copies_topology_metadata_and_interaction_state() {
     tc_widget_set_bounds(&child.widget, tc_ui_rect{5.0f, 5.0f, 40.0f, 30.0f});
     tc_widget_set_preferred_size(&child.widget, tc_ui_size{40.0f, 30.0f});
     tc_widget_set_focusable(&child.widget, true);
+    assert(tc_widget_set_cursor_intent(&child.widget, TC_UI_CURSOR_CROSSHAIR));
 
     const tc_widget_handle root_handle =
         tc_ui_document_attach_borrowed_widget(document.get(), &root.widget);
@@ -117,10 +118,12 @@ void test_snapshot_copies_topology_metadata_and_interaction_state() {
     assert(tc_widget_handle_eq(child_data->parent, root_handle));
     assert(child_data->preferred_size.width == 40.0f);
     assert((child_data->flags & TC_WIDGET_FOCUSABLE) != 0);
+    assert(child_data->cursor_intent == TC_UI_CURSOR_CROSSHAIR);
     assert(tc_widget_handle_eq(snapshot.data().hovered, child_handle));
     assert(tc_widget_handle_eq(snapshot.data().pressed, child_handle));
     assert(tc_widget_handle_eq(snapshot.data().pointer_capture, child_handle));
     assert(tc_widget_handle_eq(snapshot.data().focused, child_handle));
+    assert(snapshot.data().cursor_intent == TC_UI_CURSOR_CROSSHAIR);
     assert(snapshot.data().theme_revision == document.theme_revision());
 
     assert(tc_ui_document_destroy_widget_recursive(document.get(), root_handle));

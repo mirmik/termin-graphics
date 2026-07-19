@@ -222,6 +222,10 @@ The current foundation includes:
 - Python `WidgetRef` objects contain only an invalidation state plus a handle.
   They expose common state and canonical tree mutation without duplicating
   widget data or retaining the document itself;
+- cursor intent is backend-neutral common widget state. `Inherit` walks the
+  hovered leaf's ancestors, explicit `Default` stops that walk, and the
+  document notifies its host only when the resolved intent changes. SDL cursor
+  objects remain owned and cached by the platform host;
 - the same `WidgetRef` wraps C++ widgets created by the initial native
   native document factories. Stateful input/media factories return typed
   references without duplicating widget state;
@@ -235,8 +239,9 @@ The current foundation includes:
   dictionaries, lists, value objects and generation handles. It does not retain
   widgets or expose live native pointers, so editor tooling and MCP diagnostics
   can safely keep a point-in-time result;
-- `tc_ui_document_serialize` emits versioned `termin.gui.document` schema v1.
-  Records use stable registered type names, common widget state, per-type state
+- `tc_ui_document_serialize` emits versioned `termin.gui.document` schema v2.
+  Records use stable registered type names, common widget state (including
+  semantic cursor intent), per-type state
   dictionaries and handle-free record indices for child/root/overlay topology.
   Ephemeral hover, focus, press, capture and dirty flags are intentionally not
   persisted;

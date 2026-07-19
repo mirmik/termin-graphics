@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 #define TC_UI_DOCUMENT_SCHEMA "termin.gui.document"
-#define TC_UI_DOCUMENT_SCHEMA_VERSION 1
+#define TC_UI_DOCUMENT_SCHEMA_VERSION 2
 
 /* Returns a dict on success and nil on failure. The caller owns the result. */
 TERMIN_GUI_NATIVE_API tc_value tc_ui_document_serialize(const tc_ui_document* document);

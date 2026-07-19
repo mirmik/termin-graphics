@@ -276,6 +276,7 @@ private:
   std::shared_ptr<DocumentState> state_;
   nb::object clipboard_getter_;
   nb::object clipboard_setter_;
+  nb::object cursor_changed_handler_;
   std::string clipboard_buffer_;
 
 public:
@@ -307,11 +308,13 @@ public:
 
   void throw_pending_exception();
   void set_clipboard_handlers(nb::object getter, nb::object setter);
+  void set_cursor_changed_handler(nb::object handler);
 
 private:
   static const char *clipboard_get(void *user_data);
   static bool clipboard_set(void *user_data, const char *text,
                             size_t byte_length);
+  static void cursor_changed(void *user_data, tc_ui_cursor_intent cursor);
 };
 
 nb::object snapshot_handle_or_none(tc_widget_handle handle);

@@ -14,6 +14,7 @@ Menu::Menu(std::shared_ptr<CommandModel> model, Menu* parent,
     : NativeWidget("Menu"), model_(std::move(model)), parent_menu_(parent),
       ancestors_(std::move(ancestors)) {
     set_style_role(TC_UI_STYLE_PANEL);
+    set_cursor_intent(TC_UI_CURSOR_HAND);
     set_focusable(true);
     ancestors_.insert(model_.get());
     observed_revision_ = model_->revision();

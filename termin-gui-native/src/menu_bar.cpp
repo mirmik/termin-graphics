@@ -85,6 +85,7 @@ bool shortcut_matches(std::string_view descriptor, int32_t key, int32_t modifier
 
 MenuBar::MenuBar() : NativeWidget("MenuBar") {
     set_style_role(TC_UI_STYLE_PANEL);
+    set_cursor_intent(TC_UI_CURSOR_HAND);
     set_focusable(true);
     set_preferred_size(tc_ui_size{400.0f, item_height_});
 }

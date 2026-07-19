@@ -5,6 +5,7 @@ using namespace detail;
 
 Button::Button(std::string text) : NativeWidget("Button"), text_(std::move(text)) {
     set_style_role(TC_UI_STYLE_BUTTON);
+    set_cursor_intent(TC_UI_CURSOR_HAND);
     set_focusable(true);
     set_preferred_size(tc_ui_size{64.0f, 28.0f});
 }

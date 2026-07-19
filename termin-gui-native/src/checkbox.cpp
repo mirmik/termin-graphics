@@ -6,6 +6,7 @@ using namespace detail;
 Checkbox::Checkbox(bool checked)
     : NativeWidget("Checkbox"), checked_(checked) {
     set_style_role(TC_UI_STYLE_CHECKBOX);
+    set_cursor_intent(TC_UI_CURSOR_HAND);
     set_preferred_size(tc_ui_size {18.0f, 18.0f});
 }
 

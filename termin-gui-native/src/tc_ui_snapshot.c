@@ -140,6 +140,7 @@ bool tc_ui_document_capture_snapshot(const tc_ui_document* document,
         target->max_size = widget->max_size;
         target->flags = widget->flags;
         target->dirty_flags = tc_widget_dirty_flags(widget);
+        target->cursor_intent = widget->cursor_intent;
         target->style_role = widget->style_role;
         target->style_override = widget->style_override;
         target->child_offset = child_index;
@@ -189,6 +190,7 @@ bool tc_ui_document_capture_snapshot(const tc_ui_document* document,
     snapshot.pressed = document->pressed_widget;
     snapshot.pointer_capture = document->pointer_capture;
     snapshot.focused = document->focused_widget;
+    snapshot.cursor_intent = document->cursor_intent;
     if (!handle_is_coherent(document, snapshot.hovered) ||
         !handle_is_coherent(document, snapshot.pressed) ||
         !handle_is_coherent(document, snapshot.pointer_capture) ||

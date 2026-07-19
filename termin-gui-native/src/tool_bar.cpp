@@ -9,6 +9,7 @@ using namespace detail;
 ToolBar::ToolBar(std::shared_ptr<CommandModel> model)
     : NativeWidget("ToolBar"), model_(model ? std::move(model) : std::make_shared<CommandModel>()) {
     set_style_role(TC_UI_STYLE_PANEL);
+    set_cursor_intent(TC_UI_CURSOR_HAND);
     set_preferred_size(tc_ui_size{400.0f, 40.0f});
     observed_revision_ = model_->revision();
     connect_model();

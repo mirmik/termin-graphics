@@ -45,6 +45,7 @@ RichTextView::RichTextView(std::shared_ptr<RichTextModel> model)
     : NativeWidget("RichTextView"),
       model_(model ? std::move(model) : std::make_shared<RichTextModel>()) {
     set_style_role(TC_UI_STYLE_TEXT_INPUT);
+    set_cursor_intent(TC_UI_CURSOR_TEXT);
     set_focusable(true);
     set_preferred_size(tc_ui_size{300.0f, 150.0f});
     connect_model();

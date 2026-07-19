@@ -45,6 +45,9 @@ struct tc_ui_document {
     tc_widget_handle focused_widget;
     tc_ui_pointer_event last_pointer_event;
     bool has_pointer_event;
+    tc_ui_cursor_intent cursor_intent;
+    tc_ui_cursor_changed_fn cursor_changed;
+    void* cursor_changed_user_data;
     size_t live_count;
 
     tc_ui_theme theme;
@@ -124,5 +127,6 @@ TC_UI_INTERNAL void tc_ui_internal_update_hover(
     tc_widget_handle next,
     const tc_ui_pointer_event* source
 );
+TC_UI_INTERNAL void tc_ui_internal_refresh_cursor(tc_ui_document* document);
 
 #endif

@@ -68,6 +68,7 @@ static tc_value serialize_common(const tc_ui_widget_snapshot* widget) {
     tc_value_dict_set(&result, "preferred_size", serialize_size(widget->preferred_size));
     tc_value_dict_set(&result, "max_size", serialize_size(widget->max_size));
     tc_value_dict_set(&result, "flags", tc_value_int(widget->flags & persisted_flags));
+    tc_value_dict_set(&result, "cursor_intent", tc_value_int(widget->cursor_intent));
     tc_value_dict_set(&result, "style_role", tc_value_int(widget->style_role));
     tc_value_dict_set(&style_override, "fields",
                       tc_value_int((int64_t)widget->style_override.fields));
@@ -300,6 +301,7 @@ static bool apply_common_state(tc_widget* widget, const tc_value* common) {
     tc_value* preferred_size = required_value(common, "preferred_size", TC_VALUE_LIST);
     tc_value* max_size = required_value(common, "max_size", TC_VALUE_LIST);
     tc_value* flags = required_value(common, "flags", TC_VALUE_INT);
+    tc_value* cursor_intent = required_value(common, "cursor_intent", TC_VALUE_INT);
     tc_value* style_role = required_value(common, "style_role", TC_VALUE_INT);
     tc_value* override = required_value(common, "style_override", TC_VALUE_DICT);
     tc_value* override_fields;
@@ -315,9 +317,11 @@ static bool apply_common_state(tc_widget* widget, const tc_value* common) {
     float parsed_preferred_values[2];
     float parsed_max_values[2];
     if (!widget || !stable_id || !name || !debug_name || !bounds || !min_size || !preferred_size ||
-        !max_size || !flags || !style_role || !override || flags->data.i < 0 ||
+        !max_size || !flags || !cursor_intent || !style_role || !override || flags->data.i < 0 ||
         ((uint64_t)flags->data.i & ~persisted_flags) != 0 || style_role->data.i < 0 ||
-        style_role->data.i >= TC_UI_STYLE_ROLE_COUNT) {
+        style_role->data.i >= TC_UI_STYLE_ROLE_COUNT ||
+        cursor_intent->data.i < TC_UI_CURSOR_INHERIT ||
+        cursor_intent->data.i >= TC_UI_CURSOR_INTENT_COUNT) {
         return false;
     }
     if (!read_float_list(bounds, parsed_rect_values, 4) ||
@@ -356,6 +360,9 @@ static bool apply_common_state(tc_widget* widget, const tc_value* common) {
     tc_widget_set_visible(widget, (flags->data.i & TC_WIDGET_VISIBLE) != 0);
     tc_widget_set_enabled(widget, (flags->data.i & TC_WIDGET_ENABLED) != 0);
     tc_widget_set_mouse_transparent(widget, (flags->data.i & TC_WIDGET_MOUSE_TRANSPARENT) != 0);
+    if (!tc_widget_set_cursor_intent(widget, (tc_ui_cursor_intent)cursor_intent->data.i)) {
+        return false;
+    }
     tc_widget_set_style_role(widget, (tc_ui_style_role)style_role->data.i);
     return tc_widget_set_style_override(widget, &parsed_override);
 }

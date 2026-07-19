@@ -162,10 +162,18 @@ tc_ui_event_result Splitter::pointer_event(tc_ui_document* document, const tc_ui
 }
 
 tc_widget_handle Splitter::hit_test(tc_ui_document* document, float x, float y) {
+    const bool over_divider = rect_contains(divider_hit_rect(), x, y);
+    const bool captured = tc_widget_handle_eq(
+        tc_ui_document_pointer_capture(document), handle());
+    c_widget()->cursor_intent = over_divider || captured
+        ? (orientation_ == Orientation::Horizontal
+               ? TC_UI_CURSOR_RESIZE_HORIZONTAL
+               : TC_UI_CURSOR_RESIZE_VERTICAL)
+        : TC_UI_CURSOR_INHERIT;
     if (!rect_contains(bounds(), x, y)) {
         return tc_widget_handle_invalid();
     }
-    if (rect_contains(divider_hit_rect(), x, y)) {
+    if (over_divider) {
         return mouse_transparent() ? tc_widget_handle_invalid() : handle();
     }
     auto hit_child = [this, document, x, y](tc_widget_handle handle) {

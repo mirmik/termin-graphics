@@ -607,6 +607,48 @@ void tc_ui_internal_update_hover(
             widget->vtable->pointer_event(widget, document, &transition);
         }
     }
+    tc_ui_internal_refresh_cursor(document);
+}
+
+void tc_ui_internal_refresh_cursor(tc_ui_document* document) {
+    tc_ui_cursor_intent next = TC_UI_CURSOR_DEFAULT;
+    tc_widget* widget;
+    size_t depth = 0;
+    if (!document) {
+        return;
+    }
+    widget = tc_ui_document_resolve_widget(document, document->hovered_widget);
+    if (widget && !tc_ui_internal_widget_effectively_interactive(widget)) {
+        widget = NULL;
+    }
+    while (widget) {
+        if (depth++ >= document->live_count || widget->document != document) {
+            tc_log_error("[termin-gui-native] invalid canonical tree while resolving cursor intent");
+            next = TC_UI_CURSOR_DEFAULT;
+            break;
+        }
+        if (widget->cursor_intent != TC_UI_CURSOR_INHERIT) {
+            if (widget->cursor_intent < TC_UI_CURSOR_DEFAULT ||
+                widget->cursor_intent >= TC_UI_CURSOR_INTENT_COUNT) {
+                tc_log_error(
+                    "[termin-gui-native] invalid cursor intent %d in hovered route",
+                    (int)widget->cursor_intent
+                );
+                next = TC_UI_CURSOR_DEFAULT;
+            } else {
+                next = widget->cursor_intent;
+            }
+            break;
+        }
+        widget = widget->parent;
+    }
+    if (document->cursor_intent == next) {
+        return;
+    }
+    document->cursor_intent = next;
+    if (document->cursor_changed) {
+        document->cursor_changed(document->cursor_changed_user_data, next);
+    }
 }
 
 static bool collect_focusables_in_tree(
@@ -796,12 +838,14 @@ tc_ui_event_result tc_ui_document_dispatch_pointer_event(
     document->last_pointer_event = *event;
     document->has_pointer_event = true;
     modal_at_start = top_modal_overlay(document);
-    hit_resolution = resolve_document_hit(
-        document,
-        event->x,
-        event->y,
-        event->type == TC_UI_POINTER_DOWN
-    );
+    hit_resolution = event->type == TC_UI_POINTER_LEAVE
+        ? (tc_ui_hit_resolution){tc_widget_handle_invalid(), tc_widget_handle_invalid(), false, false}
+        : resolve_document_hit(
+              document,
+              event->x,
+              event->y,
+              event->type == TC_UI_POINTER_DOWN
+          );
     hit = hit_resolution.target;
     tc_ui_internal_update_hover(document, hit, event);
     if (event->type == TC_UI_POINTER_DOWN) {
@@ -863,6 +907,23 @@ tc_widget_handle tc_ui_document_hit_test(tc_ui_document* document, float x, floa
 
 tc_widget_handle tc_ui_document_hovered_widget(const tc_ui_document* document) {
     return document ? document->hovered_widget : tc_widget_handle_invalid();
+}
+
+tc_ui_cursor_intent tc_ui_document_cursor_intent(const tc_ui_document* document) {
+    return document ? document->cursor_intent : TC_UI_CURSOR_DEFAULT;
+}
+
+void tc_ui_document_set_cursor_changed_callback(
+    tc_ui_document* document,
+    tc_ui_cursor_changed_fn callback,
+    void* user_data
+) {
+    if (!document) {
+        tc_log_error("[termin-gui-native] cannot set cursor callback on null document");
+        return;
+    }
+    document->cursor_changed = callback;
+    document->cursor_changed_user_data = callback ? user_data : NULL;
 }
 
 tc_widget_handle tc_ui_document_pointer_capture(const tc_ui_document* document) {

@@ -54,6 +54,10 @@ public:
         tc_widget_set_mouse_transparent(&_widget, mouse_transparent);
     }
     bool mouse_transparent() const { return tc_widget_is_mouse_transparent(&_widget); }
+    bool set_cursor_intent(tc_ui_cursor_intent cursor) {
+        return tc_widget_set_cursor_intent(&_widget, cursor);
+    }
+    tc_ui_cursor_intent cursor_intent() const { return tc_widget_cursor_intent(&_widget); }
     tc_widget* parent_widget() { return tc_widget_parent(&_widget); }
     const tc_widget* parent_widget() const { return tc_widget_parent_const(&_widget); }
     size_t child_count() const { return tc_widget_child_count(&_widget); }

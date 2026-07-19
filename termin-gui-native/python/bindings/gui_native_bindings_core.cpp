@@ -186,6 +186,18 @@ void bind_gui_native_core(nb::module_& m) {
         .value("Enter", TC_UI_POINTER_ENTER)
         .value("Leave", TC_UI_POINTER_LEAVE);
 
+    nb::enum_<tc_ui_cursor_intent>(m, "CursorIntent")
+        .value("Inherit", TC_UI_CURSOR_INHERIT)
+        .value("Default", TC_UI_CURSOR_DEFAULT)
+        .value("Text", TC_UI_CURSOR_TEXT)
+        .value("Hand", TC_UI_CURSOR_HAND)
+        .value("Crosshair", TC_UI_CURSOR_CROSSHAIR)
+        .value("Move", TC_UI_CURSOR_MOVE)
+        .value("ResizeHorizontal", TC_UI_CURSOR_RESIZE_HORIZONTAL)
+        .value("ResizeVertical", TC_UI_CURSOR_RESIZE_VERTICAL)
+        .value("ResizeNwse", TC_UI_CURSOR_RESIZE_NWSE)
+        .value("ResizeNesw", TC_UI_CURSOR_RESIZE_NESW);
+
     nb::enum_<tc_ui_modifier_flag>(m, "ModifierFlag", nb::is_arithmetic())
         .value("Shift", TC_UI_MOD_SHIFT)
         .value("Ctrl", TC_UI_MOD_CTRL)

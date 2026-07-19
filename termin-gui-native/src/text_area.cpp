@@ -5,6 +5,7 @@ using namespace detail;
 TextArea::TextArea(std::string text)
     : NativeWidget("TextArea"), text_(std::move(text)) {
     set_style_role(TC_UI_STYLE_TEXT_INPUT);
+    set_cursor_intent(TC_UI_CURSOR_TEXT);
     if (!valid_utf8(text_)) {
         tc_log_error("[termin-gui-native] TextArea rejected invalid UTF-8 initial text");
         text_.clear();

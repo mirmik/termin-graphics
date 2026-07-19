@@ -6,6 +6,7 @@ using namespace detail;
 IconButton::IconButton(std::string icon)
     : NativeWidget("IconButton"), icon_(std::move(icon)) {
     set_style_role(TC_UI_STYLE_BUTTON);
+    set_cursor_intent(TC_UI_CURSOR_HAND);
     set_preferred_size(tc_ui_size {28.0f, 28.0f});
 }
 

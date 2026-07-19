@@ -224,6 +224,25 @@ typedef enum tc_ui_pointer_event_type {
     TC_UI_POINTER_LEAVE = 5
 } tc_ui_pointer_event_type;
 
+typedef enum tc_ui_cursor_intent {
+    TC_UI_CURSOR_INHERIT = 0,
+    TC_UI_CURSOR_DEFAULT = 1,
+    TC_UI_CURSOR_TEXT = 2,
+    TC_UI_CURSOR_HAND = 3,
+    TC_UI_CURSOR_CROSSHAIR = 4,
+    TC_UI_CURSOR_MOVE = 5,
+    TC_UI_CURSOR_RESIZE_HORIZONTAL = 6,
+    TC_UI_CURSOR_RESIZE_VERTICAL = 7,
+    TC_UI_CURSOR_RESIZE_NWSE = 8,
+    TC_UI_CURSOR_RESIZE_NESW = 9,
+    TC_UI_CURSOR_INTENT_COUNT = 10
+} tc_ui_cursor_intent;
+
+typedef void (*tc_ui_cursor_changed_fn)(
+    void* user_data,
+    tc_ui_cursor_intent cursor
+);
+
 typedef enum tc_ui_modifier_flag {
     TC_UI_MOD_SHIFT = 1u << 0,
     TC_UI_MOD_CTRL = 1u << 1,
@@ -436,6 +455,7 @@ struct tc_widget {
     char* owned_name;
     char* owned_debug_name;
     uint32_t flags;
+    tc_ui_cursor_intent cursor_intent;
     tc_ui_style_role style_role;
     tc_ui_style_override style_override;
 };
@@ -458,6 +478,13 @@ TERMIN_GUI_NATIVE_API void tc_widget_set_enabled(tc_widget* widget, bool enabled
 TERMIN_GUI_NATIVE_API bool tc_widget_is_enabled(const tc_widget* widget);
 TERMIN_GUI_NATIVE_API void tc_widget_set_mouse_transparent(tc_widget* widget, bool mouse_transparent);
 TERMIN_GUI_NATIVE_API bool tc_widget_is_mouse_transparent(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API bool tc_widget_set_cursor_intent(
+    tc_widget* widget,
+    tc_ui_cursor_intent cursor
+);
+TERMIN_GUI_NATIVE_API tc_ui_cursor_intent tc_widget_cursor_intent(
+    const tc_widget* widget
+);
 TERMIN_GUI_NATIVE_API tc_ui_rect tc_widget_bounds(const tc_widget* widget);
 TERMIN_GUI_NATIVE_API void tc_widget_set_bounds(tc_widget* widget, tc_ui_rect bounds);
 TERMIN_GUI_NATIVE_API tc_ui_size tc_widget_min_size(const tc_widget* widget);
@@ -663,6 +690,16 @@ TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_hit_test(
 
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_hovered_widget(
     const tc_ui_document* document
+);
+
+TERMIN_GUI_NATIVE_API tc_ui_cursor_intent tc_ui_document_cursor_intent(
+    const tc_ui_document* document
+);
+
+TERMIN_GUI_NATIVE_API void tc_ui_document_set_cursor_changed_callback(
+    tc_ui_document* document,
+    tc_ui_cursor_changed_fn callback,
+    void* user_data
 );
 
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_pointer_capture(

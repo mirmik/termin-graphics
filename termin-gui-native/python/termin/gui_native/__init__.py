@@ -25,6 +25,7 @@ from termin.gui_native._gui_native import (  # noqa: E402
     CommandModel,
     ComboBox,
     Constraints,
+    CursorIntent,
     Document,
     Dialog,
     DialogAction,
@@ -234,6 +235,14 @@ class Widget:
     def focusable(self, value: bool) -> None:
         self.native.focusable = value
 
+    @property
+    def cursor_intent(self) -> CursorIntent:
+        return self.native.cursor_intent
+
+    @cursor_intent.setter
+    def cursor_intent(self, value: CursorIntent) -> None:
+        self.native.cursor_intent = value
+
     def measure(self, constraints: Constraints) -> Size:
         preferred = self.native.preferred_size
         width = max(constraints.min_size.width, preferred.width)
@@ -306,6 +315,7 @@ __all__ = [
     "CommandModel",
     "ComboBox",
     "Constraints",
+    "CursorIntent",
     "Document",
     "Dialog",
     "DialogAction",

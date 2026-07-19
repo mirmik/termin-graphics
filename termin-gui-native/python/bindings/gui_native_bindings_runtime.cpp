@@ -704,7 +704,7 @@ bool deserialize_python_registered_widget(tc_widget *widget,
 
 Document::Document()
     : state_(std::make_shared<DocumentState>()), clipboard_getter_(nb::none()),
-      clipboard_setter_(nb::none()) {
+      clipboard_setter_(nb::none()), cursor_changed_handler_(nb::none()) {
   state_->document = tc_ui_document_create();
   if (!state_->document) {
     throw std::runtime_error("failed to create tc_ui_document");
@@ -714,6 +714,7 @@ Document::Document()
 
 Document::~Document() {
   if (state_ && state_->document) {
+    tc_ui_document_set_cursor_changed_callback(state_->document, nullptr, nullptr);
     unregister_document_state(state_->document);
     tc_ui_document_destroy(state_->document);
     state_->document = nullptr;
@@ -798,6 +799,26 @@ void Document::set_clipboard_handlers(nb::object getter, nb::object setter) {
       clipboard_setter_.is_none() ? nullptr : &Document::clipboard_set, this);
 }
 
+void Document::set_cursor_changed_handler(nb::object handler) {
+  cursor_changed_handler_ = std::move(handler);
+  tc_ui_document_set_cursor_changed_callback(
+      get(), cursor_changed_handler_.is_none() ? nullptr : &Document::cursor_changed,
+      cursor_changed_handler_.is_none() ? nullptr : this);
+}
+
+void Document::cursor_changed(void *user_data, tc_ui_cursor_intent cursor) {
+  auto *self = static_cast<Document *>(user_data);
+  try {
+    nb::gil_scoped_acquire gil;
+    self->cursor_changed_handler_(cursor);
+  } catch (...) {
+    if (!self->state_->pending_exception) {
+      self->state_->pending_exception = std::current_exception();
+    }
+    tc_log_error("[termin-gui-native/python] cursor changed handler failed");
+  }
+}
+
 const char *Document::clipboard_get(void *user_data) {
   auto *self = static_cast<Document *>(user_data);
   try {
@@ -856,6 +877,7 @@ nb::dict document_snapshot_to_python(const Document &document) {
     item["max_size"] = widget.max_size;
     item["flags"] = widget.flags;
     item["dirty_flags"] = widget.dirty_flags;
+    item["cursor_intent"] = widget.cursor_intent;
     item["style_role"] = widget.style_role;
     item["style_override"] = widget.style_override;
     nb::list children;
@@ -889,6 +911,7 @@ nb::dict document_snapshot_to_python(const Document &document) {
   interaction["pointer_capture"] =
       snapshot_handle_or_none(snapshot.data().pointer_capture);
   interaction["focused"] = snapshot_handle_or_none(snapshot.data().focused);
+  interaction["cursor_intent"] = snapshot.data().cursor_intent;
   result["interaction"] = std::move(interaction);
   result["theme_revision"] = snapshot.data().theme_revision;
   return result;

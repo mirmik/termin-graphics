@@ -64,6 +64,7 @@ void tc_widget_init_unowned(
     widget->body = body;
     tc_runtime_type_instance_link_init(&widget->runtime_type_link);
     widget->flags = TC_WIDGET_VISIBLE | TC_WIDGET_ENABLED;
+    widget->cursor_intent = TC_UI_CURSOR_INHERIT;
     widget->style_role = TC_UI_STYLE_GENERIC;
 }
 
@@ -126,6 +127,7 @@ void tc_ui_internal_invalidate_subtree_interaction_state(tc_widget* root) {
             tc_ui_internal_update_hover(document, tc_widget_handle_invalid(), &document->last_pointer_event);
         } else {
             document->hovered_widget = tc_widget_handle_invalid();
+            tc_ui_internal_refresh_cursor(document);
         }
     }
     if (clear_capture) {
@@ -237,6 +239,7 @@ void tc_widget_set_mouse_transparent(tc_widget* widget, bool mouse_transparent) 
             );
         } else {
             widget->document->hovered_widget = tc_widget_handle_invalid();
+            tc_ui_internal_refresh_cursor(widget->document);
         }
     }
     if (changed) {
@@ -251,6 +254,29 @@ void tc_widget_set_mouse_transparent(tc_widget* widget, bool mouse_transparent) 
 
 bool tc_widget_is_mouse_transparent(const tc_widget* widget) {
     return widget && (widget->flags & TC_WIDGET_MOUSE_TRANSPARENT) != 0;
+}
+
+bool tc_widget_set_cursor_intent(tc_widget* widget, tc_ui_cursor_intent cursor) {
+    if (!widget) {
+        tc_log_error("[termin-gui-native] cannot set cursor intent on null widget");
+        return false;
+    }
+    if (cursor < TC_UI_CURSOR_INHERIT || cursor >= TC_UI_CURSOR_INTENT_COUNT) {
+        tc_log_error("[termin-gui-native] rejected invalid widget cursor intent %d", (int)cursor);
+        return false;
+    }
+    if (widget->cursor_intent == cursor) {
+        return true;
+    }
+    widget->cursor_intent = cursor;
+    if (widget->document) {
+        tc_ui_internal_refresh_cursor(widget->document);
+    }
+    return true;
+}
+
+tc_ui_cursor_intent tc_widget_cursor_intent(const tc_widget* widget) {
+    return widget ? widget->cursor_intent : TC_UI_CURSOR_INHERIT;
 }
 
 tc_ui_rect tc_widget_bounds(const tc_widget* widget) {
@@ -392,6 +418,7 @@ bool tc_widget_insert_child(tc_widget* parent, size_t index, tc_widget* child) {
     }
     tc_widget_mark_dirty(parent, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
     mark_style_subtree_dirty(child);
+    tc_ui_internal_refresh_cursor(parent->document);
     return true;
 }
 
@@ -413,6 +440,7 @@ bool tc_widget_remove_child(tc_widget* parent, tc_widget* child) {
     tc_ui_internal_remove_child_at(parent, index);
     tc_widget_mark_dirty(parent, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
     mark_style_subtree_dirty(child);
+    tc_ui_internal_refresh_cursor(parent->document);
     return true;
 }
 
@@ -427,6 +455,7 @@ bool tc_widget_detach(tc_widget* widget) {
     }
     tc_widget_mark_dirty(parent, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
     mark_style_subtree_dirty(widget);
+    tc_ui_internal_refresh_cursor(widget->document);
     return true;
 }
 

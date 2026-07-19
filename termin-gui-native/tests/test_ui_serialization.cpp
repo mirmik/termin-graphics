@@ -96,6 +96,7 @@ void test_document_round_trip_preserves_structure_common_and_type_state() {
     tc_widget_set_preferred_size(child_widget, tc_ui_size{80.0f, 24.0f});
     tc_widget_set_focusable(child_widget, true);
     tc_widget_set_enabled(child_widget, false);
+    assert(tc_widget_set_cursor_intent(child_widget, TC_UI_CURSOR_CROSSHAIR));
     tc_widget_set_style_role(child_widget, TC_UI_STYLE_BUTTON);
     tc_ui_style_override style{};
     style.fields = TC_UI_STYLE_BACKGROUND | TC_UI_STYLE_FONT_SIZE |
@@ -137,6 +138,7 @@ void test_document_round_trip_preserves_structure_common_and_type_state() {
     assert(body(restored, restored_overlay)->value == 303);
     assert(tc_widget_is_focusable(restored_child_widget));
     assert(!tc_widget_is_enabled(restored_child_widget));
+    assert(tc_widget_cursor_intent(restored_child_widget) == TC_UI_CURSOR_CROSSHAIR);
     assert(tc_widget_style_role(restored_child_widget) == TC_UI_STYLE_BUTTON);
     const tc_ui_style_override restored_style = tc_widget_style_override(restored_child_widget);
     assert(restored_style.fields == style.fields);

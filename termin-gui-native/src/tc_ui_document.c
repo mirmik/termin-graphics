@@ -443,6 +443,7 @@ void tc_ui_internal_clear_document_state_references(tc_ui_document* document, tc
     }
     if (tc_ui_internal_same_handle(document->hovered_widget, handle)) {
         document->hovered_widget = tc_widget_handle_invalid();
+        tc_ui_internal_refresh_cursor(document);
     }
     if (tc_ui_internal_same_handle(document->pointer_capture, handle)) {
         document->pointer_capture = tc_widget_handle_invalid();
@@ -492,6 +493,7 @@ static bool destroy_widget_inner(tc_ui_document* document, tc_widget_handle hand
 
     widget = slot->widget;
     slot->destroying = true;
+    tc_ui_internal_invalidate_subtree_interaction_state(widget);
 
     if (recursive) {
         while (widget->child_count > 0) {
@@ -573,6 +575,7 @@ tc_ui_document* tc_ui_document_create(void) {
     document->pointer_capture = tc_widget_handle_invalid();
     document->pressed_widget = tc_widget_handle_invalid();
     document->focused_widget = tc_widget_handle_invalid();
+    document->cursor_intent = TC_UI_CURSOR_DEFAULT;
     tc_ui_theme_init_default(&document->theme);
     document->theme_revision = 1;
     return document;
@@ -714,6 +717,8 @@ void tc_ui_document_destroy(tc_ui_document* document) {
     if (!document) {
         return;
     }
+    document->cursor_changed = NULL;
+    document->cursor_changed_user_data = NULL;
     while (document->live_count > 0) {
         bool destroyed_one = false;
         for (index = 0; index < document->slot_count; ++index) {
