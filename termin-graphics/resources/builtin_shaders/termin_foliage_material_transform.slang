@@ -61,3 +61,30 @@ TerminWorldVertex termin_foliage_material_world_vertex(
     output.tangent = float4(0.0, 0.0, 0.0, 0.0);
     return output;
 }
+
+float3 termin_foliage_world_position(
+    float3 position,
+    uint instance_id
+) {
+    return termin_foliage_material_world_vertex(
+        position,
+        float3(0.0, 0.0, 1.0),
+        float2(0.0, 0.0),
+        instance_id).position;
+}
+
+TerminWorldPositionNormal termin_foliage_world_position_normal(
+    float3 position,
+    float3 normal,
+    uint instance_id
+) {
+    TerminWorldVertex world = termin_foliage_material_world_vertex(
+        position,
+        normal,
+        float2(0.0, 0.0),
+        instance_id);
+    TerminWorldPositionNormal output;
+    output.position = world.position;
+    output.normal = world.normal;
+    return output;
+}

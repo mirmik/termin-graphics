@@ -416,11 +416,30 @@ VertexOutputAdapter material_pipeline_standard_material_vertex_output_adapter()
 VertexTransformProvider material_pipeline_make_foliage_material_vertex_transform_provider(
     std::string debug_name)
 {
+    return material_pipeline_make_foliage_vertex_transform_provider(
+        std::move(debug_name),
+        MeshVertexTransformProfile::Material);
+}
+
+VertexTransformProvider material_pipeline_make_foliage_vertex_transform_provider(
+    std::string debug_name,
+    MeshVertexTransformProfile profile)
+{
     VertexTransformProvider provider;
     provider.kind = VertexTransformKind::Foliage;
     provider.debug_name = std::move(debug_name);
     provider.vertex_entry = "vs_main";
-    provider.vertex_inputs = material_pipeline_foliage_material_mesh_input();
+    switch (profile) {
+    case MeshVertexTransformProfile::Material:
+        provider.vertex_inputs = material_pipeline_foliage_material_mesh_input();
+        break;
+    case MeshVertexTransformProfile::Position:
+        provider.vertex_inputs = material_pipeline_position_mesh_input();
+        break;
+    case MeshVertexTransformProfile::PositionNormal:
+        provider.vertex_inputs = material_pipeline_position_normal_mesh_input();
+        break;
+    }
     provider.produced_fragment_input =
         material_pipeline_standard_material_fragment_interface();
     provider.produced_world_semantics =
@@ -435,16 +454,40 @@ VertexTransformProvider material_pipeline_make_foliage_material_vertex_transform
     provider.source_module = {
         "termin_foliage_material_transform",
         "builtin_shaders/termin_foliage_material_transform.slang"};
-    provider.entry_input_declaration = R"(
+    switch (profile) {
+    case MeshVertexTransformProfile::Material:
+        provider.entry_input_declaration = R"(
 struct VertexInput {
     float3 position : POSITION;
     float3 normal : NORMAL;
     float2 uv : TEXCOORD0;
     uint instance_id : SV_InstanceID;
 };)";
-    provider.adapter_input_expression =
-        "termin_foliage_material_world_vertex("
-        "input.position, input.normal, input.uv, input.instance_id)";
+        provider.adapter_input_expression =
+            "termin_foliage_material_world_vertex("
+            "input.position, input.normal, input.uv, input.instance_id)";
+        break;
+    case MeshVertexTransformProfile::Position:
+        provider.entry_input_declaration = R"(
+struct VertexInput {
+    float3 position : POSITION;
+    uint instance_id : SV_InstanceID;
+};)";
+        provider.adapter_input_expression =
+            "termin_foliage_world_position(input.position, input.instance_id)";
+        break;
+    case MeshVertexTransformProfile::PositionNormal:
+        provider.entry_input_declaration = R"(
+struct VertexInput {
+    float3 position : POSITION;
+    float3 normal : NORMAL;
+    uint instance_id : SV_InstanceID;
+};)";
+        provider.adapter_input_expression =
+            "termin_foliage_world_position_normal("
+            "input.position, input.normal, input.instance_id)";
+        break;
+    }
     return provider;
 }
 

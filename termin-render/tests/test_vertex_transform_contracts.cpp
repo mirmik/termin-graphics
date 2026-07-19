@@ -160,6 +160,25 @@ TEST_CASE("Foliage material provider is modular and declares instanced resources
     CHECK_EQ(contract.instance_streams[0].name, std::string("foliage_instances"));
 }
 
+TEST_CASE("Foliage auxiliary providers expose only the pass-required mesh ABI") {
+    termin::VertexTransformContract position =
+        termin::material_pipeline_make_foliage_vertex_transform_provider(
+            "foliage_position",
+            termin::MeshVertexTransformProfile::Position);
+    CHECK(has_attribute(position.vertex_inputs, "position", termin::MaterialPipelineValueType::Float3));
+    CHECK(!has_attribute(position.vertex_inputs, "normal", termin::MaterialPipelineValueType::Float3));
+    CHECK(!has_attribute(position.vertex_inputs, "uv", termin::MaterialPipelineValueType::Float2));
+    CHECK(position.adapter_input_expression.find("instance_id") != std::string::npos);
+
+    termin::VertexTransformContract position_normal =
+        termin::material_pipeline_make_foliage_vertex_transform_provider(
+            "foliage_position_normal",
+            termin::MeshVertexTransformProfile::PositionNormal);
+    CHECK(has_attribute(position_normal.vertex_inputs, "position", termin::MaterialPipelineValueType::Float3));
+    CHECK(has_attribute(position_normal.vertex_inputs, "normal", termin::MaterialPipelineValueType::Float3));
+    CHECK(!has_attribute(position_normal.vertex_inputs, "uv", termin::MaterialPipelineValueType::Float2));
+}
+
 TEST_CASE("Foliage shadow transform uses position-only mesh input") {
     termin::VertexTransformContract contract = foliage_shadow_transform();
 
