@@ -26,6 +26,11 @@ if(COMMAND termin_require_package)
 else()
     find_package(termin_inspect REQUIRED)
 endif()
+if(COMMAND termin_require_package)
+    termin_require_package(termin_window termin_window::termin_window)
+else()
+    find_package(termin_window REQUIRED)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
@@ -121,6 +126,26 @@ target_link_libraries(termin_gui_native
         termin_inspect::termin_inspect
 )
 
+# Optional application-facing input adapter. Keeping it in a separate target
+# leaves the document/widget core independent from native window lifecycle.
+add_library(termin_gui_native_window_input STATIC
+    src/window_input.cpp
+)
+add_library(termin_gui_native::window_input ALIAS termin_gui_native_window_input)
+set_target_properties(termin_gui_native_window_input PROPERTIES
+    EXPORT_NAME window_input
+)
+target_include_directories(termin_gui_native_window_input
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(termin_gui_native_window_input
+    PUBLIC
+        termin_gui_native
+        termin_window::termin_window
+)
+
 termin_set_rpath_lib(termin_gui_native)
 if(NOT WIN32)
     set_target_properties(termin_gui_native PROPERTIES
@@ -207,6 +232,11 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     termin_gui_native_add_test(termin_gui_native_scene_view_test
         tests/test_scene_view.cpp
     )
+    termin_gui_native_add_test(termin_gui_native_window_input_test
+        tests/test_window_input.cpp
+    )
+    target_link_libraries(termin_gui_native_window_input_test
+        PRIVATE termin_gui_native_window_input)
     termin_gui_native_add_test(termin_gui_native_renderer_pixel_smoke
         tests/test_draw_list_renderer_pixel_smoke.cpp
     )
@@ -296,7 +326,7 @@ endif()
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
-install(TARGETS termin_gui_native
+install(TARGETS termin_gui_native termin_gui_native_window_input
     EXPORT termin_gui_nativeTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}

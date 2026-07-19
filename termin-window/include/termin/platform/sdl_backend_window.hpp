@@ -2,7 +2,6 @@
 #pragma once
 
 #include <memory>
-#include <functional>
 #include <string>
 #include <utility>
 
@@ -17,7 +16,6 @@ private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
     SDL_Window* window_ = nullptr;
-    std::function<void(const SDL_Event&)> event_handler_;
     bool should_close_ = false;
 
 public:
@@ -51,15 +49,14 @@ public:
     void set_should_close(bool v) override { should_close_ = v; }
 
     void maximize() override;
+    void set_title(const std::string& title) override;
     void set_icon_bmp(const std::string& path);
     void set_fullscreen(bool enabled) override;
+    void set_text_input_enabled(bool enabled) override;
     void set_always_on_top(bool enabled);
     void close() override;
-    void poll_events() override;
-    bool poll_event(SDL_Event& out_event);
-    void set_event_handler(std::function<void(const SDL_Event&)> handler) {
-        event_handler_ = std::move(handler);
-    }
+    bool poll_event(WindowEvent& out_event) override;
+    std::pair<int, int> window_size() const override;
     std::pair<int, int> framebuffer_size() const override;
     void present(tgfx::TextureHandle color_tex) override;
 };

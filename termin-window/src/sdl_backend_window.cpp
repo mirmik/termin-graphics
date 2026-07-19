@@ -1,7 +1,9 @@
 // sdl_backend_window.cpp - SDL window + IRenderDevice wrapper.
 #include "termin/platform/sdl_backend_window.hpp"
 
+#include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
@@ -61,6 +63,68 @@ uint32_t event_window_id(const SDL_Event& ev) {
             return ev.text.windowID;
         default:
             return 0;
+    }
+}
+
+uint32_t translate_modifiers(SDL_Keymod modifiers) {
+    uint32_t result = WindowModifierNone;
+    if ((modifiers & KMOD_SHIFT) != 0) result |= WindowModifierShift;
+    if ((modifiers & KMOD_CTRL) != 0) result |= WindowModifierControl;
+    if ((modifiers & KMOD_ALT) != 0) result |= WindowModifierAlt;
+    if ((modifiers & KMOD_GUI) != 0) result |= WindowModifierSuper;
+    return result;
+}
+
+WindowPointerButton translate_pointer_button(uint8_t button) {
+    switch (button) {
+        case SDL_BUTTON_LEFT: return WindowPointerButton::Left;
+        case SDL_BUTTON_RIGHT: return WindowPointerButton::Right;
+        case SDL_BUTTON_MIDDLE: return WindowPointerButton::Middle;
+        default: return WindowPointerButton::Other;
+    }
+}
+
+WindowKey translate_key(SDL_Keycode key) {
+    if (key >= SDLK_a && key <= SDLK_z) {
+        return static_cast<WindowKey>(
+            static_cast<uint16_t>(WindowKey::A) +
+            static_cast<uint16_t>(key - SDLK_a));
+    }
+    if (key >= SDLK_0 && key <= SDLK_9) {
+        return static_cast<WindowKey>(
+            static_cast<uint16_t>(WindowKey::Digit0) +
+            static_cast<uint16_t>(key - SDLK_0));
+    }
+    switch (key) {
+        case SDLK_TAB: return WindowKey::Tab;
+        case SDLK_RETURN:
+        case SDLK_KP_ENTER: return WindowKey::Enter;
+        case SDLK_SPACE: return WindowKey::Space;
+        case SDLK_ESCAPE: return WindowKey::Escape;
+        case SDLK_BACKSPACE: return WindowKey::Backspace;
+        case SDLK_DELETE: return WindowKey::Delete;
+        case SDLK_RIGHT: return WindowKey::Right;
+        case SDLK_LEFT: return WindowKey::Left;
+        case SDLK_DOWN: return WindowKey::Down;
+        case SDLK_UP: return WindowKey::Up;
+        case SDLK_HOME: return WindowKey::Home;
+        case SDLK_END: return WindowKey::End;
+        case SDLK_INSERT: return WindowKey::Insert;
+        case SDLK_PAGEUP: return WindowKey::PageUp;
+        case SDLK_PAGEDOWN: return WindowKey::PageDown;
+        case SDLK_F1: return WindowKey::F1;
+        case SDLK_F2: return WindowKey::F2;
+        case SDLK_F3: return WindowKey::F3;
+        case SDLK_F4: return WindowKey::F4;
+        case SDLK_F5: return WindowKey::F5;
+        case SDLK_F6: return WindowKey::F6;
+        case SDLK_F7: return WindowKey::F7;
+        case SDLK_F8: return WindowKey::F8;
+        case SDLK_F9: return WindowKey::F9;
+        case SDLK_F10: return WindowKey::F10;
+        case SDLK_F11: return WindowKey::F11;
+        case SDLK_F12: return WindowKey::F12;
+        default: return WindowKey::Unknown;
     }
 }
 
@@ -403,6 +467,12 @@ void SDLBackendWindow::maximize() {
     }
 }
 
+void SDLBackendWindow::set_title(const std::string& title) {
+    if (window_) {
+        SDL_SetWindowTitle(window_, title.c_str());
+    }
+}
+
 void SDLBackendWindow::set_icon_bmp(const std::string& path) {
     if (!window_) {
         tc_log_error("[SDLBackendWindow] cannot set icon on a closed window");
@@ -428,6 +498,14 @@ void SDLBackendWindow::set_fullscreen(bool enabled) {
     const Uint32 flags = enabled ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0;
     if (SDL_SetWindowFullscreen(window_, flags) != 0) {
         tc_log(TC_LOG_ERROR, "[BackendWindow] SDL_SetWindowFullscreen failed: %s", SDL_GetError());
+    }
+}
+
+void SDLBackendWindow::set_text_input_enabled(bool enabled) {
+    if (enabled) {
+        SDL_StartTextInput();
+    } else {
+        SDL_StopTextInput();
     }
 }
 
@@ -550,20 +628,26 @@ std::pair<int, int> SDLBackendWindow::framebuffer_size() const {
     return {w, h};
 }
 
+std::pair<int, int> SDLBackendWindow::window_size() const {
+    if (!window_) return {0, 0};
+    int width = 0;
+    int height = 0;
+    SDL_GetWindowSize(window_, &width, &height);
+    return {width, height};
+}
+
 // ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------
 
-bool SDLBackendWindow::poll_event(SDL_Event& out_event) {
-    return SDL_PollEvent(&out_event) != 0;
-}
-
-void SDLBackendWindow::poll_events() {
+bool SDLBackendWindow::poll_event(WindowEvent& out_event) {
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
         if (ev.type == SDL_QUIT) {
             should_close_ = true;
-            continue;
+            out_event = {};
+            out_event.type = WindowEventType::CloseRequested;
+            return true;
         }
 
         const uint32_t own_window_id = window_ ? SDL_GetWindowID(window_) : 0;
@@ -574,13 +658,103 @@ void SDLBackendWindow::poll_events() {
 
         if (ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_CLOSE) {
             should_close_ = true;
-            continue;
+            out_event = {};
+            out_event.type = WindowEventType::CloseRequested;
+            return true;
         }
 
-        if (event_handler_) {
-            event_handler_(ev);
+        out_event = {};
+        switch (ev.type) {
+            case SDL_WINDOWEVENT:
+                if (ev.window.event != SDL_WINDOWEVENT_RESIZED &&
+                    ev.window.event != SDL_WINDOWEVENT_SIZE_CHANGED) {
+                    continue;
+                }
+                out_event.type = WindowEventType::Resized;
+                out_event.resize.width = ev.window.data1;
+                out_event.resize.height = ev.window.data2;
+                {
+                    const auto [width, height] = framebuffer_size();
+                    out_event.resize.framebuffer_width = width;
+                    out_event.resize.framebuffer_height = height;
+                }
+                return true;
+
+            case SDL_MOUSEMOTION:
+                out_event.type = WindowEventType::PointerMoved;
+                out_event.pointer.logical_position = {
+                    static_cast<float>(ev.motion.x),
+                    static_cast<float>(ev.motion.y)};
+                break;
+
+            case SDL_MOUSEBUTTONDOWN:
+            case SDL_MOUSEBUTTONUP:
+                out_event.type = ev.type == SDL_MOUSEBUTTONDOWN
+                    ? WindowEventType::PointerButtonPressed
+                    : WindowEventType::PointerButtonReleased;
+                out_event.pointer.logical_position = {
+                    static_cast<float>(ev.button.x),
+                    static_cast<float>(ev.button.y)};
+                out_event.pointer.button = translate_pointer_button(ev.button.button);
+                out_event.pointer.clicks = ev.button.clicks;
+                break;
+
+            case SDL_MOUSEWHEEL: {
+                out_event.type = WindowEventType::PointerWheel;
+                int x = 0;
+                int y = 0;
+                SDL_GetMouseState(&x, &y);
+                out_event.pointer.logical_position = {
+                    static_cast<float>(x), static_cast<float>(y)};
+                const float direction = ev.wheel.direction == SDL_MOUSEWHEEL_FLIPPED
+                    ? -1.0f : 1.0f;
+                out_event.pointer.wheel_x = direction * static_cast<float>(ev.wheel.x);
+                out_event.pointer.wheel_y = direction * static_cast<float>(ev.wheel.y);
+                break;
+            }
+
+            case SDL_KEYDOWN:
+            case SDL_KEYUP:
+                out_event.type = ev.type == SDL_KEYDOWN
+                    ? WindowEventType::KeyPressed
+                    : WindowEventType::KeyReleased;
+                out_event.key.key = translate_key(ev.key.keysym.sym);
+                out_event.key.native_key = static_cast<int32_t>(ev.key.keysym.sym);
+                out_event.key.native_scancode = static_cast<int32_t>(ev.key.keysym.scancode);
+                out_event.key.modifiers = translate_modifiers(
+                    static_cast<SDL_Keymod>(ev.key.keysym.mod));
+                out_event.key.repeat = ev.key.repeat != 0;
+                return true;
+
+            case SDL_TEXTINPUT:
+                out_event.type = WindowEventType::TextInput;
+                {
+                    const size_t length = std::min(
+                        std::strlen(ev.text.text),
+                        out_event.text.utf8.size() - 1);
+                    std::copy_n(
+                        ev.text.text, length, out_event.text.utf8.data());
+                    out_event.text.utf8[length] = '\0';
+                }
+                return true;
+
+            default:
+                continue;
         }
+
+        out_event.pointer.modifiers = translate_modifiers(SDL_GetModState());
+        const auto [window_width, window_height] = window_size();
+        const auto [framebuffer_width, framebuffer_height] = framebuffer_size();
+        out_event.pointer.framebuffer_position = out_event.pointer.logical_position;
+        if (window_width > 0 && window_height > 0) {
+            out_event.pointer.framebuffer_position.x *=
+                static_cast<float>(framebuffer_width) / static_cast<float>(window_width);
+            out_event.pointer.framebuffer_position.y *=
+                static_cast<float>(framebuffer_height) / static_cast<float>(window_height);
+        }
+        return true;
     }
+    return false;
 }
 
 // ---------------------------------------------------------------------------
