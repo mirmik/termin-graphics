@@ -336,6 +336,15 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
           },
           nb::arg("checked") = false)
       .def(
+          "create_group_box",
+          [](Document &self, const std::string &title,
+             const std::string &debug_name) {
+            return GroupBoxRef{
+                self.make_native<termin::gui_native::GroupBox>(
+                    title, debug_name.c_str())};
+          },
+          nb::arg("title") = "", nb::arg("debug_name") = "GroupBox")
+      .def(
           "create_scroll_area",
           [](Document &self, const std::string &debug_name) {
             return ScrollAreaRef{

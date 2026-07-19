@@ -586,6 +586,50 @@ void bind_gui_native_widgets(nb::module_& m) {
             },
             nb::arg("callback"));
 
+    nb::class_<GroupBoxRef>(m, "GroupBox")
+        .def_prop_ro("widget", [](const GroupBoxRef& self) { return self.widget; })
+        .def_prop_ro("handle", [](const GroupBoxRef& self) {
+            return WidgetHandle{self.widget.handle};
+        })
+        .def_prop_rw(
+            "title", [](const GroupBoxRef& self) { return self.get().title(); },
+            [](const GroupBoxRef& self, const std::string& title) {
+                self.get().set_title(title);
+            })
+        .def_prop_ro("content_handle", [](const GroupBoxRef& self) {
+            return WidgetHandle{self.get().content()};
+        })
+        .def(
+            "set_content",
+            [](const GroupBoxRef& self, const WidgetRef& content) {
+                if (self.widget.state != content.state) {
+                    throw std::invalid_argument(
+                        "GroupBox content belongs to another document");
+                }
+                self.get().set_content(content.handle);
+                self.widget.throw_pending_exception();
+            },
+            nb::arg("content"))
+        .def(
+            "set_padding",
+            [](const GroupBoxRef& self, termin::gui_native::EdgeInsets padding) {
+                self.get().set_padding(padding);
+            },
+            nb::arg("padding"))
+        .def(
+            "set_background",
+            [](const GroupBoxRef& self, tc_ui_color color) {
+                self.get().set_background({color.r, color.g, color.b, color.a});
+            },
+            nb::arg("color"))
+        .def(
+            "set_border",
+            [](const GroupBoxRef& self, tc_ui_color color, float thickness) {
+                self.get().set_border(
+                    {color.r, color.g, color.b, color.a}, thickness);
+            },
+            nb::arg("color"), nb::arg("thickness") = 1.0f);
+
     nb::class_<ScrollAreaRef>(m, "ScrollArea")
         .def_prop_ro("widget",
                      [](const ScrollAreaRef &self) { return self.widget; })

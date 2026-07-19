@@ -1147,6 +1147,38 @@ def test_native_basic_input_and_media_widget_factories():
     assert not checkbox.checked
     assert checkbox_changes == [False]
 
+    group = document.create_group_box("Rendering", "python-group")
+    group_content = document.create_panel("group-content")
+    replacement = document.create_panel("group-replacement")
+    group.title = "Display"
+    group.set_padding(EdgeInsets(8.0, 6.0, 10.0, 12.0))
+    group.set_background(Color(0.1, 0.2, 0.3, 1.0))
+    group.set_border(Color(0.8, 0.9, 1.0, 1.0), 2.0)
+    group.set_content(group_content)
+    assert group.title == "Display"
+    assert group.content_handle == group_content.handle
+    group.set_content(replacement)
+    assert group.content_handle == replacement.handle
+    assert group_content.parent is None
+    assert group_content.alive
+    group.widget.layout(Rect(0.0, 0.0, 180.0, 120.0))
+    assert replacement.bounds.x == pytest.approx(8.0)
+    assert replacement.bounds.y == pytest.approx(36.0)
+    assert replacement.bounds.width == pytest.approx(162.0)
+    assert replacement.bounds.height == pytest.approx(72.0)
+    group_draw_list = DrawList()
+    group.widget.paint(PaintContext(group_draw_list))
+    assert any(
+        command.type == DrawCommandType.Text and command.text == "Display"
+        for command in group_draw_list.commands
+    )
+    assert document.destroy_widget_recursive(group.handle)
+    assert not group.widget.alive
+    assert not replacement.alive
+    assert group_content.alive
+    with pytest.raises(RuntimeError, match="stale"):
+        _ = group.title
+
     scroll = document.create_scroll_area("python-scroll")
     scroll_content = document.create_vstack("python-scroll-content")
     scroll_content.preferred_size = Size(200.0, 300.0)
