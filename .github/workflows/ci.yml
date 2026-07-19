@@ -34,6 +34,8 @@ jobs:
           python -m termin_build.repository_control --repo-root . \
             plan pr --platform linux --json > build/ci-plans/pr-linux.json
           python -m termin_build.repository_control --repo-root . \
+            plan pr --platform windows --json > build/ci-plans/pr-windows.json
+          python -m termin_build.repository_control --repo-root . \
             plan sdk-installed --platform linux --json > build/ci-plans/sdk-installed-linux.json
           python -m termin_build.repository_control --repo-root . \
             plan windows-d3d11-bound --platform windows --json > build/ci-plans/windows-d3d11-bound.json
@@ -226,6 +228,44 @@ jobs:
         if: always()
         with:
           name: ctest-execution-manifest
+          path: |
+            build/Release-tests/ctest-selection.json
+            build/Release-tests/ctest-execution-manifest.json
+            build/Release-tests/ctest-results.xml
+          retention-days: 7
+
+  test-cpp-windows:
+    needs: plan-pr-linux
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: ci-plans
+          path: build/ci-plans/
+
+      - name: Build C++ SDK dependencies
+        shell: pwsh
+        run: .\build-sdk-cpp.ps1 --no-vulkan --no-opengl --no-sdl
+
+      - name: Run repository-controlled C++ tests
+        shell: pwsh
+        run: |
+          $env:TERMIN_TEST_PLAN = Join-Path $pwd "build\ci-plans\pr-windows.json"
+          .\run-tests-cpp.ps1 --no-vulkan --no-opengl --no-sdl
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: ctest-execution-manifest-windows
           path: |
             build/Release-tests/ctest-selection.json
             build/Release-tests/ctest-execution-manifest.json
