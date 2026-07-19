@@ -97,6 +97,7 @@ tc_widget_factory_descriptor descriptor(FactoryState& state) {
 
 void test_owned_factory_identity_and_unload_invalidation() {
     tc_runtime_type_registry_clear();
+    tc_runtime_type_registry_set_registration_owner("ambient.owner.must.survive");
     FactoryState state;
     const tc_widget_factory_descriptor factory = descriptor(state);
     assert(tc_widget_registry_register("test.ui.OwnedWidget", "test.module", "termin.gui.Widget",
@@ -108,6 +109,8 @@ void test_owned_factory_identity_and_unload_invalidation() {
            0);
     assert(std::strcmp(tc_runtime_type_registry_get_parent("test.ui.OwnedWidget"),
                        "termin.gui.Widget") == 0);
+    assert(std::strcmp(tc_runtime_type_registry_get_registration_owner(),
+                       "ambient.owner.must.survive") == 0);
 
     tc_ui_document* document = tc_ui_document_create();
     assert(document);
@@ -134,6 +137,48 @@ void test_owned_factory_identity_and_unload_invalidation() {
     assert(state.deletes == 2);
     assert(state.userdata_destroys == 1);
     assert(!tc_widget_registry_has("test.ui.OwnedWidget"));
+    tc_ui_document_destroy(document);
+    tc_runtime_type_registry_clear();
+    tc_runtime_type_registry_set_registration_owner(nullptr);
+}
+
+void test_descriptor_validation_leaves_no_partial_widget_type() {
+    tc_runtime_type_registry_clear();
+    FactoryState state;
+    const tc_widget_factory_descriptor factory = descriptor(state);
+
+    assert(!tc_widget_registry_register("test.ui.NoOwner", nullptr, nullptr, &factory));
+    assert(!tc_runtime_type_registry_has_type("test.ui.NoOwner"));
+    assert(!tc_widget_registry_register("test.ui.MissingParent", "test.module",
+                                        "test.ui.DoesNotExist", &factory));
+    assert(!tc_runtime_type_registry_has_type("test.ui.MissingParent"));
+    assert(!tc_widget_registry_register("test.ui.SelfParent", "test.module",
+                                        "test.ui.SelfParent", &factory));
+    assert(!tc_runtime_type_registry_has_type("test.ui.SelfParent"));
+    assert(state.userdata_destroys == 0);
+    tc_runtime_type_registry_clear();
+}
+
+void test_idle_factory_replacement_uses_a_fresh_descriptor() {
+    tc_runtime_type_registry_clear();
+    FactoryState first_state;
+    FactoryState second_state;
+    const tc_widget_factory_descriptor first = descriptor(first_state);
+    const tc_widget_factory_descriptor second = descriptor(second_state);
+
+    assert(tc_widget_registry_register("test.ui.Replaceable", "test.module", nullptr, &first));
+    assert(tc_widget_registry_register("test.ui.Replaceable", "test.module", nullptr, &second));
+    assert(first_state.userdata_destroys == 1);
+    assert(second_state.userdata_destroys == 0);
+
+    tc_ui_document* document = tc_ui_document_create();
+    const tc_widget_handle handle =
+        tc_ui_document_create_registered_widget(document, "test.ui.Replaceable");
+    assert(!tc_widget_handle_is_invalid(handle));
+    assert(first_state.creates == 0);
+    assert(second_state.creates == 1);
+    assert(tc_widget_registry_unregister("test.ui.Replaceable"));
+    assert(second_state.userdata_destroys == 1);
     tc_ui_document_destroy(document);
     tc_runtime_type_registry_clear();
 }
@@ -268,6 +313,8 @@ void test_owner_reload_invalidates_documents_nested_trees_and_factory_userdata()
 
 int main() {
     test_owned_factory_identity_and_unload_invalidation();
+    test_descriptor_validation_leaves_no_partial_widget_type();
+    test_idle_factory_replacement_uses_a_fresh_descriptor();
     test_borrowed_factory_is_explicit_and_not_deleted();
     test_after_adopt_failure_rolls_back_handle_and_owned_body();
     test_registered_state_hooks_round_trip_strict_dict_state();

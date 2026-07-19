@@ -54,6 +54,12 @@ typedef enum tc_widget_owner_reload_policy {
     TC_WIDGET_OWNER_RELOAD_INVALIDATE = 0,
 } tc_widget_owner_reload_policy;
 
+/*
+ * Publishes one complete widget runtime type. `owner` must be non-empty and an
+ * existing `parent_type` must already be committed (the built-in
+ * termin.gui.Widget root is initialized lazily). On success the registry owns
+ * descriptor->userdata; on failure ownership remains with the caller.
+ */
 TERMIN_GUI_NATIVE_API bool
 tc_widget_registry_register(const char* type_name, const char* owner, const char* parent_type,
                             const tc_widget_factory_descriptor* descriptor);

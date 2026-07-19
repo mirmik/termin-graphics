@@ -7,6 +7,7 @@
 
 typedef struct tc_widget_factory_record {
     tc_widget_factory_descriptor descriptor;
+    bool owns_userdata;
 } tc_widget_factory_record;
 
 typedef struct tc_widget_instance_ref {
@@ -26,7 +27,8 @@ static void destroy_factory_record(void* payload) {
     if (!record) {
         return;
     }
-    if (record->descriptor.destroy_userdata && record->descriptor.userdata) {
+    if (record->owns_userdata && record->descriptor.destroy_userdata &&
+        record->descriptor.userdata) {
         record->descriptor.destroy_userdata(record->descriptor.userdata);
     }
     free(record);
@@ -90,12 +92,33 @@ static tc_widget_factory_record* factory_record(const char* type_name) {
         type_name, TC_RUNTIME_TYPE_FACET_WIDGET_FACTORY);
 }
 
+static bool ensure_builtin_widget_parent(const char* parent_type) {
+    static const char* builtin_type = "termin.gui.Widget";
+    static const char* builtin_owner = "termin-gui-native";
+    tc_runtime_type_descriptor* descriptor;
+
+    if (!parent_type || strcmp(parent_type, builtin_type) != 0 ||
+        tc_runtime_type_registry_has_type(parent_type)) {
+        return true;
+    }
+    descriptor = tc_runtime_type_descriptor_create(builtin_type, builtin_owner, NULL);
+    if (!descriptor || !tc_runtime_type_registry_commit_descriptor(descriptor)) {
+        tc_log_error("[termin-gui-native] failed to publish builtin widget parent '%s'",
+                     builtin_type);
+        return false;
+    }
+    return true;
+}
+
 bool tc_widget_registry_register(const char* type_name, const char* owner, const char* parent_type,
                                  const tc_widget_factory_descriptor* descriptor) {
     tc_widget_factory_record* record;
-    const char* previous_owner;
-    if (!type_name || !type_name[0] || !descriptor || !descriptor->create) {
-        tc_log_error("[termin-gui-native] widget factory registration requires type and create");
+    tc_runtime_type_descriptor* type_descriptor;
+    const bool replacing = tc_widget_registry_has(type_name);
+    if (!type_name || !type_name[0] || !owner || !owner[0] || !descriptor ||
+        !descriptor->create) {
+        tc_log_error(
+            "[termin-gui-native] widget factory registration requires type, explicit owner and create");
         return false;
     }
     if (descriptor->abi_version != TC_WIDGET_FACTORY_ABI_VERSION) {
@@ -107,30 +130,25 @@ bool tc_widget_registry_register(const char* type_name, const char* owner, const
         tc_log_error("[termin-gui-native] widget factory '%s' has invalid language", type_name);
         return false;
     }
-    if (tc_widget_registry_has(type_name)) {
+    if (parent_type && parent_type[0] && strcmp(type_name, parent_type) == 0) {
+        tc_log_error("[termin-gui-native] widget type '%s' cannot be its own parent", type_name);
+        return false;
+    }
+    if (replacing) {
         if (tc_runtime_type_registry_instance_count(type_name) != 0) {
             tc_log_error(
                 "[termin-gui-native] cannot replace widget factory '%s' with live instances",
                 type_name);
             return false;
         }
-        tc_runtime_type_registry_remove_facet(type_name, TC_RUNTIME_TYPE_FACET_WIDGET_FACTORY);
     }
-
-    previous_owner = tc_runtime_type_registry_get_registration_owner();
-    tc_runtime_type_registry_set_registration_owner(owner);
-    if (!tc_runtime_type_registry_ensure_type(type_name)) {
-        tc_runtime_type_registry_set_registration_owner(previous_owner);
-        return false;
-    }
-    tc_runtime_type_registry_set_registration_owner(previous_owner);
-    if (owner && owner[0] && !tc_runtime_type_registry_set_owner(type_name, owner, true)) {
-        tc_log_error("[termin-gui-native] failed to set owner for widget type '%s'", type_name);
+    if (!ensure_builtin_widget_parent(parent_type)) {
         return false;
     }
     if (parent_type && parent_type[0] &&
-        !tc_runtime_type_registry_set_parent(type_name, parent_type)) {
-        tc_log_error("[termin-gui-native] failed to set parent for widget type '%s'", type_name);
+        !tc_runtime_type_registry_has_type(parent_type)) {
+        tc_log_error("[termin-gui-native] widget type '%s' has missing parent '%s'",
+                     type_name, parent_type);
         return false;
     }
 
@@ -140,12 +158,30 @@ bool tc_widget_registry_register(const char* type_name, const char* owner, const
         return false;
     }
     record->descriptor = *descriptor;
-    if (!tc_runtime_type_registry_set_facet_with_lifecycle(
-            type_name, TC_RUNTIME_TYPE_FACET_WIDGET_FACTORY, record, destroy_factory_record,
-            prepare_factory_unload, TC_WIDGET_FACTORY_ABI_VERSION)) {
+    type_descriptor = tc_runtime_type_descriptor_create(type_name, owner, parent_type);
+    if (!type_descriptor) {
         free(record);
         return false;
     }
+    if (!tc_runtime_type_descriptor_add_facet(
+            type_descriptor, TC_RUNTIME_TYPE_FACET_WIDGET_FACTORY, record,
+            destroy_factory_record, prepare_factory_unload, TC_WIDGET_FACTORY_ABI_VERSION)) {
+        tc_runtime_type_descriptor_destroy(type_descriptor);
+        return false;
+    }
+
+    if (replacing &&
+        !tc_runtime_type_registry_unregister_type_with_context(type_name, NULL)) {
+        tc_log_error("[termin-gui-native] failed to retire widget type '%s' before replacement",
+                     type_name);
+        tc_runtime_type_descriptor_destroy(type_descriptor);
+        return false;
+    }
+    if (!tc_runtime_type_registry_commit_descriptor(type_descriptor)) {
+        tc_log_error("[termin-gui-native] failed to commit widget type '%s'", type_name);
+        return false;
+    }
+    record->owns_userdata = true;
     return true;
 }
 
