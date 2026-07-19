@@ -36,7 +36,7 @@ void IconButton::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     tc_ui_painter_fill_rounded_rect(context, bounds(), style.corner_radius, style.background);
     if (texture_id_ != 0) {
         const float inset = 5.0f;
-        tc_ui_painter_draw_texture(context, texture_id_, tc_ui_rect {bounds().x + inset, bounds().y + inset, bounds().width - inset * 2.0f, bounds().height - inset * 2.0f}, style.foreground, false);
+        tc_ui_painter_draw_texture(context, texture_id_, tc_ui_rect {bounds().x + inset, bounds().y + inset, bounds().width - inset * 2.0f, bounds().height - inset * 2.0f}, style.foreground, TC_UI_TEXTURE_SAMPLING_LINEAR, false);
     } else if (!icon_.empty()) {
         tc_ui_text_metrics metrics {};
         measure_text(document, icon_, style.font_size, metrics);

@@ -392,7 +392,8 @@ void FileGridWidget::paint(tc_ui_document* document, tc_ui_paint_context* contex
                 const tc_ui_rect icon_rect{tile.x + (tile.width - icon_size_) * 0.5f,
                                            tile.y + 8.0f, icon_size_, icon_size_};
                 if (item.texture_id != 0) {
-                    tc_ui_painter_draw_texture(context, item.texture_id, icon_rect, foreground, false);
+                    tc_ui_painter_draw_texture(context, item.texture_id, icon_rect, foreground,
+                                               TC_UI_TEXTURE_SAMPLING_LINEAR, false);
                 } else {
                     draw_semantic_file_icon(context, icon_rect, item.icon, foreground);
                 }

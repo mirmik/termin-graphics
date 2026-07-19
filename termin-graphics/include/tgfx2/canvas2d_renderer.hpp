@@ -36,6 +36,11 @@ struct CanvasVec2 {
     float y = 0.0f;
 };
 
+enum class CanvasTextureSampling {
+    Linear,
+    Nearest,
+};
+
 struct CanvasArc {
     CanvasVec2 center;
     float radius = 0.0f;
@@ -75,6 +80,10 @@ private:
     BatchMode batch_mode_ = BatchMode::None;
     CanvasColor batch_color_{};
     TextureHandle batch_texture_{};
+    CanvasTextureSampling batch_texture_sampling_ = CanvasTextureSampling::Linear;
+    SamplerHandle linear_sampler_{};
+    SamplerHandle nearest_sampler_{};
+    IRenderDevice* samplers_on_ = nullptr;
     std::vector<float> batch_vertices_;
 
 public:
@@ -109,7 +118,8 @@ public:
     void draw_texture(TextureHandle texture,
                       float x, float y, float w, float h,
                       CanvasColor tint = CanvasColor::white(),
-                      bool flip_v = false);
+                      bool flip_v = false,
+                      CanvasTextureSampling sampling = CanvasTextureSampling::Linear);
 
     void draw_text(std::string_view text, float x, float y,
                    float size_px, CanvasColor color,
@@ -126,10 +136,12 @@ public:
 
 private:
     void ensure_shaders_(IRenderDevice& device);
+    void ensure_samplers_(IRenderDevice& device);
     void build_projection_();
     void flush_();
     bool bind_solid_(CanvasColor color);
-    bool bind_texture_(CanvasColor tint, TextureHandle texture);
+    bool bind_texture_(CanvasColor tint, TextureHandle texture,
+                       CanvasTextureSampling sampling);
     void push_quad_(termin::Bounds2f bounds, termin::Bounds2f uv);
     void append_solid_quad_(termin::Bounds2f bounds, CanvasColor color);
     void append_solid_triangle_(CanvasVec2 p0, CanvasVec2 p1, CanvasVec2 p2,
@@ -138,7 +150,8 @@ private:
         termin::Bounds2f bounds,
         termin::Bounds2f uv,
         CanvasColor tint,
-        TextureHandle texture);
+        TextureHandle texture,
+        CanvasTextureSampling sampling);
 };
 
 }  // namespace tgfx

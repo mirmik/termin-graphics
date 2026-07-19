@@ -27,7 +27,7 @@ extern "C" {
 namespace {
 
 constexpr uint32_t kWidth = 128;
-constexpr uint32_t kHeight = 64;
+constexpr uint32_t kHeight = 96;
 
 bool existing_file(const std::filesystem::path& path) {
     std::error_code error;
@@ -93,6 +93,10 @@ bool looks_black(const float* pixel) {
     return pixel[0] < 0.05f && pixel[1] < 0.05f && pixel[2] < 0.05f;
 }
 
+bool looks_purple(const float* pixel) {
+    return pixel[0] > 0.25f && pixel[2] > 0.25f && pixel[1] < 0.15f;
+}
+
 const float* pixel_at(const std::vector<float>& pixels, uint32_t x, uint32_t y) {
     return &pixels[(static_cast<size_t>(y) * kWidth + x) * 4u];
 }
@@ -126,7 +130,9 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
     image_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
     image_desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
     const tgfx::TextureHandle image = device->create_texture(image_desc);
-    if (!target || !image) {
+    image_desc.height = 1;
+    const tgfx::TextureHandle sampling_image = device->create_texture(image_desc);
+    if (!target || !image || !sampling_image) {
         std::fprintf(stderr, "Failed to create renderer smoke textures\n");
         return 1;
     }
@@ -134,11 +140,16 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
         20, 230, 30, 255, 20, 230, 30, 255, 20, 230, 30, 255, 20, 230, 30, 255,
     };
     device->upload_texture(image, std::span<const uint8_t>(green_pixels, sizeof(green_pixels)));
+    const uint8_t sampling_pixels[]{255, 0, 0, 255, 0, 0, 255, 255};
+    device->upload_texture(
+        sampling_image,
+        std::span<const uint8_t>(sampling_pixels, sizeof(sampling_pixels)));
 
     tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
     tc_ui_paint_context* painter = tc_ui_paint_context_create(draw_list);
     tc_ui_painter_draw_texture(painter, image.id, tc_ui_rect{8.0f, 8.0f, 16.0f, 16.0f},
-                               tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}, false);
+                               tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+                               TC_UI_TEXTURE_SAMPLING_LINEAR, false);
     tc_ui_painter_push_clip(painter, tc_ui_rect{40.0f, 8.0f, 24.0f, 24.0f});
     tc_ui_painter_push_clip(painter, tc_ui_rect{48.0f, 12.0f, 8.0f, 8.0f});
     tc_ui_painter_fill_rect(painter, tc_ui_rect{36.0f, 4.0f, 40.0f, 40.0f},
@@ -149,6 +160,12 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
                                     tc_ui_color{0.05f, 0.15f, 0.9f, 1.0f});
     tc_ui_painter_fill_circle(painter, tc_ui_point{48.0f, 50.0f}, 8.0f,
                               tc_ui_color{0.9f, 0.85f, 0.05f, 1.0f}, 24);
+    tc_ui_painter_draw_texture(
+        painter, sampling_image.id, tc_ui_rect{8.0f, 72.0f, 16.0f, 16.0f},
+        tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}, TC_UI_TEXTURE_SAMPLING_NEAREST, false);
+    tc_ui_painter_draw_texture(
+        painter, sampling_image.id, tc_ui_rect{32.0f, 72.0f, 16.0f, 16.0f},
+        tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}, TC_UI_TEXTURE_SAMPLING_LINEAR, false);
     constexpr uint32_t text_baseline = 30;
     tc_ui_painter_draw_text(
         painter,
@@ -183,6 +200,7 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
             picker_textures.saturation_value,
             tc_ui_rect{90.0f, 40.0f, 28.0f, 20.0f},
             tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+            TC_UI_TEXTURE_SAMPLING_LINEAR,
             false
         );
     }
@@ -200,6 +218,9 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
     const bool rounded_center_ok = read_ok && looks_blue(pixel_at(pixels, 20, 50));
     const bool rounded_corner_ok = read_ok && looks_black(pixel_at(pixels, 9, 41));
     const bool circle_ok = read_ok && looks_yellow(pixel_at(pixels, 48, 50));
+    const bool nearest_left_ok = read_ok && looks_red(pixel_at(pixels, 15, 80));
+    const bool nearest_right_ok = read_ok && looks_blue(pixel_at(pixels, 16, 80));
+    const bool linear_mid_ok = read_ok && looks_purple(pixel_at(pixels, 39, 80));
     const float* picker_pixel = pixel_at(pixels, 96, 48);
     const bool picker_texture_ok = read_ok && picker_textures_ready &&
         (picker_pixel[0] > 0.1f || picker_pixel[1] > 0.1f || picker_pixel[2] > 0.1f);
@@ -228,6 +249,7 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
     tc_ui_paint_context_destroy(painter);
     tc_ui_draw_list_destroy(draw_list);
     device->destroy(image);
+    device->destroy(sampling_image);
     device->destroy(target);
 
     if (!read_ok || !image_ok || !nested_clip_inside_ok || !nested_clip_outside_ok ||
@@ -238,6 +260,13 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
                      tgfx::backend_name(backend), read_ok, image_ok, nested_clip_inside_ok,
                      nested_clip_outside_ok, rounded_center_ok, rounded_corner_ok, circle_ok,
                      picker_texture_ok, text_ok, text_signal, text_min_y, text_max_y);
+        return 1;
+    }
+    if (!nearest_left_ok || !nearest_right_ok || !linear_mid_ok) {
+        std::fprintf(stderr,
+                     "UI renderer %s sampling smoke failed: nearest_left=%d nearest_right=%d "
+                     "linear_mid=%d\n",
+                     tgfx::backend_name(backend), nearest_left_ok, nearest_right_ok, linear_mid_ok);
         return 1;
     }
     return 0;

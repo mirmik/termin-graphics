@@ -188,7 +188,7 @@ void ToolBar::paint(tc_ui_document* document, tc_ui_paint_context* context) {
                                        icon_extent};
             if (command.texture_id != 0) {
                 tc_ui_painter_draw_texture(context, command.texture_id, icon_rect, foreground,
-                                           false);
+                                           TC_UI_TEXTURE_SAMPLING_LINEAR, false);
             } else {
                 tc_ui_text_metrics metrics{};
                 const float icon_size = std::max(18.0f, style.font_size);

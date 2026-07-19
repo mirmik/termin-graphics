@@ -17,6 +17,12 @@ tgfx::CanvasColor canvas_color(tc_ui_color color) {
     return tgfx::CanvasColor {color.r, color.g, color.b, color.a};
 }
 
+tgfx::CanvasTextureSampling texture_sampling(tc_ui_texture_sampling sampling) {
+    return sampling == TC_UI_TEXTURE_SAMPLING_NEAREST
+        ? tgfx::CanvasTextureSampling::Nearest
+        : tgfx::CanvasTextureSampling::Linear;
+}
+
 } // namespace
 
 void UiDrawListRenderer::destroy_picker_surface_texture(
@@ -293,7 +299,8 @@ void UiDrawListRenderer::render(
                 command->rect.width,
                 command->rect.height,
                 canvas_color(command->color),
-                command->flip_v
+                command->flip_v,
+                texture_sampling(command->texture_sampling)
             );
             break;
         case TC_UI_DRAW_PUSH_CLIP:

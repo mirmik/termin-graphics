@@ -125,7 +125,9 @@ The current foundation includes:
   for command unit tests;
 - text and polyline commands use draw-list-owned backing storage. Texture
   commands carry a non-owning backend-neutral texture id whose device resource
-  must remain alive through `UiDrawListRenderer::render`;
+  must remain alive through `UiDrawListRenderer::render`, plus an explicit
+  `Linear`/`Nearest` sampling mode. Sampling is sampler-owned render state, not
+  mutable texture state, and participates in Canvas2D batch boundaries;
 - `UiDrawListRenderer` renders every command through `Canvas2DRenderer` when a
   default `FontAtlas` is configured for text. Its offscreen pixel smoke covers
   text, sampled texture, rounded geometry and nested clip intersection on every

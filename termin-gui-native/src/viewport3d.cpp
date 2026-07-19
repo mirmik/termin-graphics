@@ -208,7 +208,8 @@ void Viewport3D::paint(tc_ui_document* document, tc_ui_paint_context* context) {
         const tc_ui_rect destination = pixel_aligned_geometry(bounds()).rect;
         if (destination.width > 0.0f && destination.height > 0.0f) {
             tc_ui_painter_draw_texture(context, texture, destination,
-                                       tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}, false);
+                                       tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+                                       TC_UI_TEXTURE_SAMPLING_LINEAR, false);
         }
     }
 }

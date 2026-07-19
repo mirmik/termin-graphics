@@ -28,6 +28,17 @@ void Canvas::set_overlay_texture(uint32_t texture_id) {
     mark_dirty(TC_WIDGET_DIRTY_PAINT);
 }
 
+void Canvas::set_texture_sampling(tc_ui_texture_sampling sampling) {
+    if (sampling != TC_UI_TEXTURE_SAMPLING_LINEAR &&
+        sampling != TC_UI_TEXTURE_SAMPLING_NEAREST) {
+        tc_log_error("[termin-gui-native] Canvas rejected invalid texture sampling mode");
+        return;
+    }
+    if (texture_sampling_ == sampling) return;
+    texture_sampling_ = sampling;
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+}
+
 void Canvas::set_paint_callback(PaintCallback callback) {
     paint_callback_ = std::move(callback);
     mark_dirty(TC_WIDGET_DIRTY_PAINT);
@@ -87,9 +98,11 @@ void Canvas::paint(tc_ui_document* document, tc_ui_paint_context* context) {
             image_size_.width * zoom_,
             image_size_.height * zoom_
         };
-        tc_ui_painter_draw_texture(context, texture_id_, destination, tc_ui_color {1, 1, 1, 1}, false);
+        tc_ui_painter_draw_texture(context, texture_id_, destination,
+                                   tc_ui_color {1, 1, 1, 1}, texture_sampling_, false);
         if (overlay_texture_id_ != 0) {
-            tc_ui_painter_draw_texture(context, overlay_texture_id_, destination, tc_ui_color {1, 1, 1, 1}, false);
+            tc_ui_painter_draw_texture(context, overlay_texture_id_, destination,
+                                       tc_ui_color {1, 1, 1, 1}, texture_sampling_, false);
         }
     }
     if (paint_callback_) paint_callback_(*this, context);

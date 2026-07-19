@@ -243,12 +243,15 @@ void ColorPicker::paint(tc_ui_document* document, tc_ui_paint_context* context) 
                                 (!model_->show_alpha() || texture_ids_.alpha != 0);
     if (textures_ready) {
         tc_ui_painter_draw_texture(context, texture_ids_.saturation_value, sv,
-                                   tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}, false);
+                                   tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+                                   TC_UI_TEXTURE_SAMPLING_LINEAR, false);
         tc_ui_painter_draw_texture(context, texture_ids_.hue, hue,
-                                   tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}, false);
+                                   tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+                                   TC_UI_TEXTURE_SAMPLING_LINEAR, false);
         if (model_->show_alpha())
             tc_ui_painter_draw_texture(context, texture_ids_.alpha, alpha,
-                                       tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}, false);
+                                       tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+                                       TC_UI_TEXTURE_SAMPLING_LINEAR, false);
     } else {
         paint_fallback_surfaces(context);
     }

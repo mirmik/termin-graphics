@@ -46,7 +46,8 @@ void ImageWidget::paint(tc_ui_document*, tc_ui_paint_context* context) {
         destination.x += (bounds().width - destination.width) * 0.5f;
         destination.y += (bounds().height - destination.height) * 0.5f;
     }
-    tc_ui_painter_draw_texture(context, texture_id_, destination, tint_.c_color(), false);
+    tc_ui_painter_draw_texture(context, texture_id_, destination, tint_.c_color(),
+                               TC_UI_TEXTURE_SAMPLING_LINEAR, false);
 }
 
 

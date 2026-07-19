@@ -163,6 +163,12 @@ void bind_gui_native_control_views(nb::module_ &m) {
                    [](const CanvasRef &self) { return self.get().zoom(); })
       .def_prop_ro("fit_mode",
                    [](const CanvasRef &self) { return self.get().fit_mode(); })
+      .def_prop_rw(
+          "texture_sampling",
+          [](const CanvasRef &self) { return self.get().texture_sampling(); },
+          [](const CanvasRef &self, tc_ui_texture_sampling sampling) {
+            self.get().set_texture_sampling(sampling);
+          })
       .def(
           "set_texture",
           [](const CanvasRef &self, tgfx::TextureHandle texture,
@@ -282,4 +288,3 @@ void bind_gui_native_control_views(nb::module_ &m) {
       .value("Polyline", TC_UI_DRAW_POLYLINE)
       .value("Texture", TC_UI_DRAW_TEXTURE);
 }
-

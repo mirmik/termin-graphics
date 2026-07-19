@@ -364,7 +364,7 @@ void Menu::paint(tc_ui_document* document, tc_ui_paint_context* context) {
                 tc_ui_painter_draw_texture(
                     context, data.texture_id,
                     tc_ui_rect{prefix_x, y + (height - extent) / 2, extent, extent}, foreground,
-                    false);
+                    TC_UI_TEXTURE_SAMPLING_LINEAR, false);
             } else if (!data.icon.empty()) {
                 tc_ui_painter_draw_text(context, data.icon.c_str(), tc_ui_point{prefix_x, baseline},
                                         style.font_size, foreground);

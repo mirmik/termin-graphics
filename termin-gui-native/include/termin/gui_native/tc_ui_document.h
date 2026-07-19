@@ -191,6 +191,11 @@ typedef enum tc_ui_draw_command_type {
     TC_UI_DRAW_TEXTURE = 12
 } tc_ui_draw_command_type;
 
+typedef enum tc_ui_texture_sampling {
+    TC_UI_TEXTURE_SAMPLING_LINEAR = 0,
+    TC_UI_TEXTURE_SAMPLING_NEAREST = 1
+} tc_ui_texture_sampling;
+
 typedef struct tc_ui_draw_command {
     tc_ui_draw_command_type type;
     tc_ui_rect rect;
@@ -207,6 +212,7 @@ typedef struct tc_ui_draw_command {
     const tc_ui_point* points;
     size_t point_count;
     uint32_t texture_id;
+    tc_ui_texture_sampling texture_sampling;
     bool flip_v;
 } tc_ui_draw_command;
 
@@ -826,6 +832,7 @@ TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_texture(
     uint32_t texture_id,
     tc_ui_rect rect,
     tc_ui_color tint,
+    tc_ui_texture_sampling sampling,
     bool flip_v
 );
 TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_text(

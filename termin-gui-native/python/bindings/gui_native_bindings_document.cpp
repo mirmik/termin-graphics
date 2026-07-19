@@ -3,6 +3,10 @@
 using namespace termin::gui_native::python_bindings;
 
 void bind_gui_native_rendering_and_document(nb::module_ &m) {
+  nb::enum_<tc_ui_texture_sampling>(m, "TextureSampling")
+      .value("Linear", TC_UI_TEXTURE_SAMPLING_LINEAR)
+      .value("Nearest", TC_UI_TEXTURE_SAMPLING_NEAREST);
+
   nb::class_<DrawCommand>(m, "DrawCommand")
       .def_prop_ro(
           "type", [](const DrawCommand &command) { return command.value.type; })
@@ -41,6 +45,9 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
       .def_prop_ro(
           "texture_id",
           [](const DrawCommand &command) { return command.value.texture_id; })
+      .def_prop_ro("texture_sampling", [](const DrawCommand &command) {
+        return command.value.texture_sampling;
+      })
       .def_prop_ro("flip_v", [](const DrawCommand &command) {
         return command.value.flip_v;
       });
@@ -142,23 +149,29 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
       .def(
           "draw_texture",
           [](PaintContext &self, tgfx::TextureHandle texture, tc_ui_rect rect,
-             std::optional<tc_ui_color> tint, bool flip_v) {
+             std::optional<tc_ui_color> tint, bool flip_v,
+             tc_ui_texture_sampling sampling) {
             tc_ui_painter_draw_texture(
                 self.get(), texture.id, rect,
-                tint.value_or(tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}), flip_v);
+                tint.value_or(tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}), sampling,
+                flip_v);
           },
           nb::arg("texture"), nb::arg("rect"),
-          nb::arg("tint").none() = nb::none(), nb::arg("flip_v") = false)
+          nb::arg("tint").none() = nb::none(), nb::arg("flip_v") = false,
+          nb::arg("sampling") = TC_UI_TEXTURE_SAMPLING_LINEAR)
       .def(
           "draw_image",
           [](PaintContext &self, tgfx::TextureHandle texture, tc_ui_rect rect,
-             std::optional<tc_ui_color> tint, bool flip_v) {
+             std::optional<tc_ui_color> tint, bool flip_v,
+             tc_ui_texture_sampling sampling) {
             tc_ui_painter_draw_texture(
                 self.get(), texture.id, rect,
-                tint.value_or(tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}), flip_v);
+                tint.value_or(tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}), sampling,
+                flip_v);
           },
           nb::arg("texture"), nb::arg("rect"),
-          nb::arg("tint").none() = nb::none(), nb::arg("flip_v") = false)
+          nb::arg("tint").none() = nb::none(), nb::arg("flip_v") = false,
+          nb::arg("sampling") = TC_UI_TEXTURE_SAMPLING_LINEAR)
       .def(
           "draw_text",
           [](PaintContext &self, const std::string &text, tc_ui_point position,

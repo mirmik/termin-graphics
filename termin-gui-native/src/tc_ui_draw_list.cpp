@@ -285,9 +285,12 @@ void tc_ui_painter_draw_texture(
     uint32_t texture_id,
     tc_ui_rect rect,
     tc_ui_color tint,
+    tc_ui_texture_sampling sampling,
     bool flip_v
 ) {
-    if (texture_id == 0 || !finite_rect(rect)) {
+    if (texture_id == 0 || !finite_rect(rect) ||
+        (sampling != TC_UI_TEXTURE_SAMPLING_LINEAR &&
+         sampling != TC_UI_TEXTURE_SAMPLING_NEAREST)) {
         tc_log_error("[termin-gui-native] rejected invalid texture command");
         return;
     }
@@ -296,6 +299,7 @@ void tc_ui_painter_draw_texture(
     command.texture_id = texture_id;
     command.rect = rect;
     command.color = tint;
+    command.texture_sampling = sampling;
     command.flip_v = flip_v;
     append_draw_command(context, command);
 }

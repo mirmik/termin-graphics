@@ -1066,6 +1066,10 @@ void bind_tgfx2(nb::module_& m) {
         return nb::cast<tgfx::Text3DRenderer::Anchor>(obj);
     };
 
+    nb::enum_<tgfx::CanvasTextureSampling>(m, "CanvasTextureSampling")
+        .value("Linear", tgfx::CanvasTextureSampling::Linear)
+        .value("Nearest", tgfx::CanvasTextureSampling::Nearest);
+
     nb::class_<tgfx::CanvasColor>(m, "CanvasColor")
         .def(nb::init<>())
         .def(nb::init<float, float, float, float>(),
@@ -1146,12 +1150,15 @@ void bind_tgfx2(nb::module_& m) {
                                  tgfx::TextureHandle texture,
                                  float x, float y, float w, float h,
                                  std::optional<tgfx::CanvasColor> tint,
-                                 bool flip_v) {
+                                 bool flip_v,
+                                 tgfx::CanvasTextureSampling sampling) {
             self.draw_texture(texture, x, y, w, h,
-                              tint.value_or(tgfx::CanvasColor::white()), flip_v);
+                              tint.value_or(tgfx::CanvasColor::white()), flip_v,
+                              sampling);
         }, nb::arg("texture"), nb::arg("x"), nb::arg("y"), nb::arg("w"),
            nb::arg("h"), nb::arg("tint").none() = nb::none(),
-           nb::arg("flip_v") = false)
+           nb::arg("flip_v") = false,
+           nb::arg("sampling") = tgfx::CanvasTextureSampling::Linear)
         .def("draw_text",
              [resolve_text2d_anchor](tgfx::Canvas2DRenderer& self,
                 const std::string& text,

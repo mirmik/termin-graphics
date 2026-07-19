@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <string>
+#include <type_traits>
 
 using termin::gui_native::Document;
 using termin::gui_native::UiDrawListRenderer;
@@ -125,6 +126,7 @@ void test_renderer_font_binds_document_text_measurement() {
 }
 
 void test_extended_commands_own_variable_data_and_preserve_legacy_values() {
+    static_assert(std::is_standard_layout_v<tc_ui_draw_command>);
     static_assert(TC_UI_DRAW_FILL_RECT == 0);
     static_assert(TC_UI_DRAW_TEXT == 5);
     tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
@@ -161,6 +163,7 @@ void test_extended_commands_own_variable_data_and_preserve_legacy_values() {
         42,
         tc_ui_rect {16.0f, 17.0f, 8.0f, 9.0f},
         tc_ui_color {0.5f, 0.6f, 0.7f, 0.8f},
+        TC_UI_TEXTURE_SAMPLING_NEAREST,
         true
     );
     tc_ui_painter_draw_text(context, text, tc_ui_point {18.0f, 19.0f}, 14.0f, white);
@@ -179,6 +182,7 @@ void test_extended_commands_own_variable_data_and_preserve_legacy_values() {
     assert(polyline->points && polyline->points[1].x == 3.0f);
     assert(texture && texture->type == TC_UI_DRAW_TEXTURE);
     assert(texture->texture_id == 42 && texture->flip_v);
+    assert(texture->texture_sampling == TC_UI_TEXTURE_SAMPLING_NEAREST);
     assert(owned_text && owned_text->type == TC_UI_DRAW_TEXT);
     assert(std::string(owned_text->text) == "owned text");
 

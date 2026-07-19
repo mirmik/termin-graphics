@@ -1319,6 +1319,9 @@ void test_icon_image_and_canvas_media_contracts() {
   image.set_texture(41, tc_ui_size{200.0f, 100.0f});
   canvas.set_texture(42, tc_ui_size{100.0f, 50.0f});
   canvas.set_overlay_texture(43);
+  assert(canvas.texture_sampling() == TC_UI_TEXTURE_SAMPLING_LINEAR);
+  canvas.set_texture_sampling(TC_UI_TEXTURE_SAMPLING_NEAREST);
+  assert(canvas.texture_sampling() == TC_UI_TEXTURE_SAMPLING_NEAREST);
   int custom_paints = 0;
   canvas.set_paint_callback(
       [&custom_paints](Canvas &, tc_ui_paint_context *context) {
@@ -1377,6 +1380,16 @@ void test_icon_image_and_canvas_media_contracts() {
   document.paint_roots(context);
   assert(custom_paints == 1);
   assert(count_commands(draw_list, TC_UI_DRAW_TEXTURE) == 3);
+  size_t linear_textures = 0;
+  size_t nearest_textures = 0;
+  for (size_t index = 0; index < tc_ui_draw_list_command_count(draw_list); ++index) {
+    const tc_ui_draw_command *command = tc_ui_draw_list_command_at(draw_list, index);
+    if (!command || command->type != TC_UI_DRAW_TEXTURE) continue;
+    linear_textures += command->texture_sampling == TC_UI_TEXTURE_SAMPLING_LINEAR;
+    nearest_textures += command->texture_sampling == TC_UI_TEXTURE_SAMPLING_NEAREST;
+  }
+  assert(linear_textures == 1);
+  assert(nearest_textures == 2);
   assert(count_commands(draw_list, TC_UI_DRAW_LINE) >= 1);
   canvas.clear_texture();
   tc_ui_paint_context_destroy(context);

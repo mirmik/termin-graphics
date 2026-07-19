@@ -108,8 +108,10 @@ void Canvas2DRenderer::begin(RenderContext2& ctx,
     batch_vertices_.clear();
     batch_mode_ = BatchMode::None;
     batch_texture_ = TextureHandle{};
+    batch_texture_sampling_ = CanvasTextureSampling::Linear;
 
     ensure_shaders_(ctx.device());
+    ensure_samplers_(ctx.device());
     build_projection_();
 
     ctx.set_viewport(viewport_x_, viewport_y_, viewport_w_, viewport_h_);
@@ -389,7 +391,8 @@ void Canvas2DRenderer::draw_polyline(std::span<const CanvasVec2> points,
 
 void Canvas2DRenderer::draw_texture(TextureHandle texture,
                                     float x, float y, float w, float h,
-                                    CanvasColor tint, bool flip_v) {
+                                    CanvasColor tint, bool flip_v,
+                                    CanvasTextureSampling sampling) {
     if (ctx_ == nullptr || !texture || w <= 0.0f || h <= 0.0f) return;
     const float v0 = flip_v ? 1.0f : 0.0f;
     const float v1 = flip_v ? 0.0f : 1.0f;
@@ -397,7 +400,8 @@ void Canvas2DRenderer::draw_texture(TextureHandle texture,
         termin::Rect2f{x, y, w, h}.bounds(),
         termin::Bounds2f{0.0f, v0, 1.0f, v1},
         tint,
-        texture);
+        texture,
+        sampling);
 }
 
 void Canvas2DRenderer::draw_text(std::string_view text,
@@ -432,11 +436,44 @@ FontAtlas::Size2f Canvas2DRenderer::measure_text(std::string_view text,
 void Canvas2DRenderer::release_gpu() {
     flush_();
     text2d_.release_gpu();
+    if (samplers_on_ != nullptr) {
+        if (linear_sampler_) samplers_on_->destroy(linear_sampler_);
+        if (nearest_sampler_) samplers_on_->destroy(nearest_sampler_);
+    }
+    linear_sampler_ = SamplerHandle{};
+    nearest_sampler_ = SamplerHandle{};
+    samplers_on_ = nullptr;
     solid_vs_ = ShaderHandle{};
     solid_fs_ = ShaderHandle{};
     texture_vs_ = ShaderHandle{};
     texture_fs_ = ShaderHandle{};
     compiled_on_ = nullptr;
+}
+
+void Canvas2DRenderer::ensure_samplers_(IRenderDevice& device) {
+    if (samplers_on_ == &device && linear_sampler_ && nearest_sampler_) return;
+    if (samplers_on_ != nullptr) {
+        if (linear_sampler_) samplers_on_->destroy(linear_sampler_);
+        if (nearest_sampler_) samplers_on_->destroy(nearest_sampler_);
+    }
+    linear_sampler_ = SamplerHandle{};
+    nearest_sampler_ = SamplerHandle{};
+    samplers_on_ = &device;
+
+    SamplerDesc linear_desc{};
+    linear_desc.address_u = AddressMode::ClampToEdge;
+    linear_desc.address_v = AddressMode::ClampToEdge;
+    linear_desc.address_w = AddressMode::ClampToEdge;
+    linear_sampler_ = device.create_sampler(linear_desc);
+
+    SamplerDesc nearest_desc = linear_desc;
+    nearest_desc.min_filter = FilterMode::Nearest;
+    nearest_desc.mag_filter = FilterMode::Nearest;
+    nearest_desc.mip_filter = FilterMode::Nearest;
+    nearest_sampler_ = device.create_sampler(nearest_desc);
+    if (!linear_sampler_ || !nearest_sampler_) {
+        tc::Log::error("[Canvas2DRenderer] failed to create texture samplers");
+    }
 }
 
 void Canvas2DRenderer::ensure_shaders_(IRenderDevice& device) {
@@ -488,7 +525,7 @@ void Canvas2DRenderer::flush_() {
     if (batch_mode_ == BatchMode::Solid) {
         bound = bind_solid_(batch_color_);
     } else if (batch_mode_ == BatchMode::Texture) {
-        bound = bind_texture_(batch_color_, batch_texture_);
+        bound = bind_texture_(batch_color_, batch_texture_, batch_texture_sampling_);
     } else {
         batch_vertices_.clear();
         return;
@@ -524,7 +561,8 @@ bool Canvas2DRenderer::bind_solid_(CanvasColor color) {
     return true;
 }
 
-bool Canvas2DRenderer::bind_texture_(CanvasColor tint, TextureHandle texture) {
+bool Canvas2DRenderer::bind_texture_(CanvasColor tint, TextureHandle texture,
+                                     CanvasTextureSampling sampling) {
     if (texture_vs_.id == 0 || texture_fs_.id == 0) {
         tc::Log::error("[Canvas2DRenderer] texture shader is unavailable; skipping batch");
         return false;
@@ -545,7 +583,14 @@ bool Canvas2DRenderer::bind_texture_(CanvasColor tint, TextureHandle texture) {
     tc_shader* raw = tc_shader_get(texture_shader_handle());
     ctx_->use_shader_resource_layout(raw);
     ctx_->bind_uniform_data("canvas_draw", &push, static_cast<uint32_t>(sizeof(push)));
-    ctx_->bind_texture("u_texture", texture);
+    const SamplerHandle sampler = sampling == CanvasTextureSampling::Nearest
+        ? nearest_sampler_
+        : linear_sampler_;
+    if (!sampler) {
+        tc::Log::error("[Canvas2DRenderer] texture sampler is unavailable; skipping batch");
+        return false;
+    }
+    ctx_->bind_texture("u_texture", texture, sampler);
     return true;
 }
 
@@ -595,15 +640,18 @@ void Canvas2DRenderer::append_textured_quad_(
     termin::Bounds2f bounds,
     termin::Bounds2f uv,
     CanvasColor tint,
-    TextureHandle texture
+    TextureHandle texture,
+    CanvasTextureSampling sampling
 ) {
     if (batch_mode_ != BatchMode::Texture
         || !same_color(batch_color_, tint)
-        || batch_texture_.id != texture.id) {
+        || batch_texture_.id != texture.id
+        || batch_texture_sampling_ != sampling) {
         flush_();
         batch_mode_ = BatchMode::Texture;
         batch_color_ = tint;
         batch_texture_ = texture;
+        batch_texture_sampling_ = sampling;
     }
     push_quad_(bounds, uv);
 }

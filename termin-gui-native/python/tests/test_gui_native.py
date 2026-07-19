@@ -38,6 +38,7 @@ from termin.gui_native import (
     StyleOverride,
     StyleRole,
     StyleState,
+    TextureSampling,
     Widget,
     WidgetFlag,
     WidgetLanguage,
@@ -1345,6 +1346,9 @@ def test_native_basic_input_and_media_widget_factories():
     canvas.widget.bounds = Rect(0.0, 0.0, 160.0, 100.0)
     assert canvas.fit_mode
     assert canvas.zoom == pytest.approx(1.0)
+    assert canvas.texture_sampling == TextureSampling.Linear
+    canvas.texture_sampling = TextureSampling.Nearest
+    assert canvas.texture_sampling == TextureSampling.Nearest
     zooms = []
     points = []
     canvas.connect_zoom_changed(zooms.append)
