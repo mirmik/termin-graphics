@@ -49,6 +49,7 @@ add_library(termin_gui_native SHARED
     src/tc_ui_draw_list.cpp
     src/widgets_helpers.cpp
     src/native_widget.cpp
+    src/overlay_layout.cpp
     src/box_layout.cpp
     src/grid_layout.cpp
     src/graphics_scene.cpp
@@ -262,6 +263,9 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     )
     termin_gui_native_add_test(termin_gui_native_viewport3d_test
         tests/test_viewport3d.cpp
+    )
+    termin_gui_native_add_test(termin_gui_native_overlay_layout_test
+        tests/test_overlay_layout.cpp
     )
     termin_gui_native_add_test(termin_gui_native_scene_view_test
         tests/test_scene_view.cpp

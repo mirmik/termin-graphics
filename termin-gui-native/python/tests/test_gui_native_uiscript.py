@@ -19,7 +19,7 @@ from termin.gui_native import (
 CAMERA_SCRIPT = """
 uiscript: 1
 root:
-  type: Panel
+  type: Overlay
   name: overlay
   background_color: [0, 0, 0, 0]
   anchor: absolute
@@ -48,7 +48,7 @@ def test_uiscript_v1_parses_to_toolkit_neutral_description():
     description = UiScriptLoader().parser.parse(CAMERA_SCRIPT)
 
     assert description.version == 1
-    assert description.root.type_name == "Panel"
+    assert description.root.type_name == "Overlay"
     assert description.root.properties["width"] == UiLength(100.0, "%")
     button = description.root.children[0].children[0]
     assert button.name == "inspect_btn"
@@ -140,7 +140,7 @@ def test_uiscript_failed_reload_preserves_old_tree_and_cleans_attempt():
     loader = UiScriptLoader()
     loaded = loader.load_string(CAMERA_SCRIPT, document=document)
 
-    with pytest.raises(UiScriptError, match="unsupported Panel property"):
+    with pytest.raises(UiScriptError, match="unsupported Overlay property"):
         loader.reload(loaded, CAMERA_SCRIPT.replace("background_color:", "unknown_color:"))
 
     assert document.live_widget_count == 3
@@ -160,8 +160,20 @@ def test_editor_camera_uiscript_is_in_the_supported_v1_dialect():
 
     sys.modules.pop("tcgui", None)
     loaded = UiScriptLoader().load(script)
-    assert loaded.document.live_widget_count == 10
+    assert loaded.document.live_widget_count == 8
     assert loaded.named("colliders_btn").widget.stable_id == "colliders_btn"
     assert loaded.named("ortho_btn").widget.stable_id == "ortho_btn"
     assert "tcgui" not in sys.modules
+
+    loaded.document.layout_roots(Rect(0.0, 0.0, 800.0, 600.0))
+    colliders = loaded.named("colliders_btn").widget
+    ortho = loaded.named("ortho_btn").widget
+    assert (colliders.bounds.x, colliders.bounds.y) == pytest.approx((10.0, 564.0))
+    assert (ortho.bounds.x, ortho.bounds.y) == pytest.approx((764.0, 10.0))
+    assert loaded.document.hit_test(777.0, 23.0) == ortho.handle
+    assert not loaded.document.hit_test(400.0, 300.0).valid
+
+    loaded.document.layout_roots(Rect(5.0, 7.0, 1000.0, 700.0))
+    assert (colliders.bounds.x, colliders.bounds.y) == pytest.approx((15.0, 671.0))
+    assert (ortho.bounds.x, ortho.bounds.y) == pytest.approx((969.0, 17.0))
     loaded.close()

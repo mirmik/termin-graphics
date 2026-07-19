@@ -430,6 +430,14 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
                  self.make_native<termin::gui_native::Viewport3D>()};
            })
       .def(
+          "create_overlay_layout",
+          [](Document &self, const std::string &debug_name) {
+            return OverlayLayoutRef{
+                self.make_native<termin::gui_native::OverlayLayout>(
+                    debug_name.c_str())};
+          },
+          nb::arg("debug_name") = "OverlayLayout")
+      .def(
           "create_scene_view",
           [](Document &self,
              std::shared_ptr<termin::gui_native::GraphicsScene> scene) {

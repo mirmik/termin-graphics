@@ -32,6 +32,7 @@
 #include <termin/gui_native/menu_bar.hpp>
 #include <termin/gui_native/message_box.hpp>
 #include <termin/gui_native/native_widget.hpp>
+#include <termin/gui_native/overlay_layout.hpp>
 #include <termin/gui_native/panel.hpp>
 #include <termin/gui_native/progress_bar.hpp>
 #include <termin/gui_native/rich_text_model.hpp>

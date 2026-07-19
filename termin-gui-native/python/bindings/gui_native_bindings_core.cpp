@@ -62,6 +62,13 @@ void bind_gui_native_core(nb::module_& m) {
         .value("Flex", termin::gui_native::LayoutPolicy::Flex)
         .value("Stretch", termin::gui_native::LayoutPolicy::Stretch);
 
+    nb::enum_<termin::gui_native::OverlayAnchor>(m, "OverlayAnchor")
+        .value("Fill", termin::gui_native::OverlayAnchor::Fill)
+        .value("TopLeft", termin::gui_native::OverlayAnchor::TopLeft)
+        .value("TopRight", termin::gui_native::OverlayAnchor::TopRight)
+        .value("BottomLeft", termin::gui_native::OverlayAnchor::BottomLeft)
+        .value("BottomRight", termin::gui_native::OverlayAnchor::BottomRight);
+
     nb::enum_<termin::gui_native::ImageFit>(m, "ImageFit")
         .value("Stretch", termin::gui_native::ImageFit::Stretch)
         .value("Contain", termin::gui_native::ImageFit::Contain)

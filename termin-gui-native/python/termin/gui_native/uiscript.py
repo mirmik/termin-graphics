@@ -18,6 +18,8 @@ import yaml
 from termin.gui_native._gui_native import (
     Color,
     Document,
+    OverlayAnchor,
+    Point,
     Size,
     StyleField,
     StyleOverride,
@@ -113,6 +115,12 @@ _COMPOSITION_PROPERTIES = frozenset({"anchor", "offset", "position", "width", "h
 
 def default_uiscript_registry() -> UiScriptRegistry:
     registry = UiScriptRegistry()
+    registry.register(
+        "Overlay",
+        lambda document, node: document.create_overlay_layout(node.name or "Overlay"),
+        properties={"background_color"} | _COMPOSITION_PROPERTIES,
+        container=True,
+    )
     registry.register(
         "Panel",
         lambda document, node: document.create_panel(node.name or "Panel"),
@@ -268,7 +276,7 @@ class UiScriptParser:
         if name is not None:
             names.add(name)
 
-        supported = _COMMON_PROPERTIES | widget_type.properties
+        supported = _COMMON_PROPERTIES | _COMPOSITION_PROPERTIES | widget_type.properties
         unsupported = sorted(set(data) - {"type", "name", "children"} - supported)
         if unsupported:
             raise _fail(path, f"unsupported {type_name} property/properties: {', '.join(unsupported)}")
@@ -411,7 +419,7 @@ class UiScriptLoader:
                 widget.enabled = node.properties["enabled"]
             if node.type_name in {"HStack", "VStack"} and "spacing" in node.properties:
                 widget.set_layout_spacing(node.properties["spacing"])
-            if node.type_name == "Panel":
+            if node.type_name in {"Overlay", "Panel"}:
                 _apply_panel_style(widget, node.properties)
             if node.type_name == "IconButton":
                 if "active" in node.properties:
@@ -439,7 +447,24 @@ class UiScriptLoader:
                 named[node.name] = result
             for child in node.children:
                 child_result = build(child)
-                if not widget.append_child(child_result.widget):
+                if node.type_name == "Overlay":
+                    anchors = {
+                        None: OverlayAnchor.Fill,
+                        "absolute": OverlayAnchor.Fill,
+                        "top-left": OverlayAnchor.TopLeft,
+                        "top-right": OverlayAnchor.TopRight,
+                        "bottom-left": OverlayAnchor.BottomLeft,
+                        "bottom-right": OverlayAnchor.BottomRight,
+                    }
+                    offset = child.properties.get("offset", (0.0, 0.0))
+                    accepted = public.add_child(
+                        child_result.widget,
+                        anchors[child.properties.get("anchor")],
+                        Point(*offset),
+                    )
+                else:
+                    accepted = widget.append_child(child_result.widget)
+                if not accepted:
                     raise _fail(child.source_path, "native parent rejected child")
             return result
 

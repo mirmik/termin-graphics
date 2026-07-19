@@ -591,6 +591,12 @@ void bind_gui_native_scene_views(nb::module_ &m) {
           },
           nb::arg("callback"))
       .def(
+          "disconnect_before_resize",
+          [](const Viewport3DRef &self, size_t connection_id) {
+            return self.get().before_resize().disconnect(connection_id);
+          },
+          nb::arg("connection_id"))
+      .def(
           "set_external_drag_handler",
           [](const Viewport3DRef &self, nb::object callback) {
             if (callback.is_none()) {
@@ -828,4 +834,3 @@ void bind_gui_native_scene_views(nb::module_ &m) {
           },
           nb::arg("callback"));
 }
-
