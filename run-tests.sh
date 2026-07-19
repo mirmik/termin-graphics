@@ -74,9 +74,41 @@ if [[ "$FULL" -eq 1 && "$NO_EDITOR_SMOKE" -eq 0 ]]; then
     echo "  Editor smoke tests"
     echo "========================================"
 
-    if ! "$SCRIPT_DIR/sdk/bin/termin_python" -m termin_build.repository_control \
-        --repo-root "$SCRIPT_DIR" run editor-smoke --executor process-smoke; then
+    PROCESS_SMOKE_ROOT="$SCRIPT_DIR/build/process-smoke/editor-smoke"
+    PROCESS_SMOKE_PLAN="$PROCESS_SMOKE_ROOT/expected.json"
+    PROCESS_SMOKE_REPORT="$PROCESS_SMOKE_ROOT/execution-manifest.json"
+    mkdir -p "$PROCESS_SMOKE_ROOT"
+    PROCESS_PYTHON="$(command -v python3 || command -v python || true)"
+    if [[ -z "$PROCESS_PYTHON" ]]; then
+        echo "ERROR: Python is required for process-smoke repository control" >&2
         failures+=("Editor smoke")
+    elif ! PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
+        "$PROCESS_PYTHON" -m termin_build.repository_control \
+            --repo-root "$SCRIPT_DIR" plan editor-smoke --platform linux --json \
+            > "$PROCESS_SMOKE_PLAN"; then
+        failures+=("Editor smoke plan")
+    else
+        PROCESS_EXIT=0
+        PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
+            "$PROCESS_PYTHON" -m termin_build.repository_control \
+                --repo-root "$SCRIPT_DIR" run editor-smoke \
+                --platform linux \
+                --executor process-smoke \
+                --capability editor \
+                --configuration "$TEST_BUILD_TYPE" \
+                --process-log-dir "$PROCESS_SMOKE_ROOT/logs" \
+                --plan-file "$PROCESS_SMOKE_PLAN" \
+                --report-output "$PROCESS_SMOKE_REPORT" || PROCESS_EXIT=$?
+        VERIFY_EXIT=0
+        PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
+            "$PROCESS_PYTHON" -m termin_build.repository_control \
+                --repo-root "$SCRIPT_DIR" verify-suite-execution \
+                --plan "$PROCESS_SMOKE_PLAN" \
+                --manifest "$PROCESS_SMOKE_REPORT" \
+                --executor process-smoke || VERIFY_EXIT=$?
+        if [[ "$PROCESS_EXIT" -ne 0 || "$VERIFY_EXIT" -ne 0 ]]; then
+            failures+=("Editor smoke")
+        fi
     fi
 else
     echo ""

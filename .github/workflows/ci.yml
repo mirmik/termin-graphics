@@ -146,24 +146,18 @@ jobs:
       - name: Validate D3D11 bound resource path
         shell: pwsh
         env:
-          PYTHONPATH: ${{ github.workspace }}\termin-build-tools
+          TERMIN_PROCESS_SMOKE_PLAN: ${{ github.workspace }}\build\ci-plans\windows-d3d11-bound.json
         run: |
-          python -m termin_build.repository_control --repo-root . `
-            run windows-d3d11-bound --platform windows `
-            --executor process-smoke `
-            --plan-file build/ci-plans/windows-d3d11-bound.json `
-            --report-output build/d3d11-execution-manifest.json
-          python -m termin_build.repository_control `
-            verify-suite-execution `
-            --plan build/ci-plans/windows-d3d11-bound.json `
-            --manifest build/d3d11-execution-manifest.json `
-            --executor process-smoke
+          .\run-tests.ps1 --process-smoke-only `
+            --process-smoke-profile=windows-d3d11-bound
 
       - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: d3d11-execution-manifest
-          path: build/d3d11-execution-manifest.json
+          path: |
+            build/process-smoke/windows-d3d11-bound/execution-manifest.json
+            build/process-smoke/windows-d3d11-bound/logs/
           retention-days: 7
 
   # ── 1. Build C++ libraries ───────────────────────────────────────

@@ -173,6 +173,7 @@
       "module": "termin-app",
       "executor": "process-smoke",
       "roots": ["scripts/smoke-python-module-hot-reload"],
+      "platforms": ["linux"],
       "reason": "Runs a real editor process and verifies explicit Python module reload."
     },
     {
@@ -180,6 +181,7 @@
       "module": "termin-app",
       "executor": "process-smoke",
       "roots": ["scripts/smoke-cpp-module-cascade-hot-reload"],
+      "platforms": ["linux"],
       "reason": "Runs a real editor process and verifies C++ cascade module reload."
     },
     {
@@ -187,6 +189,7 @@
       "module": "termin-app",
       "executor": "process-smoke",
       "roots": ["scripts/smoke-sdk-editor-shaders"],
+      "platforms": ["linux"],
       "reason": "Runs the installed editor with an empty OpenGL shader cache and verifies built-in engine shader sources and artifacts."
     },
     {
