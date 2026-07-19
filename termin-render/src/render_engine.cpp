@@ -254,19 +254,7 @@ static tgfx::PixelFormat resolve_fbo_color_format(
     return tgfx::PixelFormat::RGBA8_UNorm;
 }
 
-// Ensure the scene extensions that passes depend on are registered before
-// the first pipeline runs. Idempotent: each extension init is a no-op if the
-// type is already present. This lets standalone Python scripts that create
-// a RenderEngine directly (without going through EngineCore) still have
-// skybox / render_mount / etc. accessible.
-static void ensure_scene_extensions_for_render() {
-    tc_scene_render_mount_extension_init();
-    tc_scene_render_state_extension_init();
-}
-
-RenderEngine::RenderEngine() {
-    ensure_scene_extensions_for_render();
-}
+RenderEngine::RenderEngine() = default;
 
 // Out-of-line destructor so unique_ptr<tgfx::*> members can use forward
 // declarations in the header; the full tgfx2 types are visible here.
