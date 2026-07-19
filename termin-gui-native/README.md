@@ -2,6 +2,35 @@
 
 Native UI document implementation under active `termin-gui` migration.
 
+Standalone C++ applications can use the installed application host without
+depending on `termin-display` or SDL APIs:
+
+```cmake
+find_package(termin_gui_native CONFIG REQUIRED)
+target_link_libraries(app PRIVATE termin_gui_native::application_host)
+```
+
+```cpp
+termin::gui_native::Document document;
+termin::gui_native::ApplicationHostConfig config;
+config.window = {"My utility", 640, 480};
+termin::gui_native::ApplicationHost host(document, config);
+
+while (!host.should_close()) {
+    update_application_state();
+    host.tick();
+}
+```
+
+The host owns window event routing, text input, the draw list/renderer, the
+document clipboard and cursor bridges, the resizable color target, frame
+submission and deterministic GPU teardown. Empty font and shader paths resolve
+first from `TERMIN_UI_FONT`, `TERMIN_SHADERC`, `TERMIN_SLANGC` and `TERMIN_SDK`,
+then relative to the loaded SDK library. All paths remain explicitly
+overridable through `ApplicationHostConfig`. Continuous rendering is the
+default; event-driven tools can disable it and schedule work with `defer()` and
+`request_repaint()`.
+
 The current foundation includes:
 
 - `tc_ui_document` is implemented in C and adopts widget objects while owning
@@ -214,8 +243,9 @@ The current foundation includes:
   annotations intentionally remain owned by `tcplot`;
 - `UiDrawListRenderer` can flush the command list through
   `tgfx::Canvas2DRenderer`;
-- `TERMIN_GUI_NATIVE_BUILD_EXAMPLES=ON` builds a small SDL window example that
-  presents a few colored rectangles and a line.
+- `TERMIN_GUI_NATIVE_BUILD_EXAMPLES=ON` builds native window examples on the
+  public application host; the showcase receives portable pointer, wheel,
+  keyboard and text events and owns no SDL/render-target plumbing.
 - `TERMIN_BUILD_PYTHON=ON` builds `termin.gui_native`, whose Python-defined
   widgets dispatch the complete measure/layout/paint/input/lifecycle vtable
   through the same embedded `tc_widget` contract;

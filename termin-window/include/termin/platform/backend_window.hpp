@@ -18,6 +18,18 @@ class RenderContext2;
 
 namespace termin {
 
+enum class WindowCursor {
+    Default,
+    Text,
+    Hand,
+    Crosshair,
+    Move,
+    ResizeHorizontal,
+    ResizeVertical,
+    ResizeNWSE,
+    ResizeNESW,
+};
+
 // BackendWindow is intentionally backend-neutral. It does not expose SDL,
 // Qt, GLFW, or native OS handles, which lets termin-display/graphics build
 // without SDL and lets tests provide lightweight mock windows.
@@ -42,8 +54,12 @@ public:
 
     virtual void maximize() = 0;
     virtual void set_title(const std::string& title) = 0;
+    virtual void set_size(int width, int height) = 0;
     virtual void set_fullscreen(bool enabled) = 0;
     virtual void set_text_input_enabled(bool enabled) = 0;
+    virtual void set_cursor(WindowCursor cursor) = 0;
+    virtual std::string clipboard_text() const = 0;
+    virtual bool set_clipboard_text(const std::string& text) = 0;
     virtual void close() = 0;
     virtual bool poll_event(WindowEvent& out_event) = 0;
     void poll_events();

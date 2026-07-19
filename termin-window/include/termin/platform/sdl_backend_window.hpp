@@ -17,6 +17,7 @@ private:
     std::unique_ptr<Impl> impl_;
     SDL_Window* window_ = nullptr;
     bool should_close_ = false;
+    bool text_input_enabled_ = false;
 
 public:
     // Create a window + backend device. Throws std::runtime_error on
@@ -50,9 +51,13 @@ public:
 
     void maximize() override;
     void set_title(const std::string& title) override;
+    void set_size(int width, int height) override;
     void set_icon_bmp(const std::string& path);
     void set_fullscreen(bool enabled) override;
     void set_text_input_enabled(bool enabled) override;
+    void set_cursor(WindowCursor cursor) override;
+    std::string clipboard_text() const override;
+    bool set_clipboard_text(const std::string& text) override;
     void set_always_on_top(bool enabled);
     void close() override;
     bool poll_event(WindowEvent& out_event) override;
