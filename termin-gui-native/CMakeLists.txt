@@ -362,6 +362,9 @@ if(TERMIN_BUILD_PYTHON)
         python/bindings/gui_native_bindings_widgets.cpp
         python/bindings/gui_native_bindings_commands.cpp
         python/bindings/gui_native_bindings_views.cpp
+        python/bindings/gui_native_bindings_views_scene.cpp
+        python/bindings/gui_native_bindings_views_collections.cpp
+        python/bindings/gui_native_bindings_views_controls.cpp
         python/bindings/gui_native_bindings_document.cpp
     )
     target_link_libraries(_gui_native
