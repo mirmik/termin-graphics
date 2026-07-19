@@ -8,8 +8,11 @@ struct PerFrame {
     float4x4 projection;
 };
 
-struct PushData {
+struct IdModelData {
     float4x4 model;
+};
+
+struct IdPickData {
     float4 pick_color;
 };
 
@@ -17,7 +20,10 @@ struct PushData {
 ConstantBuffer<PerFrame> per_frame;
 
 [[TerminScope("draw")]]
-ConstantBuffer<PushData> id_draw;
+ConstantBuffer<IdModelData> id_model;
+
+[[TerminScope("draw")]]
+ConstantBuffer<IdPickData> id_pick;
 
 // --- vertex stage ---
 
@@ -34,7 +40,7 @@ VertexOutput vs_main(VertexInput input) {
     VertexOutput output;
     output.position = termin_to_native_clip(mul(per_frame.projection,
                      mul(per_frame.view,
-                     mul(id_draw.model, float4(input.position, 1.0)))));
+                     mul(id_model.model, float4(input.position, 1.0)))));
     return output;
 }
 
@@ -47,6 +53,6 @@ struct FragmentOutput {
 [shader("fragment")]
 FragmentOutput fs_main() {
     FragmentOutput output;
-    output.color = float4(id_draw.pick_color.rgb, 1.0);
+    output.color = float4(id_pick.pick_color.rgb, 1.0);
     return output;
 }

@@ -97,7 +97,7 @@ termin::MaterialPipelineMaterialContract material_contract()
     resources[0].scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
     resources[0].set = TC_SHADER_RESOURCE_SET_DEFAULT;
     resources[0].binding = 1;
-    resources[0].stage_mask = TC_SHADER_STAGE_FRAGMENT;
+    resources[0].stage_mask = TC_SHADER_STAGE_VERTEX | TC_SHADER_STAGE_FRAGMENT;
     resources[0].size = 64;
 
     std::snprintf(resources[1].name, sizeof(resources[1].name), "%s", "draw_data");
@@ -312,6 +312,21 @@ struct VertexInput {
 
 } // namespace
 
+TEST_CASE("material contract projects reflected resources to fragment stage") {
+    tc_shader_init();
+
+    termin::MaterialPipelineMaterialContract material = material_contract();
+
+    REQUIRE(material.resources.size() == 1);
+    CHECK(material.resources[0].requirement.name == TC_SHADER_RESOURCE_MATERIAL);
+    CHECK_EQ(
+        material.resources[0].requirement.stage_mask,
+        static_cast<uint32_t>(TC_SHADER_STAGE_FRAGMENT));
+
+    tc_shader_destroy(material.shader.handle);
+    tc_shader_shutdown();
+}
+
 TEST_CASE("material pipeline assembler attaches skinned shader contract") {
     tc_shader_init();
 
@@ -509,8 +524,8 @@ TEST_CASE("material pipeline composes one skinned provider across pass adapters"
          "termin_depth_vertex_output", "depth_draw", "depth_draw.u_model",
          termin::MeshVertexTransformProfile::Position, false, false, 64u},
         {"id", "termin_id_vertex_output_adapter",
-         "termin_id_vertex_output", "id_draw", "id_draw.model",
-         termin::MeshVertexTransformProfile::Position, false, false, 80u},
+         "termin_id_vertex_output", "id_model", "id_model.model",
+         termin::MeshVertexTransformProfile::Position, false, false, 64u},
         {"normal", "termin_normal_vertex_output_adapter",
          "termin_normal_vertex_output", "normal_draw", "normal_draw.u_model",
          termin::MeshVertexTransformProfile::PositionNormal, false, true, 64u},
@@ -564,6 +579,9 @@ TEST_CASE("material pipeline composes one skinned provider across pass adapters"
               std::string::npos);
         CHECK(source.find("termin_skinned_") != std::string::npos);
         CHECK(source.find("template_uuid") == std::string::npos);
+        if (std::string_view(adapter_case.name) == "id") {
+            CHECK(source.find("id_model.model") != std::string::npos);
+        }
 
         tc_shader_contract_view view{};
         REQUIRE(tc_shader_get_contract_view(result.shader.get(), &view));

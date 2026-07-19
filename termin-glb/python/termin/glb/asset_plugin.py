@@ -16,7 +16,7 @@ class GLBImportPlugin:
     priority = 10
 
     def preload(self, path: str) -> "PreLoadResult | None":
-        from termin_assets import PreLoadResult, read_spec_file
+        from termin_assets import AssetIdentityPolicy, PreLoadResult, read_spec_file
 
         spec_data = read_spec_file(path)
         uuid = spec_data.get("uuid") if spec_data else None
@@ -26,6 +26,7 @@ class GLBImportPlugin:
             content=None,
             uuid=uuid,
             spec_data=spec_data,
+            identity_policy=AssetIdentityPolicy.GENERATE_SIDECAR,
         )
 
 

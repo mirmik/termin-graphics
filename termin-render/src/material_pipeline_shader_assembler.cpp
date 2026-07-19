@@ -39,13 +39,14 @@ uint32_t contract_value_type(MaterialPipelineValueType type)
 
 MaterialPipelineResourceDecl resource_decl_from_binding(
     const tc_shader_resource_binding& binding,
-    MaterialPipelineResourceOwner owner)
+    MaterialPipelineResourceOwner owner,
+    uint32_t stage_mask)
 {
     MaterialPipelineResourceDecl result{};
     result.requirement.name = binding.name;
     result.requirement.kind = binding.kind;
     result.requirement.scope = binding.scope;
-    result.requirement.stage_mask = binding.stage_mask;
+    result.requirement.stage_mask = stage_mask;
     result.requirement.size = binding.size;
     result.owner = owner;
     return result;
@@ -225,16 +226,15 @@ MaterialPipelineMaterialContract material_pipeline_material_contract_from_shader
             tc_shader_resource_bindings(raw);
         contract.resources.reserve(count);
         for (uint32_t i = 0; i < count; ++i) {
-            const bool fragment_visible =
-                (bindings[i].stage_mask & TC_SHADER_STAGE_FRAGMENT) != 0u;
-            const bool material_scoped =
-                bindings[i].scope == TC_SHADER_RESOURCE_SCOPE_MATERIAL;
-            if (!fragment_visible && !material_scoped) {
+            const uint32_t fragment_stage_mask =
+                bindings[i].stage_mask & TC_SHADER_STAGE_FRAGMENT;
+            if (fragment_stage_mask == 0u) {
                 continue;
             }
             contract.resources.push_back(resource_decl_from_binding(
                 bindings[i],
-                MaterialPipelineResourceOwner::Material));
+                MaterialPipelineResourceOwner::Material,
+                fragment_stage_mask));
         }
     }
 

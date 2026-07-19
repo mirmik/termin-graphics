@@ -7,16 +7,18 @@ struct PerFrame {
     float4x4 projection;
 };
 
-struct PushData {
+// The generated material-pipeline vertex entry point evaluates its world-space
+// transform before calling termin_id_vertex_output(). Keep the model ABI in this
+// imported vertex module so static and skinned ID variants can resolve it.
+struct IdModelData {
     float4x4 model;
-    float4 pick_color;
 };
 
 [[TerminScope("frame")]]
 ConstantBuffer<PerFrame> per_frame;
 
 [[TerminScope("draw")]]
-ConstantBuffer<PushData> id_draw;
+ConstantBuffer<IdModelData> id_model;
 
 struct VertexOutput {
     float4 position : SV_Position;
