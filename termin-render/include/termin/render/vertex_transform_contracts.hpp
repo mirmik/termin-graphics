@@ -157,6 +157,10 @@ RENDER_API VertexOutputAdapter material_pipeline_standard_material_vertex_output
 RENDER_API VertexTransformProvider material_pipeline_make_foliage_material_vertex_transform_provider(
     std::string debug_name);
 
+RENDER_API VertexTransformProvider material_pipeline_make_foliage_vertex_transform_provider(
+    std::string debug_name,
+    MeshVertexTransformProfile profile);
+
 RENDER_API VertexTransformContract material_pipeline_make_foliage_vertex_transform_contract(
     VertexTransformKind kind,
     std::string debug_name,

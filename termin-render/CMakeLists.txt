@@ -68,6 +68,7 @@ set(TERMIN_RENDER_SOURCES
     src/fbo_pool.cpp
     src/frame_pass.cpp
     src/builtin_passes.cpp
+    src/camera_capability.cpp
     src/frame_uniforms.cpp
     src/frame_debug_capture_pass.cpp
     src/frame_graph_debugger_core.cpp
@@ -134,6 +135,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/unknown_pass_ops.hpp
     include/termin/render/frame_pass.hpp
     include/termin/render/builtin_passes.hpp
+    include/termin/render/camera_capability.hpp
     include/termin/render/frame_uniforms.hpp
     include/termin/render/frame_debug_capture_pass.hpp
     include/termin/render/frame_graph_debugger_core.hpp
@@ -259,6 +261,13 @@ if(TERMIN_RENDER_BUILD_TESTS)
     target_link_libraries(termin_render_vertex_transform_contracts_test PRIVATE termin_render)
     add_test(NAME termin_render_vertex_transform_contracts_test COMMAND termin_render_vertex_transform_contracts_test)
 
+    add_executable(termin_render_camera_capability_test tests/test_camera_capability.cpp)
+    target_include_directories(termin_render_camera_capability_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_render_camera_capability_test PRIVATE termin_render)
+    add_test(NAME termin_render_camera_capability_test COMMAND termin_render_camera_capability_test)
+
     add_executable(termin_render_material_pipeline_shader_assembler_test tests/test_material_pipeline_shader_assembler.cpp)
     target_include_directories(termin_render_material_pipeline_shader_assembler_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
@@ -325,6 +334,7 @@ if(TERMIN_RENDER_BUILD_TESTS)
         termin_render_material_pipeline_contracts_test
         termin_render_material_ubo_apply_test
         termin_render_vertex_transform_contracts_test
+        termin_render_camera_capability_test
         termin_render_material_pipeline_shader_assembler_test
         termin_render_shader_contract_test
         termin_render_shader_abi_test
