@@ -62,6 +62,37 @@ static bool prepare_pass_facet_unload(
     );
 }
 
+bool tc_pass_type_descriptor_add_facet(
+    tc_runtime_type_descriptor* descriptor,
+    tc_pass_factory factory,
+    void* factory_userdata,
+    tc_pass_kind kind
+) {
+    if (!descriptor) {
+        tc_log(TC_LOG_ERROR, "[tc_pass] cannot attach a pass facet to a null descriptor");
+        return false;
+    }
+    tc_frame_pass_facet_payload* facet =
+        (tc_frame_pass_facet_payload*)calloc(1, sizeof(*facet));
+    if (!facet) {
+        tc_log(TC_LOG_ERROR, "[tc_pass] failed to allocate staged pass facet");
+        return false;
+    }
+    facet->factory = factory;
+    facet->factory_userdata = factory_userdata;
+    facet->kind = kind;
+    if (!tc_runtime_type_descriptor_add_facet(
+            descriptor,
+            TC_RUNTIME_TYPE_FACET_FRAME_PASS,
+            facet,
+            destroy_pass_facet,
+            prepare_pass_facet_unload,
+            1)) {
+        return false;
+    }
+    return true;
+}
+
 typedef struct pass_type_collect_ctx {
     const char** names;
     size_t count;
@@ -202,7 +233,9 @@ void tc_pass_registry_register(
 
 void tc_pass_registry_unregister(const char* type_name) {
     if (!type_name) return;
-    tc_runtime_type_registry_remove_facet(type_name, TC_RUNTIME_TYPE_FACET_FRAME_PASS);
+    if (!tc_runtime_type_registry_unregister_type_with_context(type_name, NULL)) {
+        tc_log(TC_LOG_ERROR, "[tc_pass] failed to unregister pass type '%s'", type_name);
+    }
 }
 
 bool tc_pass_registry_has(const char* type_name) {
@@ -265,7 +298,9 @@ void tc_pass_registry_cleanup(void) {
         &ctx
     );
     for (size_t i = 0; i < ctx.count; ++i) {
-        tc_runtime_type_registry_remove_facet(ctx.names[i], TC_RUNTIME_TYPE_FACET_FRAME_PASS);
+        if (!tc_runtime_type_registry_unregister_type_with_context(ctx.names[i], NULL)) {
+            tc_log(TC_LOG_ERROR, "[tc_pass] failed to clean up pass type '%s'", ctx.names[i]);
+        }
     }
     free(ctx.names);
 
@@ -353,7 +388,9 @@ tc_pass* tc_pass_new_external(void* body, const char* type_name) {
     }
 
     if (!pass_facet(type_name)) {
-        tc_log(TC_LOG_ERROR, "[tc_pass_new_external] type '%s' not registered! Call tc_pass_registry_register() first.", type_name);
+        tc_log(TC_LOG_ERROR,
+               "[tc_pass_new_external] type '%s' is not registered; publish its frame-pass type descriptor first",
+               type_name);
         free(p);
         return NULL;
     }

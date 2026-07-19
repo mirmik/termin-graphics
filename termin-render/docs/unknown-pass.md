@@ -30,6 +30,14 @@ that module are restored on unattached candidates using
 entire payload is accepted. Schema drift or setter/conversion failure keeps the
 placeholder and its original payload intact.
 
+Frame-pass types are published through `FramePassTypeDescriptorBuilder`. The
+runtime type, parent, pass factory and inspect schema become visible together;
+a rejected descriptor leaves none of those facets registered. Bootstrap owns
+the ordering: it registers the abstract `CxxFramePass` root before
+`UnknownPass` and all concrete built-ins. Module unload removes the complete
+runtime descriptor, while the prepare-unload callback performs the placeholder
+conversion described above.
+
 ## Persistence and editor behavior
 
 Pipeline serialization writes the original pass envelope, not `UnknownPass`.

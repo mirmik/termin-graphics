@@ -29,6 +29,7 @@ extern "C" {
 #include "termin/render/tc_pass.hpp"
 #include "termin/render/unknown_pass.hpp"
 #include "unknown_pass_serialization.hpp"
+#include <tcbase/tc_string.h>
 
 namespace nb = nanobind;
 
@@ -1074,12 +1075,51 @@ void bind_tc_pass_runtime(nb::module_& m) {
         return result;
     });
 
-    m.def("tc_pass_registry_register_python", [](const std::string& type_name, nb::object cls) {
-        auto cls_ptr = std::make_shared<nb::object>(std::move(cls));
-        python_pass_classes()[type_name] = cls_ptr;
-        char* stable_name = strdup(type_name.c_str());
-        tc_pass_registry_register(type_name.c_str(), python_pass_factory, stable_name, TC_EXTERNAL_PASS);
-    });
+    m.def("tc_pass_registry_register_python", [](
+        const std::string& type_name,
+        nb::object cls,
+        nb::object parent,
+        nb::dict fields,
+        nb::dict metadata
+    ) {
+        const char* ambient_owner = tc_runtime_type_registry_get_registration_owner();
+        const char* owner = ambient_owner && ambient_owner[0]
+            ? ambient_owner
+            : "termin-render-python";
+        const char* parent_name = nullptr;
+        std::string parent_storage;
+        if (!parent.is_none()) {
+            parent_storage = nb::cast<std::string>(parent);
+            parent_name = parent_storage.c_str();
+        }
+        const char* stable_name = tc_intern_string(type_name.c_str());
+        if (!stable_name) {
+            tc_log(TC_LOG_ERROR, "[PythonFramePass] failed to intern type '%s'", type_name.c_str());
+            return false;
+        }
+        auto descriptor = FramePassTypeDescriptorBuilder(
+            type_name.c_str(),
+            owner,
+            parent_name,
+            python_pass_factory,
+            const_cast<char*>(stable_name),
+            TC_EXTERNAL_PASS);
+        auto inspect = tc::build_python_inspect_facet(type_name, std::move(fields));
+        tc_value metadata_value = tc::nb_to_tc_value(std::move(metadata));
+        const bool metadata_ok = inspect.set_metadata(&metadata_value);
+        tc_value_free(&metadata_value);
+        if (!metadata_ok) return false;
+        descriptor.set_inspect(std::move(inspect));
+        if (!descriptor.commit()) return false;
+        python_pass_classes()[type_name] =
+            std::make_shared<nb::object>(std::move(cls));
+        return true;
+    },
+    nb::arg("type_name"),
+    nb::arg("cls"),
+    nb::arg("parent") = nb::none(),
+    nb::arg("fields") = nb::dict(),
+    nb::arg("metadata") = nb::dict());
 
     m.def("tc_pass_registry_unregister_python", [](const std::string& type_name) {
         if (tc_pass_registry_has(type_name.c_str()) &&

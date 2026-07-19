@@ -1,6 +1,95 @@
 #include <termin/render/frame_pass.hpp>
 
+#include <tcbase/tc_log.h>
+
 namespace termin {
+
+FramePassTypeDescriptorBuilder::FramePassTypeDescriptorBuilder(
+    const char* type_name,
+    const char* owner,
+    const char* parent,
+    tc_pass_factory factory,
+    void* factory_userdata,
+    tc_pass_kind kind
+)
+    : _inspect(type_name ? type_name : ""),
+      _type_name(type_name ? type_name : ""),
+      _owner(owner ? owner : "") {
+    if (_type_name.empty() || _owner.empty()) {
+        tc_log(TC_LOG_ERROR, "[FramePassTypeDescriptor] type and owner must be non-empty");
+        _valid = false;
+        return;
+    }
+    if (tc_pass_registry_has(_type_name.c_str())) {
+        const char* existing_owner = tc_runtime_type_registry_get_owner(_type_name.c_str());
+        if (existing_owner && _owner == existing_owner) {
+            _already_registered = true;
+            return;
+        }
+        tc_log(
+            TC_LOG_ERROR,
+            "[FramePassTypeDescriptor] type '%s' is already registered by owner '%s'",
+            _type_name.c_str(),
+            existing_owner ? existing_owner : "<none>");
+        _valid = false;
+        return;
+    }
+    _descriptor = tc_runtime_type_descriptor_create(
+        _type_name.c_str(), _owner.c_str(), parent && parent[0] ? parent : nullptr);
+    if (!_descriptor || !tc_pass_type_descriptor_add_facet(
+            _descriptor, factory, factory_userdata, kind)) {
+        tc_log(TC_LOG_ERROR, "[FramePassTypeDescriptor] failed to stage pass facet for '%s'", _type_name.c_str());
+        _valid = false;
+    }
+}
+
+FramePassTypeDescriptorBuilder::~FramePassTypeDescriptorBuilder() {
+    tc_runtime_type_descriptor_destroy(_descriptor);
+}
+
+FramePassTypeDescriptorBuilder::FramePassTypeDescriptorBuilder(
+    FramePassTypeDescriptorBuilder&& other) noexcept
+    : _descriptor(other._descriptor),
+      _inspect(std::move(other._inspect)),
+      _type_name(std::move(other._type_name)),
+      _owner(std::move(other._owner)),
+      _already_registered(other._already_registered),
+      _valid(other._valid) {
+    other._descriptor = nullptr;
+}
+
+FramePassTypeDescriptorBuilder& FramePassTypeDescriptorBuilder::operator=(
+    FramePassTypeDescriptorBuilder&& other) noexcept {
+    if (this == &other) return *this;
+    tc_runtime_type_descriptor_destroy(_descriptor);
+    _descriptor = other._descriptor;
+    _inspect = std::move(other._inspect);
+    _type_name = std::move(other._type_name);
+    _owner = std::move(other._owner);
+    _already_registered = other._already_registered;
+    _valid = other._valid;
+    other._descriptor = nullptr;
+    return *this;
+}
+
+bool FramePassTypeDescriptorBuilder::commit() {
+    if (_already_registered) return true;
+    if (!_valid || !_descriptor || !_inspect.valid()) {
+        tc_log(TC_LOG_ERROR, "[FramePassTypeDescriptor] invalid descriptor for '%s'", _type_name.c_str());
+        return false;
+    }
+    if (!_inspect.attach_to(_descriptor)) {
+        tc_log(TC_LOG_ERROR, "[FramePassTypeDescriptor] failed to stage inspect facet for '%s'", _type_name.c_str());
+        return false;
+    }
+    tc_runtime_type_descriptor* descriptor = _descriptor;
+    _descriptor = nullptr;
+    if (!tc_runtime_type_registry_commit_descriptor(descriptor)) {
+        tc_log(TC_LOG_ERROR, "[FramePassTypeDescriptor] failed to commit '%s'", _type_name.c_str());
+        return false;
+    }
+    return true;
+}
 
 void CxxFramePass::_cb_execute(tc_pass* p, void* ctx) {
     CxxFramePass* self = from_tc(p);

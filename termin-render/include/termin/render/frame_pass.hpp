@@ -22,6 +22,7 @@ extern "C" {
 }
 
 #include "tc_inspect_cpp.hpp"
+#include <tcbase/tc_log.h>
 
 #include "tgfx/frame_graph_resource.hpp"
 #include <termin/geom/rect2.hpp>
@@ -135,7 +136,11 @@ public:
     void link_to_type_registry(const char* type_name) {
         if (!type_name) return;
         if (!tc_pass_registry_has(type_name)) {
-            tc_pass_registry_register(type_name, nullptr, nullptr, TC_NATIVE_PASS);
+            tc_log(
+                TC_LOG_ERROR,
+                "[CxxFramePass] cannot link instance to unregistered pass type '%s'",
+                type_name);
+            return;
         }
         tc_pass_link_registered_type(&_c, type_name);
     }
@@ -267,34 +272,62 @@ private:
     void _cleanup_tc_pass();
 };
 
-#define TC_DEFINE_FRAME_PASS_FACTORY(PassClass)                              \
-    static tc_pass* _factory_##PassClass(void* /*userdata*/) {               \
-        auto* pass = new PassClass();                                        \
-        tc_pass* c = pass->tc_pass_ptr();                                    \
-        c->deleter = &termin::CxxFramePass::delete_owned_pass;               \
-        tc_pass_link_registered_type(c, #PassClass);                         \
-        return c;                                                            \
-    }                                                                        \
-    void register_frame_pass_##PassClass() {                                 \
-        if (tc_pass_registry_has(#PassClass)) return;                        \
-        tc_pass_registry_register(                                           \
-            #PassClass, _factory_##PassClass, nullptr, TC_NATIVE_PASS);      \
+class RENDER_API FramePassTypeDescriptorBuilder {
+    tc_runtime_type_descriptor* _descriptor = nullptr;
+    tc::InspectFacetBuilder _inspect;
+    std::string _type_name;
+    std::string _owner;
+    bool _already_registered = false;
+    bool _valid = true;
+
+public:
+    FramePassTypeDescriptorBuilder(
+        const char* type_name,
+        const char* owner,
+        const char* parent,
+        tc_pass_factory factory,
+        void* factory_userdata,
+        tc_pass_kind kind
+    );
+    ~FramePassTypeDescriptorBuilder();
+
+    FramePassTypeDescriptorBuilder(const FramePassTypeDescriptorBuilder&) = delete;
+    FramePassTypeDescriptorBuilder& operator=(const FramePassTypeDescriptorBuilder&) = delete;
+    FramePassTypeDescriptorBuilder(FramePassTypeDescriptorBuilder&& other) noexcept;
+    FramePassTypeDescriptorBuilder& operator=(FramePassTypeDescriptorBuilder&& other) noexcept;
+
+    tc::InspectFacetBuilder& inspect() { return _inspect; }
+    void set_inspect(tc::InspectFacetBuilder&& inspect) { _inspect = std::move(inspect); }
+    bool commit();
+
+    template<typename PassClass>
+    static FramePassTypeDescriptorBuilder native(
+        const char* type_name,
+        const char* owner,
+        const char* parent = "CxxFramePass"
+    ) {
+        return FramePassTypeDescriptorBuilder(
+            type_name,
+            owner,
+            parent,
+            [](void*) -> tc_pass* {
+                auto* pass = new PassClass();
+                tc_pass* raw = pass->tc_pass_ptr();
+                raw->deleter = &CxxFramePass::delete_owned_pass;
+                return raw;
+            },
+            nullptr,
+            TC_NATIVE_PASS);
     }
 
-#define TC_DEFINE_FRAME_PASS_FACTORY_DERIVED(PassClass, ParentClass)         \
-    static tc_pass* _factory_##PassClass(void* /*userdata*/) {               \
-        auto* pass = new PassClass();                                        \
-        tc_pass* c = pass->tc_pass_ptr();                                    \
-        c->deleter = &termin::CxxFramePass::delete_owned_pass;               \
-        tc_pass_link_registered_type(c, #PassClass);                         \
-        return c;                                                            \
-    }                                                                        \
-    void register_frame_pass_##PassClass() {                                 \
-        if (tc_pass_registry_has(#PassClass)) return;                        \
-        tc_pass_registry_register(                                           \
-            #PassClass, _factory_##PassClass, nullptr, TC_NATIVE_PASS);      \
-        tc::InspectRegistry::instance().set_type_parent(                     \
-            #PassClass, #ParentClass);                                       \
+    static FramePassTypeDescriptorBuilder abstract_native(
+        const char* type_name,
+        const char* owner,
+        const char* parent = nullptr
+    ) {
+        return FramePassTypeDescriptorBuilder(
+            type_name, owner, parent, nullptr, nullptr, TC_NATIVE_PASS);
     }
+};
 
 } // namespace termin

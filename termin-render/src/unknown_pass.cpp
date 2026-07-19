@@ -34,30 +34,16 @@ std::vector<std::string> UnknownPass::get_internal_symbols() const {
     return original_internal_symbols;
 }
 
-namespace {
-
-tc_pass* create_unknown_pass(void*) {
-    auto* pass = new UnknownPass();
-    return pass->tc_pass_ptr();
-}
-
-struct UnknownPassBootstrapRegistration {
-    UnknownPassBootstrapRegistration() { ensure_unknown_pass_registered(); }
-};
-
-UnknownPassBootstrapRegistration g_unknown_pass_bootstrap_registration;
-
-} // namespace
-
 void ensure_unknown_pass_registered() {
-    if (tc_pass_registry_has("UnknownPass")) return;
-    tc_pass_registry_register(
-        "UnknownPass",
-        create_unknown_pass,
-        nullptr,
-        TC_NATIVE_PASS
-    );
-    tc::InspectRegistry::instance().set_type_parent("UnknownPass", "CxxFramePass");
+    auto root = FramePassTypeDescriptorBuilder::abstract_native(
+        "CxxFramePass", "termin-render");
+    if (!root.commit()) {
+        return;
+    }
+
+    auto descriptor = FramePassTypeDescriptorBuilder::native<UnknownPass>(
+        "UnknownPass", "termin-render");
+    (void)descriptor.commit();
 }
 
 } // namespace termin

@@ -187,6 +187,16 @@ TC_API void tc_pass_registry_register(
     tc_pass_kind kind
 );
 
+// Stage the frame-pass facet on a runtime type descriptor. The descriptor
+// owns the facet payload after a successful call and publishes it only when
+// the descriptor itself is committed.
+TC_API bool tc_pass_type_descriptor_add_facet(
+    tc_runtime_type_descriptor* descriptor,
+    tc_pass_factory factory,
+    void* factory_userdata,
+    tc_pass_kind kind
+);
+
 TC_API void tc_pass_registry_unregister(const char* type_name);
 TC_API bool tc_pass_registry_has(const char* type_name);
 // Returns a new unowned pass. Transfer it to exactly one pipeline or call
