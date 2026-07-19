@@ -137,13 +137,23 @@ if(TERMIN_WINDOW_BUILD_TESTS)
     endif()
 endif()
 
-if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL
-   AND TERMIN_WINDOW_BUILD_WINDOW_TESTS)
+if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL)
     add_executable(termin_window_backend_triangle
         tests/test_backend_window_triangle.cpp)
     target_link_libraries(termin_window_backend_triangle
         PRIVATE termin_window)
     termin_copy_sdl2_runtime(termin_window_backend_triangle)
+
+    add_executable(termin_window_multiwindow_event_routing
+        tests/test_multiwindow_event_routing.cpp)
+    target_link_libraries(termin_window_multiwindow_event_routing
+        PRIVATE termin_window)
+    termin_copy_sdl2_runtime(termin_window_multiwindow_event_routing)
+
+endif()
+
+if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL
+   AND TERMIN_WINDOW_BUILD_WINDOW_TESTS)
 
     add_test(NAME termin_window_backend_triangle
         COMMAND termin_window_backend_triangle)
@@ -152,6 +162,14 @@ if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL
         ENVIRONMENT "TERMIN_BACKEND=opengl"
         SKIP_RETURN_CODE 77
         SKIP_REGULAR_EXPRESSION "SDL_InitSubSystem failed|No available video device|Vulkan support is either not configured in SDL")
+
+    add_test(NAME termin_window_multiwindow_event_routing
+        COMMAND termin_window_multiwindow_event_routing)
+    set_tests_properties(termin_window_multiwindow_event_routing PROPERTIES
+        TIMEOUT 10
+        ENVIRONMENT "TERMIN_BACKEND=opengl"
+        SKIP_RETURN_CODE 77
+        SKIP_REGULAR_EXPRESSION "SDL_InitSubSystem failed|No available video device|Could not initialize OpenGL")
 
     add_test(NAME termin_window_backend_triangle_immediate
         COMMAND termin_window_backend_triangle)
@@ -183,6 +201,9 @@ if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL
         termin_add_test_labels(termin_window_backend_triangle
             "termin:capability:window")
         termin_add_test_labels(termin_window_backend_triangle_immediate
+            "termin:capability:window"
+            "termin:capability:opengl")
+        termin_add_test_labels(termin_window_multiwindow_event_routing
             "termin:capability:window"
             "termin:capability:opengl")
         if(TGFX2_ENABLE_VULKAN)

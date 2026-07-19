@@ -2,11 +2,14 @@
 #include "termin/platform/sdl_backend_window.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "tgfx2/device_factory.hpp"
@@ -64,6 +67,83 @@ uint32_t event_window_id(const SDL_Event& ev) {
         default:
             return 0;
     }
+}
+
+using SDLWindowEventQueue = std::deque<SDL_Event>;
+
+std::unordered_map<uint32_t, SDLWindowEventQueue*>& window_event_queues() {
+    static std::unordered_map<uint32_t, SDLWindowEventQueue*> queues;
+    return queues;
+}
+
+size_t& text_input_user_count() {
+    static size_t count = 0;
+    return count;
+}
+
+struct SystemCursorStore {
+    std::array<SDL_Cursor*, 9> cursors{};
+
+    ~SystemCursorStore() {
+        SDL_SetCursor(SDL_GetDefaultCursor());
+        for (SDL_Cursor* cursor : cursors) {
+            if (cursor) SDL_FreeCursor(cursor);
+        }
+    }
+};
+
+SystemCursorStore& system_cursor_store() {
+    static SystemCursorStore store;
+    return store;
+}
+
+void register_window_event_queue(SDL_Window* window, SDLWindowEventQueue& queue) {
+    if (!window) return;
+    window_event_queues()[SDL_GetWindowID(window)] = &queue;
+}
+
+void unregister_window_event_queue(SDL_Window* window) {
+    if (!window) return;
+    window_event_queues().erase(SDL_GetWindowID(window));
+}
+
+bool next_window_event(
+    SDL_Window* window,
+    SDLWindowEventQueue& own_queue,
+    SDL_Event& out_event) {
+    if (!own_queue.empty()) {
+        out_event = own_queue.front();
+        own_queue.pop_front();
+        return true;
+    }
+
+    const uint32_t own_window_id = window ? SDL_GetWindowID(window) : 0;
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_QUIT) {
+            for (const auto& [window_id, queue] : window_event_queues()) {
+                if (window_id != own_window_id && queue) {
+                    queue->push_back(event);
+                }
+            }
+            out_event = event;
+            return true;
+        }
+
+        const uint32_t target_window_id = event_window_id(event);
+        if (target_window_id == 0 || target_window_id == own_window_id) {
+            out_event = event;
+            return true;
+        }
+
+        const auto target = window_event_queues().find(target_window_id);
+        if (target != window_event_queues().end() && target->second) {
+            target->second->push_back(event);
+        }
+        // Keep pumping: an event for another registered window must not make
+        // the current window appear idle before its own queued events arrive.
+    }
+    return false;
 }
 
 uint32_t translate_modifiers(SDL_Keymod modifiers) {
@@ -167,6 +247,7 @@ struct SDLBackendWindow::Impl {
 
     // OpenGL state (only used when backend == OpenGL).
     SDL_GLContext gl_context = nullptr;
+    SDLWindowEventQueue pending_events;
 
     // Vulkan state for secondary windows — each one owns its own
     // swapchain bound to its own VkSurfaceKHR. Primary windows have
@@ -348,6 +429,7 @@ SDLBackendWindow::SDLBackendWindow(
         throw std::runtime_error("BackendWindow: unsupported backend");
     }
     impl_->runtime->claim_interop();
+    register_window_event_queue(window_, impl_->pending_events);
 }
 
 // ---------------------------------------------------------------------------
@@ -459,6 +541,7 @@ SDLBackendWindow::SDLBackendWindow(const std::string& title, int width, int heig
         SDL_DestroyWindow(window_);
         throw std::runtime_error("BackendWindow(secondary): unsupported backend");
     }
+    register_window_event_queue(window_, impl_->pending_events);
 }
 
 void SDLBackendWindow::maximize() {
@@ -470,6 +553,12 @@ void SDLBackendWindow::maximize() {
 void SDLBackendWindow::set_title(const std::string& title) {
     if (window_) {
         SDL_SetWindowTitle(window_, title.c_str());
+    }
+}
+
+void SDLBackendWindow::set_size(int width, int height) {
+    if (window_ && width > 0 && height > 0) {
+        SDL_SetWindowSize(window_, width, height);
     }
 }
 
@@ -502,11 +591,66 @@ void SDLBackendWindow::set_fullscreen(bool enabled) {
 }
 
 void SDLBackendWindow::set_text_input_enabled(bool enabled) {
+    if (enabled == text_input_enabled_) return;
+    text_input_enabled_ = enabled;
+    size_t& users = text_input_user_count();
     if (enabled) {
-        SDL_StartTextInput();
-    } else {
-        SDL_StopTextInput();
+        if (users++ == 0) SDL_StartTextInput();
+        return;
     }
+    if (users > 0 && --users == 0) SDL_StopTextInput();
+}
+
+void SDLBackendWindow::set_cursor(WindowCursor cursor) {
+    static constexpr std::array<SDL_SystemCursor, 9> sdl_cursors{
+        SDL_SYSTEM_CURSOR_ARROW,
+        SDL_SYSTEM_CURSOR_IBEAM,
+        SDL_SYSTEM_CURSOR_HAND,
+        SDL_SYSTEM_CURSOR_CROSSHAIR,
+        SDL_SYSTEM_CURSOR_SIZEALL,
+        SDL_SYSTEM_CURSOR_SIZEWE,
+        SDL_SYSTEM_CURSOR_SIZENS,
+        SDL_SYSTEM_CURSOR_SIZENWSE,
+        SDL_SYSTEM_CURSOR_SIZENESW,
+    };
+    const size_t index = static_cast<size_t>(cursor);
+    if (index >= sdl_cursors.size()) {
+        tc_log_error("[SDLBackendWindow] invalid cursor value: %zu", index);
+        return;
+    }
+    SDL_Cursor*& handle = system_cursor_store().cursors[index];
+    if (!handle) {
+        handle = SDL_CreateSystemCursor(sdl_cursors[index]);
+        if (!handle) {
+            tc_log_error(
+                "[SDLBackendWindow] SDL_CreateSystemCursor failed: %s",
+                SDL_GetError());
+            return;
+        }
+    }
+    SDL_SetCursor(handle);
+}
+
+std::string SDLBackendWindow::clipboard_text() const {
+    if (SDL_HasClipboardText() != SDL_TRUE) return {};
+    char* text = SDL_GetClipboardText();
+    if (!text) {
+        tc_log_error(
+            "[SDLBackendWindow] SDL_GetClipboardText failed: %s",
+            SDL_GetError());
+        return {};
+    }
+    std::string result(text);
+    SDL_free(text);
+    return result;
+}
+
+bool SDLBackendWindow::set_clipboard_text(const std::string& text) {
+    if (SDL_SetClipboardText(text.c_str()) == 0) return true;
+    tc_log_error(
+        "[SDLBackendWindow] SDL_SetClipboardText failed: %s",
+        SDL_GetError());
+    return false;
 }
 
 void SDLBackendWindow::set_always_on_top(bool enabled) {
@@ -526,6 +670,9 @@ void SDLBackendWindow::close() {
     if (!window_ && !impl_->device_ref && !impl_->gl_context) {
         return;
     }
+    set_text_input_enabled(false);
+    unregister_window_event_queue(window_);
+    impl_->pending_events.clear();
 
     // Teardown in reverse dependency order. Secondary windows skip the
     // context/device reset because those are owned by the primary —
@@ -642,7 +789,7 @@ std::pair<int, int> SDLBackendWindow::window_size() const {
 
 bool SDLBackendWindow::poll_event(WindowEvent& out_event) {
     SDL_Event ev;
-    while (SDL_PollEvent(&ev)) {
+    while (next_window_event(window_, impl_->pending_events, ev)) {
         if (ev.type == SDL_QUIT) {
             should_close_ = true;
             out_event = {};

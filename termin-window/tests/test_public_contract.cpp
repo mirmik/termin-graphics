@@ -18,8 +18,15 @@ public:
     void set_should_close(bool) override {}
     void maximize() override {}
     void set_title(const std::string&) override {}
+    void set_size(int, int) override {}
     void set_fullscreen(bool) override {}
     void set_text_input_enabled(bool) override {}
+    void set_cursor(termin::WindowCursor) override {}
+    std::string clipboard_text() const override { return clipboard_; }
+    bool set_clipboard_text(const std::string& text) override {
+        clipboard_ = text;
+        return true;
+    }
     void close() override {}
     bool poll_event(termin::WindowEvent& event) override {
         if (emitted_) return false;
@@ -34,6 +41,7 @@ public:
 
 private:
     bool emitted_ = false;
+    std::string clipboard_;
 };
 
 } // namespace
