@@ -84,6 +84,40 @@ void bind_gui_native_control_views(nb::module_ &m) {
             self.get().set_texture(texture.id);
           },
           nb::arg("texture"))
+      .def_prop_rw(
+          "tooltip",
+          [](const IconButtonRef &self) { return self.get().tooltip(); },
+          [](const IconButtonRef &self, const std::string &tooltip) {
+            self.get().set_tooltip(tooltip);
+          })
+      .def("set_background_color",
+           [](const IconButtonRef &self, tc_ui_color color) {
+             self.get().set_background_color({color.r, color.g, color.b, color.a});
+           }, nb::arg("color"))
+      .def("set_hover_color",
+           [](const IconButtonRef &self, tc_ui_color color) {
+             self.get().set_hover_color({color.r, color.g, color.b, color.a});
+           }, nb::arg("color"))
+      .def("set_pressed_color",
+           [](const IconButtonRef &self, tc_ui_color color) {
+             self.get().set_pressed_color({color.r, color.g, color.b, color.a});
+           }, nb::arg("color"))
+      .def("set_active_color",
+           [](const IconButtonRef &self, tc_ui_color color) {
+             self.get().set_active_color({color.r, color.g, color.b, color.a});
+           }, nb::arg("color"))
+      .def("set_icon_color",
+           [](const IconButtonRef &self, tc_ui_color color) {
+             self.get().set_icon_color({color.r, color.g, color.b, color.a});
+           }, nb::arg("color"))
+      .def("set_corner_radius",
+           [](const IconButtonRef &self, float radius) {
+             self.get().set_corner_radius(radius);
+           }, nb::arg("radius"))
+      .def("set_font_size",
+           [](const IconButtonRef &self, float size) {
+             self.get().set_font_size(size);
+           }, nb::arg("size"))
       .def(
           "connect_clicked",
           [](const IconButtonRef &self, nb::object callback) {

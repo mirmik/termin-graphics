@@ -2,6 +2,11 @@
 
 Native UI document implementation under active `termin-gui` migration.
 
+Declarative native documents use the deliberately limited, versioned
+[`uiscript: 1` dialect](docs/uiscript-v1.md). The loader validates into a
+toolkit-neutral description before materializing a native `Document`; it does
+not import or emulate `tcgui`.
+
 Standalone C++ applications can use the installed application host without
 depending on `termin-display` or SDL APIs:
 

@@ -296,6 +296,19 @@ class Widget:
 
 
 from termin.gui_native.showcase import PythonShowcase, build_python_showcase  # noqa: E402
+from termin.gui_native.uiscript import (  # noqa: E402
+    LoadedUiScript,
+    MaterializedWidget,
+    UISCRIPT_VERSION,
+    UiLength,
+    UiScriptDescription,
+    UiScriptError,
+    UiScriptLoader,
+    UiScriptNode,
+    UiScriptParser,
+    UiScriptRegistry,
+    default_uiscript_registry,
+)
 
 
 __all__ = [
@@ -349,6 +362,7 @@ __all__ = [
     "ImageWidget",
     "ImageFit",
     "InputDialog",
+    "LoadedUiScript",
     "KeyCode",
     "KeyEvent",
     "KeyEventType",
@@ -357,6 +371,7 @@ __all__ = [
     "Menu",
     "MenuBar",
     "MenuBarEntry",
+    "MaterializedWidget",
     "MessageBox",
     "MessageBoxKind",
     "ModifierFlag",
@@ -414,6 +429,14 @@ __all__ = [
     "TreeTableWidget",
     "TreeVisibleRow",
     "TreeWidget",
+    "UISCRIPT_VERSION",
+    "UiLength",
+    "UiScriptDescription",
+    "UiScriptError",
+    "UiScriptLoader",
+    "UiScriptNode",
+    "UiScriptParser",
+    "UiScriptRegistry",
     "Viewport3D",
     "ViewportExternalDragEvent",
     "ViewportExternalDragPhase",
@@ -427,6 +450,7 @@ __all__ = [
     "WidgetOwnership",
     "WidgetRef",
     "build_python_showcase",
+    "default_uiscript_registry",
     "has_widget_type",
     "invalid_widget_handle",
     "register_widget_type",

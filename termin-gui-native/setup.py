@@ -25,6 +25,7 @@ setup(
     packages=["termin.gui_native"],
     package_dir={"termin.gui_native": "python/termin/gui_native"},
     install_requires=[
+        "PyYAML",
         "termin-nanobind",
         "tcbase",
         "tgfx",

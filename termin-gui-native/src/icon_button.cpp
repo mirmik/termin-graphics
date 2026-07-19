@@ -1,5 +1,7 @@
 #include "widgets_internal.hpp"
 
+#include <algorithm>
+
 namespace termin::gui_native {
 using namespace detail;
 
@@ -29,10 +31,64 @@ void IconButton::set_active(bool active) {
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
+void IconButton::set_tooltip(std::string tooltip) {
+    if (!valid_utf8(tooltip)) {
+        tc_log_error("[termin-gui-native] IconButton rejected invalid UTF-8 tooltip");
+        return;
+    }
+    tooltip_ = std::move(tooltip);
+}
+
+void IconButton::set_background_color(Color color) {
+    background_color_ = color;
+    mark_dirty(TC_WIDGET_DIRTY_PAINT);
+}
+
+void IconButton::set_hover_color(Color color) {
+    hover_color_ = color;
+    mark_dirty(TC_WIDGET_DIRTY_PAINT);
+}
+
+void IconButton::set_pressed_color(Color color) {
+    pressed_color_ = color;
+    mark_dirty(TC_WIDGET_DIRTY_PAINT);
+}
+
+void IconButton::set_active_color(Color color) {
+    active_color_ = color;
+    mark_dirty(TC_WIDGET_DIRTY_PAINT);
+}
+
+void IconButton::set_icon_color(Color color) {
+    icon_color_ = color;
+    mark_dirty(TC_WIDGET_DIRTY_PAINT);
+}
+
+void IconButton::set_corner_radius(float radius) {
+    corner_radius_ = std::max(0.0f, radius);
+    mark_dirty(TC_WIDGET_DIRTY_PAINT);
+}
+
+void IconButton::set_font_size(float size) {
+    font_size_ = std::max(1.0f, size);
+    mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+}
+
 void IconButton::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     const uint32_t extra = (active_ ? TC_UI_STYLE_STATE_CHECKED : 0) |
         (pressed_ ? TC_UI_STYLE_STATE_PRESSED : 0);
-    const tc_ui_style style = computed_style(document, extra);
+    tc_ui_style style = computed_style(document, extra);
+    const uint32_t state = tc_ui_document_widget_style_state(document, c_widget()) | extra;
+    if (background_color_) style.background = background_color_->c_color();
+    if ((state & TC_UI_STYLE_STATE_HOVERED) != 0 && hover_color_)
+        style.background = hover_color_->c_color();
+    if ((state & TC_UI_STYLE_STATE_PRESSED) != 0 && pressed_color_)
+        style.background = pressed_color_->c_color();
+    if ((state & TC_UI_STYLE_STATE_CHECKED) != 0 && active_color_)
+        style.background = active_color_->c_color();
+    if (icon_color_) style.foreground = icon_color_->c_color();
+    if (corner_radius_) style.corner_radius = *corner_radius_;
+    if (font_size_) style.font_size = *font_size_;
     tc_ui_painter_fill_rounded_rect(context, bounds(), style.corner_radius, style.background);
     if (texture_id_ != 0) {
         const float inset = 5.0f;
