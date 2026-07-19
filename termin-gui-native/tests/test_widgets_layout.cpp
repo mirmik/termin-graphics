@@ -29,7 +29,9 @@ void test_box_layout_sets_child_bounds_and_paints() {
   tc_ui_paint_context *paint_context = tc_ui_paint_context_create(draw_list);
   document.paint_roots(paint_context);
 
-  assert(tc_ui_draw_list_command_count(draw_list) >= 7);
+  /* Root fill + root clip pair + two panel fills. Panels are borderless by
+     default; an outline must now be requested explicitly. */
+  assert(tc_ui_draw_list_command_count(draw_list) == 5);
 
   tc_ui_paint_context_destroy(paint_context);
   tc_ui_draw_list_destroy(draw_list);
@@ -1317,6 +1319,9 @@ void test_icon_image_and_canvas_media_contracts() {
   auto &image = ui.make<ImageWidget>();
   auto &canvas = ui.make<Canvas>();
   image.set_texture(41, tc_ui_size{200.0f, 100.0f});
+  assert(image.fit() == ImageFit::Contain);
+  image.set_fit(ImageFit::Cover);
+  assert(image.fit() == ImageFit::Cover);
   canvas.set_texture(42, tc_ui_size{100.0f, 50.0f});
   canvas.set_overlay_texture(43);
   assert(canvas.texture_sampling() == TC_UI_TEXTURE_SAMPLING_LINEAR);

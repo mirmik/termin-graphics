@@ -62,6 +62,11 @@ void bind_gui_native_core(nb::module_& m) {
         .value("Flex", termin::gui_native::LayoutPolicy::Flex)
         .value("Stretch", termin::gui_native::LayoutPolicy::Stretch);
 
+    nb::enum_<termin::gui_native::ImageFit>(m, "ImageFit")
+        .value("Stretch", termin::gui_native::ImageFit::Stretch)
+        .value("Contain", termin::gui_native::ImageFit::Contain)
+        .value("Cover", termin::gui_native::ImageFit::Cover);
+
     nb::enum_<tc_ui_style_role>(m, "StyleRole")
         .value("Generic", TC_UI_STYLE_GENERIC)
         .value("Panel", TC_UI_STYLE_PANEL)

@@ -157,7 +157,8 @@ The current foundation includes:
   omits the legacy draggable scrollbar thumb while preserving selection and
   scroll behavior;
 - `IconButton` accepts either UTF-8 icon text or a texture id. `ImageWidget`
-  and `Canvas` accept non-owning tgfx2 texture ids and explicit image sizes;
+  and `Canvas` accept non-owning tgfx2 texture ids and explicit image sizes.
+  `ImageWidget` exposes `Stretch`, `Contain` and clipped `Cover` fit modes;
   file decoding, upload, update and destruction remain host responsibilities.
   `Canvas` provides fit/zoom/pan transforms plus a backend-neutral custom paint
   callback inside its clip;

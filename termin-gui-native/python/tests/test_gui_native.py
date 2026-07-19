@@ -18,6 +18,7 @@ from termin.gui_native import (
     FrameTimeModel,
     FrameTimelineModel,
     FrameTimelineSample,
+    ImageFit,
     KeyCode,
     KeyEvent,
     KeyEventType,
@@ -97,7 +98,7 @@ def test_python_native_showcase_builds_stable_headless_snapshot():
 
     assert showcase.root.stable_id == "python-showcase.root"
     assert document.live_widget_count == 15
-    assert draw_list.command_count == 118
+    assert draw_list.command_count == 117
     assert sum(command.type == DrawCommandType.Text for command in draw_list.commands) == 31
     assert sum(command.type == DrawCommandType.PushClip for command in draw_list.commands) == 26
     assert sum(command.type == DrawCommandType.PopClip for command in draw_list.commands) == 26
@@ -983,6 +984,17 @@ def test_theme_style_inheritance_state_and_runtime_update():
     assert child.native.dirty_flags != 0
 
 
+def test_default_theme_borders_are_opt_in():
+    document = Document()
+
+    assert document.theme.role(StyleRole.Generic).base.border_width == 0.0
+    assert document.theme.role(StyleRole.Panel).base.border_width == 0.0
+    assert document.theme.role(StyleRole.Label).base.border_width == 0.0
+    assert document.theme.role(StyleRole.Button).base.border_width == 0.0
+    assert document.theme.role(StyleRole.Separator).base.border_width == 1.0
+    assert document.theme.role(StyleRole.Checkbox).base.border_width == 1.0
+
+
 def test_renderer_font_exposes_document_text_metrics():
     document = Document()
     renderer = DrawListRenderer()
@@ -1330,7 +1342,11 @@ def test_native_basic_input_and_media_widget_factories():
 
     image = document.create_image_widget()
     assert image.intrinsic_size.width == pytest.approx(64.0)
+    assert image.fit == ImageFit.Contain
     image.set_preserve_aspect(False)
+    assert image.fit == ImageFit.Stretch
+    image.fit = ImageFit.Cover
+    assert image.fit == ImageFit.Cover
 
     label = document.create_label("Loading")
     assert label.text == "Loading"

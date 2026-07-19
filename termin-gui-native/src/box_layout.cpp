@@ -30,6 +30,12 @@ BoxLayout &BoxLayout::set_border(Color color, float thickness) {
   return *this;
 }
 
+BoxLayout &BoxLayout::set_corner_radius(float radius) {
+  corner_radius_ = std::max(0.0f, radius);
+  mark_dirty(TC_WIDGET_DIRTY_PAINT);
+  return *this;
+}
+
 void BoxLayout::add_child(tc_widget_handle handle) {
   add_child(handle, LayoutPolicy::Stretch);
 }
@@ -270,11 +276,21 @@ void BoxLayout::layout(tc_ui_document *document, tc_ui_rect rect) {
 
 void BoxLayout::paint(tc_ui_document *document, tc_ui_paint_context *context) {
   if (color_visible(background_)) {
-    tc_ui_painter_fill_rect(context, bounds(), background_.c_color());
+    if (corner_radius_ > 0.0f) {
+      tc_ui_painter_fill_rounded_rect(context, bounds(), corner_radius_,
+                                      background_.c_color());
+    } else {
+      tc_ui_painter_fill_rect(context, bounds(), background_.c_color());
+    }
   }
   if (color_visible(border_) && border_thickness_ > 0.0f) {
-    tc_ui_painter_stroke_rect(context, bounds(), border_.c_color(),
-                              border_thickness_);
+    if (corner_radius_ > 0.0f) {
+      tc_ui_painter_stroke_rounded_rect(context, bounds(), corner_radius_,
+                                        border_.c_color(), border_thickness_);
+    } else {
+      tc_ui_painter_stroke_rect(context, bounds(), border_.c_color(),
+                                border_thickness_);
+    }
   }
 
   tc_ui_painter_push_clip(context, bounds());

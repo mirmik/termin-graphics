@@ -15,6 +15,7 @@ private:
     Color background_ {0.0f, 0.0f, 0.0f, 0.0f};
     Color border_ {0.0f, 0.0f, 0.0f, 0.0f};
     float border_thickness_ = 0.0f;
+    float corner_radius_ = 0.0f;
     std::vector<LayoutItem> items_;
 
 public:
@@ -23,6 +24,7 @@ public:
     BoxLayout& set_spacing(float spacing);
     BoxLayout& set_background(Color color);
     BoxLayout& set_border(Color color, float thickness = 1.0f);
+    BoxLayout& set_corner_radius(float radius);
     void add_child(tc_widget_handle handle);
     void add_child(tc_widget_handle handle, LayoutPolicy policy, float value = 0.0f);
     void add_child(const Widget& widget) { add_child(widget.handle()); }

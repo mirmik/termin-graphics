@@ -259,6 +259,13 @@ void bind_gui_native_widgets(nb::module_& m) {
             },
             nb::arg("color"), nb::arg("thickness") = 1.0f)
         .def(
+            "set_layout_corner_radius",
+            [](const WidgetRef& self, float radius) {
+                native_widget_checked<termin::gui_native::BoxLayout>(self, "BoxLayout")
+                    .set_corner_radius(radius);
+            },
+            nb::arg("radius"))
+        .def(
             "set_child_extent_limits",
             [](const WidgetRef& self, const WidgetRef& child, float minimum, float maximum) {
                 return native_widget_checked<termin::gui_native::BoxLayout>(self, "BoxLayout")

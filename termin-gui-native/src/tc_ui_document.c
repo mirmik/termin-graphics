@@ -163,7 +163,10 @@ static tc_ui_style default_base_style(void) {
     style.foreground = style_color(0.90f, 0.92f, 0.96f, 1.0f);
     style.border = style_color(0.32f, 0.34f, 0.38f, 1.0f);
     style.accent = style_color(0.25f, 0.58f, 0.88f, 1.0f);
-    style.border_width = 1.0f;
+    /* Borders are opt-in. Containers and collection views share style roles
+       with framed controls, so a non-zero inherited width produces outlines
+       around nearly every native widget. */
+    style.border_width = 0.0f;
     style.corner_radius = 4.0f;
     style.font_size = 14.0f;
     style.font_role = TC_UI_FONT_BODY;
@@ -250,6 +253,8 @@ void tc_ui_theme_init_default(tc_ui_theme* theme) {
         TC_UI_STYLE_BORDER,
         style_color(0.38f, 0.62f, 0.92f, 1.0f)
     );
+    theme->roles[TC_UI_STYLE_TEXT_INPUT].focused.fields |= TC_UI_STYLE_BORDER_WIDTH;
+    theme->roles[TC_UI_STYLE_TEXT_INPUT].focused.value.border_width = 1.0f;
 
     theme->roles[TC_UI_STYLE_GROUP_BOX].base.background = style_color(0.11f, 0.12f, 0.14f, 1.0f);
     theme->roles[TC_UI_STYLE_GROUP_BOX].base.padding_left = 10.0f;
@@ -274,6 +279,7 @@ void tc_ui_theme_init_default(tc_ui_theme* theme) {
     theme->roles[TC_UI_STYLE_CHECKBOX].base.min_width = 18.0f;
     theme->roles[TC_UI_STYLE_CHECKBOX].base.min_height = 18.0f;
     theme->roles[TC_UI_STYLE_CHECKBOX].base.corner_radius = 3.0f;
+    theme->roles[TC_UI_STYLE_CHECKBOX].base.border_width = 1.0f;
     theme->roles[TC_UI_STYLE_CHECKBOX].checked = color_override(
         TC_UI_STYLE_BACKGROUND,
         style_color(0.18f, 0.58f, 0.34f, 1.0f)

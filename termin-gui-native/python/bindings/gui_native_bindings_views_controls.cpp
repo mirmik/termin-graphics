@@ -146,6 +146,12 @@ void bind_gui_native_control_views(nb::module_ &m) {
                 termin::gui_native::Color{tint.r, tint.g, tint.b, tint.a});
           },
           nb::arg("tint"))
+      .def_prop_rw(
+          "fit",
+          [](const ImageWidgetRef &self) { return self.get().fit(); },
+          [](const ImageWidgetRef &self, termin::gui_native::ImageFit fit) {
+            self.get().set_fit(fit);
+          })
       .def(
           "set_preserve_aspect",
           [](const ImageWidgetRef &self, bool preserve) {

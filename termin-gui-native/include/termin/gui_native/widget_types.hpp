@@ -8,6 +8,7 @@
 namespace termin::gui_native {
 
 enum class Orientation { Horizontal, Vertical };
+enum class ImageFit { Stretch, Contain, Cover };
 enum class PointerButton : int32_t { Left = 0, Right = 1, Middle = 2 };
 constexpr int32_t pointer_button_value(PointerButton button) {
     return static_cast<int32_t>(button);
