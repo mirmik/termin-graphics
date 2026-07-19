@@ -1,7 +1,6 @@
 from termin.scene import PythonComponent
 from termin.render._render_native import install_drawable_vtable, drawable_capability_id
 from termin.render.drawable import RenderItemCollectContext
-from termin.scene import ComponentRegistry
 
 
 class DrawableComponent(PythonComponent):
@@ -15,8 +14,10 @@ class DrawableComponent(PythonComponent):
         install_drawable_vtable(self._tc.c_ptr_int())
 
     def __init_subclass__(cls, **kwargs):
+        cls.component_capabilities = tuple(
+            dict.fromkeys((*cls.component_capabilities, drawable_capability_id()))
+        )
         super().__init_subclass__(**kwargs)
-        ComponentRegistry.set_capability(cls.__name__, drawable_capability_id(), True)
 
     @property
     def phase_mask(self) -> int:

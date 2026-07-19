@@ -36,6 +36,11 @@ FramePassTypeDescriptorBuilder::FramePassTypeDescriptorBuilder(
     }
     _descriptor = tc_runtime_type_descriptor_create(
         _type_name.c_str(), _owner.c_str(), parent && parent[0] ? parent : nullptr);
+    if (_descriptor &&
+        tc::InspectRegistry::instance().is_empty_unowned_type_shell(_type_name) &&
+        !tc_runtime_type_descriptor_allow_unowned_shell_adoption(_descriptor)) {
+        _valid = false;
+    }
     if (!_descriptor || !tc_pass_type_descriptor_add_facet(
             _descriptor, factory, factory_userdata, kind)) {
         tc_log(TC_LOG_ERROR, "[FramePassTypeDescriptor] failed to stage pass facet for '%s'", _type_name.c_str());
