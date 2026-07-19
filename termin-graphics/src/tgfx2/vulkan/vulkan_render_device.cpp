@@ -10,7 +10,6 @@
 #include "tgfx2/vulkan/vulkan_shader_compiler.hpp"
 #include "vulkan_spirv_reflection.hpp"
 #include "vulkan_stats.hpp"
-#include "tgfx2/internal/shader_preprocess.hpp"
 #include "tgfx2/pixel_format_utils.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
 
@@ -1297,7 +1296,6 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
         uint64_t bpc      = g_push_constants_count.exchange(0, std::memory_order_relaxed);
         uint64_t rec_us   = g_record_us.exchange(0, std::memory_order_relaxed);
         uint64_t subm_us  = g_submit_us.exchange(0, std::memory_order_relaxed);
-        uint64_t sh_pre_us = g_shader_preprocess_us.exchange(0, std::memory_order_relaxed);
         uint64_t sh_comp_us = g_shader_compile_us.exchange(0, std::memory_order_relaxed);
         uint64_t sh_reflect_us = g_shader_reflect_us.exchange(0, std::memory_order_relaxed);
         uint64_t sh_module_us = g_shader_module_us.exchange(0, std::memory_order_relaxed);
@@ -1331,11 +1329,10 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
                    submit_stats_.descriptor_cleanup_us / 1000.0);
         if (shaders != 0 || pipes != 0) {
             tc_log(TC_LOG_INFO,
-                       "[tgfx2-vulkan] cold stats: shaders=%llu shader_preprocess_ms=%.3f "
+                       "[tgfx2-vulkan] cold stats: shaders=%llu "
                        "shader_compile_ms=%.3f shader_reflect_ms=%.3f shader_module_ms=%.3f "
                        "pipeline_renderpass_ms=%.3f pipeline_create_ms=%.3f",
                        static_cast<unsigned long long>(shaders),
-                       static_cast<double>(sh_pre_us) / 1000.0,
                        static_cast<double>(sh_comp_us) / 1000.0,
                        static_cast<double>(sh_reflect_us) / 1000.0,
                        static_cast<double>(sh_module_us) / 1000.0,

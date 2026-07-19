@@ -2,7 +2,6 @@
 #include "tgfx2/opengl/opengl_command_list.hpp"
 #include "tgfx2/opengl/opengl_type_conversions.hpp"
 #include "tgfx2/i_command_list.hpp"
-#include "tgfx2/internal/shader_preprocess.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
 
 #include <stdexcept>
@@ -858,11 +857,7 @@ ShaderHandle OpenGLRenderDevice::create_shader(const ShaderDesc& desc) {
     GLenum gl_stage = gl::to_gl_shader_stage(desc.stage);
     mod.gl_shader = glCreateShader(gl_stage);
 
-    // Resolve #include / @features etc. via the shared preprocessor
-    // hook (see tgfx2/internal/shader_preprocess.hpp). Vulkan's
-    // create_shader runs the exact same step so shaders line up
-    // across backends.
-    std::string resolved = internal::preprocess_shader_source(desc.source);
+    std::string resolved = desc.source;
     // On OpenGL, wrap sampling builtins so v=0 = top of content
     // regardless of whether the texture was uploaded from CPU (flipped
     // in upload_texture) or rendered into (bottom-up FBO memory).

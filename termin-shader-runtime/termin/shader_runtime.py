@@ -10,25 +10,6 @@ from tcbase import log
 from termin.shader_tools import existing_executable, resolve_path_tool, resolve_sdk_tool
 
 
-def configure_glsl_preprocessor() -> None:
-    """Register the process GLSL preprocessor for explicitly loaded includes."""
-    import tgfx  # noqa: F401
-
-    from termin.materials import register_glsl_preprocessor
-
-    register_glsl_preprocessor()
-
-
-def unregister_glsl_preprocessor() -> None:
-    """Unregister the process GLSL preprocessor callback."""
-    try:
-        from termin.materials import unregister_glsl_preprocessor as unregister
-
-        unregister()
-    except Exception as exc:
-        log.error(f"[GlslPreprocessor] cleanup failed: {exc}")
-
-
 def _configured_tool(env_name: str, label: str) -> Path | None:
     configured = os.environ.get(env_name)
     if not configured:

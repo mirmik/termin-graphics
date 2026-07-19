@@ -24,12 +24,10 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
 
 set(TERMIN_MATERIALS_SOURCES
-    src/glsl_preprocessor.cpp
     src/shader_parser.cpp
 )
 
 set(TERMIN_MATERIALS_HEADERS
-    include/termin/materials/glsl_preprocessor.hpp
     include/termin/materials/shader_parser.hpp
 )
 

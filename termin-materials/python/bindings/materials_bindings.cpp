@@ -5,34 +5,7 @@
 #include <nanobind/stl/optional.h>
 #include <nanobind/ndarray.h>
 #include <termin/materials/shader_parser.hpp>
-#include <termin/materials/glsl_preprocessor.hpp>
 #include <tcbase/tc_log.hpp>
-
-extern "C" {
-#include <tgfx/tgfx_shader_preprocess.h>
-}
-
-namespace {
-
-// C callback that wraps GlslPreprocessor::preprocess
-char* glsl_preprocess_callback(const char* source, const char* source_name) {
-    if (!source) return nullptr;
-    try {
-        std::string result = termin::glsl_preprocessor().preprocess(
-            source, source_name ? source_name : "<unknown>"
-        );
-        char* out = static_cast<char*>(malloc(result.size() + 1));
-        if (out) {
-            memcpy(out, result.c_str(), result.size() + 1);
-        }
-        return out;
-    } catch (const std::exception& e) {
-        tc::Log::error("shader_preprocess failed: %s", e.what());
-        return nullptr;
-    }
-}
-
-} // anonymous namespace
 
 namespace termin {
 
@@ -41,36 +14,6 @@ namespace nb = nanobind;
 void bind_tc_material(nb::module_& m);
 
 void bind_shader_parser(nb::module_& m) {
-    // --- GLSL preprocessor ---
-    nb::class_<GlslPreprocessor>(m, "GlslPreprocessor")
-        .def(nb::init<>())
-        .def("register_include", &GlslPreprocessor::register_include,
-            nb::arg("name"), nb::arg("source"),
-            "Register an include file")
-        .def("has_include", &GlslPreprocessor::has_include)
-        .def("get_include", [](const GlslPreprocessor& pp, const std::string& name) -> nb::object {
-            const std::string* src = pp.get_include(name);
-            return src ? nb::cast(*src) : nb::none();
-        })
-        .def("clear", &GlslPreprocessor::clear)
-        .def("size", &GlslPreprocessor::size)
-        .def_static("has_includes", &GlslPreprocessor::has_includes)
-        .def("preprocess", &GlslPreprocessor::preprocess,
-            nb::arg("source"), nb::arg("source_name") = "<unknown>",
-            "Preprocess GLSL source, resolving #include directives");
-
-    m.def("glsl_preprocessor", &glsl_preprocessor, nb::rv_policy::reference,
-        "Get the global GLSL preprocessor instance");
-
-    // Register the process-wide GLSL preprocess callback.
-    m.def("register_glsl_preprocessor", []() {
-        tgfx_gpu_set_shader_preprocess(glsl_preprocess_callback);
-    }, "Register GLSL preprocessor with shader compilation system");
-
-    m.def("unregister_glsl_preprocessor", []() {
-        tgfx_gpu_set_shader_preprocess(nullptr);
-    }, "Unregister the GLSL preprocessor");
-
     // --- MaterialProperty (UniformProperty) ---
     nb::class_<MaterialProperty>(m, "MaterialProperty")
         .def(nb::init<>())

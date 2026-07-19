@@ -9,12 +9,6 @@
 #include <regex>
 #include <utility>
 
-// Use tgfx2's shared include-resolution hook so the parser's strip /
-// inject passes see the full expanded source. Without this, plain
-// `uniform mat4 u_view;` decls hiding inside included GLSL files slip
-// past the engine-uniforms strip and break Vulkan compilation.
-#include "tgfx2/internal/shader_preprocess.hpp"
-
 namespace termin {
 
 namespace {

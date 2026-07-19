@@ -5,7 +5,6 @@
 #include "tgfx2/vulkan/vulkan_render_device.hpp"
 #include "tgfx2/vulkan/vulkan_shader_compiler.hpp"
 #include "tgfx2/vulkan/vulkan_type_conversions.hpp"
-#include "tgfx2/internal/shader_preprocess.hpp"
 #include "tgfx2/internal/shader_logging.hpp"
 #include "vulkan_spirv_reflection.hpp"
 #include "vulkan_stats.hpp"
@@ -150,21 +149,11 @@ ShaderHandle VulkanRenderDevice::create_shader(const ShaderDesc& desc) {
             spirv.resize(desc.bytecode.size() / 4);
             std::memcpy(spirv.data(), desc.bytecode.data(), desc.bytecode.size());
         } else if (!desc.source.empty()) {
-            // Resolve #include / @features etc. through the shared
-            // preprocessor hook, then compile the GLSL to SPIR-V via
-            // shaderc. OpenGL runs the same preprocess step — shaders
-            // stay identical across backends.
-            std::string resolved;
-            {
-                VulkanStatsTimer timer(g_shader_preprocess_us);
-                resolved = internal::preprocess_shader_source(desc.source);
-            }
-
             vk::SpirvCompileResult result;
             {
                 VulkanStatsTimer timer(g_shader_compile_us);
                 result = vk::compile_glsl_to_spirv(
-                    resolved, desc.stage, desc.entry_point);
+                    desc.source, desc.stage, desc.entry_point);
             }
             if (!result.success) {
                 throw std::runtime_error("Shader compilation failed: " + result.error_message);

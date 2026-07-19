@@ -56,7 +56,6 @@ target_link_libraries(glad PUBLIC ${CMAKE_DL_LIBS})
 
 # --- termin_graphics ---
 set(TGFX_C_SOURCES
-    src/tgfx_shader_preprocess.c
     src/resources/tc_shader_abi.c
     src/resources/tc_shader_registry.c
     src/resources/tc_texture_registry.c
