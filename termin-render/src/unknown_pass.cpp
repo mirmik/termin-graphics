@@ -35,12 +35,6 @@ std::vector<std::string> UnknownPass::get_internal_symbols() const {
 }
 
 void ensure_unknown_pass_registered() {
-    auto root = FramePassTypeDescriptorBuilder::abstract_native(
-        "CxxFramePass", "termin-render");
-    if (!root.commit()) {
-        return;
-    }
-
     auto descriptor = FramePassTypeDescriptorBuilder::native<UnknownPass>(
         "UnknownPass", "termin-render");
     (void)descriptor.commit();

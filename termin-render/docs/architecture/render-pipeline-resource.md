@@ -8,9 +8,38 @@ dependencies, and viewport/export target metadata.
 
 The canonical resource must never contain an `IRenderDevice`, GPU handle,
 frame graph, live `tc_pass`, scene handle, FBO pool, texture pool, shadow map,
-or another mutable execution cache. Graph compiler input is not part of this
-contract: `graph_compiler` lowers graph data into the descriptor, after which
-the resource can be serialized and consumed without the graph/editor layer.
+or another mutable execution cache. Authored pipeline input is not part of
+this contract: the asset/import layer lowers it into the descriptor, after
+which the resource can be serialized and consumed without an authoring or
+editor layer.
+
+## Authoring model
+
+The pass list is the canonical authored and semantic representation of a
+pipeline. It is intentionally supported as a compact explicit format and as a
+debugging tool. A pass-list document can be imported, saved and hot-reloaded
+directly; it does not need a graph counterpart.
+
+The node graph is a visual authoring convenience over that model. Graph import
+validates and lowers nodes, connections and editor metadata into the canonical
+pass-list semantics before publishing a compiled resource. It must not define
+a second runtime contract or make pass-list support optional.
+
+The resulting boundary is:
+
+```text
+node graph -> canonical pass-list semantics -> TcRenderPipeline descriptor
+pass list  -------------------------------> TcRenderPipeline descriptor
+```
+
+The pass list is canonical in the authoring/import domain; `TcRenderPipeline`
+remains the canonical runtime resource and identity. Neither authored
+representation is embedded in that resource.
+
+Build output and runtime packages contain only the compiled descriptor, not
+either authored representation. Hot reload of either format must compile a
+complete candidate before atomically replacing the existing resource payload;
+a failed candidate leaves the previous resource version usable.
 
 ## Execution state
 
@@ -33,7 +62,8 @@ invalidates the pool generation. `TcRenderPipeline` provides this ownership
 contract as C++ RAII.
 
 Pipeline assets declare this resource with the UUID stored in the asset
-document and compile their graph directly into it. The execution instance's
+document and compile a pass list directly, or a graph after lowering it to
+pass-list semantics, into the resource descriptor. The execution instance's
 `canonical_resource.uuid` is therefore the persisted asset identity; callers
 must not reconstruct canonical identity by looking an instance up by name.
 
@@ -55,5 +85,5 @@ strings use a little-endian 32-bit byte length followed by UTF-8 bytes.
 
 Pass `parameters` are opaque serialized values at this layer. Their schema is
 owned by the pass type named in the same pass descriptor. The canonical C
-resource layer therefore does not depend on graph JSON, editor types, build
-artifacts, or a graphics backend.
+resource layer therefore does not depend on graph JSON, pass-list JSON, editor
+types, build artifacts, or a graphics backend.

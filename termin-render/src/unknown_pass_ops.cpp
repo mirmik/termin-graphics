@@ -115,7 +115,6 @@ bool prepare_replacement(
         return false;
     }
 
-    ensure_unknown_pass_registered();
     tc_pass* unknown_tc = hooks.create_replacement
         ? hooks.create_replacement()
         : tc_pass_registry_create("UnknownPass");

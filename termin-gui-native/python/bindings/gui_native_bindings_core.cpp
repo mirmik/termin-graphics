@@ -3,6 +3,9 @@
 using namespace termin::gui_native::python_bindings;
 
 void bind_gui_native_core(nb::module_& m) {
+    if (!tc_widget_registry_initialize()) {
+        throw std::runtime_error("failed to initialize native widget runtime types");
+    }
 
     nb::class_<WidgetHandle>(m, "WidgetHandle")
         .def_prop_ro("index", [](const WidgetHandle& handle) { return handle.handle.index; })

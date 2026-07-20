@@ -124,7 +124,6 @@ TEST_CASE("UnknownPass preserves pipeline slot payload and graph contract") {
 
     tc_pipeline_destroy(pipeline);
     tc_pass_registry_unregister(kProbeType);
-    tc::InspectRegistry::instance().unregister_type(kProbeType);
 }
 
 TEST_CASE("UnknownPass keeps placeholder on schema drift") {
@@ -159,7 +158,6 @@ TEST_CASE("UnknownPass keeps placeholder on schema drift") {
     tc_value_free(&payload_copy);
     tc_pipeline_destroy(pipeline);
     tc_pass_registry_unregister(kProbeType);
-    tc::InspectRegistry::instance().unregister_type(kProbeType);
 }
 
 TEST_CASE("UnknownPass preparation failures leave every pipeline unchanged") {
@@ -201,7 +199,6 @@ TEST_CASE("UnknownPass preparation failures leave every pipeline unchanged") {
     }
 
     tc_pass_registry_unregister(kProbeType);
-    tc::InspectRegistry::instance().unregister_type(kProbeType);
 }
 
 TEST_CASE("UnknownPass prepared plan rejects stale pipeline identity") {
@@ -230,7 +227,6 @@ TEST_CASE("UnknownPass prepared plan rejects stale pipeline identity") {
 
     tc_pipeline_destroy(pipeline);
     tc_pass_registry_unregister(kProbeType);
-    tc::InspectRegistry::instance().unregister_type(kProbeType);
 }
 
 TEST_CASE("UnknownPass preparation rejects external live instances") {
@@ -254,7 +250,6 @@ TEST_CASE("UnknownPass preparation rejects external live instances") {
     tc_pass_delete_unowned(external);
     tc_pipeline_destroy(pipeline);
     tc_pass_registry_unregister(kProbeType);
-    tc::InspectRegistry::instance().unregister_type(kProbeType);
 }
 
 TEST_CASE("UnknownPass registration survives registry rebootstrap") {

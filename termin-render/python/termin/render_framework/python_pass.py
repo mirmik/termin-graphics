@@ -6,7 +6,6 @@ from typing import Any, Callable
 from termin.render_framework._render_framework_native import (
     TcPass,
     TcPassRef,
-    tc_pass_registry_has,
     tc_pass_registry_is_native,
     tc_pass_registry_register_python,
     tc_pass_registry_unregister_python,
@@ -34,16 +33,15 @@ def _register_python_pass_type(
 ) -> bool:
     if tc_pass_registry_is_native(type_name):
         return False
-    if not tc_pass_registry_has(type_name):
-        if not tc_pass_registry_register_python(
-            type_name,
-            cls,
-            owner,
-            parent_name,
-            inspect_fields or {},
-            metadata or {},
-        ):
-            return False
+    if not tc_pass_registry_register_python(
+        type_name,
+        cls,
+        owner,
+        parent_name,
+        inspect_fields or {},
+        metadata or {},
+    ):
+        return False
     _registered_python_pass_types[type_name] = owner
     _python_pass_registrations[type_name] = (cls, owner)
     return True
@@ -67,6 +65,14 @@ def unregister_python_pass_owner(owner: str) -> None:
         if registered_owner == owner:
             _python_pass_registrations.pop(type_name, None)
             _registered_python_pass_types.pop(type_name, None)
+
+
+def list_python_pass_owner(owner: str) -> list[str]:
+    return sorted(
+        type_name
+        for type_name, (_cls, registered_owner) in _python_pass_registrations.items()
+        if registered_owner == owner
+    )
 
 
 atexit.register(shutdown_python_passes)
