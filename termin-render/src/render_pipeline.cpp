@@ -16,7 +16,7 @@
 extern "C" {
 #include "render/tc_pass.h"
 #include "render/tc_pipeline.h"
-#include "render/tc_render_pipeline_registry.h"
+#include "render/tc_pipeline_template_registry.h"
 }
 
 namespace termin {
@@ -28,11 +28,11 @@ static void destroy_render_cache(void* ptr) {
 RenderPipeline::RenderPipeline(const std::string& name)
     : handle_(tc_pipeline_create(name.c_str())) {}
 
-RenderPipeline::RenderPipeline(const TcRenderPipeline& resource)
-    : handle_(tc_pipeline_create_from_resource(resource.handle)) {
-    const tc_render_pipeline* definition = resource.get();
+RenderPipeline::RenderPipeline(const TcPipelineTemplate& pipeline_template)
+    : handle_(tc_pipeline_create_from_template(pipeline_template.handle)) {
+    const tc_pipeline_template* definition = pipeline_template.get();
     if (!definition || !is_valid()) {
-        throw std::runtime_error("cannot instantiate an invalid render pipeline resource");
+        throw std::runtime_error("cannot instantiate an invalid pipeline template");
     }
 
     try {
@@ -41,7 +41,7 @@ RenderPipeline::RenderPipeline(const TcRenderPipeline& resource)
         // canonical descriptor order.
         for (uint32_t offset = 0; offset < definition->pass_count; ++offset) {
             const uint32_t index = definition->pass_count - offset - 1;
-            const tc_render_pipeline_pass_desc& desc = definition->passes[index];
+            const tc_pipeline_template_pass_desc& desc = definition->passes[index];
             tc_pass* pass = tc_pass_registry_create(desc.type_name);
             if (!pass) {
                 if (!tc_pass_registry_has("UnknownPass")) register_builtin_render_pass_types();
@@ -91,7 +91,7 @@ RenderPipeline::RenderPipeline(const TcRenderPipeline& resource)
         }
 
         for (uint32_t i = 0; i < definition->resource_count; ++i) {
-            const tc_render_pipeline_resource_desc& desc = definition->resources[i];
+            const tc_pipeline_template_resource_desc& desc = definition->resources[i];
             const std::string resource_type = desc.resource_type;
             if (resource_type.starts_with("external")) continue;
             ResourceSpec spec;

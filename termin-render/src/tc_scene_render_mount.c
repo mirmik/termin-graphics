@@ -2,7 +2,7 @@
 #include "core/tc_scene_render_mount.h"
 #include "core/tc_scene.h"
 #include "core/tc_scene_extension.h"
-#include "render/tc_render_pipeline_registry.h"
+#include "render/tc_pipeline_template_registry.h"
 #include <tcbase/tc_log.h>
 #include "tc_value.h"
 #include <stdlib.h>
@@ -38,16 +38,16 @@ static bool value_to_uint64(const tc_value* v, uint64_t* out) {
     }
 }
 
-static void render_mount_ensure_pipeline_capacity(tc_scene_render_mount* mount, size_t needed) {
+static void render_mount_ensure_pipeline_template_capacity(tc_scene_render_mount* mount, size_t needed) {
     if (!mount) return;
-    if (mount->pipeline_capacity >= needed) return;
-    size_t new_cap = (mount->pipeline_capacity == 0) ? 4 : mount->pipeline_capacity * 2;
+    if (mount->pipeline_template_capacity >= needed) return;
+    size_t new_cap = (mount->pipeline_template_capacity == 0) ? 4 : mount->pipeline_template_capacity * 2;
     while (new_cap < needed) new_cap *= 2;
-    tc_render_pipeline_handle* p = (tc_render_pipeline_handle*)realloc(
-        mount->pipelines, new_cap * sizeof(tc_render_pipeline_handle));
+    tc_pipeline_template_handle* p = (tc_pipeline_template_handle*)realloc(
+        mount->pipeline_templates, new_cap * sizeof(tc_pipeline_template_handle));
     if (!p) return;
-    mount->pipelines = p;
-    mount->pipeline_capacity = new_cap;
+    mount->pipeline_templates = p;
+    mount->pipeline_template_capacity = new_cap;
 }
 
 static void render_mount_ensure_viewport_capacity(tc_scene_render_mount* mount, size_t needed) {
@@ -82,18 +82,19 @@ static void render_mount_destroy(void* ext, void* type_userdata) {
     (void)type_userdata;
     if (!ext) return;
     tc_scene_render_mount* mount = (tc_scene_render_mount*)ext;
-    for (size_t i = 0; i < mount->pipeline_count; ++i) {
-        tc_render_pipeline* pipeline = tc_render_pipeline_get(mount->pipelines[i]);
-        if (pipeline) {
-            tc_render_pipeline_release(pipeline);
+    for (size_t i = 0; i < mount->pipeline_template_count; ++i) {
+        tc_pipeline_template* pipeline_template =
+            tc_pipeline_template_get(mount->pipeline_templates[i]);
+        if (pipeline_template) {
+            tc_pipeline_template_release(pipeline_template);
         } else {
-            tc_log_error("[tc_scene_render_mount] stale pipeline handle during destroy");
+            tc_log_error("[tc_scene_render_mount] stale pipeline template handle during destroy");
         }
     }
     for (size_t i = 0; i < mount->render_target_config_count; i++) {
         tc_render_target_config_free(&mount->render_target_configs[i]);
     }
-    free(mount->pipelines);
+    free(mount->pipeline_templates);
     free(mount->viewport_configs);
     free(mount->render_target_configs);
     free(mount);
@@ -291,20 +292,21 @@ static bool render_mount_serialize(void* ext, tc_value* out_data, void* type_use
 
     tc_scene_render_mount* mount = (tc_scene_render_mount*)ext;
 
-    tc_value pipelines = tc_value_list_new();
-    for (size_t i = 0; i < mount->pipeline_count; i++) {
-        tc_render_pipeline* pipeline = tc_render_pipeline_get(mount->pipelines[i]);
-        if (!pipeline) {
-            tc_log_error("[tc_scene_render_mount] stale pipeline handle during serialization");
+    tc_value pipeline_templates = tc_value_list_new();
+    for (size_t i = 0; i < mount->pipeline_template_count; i++) {
+        tc_pipeline_template* pipeline_template =
+            tc_pipeline_template_get(mount->pipeline_templates[i]);
+        if (!pipeline_template) {
+            tc_log_error("[tc_scene_render_mount] stale pipeline template handle during serialization");
             continue;
         }
-        const char* uuid = pipeline->header.uuid;
+        const char* uuid = pipeline_template->header.uuid;
         if (!uuid || !uuid[0]) continue;
         tc_value p = tc_value_dict_new();
         tc_value_dict_set(&p, "uuid", tc_value_string(uuid));
-        tc_value_list_push(&pipelines, p);
+        tc_value_list_push(&pipeline_templates, p);
     }
-    tc_value_dict_set(out_data, "scene_pipelines", pipelines);
+    tc_value_dict_set(out_data, "pipeline_templates", pipeline_templates);
 
     tc_value vps = tc_value_list_new();
     for (size_t i = 0; i < mount->viewport_config_count; i++) {
@@ -330,33 +332,34 @@ static bool render_mount_deserialize(void* ext, const tc_value* in_data, void* t
         tc_render_target_config_free(&mount->render_target_configs[i]);
     }
     tc_scene_render_mount* existing_mount = mount;
-    for (size_t i = 0; i < existing_mount->pipeline_count; ++i) {
-        tc_render_pipeline* pipeline = tc_render_pipeline_get(existing_mount->pipelines[i]);
-        if (pipeline) tc_render_pipeline_release(pipeline);
+    for (size_t i = 0; i < existing_mount->pipeline_template_count; ++i) {
+        tc_pipeline_template* pipeline_template =
+            tc_pipeline_template_get(existing_mount->pipeline_templates[i]);
+        if (pipeline_template) tc_pipeline_template_release(pipeline_template);
     }
-    mount->pipeline_count = 0;
+    mount->pipeline_template_count = 0;
     mount->viewport_config_count = 0;
     mount->render_target_config_count = 0;
 
-    tc_value* pipelines = tc_value_dict_get((tc_value*)in_data, "scene_pipelines");
-    if (pipelines && pipelines->type == TC_VALUE_LIST) {
-        size_t n = tc_value_list_size(pipelines);
-        render_mount_ensure_pipeline_capacity(mount, n);
+    tc_value* pipeline_templates = tc_value_dict_get((tc_value*)in_data, "pipeline_templates");
+    if (pipeline_templates && pipeline_templates->type == TC_VALUE_LIST) {
+        size_t n = tc_value_list_size(pipeline_templates);
+        render_mount_ensure_pipeline_template_capacity(mount, n);
         for (size_t i = 0; i < n; i++) {
-            tc_value* item = tc_value_list_get(pipelines, i);
+            tc_value* item = tc_value_list_get(pipeline_templates, i);
             if (!item || item->type != TC_VALUE_DICT) continue;
             tc_value* uuid = tc_value_dict_get(item, "uuid");
             if (!uuid || uuid->type != TC_VALUE_STRING || !uuid->data.s || !uuid->data.s[0]) continue;
-            tc_render_pipeline_handle h = tc_render_pipeline_find(uuid->data.s);
-            tc_render_pipeline* pipeline = tc_render_pipeline_get(h);
-            if (!pipeline) {
+            tc_pipeline_template_handle h = tc_pipeline_template_find(uuid->data.s);
+            tc_pipeline_template* pipeline_template = tc_pipeline_template_get(h);
+            if (!pipeline_template) {
                 tc_log_error(
-                    "[tc_scene_render_mount] canonical pipeline '%s' is not registered",
+                    "[tc_scene_render_mount] canonical pipeline template '%s' is not registered",
                     uuid->data.s);
                 return false;
             }
-            tc_render_pipeline_retain(pipeline);
-            mount->pipelines[mount->pipeline_count++] = h;
+            tc_pipeline_template_retain(pipeline_template);
+            mount->pipeline_templates[mount->pipeline_template_count++] = h;
         }
     }
 
@@ -466,40 +469,40 @@ tc_viewport_config* tc_scene_viewport_config_at(tc_scene_handle h, size_t index)
     return &mount->viewport_configs[index];
 }
 
-bool tc_scene_add_render_pipeline(tc_scene_handle h, tc_render_pipeline_handle pipeline_handle) {
+bool tc_scene_add_pipeline_template(tc_scene_handle h, tc_pipeline_template_handle template_handle) {
     if (!tc_scene_alive(h)) return false;
-    tc_render_pipeline* pipeline = tc_render_pipeline_get(pipeline_handle);
-    if (!pipeline) {
-        tc_log_error("[tc_scene_render_mount] cannot add stale pipeline handle");
+    tc_pipeline_template* pipeline_template = tc_pipeline_template_get(template_handle);
+    if (!pipeline_template) {
+        tc_log_error("[tc_scene_render_mount] cannot add stale pipeline template handle");
         return false;
     }
     if (!tc_scene_render_mount_ensure(h)) return false;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
     if (!mount) return false;
 
-    render_mount_ensure_pipeline_capacity(mount, mount->pipeline_count + 1);
-    if (mount->pipeline_capacity < mount->pipeline_count + 1) {
-        tc_log_error("[tc_scene_render_mount] pipeline storage allocation failed");
+    render_mount_ensure_pipeline_template_capacity(mount, mount->pipeline_template_count + 1);
+    if (mount->pipeline_template_capacity < mount->pipeline_template_count + 1) {
+        tc_log_error("[tc_scene_render_mount] pipeline template storage allocation failed");
         return false;
     }
-    tc_render_pipeline_retain(pipeline);
-    mount->pipelines[mount->pipeline_count++] = pipeline_handle;
+    tc_pipeline_template_retain(pipeline_template);
+    mount->pipeline_templates[mount->pipeline_template_count++] = template_handle;
     return true;
 }
 
-bool tc_scene_remove_render_pipeline(tc_scene_handle h, tc_render_pipeline_handle pipeline_handle) {
+bool tc_scene_remove_pipeline_template(tc_scene_handle h, tc_pipeline_template_handle template_handle) {
     if (!tc_scene_alive(h)) return false;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
     if (!mount) return false;
 
-    for (size_t i = 0; i < mount->pipeline_count; i++) {
-        if (tc_render_pipeline_handle_eq(mount->pipelines[i], pipeline_handle)) {
-            tc_render_pipeline* pipeline = tc_render_pipeline_get(pipeline_handle);
-            mount->pipelines[i] = mount->pipelines[--mount->pipeline_count];
-            if (pipeline) {
-                tc_render_pipeline_release(pipeline);
+    for (size_t i = 0; i < mount->pipeline_template_count; i++) {
+        if (tc_pipeline_template_handle_eq(mount->pipeline_templates[i], template_handle)) {
+            tc_pipeline_template* pipeline_template = tc_pipeline_template_get(template_handle);
+            mount->pipeline_templates[i] = mount->pipeline_templates[--mount->pipeline_template_count];
+            if (pipeline_template) {
+                tc_pipeline_template_release(pipeline_template);
             } else {
-                tc_log_error("[tc_scene_render_mount] stale pipeline handle during removal");
+                tc_log_error("[tc_scene_render_mount] stale pipeline template handle during removal");
             }
             return true;
         }
@@ -507,33 +510,34 @@ bool tc_scene_remove_render_pipeline(tc_scene_handle h, tc_render_pipeline_handl
     return false;
 }
 
-void tc_scene_clear_render_pipelines(tc_scene_handle h) {
+void tc_scene_clear_pipeline_templates(tc_scene_handle h) {
     if (!tc_scene_alive(h)) return;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
     if (!mount) return;
-    for (size_t i = 0; i < mount->pipeline_count; ++i) {
-        tc_render_pipeline* pipeline = tc_render_pipeline_get(mount->pipelines[i]);
-        if (pipeline) {
-            tc_render_pipeline_release(pipeline);
+    for (size_t i = 0; i < mount->pipeline_template_count; ++i) {
+        tc_pipeline_template* pipeline_template =
+            tc_pipeline_template_get(mount->pipeline_templates[i]);
+        if (pipeline_template) {
+            tc_pipeline_template_release(pipeline_template);
         } else {
-            tc_log_error("[tc_scene_render_mount] stale pipeline handle during clear");
+            tc_log_error("[tc_scene_render_mount] stale pipeline template handle during clear");
         }
     }
-    mount->pipeline_count = 0;
+    mount->pipeline_template_count = 0;
 }
 
-size_t tc_scene_render_pipeline_count(tc_scene_handle h) {
+size_t tc_scene_pipeline_template_count(tc_scene_handle h) {
     if (!tc_scene_alive(h)) return 0;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    return mount ? mount->pipeline_count : 0;
+    return mount ? mount->pipeline_template_count : 0;
 }
 
-tc_render_pipeline_handle tc_scene_render_pipeline_at(tc_scene_handle h, size_t index) {
-    if (!tc_scene_alive(h)) return tc_render_pipeline_handle_invalid();
+tc_pipeline_template_handle tc_scene_pipeline_template_at(tc_scene_handle h, size_t index) {
+    if (!tc_scene_alive(h)) return tc_pipeline_template_handle_invalid();
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    if (!mount) return tc_render_pipeline_handle_invalid();
-    if (index >= mount->pipeline_count) return tc_render_pipeline_handle_invalid();
-    return mount->pipelines[index];
+    if (!mount) return tc_pipeline_template_handle_invalid();
+    if (index >= mount->pipeline_template_count) return tc_pipeline_template_handle_invalid();
+    return mount->pipeline_templates[index];
 }
 
 void tc_scene_add_render_target_config(tc_scene_handle h, const tc_render_target_config* config) {

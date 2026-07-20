@@ -14,7 +14,7 @@
 #include "termin/render/fbo_pool.hpp"
 #include "termin/render/resource_aliases.hpp"
 #include "termin/render/resource_spec.hpp"
-#include "termin/render/tc_render_pipeline.hpp"
+#include "termin/render/tc_pipeline_template.hpp"
 
 extern "C" {
 #include "render/tc_pipeline.h"
@@ -49,7 +49,7 @@ struct RENDER_API PipelineRenderCache {
 };
 
 // Mutable execution instance. It owns live passes and device-local caches while
-// holding a strong reference to an immutable/backend-neutral TcRenderPipeline.
+// holding a strong reference to an immutable/backend-neutral TcPipelineTemplate.
 class RENDER_API RenderPipeline {
 public:
     tc_pipeline_handle handle_;
@@ -60,14 +60,14 @@ public:
 
     // Create a new pipeline in the pool (caller must destroy() when done)
     explicit RenderPipeline(const std::string& name);
-    explicit RenderPipeline(const TcRenderPipeline& resource);
+    explicit RenderPipeline(const TcPipelineTemplate& pipeline_template);
 
     tc_pipeline* ptr() { return tc_pipeline_get_ptr(handle_); }
     const tc_pipeline* ptr() const { return tc_pipeline_get_ptr(handle_); }
 
     tc_pipeline_handle handle() const { return handle_; }
-    tc_render_pipeline_handle resource_handle() const {
-        return tc_pipeline_get_resource(handle_);
+    tc_pipeline_template_handle template_handle() const {
+        return tc_pipeline_get_template(handle_);
     }
     bool is_valid() const { return tc_pipeline_pool_alive(handle_); }
 
@@ -119,7 +119,7 @@ public:
 };
 
 // Explicit name for code that needs to distinguish execution state from the
-// canonical TcRenderPipeline definition.
+// canonical TcPipelineTemplate definition.
 using RenderPipelineInstance = RenderPipeline;
 
 } // namespace termin

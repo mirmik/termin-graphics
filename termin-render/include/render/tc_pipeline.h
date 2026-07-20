@@ -3,7 +3,7 @@
 
 #include <render/tc_pass.h>
 #include <render/tc_pipeline_pool.h>
-#include <render/tc_render_pipeline.h>
+#include <render/tc_pipeline_template.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -13,7 +13,7 @@ typedef struct tc_pipeline tc_pipeline;
 
 struct tc_pipeline {
     char* name;
-    tc_render_pipeline_handle resource;
+    tc_pipeline_template_handle pipeline_template;
     tc_pass** passes;
     tc_pass_deleter* pass_deleters;
     size_t pass_count;
@@ -25,14 +25,14 @@ struct tc_pipeline {
 };
 
 // Create a mutable runtime-only collection. It has no canonical template;
-// tc_pipeline_get_resource() returns an invalid handle.
+// tc_pipeline_get_template() returns an invalid handle.
 TC_API tc_pipeline_handle tc_pipeline_create(const char* name);
 // Instantiate a mutable execution collection that strongly retains the
 // canonical immutable/versioned template for its complete lifetime.
-TC_API tc_pipeline_handle tc_pipeline_create_from_resource(tc_render_pipeline_handle resource);
+TC_API tc_pipeline_handle tc_pipeline_create_from_template(tc_pipeline_template_handle pipeline_template);
 TC_API void tc_pipeline_destroy(tc_pipeline_handle h);
 TC_API tc_pipeline* tc_pipeline_get_ptr(tc_pipeline_handle h);
-TC_API tc_render_pipeline_handle tc_pipeline_get_resource(tc_pipeline_handle h);
+TC_API tc_pipeline_template_handle tc_pipeline_get_template(tc_pipeline_handle h);
 TC_API bool tc_pipeline_adopt_pass(
     tc_pipeline_handle h,
     tc_pass* pass,

@@ -169,20 +169,20 @@ nb::object fbo_info(RenderPipeline& self, const std::string& key) {
 } // namespace
 
 void bind_render_pipeline(nb::module_& m) {
-    nb::class_<TcRenderPipeline>(m, "TcRenderPipeline")
-        .def_static("declare", &TcRenderPipeline::declare, nb::arg("uuid"), nb::arg("name"))
-        .def_static("find", &TcRenderPipeline::find, nb::arg("uuid"))
-        .def_prop_ro("is_valid", &TcRenderPipeline::is_valid)
-        .def_prop_ro("uuid", [](const TcRenderPipeline& value) {
+    nb::class_<TcPipelineTemplate>(m, "TcPipelineTemplate")
+        .def_static("declare", &TcPipelineTemplate::declare, nb::arg("uuid"), nb::arg("name"))
+        .def_static("find", &TcPipelineTemplate::find, nb::arg("uuid"))
+        .def_prop_ro("is_valid", &TcPipelineTemplate::is_valid)
+        .def_prop_ro("uuid", [](const TcPipelineTemplate& value) {
             return std::string(value.uuid());
         })
-        .def_prop_ro("name", [](const TcRenderPipeline& value) {
+        .def_prop_ro("name", [](const TcPipelineTemplate& value) {
             return std::string(value.name());
         })
-        .def_prop_ro("version", &TcRenderPipeline::version)
-        .def_prop_ro("passes", [](const TcRenderPipeline& value) {
+        .def_prop_ro("version", &TcPipelineTemplate::version)
+        .def_prop_ro("passes", [](const TcPipelineTemplate& value) {
             nb::list result;
-            const tc_render_pipeline* pipeline = value.get();
+            const tc_pipeline_template* pipeline = value.get();
             if (!pipeline) return result;
             for (uint32_t i = 0; i < pipeline->pass_count; ++i) {
                 nb::dict item;
@@ -196,12 +196,12 @@ void bind_render_pipeline(nb::module_& m) {
             }
             return result;
         })
-        .def_prop_ro("resources", [](const TcRenderPipeline& value) {
+        .def_prop_ro("resources", [](const TcPipelineTemplate& value) {
             nb::list result;
-            const tc_render_pipeline* pipeline = value.get();
+            const tc_pipeline_template* pipeline = value.get();
             if (!pipeline) return result;
             for (uint32_t i = 0; i < pipeline->resource_count; ++i) {
-                const tc_render_pipeline_resource_desc& resource = pipeline->resources[i];
+                const tc_pipeline_template_resource_desc& resource = pipeline->resources[i];
                 nb::dict item;
                 item["name"] = resource.name;
                 item["resource_type"] = resource.resource_type;
@@ -216,9 +216,9 @@ void bind_render_pipeline(nb::module_& m) {
             }
             return result;
         })
-        .def_prop_ro("dependencies", [](const TcRenderPipeline& value) {
+        .def_prop_ro("dependencies", [](const TcPipelineTemplate& value) {
             nb::list result;
-            const tc_render_pipeline* pipeline = value.get();
+            const tc_pipeline_template* pipeline = value.get();
             if (!pipeline) return result;
             for (uint32_t i = 0; i < pipeline->dependency_count; ++i) {
                 nb::dict item;
@@ -229,9 +229,9 @@ void bind_render_pipeline(nb::module_& m) {
             }
             return result;
         })
-        .def_prop_ro("targets", [](const TcRenderPipeline& value) {
+        .def_prop_ro("targets", [](const TcPipelineTemplate& value) {
             nb::list result;
-            const tc_render_pipeline* pipeline = value.get();
+            const tc_pipeline_template* pipeline = value.get();
             if (!pipeline) return result;
             for (uint32_t i = 0; i < pipeline->target_count; ++i) {
                 nb::dict item;
@@ -248,7 +248,7 @@ void bind_render_pipeline(nb::module_& m) {
 
     nb::class_<RenderPipeline>(m, "RenderPipeline")
         .def(nb::init<const std::string&>(), nb::arg("name") = "default")
-        .def(nb::init<const TcRenderPipeline&>(), nb::arg("resource"))
+        .def(nb::init<const TcPipelineTemplate&>(), nb::arg("pipeline_template"))
 
         .def_static("from_handle", [](uint32_t index, uint32_t generation) {
             tc_pipeline_handle h;
@@ -288,8 +288,8 @@ void bind_render_pipeline(nb::module_& m) {
             return self.handle();
         })
 
-        .def_prop_ro("canonical_resource", [](RenderPipeline& self) {
-            return TcRenderPipeline(self.resource_handle());
+        .def_prop_ro("pipeline_template", [](RenderPipeline& self) {
+            return TcPipelineTemplate(self.template_handle());
         })
 
         .def_prop_ro("pass_count", &RenderPipeline::pass_count)
@@ -635,31 +635,31 @@ void bind_render_pipeline(nb::module_& m) {
     m.attr("RenderPipelineInstance") = m.attr("RenderPipeline");
 
     m.def("compile_graph_from_json", [](const std::string& json_str,
-                                         const std::string& resource_uuid,
-                                         const std::string& resource_name) {
-        if (resource_uuid.empty()) {
+                                         const std::string& template_uuid,
+                                         const std::string& template_name) {
+        if (template_uuid.empty()) {
             return tc::compile_graph(json_str);
         }
-        const std::string& name = resource_name.empty() ? resource_uuid : resource_name;
-        TcRenderPipeline resource = TcRenderPipeline::declare(resource_uuid, name);
-        if (!resource.is_valid()) {
-            throw std::runtime_error("failed to declare canonical pipeline resource");
+        const std::string& name = template_name.empty() ? template_uuid : template_name;
+        TcPipelineTemplate pipeline_template = TcPipelineTemplate::declare(template_uuid, name);
+        if (!pipeline_template.is_valid()) {
+            throw std::runtime_error("failed to declare canonical pipeline template");
         }
-        return tc::compile_graph(json_str, resource);
-    }, nb::arg("json_str"), nb::arg("resource_uuid") = "",
-       nb::arg("resource_name") = "", nb::rv_policy::take_ownership);
+        return tc::compile_graph(json_str, pipeline_template);
+    }, nb::arg("json_str"), nb::arg("template_uuid") = "",
+       nb::arg("template_name") = "", nb::rv_policy::take_ownership);
 
-    m.def("publish_pipeline_definition", [](
+    m.def("publish_pipeline_template", [](
         RenderPipeline& pipeline,
-        const TcRenderPipeline& resource,
+        const TcPipelineTemplate& pipeline_template,
         const std::vector<std::string>& pass_parameters,
         nb::list target_values
     ) {
-        std::vector<tc::PipelineDefinitionTarget> targets;
+        std::vector<tc::PipelineTemplateTarget> targets;
         targets.reserve(nb::len(target_values));
         for (nb::handle value : target_values) {
             nb::dict item = nb::cast<nb::dict>(value);
-            tc::PipelineDefinitionTarget target;
+            tc::PipelineTemplateTarget target;
             if (item.contains("viewport_name")) {
                 target.viewport_name = nb::cast<std::string>(item["viewport_name"]);
             }
@@ -670,14 +670,15 @@ void bind_render_pipeline(nb::module_& m) {
             if (item.contains("height")) target.height = nb::cast<int32_t>(item["height"]);
             targets.push_back(std::move(target));
         }
-        if (!tc::publish_pipeline_definition(pipeline, resource, pass_parameters, targets)) {
-            throw std::runtime_error("failed to publish canonical pipeline definition");
+        if (!tc::publish_pipeline_template(
+                pipeline, pipeline_template, pass_parameters, targets)) {
+            throw std::runtime_error("failed to publish canonical pipeline template");
         }
-    }, nb::arg("pipeline"), nb::arg("resource"),
+    }, nb::arg("pipeline"), nb::arg("pipeline_template"),
        nb::arg("pass_parameters") = std::vector<std::string>{},
        nb::arg("targets") = nb::list());
 
-    m.def("apply_pipeline_resource_recipe", [](
+    m.def("apply_pipeline_template_recipe", [](
         RenderPipeline& pipeline,
         nb::dict view_values,
         nb::dict composition_values

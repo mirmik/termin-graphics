@@ -26,7 +26,7 @@ struct ResourceNaming {
     std::unordered_map<std::string, termin::FboComposition> fbo_compositions;
 };
 
-struct PipelineDefinitionTarget {
+struct PipelineTemplateTarget {
     std::string viewport_name;
     std::string export_name;
     int32_t width = 0;
@@ -34,13 +34,13 @@ struct PipelineDefinitionTarget {
 };
 
 // Publish a fully compiled execution candidate into a stable canonical
-// resource. All descriptor storage is prepared before the registry swaps the
-// live payload, so failure leaves the previous resource version untouched.
-RENDER_API bool publish_pipeline_definition(
+// template. All descriptor storage is prepared before the registry swaps the
+// live payload, so failure leaves the previous template version untouched.
+RENDER_API bool publish_pipeline_template(
     termin::RenderPipeline& instance,
-    const termin::TcRenderPipeline& resource,
+    const termin::TcPipelineTemplate& pipeline_template,
     const std::vector<std::string>& pass_parameters = {},
-    const std::vector<PipelineDefinitionTarget>& targets = {}
+    const std::vector<PipelineTemplateTarget>& targets = {}
 );
 
 RENDER_API std::vector<NodeData*> topological_sort(GraphData& graph);
@@ -60,13 +60,13 @@ RENDER_API const ViewportFrameData* find_containing_frame(
 RENDER_API termin::RenderPipeline* compile_graph(GraphData& graph);
 RENDER_API termin::RenderPipeline* compile_graph(
     GraphData& graph,
-    const termin::TcRenderPipeline& resource
+    const termin::TcPipelineTemplate& pipeline_template
 );
 RENDER_API termin::RenderPipeline* compile_graph(const nos::trent& graph_trent);
 RENDER_API termin::RenderPipeline* compile_graph(const std::string& json_str);
 RENDER_API termin::RenderPipeline* compile_graph(
     const std::string& json_str,
-    const termin::TcRenderPipeline& resource
+    const termin::TcPipelineTemplate& pipeline_template
 );
 
 } // namespace tc

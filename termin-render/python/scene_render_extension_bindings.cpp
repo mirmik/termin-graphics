@@ -3,7 +3,7 @@
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 
-#include <termin/render/tc_render_pipeline.hpp>
+#include <termin/render/tc_pipeline_template.hpp>
 #include <termin/render/tc_scene_render_ext.hpp>
 #include <termin/tc_scene.hpp>
 #include <termin/geom/vec3.hpp>
@@ -300,28 +300,28 @@ void bind_scene_render_extensions(nb::module_& m) {
         .def_prop_ro("render_target_configs", [](const SceneRenderMount& self) {
             return scene_render_target_configs(TcSceneRef(self.handle()));
         })
-        .def("add_render_pipeline", [](SceneRenderMount& self, const TcRenderPipeline& pipeline) {
-            return scene_add_render_pipeline(TcSceneRef(self.handle()), pipeline);
-        }, nb::arg("pipeline"))
-        .def("remove_render_pipeline", [](SceneRenderMount& self, const TcRenderPipeline& pipeline) {
-            return tc_scene_remove_render_pipeline(self.handle(), pipeline.handle);
-        }, nb::arg("pipeline"))
-        .def("clear_render_pipelines", [](SceneRenderMount& self) {
-            scene_clear_render_pipelines(TcSceneRef(self.handle()));
+        .def("add_pipeline_template", [](SceneRenderMount& self, const TcPipelineTemplate& pipeline_template) {
+            return scene_add_pipeline_template(TcSceneRef(self.handle()), pipeline_template);
+        }, nb::arg("pipeline_template"))
+        .def("remove_pipeline_template", [](SceneRenderMount& self, const TcPipelineTemplate& pipeline_template) {
+            return tc_scene_remove_pipeline_template(self.handle(), pipeline_template.handle);
+        }, nb::arg("pipeline_template"))
+        .def("clear_pipeline_templates", [](SceneRenderMount& self) {
+            scene_clear_pipeline_templates(TcSceneRef(self.handle()));
         })
-        .def("render_pipeline_count", [](const SceneRenderMount& self) {
-            return scene_render_pipeline_count(TcSceneRef(self.handle()));
+        .def("pipeline_template_count", [](const SceneRenderMount& self) {
+            return scene_pipeline_template_count(TcSceneRef(self.handle()));
         })
-        .def("render_pipeline_at", [](const SceneRenderMount& self, size_t index) {
-            return scene_render_pipeline_at(TcSceneRef(self.handle()), index);
+        .def("pipeline_template_at", [](const SceneRenderMount& self, size_t index) {
+            return scene_pipeline_template_at(TcSceneRef(self.handle()), index);
         }, nb::arg("index"))
-        .def_prop_ro("scene_pipelines", [](const SceneRenderMount& self) {
+        .def_prop_ro("pipeline_templates", [](const SceneRenderMount& self) {
             TcSceneRef scene(self.handle());
-            std::vector<TcRenderPipeline> result;
-            size_t count = scene_render_pipeline_count(scene);
+            std::vector<TcPipelineTemplate> result;
+            size_t count = scene_pipeline_template_count(scene);
             result.reserve(count);
             for (size_t i = 0; i < count; ++i) {
-                result.push_back(scene_render_pipeline_at(scene, i));
+                result.push_back(scene_pipeline_template_at(scene, i));
             }
             return result;
         });

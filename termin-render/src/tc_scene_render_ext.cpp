@@ -300,40 +300,39 @@ std::vector<RenderTargetConfig> scene_render_target_configs(const TcSceneRef& sc
     return result;
 }
 
-bool scene_add_render_pipeline(const TcSceneRef& scene, const TcRenderPipeline& pipeline) {
-    return tc_scene_add_render_pipeline(scene.handle(), pipeline.handle);
+bool scene_add_pipeline_template(
+    const TcSceneRef& scene,
+    const TcPipelineTemplate& pipeline_template
+) {
+    return tc_scene_add_pipeline_template(scene.handle(), pipeline_template.handle);
 }
 
-void scene_clear_render_pipelines(const TcSceneRef& scene) {
-    tc_scene_clear_render_pipelines(scene.handle());
+void scene_clear_pipeline_templates(const TcSceneRef& scene) {
+    tc_scene_clear_pipeline_templates(scene.handle());
 }
 
-size_t scene_render_pipeline_count(const TcSceneRef& scene) {
+size_t scene_pipeline_template_count(const TcSceneRef& scene) {
     tc_scene_render_mount* mount = tc_scene_render_mount_get(scene.handle());
-    return mount ? mount->pipeline_count : 0;
+    return mount ? mount->pipeline_template_count : 0;
 }
 
-TcRenderPipeline scene_render_pipeline_at(const TcSceneRef& scene, size_t index) {
+TcPipelineTemplate scene_pipeline_template_at(const TcSceneRef& scene, size_t index) {
     tc_scene_render_mount* mount = tc_scene_render_mount_get(scene.handle());
-    if (!mount || index >= mount->pipeline_count) {
-        return TcRenderPipeline();
+    if (!mount || index >= mount->pipeline_template_count) {
+        return TcPipelineTemplate();
     }
-    return TcRenderPipeline(mount->pipelines[index]);
+    return TcPipelineTemplate(mount->pipeline_templates[index]);
 }
 
 void scene_merge_legacy_render_extensions(const nos::trent& data, nos::trent& merged_extensions) {
     if (!merged_extensions.contains("render_mount")) {
         bool has_legacy_render_mount =
-            (data.contains("viewport_configs") && data["viewport_configs"].is_list()) ||
-            (data.contains("scene_pipelines") && data["scene_pipelines"].is_list());
+            data.contains("viewport_configs") && data["viewport_configs"].is_list();
 
         if (has_legacy_render_mount) {
             nos::trent render_mount;
             if (data.contains("viewport_configs") && data["viewport_configs"].is_list()) {
                 render_mount["viewport_configs"] = data["viewport_configs"];
-            }
-            if (data.contains("scene_pipelines") && data["scene_pipelines"].is_list()) {
-                render_mount["scene_pipelines"] = data["scene_pipelines"];
             }
             merged_extensions["render_mount"] = std::move(render_mount);
         }

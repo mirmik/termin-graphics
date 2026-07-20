@@ -12,10 +12,10 @@
 extern "C" {
 #endif
 
-TC_DEFINE_HANDLE(tc_render_pipeline_handle)
+TC_DEFINE_HANDLE(tc_pipeline_template_handle)
 
-#define TC_RENDER_PIPELINE_DESCRIPTOR_VERSION 1u
-#define TC_RENDER_PIPELINE_BINARY_VERSION 1u
+#define TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION 1u
+#define TC_PIPELINE_TEMPLATE_BINARY_VERSION 1u
 
 typedef enum tc_pipeline_resource_access {
     TC_PIPELINE_RESOURCE_READ = 1,
@@ -23,14 +23,14 @@ typedef enum tc_pipeline_resource_access {
     TC_PIPELINE_RESOURCE_READ_WRITE = 3
 } tc_pipeline_resource_access;
 
-typedef struct tc_render_pipeline_pass_desc {
+typedef struct tc_pipeline_template_pass_desc {
     const char* type_name;
     const char* name;
     const char* parameters;
     const char* viewport_name;
-} tc_render_pipeline_pass_desc;
+} tc_pipeline_template_pass_desc;
 
-typedef struct tc_render_pipeline_resource_desc {
+typedef struct tc_pipeline_template_resource_desc {
     const char* name;
     const char* resource_type;
     const char* format;
@@ -40,47 +40,47 @@ typedef struct tc_render_pipeline_resource_desc {
     float scale;
     uint32_t samples;
     uint32_t flags;
-} tc_render_pipeline_resource_desc;
+} tc_pipeline_template_resource_desc;
 
-typedef struct tc_render_pipeline_dependency_desc {
+typedef struct tc_pipeline_template_dependency_desc {
     uint32_t pass_index;
     const char* resource;
     tc_pipeline_resource_access access;
-} tc_render_pipeline_dependency_desc;
+} tc_pipeline_template_dependency_desc;
 
-typedef struct tc_render_pipeline_target_desc {
+typedef struct tc_pipeline_template_target_desc {
     const char* viewport_name;
     const char* export_name;
     int32_t width;
     int32_t height;
-} tc_render_pipeline_target_desc;
+} tc_pipeline_template_target_desc;
 
-typedef struct tc_render_pipeline_payload_desc {
+typedef struct tc_pipeline_template_payload_desc {
     uint32_t descriptor_version;
     const char* name;
-    const tc_render_pipeline_pass_desc* passes;
+    const tc_pipeline_template_pass_desc* passes;
     uint32_t pass_count;
-    const tc_render_pipeline_resource_desc* resources;
+    const tc_pipeline_template_resource_desc* resources;
     uint32_t resource_count;
-    const tc_render_pipeline_dependency_desc* dependencies;
+    const tc_pipeline_template_dependency_desc* dependencies;
     uint32_t dependency_count;
-    const tc_render_pipeline_target_desc* targets;
+    const tc_pipeline_template_target_desc* targets;
     uint32_t target_count;
-} tc_render_pipeline_payload_desc;
+} tc_pipeline_template_payload_desc;
 
-typedef struct tc_render_pipeline {
+typedef struct tc_pipeline_template {
     tc_resource_header header;
-    tc_render_pipeline_handle self_handle;
+    tc_pipeline_template_handle self_handle;
     uint32_t descriptor_version;
-    tc_render_pipeline_pass_desc* passes;
+    tc_pipeline_template_pass_desc* passes;
     uint32_t pass_count;
-    tc_render_pipeline_resource_desc* resources;
+    tc_pipeline_template_resource_desc* resources;
     uint32_t resource_count;
-    tc_render_pipeline_dependency_desc* dependencies;
+    tc_pipeline_template_dependency_desc* dependencies;
     uint32_t dependency_count;
-    tc_render_pipeline_target_desc* targets;
+    tc_pipeline_template_target_desc* targets;
     uint32_t target_count;
-} tc_render_pipeline;
+} tc_pipeline_template;
 
 #ifdef __cplusplus
 }

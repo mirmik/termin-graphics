@@ -58,7 +58,7 @@ set(TERMIN_RENDER_SOURCES
     src/tc_render_target.c
     src/tc_render_target_config.c
     src/tc_pass.c
-    src/tc_render_pipeline_registry.c
+    src/tc_pipeline_template_registry.c
     src/tc_pipeline.c
     src/tc_frame_graph.c
     src/tc_scene_render_ext.cpp
@@ -117,8 +117,8 @@ set(TERMIN_RENDER_HEADERS
     include/render/tc_render_target_pool.h
     include/render/tc_render_target.h
     include/render/tc_pass.h
-    include/render/tc_render_pipeline.h
-    include/render/tc_render_pipeline_registry.h
+    include/render/tc_pipeline_template.h
+    include/render/tc_pipeline_template_registry.h
     include/render/tc_pipeline.h
     include/render/tc_frame_graph.h
     include/tc_pipeline_registry.h
@@ -149,7 +149,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/material_ubo_apply.hpp
     include/termin/render/resource_aliases.hpp
     include/termin/render/render_pipeline.hpp
-    include/termin/render/tc_render_pipeline.hpp
+    include/termin/render/tc_pipeline_template.hpp
     include/termin/render/render_engine.hpp
     include/termin/render/render_item_submission.hpp
     include/termin/render/render_scene_item_collector.hpp
@@ -297,12 +297,12 @@ if(TERMIN_RENDER_BUILD_TESTS)
     target_link_libraries(termin_render_pass_ownership_test PRIVATE termin_render)
     add_test(NAME termin_render_pass_ownership_test COMMAND termin_render_pass_ownership_test)
 
-    add_executable(termin_render_pipeline_resource_test tests/test_render_pipeline_resource.cpp)
-    target_include_directories(termin_render_pipeline_resource_test PRIVATE
+    add_executable(termin_render_pipeline_template_test tests/test_pipeline_template.cpp)
+    target_include_directories(termin_render_pipeline_template_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
     )
-    target_link_libraries(termin_render_pipeline_resource_test PRIVATE termin_render)
-    add_test(NAME termin_render_pipeline_resource_test COMMAND termin_render_pipeline_resource_test)
+    target_link_libraries(termin_render_pipeline_template_test PRIVATE termin_render)
+    add_test(NAME termin_render_pipeline_template_test COMMAND termin_render_pipeline_template_test)
 
     add_executable(termin_render_unknown_pass_test tests/test_unknown_pass.cpp)
     target_include_directories(termin_render_unknown_pass_test PRIVATE
@@ -346,7 +346,7 @@ if(TERMIN_RENDER_BUILD_TESTS)
         termin_render_shader_contract_test
         termin_render_shader_abi_test
         termin_render_pass_ownership_test
-        termin_render_pipeline_resource_test
+        termin_render_pipeline_template_test
         termin_render_unknown_pass_test
         termin_render_item_submission_test
         termin_render_task_test

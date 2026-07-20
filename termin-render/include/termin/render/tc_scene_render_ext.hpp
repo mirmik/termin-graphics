@@ -5,7 +5,7 @@
 
 #include <termin/render/render_export.hpp>
 #include <termin/render/tc_scene_render_accessors.hpp>
-#include <termin/render/tc_render_pipeline.hpp>
+#include <termin/render/tc_pipeline_template.hpp>
 #include <termin/tc_scene.hpp>
 #include <termin/viewport_config.hpp>
 #include <termin/render_target_config.hpp>
@@ -34,12 +34,14 @@ RENDER_API size_t scene_render_target_config_count(const TcSceneRef& scene);
 RENDER_API RenderTargetConfig scene_render_target_config_at(const TcSceneRef& scene, size_t index);
 RENDER_API std::vector<RenderTargetConfig> scene_render_target_configs(const TcSceneRef& scene);
 
-// --- Canonical pipeline resources ---
+// --- Canonical pipeline templates ---
 
-RENDER_API bool scene_add_render_pipeline(const TcSceneRef& scene, const TcRenderPipeline& pipeline);
-RENDER_API void scene_clear_render_pipelines(const TcSceneRef& scene);
-RENDER_API size_t scene_render_pipeline_count(const TcSceneRef& scene);
-RENDER_API TcRenderPipeline scene_render_pipeline_at(const TcSceneRef& scene, size_t index);
+RENDER_API bool scene_add_pipeline_template(
+    const TcSceneRef& scene,
+    const TcPipelineTemplate& pipeline_template);
+RENDER_API void scene_clear_pipeline_templates(const TcSceneRef& scene);
+RENDER_API size_t scene_pipeline_template_count(const TcSceneRef& scene);
+RENDER_API TcPipelineTemplate scene_pipeline_template_at(const TcSceneRef& scene, size_t index);
 
 // --- Legacy adapter for load_from_data render mount/state ---
 

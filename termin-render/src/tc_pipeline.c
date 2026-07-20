@@ -1,7 +1,7 @@
 #include <render/tc_pipeline.h>
 #include <render/tc_pipeline_pool.h>
 #include <render/tc_frame_graph.h>
-#include <render/tc_render_pipeline_registry.h>
+#include <render/tc_pipeline_template_registry.h>
 #include <tc_pipeline_registry.h>
 #include <tcbase/tc_log.h>
 #ifdef TERMIN_RENDER_ENABLE_TEST_HOOKS
@@ -108,9 +108,10 @@ static void destroy_pipeline_slot(tc_pipeline* pipeline) {
     }
 
     destroy_all_pipeline_passes(pipeline);
-    tc_render_pipeline* resource = tc_render_pipeline_get(pipeline->resource);
-    pipeline->resource = tc_render_pipeline_handle_invalid();
-    if (resource) tc_render_pipeline_release(resource);
+    tc_pipeline_template* pipeline_template =
+        tc_pipeline_template_get(pipeline->pipeline_template);
+    pipeline->pipeline_template = tc_pipeline_template_handle_invalid();
+    if (pipeline_template) tc_pipeline_template_release(pipeline_template);
     free(pipeline->passes);
     free(pipeline->pass_deleters);
     free(pipeline->name);
@@ -250,9 +251,9 @@ bool tc_pipeline_pool_alive(tc_pipeline_handle h) {
     return pipeline_handle_alive(h);
 }
 
-static tc_pipeline_handle pipeline_pool_alloc_with_resource(
+static tc_pipeline_handle pipeline_pool_alloc_with_template(
     const char* name,
-    tc_render_pipeline_handle resource_handle
+    tc_pipeline_template_handle template_handle
 ) {
     if (!g_pipeline_pool) {
         tc_pipeline_pool_init();
@@ -274,9 +275,9 @@ static tc_pipeline_handle pipeline_pool_alloc_with_resource(
     g_pipeline_pool->alive[idx] = true;
     tc_pipeline* p = &g_pipeline_pool->pipelines[idx];
     p->name = name ? tc_pipeline_strdup(name) : tc_pipeline_strdup("default");
-    p->resource = resource_handle;
-    tc_render_pipeline* resource = tc_render_pipeline_get(resource_handle);
-    if (resource) tc_render_pipeline_retain(resource);
+    p->pipeline_template = template_handle;
+    tc_pipeline_template* pipeline_template = tc_pipeline_template_get(template_handle);
+    if (pipeline_template) tc_pipeline_template_retain(pipeline_template);
     p->passes = NULL;
     p->pass_deleters = NULL;
     p->pass_count = 0;
@@ -292,13 +293,13 @@ static tc_pipeline_handle pipeline_pool_alloc_with_resource(
     return h;
 }
 
-tc_pipeline_handle tc_pipeline_create_from_resource(tc_render_pipeline_handle resource_handle) {
-    tc_render_pipeline* resource = tc_render_pipeline_get(resource_handle);
-    if (!resource) {
-        tc_log_error("[tc_pipeline] cannot create instance from an invalid resource");
+tc_pipeline_handle tc_pipeline_create_from_template(tc_pipeline_template_handle template_handle) {
+    tc_pipeline_template* pipeline_template = tc_pipeline_template_get(template_handle);
+    if (!pipeline_template) {
+        tc_log_error("[tc_pipeline] cannot create instance from an invalid template");
         return TC_PIPELINE_HANDLE_INVALID;
     }
-    return pipeline_pool_alloc_with_resource(resource->header.name, resource_handle);
+    return pipeline_pool_alloc_with_template(pipeline_template->header.name, template_handle);
 }
 
 tc_pipeline_handle tc_pipeline_pool_alloc(const char* name) {
@@ -306,9 +307,9 @@ tc_pipeline_handle tc_pipeline_pool_alloc(const char* name) {
 }
 
 tc_pipeline_handle tc_pipeline_create(const char* name) {
-    return pipeline_pool_alloc_with_resource(
+    return pipeline_pool_alloc_with_template(
         name ? name : "default",
-        tc_render_pipeline_handle_invalid());
+        tc_pipeline_template_handle_invalid());
 }
 
 void tc_pipeline_pool_free(tc_pipeline_handle h) {
@@ -350,9 +351,9 @@ tc_pipeline* tc_pipeline_get_ptr(tc_pipeline_handle h) {
     return &g_pipeline_pool->pipelines[h.index];
 }
 
-tc_render_pipeline_handle tc_pipeline_get_resource(tc_pipeline_handle h) {
-    if (!pipeline_handle_alive(h)) return tc_render_pipeline_handle_invalid();
-    return g_pipeline_pool->pipelines[h.index].resource;
+tc_pipeline_template_handle tc_pipeline_get_template(tc_pipeline_handle h) {
+    if (!pipeline_handle_alive(h)) return tc_pipeline_template_handle_invalid();
+    return g_pipeline_pool->pipelines[h.index].pipeline_template;
 }
 
 const char* tc_pipeline_get_name(tc_pipeline_handle h) {
