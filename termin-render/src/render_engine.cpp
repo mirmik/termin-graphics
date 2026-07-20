@@ -324,7 +324,7 @@ void RenderEngine::ensure_tgfx2() {
     // registered it as the process-wide interop target. Creating a second
     // device here would mint a
     // new HandlePool — scene textures end up on one pool, the UI /
-    // FBOSurface on another, and blit_to_texture silently drops
+    // display-owned surface on another, and blit_to_texture silently drops
     // cross-pool calls. Symptom was an entirely grey viewport with
     // no Vulkan/GL errors.
     if (auto* host_dev = static_cast<tgfx::IRenderDevice*>(tgfx2_interop_get_device())) {

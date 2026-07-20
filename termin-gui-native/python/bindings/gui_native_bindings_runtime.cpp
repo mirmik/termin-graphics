@@ -320,6 +320,8 @@ bool PythonViewportSurfaceHost::resize(int width, int height) {
 }
 
 bool PythonViewportSurfaceHost::pointer_move(double x, double y) {
+  pointer_x_ = x;
+  pointer_y_ = y;
   return invoke<bool>([this, x, y] {
     return nb::cast<bool>(object_.attr("dispatch_pointer_move")(x, y));
   });
@@ -330,13 +332,14 @@ bool PythonViewportSurfaceHost::pointer_button(int button, int action,
                                                uint32_t click_count) {
   return invoke<bool>([this, button, action, modifiers, click_count] {
     return nb::cast<bool>(object_.attr("dispatch_pointer_button")(
-        button, action, modifiers, click_count));
+        pointer_x_, pointer_y_, button, action, modifiers, click_count));
   });
 }
 
 bool PythonViewportSurfaceHost::scroll(double x, double y, int modifiers) {
   return invoke<bool>([this, x, y, modifiers] {
-    return nb::cast<bool>(object_.attr("dispatch_scroll")(x, y, modifiers));
+    return nb::cast<bool>(
+        object_.attr("dispatch_wheel")(pointer_x_, pointer_y_, x, y, modifiers));
   });
 }
 

@@ -235,12 +235,13 @@ The current foundation includes:
 - `TextInput` changed/submitted signals and table/tree context-menu requests
   are available through the Python bridge. Collection consumers can implement
   live filters and reusable context actions without polling widget internals;
-- `Viewport3D` composites an externally owned backend-neutral texture through
+- `Viewport3D` composites a display-owned backend-neutral texture through
   a retained `ViewportSurfaceHost`. Layout performs an ordered
   `before_resize` notification followed by host resize, while pointer, wheel,
   key and UTF-8 text input use typed host methods. The Python bridge accepts
-  the same explicit protocol; `termin.display.FBOSurface` implements it with
-  typed `tc_input_manager` dispatch and no raw Python pointer transport.
+  the same explicit protocol; `termin.display.Display` supplies texture,
+  resize and typed display input without a second surface facade or raw Python
+  pointer transport.
   External drag/drop is a separate typed host callback so OS payload ownership
   never leaks into the core pointer-event ABI;
 - `GraphicsScene` and `SceneView` provide the retained 2D tool-scene boundary

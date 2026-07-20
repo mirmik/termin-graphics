@@ -159,13 +159,22 @@ class ViewportSurfaceHost(Protocol):
 
     def dispatch_pointer_button(
         self,
+        x: float,
+        y: float,
         button: int,
         action: int,
         modifiers: int,
         click_count: int,
     ) -> bool: ...
 
-    def dispatch_scroll(self, x: float, y: float, modifiers: int) -> bool: ...
+    def dispatch_wheel(
+        self,
+        x: float,
+        y: float,
+        wheel_x: float,
+        wheel_y: float,
+        modifiers: int,
+    ) -> bool: ...
 
     def dispatch_key(self, key: int, scancode: int, action: int, modifiers: int) -> bool: ...
 

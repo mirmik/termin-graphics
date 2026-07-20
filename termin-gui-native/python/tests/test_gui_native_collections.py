@@ -951,12 +951,12 @@ def test_native_viewport3d_surface_protocol_input_drag_and_lifetime():
             self.calls.append(("move", x, y))
             return True
 
-        def dispatch_pointer_button(self, button, action, modifiers, click_count):
-            self.calls.append(("button", button, action, modifiers, click_count))
+        def dispatch_pointer_button(self, x, y, button, action, modifiers, click_count):
+            self.calls.append(("button", x, y, button, action, modifiers, click_count))
             return True
 
-        def dispatch_scroll(self, x, y, modifiers):
-            self.calls.append(("scroll", x, y, modifiers))
+        def dispatch_wheel(self, x, y, wheel_x, wheel_y, modifiers):
+            self.calls.append(("wheel", x, y, wheel_x, wheel_y, modifiers))
             return True
 
         def dispatch_key(self, key, scancode, action, modifiers):
@@ -1006,7 +1006,7 @@ def test_native_viewport3d_surface_protocol_input_drag_and_lifetime():
     assert document.dispatch_pointer_event(pointer) == EventResult.Handled
     assert surface.calls[-2:] == [
         ("move", 32.0, 45.0),
-        ("button", 1, 1, 7, 2),
+        ("button", 32.0, 45.0, 1, 1, 7, 2),
     ]
 
     key = KeyEvent()
@@ -1061,10 +1061,10 @@ def test_native_viewport3d_stale_surface_and_destroy_release_are_safe():
         def dispatch_pointer_move(self, x, y):
             raise AssertionError("stale surface must not receive input")
 
-        def dispatch_pointer_button(self, button, action, modifiers, click_count):
+        def dispatch_pointer_button(self, x, y, button, action, modifiers, click_count):
             raise AssertionError("stale surface must not receive input")
 
-        def dispatch_scroll(self, x, y, modifiers):
+        def dispatch_wheel(self, x, y, wheel_x, wheel_y, modifiers):
             raise AssertionError("stale surface must not receive input")
 
         def dispatch_key(self, key, scancode, action, modifiers):
@@ -1090,8 +1090,8 @@ def test_native_viewport3d_stale_surface_and_destroy_release_are_safe():
     assert weak_surface() is None
 
 
-def test_display_viewport_host_separates_surface_and_input_protocols():
-    from termin.display import DisplayViewportHost, FBOSurface
+def test_display_is_the_viewport_surface_and_input_protocol():
+    from termin.display import Display
 
     surface_methods = (
         "is_valid",
@@ -1102,15 +1102,14 @@ def test_display_viewport_host_separates_surface_and_input_protocols():
     input_methods = (
         "dispatch_pointer_move",
         "dispatch_pointer_button",
-        "dispatch_scroll",
+        "dispatch_wheel",
         "dispatch_key",
         "dispatch_text",
     )
     for method_name in surface_methods:
-        assert callable(getattr(FBOSurface, method_name))
+        assert callable(getattr(Display, method_name))
     for method_name in input_methods:
-        assert method_name not in dir(FBOSurface)
-        assert callable(getattr(DisplayViewportHost, method_name))
+        assert callable(getattr(Display, method_name))
 
 
 def test_native_scene_view_model_transform_drag_callbacks_and_embedding():

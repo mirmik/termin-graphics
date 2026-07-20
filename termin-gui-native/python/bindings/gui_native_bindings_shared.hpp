@@ -193,6 +193,8 @@ class PythonViewportSurfaceHost final
 private:
   nb::object object_;
   std::shared_ptr<DocumentState> state_;
+  double pointer_x_ = 0.0;
+  double pointer_y_ = 0.0;
 
 public:
   PythonViewportSurfaceHost(nb::object object,
