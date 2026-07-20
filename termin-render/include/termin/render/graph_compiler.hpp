@@ -26,6 +26,23 @@ struct ResourceNaming {
     std::unordered_map<std::string, termin::FboComposition> fbo_compositions;
 };
 
+struct PipelineDefinitionTarget {
+    std::string viewport_name;
+    std::string export_name;
+    int32_t width = 0;
+    int32_t height = 0;
+};
+
+// Publish a fully compiled execution candidate into a stable canonical
+// resource. All descriptor storage is prepared before the registry swaps the
+// live payload, so failure leaves the previous resource version untouched.
+RENDER_API bool publish_pipeline_definition(
+    termin::RenderPipeline& instance,
+    const termin::TcRenderPipeline& resource,
+    const std::vector<std::string>& pass_parameters = {},
+    const std::vector<PipelineDefinitionTarget>& targets = {}
+);
+
 RENDER_API std::vector<NodeData*> topological_sort(GraphData& graph);
 
 RENDER_API ResourceNaming assign_resource_names(const GraphData& graph);

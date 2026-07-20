@@ -2,12 +2,21 @@
 #include "termin/render/render_pipeline.hpp"
 
 #include <tcbase/tc_log.hpp>
+#include <stdexcept>
+#include <trent/json.h>
 
 #include "termin/lighting/shadow.hpp"
+#include "termin/render/frame_pass.hpp"
+#include "termin/render/builtin_passes.hpp"
+#include "termin/render/tc_pass.hpp"
+#include "termin/render/unknown_pass.hpp"
+#include "tc_inspect_cpp.hpp"
+#include "tc_value_trent.hpp"
 
 extern "C" {
 #include "render/tc_pass.h"
 #include "render/tc_pipeline.h"
+#include "render/tc_render_pipeline_registry.h"
 }
 
 namespace termin {
@@ -20,7 +29,86 @@ RenderPipeline::RenderPipeline(const std::string& name)
     : handle_(tc_pipeline_create(name.c_str())) {}
 
 RenderPipeline::RenderPipeline(const TcRenderPipeline& resource)
-    : handle_(tc_pipeline_create_from_resource(resource.handle)) {}
+    : handle_(tc_pipeline_create_from_resource(resource.handle)) {
+    const tc_render_pipeline* definition = resource.get();
+    if (!definition || !is_valid()) {
+        throw std::runtime_error("cannot instantiate an invalid render pipeline resource");
+    }
+
+    try {
+        tc::init_cpp_inspect_vtable();
+        // tc_pipeline_adopt_pass prepends, so walk backwards to preserve the
+        // canonical descriptor order.
+        for (uint32_t offset = 0; offset < definition->pass_count; ++offset) {
+            const uint32_t index = definition->pass_count - offset - 1;
+            const tc_render_pipeline_pass_desc& desc = definition->passes[index];
+            tc_pass* pass = tc_pass_registry_create(desc.type_name);
+            if (!pass) {
+                if (!tc_pass_registry_has("UnknownPass")) register_builtin_render_pass_types();
+                pass = tc_pass_registry_create("UnknownPass");
+                auto* unknown = pass
+                    ? dynamic_cast<UnknownPass*>(CxxFramePass::from_tc(pass))
+                    : nullptr;
+                if (!unknown) {
+                    throw std::runtime_error(
+                        std::string("cannot instantiate pass type '") + desc.type_name + "'");
+                }
+                unknown->original_type = desc.type_name;
+            }
+
+            TcPassRef pass_ref(pass);
+            pass_ref.set_pass_name(desc.name);
+            if (desc.viewport_name) pass_ref.set_viewport_name(desc.viewport_name);
+            if (desc.parameters && desc.parameters[0]) {
+                const nos::trent parameters = nos::json::parse(desc.parameters);
+                if (!parameters.is_dict()) {
+                    tc_pass_delete_unowned(pass);
+                    throw std::runtime_error(
+                        std::string("parameters for pass '") + desc.name + "' are not an object");
+                }
+                if (auto* unknown = dynamic_cast<UnknownPass*>(CxxFramePass::from_tc(pass))) {
+                    tc_value_free(&unknown->original_data);
+                    unknown->original_data = tc::trent_to_tc_value(parameters);
+                } else {
+                    for (const auto& [field_name, value] : parameters.as_dict()) {
+                        tc_value field_value = tc::trent_to_tc_value(value);
+                        const bool assigned = pass_ref.set_field(field_name, field_value);
+                        tc_value_free(&field_value);
+                        if (!assigned) {
+                            tc::Log::warn(
+                                "RenderPipeline: failed to restore field '%s.%s'",
+                                desc.type_name,
+                                field_name.c_str());
+                        }
+                    }
+                }
+            }
+            if (!tc_pipeline_adopt_pass(handle_, pass, pass->deleter)) {
+                tc_pass_delete_unowned(pass);
+                throw std::runtime_error(
+                    std::string("cannot adopt pass '") + desc.name + "'");
+            }
+        }
+
+        for (uint32_t i = 0; i < definition->resource_count; ++i) {
+            const tc_render_pipeline_resource_desc& desc = definition->resources[i];
+            const std::string resource_type = desc.resource_type;
+            if (resource_type.starts_with("external")) continue;
+            ResourceSpec spec;
+            spec.resource = desc.name;
+            spec.resource_type = resource_type;
+            if (desc.format) spec.format = desc.format;
+            if (desc.viewport_name) spec.viewport_name = desc.viewport_name;
+            if (desc.width > 0 && desc.height > 0) spec.size = {desc.width, desc.height};
+            spec.scale = desc.scale;
+            spec.samples = static_cast<int>(desc.samples);
+            add_spec(spec);
+        }
+    } catch (...) {
+        destroy();
+        throw;
+    }
+}
 
 std::string RenderPipeline::name() const {
     const char* n = tc_pipeline_get_name(handle_);

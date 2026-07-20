@@ -1009,13 +1009,6 @@ struct CompiledDependencyStorage {
     tc_pipeline_resource_access access = TC_PIPELINE_RESOURCE_READ;
 };
 
-struct CompiledTargetStorage {
-    std::string viewport_name;
-    std::string export_name;
-    int32_t width = 0;
-    int32_t height = 0;
-};
-
 void collect_dependencies(
     tc_pass* pass,
     uint32_t pass_index,
@@ -1037,12 +1030,18 @@ void collect_dependencies(
     }
 }
 
-void publish_compiled_definition(RenderPipeline& instance, const GraphData& graph) {
+} // namespace
+
+bool publish_pipeline_definition(
+    RenderPipeline& instance,
+    const TcRenderPipeline& resource_handle,
+    const std::vector<std::string>& pass_parameters,
+    const std::vector<PipelineDefinitionTarget>& targets
+) {
     std::vector<CompiledPassStorage> pass_storage;
     std::vector<tc_render_pipeline_pass_desc> pass_descs;
     pass_storage.reserve(instance.pass_count());
     pass_descs.reserve(instance.pass_count());
-    std::unordered_set<const NodeData*> consumed_nodes;
     std::vector<CompiledDependencyStorage> dependency_storage;
 
     for (uint32_t i = 0; i < instance.pass_count(); ++i) {
@@ -1052,13 +1051,7 @@ void publish_compiled_definition(RenderPipeline& instance, const GraphData& grap
         stored.type_name = tc_pass_type_name(pass);
         stored.name = pass->pass_name ? pass->pass_name : stored.type_name;
         stored.viewport_name = pass->viewport_name ? pass->viewport_name : "";
-        for (const NodeData& node : graph.nodes) {
-            if (consumed_nodes.contains(&node) || node.pass_class != stored.type_name) continue;
-            if (!node.name.empty() && node.name != stored.name) continue;
-            stored.parameters = nos::json::dump(node.params);
-            consumed_nodes.insert(&node);
-            break;
-        }
+        if (i < pass_parameters.size()) stored.parameters = pass_parameters[i];
         pass_storage.push_back(std::move(stored));
         collect_dependencies(
             pass, i, tc_pass_get_reads, TC_PIPELINE_RESOURCE_READ, dependency_storage);
@@ -1119,14 +1112,9 @@ void publish_compiled_definition(RenderPipeline& instance, const GraphData& grap
         dependency_descs.push_back({stored.pass_index, stored.resource.c_str(), stored.access});
     }
 
-    std::vector<CompiledTargetStorage> target_storage;
     std::vector<tc_render_pipeline_target_desc> target_descs;
-    target_storage.reserve(graph.viewport_frames.size());
-    target_descs.reserve(graph.viewport_frames.size());
-    for (const ViewportFrameData& frame : graph.viewport_frames) {
-        target_storage.push_back({frame.viewport_name, "", 0, 0});
-    }
-    for (const CompiledTargetStorage& stored : target_storage) {
+    target_descs.reserve(targets.size());
+    for (const PipelineDefinitionTarget& stored : targets) {
         target_descs.push_back({
             stored.viewport_name.c_str(),
             stored.export_name.empty() ? nullptr : stored.export_name.c_str(),
@@ -1135,7 +1123,7 @@ void publish_compiled_definition(RenderPipeline& instance, const GraphData& grap
         });
     }
 
-    tc_render_pipeline* resource = tc_render_pipeline_get(instance.resource_handle());
+    tc_render_pipeline* resource = resource_handle.get();
     const std::string pipeline_name = instance.name();
     const tc_render_pipeline_payload_desc payload = {
         TC_RENDER_PIPELINE_DESCRIPTOR_VERSION,
@@ -1146,11 +1134,11 @@ void publish_compiled_definition(RenderPipeline& instance, const GraphData& grap
         target_descs.data(), static_cast<uint32_t>(target_descs.size()),
     };
     if (!resource || !tc_render_pipeline_set_payload(resource, &payload)) {
-        tc::Log::error("compile_graph: failed to publish canonical pipeline descriptor");
+        tc::Log::error("publish_pipeline_definition: failed to publish canonical pipeline descriptor");
+        return false;
     }
+    return true;
 }
-
-} // namespace
 
 static RenderPipeline* compile_graph_impl(
     GraphData& graph,
@@ -1171,9 +1159,11 @@ static RenderPipeline* compile_graph_impl(
     auto resource_nodes = collect_resource_nodes(graph);
 
     // 5. Create pipeline
-    auto* pipeline = resource
-        ? new RenderPipeline(*resource)
-        : new RenderPipeline("compiled_graph");
+    // Always compile into an isolated candidate. Instantiating directly from
+    // an existing resource would hydrate its previous pass plan and append
+    // the candidate passes during hot reload.
+    auto* pipeline = new RenderPipeline("compiled_graph");
+    if (resource) pipeline->set_name(resource->name());
     pipeline->cache().resource_views = naming.resource_views;
     pipeline->cache().fbo_compositions = naming.fbo_compositions;
 
@@ -1312,7 +1302,41 @@ static RenderPipeline* compile_graph_impl(
         }
     }
 
-    publish_compiled_definition(*pipeline, graph);
+    if (resource) {
+        std::vector<std::string> pass_parameters;
+        pass_parameters.reserve(pipeline->pass_count());
+        std::unordered_set<const NodeData*> consumed_nodes;
+        for (uint32_t i = 0; i < pipeline->pass_count(); ++i) {
+            tc_pass* pass = pipeline->get_pass_at(i);
+            const std::string type_name = pass ? tc_pass_type_name(pass) : "";
+            const std::string pass_name = pass && pass->pass_name ? pass->pass_name : type_name;
+            std::string parameters;
+            for (const NodeData& node : graph.nodes) {
+                if (consumed_nodes.contains(&node) || node.pass_class != type_name) continue;
+                if (!node.name.empty() && node.name != pass_name) continue;
+                parameters = nos::json::dump(node.params);
+                consumed_nodes.insert(&node);
+                break;
+            }
+            pass_parameters.push_back(std::move(parameters));
+        }
+        std::vector<PipelineDefinitionTarget> targets;
+        targets.reserve(graph.viewport_frames.size());
+        for (const ViewportFrameData& frame : graph.viewport_frames) {
+            targets.push_back({frame.viewport_name, "", 0, 0});
+        }
+        if (!publish_pipeline_definition(*pipeline, *resource, pass_parameters, targets)) {
+            pipeline->destroy();
+            delete pipeline;
+            throw GraphCompileError("failed to publish canonical pipeline descriptor");
+        }
+        auto* published_instance = new RenderPipeline(*resource);
+        published_instance->cache().resource_views = pipeline->cache().resource_views;
+        published_instance->cache().fbo_compositions = pipeline->cache().fbo_compositions;
+        pipeline->destroy();
+        delete pipeline;
+        return published_instance;
+    }
     return pipeline;
 }
 

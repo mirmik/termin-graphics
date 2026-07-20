@@ -15,6 +15,7 @@ extern "C" {
 }
 
 #include "termin/render/render_pipeline.hpp"
+#include "termin/render/builtin_passes.hpp"
 #include "termin/render/tc_pass.hpp"
 #include "termin/render/graph_compiler.hpp"
 #include "termin/render/fbo_pool.hpp"
@@ -78,6 +79,7 @@ tc_pass* tc_pass_ptr_from_python_pass(nb::object pass_obj, const char* context) 
 }
 
 tc_pass* make_unknown_pass_from_serialized(const std::string& original_type, nb::dict data) {
+    if (!tc_pass_registry_has("UnknownPass")) register_builtin_render_pass_types();
     tc_pass* raw = tc_pass_registry_create("UnknownPass");
     if (!raw) throw std::runtime_error("failed to create UnknownPass");
     auto* unknown = dynamic_cast<UnknownPass*>(CxxFramePass::from_tc(raw));
@@ -210,6 +212,35 @@ void bind_render_pipeline(nb::module_& m) {
                 item["height"] = resource.height;
                 item["scale"] = resource.scale;
                 item["samples"] = resource.samples;
+                result.append(std::move(item));
+            }
+            return result;
+        })
+        .def_prop_ro("dependencies", [](const TcRenderPipeline& value) {
+            nb::list result;
+            const tc_render_pipeline* pipeline = value.get();
+            if (!pipeline) return result;
+            for (uint32_t i = 0; i < pipeline->dependency_count; ++i) {
+                nb::dict item;
+                item["pass_index"] = pipeline->dependencies[i].pass_index;
+                item["resource"] = pipeline->dependencies[i].resource;
+                item["access"] = static_cast<uint32_t>(pipeline->dependencies[i].access);
+                result.append(std::move(item));
+            }
+            return result;
+        })
+        .def_prop_ro("targets", [](const TcRenderPipeline& value) {
+            nb::list result;
+            const tc_render_pipeline* pipeline = value.get();
+            if (!pipeline) return result;
+            for (uint32_t i = 0; i < pipeline->target_count; ++i) {
+                nb::dict item;
+                item["viewport_name"] = pipeline->targets[i].viewport_name
+                    ? nb::cast(pipeline->targets[i].viewport_name) : nb::none();
+                item["export_name"] = pipeline->targets[i].export_name
+                    ? nb::cast(pipeline->targets[i].export_name) : nb::none();
+                item["width"] = pipeline->targets[i].width;
+                item["height"] = pipeline->targets[i].height;
                 result.append(std::move(item));
             }
             return result;
@@ -450,6 +481,22 @@ void bind_render_pipeline(nb::module_& m) {
                 specs_list.append(spec_dict);
             }
             result["pipeline_specs"] = specs_list;
+            nb::dict views;
+            for (const auto& [name, view] : self.cache().resource_views) {
+                nb::dict item;
+                item["parent"] = view.parent;
+                item["attachment"] = view.attachment == AttachmentKind::Depth ? "depth" : "color";
+                views[name.c_str()] = std::move(item);
+            }
+            result["resource_views"] = std::move(views);
+            nb::dict compositions;
+            for (const auto& [name, composition] : self.cache().fbo_compositions) {
+                nb::dict item;
+                item["color"] = composition.color;
+                item["depth"] = composition.depth;
+                compositions[name.c_str()] = std::move(item);
+            }
+            result["fbo_compositions"] = std::move(compositions);
             return result;
         })
 
@@ -547,6 +594,34 @@ void bind_render_pipeline(nb::module_& m) {
                     pipeline->add_spec(spec);
                 }
             }
+            if (data.contains("resource_views")) {
+                nb::dict values = nb::cast<nb::dict>(data["resource_views"]);
+                for (auto [key, value] : values) {
+                    nb::dict item = nb::cast<nb::dict>(value);
+                    ResourceView view;
+                    view.parent = nb::cast<std::string>(item["parent"]);
+                    if (item.contains("attachment")
+                        && nb::cast<std::string>(item["attachment"]) == "depth") {
+                        view.attachment = AttachmentKind::Depth;
+                    }
+                    pipeline->cache().resource_views[nb::cast<std::string>(key)] = std::move(view);
+                }
+            }
+            if (data.contains("fbo_compositions")) {
+                nb::dict values = nb::cast<nb::dict>(data["fbo_compositions"]);
+                for (auto [key, value] : values) {
+                    nb::dict item = nb::cast<nb::dict>(value);
+                    FboComposition composition;
+                    if (item.contains("color")) {
+                        composition.color = nb::cast<std::string>(item["color"]);
+                    }
+                    if (item.contains("depth")) {
+                        composition.depth = nb::cast<std::string>(item["depth"]);
+                    }
+                    pipeline->cache().fbo_compositions[nb::cast<std::string>(key)] =
+                        std::move(composition);
+                }
+            }
             return pipeline;
         }, nb::rv_policy::take_ownership)
 
@@ -573,6 +648,60 @@ void bind_render_pipeline(nb::module_& m) {
         return tc::compile_graph(json_str, resource);
     }, nb::arg("json_str"), nb::arg("resource_uuid") = "",
        nb::arg("resource_name") = "", nb::rv_policy::take_ownership);
+
+    m.def("publish_pipeline_definition", [](
+        RenderPipeline& pipeline,
+        const TcRenderPipeline& resource,
+        const std::vector<std::string>& pass_parameters,
+        nb::list target_values
+    ) {
+        std::vector<tc::PipelineDefinitionTarget> targets;
+        targets.reserve(nb::len(target_values));
+        for (nb::handle value : target_values) {
+            nb::dict item = nb::cast<nb::dict>(value);
+            tc::PipelineDefinitionTarget target;
+            if (item.contains("viewport_name")) {
+                target.viewport_name = nb::cast<std::string>(item["viewport_name"]);
+            }
+            if (item.contains("export_name")) {
+                target.export_name = nb::cast<std::string>(item["export_name"]);
+            }
+            if (item.contains("width")) target.width = nb::cast<int32_t>(item["width"]);
+            if (item.contains("height")) target.height = nb::cast<int32_t>(item["height"]);
+            targets.push_back(std::move(target));
+        }
+        if (!tc::publish_pipeline_definition(pipeline, resource, pass_parameters, targets)) {
+            throw std::runtime_error("failed to publish canonical pipeline definition");
+        }
+    }, nb::arg("pipeline"), nb::arg("resource"),
+       nb::arg("pass_parameters") = std::vector<std::string>{},
+       nb::arg("targets") = nb::list());
+
+    m.def("apply_pipeline_resource_recipe", [](
+        RenderPipeline& pipeline,
+        nb::dict view_values,
+        nb::dict composition_values
+    ) {
+        pipeline.cache().resource_views.clear();
+        for (auto [key, value] : view_values) {
+            nb::dict item = nb::cast<nb::dict>(value);
+            ResourceView view;
+            view.parent = nb::cast<std::string>(item["parent"]);
+            if (item.contains("attachment")
+                && nb::cast<std::string>(item["attachment"]) == "depth") {
+                view.attachment = AttachmentKind::Depth;
+            }
+            pipeline.cache().resource_views[nb::cast<std::string>(key)] = std::move(view);
+        }
+        pipeline.cache().fbo_compositions.clear();
+        for (auto [key, value] : composition_values) {
+            nb::dict item = nb::cast<nb::dict>(value);
+            FboComposition composition;
+            if (item.contains("color")) composition.color = nb::cast<std::string>(item["color"]);
+            if (item.contains("depth")) composition.depth = nb::cast<std::string>(item["depth"]);
+            pipeline.cache().fbo_compositions[nb::cast<std::string>(key)] = std::move(composition);
+        }
+    }, nb::arg("pipeline"), nb::arg("resource_views"), nb::arg("fbo_compositions"));
 }
 
 } // namespace termin
