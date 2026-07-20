@@ -10,7 +10,8 @@ FramePassTypeDescriptorBuilder::FramePassTypeDescriptorBuilder(
     const char* parent,
     tc_pass_factory factory,
     void* factory_userdata,
-    tc_pass_kind kind
+    tc_pass_kind kind,
+    bool allow_same_owner_replacement
 )
     : _inspect(type_name ? type_name : ""),
       _type_name(type_name ? type_name : ""),
@@ -20,25 +21,10 @@ FramePassTypeDescriptorBuilder::FramePassTypeDescriptorBuilder(
         _valid = false;
         return;
     }
-    if (tc_pass_registry_has(_type_name.c_str())) {
-        const char* existing_owner = tc_runtime_type_registry_get_owner(_type_name.c_str());
-        if (existing_owner && _owner == existing_owner) {
-            _already_registered = true;
-            return;
-        }
-        tc_log(
-            TC_LOG_ERROR,
-            "[FramePassTypeDescriptor] type '%s' is already registered by owner '%s'",
-            _type_name.c_str(),
-            existing_owner ? existing_owner : "<none>");
-        _valid = false;
-        return;
-    }
     _descriptor = tc_runtime_type_descriptor_create(
         _type_name.c_str(), _owner.c_str(), parent && parent[0] ? parent : nullptr);
-    if (_descriptor &&
-        tc::InspectRegistry::instance().is_empty_unowned_type_shell(_type_name) &&
-        !tc_runtime_type_descriptor_allow_unowned_shell_adoption(_descriptor)) {
+    if (_descriptor && allow_same_owner_replacement &&
+        !tc_runtime_type_descriptor_allow_same_owner_replacement(_descriptor)) {
         _valid = false;
     }
     if (!_descriptor || !tc_pass_type_descriptor_add_facet(
@@ -58,7 +44,6 @@ FramePassTypeDescriptorBuilder::FramePassTypeDescriptorBuilder(
       _inspect(std::move(other._inspect)),
       _type_name(std::move(other._type_name)),
       _owner(std::move(other._owner)),
-      _already_registered(other._already_registered),
       _valid(other._valid) {
     other._descriptor = nullptr;
 }
@@ -71,14 +56,12 @@ FramePassTypeDescriptorBuilder& FramePassTypeDescriptorBuilder::operator=(
     _inspect = std::move(other._inspect);
     _type_name = std::move(other._type_name);
     _owner = std::move(other._owner);
-    _already_registered = other._already_registered;
     _valid = other._valid;
     other._descriptor = nullptr;
     return *this;
 }
 
 bool FramePassTypeDescriptorBuilder::commit() {
-    if (_already_registered) return true;
     if (!_valid || !_descriptor || !_inspect.valid()) {
         tc_log(TC_LOG_ERROR, "[FramePassTypeDescriptor] invalid descriptor for '%s'", _type_name.c_str());
         return false;

@@ -78,7 +78,6 @@ tc_pass* tc_pass_ptr_from_python_pass(nb::object pass_obj, const char* context) 
 }
 
 tc_pass* make_unknown_pass_from_serialized(const std::string& original_type, nb::dict data) {
-    ensure_unknown_pass_registered();
     tc_pass* raw = tc_pass_registry_create("UnknownPass");
     if (!raw) throw std::runtime_error("failed to create UnknownPass");
     auto* unknown = dynamic_cast<UnknownPass*>(CxxFramePass::from_tc(raw));

@@ -6,7 +6,6 @@ from typing import Any, Callable
 from termin.render_framework._render_framework_native import (
     TcPass,
     TcPassRef,
-    tc_pass_registry_has,
     tc_pass_registry_is_native,
     tc_pass_registry_register_python,
     tc_pass_registry_unregister_python,
@@ -34,16 +33,15 @@ def _register_python_pass_type(
 ) -> bool:
     if tc_pass_registry_is_native(type_name):
         return False
-    if not tc_pass_registry_has(type_name):
-        if not tc_pass_registry_register_python(
-            type_name,
-            cls,
-            owner,
-            parent_name,
-            inspect_fields or {},
-            metadata or {},
-        ):
-            return False
+    if not tc_pass_registry_register_python(
+        type_name,
+        cls,
+        owner,
+        parent_name,
+        inspect_fields or {},
+        metadata or {},
+    ):
+        return False
     _registered_python_pass_types[type_name] = owner
     _python_pass_registrations[type_name] = (cls, owner)
     return True

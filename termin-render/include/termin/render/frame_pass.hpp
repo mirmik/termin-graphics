@@ -277,7 +277,6 @@ class RENDER_API FramePassTypeDescriptorBuilder {
     tc::InspectFacetBuilder _inspect;
     std::string _type_name;
     std::string _owner;
-    bool _already_registered = false;
     bool _valid = true;
 
 public:
@@ -287,7 +286,8 @@ public:
         const char* parent,
         tc_pass_factory factory,
         void* factory_userdata,
-        tc_pass_kind kind
+        tc_pass_kind kind,
+        bool allow_same_owner_replacement = false
     );
     ~FramePassTypeDescriptorBuilder();
 

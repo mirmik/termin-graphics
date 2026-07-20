@@ -198,39 +198,6 @@ void tc_pass_delete_unowned(tc_pass* p) {
     deleter(p);
 }
 
-void tc_pass_registry_register(
-    const char* type_name,
-    tc_pass_factory factory,
-    void* factory_userdata,
-    tc_pass_kind kind
-) {
-    if (!type_name) return;
-    tc_runtime_type_registry_ensure_type(type_name);
-    tc_frame_pass_facet_payload* facet = pass_facet(type_name);
-    if (facet) {
-        facet->factory = factory;
-        facet->factory_userdata = factory_userdata;
-        facet->kind = kind;
-        return;
-    }
-    facet = (tc_frame_pass_facet_payload*)calloc(1, sizeof(*facet));
-    if (facet) {
-        facet->factory = factory;
-        facet->factory_userdata = factory_userdata;
-        facet->kind = kind;
-        if (!tc_runtime_type_registry_set_facet_with_lifecycle(
-            type_name,
-            TC_RUNTIME_TYPE_FACET_FRAME_PASS,
-            facet,
-            destroy_pass_facet,
-            prepare_pass_facet_unload,
-            1
-        )) {
-            free(facet);
-        }
-    }
-}
-
 void tc_pass_registry_unregister(const char* type_name) {
     if (!type_name) return;
     if (!tc_runtime_type_registry_unregister_type_with_context(type_name, NULL)) {

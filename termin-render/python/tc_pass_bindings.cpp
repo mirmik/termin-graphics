@@ -1098,13 +1098,26 @@ void bind_tc_pass_runtime(nb::module_& m) {
             tc_log(TC_LOG_ERROR, "[PythonFramePass] failed to intern type '%s'", type_name.c_str());
             return false;
         }
+        const char* existing_owner = tc_runtime_type_registry_get_owner(type_name.c_str());
+        const bool allow_same_owner_replacement =
+            existing_owner && owner == existing_owner;
+        if (tc_pass_registry_has(type_name.c_str()) && !allow_same_owner_replacement) {
+            tc_log(
+                TC_LOG_ERROR,
+                "[PythonFramePass] refusing replacement of type '%s' owned by '%s'",
+                type_name.c_str(),
+                existing_owner ? existing_owner : "<none>"
+            );
+            return false;
+        }
         auto descriptor = FramePassTypeDescriptorBuilder(
             type_name.c_str(),
             owner.c_str(),
             parent_name,
             python_pass_factory,
             const_cast<char*>(stable_name),
-            TC_EXTERNAL_PASS);
+            TC_EXTERNAL_PASS,
+            allow_same_owner_replacement);
         auto inspect = tc::build_python_inspect_facet(type_name, std::move(fields));
         tc_value metadata_value = tc::nb_to_tc_value(std::move(metadata));
         const bool metadata_ok = inspect.set_metadata(&metadata_value);

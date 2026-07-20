@@ -92,15 +92,11 @@ static tc_widget_factory_record* factory_record(const char* type_name) {
         type_name, TC_RUNTIME_TYPE_FACET_WIDGET_FACTORY);
 }
 
-static bool ensure_builtin_widget_parent(const char* parent_type) {
+bool tc_widget_registry_initialize(void) {
     static const char* builtin_type = "termin.gui.Widget";
     static const char* builtin_owner = "termin-gui-native";
     tc_runtime_type_descriptor* descriptor;
 
-    if (!parent_type || strcmp(parent_type, builtin_type) != 0 ||
-        tc_runtime_type_registry_has_type(parent_type)) {
-        return true;
-    }
     descriptor = tc_runtime_type_descriptor_create(builtin_type, builtin_owner, NULL);
     if (!descriptor || !tc_runtime_type_registry_commit_descriptor(descriptor)) {
         tc_log_error("[termin-gui-native] failed to publish builtin widget parent '%s'",
@@ -142,9 +138,6 @@ bool tc_widget_registry_register(const char* type_name, const char* owner, const
             return false;
         }
     }
-    if (!ensure_builtin_widget_parent(parent_type)) {
-        return false;
-    }
     if (parent_type && parent_type[0] &&
         !tc_runtime_type_registry_has_type(parent_type)) {
         tc_log_error("[termin-gui-native] widget type '%s' has missing parent '%s'",
@@ -170,12 +163,22 @@ bool tc_widget_registry_register(const char* type_name, const char* owner, const
         return false;
     }
 
-    if (replacing &&
-        !tc_runtime_type_registry_unregister_type_with_context(type_name, NULL)) {
-        tc_log_error("[termin-gui-native] failed to retire widget type '%s' before replacement",
-                     type_name);
-        tc_runtime_type_descriptor_destroy(type_descriptor);
-        return false;
+    if (replacing) {
+        const char* existing_owner = tc_runtime_type_registry_get_owner(type_name);
+        if (!existing_owner || strcmp(existing_owner, owner) != 0) {
+            tc_log_error(
+                "[termin-gui-native] cannot replace widget type '%s' owned by '%s' with owner '%s'",
+                type_name,
+                existing_owner ? existing_owner : "<none>",
+                owner
+            );
+            tc_runtime_type_descriptor_destroy(type_descriptor);
+            return false;
+        }
+        if (!tc_runtime_type_descriptor_allow_same_owner_replacement(type_descriptor)) {
+            tc_runtime_type_descriptor_destroy(type_descriptor);
+            return false;
+        }
     }
     if (!tc_runtime_type_registry_commit_descriptor(type_descriptor)) {
         tc_log_error("[termin-gui-native] failed to commit widget type '%s'", type_name);

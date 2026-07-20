@@ -3,6 +3,7 @@
 #include "render/tc_render_target.h"
 #include "core/tc_component.h"
 #include "core/tc_scene.h"
+#include "inspect/tc_runtime_type_registry.h"
 #include "tgfx/resources/tc_texture.h"
 #include "tgfx/resources/tc_texture_registry.h"
 
@@ -44,12 +45,31 @@ GUARD_C_TEST(test_render_target_rejects_invalid_dimensions_without_mutation) {
     return 0;
 }
 
-static void init_test_component(tc_component* component, const char* type_name) {
+static bool init_test_component(tc_component* component, const char* type_name) {
     if (!tc_component_registry_has(type_name)) {
-        tc_component_registry_register_abstract(type_name, TC_CXX_COMPONENT, NULL);
+        tc_runtime_type_descriptor* descriptor = tc_runtime_type_descriptor_create(
+            type_name, "termin-render-test", NULL);
+        if (!descriptor) return false;
+        if (!tc_component_type_descriptor_add_facet(
+            descriptor,
+            NULL,
+            NULL,
+            TC_CXX_COMPONENT,
+            true,
+            NULL,
+            NULL,
+            NULL,
+            0,
+            NULL,
+            0)) {
+            tc_runtime_type_descriptor_destroy(descriptor);
+            return false;
+        }
+        if (!tc_runtime_type_registry_commit_descriptor(descriptor)) return false;
     }
     tc_component_init(component, NULL);
     tc_component_set_declared_type_name(component, type_name);
+    return true;
 }
 
 static void cleanup_test_component(tc_component* component) {
@@ -67,7 +87,7 @@ GUARD_C_TEST(test_render_target_resolves_camera_replacement_from_entity_handle) 
     GUARD_C_REQUIRE(tc_entity_pool_alive(pool, entity_id));
 
     tc_component first_camera;
-    init_test_component(&first_camera, "CameraComponent");
+    GUARD_C_REQUIRE(init_test_component(&first_camera, "CameraComponent"));
     tc_entity_pool_add_component(pool, entity_id, &first_camera);
 
     tc_render_target_handle target = tc_render_target_new("stable-camera");
@@ -80,7 +100,7 @@ GUARD_C_TEST(test_render_target_resolves_camera_replacement_from_entity_handle) 
     cleanup_test_component(&first_camera);
 
     tc_component replacement_camera;
-    init_test_component(&replacement_camera, "CameraComponent");
+    GUARD_C_REQUIRE(init_test_component(&replacement_camera, "CameraComponent"));
     tc_entity_pool_add_component(pool, entity_id, &replacement_camera);
     GUARD_C_CHECK(tc_render_target_get_camera(target) == &replacement_camera);
 
@@ -110,7 +130,7 @@ GUARD_C_TEST(test_render_target_resolves_camera_from_scene_less_pool) {
     tc_entity_id entity_id = tc_entity_pool_alloc(pool, "Editor Camera");
     GUARD_C_REQUIRE(tc_entity_pool_alive(pool, entity_id));
     tc_component camera;
-    init_test_component(&camera, "CameraComponent");
+    GUARD_C_REQUIRE(init_test_component(&camera, "CameraComponent"));
     tc_entity_pool_add_component(pool, entity_id, &camera);
 
     tc_render_target_handle target = tc_render_target_new("editor-target");
@@ -143,7 +163,7 @@ GUARD_C_TEST(test_render_target_rejects_camera_from_another_scene) {
     tc_entity_id camera_entity = tc_entity_pool_alloc(camera_pool, "Camera");
     GUARD_C_REQUIRE(tc_entity_pool_alive(camera_pool, camera_entity));
     tc_component camera;
-    init_test_component(&camera, "CameraComponent");
+    GUARD_C_REQUIRE(init_test_component(&camera, "CameraComponent"));
     tc_entity_pool_add_component(camera_pool, camera_entity, &camera);
 
     tc_render_target_handle target = tc_render_target_new("cross-scene-target");
@@ -173,7 +193,7 @@ GUARD_C_TEST(test_render_target_resolves_xr_origin_and_rejects_stale_scene) {
     GUARD_C_REQUIRE(tc_entity_pool_alive(pool, entity_id));
 
     tc_component xr_origin;
-    init_test_component(&xr_origin, "XrOriginComponent");
+    GUARD_C_REQUIRE(init_test_component(&xr_origin, "XrOriginComponent"));
     tc_entity_pool_add_component(pool, entity_id, &xr_origin);
 
     tc_render_target_handle target = tc_render_target_new("stable-xr-origin");

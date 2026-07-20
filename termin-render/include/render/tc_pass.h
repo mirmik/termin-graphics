@@ -180,13 +180,6 @@ typedef bool (*tc_pass_prepare_unload_fn)(
     void* user_data
 );
 
-TC_API void tc_pass_registry_register(
-    const char* type_name,
-    tc_pass_factory factory,
-    void* factory_userdata,
-    tc_pass_kind kind
-);
-
 // Stage the frame-pass facet on a runtime type descriptor. The descriptor
 // owns the facet payload after a successful call and publishes it only when
 // the descriptor itself is committed.

@@ -3,6 +3,7 @@
 GUARD_TEST_MAIN();
 
 #include <termin/render/frame_pass.hpp>
+#include <termin/render/builtin_passes.hpp>
 
 extern "C" {
 #include "render/tc_pass.h"
@@ -35,9 +36,13 @@ public:
     }
 };
 
-tc_pass* create_ownership_probe_pass(void*) {
-    auto* pass = new OwnershipProbePass();
-    return pass->tc_pass_ptr();
+void register_ownership_probe_pass() {
+    if (!tc_pass_registry_has("CxxFramePass")) {
+        termin::register_builtin_render_pass_types();
+    }
+    auto descriptor = termin::FramePassTypeDescriptorBuilder::native<OwnershipProbePass>(
+        kOwnershipProbePassType, "termin-render-test");
+    REQUIRE(descriptor.commit());
 }
 
 } // namespace
@@ -48,11 +53,7 @@ TEST_CASE("Pipeline consumes registry-created CxxFramePass owner reference") {
     g_probe_destroyed = 0;
 
     tc_pass_registry_unregister(kOwnershipProbePassType);
-    tc_pass_registry_register(
-        kOwnershipProbePassType,
-        create_ownership_probe_pass,
-        nullptr,
-        TC_NATIVE_PASS);
+    register_ownership_probe_pass();
 
     tc_pipeline_handle pipeline = tc_pipeline_create("ownership-test");
     REQUIRE(tc_pipeline_handle_valid(pipeline));
@@ -88,11 +89,7 @@ TEST_CASE("Pass adoption is atomic and rejects missing deleter or a second owner
     g_probe_destroyed = 0;
 
     tc_pass_registry_unregister(kOwnershipProbePassType);
-    tc_pass_registry_register(
-        kOwnershipProbePassType,
-        create_ownership_probe_pass,
-        nullptr,
-        TC_NATIVE_PASS);
+    register_ownership_probe_pass();
 
     const tc_pipeline_handle first = tc_pipeline_create("first-owner");
     const tc_pipeline_handle second = tc_pipeline_create("second-owner");
@@ -125,11 +122,7 @@ TEST_CASE("Moving an owned pass preserves its single ownership record") {
     g_probe_lifecycle_destroyed = 0;
     g_probe_destroyed = 0;
     tc_pass_registry_unregister(kOwnershipProbePassType);
-    tc_pass_registry_register(
-        kOwnershipProbePassType,
-        create_ownership_probe_pass,
-        nullptr,
-        TC_NATIVE_PASS);
+    register_ownership_probe_pass();
 
     const tc_pipeline_handle pipeline = tc_pipeline_create("move-owner");
     tc_pass* first = tc_pass_registry_create(kOwnershipProbePassType);
@@ -171,11 +164,7 @@ TEST_CASE("Pipeline shutdown destroys every live slot through the normal teardow
     int cache_destroyed = 0;
 
     tc_pass_registry_unregister(kOwnershipProbePassType);
-    tc_pass_registry_register(
-        kOwnershipProbePassType,
-        create_ownership_probe_pass,
-        nullptr,
-        TC_NATIVE_PASS);
+    register_ownership_probe_pass();
 
     const tc_pipeline_handle pipeline = tc_pipeline_create("shutdown-owner");
     REQUIRE(tc_pipeline_handle_valid(pipeline));

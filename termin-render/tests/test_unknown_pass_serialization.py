@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import termin.bootstrap
 from termin.render_framework import RenderPipeline
 
 
 def test_missing_pass_roundtrip_preserves_original_envelope_and_graph_contract() -> None:
+    termin.bootstrap.bootstrap_runtime()
     serialized = {
         "name": "degraded",
         "passes": [
@@ -56,3 +58,4 @@ def test_missing_pass_roundtrip_preserves_original_envelope_and_graph_contract()
         assert restored["_unknown_graph"] == serialized["passes"][0]["_unknown_graph"]
     finally:
         pipeline.destroy()
+        termin.bootstrap.shutdown_runtime()

@@ -97,6 +97,7 @@ tc_widget_factory_descriptor descriptor(FactoryState& state) {
 
 void test_owned_factory_identity_and_unload_invalidation() {
     tc_runtime_type_registry_clear();
+    assert(tc_widget_registry_initialize());
     FactoryState state;
     const tc_widget_factory_descriptor factory = descriptor(state);
     assert(tc_widget_registry_register("test.ui.OwnedWidget", "test.module", "termin.gui.Widget",
