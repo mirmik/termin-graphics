@@ -39,3 +39,14 @@ read from `TcShaderProgram`; the material records the program UUID and version
 used to build it. Source-only reloads keep phase identity and merely advance
 that dependency version, while schema changes rebuild loaded materials and
 invalidate dependent material-pass pipelines.
+
+Runtime packages serialize this layer explicitly as versioned
+`shaders/*.shader-program.json` resources. A program descriptor contains the
+backend-independent property schema, ordered phase metadata, render states and
+references to the independently packaged phase `TcShader` resources. Backend
+artifacts remain attached to those phase shader resources rather than becoming
+program payload. `termin-runtime` loads phase shaders first, reconstructs each
+`TcShaderProgram` without the authored `.shader` parser, then restores material
+program UUID/version dependencies. An unsupported descriptor schema, a missing
+phase shader or a phase UUID that does not match the deterministic program
+identity fails package loading with a diagnostic.
