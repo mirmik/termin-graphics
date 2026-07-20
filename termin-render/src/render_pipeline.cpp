@@ -19,6 +19,9 @@ static void destroy_render_cache(void* ptr) {
 RenderPipeline::RenderPipeline(const std::string& name)
     : handle_(tc_pipeline_create(name.c_str())) {}
 
+RenderPipeline::RenderPipeline(const TcRenderPipeline& resource)
+    : handle_(tc_pipeline_create_from_resource(resource.handle)) {}
+
 std::string RenderPipeline::name() const {
     const char* n = tc_pipeline_get_name(handle_);
     return n ? n : "";

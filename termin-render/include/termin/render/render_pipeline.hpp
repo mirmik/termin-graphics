@@ -14,6 +14,7 @@
 #include "termin/render/fbo_pool.hpp"
 #include "termin/render/resource_aliases.hpp"
 #include "termin/render/resource_spec.hpp"
+#include "termin/render/tc_render_pipeline.hpp"
 
 extern "C" {
 #include "render/tc_pipeline.h"
@@ -47,8 +48,8 @@ struct RENDER_API PipelineRenderCache {
     std::unordered_map<std::string, std::string> texture_alias_to_canonical;
 };
 
-// Lightweight handle wrapper. Does NOT own the pipeline.
-// Pipeline lifetime is managed by tc_pipeline_create / tc_pipeline_destroy.
+// Mutable execution instance. It owns live passes and device-local caches while
+// holding a strong reference to an immutable/backend-neutral TcRenderPipeline.
 class RENDER_API RenderPipeline {
 public:
     tc_pipeline_handle handle_;
@@ -59,11 +60,15 @@ public:
 
     // Create a new pipeline in the pool (caller must destroy() when done)
     explicit RenderPipeline(const std::string& name);
+    explicit RenderPipeline(const TcRenderPipeline& resource);
 
     tc_pipeline* ptr() { return tc_pipeline_get_ptr(handle_); }
     const tc_pipeline* ptr() const { return tc_pipeline_get_ptr(handle_); }
 
     tc_pipeline_handle handle() const { return handle_; }
+    tc_render_pipeline_handle resource_handle() const {
+        return tc_pipeline_get_resource(handle_);
+    }
     bool is_valid() const { return tc_pipeline_pool_alive(handle_); }
 
     std::string name() const;
@@ -112,5 +117,9 @@ public:
     // Destroy pipeline in pool (frees passes, render_cache, frame_graph)
     void destroy();
 };
+
+// Explicit name for code that needs to distinguish execution state from the
+// canonical TcRenderPipeline definition.
+using RenderPipelineInstance = RenderPipeline;
 
 } // namespace termin

@@ -3,6 +3,7 @@
 
 #include <render/tc_pass.h>
 #include <render/tc_pipeline_pool.h>
+#include <render/tc_render_pipeline.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -12,6 +13,7 @@ typedef struct tc_pipeline tc_pipeline;
 
 struct tc_pipeline {
     char* name;
+    tc_render_pipeline_handle resource;
     tc_pass** passes;
     tc_pass_deleter* pass_deleters;
     size_t pass_count;
@@ -23,8 +25,10 @@ struct tc_pipeline {
 };
 
 TC_API tc_pipeline_handle tc_pipeline_create(const char* name);
+TC_API tc_pipeline_handle tc_pipeline_create_from_resource(tc_render_pipeline_handle resource);
 TC_API void tc_pipeline_destroy(tc_pipeline_handle h);
 TC_API tc_pipeline* tc_pipeline_get_ptr(tc_pipeline_handle h);
+TC_API tc_render_pipeline_handle tc_pipeline_get_resource(tc_pipeline_handle h);
 TC_API bool tc_pipeline_adopt_pass(
     tc_pipeline_handle h,
     tc_pass* pass,

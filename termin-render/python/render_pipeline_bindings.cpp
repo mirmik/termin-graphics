@@ -168,8 +168,57 @@ nb::object fbo_info(RenderPipeline& self, const std::string& key) {
 } // namespace
 
 void bind_render_pipeline(nb::module_& m) {
+    nb::class_<TcRenderPipeline>(m, "TcRenderPipeline")
+        .def_static("declare", &TcRenderPipeline::declare, nb::arg("uuid"), nb::arg("name"))
+        .def_static("find", &TcRenderPipeline::find, nb::arg("uuid"))
+        .def_prop_ro("is_valid", &TcRenderPipeline::is_valid)
+        .def_prop_ro("uuid", [](const TcRenderPipeline& value) {
+            return std::string(value.uuid());
+        })
+        .def_prop_ro("name", [](const TcRenderPipeline& value) {
+            return std::string(value.name());
+        })
+        .def_prop_ro("version", &TcRenderPipeline::version)
+        .def_prop_ro("passes", [](const TcRenderPipeline& value) {
+            nb::list result;
+            const tc_render_pipeline* pipeline = value.get();
+            if (!pipeline) return result;
+            for (uint32_t i = 0; i < pipeline->pass_count; ++i) {
+                nb::dict item;
+                item["type"] = pipeline->passes[i].type_name;
+                item["name"] = pipeline->passes[i].name;
+                item["parameters"] = pipeline->passes[i].parameters
+                    ? nb::cast(pipeline->passes[i].parameters) : nb::none();
+                item["viewport_name"] = pipeline->passes[i].viewport_name
+                    ? nb::cast(pipeline->passes[i].viewport_name) : nb::none();
+                result.append(std::move(item));
+            }
+            return result;
+        })
+        .def_prop_ro("resources", [](const TcRenderPipeline& value) {
+            nb::list result;
+            const tc_render_pipeline* pipeline = value.get();
+            if (!pipeline) return result;
+            for (uint32_t i = 0; i < pipeline->resource_count; ++i) {
+                const tc_render_pipeline_resource_desc& resource = pipeline->resources[i];
+                nb::dict item;
+                item["name"] = resource.name;
+                item["resource_type"] = resource.resource_type;
+                item["format"] = resource.format ? nb::cast(resource.format) : nb::none();
+                item["viewport_name"] = resource.viewport_name
+                    ? nb::cast(resource.viewport_name) : nb::none();
+                item["width"] = resource.width;
+                item["height"] = resource.height;
+                item["scale"] = resource.scale;
+                item["samples"] = resource.samples;
+                result.append(std::move(item));
+            }
+            return result;
+        });
+
     nb::class_<RenderPipeline>(m, "RenderPipeline")
         .def(nb::init<const std::string&>(), nb::arg("name") = "default")
+        .def(nb::init<const TcRenderPipeline&>(), nb::arg("resource"))
 
         .def_static("from_handle", [](uint32_t index, uint32_t generation) {
             tc_pipeline_handle h;
@@ -207,6 +256,10 @@ void bind_render_pipeline(nb::module_& m) {
 
         .def_prop_ro("_pipeline_handle", [](RenderPipeline& self) -> tc_pipeline_handle {
             return self.handle();
+        })
+
+        .def_prop_ro("canonical_resource", [](RenderPipeline& self) {
+            return TcRenderPipeline(self.resource_handle());
         })
 
         .def_prop_ro("pass_count", &RenderPipeline::pass_count)
@@ -505,9 +558,22 @@ void bind_render_pipeline(nb::module_& m) {
             return RenderPipelineClass.attr("deserialize")(data, resource_manager);
         }, nb::arg("resource_manager"));
 
-    m.def("compile_graph_from_json", [](const std::string& json_str) {
-        return tc::compile_graph(json_str);
-    }, nb::arg("json_str"), nb::rv_policy::take_ownership);
+    m.attr("RenderPipelineInstance") = m.attr("RenderPipeline");
+
+    m.def("compile_graph_from_json", [](const std::string& json_str,
+                                         const std::string& resource_uuid,
+                                         const std::string& resource_name) {
+        if (resource_uuid.empty()) {
+            return tc::compile_graph(json_str);
+        }
+        const std::string& name = resource_name.empty() ? resource_uuid : resource_name;
+        TcRenderPipeline resource = TcRenderPipeline::declare(resource_uuid, name);
+        if (!resource.is_valid()) {
+            throw std::runtime_error("failed to declare canonical pipeline resource");
+        }
+        return tc::compile_graph(json_str, resource);
+    }, nb::arg("json_str"), nb::arg("resource_uuid") = "",
+       nb::arg("resource_name") = "", nb::rv_policy::take_ownership);
 }
 
 } // namespace termin

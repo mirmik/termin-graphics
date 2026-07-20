@@ -41,7 +41,15 @@ RENDER_API const ViewportFrameData* find_containing_frame(
 );
 
 RENDER_API termin::RenderPipeline* compile_graph(GraphData& graph);
+RENDER_API termin::RenderPipeline* compile_graph(
+    GraphData& graph,
+    const termin::TcRenderPipeline& resource
+);
 RENDER_API termin::RenderPipeline* compile_graph(const nos::trent& graph_trent);
 RENDER_API termin::RenderPipeline* compile_graph(const std::string& json_str);
+RENDER_API termin::RenderPipeline* compile_graph(
+    const std::string& json_str,
+    const termin::TcRenderPipeline& resource
+);
 
 } // namespace tc

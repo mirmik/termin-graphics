@@ -6,6 +6,8 @@ preload_sdk_libs("termin_render")
 
 from termin.render_framework._render_framework_native import (
     RenderPipeline,
+    RenderPipelineInstance,
+    TcRenderPipeline,
     PipelineHandle,
     RenderTargetHandle,
     render_target_new,
@@ -96,6 +98,8 @@ atexit.register(shutdown_render_pipelines)
 
 __all__ = [
     "RenderPipeline",
+    "RenderPipelineInstance",
+    "TcRenderPipeline",
     "PipelineHandle",
     "RenderTargetHandle",
     "render_target_new",

@@ -10,11 +10,13 @@
 #include <deque>
 #include <optional>
 #include <cstdlib>
+#include <unordered_map>
 #include <unordered_set>
 
 extern "C" {
 #include "inspect/tc_inspect_pass_adapter.h"
 #include "render/tc_pass.h"
+#include "render/tc_render_pipeline_registry.h"
 #include "tc_value.h"
 }
 
@@ -22,6 +24,7 @@ extern "C" {
 
 using termin::CxxFramePass;
 using termin::TcPassRef;
+using termin::TcRenderPipeline;
 using termin::RenderPipeline;
 using termin::ResourceSpec;
 using termin::TextureFilter;
@@ -984,7 +987,175 @@ static ResourceSpec infer_resource_spec(
 // Main Compilation Function
 // ============================================================================
 
-RenderPipeline* compile_graph(GraphData& graph) {
+namespace {
+
+struct CompiledPassStorage {
+    std::string type_name;
+    std::string name;
+    std::string parameters;
+    std::string viewport_name;
+};
+
+struct CompiledResourceStorage {
+    std::string name;
+    std::string resource_type;
+    std::string format;
+    std::string viewport_name;
+};
+
+struct CompiledDependencyStorage {
+    uint32_t pass_index = 0;
+    std::string resource;
+    tc_pipeline_resource_access access = TC_PIPELINE_RESOURCE_READ;
+};
+
+struct CompiledTargetStorage {
+    std::string viewport_name;
+    std::string export_name;
+    int32_t width = 0;
+    int32_t height = 0;
+};
+
+void collect_dependencies(
+    tc_pass* pass,
+    uint32_t pass_index,
+    size_t (*enumerate)(tc_pass*, const char**, size_t),
+    tc_pipeline_resource_access access,
+    std::vector<CompiledDependencyStorage>& output
+) {
+    const size_t count = enumerate(pass, nullptr, 0);
+    std::vector<const char*> names(count);
+    const size_t actual = enumerate(pass, names.data(), names.size());
+    if (actual != count) {
+        tc::Log::error(
+            "compile_graph: pass '%s' changed dependency count during descriptor lowering",
+            pass && pass->pass_name ? pass->pass_name : "<unnamed>");
+        return;
+    }
+    for (const char* name : names) {
+        if (name && name[0]) output.push_back({pass_index, name, access});
+    }
+}
+
+void publish_compiled_definition(RenderPipeline& instance, const GraphData& graph) {
+    std::vector<CompiledPassStorage> pass_storage;
+    std::vector<tc_render_pipeline_pass_desc> pass_descs;
+    pass_storage.reserve(instance.pass_count());
+    pass_descs.reserve(instance.pass_count());
+    std::unordered_set<const NodeData*> consumed_nodes;
+    std::vector<CompiledDependencyStorage> dependency_storage;
+
+    for (uint32_t i = 0; i < instance.pass_count(); ++i) {
+        tc_pass* pass = instance.get_pass_at(i);
+        if (!pass) continue;
+        CompiledPassStorage stored;
+        stored.type_name = tc_pass_type_name(pass);
+        stored.name = pass->pass_name ? pass->pass_name : stored.type_name;
+        stored.viewport_name = pass->viewport_name ? pass->viewport_name : "";
+        for (const NodeData& node : graph.nodes) {
+            if (consumed_nodes.contains(&node) || node.pass_class != stored.type_name) continue;
+            if (!node.name.empty() && node.name != stored.name) continue;
+            stored.parameters = nos::json::dump(node.params);
+            consumed_nodes.insert(&node);
+            break;
+        }
+        pass_storage.push_back(std::move(stored));
+        collect_dependencies(
+            pass, i, tc_pass_get_reads, TC_PIPELINE_RESOURCE_READ, dependency_storage);
+        collect_dependencies(
+            pass, i, tc_pass_get_writes, TC_PIPELINE_RESOURCE_WRITE, dependency_storage);
+    }
+    for (const CompiledPassStorage& stored : pass_storage) {
+        pass_descs.push_back({
+            stored.type_name.c_str(),
+            stored.name.c_str(),
+            stored.parameters.empty() ? nullptr : stored.parameters.c_str(),
+            stored.viewport_name.empty() ? nullptr : stored.viewport_name.c_str(),
+        });
+    }
+
+    const std::vector<ResourceSpec> specs = instance.collect_specs();
+    std::vector<CompiledResourceStorage> resource_storage;
+    std::vector<tc_render_pipeline_resource_desc> resource_descs;
+    resource_storage.reserve(specs.size() + dependency_storage.size());
+    std::unordered_map<std::string, size_t> resource_indices;
+    for (const ResourceSpec& spec : specs) {
+        if (spec.resource.empty() || resource_indices.contains(spec.resource)) continue;
+        resource_indices[spec.resource] = resource_storage.size();
+        resource_storage.push_back({
+            spec.resource,
+            spec.resource_type,
+            spec.format.value_or(""),
+            spec.viewport_name,
+        });
+    }
+    for (const CompiledDependencyStorage& dependency : dependency_storage) {
+        if (resource_indices.contains(dependency.resource)) continue;
+        resource_indices[dependency.resource] = resource_storage.size();
+        resource_storage.push_back({dependency.resource, "external", "", ""});
+    }
+    resource_descs.reserve(resource_storage.size());
+    for (const CompiledResourceStorage& stored : resource_storage) {
+        const ResourceSpec* spec = nullptr;
+        for (const ResourceSpec& candidate : specs) {
+            if (candidate.resource == stored.name) { spec = &candidate; break; }
+        }
+        resource_descs.push_back({
+            stored.name.c_str(),
+            stored.resource_type.c_str(),
+            stored.format.empty() ? nullptr : stored.format.c_str(),
+            stored.viewport_name.empty() ? nullptr : stored.viewport_name.c_str(),
+            spec && spec->size ? spec->size->first : 0,
+            spec && spec->size ? spec->size->second : 0,
+            spec ? spec->scale : 1.0f,
+            spec ? static_cast<uint32_t>(spec->samples) : 1u,
+            0,
+        });
+    }
+
+    std::vector<tc_render_pipeline_dependency_desc> dependency_descs;
+    dependency_descs.reserve(dependency_storage.size());
+    for (const CompiledDependencyStorage& stored : dependency_storage) {
+        dependency_descs.push_back({stored.pass_index, stored.resource.c_str(), stored.access});
+    }
+
+    std::vector<CompiledTargetStorage> target_storage;
+    std::vector<tc_render_pipeline_target_desc> target_descs;
+    target_storage.reserve(graph.viewport_frames.size());
+    target_descs.reserve(graph.viewport_frames.size());
+    for (const ViewportFrameData& frame : graph.viewport_frames) {
+        target_storage.push_back({frame.viewport_name, "", 0, 0});
+    }
+    for (const CompiledTargetStorage& stored : target_storage) {
+        target_descs.push_back({
+            stored.viewport_name.c_str(),
+            stored.export_name.empty() ? nullptr : stored.export_name.c_str(),
+            stored.width,
+            stored.height,
+        });
+    }
+
+    tc_render_pipeline* resource = tc_render_pipeline_get(instance.resource_handle());
+    const std::string pipeline_name = instance.name();
+    const tc_render_pipeline_payload_desc payload = {
+        TC_RENDER_PIPELINE_DESCRIPTOR_VERSION,
+        pipeline_name.c_str(),
+        pass_descs.data(), static_cast<uint32_t>(pass_descs.size()),
+        resource_descs.data(), static_cast<uint32_t>(resource_descs.size()),
+        dependency_descs.data(), static_cast<uint32_t>(dependency_descs.size()),
+        target_descs.data(), static_cast<uint32_t>(target_descs.size()),
+    };
+    if (!resource || !tc_render_pipeline_set_payload(resource, &payload)) {
+        tc::Log::error("compile_graph: failed to publish canonical pipeline descriptor");
+    }
+}
+
+} // namespace
+
+static RenderPipeline* compile_graph_impl(
+    GraphData& graph,
+    const TcRenderPipeline* resource
+) {
     validate_connection_types(graph);
 
     // 1. Topological sort
@@ -1000,7 +1171,9 @@ RenderPipeline* compile_graph(GraphData& graph) {
     auto resource_nodes = collect_resource_nodes(graph);
 
     // 5. Create pipeline
-    auto* pipeline = new RenderPipeline("compiled_graph");
+    auto* pipeline = resource
+        ? new RenderPipeline(*resource)
+        : new RenderPipeline("compiled_graph");
     pipeline->cache().resource_views = naming.resource_views;
     pipeline->cache().fbo_compositions = naming.fbo_compositions;
 
@@ -1139,7 +1312,19 @@ RenderPipeline* compile_graph(GraphData& graph) {
         }
     }
 
+    publish_compiled_definition(*pipeline, graph);
     return pipeline;
+}
+
+RenderPipeline* compile_graph(GraphData& graph) {
+    return compile_graph_impl(graph, nullptr);
+}
+
+RenderPipeline* compile_graph(GraphData& graph, const TcRenderPipeline& resource) {
+    if (!resource.is_valid()) {
+        throw GraphCompileError("cannot compile graph into an invalid pipeline resource");
+    }
+    return compile_graph_impl(graph, &resource);
 }
 
 RenderPipeline* compile_graph(const nos::trent& graph_trent) {
@@ -1150,6 +1335,15 @@ RenderPipeline* compile_graph(const nos::trent& graph_trent) {
 RenderPipeline* compile_graph(const std::string& json_str) {
     nos::trent data = nos::json::parse(json_str);
     return compile_graph(data);
+}
+
+RenderPipeline* compile_graph(
+    const std::string& json_str,
+    const TcRenderPipeline& resource
+) {
+    nos::trent data = nos::json::parse(json_str);
+    GraphData graph = GraphData::from_trent(data);
+    return compile_graph(graph, resource);
 }
 
 } // namespace tc
