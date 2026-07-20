@@ -11,7 +11,7 @@ from tcbase import Key, Mods, MouseButton
 from tcgui.widgets.ui import UI
 from tcgui.widgets.units import pct
 from tcgui.widgets.vstack import VStack
-from termin.display._platform_native import SDLBackendWindow
+from termin.display import WindowedGraphicsSession, quit_sdl
 from tgfx import Tgfx2Context
 
 from tcnodegraph import Graph, GraphController, NodeGraphView
@@ -164,8 +164,9 @@ def build_ui(graphics) -> UI:
 
 
 def main():
-    window = SDLBackendWindow("termin-nodegraph demo", 1280, 820)
-    graphics = Tgfx2Context.from_window(window.device_ptr(), window.context_ptr())
+    runtime = WindowedGraphicsSession.create_native()
+    window = runtime.create_window("termin-nodegraph demo", 1280, 820)
+    graphics = Tgfx2Context.from_runtime(runtime.graphics)
     ui = build_ui(graphics)
     main_id = window.window_id()
 
@@ -231,7 +232,9 @@ def main():
             if tex is not None:
                 window.present(tex)
     finally:
-        sdl2.SDL_Quit()
+        window.close()
+        runtime.close()
+        quit_sdl()
 
 
 if __name__ == "__main__":

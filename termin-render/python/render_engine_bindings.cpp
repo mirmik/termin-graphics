@@ -8,6 +8,7 @@
 #include <termin/tc_scene.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/render_context.hpp>
+#include <tgfx2/graphics_host.hpp>
 
 namespace nb = nanobind;
 
@@ -16,6 +17,8 @@ namespace termin {
 void bind_render_engine(nb::module_& m) {
     nb::class_<RenderEngine>(m, "RenderEngine")
         .def(nb::init<>())
+        .def("set_graphics_host", &RenderEngine::set_graphics_host,
+             nb::arg("graphics_host"), nb::keep_alive<1, 2>())
         .def("ensure_tgfx2", &RenderEngine::ensure_tgfx2)
         .def(
             "configure_shader_artifacts",

@@ -13,7 +13,7 @@ import math
 import numpy as np
 import sdl2
 
-from termin.display import SDLBackendWindow
+from termin.display import WindowedGraphicsSession, quit_sdl
 from termin.geombase import OrbitCamera
 from tgfx import (
     CULL_NONE,
@@ -155,7 +155,7 @@ def _push_state(ctx, camera: OrbitCamera, aspect: float,
     ctx.set_push_constants(np.ascontiguousarray(pc, dtype=np.uint8))
 
 
-def _dispatch(event: sdl2.SDL_Event, window: SDLBackendWindow,
+def _dispatch(event: sdl2.SDL_Event, window,
               camera: OrbitCamera, drag: dict[str, float | str]) -> None:
     etype = event.type
     if etype == sdl2.SDL_QUIT:
@@ -193,8 +193,9 @@ def _dispatch(event: sdl2.SDL_Event, window: SDLBackendWindow,
 
 def main() -> None:
     configure_default_shader_runtime("examples")
-    window = SDLBackendWindow("tgfx2 3D line mesh demo", 1100, 760)
-    ctx = Tgfx2Context.from_window(window.device_ptr(), window.context_ptr())
+    runtime = WindowedGraphicsSession.create_native()
+    window = runtime.create_window("tgfx2 3D line mesh demo", 1100, 760)
+    ctx = Tgfx2Context.from_runtime(runtime.graphics)
     target = RenderTarget(ctx, 1100, 760)
     vs = ctx.device.create_shader(Tgfx2ShaderStage.Vertex, _VERT_SRC)
     fs = ctx.device.create_shader(Tgfx2ShaderStage.Fragment, _FRAG_SRC)
@@ -253,7 +254,8 @@ def main() -> None:
     finally:
         target.destroy()
         window.close()
-        sdl2.SDL_Quit()
+        runtime.close()
+        quit_sdl()
 
 
 if __name__ == "__main__":

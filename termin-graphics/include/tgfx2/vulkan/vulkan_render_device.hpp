@@ -173,6 +173,13 @@ struct VulkanDeviceCreateInfo {
     // offscreen-only — no swapchain.
     std::function<VkSurfaceKHR(VkInstance)> surface_factory;
 
+    // Optional short-lived surface used only to select a physical device and
+    // queue families capable of presenting to the host window system. Unlike
+    // `surface_factory`, this does not create a device-owned swapchain: the
+    // surface is destroyed before construction completes and presentation
+    // windows create their own surfaces/swapchains afterwards.
+    std::function<VkSurfaceKHR(VkInstance)> presentation_probe_surface_factory;
+
     // Initial swapchain extent in physical pixels. Only used when a
     // surface is present. Ignored otherwise. The swapchain may clamp
     // this to the surface's min/max caps.

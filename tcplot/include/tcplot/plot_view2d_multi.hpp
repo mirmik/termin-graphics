@@ -12,7 +12,7 @@
 // Non-owning: `device/cache/ctx/font` are provided by the caller (a
 // process-wide Tgfx2Context) and must outlive the view. This mirrors
 // the `RenderEngine::ensure_tgfx2` pattern and the Python-side
-// `Tgfx2Context.from_window` contract — application-level host owns
+// `Tgfx2Context.from_runtime` contract — application-level host owns
 // exactly one OpenGLRenderDevice, every renderer borrows it. The old
 // self-contained-ctor model (view builds its own device) is gone:
 // recreating a device to change panel count caused GL resource

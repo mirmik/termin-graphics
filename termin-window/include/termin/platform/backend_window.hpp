@@ -2,6 +2,7 @@
 #pragma once
 
 #include <functional>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <utility>
@@ -14,9 +15,13 @@
 namespace tgfx {
 class IRenderDevice;
 class RenderContext2;
+class GraphicsHost;
 }
 
 namespace termin {
+
+class BackendWindow;
+using BackendWindowPtr = std::unique_ptr<BackendWindow>;
 
 enum class WindowCursor {
     Default,
@@ -43,8 +48,6 @@ public:
     BackendWindow(const BackendWindow&) = delete;
     BackendWindow& operator=(const BackendWindow&) = delete;
 
-    virtual tgfx::IRenderDevice* device() = 0;
-    virtual tgfx::RenderContext2* context() = 0;
     virtual tgfx::BackendType backend_type() const = 0;
     virtual tgfx::PresentationMode requested_presentation_mode() const = 0;
     virtual tgfx::PresentationMode presentation_mode() const = 0;
@@ -72,8 +75,6 @@ protected:
     BackendWindow() = default;
 };
 
-using BackendWindowPtr = std::unique_ptr<BackendWindow>;
-
 struct WindowConfig {
     std::string title;
     int width = 1280;
@@ -81,8 +82,63 @@ struct WindowConfig {
     tgfx::PresentationMode presentation_mode = tgfx::PresentationMode::VSync;
 };
 
-// Creates the native window implementation selected by the SDK build. The
-// returned interface does not expose SDL or another platform toolkit.
-TERMIN_WINDOW_API BackendWindowPtr create_native_window(const WindowConfig& config);
+// Platform window/presentation service for one application graphics domain.
+// The canonical domain object is tgfx::GraphicsHost; this interface adds
+// native-window construction without duplicating its device/context contract.
+// Windows created by one system are equal presentation targets.
+class TERMIN_WINDOW_API BackendWindowSystem {
+public:
+    virtual ~BackendWindowSystem() = default;
+
+    BackendWindowSystem(const BackendWindowSystem&) = delete;
+    BackendWindowSystem& operator=(const BackendWindowSystem&) = delete;
+
+    // Platform-aware creation is required for SDL/OpenGL and Vulkan, but the
+    // returned GraphicsHost is the sole owner of the graphics domain.
+    virtual std::unique_ptr<tgfx::GraphicsHost> create_graphics_host() = 0;
+    virtual BackendWindowPtr create_window(
+        tgfx::GraphicsHost& graphics,
+        const WindowConfig& config) = 0;
+    virtual size_t live_window_count() const = 0;
+    // Closes the canonical host first, then platform state. This ordering is
+    // mandatory for OpenGL, whose device teardown needs the SDL GL context.
+    virtual void close(tgfx::GraphicsHost& graphics) = 0;
+
+protected:
+    BackendWindowSystem() = default;
+};
+
+using BackendWindowSystemPtr = std::unique_ptr<BackendWindowSystem>;
+
+// Standard composition root for windowed applications. This is a lifetime
+// aggregate, not a second graphics abstraction: `graphics()` returns the one
+// canonical tgfx::GraphicsHost. Presentation windows remain separately owned
+// and must be closed before close().
+class TERMIN_WINDOW_API WindowedGraphicsSession {
+private:
+    BackendWindowSystemPtr windows_;
+    std::unique_ptr<tgfx::GraphicsHost> graphics_;
+    bool closed_ = false;
+
+public:
+    WindowedGraphicsSession(
+        BackendWindowSystemPtr windows,
+        std::unique_ptr<tgfx::GraphicsHost> graphics);
+    ~WindowedGraphicsSession();
+
+    WindowedGraphicsSession(const WindowedGraphicsSession&) = delete;
+    WindowedGraphicsSession& operator=(const WindowedGraphicsSession&) = delete;
+
+    tgfx::GraphicsHost& graphics();
+    const tgfx::GraphicsHost& graphics() const;
+    BackendWindowPtr create_window(const WindowConfig& config);
+    void close();
+};
+
+// Creates the native window system and its platform-compatible GraphicsHost.
+// The system must outlive every window and every GPU resource in that runtime.
+TERMIN_WINDOW_API BackendWindowSystemPtr create_native_window_system();
+TERMIN_WINDOW_API std::unique_ptr<WindowedGraphicsSession>
+create_native_windowed_graphics();
 
 } // namespace termin

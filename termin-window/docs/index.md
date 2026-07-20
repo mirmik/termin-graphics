@@ -1,15 +1,24 @@
 # termin-window
 
 `termin-window` is the lightweight installed SDK boundary for native windows
-that own a Termin graphics runtime and presentation surface. It depends on
+and platform presentation. `tgfx::GraphicsHost` in `termin-graphics` is the
+only owner of the application `IRenderDevice`, `PipelineCache` and
+`RenderContext2`; each `BackendWindow` owns only its native window and
+per-window presentation resources. It depends on
 `termin-base`, `termin-graphics`, and the selected platform window provider,
 but not on scene, engine input, render, or materials packages.
 
-Portable applications create a `termin::BackendWindow` through
-`termin::create_native_window()` and consume `termin::WindowEvent`. The public
-application path covers title, logical/framebuffer size, text input, event
-polling, semantic system cursors, clipboard text, graphics context, and
-presentation without exposing SDL types.
+Portable applications use `termin::create_native_windowed_graphics()` to get a
+`WindowedGraphicsSession`. The session is a lifetime aggregate of the platform
+`BackendWindowSystem` and the canonical `tgfx::GraphicsHost`, not another
+graphics abstraction. Applications obtain renderer state from
+`session->graphics()` and create any number of equal `BackendWindow`
+presentation targets with `session->create_window()`. All GPU consumers and
+windows must be destroyed before `session->close()`.
+Windows consume `termin::WindowEvent`; the public application path covers
+title, logical/framebuffer size, text input, event polling, semantic system
+cursors, clipboard text, and presentation without exposing
+SDL types.
 SDL's process-global queue is routed through per-window pending queues, so
 polling one `BackendWindow` does not consume events addressed to another and a
 global quit request reaches every registered window.

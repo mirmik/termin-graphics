@@ -23,13 +23,12 @@ extern "C" {
 #include "core/tc_scene.h"
 }
 
-// tgfx2 forward declarations — RenderEngine lazily owns an OpenGL device,
-// pipeline cache, and mid-level RenderContext2 that migrated passes use via
-// ExecuteContext::ctx2 (see Phase 2 of tgfx2 migration).
+// tgfx2 forward declarations. Windowed hosts inject the canonical graphics
+// domain; standalone/headless engines may create one explicitly.
 namespace tgfx {
 class IRenderDevice;
 class RenderContext2;
-class RenderRuntime;
+class GraphicsHost;
 }
 
 namespace termin {
@@ -76,20 +75,20 @@ public:
 
 class RENDER_API RenderEngine {
 private:
-    // Lazily constructed tgfx2 runtime. It either owns a standalone
-    // device or borrows the host-owned process-wide interop device.
-    std::unique_ptr<tgfx::RenderRuntime> tgfx2_runtime_;
+    std::unique_ptr<tgfx::GraphicsHost> owned_graphics_host_;
+    tgfx::GraphicsHost* graphics_host_ = nullptr;
     std::unique_ptr<ShaderArtifactResolver> shader_artifact_resolver_;
     // Reused between executions. invalidate_keep_capacity() defines the
     // frame/view ownership boundary while retaining payload allocations.
     std::vector<RenderSceneItemSnapshot> render_item_snapshot_scratch_;
 
 public:
+    void set_graphics_host(tgfx::GraphicsHost& graphics_host);
     void ensure_tgfx2();
 
     // Access the engine's tgfx2 render context. May return nullptr if
     // ensure_tgfx2() has not yet been called or TERMIN_DISABLE_TGFX2 is
-    // set. The returned pointer remains owned by the RenderEngine.
+    // set. The returned pointer belongs to the injected/owned GraphicsHost.
     tgfx::RenderContext2* tgfx2_ctx();
 
     // Access the tgfx2 render device that owns all texture/buffer

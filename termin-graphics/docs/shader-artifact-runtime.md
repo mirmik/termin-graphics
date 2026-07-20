@@ -1,6 +1,6 @@
 # Shader artifact runtime
 
-Shader artifact resolution is scoped to a `tgfx::RenderRuntime` and its render
+Shader artifact resolution is scoped to a `tgfx::GraphicsHost` and its render
 device. `termin::ShaderArtifactResolver` carries the artifact root, writable
 cache root, compiler path and dev-compile policy. `RenderEngine` accepts this
 configuration before or after lazy tgfx2 initialization and applies it to the

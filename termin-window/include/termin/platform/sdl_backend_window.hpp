@@ -11,6 +11,8 @@
 
 namespace termin {
 
+class SDLWindowSystem;
+
 class TERMIN_WINDOW_API SDLBackendWindow : public BackendWindow {
 private:
     struct Impl;
@@ -20,26 +22,21 @@ private:
     bool text_input_enabled_ = false;
 
 public:
-    // Create a window + backend device. Throws std::runtime_error on
-    // SDL / device failure. The selected render backend is TERMIN_BACKEND.
+    // Create one presentation window on an application-owned graphics
+    // runtime. The runtime must outlive this window.
     SDLBackendWindow(
+        SDLWindowSystem& window_system,
+        tgfx::GraphicsHost& graphics,
         const std::string& title,
         int width,
         int height,
         tgfx::PresentationMode presentation_mode = tgfx::PresentationMode::VSync);
-
-    // Secondary-window constructor. Uses the IRenderDevice owned by
-    // `share_with`; no new device is created.
-    SDLBackendWindow(const std::string& title, int width, int height,
-                     SDLBackendWindow& share_with);
 
     ~SDLBackendWindow() override;
 
     SDLBackendWindow(const SDLBackendWindow&) = delete;
     SDLBackendWindow& operator=(const SDLBackendWindow&) = delete;
 
-    tgfx::IRenderDevice* device() override;
-    tgfx::RenderContext2* context() override;
     tgfx::BackendType backend_type() const override;
     tgfx::PresentationMode requested_presentation_mode() const override;
     tgfx::PresentationMode presentation_mode() const override;
@@ -64,6 +61,30 @@ public:
     std::pair<int, int> window_size() const override;
     std::pair<int, int> framebuffer_size() const override;
     void present(tgfx::TextureHandle color_tex) override;
+};
+
+class TERMIN_WINDOW_API SDLWindowSystem : public BackendWindowSystem {
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+
+    void register_window();
+    void unregister_window();
+    friend class SDLBackendWindow;
+
+public:
+    SDLWindowSystem();
+    ~SDLWindowSystem() override;
+
+    SDLWindowSystem(const SDLWindowSystem&) = delete;
+    SDLWindowSystem& operator=(const SDLWindowSystem&) = delete;
+
+    std::unique_ptr<tgfx::GraphicsHost> create_graphics_host() override;
+    BackendWindowPtr create_window(
+        tgfx::GraphicsHost& graphics,
+        const WindowConfig& config) override;
+    size_t live_window_count() const override;
+    void close(tgfx::GraphicsHost& graphics) override;
 };
 
 } // namespace termin

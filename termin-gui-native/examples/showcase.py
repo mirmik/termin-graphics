@@ -8,7 +8,7 @@ import sys
 import time
 
 import tgfx
-from termin.display import SDLBackendWindow
+from termin.display import WindowedGraphicsSession, quit_sdl
 from termin.gui_native import (
     Document,
     DrawList,
@@ -45,8 +45,10 @@ def main() -> int:
         return 77
 
     try:
-        window = SDLBackendWindow("termin-gui-native Python showcase", 800, 600)
-        context = window.context()
+        runtime = WindowedGraphicsSession.create_native()
+        window = runtime.create_window("termin-gui-native Python showcase", 800, 600)
+        graphics = tgfx.Tgfx2Context.from_runtime(runtime.graphics)
+        context = graphics.context
         document = Document()
         build_python_showcase(document)
         draw_list = DrawList()
@@ -95,6 +97,9 @@ def main() -> int:
         renderer.release_gpu()
         if color_target is not None:
             context.destroy_texture(color_target)
+        window.close()
+        runtime.close()
+        quit_sdl()
         return 0
     except Exception as exc:
         print(f"termin-gui-native Python showcase failed: {exc}", file=sys.stderr)

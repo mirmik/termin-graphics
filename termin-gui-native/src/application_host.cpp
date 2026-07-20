@@ -20,6 +20,7 @@
 
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/i_render_device.hpp>
+#include <tgfx2/graphics_host.hpp>
 #include <tgfx2/render_context.hpp>
 #include <tgfx2/tc_shader_bridge.hpp>
 
@@ -253,6 +254,7 @@ tgfx::TextureHandle create_color_target(
 struct ApplicationHost::Impl {
     Document* document = nullptr;
     ApplicationHostConfig config;
+    std::unique_ptr<WindowedGraphicsSession> graphics_session;
     BackendWindowPtr window;
     tgfx::IRenderDevice* device = nullptr;
     tgfx::RenderContext2* context = nullptr;
@@ -314,21 +316,27 @@ struct ApplicationHost::Impl {
     Impl(
         Document& document_ref,
         ApplicationHostConfig host_config,
+        std::unique_ptr<WindowedGraphicsSession> host_graphics_session,
         BackendWindowPtr backend_window)
         : document(&document_ref),
           config(std::move(host_config)),
+          graphics_session(std::move(host_graphics_session)),
           window(std::move(backend_window)),
           draw_list(tc_ui_draw_list_create()),
           paint_context(tc_ui_paint_context_create(draw_list.get())) {
         resolve_runtime_config(config);
+        if (!graphics_session && !window) {
+            graphics_session = create_native_windowed_graphics();
+            window = graphics_session->create_window(config.window);
+        }
+        if (!graphics_session) {
+            host_error("ApplicationHost requires a non-null WindowedGraphicsSession");
+        }
         if (!window) {
             host_error("ApplicationHost requires a non-null BackendWindow");
         }
-        device = window->device();
-        context = window->context();
-        if (!device || !context) {
-            host_error("ApplicationHost window has no render device or context");
-        }
+        device = &graphics_session->graphics().device();
+        context = &graphics_session->graphics().context();
         if (!draw_list || !paint_context) {
             host_error("ApplicationHost failed to allocate native GUI paint state");
         }
@@ -360,6 +368,9 @@ struct ApplicationHost::Impl {
             document->set_clipboard(nullptr, nullptr, nullptr);
             document->set_text_measurer(nullptr, nullptr);
         }
+        window->close();
+        window.reset();
+        graphics_session->close();
     }
 
     void ensure_color_target(int width, int height) {
@@ -385,18 +396,21 @@ struct ApplicationHost::Impl {
 ApplicationHost::ApplicationHost(
     Document& document,
     ApplicationHostConfig config)
-    : ApplicationHost(
+    : impl_(std::make_unique<Impl>(
           document,
-          config,
-          create_native_window(config.window)) {}
+          std::move(config),
+          std::unique_ptr<WindowedGraphicsSession>{},
+          BackendWindowPtr{})) {}
 
 ApplicationHost::ApplicationHost(
     Document& document,
     ApplicationHostConfig config,
+    std::unique_ptr<WindowedGraphicsSession> graphics_session,
     BackendWindowPtr window)
     : impl_(std::make_unique<Impl>(
           document,
           std::move(config),
+          std::move(graphics_session),
           std::move(window))) {}
 
 ApplicationHost::~ApplicationHost() = default;
@@ -405,6 +419,8 @@ ApplicationHost& ApplicationHost::operator=(ApplicationHost&&) noexcept = defaul
 
 BackendWindow& ApplicationHost::window() { return *impl_->window; }
 const BackendWindow& ApplicationHost::window() const { return *impl_->window; }
+tgfx::IRenderDevice& ApplicationHost::device() { return *impl_->device; }
+const tgfx::IRenderDevice& ApplicationHost::device() const { return *impl_->device; }
 
 size_t ApplicationHost::pump_events() {
     size_t event_count = 0;

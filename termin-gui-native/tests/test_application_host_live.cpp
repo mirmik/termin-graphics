@@ -56,7 +56,7 @@ int main() {
             return 1;
         }
         const auto initial_desc =
-            host.window().device()->texture_desc(host.color_target());
+            host.device().texture_desc(host.color_target());
         if (initial_desc.width != static_cast<uint32_t>(host.framebuffer_width()) ||
             initial_desc.height != static_cast<uint32_t>(host.framebuffer_height())) {
             std::fprintf(stderr, "unexpected initial color target dimensions\n");
@@ -75,7 +75,7 @@ int main() {
             return 1;
         }
         const auto resized_desc =
-            host.window().device()->texture_desc(host.color_target());
+            host.device().texture_desc(host.color_target());
         if (resized_desc.width != static_cast<uint32_t>(host.framebuffer_width()) ||
             resized_desc.height != static_cast<uint32_t>(host.framebuffer_height()) ||
             (resized_desc.width == initial_desc.width &&

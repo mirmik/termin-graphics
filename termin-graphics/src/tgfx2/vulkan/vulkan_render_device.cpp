@@ -113,7 +113,13 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     requested_ring_ubo_slot_size_ = info.ring_ubo_slot_size;
     init_instance(info);
 
-    // Resolve the surface. Two supply paths:
+    if (info.presentation_probe_surface_factory &&
+        (info.surface != VK_NULL_HANDLE || info.surface_factory)) {
+        throw std::invalid_argument(
+            "VulkanRenderDevice: presentation probe and owned surface are mutually exclusive");
+    }
+
+    // Resolve the surface. Three supply paths:
     //   1. info.surface — pre-made surface (embedded hosts with their
     //      own VkInstance via shared layers; rare).
     //   2. info.surface_factory — a callback invoked with our freshly
@@ -122,6 +128,10 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     //      info.instance_extensions, then hands us a factory that
     //      wraps SDL_Vulkan_CreateSurface(window, instance, &surf)
     //      / glfwCreateWindowSurface(instance, window, ...).
+    //   3. info.presentation_probe_surface_factory — a temporary surface
+    //      used only for device/queue selection. Multi-window hosts use this
+    //      path and create one independently-owned swapchain per window.
+    bool surface_is_presentation_probe = false;
     if (info.surface != VK_NULL_HANDLE) {
         surface_ = info.surface;
     } else if (info.surface_factory) {
@@ -129,6 +139,13 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
         if (surface_ == VK_NULL_HANDLE) {
             throw std::runtime_error("VulkanRenderDevice: surface_factory returned VK_NULL_HANDLE");
         }
+    } else if (info.presentation_probe_surface_factory) {
+        surface_ = info.presentation_probe_surface_factory(instance_);
+        if (surface_ == VK_NULL_HANDLE) {
+            throw std::runtime_error(
+                "VulkanRenderDevice: presentation_probe_surface_factory returned VK_NULL_HANDLE");
+        }
+        surface_is_presentation_probe = true;
     }
 
     if (info.physical_device_selector) {
@@ -139,6 +156,15 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     }
     pick_physical_device();
     create_logical_device();
+
+    // Queue handles and enabled device extensions no longer depend on the
+    // probe surface after logical-device creation. Do not retain a window
+    // system object in the device: visible windows own their presentation
+    // surfaces and swapchains.
+    if (surface_is_presentation_probe) {
+        vkDestroySurfaceKHR(instance_, surface_, nullptr);
+        surface_ = VK_NULL_HANDLE;
+    }
     create_allocator();
     create_command_pool();
     create_descriptor_pool();

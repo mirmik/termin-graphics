@@ -13,6 +13,7 @@
 #endif
 
 #include "termin/platform/sdl_backend_window.hpp"
+#include "tgfx2/graphics_host.hpp"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/i_command_list.hpp"
@@ -36,8 +37,11 @@ int main() {
     force_d3d11_backend();
 
     try {
-        termin::SDLBackendWindow win("BackendWindow D3D11 present smoke", 320, 240);
-        tgfx::IRenderDevice* dev = win.device();
+        auto graphics_session = termin::create_native_windowed_graphics();
+        auto window = graphics_session->create_window(
+            {"BackendWindow D3D11 present smoke", 320, 240});
+        auto& win = *window;
+        tgfx::IRenderDevice* dev = &graphics_session->graphics().device();
         if (!dev) {
             std::fprintf(stderr, "BackendWindow D3D11 smoke: no render device\n");
             return 1;
@@ -140,6 +144,8 @@ int main() {
         dev->wait_idle();
         dev->destroy(rt);
         win.close();
+        window.reset();
+        graphics_session->close();
 
         std::printf("BackendWindow D3D11 present smoke OK: %dx%d\n", fb_w, fb_h);
         return 0;

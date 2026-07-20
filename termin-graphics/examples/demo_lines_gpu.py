@@ -7,7 +7,7 @@ import math
 
 import sdl2
 
-from termin.display import SDLBackendWindow
+from termin.display import WindowedGraphicsSession, quit_sdl
 from termin.geombase import OrbitCamera
 from tgfx import (
     CULL_NONE,
@@ -130,7 +130,7 @@ def _make_scene() -> list[GpuLine]:
     ] + angle_lines + [center_marker]
 
 
-def _dispatch(event: sdl2.SDL_Event, window: SDLBackendWindow,
+def _dispatch(event: sdl2.SDL_Event, window,
               camera: OrbitCamera, drag: dict[str, float | str]) -> None:
     etype = event.type
     if etype == sdl2.SDL_QUIT:
@@ -168,9 +168,10 @@ def _dispatch(event: sdl2.SDL_Event, window: SDLBackendWindow,
 
 def main() -> None:
     configure_default_shader_runtime("examples")
-    window = SDLBackendWindow(
+    runtime = WindowedGraphicsSession.create_native()
+    window = runtime.create_window(
         "tgfx2 GPU screen-space line demo - angle gallery v2", 1100, 760)
-    ctx = Tgfx2Context.from_window(window.device_ptr(), window.context_ptr())
+    ctx = Tgfx2Context.from_runtime(runtime.graphics)
     target = RenderTarget(ctx, 1100, 760)
     renderer = ScreenSpaceLineRenderer()
 
@@ -228,7 +229,9 @@ def main() -> None:
         renderer.release(ctx.context)
         target.destroy()
         window.close()
-        sdl2.SDL_Quit()
+        window.close()
+        runtime.close()
+        quit_sdl()
 
 
 if __name__ == "__main__":

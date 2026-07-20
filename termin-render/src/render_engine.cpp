@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <functional>
+#include <stdexcept>
 #include <algorithm>
 #include <chrono>
 #include <unordered_map>
@@ -16,7 +17,7 @@
 #include "tgfx2/pixel_format_utils.hpp"
 #include "tgfx2/pipeline_cache.hpp"
 #include "tgfx2/render_context.hpp"
-#include "tgfx2/render_runtime.hpp"
+#include "tgfx2/graphics_host.hpp"
 #include "tgfx2/shader_artifact_resolver.hpp"
 #include "tgfx/tgfx2_interop.h"
 #include "termin/render/tgfx2_bridge.hpp"
@@ -261,11 +262,25 @@ RenderEngine::RenderEngine() = default;
 RenderEngine::~RenderEngine() = default;
 
 tgfx::RenderContext2* RenderEngine::tgfx2_ctx() {
-    return tgfx2_runtime_ ? &tgfx2_runtime_->context() : nullptr;
+    return graphics_host_ ? &graphics_host_->context() : nullptr;
 }
 
 tgfx::IRenderDevice* RenderEngine::tgfx2_device() {
-    return tgfx2_runtime_ ? &tgfx2_runtime_->device() : nullptr;
+    return graphics_host_ ? &graphics_host_->device() : nullptr;
+}
+
+void RenderEngine::set_graphics_host(tgfx::GraphicsHost& graphics_host) {
+    if (graphics_host.is_closed()) {
+        throw std::invalid_argument("RenderEngine::set_graphics_host: host is closed");
+    }
+    if (graphics_host_ && graphics_host_ != &graphics_host) {
+        throw std::logic_error(
+            "RenderEngine::set_graphics_host: replacing the graphics domain is forbidden");
+    }
+    graphics_host_ = &graphics_host;
+    if (shader_artifact_resolver_) {
+        graphics_host_->configure_shader_artifacts(*shader_artifact_resolver_);
+    }
 }
 
 void RenderEngine::configure_shader_artifacts(
@@ -280,17 +295,17 @@ void RenderEngine::configure_shader_artifacts(
         compiler_path,
         dev_compile_enabled
     );
-    if (tgfx2_runtime_) {
-        tgfx2_runtime_->configure_shader_artifacts(*shader_artifact_resolver_);
+    if (graphics_host_) {
+        graphics_host_->configure_shader_artifacts(*shader_artifact_resolver_);
     }
 }
 
 RenderPipelineCacheStats RenderEngine::pipeline_cache_stats() const {
-    if (!tgfx2_runtime_) {
+    if (!graphics_host_) {
         return {};
     }
 
-    const tgfx::PipelineCacheStats cache_stats = tgfx2_runtime_->cache_stats();
+    const tgfx::PipelineCacheStats cache_stats = graphics_host_->cache_stats();
     RenderPipelineCacheStats out;
     out.hit_count = cache_stats.hit_count;
     out.miss_count = cache_stats.miss_count;
@@ -303,8 +318,6 @@ RenderPipelineCacheStats RenderEngine::pipeline_cache_stats() const {
 }
 
 void RenderEngine::ensure_tgfx2() {
-    // TODO: tgfx context initialization should happen at the application
-    // top level, not inside RenderEngine.
     // Diagnostic escape hatch: setting TERMIN_DISABLE_TGFX2=1 keeps the tgfx2
     // stack un-initialised, so ctx.ctx2 stays nullptr. Used to isolate whether
     // a rendering regression is caused by the tgfx2 path or not.
@@ -316,30 +329,23 @@ void RenderEngine::ensure_tgfx2() {
         return;
     }
 
-    if (tgfx2_runtime_) {
+    if (graphics_host_) {
         return;
     }
 
-    // Prefer the host-owned device if the application composition root has
-    // registered it as the process-wide interop target. Creating a second
-    // device here would mint a
-    // new HandlePool — scene textures end up on one pool, the UI /
-    // display-owned surface on another, and blit_to_texture silently drops
-    // cross-pool calls. Symptom was an entirely grey viewport with
-    // no Vulkan/GL errors.
-    if (auto* host_dev = static_cast<tgfx::IRenderDevice*>(tgfx2_interop_get_device())) {
-        tgfx2_runtime_ = std::make_unique<tgfx::RenderRuntime>(*host_dev);
-    } else {
-        // No host — standalone render test / headless case. Create our
-        // own device and register it as the interop target so any
-        // later Python helper that checks interop lands on it.
-        // Backend selected by TERMIN_BACKEND env-var (default Vulkan when compiled).
-        auto runtime = tgfx::RenderRuntime::create_from_env();
-        runtime->claim_interop();
-        tgfx2_runtime_ = std::move(runtime);
+    // Never rebuild a second cache/context around a globally installed raw
+    // device. Windowed composition roots must inject the exact GraphicsHost.
+    if (tgfx2_interop_get_device() != nullptr) {
+        tc::Log::error(
+            "RenderEngine::ensure_tgfx2: graphics domain installed without "
+            "set_graphics_host()");
+        throw std::logic_error(
+            "RenderEngine requires set_graphics_host() in a windowed application");
     }
+    owned_graphics_host_ = tgfx::GraphicsHost::create_application_from_env();
+    graphics_host_ = owned_graphics_host_.get();
     if (shader_artifact_resolver_) {
-        tgfx2_runtime_->configure_shader_artifacts(*shader_artifact_resolver_);
+        graphics_host_->configure_shader_artifacts(*shader_artifact_resolver_);
     }
 }
 

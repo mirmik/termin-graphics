@@ -15,7 +15,7 @@ from tcgui.widgets.ui import UI
 from tcgui.widgets.label import Label
 from tcgui.widgets.vstack import VStack
 from tcgui.widgets.theme import current_theme as _t
-from termin.display import SDLBackendWindow
+from termin.display import WindowedGraphicsSession, quit_sdl
 from tgfx import Tgfx2Context, configure_default_shader_runtime
 
 
@@ -39,8 +39,9 @@ def make_ui():
 
 def main():
     configure_default_shader_runtime("examples")
-    window = SDLBackendWindow("SDF Text Demo", 1000, 700)
-    ctx = Tgfx2Context.from_window(window.device_ptr(), window.context_ptr())
+    runtime = WindowedGraphicsSession.create_native()
+    window = runtime.create_window("SDF Text Demo", 1000, 700)
+    ctx = Tgfx2Context.from_runtime(runtime.graphics)
     ui = UI(graphics=ctx)
     ui.root = make_ui()
 
@@ -82,7 +83,8 @@ def main():
             window.present(tex)
 
     window.close()
-    sdl2.SDL_Quit()
+    runtime.close()
+    quit_sdl()
 
 
 if __name__ == "__main__":

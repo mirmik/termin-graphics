@@ -1,4 +1,4 @@
-// sdl_backend_window.cpp - SDL window + IRenderDevice wrapper.
+// sdl_backend_window.cpp - SDL presentation windows on a host-owned device.
 #include "termin/platform/sdl_backend_window.hpp"
 
 #include <algorithm>
@@ -19,7 +19,7 @@
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #endif
 #include "tgfx2/render_context.hpp"
-#include "tgfx2/render_runtime.hpp"
+#include "tgfx2/graphics_host.hpp"
 #include "tgfx/tgfx2_interop.h"
 #ifdef TGFX2_HAS_D3D11
 #include <SDL2/SDL_syswm.h>
@@ -229,33 +229,27 @@ HWND get_sdl_hwnd(SDL_Window* window) {
 // need to know about SDL_GLContext / VkInstance / etc.
 // ---------------------------------------------------------------------------
 
+struct SDLWindowSystem::Impl {
+    tgfx::BackendType backend = tgfx::BackendType::OpenGL;
+    std::unique_ptr<tgfx::IRenderDevice> prepared_device;
+    tgfx::GraphicsHost* graphics_host = nullptr;
+    SDL_Window* gl_bootstrap_window = nullptr;
+    SDL_GLContext gl_context = nullptr;
+    size_t live_windows = 0;
+    bool closed = false;
+};
+
 struct SDLBackendWindow::Impl {
+    SDLWindowSystem* window_system = nullptr;
     tgfx::BackendType backend = tgfx::BackendType::OpenGL;
     tgfx::PresentationMode requested_presentation_mode = tgfx::PresentationMode::VSync;
     tgfx::PresentationMode presentation_mode = tgfx::PresentationMode::VSync;
-    // Owned GPU runtime for primary windows; left empty on secondary
-    // windows (they point `device_ref` at the primary's device instead).
-    std::unique_ptr<tgfx::RenderRuntime> runtime;
-    // Non-owning pointer used by the rest of the class. Always set —
-    // equals runtime->device() for primary, or the shared device for
-    // secondary.
     tgfx::IRenderDevice* device_ref = nullptr;
-    // Primary the secondary window borrows its device/context from.
-    // nullptr on primaries. Used so context() / device() return the
-    // same objects everywhere.
-    SDLBackendWindow* shared_ctx_owner = nullptr;
-
-    // OpenGL state (only used when backend == OpenGL).
-    SDL_GLContext gl_context = nullptr;
     SDLWindowEventQueue pending_events;
 
-    // Vulkan state for secondary windows — each one owns its own
-    // swapchain bound to its own VkSurfaceKHR. Primary windows have
-    // the surface/swapchain owned by VulkanRenderDevice itself and
-    // leave these empty.
 #ifdef TGFX2_HAS_VULKAN
-    VkSurfaceKHR secondary_surface = VK_NULL_HANDLE;
-    std::unique_ptr<tgfx::VulkanSwapchain> secondary_swapchain;
+    VkSurfaceKHR surface = VK_NULL_HANDLE;
+    std::unique_ptr<tgfx::VulkanSwapchain> swapchain;
 #endif
 
 #ifdef TGFX2_HAS_D3D11
@@ -266,22 +260,15 @@ struct SDLBackendWindow::Impl {
 };
 
 // ---------------------------------------------------------------------------
-// Ctor / dtor
+// Host graphics runtime
 // ---------------------------------------------------------------------------
 
-SDLBackendWindow::SDLBackendWindow(
-    const std::string& title,
-    int width,
-    int height,
-    tgfx::PresentationMode presentation_mode)
+SDLWindowSystem::SDLWindowSystem()
     : impl_(std::make_unique<Impl>())
 {
-    impl_->requested_presentation_mode = presentation_mode;
-    impl_->presentation_mode = presentation_mode;
     if (tgfx2_interop_get_device() != nullptr) {
         throw std::runtime_error(
-            "BackendWindow(primary): an application graphics device is already installed; "
-            "create a secondary window sharing the primary instead");
+            "SDLWindowSystem: an application graphics device is already installed");
     }
     if (SDL_WasInit(SDL_INIT_VIDEO) == 0 && SDL_InitSubSystem(SDL_INIT_VIDEO) != 0) {
         throw std::runtime_error(std::string("SDL_InitSubSystem failed: ") + SDL_GetError());
@@ -306,25 +293,223 @@ SDLBackendWindow::SDLBackendWindow(
         SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
         SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
+        const Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN;
+        impl_->gl_bootstrap_window = SDL_CreateWindow(
+            "Termin graphics runtime",
+            SDL_WINDOWPOS_UNDEFINED,
+            SDL_WINDOWPOS_UNDEFINED,
+            1,
+            1,
+            flags);
+        if (!impl_->gl_bootstrap_window) {
+            throw std::runtime_error(
+                std::string("SDLWindowSystem bootstrap window failed: ") + SDL_GetError());
+        }
+
+        impl_->gl_context = SDL_GL_CreateContext(impl_->gl_bootstrap_window);
+        if (!impl_->gl_context) {
+            SDL_DestroyWindow(impl_->gl_bootstrap_window);
+            impl_->gl_bootstrap_window = nullptr;
+            throw std::runtime_error(
+                std::string("SDLWindowSystem GL context failed: ") + SDL_GetError());
+        }
+        SDL_GL_MakeCurrent(impl_->gl_bootstrap_window, impl_->gl_context);
+
+        // OpenGLRenderDevice ctor loads GLAD and validates the live
+        // context — it expects MakeCurrent to already have happened.
+        impl_->prepared_device = tgfx::create_device(tgfx::BackendType::OpenGL);
+
+#else
+        throw std::runtime_error("SDLWindowSystem: OpenGL backend not compiled");
+#endif
+    }
+#ifdef TGFX2_HAS_VULKAN
+    else if (impl_->backend == tgfx::BackendType::Vulkan) {
+        std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> bootstrap(
+            SDL_CreateWindow(
+            "Termin Vulkan bootstrap",
+            SDL_WINDOWPOS_UNDEFINED,
+            SDL_WINDOWPOS_UNDEFINED,
+            1,
+            1,
+            SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN),
+            SDL_DestroyWindow);
+        if (!bootstrap) {
+            throw std::runtime_error(
+                std::string("SDLWindowSystem Vulkan bootstrap failed: ") + SDL_GetError());
+        }
+
+        uint32_t ext_count = 0;
+        if (!SDL_Vulkan_GetInstanceExtensions(bootstrap.get(), &ext_count, nullptr)) {
+            throw std::runtime_error(
+                std::string("SDL_Vulkan_GetInstanceExtensions(count) failed: ") + SDL_GetError());
+        }
+        std::vector<const char*> extensions(ext_count);
+        if (!SDL_Vulkan_GetInstanceExtensions(
+                bootstrap.get(), &ext_count, extensions.data())) {
+            throw std::runtime_error(
+                std::string("SDL_Vulkan_GetInstanceExtensions(list) failed: ") + SDL_GetError());
+        }
+
+        tgfx::VulkanDeviceCreateInfo info;
+        const char* validation_env = std::getenv("TGFX2_VULKAN_VALIDATION");
+        info.enable_validation = (validation_env && validation_env[0] == '1');
+        info.instance_extensions = extensions;
+        info.presentation_probe_surface_factory = [window = bootstrap.get()](
+            VkInstance instance) {
+            VkSurfaceKHR surface = VK_NULL_HANDLE;
+            if (!SDL_Vulkan_CreateSurface(window, instance, &surface)) {
+                throw std::runtime_error(
+                    std::string("SDL_Vulkan_CreateSurface(probe) failed: ") + SDL_GetError());
+            }
+            return surface;
+        };
+        impl_->prepared_device = std::make_unique<tgfx::VulkanRenderDevice>(info);
+    }
+#endif
+#ifdef TGFX2_HAS_D3D11
+    else if (impl_->backend == tgfx::BackendType::D3D11) {
+        impl_->prepared_device = std::make_unique<tgfx::D3D11RenderDevice>();
+    }
+#endif
+    else {
+        throw std::runtime_error("SDLWindowSystem: unsupported backend");
+    }
+}
+
+SDLWindowSystem::~SDLWindowSystem() {
+    if (impl_ && impl_->live_windows != 0) {
+        tc_log_error(
+            "[SDLWindowSystem] destroyed with %zu live presentation window(s)",
+            impl_->live_windows);
+    }
+    if (impl_) {
+        // Do not pretend recovery is possible: live windows still contain
+        // non-owning device/system references. Their owner violated the
+        // WindowedGraphicsSession lifetime contract.
+        return;
+    }
+    if (impl_) {
+        // A host created through create_graphics_host() is externally owned
+        // and must already be closed by the session. A merely prepared device
+        // is still ours and must die before the GL bootstrap context.
+        impl_->prepared_device.reset();
+        if (impl_->gl_context) {
+            SDL_GL_DeleteContext(impl_->gl_context);
+            impl_->gl_context = nullptr;
+        }
+        if (impl_->gl_bootstrap_window) {
+            SDL_DestroyWindow(impl_->gl_bootstrap_window);
+            impl_->gl_bootstrap_window = nullptr;
+        }
+    }
+}
+
+std::unique_ptr<tgfx::GraphicsHost> SDLWindowSystem::create_graphics_host() {
+    if (impl_->closed || !impl_->prepared_device || impl_->graphics_host) {
+        throw std::logic_error(
+            "SDLWindowSystem::create_graphics_host requires one fresh prepared device");
+    }
+    auto graphics = tgfx::GraphicsHost::adopt_application_device(
+        std::move(impl_->prepared_device));
+    impl_->graphics_host = graphics.get();
+    return graphics;
+}
+
+BackendWindowPtr SDLWindowSystem::create_window(
+    tgfx::GraphicsHost& graphics,
+    const WindowConfig& config) {
+    if (impl_->closed || impl_->graphics_host != &graphics || graphics.is_closed()) {
+        throw std::logic_error("SDLWindowSystem::create_window called after close");
+    }
+    return std::make_unique<SDLBackendWindow>(
+        *this,
+        graphics,
+        config.title,
+        config.width,
+        config.height,
+        config.presentation_mode);
+}
+
+size_t SDLWindowSystem::live_window_count() const {
+    return impl_->live_windows;
+}
+
+void SDLWindowSystem::close(tgfx::GraphicsHost& graphics) {
+    if (impl_->closed) return;
+    if (impl_->live_windows != 0) {
+        throw std::logic_error(
+            "SDLWindowSystem::close requires all presentation windows to be closed");
+    }
+    if (impl_->graphics_host != &graphics) {
+        throw std::invalid_argument(
+            "SDLWindowSystem::close received a different GraphicsHost");
+    }
+    graphics.close();
+    impl_->graphics_host = nullptr;
+    impl_->prepared_device.reset();
+    if (impl_->gl_context) {
+        SDL_GL_DeleteContext(impl_->gl_context);
+        impl_->gl_context = nullptr;
+    }
+    if (impl_->gl_bootstrap_window) {
+        SDL_DestroyWindow(impl_->gl_bootstrap_window);
+        impl_->gl_bootstrap_window = nullptr;
+    }
+    impl_->closed = true;
+}
+
+void SDLWindowSystem::register_window() {
+    ++impl_->live_windows;
+}
+
+void SDLWindowSystem::unregister_window() {
+    if (impl_->live_windows == 0) {
+        tc_log_error("[SDLWindowSystem] presentation window count underflow");
+        return;
+    }
+    --impl_->live_windows;
+}
+
+// ---------------------------------------------------------------------------
+// Presentation window
+// ---------------------------------------------------------------------------
+
+SDLBackendWindow::SDLBackendWindow(
+    SDLWindowSystem& window_system,
+    tgfx::GraphicsHost& graphics,
+    const std::string& title,
+    int width,
+    int height,
+    tgfx::PresentationMode presentation_mode)
+    : impl_(std::make_unique<Impl>())
+{
+    impl_->window_system = &window_system;
+    impl_->backend = graphics.device().backend_type();
+    impl_->requested_presentation_mode = presentation_mode;
+    impl_->presentation_mode = presentation_mode;
+    impl_->device_ref = &graphics.device();
+    configure_sdl_window_hints();
+
+    try {
+    if (impl_->backend == tgfx::BackendType::OpenGL) {
+#ifdef TGFX2_HAS_OPENGL
         Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
         window_ = SDL_CreateWindow(title.c_str(),
                                     SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
                                     width, height, flags);
         if (!window_) {
-            throw std::runtime_error(std::string("SDL_CreateWindow failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("SDL_CreateWindow(OpenGL) failed: ") +
+                                     SDL_GetError());
         }
-
-        impl_->gl_context = SDL_GL_CreateContext(window_);
-        if (!impl_->gl_context) {
-            SDL_DestroyWindow(window_);
-            throw std::runtime_error(std::string("SDL_GL_CreateContext failed: ") + SDL_GetError());
+        if (SDL_GL_MakeCurrent(window_, window_system.impl_->gl_context) != 0) {
+            throw std::runtime_error(
+                std::string("SDL_GL_MakeCurrent(window) failed: ") + SDL_GetError());
         }
-        SDL_GL_MakeCurrent(window_, impl_->gl_context);
         const int swap_interval = presentation_mode == tgfx::PresentationMode::VSync ? 1 : 0;
         if (SDL_GL_SetSwapInterval(swap_interval) != 0) {
             tc_log_warn(
-                "BackendWindow: SDL_GL_SetSwapInterval(%d) is unsupported: %s; "
-                "continuing with the driver's active interval",
+                "SDLBackendWindow: SDL_GL_SetSwapInterval(%d) is unsupported: %s",
                 swap_interval,
                 SDL_GetError());
         }
@@ -332,22 +517,8 @@ SDLBackendWindow::SDLBackendWindow(
         impl_->presentation_mode = applied_swap_interval == 0
             ? tgfx::PresentationMode::Immediate
             : tgfx::PresentationMode::VSync;
-        if (impl_->presentation_mode != presentation_mode) {
-            tc_log_warn(
-                "BackendWindow: requested OpenGL presentation mode '%s', but the "
-                "driver applied '%s' (swap interval %d)",
-                presentation_mode == tgfx::PresentationMode::VSync ? "vsync" : "immediate",
-                impl_->presentation_mode == tgfx::PresentationMode::VSync ? "vsync" : "immediate",
-                applied_swap_interval);
-        }
-
-        // OpenGLRenderDevice ctor loads GLAD and validates the live
-        // context — it expects MakeCurrent to already have happened.
-        impl_->runtime = tgfx::RenderRuntime::create(tgfx::BackendType::OpenGL);
-        impl_->device_ref = &impl_->runtime->device();
-
 #else
-        throw std::runtime_error("BackendWindow: OpenGL backend not compiled");
+        throw std::runtime_error("SDLBackendWindow: OpenGL backend not compiled");
 #endif
     }
 #ifdef TGFX2_HAS_VULKAN
@@ -357,140 +528,7 @@ SDLBackendWindow::SDLBackendWindow(
                                     SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
                                     width, height, flags);
         if (!window_) {
-            throw std::runtime_error(std::string("SDL_CreateWindow(Vulkan) failed: ") + SDL_GetError());
-        }
-
-        uint32_t ext_count = 0;
-        SDL_Vulkan_GetInstanceExtensions(window_, &ext_count, nullptr);
-        std::vector<const char*> extensions(ext_count);
-        SDL_Vulkan_GetInstanceExtensions(window_, &ext_count, extensions.data());
-
-        int fb_w = 0, fb_h = 0;
-        SDL_Vulkan_GetDrawableSize(window_, &fb_w, &fb_h);
-
-        tgfx::VulkanDeviceCreateInfo info;
-        const char* validation_env = std::getenv("TGFX2_VULKAN_VALIDATION");
-        info.enable_validation = (validation_env && validation_env[0] == '1');
-        info.instance_extensions = extensions;
-        info.swapchain_width = static_cast<uint32_t>(fb_w);
-        info.swapchain_height = static_cast<uint32_t>(fb_h);
-        info.presentation_mode = presentation_mode;
-        SDL_Window* win = window_;
-        info.surface_factory = [win](VkInstance inst) -> VkSurfaceKHR {
-            VkSurfaceKHR surf = VK_NULL_HANDLE;
-            if (!SDL_Vulkan_CreateSurface(win, inst, &surf)) {
-                return VK_NULL_HANDLE;
-            }
-            return surf;
-        };
-
-        impl_->runtime = std::make_unique<tgfx::RenderRuntime>(
-            std::make_unique<tgfx::VulkanRenderDevice>(info));
-        impl_->device_ref = &impl_->runtime->device();
-    }
-#endif
-#ifdef TGFX2_HAS_D3D11
-    else if (impl_->backend == tgfx::BackendType::D3D11) {
-        if (presentation_mode != tgfx::PresentationMode::VSync) {
-            tc_log_warn(
-                "BackendWindow: D3D11 Immediate presentation is unsupported until "
-                "the flip-model tearing path is implemented; continuing with VSync");
-            impl_->presentation_mode = tgfx::PresentationMode::VSync;
-        }
-        Uint32 flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
-        window_ = SDL_CreateWindow(title.c_str(),
-                                    SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                                    width, height, flags);
-        if (!window_) {
-            throw std::runtime_error(std::string("SDL_CreateWindow(D3D11) failed: ") +
-                                     SDL_GetError());
-        }
-
-        int fb_w = 0, fb_h = 0;
-        SDL_GetWindowSize(window_, &fb_w, &fb_h);
-        if (fb_w <= 0 || fb_h <= 0) {
-            fb_w = width;
-            fb_h = height;
-        }
-
-        auto d3d_device = std::make_unique<tgfx::D3D11RenderDevice>();
-        auto* d3d_device_ref = d3d_device.get();
-        impl_->runtime = std::make_unique<tgfx::RenderRuntime>(std::move(d3d_device));
-        impl_->device_ref = &impl_->runtime->device();
-        impl_->d3d11_swapchain = std::make_unique<tgfx::D3D11Swapchain>(
-            *d3d_device_ref,
-            get_sdl_hwnd(window_),
-            static_cast<uint32_t>(fb_w),
-            static_cast<uint32_t>(fb_h));
-    }
-#endif
-    else {
-        SDL_DestroyWindow(window_);
-        throw std::runtime_error("BackendWindow: unsupported backend");
-    }
-    impl_->runtime->claim_interop();
-    register_window_event_queue(window_, impl_->pending_events);
-}
-
-// ---------------------------------------------------------------------------
-// Secondary window — reuses the primary's IRenderDevice, adds its own
-// OS window + surface/GL-context + (Vulkan) swapchain. The whole point
-// is "one IRenderDevice per process" — secondary windows must not spin
-// up their own devices.
-// ---------------------------------------------------------------------------
-
-SDLBackendWindow::SDLBackendWindow(const std::string& title, int width, int height,
-                              SDLBackendWindow& share_with)
-    : impl_(std::make_unique<Impl>())
-{
-    if (!share_with.impl_->device_ref) {
-        throw std::runtime_error(
-            "BackendWindow(secondary): primary window has no device");
-    }
-    impl_->backend = share_with.impl_->backend;
-    impl_->requested_presentation_mode = share_with.impl_->requested_presentation_mode;
-    impl_->presentation_mode = share_with.impl_->presentation_mode;
-    impl_->device_ref = share_with.impl_->device_ref;
-    impl_->shared_ctx_owner = &share_with;
-    configure_sdl_window_hints();
-
-    if (impl_->backend == tgfx::BackendType::OpenGL) {
-#ifdef TGFX2_HAS_OPENGL
-        // Secondary GL windows don't get their own GL context — they
-        // borrow the primary's. One context can be made current against
-        // any of its owner's compatible windows, which is exactly what
-        // we need here: no share-group complexity, no second set of
-        // cached FBOs, no risk of desynchronised GLAD function tables.
-        // present() will MakeCurrent the primary's context against
-        // this window before blitting + SwapWindow.
-        Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
-        window_ = SDL_CreateWindow(title.c_str(),
-                                    SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                                    width, height, flags);
-        if (!window_) {
-            throw std::runtime_error(std::string("SDL_CreateWindow(secondary) failed: ") +
-                                     SDL_GetError());
-        }
-        // impl_->gl_context stays null — the dtor skips SDL_GL_DeleteContext.
-
-        // Re-make the primary context current. Creating a new
-        // SDL_WINDOW_OPENGL window can unbind the current GL context
-        // on some drivers (Mesa/GLX in particular), after which any
-        // GL call dispatched through GLAD hits a null function pointer
-        // and segfaults.
-        SDL_GL_MakeCurrent(share_with.window_, share_with.impl_->gl_context);
-#else
-        throw std::runtime_error("BackendWindow(secondary): OpenGL backend not compiled");
-#endif
-    }
-#ifdef TGFX2_HAS_VULKAN
-    else if (impl_->backend == tgfx::BackendType::Vulkan) {
-        Uint32 flags = SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
-        window_ = SDL_CreateWindow(title.c_str(),
-                                    SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                                    width, height, flags);
-        if (!window_) {
-            throw std::runtime_error(std::string("SDL_CreateWindow(Vulkan secondary) failed: ") +
+            throw std::runtime_error(std::string("SDL_CreateWindow(Vulkan) failed: ") +
                                      SDL_GetError());
         }
 
@@ -498,14 +536,15 @@ SDLBackendWindow::SDLBackendWindow(const std::string& title, int width, int heig
         VkSurfaceKHR surf = VK_NULL_HANDLE;
         if (!SDL_Vulkan_CreateSurface(window_, vk_dev->instance(), &surf)) {
             SDL_DestroyWindow(window_);
-            throw std::runtime_error(std::string("SDL_Vulkan_CreateSurface(secondary) failed: ") +
+            window_ = nullptr;
+            throw std::runtime_error(std::string("SDL_Vulkan_CreateSurface(window) failed: ") +
                                      SDL_GetError());
         }
-        impl_->secondary_surface = surf;
+        impl_->surface = surf;
 
         int fb_w = 0, fb_h = 0;
         SDL_Vulkan_GetDrawableSize(window_, &fb_w, &fb_h);
-        impl_->secondary_swapchain = std::make_unique<tgfx::VulkanSwapchain>(
+        impl_->swapchain = std::make_unique<tgfx::VulkanSwapchain>(
             *vk_dev, surf,
             static_cast<uint32_t>(fb_w),
             static_cast<uint32_t>(fb_h),
@@ -519,7 +558,7 @@ SDLBackendWindow::SDLBackendWindow(const std::string& title, int width, int heig
                                     SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
                                     width, height, flags);
         if (!window_) {
-            throw std::runtime_error(std::string("SDL_CreateWindow(D3D11 secondary) failed: ") +
+            throw std::runtime_error(std::string("SDL_CreateWindow(D3D11) failed: ") +
                                      SDL_GetError());
         }
 
@@ -539,9 +578,31 @@ SDLBackendWindow::SDLBackendWindow(const std::string& title, int width, int heig
 #endif
     else {
         SDL_DestroyWindow(window_);
-        throw std::runtime_error("BackendWindow(secondary): unsupported backend");
+        window_ = nullptr;
+        throw std::runtime_error("SDLBackendWindow: unsupported backend");
     }
     register_window_event_queue(window_, impl_->pending_events);
+    window_system.register_window();
+    } catch (...) {
+#ifdef TGFX2_HAS_D3D11
+        impl_->d3d11_swapchain.reset();
+#endif
+#ifdef TGFX2_HAS_VULKAN
+        impl_->swapchain.reset();
+        if (impl_->surface != VK_NULL_HANDLE) {
+            auto* vk_dev = static_cast<tgfx::VulkanRenderDevice*>(impl_->device_ref);
+            vkDestroySurfaceKHR(vk_dev->instance(), impl_->surface, nullptr);
+            impl_->surface = VK_NULL_HANDLE;
+        }
+#endif
+        if (window_) {
+            SDL_DestroyWindow(window_);
+            window_ = nullptr;
+        }
+        impl_->device_ref = nullptr;
+        impl_->window_system = nullptr;
+        throw;
+    }
 }
 
 void SDLBackendWindow::maximize() {
@@ -667,17 +728,16 @@ void SDLBackendWindow::set_always_on_top(bool enabled) {
 void SDLBackendWindow::close() {
     // Idempotent teardown — callers (both the dtor and Python
     // `window.close()`) can invoke this without checking state first.
-    if (!window_ && !impl_->device_ref && !impl_->gl_context) {
+    if (!window_ && !impl_->device_ref) {
         return;
     }
     set_text_input_enabled(false);
     unregister_window_event_queue(window_);
     impl_->pending_events.clear();
 
-    // Teardown in reverse dependency order. Secondary windows skip the
-    // context/device reset because those are owned by the primary —
-    // tearing them down here would yank the rug out from under the
-    // primary and every other secondary.
+    // Teardown only this window's presentation resources. The shared device
+    // and context belong to SDLWindowSystem and remain available to every
+    // other window regardless of creation or destruction order.
 #ifdef TGFX2_HAS_D3D11
     if (impl_->d3d11_swapchain) {
         if (impl_->device_ref) {
@@ -687,36 +747,26 @@ void SDLBackendWindow::close() {
     }
 #endif
 #ifdef TGFX2_HAS_VULKAN
-    // Vulkan secondary: wait idle before destroying the swapchain /
-    // surface to avoid killing resources still in flight.
-    if (impl_->secondary_swapchain) {
+    if (impl_->swapchain) {
         if (impl_->device_ref) {
             impl_->device_ref->wait_idle();
         }
-        impl_->secondary_swapchain.reset();
+        impl_->swapchain.reset();
     }
-    if (impl_->secondary_surface != VK_NULL_HANDLE && impl_->device_ref) {
+    if (impl_->surface != VK_NULL_HANDLE && impl_->device_ref) {
         auto* vk_dev = static_cast<tgfx::VulkanRenderDevice*>(impl_->device_ref);
-        vkDestroySurfaceKHR(vk_dev->instance(), impl_->secondary_surface, nullptr);
-        impl_->secondary_surface = VK_NULL_HANDLE;
+        vkDestroySurfaceKHR(vk_dev->instance(), impl_->surface, nullptr);
+        impl_->surface = VK_NULL_HANDLE;
     }
 #endif
-    if (impl_->shared_ctx_owner == nullptr) {
-        // Primary window — RenderRuntime owns the device/ctx/cache chain and
-        // releases its explicit process-wide interop claim before teardown.
-        impl_->runtime.reset();
-    }
-    // Shared devices still accessed through device_ref; stop using it.
     impl_->device_ref = nullptr;
-    impl_->shared_ctx_owner = nullptr;
-
-    if (impl_->gl_context) {
-        SDL_GL_DeleteContext(impl_->gl_context);
-        impl_->gl_context = nullptr;
-    }
     if (window_) {
         SDL_DestroyWindow(window_);
         window_ = nullptr;
+    }
+    if (impl_->window_system) {
+        impl_->window_system->unregister_window();
+        impl_->window_system = nullptr;
     }
     should_close_ = true;
 }
@@ -729,10 +779,6 @@ SDLBackendWindow::~SDLBackendWindow() {
 // Accessors
 // ---------------------------------------------------------------------------
 
-tgfx::IRenderDevice* SDLBackendWindow::device() {
-    return impl_->device_ref;
-}
-
 tgfx::BackendType SDLBackendWindow::backend_type() const {
     return impl_->backend;
 }
@@ -743,19 +789,6 @@ tgfx::PresentationMode SDLBackendWindow::requested_presentation_mode() const {
 
 tgfx::PresentationMode SDLBackendWindow::presentation_mode() const {
     return impl_->presentation_mode;
-}
-
-tgfx::RenderContext2* SDLBackendWindow::context() {
-    // Secondary windows never build their own RenderContext2 — that
-    // would defeat "one PipelineCache per device" and force redundant
-    // pipeline compilations. They forward to the primary instead.
-    if (impl_->shared_ctx_owner) {
-        return impl_->shared_ctx_owner->context();
-    }
-    if (!impl_->runtime) {
-        return nullptr;
-    }
-    return &impl_->runtime->context();
 }
 
 std::pair<int, int> SDLBackendWindow::framebuffer_size() const {
@@ -916,18 +949,19 @@ void SDLBackendWindow::present(tgfx::TextureHandle color_tex) {
 
     if (impl_->backend == tgfx::BackendType::OpenGL) {
 #ifdef TGFX2_HAS_OPENGL
-        // Secondary windows borrow the primary's GL context. Find it:
-        // either we own it (primary) or the shared owner does.
-        SDL_GLContext gl_ctx = impl_->gl_context
-            ? impl_->gl_context
-            : (impl_->shared_ctx_owner
-                ? impl_->shared_ctx_owner->impl_->gl_context
-                : nullptr);
+        SDL_GLContext gl_ctx = impl_->window_system
+            ? impl_->window_system->impl_->gl_context
+            : nullptr;
         if (!gl_ctx) {
             tc_log(TC_LOG_ERROR, "[BackendWindow] present: no GL context");
             return;
         }
-        SDL_GL_MakeCurrent(window_, gl_ctx);
+        if (SDL_GL_MakeCurrent(window_, gl_ctx) != 0) {
+            tc_log_error(
+                "[BackendWindow] present: SDL_GL_MakeCurrent failed: %s",
+                SDL_GetError());
+            return;
+        }
 
         auto* gl_dev = static_cast<tgfx::OpenGLRenderDevice*>(impl_->device_ref);
         gl_dev->present_to_default_framebuffer(color_tex, w, h);
@@ -936,13 +970,7 @@ void SDLBackendWindow::present(tgfx::TextureHandle color_tex) {
     }
 #ifdef TGFX2_HAS_VULKAN
     else if (impl_->backend == tgfx::BackendType::Vulkan) {
-        auto* vk_dev = static_cast<tgfx::VulkanRenderDevice*>(impl_->device_ref);
-        // Secondary windows carry their own swapchain; primary windows
-        // use the one owned by VulkanRenderDevice. Either way, pick
-        // the one that belongs to this window.
-        tgfx::VulkanSwapchain* sc = impl_->secondary_swapchain
-                                        ? impl_->secondary_swapchain.get()
-                                        : vk_dev->swapchain();
+        tgfx::VulkanSwapchain* sc = impl_->swapchain.get();
         if (!sc) {
             tc_log(TC_LOG_ERROR, "[BackendWindow] present: no Vulkan swapchain");
             return;

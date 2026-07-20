@@ -26,6 +26,19 @@
 
 Если код знает про frame graph/debugger/render pipeline, он обычно относится к [termin-render](../../docs/modules.md#termin-render). Если код знает про widget tree, layout или events, он относится к [termin-gui](../../termin-gui/docs/index.md).
 
+## Application Graphics Host
+
+`tgfx::GraphicsHost` — единственный канонический владелец application graphics
+domain: `IRenderDevice`, `PipelineCache`, `RenderContext2`, shader resolver и
+interop claim. Он не имеет borrowed-конструкторов. Consumers получают ссылку
+на существующий host; standalone/headless tools используют явно именованные
+application или isolated factories.
+
+Оконные, WPF, Android и OpenXR adapters могут по-разному подготовить platform
+device, но передают его во владение `GraphicsHost`. Они не должны создавать
+собственные параллельные device/cache/context bundles. Полный windowed contract
+описан в [Graphics Host and Window Session](../../docs/architecture/2026-07-21-graphics-host-and-window-session.md).
+
 ## Texture CPU Sync
 
 `tc_texture_storage_kind` describes the source of truth:

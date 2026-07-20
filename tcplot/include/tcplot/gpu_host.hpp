@@ -1,9 +1,11 @@
 // gpu_host.hpp — process-wide GPU runtime bundle for tcplot.
 //
-// Owns the one `IRenderDevice`, `PipelineCache`, `RenderContext2` and
-// `FontAtlas` that every `PlotView*` borrows. Matches the "one device
+// Owns plot-specific `FontAtlas` state and either owns a standalone
+// `GraphicsHost` or borrows the application's canonical host. Every
+// `PlotView*` borrows the resulting device/cache/context/font bundle. Matches
+// the "one device
 // per process" invariant from tgfx2 Python bindings
-// (`Tgfx2Context.from_window`) — recreating a device provokes GL
+// (`Tgfx2Context.from_runtime`) — recreating a device provokes GL
 // resource collisions on shared contexts (two GLWpfControls in one
 // window), so we create everything once at application startup and
 // tear it down at process exit.
@@ -20,7 +22,7 @@ namespace tgfx {
 class IRenderDevice;
 class PipelineCache;
 class RenderContext2;
-class RenderRuntime;
+class GraphicsHost;
 class FontAtlas;
 }
 
@@ -28,7 +30,8 @@ namespace tcplot {
 
 class TCPLOT_API GpuHost {
 private:
-    std::unique_ptr<tgfx::RenderRuntime> runtime_;
+    std::unique_ptr<tgfx::GraphicsHost> owned_graphics_;
+    tgfx::GraphicsHost* graphics_ = nullptr;
     std::unique_ptr<tgfx::FontAtlas>      font_;
 
 public:
@@ -38,6 +41,9 @@ public:
 
     // Explicit backend override — mostly for the Vulkan path.
     GpuHost(const std::string& ttf_path, tgfx::BackendType backend);
+
+    // Embedded plots borrow the application's canonical graphics domain.
+    GpuHost(const std::string& ttf_path, tgfx::GraphicsHost& graphics);
 
     ~GpuHost();
 

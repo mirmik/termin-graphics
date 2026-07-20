@@ -23,6 +23,7 @@
 #include <stdexcept>
 
 #include <tgfx2/render_context.hpp>
+#include <tgfx2/graphics_host.hpp>
 #include <tgfx2/canvas2d_renderer.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/device_factory.hpp>
@@ -64,6 +65,11 @@ void bind_tgfx2(nb::module_& m) {
         },
         nb::arg("name"),
         "Return whether the named tgfx2 backend is compiled into this SDK.");
+
+    // Canonical application graphics-domain owner. Construction stays with
+    // platform/application composition roots; Python receives a borrowed
+    // reference and builds lightweight renderer contexts from it.
+    nb::class_<tgfx::GraphicsHost>(m, "GraphicsHost");
 
     // --- Opaque handle wrappers ---
     //
@@ -628,8 +634,8 @@ void bind_tgfx2(nb::module_& m) {
     //
     // Non-owning bundle of the process-wide GPU runtime: `IRenderDevice`
     // (resource factory), `RenderContext2` (command recorder). Created
-    // exactly once by the top-level application host (BackendWindow or
-    // equivalent) and handed down to every renderer that needs to draw.
+    // exactly once by the top-level application host and handed down to every
+    // renderer that needs to draw.
     //
     // Python-side this is exposed as `Tgfx2Context`. Both pointers are
     // raw — the holder observes, never owns. The lifetime invariant is
@@ -654,32 +660,28 @@ void bind_tgfx2(nb::module_& m) {
     // struct Tgfx2ContextHolder above for the rationale.
     nb::class_<Tgfx2ContextHolder>(m, "Tgfx2Context")
 
-        // Factory used by the application top level. BackendWindow (or
-        // an equivalent host) has already created an IRenderDevice and
-        // RenderContext2; it passes both as raw C++ pointers (cast to
-        // uintptr_t — cross-module, nanobind types for IRenderDevice /
-        // RenderContext2 live in different binding modules, uintptr_t
-        // is the stable wire format). The host owns the lifetimes:
-        // both pointers must outlive this Tgfx2Context.
-        .def_static("from_window",
-            [](uintptr_t device_ptr, uintptr_t ctx_ptr) -> Tgfx2ContextHolder* {
-                auto* dev = reinterpret_cast<tgfx::IRenderDevice*>(device_ptr);
-                auto* rctx = reinterpret_cast<tgfx::RenderContext2*>(ctx_ptr);
-                if (!dev || !rctx) return nullptr;
+        // Factory used by application composition roots. It borrows the
+        // canonical GraphicsHost instead of reconstructing a window-shaped
+        // device/context abstraction in every host.
+        .def_static("from_runtime",
+            [](tgfx::GraphicsHost& runtime) -> Tgfx2ContextHolder* {
+                auto* dev = &runtime.device();
+                auto* rctx = &runtime.context();
                 // The application host must install its device before it
                 // exposes observing wrappers. This factory never mutates the
                 // process-wide graphics domain.
                 if (tgfx2_interop_get_device() != dev) {
                     throw std::runtime_error(
-                        "Tgfx2Context.from_window: host device is not the installed "
+                        "Tgfx2Context.from_runtime: runtime device is not the installed "
                         "application graphics device");
                 }
                 return new Tgfx2ContextHolder(dev, rctx);
             },
-            nb::arg("device_ptr"), nb::arg("ctx_ptr"),
+            nb::arg("runtime"),
             nb::rv_policy::take_ownership,
+            nb::keep_alive<0, 1>(),
             "Build a Tgfx2Context over an existing device+RenderContext2 "
-            "owned by the application host (BackendWindow).")
+            "owned by the canonical application GraphicsHost.")
 
         // Factory for in-scene helpers (UIComponent, etc.) that
         // only see a live RenderContext2 at draw time — the framegraph's

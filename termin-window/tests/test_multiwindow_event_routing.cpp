@@ -1,10 +1,12 @@
 #include <cassert>
 #include <cstdio>
 #include <exception>
+#include <stdexcept>
 
 #include <SDL2/SDL.h>
 
 #include "termin/platform/sdl_backend_window.hpp"
+#include "tgfx2/graphics_host.hpp"
 
 namespace {
 
@@ -18,8 +20,13 @@ void drain(termin::SDLBackendWindow& window) {
 
 int main() {
     try {
-        termin::SDLBackendWindow primary("event routing primary", 320, 200);
-        termin::SDLBackendWindow secondary("event routing secondary", 240, 160, primary);
+        auto graphics_session = termin::create_native_windowed_graphics();
+        auto primary_owner = graphics_session->create_window(
+            {"event routing primary", 320, 200});
+        auto secondary_owner = graphics_session->create_window(
+            {"event routing secondary", 240, 160});
+        auto& primary = static_cast<termin::SDLBackendWindow&>(*primary_owner);
+        auto& secondary = static_cast<termin::SDLBackendWindow&>(*secondary_owner);
         drain(primary);
         drain(secondary);
 
@@ -54,6 +61,20 @@ int main() {
         assert(event.type == termin::WindowEventType::CloseRequested);
         assert(primary.should_close());
         assert(secondary.should_close());
+
+        bool live_window_close_rejected = false;
+        try {
+            graphics_session->close();
+        } catch (const std::logic_error&) {
+            live_window_close_rejected = true;
+        }
+        assert(live_window_close_rejected);
+        assert(!graphics_session->graphics().is_closed());
+
+        primary_owner.reset();
+        assert(!graphics_session->graphics().is_closed());
+        secondary_owner.reset();
+        graphics_session->close();
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "multiwindow event routing skipped: %s\n", error.what());

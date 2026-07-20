@@ -1,6 +1,6 @@
 """Shared host loop for tcplot examples.
 
-Spins up an SDLBackendWindow + tcgui UI and runs a wait-for-event main
+Spins up an WindowedGraphicsSession window + tcgui UI and runs a wait-for-event main
 loop until the user closes the window. Picks OpenGL or Vulkan based
 on the ``TERMIN_BACKEND`` env-var, same as other backend-neutral SDL
 hosts in the project.
@@ -15,7 +15,7 @@ import sdl2
 
 from tcbase import MouseButton
 from tcgui.widgets.ui import UI
-from termin.display import SDLBackendWindow
+from termin.display import WindowedGraphicsSession, quit_sdl
 from tgfx import Tgfx2Context, configure_default_shader_runtime
 
 
@@ -26,10 +26,11 @@ def run_demo(title: str, make_widget: Callable[[], object],
              size: tuple[int, int] = (900, 600),
              bg: tuple[float, float, float, float] = (0.10, 0.10, 0.12, 1.0)
              ) -> None:
-    """Host a tcplot widget inside an SDLBackendWindow until it closes."""
+    """Host a tcplot widget inside an WindowedGraphicsSession window until it closes."""
     configure_default_shader_runtime("examples")
-    window = SDLBackendWindow(title, size[0], size[1])
-    ctx = Tgfx2Context.from_window(window.device_ptr(), window.context_ptr())
+    runtime = WindowedGraphicsSession.create_native()
+    window = runtime.create_window(title, size[0], size[1])
+    ctx = Tgfx2Context.from_runtime(runtime.graphics)
 
     ui = UI(graphics=ctx)
     ui.root = make_widget()
@@ -75,4 +76,5 @@ def run_demo(title: str, make_widget: Callable[[], object],
             window.present(tex)
 
     window.close()
-    sdl2.SDL_Quit()
+    runtime.close()
+    quit_sdl()

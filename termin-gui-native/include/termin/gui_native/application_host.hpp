@@ -38,6 +38,7 @@ public:
     ApplicationHost(
         Document& document,
         ApplicationHostConfig config,
+        std::unique_ptr<WindowedGraphicsSession> graphics_session,
         BackendWindowPtr window);
     ~ApplicationHost();
 
@@ -48,6 +49,8 @@ public:
 
     BackendWindow& window();
     const BackendWindow& window() const;
+    tgfx::IRenderDevice& device();
+    const tgfx::IRenderDevice& device() const;
 
     // Routes all currently queued events into the bound Document. Returns the
     // number of portable window events consumed by this host.

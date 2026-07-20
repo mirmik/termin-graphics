@@ -130,7 +130,7 @@ set(TGFX2_SOURCES
     src/tgfx2/pixel_format_utils.cpp
     src/tgfx2/pipeline_cache.cpp
     src/tgfx2/render_context.cpp
-    src/tgfx2/render_runtime.cpp
+    src/tgfx2/graphics_host.cpp
     src/tgfx2_interop.cpp
     src/tgfx2/tc_mesh_bridge.cpp
     src/tgfx2/tc_shader_bridge.cpp

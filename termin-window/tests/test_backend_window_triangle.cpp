@@ -18,6 +18,7 @@
 #include <cstdlib>
 
 #include "termin/platform/sdl_backend_window.hpp"
+#include "tgfx2/graphics_host.hpp"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/i_command_list.hpp"
@@ -51,8 +52,11 @@ try {
         "TERMIN_TEST_PRESENTATION_MODE=%s\n",
         presentation_mode == tgfx::PresentationMode::VSync ? "vsync" : "immediate");
 
-    termin::SDLBackendWindow win(
-        "BackendWindow triangle smoke", 800, 600, presentation_mode);
+    auto graphics_session = termin::create_native_windowed_graphics();
+    termin::WindowConfig window_config{
+        "BackendWindow triangle smoke", 800, 600, presentation_mode};
+    auto window = graphics_session->create_window(window_config);
+    auto& win = *window;
     if (win.requested_presentation_mode() != presentation_mode) {
         fprintf(stderr, "BackendWindow requested presentation mode mismatch\n");
         return 1;
@@ -60,7 +64,7 @@ try {
     printf(
         "APPLIED_PRESENTATION_MODE=%s\n",
         win.presentation_mode() == tgfx::PresentationMode::VSync ? "vsync" : "immediate");
-    tgfx::IRenderDevice* dev = win.device();
+    tgfx::IRenderDevice* dev = &graphics_session->graphics().device();
     if (!dev) {
         fprintf(stderr, "BackendWindow has no device\n");
         return 1;
@@ -189,6 +193,8 @@ void main() {
     dev->destroy(rt);
     dev->destroy(fs);
     dev->destroy(vs);
+    window.reset();
+    graphics_session->close();
 
     printf("Frames: %llu. OK.\n", static_cast<unsigned long long>(frame_index));
     return 0;

@@ -323,6 +323,12 @@
       "roots": ["termin-collision/tests"]
     },
     {
+      "id": "termin-display-tests-python",
+      "module": "termin-display",
+      "executor": "pytest",
+      "roots": ["termin-display/tests/python"]
+    },
+    {
       "id": "termin-components-collision-tests",
       "module": "termin-components-collision",
       "executor": "pytest",

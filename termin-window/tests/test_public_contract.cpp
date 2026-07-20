@@ -1,16 +1,25 @@
 #include <type_traits>
 
 #include "termin/platform/backend_window.hpp"
+#include "tgfx2/graphics_host.hpp"
 #ifdef TERMIN_WINDOW_HAS_SDL
 #include "termin/platform/sdl_backend_window.hpp"
 #endif
 
 namespace {
 
+template <typename T>
+concept ExposesGraphicsDevice = requires(T& value) {
+    value.device();
+};
+
+template <typename T>
+concept ExposesGraphicsContext = requires(T& value) {
+    value.context();
+};
+
 class FakeWindow final : public termin::BackendWindow {
 public:
-    tgfx::IRenderDevice* device() override { return nullptr; }
-    tgfx::RenderContext2* context() override { return nullptr; }
     tgfx::BackendType backend_type() const override { return {}; }
     tgfx::PresentationMode requested_presentation_mode() const override { return {}; }
     tgfx::PresentationMode presentation_mode() const override { return {}; }
@@ -49,8 +58,12 @@ private:
 int main() {
 #ifdef TERMIN_WINDOW_HAS_SDL
     static_assert(std::is_base_of_v<termin::BackendWindow, termin::SDLBackendWindow>);
+    static_assert(std::is_base_of_v<termin::BackendWindowSystem, termin::SDLWindowSystem>);
     static_assert(!std::is_copy_constructible_v<termin::SDLBackendWindow>);
 #endif
+    static_assert(!ExposesGraphicsDevice<termin::BackendWindow>);
+    static_assert(!ExposesGraphicsContext<termin::BackendWindow>);
+    static_assert(!std::is_constructible_v<tgfx::GraphicsHost, tgfx::IRenderDevice&>);
     FakeWindow window;
     bool handled = false;
     window.set_event_handler([&handled](const termin::WindowEvent& event) {

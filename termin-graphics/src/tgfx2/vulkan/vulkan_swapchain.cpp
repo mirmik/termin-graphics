@@ -82,6 +82,16 @@ VulkanSwapchain::VulkanSwapchain(VulkanRenderDevice& dev,
       width_(width),
       height_(height)
 {
+    VkBool32 present_support = VK_FALSE;
+    const VkResult support_result = vkGetPhysicalDeviceSurfaceSupportKHR(
+        device_.physical_device(),
+        device_.present_queue_family(),
+        surface_,
+        &present_support);
+    if (support_result != VK_SUCCESS || present_support != VK_TRUE) {
+        throw std::runtime_error(
+            "VulkanSwapchain: runtime present queue cannot present to this surface");
+    }
     create_swapchain();
     create_sync_objects();
 

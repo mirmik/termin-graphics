@@ -111,7 +111,7 @@ int run_showcase_window(const char* title) {
             }
             if (!capture_path.empty() &&
                 !write_ppm_screenshot(
-                    *host.window().device(),
+                    host.device(),
                     host.color_target(),
                     host.framebuffer_width(),
                     host.framebuffer_height(),
