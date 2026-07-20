@@ -163,12 +163,11 @@ void append_vertex_output_adapter_to_hash(
 bool material_shader_override_supported(VertexTransformKind kind)
 {
     switch (kind) {
+    case VertexTransformKind::StaticMesh:
     case VertexTransformKind::SkinnedMesh:
     case VertexTransformKind::Foliage:
     case VertexTransformKind::FoliageShadow:
         return true;
-    case VertexTransformKind::StaticMesh:
-        return false;
     }
     return false;
 }
@@ -263,7 +262,8 @@ bool shader_requires_material_pipeline_contract(const tc_shader* shader)
     if (!shader || !shader->is_variant) {
         return false;
     }
-    return shader->variant_op == TC_SHADER_VARIANT_SKINNING ||
+    return shader->variant_op == TC_SHADER_VARIANT_NONE ||
+           shader->variant_op == TC_SHADER_VARIANT_SKINNING ||
            shader->variant_op == TC_SHADER_VARIANT_FOLIAGE ||
            shader->variant_op == TC_SHADER_VARIANT_FOLIAGE_SHADOW;
 }
@@ -450,9 +450,13 @@ TcShader assemble_material_shader_override(const MaterialShaderOverrideRequest& 
         return TcShader();
     }
 
-    if (shader_variant_op != TC_SHADER_VARIANT_NONE) {
-        assembly.shader.set_variant_info(original_shader, shader_variant_op);
-    }
+    // A static material-pipeline shader is still derived from the authored
+    // material shader: its vertex stage and assembled ABI contract belong to
+    // the selected pass/transform.  Keep the original relationship even when
+    // no deformation operation is applied so canonical cache entries can be
+    // reused and invalidated on material shader reloads in exactly the same
+    // way as skinned and foliage variants.
+    assembly.shader.set_variant_info(original_shader, shader_variant_op);
     if (!tc_shader_has_contract(assembly.shader.get())) {
         tc::Log::error(
             "[%s] material shader override for '%s' was created without tc_shader_contract",

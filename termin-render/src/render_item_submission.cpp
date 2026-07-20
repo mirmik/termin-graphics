@@ -276,31 +276,25 @@ RenderItemTaskRejection mesh_render_item_task_shader_planner(
             return RenderItemTaskRejection::PassVertexTransformUnsupported;
         }
     }
-    if (out_plan.vertex_transform_kind == VertexTransformKind::StaticMesh) {
-        out_plan.final_shader = request.candidate_shader;
-        out_detail = nullptr;
-        return RenderItemTaskRejection::None;
-    }
     if (!request.contract || !request.contract->shader_contract) {
-        out_detail = "skinned mesh planning requires a pass shader contract";
+        out_detail = "mesh planning requires a pass shader contract";
         return RenderItemTaskRejection::ShaderPlanningRejected;
     }
 
     MaterialShaderOverrideRequest override_request{};
     override_request.original_shader = TcShader(request.candidate_shader);
-    override_request.vertex_transform_kind = VertexTransformKind::SkinnedMesh;
+    override_request.vertex_transform_kind = out_plan.vertex_transform_kind;
     override_request.pass_contract = *request.contract->shader_contract;
-    override_request.shader_variant_op = TC_SHADER_VARIANT_SKINNING;
     override_request.debug_context = request.contract->debug_pass_name
         ? request.contract->debug_pass_name
         : "MeshRenderItemPlanner";
     TcShader planned = assemble_material_shader_override(override_request);
     if (!planned.is_valid()) {
-        out_detail = "failed to assemble the skinned mesh shader";
+        out_detail = "failed to assemble the mesh shader";
         return RenderItemTaskRejection::ShaderPlanningRejected;
     }
     if (!out_plan.set_final_shader(std::move(planned))) {
-        out_detail = "shader usage packet is full after planning the skinned mesh shader";
+        out_detail = "shader usage packet is full after planning the mesh shader";
         return RenderItemTaskRejection::ShaderPlanningRejected;
     }
     out_detail = nullptr;

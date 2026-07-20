@@ -6,6 +6,7 @@ GUARD_TEST_MAIN();
 #include <termin/render/render_task.hpp>
 
 #include <array>
+#include <cstdio>
 #include <cstring>
 
 namespace {
@@ -180,12 +181,77 @@ TEST_CASE("RenderItem draw encoder registry stores custom capabilities") {
 }
 
 TEST_CASE("RenderItem task planner accepts a supported mesh contract") {
+    tc_shader_init();
+
+    termin::TcShaderCreateInfo create_info{};
+    create_info.sources.fragment = R"(
+struct FragmentOutput { float4 color : SV_Target0; };
+[shader("fragment")]
+FragmentOutput fs_main() {
+    FragmentOutput output;
+    output.color = float4(1.0, 1.0, 1.0, 1.0);
+    return output;
+}
+)";
+    create_info.sources.name = "static-mesh-planner-material";
+    create_info.sources.fragment_entry = "fs_main";
+    create_info.uuid = "static-mesh-planner-material";
+    create_info.language = TC_SHADER_LANGUAGE_SLANG;
+    create_info.artifact_policy = TC_SHADER_ARTIFACT_REQUIRED;
+    termin::TcShader candidate = termin::TcShader::from_sources(create_info);
+    REQUIRE(candidate.is_valid());
+
+    tc_shader_resource_binding material_layout{};
+    std::snprintf(
+        material_layout.name,
+        sizeof(material_layout.name),
+        "%s",
+        TC_SHADER_RESOURCE_MATERIAL);
+    material_layout.kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    material_layout.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    material_layout.stage_mask = TC_SHADER_STAGE_FRAGMENT;
+    material_layout.size = 64u;
+    tc_shader_set_resource_layout(candidate.get(), &material_layout, 1u);
+
+    // Reproduce the authored/reflection contract that triggered the runtime
+    // regression.  The mesh planner must not pass this original all-graphics
+    // requirement through to a fragment-only material layout.
+    tc_shader_resource_requirement authored_material{};
+    std::snprintf(
+        authored_material.name,
+        sizeof(authored_material.name),
+        "%s",
+        TC_SHADER_RESOURCE_MATERIAL);
+    authored_material.kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    authored_material.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    authored_material.stage_mask = TC_SHADER_STAGE_ALL_GRAPHICS;
+    authored_material.size = 64u;
+    tc_shader_contract_desc authored_contract{};
+    authored_contract.schema_version = TC_SHADER_CONTRACT_SCHEMA_VERSION;
+    authored_contract.source_kind = TC_SHADER_CONTRACT_SOURCE_REFLECTION;
+    authored_contract.resources = &authored_material;
+    authored_contract.resource_count = 1u;
+    authored_contract.debug_name = "static-mesh-planner-authored-contract";
+    REQUIRE(tc_shader_set_contract(candidate.get(), &authored_contract));
+
     tc_render_item item{};
     item.kind = TC_RENDER_ITEM_KIND_MESH;
     item.flags = TC_RENDER_ITEM_FLAG_HAS_MODEL_MATRIX;
     tc_material_phase phase{};
 
     termin::MaterialPipelinePassContract shader_contract{};
+    shader_contract.debug_name = "planner_test";
+    shader_contract.uses_material_fragment = true;
+    shader_contract.vertex_output_adapter =
+        termin::material_pipeline_standard_material_vertex_output_adapter();
+    shader_contract.static_vertex_transform =
+        termin::material_pipeline_make_static_mesh_vertex_transform_provider(
+            "static",
+            termin::MeshVertexTransformProfile::Material,
+            "draw_data.u_model");
+    shader_contract.static_vertex_transform->resources.push_back(
+        termin::material_pipeline_draw_resource_decl(
+            "draw_data", TC_SHADER_STAGE_VERTEX, 64u));
     termin::RenderItemTaskPlanningContract contract{};
     contract.phase = TC_PHASE_OPAQUE;
     contract.material_phase_policy = termin::RenderItemMaterialPhasePolicy::Required;
@@ -203,8 +269,7 @@ TEST_CASE("RenderItem task planner accepts a supported mesh contract") {
     request.item_index = 7u;
     request.source_draw_index = 3u;
     request.material_phase = &phase;
-    request.candidate_shader.index = 1u;
-    request.candidate_shader.generation = 1u;
+    request.candidate_shader = candidate.handle;
     request.contract = &contract;
 
     termin::RenderTaskList tasks;
@@ -220,6 +285,25 @@ TEST_CASE("RenderItem task planner accepts a supported mesh contract") {
     CHECK(task.phase == TC_PHASE_OPAQUE);
     CHECK(task.has_vertex_transform_kind);
     CHECK(task.vertex_transform_kind == termin::VertexTransformKind::StaticMesh);
+    CHECK_FALSE(tc_shader_handle_eq(task.final_shader, candidate.handle));
+    tc_shader* planned_shader = tc_shader_get(task.final_shader);
+    REQUIRE(planned_shader != nullptr);
+    tc_shader_contract_view planned_contract{};
+    REQUIRE(tc_shader_get_contract_view(planned_shader, &planned_contract));
+    REQUIRE(planned_contract.resource_count > 0u);
+    const tc_shader_resource_requirement* planned_material = nullptr;
+    for (uint32_t i = 0; i < planned_contract.resource_count; ++i) {
+        if (std::strcmp(
+                planned_contract.resources[i].name,
+                TC_SHADER_RESOURCE_MATERIAL) == 0) {
+            planned_material = &planned_contract.resources[i];
+            break;
+        }
+    }
+    REQUIRE(planned_material != nullptr);
+    CHECK(planned_material->stage_mask == TC_SHADER_STAGE_FRAGMENT);
+
+    tc_shader_shutdown();
 }
 
 TEST_CASE("RenderItem task planner delegates final shader selection to the encoder hook") {

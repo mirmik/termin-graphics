@@ -768,3 +768,47 @@ TEST_CASE("material shader overrides stay canonical across frame-local owners") 
 
     tc_shader_shutdown();
 }
+
+TEST_CASE("static material shader overrides are canonical derived shaders") {
+    tc_shader_init();
+
+    termin::MaterialPipelineMaterialContract material = material_contract();
+    termin::MaterialPipelinePassContract pass = material_pass_contract();
+    termin::MaterialShaderOverrideRequest request{};
+    request.original_shader = material.shader;
+    request.vertex_transform_kind = termin::VertexTransformKind::StaticMesh;
+    request.pass_contract = pass;
+    request.debug_context = "canonical-static-override-test";
+
+    termin::TcShader first = termin::assemble_material_shader_override(request);
+    REQUIRE(first.is_valid());
+    REQUIRE(first.get() != nullptr);
+    CHECK_FALSE(tc_shader_handle_eq(first.handle, material.shader.handle));
+    CHECK(first.is_variant());
+    CHECK(first.variant_op() == TC_SHADER_VARIANT_NONE);
+    CHECK(tc_shader_handle_eq(first.original().handle, material.shader.handle));
+
+    tc_shader_contract_view view{};
+    REQUIRE(tc_shader_get_contract_view(first.get(), &view));
+    const tc_shader_resource_requirement* material_resource =
+        contract_resource(view, TC_SHADER_RESOURCE_MATERIAL);
+    REQUIRE(material_resource != nullptr);
+    CHECK_EQ(
+        material_resource->stage_mask,
+        static_cast<uint32_t>(TC_SHADER_STAGE_FRAGMENT));
+
+    const tc_shader_handle first_handle = first.handle;
+    first = termin::TcShader();
+    termin::TcShader second = termin::assemble_material_shader_override(request);
+    REQUIRE(second.is_valid());
+    CHECK(tc_shader_handle_eq(second.handle, first_handle));
+
+    tc_shader_bump_version(material.shader.get());
+    CHECK(tc_shader_variant_is_stale(second.handle));
+    termin::TcShader refreshed = termin::assemble_material_shader_override(request);
+    REQUIRE(refreshed.is_valid());
+    CHECK(tc_shader_handle_eq(refreshed.handle, first_handle));
+    CHECK_FALSE(tc_shader_variant_is_stale(refreshed.handle));
+
+    tc_shader_shutdown();
+}
