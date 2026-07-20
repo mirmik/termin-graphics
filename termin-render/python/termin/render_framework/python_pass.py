@@ -67,6 +67,14 @@ def unregister_python_pass_owner(owner: str) -> None:
             _registered_python_pass_types.pop(type_name, None)
 
 
+def list_python_pass_owner(owner: str) -> list[str]:
+    return sorted(
+        type_name
+        for type_name, (_cls, registered_owner) in _python_pass_registrations.items()
+        if registered_owner == owner
+    )
+
+
 atexit.register(shutdown_python_passes)
 
 
