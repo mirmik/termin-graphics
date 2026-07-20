@@ -598,6 +598,16 @@ if(BUILD_TGFX2_TESTS)
     termin_set_rpath_test(tgfx2_device_factory_test)
     add_test(NAME tgfx2_device_factory_test COMMAND tgfx2_device_factory_test)
 
+    add_executable(tgfx2_presentation_geometry_test
+        tests/test_presentation_geometry.cpp)
+    target_link_libraries(tgfx2_presentation_geometry_test PRIVATE termin_graphics2)
+    termin_set_rpath_test(tgfx2_presentation_geometry_test)
+    add_test(NAME tgfx2_presentation_geometry_test
+        COMMAND tgfx2_presentation_geometry_test)
+    if(COMMAND termin_add_test_labels)
+        termin_add_test_labels(tgfx2_presentation_geometry_test)
+    endif()
+
     if(TGFX2_ENABLE_OPENGL AND BUILD_TGFX2_WINDOW_TESTS)
         set(SDL2_OPENGL_SMOKE_FOUND FALSE)
         find_path(SDL2_OPENGL_SMOKE_INCLUDE_DIR SDL.h PATH_SUFFIXES SDL2)

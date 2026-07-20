@@ -1,6 +1,7 @@
 #include "tgfx2/d3d11/d3d11_swapchain.hpp"
 
 #include "tgfx2/d3d11/d3d11_render_device.hpp"
+#include "tgfx2/presentation_geometry.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -127,14 +128,34 @@ bool D3D11Swapchain::compose_and_present(TextureHandle color_texture, uint32_t s
             color_texture.id);
         return false;
     }
-    if (src_desc.width != width_ || src_desc.height != height_) {
+    const termin::Bounds2i destination = aspect_fit_rect(
+        src_desc.width, src_desc.height, width_, height_);
+    D3D11Texture* source = device_.get_texture(color_texture);
+    D3D11Texture* target = device_.get_texture(backbuffer_texture_);
+    if (!source || !source->texture || !target || !target->texture || !target->rtv) {
         tc::Log::error(
-            "D3D11Swapchain::compose_and_present: source size %ux%u does not match swapchain %ux%u",
-            src_desc.width,
-            src_desc.height,
-            width_,
-            height_);
+            "D3D11Swapchain::compose_and_present: stale native texture source=%u backbuffer=%u",
+            color_texture.id,
+            backbuffer_texture_.id);
         return false;
+    }
+    const bool exact_extent = destination.x0 == 0 && destination.y0 == 0 &&
+                              destination.width() == static_cast<int>(width_) &&
+                              destination.height() == static_cast<int>(height_);
+    const bool raw_copy = exact_extent && src_desc.format == target->desc.format &&
+                          src_desc.sample_count == target->desc.sample_count;
+    if (!raw_copy && src_desc.sample_count == 1 && !source->srv) {
+        tc::Log::error(
+            "D3D11Swapchain::compose_and_present: source texture id=%u requires Sampled usage for composition",
+            color_texture.id);
+        return false;
+    }
+    if (!exact_extent) {
+        device_.clear_texture(
+            backbuffer_texture_,
+            termin::Color4(0.0f, 0.0f, 0.0f, 1.0f),
+            termin::Bounds2i::from_size(
+                static_cast<int>(width_), static_cast<int>(height_)));
     }
 
     device_.blit_to_texture(
@@ -143,7 +164,7 @@ bool D3D11Swapchain::compose_and_present(TextureHandle color_texture, uint32_t s
         termin::Bounds2i::from_size(
             static_cast<int>(src_desc.width),
             static_cast<int>(src_desc.height)),
-        termin::Bounds2i::from_size(static_cast<int>(width_), static_cast<int>(height_)));
+        destination);
     return present(sync_interval);
 }
 

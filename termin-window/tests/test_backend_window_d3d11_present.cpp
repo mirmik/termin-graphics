@@ -106,6 +106,37 @@ int main() {
         }
 
         win.present(rt);
+
+        const auto present_scaled = [&](uint32_t width, uint32_t height) {
+            tgfx::TextureDesc desc = rt_desc;
+            desc.width = width;
+            desc.height = height;
+            tgfx::TextureHandle texture = dev->create_texture(desc);
+            if (!texture) return false;
+            tgfx::RenderPassDesc scaled_pass;
+            tgfx::ColorAttachmentDesc scaled_color = color;
+            scaled_color.texture = texture;
+            scaled_pass.colors.push_back(scaled_color);
+            auto scaled_cmd = dev->create_command_list();
+            scaled_cmd->begin();
+            scaled_cmd->begin_render_pass(scaled_pass);
+            scaled_cmd->end_render_pass();
+            scaled_cmd->end();
+            dev->submit(*scaled_cmd);
+            win.present(texture);
+            dev->wait_idle();
+            dev->destroy(texture);
+            return true;
+        };
+        if (!present_scaled(160, 120) || !present_scaled(640, 480) ||
+            !present_scaled(320, 180) || !present_scaled(180, 320)) {
+            std::fprintf(stderr, "BackendWindow D3D11 smoke: scaled source creation failed\n");
+            dev->destroy(rt);
+            return 1;
+        }
+
+        win.set_size(400, 300);
+        win.present(rt);
         dev->wait_idle();
         dev->destroy(rt);
         win.close();
