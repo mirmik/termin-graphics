@@ -1,7 +1,6 @@
 #include <termin/render/tc_scene_render_ext.hpp>
 
 #include <tcbase/tc_value_trent.hpp>
-#include <termin/render/scene_pipeline_template.hpp>
 
 extern "C" {
 #include "core/tc_scene_render_mount.h"
@@ -301,25 +300,25 @@ std::vector<RenderTargetConfig> scene_render_target_configs(const TcSceneRef& sc
     return result;
 }
 
-void scene_add_pipeline_template(const TcSceneRef& scene, const TcScenePipelineTemplate& templ) {
-    tc_scene_add_pipeline_template(scene.handle(), templ.handle());
+bool scene_add_render_pipeline(const TcSceneRef& scene, const TcRenderPipeline& pipeline) {
+    return tc_scene_add_render_pipeline(scene.handle(), pipeline.handle);
 }
 
-void scene_clear_pipeline_templates(const TcSceneRef& scene) {
-    tc_scene_clear_pipeline_templates(scene.handle());
+void scene_clear_render_pipelines(const TcSceneRef& scene) {
+    tc_scene_clear_render_pipelines(scene.handle());
 }
 
-size_t scene_pipeline_template_count(const TcSceneRef& scene) {
+size_t scene_render_pipeline_count(const TcSceneRef& scene) {
     tc_scene_render_mount* mount = tc_scene_render_mount_get(scene.handle());
-    return mount ? mount->pipeline_template_count : 0;
+    return mount ? mount->pipeline_count : 0;
 }
 
-TcScenePipelineTemplate scene_pipeline_template_at(const TcSceneRef& scene, size_t index) {
+TcRenderPipeline scene_render_pipeline_at(const TcSceneRef& scene, size_t index) {
     tc_scene_render_mount* mount = tc_scene_render_mount_get(scene.handle());
-    if (!mount || index >= mount->pipeline_template_count) {
-        return TcScenePipelineTemplate(TC_SPT_HANDLE_INVALID);
+    if (!mount || index >= mount->pipeline_count) {
+        return TcRenderPipeline();
     }
-    return TcScenePipelineTemplate(mount->pipeline_templates[index]);
+    return TcRenderPipeline(mount->pipelines[index]);
 }
 
 void scene_merge_legacy_render_extensions(const nos::trent& data, nos::trent& merged_extensions) {

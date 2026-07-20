@@ -2,6 +2,8 @@
 #include "core/tc_scene_render_mount.h"
 #include "core/tc_scene.h"
 #include "core/tc_scene_extension.h"
+#include "render/tc_render_pipeline_registry.h"
+#include <tcbase/tc_log.h>
 #include "tc_value.h"
 #include <stdlib.h>
 #include <string.h>
@@ -38,13 +40,14 @@ static bool value_to_uint64(const tc_value* v, uint64_t* out) {
 
 static void render_mount_ensure_pipeline_capacity(tc_scene_render_mount* mount, size_t needed) {
     if (!mount) return;
-    if (mount->pipeline_template_capacity >= needed) return;
-    size_t new_cap = (mount->pipeline_template_capacity == 0) ? 4 : mount->pipeline_template_capacity * 2;
+    if (mount->pipeline_capacity >= needed) return;
+    size_t new_cap = (mount->pipeline_capacity == 0) ? 4 : mount->pipeline_capacity * 2;
     while (new_cap < needed) new_cap *= 2;
-    tc_spt_handle* p = (tc_spt_handle*)realloc(mount->pipeline_templates, new_cap * sizeof(tc_spt_handle));
+    tc_render_pipeline_handle* p = (tc_render_pipeline_handle*)realloc(
+        mount->pipelines, new_cap * sizeof(tc_render_pipeline_handle));
     if (!p) return;
-    mount->pipeline_templates = p;
-    mount->pipeline_template_capacity = new_cap;
+    mount->pipelines = p;
+    mount->pipeline_capacity = new_cap;
 }
 
 static void render_mount_ensure_viewport_capacity(tc_scene_render_mount* mount, size_t needed) {
@@ -79,10 +82,18 @@ static void render_mount_destroy(void* ext, void* type_userdata) {
     (void)type_userdata;
     if (!ext) return;
     tc_scene_render_mount* mount = (tc_scene_render_mount*)ext;
+    for (size_t i = 0; i < mount->pipeline_count; ++i) {
+        tc_render_pipeline* pipeline = tc_render_pipeline_get(mount->pipelines[i]);
+        if (pipeline) {
+            tc_render_pipeline_release(pipeline);
+        } else {
+            tc_log_error("[tc_scene_render_mount] stale pipeline handle during destroy");
+        }
+    }
     for (size_t i = 0; i < mount->render_target_config_count; i++) {
         tc_render_target_config_free(&mount->render_target_configs[i]);
     }
-    free(mount->pipeline_templates);
+    free(mount->pipelines);
     free(mount->viewport_configs);
     free(mount->render_target_configs);
     free(mount);
@@ -281,10 +292,13 @@ static bool render_mount_serialize(void* ext, tc_value* out_data, void* type_use
     tc_scene_render_mount* mount = (tc_scene_render_mount*)ext;
 
     tc_value pipelines = tc_value_list_new();
-    for (size_t i = 0; i < mount->pipeline_template_count; i++) {
-        tc_spt_handle h = mount->pipeline_templates[i];
-        if (!tc_spt_is_valid(h)) continue;
-        const char* uuid = tc_spt_get_uuid(h);
+    for (size_t i = 0; i < mount->pipeline_count; i++) {
+        tc_render_pipeline* pipeline = tc_render_pipeline_get(mount->pipelines[i]);
+        if (!pipeline) {
+            tc_log_error("[tc_scene_render_mount] stale pipeline handle during serialization");
+            continue;
+        }
+        const char* uuid = pipeline->header.uuid;
         if (!uuid || !uuid[0]) continue;
         tc_value p = tc_value_dict_new();
         tc_value_dict_set(&p, "uuid", tc_value_string(uuid));
@@ -315,7 +329,12 @@ static bool render_mount_deserialize(void* ext, const tc_value* in_data, void* t
     for (size_t i = 0; i < mount->render_target_config_count; i++) {
         tc_render_target_config_free(&mount->render_target_configs[i]);
     }
-    mount->pipeline_template_count = 0;
+    tc_scene_render_mount* existing_mount = mount;
+    for (size_t i = 0; i < existing_mount->pipeline_count; ++i) {
+        tc_render_pipeline* pipeline = tc_render_pipeline_get(existing_mount->pipelines[i]);
+        if (pipeline) tc_render_pipeline_release(pipeline);
+    }
+    mount->pipeline_count = 0;
     mount->viewport_config_count = 0;
     mount->render_target_config_count = 0;
 
@@ -328,9 +347,16 @@ static bool render_mount_deserialize(void* ext, const tc_value* in_data, void* t
             if (!item || item->type != TC_VALUE_DICT) continue;
             tc_value* uuid = tc_value_dict_get(item, "uuid");
             if (!uuid || uuid->type != TC_VALUE_STRING || !uuid->data.s || !uuid->data.s[0]) continue;
-            tc_spt_handle h = tc_spt_find_by_uuid(uuid->data.s);
-            if (!tc_spt_is_valid(h)) continue;
-            mount->pipeline_templates[mount->pipeline_template_count++] = h;
+            tc_render_pipeline_handle h = tc_render_pipeline_find(uuid->data.s);
+            tc_render_pipeline* pipeline = tc_render_pipeline_get(h);
+            if (!pipeline) {
+                tc_log_error(
+                    "[tc_scene_render_mount] canonical pipeline '%s' is not registered",
+                    uuid->data.s);
+                return false;
+            }
+            tc_render_pipeline_retain(pipeline);
+            mount->pipelines[mount->pipeline_count++] = h;
         }
     }
 
@@ -440,49 +466,74 @@ tc_viewport_config* tc_scene_viewport_config_at(tc_scene_handle h, size_t index)
     return &mount->viewport_configs[index];
 }
 
-void tc_scene_add_pipeline_template(tc_scene_handle h, tc_spt_handle spt) {
-    if (!tc_scene_alive(h)) return;
-    if (!tc_spt_is_valid(spt)) return;
-    if (!tc_scene_render_mount_ensure(h)) return;
+bool tc_scene_add_render_pipeline(tc_scene_handle h, tc_render_pipeline_handle pipeline_handle) {
+    if (!tc_scene_alive(h)) return false;
+    tc_render_pipeline* pipeline = tc_render_pipeline_get(pipeline_handle);
+    if (!pipeline) {
+        tc_log_error("[tc_scene_render_mount] cannot add stale pipeline handle");
+        return false;
+    }
+    if (!tc_scene_render_mount_ensure(h)) return false;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    if (!mount) return;
+    if (!mount) return false;
 
-    render_mount_ensure_pipeline_capacity(mount, mount->pipeline_template_count + 1);
-    mount->pipeline_templates[mount->pipeline_template_count++] = spt;
+    render_mount_ensure_pipeline_capacity(mount, mount->pipeline_count + 1);
+    if (mount->pipeline_capacity < mount->pipeline_count + 1) {
+        tc_log_error("[tc_scene_render_mount] pipeline storage allocation failed");
+        return false;
+    }
+    tc_render_pipeline_retain(pipeline);
+    mount->pipelines[mount->pipeline_count++] = pipeline_handle;
+    return true;
 }
 
-void tc_scene_remove_pipeline_template(tc_scene_handle h, tc_spt_handle spt) {
-    if (!tc_scene_alive(h)) return;
+bool tc_scene_remove_render_pipeline(tc_scene_handle h, tc_render_pipeline_handle pipeline_handle) {
+    if (!tc_scene_alive(h)) return false;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    if (!mount) return;
+    if (!mount) return false;
 
-    for (size_t i = 0; i < mount->pipeline_template_count; i++) {
-        if (tc_spt_handle_eq(mount->pipeline_templates[i], spt)) {
-            mount->pipeline_templates[i] = mount->pipeline_templates[--mount->pipeline_template_count];
-            return;
+    for (size_t i = 0; i < mount->pipeline_count; i++) {
+        if (tc_render_pipeline_handle_eq(mount->pipelines[i], pipeline_handle)) {
+            tc_render_pipeline* pipeline = tc_render_pipeline_get(pipeline_handle);
+            mount->pipelines[i] = mount->pipelines[--mount->pipeline_count];
+            if (pipeline) {
+                tc_render_pipeline_release(pipeline);
+            } else {
+                tc_log_error("[tc_scene_render_mount] stale pipeline handle during removal");
+            }
+            return true;
         }
     }
+    return false;
 }
 
-void tc_scene_clear_pipeline_templates(tc_scene_handle h) {
+void tc_scene_clear_render_pipelines(tc_scene_handle h) {
     if (!tc_scene_alive(h)) return;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
     if (!mount) return;
-    mount->pipeline_template_count = 0;
+    for (size_t i = 0; i < mount->pipeline_count; ++i) {
+        tc_render_pipeline* pipeline = tc_render_pipeline_get(mount->pipelines[i]);
+        if (pipeline) {
+            tc_render_pipeline_release(pipeline);
+        } else {
+            tc_log_error("[tc_scene_render_mount] stale pipeline handle during clear");
+        }
+    }
+    mount->pipeline_count = 0;
 }
 
-size_t tc_scene_pipeline_template_count(tc_scene_handle h) {
+size_t tc_scene_render_pipeline_count(tc_scene_handle h) {
     if (!tc_scene_alive(h)) return 0;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    return mount ? mount->pipeline_template_count : 0;
+    return mount ? mount->pipeline_count : 0;
 }
 
-tc_spt_handle tc_scene_pipeline_template_at(tc_scene_handle h, size_t index) {
-    if (!tc_scene_alive(h)) return TC_SPT_HANDLE_INVALID;
+tc_render_pipeline_handle tc_scene_render_pipeline_at(tc_scene_handle h, size_t index) {
+    if (!tc_scene_alive(h)) return tc_render_pipeline_handle_invalid();
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    if (!mount) return TC_SPT_HANDLE_INVALID;
-    if (index >= mount->pipeline_template_count) return TC_SPT_HANDLE_INVALID;
-    return mount->pipeline_templates[index];
+    if (!mount) return tc_render_pipeline_handle_invalid();
+    if (index >= mount->pipeline_count) return tc_render_pipeline_handle_invalid();
+    return mount->pipelines[index];
 }
 
 void tc_scene_add_render_target_config(tc_scene_handle h, const tc_render_target_config* config) {

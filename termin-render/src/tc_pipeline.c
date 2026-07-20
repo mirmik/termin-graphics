@@ -27,9 +27,6 @@ typedef struct {
 } PipelinePool;
 
 static PipelinePool* g_pipeline_pool = NULL;
-static bool g_pipeline_registry_initialized = false;
-static uint64_t g_pipeline_resource_sequence = 1;
-
 #ifdef TERMIN_RENDER_ENABLE_TEST_HOOKS
 static size_t g_pipeline_storage_allocations_before_failure = SIZE_MAX;
 
@@ -134,15 +131,11 @@ static void tc_pipeline_strset(char** dest, const char* src) {
 }
 
 void tc_pipeline_registry_init(void) {
-    if (g_pipeline_registry_initialized) return;
-    g_pipeline_registry_initialized = true;
-    tc_render_pipeline_init();
+    tc_pipeline_pool_init();
 }
 
 void tc_pipeline_registry_shutdown(void) {
-    if (!g_pipeline_registry_initialized) return;
-    g_pipeline_registry_initialized = false;
-    tc_render_pipeline_shutdown();
+    tc_pipeline_pool_shutdown();
 }
 
 void tc_pipeline_pool_init(void) {
@@ -179,7 +172,6 @@ void tc_pipeline_pool_init(void) {
     pool->count = 0;
 
     g_pipeline_pool = pool;
-    tc_pipeline_registry_init();
 }
 
 void tc_pipeline_pool_shutdown(void) {
@@ -200,7 +192,6 @@ void tc_pipeline_pool_shutdown(void) {
     free(g_pipeline_pool);
     g_pipeline_pool = NULL;
 
-    tc_pipeline_registry_shutdown();
 }
 
 static bool pipeline_pool_grow(void) {
@@ -284,7 +275,8 @@ static tc_pipeline_handle pipeline_pool_alloc_with_resource(
     tc_pipeline* p = &g_pipeline_pool->pipelines[idx];
     p->name = name ? tc_pipeline_strdup(name) : tc_pipeline_strdup("default");
     p->resource = resource_handle;
-    tc_render_pipeline_retain(tc_render_pipeline_get(resource_handle));
+    tc_render_pipeline* resource = tc_render_pipeline_get(resource_handle);
+    if (resource) tc_render_pipeline_retain(resource);
     p->passes = NULL;
     p->pass_deleters = NULL;
     p->pass_count = 0;
@@ -314,22 +306,9 @@ tc_pipeline_handle tc_pipeline_pool_alloc(const char* name) {
 }
 
 tc_pipeline_handle tc_pipeline_create(const char* name) {
-    if (!g_pipeline_pool) {
-        tc_pipeline_pool_init();
-        if (!g_pipeline_pool) return TC_PIPELINE_HANDLE_INVALID;
-    }
-    char uuid[TC_UUID_SIZE];
-    snprintf(
-        uuid,
-        sizeof(uuid),
-        "runtime-pipeline-%016llx",
-        (unsigned long long)g_pipeline_resource_sequence++);
-    const char* resolved_name = name ? name : "default";
-    tc_render_pipeline_handle resource = tc_render_pipeline_create(uuid, resolved_name);
-    if (tc_render_pipeline_handle_is_invalid(resource)) return TC_PIPELINE_HANDLE_INVALID;
-    tc_pipeline_handle instance = pipeline_pool_alloc_with_resource(resolved_name, resource);
-    if (!tc_pipeline_handle_valid(instance)) tc_render_pipeline_remove(resource);
-    return instance;
+    return pipeline_pool_alloc_with_resource(
+        name ? name : "default",
+        tc_render_pipeline_handle_invalid());
 }
 
 void tc_pipeline_pool_free(tc_pipeline_handle h) {

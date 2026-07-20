@@ -131,3 +131,18 @@ TEST_CASE("instances share definition but isolate mutable execution state") {
     CHECK(tc_render_pipeline_remove(replacement));
     tc_pipeline_pool_shutdown();
 }
+
+TEST_CASE("runtime-only pipeline does not synthesize a canonical resource") {
+    tc_render_pipeline_init();
+    tc_pipeline_pool_init();
+
+    const size_t resource_count = tc_render_pipeline_count();
+    const tc_pipeline_handle instance = tc_pipeline_create("runtime-only");
+    REQUIRE(tc_pipeline_pool_alive(instance));
+    CHECK(tc_render_pipeline_handle_is_invalid(tc_pipeline_get_resource(instance)));
+    CHECK(tc_render_pipeline_count() == resource_count);
+
+    tc_pipeline_destroy(instance);
+    tc_pipeline_pool_shutdown();
+    tc_render_pipeline_shutdown();
+}

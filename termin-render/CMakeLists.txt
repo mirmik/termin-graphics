@@ -51,7 +51,6 @@ set(TERMIN_RENDER_SOURCES
     src/tc_light_capability.c
     src/tc_camera_capability.c
     src/tc_scene_drawable.c
-    src/tc_scene_pipeline_template.c
     src/tc_scene_render_mount.c
     src/tc_scene_render_state.c
     src/tc_scene_skybox.c
@@ -93,7 +92,6 @@ set(TERMIN_RENDER_SOURCES
     src/shader_contract.cpp
     src/tgfx2_bridge.cpp
     src/vertex_transform_contracts.cpp
-    src/scene_pipeline_template.cpp
     src/shadow.cpp
     src/tc_project_settings.c
     src/tc_inspect_pass_adapter.cpp
@@ -106,7 +104,6 @@ set(TERMIN_RENDER_HEADERS
     include/termin_render/termin_render.h
     include/termin_render/version.h
     include/core/tc_scene_lighting.h
-    include/core/tc_scene_pipeline_template.h
     include/core/tc_scene_render_mount.h
     include/core/tc_scene_render_state.h
     include/core/tc_scene_skybox.h
@@ -157,7 +154,6 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/render_item_submission.hpp
     include/termin/render/render_scene_item_collector.hpp
     include/termin/render/python_render_item.hpp
-    include/termin/render/scene_pipeline_template.hpp
     include/termin/render/shader_abi.hpp
     include/termin/render/shader_resource_apply.hpp
     include/termin/render/shader_contract.hpp
@@ -365,7 +361,6 @@ if(TERMIN_BUILD_PYTHON)
 
     nanobind_add_module(_render_framework_native NB_SHARED
         python/render_framework_bindings.cpp
-        python/scene_pipeline_template_bindings.cpp
         python/tc_pass_bindings.cpp
         python/tc_render_target_bindings.cpp
         python/render_engine_bindings.cpp

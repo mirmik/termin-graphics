@@ -24,7 +24,11 @@ struct tc_pipeline {
     bool dirty;
 };
 
+// Create a mutable runtime-only collection. It has no canonical template;
+// tc_pipeline_get_resource() returns an invalid handle.
 TC_API tc_pipeline_handle tc_pipeline_create(const char* name);
+// Instantiate a mutable execution collection that strongly retains the
+// canonical immutable/versioned template for its complete lifetime.
 TC_API tc_pipeline_handle tc_pipeline_create_from_resource(tc_render_pipeline_handle resource);
 TC_API void tc_pipeline_destroy(tc_pipeline_handle h);
 TC_API tc_pipeline* tc_pipeline_get_ptr(tc_pipeline_handle h);
