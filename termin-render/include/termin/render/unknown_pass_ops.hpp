@@ -23,6 +23,15 @@ struct RENDER_API UnknownPassPreparationHooks {
     std::function<tc_pass*()> create_replacement;
 };
 
+class UnknownPassDegradationPlan;
+
+RENDER_API bool prepare_passes_to_unknown(
+    const std::vector<std::string>& type_names,
+    UnknownPassDegradationPlan& plan,
+    std::string* error,
+    const UnknownPassPreparationHooks& hooks
+);
+
 class RENDER_API UnknownPassDegradationPlan {
 public:
     UnknownPassDegradationPlan();
@@ -43,7 +52,7 @@ private:
     struct Impl;
     std::unique_ptr<Impl> _impl;
 
-    friend bool prepare_passes_to_unknown(
+    friend RENDER_API bool prepare_passes_to_unknown(
         const std::vector<std::string>&,
         UnknownPassDegradationPlan&,
         std::string*,
