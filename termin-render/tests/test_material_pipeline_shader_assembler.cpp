@@ -24,6 +24,18 @@ VertexOutput vs_main() {
 }
 )";
 
+constexpr const char* kPositionVertexSource = R"(
+import termin_prelude;
+struct VertexInput { float3 position : POSITION; };
+struct VertexOutput { float4 position : SV_Position; };
+[shader("vertex")]
+VertexOutput vs_main(VertexInput input) {
+    VertexOutput output;
+    output.position = float4(input.position, 1.0);
+    return output;
+}
+)";
+
 constexpr const char* kFragmentSource = R"(
 struct FragmentOutput { float4 color : SV_Target0; };
 [shader("fragment")]
@@ -809,6 +821,57 @@ TEST_CASE("static material shader overrides are canonical derived shaders") {
     REQUIRE(refreshed.is_valid());
     CHECK(tc_shader_handle_eq(refreshed.handle, first_handle));
     CHECK_FALSE(tc_shader_variant_is_stale(refreshed.handle));
+
+    tc_shader_shutdown();
+}
+
+TEST_CASE("static authored vertex interface is not widened by material pipeline planning") {
+    tc_shader_init();
+
+    termin::TcShaderCreateInfo create_info{};
+    create_info.sources.vertex = kPositionVertexSource;
+    create_info.sources.fragment = kFragmentSource;
+    create_info.sources.name = "authored-static-position-material";
+    create_info.sources.vertex_entry = "vs_main";
+    create_info.sources.fragment_entry = "fs_main";
+    create_info.language = TC_SHADER_LANGUAGE_SLANG;
+    create_info.artifact_policy = TC_SHADER_ARTIFACT_REQUIRED;
+    termin::TcShader shader = termin::TcShader::from_sources(create_info);
+    REQUIRE(shader.is_valid());
+
+    tc_shader_contract_vertex_input position{};
+    std::snprintf(position.semantic, sizeof(position.semantic), "%s", "position");
+    position.type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
+    position.required = 1;
+    tc_shader_contract_desc contract{};
+    contract.source_kind = TC_SHADER_CONTRACT_SOURCE_DECLARED;
+    contract.vertex_inputs = &position;
+    contract.vertex_input_count = 1;
+    contract.debug_name = "authored-static-position-material";
+    REQUIRE(tc_shader_set_contract(shader.get(), &contract));
+
+    termin::MaterialShaderOverrideRequest request{};
+    request.original_shader = shader;
+    request.vertex_transform_kind = termin::VertexTransformKind::StaticMesh;
+    request.pass_contract = material_pass_contract();
+    request.debug_context = "authored-static-position-test";
+
+    termin::TcShader planned = termin::assemble_material_shader_override(request);
+    REQUIRE(planned.is_valid());
+    CHECK(tc_shader_handle_eq(planned.handle, shader.handle));
+    CHECK_FALSE(planned.is_variant());
+    CHECK(
+        termin::material_mesh_vertex_input_for_shader(
+            planned.get(),
+            termin::MaterialMeshVertexInput::FullMaterial) ==
+        termin::MaterialMeshVertexInput::Position);
+
+    tc_shader_contract_view view{};
+    REQUIRE(tc_shader_get_contract_view(planned.get(), &view));
+    CHECK(contract_has_vertex_input(view, "position"));
+    CHECK_FALSE(contract_has_vertex_input(view, "normal"));
+    CHECK_FALSE(contract_has_vertex_input(view, "uv"));
+    CHECK_FALSE(contract_has_vertex_input(view, "tangent"));
 
     tc_shader_shutdown();
 }

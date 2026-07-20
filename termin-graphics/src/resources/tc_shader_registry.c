@@ -1517,3 +1517,94 @@ bool tc_shader_get_contract_view(
     out->source_debug_name = shader->contract.source_debug_name;
     return true;
 }
+
+bool tc_shader_sync_reflected_contract_resources(tc_shader* shader) {
+    if (!shader) {
+        tc_log(
+            TC_LOG_ERROR,
+            "tc_shader_sync_reflected_contract_resources called with NULL shader");
+        return false;
+    }
+    if (!tc_shader_has_resource_layout(shader)) {
+        tc_log(
+            TC_LOG_ERROR,
+            "tc_shader_sync_reflected_contract_resources: shader '%s' has no known resource layout",
+            shader->name ? shader->name : shader->uuid);
+        return false;
+    }
+
+    tc_shader_contract_view existing;
+    const bool has_existing = tc_shader_get_contract_view(shader, &existing);
+    if (has_existing &&
+        existing.source_kind != TC_SHADER_CONTRACT_SOURCE_DECLARED &&
+        existing.source_kind != TC_SHADER_CONTRACT_SOURCE_REFLECTION) {
+        return true;
+    }
+
+    const uint32_t binding_count = shader->resource_binding_count;
+    tc_shader_resource_requirement* requirements = NULL;
+    if (binding_count > 0) {
+        requirements = (tc_shader_resource_requirement*)calloc(
+            binding_count,
+            sizeof(tc_shader_resource_requirement));
+        if (!requirements) {
+            tc_log(
+                TC_LOG_ERROR,
+                "tc_shader_sync_reflected_contract_resources: allocation failed (%u entries)",
+                binding_count);
+            return false;
+        }
+    }
+
+    uint32_t requirement_count = 0;
+    for (uint32_t i = 0; i < binding_count; ++i) {
+        const tc_shader_resource_binding* binding = &shader->resource_bindings[i];
+        if (binding->name[0] == '\0' ||
+            binding->kind == TC_SHADER_RESOURCE_NONE ||
+            binding->stage_mask == TC_SHADER_STAGE_NONE) {
+            continue;
+        }
+
+        tc_shader_resource_requirement* requirement =
+            &requirements[requirement_count++];
+        snprintf(
+            requirement->name,
+            sizeof(requirement->name),
+            "%s",
+            binding->name);
+        requirement->kind = binding->kind;
+        requirement->scope = binding->scope;
+        requirement->stage_mask = binding->stage_mask;
+        requirement->size = binding->size;
+        requirement->element_stride = 0;
+        requirement->fields = binding->fields;
+        requirement->field_count = binding->field_count;
+    }
+
+    tc_shader_contract_desc desc;
+    memset(&desc, 0, sizeof(desc));
+    desc.schema_version = TC_SHADER_CONTRACT_SCHEMA_VERSION;
+    desc.source_kind = has_existing
+        ? existing.source_kind
+        : TC_SHADER_CONTRACT_SOURCE_REFLECTION;
+    desc.vertex_inputs = has_existing ? existing.vertex_inputs : NULL;
+    desc.vertex_input_count = has_existing ? existing.vertex_input_count : 0;
+    desc.resources = requirements;
+    desc.resource_count = requirement_count;
+    desc.debug_name = has_existing && existing.debug_name
+        ? existing.debug_name
+        : (shader->name ? shader->name : shader->uuid);
+    desc.source_debug_name = has_existing && existing.source_debug_name
+        ? existing.source_debug_name
+        : "compiler resource layout reflection";
+
+    const bool result = tc_shader_set_contract(shader, &desc);
+    free(requirements);
+    if (!result) {
+        tc_log(
+            TC_LOG_ERROR,
+            "tc_shader_sync_reflected_contract_resources: failed for shader '%s'",
+            shader->name ? shader->name : shader->uuid);
+    }
+    return result;
+}

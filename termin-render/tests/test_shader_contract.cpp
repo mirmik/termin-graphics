@@ -142,3 +142,29 @@ TEST_CASE("shader contract validation rejects incompatible resource layout entry
     tc_shader_destroy(handle);
     tc_shader_shutdown();
 }
+
+TEST_CASE("shader contract validation still rejects a genuine stage mismatch") {
+    tc_shader_init();
+
+    tc_shader_handle handle = tc_shader_create("shader-contract-stage-incompatible");
+    tc_shader* shader = tc_shader_get(handle);
+    REQUIRE(shader != nullptr);
+
+    tc_shader_resource_binding binding = material_binding();
+    binding.stage_mask = TC_SHADER_STAGE_FRAGMENT;
+    tc_shader_set_resource_layout(shader, &binding, 1);
+
+    tc_shader_resource_requirement requirement = material_requirement();
+    requirement.stage_mask = TC_SHADER_STAGE_VERTEX | TC_SHADER_STAGE_FRAGMENT;
+    tc_shader_contract_desc desc = contract_desc(&requirement, 1);
+    desc.source_kind = TC_SHADER_CONTRACT_SOURCE_ASSEMBLED;
+    REQUIRE(tc_shader_set_contract(shader, &desc));
+
+    termin::ShaderContractValidationOptions options{};
+    options.debug_context = "contract-test";
+    options.require_contract = true;
+    CHECK(!termin::validate_shader_contract(shader, options));
+
+    tc_shader_destroy(handle);
+    tc_shader_shutdown();
+}

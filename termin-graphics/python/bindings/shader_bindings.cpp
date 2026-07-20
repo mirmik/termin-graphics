@@ -134,6 +134,101 @@ tc_render_state shader_program_render_state_from_dict(const nb::dict& values) {
     return result;
 }
 
+[[noreturn]] void throw_property_default_error(
+    const std::string& name,
+    const std::string& property_type,
+    const std::string& detail)
+{
+    throw std::invalid_argument(
+        "TcShaderProgram property '" + name + "' (" + property_type + ") " + detail);
+}
+
+void set_shader_program_property_default(
+    const std::string& name,
+    const std::string& property_type,
+    nb::handle object,
+    tc_uniform_value& default_value,
+    std::string& default_text)
+{
+    if (property_type == "Bool") {
+        if (!nb::isinstance<nb::bool_>(object)) {
+            throw_property_default_error(name, property_type, "default must be bool");
+        }
+        default_value.type = TC_UNIFORM_BOOL;
+        default_value.data.i = nb::cast<bool>(object) ? 1 : 0;
+        return;
+    }
+    if (property_type == "Int") {
+        if (nb::isinstance<nb::bool_>(object) || !nb::isinstance<nb::int_>(object)) {
+            throw_property_default_error(name, property_type, "default must be int");
+        }
+        default_value.type = TC_UNIFORM_INT;
+        default_value.data.i = nb::cast<int32_t>(object);
+        return;
+    }
+    if (property_type == "Float") {
+        const bool numeric = !nb::isinstance<nb::bool_>(object)
+            && (nb::isinstance<nb::int_>(object) || nb::isinstance<nb::float_>(object));
+        if (!numeric) {
+            throw_property_default_error(name, property_type, "default must be numeric");
+        }
+        default_value.type = TC_UNIFORM_FLOAT;
+        default_value.data.f = nb::cast<float>(object);
+        return;
+    }
+    if (property_type == "Texture" || property_type == "Texture2D") {
+        if (!nb::isinstance<nb::str>(object)) {
+            throw_property_default_error(name, property_type, "default must be a texture name");
+        }
+        default_text = nb::cast<std::string>(object);
+        return;
+    }
+
+    size_t expected_size = 0;
+    tc_uniform_type uniform_type = TC_UNIFORM_NONE;
+    if (property_type == "Vec2") {
+        expected_size = 2;
+        uniform_type = TC_UNIFORM_VEC2;
+    } else if (property_type == "Vec3") {
+        expected_size = 3;
+        uniform_type = TC_UNIFORM_VEC3;
+    } else if (property_type == "Vec4" || property_type == "Color") {
+        expected_size = 4;
+        uniform_type = TC_UNIFORM_VEC4;
+    } else if (property_type == "Mat4") {
+        expected_size = 16;
+        uniform_type = TC_UNIFORM_MAT4;
+    } else {
+        throw_property_default_error(name, property_type, "has an unsupported default type");
+    }
+
+    if (!nb::isinstance<nb::tuple>(object) && !nb::isinstance<nb::list>(object)) {
+        throw_property_default_error(name, property_type, "default must be a sequence");
+    }
+    nb::sequence sequence = nb::cast<nb::sequence>(object);
+    const size_t size = nb::len(sequence);
+    if (size != expected_size) {
+        throw_property_default_error(
+            name,
+            property_type,
+            "default requires exactly " + std::to_string(expected_size) + " components; got "
+                + std::to_string(size));
+    }
+
+    default_value.type = uniform_type;
+    float* destination = nullptr;
+    switch (uniform_type) {
+        case TC_UNIFORM_VEC2: destination = default_value.data.v2; break;
+        case TC_UNIFORM_VEC3: destination = default_value.data.v3; break;
+        case TC_UNIFORM_VEC4: destination = default_value.data.v4; break;
+        case TC_UNIFORM_MAT4: destination = default_value.data.m4; break;
+        default: break;
+    }
+    for (size_t component = 0; component < expected_size; ++component) {
+        destination[component] = nb::cast<float>(sequence[component]);
+    }
+}
+
 } // namespace
 
 void bind_shader(nb::module_& m) {
@@ -525,6 +620,14 @@ void bind_shader(nb::module_& m) {
                                 property.default_value.data.v4[2],
                                 property.default_value.data.v4[3]);
                             break;
+                        case TC_UNIFORM_MAT4: {
+                            nb::list components;
+                            for (size_t component = 0; component < 16; ++component) {
+                                components.append(property.default_value.data.m4[component]);
+                            }
+                            item["default"] = nb::tuple(components);
+                            break;
+                        }
                         default:
                             item["default"] = nb::none();
                             break;
@@ -594,44 +697,12 @@ void bind_shader(nb::module_& m) {
                 if (item.contains("default") && !item["default"].is_none()) {
                     nb::object object = nb::borrow<nb::object>(item["default"]);
                     has_defaults[i] = 1;
-                    if (nb::isinstance<nb::bool_>(object)) {
-                        default_value.type = TC_UNIFORM_BOOL;
-                        default_value.data.i = nb::cast<bool>(object) ? 1 : 0;
-                    } else if (nb::isinstance<nb::int_>(object)) {
-                        default_value.type = TC_UNIFORM_INT;
-                        default_value.data.i = nb::cast<int32_t>(object);
-                    } else if (nb::isinstance<nb::float_>(object)) {
-                        default_value.type = TC_UNIFORM_FLOAT;
-                        default_value.data.f = nb::cast<float>(object);
-                    } else if (nb::isinstance<nb::str>(object)) {
-                        default_texts[i] = nb::cast<std::string>(object);
-                    } else if (
-                        nb::isinstance<nb::tuple>(object)
-                        || nb::isinstance<nb::list>(object)) {
-                        nb::sequence sequence = nb::cast<nb::sequence>(object);
-                        const size_t size = nb::len(sequence);
-                        if (size < 2 || size > 4) {
-                            throw std::invalid_argument(
-                                "TcShaderProgram vector defaults require 2-4 components");
-                        }
-                        float components[4] = {};
-                        for (size_t component = 0; component < size; ++component) {
-                            components[component] = nb::cast<float>(sequence[component]);
-                        }
-                        if (size == 2) {
-                            default_value.type = TC_UNIFORM_VEC2;
-                            memcpy(default_value.data.v2, components, sizeof(float) * 2);
-                        } else if (size == 3) {
-                            default_value.type = TC_UNIFORM_VEC3;
-                            memcpy(default_value.data.v3, components, sizeof(float) * 3);
-                        } else {
-                            default_value.type = TC_UNIFORM_VEC4;
-                            memcpy(default_value.data.v4, components, sizeof(float) * 4);
-                        }
-                    } else {
-                        throw std::invalid_argument(
-                            "TcShaderProgram property default has an unsupported type");
-                    }
+                    set_shader_program_property_default(
+                        property_names.back(),
+                        property_types.back(),
+                        object,
+                        default_value,
+                        default_texts[i]);
                 }
                 tc_shader_program_property_desc desc{};
                 desc.name = property_names.back().c_str();

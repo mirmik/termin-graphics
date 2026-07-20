@@ -213,6 +213,11 @@ def test_shader_program_registry_owns_canonical_multiphase_payload():
                 "property_type": "Texture2D",
                 "default": "normal",
             },
+            {
+                "name": "transform",
+                "property_type": "Mat4",
+                "default": tuple(float(component) for component in range(16)),
+            },
         ],
         phases=[
             {"phase_mark": "opaque", "priority": 4},
@@ -256,12 +261,44 @@ def test_shader_program_registry_owns_canonical_multiphase_payload():
             "range_min": None,
             "range_max": None,
         },
+        {
+            "name": "transform",
+            "property_type": "Mat4",
+            "label": "",
+            "has_default": True,
+            "default": tuple(float(component) for component in range(16)),
+            "range_min": None,
+            "range_max": None,
+        },
     ]
     phases = program.phases
     assert [phase["phase_mark"] for phase in phases] == ["opaque", "transparent"]
     assert phases[0]["shader"].uuid != phases[1]["shader"].uuid
     assert program.find_phase("transparent")["state"]["blend"] is True
     assert program.find_phase("missing") is None
+
+
+def test_shader_program_rejects_default_shape_mismatched_with_property_type():
+    program = tgfx.TcShaderProgram.declare(
+        "python-shader-program-invalid-default",
+        "Invalid Default",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"property 'transform' \(Mat4\) default requires exactly 16 components; got 4",
+    ):
+        program.set_payload(
+            name="Invalid Default",
+            properties=[
+                {
+                    "name": "transform",
+                    "property_type": "Mat4",
+                    "default": (1.0, 0.0, 0.0, 1.0),
+                }
+            ],
+            phases=[],
+        )
 
 
 def test_tc_material_does_not_expose_legacy_from_parsed_forwarder():

@@ -1764,7 +1764,18 @@ bool tc_shader_ensure_tgfx2(
         tc_log(TC_LOG_ERROR, "tc_shader_ensure_tgfx2: out_fs is NULL");
         return false;
     }
-    return device->ensure_tc_shader(shader, out_vs, out_fs);
+    if (!device->ensure_tc_shader(shader, out_vs, out_fs)) {
+        return false;
+    }
+    if (tc_shader_has_resource_layout(shader) &&
+        !tc_shader_sync_reflected_contract_resources(shader)) {
+        tc_log(
+            TC_LOG_ERROR,
+            "tc_shader_ensure_tgfx2: failed to synchronize reflected contract for '%s'",
+            shader->name ? shader->name : shader->uuid);
+        return false;
+    }
+    return true;
 }
 
 } // namespace termin

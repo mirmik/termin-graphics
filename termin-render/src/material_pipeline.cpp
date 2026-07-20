@@ -359,6 +359,23 @@ TcShader assemble_material_shader_override(const MaterialShaderOverrideRequest& 
 
     MaterialPipelinePassContract pass_contract = *request.pass_contract;
 
+    // A static authored vertex stage already is the transform contract for
+    // the material. Reassembling it through the pass's generic Material
+    // provider discards that authored mesh interface and can introduce inputs
+    // the shader never requested (notably tangent for position-only debug
+    // materials). Deformation transforms and pass-owned fragment overrides
+    // still require assembly, as do fragment-only material shaders.
+    const bool authored_static_material_shader =
+        request.vertex_transform_kind == VertexTransformKind::StaticMesh &&
+        !request.vertex_transform_contract.has_value() &&
+        shader_variant_op == TC_SHADER_VARIANT_NONE &&
+        pass_contract.uses_material_fragment &&
+        pass_contract.fragment_source_override.empty() &&
+        original_shader.vertex_source()[0] != '\0';
+    if (authored_static_material_shader) {
+        return original_shader;
+    }
+
     std::optional<VertexTransformContract> vertex_transform_contract_opt =
         request.vertex_transform_contract.has_value()
             ? request.vertex_transform_contract

@@ -433,6 +433,13 @@ TGFX_API bool tc_shader_get_contract_view(
     tc_shader_contract_view* out
 );
 
+// Synchronize the effective resource requirements with the complete compiler
+// resource layout. Declared contracts keep their authored vertex inputs while
+// reflection becomes authoritative for resource kind/scope/stage/size. Pure
+// reflection contracts are refreshed as additional stage sidecars are merged.
+// Assembled/generated contracts are intentionally left unchanged.
+TGFX_API bool tc_shader_sync_reflected_contract_resources(tc_shader* shader);
+
 #ifdef __cplusplus
 }
 #endif

@@ -315,6 +315,132 @@ TEST_CASE("shader contract resources are independent from shader resource layout
     tc_shader_shutdown();
 }
 
+TEST_CASE("declared shader contract resources synchronize from compiler layout explicitly") {
+    tc_shader_init();
+
+    tc_shader_handle handle = tc_shader_create("declared-contract-reflection-sync-test");
+    REQUIRE(!tc_shader_handle_is_invalid(handle));
+    tc_shader* shader = tc_shader_get(handle);
+    REQUIRE(shader != nullptr);
+
+    tc_shader_contract_vertex_input vertex_input{};
+    std::snprintf(vertex_input.semantic, sizeof(vertex_input.semantic), "%s", "position");
+    vertex_input.type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
+    vertex_input.required = 1;
+
+    tc_shader_resource_requirement declared{};
+    std::snprintf(declared.name, sizeof(declared.name), "%s", "material");
+    declared.kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    declared.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    declared.stage_mask = TC_SHADER_STAGE_ALL_GRAPHICS;
+    declared.size = 224;
+
+    tc_shader_contract_desc desc{};
+    desc.source_kind = TC_SHADER_CONTRACT_SOURCE_DECLARED;
+    desc.vertex_inputs = &vertex_input;
+    desc.vertex_input_count = 1;
+    desc.resources = &declared;
+    desc.resource_count = 1;
+    desc.debug_name = "declared-contract-reflection-sync-test";
+    desc.source_debug_name = "test parser";
+    REQUIRE(tc_shader_set_contract(shader, &desc));
+
+    tc_shader_resource_binding fragment_resources[2]{};
+    std::snprintf(
+        fragment_resources[0].name,
+        sizeof(fragment_resources[0].name),
+        "%s",
+        "material");
+    fragment_resources[0].kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    fragment_resources[0].scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    fragment_resources[0].stage_mask = TC_SHADER_STAGE_FRAGMENT;
+    fragment_resources[0].size = 224;
+    std::snprintf(
+        fragment_resources[1].name,
+        sizeof(fragment_resources[1].name),
+        "%s",
+        "u_color_texture");
+    fragment_resources[1].kind = TC_SHADER_RESOURCE_TEXTURE;
+    fragment_resources[1].scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    fragment_resources[1].stage_mask = TC_SHADER_STAGE_FRAGMENT;
+    tc_shader_set_resource_layout(shader, fragment_resources, 2);
+
+    REQUIRE(tc_shader_sync_reflected_contract_resources(shader));
+    tc_shader_contract_view view{};
+    REQUIRE(tc_shader_get_contract_view(shader, &view));
+    CHECK_EQ(view.source_kind, TC_SHADER_CONTRACT_SOURCE_DECLARED);
+    REQUIRE_EQ(view.vertex_input_count, 1u);
+    CHECK(std::strcmp(view.vertex_inputs[0].semantic, "position") == 0);
+    REQUIRE_EQ(view.resource_count, 2u);
+    CHECK_EQ(view.resources[0].stage_mask, TC_SHADER_STAGE_FRAGMENT);
+    CHECK_EQ(view.resources[1].stage_mask, TC_SHADER_STAGE_FRAGMENT);
+
+    tc_shader_resource_binding merged_resources[3]{};
+    merged_resources[0] = fragment_resources[0];
+    merged_resources[1] = fragment_resources[1];
+    std::snprintf(
+        merged_resources[2].name,
+        sizeof(merged_resources[2].name),
+        "%s",
+        "draw_data");
+    merged_resources[2].kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    merged_resources[2].scope = TC_SHADER_RESOURCE_SCOPE_DRAW;
+    merged_resources[2].stage_mask = TC_SHADER_STAGE_VERTEX;
+    merged_resources[2].size = 64;
+    tc_shader_set_resource_layout(shader, merged_resources, 3);
+
+    REQUIRE(tc_shader_sync_reflected_contract_resources(shader));
+    REQUIRE(tc_shader_get_contract_view(shader, &view));
+    REQUIRE_EQ(view.resource_count, 3u);
+    bool found_vertex_resource = false;
+    for (uint32_t i = 0; i < view.resource_count; ++i) {
+        if (std::strcmp(view.resources[i].name, "draw_data") == 0) {
+            found_vertex_resource = true;
+            CHECK_EQ(view.resources[i].stage_mask, TC_SHADER_STAGE_VERTEX);
+        }
+    }
+    CHECK(found_vertex_resource);
+
+    tc_shader_destroy(handle);
+    tc_shader_shutdown();
+}
+
+TEST_CASE("assembled shader contract resources are not replaced by reflection sync") {
+    tc_shader_init();
+
+    tc_shader_handle handle = tc_shader_create("assembled-contract-reflection-sync-test");
+    REQUIRE(!tc_shader_handle_is_invalid(handle));
+    tc_shader* shader = tc_shader_get(handle);
+    REQUIRE(shader != nullptr);
+
+    tc_shader_resource_requirement assembled{};
+    std::snprintf(assembled.name, sizeof(assembled.name), "%s", "assembled_only");
+    assembled.kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
+    assembled.scope = TC_SHADER_RESOURCE_SCOPE_DRAW;
+    assembled.stage_mask = TC_SHADER_STAGE_VERTEX;
+    tc_shader_contract_desc desc{};
+    desc.source_kind = TC_SHADER_CONTRACT_SOURCE_ASSEMBLED;
+    desc.resources = &assembled;
+    desc.resource_count = 1;
+    REQUIRE(tc_shader_set_contract(shader, &desc));
+
+    tc_shader_resource_binding reflected{};
+    std::snprintf(reflected.name, sizeof(reflected.name), "%s", "reflected_only");
+    reflected.kind = TC_SHADER_RESOURCE_TEXTURE;
+    reflected.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    reflected.stage_mask = TC_SHADER_STAGE_FRAGMENT;
+    tc_shader_set_resource_layout(shader, &reflected, 1);
+
+    REQUIRE(tc_shader_sync_reflected_contract_resources(shader));
+    tc_shader_contract_view view{};
+    REQUIRE(tc_shader_get_contract_view(shader, &view));
+    REQUIRE_EQ(view.resource_count, 1u);
+    CHECK(std::strcmp(view.resources[0].name, "assembled_only") == 0);
+
+    tc_shader_destroy(handle);
+    tc_shader_shutdown();
+}
+
 TEST_CASE("material UBO layout update preserves D3D11 register placement") {
     tc_shader_init();
 

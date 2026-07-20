@@ -16,6 +16,13 @@ before publishing it. A rejected property or phase leaves the previous
 payload and version unchanged. A successful replacement swaps the arrays,
 releases old phase handles, and increments the program version once.
 
+The Python binding encodes property defaults according to the declared
+`property_type`, rather than inferring their meaning from the Python value
+shape. Vector defaults therefore require exactly 2, 3, or 4 components and a
+`Mat4` default requires exactly 16. Matrix values are stored and exposed as a
+flat column-major tuple matching `Mat44f`; material construction converts that
+tuple back to a typed `Mat44f` before publishing the uniform.
+
 Ownership follows the canonical resource contract:
 
 - `create` rejects duplicate UUIDs; `declare`/`get_or_create` are idempotent;

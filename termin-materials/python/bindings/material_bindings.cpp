@@ -4,6 +4,7 @@
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/optional.h>
 #include <tgfx/tgfx_material_handle.hpp>
+#include <termin/geom/vec2.hpp>
 #include "termin/materials/shader_parser.hpp"
 #include "tgfx/render_state.hpp"
 #include <tgfx/tgfx_shader_handle.hpp>
@@ -768,6 +769,10 @@ void bind_tc_material(nb::module_& m) {
         .def("set_uniform_int", [](tc_material_phase& p, const char* name, int v) {
             tc_material_phase_set_uniform(&p, name, TC_UNIFORM_INT, &v);
         })
+        .def("set_uniform_vec2", [](tc_material_phase& p, const char* name, const Vec2& v) {
+            float arr[2] = {(float)v.x, (float)v.y};
+            tc_material_phase_set_uniform(&p, name, TC_UNIFORM_VEC2, arr);
+        })
         .def("set_uniform_vec3", [](tc_material_phase& p, const char* name, const Vec3& v) {
             float arr[3] = {(float)v.x, (float)v.y, (float)v.z};
             tc_material_phase_set_uniform(&p, name, TC_UNIFORM_VEC3, arr);
@@ -825,6 +830,10 @@ void bind_tc_material(nb::module_& m) {
             } else if (nb::isinstance<nb::float_>(value)) {
                 float v = nb::cast<float>(value);
                 tc_material_phase_set_uniform(&p, name.c_str(), TC_UNIFORM_FLOAT, &v);
+            } else if (nb::isinstance<Vec2>(value)) {
+                Vec2 v = nb::cast<Vec2>(value);
+                float arr[2] = {(float)v.x, (float)v.y};
+                tc_material_phase_set_uniform(&p, name.c_str(), TC_UNIFORM_VEC2, arr);
             } else if (nb::isinstance<Vec3>(value)) {
                 Vec3 v = nb::cast<Vec3>(value);
                 float arr[3] = {(float)v.x, (float)v.y, (float)v.z};

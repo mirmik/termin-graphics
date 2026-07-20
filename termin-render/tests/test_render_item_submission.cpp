@@ -306,6 +306,100 @@ FragmentOutput fs_main() {
     tc_shader_shutdown();
 }
 
+TEST_CASE("RenderItem planner preserves a compact authored static vertex contract") {
+    tc_shader_init();
+
+    termin::TcShaderCreateInfo create_info{};
+    create_info.sources.vertex = R"(
+struct VertexInput { float3 position : POSITION; };
+struct VertexOutput { float4 position : SV_Position; };
+[shader("vertex")]
+VertexOutput vs_main(VertexInput input) {
+    VertexOutput output;
+    output.position = float4(input.position, 1.0);
+    return output;
+}
+)";
+    create_info.sources.fragment = R"(
+struct FragmentOutput { float4 color : SV_Target0; };
+[shader("fragment")]
+FragmentOutput fs_main() {
+    FragmentOutput output;
+    output.color = float4(0.15, 0.9, 1.0, 0.35);
+    return output;
+}
+)";
+    create_info.sources.name = "static-position-debug-material";
+    create_info.sources.vertex_entry = "vs_main";
+    create_info.sources.fragment_entry = "fs_main";
+    create_info.language = TC_SHADER_LANGUAGE_SLANG;
+    create_info.artifact_policy = TC_SHADER_ARTIFACT_REQUIRED;
+    termin::TcShader candidate = termin::TcShader::from_sources(create_info);
+    REQUIRE(candidate.is_valid());
+
+    tc_shader_contract_vertex_input position{};
+    std::snprintf(position.semantic, sizeof(position.semantic), "%s", "position");
+    position.type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
+    position.required = 1;
+    tc_shader_contract_desc shader_contract_desc{};
+    shader_contract_desc.source_kind = TC_SHADER_CONTRACT_SOURCE_DECLARED;
+    shader_contract_desc.vertex_inputs = &position;
+    shader_contract_desc.vertex_input_count = 1;
+    REQUIRE(tc_shader_set_contract(candidate.get(), &shader_contract_desc));
+
+    tc_render_item item{};
+    item.kind = TC_RENDER_ITEM_KIND_MESH;
+    item.flags = TC_RENDER_ITEM_FLAG_HAS_MODEL_MATRIX;
+    tc_material_phase phase{};
+
+    termin::MaterialPipelinePassContract shader_contract{};
+    shader_contract.debug_name = "static_color";
+    shader_contract.required_material_fragment_input =
+        termin::material_pipeline_standard_material_fragment_interface();
+    shader_contract.uses_material_fragment = true;
+    shader_contract.vertex_output_adapter =
+        termin::material_pipeline_standard_material_vertex_output_adapter();
+    shader_contract.static_vertex_transform =
+        termin::material_pipeline_make_static_mesh_vertex_transform_provider(
+            "static",
+            termin::MeshVertexTransformProfile::Material,
+            "draw_data.u_model");
+
+    termin::RenderItemTaskPlanningContract contract{};
+    contract.phase = TC_PHASE_OPAQUE;
+    contract.material_phase_policy = termin::RenderItemMaterialPhasePolicy::Required;
+    contract.provided_input_mask =
+        termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
+    contract.required_input_mask =
+        termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
+    contract.accepted_vertex_transform_kind_mask =
+        termin::render_item_vertex_transform_kind_bit(
+            termin::VertexTransformKind::StaticMesh);
+    contract.shader_contract = &shader_contract;
+    contract.debug_pass_name = "static_color";
+
+    termin::RenderItemTaskPlanningRequest request{};
+    request.item = &item;
+    request.material_phase = &phase;
+    request.candidate_shader = candidate.handle;
+    request.contract = &contract;
+
+    termin::RenderTaskList tasks;
+    termin::RenderItemTaskPlanningResult result =
+        termin::plan_render_item_task(request, tasks);
+    REQUIRE(result.accepted());
+    REQUIRE_EQ(tasks.size(), 1u);
+    const termin::RenderTask& task = tasks.at(result.task_index);
+    CHECK(tc_shader_handle_eq(task.final_shader, candidate.handle));
+    CHECK(
+        termin::material_mesh_vertex_input_for_shader(
+            tc_shader_get(task.final_shader),
+            termin::MaterialMeshVertexInput::FullMaterial) ==
+        termin::MaterialMeshVertexInput::Position);
+
+    tc_shader_shutdown();
+}
+
 TEST_CASE("RenderItem task planner delegates final shader selection to the encoder hook") {
     constexpr uint32_t test_kind = 0x7fff0004u;
     termin::unregister_render_item_draw_encoder(test_kind, test_encoder, nullptr);
