@@ -730,7 +730,7 @@ void bind_mesh(nb::module_& m) {
     // =========================================================================
     m.def("tc_mesh_compute_uuid", [](nb::ndarray<float, nb::c_contig, nb::device::cpu> vertices,
                                       nb::ndarray<uint32_t, nb::c_contig, nb::device::cpu> indices) {
-        char uuid[40];
+        char uuid[TC_UUID_SIZE];
         tc_mesh_compute_uuid(vertices.data(), vertices.size() * sizeof(float),
                             indices.data(), indices.size(), uuid);
         return std::string(uuid);

@@ -39,7 +39,7 @@ TGFX_API size_t tc_texture_count(void);
 
 typedef struct tc_texture_info {
     tc_texture_handle handle;
-    char uuid[40];
+    char uuid[TC_UUID_SIZE];
     const char* name;
     const char* source_path;
     uint32_t ref_count;

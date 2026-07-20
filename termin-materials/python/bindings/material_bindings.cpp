@@ -599,6 +599,68 @@ TcMaterial create_material_from_parsed(
     return mat;
 }
 
+void configure_shader_from_parsed(
+    TcShader& shader,
+    const ShaderMultyPhaseProgramm& program,
+    const ShaderPhase& phase,
+    const std::string& name,
+    const std::string& source_path)
+{
+    tc_shader* raw = shader.get();
+    if (!raw) {
+        tc::Log::error("configure_shader_from_parsed called with a stale TcShader");
+        throw std::runtime_error("Cannot configure a stale TcShader");
+    }
+
+    const auto vertex = phase.stages.find("vertex");
+    const auto fragment = phase.stages.find("fragment");
+    const auto geometry = phase.stages.find("geometry");
+    if (vertex == phase.stages.end() || fragment == phase.stages.end()) {
+        tc::Log::error(
+            "Shader phase '%s' has no complete vertex/fragment stage pair",
+            phase.phase_mark.c_str());
+        throw std::runtime_error("Shader phase has no complete vertex/fragment stage pair");
+    }
+
+    const tc_shader_language language = shader_language_from_string(program.language);
+    shader.set_language(language);
+    shader.set_artifact_policy(artifact_policy_for_language(language));
+    shader.set_features(0);
+    for (const std::string& feature : program.features) {
+        if (feature == "lighting_ubo") {
+            shader.set_feature(TC_SHADER_FEATURE_LIGHTING_UBO);
+        }
+    }
+
+    TcShaderSources sources{};
+    sources.vertex = vertex->second.source;
+    sources.fragment = fragment->second.source;
+    sources.geometry = geometry == phase.stages.end() ? "" : geometry->second.source;
+    sources.name = name;
+    sources.source_path = source_path;
+    sources.vertex_entry = vertex->second.entry;
+    sources.fragment_entry = fragment->second.entry;
+    sources.geometry_entry = geometry == phase.stages.end() ? "" : geometry->second.entry;
+    shader.set_sources(sources);
+
+    if (std::string(shader.vertex_source()) != sources.vertex
+        || std::string(shader.fragment_source()) != sources.fragment
+        || std::string(shader.geometry_source()) != sources.geometry) {
+        tc::Log::error(
+            "Failed to publish sources for shader phase '%s'",
+            phase.phase_mark.c_str());
+        throw std::runtime_error("Failed to publish parsed shader sources");
+    }
+
+    apply_parser_resource_layout(raw, phase, phase.material_ubo_layout);
+    if (!tc_shader_has_contract(raw)) {
+        tc::Log::error(
+            "Failed to publish interface contract for shader phase '%s'",
+            phase.phase_mark.c_str());
+        throw std::runtime_error("Failed to publish parsed shader contract");
+    }
+}
+
 // NOLINTNEXTLINE(readability-function-size): preserves the Python API; implementation uses ParsedMaterialCreateOptions.
 TcMaterial create_material_from_parsed_py(
     const ShaderMultyPhaseProgramm& program,
@@ -965,6 +1027,10 @@ void bind_tc_material(nb::module_& m) {
         .def_prop_rw("shader_name",
             &TcMaterial::shader_name,
             &TcMaterial::set_shader_name)
+        .def_prop_ro("shader_program_uuid", &TcMaterial::shader_program_uuid)
+        .def_prop_ro("shader_program_version", &TcMaterial::shader_program_version)
+        .def("set_shader_program_dependency", &TcMaterial::set_shader_program_dependency,
+            nb::arg("uuid"), nb::arg("version"))
         .def_prop_rw("source_path",
             &TcMaterial::source_path,
             &TcMaterial::set_source_path)
@@ -1195,6 +1261,16 @@ void bind_tc_material(nb::module_& m) {
         nb::arg("default_white_texture") = nb::none(),
         nb::arg("default_normal_texture") = nb::none(),
         "Create a TcMaterial from a parsed ShaderMultyPhaseProgramm");
+
+    m.def(
+        "configure_shader_from_parsed",
+        &configure_shader_from_parsed,
+        nb::arg("shader"),
+        nb::arg("program"),
+        nb::arg("phase"),
+        nb::arg("name"),
+        nb::arg("source_path") = "",
+        "Publish one parsed shader phase into an existing canonical TcShader");
 
     // Material registry info functions
     m.def("tc_material_get_all_info", []() -> nb::list {

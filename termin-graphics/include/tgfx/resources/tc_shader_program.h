@@ -16,11 +16,13 @@ TC_DEFINE_HANDLE(tc_shader_program_handle)
 
 #define TC_SHADER_PROGRAM_PROPERTY_TYPE_MAX 16
 #define TC_SHADER_PROGRAM_PROPERTY_LABEL_MAX 64
+#define TC_SHADER_PROGRAM_PROPERTY_DEFAULT_TEXT_MAX 64
 
 typedef struct tc_shader_program_property {
     char name[TC_UNIFORM_NAME_MAX];
     char property_type[TC_SHADER_PROGRAM_PROPERTY_TYPE_MAX];
     char label[TC_SHADER_PROGRAM_PROPERTY_LABEL_MAX];
+    char default_text[TC_SHADER_PROGRAM_PROPERTY_DEFAULT_TEXT_MAX];
     tc_uniform_value default_value;
     double range_min;
     double range_max;
@@ -42,6 +44,7 @@ typedef struct tc_shader_program_property_desc {
     const char* property_type;
     const char* label;
     const tc_uniform_value* default_value;
+    const char* default_text;
     double range_min;
     double range_max;
     uint8_t has_range_min;

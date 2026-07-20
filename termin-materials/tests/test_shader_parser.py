@@ -236,6 +236,24 @@ def test_slang_material_texture_declarations_are_synthesized():
 
 def test_shader_interface_compare_separates_source_from_inputs():
     from termin.default_assets.render.shader_interface import compare_shader_interface
+    from tgfx import TcShaderProgram
+
+    def canonical(uuid: str, parsed):
+        program = TcShaderProgram.declare(uuid, "test")
+        program.set_payload(
+            name="test",
+            language="slang",
+            properties=[
+                {
+                    "name": prop.name,
+                    "property_type": prop.property_type,
+                    "default": prop.default,
+                }
+                for prop in parsed.material_properties
+            ],
+            phases=[{"phase_mark": phase.phase_mark} for phase in parsed.phases],
+        )
+        return program
 
     base = parse_shader_text("\n".join([
         "@program test",
@@ -279,6 +297,11 @@ def test_shader_interface_compare_separates_source_from_inputs():
         "@endstage",
         "@endphase",
     ]))
+
+    base = canonical("shader-interface-base", base)
+    source_only = canonical("shader-interface-source", source_only)
+    texture_input_added = canonical("shader-interface-texture", texture_input_added)
+    numeric_uniform_added = canonical("shader-interface-numeric", numeric_uniform_added)
 
     no_interface_change = compare_shader_interface(base, source_only)
     assert no_interface_change.material_changed is False
@@ -617,12 +640,8 @@ def test_slang_texture_property_does_not_duplicate_existing_sampler2d_declaratio
 
 
 def test_stdlib_blinn_phong_uses_slang_scope_model():
-    from termin.default_assets.render.shader_asset import ShaderAsset
-
     shader_path = stdlib_root() / "shaders" / "BlinnPhong.shader"
-    shader_asset = ShaderAsset.from_file(shader_path, name="BlinnPhong")
-    program = shader_asset.program
-    assert program is not None
+    program = parse_shader_text(shader_path.read_text(encoding="utf-8"))
 
     phase = program.phases[0]
     vertex = phase.stages["vertex"].source
@@ -643,17 +662,14 @@ def test_stdlib_blinn_phong_uses_slang_scope_model():
     assert "layout(" not in fragment
 
 
-def test_string_shader_uuid_produces_readable_distinct_phase_ids():
+def test_string_shader_uuid_produces_canonical_distinct_phase_ids():
     from termin.default_assets.render.shader_asset import make_phase_uuid
 
-    assert (
-        make_phase_uuid("termin-stdlib-shader-blinn-phong", "opaque")
-        == "stdlib-blinn-phong-opaque"
-    )
-    assert (
-        make_phase_uuid("termin-stdlib-shader-blinn-phong", "shadow")
-        == "stdlib-blinn-phong-shadow"
-    )
+    opaque = make_phase_uuid("termin-stdlib-shader-blinn-phong", "opaque")
+    shadow = make_phase_uuid("termin-stdlib-shader-blinn-phong", "shadow")
+    assert opaque.startswith("shader-phase-")
+    assert shadow.startswith("shader-phase-")
+    assert opaque != shadow
 
 
 def test_stdlib_slang_material_creates_slang_tc_shader():
@@ -670,12 +686,7 @@ def test_stdlib_slang_material_creates_slang_tc_shader():
         stdlib / "shaders" / "SlangNormalColor.shader",
         name="SlangNormalColor",
     )
-    rm.register_shader(
-        "SlangNormalColor",
-        shader_asset.program,
-        source_path=str(shader_asset.source_path),
-        uuid="00000000-0000-0000-0001-000000000007",
-    )
+    rm.register_shader_asset("SlangNormalColor", shader_asset)
 
     material_asset = MaterialAsset.from_file(
         stdlib / "materials" / "SlangNormalColor.material",
@@ -684,9 +695,14 @@ def test_stdlib_slang_material_creates_slang_tc_shader():
     material = material_asset.material
 
     assert material is not None
+    canonical_program = rm.get_shader("SlangNormalColor")
+    assert canonical_program is not None
+    assert material.shader_program_uuid == canonical_program.uuid
+    assert material.shader_program_version == canonical_program.version
     assert material.phase_count == 1
     phase = material.get_phase(0)
     assert phase is not None
+    assert phase.shader.uuid == canonical_program.phases[0]["shader"].uuid
     assert phase.shader.language == ShaderLanguage.SLANG
     assert phase.shader.artifact_policy == ShaderArtifactPolicy.REQUIRED
     assert "import termin_prelude;" in phase.shader.vertex_source
@@ -713,12 +729,7 @@ def test_stdlib_slang_textured_normal_material_uses_texture_property():
         stdlib / "shaders" / "SlangTexturedNormal.shader",
         name="SlangTexturedNormal",
     )
-    rm.register_shader(
-        "SlangTexturedNormal",
-        shader_asset.program,
-        source_path=str(shader_asset.source_path),
-        uuid="00000000-0000-0000-0001-000000000008",
-    )
+    rm.register_shader_asset("SlangTexturedNormal", shader_asset)
 
     material_asset = MaterialAsset.from_file(
         stdlib / "materials" / "SlangTexturedNormal.material",
@@ -748,8 +759,6 @@ def test_stdlib_slang_textured_normal_material_uses_texture_property():
 
 
 def test_builtin_pbr_shader_uses_slang_scope_model():
-    from termin.default_assets.render.shader_asset import ShaderAsset
-
     expected_material_textures = [
         "u_albedo_texture",
         "u_normal_texture",
@@ -759,12 +768,9 @@ def test_builtin_pbr_shader_uses_slang_scope_model():
     ]
 
     stdlib = stdlib_root()
-    shader_asset = ShaderAsset.from_file(
-        stdlib / "shaders" / "CookTorrancePBR.shader",
-        name="CookTorrancePBR",
+    program = parse_shader_text(
+        (stdlib / "shaders" / "CookTorrancePBR.shader").read_text(encoding="utf-8")
     )
-    program = shader_asset.program
-    assert program is not None
     assert program.program == "CookTorrancePBR"
     assert program.language == "slang"
     assert "lighting_ubo" in program.features

@@ -4,6 +4,7 @@
 #include "tgfx/tgfx_api.h"
 #include "tgfx/tc_handle.h"
 #include <tcbase/tc_binding_types.h>
+#include <tcbase/tc_uuid.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -260,7 +261,7 @@ typedef struct tc_shader {
     char source_hash[TC_SHADER_HASH_LEN];  // source + metadata identity hash
     uint32_t version;            // incremented on source change
     uint32_t ref_count;          // reference count for ownership
-    char uuid[40];               // unique identifier
+    char uuid[TC_UUID_SIZE];     // unique identifier
     const char* name;            // human-readable name (interned string)
     const char* source_path;     // optional source file path (interned string)
     uint8_t is_variant;          // true if this is a derived variant

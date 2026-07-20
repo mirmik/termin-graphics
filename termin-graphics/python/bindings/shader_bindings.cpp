@@ -494,6 +494,9 @@ void bind_shader(nb::module_& m) {
                 item["label"] = std::string(property.label);
                 item["has_default"] = property.has_default != 0;
                 if (property.has_default) {
+                    if (property.default_text[0] != '\0') {
+                        item["default"] = std::string(property.default_text);
+                    } else {
                     switch ((tc_uniform_type)property.default_value.type) {
                         case TC_UNIFORM_BOOL:
                             item["default"] = property.default_value.data.i != 0;
@@ -504,9 +507,28 @@ void bind_shader(nb::module_& m) {
                         case TC_UNIFORM_FLOAT:
                             item["default"] = property.default_value.data.f;
                             break;
+                        case TC_UNIFORM_VEC2:
+                            item["default"] = nb::make_tuple(
+                                property.default_value.data.v2[0],
+                                property.default_value.data.v2[1]);
+                            break;
+                        case TC_UNIFORM_VEC3:
+                            item["default"] = nb::make_tuple(
+                                property.default_value.data.v3[0],
+                                property.default_value.data.v3[1],
+                                property.default_value.data.v3[2]);
+                            break;
+                        case TC_UNIFORM_VEC4:
+                            item["default"] = nb::make_tuple(
+                                property.default_value.data.v4[0],
+                                property.default_value.data.v4[1],
+                                property.default_value.data.v4[2],
+                                property.default_value.data.v4[3]);
+                            break;
                         default:
                             item["default"] = nb::none();
                             break;
+                    }
                     }
                 }
                 item["range_min"] = property.has_range_min
@@ -551,6 +573,7 @@ void bind_shader(nb::module_& m) {
             std::vector<std::string> property_labels;
             std::vector<tc_uniform_value> defaults;
             std::vector<uint8_t> has_defaults;
+            std::vector<std::string> default_texts;
             std::vector<tc_shader_program_property_desc> properties;
             const size_t property_count = nb::len(property_values);
             property_names.reserve(property_count);
@@ -558,6 +581,7 @@ void bind_shader(nb::module_& m) {
             property_labels.reserve(property_count);
             defaults.resize(property_count);
             has_defaults.resize(property_count);
+            default_texts.resize(property_count);
             properties.reserve(property_count);
             for (size_t i = 0; i < property_count; ++i) {
                 nb::dict item = nb::cast<nb::dict>(property_values[i]);
@@ -579,16 +603,44 @@ void bind_shader(nb::module_& m) {
                     } else if (nb::isinstance<nb::float_>(object)) {
                         default_value.type = TC_UNIFORM_FLOAT;
                         default_value.data.f = nb::cast<float>(object);
+                    } else if (nb::isinstance<nb::str>(object)) {
+                        default_texts[i] = nb::cast<std::string>(object);
+                    } else if (
+                        nb::isinstance<nb::tuple>(object)
+                        || nb::isinstance<nb::list>(object)) {
+                        nb::sequence sequence = nb::cast<nb::sequence>(object);
+                        const size_t size = nb::len(sequence);
+                        if (size < 2 || size > 4) {
+                            throw std::invalid_argument(
+                                "TcShaderProgram vector defaults require 2-4 components");
+                        }
+                        float components[4] = {};
+                        for (size_t component = 0; component < size; ++component) {
+                            components[component] = nb::cast<float>(sequence[component]);
+                        }
+                        if (size == 2) {
+                            default_value.type = TC_UNIFORM_VEC2;
+                            memcpy(default_value.data.v2, components, sizeof(float) * 2);
+                        } else if (size == 3) {
+                            default_value.type = TC_UNIFORM_VEC3;
+                            memcpy(default_value.data.v3, components, sizeof(float) * 3);
+                        } else {
+                            default_value.type = TC_UNIFORM_VEC4;
+                            memcpy(default_value.data.v4, components, sizeof(float) * 4);
+                        }
                     } else {
                         throw std::invalid_argument(
-                            "TcShaderProgram property defaults currently require bool, int, or float");
+                            "TcShaderProgram property default has an unsupported type");
                     }
                 }
                 tc_shader_program_property_desc desc{};
                 desc.name = property_names.back().c_str();
                 desc.property_type = property_types.back().c_str();
                 desc.label = property_labels.back().empty() ? nullptr : property_labels.back().c_str();
-                desc.default_value = has_defaults[i] ? &defaults[i] : nullptr;
+                desc.default_value = has_defaults[i] && default_texts[i].empty()
+                    ? &defaults[i]
+                    : nullptr;
+                desc.default_text = default_texts[i].empty() ? nullptr : default_texts[i].c_str();
                 if (item.contains("range_min") && !item["range_min"].is_none()) {
                     desc.range_min = nb::cast<double>(item["range_min"]);
                     desc.has_range_min = 1;
@@ -636,6 +688,15 @@ void bind_shader(nb::module_& m) {
         nb::arg("features") = 0,
         nb::arg("properties") = nb::list(),
         nb::arg("phases") = nb::list())
+        .def_static("make_phase_uuid", [](
+            const std::string& program_uuid,
+            const std::string& phase_mark
+        ) {
+            char result[TC_UUID_SIZE];
+            tc_shader_program_make_phase_uuid(
+                result, sizeof(result), program_uuid.c_str(), phase_mark.c_str());
+            return std::string(result);
+        }, nb::arg("program_uuid"), nb::arg("phase_mark"))
         .def("find_phase", [](const TcShaderProgram& value, const std::string& mark) -> nb::object {
             const tc_shader_program_phase* phase = tc_shader_program_find_phase(value.get(), mark.c_str());
             if (!phase) return nb::none();

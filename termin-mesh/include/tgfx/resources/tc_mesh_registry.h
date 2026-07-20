@@ -50,7 +50,7 @@ TGFX_API size_t tc_mesh_count(void);
 
 typedef struct tc_mesh_info {
     tc_mesh_handle handle;
-    char uuid[40];
+    char uuid[TC_UUID_SIZE];
     const char* name;
     uint32_t ref_count;
     uint32_t version;

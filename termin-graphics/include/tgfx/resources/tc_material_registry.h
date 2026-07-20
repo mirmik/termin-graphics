@@ -80,7 +80,7 @@ TGFX_API bool tc_material_find_phase_ref(
 
 typedef struct tc_material_info {
     tc_material_handle handle;
-    char uuid[40];
+    char uuid[TC_UUID_SIZE];
     const char* name;
     uint32_t ref_count;
     uint32_t version;

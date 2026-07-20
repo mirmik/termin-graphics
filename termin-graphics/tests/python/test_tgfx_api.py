@@ -202,7 +202,17 @@ def test_shader_program_registry_owns_canonical_multiphase_payload():
                 "default": 0.5,
                 "range_min": 0.0,
                 "range_max": 1.0,
-            }
+            },
+            {
+                "name": "tint",
+                "property_type": "Color",
+                "default": (1.0, 0.5, 0.25, 1.0),
+            },
+            {
+                "name": "normal_texture",
+                "property_type": "Texture2D",
+                "default": "normal",
+            },
         ],
         phases=[
             {"phase_mark": "opaque", "priority": 4},
@@ -227,7 +237,25 @@ def test_shader_program_registry_owns_canonical_multiphase_payload():
             "default": 0.5,
             "range_min": 0.0,
             "range_max": 1.0,
-        }
+        },
+        {
+            "name": "tint",
+            "property_type": "Color",
+            "label": "",
+            "has_default": True,
+            "default": (1.0, 0.5, 0.25, 1.0),
+            "range_min": None,
+            "range_max": None,
+        },
+        {
+            "name": "normal_texture",
+            "property_type": "Texture2D",
+            "label": "",
+            "has_default": True,
+            "default": "normal",
+            "range_min": None,
+            "range_max": None,
+        },
     ]
     phases = program.phases
     assert [phase["phase_mark"] for phase in phases] == ["opaque", "transparent"]

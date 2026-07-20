@@ -27,7 +27,7 @@ TEST_CASE("shader program registry owns canonical payload and phase shaders") {
         default_value.type = TC_UNIFORM_FLOAT;
         default_value.data.f = 0.5f;
         const tc_shader_program_property_desc property = {
-            "roughness", "Float", "Roughness", &default_value, 0.0, 1.0, 1, 1};
+            "roughness", "Float", "Roughness", &default_value, nullptr, 0.0, 1.0, 1, 1};
         const tc_shader_program_phase_desc phases[] = {
             {"opaque", 3, tc_render_state_opaque()},
             {"shadow", -1, tc_render_state_opaque()},

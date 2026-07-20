@@ -137,6 +137,24 @@ public:
         }
     }
 
+    const char* shader_program_uuid() const {
+        tc_material* m = get();
+        return m ? m->shader_program_uuid : "";
+    }
+
+    uint32_t shader_program_version() const {
+        tc_material* m = get();
+        return m ? m->shader_program_version : 0;
+    }
+
+    void set_shader_program_dependency(const char* uuid, uint32_t version) {
+        tc_material* m = get();
+        if (!m) return;
+        strncpy(m->shader_program_uuid, uuid ? uuid : "", TC_UUID_SIZE - 1);
+        m->shader_program_uuid[TC_UUID_SIZE - 1] = '\0';
+        m->shader_program_version = version;
+    }
+
     const char* source_path() const {
         tc_material* m = get();
         return (m && m->source_path) ? m->source_path : "";

@@ -160,7 +160,7 @@ TcMesh TcMesh::from_mesh3(const Mesh3& mesh,
 
     // Compute UUID from data if not provided
     if (uuid_str.empty()) {
-        char computed_uuid[40];
+        char computed_uuid[TC_UUID_SIZE];
         tc_mesh_compute_uuid(buffer.data(), buffer.size(),
                             mesh.triangles.data(), mesh.triangles.size(),
                             computed_uuid);
@@ -209,7 +209,7 @@ TcMesh TcMesh::from_interleaved(const TcMeshCreateInfo& create_info) {
     // Compute UUID from data if not provided
     if (uuid_str.empty()) {
         size_t vertices_size = data.vertex_count * data.layout->stride;
-        char computed_uuid[40];
+        char computed_uuid[TC_UUID_SIZE];
         tc_mesh_compute_uuid(
             data.vertices,
             vertices_size,

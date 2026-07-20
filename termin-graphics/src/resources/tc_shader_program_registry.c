@@ -261,6 +261,14 @@ static bool build_properties(
         if (input->default_value) {
             output->default_value = *input->default_value;
             output->has_default = 1;
+        } else if (input->default_text) {
+            if (strlen(input->default_text) >= sizeof(output->default_text)) {
+                tc_log_error("tc_shader_program_set_payload: property default text is too long");
+                free(properties);
+                return false;
+            }
+            strcpy(output->default_text, input->default_text);
+            output->has_default = 1;
         }
         output->range_min = input->range_min;
         output->range_max = input->range_max;

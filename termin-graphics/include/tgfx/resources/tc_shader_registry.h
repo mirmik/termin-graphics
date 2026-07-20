@@ -130,7 +130,7 @@ TGFX_API void tc_shader_make_variant_uuid(
 
 typedef struct tc_shader_info {
     tc_shader_handle handle;
-    char uuid[40];
+    char uuid[TC_UUID_SIZE];
     char source_hash[TC_SHADER_HASH_LEN];
     const char* name;
     const char* source_path;

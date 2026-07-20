@@ -713,6 +713,8 @@ tc_material_handle tc_material_copy(tc_material_handle src, const char* new_uuid
 
     // Copy metadata
     strncpy(dst_mat->shader_name, src_mat->shader_name, TC_MATERIAL_NAME_MAX - 1);
+    strncpy(dst_mat->shader_program_uuid, src_mat->shader_program_uuid, TC_UUID_SIZE - 1);
+    dst_mat->shader_program_version = src_mat->shader_program_version;
     strncpy(dst_mat->active_phase_mark, src_mat->active_phase_mark, TC_PHASE_MARK_MAX - 1);
 
     return dst;

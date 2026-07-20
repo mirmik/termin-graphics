@@ -191,6 +191,8 @@ typedef struct tc_material {
 
     // Metadata
     char shader_name[TC_MATERIAL_NAME_MAX];
+    char shader_program_uuid[TC_UUID_SIZE];
+    uint32_t shader_program_version;
     char active_phase_mark[TC_PHASE_MARK_MAX];  // force specific phase mark
     const char* source_path;  // interned path to .material file (or NULL)
 

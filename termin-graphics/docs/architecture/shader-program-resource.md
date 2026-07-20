@@ -26,5 +26,16 @@ Ownership follows the canonical resource contract:
   shaders;
 - explicit `remove` is accepted only when no retained handle exists.
 
-Parsing `.shader` assets and migrating `TcMaterial` consumers are separate
-layers. They populate or consume this resource but do not change its lifecycle.
+The authored `.shader` importer parses `ShaderMultyPhaseProgramm` only as a
+temporary source-domain IR. `ShaderAsset` declares and strongly retains the
+program handle with the catalog UUID, atomically replaces the program payload,
+and publishes each parsed phase into the `TcShader` owned by the corresponding
+phase descriptor. Neither the parsed IR nor a parallel name-keyed program cache
+survives the import.
+
+`TcMaterial` resolves its shader reference to a canonical program UUID. Its
+phases, render state, defaults, property schema and phase shader handles are
+read from `TcShaderProgram`; the material records the program UUID and version
+used to build it. Source-only reloads keep phase identity and merely advance
+that dependency version, while schema changes rebuild loaded materials and
+invalidate dependent material-pass pipelines.
