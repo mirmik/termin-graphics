@@ -320,6 +320,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $CtestJunitPath = Join-Path $BuildDir "ctest-results.xml"
+# CTest may leave an existing JUnit document untouched, so remove only the
+# report owned by this build directory before starting a new run.
+Remove-Item -LiteralPath $CtestJunitPath -Force -ErrorAction SilentlyContinue
 & ctest --test-dir $BuildDir -C $BuildType -R $CtestRegex `
     --output-on-failure --output-junit $CtestJunitPath
 $CtestExit = $LASTEXITCODE

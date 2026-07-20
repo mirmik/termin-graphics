@@ -253,6 +253,9 @@ if ! cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"; then
 fi
 
 CTEST_JUNIT="$BUILD_DIR/ctest-results.xml"
+# CTest does not reliably replace an existing JUnit document. A stale failure
+# must never be reported as the result of a later successful run.
+rm -f -- "$CTEST_JUNIT"
 CTEST_EXIT=0
 ctest --test-dir "$BUILD_DIR" -R "$CTEST_REGEX" --output-on-failure \
     --output-junit "$CTEST_JUNIT" || CTEST_EXIT=$?
