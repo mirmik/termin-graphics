@@ -35,7 +35,10 @@
     },
     {
       "path": "termin-audio",
-      "distribution": "termin-audio"
+      "distribution": "termin-audio",
+      "native_extensions": [
+        {"extension": "termin.audio._audio_native", "target": "_audio_native"}
+      ]
     },
     {
       "path": "termin-mesh",

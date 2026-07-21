@@ -244,6 +244,7 @@
       "reason": "Human-facing desktop/backend smoke procedures are recorded here until each has an automated process or device executor."
     },
     {"id": "termin-app-cpp-tests", "module": "termin-app", "executor": "ctest", "roots": ["termin-app/cpp/tests"]},
+    {"id": "termin-audio-tests-native", "module": "termin-audio", "executor": "ctest", "roots": ["termin-audio/tests"]},
     {"id": "termin-base-tests-native", "module": "termin-base", "executor": "ctest", "roots": ["termin-base/tests"]},
     {"id": "termin-bootstrap-tests-native", "module": "termin-bootstrap", "executor": "ctest", "roots": ["termin-bootstrap/tests"]},
     {"id": "termin-collision-tests-native", "module": "termin-collision", "executor": "ctest", "roots": ["termin-collision/tests"]},

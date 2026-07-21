@@ -177,6 +177,7 @@ endif()
 
 add_subdirectory(termin-base)
 add_subdirectory(termin-image)
+add_subdirectory(termin-audio)
 add_subdirectory(termin-modules)
 add_subdirectory(termin-mesh)
 add_subdirectory(termin-csg)
