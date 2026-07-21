@@ -23,7 +23,7 @@ extern "C" {
 #include "tc_inspect_cpp.hpp"
 #include "termin/bindings/tc_value_helpers.hpp"
 #include "termin/render/execute_context.hpp"
-#include "termin/render/frame_graph_debugger_core.hpp"
+#include "termin/render/frame_graph_capture.hpp"
 #include "termin/render/frame_pass.hpp"
 #include "termin/render/resource_spec.hpp"
 #include "termin/render/tc_pass.hpp"
@@ -498,49 +498,6 @@ void bind_tc_pass_runtime(nb::module_& m) {
             }
             return result;
         })
-        .def("set_debug_internal_point", [](TcPassRef& self, const std::string& symbol) {
-            tc_pass* p = self.ptr();
-            if (!p) {
-                return;
-            }
-            if (p->debug_internal_symbol) {
-                free(p->debug_internal_symbol);
-                p->debug_internal_symbol = nullptr;
-            }
-            if (!symbol.empty()) {
-                p->debug_internal_symbol = strdup(symbol.c_str());
-            }
-        }, nb::arg("symbol"))
-        .def("get_debug_internal_point", [](TcPassRef& self) -> std::string {
-            tc_pass* p = self.ptr();
-            if (p && p->debug_internal_symbol) {
-                return std::string(p->debug_internal_symbol);
-            }
-            return "";
-        })
-        .def("clear_debug_internal_point", [](TcPassRef& self) {
-            tc_pass* p = self.ptr();
-            if (p && p->debug_internal_symbol) {
-                free(p->debug_internal_symbol);
-                p->debug_internal_symbol = nullptr;
-            }
-        })
-        .def("set_debug_capture", [](TcPassRef& self, FrameGraphCapture* c) {
-            tc_pass* p = self.ptr();
-            if (p) {
-                p->debug_capture = c;
-            }
-        }, nb::arg("capture"))
-        .def("clear_debug_capture", [](TcPassRef& self) {
-            tc_pass* p = self.ptr();
-            if (p) {
-                p->debug_capture = nullptr;
-            }
-        })
-        .def("get_debug_capture", [](TcPassRef& self) -> FrameGraphCapture* {
-            tc_pass* p = self.ptr();
-            return p ? static_cast<FrameGraphCapture*>(p->debug_capture) : nullptr;
-        }, nb::rv_policy::reference)
         .def("set_debugger_window", [](TcPassRef& self, nb::object window, nb::object depth_callback, nb::object error_callback) {
             nb::object py_obj = tc_pass_to_python(self.ptr());
             if (!py_obj.is_none() && nb::hasattr(py_obj, "set_debugger_window")) {

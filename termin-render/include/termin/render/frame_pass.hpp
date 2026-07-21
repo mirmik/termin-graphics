@@ -165,45 +165,12 @@ public:
         _c.viewport_name = name.empty() ? nullptr : tc_strdup(name.c_str());
     }
 
-    std::string debug_internal_symbol_get() const {
-        return _c.debug_internal_symbol ? _c.debug_internal_symbol : "";
-    }
-
-    void debug_internal_symbol_set(const std::string& sym) {
-        if (_c.debug_internal_symbol) free(_c.debug_internal_symbol);
-        _c.debug_internal_symbol = sym.empty() ? nullptr : tc_strdup(sym.c_str());
-    }
-
-    FrameGraphCapture* debug_capture_get() const {
-        return reinterpret_cast<FrameGraphCapture*>(_c.debug_capture);
-    }
-
-    FrameGraphCapture* debug_capture() const {
-        return debug_capture_get();
-    }
-
-    void debug_capture_set(FrameGraphCapture* capture) {
-        _c.debug_capture = reinterpret_cast<void*>(capture);
-    }
-
-    void set_debug_capture(FrameGraphCapture* capture) {
-        debug_capture_set(capture);
-    }
-
-    void clear_debug_capture() {
-        _c.debug_capture = nullptr;
-    }
-
     const std::string get_pass_name() const { return pass_name_get(); }
     void set_pass_name(const std::string& name) { pass_name_set(name); }
     bool get_enabled() const { return enabled_get(); }
     void set_enabled(bool v) { enabled_set(v); }
     const std::string get_viewport_name() const { return viewport_name_get(); }
     void set_viewport_name(const std::string& name) { viewport_name_set(name); }
-    const std::string get_debug_internal_symbol() const { return debug_internal_symbol_get(); }
-    void set_debug_internal_symbol(const std::string& sym) { debug_internal_symbol_set(sym); }
-    const std::string get_debug_internal_point() const { return debug_internal_symbol_get(); }
-    void set_debug_internal_point(const std::string& sym) { debug_internal_symbol_set(sym); }
 
     virtual void execute(ExecuteContext& ctx) {
         (void)ctx;
@@ -254,10 +221,6 @@ public:
 
     bool is_inplace() const {
         return !get_inplace_aliases().empty();
-    }
-
-    void clear_debug_internal_point() {
-        debug_internal_symbol_set("");
     }
 
     std::set<const char*> required_resources() const {

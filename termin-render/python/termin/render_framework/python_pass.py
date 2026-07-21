@@ -171,7 +171,6 @@ class PythonFramePass:
         self._passthrough = False
         self._viewport_name = viewport_name
 
-        self.debug_internal_symbol: str | None = None
         self._debugger_window: Any = None
         self._depth_capture_callback: Callable[[Any], None] | None = None
         self._depth_error_callback: Callable[[str], None] | None = None
@@ -272,12 +271,6 @@ class PythonFramePass:
 
     def get_internal_symbols(self) -> list[str]:
         return []
-
-    def set_debug_internal_point(self, symbol: str | None) -> None:
-        self.debug_internal_symbol = symbol
-
-    def get_debug_internal_point(self) -> str | None:
-        return self.debug_internal_symbol
 
     def set_debugger_window(
         self,

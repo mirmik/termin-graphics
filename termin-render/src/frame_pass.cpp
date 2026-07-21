@@ -208,10 +208,6 @@ void CxxFramePass::_cleanup_tc_pass() {
         free(_c.viewport_name);
         _c.viewport_name = nullptr;
     }
-    if (_c.debug_internal_symbol) {
-        free(_c.debug_internal_symbol);
-        _c.debug_internal_symbol = nullptr;
-    }
 }
 
 } // namespace termin

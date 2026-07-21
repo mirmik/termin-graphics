@@ -1,4 +1,4 @@
-#include <termin/render/frame_graph_debugger_core.hpp>
+#include <termin/render/frame_graph_capture.hpp>
 #include <termin/render/frame_pass.hpp>
 
 #include <tgfx2/render_context.hpp>

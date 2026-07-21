@@ -34,6 +34,7 @@ class GraphicsHost;
 namespace termin {
 
 class ShaderArtifactResolver;
+struct FrameGraphCaptureRequest;
 
 struct RenderPipelineCacheStats {
     uint64_t hit_count = 0;
@@ -113,7 +114,8 @@ public:
         tc_scene_handle scene,
         const std::unordered_map<std::string, RenderTargetContext>& render_target_contexts,
         const std::vector<Light>& lights,
-        const std::string& default_render_target = ""
+        const std::string& default_render_target = "",
+        const std::vector<FrameGraphCaptureRequest*>& debug_capture_requests = {}
     );
 };
 

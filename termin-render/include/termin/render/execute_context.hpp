@@ -12,6 +12,7 @@
 #include <core/tc_entity_pool.h>
 
 #include <tgfx2/handles.hpp>
+#include <tgfx2/enums.hpp>
 
 namespace tgfx {
 class RenderContext2;
@@ -21,6 +22,7 @@ namespace termin {
 
 class ShadowMapArrayResource;
 class RenderSceneItemSnapshot;
+struct FrameGraphCaptureRequest;
 
 // Per-resource tgfx2 texture map. Passes that draw through ctx2
 // consume entries from tex2_reads/tex2_writes (and the depth variants
@@ -58,6 +60,19 @@ public:
     // Borrowed from RenderEngine for this scene/view execution. Immutable
     // after its first successful collection and shared by all geometry passes.
     RenderSceneItemSnapshot* render_item_snapshot = nullptr;
+    // Frame-local debugger requests for this pass. These pointers are valid
+    // only until the enclosing RenderEngine execution returns.
+    std::vector<FrameGraphCaptureRequest*> debug_internal_capture_requests;
+
+    const std::string* requested_internal_symbol() const;
+    bool should_capture_internal(const char* symbol) const;
+    bool capture_internal(
+        const char* symbol,
+        tgfx::TextureHandle texture,
+        int width = 0,
+        int height = 0,
+        tgfx::PixelFormat format = tgfx::PixelFormat::RGBA8_UNorm
+    );
 };
 
 } // namespace termin

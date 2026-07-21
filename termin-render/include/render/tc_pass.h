@@ -62,8 +62,6 @@ struct tc_pass {
     bool enabled;
     bool passthrough;
     char* viewport_name;
-    char* debug_internal_symbol;
-    void* debug_capture;
     tc_pass_kind kind;
     tc_language native_language;
     void* body;
@@ -79,8 +77,6 @@ static inline void tc_pass_init_unowned(tc_pass* p, const tc_pass_vtable* vtable
     p->enabled = true;
     p->passthrough = false;
     p->viewport_name = NULL;
-    p->debug_internal_symbol = NULL;
-    p->debug_capture = NULL;
     p->kind = TC_NATIVE_PASS;
     p->native_language = TC_LANGUAGE_CXX;
     p->body = NULL;

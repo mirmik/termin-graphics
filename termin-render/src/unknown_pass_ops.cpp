@@ -149,9 +149,6 @@ bool prepare_replacement(
     tc_pass_set_enabled(unknown_tc, pass->enabled);
     tc_pass_set_passthrough(unknown_tc, pass->passthrough);
     tc_pass_set_viewport_name(unknown_tc, pass->viewport_name);
-    unknown->set_debug_internal_point(
-        pass->debug_internal_symbol ? pass->debug_internal_symbol : ""
-    );
 
     if (!replacement) {
         tc_pass_delete_unowned(unknown_tc);
@@ -209,12 +206,6 @@ bool upgrade_at(
     tc_pass_set_enabled(restored, pass->enabled);
     tc_pass_set_passthrough(restored, pass->passthrough);
     tc_pass_set_viewport_name(restored, pass->viewport_name);
-    if (auto* cxx = CxxFramePass::from_tc(restored)) {
-        cxx->set_debug_internal_point(
-            pass->debug_internal_symbol ? pass->debug_internal_symbol : ""
-        );
-    }
-
     if (!tc_pipeline_replace_pass_at(pipeline, index, restored, restored->deleter)) {
         tc_pass_delete_unowned(restored);
         error = "failed to replace UnknownPass in pipeline";

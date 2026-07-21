@@ -380,6 +380,5 @@ void tc_pass_free_external(tc_pass* p) {
     tc_pass_unlink_from_registry(p);
     if (p->pass_name) free(p->pass_name);
     if (p->viewport_name) free(p->viewport_name);
-    if (p->debug_internal_symbol) free(p->debug_internal_symbol);
     free(p);
 }

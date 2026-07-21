@@ -62,18 +62,9 @@ private:
     int height_ = 0;
     tgfx::PixelFormat format_ = tgfx::PixelFormat::RGBA8_UNorm;
     bool captured_ = false;
-    CxxFramePass* target_pass_ = nullptr;
 
 public:
     ~FrameGraphCapture();
-
-    void set_target(CxxFramePass* pass) { target_pass_ = pass; }
-    void clear_target() { target_pass_ = nullptr; }
-    CxxFramePass* target() const { return target_pass_; }
-
-    bool should_capture(CxxFramePass* caller) const {
-        return caller && caller == target_pass_;
-    }
 
     // Capture `src_tex` into an internal owned tgfx2 texture. When width
     // or height is non-positive, the source texture's real dimensions are
@@ -101,6 +92,32 @@ private:
         tgfx::IRenderDevice& device,
         int w, int h, tgfx::PixelFormat fmt
     );
+};
+
+enum class FrameGraphCaptureRequestStatus {
+    Pending,
+    Captured,
+    ResourceUnavailable,
+};
+
+enum class FrameGraphCaptureRequestKind {
+    Resource,
+    InternalSymbol,
+};
+
+// One frame-local request supplied by an execution instrumentation provider.
+// It is never stored by a pipeline or pass and is valid only for the duration
+// of one RenderEngine::render_scene_pipeline_offscreen call.
+struct FrameGraphCaptureRequest {
+    FrameGraphCaptureRequestKind kind = FrameGraphCaptureRequestKind::Resource;
+    uint64_t generation = 0;
+    std::string resource;
+    size_t pass_index = static_cast<size_t>(-1);
+    std::string internal_symbol;
+    FrameGraphCapture* capture = nullptr;
+    FrameGraphCapture* depth_capture = nullptr;
+    bool paused = false;
+    FrameGraphCaptureRequestStatus status = FrameGraphCaptureRequestStatus::Pending;
 };
 
 struct FrameGraphPresenterOptions {
@@ -162,16 +179,6 @@ public:
 private:
     void ensure_fs(tgfx::IRenderDevice& device);
     void release_tgfx2_resources();
-};
-
-class RENDER_API FrameGraphDebuggerCore {
-public:
-    FrameGraphCapture capture;
-    FrameGraphCapture depth_capture;
-    FrameGraphPresenter presenter;
-
-    tgfx::TextureHandle capture_tex() const { return capture.capture_tex(); }
-    tgfx::TextureHandle depth_capture_tex() const { return depth_capture.capture_tex(); }
 };
 
 } // namespace termin

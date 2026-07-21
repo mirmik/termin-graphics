@@ -70,8 +70,8 @@ set(TERMIN_RENDER_SOURCES
     src/builtin_passes.cpp
     src/camera_capability.cpp
     src/frame_uniforms.cpp
-    src/frame_debug_capture_pass.cpp
-    src/frame_graph_debugger_core.cpp
+    src/frame_graph_capture.cpp
+    src/execute_context.cpp
     src/graph_alias_pass.cpp
     src/graph_compiler.cpp
     src/graph_data.cpp
@@ -137,8 +137,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/builtin_passes.hpp
     include/termin/render/camera_capability.hpp
     include/termin/render/frame_uniforms.hpp
-    include/termin/render/frame_debug_capture_pass.hpp
-    include/termin/render/frame_graph_debugger_core.hpp
+    include/termin/render/frame_graph_capture.hpp
     include/termin/render/graph_alias_pass.hpp
     include/termin/render/graph_compiler.hpp
     include/termin/render/graph_data.hpp

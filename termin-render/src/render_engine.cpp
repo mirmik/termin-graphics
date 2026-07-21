@@ -21,6 +21,7 @@
 #include "tgfx2/shader_artifact_resolver.hpp"
 #include "tgfx/tgfx2_interop.h"
 #include "termin/render/tgfx2_bridge.hpp"
+#include "termin/render/frame_graph_capture.hpp"
 #include "termin/render/render_scene_item_collector.hpp"
 
 extern "C" {
@@ -354,7 +355,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
     tc_scene_handle scene,
     const std::unordered_map<std::string, RenderTargetContext>& render_target_contexts,
     const std::vector<Light>& lights,
-    const std::string& default_render_target
+    const std::string& default_render_target,
+    const std::vector<FrameGraphCaptureRequest*>& debug_capture_requests
 ) {
     if (!pipeline.is_valid()) {
         tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: pipeline is null");
@@ -859,6 +861,138 @@ void RenderEngine::render_scene_pipeline_offscreen(
     tc_profiler_end_section();
     clear_resources_ms = timing_ms(clear_resources_begin, RenderTimingClock::now());
 
+    std::vector<size_t> debug_capture_boundaries(
+        debug_capture_requests.size(), static_cast<size_t>(-1));
+    for (size_t request_index = 0;
+         request_index < debug_capture_requests.size();
+         ++request_index) {
+        FrameGraphCaptureRequest* request = debug_capture_requests[request_index];
+        if (!request) continue;
+        request->status = FrameGraphCaptureRequestStatus::Pending;
+        if (request->kind != FrameGraphCaptureRequestKind::Resource
+                || request->paused || request->resource.empty()
+                || !request->capture) {
+            continue;
+        }
+        const char* selected_canonical = tc_frame_graph_canonical_resource(
+            fg, request->resource.c_str());
+        const std::string selected = selected_canonical
+            ? selected_canonical : request->resource;
+        for (size_t pass_index = 0; pass_index < schedule_count; ++pass_index) {
+            tc_pass* scheduled = tc_frame_graph_schedule_at(fg, pass_index);
+            if (!scheduled || !scheduled->enabled || scheduled->passthrough) continue;
+            const std::vector<const char*> writes = collect_pass_dependencies(
+                scheduled, tc_pass_get_writes);
+            for (const char* write : writes) {
+                if (!write) continue;
+                const char* write_canonical = tc_frame_graph_canonical_resource(fg, write);
+                if (selected == (write_canonical ? write_canonical : write)) {
+                    debug_capture_boundaries[request_index] = pass_index;
+                }
+            }
+        }
+    }
+
+    auto capture_debug_resource = [&](
+        FrameGraphCaptureRequest& request,
+        const RenderTargetContext& rt_ctx
+    ) {
+        std::function<tgfx::TextureHandle(const std::string&)> resolve_depth;
+        std::function<tgfx::TextureHandle(const std::string&)> resolve_color;
+        resolve_color = [&](const std::string& name) -> tgfx::TextureHandle {
+            const char* canonical_c = tc_frame_graph_canonical_resource(fg, name.c_str());
+            const std::string canonical = canonical_c ? canonical_c : name;
+            if (canonical != name) {
+                tgfx::TextureHandle canonical_handle = resolve_color(canonical);
+                if (canonical_handle) return canonical_handle;
+            }
+            if (is_external_color_output(name.c_str())) return rt_ctx.output_color_tex;
+            auto external = rt_ctx.external_textures.find(name);
+            if (external != rt_ctx.external_textures.end()) return external->second;
+            auto view = pipeline_cache.resource_views.find(name);
+            if (view != pipeline_cache.resource_views.end()) {
+                return view->second.attachment == AttachmentKind::Color
+                    ? resolve_color(view->second.parent) : tgfx::TextureHandle{};
+            }
+            auto composition = pipeline_cache.fbo_compositions.find(name);
+            if (composition != pipeline_cache.fbo_compositions.end()) {
+                return resolve_color(composition->second.color);
+            }
+            auto texture = tex2_resources.find(name);
+            return texture != tex2_resources.end()
+                ? texture->second : tgfx::TextureHandle{};
+        };
+        resolve_depth = [&](const std::string& name) -> tgfx::TextureHandle {
+            const char* canonical_c = tc_frame_graph_canonical_resource(fg, name.c_str());
+            const std::string canonical = canonical_c ? canonical_c : name;
+            if (canonical != name) {
+                tgfx::TextureHandle canonical_handle = resolve_depth(canonical);
+                if (canonical_handle) return canonical_handle;
+            }
+            if (is_external_color_output(name.c_str())
+                    || is_external_depth_output(name.c_str())) {
+                return rt_ctx.output_depth_tex;
+            }
+            auto view = pipeline_cache.resource_views.find(name);
+            if (view != pipeline_cache.resource_views.end()) {
+                return view->second.attachment == AttachmentKind::Depth
+                    ? resolve_depth(view->second.parent) : tgfx::TextureHandle{};
+            }
+            auto composition = pipeline_cache.fbo_compositions.find(name);
+            if (composition != pipeline_cache.fbo_compositions.end()) {
+                tgfx::TextureHandle depth = resolve_depth(composition->second.depth);
+                return depth ? depth : resolve_color(composition->second.depth);
+            }
+            auto texture = tex2_depth_resources.find(name);
+            return texture != tex2_depth_resources.end()
+                ? texture->second : tgfx::TextureHandle{};
+        };
+
+        const tgfx::TextureHandle color = resolve_color(request.resource);
+        const tgfx::TextureHandle depth = resolve_depth(request.resource);
+        const tgfx::TextureHandle primary = color ? color : depth;
+        if (!primary) {
+            request.status = FrameGraphCaptureRequestStatus::ResourceUnavailable;
+            tc::Log::warn(
+                "[FrameGraphDebugger] resource '%s' is unavailable in the live execution",
+                request.resource.c_str());
+            return;
+        }
+        request.capture->reset_capture();
+        request.capture->capture_direct_via_ctx2(ctx2, primary, 0, 0);
+        if (request.depth_capture) {
+            if (color && depth && depth != color) {
+                request.depth_capture->capture_direct_via_ctx2(ctx2, depth, 0, 0);
+            } else {
+                request.depth_capture->reset_capture();
+            }
+        }
+        request.status = request.capture->has_capture()
+            ? FrameGraphCaptureRequestStatus::Captured
+            : FrameGraphCaptureRequestStatus::ResourceUnavailable;
+        if (request.status == FrameGraphCaptureRequestStatus::ResourceUnavailable) {
+            tc::Log::error(
+                "[FrameGraphDebugger] failed to capture resource '%s'",
+                request.resource.c_str());
+        }
+    };
+
+    // Resources without a writer in this schedule are external/read-only and
+    // already exist after execution-resource assembly.
+    for (size_t request_index = 0;
+         request_index < debug_capture_requests.size();
+         ++request_index) {
+        FrameGraphCaptureRequest* request = debug_capture_requests[request_index];
+        if (!request || request->kind != FrameGraphCaptureRequestKind::Resource
+                || request->paused || request->resource.empty()
+                || !request->capture) {
+            continue;
+        }
+        if (debug_capture_boundaries[request_index] == static_cast<size_t>(-1)) {
+            capture_debug_resource(*request, default_rt_ctx);
+        }
+    }
+
     // One lazy snapshot per logical render target/view. The map owns stable
     // storage until every pass in this execution has completed.
     render_item_snapshot_scratch_.resize(render_target_contexts.size());
@@ -1071,8 +1205,34 @@ void RenderEngine::render_scene_pipeline_offscreen(
         ctx.layer_mask = rt_ctx.layer_mask;
         ctx.render_category_mask = rt_ctx.render_category_mask;
         ctx.render_item_snapshot = render_item_snapshots.at(&rt_ctx);
+        for (FrameGraphCaptureRequest* request : debug_capture_requests) {
+            if (!request
+                    || request->kind != FrameGraphCaptureRequestKind::InternalSymbol
+                    || request->paused || !request->capture
+                    || request->pass_index >= pipeline.pass_count()) {
+                continue;
+            }
+            if (pipeline.get_pass_at(request->pass_index) == pass) {
+                ctx.debug_internal_capture_requests.push_back(request);
+            }
+        }
 
         tc_pass_execute(pass, &ctx);
+
+        for (size_t request_index = 0;
+             request_index < debug_capture_requests.size();
+             ++request_index) {
+            FrameGraphCaptureRequest* request =
+                debug_capture_requests[request_index];
+            if (!request || request->kind != FrameGraphCaptureRequestKind::Resource
+                    || request->paused
+                    || request->status != FrameGraphCaptureRequestStatus::Pending) {
+                continue;
+            }
+            if (debug_capture_boundaries[request_index] == i) {
+                capture_debug_resource(*request, rt_ctx);
+            }
+        }
 
         // Per-pass sync — no-op on explicit-submission backends.
         tc_render_sync_mode sync_mode = tc_project_settings_get_render_sync_mode();
@@ -1090,6 +1250,23 @@ void RenderEngine::render_scene_pipeline_offscreen(
         pass_stats.total_ms += pass_ms;
     }
     tc_profiler_end_section();
+
+    for (FrameGraphCaptureRequest* request : debug_capture_requests) {
+        if (request && !request->paused
+                && request->status == FrameGraphCaptureRequestStatus::Pending) {
+            request->status = FrameGraphCaptureRequestStatus::ResourceUnavailable;
+            if (request->kind == FrameGraphCaptureRequestKind::Resource) {
+                tc::Log::warn(
+                    "[FrameGraphDebugger] resource '%s' capture boundary was not executed",
+                    request->resource.c_str());
+            } else {
+                tc::Log::warn(
+                    "[FrameGraphDebugger] internal symbol '%s' in pass %zu was not executed",
+                    request->internal_symbol.c_str(),
+                    request->pass_index);
+            }
+        }
+    }
 
     const auto end_frame_begin = RenderTimingClock::now();
     if (owns_tgfx2_frame) {

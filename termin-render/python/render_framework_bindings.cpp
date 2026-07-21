@@ -13,8 +13,7 @@
 #include <termin/geom/mat44.hpp>
 #include <termin/entity/entity.hpp>
 #include <termin/render/render_camera.hpp>
-#include <termin/render/frame_debug_capture_pass.hpp>
-#include <termin/render/frame_graph_debugger_core.hpp>
+#include <termin/render/frame_graph_capture.hpp>
 #include <termin/render/graph_alias_pass.hpp>
 #include <termin/render/render_pipeline.hpp>
 #include <termin/render/shader_usage_collector.hpp>
@@ -432,9 +431,6 @@ void bind_render_framework(nb::module_& m) {
         .def("get_internal_symbols", &CxxFramePass::get_internal_symbols)
         .def("get_internal_symbols_with_timing", &CxxFramePass::get_internal_symbols_with_timing)
         .def("get_resource_specs", &CxxFramePass::get_resource_specs)
-        .def("set_debug_internal_point", &CxxFramePass::set_debug_internal_point)
-        .def("clear_debug_internal_point", &CxxFramePass::clear_debug_internal_point)
-        .def("get_debug_internal_point", &CxxFramePass::get_debug_internal_point)
         .def("required_resources", &CxxFramePass::required_resources)
         .def("destroy", &CxxFramePass::destroy)
         .def_prop_ro("_tc_pass",
@@ -467,40 +463,6 @@ void bind_render_framework(nb::module_& m) {
         .def_prop_ro("reads", &GraphAliasPass::compute_reads)
         .def_prop_ro("writes", &GraphAliasPass::compute_writes)
         .def("get_inplace_aliases", &GraphAliasPass::get_inplace_aliases);
-
-    nb::class_<FrameDebugCapturePass, CxxFramePass>(m, "FrameDebugCapturePass")
-        .def("__init__", [](FrameDebugCapturePass* self, const std::string& pass_name) {
-            new (self) FrameDebugCapturePass(pass_name);
-            init_render_pass_from_python(self, "FrameDebugCapturePass");
-        }, nb::arg("pass_name") = "FrameDebugger")
-        .def_rw("source_resource", &FrameDebugCapturePass::source_resource)
-        .def_rw("source_type", &FrameDebugCapturePass::source_type)
-        .def_rw("paused", &FrameDebugCapturePass::paused)
-        .def("set_source_resource", &FrameDebugCapturePass::set_source_resource)
-        .def("set_source_type", &FrameDebugCapturePass::set_source_type)
-        .def("set_paused", &FrameDebugCapturePass::set_paused)
-        .def("set_capture", &FrameDebugCapturePass::set_capture, nb::arg("capture"))
-        .def("set_depth_capture", &FrameDebugCapturePass::set_depth_capture, nb::arg("capture"))
-        .def_prop_ro("reads", [](FrameDebugCapturePass& p) {
-            auto reads = p.compute_reads();
-            std::set<std::string> result;
-            for (const char* r : reads) {
-                if (r) {
-                    result.insert(r);
-                }
-            }
-            return result;
-        })
-        .def_prop_ro("writes", [](FrameDebugCapturePass& p) {
-            auto writes = p.compute_writes();
-            std::set<std::string> result;
-            for (const char* w : writes) {
-                if (w) {
-                    result.insert(w);
-                }
-            }
-            return result;
-        });
 
     {
         m.attr("GraphAliasPass").attr("category") = "Graph";
@@ -617,10 +579,6 @@ void bind_render_framework(nb::module_& m) {
 
     nb::class_<FrameGraphCapture>(m, "FrameGraphCapture")
         .def(nb::init<>())
-        .def("set_target", [](FrameGraphCapture& self, CxxFramePass* pass) {
-            self.set_target(pass);
-        }, nb::arg("pass"), nb::rv_policy::reference)
-        .def("clear_target", &FrameGraphCapture::clear_target)
         .def("capture_direct_via_ctx2",
              &FrameGraphCapture::capture_direct_via_ctx2,
              nb::arg("ctx2"), nb::arg("src_tex"),
@@ -698,20 +656,6 @@ void bind_render_framework(nb::module_& m) {
         .def_static("get_texture_info",
              &FrameGraphPresenter::get_texture_info,
              nb::arg("device"), nb::arg("tex"));
-
-    nb::class_<FrameGraphDebuggerCore>(m, "FrameGraphDebuggerCore")
-        .def(nb::init<>())
-        .def_prop_ro("capture_tex", &FrameGraphDebuggerCore::capture_tex)
-        .def_prop_ro("depth_capture_tex", &FrameGraphDebuggerCore::depth_capture_tex)
-        .def_prop_ro("capture", [](FrameGraphDebuggerCore& self) -> FrameGraphCapture& {
-            return self.capture;
-        }, nb::rv_policy::reference_internal)
-        .def_prop_ro("depth_capture", [](FrameGraphDebuggerCore& self) -> FrameGraphCapture& {
-            return self.depth_capture;
-        }, nb::rv_policy::reference_internal)
-        .def_prop_ro("presenter", [](FrameGraphDebuggerCore& self) -> FrameGraphPresenter& {
-            return self.presenter;
-        }, nb::rv_policy::reference_internal);
 
     bind_tc_pass_runtime(m);
 }
