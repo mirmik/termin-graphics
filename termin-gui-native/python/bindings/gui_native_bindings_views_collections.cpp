@@ -7,11 +7,6 @@ void bind_gui_native_collection_views(nb::module_ &m) {
       .value("Single", termin::gui_native::SelectionMode::Single)
       .value("Multiple", termin::gui_native::SelectionMode::Multiple);
 
-  nb::enum_<termin::gui_native::PointerButton>(m, "PointerButton")
-      .value("Left", termin::gui_native::PointerButton::Left)
-      .value("Right", termin::gui_native::PointerButton::Right)
-      .value("Middle", termin::gui_native::PointerButton::Middle);
-
   nb::class_<ListWidgetRef>(m, "ListWidget")
       .def_prop_ro("widget",
                    [](const ListWidgetRef &self) { return self.widget; })
@@ -1297,4 +1292,3 @@ void bind_gui_native_collection_views(nb::module_ &m) {
           },
           nb::arg("callback"));
 }
-

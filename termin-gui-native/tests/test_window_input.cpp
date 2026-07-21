@@ -8,7 +8,7 @@ int main() {
     pointer.type = termin::WindowEventType::PointerButtonPressed;
     pointer.pointer.logical_position = {12.0f, 20.0f};
     pointer.pointer.framebuffer_position = {18.0f, 30.0f};
-    pointer.pointer.button = termin::WindowPointerButton::Right;
+    pointer.pointer.button = tcbase::MouseButton::RIGHT;
     pointer.pointer.clicks = 2;
     pointer.pointer.modifiers =
         termin::WindowModifierShift | termin::WindowModifierControl;

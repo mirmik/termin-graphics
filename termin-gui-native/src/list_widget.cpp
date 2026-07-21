@@ -302,7 +302,7 @@ tc_ui_event_result ListWidget::pointer_event(tc_ui_document* document, const tc_
     if (event->type == TC_UI_POINTER_DOWN) {
         tc_ui_document_set_focus(document, handle());
         const size_t index = index_at(event->x, event->y);
-        if (event->button == pointer_button_value(PointerButton::Right)) {
+        if (event->button == tcbase::mouse_button_value(tcbase::MouseButton::RIGHT)) {
             if (index != SelectionModel::npos && model_->item(index).enabled)
                 apply_selection(index, event->modifiers);
             context_menu_requested_.emit(
@@ -311,12 +311,12 @@ tc_ui_event_result ListWidget::pointer_event(tc_ui_document* document, const tc_
             return TC_UI_EVENT_HANDLED;
         }
         if (index == SelectionModel::npos || !model_->item(index).enabled) {
-            if (event->button == pointer_button_value(PointerButton::Left))
+            if (event->button == tcbase::mouse_button_value(tcbase::MouseButton::LEFT))
                 activation_clicks_.clear();
             return TC_UI_EVENT_IGNORED;
         }
         const bool selected = apply_selection(index, event->modifiers);
-        if (event->button == pointer_button_value(PointerButton::Left) &&
+        if (event->button == tcbase::mouse_button_value(tcbase::MouseButton::LEFT) &&
             activation_clicks_.press(model_->item(index).stable_id, event->click_count)) {
             activated_.emit(*this, index, model_->item(index));
             return TC_UI_EVENT_HANDLED;

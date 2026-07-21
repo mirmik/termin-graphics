@@ -580,13 +580,13 @@ TreeTableWidget::pointer_event(tc_ui_document *document,
   const size_t index = row_index_at(event->x, event->y);
   const TreeTableNodeId node =
       index == SIZE_MAX ? kInvalidTreeTableNodeId : visible_[index].node;
-  if (event->button == pointer_button_value(PointerButton::Right)) {
+  if (event->button == tcbase::mouse_button_value(tcbase::MouseButton::RIGHT)) {
     if (node != kInvalidTreeTableNodeId)
       select_node(node, false);
     context_menu_requested_.emit(*this, node, event->x, event->y);
     return TC_UI_EVENT_HANDLED;
   }
-  if (event->button != pointer_button_value(PointerButton::Left) ||
+  if (event->button != tcbase::mouse_button_value(tcbase::MouseButton::LEFT) ||
       node == kInvalidTreeTableNodeId || !model_->node(node).data.enabled) {
     activation_clicks_.clear();
     return TC_UI_EVENT_IGNORED;

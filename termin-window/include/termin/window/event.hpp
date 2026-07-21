@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include <tcbase/input_enums.hpp>
+
 namespace termin {
 
 enum class WindowEventType : uint8_t {
@@ -17,14 +19,6 @@ enum class WindowEventType : uint8_t {
     KeyPressed,
     KeyReleased,
     TextInput,
-};
-
-enum class WindowPointerButton : int8_t {
-    None = -1,
-    Left = 0,
-    Right = 1,
-    Middle = 2,
-    Other = 3,
 };
 
 enum class WindowKey : uint16_t {
@@ -70,7 +64,7 @@ struct WindowPointerEvent {
     // coordinates are ready for pixel-addressed rendering and hit testing.
     WindowPoint logical_position;
     WindowPoint framebuffer_position;
-    WindowPointerButton button = WindowPointerButton::None;
+    tcbase::MouseButton button = tcbase::MouseButton::NONE;
     uint32_t clicks = 0;
     uint32_t modifiers = WindowModifierNone;
     float wheel_x = 0.0f;

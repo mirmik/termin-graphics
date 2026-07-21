@@ -68,7 +68,7 @@ std::optional<tc_ui_pointer_event> make_pointer_event(const WindowEvent& event) 
         type,
         event.pointer.framebuffer_position.x,
         event.pointer.framebuffer_position.y,
-        static_cast<int32_t>(event.pointer.button),
+        tcbase::mouse_button_value(event.pointer.button),
         event.pointer.clicks,
         translate_modifiers(event.pointer.modifiers),
         event.pointer.wheel_x,

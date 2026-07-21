@@ -155,12 +155,12 @@ uint32_t translate_modifiers(SDL_Keymod modifiers) {
     return result;
 }
 
-WindowPointerButton translate_pointer_button(uint8_t button) {
+tcbase::MouseButton translate_pointer_button(uint8_t button) {
     switch (button) {
-        case SDL_BUTTON_LEFT: return WindowPointerButton::Left;
-        case SDL_BUTTON_RIGHT: return WindowPointerButton::Right;
-        case SDL_BUTTON_MIDDLE: return WindowPointerButton::Middle;
-        default: return WindowPointerButton::Other;
+        case SDL_BUTTON_LEFT: return tcbase::MouseButton::LEFT;
+        case SDL_BUTTON_RIGHT: return tcbase::MouseButton::RIGHT;
+        case SDL_BUTTON_MIDDLE: return tcbase::MouseButton::MIDDLE;
+        default: return tcbase::MouseButton::OTHER;
     }
 }
 

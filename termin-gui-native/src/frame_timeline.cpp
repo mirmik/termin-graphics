@@ -333,7 +333,7 @@ tc_ui_event_result FrameTimelineWidget::pointer_event(tc_ui_document* document,
         return TC_UI_EVENT_HANDLED;
     }
     if (event->type == TC_UI_POINTER_DOWN &&
-        event->button == pointer_button_value(PointerButton::Left)) {
+        event->button == tcbase::mouse_button_value(tcbase::MouseButton::LEFT)) {
         tc_ui_document_set_focus(document, handle());
         return select_index(index_at(event->x, event->y))
             ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;

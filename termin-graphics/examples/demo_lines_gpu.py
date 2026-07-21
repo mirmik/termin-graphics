@@ -7,6 +7,7 @@ import math
 
 import sdl2
 
+from tcbase import MouseButton
 from termin.display import WindowedGraphicsSession, quit_sdl
 from termin.geombase import OrbitCamera
 from tgfx import (
@@ -20,6 +21,12 @@ from tgfx import (
     Tgfx2PixelFormat,
     configure_default_shader_runtime,
 )
+
+_SDL_BUTTON_MAP = {
+    1: MouseButton.LEFT,
+    2: MouseButton.MIDDLE,
+    3: MouseButton.RIGHT,
+}
 
 
 class RenderTarget:
@@ -139,10 +146,10 @@ def _dispatch(event: sdl2.SDL_Event, window,
         if event.window.event == sdl2.SDL_WINDOWEVENT_CLOSE:
             window.set_should_close(True)
     elif etype == sdl2.SDL_MOUSEBUTTONDOWN:
-        button = int(event.button.button)
-        if button == 2:
+        button = _SDL_BUTTON_MAP.get(int(event.button.button), MouseButton.OTHER)
+        if button == MouseButton.MIDDLE:
             drag["mode"] = "orbit"
-        elif button == 3:
+        elif button == MouseButton.RIGHT:
             drag["mode"] = "pan"
         drag["x"] = float(event.button.x)
         drag["y"] = float(event.button.y)

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 import math
 import weakref
 
+from tcbase import MouseButton
 from termin.gui_native import (
     Color,
     Document,
@@ -15,7 +16,6 @@ from termin.gui_native import (
     KeyCode,
     KeyEventType,
     Point,
-    PointerButton,
     PointerEventType,
     Rect,
     Size,
@@ -427,13 +427,13 @@ class NativeNodeGraphView:
         self.param_widgets.clear()
 
     def _pointer(self, world: Point, event) -> bool:
-        if event.type == PointerEventType.Down and event.button == PointerButton.Right.value:
+        if event.type == PointerEventType.Down and event.button == MouseButton.RIGHT.value:
             if self.on_context_requested is not None:
                 hit = self.scene.hit_test(world.x, world.y)
                 self.on_context_requested(world, None if hit is None else hit.stable_id)
                 return True
             return False
-        if event.type == PointerEventType.Down and event.button == PointerButton.Left.value:
+        if event.type == PointerEventType.Down and event.button == MouseButton.LEFT.value:
             socket = self._hit_socket(world)
             if socket is None:
                 return False
@@ -449,7 +449,7 @@ class NativeNodeGraphView:
             self.request_render()
             return True
         if (event.type == PointerEventType.Up and
-                event.button == PointerButton.Left.value and
+                event.button == MouseButton.LEFT.value and
                 self._pending_connection is not None):
             start = self._pending_connection
             target = self._hit_socket(world)

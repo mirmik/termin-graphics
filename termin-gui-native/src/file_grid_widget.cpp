@@ -552,7 +552,8 @@ tc_ui_event_result FileGridWidget::pointer_event(tc_ui_document* document,
     if (event->type != TC_UI_POINTER_DOWN)
         return TC_UI_EVENT_IGNORED;
     tc_ui_document_set_focus(document, handle());
-    if (event->button == pointer_button_value(PointerButton::Left) && scrollbar_hit(event->x, event->y)) {
+    if (event->button == tcbase::mouse_button_value(tcbase::MouseButton::LEFT) &&
+        scrollbar_hit(event->x, event->y)) {
         dragging_scrollbar_ = true;
         drag_start_y_ = event->y;
         drag_start_scroll_ = scroll_y_;
@@ -560,7 +561,7 @@ tc_ui_event_result FileGridWidget::pointer_event(tc_ui_document* document,
         return TC_UI_EVENT_HANDLED;
     }
     const size_t index = index_at(event->x, event->y);
-    if (event->button == pointer_button_value(PointerButton::Right)) {
+    if (event->button == tcbase::mouse_button_value(tcbase::MouseButton::RIGHT)) {
         if (index != SelectionModel::npos)
             apply_selection(index, event->modifiers);
         context_menu_requested_.emit(
@@ -568,7 +569,7 @@ tc_ui_event_result FileGridWidget::pointer_event(tc_ui_document* document,
             event->y);
         return TC_UI_EVENT_HANDLED;
     }
-    if (event->button != pointer_button_value(PointerButton::Left))
+    if (event->button != tcbase::mouse_button_value(tcbase::MouseButton::LEFT))
         return TC_UI_EVENT_IGNORED;
     if (index == SelectionModel::npos || !model_->item(index).enabled) {
         activation_clicks_.clear();

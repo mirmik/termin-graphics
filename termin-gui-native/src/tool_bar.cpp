@@ -252,7 +252,8 @@ tc_ui_event_result ToolBar::pointer_event(tc_ui_document* document,
         return rect_contains(bounds(), event->x, event->y) ? TC_UI_EVENT_HANDLED
                                                            : TC_UI_EVENT_IGNORED;
     }
-    if (event->type == TC_UI_POINTER_DOWN && event->button == pointer_button_value(PointerButton::Left)) {
+    if (event->type == TC_UI_POINTER_DOWN &&
+        event->button == tcbase::mouse_button_value(tcbase::MouseButton::LEFT)) {
         const size_t index = index_at(event->x, event->y);
         if (index == SIZE_MAX || !model_->command_at(index).data.enabled) {
             return TC_UI_EVENT_IGNORED;

@@ -282,7 +282,8 @@ tc_ui_event_result MenuBar::pointer_event(tc_ui_document* document,
             open_menu(document, next);
         return next == SIZE_MAX ? TC_UI_EVENT_IGNORED : TC_UI_EVENT_HANDLED;
     }
-    if (event->type == TC_UI_POINTER_DOWN && event->button == pointer_button_value(PointerButton::Left)) {
+    if (event->type == TC_UI_POINTER_DOWN &&
+        event->button == tcbase::mouse_button_value(tcbase::MouseButton::LEFT)) {
         const size_t index = index_at(event->x, event->y);
         if (index == SIZE_MAX)
             return TC_UI_EVENT_IGNORED;
