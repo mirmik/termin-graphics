@@ -180,6 +180,24 @@ void bind_render_pipeline(nb::module_& m) {
             return std::string(value.name());
         })
         .def_prop_ro("version", &TcPipelineTemplate::version)
+        .def("serialize", [](const TcPipelineTemplate& value) {
+            const tc_pipeline_template* pipeline_template = value.get();
+            if (!pipeline_template) {
+                throw std::runtime_error("cannot serialize an invalid pipeline template");
+            }
+            const size_t size = tc_pipeline_template_serialize(
+                pipeline_template, nullptr, 0);
+            if (size == 0) {
+                throw std::runtime_error("failed to size pipeline template descriptor");
+            }
+            std::vector<uint8_t> bytes(size);
+            if (tc_pipeline_template_serialize(
+                    pipeline_template, bytes.data(), bytes.size()) != size) {
+                throw std::runtime_error("failed to serialize pipeline template descriptor");
+            }
+            return nb::bytes(
+                reinterpret_cast<const char*>(bytes.data()), bytes.size());
+        })
         .def_prop_ro("passes", [](const TcPipelineTemplate& value) {
             nb::list result;
             const tc_pipeline_template* pipeline = value.get();

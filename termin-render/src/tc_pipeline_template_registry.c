@@ -184,6 +184,18 @@ static bool validate_payload(const tc_pipeline_template_payload_desc* desc) {
             tc_log_error("tc_pipeline_template_set_payload: resource %u lacks name or type", i);
             return false;
         }
+        if (desc->resources[i].samples == 0) {
+            tc_log_error("tc_pipeline_template_set_payload: resource %u has zero samples", i);
+            return false;
+        }
+        for (uint32_t previous = 0; previous < i; ++previous) {
+            if (strcmp(desc->resources[previous].name, desc->resources[i].name) == 0) {
+                tc_log_error(
+                    "tc_pipeline_template_set_payload: duplicate resource '%s'",
+                    desc->resources[i].name);
+                return false;
+            }
+        }
     }
     for (uint32_t i = 0; i < desc->dependency_count; ++i) {
         if (desc->dependencies[i].pass_index >= desc->pass_count
@@ -191,6 +203,24 @@ static bool validate_payload(const tc_pipeline_template_payload_desc* desc) {
             || desc->dependencies[i].access < TC_PIPELINE_RESOURCE_READ
             || desc->dependencies[i].access > TC_PIPELINE_RESOURCE_READ_WRITE) {
             tc_log_error("tc_pipeline_template_set_payload: invalid dependency %u", i);
+            return false;
+        }
+        bool resource_found = false;
+        for (uint32_t resource_index = 0;
+             resource_index < desc->resource_count;
+             ++resource_index) {
+            if (strcmp(
+                    desc->resources[resource_index].name,
+                    desc->dependencies[i].resource) == 0) {
+                resource_found = true;
+                break;
+            }
+        }
+        if (!resource_found) {
+            tc_log_error(
+                "tc_pipeline_template_set_payload: dependency %u references missing resource '%s'",
+                i,
+                desc->dependencies[i].resource);
             return false;
         }
     }
