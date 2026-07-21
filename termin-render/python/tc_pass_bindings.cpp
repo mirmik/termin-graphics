@@ -474,11 +474,14 @@ void bind_tc_pass_runtime(nb::module_& m) {
             std::vector<std::string> result;
             tc_pass* p = self.ptr();
             if (p) {
-                const char* symbols[64];
-                size_t count = tc_pass_get_internal_symbols(p, symbols, 64);
-                for (size_t i = 0; i < count; ++i) {
-                    if (symbols[i]) {
-                        result.push_back(symbols[i]);
+                std::vector<const char*> symbols = collect_pass_strings(
+                    p,
+                    tc_pass_get_internal_symbols
+                );
+                result.reserve(symbols.size());
+                for (const char* symbol : symbols) {
+                    if (symbol) {
+                        result.emplace_back(symbol);
                     }
                 }
             }

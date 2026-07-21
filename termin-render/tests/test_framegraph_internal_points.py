@@ -22,6 +22,13 @@ def test_framepass_has_no_internal_symbols_by_default():
     assert p.get_internal_symbols() == []
 
 
+def test_tc_pass_ref_collects_more_than_64_internal_symbols():
+    symbols = [f"symbol-{index}" for index in range(128)]
+    p = DummyFramePass(name="many-symbols", internal_symbols=symbols)
+
+    assert p._tc_pass.get_internal_symbols() == symbols
+
+
 def test_debug_internal_point_configuration_is_mutable():
     p = DummyPass(name="p", reads={"in"}, writes={"out"})
     # по умолчанию точки дебага не заданы
