@@ -104,6 +104,30 @@ RenderPipeline::RenderPipeline(const TcPipelineTemplate& pipeline_template)
             spec.samples = static_cast<int>(desc.samples);
             add_spec(spec);
         }
+
+        PipelineRenderCache& render_cache = cache();
+        for (uint32_t i = 0; i < definition->resource_view_count; ++i) {
+            const tc_pipeline_template_resource_view_desc& desc =
+                definition->resource_views[i];
+            render_cache.resource_views.emplace(
+                desc.name,
+                ResourceView{
+                    desc.parent,
+                    desc.attachment == TC_PIPELINE_ATTACHMENT_DEPTH
+                        ? AttachmentKind::Depth
+                        : AttachmentKind::Color,
+                });
+        }
+        for (uint32_t i = 0; i < definition->fbo_composition_count; ++i) {
+            const tc_pipeline_template_fbo_composition_desc& desc =
+                definition->fbo_compositions[i];
+            render_cache.fbo_compositions.emplace(
+                desc.name,
+                FboComposition{
+                    desc.color ? desc.color : "",
+                    desc.depth ? desc.depth : "",
+                });
+        }
     } catch (...) {
         destroy();
         throw;

@@ -4,7 +4,9 @@
 compiled render pipeline. It is a versioned `tc_resource_header` template in a
 process-global UUID registry. Its payload contains only the ordered pass plan,
 opaque pass parameter payloads, resource specifications, pass/resource
-dependencies, and viewport/export target metadata.
+dependencies, viewport/export target metadata, attachment resource views, and
+FBO compositions. Views and compositions are backend-independent resource
+recipes, not GPU objects or mutable cache state.
 
 The canonical template must never contain an `IRenderDevice`, GPU handle,
 frame graph, live `tc_pass`, scene handle, FBO pool, texture pool, shadow map,
@@ -69,10 +71,14 @@ must not reconstruct canonical identity by looking an instance up by name.
 
 ## Descriptor format
 
-`tc_pipeline_template_payload_desc.descriptor_version` is currently `1`.
+`tc_pipeline_template_payload_desc.descriptor_version` is currently `2`.
 `tc_pipeline_template_set_payload()` validates and atomically replaces the full
 payload, then increments the template version. Partial mutation is not part of
-the compiled-template contract.
+the compiled-template contract. Every resource view must name an existing
+concrete parent resource. Every FBO composition attachment must name either a
+concrete resource or a view of the matching attachment kind. Invalid or
+conflicting recipe names reject the candidate without changing the live
+template version.
 
 `tc_pipeline_template_serialize()` writes the versioned `TPLT` binary envelope.
 The envelope records its own binary version and the descriptor version, then
@@ -82,6 +88,12 @@ versions, malformed counts, truncated input and trailing bytes; it publishes
 the UUID only after the full descriptor can be reconstructed.
 Integer and IEEE-754 single-precision fields use little-endian byte order;
 strings use a little-endian 32-bit byte length followed by UTF-8 bytes.
+
+The authored pass-list JSON carries the same `resource_views` and
+`fbo_compositions` tables. Graph lowering emits them into the pass list, and
+template publication copies them into the binary descriptor. Consequently a
+`RenderPipeline` constructed from a deserialized TPLT restores the complete
+resource recipe without graph JSON or an asset-layer side channel.
 
 Pass `parameters` are opaque serialized values at this layer. Their schema is
 owned by the pass type named in the same pass descriptor. The canonical C

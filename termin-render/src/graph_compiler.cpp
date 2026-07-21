@@ -7,6 +7,7 @@
 #include "termin/render/render_pipeline.hpp"
 #include <termin/render/resource_spec.hpp>
 #include <trent/json.h>
+#include <algorithm>
 #include <deque>
 #include <optional>
 #include <cstdlib>
@@ -1009,6 +1010,18 @@ struct CompiledDependencyStorage {
     tc_pipeline_resource_access access = TC_PIPELINE_RESOURCE_READ;
 };
 
+struct CompiledResourceViewStorage {
+    std::string name;
+    std::string parent;
+    tc_pipeline_attachment_kind attachment = TC_PIPELINE_ATTACHMENT_COLOR;
+};
+
+struct CompiledFboCompositionStorage {
+    std::string name;
+    std::string color;
+    std::string depth;
+};
+
 void collect_dependencies(
     tc_pass* pass,
     uint32_t pass_index,
@@ -1068,6 +1081,7 @@ bool publish_pipeline_template(
     }
 
     const std::vector<ResourceSpec> specs = instance.collect_specs();
+    const termin::PipelineRenderCache& cache = instance.cache();
     std::vector<CompiledResourceStorage> resource_storage;
     std::vector<tc_pipeline_template_resource_desc> resource_descs;
     resource_storage.reserve(specs.size() + dependency_storage.size());
@@ -1082,10 +1096,18 @@ bool publish_pipeline_template(
             spec.viewport_name,
         });
     }
+    const auto add_external_resource = [&](const std::string& name) {
+        if (name.empty() || resource_indices.contains(name)) return;
+        resource_indices[name] = resource_storage.size();
+        resource_storage.push_back({name, "external", "", ""});
+    };
     for (const CompiledDependencyStorage& dependency : dependency_storage) {
         if (resource_indices.contains(dependency.resource)) continue;
-        resource_indices[dependency.resource] = resource_storage.size();
-        resource_storage.push_back({dependency.resource, "external", "", ""});
+        if (cache.resource_views.contains(dependency.resource)
+            || cache.fbo_compositions.contains(dependency.resource)) {
+            continue;
+        }
+        add_external_resource(dependency.resource);
     }
     resource_descs.reserve(resource_storage.size());
     for (const CompiledResourceStorage& stored : resource_storage) {
@@ -1123,6 +1145,50 @@ bool publish_pipeline_template(
         });
     }
 
+    std::vector<CompiledResourceViewStorage> resource_view_storage;
+    resource_view_storage.reserve(cache.resource_views.size());
+    for (const auto& [name, view] : cache.resource_views) {
+        resource_view_storage.push_back({
+            name,
+            view.parent,
+            view.attachment == termin::AttachmentKind::Depth
+                ? TC_PIPELINE_ATTACHMENT_DEPTH
+                : TC_PIPELINE_ATTACHMENT_COLOR,
+        });
+    }
+    std::sort(
+        resource_view_storage.begin(),
+        resource_view_storage.end(),
+        [](const auto& lhs, const auto& rhs) { return lhs.name < rhs.name; });
+    std::vector<tc_pipeline_template_resource_view_desc> resource_view_descs;
+    resource_view_descs.reserve(resource_view_storage.size());
+    for (const CompiledResourceViewStorage& stored : resource_view_storage) {
+        resource_view_descs.push_back({
+            stored.name.c_str(),
+            stored.parent.c_str(),
+            stored.attachment,
+        });
+    }
+
+    std::vector<CompiledFboCompositionStorage> fbo_composition_storage;
+    fbo_composition_storage.reserve(cache.fbo_compositions.size());
+    for (const auto& [name, composition] : cache.fbo_compositions) {
+        fbo_composition_storage.push_back({name, composition.color, composition.depth});
+    }
+    std::sort(
+        fbo_composition_storage.begin(),
+        fbo_composition_storage.end(),
+        [](const auto& lhs, const auto& rhs) { return lhs.name < rhs.name; });
+    std::vector<tc_pipeline_template_fbo_composition_desc> fbo_composition_descs;
+    fbo_composition_descs.reserve(fbo_composition_storage.size());
+    for (const CompiledFboCompositionStorage& stored : fbo_composition_storage) {
+        fbo_composition_descs.push_back({
+            stored.name.c_str(),
+            stored.color.empty() ? nullptr : stored.color.c_str(),
+            stored.depth.empty() ? nullptr : stored.depth.c_str(),
+        });
+    }
+
     tc_pipeline_template* template_data = pipeline_template.get();
     const std::string pipeline_name = instance.name();
     const tc_pipeline_template_payload_desc payload = {
@@ -1132,6 +1198,8 @@ bool publish_pipeline_template(
         resource_descs.data(), static_cast<uint32_t>(resource_descs.size()),
         dependency_descs.data(), static_cast<uint32_t>(dependency_descs.size()),
         target_descs.data(), static_cast<uint32_t>(target_descs.size()),
+        resource_view_descs.data(), static_cast<uint32_t>(resource_view_descs.size()),
+        fbo_composition_descs.data(), static_cast<uint32_t>(fbo_composition_descs.size()),
     };
     if (!template_data || !tc_pipeline_template_set_payload(template_data, &payload)) {
         tc::Log::error("publish_pipeline_template: failed to publish canonical pipeline template");
@@ -1286,13 +1354,21 @@ static RenderPipeline* compile_graph_impl(
         if (resource_type == "shadow" || resource_type == "shadow_map_array") {
             continue;
         }
-        if (is_external_resource_name(res_name)) {
-            continue;
-        }
         if (naming.resource_views.find(res_name) != naming.resource_views.end()) {
             continue;
         }
         if (naming.fbo_compositions.find(res_name) != naming.fbo_compositions.end()) {
+            continue;
+        }
+        if (is_external_resource_name(res_name)
+            || naming.external_resources.contains(res_name)
+            || resource_type.starts_with("external")) {
+            ResourceSpec spec;
+            spec.resource = res_name;
+            spec.resource_type = resource_type.starts_with("external")
+                ? resource_type
+                : "external";
+            pipeline->add_spec(spec);
             continue;
         }
 
@@ -1332,8 +1408,6 @@ static RenderPipeline* compile_graph_impl(
             throw GraphCompileError("failed to publish canonical pipeline template");
         }
         auto* published_instance = new RenderPipeline(*pipeline_template);
-        published_instance->cache().resource_views = pipeline->cache().resource_views;
-        published_instance->cache().fbo_compositions = pipeline->cache().fbo_compositions;
         pipeline->destroy();
         delete pipeline;
         return published_instance;

@@ -31,6 +31,14 @@ namespace termin {
 
 namespace {
 
+struct RenderPipelineCandidateDeleter {
+    void operator()(RenderPipeline* pipeline) const {
+        if (!pipeline) return;
+        pipeline->destroy();
+        delete pipeline;
+    }
+};
+
 void python_pipeline_pass_deleter(tc_pass* pass) {
     if (!pass || !pass->body) return;
     PyObject* body = reinterpret_cast<PyObject*>(pass->body);
@@ -260,6 +268,35 @@ void bind_render_pipeline(nb::module_& m) {
                 item["width"] = pipeline->targets[i].width;
                 item["height"] = pipeline->targets[i].height;
                 result.append(std::move(item));
+            }
+            return result;
+        })
+        .def_prop_ro("resource_views", [](const TcPipelineTemplate& value) {
+            nb::dict result;
+            const tc_pipeline_template* pipeline = value.get();
+            if (!pipeline) return result;
+            for (uint32_t i = 0; i < pipeline->resource_view_count; ++i) {
+                const tc_pipeline_template_resource_view_desc& view =
+                    pipeline->resource_views[i];
+                nb::dict item;
+                item["parent"] = view.parent;
+                item["attachment"] = view.attachment == TC_PIPELINE_ATTACHMENT_DEPTH
+                    ? "depth" : "color";
+                result[view.name] = std::move(item);
+            }
+            return result;
+        })
+        .def_prop_ro("fbo_compositions", [](const TcPipelineTemplate& value) {
+            nb::dict result;
+            const tc_pipeline_template* pipeline = value.get();
+            if (!pipeline) return result;
+            for (uint32_t i = 0; i < pipeline->fbo_composition_count; ++i) {
+                const tc_pipeline_template_fbo_composition_desc& composition =
+                    pipeline->fbo_compositions[i];
+                nb::dict item;
+                item["color"] = composition.color ? composition.color : "";
+                item["depth"] = composition.depth ? composition.depth : "";
+                result[composition.name] = std::move(item);
             }
             return result;
         });
@@ -523,7 +560,8 @@ void bind_render_pipeline(nb::module_& m) {
             nb::object deserialize_pass = pass_module.attr("deserialize_pass");
             std::string name = "default";
             if (data.contains("name")) name = nb::cast<std::string>(data["name"]);
-            RenderPipeline* pipeline = new RenderPipeline(name);
+            std::unique_ptr<RenderPipeline, RenderPipelineCandidateDeleter> pipeline(
+                new RenderPipeline(name));
             if (data.contains("passes")) {
                 nb::list passes = nb::cast<nb::list>(data["passes"]);
                 for (size_t i = 0; i < nb::len(passes); i++) {
@@ -616,11 +654,22 @@ void bind_render_pipeline(nb::module_& m) {
                 nb::dict values = nb::cast<nb::dict>(data["resource_views"]);
                 for (auto [key, value] : values) {
                     nb::dict item = nb::cast<nb::dict>(value);
+                    if (!item.contains("parent") || !item.contains("attachment")) {
+                        throw std::runtime_error(
+                            "resource view requires 'parent' and 'attachment'");
+                    }
                     ResourceView view;
                     view.parent = nb::cast<std::string>(item["parent"]);
-                    if (item.contains("attachment")
-                        && nb::cast<std::string>(item["attachment"]) == "depth") {
+                    const std::string attachment =
+                        nb::cast<std::string>(item["attachment"]);
+                    if (view.parent.empty()) {
+                        throw std::runtime_error("resource view parent must not be empty");
+                    }
+                    if (attachment == "depth") {
                         view.attachment = AttachmentKind::Depth;
+                    } else if (attachment != "color") {
+                        throw std::runtime_error(
+                            "resource view attachment must be 'color' or 'depth'");
                     }
                     pipeline->cache().resource_views[nb::cast<std::string>(key)] = std::move(view);
                 }
@@ -636,11 +685,15 @@ void bind_render_pipeline(nb::module_& m) {
                     if (item.contains("depth")) {
                         composition.depth = nb::cast<std::string>(item["depth"]);
                     }
+                    if (composition.color.empty() && composition.depth.empty()) {
+                        throw std::runtime_error(
+                            "FBO composition requires a color or depth attachment");
+                    }
                     pipeline->cache().fbo_compositions[nb::cast<std::string>(key)] =
                         std::move(composition);
                 }
             }
-            return pipeline;
+            return pipeline.release();
         }, nb::rv_policy::take_ownership)
 
         .def("copy", [](RenderPipeline& self, nb::object resource_manager) -> nb::object {
@@ -696,31 +749,6 @@ void bind_render_pipeline(nb::module_& m) {
        nb::arg("pass_parameters") = std::vector<std::string>{},
        nb::arg("targets") = nb::list());
 
-    m.def("apply_pipeline_template_recipe", [](
-        RenderPipeline& pipeline,
-        nb::dict view_values,
-        nb::dict composition_values
-    ) {
-        pipeline.cache().resource_views.clear();
-        for (auto [key, value] : view_values) {
-            nb::dict item = nb::cast<nb::dict>(value);
-            ResourceView view;
-            view.parent = nb::cast<std::string>(item["parent"]);
-            if (item.contains("attachment")
-                && nb::cast<std::string>(item["attachment"]) == "depth") {
-                view.attachment = AttachmentKind::Depth;
-            }
-            pipeline.cache().resource_views[nb::cast<std::string>(key)] = std::move(view);
-        }
-        pipeline.cache().fbo_compositions.clear();
-        for (auto [key, value] : composition_values) {
-            nb::dict item = nb::cast<nb::dict>(value);
-            FboComposition composition;
-            if (item.contains("color")) composition.color = nb::cast<std::string>(item["color"]);
-            if (item.contains("depth")) composition.depth = nb::cast<std::string>(item["depth"]);
-            pipeline.cache().fbo_compositions[nb::cast<std::string>(key)] = std::move(composition);
-        }
-    }, nb::arg("pipeline"), nb::arg("resource_views"), nb::arg("fbo_compositions"));
 }
 
 } // namespace termin

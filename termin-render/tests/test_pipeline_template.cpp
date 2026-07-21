@@ -5,6 +5,9 @@ GUARD_TEST_MAIN();
 #include <cstring>
 #include <vector>
 
+#include <termin/render/render_pipeline.hpp>
+#include <termin/render/tc_pipeline_template.hpp>
+
 extern "C" {
 #include <render/tc_pipeline.h>
 #include <render/tc_pipeline_template_registry.h>
@@ -30,6 +33,13 @@ TEST_CASE("compiled pipeline template round-trips without execution state") {
     const tc_pipeline_template_target_desc targets[] = {
         {"main", "final-color", 1920, 1080},
     };
+    const tc_pipeline_template_resource_view_desc resource_views[] = {
+        {"scene-color.view", "scene-color", TC_PIPELINE_ATTACHMENT_COLOR},
+        {"scene-depth.view", "scene-depth", TC_PIPELINE_ATTACHMENT_DEPTH},
+    };
+    const tc_pipeline_template_fbo_composition_desc fbo_compositions[] = {
+        {"joined-scene", "scene-color.view", "scene-depth.view"},
+    };
     const tc_pipeline_template_payload_desc payload = {
         TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION,
         "main pipeline",
@@ -37,6 +47,8 @@ TEST_CASE("compiled pipeline template round-trips without execution state") {
         resources, 2,
         dependencies, 3,
         targets, 1,
+        resource_views, 2,
+        fbo_compositions, 1,
     };
 
     tc_pipeline_template_handle original_handle =
@@ -52,6 +64,16 @@ TEST_CASE("compiled pipeline template round-trips without execution state") {
     CHECK_FALSE(tc_pipeline_template_set_payload(original, &rejected));
     CHECK_EQ(tc_pipeline_template_version(original), initial_version + 1);
     CHECK_EQ(original->pass_count, 2u);
+
+    const tc_pipeline_template_resource_view_desc invalid_views[] = {
+        {"orphan", "missing-parent", TC_PIPELINE_ATTACHMENT_COLOR},
+    };
+    rejected = payload;
+    rejected.resource_views = invalid_views;
+    rejected.resource_view_count = 1;
+    CHECK_FALSE(tc_pipeline_template_set_payload(original, &rejected));
+    CHECK_EQ(tc_pipeline_template_version(original), initial_version + 1);
+    CHECK_EQ(original->resource_view_count, 2u);
 
     const size_t byte_count = tc_pipeline_template_serialize(original, nullptr, 0);
     REQUIRE(byte_count > 32);
@@ -79,6 +101,12 @@ TEST_CASE("compiled pipeline template round-trips without execution state") {
     CHECK(decoded->dependencies[1].access == TC_PIPELINE_RESOURCE_READ);
     REQUIRE(decoded->target_count == 1);
     CHECK(std::strcmp(decoded->targets[0].export_name, "final-color") == 0);
+    REQUIRE(decoded->resource_view_count == 2);
+    CHECK(std::strcmp(decoded->resource_views[0].parent, "scene-color") == 0);
+    CHECK(decoded->resource_views[1].attachment == TC_PIPELINE_ATTACHMENT_DEPTH);
+    REQUIRE(decoded->fbo_composition_count == 1);
+    CHECK(std::strcmp(decoded->fbo_compositions[0].name, "joined-scene") == 0);
+    CHECK(std::strcmp(decoded->fbo_compositions[0].depth, "scene-depth.view") == 0);
 
     CHECK(tc_pipeline_template_remove(original_handle));
     CHECK(tc_pipeline_template_remove(decoded_handle));
@@ -146,4 +174,50 @@ TEST_CASE("runtime-only pipeline does not synthesize a canonical template") {
     tc_pipeline_destroy(instance);
     tc_pipeline_pool_shutdown();
     tc_pipeline_template_shutdown();
+}
+
+TEST_CASE("runtime instance restores resource views and FBO compositions from template") {
+    tc_pipeline_pool_init();
+
+    const tc_pipeline_template_resource_desc resources[] = {
+        {"scene-fbo", "external", nullptr, nullptr, 0, 0, 1.0f, 1, 0},
+    };
+    const tc_pipeline_template_resource_view_desc resource_views[] = {
+        {"scene-color", "scene-fbo", TC_PIPELINE_ATTACHMENT_COLOR},
+        {"scene-depth", "scene-fbo", TC_PIPELINE_ATTACHMENT_DEPTH},
+    };
+    const tc_pipeline_template_fbo_composition_desc fbo_compositions[] = {
+        {"joined-scene", "scene-color", "scene-depth"},
+    };
+    const tc_pipeline_template_payload_desc payload = {
+        TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION,
+        "recipe pipeline",
+        nullptr, 0,
+        resources, 1,
+        nullptr, 0,
+        nullptr, 0,
+        resource_views, 2,
+        fbo_compositions, 1,
+    };
+    const tc_pipeline_template_handle handle =
+        tc_pipeline_template_create("pipeline-recipe-instance", "placeholder");
+    REQUIRE(tc_pipeline_template_set_payload(tc_pipeline_template_get(handle), &payload));
+
+    {
+        termin::TcPipelineTemplate definition(handle);
+        termin::RenderPipeline instance(definition);
+        REQUIRE(instance.is_valid());
+        REQUIRE(instance.cache().resource_views.size() == 2);
+        CHECK(instance.cache().resource_views.at("scene-color").parent == "scene-fbo");
+        CHECK(
+            instance.cache().resource_views.at("scene-depth").attachment
+            == termin::AttachmentKind::Depth);
+        REQUIRE(instance.cache().fbo_compositions.size() == 1);
+        CHECK(instance.cache().fbo_compositions.at("joined-scene").color == "scene-color");
+        CHECK(instance.cache().fbo_compositions.at("joined-scene").depth == "scene-depth");
+        instance.destroy();
+    }
+
+    CHECK_FALSE(tc_pipeline_template_is_valid(handle));
+    tc_pipeline_pool_shutdown();
 }

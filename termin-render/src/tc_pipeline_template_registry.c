@@ -23,14 +23,20 @@ static void clear_payload(tc_pipeline_template* pipeline_template) {
     free(pipeline_template->resources);
     free(pipeline_template->dependencies);
     free(pipeline_template->targets);
+    free(pipeline_template->resource_views);
+    free(pipeline_template->fbo_compositions);
     pipeline_template->passes = NULL;
     pipeline_template->resources = NULL;
     pipeline_template->dependencies = NULL;
     pipeline_template->targets = NULL;
+    pipeline_template->resource_views = NULL;
+    pipeline_template->fbo_compositions = NULL;
     pipeline_template->pass_count = 0;
     pipeline_template->resource_count = 0;
     pipeline_template->dependency_count = 0;
     pipeline_template->target_count = 0;
+    pipeline_template->resource_view_count = 0;
+    pipeline_template->fbo_composition_count = 0;
 }
 
 void tc_pipeline_template_init(void) {
@@ -167,7 +173,9 @@ static bool validate_payload(const tc_pipeline_template_payload_desc* desc) {
     if ((desc->pass_count && !desc->passes)
         || (desc->resource_count && !desc->resources)
         || (desc->dependency_count && !desc->dependencies)
-        || (desc->target_count && !desc->targets)) {
+        || (desc->target_count && !desc->targets)
+        || (desc->resource_view_count && !desc->resource_views)
+        || (desc->fbo_composition_count && !desc->fbo_compositions)) {
         tc_log_error("tc_pipeline_template_set_payload: array pointer is NULL");
         return false;
     }
@@ -197,6 +205,122 @@ static bool validate_payload(const tc_pipeline_template_payload_desc* desc) {
             }
         }
     }
+    for (uint32_t i = 0; i < desc->resource_view_count; ++i) {
+        const tc_pipeline_template_resource_view_desc* view = &desc->resource_views[i];
+        if (!view->name || !view->name[0] || !view->parent || !view->parent[0]
+            || (view->attachment != TC_PIPELINE_ATTACHMENT_COLOR
+                && view->attachment != TC_PIPELINE_ATTACHMENT_DEPTH)) {
+            tc_log_error("tc_pipeline_template_set_payload: invalid resource view %u", i);
+            return false;
+        }
+        bool parent_found = false;
+        for (uint32_t resource_index = 0;
+             resource_index < desc->resource_count;
+             ++resource_index) {
+            const char* resource_name = desc->resources[resource_index].name;
+            if (strcmp(resource_name, view->name) == 0) {
+                tc_log_error(
+                    "tc_pipeline_template_set_payload: resource view '%s' conflicts with a concrete resource",
+                    view->name);
+                return false;
+            }
+            if (strcmp(resource_name, view->parent) == 0) parent_found = true;
+        }
+        if (!parent_found) {
+            tc_log_error(
+                "tc_pipeline_template_set_payload: resource view '%s' references missing parent '%s'",
+                view->name,
+                view->parent);
+            return false;
+        }
+        for (uint32_t previous = 0; previous < i; ++previous) {
+            if (strcmp(desc->resource_views[previous].name, view->name) == 0) {
+                tc_log_error(
+                    "tc_pipeline_template_set_payload: duplicate resource view '%s'",
+                    view->name);
+                return false;
+            }
+        }
+    }
+    for (uint32_t i = 0; i < desc->fbo_composition_count; ++i) {
+        const tc_pipeline_template_fbo_composition_desc* composition =
+            &desc->fbo_compositions[i];
+        if (!composition->name || !composition->name[0]
+            || ((!composition->color || !composition->color[0])
+                && (!composition->depth || !composition->depth[0]))) {
+            tc_log_error("tc_pipeline_template_set_payload: invalid FBO composition %u", i);
+            return false;
+        }
+        for (uint32_t resource_index = 0;
+             resource_index < desc->resource_count;
+             ++resource_index) {
+            if (strcmp(desc->resources[resource_index].name, composition->name) == 0) {
+                tc_log_error(
+                    "tc_pipeline_template_set_payload: FBO composition '%s' conflicts with a concrete resource",
+                    composition->name);
+                return false;
+            }
+        }
+        for (uint32_t view_index = 0;
+             view_index < desc->resource_view_count;
+             ++view_index) {
+            if (strcmp(desc->resource_views[view_index].name, composition->name) == 0) {
+                tc_log_error(
+                    "tc_pipeline_template_set_payload: FBO composition '%s' conflicts with a resource view",
+                    composition->name);
+                return false;
+            }
+        }
+        for (uint32_t previous = 0; previous < i; ++previous) {
+            if (strcmp(desc->fbo_compositions[previous].name, composition->name) == 0) {
+                tc_log_error(
+                    "tc_pipeline_template_set_payload: duplicate FBO composition '%s'",
+                    composition->name);
+                return false;
+            }
+        }
+        const char* attachments[2] = {composition->color, composition->depth};
+        const tc_pipeline_attachment_kind expected_kinds[2] = {
+            TC_PIPELINE_ATTACHMENT_COLOR,
+            TC_PIPELINE_ATTACHMENT_DEPTH,
+        };
+        for (uint32_t attachment_index = 0; attachment_index < 2; ++attachment_index) {
+            const char* attachment = attachments[attachment_index];
+            if (!attachment || !attachment[0]) continue;
+            bool found = false;
+            for (uint32_t resource_index = 0;
+                 resource_index < desc->resource_count;
+                 ++resource_index) {
+                if (strcmp(desc->resources[resource_index].name, attachment) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+            for (uint32_t view_index = 0;
+                 !found && view_index < desc->resource_view_count;
+                 ++view_index) {
+                const tc_pipeline_template_resource_view_desc* view =
+                    &desc->resource_views[view_index];
+                if (strcmp(view->name, attachment) == 0) {
+                    if (view->attachment != expected_kinds[attachment_index]) {
+                        tc_log_error(
+                            "tc_pipeline_template_set_payload: FBO composition '%s' uses view '%s' for the wrong attachment kind",
+                            composition->name,
+                            attachment);
+                        return false;
+                    }
+                    found = true;
+                }
+            }
+            if (!found) {
+                tc_log_error(
+                    "tc_pipeline_template_set_payload: FBO composition '%s' references missing attachment '%s'",
+                    composition->name,
+                    attachment);
+                return false;
+            }
+        }
+    }
     for (uint32_t i = 0; i < desc->dependency_count; ++i) {
         if (desc->dependencies[i].pass_index >= desc->pass_count
             || !desc->dependencies[i].resource || !desc->dependencies[i].resource[0]
@@ -215,6 +339,20 @@ static bool validate_payload(const tc_pipeline_template_payload_desc* desc) {
                 resource_found = true;
                 break;
             }
+        }
+        for (uint32_t view_index = 0;
+             !resource_found && view_index < desc->resource_view_count;
+             ++view_index) {
+            resource_found = strcmp(
+                desc->resource_views[view_index].name,
+                desc->dependencies[i].resource) == 0;
+        }
+        for (uint32_t composition_index = 0;
+             !resource_found && composition_index < desc->fbo_composition_count;
+             ++composition_index) {
+            resource_found = strcmp(
+                desc->fbo_compositions[composition_index].name,
+                desc->dependencies[i].resource) == 0;
         }
         if (!resource_found) {
             tc_log_error(
@@ -243,10 +381,14 @@ bool tc_pipeline_template_set_payload(
     tc_pipeline_template_resource_desc* resources = NULL;
     tc_pipeline_template_dependency_desc* dependencies = NULL;
     tc_pipeline_template_target_desc* targets = NULL;
+    tc_pipeline_template_resource_view_desc* resource_views = NULL;
+    tc_pipeline_template_fbo_composition_desc* fbo_compositions = NULL;
     ALLOC_COPY(passes, desc->pass_count);
     ALLOC_COPY(resources, desc->resource_count);
     ALLOC_COPY(dependencies, desc->dependency_count);
     ALLOC_COPY(targets, desc->target_count);
+    ALLOC_COPY(resource_views, desc->resource_view_count);
+    ALLOC_COPY(fbo_compositions, desc->fbo_composition_count);
 
     for (uint32_t i = 0; i < desc->pass_count; ++i) {
         passes[i] = desc->passes[i];
@@ -271,6 +413,17 @@ bool tc_pipeline_template_set_payload(
         targets[i].viewport_name = intern_optional(desc->targets[i].viewport_name);
         targets[i].export_name = intern_optional(desc->targets[i].export_name);
     }
+    for (uint32_t i = 0; i < desc->resource_view_count; ++i) {
+        resource_views[i] = desc->resource_views[i];
+        resource_views[i].name = tc_intern_string(desc->resource_views[i].name);
+        resource_views[i].parent = tc_intern_string(desc->resource_views[i].parent);
+    }
+    for (uint32_t i = 0; i < desc->fbo_composition_count; ++i) {
+        fbo_compositions[i] = desc->fbo_compositions[i];
+        fbo_compositions[i].name = tc_intern_string(desc->fbo_compositions[i].name);
+        fbo_compositions[i].color = intern_optional(desc->fbo_compositions[i].color);
+        fbo_compositions[i].depth = intern_optional(desc->fbo_compositions[i].depth);
+    }
 
     clear_payload(pipeline_template);
     pipeline_template->header.name = tc_intern_string(desc->name);
@@ -283,6 +436,10 @@ bool tc_pipeline_template_set_payload(
     pipeline_template->dependency_count = desc->dependency_count;
     pipeline_template->targets = targets;
     pipeline_template->target_count = desc->target_count;
+    pipeline_template->resource_views = resource_views;
+    pipeline_template->resource_view_count = desc->resource_view_count;
+    pipeline_template->fbo_compositions = fbo_compositions;
+    pipeline_template->fbo_composition_count = desc->fbo_composition_count;
     tc_resource_header_bump_version(&pipeline_template->header);
     return true;
 
@@ -292,6 +449,8 @@ allocation_failed:
     free(resources);
     free(dependencies);
     free(targets);
+    free(resource_views);
+    free(fbo_compositions);
     return false;
 }
 
@@ -362,6 +521,8 @@ size_t tc_pipeline_template_serialize(
     write_u32(&writer, pipeline_template->resource_count);
     write_u32(&writer, pipeline_template->dependency_count);
     write_u32(&writer, pipeline_template->target_count);
+    write_u32(&writer, pipeline_template->resource_view_count);
+    write_u32(&writer, pipeline_template->fbo_composition_count);
     for (uint32_t i = 0; i < pipeline_template->pass_count; ++i) {
         write_string(&writer, pipeline_template->passes[i].type_name);
         write_string(&writer, pipeline_template->passes[i].name);
@@ -390,6 +551,16 @@ size_t tc_pipeline_template_serialize(
         write_string(&writer, pipeline_template->targets[i].export_name);
         write_i32(&writer, pipeline_template->targets[i].width);
         write_i32(&writer, pipeline_template->targets[i].height);
+    }
+    for (uint32_t i = 0; i < pipeline_template->resource_view_count; ++i) {
+        write_string(&writer, pipeline_template->resource_views[i].name);
+        write_string(&writer, pipeline_template->resource_views[i].parent);
+        write_u32(&writer, (uint32_t)pipeline_template->resource_views[i].attachment);
+    }
+    for (uint32_t i = 0; i < pipeline_template->fbo_composition_count; ++i) {
+        write_string(&writer, pipeline_template->fbo_compositions[i].name);
+        write_string(&writer, pipeline_template->fbo_compositions[i].color);
+        write_string(&writer, pipeline_template->fbo_compositions[i].depth);
     }
     if (!writer.valid) return 0;
     if (output && writer.offset > capacity) return writer.offset;
@@ -467,10 +638,23 @@ static void free_decoded_payload(tc_pipeline_template_payload_desc* desc) {
         free((void*)desc->targets[i].viewport_name);
         free((void*)desc->targets[i].export_name);
     }
+    for (uint32_t i = 0; desc->resource_views && i < desc->resource_view_count; ++i) {
+        free((void*)desc->resource_views[i].name);
+        free((void*)desc->resource_views[i].parent);
+    }
+    for (uint32_t i = 0;
+         desc->fbo_compositions && i < desc->fbo_composition_count;
+         ++i) {
+        free((void*)desc->fbo_compositions[i].name);
+        free((void*)desc->fbo_compositions[i].color);
+        free((void*)desc->fbo_compositions[i].depth);
+    }
     free((void*)desc->passes);
     free((void*)desc->resources);
     free((void*)desc->dependencies);
     free((void*)desc->targets);
+    free((void*)desc->resource_views);
+    free((void*)desc->fbo_compositions);
 }
 
 tc_pipeline_template_handle tc_pipeline_template_deserialize(
@@ -494,11 +678,14 @@ tc_pipeline_template_handle tc_pipeline_template_deserialize(
     desc.resource_count = read_u32(&reader);
     desc.dependency_count = read_u32(&reader);
     desc.target_count = read_u32(&reader);
+    desc.resource_view_count = read_u32(&reader);
+    desc.fbo_composition_count = read_u32(&reader);
     if (!reader.valid || memcmp(magic, "TPLT", 4) != 0
         || binary_version != TC_PIPELINE_TEMPLATE_BINARY_VERSION
         || desc.descriptor_version != TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION
         || desc.pass_count > 65536 || desc.resource_count > 65536
-        || desc.dependency_count > 262144 || desc.target_count > 65536) {
+        || desc.dependency_count > 262144 || desc.target_count > 65536
+        || desc.resource_view_count > 65536 || desc.fbo_composition_count > 65536) {
         tc_log_error("tc_pipeline_template_deserialize: invalid header");
         free_decoded_payload(&desc);
         return tc_pipeline_template_handle_invalid();
@@ -507,8 +694,14 @@ tc_pipeline_template_handle tc_pipeline_template_deserialize(
     desc.resources = (tc_pipeline_template_resource_desc*)calloc(desc.resource_count, sizeof(*desc.resources));
     desc.dependencies = (tc_pipeline_template_dependency_desc*)calloc(desc.dependency_count, sizeof(*desc.dependencies));
     desc.targets = (tc_pipeline_template_target_desc*)calloc(desc.target_count, sizeof(*desc.targets));
+    desc.resource_views = (tc_pipeline_template_resource_view_desc*)calloc(
+        desc.resource_view_count, sizeof(*desc.resource_views));
+    desc.fbo_compositions = (tc_pipeline_template_fbo_composition_desc*)calloc(
+        desc.fbo_composition_count, sizeof(*desc.fbo_compositions));
     if ((desc.pass_count && !desc.passes) || (desc.resource_count && !desc.resources)
-        || (desc.dependency_count && !desc.dependencies) || (desc.target_count && !desc.targets)) {
+        || (desc.dependency_count && !desc.dependencies) || (desc.target_count && !desc.targets)
+        || (desc.resource_view_count && !desc.resource_views)
+        || (desc.fbo_composition_count && !desc.fbo_compositions)) {
         reader.valid = false;
     }
     for (uint32_t i = 0; reader.valid && i < desc.pass_count; ++i) {
@@ -542,6 +735,20 @@ tc_pipeline_template_handle tc_pipeline_template_deserialize(
         value->export_name = read_string(&reader);
         value->width = read_i32(&reader);
         value->height = read_i32(&reader);
+    }
+    for (uint32_t i = 0; reader.valid && i < desc.resource_view_count; ++i) {
+        tc_pipeline_template_resource_view_desc* value =
+            (tc_pipeline_template_resource_view_desc*)&desc.resource_views[i];
+        value->name = read_string(&reader);
+        value->parent = read_string(&reader);
+        value->attachment = (tc_pipeline_attachment_kind)read_u32(&reader);
+    }
+    for (uint32_t i = 0; reader.valid && i < desc.fbo_composition_count; ++i) {
+        tc_pipeline_template_fbo_composition_desc* value =
+            (tc_pipeline_template_fbo_composition_desc*)&desc.fbo_compositions[i];
+        value->name = read_string(&reader);
+        value->color = read_string(&reader);
+        value->depth = read_string(&reader);
     }
     if (!reader.valid || reader.offset != reader.size) {
         tc_log_error("tc_pipeline_template_deserialize: truncated or trailing data");

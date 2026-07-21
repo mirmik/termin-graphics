@@ -14,8 +14,8 @@ extern "C" {
 
 TC_DEFINE_HANDLE(tc_pipeline_template_handle)
 
-#define TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION 1u
-#define TC_PIPELINE_TEMPLATE_BINARY_VERSION 1u
+#define TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION 2u
+#define TC_PIPELINE_TEMPLATE_BINARY_VERSION 2u
 
 typedef enum tc_pipeline_resource_access {
     TC_PIPELINE_RESOURCE_READ = 1,
@@ -55,6 +55,23 @@ typedef struct tc_pipeline_template_target_desc {
     int32_t height;
 } tc_pipeline_template_target_desc;
 
+typedef enum tc_pipeline_attachment_kind {
+    TC_PIPELINE_ATTACHMENT_COLOR = 1,
+    TC_PIPELINE_ATTACHMENT_DEPTH = 2
+} tc_pipeline_attachment_kind;
+
+typedef struct tc_pipeline_template_resource_view_desc {
+    const char* name;
+    const char* parent;
+    tc_pipeline_attachment_kind attachment;
+} tc_pipeline_template_resource_view_desc;
+
+typedef struct tc_pipeline_template_fbo_composition_desc {
+    const char* name;
+    const char* color;
+    const char* depth;
+} tc_pipeline_template_fbo_composition_desc;
+
 typedef struct tc_pipeline_template_payload_desc {
     uint32_t descriptor_version;
     const char* name;
@@ -66,6 +83,10 @@ typedef struct tc_pipeline_template_payload_desc {
     uint32_t dependency_count;
     const tc_pipeline_template_target_desc* targets;
     uint32_t target_count;
+    const tc_pipeline_template_resource_view_desc* resource_views;
+    uint32_t resource_view_count;
+    const tc_pipeline_template_fbo_composition_desc* fbo_compositions;
+    uint32_t fbo_composition_count;
 } tc_pipeline_template_payload_desc;
 
 typedef struct tc_pipeline_template {
@@ -80,6 +101,10 @@ typedef struct tc_pipeline_template {
     uint32_t dependency_count;
     tc_pipeline_template_target_desc* targets;
     uint32_t target_count;
+    tc_pipeline_template_resource_view_desc* resource_views;
+    uint32_t resource_view_count;
+    tc_pipeline_template_fbo_composition_desc* fbo_compositions;
+    uint32_t fbo_composition_count;
 } tc_pipeline_template;
 
 #ifdef __cplusplus
