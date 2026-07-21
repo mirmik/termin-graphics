@@ -212,6 +212,9 @@ public:
     // Create 1x1 white texture
     static TcTexture white_1x1();
 
+    // Create 1x1 flat tangent-space normal texture
+    static TcTexture normal_1x1();
+
     // Create 1x1 depth texture for sampler2DShadow placeholders (AMD compatibility)
     // Returns 1.0 (fully lit) when sampled
     static TcTexture dummy_shadow_1x1();

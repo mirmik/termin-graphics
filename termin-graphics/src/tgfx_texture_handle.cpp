@@ -86,23 +86,11 @@ TcTexture TcTexture::from_data(const TcTextureCreateInfo& info) {
 }
 
 TcTexture TcTexture::white_1x1() {
-    static const char* WHITE_UUID = "__white_1x1__";
+    return TcTexture(tc_texture_get_white_1x1());
+}
 
-    // Check if already exists
-    tc_texture_handle h = tc_texture_find(WHITE_UUID);
-    if (!tc_texture_handle_is_invalid(h)) {
-        return TcTexture(h);
-    }
-
-    // Create 1x1 white pixel
-    uint8_t white_pixel[4] = {255, 255, 255, 255};
-    return from_data(TcTextureCreateInfo{
-        TexturePixelDataView{white_pixel, 1, 1, 4},
-        TextureTransformFlags{false, false, false},
-        "__white_1x1__",
-        "",
-        WHITE_UUID
-    });
+TcTexture TcTexture::normal_1x1() {
+    return TcTexture(tc_texture_get_normal_1x1());
 }
 
 TcTexture TcTexture::dummy_shadow_1x1() {

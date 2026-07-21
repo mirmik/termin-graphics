@@ -160,9 +160,17 @@ class Texture:
         return tex
 
 
-# --- White 1x1 Texture ---
-
-_white_texture: Texture | None = None
+def _default_texture(texture_data: TcTexture, name: str) -> Texture:
+    asset = TextureAsset(
+        texture_data=texture_data,
+        name=name,
+        source_path=name,
+        uuid=texture_data.uuid,
+    )
+    texture = Texture()
+    texture._asset = asset
+    texture._texture_data = texture_data
+    return texture
 
 
 def get_white_texture() -> Texture:
@@ -170,31 +178,12 @@ def get_white_texture() -> Texture:
     Returns a white 1x1 texture.
 
     Used as default for optional texture slots (like albedo when no texture is set).
-    Singleton — created once.
+    The canonical texture data lives in the C registry. This compatibility
+    wrapper is deliberately recreated instead of cached in Python.
     """
-    global _white_texture
+    from termin.render.texture_handle import get_white_texture_handle
 
-    if _white_texture is None:
-        from termin.render.texture_handle import get_white_texture_handle
-
-        texture_data = get_white_texture_handle()
-        asset = TextureAsset(
-            texture_data=texture_data,
-            name="__white_1x1__",
-            source_path="__white_1x1__",
-            uuid=texture_data.uuid,
-        )
-        texture = Texture()
-        texture._asset = asset
-        texture._texture_data = texture_data
-        _white_texture = texture
-
-    return _white_texture
-
-
-# --- Normal 1x1 Texture (flat normal) ---
-
-_normal_texture: Texture | None = None
+    return _default_texture(get_white_texture_handle(), "__white_1x1__")
 
 
 def get_normal_texture() -> Texture:
@@ -203,23 +192,9 @@ def get_normal_texture() -> Texture:
 
     RGB(128, 128, 255) = tangent space normal (0, 0, 1) after [0,255]->[-1,1] conversion.
     Used as default for normal map slots when no texture is set.
-    Singleton — created once.
+    The canonical texture data lives in the C registry. This compatibility
+    wrapper is deliberately recreated instead of cached in Python.
     """
-    global _normal_texture
+    from termin.render.texture_handle import get_normal_texture_handle
 
-    if _normal_texture is None:
-        from termin.render.texture_handle import get_normal_texture_handle
-
-        texture_data = get_normal_texture_handle()
-        asset = TextureAsset(
-            texture_data=texture_data,
-            name="__normal_1x1__",
-            source_path="__normal_1x1__",
-            uuid=texture_data.uuid,
-        )
-        texture = Texture()
-        texture._asset = asset
-        texture._texture_data = texture_data
-        _normal_texture = texture
-
-    return _normal_texture
+    return _default_texture(get_normal_texture_handle(), "__normal_1x1__")

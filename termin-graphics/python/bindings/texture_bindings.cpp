@@ -181,6 +181,7 @@ void bind_texture(nb::module_& m) {
         )
 
         .def_static("white_1x1", &TcTexture::white_1x1)
+        .def_static("normal_1x1", &TcTexture::normal_1x1)
 
         .def_static("from_uuid", &TcTexture::from_uuid, nb::arg("uuid"))
 
