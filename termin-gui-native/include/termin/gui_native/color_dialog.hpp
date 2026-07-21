@@ -24,14 +24,14 @@ class ColorDialog final : public Dialog {
     Color color() const { return model_->color(); }
     void set_color(Color color) { model_->set_color(color); }
     tc_widget_handle picker_handle() const { return picker_handle_; }
-    bool show(tc_ui_document* document, tc_ui_rect viewport);
+    bool show(tc_ui_document_handle document, tc_ui_rect viewport);
     Signal<ColorDialog&, const std::optional<Color>&>& color_finished() { return color_finished_; }
 
   protected:
     bool before_action(const DialogAction& action) override;
 
   private:
-    bool ensure_content(tc_ui_document* document);
+    bool ensure_content(tc_ui_document_handle document);
 };
 
 } // namespace termin::gui_native

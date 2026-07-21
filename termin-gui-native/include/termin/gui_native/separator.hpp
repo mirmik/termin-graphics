@@ -12,6 +12,6 @@ public:
     explicit Separator(Orientation orientation = Orientation::Horizontal);
     Separator& set_color(Color color);
     Separator& set_thickness(float thickness);
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
 };
 } // namespace termin::gui_native

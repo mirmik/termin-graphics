@@ -19,7 +19,7 @@ public:
     int paint_count = 0;
 
 private:
-    static void paint(tc_widget* widget, tc_ui_document*, tc_ui_paint_context* context) {
+    static void paint(tc_widget* widget, tc_ui_document_handle, tc_ui_paint_context* context) {
         auto* self = static_cast<TestPaintWidget*>(widget->body);
         self->paint_count += 1;
 

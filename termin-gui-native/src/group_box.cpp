@@ -57,7 +57,7 @@ void GroupBox::set_content(tc_widget_handle handle) {
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
-tc_ui_size GroupBox::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size GroupBox::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
     const tc_ui_style style = computed_style(document);
     tc_ui_size measured = preferred_size();
     tc_ui_text_metrics title_metrics {};
@@ -85,7 +85,7 @@ tc_ui_size GroupBox::measure(tc_ui_document* document, tc_ui_constraints constra
     return clamp_size(measured, constraints);
 }
 
-void GroupBox::layout(tc_ui_document* document, tc_ui_rect rect) {
+void GroupBox::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
     if (tc_widget_handle_is_invalid(this->content())) {
         return;
@@ -94,7 +94,7 @@ void GroupBox::layout(tc_ui_document* document, tc_ui_rect rect) {
     layout_widget(content, document, content_rect(document));
 }
 
-void GroupBox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void GroupBox::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     if (color_visible(style.background)) {
         tc_ui_painter_fill_rect(context, bounds(), style.background);
@@ -139,11 +139,11 @@ void GroupBox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     tc_ui_painter_pop_clip(context);
 }
 
-tc_ui_event_result GroupBox::pointer_event(tc_ui_document*, const tc_ui_pointer_event*) {
+tc_ui_event_result GroupBox::pointer_event(tc_ui_document_handle, const tc_ui_pointer_event*) {
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_widget_handle GroupBox::hit_test(tc_ui_document* document, float x, float y) {
+tc_widget_handle GroupBox::hit_test(tc_ui_document_handle document, float x, float y) {
     if (!visible() || !rect_contains(bounds(), x, y)) {
         return tc_widget_handle_invalid();
     }
@@ -159,7 +159,7 @@ tc_widget_handle GroupBox::hit_test(tc_ui_document* document, float x, float y) 
     return mouse_transparent() ? tc_widget_handle_invalid() : handle();
 }
 
-tc_ui_rect GroupBox::content_rect(tc_ui_document* document) const {
+tc_ui_rect GroupBox::content_rect(tc_ui_document_handle document) const {
     const tc_ui_style style = computed_style(document);
     tc_ui_rect rect {
         bounds().x + style.padding_left,

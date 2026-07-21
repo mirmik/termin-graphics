@@ -53,12 +53,12 @@ class ColorPicker : public NativeWidget {
     const ColorPickerSurface& surface(ColorPickerSurfaceKind kind);
     Signal<ColorPicker&, uint32_t>& surfaces_invalidated() { return surfaces_invalidated_; }
 
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document,
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document,
                                      const tc_ui_pointer_event* event) override;
-    void on_destroy(tc_ui_document* document) override;
+    void on_destroy(tc_ui_document_handle document) override;
 
   private:
     void connect_model();

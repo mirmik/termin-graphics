@@ -21,13 +21,13 @@ class InputDialog final : public Dialog {
     const std::string& message() const { return message_; }
     const std::string& value() const;
     void set_value(std::string value);
-    bool show(tc_ui_document* document, tc_ui_rect viewport);
+    bool show(tc_ui_document_handle document, tc_ui_rect viewport);
     Signal<InputDialog&, const std::optional<std::string>&>& value_finished() {
         return value_finished_;
     }
 
   private:
-    bool ensure_content(tc_ui_document* document);
+    bool ensure_content(tc_ui_document_handle document);
 
 };
 

@@ -56,34 +56,34 @@ class Dialog : public NativeWidget {
     void set_dismiss_on_escape(bool enabled) { dismiss_on_escape_ = enabled; }
     void set_content(NativeWidget& content);
     tc_widget_handle content_handle() const { return content_handle_; }
-    bool show(tc_ui_document* document, tc_ui_rect viewport);
-    bool close(tc_ui_document* document);
-    bool activate(std::string_view action_id, tc_ui_document* document);
+    bool show(tc_ui_document_handle document, tc_ui_rect viewport);
+    bool close(tc_ui_document_handle document);
+    bool activate(std::string_view action_id, tc_ui_document_handle document);
     bool open() const { return open_; }
     const DialogResult* result() const { return has_result_ ? &result_ : nullptr; }
     const std::vector<tc_widget_handle>& button_handles() const { return button_handles_; }
 
     Signal<Dialog&, const DialogResult&>& finished() { return finished_; }
 
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
-    tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event) override;
-    void overlay_dismissed(tc_ui_document* document, tc_ui_overlay_dismiss_reason reason) override;
-    void on_destroy(tc_ui_document* document) override;
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_widget_handle hit_test(tc_ui_document_handle document, float x, float y) override;
+    tc_ui_event_result key_event(tc_ui_document_handle document, const tc_ui_key_event* event) override;
+    void overlay_dismissed(tc_ui_document_handle document, tc_ui_overlay_dismiss_reason reason) override;
+    void on_destroy(tc_ui_document_handle document) override;
 
   protected:
     virtual bool before_action(const DialogAction& action);
 
   private:
     static void validate_actions(const std::vector<DialogAction>& actions);
-    static tc_ui_size action_button_size(tc_ui_document* document, const DialogAction& action);
-    bool ensure_buttons(tc_ui_document* document);
-    void destroy_buttons(tc_ui_document* document);
+    static tc_ui_size action_button_size(tc_ui_document_handle document, const DialogAction& action);
+    bool ensure_buttons(tc_ui_document_handle document);
+    void destroy_buttons(tc_ui_document_handle document);
     const DialogAction* default_action() const;
     const DialogAction* cancel_action() const;
-    void deliver_result(tc_ui_document* document, DialogResult result);
+    void deliver_result(tc_ui_document_handle document, DialogResult result);
 
 };
 

@@ -127,7 +127,7 @@ std::vector<tc_widget_handle> BoxLayout::children() const {
   return handles;
 }
 
-tc_ui_size BoxLayout::measure(tc_ui_document *document,
+tc_ui_size BoxLayout::measure(tc_ui_document_handle document,
                               tc_ui_constraints constraints) {
   tc_ui_size content{0.0f, 0.0f};
   size_t live_children = 0;
@@ -185,7 +185,7 @@ tc_ui_size BoxLayout::measure(tc_ui_document *document,
   return clamp_size(content, effective_constraints);
 }
 
-void BoxLayout::layout(tc_ui_document *document, tc_ui_rect rect) {
+void BoxLayout::layout(tc_ui_document_handle document, tc_ui_rect rect) {
   NativeWidget::layout(document, rect);
 
   struct LiveItem {
@@ -274,7 +274,7 @@ void BoxLayout::layout(tc_ui_document *document, tc_ui_rect rect) {
   }
 }
 
-void BoxLayout::paint(tc_ui_document *document, tc_ui_paint_context *context) {
+void BoxLayout::paint(tc_ui_document_handle document, tc_ui_paint_context *context) {
   if (color_visible(background_)) {
     if (corner_radius_ > 0.0f) {
       tc_ui_painter_fill_rounded_rect(context, bounds(), corner_radius_,
@@ -300,13 +300,13 @@ void BoxLayout::paint(tc_ui_document *document, tc_ui_paint_context *context) {
   tc_ui_painter_pop_clip(context);
 }
 
-tc_ui_event_result BoxLayout::pointer_event(tc_ui_document *,
+tc_ui_event_result BoxLayout::pointer_event(tc_ui_document_handle,
                                             const tc_ui_pointer_event *event) {
   (void)event;
   return TC_UI_EVENT_IGNORED;
 }
 
-tc_widget_handle BoxLayout::hit_test(tc_ui_document *document, float x,
+tc_widget_handle BoxLayout::hit_test(tc_ui_document_handle document, float x,
                                      float y) {
   if (!visible() || !rect_contains(bounds(), x, y)) {
     return tc_widget_handle_invalid();

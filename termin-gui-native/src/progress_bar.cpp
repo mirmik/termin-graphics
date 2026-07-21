@@ -19,7 +19,7 @@ void ProgressBar::set_value(float value) {
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
-void ProgressBar::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void ProgressBar::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     tc_ui_painter_fill_rect(context, bounds(), style.background);
     tc_ui_rect fill = bounds();

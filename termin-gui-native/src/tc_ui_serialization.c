@@ -90,7 +90,7 @@ static bool find_widget_index(const tc_ui_document_inspect_snapshot* snapshot,
     return false;
 }
 
-tc_value tc_ui_document_serialize(const tc_ui_document* document) {
+tc_value tc_ui_document_serialize(tc_ui_document_handle document) {
     tc_ui_document_inspect_snapshot snapshot = {0};
     tc_value result = tc_value_nil();
     tc_value widgets;
@@ -376,7 +376,7 @@ static bool read_record_index(const tc_value* value, size_t count, size_t* out_i
     return true;
 }
 
-static void rollback_restored_widgets(tc_ui_document* document, tc_widget_handle* handles,
+static void rollback_restored_widgets(tc_ui_document_handle document, tc_widget_handle* handles,
                                       size_t count) {
     while (count > 0) {
         tc_widget_handle handle = handles[--count];
@@ -386,7 +386,7 @@ static void rollback_restored_widgets(tc_ui_document* document, tc_widget_handle
     }
 }
 
-bool tc_ui_document_restore(tc_ui_document* document, const tc_value* serialized) {
+bool tc_ui_document_restore(tc_ui_document_handle document, const tc_value* serialized) {
     tc_value* schema;
     tc_value* version;
     tc_value* widgets;
@@ -395,7 +395,8 @@ bool tc_ui_document_restore(tc_ui_document* document, const tc_value* serialized
     tc_widget_handle* handles = NULL;
     size_t widget_count;
     size_t index;
-    if (!document || !serialized || tc_ui_document_live_widget_count(document) != 0) {
+    if (!tc_ui_document_is_valid(document) || !serialized ||
+        tc_ui_document_live_widget_count(document) != 0) {
         tc_log_error(
             "[termin-gui-native] UI restore requires an empty document and serialized data");
         return false;

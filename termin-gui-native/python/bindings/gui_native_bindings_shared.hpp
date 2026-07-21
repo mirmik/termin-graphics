@@ -104,15 +104,15 @@ struct Theme {
 };
 
 struct DocumentState {
-  tc_ui_document *document = nullptr;
+  tc_ui_document_handle document = tc_ui_document_handle_invalid();
   std::exception_ptr pending_exception;
 };
 
 tc_value python_to_tc_value(nb::object value);
 nb::object tc_value_to_python(const tc_value *value);
 void register_document_state(const std::shared_ptr<DocumentState> &state);
-void unregister_document_state(tc_ui_document *document);
-std::shared_ptr<DocumentState> find_document_state(tc_ui_document *document);
+void unregister_document_state(tc_ui_document_handle document);
+std::shared_ptr<DocumentState> find_document_state(tc_ui_document_handle document);
 
 struct WidgetRef {
   std::shared_ptr<DocumentState> state;
@@ -237,23 +237,23 @@ struct PythonWidget {
   static PythonWidget *from_widget(tc_widget *widget);
   static void delete_widget(tc_widget *widget);
   void capture_exception(const char *operation);
-  static tc_ui_size measure(tc_widget *widget, tc_ui_document *,
+  static tc_ui_size measure(tc_widget *widget, tc_ui_document_handle ,
                             tc_ui_constraints constraints);
-  static void layout(tc_widget *widget, tc_ui_document *, tc_ui_rect rect);
-  static void paint(tc_widget *widget, tc_ui_document *,
+  static void layout(tc_widget *widget, tc_ui_document_handle , tc_ui_rect rect);
+  static void paint(tc_widget *widget, tc_ui_document_handle ,
                     tc_ui_paint_context *context);
-  static tc_ui_event_result pointer_event(tc_widget *widget, tc_ui_document *,
+  static tc_ui_event_result pointer_event(tc_widget *widget, tc_ui_document_handle ,
                                           const tc_ui_pointer_event *event);
-  static tc_widget_handle hit_test(tc_widget *widget, tc_ui_document *document,
+  static tc_widget_handle hit_test(tc_widget *widget, tc_ui_document_handle document,
                                    float x, float y);
-  static tc_ui_event_result key_event(tc_widget *widget, tc_ui_document *,
+  static tc_ui_event_result key_event(tc_widget *widget, tc_ui_document_handle ,
                                       const tc_ui_key_event *event);
-  static tc_ui_event_result text_event(tc_widget *widget, tc_ui_document *,
+  static tc_ui_event_result text_event(tc_widget *widget, tc_ui_document_handle ,
                                        const tc_ui_text_event *event);
-  static void focus_event(tc_widget *widget, tc_ui_document *, bool focused);
-  static void overlay_dismissed(tc_widget *widget, tc_ui_document *,
+  static void focus_event(tc_widget *widget, tc_ui_document_handle , bool focused);
+  static void overlay_dismissed(tc_widget *widget, tc_ui_document_handle ,
                                 tc_ui_overlay_dismiss_reason reason);
-  static void on_destroy(tc_widget *widget, tc_ui_document *);
+  static void on_destroy(tc_widget *widget, tc_ui_document_handle );
 };
 
 struct PythonWidgetFactory {
@@ -263,9 +263,9 @@ struct PythonWidgetFactory {
   nb::object deserialize_state;
 };
 
-bool create_python_registered_widget(tc_ui_document *document, void *userdata,
+bool create_python_registered_widget(tc_ui_document_handle document, void *userdata,
                                      tc_widget_factory_result *result);
-bool bind_python_registered_widget(tc_ui_document *, tc_widget *widget,
+bool bind_python_registered_widget(tc_ui_document_handle , tc_widget *widget,
                                    tc_widget_handle handle, void *);
 void destroy_python_widget_factory(void *userdata);
 bool serialize_python_registered_widget(const tc_widget *widget, void *userdata,
@@ -285,11 +285,13 @@ private:
 public:
   Document();
   ~Document();
+  void close();
 
   Document(const Document &) = delete;
   Document &operator=(const Document &) = delete;
 
-  tc_ui_document *get() const;
+  tc_ui_document_handle get() const;
+  bool is_closed() const;
   WidgetHandle adopt(nb::object object, const std::string &debug_name);
   WidgetRef ref(WidgetHandle handle) const;
   WidgetRef create_registered_widget(const std::string &type_name);

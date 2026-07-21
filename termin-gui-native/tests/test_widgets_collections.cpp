@@ -720,11 +720,11 @@ void test_tree_table_widget_expansion_navigation_and_columns() {
   tc_ui_key_event key{};
   key.type = TC_UI_KEY_DOWN;
   key.key = TC_UI_KEY_LEFT;
-  assert(table.key_event(nullptr, &key) == TC_UI_EVENT_HANDLED);
+  assert(table.key_event(tc_ui_document_handle_invalid(), &key) == TC_UI_EVENT_HANDLED);
   assert(!table.expanded(compose));
   assert(table.visible_count() == 3);
   key.key = TC_UI_KEY_RIGHT;
-  assert(table.key_event(nullptr, &key) == TC_UI_EVENT_HANDLED);
+  assert(table.key_event(tc_ui_document_handle_invalid(), &key) == TC_UI_EVENT_HANDLED);
   assert(table.expanded(compose));
   assert(table.visible_count() == 4);
 

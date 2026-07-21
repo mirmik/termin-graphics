@@ -18,8 +18,8 @@ public:
     Label& set_text(std::string text);
     Label& set_color(Color color);
     Label& set_font_size(float font_size);
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
 private:
     void update_unmeasured_size();
 };

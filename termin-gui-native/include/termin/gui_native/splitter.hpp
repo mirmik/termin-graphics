@@ -26,16 +26,16 @@ public:
     tc_widget_handle second() const { return child_handle_at(1); }
     float split_fraction() const { return split_fraction_; }
     float divider_thickness() const { return divider_thickness_; }
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
-    tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) override;
+    tc_widget_handle hit_test(tc_ui_document_handle document, float x, float y) override;
 private:
     tc_ui_rect divider_rect() const;
     tc_ui_rect divider_hit_rect() const;
     tc_ui_rect divider_line_rect(float line_thickness) const;
-    void layout_children(tc_ui_document* document);
+    void layout_children(tc_ui_document_handle document);
     float split_axis_extent() const;
 };
 } // namespace termin::gui_native

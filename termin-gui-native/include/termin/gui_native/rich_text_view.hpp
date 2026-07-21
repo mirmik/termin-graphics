@@ -80,27 +80,27 @@ class RichTextView : public NativeWidget {
     void select_all();
     void clear_selection();
 
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document,
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document,
                                      const tc_ui_pointer_event* event) override;
-    tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event) override;
+    tc_ui_event_result key_event(tc_ui_document_handle document, const tc_ui_key_event* event) override;
 
     void connect_model();
     void disconnect_model();
     void on_model_changed();
     void invalidate_visual_rows();
-    tc_ui_rect content_rect(tc_ui_document* document) const;
-    float effective_line_height(tc_ui_document* document) const;
-    float measure_width(tc_ui_document* document, std::string_view text, float font_size) const;
-    void ensure_visual_rows(tc_ui_document* document, float width, float font_size);
-    tc_ui_rect prepare_layout(tc_ui_document* document, const tc_ui_style& style);
+    tc_ui_rect content_rect(tc_ui_document_handle document) const;
+    float effective_line_height(tc_ui_document_handle document) const;
+    float measure_width(tc_ui_document_handle document, std::string_view text, float font_size) const;
+    void ensure_visual_rows(tc_ui_document_handle document, float width, float font_size);
+    tc_ui_rect prepare_layout(tc_ui_document_handle document, const tc_ui_style& style);
     void clamp_scroll(float viewport_height);
     ScrollbarGeometry scrollbar_geometry(tc_ui_rect content) const;
-    size_t source_offset_from_point(tc_ui_document* document, tc_ui_rect content, float x,
+    size_t source_offset_from_point(tc_ui_document_handle document, tc_ui_rect content, float x,
                                     float y) const;
-    float row_x_for_offset(tc_ui_document* document, const VisualRow& row, size_t offset,
+    float row_x_for_offset(tc_ui_document_handle document, const VisualRow& row, size_t offset,
                            float font_size) const;
     void append_run(VisualRow& row, std::string text, const RichTextStyle& style,
                     size_t source_start, size_t source_end, float width);

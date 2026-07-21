@@ -37,7 +37,7 @@ class FileDialogOverlay final : public Dialog {
     void set_filters(std::vector<FileDialogFilter> filters);
     void set_initial_directory(std::string directory);
     void set_file_name(std::string file_name);
-    bool show(tc_ui_document* document, tc_ui_rect viewport);
+    bool show(tc_ui_document_handle document, tc_ui_rect viewport);
     Signal<FileDialogOverlay&, const std::optional<std::string>&>& path_finished() {
         return path_finished_;
     }
@@ -46,7 +46,7 @@ class FileDialogOverlay final : public Dialog {
     bool before_action(const DialogAction& action) override;
 
   private:
-    bool ensure_content(tc_ui_document* document);
+    bool ensure_content(tc_ui_document_handle document);
     bool navigate_to_input();
     void sync_view();
     void sync_entries();

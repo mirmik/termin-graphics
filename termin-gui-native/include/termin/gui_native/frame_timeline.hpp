@@ -68,11 +68,11 @@ class FrameTimelineWidget final : public NativeWidget {
     void set_warning_ratio(float ratio);
     Signal<FrameTimelineWidget&, int64_t>& selection_changed() { return selection_changed_; }
 
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document,
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document,
                                      const tc_ui_pointer_event* event) override;
-    tc_ui_event_result key_event(tc_ui_document* document,
+    tc_ui_event_result key_event(tc_ui_document_handle document,
                                  const tc_ui_key_event* event) override;
 
   private:

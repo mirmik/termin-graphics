@@ -33,10 +33,10 @@ public:
     const std::vector<GridTrack>& columns() const { return columns_; }
     const std::vector<GridTrack>& rows() const { return rows_; }
     const std::vector<GridItem>& items() const { return items_; }
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
-    tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) override;
+    tc_widget_handle hit_test(tc_ui_document_handle document, float x, float y) override;
 };
 } // namespace termin::gui_native

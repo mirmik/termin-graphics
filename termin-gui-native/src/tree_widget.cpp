@@ -9,7 +9,7 @@ using namespace detail;
 
 namespace {
 struct WidgetLifetimeToken {
-  tc_ui_document *document = nullptr;
+  tc_ui_document_handle document = tc_ui_document_handle_invalid();
   tc_widget_handle handle = tc_widget_handle_invalid();
 };
 
@@ -18,7 +18,7 @@ WidgetLifetimeToken lifetime_token(const TreeWidget &widget) {
 }
 
 bool callback_target_alive(const WidgetLifetimeToken &token) {
-  return !token.document ||
+  return tc_ui_document_handle_is_invalid(token.document) ||
          tc_ui_document_is_alive(token.document, token.handle);
 }
 } // namespace
@@ -316,7 +316,7 @@ void TreeWidget::ensure_visible(TreeNodeId node) {
     set_scroll_y(bottom - bounds().height);
 }
 
-tc_ui_size TreeWidget::measure(tc_ui_document *document,
+tc_ui_size TreeWidget::measure(tc_ui_document_handle document,
                                tc_ui_constraints constraints) {
   sync_models();
   const tc_ui_style style = computed_style(document);
@@ -326,13 +326,13 @@ tc_ui_size TreeWidget::measure(tc_ui_document *document,
       constraints);
 }
 
-void TreeWidget::layout(tc_ui_document *document, tc_ui_rect rect) {
+void TreeWidget::layout(tc_ui_document_handle document, tc_ui_rect rect) {
   sync_models();
   NativeWidget::layout(document, rect);
   clamp_scroll();
 }
 
-void TreeWidget::paint(tc_ui_document *document, tc_ui_paint_context *context) {
+void TreeWidget::paint(tc_ui_document_handle document, tc_ui_paint_context *context) {
   sync_models();
   const tc_ui_style style = computed_style(document);
   tc_ui_painter_fill_rect(context, bounds(), style.background);
@@ -449,7 +449,7 @@ void TreeWidget::clear_drag_state() {
   mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
-tc_ui_event_result TreeWidget::pointer_event(tc_ui_document *document,
+tc_ui_event_result TreeWidget::pointer_event(tc_ui_document_handle document,
                                              const tc_ui_pointer_event *event) {
   if (!event)
     return TC_UI_EVENT_IGNORED;
@@ -580,7 +580,7 @@ bool TreeWidget::select_from_navigation(TreeNodeId node) {
   return true;
 }
 
-tc_ui_event_result TreeWidget::key_event(tc_ui_document *,
+tc_ui_event_result TreeWidget::key_event(tc_ui_document_handle,
                                          const tc_ui_key_event *event) {
   if (!event || event->type != TC_UI_KEY_DOWN)
     return TC_UI_EVENT_IGNORED;

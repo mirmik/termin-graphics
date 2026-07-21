@@ -137,14 +137,14 @@ const ColorPickerSurface& ColorPicker::surface(ColorPickerSurfaceKind kind) {
     return alpha_surface_;
 }
 
-tc_ui_size ColorPicker::measure(tc_ui_document*, tc_ui_constraints constraints) {
+tc_ui_size ColorPicker::measure(tc_ui_document_handle, tc_ui_constraints constraints) {
     const float width =
         surface_size_ + gap_ + bar_width_ + (model_->show_alpha() ? gap_ + bar_width_ : 0.0f);
     return clamp_size(tc_ui_size{width, surface_size_ + gap_ + preview_height_ + label_height_},
                       constraints);
 }
 
-void ColorPicker::layout(tc_ui_document* document, tc_ui_rect rect) {
+void ColorPicker::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
     content_rect_ = rect;
     const float bars = gap_ + bar_width_ + (model_->show_alpha() ? gap_ + bar_width_ : 0.0f);
@@ -234,7 +234,7 @@ void ColorPicker::paint_fallback_surfaces(tc_ui_paint_context* context) const {
     }
 }
 
-void ColorPicker::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void ColorPicker::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     const tc_ui_rect sv = sv_rect();
     const tc_ui_rect hue = hue_rect();
@@ -312,7 +312,7 @@ void ColorPicker::apply_pointer(float x, float y) {
     }
 }
 
-tc_ui_event_result ColorPicker::pointer_event(tc_ui_document* document,
+tc_ui_event_result ColorPicker::pointer_event(tc_ui_document_handle document,
                                               const tc_ui_pointer_event* event) {
     if (!event)
         return TC_UI_EVENT_IGNORED;
@@ -344,7 +344,7 @@ tc_ui_event_result ColorPicker::pointer_event(tc_ui_document* document,
     return TC_UI_EVENT_IGNORED;
 }
 
-void ColorPicker::on_destroy(tc_ui_document* document) {
+void ColorPicker::on_destroy(tc_ui_document_handle document) {
     if (tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle()))
         tc_ui_document_release_pointer_capture(document, handle());
     dragging_ = DragTarget::None;

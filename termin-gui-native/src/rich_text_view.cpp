@@ -182,14 +182,14 @@ void RichTextView::clear_selection() {
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
-tc_ui_rect RichTextView::content_rect(tc_ui_document* document) const {
+tc_ui_rect RichTextView::content_rect(tc_ui_document_handle document) const {
     const tc_ui_style style = computed_style(document);
     return tc_ui_rect{bounds().x + style.padding_left, bounds().y + style.padding_top,
                       std::max(0.0f, bounds().width - style.padding_left - style.padding_right),
                       std::max(0.0f, bounds().height - style.padding_top - style.padding_bottom)};
 }
 
-float RichTextView::effective_line_height(tc_ui_document* document) const {
+float RichTextView::effective_line_height(tc_ui_document_handle document) const {
     if (line_height_ > 0.0f)
         return line_height_;
     const tc_ui_style style = computed_style(document);
@@ -200,7 +200,7 @@ float RichTextView::effective_line_height(tc_ui_document* document) const {
     return style.font_size * 1.4f;
 }
 
-float RichTextView::measure_width(tc_ui_document* document, std::string_view text,
+float RichTextView::measure_width(tc_ui_document_handle document, std::string_view text,
                                   float font_size) const {
     if (text.empty())
         return 0.0f;
@@ -232,7 +232,7 @@ void RichTextView::append_run(VisualRow& row, std::string text, const RichTextSt
     row.width += width;
 }
 
-void RichTextView::ensure_visual_rows(tc_ui_document* document, float width, float font_size) {
+void RichTextView::ensure_visual_rows(tc_ui_document_handle document, float width, float font_size) {
     width = std::max(0.0f, width);
     if (cached_revision_ == model_->revision() && cached_width_ == width &&
         cached_font_size_ == font_size) {
@@ -317,7 +317,7 @@ void RichTextView::clamp_scroll(float viewport_height) {
     scroll_y_ = clamp_float(scroll_y_, 0.0f, std::max(0.0f, content_height() - viewport_height));
 }
 
-tc_ui_rect RichTextView::prepare_layout(tc_ui_document* document, const tc_ui_style& style) {
+tc_ui_rect RichTextView::prepare_layout(tc_ui_document_handle document, const tc_ui_style& style) {
     tc_ui_rect content = content_rect(document);
     cached_line_height_ = effective_line_height(document);
     ensure_visual_rows(document, content.width, style.font_size);
@@ -349,7 +349,7 @@ RichTextView::ScrollbarGeometry RichTextView::scrollbar_geometry(tc_ui_rect cont
     return result;
 }
 
-float RichTextView::row_x_for_offset(tc_ui_document* document, const VisualRow& row, size_t offset,
+float RichTextView::row_x_for_offset(tc_ui_document_handle document, const VisualRow& row, size_t offset,
                                      float font_size) const {
     float x = 0.0f;
     for (const VisualRun& run : row.runs) {
@@ -366,7 +366,7 @@ float RichTextView::row_x_for_offset(tc_ui_document* document, const VisualRow& 
     return x;
 }
 
-size_t RichTextView::source_offset_from_point(tc_ui_document* document, tc_ui_rect content, float x,
+size_t RichTextView::source_offset_from_point(tc_ui_document_handle document, tc_ui_rect content, float x,
                                               float y) const {
     if (rows_.empty())
         return 0;
@@ -393,17 +393,17 @@ size_t RichTextView::source_offset_from_point(tc_ui_document* document, tc_ui_re
     return row.source_end;
 }
 
-tc_ui_size RichTextView::measure(tc_ui_document*, tc_ui_constraints constraints) {
+tc_ui_size RichTextView::measure(tc_ui_document_handle, tc_ui_constraints constraints) {
     return clamp_size(preferred_size(), constraints);
 }
 
-void RichTextView::layout(tc_ui_document* document, tc_ui_rect rect) {
+void RichTextView::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
     const tc_ui_style style = computed_style(document);
     prepare_layout(document, style);
 }
 
-void RichTextView::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void RichTextView::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     tc_ui_painter_fill_rounded_rect(context, bounds(), 3.0f, style.background);
     if (style.border_width > 0.0f) {
@@ -470,7 +470,7 @@ void RichTextView::paint(tc_ui_document* document, tc_ui_paint_context* context)
     }
 }
 
-tc_ui_event_result RichTextView::pointer_event(tc_ui_document* document,
+tc_ui_event_result RichTextView::pointer_event(tc_ui_document_handle document,
                                                const tc_ui_pointer_event* event) {
     if (!event)
         return TC_UI_EVENT_IGNORED;
@@ -532,7 +532,7 @@ tc_ui_event_result RichTextView::pointer_event(tc_ui_document* document,
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_ui_event_result RichTextView::key_event(tc_ui_document* document, const tc_ui_key_event* event) {
+tc_ui_event_result RichTextView::key_event(tc_ui_document_handle document, const tc_ui_key_event* event) {
     if (!event || event->type != TC_UI_KEY_DOWN)
         return TC_UI_EVENT_IGNORED;
     if (command_modifier(event->modifiers) && key_matches_ascii(event->key, 'a')) {

@@ -191,16 +191,16 @@ bool Viewport3D::dispatch_external_drag(const ViewportExternalDragEvent& event) 
     return false;
 }
 
-tc_ui_size Viewport3D::measure(tc_ui_document*, tc_ui_constraints constraints) {
+tc_ui_size Viewport3D::measure(tc_ui_document_handle, tc_ui_constraints constraints) {
     return detail::clamp_size(preferred_size(), constraints);
 }
 
-void Viewport3D::layout(tc_ui_document* document, tc_ui_rect rect) {
+void Viewport3D::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
     sync_surface_size();
 }
 
-void Viewport3D::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void Viewport3D::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     tc_ui_painter_fill_rect(context, bounds(), style.background);
     const uint32_t texture = texture_id();
@@ -239,7 +239,7 @@ bool Viewport3D::sync_pointer_position(const tc_ui_pointer_event& event) {
     return false;
 }
 
-tc_ui_event_result Viewport3D::pointer_event(tc_ui_document* document,
+tc_ui_event_result Viewport3D::pointer_event(tc_ui_document_handle document,
                                              const tc_ui_pointer_event* event) {
     if (!event)
         return TC_UI_EVENT_IGNORED;
@@ -280,7 +280,7 @@ tc_ui_event_result Viewport3D::pointer_event(tc_ui_document* document,
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_ui_event_result Viewport3D::key_event(tc_ui_document*, const tc_ui_key_event* event) {
+tc_ui_event_result Viewport3D::key_event(tc_ui_document_handle, const tc_ui_key_event* event) {
     if (!event)
         return TC_UI_EVENT_IGNORED;
     if (surface_valid()) {
@@ -298,7 +298,7 @@ tc_ui_event_result Viewport3D::key_event(tc_ui_document*, const tc_ui_key_event*
     return TC_UI_EVENT_HANDLED;
 }
 
-tc_ui_event_result Viewport3D::text_event(tc_ui_document*, const tc_ui_text_event* event) {
+tc_ui_event_result Viewport3D::text_event(tc_ui_document_handle, const tc_ui_text_event* event) {
     if (!event || !event->text)
         return TC_UI_EVENT_IGNORED;
     if (!surface_valid())
@@ -322,7 +322,7 @@ tc_ui_event_result Viewport3D::text_event(tc_ui_document*, const tc_ui_text_even
     return TC_UI_EVENT_HANDLED;
 }
 
-void Viewport3D::on_destroy(tc_ui_document*) {
+void Viewport3D::on_destroy(tc_ui_document_handle) {
     external_drag_handler_ = {};
     before_resize_ = {};
     detach_surface();

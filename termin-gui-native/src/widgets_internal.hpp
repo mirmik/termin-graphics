@@ -30,18 +30,18 @@ bool valid_utf8(std::string_view text);
 size_t utf8_floor_boundary(std::string_view text, size_t offset);
 size_t utf8_previous_boundary(std::string_view text, size_t offset);
 size_t utf8_next_boundary(std::string_view text, size_t offset);
-bool measure_text(tc_ui_document* document, std::string_view text, float font_size, tc_ui_text_metrics& metrics);
-float centered_text_baseline(tc_ui_document* document, std::string_view text, float font_size, tc_ui_rect rect);
+bool measure_text(tc_ui_document_handle document, std::string_view text, float font_size, tc_ui_text_metrics& metrics);
+float centered_text_baseline(tc_ui_document_handle document, std::string_view text, float font_size, tc_ui_rect rect);
 tc_ui_size clamp_size(tc_ui_size size, tc_ui_constraints constraints);
 float effective_max(float value);
 tc_ui_constraints unconstrained();
-tc_widget* resolve_child(tc_ui_document* document, const tc_widget* expected_parent, tc_widget_handle handle, const char* owner);
+tc_widget* resolve_child(tc_ui_document_handle document, const tc_widget* expected_parent, tc_widget_handle handle, const char* owner);
 tc_widget* attach_child(tc_widget* parent, tc_widget_handle child_handle, size_t index, const char* owner);
 void detach_if_child(tc_widget* parent, tc_widget_handle child_handle);
-tc_ui_size measure_widget(tc_widget* widget, tc_ui_document* document, tc_ui_constraints constraints);
+tc_ui_size measure_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_constraints constraints);
 NativeWidget* native_widget_body(tc_widget* widget);
-void layout_widget(tc_widget* widget, tc_ui_document* document, tc_ui_rect rect);
-void paint_widget(tc_widget* widget, tc_ui_document* document, tc_ui_paint_context* context);
+void layout_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_rect rect);
+void paint_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_paint_context* context);
 tc_ui_rect inset_rect(tc_ui_rect rect, EdgeInsets padding);
 float primary_size(tc_ui_size size, Orientation orientation);
 float cross_size(tc_ui_size size, Orientation orientation);
@@ -66,7 +66,7 @@ struct GridAxisLayout {
     std::vector<float> shrink_weights;
 };
 
-GridAxisLayout build_grid_axis(tc_ui_document* document, const tc_widget* expected_parent, const std::vector<GridTrack>& tracks, const std::vector<GridItem>& items, bool columns, float spacing);
+GridAxisLayout build_grid_axis(tc_ui_document_handle document, const tc_widget* expected_parent, const std::vector<GridTrack>& tracks, const std::vector<GridItem>& items, bool columns, float spacing);
 float axis_total_extent(const std::vector<float>& extents, float spacing);
 
 } // namespace termin::gui_native::detail

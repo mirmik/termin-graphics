@@ -77,28 +77,28 @@ public:
     Signal<SceneView&, std::shared_ptr<GraphicsItem>>& item_moved() { return item_moved_; }
     Signal<SceneView&, const SceneTransform&>& transform_changed() { return transform_changed_; }
 
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document,
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document,
                                      const tc_ui_pointer_event* event) override;
-    tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event) override;
-    tc_ui_event_result text_event(tc_ui_document* document, const tc_ui_text_event* event) override;
-    tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
-    void on_destroy(tc_ui_document* document) override;
+    tc_ui_event_result key_event(tc_ui_document_handle document, const tc_ui_key_event* event) override;
+    tc_ui_event_result text_event(tc_ui_document_handle document, const tc_ui_text_event* event) override;
+    tc_widget_handle hit_test(tc_ui_document_handle document, float x, float y) override;
+    void on_destroy(tc_ui_document_handle document) override;
 
 private:
     void connect_scene();
     void disconnect_scene();
     void on_scene_changed();
-    void reconcile_embedded_widgets(tc_ui_document* document);
+    void reconcile_embedded_widgets(tc_ui_document_handle document);
     void collect_embedded(const std::shared_ptr<GraphicsItem>& item,
                           std::vector<std::shared_ptr<GraphicsItem>>& result) const;
-    void layout_item(tc_ui_document* document, const std::shared_ptr<GraphicsItem>& item,
+    void layout_item(tc_ui_document_handle document, const std::shared_ptr<GraphicsItem>& item,
                      const SceneTransform& transform);
-    void paint_item(tc_ui_document* document, tc_ui_paint_context* context,
+    void paint_item(tc_ui_document_handle document, tc_ui_paint_context* context,
                     const std::shared_ptr<GraphicsItem>& item, const SceneTransform& transform);
-    tc_widget_handle hit_test_embedded(tc_ui_document* document,
+    tc_widget_handle hit_test_embedded(tc_ui_document_handle document,
                                        const std::shared_ptr<GraphicsItem>& item, float x,
                                        float y) const;
     std::shared_ptr<GraphicsItem> selectable_ancestor(std::shared_ptr<GraphicsItem> item) const;

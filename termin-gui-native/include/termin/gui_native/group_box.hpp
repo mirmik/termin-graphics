@@ -21,12 +21,12 @@ public:
     void set_content(const Widget& widget) { set_content(widget.handle()); }
     const std::string& title() const { return title_; }
     tc_widget_handle content() const { return child_handle_at(0); }
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
-    tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) override;
+    tc_widget_handle hit_test(tc_ui_document_handle document, float x, float y) override;
 private:
-    tc_ui_rect content_rect(tc_ui_document* document) const;
+    tc_ui_rect content_rect(tc_ui_document_handle document) const;
 };
 } // namespace termin::gui_native

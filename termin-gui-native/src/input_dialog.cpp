@@ -18,7 +18,7 @@ InputDialog::InputDialog(std::string title, std::string message, std::string val
     });
 }
 
-bool InputDialog::ensure_content(tc_ui_document* document) {
+bool InputDialog::ensure_content(tc_ui_document_handle document) {
     if (!tc_widget_handle_is_invalid(input_handle_) &&
         tc_ui_document_is_alive(document, input_handle_)) {
         return true;
@@ -61,7 +61,7 @@ bool InputDialog::ensure_content(tc_ui_document* document) {
 }
 
 const std::string& InputDialog::value() const {
-    if (!document() || !tc_ui_document_is_alive(document(), input_handle_))
+    if (tc_ui_document_handle_is_invalid(document()) || !tc_ui_document_is_alive(document(), input_handle_))
         return initial_value_;
     const tc_widget* widget = tc_ui_document_resolve_widget_const(document(), input_handle_);
     const auto* input = dynamic_cast<const TextInput*>(static_cast<const Widget*>(widget->body));
@@ -74,7 +74,7 @@ void InputDialog::set_value(std::string value) {
         throw std::invalid_argument("input dialog value must be valid UTF-8");
     }
     initial_value_ = std::move(value);
-    if (document() && tc_ui_document_is_alive(document(), input_handle_)) {
+    if (!tc_ui_document_handle_is_invalid(document()) && tc_ui_document_is_alive(document(), input_handle_)) {
         tc_widget* widget = tc_ui_document_resolve_widget(document(), input_handle_);
         auto* input = dynamic_cast<TextInput*>(static_cast<Widget*>(widget->body));
         if (input)
@@ -82,7 +82,7 @@ void InputDialog::set_value(std::string value) {
     }
 }
 
-bool InputDialog::show(tc_ui_document* document, tc_ui_rect viewport) {
+bool InputDialog::show(tc_ui_document_handle document, tc_ui_rect viewport) {
     if (!ensure_content(document) || !Dialog::show(document, viewport))
         return false;
     tc_ui_document_set_focus(document, input_handle_);

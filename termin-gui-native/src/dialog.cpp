@@ -49,14 +49,14 @@ void Dialog::set_actions(std::vector<DialogAction> actions) {
         throw std::logic_error("dialog actions cannot change while open");
     }
     validate_actions(actions);
-    if (document())
+    if (!tc_ui_document_handle_is_invalid(document()))
         destroy_buttons(document());
     actions_ = std::move(actions);
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
 void Dialog::set_content(NativeWidget& content) {
-    if (!document() || content.document() != document()) {
+    if (tc_ui_document_handle_is_invalid(document()) || !tc_ui_document_handle_eq(content.document(), document())) {
         tc_log_error("[termin-gui-native] Dialog content must be adopted by the same document");
         throw std::invalid_argument("dialog content must share the adopted document");
     }
@@ -79,7 +79,7 @@ void Dialog::set_content(NativeWidget& content) {
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
-tc_ui_size Dialog::action_button_size(tc_ui_document* document, const DialogAction& action) {
+tc_ui_size Dialog::action_button_size(tc_ui_document_handle document, const DialogAction& action) {
     tc_ui_text_metrics metrics{};
     const bool has_metrics = measure_text(document, action.label, 14.0f, metrics);
     const float label_width = has_metrics ? metrics.width : static_cast<float>(action.label.size()) * 7.0f;
@@ -100,7 +100,7 @@ const DialogAction* Dialog::cancel_action() const {
     return nullptr;
 }
 
-bool Dialog::ensure_buttons(tc_ui_document* document) {
+bool Dialog::ensure_buttons(tc_ui_document_handle document) {
     if (button_handles_.size() == actions_.size())
         return true;
     destroy_buttons(document);
@@ -132,7 +132,7 @@ bool Dialog::ensure_buttons(tc_ui_document* document) {
     return true;
 }
 
-void Dialog::destroy_buttons(tc_ui_document* document) {
+void Dialog::destroy_buttons(tc_ui_document_handle document) {
     for (size_t index = 0; index < button_handles_.size(); ++index) {
         tc_widget* widget = tc_ui_document_resolve_widget(document, button_handles_[index]);
         if (!widget)
@@ -146,7 +146,7 @@ void Dialog::destroy_buttons(tc_ui_document* document) {
     button_connections_.clear();
 }
 
-tc_ui_size Dialog::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size Dialog::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
     if (!ensure_buttons(document))
         return clamp_size(preferred_size(), constraints);
     float content_width = 0.0f;
@@ -168,7 +168,7 @@ tc_ui_size Dialog::measure(tc_ui_document* document, tc_ui_constraints constrain
     return clamp_size(wanted, constraints);
 }
 
-void Dialog::layout(tc_ui_document* document, tc_ui_rect rect) {
+void Dialog::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
     if (!ensure_buttons(document))
         return;
@@ -202,7 +202,7 @@ void Dialog::layout(tc_ui_document* document, tc_ui_rect rect) {
     }
 }
 
-void Dialog::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void Dialog::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     tc_ui_painter_fill_rounded_rect(context, bounds(), style.corner_radius, style.background);
     if (style.border_width > 0.0f && color_visible(style.border)) {
@@ -230,7 +230,7 @@ void Dialog::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     tc_ui_painter_pop_clip(context);
 }
 
-tc_widget_handle Dialog::hit_test(tc_ui_document* document, float x, float y) {
+tc_widget_handle Dialog::hit_test(tc_ui_document_handle document, float x, float y) {
     if (!visible() || !rect_contains(bounds(), x, y))
         return tc_widget_handle_invalid();
     for (size_t index = child_count(); index > 0; --index) {
@@ -245,8 +245,8 @@ tc_widget_handle Dialog::hit_test(tc_ui_document* document, float x, float y) {
     return mouse_transparent() ? tc_widget_handle_invalid() : handle();
 }
 
-bool Dialog::show(tc_ui_document* document, tc_ui_rect viewport) {
-    if (!document || !tc_ui_document_is_alive(document, handle()) || open_) {
+bool Dialog::show(tc_ui_document_handle document, tc_ui_rect viewport) {
+    if (tc_ui_document_handle_is_invalid(document) || !tc_ui_document_is_alive(document, handle()) || open_) {
         tc_log_error("[termin-gui-native] Dialog show requires a live closed adopted widget");
         return false;
     }
@@ -276,7 +276,7 @@ bool Dialog::show(tc_ui_document* document, tc_ui_rect viewport) {
     return true;
 }
 
-bool Dialog::close(tc_ui_document* document) {
+bool Dialog::close(tc_ui_document_handle document) {
     if (!open_)
         return false;
     has_pending_result_ = true;
@@ -284,7 +284,7 @@ bool Dialog::close(tc_ui_document* document) {
     return tc_ui_document_dismiss_overlay(document, handle(), TC_UI_OVERLAY_DISMISS_PROGRAMMATIC);
 }
 
-bool Dialog::activate(std::string_view action_id, tc_ui_document* document) {
+bool Dialog::activate(std::string_view action_id, tc_ui_document_handle document) {
     if (!open_)
         return false;
     for (const DialogAction& action : actions_) {
@@ -303,7 +303,7 @@ bool Dialog::activate(std::string_view action_id, tc_ui_document* document) {
 
 bool Dialog::before_action(const DialogAction&) { return true; }
 
-tc_ui_event_result Dialog::key_event(tc_ui_document* document, const tc_ui_key_event* event) {
+tc_ui_event_result Dialog::key_event(tc_ui_document_handle document, const tc_ui_key_event* event) {
     if (!event || event->type != TC_UI_KEY_DOWN || event->key != TC_UI_KEY_ENTER)
         return TC_UI_EVENT_IGNORED;
     const DialogAction* action = default_action();
@@ -311,7 +311,7 @@ tc_ui_event_result Dialog::key_event(tc_ui_document* document, const tc_ui_key_e
                                                            : TC_UI_EVENT_IGNORED;
 }
 
-void Dialog::deliver_result(tc_ui_document* document, DialogResult result) {
+void Dialog::deliver_result(tc_ui_document_handle document, DialogResult result) {
     if (has_result_)
         return;
     has_result_ = true;
@@ -322,7 +322,7 @@ void Dialog::deliver_result(tc_ui_document* document, DialogResult result) {
     finished_.emit(*this, result_);
 }
 
-void Dialog::overlay_dismissed(tc_ui_document* document, tc_ui_overlay_dismiss_reason reason) {
+void Dialog::overlay_dismissed(tc_ui_document_handle document, tc_ui_overlay_dismiss_reason reason) {
     open_ = false;
     DialogResult result;
     if (has_pending_result_) {
@@ -338,7 +338,7 @@ void Dialog::overlay_dismissed(tc_ui_document* document, tc_ui_overlay_dismiss_r
     deliver_result(document, std::move(result));
 }
 
-void Dialog::on_destroy(tc_ui_document* document) {
+void Dialog::on_destroy(tc_ui_document_handle document) {
     open_ = false;
     destroy_buttons(document);
     if (!tc_widget_handle_is_invalid(content_handle_) &&

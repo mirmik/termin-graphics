@@ -44,7 +44,7 @@ void Slider::set_step(float step) {
     set_value(value_);
 }
 
-void Slider::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void Slider::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     const float center_y = bounds().y + bounds().height * 0.5f;
     const float left = bounds().x + 10.0f;
@@ -73,7 +73,7 @@ void Slider::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     );
 }
 
-tc_ui_event_result Slider::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
+tc_ui_event_result Slider::pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) {
     if (!event) {
         return TC_UI_EVENT_IGNORED;
     }

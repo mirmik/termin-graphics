@@ -19,7 +19,7 @@ void Checkbox::set_checked(bool checked) {
     changed_.emit(*this, checked_);
 }
 
-void Checkbox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void Checkbox::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(
         document,
         checked_ ? TC_UI_STYLE_STATE_CHECKED : 0
@@ -54,7 +54,7 @@ void Checkbox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     }
 }
 
-tc_ui_event_result Checkbox::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
+tc_ui_event_result Checkbox::pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) {
     if (!event) {
         return TC_UI_EVENT_IGNORED;
     }

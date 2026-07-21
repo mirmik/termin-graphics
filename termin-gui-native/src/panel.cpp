@@ -20,7 +20,7 @@ Panel& Panel::set_border(Color color, float thickness) {
     return *this;
 }
 
-void Panel::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void Panel::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     tc_ui_painter_fill_rect(context, bounds(), style.background);
     if (style.border_width > 0.0f && color_visible(style.border)) {

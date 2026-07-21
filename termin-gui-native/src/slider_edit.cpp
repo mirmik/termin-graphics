@@ -18,7 +18,7 @@ void SliderEdit::set_value(float value) {
     value_ = next;
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
     changed_.emit(*this, value_);
-    if (!syncing_ && document() &&
+    if (!syncing_ && !tc_ui_document_handle_is_invalid(document()) &&
         tc_ui_document_is_alive(document(), slider_handle_) &&
         tc_ui_document_is_alive(document(), spin_box_handle_)) {
         sync_children(document());
@@ -33,7 +33,7 @@ void SliderEdit::set_range(float min_value, float max_value) {
     min_value_ = min_value;
     max_value_ = max_value;
     set_value(value_);
-    if (!syncing_ && document() &&
+    if (!syncing_ && !tc_ui_document_handle_is_invalid(document()) &&
         tc_ui_document_is_alive(document(), slider_handle_) &&
         tc_ui_document_is_alive(document(), spin_box_handle_)) {
         sync_children(document());
@@ -46,7 +46,7 @@ void SliderEdit::set_step(float step) {
         return;
     }
     step_ = step;
-    if (!syncing_ && document() &&
+    if (!syncing_ && !tc_ui_document_handle_is_invalid(document()) &&
         tc_ui_document_is_alive(document(), slider_handle_) &&
         tc_ui_document_is_alive(document(), spin_box_handle_)) {
         sync_children(document());
@@ -59,7 +59,7 @@ void SliderEdit::set_decimals(int decimals) {
         return;
     }
     decimals_ = decimals;
-    if (!syncing_ && document() && tc_ui_document_is_alive(document(), spin_box_handle_)) {
+    if (!syncing_ && !tc_ui_document_handle_is_invalid(document()) && tc_ui_document_is_alive(document(), spin_box_handle_)) {
         sync_children(document());
     }
 }
@@ -69,7 +69,7 @@ void SliderEdit::set_label(std::string label) {
     set_preferred_size(tc_ui_size {300.0f, label_.empty() ? 34.0f : 52.0f});
 }
 
-bool SliderEdit::ensure_children(tc_ui_document* document) {
+bool SliderEdit::ensure_children(tc_ui_document_handle document) {
     if (!tc_widget_handle_is_invalid(slider_handle_) && !tc_widget_handle_is_invalid(spin_box_handle_)) {
         return true;
     }
@@ -112,7 +112,7 @@ bool SliderEdit::ensure_children(tc_ui_document* document) {
     return true;
 }
 
-void SliderEdit::sync_children(tc_ui_document* document) {
+void SliderEdit::sync_children(tc_ui_document_handle document) {
     auto* slider = static_cast<Slider*>(tc_ui_document_resolve_widget(document, slider_handle_)->body);
     auto* spin_box = static_cast<SpinBox*>(tc_ui_document_resolve_widget(document, spin_box_handle_)->body);
     syncing_ = true;
@@ -126,11 +126,11 @@ void SliderEdit::sync_children(tc_ui_document* document) {
     syncing_ = false;
 }
 
-tc_ui_size SliderEdit::measure(tc_ui_document*, tc_ui_constraints constraints) {
+tc_ui_size SliderEdit::measure(tc_ui_document_handle, tc_ui_constraints constraints) {
     return clamp_size(preferred_size(), constraints);
 }
 
-void SliderEdit::layout(tc_ui_document* document, tc_ui_rect rect) {
+void SliderEdit::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
     if (!ensure_children(document)) return;
     sync_children(document);
@@ -148,13 +148,13 @@ void SliderEdit::layout(tc_ui_document* document, tc_ui_rect rect) {
     );
 }
 
-void SliderEdit::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void SliderEdit::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     if (label_.empty()) return;
     const tc_ui_style style = computed_style(document);
     tc_ui_painter_draw_text(context, label_.c_str(), tc_ui_point {bounds().x, bounds().y + 13.0f}, 11.0f, style.foreground);
 }
 
-void SliderEdit::on_destroy(tc_ui_document* document) {
+void SliderEdit::on_destroy(tc_ui_document_handle document) {
     if (tc_widget* widget = tc_ui_document_resolve_widget(document, slider_handle_)) {
         static_cast<Slider*>(widget->body)->changed().disconnect(slider_connection_);
     }

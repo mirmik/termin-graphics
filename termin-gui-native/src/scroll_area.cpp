@@ -44,7 +44,7 @@ void ScrollArea::set_scroll(float x, float y) {
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
-tc_ui_size ScrollArea::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size ScrollArea::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
     tc_ui_size measured = preferred_size();
     if (!tc_widget_handle_is_invalid(this->content())) {
         if (tc_widget* content = resolve_child(document, c_widget(), this->content(), "ScrollArea::measure")) {
@@ -58,7 +58,7 @@ tc_ui_size ScrollArea::measure(tc_ui_document* document, tc_ui_constraints const
     return clamp_size(measured, constraints);
 }
 
-void ScrollArea::layout(tc_ui_document* document, tc_ui_rect rect) {
+void ScrollArea::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
     content_size_ = tc_ui_size {0.0f, 0.0f};
     if (tc_widget_handle_is_invalid(this->content())) {
@@ -82,7 +82,7 @@ void ScrollArea::layout(tc_ui_document* document, tc_ui_rect rect) {
     );
 }
 
-void ScrollArea::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void ScrollArea::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     tc_ui_painter_push_clip(context, bounds());
     if (!tc_widget_handle_is_invalid(this->content())) {
         tc_widget* content = resolve_child(document, c_widget(), this->content(), "ScrollArea::paint");
@@ -91,7 +91,7 @@ void ScrollArea::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     tc_ui_painter_pop_clip(context);
 }
 
-tc_ui_event_result ScrollArea::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
+tc_ui_event_result ScrollArea::pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) {
     if (!event || !rect_contains(bounds(), event->x, event->y)) {
         return TC_UI_EVENT_IGNORED;
     }
@@ -120,7 +120,7 @@ tc_ui_event_result ScrollArea::pointer_event(tc_ui_document* document, const tc_
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_widget_handle ScrollArea::hit_test(tc_ui_document* document, float x, float y) {
+tc_widget_handle ScrollArea::hit_test(tc_ui_document_handle document, float x, float y) {
     if (!rect_contains(bounds(), x, y)) {
         return tc_widget_handle_invalid();
     }

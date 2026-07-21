@@ -7,13 +7,13 @@ namespace termin::gui_native {
 
 namespace {
 
-template <typename T> T* resolve(tc_ui_document* document, tc_widget_handle handle) {
+template <typename T> T* resolve(tc_ui_document_handle document, tc_widget_handle handle) {
     tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
     return widget ? dynamic_cast<T*>(static_cast<Widget*>(widget->body)) : nullptr;
 }
 
 template <typename T>
-T* adopt(tc_ui_document* document, std::unique_ptr<T> widget, tc_widget_handle& handle) {
+T* adopt(tc_ui_document_handle document, std::unique_ptr<T> widget, tc_widget_handle& handle) {
     handle = tc_ui_document_adopt_widget(
         document, widget->c_widget(), &Widget::delete_owned_widget);
     if (tc_widget_handle_is_invalid(handle))
@@ -86,13 +86,13 @@ void FileDialogOverlay::set_initial_directory(std::string directory) {
 
 void FileDialogOverlay::set_file_name(std::string file_name) {
     model_.set_file_name(std::move(file_name));
-    if (document()) {
+    if (!tc_ui_document_handle_is_invalid(document())) {
         if (TextInput* input = resolve<TextInput>(document(), name_input_handle_))
             input->set_text(model_.file_name());
     }
 }
 
-bool FileDialogOverlay::ensure_content(tc_ui_document* document) {
+bool FileDialogOverlay::ensure_content(tc_ui_document_handle document) {
     if (!tc_widget_handle_is_invalid(list_handle_) &&
         tc_ui_document_is_alive(document, list_handle_))
         return true;
@@ -227,7 +227,7 @@ void FileDialogOverlay::sync_entries() {
 }
 
 void FileDialogOverlay::sync_view() {
-    if (!document())
+    if (tc_ui_document_handle_is_invalid(document()))
         return;
     sync_entries();
     if (TextInput* path = resolve<TextInput>(document(), path_input_handle_))
@@ -246,7 +246,7 @@ void FileDialogOverlay::sync_view() {
 }
 
 void FileDialogOverlay::show_error(std::string message) {
-    if (!document())
+    if (tc_ui_document_handle_is_invalid(document()))
         return;
     if (Label* label = resolve<Label>(document(), error_label_handle_))
         label->set_text(std::move(message));
@@ -298,7 +298,7 @@ bool FileDialogOverlay::before_action(const DialogAction& action) {
     return true;
 }
 
-bool FileDialogOverlay::show(tc_ui_document* document, tc_ui_rect viewport) {
+bool FileDialogOverlay::show(tc_ui_document_handle document, tc_ui_rect viewport) {
     if (!ensure_content(document))
         return false;
     accepted_path_.reset();

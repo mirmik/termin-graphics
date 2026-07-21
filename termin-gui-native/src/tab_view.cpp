@@ -94,7 +94,7 @@ void TabView::set_selected_index(size_t index) {
     selection_changed_.emit(*this, selected_index_);
 }
 
-tc_ui_size TabView::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size TabView::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
     tc_ui_size content {preferred_size().width, std::max(0.0f, preferred_size().height - header_height_)};
     for (size_t index = 0; index < child_count(); ++index) {
         tc_widget* child = child_at(index);
@@ -108,7 +108,7 @@ tc_ui_size TabView::measure(tc_ui_document* document, tc_ui_constraints constrai
     return clamp_size(tc_ui_size {content.width, content.height + header_height_}, constraints);
 }
 
-void TabView::layout(tc_ui_document* document, tc_ui_rect rect) {
+void TabView::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
     if (child_count() == 0 || selected_index_ >= child_count()) {
         return;
@@ -117,7 +117,7 @@ void TabView::layout(tc_ui_document* document, tc_ui_rect rect) {
     layout_widget(selected, document, page_rect());
 }
 
-void TabView::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void TabView::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     const tc_ui_style selected_style = computed_style(document, TC_UI_STYLE_STATE_CHECKED);
     tc_ui_painter_fill_rect(context, bounds(), style.background);
@@ -168,7 +168,7 @@ void TabView::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     tc_ui_painter_pop_clip(context);
 }
 
-tc_ui_event_result TabView::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
+tc_ui_event_result TabView::pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) {
     if (!event || !rect_contains(bounds(), event->x, event->y)) {
         return TC_UI_EVENT_IGNORED;
     }
@@ -187,7 +187,7 @@ tc_ui_event_result TabView::pointer_event(tc_ui_document* document, const tc_ui_
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_widget_handle TabView::hit_test(tc_ui_document* document, float x, float y) {
+tc_widget_handle TabView::hit_test(tc_ui_document_handle document, float x, float y) {
     c_widget()->cursor_intent = y >= bounds().y && y < bounds().y + header_height_
         ? TC_UI_CURSOR_HAND
         : TC_UI_CURSOR_INHERIT;
@@ -218,7 +218,7 @@ tc_ui_rect TabView::page_rect() const {
     };
 }
 
-float TabView::tab_width(tc_ui_document* document, size_t index) const {
+float TabView::tab_width(tc_ui_document_handle document, size_t index) const {
     if (index >= pages_.size()) {
         return min_tab_width_;
     }
@@ -234,7 +234,7 @@ float TabView::tab_width(tc_ui_document* document, size_t index) const {
     );
 }
 
-tc_ui_rect TabView::tab_rect(tc_ui_document* document, size_t index) const {
+tc_ui_rect TabView::tab_rect(tc_ui_document_handle document, size_t index) const {
     float x = bounds().x;
     for (size_t current = 0; current < index; ++current) {
         x += tab_width(document, current);

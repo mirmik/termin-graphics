@@ -14,12 +14,23 @@
 extern "C" {
 #endif
 
+TC_DEFINE_HANDLE(tc_ui_document_handle)
 TC_DEFINE_HANDLE(tc_widget_handle)
+
+#define TC_UI_DOCUMENT_DEBUG_NAME_CAPACITY 128
 
 typedef struct tc_ui_document tc_ui_document;
 typedef struct tc_widget tc_widget;
 typedef struct tc_ui_draw_list tc_ui_draw_list;
 typedef struct tc_ui_paint_context tc_ui_paint_context;
+
+typedef struct tc_ui_document_info {
+    tc_ui_document_handle handle;
+    size_t live_widget_count;
+    size_t root_count;
+    size_t overlay_count;
+    char debug_name[TC_UI_DOCUMENT_DEBUG_NAME_CAPACITY];
+} tc_ui_document_info;
 
 typedef struct tc_ui_size {
     float width;
@@ -386,58 +397,58 @@ typedef struct tc_widget_vtable {
 
     tc_ui_size (*measure)(
         tc_widget* widget,
-        tc_ui_document* document,
+        tc_ui_document_handle document,
         tc_ui_constraints constraints
     );
     void (*layout)(
         tc_widget* widget,
-        tc_ui_document* document,
+        tc_ui_document_handle document,
         tc_ui_rect rect
     );
     void (*paint)(
         tc_widget* widget,
-        tc_ui_document* document,
+        tc_ui_document_handle document,
         tc_ui_paint_context* context
     );
     tc_ui_event_result (*pointer_event)(
         tc_widget* widget,
-        tc_ui_document* document,
+        tc_ui_document_handle document,
         const tc_ui_pointer_event* event
     );
     tc_widget_handle (*hit_test)(
         tc_widget* widget,
-        tc_ui_document* document,
+        tc_ui_document_handle document,
         float x,
         float y
     );
     tc_ui_event_result (*key_event)(
         tc_widget* widget,
-        tc_ui_document* document,
+        tc_ui_document_handle document,
         const tc_ui_key_event* event
     );
     tc_ui_event_result (*text_event)(
         tc_widget* widget,
-        tc_ui_document* document,
+        tc_ui_document_handle document,
         const tc_ui_text_event* event
     );
     void (*focus_event)(
         tc_widget* widget,
-        tc_ui_document* document,
+        tc_ui_document_handle document,
         bool focused
     );
     void (*overlay_dismissed)(
         tc_widget* widget,
-        tc_ui_document* document,
+        tc_ui_document_handle document,
         tc_ui_overlay_dismiss_reason reason
     );
 
-    void (*on_destroy)(tc_widget* widget, tc_ui_document* document);
+    void (*on_destroy)(tc_widget* widget, tc_ui_document_handle document);
 } tc_widget_vtable;
 
 struct tc_widget {
     const tc_widget_vtable* vtable;
     tc_widget_deleter deleter;
-    tc_ui_document* document;
+    tc_ui_document_handle document;
     tc_widget_handle handle;
     tc_language native_language;
     tc_widget_ownership_policy ownership_policy;
@@ -531,74 +542,86 @@ TERMIN_GUI_NATIVE_API bool tc_widget_set_style_override(
 TERMIN_GUI_NATIVE_API void tc_widget_clear_style_override(tc_widget* widget);
 TERMIN_GUI_NATIVE_API tc_ui_style_override tc_widget_style_override(const tc_widget* widget);
 
-TERMIN_GUI_NATIVE_API tc_ui_document* tc_ui_document_create(void);
-TERMIN_GUI_NATIVE_API void tc_ui_document_destroy(tc_ui_document* document);
+TERMIN_GUI_NATIVE_API tc_ui_document_handle tc_ui_document_create(void);
+TERMIN_GUI_NATIVE_API void tc_ui_document_destroy(tc_ui_document_handle document);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_is_valid(tc_ui_document_handle document);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_set_debug_name(
+    tc_ui_document_handle document,
+    const char* debug_name
+);
+TERMIN_GUI_NATIVE_API const char* tc_ui_document_debug_name(tc_ui_document_handle document);
+TERMIN_GUI_NATIVE_API size_t tc_ui_document_pool_count(void);
+TERMIN_GUI_NATIVE_API size_t tc_ui_document_pool_capacity(void);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_info_at(
+    size_t pool_index,
+    tc_ui_document_info* out_info
+);
 TERMIN_GUI_NATIVE_API void tc_ui_theme_init_default(tc_ui_theme* theme);
-TERMIN_GUI_NATIVE_API const tc_ui_theme* tc_ui_document_theme(const tc_ui_document* document);
+TERMIN_GUI_NATIVE_API const tc_ui_theme* tc_ui_document_theme(tc_ui_document_handle document);
 TERMIN_GUI_NATIVE_API bool tc_ui_document_set_theme(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     const tc_ui_theme* theme
 );
-TERMIN_GUI_NATIVE_API uint64_t tc_ui_document_theme_revision(const tc_ui_document* document);
+TERMIN_GUI_NATIVE_API uint64_t tc_ui_document_theme_revision(tc_ui_document_handle document);
 TERMIN_GUI_NATIVE_API uint32_t tc_ui_document_widget_style_state(
-    const tc_ui_document* document,
+    tc_ui_document_handle document,
     const tc_widget* widget
 );
 TERMIN_GUI_NATIVE_API bool tc_ui_document_resolve_style(
-    const tc_ui_document* document,
+    tc_ui_document_handle document,
     const tc_widget* widget,
     uint32_t extra_state_flags,
     tc_ui_style* out_style
 );
 
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_adopt_widget(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_widget* widget,
     tc_widget_deleter deleter
 );
 
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_attach_borrowed_widget(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_widget* widget
 );
 
 TERMIN_GUI_NATIVE_API bool tc_ui_document_is_alive(
-    const tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_widget_handle handle
 );
 
 TERMIN_GUI_NATIVE_API tc_widget* tc_ui_document_resolve_widget(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_widget_handle handle
 );
 
 TERMIN_GUI_NATIVE_API const tc_widget* tc_ui_document_resolve_widget_const(
-    const tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_widget_handle handle
 );
 
 TERMIN_GUI_NATIVE_API bool tc_ui_document_destroy_widget(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_widget_handle handle
 );
 
 TERMIN_GUI_NATIVE_API bool tc_ui_document_destroy_widget_recursive(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_widget_handle handle
 );
 
 TERMIN_GUI_NATIVE_API size_t tc_ui_document_live_widget_count(
-    const tc_ui_document* document
+    tc_ui_document_handle document
 );
 
 TERMIN_GUI_NATIVE_API void tc_ui_document_set_text_measurer(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_ui_text_measure_fn measure,
     void* user_data
 );
 
 TERMIN_GUI_NATIVE_API bool tc_ui_document_measure_text(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     const char* text_utf8,
     size_t text_byte_length,
     float font_size,
@@ -606,72 +629,72 @@ TERMIN_GUI_NATIVE_API bool tc_ui_document_measure_text(
 );
 
 TERMIN_GUI_NATIVE_API void tc_ui_document_set_clipboard(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_ui_clipboard_get_text_fn get_text,
     tc_ui_clipboard_set_text_fn set_text,
     void* user_data
 );
 
-TERMIN_GUI_NATIVE_API const char* tc_ui_document_clipboard_text(tc_ui_document* document);
+TERMIN_GUI_NATIVE_API const char* tc_ui_document_clipboard_text(tc_ui_document_handle document);
 TERMIN_GUI_NATIVE_API bool tc_ui_document_set_clipboard_text(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     const char* text_utf8,
     size_t text_byte_length
 );
 
 TERMIN_GUI_NATIVE_API bool tc_ui_document_add_root(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_widget_handle handle
 );
 
 TERMIN_GUI_NATIVE_API bool tc_ui_document_remove_root(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_widget_handle handle
 );
 
 TERMIN_GUI_NATIVE_API size_t tc_ui_document_root_count(
-    const tc_ui_document* document
+    tc_ui_document_handle document
 );
 
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_root_at(
-    const tc_ui_document* document,
+    tc_ui_document_handle document,
     size_t index
 );
 
 TERMIN_GUI_NATIVE_API void tc_ui_document_paint_roots(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_ui_paint_context* context
 );
 
 TERMIN_GUI_NATIVE_API void tc_ui_document_paint(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_ui_paint_context* context
 );
 
 TERMIN_GUI_NATIVE_API void tc_ui_document_layout_roots(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_ui_rect rect
 );
 
 TERMIN_GUI_NATIVE_API bool tc_ui_document_show_overlay(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_widget_handle handle,
     uint32_t flags
 );
 
 TERMIN_GUI_NATIVE_API bool tc_ui_document_dismiss_overlay(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_widget_handle handle,
     tc_ui_overlay_dismiss_reason reason
 );
 
-TERMIN_GUI_NATIVE_API size_t tc_ui_document_overlay_count(const tc_ui_document* document);
+TERMIN_GUI_NATIVE_API size_t tc_ui_document_overlay_count(tc_ui_document_handle document);
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_overlay_at(
-    const tc_ui_document* document,
+    tc_ui_document_handle document,
     size_t index
 );
 TERMIN_GUI_NATIVE_API uint32_t tc_ui_document_overlay_flags_at(
-    const tc_ui_document* document,
+    tc_ui_document_handle document,
     size_t index
 );
 
@@ -684,72 +707,72 @@ TERMIN_GUI_NATIVE_API tc_ui_rect tc_ui_tooltip_rect(
 );
 
 TERMIN_GUI_NATIVE_API tc_ui_event_result tc_ui_document_dispatch_pointer_event(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     const tc_ui_pointer_event* event
 );
 
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_hit_test(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     float x,
     float y
 );
 
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_hovered_widget(
-    const tc_ui_document* document
+    tc_ui_document_handle document
 );
 
 TERMIN_GUI_NATIVE_API tc_ui_cursor_intent tc_ui_document_cursor_intent(
-    const tc_ui_document* document
+    tc_ui_document_handle document
 );
 
 TERMIN_GUI_NATIVE_API void tc_ui_document_set_cursor_changed_callback(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_ui_cursor_changed_fn callback,
     void* user_data
 );
 
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_pointer_capture(
-    const tc_ui_document* document
+    tc_ui_document_handle document
 );
 
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_pressed_widget(
-    const tc_ui_document* document
+    tc_ui_document_handle document
 );
 
 TERMIN_GUI_NATIVE_API bool tc_ui_document_set_pointer_capture(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_widget_handle handle
 );
 
 TERMIN_GUI_NATIVE_API bool tc_ui_document_release_pointer_capture(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_widget_handle handle
 );
 
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_focused_widget(
-    const tc_ui_document* document
+    tc_ui_document_handle document
 );
 
 TERMIN_GUI_NATIVE_API bool tc_ui_document_set_focus(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_widget_handle handle
 );
 
 TERMIN_GUI_NATIVE_API bool tc_ui_document_clear_focus(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_widget_handle handle
 );
 
-TERMIN_GUI_NATIVE_API bool tc_ui_document_focus_next(tc_ui_document* document);
-TERMIN_GUI_NATIVE_API bool tc_ui_document_focus_previous(tc_ui_document* document);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_focus_next(tc_ui_document_handle document);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_focus_previous(tc_ui_document_handle document);
 
 TERMIN_GUI_NATIVE_API tc_ui_event_result tc_ui_document_dispatch_key_event(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     const tc_ui_key_event* event
 );
 
 TERMIN_GUI_NATIVE_API tc_ui_event_result tc_ui_document_dispatch_text_event(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     const tc_ui_text_event* event
 );
 

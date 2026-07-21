@@ -94,7 +94,7 @@ const OverlayPlacement* OverlayLayout::placement(tc_widget_handle handle) const 
 }
 
 tc_ui_size OverlayLayout::measure(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_ui_constraints constraints) {
     tc_ui_size measured = NativeWidget::measure(document, constraints);
     for (size_t index = 0; index < child_count(); ++index) {
@@ -109,7 +109,7 @@ tc_ui_size OverlayLayout::measure(
     return clamp_size(measured, constraints);
 }
 
-void OverlayLayout::layout(tc_ui_document* document, tc_ui_rect rect) {
+void OverlayLayout::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
     for (size_t index = 0; index < child_count(); ++index) {
         tc_widget* child = child_at(index);
@@ -140,7 +140,7 @@ void OverlayLayout::layout(tc_ui_document* document, tc_ui_rect rect) {
 }
 
 void OverlayLayout::paint(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_ui_paint_context* context) {
     tc_ui_painter_push_clip(context, bounds());
     const tc_ui_style_override local_style = style_override();
@@ -155,7 +155,7 @@ void OverlayLayout::paint(
 }
 
 tc_widget_handle OverlayLayout::hit_test(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     float x,
     float y) {
     if (!visible() || !rect_contains(bounds(), x, y)) {

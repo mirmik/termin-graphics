@@ -11,7 +11,7 @@ class DocumentSnapshot {
     tc_ui_document_inspect_snapshot snapshot_{};
 
   public:
-    TERMIN_GUI_NATIVE_API explicit DocumentSnapshot(const tc_ui_document* document);
+    TERMIN_GUI_NATIVE_API explicit DocumentSnapshot(tc_ui_document_handle document);
 
     TERMIN_GUI_NATIVE_API explicit DocumentSnapshot(const Document& document);
 

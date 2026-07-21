@@ -5,7 +5,7 @@
 
 namespace termin::gui_native {
 
-DocumentSnapshot::DocumentSnapshot(const tc_ui_document* document) {
+DocumentSnapshot::DocumentSnapshot(tc_ui_document_handle document) {
     if (!tc_ui_document_capture_snapshot(document, &snapshot_)) {
         throw std::runtime_error("failed to capture native UI document snapshot");
     }

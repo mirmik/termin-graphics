@@ -151,7 +151,7 @@ size_t utf8_next_boundary(std::string_view text, size_t offset) {
 }
 
 bool measure_text(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     std::string_view text,
     float font_size,
     tc_ui_text_metrics& metrics
@@ -166,7 +166,7 @@ bool measure_text(
 }
 
 float centered_text_baseline(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     std::string_view text,
     float font_size,
     tc_ui_rect rect
@@ -200,19 +200,19 @@ tc_ui_constraints unconstrained() {
 }
 
 tc_widget* resolve_child(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     const tc_widget* expected_parent,
     tc_widget_handle handle,
     const char* owner
 ) {
     (void)owner;
-    if (!document || !expected_parent) {
+    if (tc_ui_document_handle_is_invalid(document) || !expected_parent) {
         return nullptr;
     }
     for (size_t index = 0; index < expected_parent->child_count; ++index) {
         tc_widget* child = expected_parent->children[index];
         if (child && tc_widget_handle_eq(child->handle, handle) &&
-            child->document == document && tc_widget_is_visible(child)) {
+            tc_ui_document_handle_eq(child->document, document) && tc_widget_is_visible(child)) {
             return child;
         }
     }
@@ -225,7 +225,7 @@ tc_widget* attach_child(
     size_t index,
     const char* owner
 ) {
-    if (!parent || !parent->document) {
+    if (!parent || tc_ui_document_handle_is_invalid(parent->document)) {
         tc_log_error("[termin-gui-native] %s has not been adopted", owner ? owner : "widget");
         return nullptr;
     }
@@ -242,7 +242,7 @@ tc_widget* attach_child(
 }
 
 void detach_if_child(tc_widget* parent, tc_widget_handle child_handle) {
-    if (!parent || !parent->document || tc_widget_handle_is_invalid(child_handle)) {
+    if (!parent || tc_ui_document_handle_is_invalid(parent->document) || tc_widget_handle_is_invalid(child_handle)) {
         return;
     }
     tc_widget* child = tc_ui_document_resolve_widget(parent->document, child_handle);
@@ -251,7 +251,7 @@ void detach_if_child(tc_widget* parent, tc_widget_handle child_handle) {
     }
 }
 
-tc_ui_size measure_widget(tc_widget* widget, tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size measure_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_constraints constraints) {
     if (widget && widget->vtable && widget->vtable->measure) {
         return widget->vtable->measure(widget, document, constraints);
     }
@@ -265,13 +265,13 @@ NativeWidget* native_widget_body(tc_widget* widget) {
     return dynamic_cast<NativeWidget*>(static_cast<Widget*>(widget->body));
 }
 
-void layout_widget(tc_widget* widget, tc_ui_document* document, tc_ui_rect rect) {
+void layout_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_rect rect) {
     if (widget && tc_widget_is_visible(widget) && widget->vtable && widget->vtable->layout) {
         widget->vtable->layout(widget, document, rect);
     }
 }
 
-void paint_widget(tc_widget* widget, tc_ui_document* document, tc_ui_paint_context* context) {
+void paint_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_paint_context* context) {
     if (widget && tc_widget_is_visible(widget) && widget->vtable && widget->vtable->paint) {
         widget->vtable->paint(widget, document, context);
     }
@@ -496,7 +496,7 @@ void apply_span_requirement(
 
 
 GridAxisLayout build_grid_axis(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     const tc_widget* expected_parent,
     const std::vector<GridTrack>& tracks,
     const std::vector<GridItem>& items,

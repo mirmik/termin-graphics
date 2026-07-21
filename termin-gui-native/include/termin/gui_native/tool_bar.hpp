@@ -43,10 +43,10 @@ class ToolBar final : public NativeWidget {
 
     Signal<ToolBar&, size_t, CommandId, const CommandData&>& activated() { return activated_; }
 
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document,
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document,
                                      const tc_ui_pointer_event* event) override;
 
   private:
@@ -54,7 +54,7 @@ class ToolBar final : public NativeWidget {
     void disconnect_model();
     void on_model_changed(const CommandChange& change);
     void sync_model();
-    void compute_item_rects(tc_ui_document* document);
+    void compute_item_rects(tc_ui_document_handle document);
     size_t index_at(float x, float y) const;
     bool activate(size_t index);
 

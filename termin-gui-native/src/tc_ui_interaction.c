@@ -12,12 +12,12 @@ static tc_ui_event_result dispatch_pointer_event_to_widget(
     tc_widget_handle handle,
     const tc_ui_pointer_event* event
 ) {
-    tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
+    tc_widget* widget = tc_ui_document_resolve_widget(document->handle, handle);
     if (!widget || !tc_ui_internal_widget_effectively_interactive(widget) ||
         !widget->vtable || !widget->vtable->pointer_event) {
         return TC_UI_EVENT_IGNORED;
     }
-    return widget->vtable->pointer_event(widget, document, event);
+    return widget->vtable->pointer_event(widget, document->handle, event);
 }
 
 static tc_ui_event_result dispatch_key_event_to_widget(
@@ -25,12 +25,12 @@ static tc_ui_event_result dispatch_key_event_to_widget(
     tc_widget_handle handle,
     const tc_ui_key_event* event
 ) {
-    tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
+    tc_widget* widget = tc_ui_document_resolve_widget(document->handle, handle);
     if (!widget || !tc_ui_internal_widget_effectively_interactive(widget) ||
         !widget->vtable || !widget->vtable->key_event) {
         return TC_UI_EVENT_IGNORED;
     }
-    return widget->vtable->key_event(widget, document, event);
+    return widget->vtable->key_event(widget, document->handle, event);
 }
 
 static tc_ui_event_result dispatch_text_event_to_widget(
@@ -38,12 +38,12 @@ static tc_ui_event_result dispatch_text_event_to_widget(
     tc_widget_handle handle,
     const tc_ui_text_event* event
 ) {
-    tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
+    tc_widget* widget = tc_ui_document_resolve_widget(document->handle, handle);
     if (!widget || !tc_ui_internal_widget_effectively_interactive(widget) ||
         !widget->vtable || !widget->vtable->text_event) {
         return TC_UI_EVENT_IGNORED;
     }
-    return widget->vtable->text_event(widget, document, event);
+    return widget->vtable->text_event(widget, document->handle, event);
 }
 
 static void dispatch_focus_event_to_widget(
@@ -51,9 +51,9 @@ static void dispatch_focus_event_to_widget(
     tc_widget_handle handle,
     bool focused
 ) {
-    tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
+    tc_widget* widget = tc_ui_document_resolve_widget(document->handle, handle);
     if (widget && widget->vtable && widget->vtable->focus_event) {
-        widget->vtable->focus_event(widget, document, focused);
+        widget->vtable->focus_event(widget, document->handle, focused);
     }
 }
 
@@ -94,7 +94,7 @@ static tc_widget_handle nearest_interactive_ancestor(
     tc_ui_document* document,
     tc_widget_handle handle
 ) {
-    tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
+    tc_widget* widget = tc_ui_document_resolve_widget(document->handle, handle);
     while (widget && !tc_ui_internal_widget_effectively_interactive(widget)) {
         widget = widget->parent;
     }
@@ -110,7 +110,7 @@ static bool snapshot_route(
     tc_widget_handle* route = NULL;
     size_t count = 0;
     size_t capacity = 0;
-    tc_widget* widget = tc_ui_document_resolve_widget(document, target);
+    tc_widget* widget = tc_ui_document_resolve_widget(document->handle, target);
 
     while (widget) {
         if (count > document->live_count) {
@@ -123,7 +123,7 @@ static bool snapshot_route(
             return false;
         }
         route[count++] = widget->handle;
-        if (widget->parent && widget->parent->document != document) {
+        if (widget->parent && !tc_ui_document_handle_eq(widget->parent->document, document->handle)) {
             tc_log_error("[termin-gui-native] event route crosses document boundary");
             free(route);
             return false;
@@ -228,18 +228,18 @@ static tc_widget_handle hit_test_entry(
     const char* kind,
     bool allow_root_hit
 ) {
-    tc_widget* widget = tc_ui_document_resolve_widget(document, entry);
+    tc_widget* widget = tc_ui_document_resolve_widget(document->handle, entry);
     tc_widget_handle hit;
     if (!widget || !tc_widget_is_visible(widget) ||
         !widget->vtable || !widget->vtable->hit_test) {
         return tc_widget_handle_invalid();
     }
-    hit = widget->vtable->hit_test(widget, document, x, y);
+    hit = widget->vtable->hit_test(widget, document->handle, x, y);
     if (tc_widget_handle_is_invalid(hit)) {
         return hit;
     }
     {
-        tc_widget* hit_widget = tc_ui_document_resolve_widget(document, hit);
+        tc_widget* hit_widget = tc_ui_document_resolve_widget(document->handle, hit);
         tc_widget* hit_root = hit_widget;
         while (hit_root && hit_root->parent) {
             hit_root = hit_root->parent;
@@ -295,7 +295,7 @@ static tc_ui_hit_resolution resolve_document_hit(
     }
     for (index = overlay_count; index > 0; --index) {
         const tc_ui_overlay_entry overlay = overlays[index - 1];
-        tc_widget* overlay_widget = tc_ui_document_resolve_widget(document, overlay.handle);
+        tc_widget* overlay_widget = tc_ui_document_resolve_widget(document->handle, overlay.handle);
         if (!overlay_widget || !tc_widget_is_visible(overlay_widget)) {
             continue;
         }
@@ -313,13 +313,13 @@ static tc_ui_hit_resolution resolve_document_hit(
                 return result;
             }
         }
-        overlay_widget = tc_ui_document_resolve_widget(document, overlay.handle);
+        overlay_widget = tc_ui_document_resolve_widget(document->handle, overlay.handle);
         if (!overlay_widget || tc_ui_internal_find_overlay_index(document, overlay.handle) == SIZE_MAX) {
             continue;
         }
         if (dismiss_outside && (overlay.flags & TC_UI_OVERLAY_DISMISS_ON_OUTSIDE) != 0) {
             tc_ui_document_dismiss_overlay(
-                document,
+                document->handle,
                 overlay.handle,
                 TC_UI_OVERLAY_DISMISS_OUTSIDE
             );
@@ -345,15 +345,16 @@ static tc_ui_hit_resolution resolve_document_hit(
     return result;
 }
 
-void tc_ui_document_paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void tc_ui_document_paint(tc_ui_document_handle document_handle, tc_ui_paint_context* context) {
     tc_ui_overlay_entry* overlays = NULL;
     size_t count;
     size_t index;
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_paint");
     if (!document) {
-        tc_log_error("[termin-gui-native] cannot paint null document");
         return;
     }
-    tc_ui_document_paint_roots(document, context);
+    tc_ui_document_paint_roots(document_handle, context);
     count = document->overlay_count;
     if (count > 0) {
         overlays = (tc_ui_overlay_entry*)malloc(count * sizeof(*overlays));
@@ -364,9 +365,9 @@ void tc_ui_document_paint(tc_ui_document* document, tc_ui_paint_context* context
         memcpy(overlays, document->overlays, count * sizeof(*overlays));
     }
     for (index = 0; index < count; ++index) {
-        tc_widget* widget = tc_ui_document_resolve_widget(document, overlays[index].handle);
+        tc_widget* widget = tc_ui_document_resolve_widget(document->handle, overlays[index].handle);
         if (widget && tc_widget_is_visible(widget) && widget->vtable && widget->vtable->paint) {
-            widget->vtable->paint(widget, document, context);
+            widget->vtable->paint(widget, document->handle, context);
         }
     }
     free(overlays);
@@ -391,7 +392,8 @@ static void invalidate_interaction_outside_subtree(tc_widget* root) {
     bool clear_capture;
     bool clear_pressed;
     bool clear_focus;
-    if (!root || !(document = root->document)) {
+    if (!root || tc_ui_document_handle_is_invalid(root->document) ||
+        !(document = tc_ui_internal_resolve_document(root->document))) {
         return;
     }
     clear_hover = !tc_widget_handle_is_invalid(document->hovered_widget) &&
@@ -421,7 +423,7 @@ static void invalidate_interaction_outside_subtree(tc_widget* root) {
 }
 
 bool tc_ui_document_show_overlay(
-    tc_ui_document* document,
+    tc_ui_document_handle document_handle,
     tc_widget_handle handle,
     uint32_t flags
 ) {
@@ -431,7 +433,9 @@ bool tc_ui_document_show_overlay(
         TC_UI_OVERLAY_TOOLTIP |
         TC_UI_OVERLAY_ALLOW_ROOT_HIT |
         TC_UI_OVERLAY_BLOCK_ESCAPE;
-    tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_show_overlay");
+    tc_widget* widget = document ? tc_ui_document_resolve_widget(document_handle, handle) : NULL;
     size_t existing;
     if (!widget || widget->parent || handle_is_root(document, handle)) {
         tc_log_error("[termin-gui-native] overlay must be a live unparented non-root widget");
@@ -469,15 +473,17 @@ bool tc_ui_document_show_overlay(
     if ((flags & TC_UI_OVERLAY_MODAL) != 0) {
         invalidate_interaction_outside_subtree(widget);
     }
-    return tc_ui_document_is_alive(document, handle) &&
+    return tc_ui_document_is_alive(document_handle, handle) &&
         tc_ui_internal_find_overlay_index(document, handle) != SIZE_MAX;
 }
 
 bool tc_ui_document_dismiss_overlay(
-    tc_ui_document* document,
+    tc_ui_document_handle document_handle,
     tc_widget_handle handle,
     tc_ui_overlay_dismiss_reason reason
 ) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_dismiss_overlay");
     size_t index = tc_ui_internal_find_overlay_index(document, handle);
     tc_widget* widget;
     if (reason < TC_UI_OVERLAY_DISMISS_PROGRAMMATIC ||
@@ -489,28 +495,34 @@ bool tc_ui_document_dismiss_overlay(
         return false;
     }
     tc_ui_internal_remove_overlay_at(document, index);
-    widget = tc_ui_document_resolve_widget(document, handle);
+    widget = tc_ui_document_resolve_widget(document->handle, handle);
     if (widget) {
         tc_ui_internal_invalidate_subtree_interaction_state(widget);
     }
-    widget = tc_ui_document_resolve_widget(document, handle);
+    widget = tc_ui_document_resolve_widget(document->handle, handle);
     if (widget && widget->vtable && widget->vtable->overlay_dismissed) {
-        widget->vtable->overlay_dismissed(widget, document, reason);
+        widget->vtable->overlay_dismissed(widget, document->handle, reason);
     }
     return true;
 }
 
-size_t tc_ui_document_overlay_count(const tc_ui_document* document) {
+size_t tc_ui_document_overlay_count(tc_ui_document_handle document_handle) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_overlay_count");
     return document ? document->overlay_count : 0;
 }
 
-tc_widget_handle tc_ui_document_overlay_at(const tc_ui_document* document, size_t index) {
+tc_widget_handle tc_ui_document_overlay_at(tc_ui_document_handle document_handle, size_t index) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_overlay_at");
     return document && index < document->overlay_count
         ? document->overlays[index].handle
         : tc_widget_handle_invalid();
 }
 
-uint32_t tc_ui_document_overlay_flags_at(const tc_ui_document* document, size_t index) {
+uint32_t tc_ui_document_overlay_flags_at(tc_ui_document_handle document_handle, size_t index) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_overlay_flags_at");
     return document && index < document->overlay_count
         ? document->overlays[index].flags
         : 0;
@@ -540,16 +552,17 @@ tc_ui_rect tc_ui_tooltip_rect(
     return result;
 }
 
-void tc_ui_document_layout_roots(tc_ui_document* document, tc_ui_rect rect) {
+void tc_ui_document_layout_roots(tc_ui_document_handle document_handle, tc_ui_rect rect) {
     size_t index;
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_layout_roots");
     if (!document) {
-        tc_log_error("[termin-gui-native] cannot layout roots of null document");
         return;
     }
     for (index = 0; index < document->root_count; ++index) {
-        tc_widget* widget = tc_ui_document_resolve_widget(document, document->roots[index]);
+        tc_widget* widget = tc_ui_document_resolve_widget(document->handle, document->roots[index]);
         if (widget && tc_widget_is_visible(widget) && widget->vtable && widget->vtable->layout) {
-            widget->vtable->layout(widget, document, rect);
+            widget->vtable->layout(widget, document->handle, rect);
         }
     }
 }
@@ -571,7 +584,7 @@ bool tc_ui_internal_change_focus(tc_ui_document* document, tc_widget_handle next
 }
 
 static void focus_from_pointer_target(tc_ui_document* document, tc_widget_handle target) {
-    tc_widget* widget = tc_ui_document_resolve_widget(document, target);
+    tc_widget* widget = tc_ui_document_resolve_widget(document->handle, target);
     while (widget) {
         if (tc_ui_internal_widget_effectively_interactive(widget) && tc_widget_is_focusable(widget)) {
             tc_ui_internal_change_focus(document, widget->handle);
@@ -594,17 +607,17 @@ void tc_ui_internal_update_hover(
     }
     document->hovered_widget = next;
     if (!tc_widget_handle_is_invalid(previous)) {
-        tc_widget* widget = tc_ui_document_resolve_widget(document, previous);
+        tc_widget* widget = tc_ui_document_resolve_widget(document->handle, previous);
         transition.type = TC_UI_POINTER_LEAVE;
         if (widget && widget->vtable && widget->vtable->pointer_event) {
-            widget->vtable->pointer_event(widget, document, &transition);
+            widget->vtable->pointer_event(widget, document->handle, &transition);
         }
     }
     if (!tc_widget_handle_is_invalid(next) && tc_ui_internal_same_handle(document->hovered_widget, next)) {
-        tc_widget* widget = tc_ui_document_resolve_widget(document, next);
+        tc_widget* widget = tc_ui_document_resolve_widget(document->handle, next);
         transition.type = TC_UI_POINTER_ENTER;
         if (widget && widget->vtable && widget->vtable->pointer_event) {
-            widget->vtable->pointer_event(widget, document, &transition);
+            widget->vtable->pointer_event(widget, document->handle, &transition);
         }
     }
     tc_ui_internal_refresh_cursor(document);
@@ -617,12 +630,12 @@ void tc_ui_internal_refresh_cursor(tc_ui_document* document) {
     if (!document) {
         return;
     }
-    widget = tc_ui_document_resolve_widget(document, document->hovered_widget);
+    widget = tc_ui_document_resolve_widget(document->handle, document->hovered_widget);
     if (widget && !tc_ui_internal_widget_effectively_interactive(widget)) {
         widget = NULL;
     }
     while (widget) {
-        if (depth++ >= document->live_count || widget->document != document) {
+        if (depth++ >= document->live_count || !tc_ui_document_handle_eq(widget->document, document->handle)) {
             tc_log_error("[termin-gui-native] invalid canonical tree while resolving cursor intent");
             next = TC_UI_CURSOR_DEFAULT;
             break;
@@ -660,7 +673,7 @@ static bool collect_focusables_in_tree(
     size_t* capacity
 ) {
     size_t index;
-    tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
+    tc_widget* widget = tc_ui_document_resolve_widget(document->handle, handle);
     bool interactive;
     if (!widget) {
         return true;
@@ -697,7 +710,7 @@ static size_t top_modal_overlay_index(const tc_ui_document* document) {
     }
     for (index = document->overlay_count; index > 0; --index) {
         const tc_ui_overlay_entry* overlay = &document->overlays[index - 1];
-        const tc_widget* widget = tc_ui_document_resolve_widget_const(document, overlay->handle);
+        const tc_widget* widget = tc_ui_document_resolve_widget_const(document->handle, overlay->handle);
         if (widget && tc_widget_is_visible(widget) &&
             (overlay->flags & TC_UI_OVERLAY_MODAL) != 0) {
             return index - 1;
@@ -719,13 +732,13 @@ static bool handle_is_in_modal_scope(
     size_t modal_index
 ) {
     size_t index;
-    tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
+    tc_widget* widget = tc_ui_document_resolve_widget(document->handle, handle);
     if (!widget || modal_index == SIZE_MAX || modal_index >= document->overlay_count) {
         return false;
     }
     for (index = modal_index; index < document->overlay_count; ++index) {
         tc_widget* overlay = tc_ui_document_resolve_widget(
-            document,
+            document->handle,
             document->overlays[index].handle
         );
         if (overlay && tc_ui_internal_widget_is_descendant_of(widget, overlay)) {
@@ -822,7 +835,7 @@ static bool move_focus(tc_ui_document* document, bool reverse) {
 }
 
 tc_ui_event_result tc_ui_document_dispatch_pointer_event(
-    tc_ui_document* document,
+    tc_ui_document_handle document_handle,
     const tc_ui_pointer_event* event
 ) {
     tc_ui_hit_resolution hit_resolution;
@@ -831,6 +844,8 @@ tc_ui_event_result tc_ui_document_dispatch_pointer_event(
     tc_widget_handle target;
     tc_widget_handle handler = tc_widget_handle_invalid();
     tc_ui_event_result result;
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_dispatch_pointer_event");
     if (!document || !event) {
         tc_log_error("[termin-gui-native] cannot dispatch pointer event without document/event");
         return TC_UI_EVENT_IGNORED;
@@ -858,11 +873,11 @@ tc_ui_event_result tc_ui_document_dispatch_pointer_event(
         return TC_UI_EVENT_HANDLED;
     }
     if (!tc_widget_handle_is_invalid(document->pointer_capture) &&
-        !tc_ui_document_is_alive(document, document->pointer_capture)) {
+        !tc_ui_document_is_alive(document->handle, document->pointer_capture)) {
         document->pointer_capture = tc_widget_handle_invalid();
     }
     if (!tc_widget_handle_is_invalid(document->pressed_widget) &&
-        !tc_ui_document_is_alive(document, document->pressed_widget)) {
+        !tc_ui_document_is_alive(document->handle, document->pressed_widget)) {
         document->pressed_widget = tc_widget_handle_invalid();
     }
 
@@ -878,16 +893,16 @@ tc_ui_event_result tc_ui_document_dispatch_pointer_event(
         document->pressed_widget = tc_widget_handle_invalid();
     }
     if (hit_resolution.blocked) {
-        tc_widget* blocker = tc_ui_document_resolve_widget(document, hit_resolution.blocker);
-        tc_widget* target_widget = tc_ui_document_resolve_widget(document, target);
+        tc_widget* blocker = tc_ui_document_resolve_widget(document->handle, hit_resolution.blocker);
+        tc_widget* target_widget = tc_ui_document_resolve_widget(document->handle, target);
         if (!blocker || !target_widget || !tc_ui_internal_widget_is_descendant_of(target_widget, blocker)) {
             return TC_UI_EVENT_HANDLED;
         }
     }
     result = dispatch_pointer_route(document, target, event, &handler);
     if (event->type == TC_UI_POINTER_DOWN && result == TC_UI_EVENT_HANDLED &&
-        tc_ui_document_is_alive(document, handler)) {
-        tc_widget* handled_widget = tc_ui_document_resolve_widget(document, handler);
+        tc_ui_document_is_alive(document->handle, handler)) {
+        tc_widget* handled_widget = tc_ui_document_resolve_widget(document->handle, handler);
         if (tc_ui_internal_widget_effectively_interactive(handled_widget)) {
             document->pressed_widget = handler;
         }
@@ -897,7 +912,9 @@ tc_ui_event_result tc_ui_document_dispatch_pointer_event(
         : result;
 }
 
-tc_widget_handle tc_ui_document_hit_test(tc_ui_document* document, float x, float y) {
+tc_widget_handle tc_ui_document_hit_test(tc_ui_document_handle document_handle, float x, float y) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_hit_test");
     if (!document) {
         tc_log_error("[termin-gui-native] cannot hit-test roots of null document");
         return tc_widget_handle_invalid();
@@ -905,37 +922,48 @@ tc_widget_handle tc_ui_document_hit_test(tc_ui_document* document, float x, floa
     return resolve_document_hit(document, x, y, false).target;
 }
 
-tc_widget_handle tc_ui_document_hovered_widget(const tc_ui_document* document) {
+tc_widget_handle tc_ui_document_hovered_widget(tc_ui_document_handle document_handle) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_hovered_widget");
     return document ? document->hovered_widget : tc_widget_handle_invalid();
 }
 
-tc_ui_cursor_intent tc_ui_document_cursor_intent(const tc_ui_document* document) {
+tc_ui_cursor_intent tc_ui_document_cursor_intent(tc_ui_document_handle document_handle) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_cursor_intent");
     return document ? document->cursor_intent : TC_UI_CURSOR_DEFAULT;
 }
 
 void tc_ui_document_set_cursor_changed_callback(
-    tc_ui_document* document,
+    tc_ui_document_handle document_handle,
     tc_ui_cursor_changed_fn callback,
     void* user_data
 ) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_set_cursor_changed_callback");
     if (!document) {
-        tc_log_error("[termin-gui-native] cannot set cursor callback on null document");
         return;
     }
     document->cursor_changed = callback;
     document->cursor_changed_user_data = callback ? user_data : NULL;
 }
 
-tc_widget_handle tc_ui_document_pointer_capture(const tc_ui_document* document) {
+tc_widget_handle tc_ui_document_pointer_capture(tc_ui_document_handle document_handle) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_pointer_capture");
     return document ? document->pointer_capture : tc_widget_handle_invalid();
 }
 
-tc_widget_handle tc_ui_document_pressed_widget(const tc_ui_document* document) {
+tc_widget_handle tc_ui_document_pressed_widget(tc_ui_document_handle document_handle) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_pressed_widget");
     return document ? document->pressed_widget : tc_widget_handle_invalid();
 }
 
-bool tc_ui_document_set_pointer_capture(tc_ui_document* document, tc_widget_handle handle) {
-    tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
+bool tc_ui_document_set_pointer_capture(tc_ui_document_handle document_handle, tc_widget_handle handle) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_set_pointer_capture");
+    tc_widget* widget = document ? tc_ui_document_resolve_widget(document_handle, handle) : NULL;
     size_t modal_index = top_modal_overlay_index(document);
     if (!widget || !tc_ui_internal_widget_effectively_interactive(widget)) {
         tc_log_error("[termin-gui-native] cannot capture pointer for invalid or disabled widget");
@@ -949,7 +977,9 @@ bool tc_ui_document_set_pointer_capture(tc_ui_document* document, tc_widget_hand
     return true;
 }
 
-bool tc_ui_document_release_pointer_capture(tc_ui_document* document, tc_widget_handle handle) {
+bool tc_ui_document_release_pointer_capture(tc_ui_document_handle document_handle, tc_widget_handle handle) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_release_pointer_capture");
     if (!document || !tc_ui_internal_same_handle(document->pointer_capture, handle)) {
         return false;
     }
@@ -957,12 +987,16 @@ bool tc_ui_document_release_pointer_capture(tc_ui_document* document, tc_widget_
     return true;
 }
 
-tc_widget_handle tc_ui_document_focused_widget(const tc_ui_document* document) {
+tc_widget_handle tc_ui_document_focused_widget(tc_ui_document_handle document_handle) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_focused_widget");
     return document ? document->focused_widget : tc_widget_handle_invalid();
 }
 
-bool tc_ui_document_set_focus(tc_ui_document* document, tc_widget_handle handle) {
-    tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
+bool tc_ui_document_set_focus(tc_ui_document_handle document_handle, tc_widget_handle handle) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_set_focus");
+    tc_widget* widget = document ? tc_ui_document_resolve_widget(document_handle, handle) : NULL;
     size_t modal_index = top_modal_overlay_index(document);
     if (!widget || !tc_ui_internal_widget_effectively_interactive(widget) || !tc_widget_is_focusable(widget)) {
         tc_log_error("[termin-gui-native] cannot focus invalid, disabled or non-focusable widget");
@@ -975,29 +1009,37 @@ bool tc_ui_document_set_focus(tc_ui_document* document, tc_widget_handle handle)
     return tc_ui_internal_change_focus(document, handle);
 }
 
-bool tc_ui_document_clear_focus(tc_ui_document* document, tc_widget_handle handle) {
+bool tc_ui_document_clear_focus(tc_ui_document_handle document_handle, tc_widget_handle handle) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_clear_focus");
     if (!document || !tc_ui_internal_same_handle(document->focused_widget, handle)) {
         return false;
     }
     return tc_ui_internal_change_focus(document, tc_widget_handle_invalid());
 }
 
-bool tc_ui_document_focus_next(tc_ui_document* document) {
+bool tc_ui_document_focus_next(tc_ui_document_handle document_handle) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_focus_next");
     return move_focus(document, false);
 }
 
-bool tc_ui_document_focus_previous(tc_ui_document* document) {
+bool tc_ui_document_focus_previous(tc_ui_document_handle document_handle) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_focus_previous");
     return move_focus(document, true);
 }
 
 tc_ui_event_result tc_ui_document_dispatch_key_event(
-    tc_ui_document* document,
+    tc_ui_document_handle document_handle,
     const tc_ui_key_event* event
 ) {
     tc_ui_event_result result = TC_UI_EVENT_IGNORED;
     tc_widget_handle modal;
     tc_widget_handle target;
     size_t modal_index;
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_dispatch_key_event");
     if (!document || !event) {
         return TC_UI_EVENT_IGNORED;
     }
@@ -1008,13 +1050,13 @@ tc_ui_event_result tc_ui_document_dispatch_key_event(
             return TC_UI_EVENT_HANDLED;
         }
         return tc_ui_document_dismiss_overlay(
-            document,
+            document->handle,
             top.handle,
             TC_UI_OVERLAY_DISMISS_ESCAPE
         ) ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
     }
     if (!tc_widget_handle_is_invalid(document->focused_widget) &&
-        !tc_ui_document_is_alive(document, document->focused_widget)) {
+        !tc_ui_document_is_alive(document->handle, document->focused_widget)) {
         document->focused_widget = tc_widget_handle_invalid();
     }
     modal = top_modal_overlay(document);
@@ -1044,18 +1086,20 @@ tc_ui_event_result tc_ui_document_dispatch_key_event(
 }
 
 tc_ui_event_result tc_ui_document_dispatch_text_event(
-    tc_ui_document* document,
+    tc_ui_document_handle document_handle,
     const tc_ui_text_event* event
 ) {
     tc_widget_handle modal;
     tc_widget_handle target;
     size_t modal_index;
     tc_ui_event_result result;
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_dispatch_text_event");
     if (!document || !event) {
         return TC_UI_EVENT_IGNORED;
     }
     if (!tc_widget_handle_is_invalid(document->focused_widget) &&
-        !tc_ui_document_is_alive(document, document->focused_widget)) {
+        !tc_ui_document_is_alive(document->handle, document->focused_widget)) {
         document->focused_widget = tc_widget_handle_invalid();
     }
     modal = top_modal_overlay(document);

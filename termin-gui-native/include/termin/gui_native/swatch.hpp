@@ -10,6 +10,6 @@ private:
 
 public:
     explicit Swatch(Color color);
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
 };
 } // namespace termin::gui_native

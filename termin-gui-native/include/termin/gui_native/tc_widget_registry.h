@@ -17,10 +17,10 @@ typedef struct tc_widget_factory_result {
     tc_widget_ownership_policy ownership;
 } tc_widget_factory_result;
 
-typedef bool (*tc_widget_factory_create_fn)(tc_ui_document* document, void* userdata,
+typedef bool (*tc_widget_factory_create_fn)(tc_ui_document_handle document, void* userdata,
                                             tc_widget_factory_result* out_result);
 
-typedef bool (*tc_widget_factory_after_adopt_fn)(tc_ui_document* document, tc_widget* widget,
+typedef bool (*tc_widget_factory_after_adopt_fn)(tc_ui_document_handle document, tc_widget* widget,
                                                  tc_widget_handle handle, void* userdata);
 
 typedef void (*tc_widget_factory_userdata_destroy_fn)(void* userdata);
@@ -78,7 +78,7 @@ TERMIN_GUI_NATIVE_API bool tc_widget_registry_deserialize_state(tc_widget* widge
                                                                 const tc_value* state);
 
 TERMIN_GUI_NATIVE_API tc_widget_handle
-tc_ui_document_create_registered_widget(tc_ui_document* document, const char* type_name);
+tc_ui_document_create_registered_widget(tc_ui_document_handle document, const char* type_name);
 
 #ifdef __cplusplus
 }

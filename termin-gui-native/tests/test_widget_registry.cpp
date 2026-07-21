@@ -35,7 +35,7 @@ void delete_factory_widget(tc_widget* widget) {
     delete body;
 }
 
-bool create_factory_widget(tc_ui_document*, void* userdata, tc_widget_factory_result* result) {
+bool create_factory_widget(tc_ui_document_handle, void* userdata, tc_widget_factory_result* result) {
     auto* state = static_cast<FactoryState*>(userdata);
     assert(state && result);
     state->creates += 1;
@@ -58,7 +58,7 @@ bool create_factory_widget(tc_ui_document*, void* userdata, tc_widget_factory_re
     return true;
 }
 
-bool after_adopt_factory_widget(tc_ui_document*, tc_widget*, tc_widget_handle, void* userdata) {
+bool after_adopt_factory_widget(tc_ui_document_handle, tc_widget*, tc_widget_handle, void* userdata) {
     auto* state = static_cast<FactoryState*>(userdata);
     state->adopts += 1;
     return !state->fail_after_adopt;
@@ -110,8 +110,8 @@ void test_owned_factory_identity_and_unload_invalidation() {
     assert(std::strcmp(tc_runtime_type_registry_get_parent("test.ui.OwnedWidget"),
                        "termin.gui.Widget") == 0);
 
-    tc_ui_document* document = tc_ui_document_create();
-    assert(document);
+    tc_ui_document_handle document = tc_ui_document_create();
+    assert(tc_ui_document_is_valid(document));
     const tc_widget_handle parent =
         tc_ui_document_create_registered_widget(document, "test.ui.OwnedWidget");
     const tc_widget_handle child =
@@ -168,7 +168,7 @@ void test_idle_factory_replacement_uses_a_fresh_descriptor() {
     assert(first_state.userdata_destroys == 1);
     assert(second_state.userdata_destroys == 0);
 
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     const tc_widget_handle handle =
         tc_ui_document_create_registered_widget(document, "test.ui.Replaceable");
     assert(!tc_widget_handle_is_invalid(handle));
@@ -186,7 +186,7 @@ void test_borrowed_factory_is_explicit_and_not_deleted() {
     state.borrowed = true;
     const tc_widget_factory_descriptor factory = descriptor(state);
     assert(tc_widget_registry_register("test.ui.BorrowedWidget", "test.module", nullptr, &factory));
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     const tc_widget_handle handle =
         tc_ui_document_create_registered_widget(document, "test.ui.BorrowedWidget");
     assert(!tc_widget_handle_is_invalid(handle));
@@ -196,7 +196,7 @@ void test_borrowed_factory_is_explicit_and_not_deleted() {
     assert(tc_widget_registry_unregister("test.ui.BorrowedWidget"));
     assert(!tc_ui_document_is_alive(document, handle));
     assert(state.deletes == 0);
-    assert(state.borrowed_widget.widget.document == nullptr);
+    assert(tc_ui_document_handle_is_invalid(state.borrowed_widget.widget.document));
     tc_ui_document_destroy(document);
     tc_runtime_type_registry_clear();
 }
@@ -207,7 +207,7 @@ void test_after_adopt_failure_rolls_back_handle_and_owned_body() {
     state.fail_after_adopt = true;
     const tc_widget_factory_descriptor factory = descriptor(state);
     assert(tc_widget_registry_register("test.ui.FailingWidget", "test.module", nullptr, &factory));
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     const tc_widget_handle handle =
         tc_ui_document_create_registered_widget(document, "test.ui.FailingWidget");
     assert(tc_widget_handle_is_invalid(handle));
@@ -223,7 +223,7 @@ void test_registered_state_hooks_round_trip_strict_dict_state() {
     FactoryState state;
     const tc_widget_factory_descriptor factory = descriptor(state);
     assert(tc_widget_registry_register("test.ui.StatefulWidget", "test.module", nullptr, &factory));
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     const tc_widget_handle handle =
         tc_ui_document_create_registered_widget(document, "test.ui.StatefulWidget");
     tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
@@ -262,9 +262,10 @@ void test_owner_reload_invalidates_documents_nested_trees_and_factory_userdata()
     assert(tc_widget_registry_register("test.ui.ForeignChild", "test.module.foreign", nullptr,
                                        &foreign_factory));
 
-    tc_ui_document* first_document = tc_ui_document_create();
-    tc_ui_document* second_document = tc_ui_document_create();
-    assert(first_document && second_document);
+    tc_ui_document_handle first_document = tc_ui_document_create();
+    tc_ui_document_handle second_document = tc_ui_document_create();
+    assert(tc_ui_document_is_valid(first_document));
+    assert(tc_ui_document_is_valid(second_document));
     const tc_widget_handle parent =
         tc_ui_document_create_registered_widget(first_document, "test.ui.ReloadParent");
     const tc_widget_handle foreign_child =

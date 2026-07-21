@@ -38,23 +38,23 @@ public:
     void clear_selection();
     Signal<TextArea&, const std::string&>& changed() { return changed_; }
     const Signal<TextArea&, const std::string&>& changed() const { return changed_; }
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
-    tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event) override;
-    tc_ui_event_result text_event(tc_ui_document* document, const tc_ui_text_event* event) override;
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) override;
+    tc_ui_event_result key_event(tc_ui_document_handle document, const tc_ui_key_event* event) override;
+    tc_ui_event_result text_event(tc_ui_document_handle document, const tc_ui_text_event* event) override;
 private:
     std::vector<Line> lines() const;
-    tc_ui_rect text_clip_rect(tc_ui_document* document) const;
-    float line_height(tc_ui_document* document) const;
-    bool measure_range(tc_ui_document* document, size_t start, size_t end, float font_size, float& width) const;
+    tc_ui_rect text_clip_rect(tc_ui_document_handle document) const;
+    float line_height(tc_ui_document_handle document) const;
+    bool measure_range(tc_ui_document_handle document, size_t start, size_t end, float font_size, float& width) const;
     size_t line_index_for_offset(const std::vector<Line>& lines, size_t offset) const;
-    size_t caret_from_point(tc_ui_document* document, float x, float y) const;
-    size_t caret_from_line_x(tc_ui_document* document, const Line& line, float content_x) const;
-    void ensure_caret_visible(tc_ui_document* document);
+    size_t caret_from_point(tc_ui_document_handle document, float x, float y) const;
+    size_t caret_from_line_x(tc_ui_document_handle document, const Line& line, float content_x) const;
+    void ensure_caret_visible(tc_ui_document_handle document);
     void move_caret(size_t next, bool extend_selection, bool preserve_column = false);
-    void move_vertical(tc_ui_document* document, int direction, bool extend_selection);
+    void move_vertical(tc_ui_document_handle document, int direction, bool extend_selection);
     bool delete_selection();
     bool replace_selection(std::string_view inserted);
     void emit_changed();

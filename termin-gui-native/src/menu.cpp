@@ -73,7 +73,7 @@ void Menu::set_max_visible_height(float height) {
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
-void Menu::rebuild_geometry(tc_ui_document* document) {
+void Menu::rebuild_geometry(tc_ui_document_handle document) {
     sync_model();
     item_tops_.clear();
     item_tops_.reserve(model_->size() + 1);
@@ -87,7 +87,7 @@ void Menu::rebuild_geometry(tc_ui_document* document) {
     (void)document;
 }
 
-tc_ui_size Menu::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size Menu::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
     rebuild_geometry(document);
     const tc_ui_style style = computed_style(document);
     float label_width = 0.0f;
@@ -123,16 +123,16 @@ tc_ui_size Menu::measure(tc_ui_document* document, tc_ui_constraints constraints
     return clamp_size(tc_ui_size{std::max(min_width_, width), height}, constraints);
 }
 
-void Menu::layout(tc_ui_document* document, tc_ui_rect rect) {
+void Menu::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     rebuild_geometry(document);
     NativeWidget::layout(document, rect);
     scroll_offset_ =
         clamp_float(scroll_offset_, 0.0f, std::max(0.0f, content_height_ - rect.height));
 }
 
-bool Menu::show(tc_ui_document* document, tc_ui_point position, tc_ui_rect viewport,
+bool Menu::show(tc_ui_document_handle document, tc_ui_point position, tc_ui_rect viewport,
                 bool dismiss_on_outside) {
-    if (!document || !tc_ui_document_is_alive(document, handle())) {
+    if (tc_ui_document_handle_is_invalid(document) || !tc_ui_document_is_alive(document, handle())) {
         tc_log_error("[termin-gui-native] Menu must be adopted before show");
         return false;
     }
@@ -156,7 +156,7 @@ bool Menu::show(tc_ui_document* document, tc_ui_point position, tc_ui_rect viewp
     return open_;
 }
 
-bool Menu::dismiss(tc_ui_document* document, tc_ui_overlay_dismiss_reason reason) {
+bool Menu::dismiss(tc_ui_document_handle document, tc_ui_overlay_dismiss_reason reason) {
     if (!open_)
         return false;
     return tc_ui_document_dismiss_overlay(document, handle(), reason);
@@ -220,7 +220,7 @@ Menu* Menu::root_menu() {
     return result;
 }
 
-void Menu::close_submenu(tc_ui_document* document) {
+void Menu::close_submenu(tc_ui_document_handle document) {
     if (tc_widget_handle_is_invalid(child_handle_))
         return;
     tc_widget* child_widget = tc_ui_document_resolve_widget(document, child_handle_);
@@ -235,7 +235,7 @@ void Menu::close_submenu(tc_ui_document* document) {
     child_index_ = SIZE_MAX;
 }
 
-bool Menu::open_submenu(tc_ui_document* document, size_t index, bool select_first) {
+bool Menu::open_submenu(tc_ui_document_handle document, size_t index, bool select_first) {
     if (index >= model_->size())
         return false;
     const CommandData& data = model_->command_at(index).data;
@@ -282,7 +282,7 @@ bool Menu::open_submenu(tc_ui_document* document, size_t index, bool select_firs
     return true;
 }
 
-bool Menu::activate_index(tc_ui_document* document, size_t index) {
+bool Menu::activate_index(tc_ui_document_handle document, size_t index) {
     if (index >= model_->size())
         return false;
     const Command& command = model_->command_at(index);
@@ -305,9 +305,9 @@ bool Menu::activate_index(tc_ui_document* document, size_t index) {
     return true;
 }
 
-bool Menu::activate_current(tc_ui_document* document) { return activate_index(document, current_); }
+bool Menu::activate_current(tc_ui_document_handle document) { return activate_index(document, current_); }
 
-void Menu::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void Menu::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     if (item_tops_.size() != model_->size() + 1)
         rebuild_geometry(document);
     const tc_ui_style style = computed_style(document);
@@ -390,7 +390,7 @@ void Menu::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     tc_ui_painter_pop_clip(context);
 }
 
-tc_ui_event_result Menu::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
+tc_ui_event_result Menu::pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) {
     if (!event)
         return TC_UI_EVENT_IGNORED;
     if (event->type == TC_UI_POINTER_WHEEL && rect_contains(bounds(), event->x, event->y)) {
@@ -419,7 +419,7 @@ tc_ui_event_result Menu::pointer_event(tc_ui_document* document, const tc_ui_poi
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_ui_event_result Menu::key_event(tc_ui_document* document, const tc_ui_key_event* event) {
+tc_ui_event_result Menu::key_event(tc_ui_document_handle document, const tc_ui_key_event* event) {
     if (!event || event->type != TC_UI_KEY_DOWN)
         return TC_UI_EVENT_IGNORED;
     if (event->key == TC_UI_KEY_UP_ARROW || event->key == TC_UI_KEY_DOWN_ARROW) {
@@ -456,7 +456,7 @@ tc_ui_event_result Menu::key_event(tc_ui_document* document, const tc_ui_key_eve
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_widget_handle Menu::hit_test(tc_ui_document* document, float x, float y) {
+tc_widget_handle Menu::hit_test(tc_ui_document_handle document, float x, float y) {
     const tc_widget_handle own = NativeWidget::hit_test(document, x, y);
     if (!tc_widget_handle_is_invalid(own))
         return own;
@@ -468,7 +468,7 @@ tc_widget_handle Menu::hit_test(tc_ui_document* document, float x, float y) {
     return tc_widget_handle_invalid();
 }
 
-void Menu::overlay_dismissed(tc_ui_document* document, tc_ui_overlay_dismiss_reason reason) {
+void Menu::overlay_dismissed(tc_ui_document_handle document, tc_ui_overlay_dismiss_reason reason) {
     open_ = false;
     close_submenu(document);
     current_ = SIZE_MAX;
@@ -477,7 +477,7 @@ void Menu::overlay_dismissed(tc_ui_document* document, tc_ui_overlay_dismiss_rea
         tc_ui_document_set_focus(document, parent_menu_->handle());
 }
 
-void Menu::on_destroy(tc_ui_document* document) {
+void Menu::on_destroy(tc_ui_document_handle document) {
     close_submenu(document);
     open_ = false;
 }

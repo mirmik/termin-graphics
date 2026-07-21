@@ -102,7 +102,7 @@ public:
   int move_count = 0;
   int up_count = 0;
 
-  tc_ui_event_result pointer_event(tc_ui_document *document,
+  tc_ui_event_result pointer_event(tc_ui_document_handle document,
                                    const tc_ui_pointer_event *event) override {
     if (!event) {
       return TC_UI_EVENT_IGNORED;
@@ -141,7 +141,7 @@ public:
   int text_count = 0;
   int last_key = 0;
 
-  tc_ui_event_result key_event(tc_ui_document *,
+  tc_ui_event_result key_event(tc_ui_document_handle,
                                const tc_ui_key_event *event) override {
     if (!event) {
       return TC_UI_EVENT_IGNORED;
@@ -151,7 +151,7 @@ public:
     return TC_UI_EVENT_HANDLED;
   }
 
-  tc_ui_event_result text_event(tc_ui_document *,
+  tc_ui_event_result text_event(tc_ui_document_handle,
                                 const tc_ui_text_event *event) override {
     if (!event || !event->text) {
       return TC_UI_EVENT_IGNORED;

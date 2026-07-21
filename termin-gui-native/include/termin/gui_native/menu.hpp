@@ -43,9 +43,9 @@ class Menu final : public NativeWidget {
 
     const std::shared_ptr<CommandModel>& model() const { return model_; }
     void set_model(std::shared_ptr<CommandModel> model);
-    bool show(tc_ui_document* document, tc_ui_point position, tc_ui_rect viewport,
+    bool show(tc_ui_document_handle document, tc_ui_point position, tc_ui_rect viewport,
               bool dismiss_on_outside = true);
-    bool dismiss(tc_ui_document* document,
+    bool dismiss(tc_ui_document_handle document,
                  tc_ui_overlay_dismiss_reason reason = TC_UI_OVERLAY_DISMISS_PROGRAMMATIC);
     bool open() const { return open_; }
     size_t current_index() const { return current_; }
@@ -58,15 +58,15 @@ class Menu final : public NativeWidget {
     Signal<Menu&, tc_ui_overlay_dismiss_reason>& dismissed() { return dismissed_; }
     Signal<Menu&, int>& adjacent_requested() { return adjacent_requested_; }
 
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document,
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document,
                                      const tc_ui_pointer_event* event) override;
-    tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event) override;
-    tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
-    void overlay_dismissed(tc_ui_document* document, tc_ui_overlay_dismiss_reason reason) override;
-    void on_destroy(tc_ui_document* document) override;
+    tc_ui_event_result key_event(tc_ui_document_handle document, const tc_ui_key_event* event) override;
+    tc_widget_handle hit_test(tc_ui_document_handle document, float x, float y) override;
+    void overlay_dismissed(tc_ui_document_handle document, tc_ui_overlay_dismiss_reason reason) override;
+    void on_destroy(tc_ui_document_handle document) override;
 
   private:
     friend class MenuBar;
@@ -76,15 +76,15 @@ class Menu final : public NativeWidget {
     void connect_model();
     void disconnect_model();
     void sync_model();
-    void rebuild_geometry(tc_ui_document* document);
+    void rebuild_geometry(tc_ui_document_handle document);
     size_t index_at(float x, float y) const;
     size_t next_selectable(size_t from, int direction) const;
     void set_current(size_t index);
     void ensure_current_visible();
-    bool activate_current(tc_ui_document* document);
-    bool activate_index(tc_ui_document* document, size_t index);
-    bool open_submenu(tc_ui_document* document, size_t index, bool select_first);
-    void close_submenu(tc_ui_document* document);
+    bool activate_current(tc_ui_document_handle document);
+    bool activate_index(tc_ui_document_handle document, size_t index);
+    bool open_submenu(tc_ui_document_handle document, size_t index, bool select_first);
+    void close_submenu(tc_ui_document_handle document);
     Menu* root_menu();
 
 };

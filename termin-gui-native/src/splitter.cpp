@@ -71,7 +71,7 @@ Splitter& Splitter::set_divider_thickness(float thickness) {
     return *this;
 }
 
-tc_ui_size Splitter::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size Splitter::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
     tc_ui_size first_size {0.0f, 0.0f};
     tc_ui_size second_size {0.0f, 0.0f};
     if (!tc_widget_handle_is_invalid(this->first())) {
@@ -98,12 +98,12 @@ tc_ui_size Splitter::measure(tc_ui_document* document, tc_ui_constraints constra
     return clamp_size(measured, constraints);
 }
 
-void Splitter::layout(tc_ui_document* document, tc_ui_rect rect) {
+void Splitter::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
     layout_children(document);
 }
 
-void Splitter::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void Splitter::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     tc_ui_painter_push_clip(context, bounds());
     if (!tc_widget_handle_is_invalid(this->first())) {
         tc_widget* first = resolve_child(document, c_widget(), this->first(), "Splitter::paint(first)");
@@ -124,7 +124,7 @@ void Splitter::paint(tc_ui_document* document, tc_ui_paint_context* context) {
         style.background);
 }
 
-tc_ui_event_result Splitter::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
+tc_ui_event_result Splitter::pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) {
     if (!event) {
         return TC_UI_EVENT_IGNORED;
     }
@@ -161,7 +161,7 @@ tc_ui_event_result Splitter::pointer_event(tc_ui_document* document, const tc_ui
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_widget_handle Splitter::hit_test(tc_ui_document* document, float x, float y) {
+tc_widget_handle Splitter::hit_test(tc_ui_document_handle document, float x, float y) {
     const bool over_divider = rect_contains(divider_hit_rect(), x, y);
     const bool captured = tc_widget_handle_eq(
         tc_ui_document_pointer_capture(document), handle());
@@ -247,7 +247,7 @@ tc_ui_rect Splitter::divider_line_rect(float line_thickness) const {
         thickness};
 }
 
-void Splitter::layout_children(tc_ui_document* document) {
+void Splitter::layout_children(tc_ui_document_handle document) {
     const float axis = split_axis_extent();
     const float first_extent = clamp_float(
         axis * split_fraction_,

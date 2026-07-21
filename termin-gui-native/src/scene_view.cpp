@@ -160,8 +160,8 @@ void SceneView::collect_embedded(const std::shared_ptr<GraphicsItem>& item,
         collect_embedded(child, result);
 }
 
-void SceneView::reconcile_embedded_widgets(tc_ui_document* document) {
-    if (!document)
+void SceneView::reconcile_embedded_widgets(tc_ui_document_handle document) {
+    if (tc_ui_document_handle_is_invalid(document))
         return;
     std::vector<std::shared_ptr<GraphicsItem>> embedded;
     for (const auto& item : scene_->items())
@@ -201,7 +201,7 @@ void SceneView::reconcile_embedded_widgets(tc_ui_document* document) {
     embedded_widgets_ = std::move(next);
 }
 
-void SceneView::layout_item(tc_ui_document* document, const std::shared_ptr<GraphicsItem>& item,
+void SceneView::layout_item(tc_ui_document_handle document, const std::shared_ptr<GraphicsItem>& item,
                             const SceneTransform& scene_transform) {
     if (!item || !item->visible())
         return;
@@ -220,11 +220,11 @@ void SceneView::layout_item(tc_ui_document* document, const std::shared_ptr<Grap
         layout_item(document, child, scene_transform);
 }
 
-tc_ui_size SceneView::measure(tc_ui_document*, tc_ui_constraints constraints) {
+tc_ui_size SceneView::measure(tc_ui_document_handle, tc_ui_constraints constraints) {
     return detail::clamp_size(preferred_size(), constraints);
 }
 
-void SceneView::layout(tc_ui_document* document, tc_ui_rect rect) {
+void SceneView::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
     reconcile_embedded_widgets(document);
     const SceneTransform current = transform();
@@ -232,7 +232,7 @@ void SceneView::layout(tc_ui_document* document, tc_ui_rect rect) {
         layout_item(document, item, current);
 }
 
-void SceneView::paint_item(tc_ui_document* document, tc_ui_paint_context* context,
+void SceneView::paint_item(tc_ui_document_handle document, tc_ui_paint_context* context,
                            const std::shared_ptr<GraphicsItem>& item,
                            const SceneTransform& scene_transform) {
     if (!item || !item->visible())
@@ -248,7 +248,7 @@ void SceneView::paint_item(tc_ui_document* document, tc_ui_paint_context* contex
         paint_item(document, context, child, scene_transform);
 }
 
-void SceneView::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void SceneView::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     reconcile_embedded_widgets(document);
     tc_ui_painter_fill_rect(context, bounds(), background_.c_color());
     tc_ui_painter_push_clip(context, bounds());
@@ -312,7 +312,7 @@ void SceneView::emit_transform_changed() {
     transform_changed_.emit(*this, current);
 }
 
-tc_ui_event_result SceneView::pointer_event(tc_ui_document* document,
+tc_ui_event_result SceneView::pointer_event(tc_ui_document_handle document,
                                             const tc_ui_pointer_event* event) {
     if (!event)
         return TC_UI_EVENT_IGNORED;
@@ -386,7 +386,7 @@ tc_ui_event_result SceneView::pointer_event(tc_ui_document* document,
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_ui_event_result SceneView::key_event(tc_ui_document*, const tc_ui_key_event* event) {
+tc_ui_event_result SceneView::key_event(tc_ui_document_handle, const tc_ui_key_event* event) {
     if (!event)
         return TC_UI_EVENT_IGNORED;
     if (key_handler_) {
@@ -401,7 +401,7 @@ tc_ui_event_result SceneView::key_event(tc_ui_document*, const tc_ui_key_event* 
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_ui_event_result SceneView::text_event(tc_ui_document*, const tc_ui_text_event* event) {
+tc_ui_event_result SceneView::text_event(tc_ui_document_handle, const tc_ui_text_event* event) {
     if (!event)
         return TC_UI_EVENT_IGNORED;
     if (text_handler_) {
@@ -416,7 +416,7 @@ tc_ui_event_result SceneView::text_event(tc_ui_document*, const tc_ui_text_event
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_widget_handle SceneView::hit_test_embedded(tc_ui_document* document,
+tc_widget_handle SceneView::hit_test_embedded(tc_ui_document_handle document,
                                               const std::shared_ptr<GraphicsItem>& item, float x,
                                               float y) const {
     if (!item || !item->visible() || !item->enabled())
@@ -433,7 +433,7 @@ tc_widget_handle SceneView::hit_test_embedded(tc_ui_document* document,
     return tc_widget_handle_invalid();
 }
 
-tc_widget_handle SceneView::hit_test(tc_ui_document* document, float x, float y) {
+tc_widget_handle SceneView::hit_test(tc_ui_document_handle document, float x, float y) {
     if (!visible() || !detail::rect_contains(bounds(), x, y))
         return tc_widget_handle_invalid();
     for (const auto& item : sorted_by_z(scene_->items(), true)) {
@@ -444,7 +444,7 @@ tc_widget_handle SceneView::hit_test(tc_ui_document* document, float x, float y)
     return mouse_transparent() ? tc_widget_handle_invalid() : handle();
 }
 
-void SceneView::on_destroy(tc_ui_document* document) {
+void SceneView::on_destroy(tc_ui_document_handle document) {
     disconnect_scene();
     set_hovered_item(nullptr);
     for (tc_widget_handle handle : embedded_widgets_) {

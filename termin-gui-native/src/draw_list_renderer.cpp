@@ -92,7 +92,7 @@ bool UiDrawListRenderer::set_default_font_path(const std::string& path, int defa
     }
 }
 
-void UiDrawListRenderer::bind_text_measurer(tc_ui_document* document) {
+void UiDrawListRenderer::bind_text_measurer(tc_ui_document_handle document) {
     tc_ui_document_set_text_measurer(document, &UiDrawListRenderer::measure_text, this);
 }
 

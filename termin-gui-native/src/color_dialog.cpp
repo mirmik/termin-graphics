@@ -15,7 +15,7 @@ ColorDialog::ColorDialog(Color initial, bool show_alpha, std::string title)
     });
 }
 
-bool ColorDialog::ensure_content(tc_ui_document* document) {
+bool ColorDialog::ensure_content(tc_ui_document_handle document) {
     if (!tc_widget_handle_is_invalid(picker_handle_) &&
         tc_ui_document_is_alive(document, picker_handle_))
         return true;
@@ -39,7 +39,7 @@ bool ColorDialog::before_action(const DialogAction& action) {
     return true;
 }
 
-bool ColorDialog::show(tc_ui_document* document, tc_ui_rect viewport) {
+bool ColorDialog::show(tc_ui_document_handle document, tc_ui_rect viewport) {
     accepted_color_.reset();
     return ensure_content(document) && Dialog::show(document, viewport);
 }

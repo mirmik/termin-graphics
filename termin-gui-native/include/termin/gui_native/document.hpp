@@ -9,7 +9,7 @@ namespace termin::gui_native {
 
 class Document {
 private:
-    tc_ui_document* _document = nullptr;
+    tc_ui_document_handle _document = tc_ui_document_handle_invalid();
 
 public:
     TERMIN_GUI_NATIVE_API Document();
@@ -18,8 +18,10 @@ public:
     Document& operator=(const Document&) = delete;
     TERMIN_GUI_NATIVE_API Document(Document&& other) noexcept;
     TERMIN_GUI_NATIVE_API Document& operator=(Document&& other) noexcept;
-    tc_ui_document* get() { return _document; }
-    const tc_ui_document* get() const { return _document; }
+    TERMIN_GUI_NATIVE_API void close();
+    bool valid() const { return tc_ui_document_is_valid(_document); }
+    tc_ui_document_handle get() { return _document; }
+    tc_ui_document_handle get() const { return _document; }
     TERMIN_GUI_NATIVE_API tc_widget_handle adopt(Widget* widget);
     bool add_root(const Widget& widget) { return tc_ui_document_add_root(_document, widget.handle()); }
     bool remove_root(const Widget& widget) { return tc_ui_document_remove_root(_document, widget.handle()); }

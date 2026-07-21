@@ -18,10 +18,10 @@ private:
 
     const std::string& message() const { return message_; }
     MessageBoxKind kind() const { return kind_; }
-    bool show(tc_ui_document* document, tc_ui_rect viewport);
+    bool show(tc_ui_document_handle document, tc_ui_rect viewport);
 
   private:
-    bool ensure_content(tc_ui_document* document);
+    bool ensure_content(tc_ui_document_handle document);
 
 };
 

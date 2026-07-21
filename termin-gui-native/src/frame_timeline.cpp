@@ -20,7 +20,7 @@ bool valid_sample(const FrameTimelineSample& sample) {
 }
 
 struct WidgetLifetimeToken {
-    tc_ui_document* document = nullptr;
+    tc_ui_document_handle document = tc_ui_document_handle_invalid();
     tc_widget_handle handle = tc_widget_handle_invalid();
 };
 
@@ -29,7 +29,8 @@ WidgetLifetimeToken lifetime_token(const FrameTimelineWidget& widget) {
 }
 
 bool callback_target_alive(const WidgetLifetimeToken& token) {
-    return !token.document || tc_ui_document_is_alive(token.document, token.handle);
+    return tc_ui_document_handle_is_invalid(token.document) ||
+           tc_ui_document_is_alive(token.document, token.handle);
 }
 } // namespace
 
@@ -211,11 +212,11 @@ void FrameTimelineWidget::on_model_changed() {
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
-tc_ui_size FrameTimelineWidget::measure(tc_ui_document*, tc_ui_constraints constraints) {
+tc_ui_size FrameTimelineWidget::measure(tc_ui_document_handle, tc_ui_constraints constraints) {
     return detail::clamp_size(preferred_size(), constraints);
 }
 
-void FrameTimelineWidget::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void FrameTimelineWidget::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     const tc_ui_rect rect = bounds();
     tc_ui_painter_fill_rect(context, rect, style.background);
@@ -304,7 +305,7 @@ size_t FrameTimelineWidget::index_at(float x, float y) const {
     return std::min(begin + local, end - 1);
 }
 
-tc_ui_event_result FrameTimelineWidget::pointer_event(tc_ui_document* document,
+tc_ui_event_result FrameTimelineWidget::pointer_event(tc_ui_document_handle document,
                                                       const tc_ui_pointer_event* event) {
     if (!event) return TC_UI_EVENT_IGNORED;
     if (event->type == TC_UI_POINTER_LEAVE) {
@@ -341,7 +342,7 @@ tc_ui_event_result FrameTimelineWidget::pointer_event(tc_ui_document* document,
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_ui_event_result FrameTimelineWidget::key_event(tc_ui_document*, const tc_ui_key_event* event) {
+tc_ui_event_result FrameTimelineWidget::key_event(tc_ui_document_handle, const tc_ui_key_event* event) {
     if (!event || event->type != TC_UI_KEY_DOWN || model_->samples().empty())
         return TC_UI_EVENT_IGNORED;
     size_t index = selected_id_ ? index_for_id(*selected_id_) : SIZE_MAX;

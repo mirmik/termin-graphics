@@ -574,7 +574,7 @@ void bind_gui_native_scene_views(nb::module_ &m) {
                     termin::gui_native::Viewport3D &,
                     termin::gui_native::ViewportSurfaceSize previous,
                     termin::gui_native::ViewportSurfaceSize next) {
-                  if (!state || !state->document)
+                  if (!state || tc_ui_document_handle_is_invalid(state->document))
                     return;
                   nb::gil_scoped_acquire gil;
                   try {
@@ -608,7 +608,7 @@ void bind_gui_native_scene_views(nb::module_ &m) {
                 [state, callback = std::move(callback)](
                     const termin::gui_native::ViewportExternalDragEvent
                         &event) {
-                  if (!state || !state->document)
+                  if (!state || tc_ui_document_handle_is_invalid(state->document))
                     return false;
                   nb::gil_scoped_acquire gil;
                   try {

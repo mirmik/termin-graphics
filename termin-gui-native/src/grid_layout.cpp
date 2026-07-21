@@ -97,7 +97,7 @@ bool GridLayout::set_row_extent_limits(size_t row, float min_extent, float max_e
     return true;
 }
 
-tc_ui_size GridLayout::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size GridLayout::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
     GridAxisLayout columns = build_grid_axis(document, c_widget(), columns_, items_, true, column_spacing_);
     GridAxisLayout rows = build_grid_axis(document, c_widget(), rows_, items_, false, row_spacing_);
     tc_ui_size measured {
@@ -109,7 +109,7 @@ tc_ui_size GridLayout::measure(tc_ui_document* document, tc_ui_constraints const
     return clamp_size(measured, constraints);
 }
 
-void GridLayout::layout(tc_ui_document* document, tc_ui_rect rect) {
+void GridLayout::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
     if (columns_.empty() || rows_.empty()) {
         return;
@@ -173,7 +173,7 @@ void GridLayout::layout(tc_ui_document* document, tc_ui_rect rect) {
     }
 }
 
-void GridLayout::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void GridLayout::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     if (color_visible(background_)) {
         tc_ui_painter_fill_rect(context, bounds(), background_.c_color());
     }
@@ -188,11 +188,11 @@ void GridLayout::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     tc_ui_painter_pop_clip(context);
 }
 
-tc_ui_event_result GridLayout::pointer_event(tc_ui_document*, const tc_ui_pointer_event*) {
+tc_ui_event_result GridLayout::pointer_event(tc_ui_document_handle, const tc_ui_pointer_event*) {
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_widget_handle GridLayout::hit_test(tc_ui_document* document, float x, float y) {
+tc_widget_handle GridLayout::hit_test(tc_ui_document_handle document, float x, float y) {
     if (!visible() || !rect_contains(bounds(), x, y)) {
         return tc_widget_handle_invalid();
     }

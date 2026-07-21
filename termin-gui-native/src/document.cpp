@@ -5,20 +5,31 @@
 
 namespace termin::gui_native {
 
-Document::Document() : _document(tc_ui_document_create()) {}
-
-Document::~Document() {
-    tc_ui_document_destroy(_document);
+Document::Document() : _document(tc_ui_document_create()) {
+    if (tc_ui_document_handle_is_invalid(_document)) {
+        throw std::runtime_error("failed to create tc_ui_document");
+    }
 }
 
-Document::Document(Document&& other) noexcept : _document(std::exchange(other._document, nullptr)) {}
+Document::~Document() {
+    close();
+}
+
+Document::Document(Document&& other) noexcept : _document(std::exchange(other._document, tc_ui_document_handle_invalid())) {}
 
 Document& Document::operator=(Document&& other) noexcept {
     if (this != &other) {
-        tc_ui_document_destroy(_document);
-        _document = std::exchange(other._document, nullptr);
+        close();
+        _document = std::exchange(other._document, tc_ui_document_handle_invalid());
     }
     return *this;
+}
+
+void Document::close() {
+    if (!tc_ui_document_handle_is_invalid(_document)) {
+        tc_ui_document_destroy(_document);
+        _document = tc_ui_document_handle_invalid();
+    }
 }
 
 tc_widget_handle Document::adopt(Widget* widget) {

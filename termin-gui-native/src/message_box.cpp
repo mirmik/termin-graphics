@@ -14,7 +14,7 @@ MessageBox::MessageBox(std::string title, std::string message, MessageBoxKind ki
     }
 }
 
-bool MessageBox::ensure_content(tc_ui_document* document) {
+bool MessageBox::ensure_content(tc_ui_document_handle document) {
     if (!tc_widget_handle_is_invalid(message_content_handle_) &&
         tc_ui_document_is_alive(document, message_content_handle_)) {
         return true;
@@ -64,7 +64,7 @@ bool MessageBox::ensure_content(tc_ui_document* document) {
     return true;
 }
 
-bool MessageBox::show(tc_ui_document* document, tc_ui_rect viewport) {
+bool MessageBox::show(tc_ui_document_handle document, tc_ui_rect viewport) {
     return ensure_content(document) && Dialog::show(document, viewport);
 }
 

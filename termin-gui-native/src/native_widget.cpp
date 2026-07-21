@@ -20,7 +20,7 @@ NativeWidget::NativeWidget(const char* debug_name)
     : Widget(&VTABLE, debug_name) {}
 
 tc_ui_style NativeWidget::computed_style(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     uint32_t extra_state_flags
 ) const {
     tc_ui_style style {};
@@ -30,7 +30,7 @@ tc_ui_style NativeWidget::computed_style(
     return style;
 }
 
-tc_ui_size NativeWidget::measure(tc_ui_document*, tc_ui_constraints constraints) {
+tc_ui_size NativeWidget::measure(tc_ui_document_handle, tc_ui_constraints constraints) {
     const float constraint_max_width = effective_max(constraints.max_size.width);
     const float constraint_max_height = effective_max(constraints.max_size.height);
     const float max_width = std::min(effective_max(max_size().width), constraint_max_width);
@@ -48,48 +48,48 @@ tc_ui_size NativeWidget::measure(tc_ui_document*, tc_ui_constraints constraints)
     return clamp_size(preferred, effective_constraints);
 }
 
-void NativeWidget::layout(tc_ui_document*, tc_ui_rect rect) {
+void NativeWidget::layout(tc_ui_document_handle, tc_ui_rect rect) {
     tc_widget_set_bounds(c_widget(), rect);
     clear_dirty(TC_WIDGET_DIRTY_LAYOUT);
 }
 
-void NativeWidget::paint(tc_ui_document*, tc_ui_paint_context*) {}
+void NativeWidget::paint(tc_ui_document_handle, tc_ui_paint_context*) {}
 
-tc_ui_event_result NativeWidget::pointer_event(tc_ui_document*, const tc_ui_pointer_event*) {
+tc_ui_event_result NativeWidget::pointer_event(tc_ui_document_handle, const tc_ui_pointer_event*) {
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_widget_handle NativeWidget::hit_test(tc_ui_document*, float x, float y) {
+tc_widget_handle NativeWidget::hit_test(tc_ui_document_handle, float x, float y) {
     if (!visible() || !rect_contains(bounds(), x, y) || mouse_transparent()) {
         return tc_widget_handle_invalid();
     }
     return handle();
 }
 
-tc_ui_event_result NativeWidget::key_event(tc_ui_document*, const tc_ui_key_event*) {
+tc_ui_event_result NativeWidget::key_event(tc_ui_document_handle, const tc_ui_key_event*) {
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_ui_event_result NativeWidget::text_event(tc_ui_document*, const tc_ui_text_event*) {
+tc_ui_event_result NativeWidget::text_event(tc_ui_document_handle, const tc_ui_text_event*) {
     return TC_UI_EVENT_IGNORED;
 }
 
-void NativeWidget::focus_event(tc_ui_document*, bool) {}
+void NativeWidget::focus_event(tc_ui_document_handle, bool) {}
 
-void NativeWidget::overlay_dismissed(tc_ui_document*, tc_ui_overlay_dismiss_reason) {}
+void NativeWidget::overlay_dismissed(tc_ui_document_handle, tc_ui_overlay_dismiss_reason) {}
 
-void NativeWidget::on_destroy(tc_ui_document*) {}
+void NativeWidget::on_destroy(tc_ui_document_handle) {}
 
 tc_ui_size NativeWidget::dispatch_measure(
     tc_widget* widget,
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_ui_constraints constraints
 ) {
     auto* self = static_cast<NativeWidget*>(widget ? widget->body : nullptr);
     return self ? self->measure(document, constraints) : constraints.min_size;
 }
 
-void NativeWidget::dispatch_layout(tc_widget* widget, tc_ui_document* document, tc_ui_rect rect) {
+void NativeWidget::dispatch_layout(tc_widget* widget, tc_ui_document_handle document, tc_ui_rect rect) {
     auto* self = static_cast<NativeWidget*>(widget ? widget->body : nullptr);
     if (self) {
         self->layout(document, rect);
@@ -98,7 +98,7 @@ void NativeWidget::dispatch_layout(tc_widget* widget, tc_ui_document* document, 
 
 void NativeWidget::dispatch_paint(
     tc_widget* widget,
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_ui_paint_context* context
 ) {
     auto* self = static_cast<NativeWidget*>(widget ? widget->body : nullptr);
@@ -109,7 +109,7 @@ void NativeWidget::dispatch_paint(
 
 tc_ui_event_result NativeWidget::dispatch_pointer_event(
     tc_widget* widget,
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     const tc_ui_pointer_event* event
 ) {
     auto* self = static_cast<NativeWidget*>(widget ? widget->body : nullptr);
@@ -118,7 +118,7 @@ tc_ui_event_result NativeWidget::dispatch_pointer_event(
 
 tc_widget_handle NativeWidget::dispatch_hit_test(
     tc_widget* widget,
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     float x,
     float y
 ) {
@@ -128,7 +128,7 @@ tc_widget_handle NativeWidget::dispatch_hit_test(
 
 tc_ui_event_result NativeWidget::dispatch_key_event(
     tc_widget* widget,
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     const tc_ui_key_event* event
 ) {
     auto* self = static_cast<NativeWidget*>(widget ? widget->body : nullptr);
@@ -137,7 +137,7 @@ tc_ui_event_result NativeWidget::dispatch_key_event(
 
 tc_ui_event_result NativeWidget::dispatch_text_event(
     tc_widget* widget,
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     const tc_ui_text_event* event
 ) {
     auto* self = static_cast<NativeWidget*>(widget ? widget->body : nullptr);
@@ -146,7 +146,7 @@ tc_ui_event_result NativeWidget::dispatch_text_event(
 
 void NativeWidget::dispatch_focus_event(
     tc_widget* widget,
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     bool focused
 ) {
     auto* self = static_cast<NativeWidget*>(widget ? widget->body : nullptr);
@@ -157,7 +157,7 @@ void NativeWidget::dispatch_focus_event(
 
 void NativeWidget::dispatch_overlay_dismissed(
     tc_widget* widget,
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     tc_ui_overlay_dismiss_reason reason
 ) {
     auto* self = static_cast<NativeWidget*>(widget ? widget->body : nullptr);
@@ -166,7 +166,7 @@ void NativeWidget::dispatch_overlay_dismissed(
     }
 }
 
-void NativeWidget::dispatch_on_destroy(tc_widget* widget, tc_ui_document* document) {
+void NativeWidget::dispatch_on_destroy(tc_widget* widget, tc_ui_document_handle document) {
     auto* self = static_cast<NativeWidget*>(widget ? widget->body : nullptr);
     if (self) {
         self->on_destroy(document);

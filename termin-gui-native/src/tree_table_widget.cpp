@@ -360,7 +360,7 @@ void TreeTableWidget::compute_column_layout() {
   }
 }
 
-tc_ui_size TreeTableWidget::measure(tc_ui_document *document,
+tc_ui_size TreeTableWidget::measure(tc_ui_document_handle document,
                                     tc_ui_constraints constraints) {
   sync_models();
   const tc_ui_style style = computed_style(document);
@@ -370,14 +370,14 @@ tc_ui_size TreeTableWidget::measure(tc_ui_document *document,
       constraints);
 }
 
-void TreeTableWidget::layout(tc_ui_document *document, tc_ui_rect rect) {
+void TreeTableWidget::layout(tc_ui_document_handle document, tc_ui_rect rect) {
   sync_models();
   NativeWidget::layout(document, rect);
   compute_column_layout();
   clamp_scroll();
 }
 
-void TreeTableWidget::paint(tc_ui_document *document,
+void TreeTableWidget::paint(tc_ui_document_handle document,
                             tc_ui_paint_context *context) {
   sync_models();
   const tc_ui_style style = computed_style(document);
@@ -516,7 +516,7 @@ bool TreeTableWidget::point_in_toggle(const TreeVisibleRow &row,
 }
 
 tc_ui_event_result
-TreeTableWidget::pointer_event(tc_ui_document *document,
+TreeTableWidget::pointer_event(tc_ui_document_handle document,
                                const tc_ui_pointer_event *event) {
   if (!event)
     return TC_UI_EVENT_IGNORED;
@@ -633,7 +633,7 @@ TreeTableWidget::first_enabled_child(TreeTableNodeId node) const {
   return kInvalidTreeTableNodeId;
 }
 
-tc_ui_event_result TreeTableWidget::key_event(tc_ui_document *,
+tc_ui_event_result TreeTableWidget::key_event(tc_ui_document_handle,
                                               const tc_ui_key_event *event) {
   if (!event || event->type != TC_UI_KEY_DOWN)
     return TC_UI_EVENT_IGNORED;

@@ -105,11 +105,11 @@ void FrameTimeGraph::set_thresholds(float target_frame_ms, float warning_frame_m
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
-tc_ui_size FrameTimeGraph::measure(tc_ui_document*, tc_ui_constraints constraints) {
+tc_ui_size FrameTimeGraph::measure(tc_ui_document_handle, tc_ui_constraints constraints) {
     return detail::clamp_size(preferred_size(), constraints);
 }
 
-void FrameTimeGraph::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void FrameTimeGraph::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     const tc_ui_rect rect = bounds();
     tc_ui_painter_fill_rect(context, rect, style.background);

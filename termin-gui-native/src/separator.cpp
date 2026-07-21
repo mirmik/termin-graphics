@@ -25,7 +25,7 @@ Separator& Separator::set_thickness(float thickness) {
     return *this;
 }
 
-void Separator::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void Separator::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     const float thickness = std::max(1.0f, style.border_width);
     tc_ui_rect rect = bounds();

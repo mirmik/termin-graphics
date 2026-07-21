@@ -36,7 +36,7 @@ void StatusBar::clear_message() {
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
-tc_ui_size StatusBar::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size StatusBar::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
     const tc_ui_style style = computed_style(document);
     tc_ui_text_metrics metrics{};
     measure_text(document, displayed_text(), std::max(9.0f, style.font_size - 2.0f), metrics);
@@ -46,7 +46,7 @@ tc_ui_size StatusBar::measure(tc_ui_document* document, tc_ui_constraints constr
         constraints);
 }
 
-void StatusBar::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void StatusBar::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     tc_ui_painter_fill_rect(context, bounds(), style.background);
     tc_ui_painter_draw_line(context, tc_ui_point{bounds().x, bounds().y},

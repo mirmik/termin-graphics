@@ -165,7 +165,7 @@ void ListWidget::sync_model() {
     if (selection_changed) emit_selection_changed();
 }
 
-tc_ui_size ListWidget::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size ListWidget::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
     sync_model();
     const tc_ui_style style = computed_style(document);
     return clamp_size(
@@ -177,13 +177,13 @@ tc_ui_size ListWidget::measure(tc_ui_document* document, tc_ui_constraints const
     );
 }
 
-void ListWidget::layout(tc_ui_document* document, tc_ui_rect rect) {
+void ListWidget::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     sync_model();
     NativeWidget::layout(document, rect);
     clamp_scroll();
 }
 
-void ListWidget::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void ListWidget::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     sync_model();
     const tc_ui_style style = computed_style(document);
     tc_ui_painter_fill_rect(context, bounds(), style.background);
@@ -275,7 +275,7 @@ void ListWidget::emit_selection_changed() {
     selection_changed_.emit(*this, selection_.selected_indices());
 }
 
-tc_ui_event_result ListWidget::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
+tc_ui_event_result ListWidget::pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) {
     if (!event) return TC_UI_EVENT_IGNORED;
     sync_model();
     if (event->type == TC_UI_POINTER_LEAVE) {
@@ -326,7 +326,7 @@ tc_ui_event_result ListWidget::pointer_event(tc_ui_document* document, const tc_
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_ui_event_result ListWidget::key_event(tc_ui_document*, const tc_ui_key_event* event) {
+tc_ui_event_result ListWidget::key_event(tc_ui_document_handle, const tc_ui_key_event* event) {
     if (!event || event->type != TC_UI_KEY_DOWN) return TC_UI_EVENT_IGNORED;
     sync_model();
     if (event->key == TC_UI_KEY_A && (event->modifiers & TC_UI_MOD_CTRL) != 0) {

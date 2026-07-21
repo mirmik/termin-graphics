@@ -38,10 +38,10 @@ public:
         tc_ui_point offset = {});
     const OverlayPlacement* placement(tc_widget_handle handle) const;
 
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_widget_handle hit_test(tc_ui_document_handle document, float x, float y) override;
 };
 
 } // namespace termin::gui_native

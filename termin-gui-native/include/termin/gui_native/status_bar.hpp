@@ -24,8 +24,8 @@ class StatusBar final : public NativeWidget {
     bool has_message() const { return !message_.empty(); }
     const std::string& displayed_text() const { return has_message() ? message_ : text_; }
 
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
 
 };
 

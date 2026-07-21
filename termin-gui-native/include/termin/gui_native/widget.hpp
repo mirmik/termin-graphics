@@ -20,8 +20,8 @@ public:
     static void delete_owned_widget(tc_widget* widget) {
         delete static_cast<Widget*>(widget->body);
     }
-    tc_ui_document* document() { return _widget.document; }
-    const tc_ui_document* document() const { return _widget.document; }
+    tc_ui_document_handle document() { return _widget.document; }
+    tc_ui_document_handle document() const { return _widget.document; }
     tc_widget_handle handle() const { return _widget.handle; }
     const char* stable_id() const { return tc_widget_stable_id(&_widget); }
     const char* name() const { return tc_widget_name(&_widget); }

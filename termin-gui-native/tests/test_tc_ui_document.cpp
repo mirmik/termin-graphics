@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cstdlib>
+#include <string>
 #include <vector>
 
 struct TestWidget {
@@ -45,14 +46,14 @@ static void test_widget_delete(tc_widget* widget) {
     delete self;
 }
 
-static void test_widget_on_destroy(tc_widget* widget, tc_ui_document*) {
+static void test_widget_on_destroy(tc_widget* widget, tc_ui_document_handle) {
     TestWidget* self = from_widget(widget);
     if (self->destroy_count) {
         *self->destroy_count += 1;
     }
 }
 
-static void test_widget_paint(tc_widget* widget, tc_ui_document*, tc_ui_paint_context*) {
+static void test_widget_paint(tc_widget* widget, tc_ui_document_handle, tc_ui_paint_context*) {
     TestWidget* self = from_widget(widget);
     if (self->paint_count) {
         *self->paint_count += 1;
@@ -114,7 +115,7 @@ static RouteWidget* route_widget_from(tc_widget* widget) {
 
 static tc_widget_handle route_widget_hit_test(
     tc_widget* widget,
-    tc_ui_document*,
+    tc_ui_document_handle,
     float x,
     float
 ) {
@@ -127,7 +128,7 @@ static tc_widget_handle route_widget_hit_test(
 
 static tc_ui_event_result route_widget_pointer_event(
     tc_widget* widget,
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     const tc_ui_pointer_event* event
 ) {
     RouteWidget* self = route_widget_from(widget);
@@ -149,7 +150,7 @@ static tc_ui_event_result route_widget_pointer_event(
     return event->type == self->handled_pointer ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
 }
 
-static void route_widget_paint(tc_widget* widget, tc_ui_document*, tc_ui_paint_context*) {
+static void route_widget_paint(tc_widget* widget, tc_ui_document_handle, tc_ui_paint_context*) {
     RouteWidget* self = route_widget_from(widget);
     if (self->paint_log) {
         self->paint_log->push_back(self->id);
@@ -158,7 +159,7 @@ static void route_widget_paint(tc_widget* widget, tc_ui_document*, tc_ui_paint_c
 
 static tc_ui_event_result route_widget_key_event(
     tc_widget* widget,
-    tc_ui_document*,
+    tc_ui_document_handle,
     const tc_ui_key_event*
 ) {
     RouteWidget* self = route_widget_from(widget);
@@ -168,7 +169,7 @@ static tc_ui_event_result route_widget_key_event(
     return self->handle_key ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
 }
 
-static void route_widget_focus_event(tc_widget* widget, tc_ui_document* document, bool focused) {
+static void route_widget_focus_event(tc_widget* widget, tc_ui_document_handle document, bool focused) {
     RouteWidget* self = route_widget_from(widget);
     if (self->focus_log) {
         self->focus_log->push_back(self->id * 10 + (focused ? 1 : 0));
@@ -180,7 +181,7 @@ static void route_widget_focus_event(tc_widget* widget, tc_ui_document* document
 
 static void route_widget_overlay_dismissed(
     tc_widget* widget,
-    tc_ui_document*,
+    tc_ui_document_handle,
     tc_ui_overlay_dismiss_reason reason
 ) {
     RouteWidget* self = route_widget_from(widget);
@@ -204,7 +205,7 @@ static const tc_widget_vtable ROUTE_WIDGET_VTABLE {
 };
 
 static tc_widget_handle adopt_route_widget(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     RouteWidget& widget,
     int id
 ) {
@@ -218,11 +219,11 @@ static tc_widget_handle adopt_route_widget(
     return tc_ui_document_attach_borrowed_widget(document, &widget.widget);
 }
 
-static tc_widget_handle adopt(tc_ui_document* document, TestWidget* widget) {
+static tc_widget_handle adopt(tc_ui_document_handle document, TestWidget* widget) {
     tc_widget_handle handle = tc_ui_document_adopt_widget(
         document, &widget->widget, &test_widget_delete);
     assert(!tc_widget_handle_is_invalid(handle));
-    assert(widget->widget.document == document);
+    assert(tc_ui_document_handle_eq(widget->widget.document, document));
     assert(tc_widget_handle_eq(widget->widget.handle, handle));
     return handle;
 }
@@ -232,7 +233,7 @@ static void test_init_defaults_and_common_state() {
     tc_widget_init_unowned(
         &borrowed.widget, &TEST_WIDGET_VTABLE, TC_LANGUAGE_CXX, &borrowed);
 
-    assert(borrowed.widget.document == nullptr);
+    assert(tc_ui_document_handle_is_invalid(borrowed.widget.document));
     assert(tc_widget_handle_is_invalid(borrowed.widget.handle));
     assert(tc_widget_parent(&borrowed.widget) == nullptr);
     assert(tc_widget_child_count(&borrowed.widget) == 0);
@@ -273,26 +274,86 @@ static void test_borrowed_widget_can_be_adopted_and_released() {
     tc_widget_init_unowned(
         &borrowed.widget, &TEST_WIDGET_VTABLE, TC_LANGUAGE_CXX, &borrowed);
 
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     tc_widget_handle handle = tc_ui_document_attach_borrowed_widget(document, &borrowed.widget);
     assert(!tc_widget_handle_is_invalid(handle));
     assert(tc_ui_document_destroy_widget(document, handle));
     assert(destroyed == 1);
-    assert(borrowed.widget.document == nullptr);
+    assert(tc_ui_document_handle_is_invalid(borrowed.widget.document));
     assert(tc_widget_handle_is_invalid(borrowed.widget.handle));
     tc_ui_document_destroy(document);
+}
+
+static void test_document_handles_become_stale_after_destroy() {
+    tc_ui_document_handle document = tc_ui_document_create();
+    assert(!tc_ui_document_handle_is_invalid(document));
+    assert(tc_ui_document_is_valid(document));
+
+    tc_ui_document_destroy(document);
+    assert(!tc_ui_document_is_valid(document));
+    assert(!tc_ui_document_is_alive(document, tc_widget_handle_invalid()));
+    assert(tc_ui_document_handle_is_invalid(tc_ui_document_handle_invalid()));
+
+    const tc_ui_document_handle invalid = tc_ui_document_handle_invalid();
+    assert(!tc_ui_document_is_valid(invalid));
+    tc_ui_document_destroy(invalid);
+}
+
+static void test_document_pool_enumeration_reports_live_documents() {
+    const size_t baseline = tc_ui_document_pool_count();
+    tc_ui_document_handle document = tc_ui_document_create();
+    assert(tc_ui_document_pool_count() == baseline + 1);
+    assert(tc_ui_document_set_debug_name(document, "pool-test"));
+
+    bool found = false;
+    const size_t capacity = tc_ui_document_pool_capacity();
+    for (size_t index = 0; index < capacity; ++index) {
+        tc_ui_document_info info {};
+        if (!tc_ui_document_info_at(index, &info)) {
+            continue;
+        }
+        if (tc_ui_document_handle_eq(info.handle, document)) {
+            found = true;
+            assert(info.live_widget_count == 0);
+            assert(info.root_count == 0);
+            assert(info.overlay_count == 0);
+            assert(std::string(info.debug_name) == "pool-test");
+        }
+    }
+    assert(found);
+
+    tc_ui_document_destroy(document);
+    assert(tc_ui_document_pool_count() == baseline);
+}
+
+static void test_document_destroy_invalidates_widgets_once() {
+    int destroyed = 0;
+    int deleted = 0;
+    tc_ui_document_handle document = tc_ui_document_create();
+    TestWidget* widget = make_test_widget(&destroyed, &deleted);
+    const tc_widget_handle handle = adopt(document, widget);
+
+    tc_ui_document_destroy(document);
+    assert(destroyed == 1);
+    assert(deleted == 1);
+
+    // The stale document and widget handles must not trigger a second teardown.
+    tc_ui_document_destroy(document);
+    assert(destroyed == 1);
+    assert(deleted == 1);
+    (void)handle;
 }
 
 static void test_owned_adoption_requires_deleter_and_is_atomic() {
     TestWidget borrowed;
     tc_widget_init_unowned(
         &borrowed.widget, &TEST_WIDGET_VTABLE, TC_LANGUAGE_CXX, &borrowed);
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
 
     const tc_widget_handle rejected =
         tc_ui_document_adopt_widget(document, &borrowed.widget, nullptr);
     assert(tc_widget_handle_is_invalid(rejected));
-    assert(borrowed.widget.document == nullptr);
+    assert(tc_ui_document_handle_is_invalid(borrowed.widget.document));
     assert(tc_widget_handle_is_invalid(borrowed.widget.handle));
     assert(borrowed.widget.deleter == nullptr);
     assert(tc_widget_ownership(&borrowed.widget) == TC_WIDGET_BORROWED);
@@ -318,7 +379,7 @@ static void test_owned_adoption_requires_deleter_and_is_atomic() {
 }
 
 static void test_tree_order_reparent_and_root_invariants() {
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     TestWidget* parent_a = make_test_widget();
     TestWidget* parent_b = make_test_widget();
     TestWidget* child_a = make_test_widget();
@@ -372,8 +433,8 @@ static void test_tree_order_reparent_and_root_invariants() {
 }
 
 static void test_tree_rejects_self_cycles_and_cross_document_links() {
-    tc_ui_document* first_document = tc_ui_document_create();
-    tc_ui_document* second_document = tc_ui_document_create();
+    tc_ui_document_handle first_document = tc_ui_document_create();
+    tc_ui_document_handle second_document = tc_ui_document_create();
     TestWidget* parent = make_test_widget();
     TestWidget* child = make_test_widget();
     TestWidget* foreign = make_test_widget();
@@ -396,7 +457,7 @@ static void test_tree_rejects_self_cycles_and_cross_document_links() {
 static void test_plain_destroy_unlinks_tree_without_destroying_relatives() {
     int destroyed = 0;
     int deleted = 0;
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     TestWidget* parent = make_test_widget(&destroyed, &deleted);
     TestWidget* child_a = make_test_widget(&destroyed, &deleted);
     TestWidget* child_b = make_test_widget(&destroyed, &deleted);
@@ -424,7 +485,7 @@ static void test_plain_destroy_unlinks_tree_without_destroying_relatives() {
 static void test_recursive_destroy_uses_canonical_tree() {
     int destroyed = 0;
     int deleted = 0;
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     TestWidget* root = make_test_widget(&destroyed, &deleted);
     TestWidget* child = make_test_widget(&destroyed, &deleted);
     TestWidget* grandchild = make_test_widget(&destroyed, &deleted);
@@ -447,7 +508,7 @@ static void test_roots_are_explicit_visible_paint_entrypoints() {
     int deleted = 0;
     int painted_a = 0;
     int painted_b = 0;
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     TestWidget* root_a = make_test_widget(nullptr, &deleted, &painted_a);
     TestWidget* root_b = make_test_widget(nullptr, &deleted, &painted_b);
     tc_widget_handle root_a_handle = adopt(document, root_a);
@@ -468,7 +529,7 @@ static void test_roots_are_explicit_visible_paint_entrypoints() {
 }
 
 static void test_document_text_measurement_service_contract() {
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     tc_ui_text_metrics metrics {};
     assert(!tc_ui_document_measure_text(document, "abc", 3, 12.0f, &metrics));
 
@@ -490,7 +551,7 @@ static void test_document_text_measurement_service_contract() {
 }
 
 static void test_pointer_routing_hover_pressed_and_bubbling() {
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     RouteWidget root;
     RouteWidget child;
     std::vector<int> log;
@@ -532,7 +593,7 @@ static void test_pointer_routing_hover_pressed_and_bubbling() {
 }
 
 static void test_routing_snapshot_survives_destroyed_target() {
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     RouteWidget root;
     RouteWidget child;
     std::vector<int> log;
@@ -558,7 +619,7 @@ static void test_routing_snapshot_survives_destroyed_target() {
 }
 
 static void test_keyboard_bubbling_focus_events_and_tab_traversal() {
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     RouteWidget root;
     RouteWidget first;
     RouteWidget skipped;
@@ -617,7 +678,7 @@ static void test_keyboard_bubbling_focus_events_and_tab_traversal() {
 
 static void test_state_setters_survive_lifecycle_callback_destroy() {
     {
-        tc_ui_document* document = tc_ui_document_create();
+        tc_ui_document_handle document = tc_ui_document_create();
         RouteWidget hovered;
         tc_widget_handle handle = adopt_route_widget(document, hovered, 1);
         hovered.destroy_on_leave = handle;
@@ -632,7 +693,7 @@ static void test_state_setters_survive_lifecycle_callback_destroy() {
         tc_ui_document_destroy(document);
     }
     {
-        tc_ui_document* document = tc_ui_document_create();
+        tc_ui_document_handle document = tc_ui_document_create();
         RouteWidget focused;
         tc_widget_handle handle = adopt_route_widget(document, focused, 1);
         tc_widget_set_focusable(&focused.widget, true);
@@ -647,7 +708,7 @@ static void test_state_setters_survive_lifecycle_callback_destroy() {
 }
 
 static void test_overlay_paint_hit_order_and_tooltip_transparency() {
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     RouteWidget root;
     RouteWidget popup;
     RouteWidget tooltip;
@@ -680,7 +741,7 @@ static void test_overlay_paint_hit_order_and_tooltip_transparency() {
 }
 
 static void test_overlay_outside_escape_and_programmatic_dismissal() {
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     RouteWidget root;
     RouteWidget popup;
     std::vector<int> pointer_log;
@@ -722,7 +783,7 @@ static void test_overlay_outside_escape_and_programmatic_dismissal() {
 }
 
 static void test_modal_overlay_blocks_lower_input_and_scopes_focus() {
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     RouteWidget root;
     RouteWidget modal;
     RouteWidget modal_focus;
@@ -786,7 +847,7 @@ static void test_tooltip_rect_is_host_driven_and_clamped() {
 }
 
 static void test_theme_style_resolution_inheritance_and_invalidation() {
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     RouteWidget parent_a;
     RouteWidget parent_b;
     RouteWidget child;
@@ -887,7 +948,7 @@ static void record_cursor_change(void* user_data, tc_ui_cursor_intent cursor) {
 }
 
 static void test_cursor_intent_inheritance_transitions_and_lifetime() {
-    tc_ui_document* document = tc_ui_document_create();
+    tc_ui_document_handle document = tc_ui_document_create();
     RouteWidget root;
     RouteWidget child;
     std::vector<tc_ui_cursor_intent> changes;
@@ -949,6 +1010,9 @@ static void test_cursor_intent_inheritance_transitions_and_lifetime() {
 int main() {
     test_init_defaults_and_common_state();
     test_borrowed_widget_can_be_adopted_and_released();
+    test_document_handles_become_stale_after_destroy();
+    test_document_pool_enumeration_reports_live_documents();
+    test_document_destroy_invalidates_widgets_once();
     test_owned_adoption_requires_deleter_and_is_atomic();
     test_tree_order_reparent_and_root_invariants();
     test_tree_rejects_self_cycles_and_cross_document_links();

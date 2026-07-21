@@ -36,17 +36,17 @@ public:
     const Signal<TextInput&, const std::string&>& changed() const { return changed_; }
     Signal<TextInput&, const std::string&>& submitted() { return submitted_; }
     const Signal<TextInput&, const std::string&>& submitted() const { return submitted_; }
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
-    tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event) override;
-    tc_ui_event_result text_event(tc_ui_document* document, const tc_ui_text_event* event) override;
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) override;
+    tc_ui_event_result key_event(tc_ui_document_handle document, const tc_ui_key_event* event) override;
+    tc_ui_event_result text_event(tc_ui_document_handle document, const tc_ui_text_event* event) override;
 private:
-    tc_ui_rect text_clip_rect(tc_ui_document* document) const;
-    bool measure_prefix(tc_ui_document* document, size_t byte_offset, float font_size, float& width) const;
-    void ensure_caret_visible(tc_ui_document* document);
-    size_t caret_from_content_x(tc_ui_document* document, float content_x) const;
+    tc_ui_rect text_clip_rect(tc_ui_document_handle document) const;
+    bool measure_prefix(tc_ui_document_handle document, size_t byte_offset, float font_size, float& width) const;
+    void ensure_caret_visible(tc_ui_document_handle document);
+    size_t caret_from_content_x(tc_ui_document_handle document, float content_x) const;
     void update_unmeasured_size();
     void emit_changed();
     void move_caret(size_t next, bool extend_selection);

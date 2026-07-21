@@ -12,7 +12,7 @@ public:
     explicit ComboBoxPopup(ComboBox& owner)
         : NativeWidget("ComboBoxPopup"), owner_(owner) {}
 
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override {
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override {
         const tc_ui_style style = owner_.computed_style(document);
         tc_ui_painter_fill_rect(context, bounds(), tc_ui_color {0.18f, 0.18f, 0.22f, 0.98f});
         tc_ui_painter_push_clip(context, bounds());
@@ -34,7 +34,7 @@ public:
         tc_ui_painter_stroke_rect(context, bounds(), style.border, 1.0f);
     }
 
-    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override {
+    tc_ui_event_result pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) override {
         if (!event) return TC_UI_EVENT_IGNORED;
         if (event->type == TC_UI_POINTER_WHEEL) {
             const float content_height = static_cast<float>(owner_.items_.size()) * owner_.item_height_;
@@ -63,7 +63,7 @@ public:
         return TC_UI_EVENT_IGNORED;
     }
 
-    void overlay_dismissed(tc_ui_document*, tc_ui_overlay_dismiss_reason) override {
+    void overlay_dismissed(tc_ui_document_handle, tc_ui_overlay_dismiss_reason) override {
         owner_.popup_dismissed();
     }
 
@@ -114,7 +114,7 @@ void ComboBox::set_selected_index(int index) {
     changed_.emit(*this, selected_index_, text);
 }
 
-tc_ui_size ComboBox::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size ComboBox::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
     const tc_ui_style style = computed_style(document);
     float max_width = 0.0f;
     for (const std::string& item : items_) {
@@ -125,7 +125,7 @@ tc_ui_size ComboBox::measure(tc_ui_document* document, tc_ui_constraints constra
     return clamp_size(result, constraints);
 }
 
-void ComboBox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void ComboBox::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     const std::string text = selected_text().empty() ? "Select..." : selected_text();
     tc_ui_painter_fill_rounded_rect(context, bounds(), style.corner_radius, style.background);
@@ -138,7 +138,7 @@ void ComboBox::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     tc_ui_painter_draw_text(context, open_ ? "^" : "v", tc_ui_point {bounds().x + bounds().width - 18.0f, bounds().y + bounds().height * 0.68f}, style.font_size, style.foreground);
 }
 
-bool ComboBox::show_popup(tc_ui_document* document) {
+bool ComboBox::show_popup(tc_ui_document_handle document) {
     if (items_.empty()) return false;
     if (tc_widget_handle_is_invalid(popup_handle_)) {
         auto popup = std::make_unique<ComboBoxPopup>(*this);
@@ -160,7 +160,7 @@ bool ComboBox::show_popup(tc_ui_document* document) {
     return open_;
 }
 
-void ComboBox::hide_popup(tc_ui_document* document) {
+void ComboBox::hide_popup(tc_ui_document_handle document) {
     if (open_) tc_ui_document_dismiss_overlay(document, popup_handle_, TC_UI_OVERLAY_DISMISS_PROGRAMMATIC);
 }
 
@@ -169,14 +169,14 @@ void ComboBox::popup_dismissed() {
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
-tc_ui_event_result ComboBox::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
+tc_ui_event_result ComboBox::pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) {
     if (!event || event->type != TC_UI_POINTER_DOWN || !rect_contains(bounds(), event->x, event->y)) return TC_UI_EVENT_IGNORED;
     tc_ui_document_set_focus(document, handle());
     if (open_) hide_popup(document); else show_popup(document);
     return TC_UI_EVENT_HANDLED;
 }
 
-tc_ui_event_result ComboBox::key_event(tc_ui_document* document, const tc_ui_key_event* event) {
+tc_ui_event_result ComboBox::key_event(tc_ui_document_handle document, const tc_ui_key_event* event) {
     if (!event || event->type != TC_UI_KEY_DOWN) return TC_UI_EVENT_IGNORED;
     if (event->key == TC_UI_KEY_ESCAPE && open_) {
         hide_popup(document);
@@ -197,7 +197,7 @@ tc_ui_event_result ComboBox::key_event(tc_ui_document* document, const tc_ui_key
     return TC_UI_EVENT_IGNORED;
 }
 
-void ComboBox::on_destroy(tc_ui_document* document) {
+void ComboBox::on_destroy(tc_ui_document_handle document) {
     if (!tc_widget_handle_is_invalid(popup_handle_) && tc_ui_document_is_alive(document, popup_handle_)) {
         if (open_) tc_ui_document_dismiss_overlay(document, popup_handle_, TC_UI_OVERLAY_DISMISS_PROGRAMMATIC);
         tc_ui_document_destroy_widget(document, popup_handle_);

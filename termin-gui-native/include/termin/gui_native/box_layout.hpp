@@ -41,11 +41,11 @@ public:
     bool set_child_extent_limits(const Widget& widget, float min_extent, float max_extent) { return set_child_extent_limits(widget.handle(), min_extent, max_extent); }
     const std::vector<LayoutItem>& items() const { return items_; }
     std::vector<tc_widget_handle> children() const;
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
-    tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) override;
+    tc_widget_handle hit_test(tc_ui_document_handle document, float x, float y) override;
 };
 
 } // namespace termin::gui_native

@@ -92,7 +92,7 @@ std::string ToolBar::hovered_tooltip() const {
     return model_->command_at(hovered_).data.tooltip;
 }
 
-tc_ui_size ToolBar::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size ToolBar::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
     sync_model();
     const tc_ui_style style = computed_style(document);
     float width = padding_ * 2.0f;
@@ -117,7 +117,7 @@ tc_ui_size ToolBar::measure(tc_ui_document* document, tc_ui_constraints constrai
                       constraints);
 }
 
-void ToolBar::compute_item_rects(tc_ui_document* document) {
+void ToolBar::compute_item_rects(tc_ui_document_handle document) {
     item_rects_.clear();
     item_rects_.reserve(model_->size());
     const tc_ui_style style = computed_style(document);
@@ -148,13 +148,13 @@ void ToolBar::compute_item_rects(tc_ui_document* document) {
     }
 }
 
-void ToolBar::layout(tc_ui_document* document, tc_ui_rect rect) {
+void ToolBar::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     sync_model();
     NativeWidget::layout(document, rect);
     compute_item_rects(document);
 }
 
-void ToolBar::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void ToolBar::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     sync_model();
     if (item_rects_.size() != model_->size())
         compute_item_rects(document);
@@ -233,7 +233,7 @@ bool ToolBar::activate(size_t index) {
     return true;
 }
 
-tc_ui_event_result ToolBar::pointer_event(tc_ui_document* document,
+tc_ui_event_result ToolBar::pointer_event(tc_ui_document_handle document,
                                           const tc_ui_pointer_event* event) {
     if (!event)
         return TC_UI_EVENT_IGNORED;

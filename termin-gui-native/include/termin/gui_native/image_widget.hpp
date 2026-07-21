@@ -28,7 +28,7 @@ public:
     void set_preserve_aspect(bool preserve) {
         set_fit(preserve ? ImageFit::Contain : ImageFit::Stretch);
     }
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
 };
 } // namespace termin::gui_native

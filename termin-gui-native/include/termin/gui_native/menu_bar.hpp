@@ -43,21 +43,21 @@ class MenuBar final : public NativeWidget {
 
     Signal<MenuBar&, size_t, CommandId, const CommandData&>& activated() { return activated_; }
 
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document,
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document,
                                      const tc_ui_pointer_event* event) override;
-    tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event) override;
-    void on_destroy(tc_ui_document* document) override;
+    tc_ui_event_result key_event(tc_ui_document_handle document, const tc_ui_key_event* event) override;
+    void on_destroy(tc_ui_document_handle document) override;
 
   private:
     static void validate_entries(const std::vector<MenuBarEntry>& entries);
-    void compute_item_rects(tc_ui_document* document);
+    void compute_item_rects(tc_ui_document_handle document);
     size_t index_at(float x, float y) const;
-    bool open_menu(tc_ui_document* document, size_t index, bool select_first = false);
-    void close_menu(tc_ui_document* document);
-    void switch_menu(tc_ui_document* document, int direction);
+    bool open_menu(tc_ui_document_handle document, size_t index, bool select_first = false);
+    void close_menu(tc_ui_document_handle document);
+    void switch_menu(tc_ui_document_handle document, int direction);
     bool dispatch_shortcut_in(const std::shared_ptr<CommandModel>& model, int32_t key,
                               int32_t modifiers, std::unordered_set<const CommandModel*>& visited,
                               size_t menu_index);

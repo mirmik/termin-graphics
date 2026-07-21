@@ -79,7 +79,7 @@ void TextInput::clear_selection() {
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
-tc_ui_size TextInput::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size TextInput::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
     const tc_ui_style style = computed_style(document);
     tc_ui_text_metrics metrics {};
     tc_ui_size measured = preferred_size();
@@ -99,12 +99,12 @@ tc_ui_size TextInput::measure(tc_ui_document* document, tc_ui_constraints constr
     return clamp_size(measured, constraints);
 }
 
-void TextInput::layout(tc_ui_document* document, tc_ui_rect rect) {
+void TextInput::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
     ensure_caret_visible(document);
 }
 
-void TextInput::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void TextInput::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     ensure_caret_visible(document);
     const tc_ui_style style = computed_style(document);
     const bool focused = tc_widget_handle_eq(tc_ui_document_focused_widget(document), handle());
@@ -173,7 +173,7 @@ void TextInput::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     tc_ui_painter_pop_clip(context);
 }
 
-tc_ui_event_result TextInput::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
+tc_ui_event_result TextInput::pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) {
     if (!event) {
         return TC_UI_EVENT_IGNORED;
     }
@@ -212,7 +212,7 @@ tc_ui_event_result TextInput::pointer_event(tc_ui_document* document, const tc_u
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_ui_event_result TextInput::key_event(tc_ui_document* document, const tc_ui_key_event* event) {
+tc_ui_event_result TextInput::key_event(tc_ui_document_handle document, const tc_ui_key_event* event) {
     if (!event || event->type != TC_UI_KEY_DOWN) {
         return TC_UI_EVENT_IGNORED;
     }
@@ -312,7 +312,7 @@ tc_ui_event_result TextInput::key_event(tc_ui_document* document, const tc_ui_ke
     }
 }
 
-tc_ui_event_result TextInput::text_event(tc_ui_document* document, const tc_ui_text_event* event) {
+tc_ui_event_result TextInput::text_event(tc_ui_document_handle document, const tc_ui_text_event* event) {
     if (!event || !event->text || event->text[0] == '\0') {
         return TC_UI_EVENT_IGNORED;
     }
@@ -329,7 +329,7 @@ tc_ui_event_result TextInput::text_event(tc_ui_document* document, const tc_ui_t
     return TC_UI_EVENT_HANDLED;
 }
 
-tc_ui_rect TextInput::text_clip_rect(tc_ui_document* document) const {
+tc_ui_rect TextInput::text_clip_rect(tc_ui_document_handle document) const {
     const tc_ui_style style = computed_style(document);
     return tc_ui_rect {
         bounds().x + style.padding_left,
@@ -340,7 +340,7 @@ tc_ui_rect TextInput::text_clip_rect(tc_ui_document* document) const {
 }
 
 bool TextInput::measure_prefix(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     size_t byte_offset,
     float font_size,
     float& width
@@ -355,7 +355,7 @@ bool TextInput::measure_prefix(
     return true;
 }
 
-void TextInput::ensure_caret_visible(tc_ui_document* document) {
+void TextInput::ensure_caret_visible(tc_ui_document_handle document) {
     const tc_ui_style style = computed_style(document);
     const float viewport_width = text_clip_rect(document).width;
     float caret_width = 0.0f;
@@ -375,7 +375,7 @@ void TextInput::ensure_caret_visible(tc_ui_document* document) {
     scroll_x_ = clamp_float(scroll_x_, 0.0f, std::max(0.0f, full_metrics.width - visible_width));
 }
 
-size_t TextInput::caret_from_content_x(tc_ui_document* document, float content_x) const {
+size_t TextInput::caret_from_content_x(tc_ui_document_handle document, float content_x) const {
     const tc_ui_style style = computed_style(document);
     size_t current = 0;
     float current_width = 0.0f;

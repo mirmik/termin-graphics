@@ -10,7 +10,7 @@ Button::Button(std::string text) : NativeWidget("Button"), text_(std::move(text)
     set_preferred_size(tc_ui_size{64.0f, 28.0f});
 }
 
-tc_ui_event_result Button::key_event(tc_ui_document*, const tc_ui_key_event* event) {
+tc_ui_event_result Button::key_event(tc_ui_document_handle, const tc_ui_key_event* event) {
     if (!event || event->type != TC_UI_KEY_DOWN ||
         (event->key != TC_UI_KEY_ENTER && event->key != ' ')) {
         return TC_UI_EVENT_IGNORED;
@@ -37,7 +37,7 @@ Button& Button::set_text(std::string text) {
     return *this;
 }
 
-void Button::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void Button::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     tc_ui_painter_fill_rounded_rect(context, bounds(), style.corner_radius, style.background);
     if (style.border_width > 0.0f && color_visible(style.border)) {
@@ -60,7 +60,7 @@ void Button::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     }
 }
 
-tc_ui_event_result Button::pointer_event(tc_ui_document* document,
+tc_ui_event_result Button::pointer_event(tc_ui_document_handle document,
                                          const tc_ui_pointer_event* event) {
     if (!event) {
         return TC_UI_EVENT_IGNORED;

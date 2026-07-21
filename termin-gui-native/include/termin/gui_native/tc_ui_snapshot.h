@@ -53,7 +53,7 @@ typedef struct tc_ui_document_inspect_snapshot {
 
 /* Captures an owner-thread, point-in-time copy. On failure out_snapshot is unchanged. */
 TERMIN_GUI_NATIVE_API bool
-tc_ui_document_capture_snapshot(const tc_ui_document* document,
+tc_ui_document_capture_snapshot(tc_ui_document_handle document,
                                 tc_ui_document_inspect_snapshot* out_snapshot);
 
 /* Releases every allocation and resets the snapshot to its zero state. */

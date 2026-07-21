@@ -37,7 +37,7 @@ Label& Label::set_font_size(float font_size) {
     return *this;
 }
 
-tc_ui_size Label::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size Label::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
     const tc_ui_style style = computed_style(document);
     tc_ui_text_metrics metrics {};
     tc_ui_size measured = preferred_size();
@@ -50,7 +50,7 @@ tc_ui_size Label::measure(tc_ui_document* document, tc_ui_constraints constraint
     return clamp_size(measured, constraints);
 }
 
-void Label::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void Label::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     tc_ui_text_metrics metrics {};
     const bool has_metrics = measure_text(document, text_, style.font_size, metrics);

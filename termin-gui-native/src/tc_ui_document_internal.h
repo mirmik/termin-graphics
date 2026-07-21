@@ -23,6 +23,9 @@ typedef struct tc_ui_overlay_entry {
 } tc_ui_overlay_entry;
 
 struct tc_ui_document {
+    tc_ui_document_handle handle;
+    char debug_name[TC_UI_DOCUMENT_DEBUG_NAME_CAPACITY];
+
     tc_widget_slot* slots;
     size_t slot_count;
     size_t slot_capacity;
@@ -62,6 +65,14 @@ struct tc_ui_document {
     tc_ui_clipboard_set_text_fn clipboard_set_text;
     void* clipboard_user_data;
 };
+
+TC_UI_INTERNAL tc_ui_document* tc_ui_internal_resolve_document(
+    tc_ui_document_handle handle
+);
+TC_UI_INTERNAL tc_ui_document* tc_ui_internal_resolve_document_checked(
+    tc_ui_document_handle handle,
+    const char* operation
+);
 
 TC_UI_INTERNAL bool tc_ui_internal_same_handle(tc_widget_handle lhs, tc_widget_handle rhs);
 TC_UI_INTERNAL bool tc_ui_internal_reserve_array(

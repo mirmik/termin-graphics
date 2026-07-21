@@ -36,12 +36,12 @@ public:
     tc_widget_handle spin_box_handle() const { return spin_box_handle_; }
     Signal<SliderEdit&, float>& changed() { return changed_; }
     const Signal<SliderEdit&, float>& changed() const { return changed_; }
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    void on_destroy(tc_ui_document* document) override;
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    void on_destroy(tc_ui_document_handle document) override;
 private:
-    bool ensure_children(tc_ui_document* document);
-    void sync_children(tc_ui_document* document);
+    bool ensure_children(tc_ui_document_handle document);
+    void sync_children(tc_ui_document_handle document);
 };
 } // namespace termin::gui_native

@@ -38,11 +38,11 @@ void ImageWidget::set_fit(ImageFit fit) {
     mark_dirty(TC_WIDGET_DIRTY_PAINT);
 }
 
-tc_ui_size ImageWidget::measure(tc_ui_document*, tc_ui_constraints constraints) {
+tc_ui_size ImageWidget::measure(tc_ui_document_handle, tc_ui_constraints constraints) {
     return clamp_size(intrinsic_size_, constraints);
 }
 
-void ImageWidget::paint(tc_ui_document*, tc_ui_paint_context* context) {
+void ImageWidget::paint(tc_ui_document_handle, tc_ui_paint_context* context) {
     if (texture_id_ == 0) return;
     tc_ui_rect destination = bounds();
     if (fit_ != ImageFit::Stretch && intrinsic_size_.width > 0.0f && intrinsic_size_.height > 0.0f) {

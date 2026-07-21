@@ -7,7 +7,7 @@
 
 namespace {
 
-tc_ui_event_result handle_pointer(tc_widget*, tc_ui_document*, const tc_ui_pointer_event*) {
+tc_ui_event_result handle_pointer(tc_widget*, tc_ui_document_handle, const tc_ui_pointer_event*) {
     return TC_UI_EVENT_HANDLED;
 }
 
@@ -16,7 +16,7 @@ bool contains(const tc_ui_rect& bounds, float x, float y) {
            y <= bounds.y + bounds.height;
 }
 
-tc_widget_handle hit_snapshot_widget(tc_widget* widget, tc_ui_document*, float x, float y) {
+tc_widget_handle hit_snapshot_widget(tc_widget* widget, tc_ui_document_handle, float x, float y) {
     for (size_t index = widget->child_count; index > 0; --index) {
         tc_widget* child = widget->children[index - 1];
         if (child && contains(child->bounds, x, y)) {
@@ -135,13 +135,13 @@ void test_snapshot_copies_topology_metadata_and_interaction_state() {
 void test_document_and_snapshot_move_lifetimes() {
     termin::gui_native::Document source;
     termin::gui_native::Document moved(std::move(source));
-    assert(source.get() == nullptr);
-    assert(moved.get() != nullptr);
+    assert(tc_ui_document_handle_is_invalid(source.get()));
+    assert(!tc_ui_document_handle_is_invalid(moved.get()));
 
     termin::gui_native::Document replacement;
     replacement = std::move(moved);
-    assert(moved.get() == nullptr);
-    assert(replacement.get() != nullptr);
+    assert(tc_ui_document_handle_is_invalid(moved.get()));
+    assert(!tc_ui_document_handle_is_invalid(replacement.get()));
 
     termin::gui_native::DocumentSnapshot snapshot(replacement);
     termin::gui_native::DocumentSnapshot moved_snapshot(std::move(snapshot));

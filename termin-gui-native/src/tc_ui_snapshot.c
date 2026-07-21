@@ -31,7 +31,7 @@ static bool copy_widget_strings(tc_ui_widget_snapshot* snapshot, const tc_widget
            (!widget->name || snapshot->name) && (!widget->debug_name || snapshot->debug_name);
 }
 
-static bool handle_is_coherent(const tc_ui_document* document, tc_widget_handle handle) {
+static bool handle_is_coherent(tc_ui_document_handle document, tc_widget_handle handle) {
     return tc_widget_handle_is_invalid(handle) || tc_ui_document_is_alive(document, handle);
 }
 
@@ -55,9 +55,11 @@ void tc_ui_document_snapshot_destroy(tc_ui_document_inspect_snapshot* snapshot) 
     memset(snapshot, 0, sizeof(*snapshot));
 }
 
-bool tc_ui_document_capture_snapshot(const tc_ui_document* document,
+bool tc_ui_document_capture_snapshot(tc_ui_document_handle document_handle,
                                      tc_ui_document_inspect_snapshot* out_snapshot) {
     tc_ui_document_inspect_snapshot snapshot = {0};
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_capture_snapshot");
     size_t total_children = 0;
     size_t slot_index;
     size_t widget_index = 0;
@@ -120,7 +122,8 @@ bool tc_ui_document_capture_snapshot(const tc_ui_document* document,
         }
         target = &snapshot.widgets[widget_index++];
         target->handle = widget->handle;
-        if (widget->parent && (widget->parent->document != document ||
+        if (widget->parent && (!tc_ui_document_handle_eq(
+                                   widget->parent->document, document_handle) ||
                                tc_widget_handle_is_invalid(widget->parent->handle))) {
             tc_log_error("[termin-gui-native] invalid canonical parent during snapshot");
             tc_ui_document_snapshot_destroy(&snapshot);
@@ -147,7 +150,7 @@ bool tc_ui_document_capture_snapshot(const tc_ui_document* document,
         target->child_count = widget->child_count;
         for (index = 0; index < widget->child_count; ++index) {
             const tc_widget* child = widget->children[index];
-            if (!child || child->document != document ||
+            if (!child || !tc_ui_document_handle_eq(child->document, document_handle) ||
                 tc_widget_handle_is_invalid(child->handle)) {
                 tc_log_error("[termin-gui-native] invalid canonical child during snapshot");
                 tc_ui_document_snapshot_destroy(&snapshot);
@@ -171,7 +174,7 @@ bool tc_ui_document_capture_snapshot(const tc_ui_document* document,
         memcpy(snapshot.roots, document->roots, snapshot.root_count * sizeof(tc_widget_handle));
     }
     for (slot_index = 0; slot_index < snapshot.root_count; ++slot_index) {
-        if (!tc_ui_document_is_alive(document, snapshot.roots[slot_index])) {
+        if (!tc_ui_document_is_alive(document_handle, snapshot.roots[slot_index])) {
             tc_log_error("[termin-gui-native] stale root handle during snapshot");
             tc_ui_document_snapshot_destroy(&snapshot);
             return false;
@@ -180,7 +183,7 @@ bool tc_ui_document_capture_snapshot(const tc_ui_document* document,
     for (slot_index = 0; slot_index < snapshot.overlay_count; ++slot_index) {
         snapshot.overlays[slot_index].handle = document->overlays[slot_index].handle;
         snapshot.overlays[slot_index].flags = document->overlays[slot_index].flags;
-        if (!tc_ui_document_is_alive(document, snapshot.overlays[slot_index].handle)) {
+        if (!tc_ui_document_is_alive(document_handle, snapshot.overlays[slot_index].handle)) {
             tc_log_error("[termin-gui-native] stale overlay handle during snapshot");
             tc_ui_document_snapshot_destroy(&snapshot);
             return false;
@@ -191,10 +194,10 @@ bool tc_ui_document_capture_snapshot(const tc_ui_document* document,
     snapshot.pointer_capture = document->pointer_capture;
     snapshot.focused = document->focused_widget;
     snapshot.cursor_intent = document->cursor_intent;
-    if (!handle_is_coherent(document, snapshot.hovered) ||
-        !handle_is_coherent(document, snapshot.pressed) ||
-        !handle_is_coherent(document, snapshot.pointer_capture) ||
-        !handle_is_coherent(document, snapshot.focused)) {
+    if (!handle_is_coherent(document_handle, snapshot.hovered) ||
+        !handle_is_coherent(document_handle, snapshot.pressed) ||
+        !handle_is_coherent(document_handle, snapshot.pointer_capture) ||
+        !handle_is_coherent(document_handle, snapshot.focused)) {
         tc_log_error("[termin-gui-native] stale interaction handle during snapshot");
         tc_ui_document_snapshot_destroy(&snapshot);
         return false;

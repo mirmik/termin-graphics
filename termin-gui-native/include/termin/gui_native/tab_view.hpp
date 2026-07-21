@@ -30,14 +30,14 @@ public:
     Signal<TabView &, size_t> &selection_changed() {
       return selection_changed_;
     }
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
-    tc_widget_handle hit_test(tc_ui_document* document, float x, float y) override;
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) override;
+    tc_widget_handle hit_test(tc_ui_document_handle document, float x, float y) override;
 private:
     tc_ui_rect page_rect() const;
-    float tab_width(tc_ui_document* document, size_t index) const;
-    tc_ui_rect tab_rect(tc_ui_document* document, size_t index) const;
+    float tab_width(tc_ui_document_handle document, size_t index) const;
+    tc_ui_rect tab_rect(tc_ui_document_handle document, size_t index) const;
 };
 } // namespace termin::gui_native

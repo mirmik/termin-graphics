@@ -93,7 +93,7 @@ std::vector<TextArea::Line> TextArea::lines() const {
     return result;
 }
 
-tc_ui_rect TextArea::text_clip_rect(tc_ui_document* document) const {
+tc_ui_rect TextArea::text_clip_rect(tc_ui_document_handle document) const {
     const tc_ui_style style = computed_style(document);
     return tc_ui_rect {
         bounds().x + style.padding_left,
@@ -103,7 +103,7 @@ tc_ui_rect TextArea::text_clip_rect(tc_ui_document* document) const {
     };
 }
 
-float TextArea::line_height(tc_ui_document* document) const {
+float TextArea::line_height(tc_ui_document_handle document) const {
     const tc_ui_style style = computed_style(document);
     tc_ui_text_metrics metrics {};
     if (measure_text(document, "Mg", style.font_size, metrics)) {
@@ -113,7 +113,7 @@ float TextArea::line_height(tc_ui_document* document) const {
 }
 
 bool TextArea::measure_range(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     size_t start,
     size_t end,
     float font_size,
@@ -143,7 +143,7 @@ size_t TextArea::line_index_for_offset(const std::vector<Line>& spans, size_t of
 }
 
 size_t TextArea::caret_from_line_x(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     const Line& line,
     float content_x
 ) const {
@@ -165,7 +165,7 @@ size_t TextArea::caret_from_line_x(
     return line.end;
 }
 
-size_t TextArea::caret_from_point(tc_ui_document* document, float x, float y) const {
+size_t TextArea::caret_from_point(tc_ui_document_handle document, float x, float y) const {
     const auto spans = lines();
     const tc_ui_rect clip = text_clip_rect(document);
     const float height = std::max(1.0f, line_height(document));
@@ -181,19 +181,19 @@ size_t TextArea::caret_from_point(tc_ui_document* document, float x, float y) co
     );
 }
 
-tc_ui_size TextArea::measure(tc_ui_document*, tc_ui_constraints constraints) {
+tc_ui_size TextArea::measure(tc_ui_document_handle, tc_ui_constraints constraints) {
     tc_ui_size measured = preferred_size();
     measured.width = std::max(measured.width, min_size().width);
     measured.height = std::max(measured.height, min_size().height);
     return clamp_size(measured, constraints);
 }
 
-void TextArea::layout(tc_ui_document* document, tc_ui_rect rect) {
+void TextArea::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
     ensure_caret_visible(document);
 }
 
-void TextArea::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void TextArea::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     const tc_ui_rect clip = text_clip_rect(document);
     const float height = std::max(1.0f, line_height(document));
@@ -261,7 +261,7 @@ void TextArea::paint(tc_ui_document* document, tc_ui_paint_context* context) {
 }
 
 tc_ui_event_result TextArea::pointer_event(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     const tc_ui_pointer_event* event
 ) {
     if (!event) {
@@ -308,7 +308,7 @@ tc_ui_event_result TextArea::pointer_event(
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_ui_event_result TextArea::key_event(tc_ui_document* document, const tc_ui_key_event* event) {
+tc_ui_event_result TextArea::key_event(tc_ui_document_handle document, const tc_ui_key_event* event) {
     if (!event || event->type != TC_UI_KEY_DOWN) {
         return TC_UI_EVENT_IGNORED;
     }
@@ -401,7 +401,7 @@ tc_ui_event_result TextArea::key_event(tc_ui_document* document, const tc_ui_key
 }
 
 tc_ui_event_result TextArea::text_event(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     const tc_ui_text_event* event
 ) {
     if (!event || !event->text || event->text[0] == '\0') {
@@ -419,7 +419,7 @@ tc_ui_event_result TextArea::text_event(
     return TC_UI_EVENT_HANDLED;
 }
 
-void TextArea::ensure_caret_visible(tc_ui_document* document) {
+void TextArea::ensure_caret_visible(tc_ui_document_handle document) {
     const auto spans = lines();
     const size_t line_index = line_index_for_offset(spans, caret_);
     const tc_ui_style style = computed_style(document);
@@ -465,7 +465,7 @@ void TextArea::move_caret(size_t next, bool extend_selection, bool preserve_colu
 }
 
 void TextArea::move_vertical(
-    tc_ui_document* document,
+    tc_ui_document_handle document,
     int direction,
     bool extend_selection
 ) {

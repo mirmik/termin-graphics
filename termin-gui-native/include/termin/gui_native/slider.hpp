@@ -24,8 +24,8 @@ public:
     void set_step(float step);
     Signal<Slider&, float>& changed() { return changed_; }
     const Signal<Slider&, float>& changed() const { return changed_; }
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) override;
 private:
 };
 } // namespace termin::gui_native

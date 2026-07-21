@@ -74,7 +74,7 @@ void IconButton::set_font_size(float size) {
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
-void IconButton::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void IconButton::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const uint32_t extra = (active_ ? TC_UI_STYLE_STATE_CHECKED : 0) |
         (pressed_ ? TC_UI_STYLE_STATE_PRESSED : 0);
     tc_ui_style style = computed_style(document, extra);
@@ -100,7 +100,7 @@ void IconButton::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     }
 }
 
-tc_ui_event_result IconButton::pointer_event(tc_ui_document*, const tc_ui_pointer_event* event) {
+tc_ui_event_result IconButton::pointer_event(tc_ui_document_handle, const tc_ui_pointer_event* event) {
     if (!event) return TC_UI_EVENT_IGNORED;
     if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
         pressed_ = true;

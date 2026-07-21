@@ -8,7 +8,7 @@ using namespace detail;
 
 namespace {
 
-std::string elide_text(tc_ui_document* document, std::string_view text, float font_size,
+std::string elide_text(tc_ui_document_handle document, std::string_view text, float font_size,
                        float max_width) {
     tc_ui_text_metrics metrics{};
     if (!measure_text(document, text, font_size, metrics) || metrics.width <= max_width) {
@@ -348,7 +348,7 @@ bool FileGridWidget::clear_selection() {
     return changed;
 }
 
-tc_ui_size FileGridWidget::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size FileGridWidget::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
     sync_model();
     const tc_ui_style style = computed_style(document);
     return clamp_size(tc_ui_size{std::max(preferred_size().width, style.min_width),
@@ -356,13 +356,13 @@ tc_ui_size FileGridWidget::measure(tc_ui_document* document, tc_ui_constraints c
                       constraints);
 }
 
-void FileGridWidget::layout(tc_ui_document* document, tc_ui_rect rect) {
+void FileGridWidget::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     sync_model();
     NativeWidget::layout(document, rect);
     clamp_scroll();
 }
 
-void FileGridWidget::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void FileGridWidget::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     sync_model();
     const tc_ui_style style = computed_style(document);
     tc_ui_painter_fill_rect(context, bounds(), style.background);
@@ -481,7 +481,7 @@ size_t FileGridWidget::next_enabled(size_t from, int direction) const {
     return SelectionModel::npos;
 }
 
-tc_ui_event_result FileGridWidget::pointer_event(tc_ui_document* document,
+tc_ui_event_result FileGridWidget::pointer_event(tc_ui_document_handle document,
                                                  const tc_ui_pointer_event* event) {
     if (!event)
         return TC_UI_EVENT_IGNORED;
@@ -588,7 +588,7 @@ tc_ui_event_result FileGridWidget::pointer_event(tc_ui_document* document,
     return TC_UI_EVENT_HANDLED;
 }
 
-tc_ui_event_result FileGridWidget::key_event(tc_ui_document*, const tc_ui_key_event* event) {
+tc_ui_event_result FileGridWidget::key_event(tc_ui_document_handle, const tc_ui_key_event* event) {
     if (!event || event->type != TC_UI_KEY_DOWN)
         return TC_UI_EVENT_IGNORED;
     sync_model();

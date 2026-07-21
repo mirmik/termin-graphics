@@ -48,8 +48,8 @@ class FrameTimeGraph : public NativeWidget {
     float target_frame_ms() const { return target_frame_ms_; }
     float warning_frame_ms() const { return warning_frame_ms_; }
     void set_thresholds(float target_frame_ms, float warning_frame_ms);
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
 
   private:
     void connect_model();

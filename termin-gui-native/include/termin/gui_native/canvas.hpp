@@ -42,8 +42,8 @@ public:
     tc_ui_point image_to_widget(tc_ui_point point) const;
     Signal<Canvas&, float>& zoom_changed() { return zoom_changed_; }
     Signal<Canvas&, tc_ui_point, const tc_ui_pointer_event&>& pointer_input() { return pointer_input_; }
-    void layout(tc_ui_document* document, tc_ui_rect rect) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
+    void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) override;
 };
 } // namespace termin::gui_native

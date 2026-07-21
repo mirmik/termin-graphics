@@ -81,13 +81,13 @@ tc_ui_point Canvas::image_to_widget(tc_ui_point point) const {
     };
 }
 
-void Canvas::layout(tc_ui_document* document, tc_ui_rect rect) {
+void Canvas::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     const bool size_changed = bounds().width != rect.width || bounds().height != rect.height;
     NativeWidget::layout(document, rect);
     if (fit_mode_ && size_changed) fit_in_view();
 }
 
-void Canvas::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void Canvas::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const tc_ui_style style = computed_style(document);
     tc_ui_painter_fill_rect(context, bounds(), style.background);
     tc_ui_painter_push_clip(context, bounds());
@@ -109,7 +109,7 @@ void Canvas::paint(tc_ui_document* document, tc_ui_paint_context* context) {
     tc_ui_painter_pop_clip(context);
 }
 
-tc_ui_event_result Canvas::pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) {
+tc_ui_event_result Canvas::pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) {
     if (!event) return TC_UI_EVENT_IGNORED;
     const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
     if (event->type == TC_UI_POINTER_WHEEL && rect_contains(bounds(), event->x, event->y) && image_size_.width > 0.0f) {

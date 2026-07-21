@@ -129,7 +129,7 @@ void MenuBar::clear() {
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
-tc_ui_size MenuBar::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size MenuBar::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
     const tc_ui_style style = computed_style(document);
     float width = 0.0f;
     for (const MenuBarEntry& entry : entries_) {
@@ -142,7 +142,7 @@ tc_ui_size MenuBar::measure(tc_ui_document* document, tc_ui_constraints constrai
         constraints);
 }
 
-void MenuBar::compute_item_rects(tc_ui_document* document) {
+void MenuBar::compute_item_rects(tc_ui_document_handle document) {
     const tc_ui_style style = computed_style(document);
     item_rects_.clear();
     item_rects_.reserve(entries_.size());
@@ -156,12 +156,12 @@ void MenuBar::compute_item_rects(tc_ui_document* document) {
     }
 }
 
-void MenuBar::layout(tc_ui_document* document, tc_ui_rect rect) {
+void MenuBar::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     NativeWidget::layout(document, rect);
     compute_item_rects(document);
 }
 
-void MenuBar::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void MenuBar::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     if (item_rects_.size() != entries_.size())
         compute_item_rects(document);
     const tc_ui_style style = computed_style(document);
@@ -187,7 +187,7 @@ size_t MenuBar::index_at(float x, float y) const {
     return SIZE_MAX;
 }
 
-bool MenuBar::open_menu(tc_ui_document* document, size_t index, bool select_first) {
+bool MenuBar::open_menu(tc_ui_document_handle document, size_t index, bool select_first) {
     if (index >= entries_.size())
         return false;
     if (!tc_widget_handle_is_invalid(popup_handle_))
@@ -234,7 +234,7 @@ bool MenuBar::open_menu(tc_ui_document* document, size_t index, bool select_firs
     return true;
 }
 
-void MenuBar::close_menu(tc_ui_document* document) {
+void MenuBar::close_menu(tc_ui_document_handle document) {
     if (tc_widget_handle_is_invalid(popup_handle_)) {
         open_index_ = SIZE_MAX;
         return;
@@ -256,7 +256,7 @@ void MenuBar::close_menu(tc_ui_document* document) {
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
-void MenuBar::switch_menu(tc_ui_document* document, int direction) {
+void MenuBar::switch_menu(tc_ui_document_handle document, int direction) {
     if (entries_.empty())
         return;
     size_t index = open_index_;
@@ -268,7 +268,7 @@ void MenuBar::switch_menu(tc_ui_document* document, int direction) {
     open_menu(document, index, true);
 }
 
-tc_ui_event_result MenuBar::pointer_event(tc_ui_document* document,
+tc_ui_event_result MenuBar::pointer_event(tc_ui_document_handle document,
                                           const tc_ui_pointer_event* event) {
     if (!event)
         return TC_UI_EVENT_IGNORED;
@@ -297,7 +297,7 @@ tc_ui_event_result MenuBar::pointer_event(tc_ui_document* document,
     return TC_UI_EVENT_IGNORED;
 }
 
-tc_ui_event_result MenuBar::key_event(tc_ui_document* document, const tc_ui_key_event* event) {
+tc_ui_event_result MenuBar::key_event(tc_ui_document_handle document, const tc_ui_key_event* event) {
     if (!event || event->type != TC_UI_KEY_DOWN)
         return TC_UI_EVENT_IGNORED;
     if (event->key == TC_UI_KEY_LEFT || event->key == TC_UI_KEY_RIGHT) {
@@ -347,6 +347,6 @@ bool MenuBar::dispatch_shortcut(int32_t key, int32_t modifiers) {
     return false;
 }
 
-void MenuBar::on_destroy(tc_ui_document* document) { close_menu(document); }
+void MenuBar::on_destroy(tc_ui_document_handle document) { close_menu(document); }
 
 } // namespace termin::gui_native

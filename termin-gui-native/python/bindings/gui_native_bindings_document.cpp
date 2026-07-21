@@ -3,6 +3,24 @@
 using namespace termin::gui_native::python_bindings;
 
 void bind_gui_native_rendering_and_document(nb::module_ &m) {
+  m.def("tc_ui_document_registry_get_all_info", []() {
+    nb::list result;
+    const size_t capacity = tc_ui_document_pool_capacity();
+    for (size_t index = 0; index < capacity; ++index) {
+      tc_ui_document_info info{};
+      if (!tc_ui_document_info_at(index, &info))
+        continue;
+      nb::dict record;
+      record["handle"] = nb::make_tuple(info.handle.index, info.handle.generation);
+      record["name"] = info.debug_name;
+      record["live_widget_count"] = info.live_widget_count;
+      record["root_count"] = info.root_count;
+      record["overlay_count"] = info.overlay_count;
+      result.append(std::move(record));
+    }
+    return result;
+  });
+
   nb::enum_<tc_ui_texture_sampling>(m, "TextureSampling")
       .value("Linear", TC_UI_TEXTURE_SAMPLING_LINEAR)
       .value("Nearest", TC_UI_TEXTURE_SAMPLING_NEAREST);
@@ -192,6 +210,18 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
 
   nb::class_<Document>(m, "Document")
       .def(nb::init<>())
+      .def("close", &Document::close)
+      .def_prop_ro("closed", &Document::is_closed)
+      .def_prop_rw(
+          "debug_name",
+          [](const Document &self) {
+            const char *name = tc_ui_document_debug_name(self.get());
+            return std::string(name ? name : "");
+          },
+          [](Document &self, const std::string &name) {
+            if (!tc_ui_document_set_debug_name(self.get(), name.c_str()))
+              throw std::runtime_error("failed to set native UI document debug name");
+          })
       .def("inspect_snapshot", &document_snapshot_to_python)
       .def("serialize", &Document::serialize)
       .def("restore", &Document::restore, nb::arg("serialized"))
@@ -262,6 +292,8 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
       .def(
           "is_alive",
           [](const Document &self, WidgetHandle handle) {
+            if (self.is_closed())
+              return false;
             return tc_ui_document_is_alive(self.get(), handle.handle);
           },
           nb::arg("handle"))

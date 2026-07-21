@@ -11,7 +11,7 @@ typedef struct tc_widget_factory_record {
 } tc_widget_factory_record;
 
 typedef struct tc_widget_instance_ref {
-    tc_ui_document* document;
+    tc_ui_document_handle document;
     tc_widget_handle handle;
 } tc_widget_instance_ref;
 
@@ -37,7 +37,8 @@ static void destroy_factory_record(void* payload) {
 static bool collect_widget_instance(void* instance, void* user_data) {
     tc_widget_instance_list* list = (tc_widget_instance_list*)user_data;
     tc_widget* widget = (tc_widget*)instance;
-    if (!list || !widget || !widget->document || tc_widget_handle_is_invalid(widget->handle)) {
+    if (!list || !widget || tc_ui_document_handle_is_invalid(widget->document) ||
+        tc_widget_handle_is_invalid(widget->handle)) {
         tc_log_error("[termin-gui-native] registered widget instance has invalid ownership state");
         if (list) {
             list->ok = false;
@@ -292,12 +293,13 @@ static void release_unadopted_result(const tc_widget_factory_result* result) {
     }
 }
 
-tc_widget_handle tc_ui_document_create_registered_widget(tc_ui_document* document,
-                                                         const char* type_name) {
+tc_widget_handle tc_ui_document_create_registered_widget(tc_ui_document_handle document,
+                                                          const char* type_name) {
     tc_widget_factory_record* record;
     tc_widget_factory_result result = {NULL, NULL, TC_WIDGET_BORROWED};
     tc_widget_handle handle = tc_widget_handle_invalid();
-    if (!document || !type_name || !type_name[0]) {
+    if (tc_ui_document_handle_is_invalid(document) || !tc_ui_document_is_valid(document) ||
+        !type_name || !type_name[0]) {
         tc_log_error("[termin-gui-native] registered widget creation requires document and type");
         return handle;
     }
@@ -321,7 +323,8 @@ tc_widget_handle tc_ui_document_create_registered_widget(tc_ui_document* documen
         release_unadopted_result(&result);
         return handle;
     }
-    if (result.widget->document || !tc_widget_handle_is_invalid(result.widget->handle) ||
+    if (!tc_ui_document_handle_is_invalid(result.widget->document) ||
+        !tc_widget_handle_is_invalid(result.widget->handle) ||
         result.widget->runtime_type_link.type_name) {
         tc_log_error("[termin-gui-native] widget factory '%s' returned a live widget", type_name);
         release_unadopted_result(&result);

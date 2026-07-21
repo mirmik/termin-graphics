@@ -8,8 +8,12 @@ namespace termin::gui_native::python_bindings {
 namespace {
 
 std::mutex g_document_states_mutex;
-std::unordered_map<tc_ui_document *, std::weak_ptr<DocumentState>>
+std::unordered_map<uint64_t, std::weak_ptr<DocumentState>>
     g_document_states;
+
+uint64_t document_key(tc_ui_document_handle handle) {
+  return (static_cast<uint64_t>(handle.index) << 32) | handle.generation;
+}
 
 } // namespace
 
@@ -196,27 +200,27 @@ nb::object tc_value_to_python(const tc_value *value) {
 
 void register_document_state(const std::shared_ptr<DocumentState> &state) {
   std::lock_guard<std::mutex> lock(g_document_states_mutex);
-  g_document_states[state->document] = state;
+  g_document_states[document_key(state->document)] = state;
 }
 
-void unregister_document_state(tc_ui_document *document) {
+void unregister_document_state(tc_ui_document_handle document) {
   std::lock_guard<std::mutex> lock(g_document_states_mutex);
-  g_document_states.erase(document);
+  g_document_states.erase(document_key(document));
 }
 
-std::shared_ptr<DocumentState> find_document_state(tc_ui_document *document) {
+std::shared_ptr<DocumentState> find_document_state(tc_ui_document_handle document) {
   std::lock_guard<std::mutex> lock(g_document_states_mutex);
-  const auto found = g_document_states.find(document);
+  const auto found = g_document_states.find(document_key(document));
   return found == g_document_states.end() ? nullptr : found->second.lock();
 }
 
 bool WidgetRef::alive() const {
-  return state && state->document &&
+  return state && !tc_ui_document_handle_is_invalid(state->document) &&
          tc_ui_document_is_alive(state->document, handle);
 }
 
 tc_widget *WidgetRef::resolve() const {
-  return state && state->document
+  return state && !tc_ui_document_handle_is_invalid(state->document)
              ? tc_ui_document_resolve_widget(state->document, handle)
              : nullptr;
 }
@@ -397,7 +401,7 @@ void PythonWidget::capture_exception(const char *operation) {
                                              : "<unnamed>");
 }
 
-tc_ui_size PythonWidget::measure(tc_widget *widget, tc_ui_document *,
+tc_ui_size PythonWidget::measure(tc_widget *widget, tc_ui_document_handle ,
                                  tc_ui_constraints constraints) {
   PythonWidget *self = from_widget(widget);
   if (!self) {
@@ -414,7 +418,7 @@ tc_ui_size PythonWidget::measure(tc_widget *widget, tc_ui_document *,
   }
 }
 
-void PythonWidget::layout(tc_widget *widget, tc_ui_document *,
+void PythonWidget::layout(tc_widget *widget, tc_ui_document_handle ,
                           tc_ui_rect rect) {
   PythonWidget *self = from_widget(widget);
   if (!self) {
@@ -431,7 +435,7 @@ void PythonWidget::layout(tc_widget *widget, tc_ui_document *,
   }
 }
 
-void PythonWidget::paint(tc_widget *widget, tc_ui_document *,
+void PythonWidget::paint(tc_widget *widget, tc_ui_document_handle ,
                          tc_ui_paint_context *context) {
   PythonWidget *self = from_widget(widget);
   if (!self) {
@@ -449,7 +453,7 @@ void PythonWidget::paint(tc_widget *widget, tc_ui_document *,
 }
 
 tc_ui_event_result
-PythonWidget::pointer_event(tc_widget *widget, tc_ui_document *,
+PythonWidget::pointer_event(tc_widget *widget, tc_ui_document_handle ,
                             const tc_ui_pointer_event *event) {
   PythonWidget *self = from_widget(widget);
   if (!self || !event) {
@@ -468,7 +472,7 @@ PythonWidget::pointer_event(tc_widget *widget, tc_ui_document *,
 }
 
 tc_widget_handle PythonWidget::hit_test(tc_widget *widget,
-                                        tc_ui_document *document, float x,
+                                        tc_ui_document_handle document, float x,
                                         float y) {
   PythonWidget *self = from_widget(widget);
   if (!self) {
@@ -492,7 +496,7 @@ tc_widget_handle PythonWidget::hit_test(tc_widget *widget,
   }
 }
 
-tc_ui_event_result PythonWidget::key_event(tc_widget *widget, tc_ui_document *,
+tc_ui_event_result PythonWidget::key_event(tc_widget *widget, tc_ui_document_handle ,
                                            const tc_ui_key_event *event) {
   PythonWidget *self = from_widget(widget);
   if (!self || !event) {
@@ -509,7 +513,7 @@ tc_ui_event_result PythonWidget::key_event(tc_widget *widget, tc_ui_document *,
   }
 }
 
-tc_ui_event_result PythonWidget::text_event(tc_widget *widget, tc_ui_document *,
+tc_ui_event_result PythonWidget::text_event(tc_widget *widget, tc_ui_document_handle ,
                                             const tc_ui_text_event *event) {
   PythonWidget *self = from_widget(widget);
   if (!self || !event) {
@@ -527,7 +531,7 @@ tc_ui_event_result PythonWidget::text_event(tc_widget *widget, tc_ui_document *,
   }
 }
 
-void PythonWidget::focus_event(tc_widget *widget, tc_ui_document *,
+void PythonWidget::focus_event(tc_widget *widget, tc_ui_document_handle ,
                                bool focused) {
   PythonWidget *self = from_widget(widget);
   if (!self) {
@@ -543,7 +547,7 @@ void PythonWidget::focus_event(tc_widget *widget, tc_ui_document *,
   }
 }
 
-void PythonWidget::overlay_dismissed(tc_widget *widget, tc_ui_document *,
+void PythonWidget::overlay_dismissed(tc_widget *widget, tc_ui_document_handle ,
                                      tc_ui_overlay_dismiss_reason reason) {
   PythonWidget *self = from_widget(widget);
   if (!self) {
@@ -559,7 +563,7 @@ void PythonWidget::overlay_dismissed(tc_widget *widget, tc_ui_document *,
   }
 }
 
-void PythonWidget::on_destroy(tc_widget *widget, tc_ui_document *) {
+void PythonWidget::on_destroy(tc_widget *widget, tc_ui_document_handle ) {
   PythonWidget *self = from_widget(widget);
   if (!self) {
     tc_log_error(
@@ -591,7 +595,7 @@ const tc_widget_vtable PythonWidget::VTABLE{
     &PythonWidget::on_destroy,
 };
 
-bool create_python_registered_widget(tc_ui_document *document, void *userdata,
+bool create_python_registered_widget(tc_ui_document_handle document, void *userdata,
                                      tc_widget_factory_result *result) {
   auto *factory = static_cast<PythonWidgetFactory *>(userdata);
   std::shared_ptr<DocumentState> state = find_document_state(document);
@@ -619,7 +623,7 @@ bool create_python_registered_widget(tc_ui_document *document, void *userdata,
   }
 }
 
-bool bind_python_registered_widget(tc_ui_document *, tc_widget *widget,
+bool bind_python_registered_widget(tc_ui_document_handle , tc_widget *widget,
                                    tc_widget_handle handle, void *) {
   PythonWidget *python_widget = PythonWidget::from_widget(widget);
   if (!python_widget || !python_widget->state) {
@@ -710,23 +714,33 @@ Document::Document()
     : state_(std::make_shared<DocumentState>()), clipboard_getter_(nb::none()),
       clipboard_setter_(nb::none()), cursor_changed_handler_(nb::none()) {
   state_->document = tc_ui_document_create();
-  if (!state_->document) {
+  if (tc_ui_document_handle_is_invalid(state_->document)) {
     throw std::runtime_error("failed to create tc_ui_document");
   }
   register_document_state(state_);
 }
 
-Document::~Document() {
-  if (state_ && state_->document) {
+Document::~Document() { close(); }
+
+void Document::close() {
+  if (state_ && !tc_ui_document_handle_is_invalid(state_->document)) {
     tc_ui_document_set_cursor_changed_callback(state_->document, nullptr, nullptr);
     unregister_document_state(state_->document);
     tc_ui_document_destroy(state_->document);
-    state_->document = nullptr;
+    state_->document = tc_ui_document_handle_invalid();
     state_->pending_exception = nullptr;
   }
 }
 
-tc_ui_document *Document::get() const { return state_->document; }
+tc_ui_document_handle Document::get() const {
+  if (is_closed())
+    throw std::runtime_error("native UI document is closed");
+  return state_->document;
+}
+
+bool Document::is_closed() const {
+  return !state_ || tc_ui_document_handle_is_invalid(state_->document);
+}
 
 WidgetHandle Document::adopt(nb::object object, const std::string &debug_name) {
   auto widget = std::make_unique<PythonWidget>(object, debug_name, state_);

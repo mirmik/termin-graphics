@@ -26,7 +26,7 @@ void delete_serializable(tc_widget* widget) {
     delete body;
 }
 
-bool create_serializable(tc_ui_document*, void* userdata, tc_widget_factory_result* result) {
+bool create_serializable(tc_ui_document_handle, void* userdata, tc_widget_factory_result* result) {
     auto* state = static_cast<FactoryState*>(userdata);
     auto* body = new SerializableWidget();
     body->value = state->next_value++;
@@ -64,7 +64,7 @@ tc_widget_factory_descriptor descriptor(FactoryState& state) {
     };
 }
 
-SerializableWidget* body(tc_ui_document* document, tc_widget_handle handle) {
+SerializableWidget* body(tc_ui_document_handle document, tc_widget_handle handle) {
     tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
     return widget ? static_cast<SerializableWidget*>(widget->body) : nullptr;
 }
@@ -76,7 +76,7 @@ void test_document_round_trip_preserves_structure_common_and_type_state() {
     assert(tc_widget_registry_register("test.ui.SerializableWidget", "test.module", nullptr,
                                        &factory));
 
-    tc_ui_document* source = tc_ui_document_create();
+    tc_ui_document_handle source = tc_ui_document_create();
     const tc_widget_handle root =
         tc_ui_document_create_registered_widget(source, "test.ui.SerializableWidget");
     const tc_widget_handle child =
@@ -118,7 +118,7 @@ void test_document_round_trip_preserves_structure_common_and_type_state() {
     termin::gui_native::Document restored_owner;
     const tc::trent serialized_cpp = tc::trent::copy_of(serialized);
     restored_owner.restore(serialized_cpp);
-    tc_ui_document* restored = restored_owner.get();
+    tc_ui_document_handle restored = restored_owner.get();
     assert(tc_ui_document_live_widget_count(restored) == 3);
     assert(tc_ui_document_root_count(restored) == 1);
     assert(tc_ui_document_overlay_count(restored) == 1);
@@ -154,7 +154,7 @@ void test_document_round_trip_preserves_structure_common_and_type_state() {
     tc_value* first_record = tc_value_list_get(records, 0);
     tc_value* children = tc_value_dict_get(first_record, "children");
     tc_value_list_get(children, 0)->data.i = 0;
-    tc_ui_document* rejected = tc_ui_document_create();
+    tc_ui_document_handle rejected = tc_ui_document_create();
     assert(!tc_ui_document_restore(rejected, &serialized));
     assert(tc_ui_document_live_widget_count(rejected) == 0);
 

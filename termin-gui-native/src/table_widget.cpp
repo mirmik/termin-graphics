@@ -266,7 +266,7 @@ void TableWidget::compute_column_layout() {
     }
 }
 
-tc_ui_size TableWidget::measure(tc_ui_document* document, tc_ui_constraints constraints) {
+tc_ui_size TableWidget::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
     sync_models();
     const tc_ui_style style = computed_style(document);
     return clamp_size(tc_ui_size{std::max(preferred_size().width, style.min_width),
@@ -274,14 +274,14 @@ tc_ui_size TableWidget::measure(tc_ui_document* document, tc_ui_constraints cons
                       constraints);
 }
 
-void TableWidget::layout(tc_ui_document* document, tc_ui_rect rect) {
+void TableWidget::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     sync_models();
     NativeWidget::layout(document, rect);
     compute_column_layout();
     clamp_scroll();
 }
 
-void TableWidget::paint(tc_ui_document* document, tc_ui_paint_context* context) {
+void TableWidget::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     sync_models();
     const tc_ui_style style = computed_style(document);
     const tc_ui_rect header{bounds().x, bounds().y, bounds().width, header_height_};
@@ -396,7 +396,7 @@ bool TableWidget::apply_selection(size_t index, int32_t modifiers) {
     return true;
 }
 
-tc_ui_event_result TableWidget::pointer_event(tc_ui_document* document,
+tc_ui_event_result TableWidget::pointer_event(tc_ui_document_handle document,
                                               const tc_ui_pointer_event* event) {
     if (!event)
         return TC_UI_EVENT_IGNORED;
@@ -496,7 +496,7 @@ size_t TableWidget::next_enabled(size_t from, int direction) const {
     return SelectionModel::npos;
 }
 
-tc_ui_event_result TableWidget::key_event(tc_ui_document*, const tc_ui_key_event* event) {
+tc_ui_event_result TableWidget::key_event(tc_ui_document_handle, const tc_ui_key_event* event) {
     if (!event || event->type != TC_UI_KEY_DOWN)
         return TC_UI_EVENT_IGNORED;
     sync_models();

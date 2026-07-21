@@ -42,7 +42,7 @@ public:
     bool active() const { return active_; }
     Signal<IconButton&>& clicked() { return clicked_; }
     const Signal<IconButton&>& clicked() const { return clicked_; }
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) override;
 };
 } // namespace termin::gui_native

@@ -41,12 +41,12 @@ public:
     void set_decimals(int decimals);
     Signal<SpinBox&, float>& changed() { return changed_; }
     const Signal<SpinBox&, float>& changed() const { return changed_; }
-    tc_ui_size measure(tc_ui_document* document, tc_ui_constraints constraints) override;
-    void paint(tc_ui_document* document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document* document, const tc_ui_pointer_event* event) override;
-    tc_ui_event_result key_event(tc_ui_document* document, const tc_ui_key_event* event) override;
-    tc_ui_event_result text_event(tc_ui_document* document, const tc_ui_text_event* event) override;
-    void focus_event(tc_ui_document* document, bool focused) override;
+    tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
+    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) override;
+    tc_ui_event_result key_event(tc_ui_document_handle document, const tc_ui_key_event* event) override;
+    tc_ui_event_result text_event(tc_ui_document_handle document, const tc_ui_text_event* event) override;
+    void focus_event(tc_ui_document_handle document, bool focused) override;
 private:
     std::string formatted_value() const;
     void begin_edit();
@@ -54,9 +54,9 @@ private:
     void cancel_edit();
     tc_ui_rect up_button_rect() const;
     tc_ui_rect down_button_rect() const;
-    tc_ui_rect text_clip_rect(tc_ui_document* document) const;
-    size_t caret_from_content_x(tc_ui_document* document, float content_x) const;
-    float prefix_width(tc_ui_document* document, size_t offset, float font_size) const;
+    tc_ui_rect text_clip_rect(tc_ui_document_handle document) const;
+    size_t caret_from_content_x(tc_ui_document_handle document, float content_x) const;
+    float prefix_width(tc_ui_document_handle document, size_t offset, float font_size) const;
     void move_caret(size_t next, bool extend_selection);
     bool delete_selection();
     void replace_selection(std::string_view text);
