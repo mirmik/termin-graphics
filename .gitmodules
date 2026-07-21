@@ -35,3 +35,9 @@
 [submodule "termin-thirdparty/libwebp"]
 	path = termin-thirdparty/libwebp
 	url = https://github.com/webmproject/libwebp.git
+[submodule "termin-thirdparty/libogg"]
+	path = termin-thirdparty/libogg
+	url = https://github.com/xiph/ogg.git
+[submodule "termin-thirdparty/libvorbis"]
+	path = termin-thirdparty/libvorbis
+	url = https://github.com/xiph/vorbis.git
