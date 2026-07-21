@@ -15,6 +15,10 @@
 #include <string>
 #include <unordered_map>
 
+extern "C" {
+#include <tgfx/resources/tc_mesh_registry.h>
+}
+
 namespace termin {
 
 bool set_render_item_inline_uniform(
@@ -281,6 +285,69 @@ RenderItemTaskRejection mesh_render_item_task_shader_planner(
         return RenderItemTaskRejection::ShaderPlanningRejected;
     }
 
+    const MaterialPipelinePassContract& pass_contract =
+        *request.contract->shader_contract;
+    const std::optional<VertexTransformContract>* transform = nullptr;
+    switch (out_plan.vertex_transform_kind) {
+    case VertexTransformKind::StaticMesh:
+        transform = &pass_contract.static_vertex_transform;
+        break;
+    case VertexTransformKind::SkinnedMesh:
+        transform = &pass_contract.skinned_vertex_transform;
+        break;
+    case VertexTransformKind::Foliage:
+    case VertexTransformKind::FoliageShadow:
+        break;
+    }
+
+    const tc_mesh_handle mesh_handle = request.item->payload.mesh.mesh_handle;
+    tc_mesh* mesh = tc_mesh_get(mesh_handle);
+    if (mesh && transform && transform->has_value()) {
+        for (const MaterialPipelineSemantic& required :
+             transform->value().vertex_inputs.mesh_attributes) {
+            if (tc_vertex_layout_find(&mesh->layout, required.name.c_str())) {
+                continue;
+            }
+
+            // A malformed phase declaration can be planned every frame. Keep
+            // the diagnostic useful without turning it into a render-loop log
+            // flood. The mesh version is part of the key so a later resource
+            // edit can be diagnosed again if it is still incompatible.
+            static std::mutex diagnostic_mutex;
+            static std::unordered_map<std::string, uint32_t> diagnosed_versions;
+            std::string diagnostic_key = request.contract->debug_pass_name
+                ? request.contract->debug_pass_name
+                : "MeshRenderItemPlanner";
+            diagnostic_key += '|';
+            diagnostic_key += mesh->header.uuid;
+            diagnostic_key += '|';
+            diagnostic_key += transform->value().debug_name;
+            diagnostic_key += '|';
+            diagnostic_key += required.name;
+            bool should_log = false;
+            {
+                std::lock_guard<std::mutex> lock(diagnostic_mutex);
+                auto [it, inserted] = diagnosed_versions.emplace(
+                    diagnostic_key,
+                    mesh->header.version);
+                should_log = inserted || it->second != mesh->header.version;
+                it->second = mesh->header.version;
+            }
+            if (should_log) {
+                tc::Log::error(
+                    "[RenderItemPlan] skip mesh '%s' in pass '%s': phase contract "
+                    "requires vertex semantic '%s', but the mesh layout does not provide it",
+                    mesh->header.name ? mesh->header.name : mesh->header.uuid,
+                    request.contract->debug_pass_name
+                        ? request.contract->debug_pass_name
+                        : "<unknown>",
+                    required.name.c_str());
+            }
+            out_detail = "mesh layout does not satisfy the pass vertex-input contract";
+            return RenderItemTaskRejection::MeshVertexInputMismatch;
+        }
+    }
+
     MaterialShaderOverrideRequest override_request{};
     override_request.original_shader = TcShader(request.candidate_shader);
     override_request.vertex_transform_kind = out_plan.vertex_transform_kind;
@@ -434,6 +501,7 @@ const char* render_item_task_rejection_name(RenderItemTaskRejection rejection)
     case RenderItemTaskRejection::RequiredInputMissing: return "required_input_missing";
     case RenderItemTaskRejection::VertexTransformUnsupported: return "vertex_transform_unsupported";
     case RenderItemTaskRejection::PassVertexTransformUnsupported: return "pass_vertex_transform_unsupported";
+    case RenderItemTaskRejection::MeshVertexInputMismatch: return "mesh_vertex_input_mismatch";
     case RenderItemTaskRejection::ShaderPlanningRejected: return "shader_planning_rejected";
     }
     return "unknown";
@@ -476,6 +544,12 @@ void log_task_rejection(
     const RegisteredRenderItemDrawEncoder* encoder,
     RenderItemTaskPlanningResult& result)
 {
+    // The mesh planner emits this resource-specific diagnostic through a
+    // versioned once-only key. Repeating the generic rejection here would
+    // restore the per-frame spam that the early contract check prevents.
+    if (result.rejection == RenderItemTaskRejection::MeshVertexInputMismatch) {
+        return;
+    }
     const char* pass_name = request.contract && request.contract->debug_pass_name
         ? request.contract->debug_pass_name
         : "<unknown>";

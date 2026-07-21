@@ -4,12 +4,23 @@ GUARD_TEST_MAIN();
 
 #include <termin/render/render_item_submission.hpp>
 #include <termin/render/render_task.hpp>
+#include <tgfx/resources/tc_mesh_registry.h>
 
 #include <array>
 #include <cstdio>
 #include <cstring>
 
 namespace {
+
+size_t vertex_contract_diagnostic_count = 0;
+
+void capture_vertex_contract_diagnostic(tc_log_level level, const char* message)
+{
+    if (level == TC_LOG_ERROR && message &&
+        std::strstr(message, "phase contract requires vertex semantic")) {
+        ++vertex_contract_diagnostic_count;
+    }
+}
 
 bool test_encoder(
     tgfx::RenderContext2& ctx,
@@ -80,6 +91,64 @@ termin::RenderItemTaskRejection owning_test_shader_planner(
 }
 
 } // namespace
+
+TEST_CASE("Mesh RenderItem planner rejects a phase contract requiring absent vertex semantics") {
+    tc_mesh_init();
+
+    const tc_mesh_handle mesh_handle = tc_mesh_create(
+        "render-item-position-only-contract-test");
+    REQUIRE(!tc_mesh_handle_is_invalid(mesh_handle));
+    tc_mesh* mesh = tc_mesh_get(mesh_handle);
+    REQUIRE(mesh != nullptr);
+    mesh->layout = tc_vertex_layout_pos();
+
+    tc_render_item item{};
+    item.kind = TC_RENDER_ITEM_KIND_MESH;
+    item.payload.mesh.mesh_handle = mesh_handle;
+
+    termin::MaterialPipelinePassContract shader_contract{};
+    shader_contract.debug_name = "normal";
+    shader_contract.static_vertex_transform =
+        termin::material_pipeline_make_static_mesh_vertex_transform_provider(
+            "static_normal",
+            termin::MeshVertexTransformProfile::PositionNormal,
+            "normal_draw.u_model");
+
+    termin::RenderItemTaskPlanningContract contract{};
+    contract.phase = TC_PHASE_NORMAL;
+    contract.provided_input_mask =
+        termin::render_item_task_input_bit(
+            termin::RenderItemTaskInput::DrawContext);
+    contract.accepted_vertex_transform_kind_mask =
+        termin::render_item_vertex_transform_kind_bit(
+            termin::VertexTransformKind::StaticMesh);
+    contract.shader_contract = &shader_contract;
+    contract.debug_pass_name = "NormalPass";
+
+    termin::RenderItemTaskPlanningRequest request{};
+    request.item = &item;
+    request.contract = &contract;
+
+    vertex_contract_diagnostic_count = 0;
+    tc_log_set_callback(capture_vertex_contract_diagnostic);
+    termin::RenderTaskList tasks;
+    const termin::RenderItemTaskPlanningResult result =
+        termin::plan_render_item_task(request, tasks);
+    termin::RenderTaskList repeated_tasks;
+    const termin::RenderItemTaskPlanningResult repeated_result =
+        termin::plan_render_item_task(request, repeated_tasks);
+    tc_log_set_callback(nullptr);
+
+    CHECK(result.rejection ==
+          termin::RenderItemTaskRejection::MeshVertexInputMismatch);
+    CHECK(repeated_result.rejection ==
+          termin::RenderItemTaskRejection::MeshVertexInputMismatch);
+    CHECK(tasks.empty());
+    CHECK(repeated_tasks.empty());
+    CHECK(vertex_contract_diagnostic_count == 1u);
+
+    tc_mesh_shutdown();
+}
 
 TEST_CASE("RenderItem draw encoder registry enforces ownership") {
     constexpr uint32_t test_kind = 0x7fff0001u;

@@ -122,6 +122,7 @@ enum class RenderItemTaskRejection : uint8_t {
     RequiredInputMissing,
     VertexTransformUnsupported,
     PassVertexTransformUnsupported,
+    MeshVertexInputMismatch,
     ShaderPlanningRejected,
 };
 
