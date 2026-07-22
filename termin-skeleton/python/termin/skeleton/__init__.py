@@ -7,6 +7,7 @@ preload_sdk_libs("termin_skeleton")
 from termin.skeleton._skeleton_native import (
     TcSkeleton,
     SkeletonInstance,
+    tc_skeleton_get_all_info,
 )
 
 
@@ -22,5 +23,6 @@ def __getattr__(name: str):
 __all__ = [
     "TcSkeleton",
     "SkeletonInstance",
+    "tc_skeleton_get_all_info",
     "SkeletonAsset",
 ]

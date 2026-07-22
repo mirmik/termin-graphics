@@ -86,6 +86,8 @@ typedef struct tc_material_info {
     uint32_t version;
     size_t phase_count;
     size_t texture_count;
+    uint8_t is_loaded;
+    uint8_t _pad[7];
 } tc_material_info;
 
 TGFX_API tc_material_info* tc_material_get_all_info(size_t* count);

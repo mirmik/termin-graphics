@@ -1,13 +1,28 @@
 #include "guard_main.h"
 
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
 #include <tgfx/tgfx_shader_handle.hpp>
 #include <tgfx/tgfx_shader_program_handle.hpp>
+#include <tcbase/tc_log.h>
 
 using termin::TcShader;
 using termin::TcShaderProgram;
+
+namespace {
+int stale_log_count = 0;
+std::string stale_log_message;
+
+void capture_stale_log(tc_log_level level, const char* message) {
+    if (level != TC_LOG_ERROR || !message) return;
+    if (std::strstr(message, "stale resource handle dereference")) {
+        ++stale_log_count;
+        stale_log_message = message;
+    }
+}
+} // namespace
 
 TEST_CASE("shader program registry owns canonical payload and phase shaders") {
     tc_shader_init();
@@ -103,5 +118,40 @@ TEST_CASE("shader program declare is canonical by UUID") {
         CHECK_EQ(tc_shader_program_count(), 1u);
     }
     CHECK_EQ(tc_shader_program_count(), 0u);
+    tc_shader_program_shutdown();
+}
+
+TEST_CASE("shader program stale dereference is logged while validity probes stay quiet") {
+    tc_shader_program_init();
+    tc_shader_program_handle handle =
+        tc_shader_program_create("stale-program", "Stale Program");
+    tc_shader_program* program = tc_shader_program_get(handle);
+    REQUIRE(program != nullptr);
+    tc_shader_program_retain(program);
+
+    size_t info_count = 0;
+    tc_shader_program_info* infos = tc_shader_program_get_all_info(&info_count);
+    REQUIRE(infos != nullptr);
+    CHECK_EQ(info_count, 1u);
+    CHECK_EQ(std::string(infos[0].uuid), "stale-program");
+    CHECK_EQ(std::string(infos[0].name), "Stale Program");
+    CHECK_EQ(infos[0].ref_count, 1u);
+    CHECK(infos[0].is_loaded != 0);
+    free(infos);
+
+    REQUIRE(tc_shader_program_release(program));
+    stale_log_count = 0;
+    stale_log_message.clear();
+    tc_log_set_callback(capture_stale_log);
+
+    CHECK(!tc_shader_program_is_valid(handle));
+    CHECK_EQ(stale_log_count, 0);
+    CHECK(tc_shader_program_get(handle) == nullptr);
+    CHECK_EQ(stale_log_count, 1);
+    CHECK(stale_log_message.find("type=tc_shader_program") != std::string::npos);
+    CHECK(stale_log_message.find("index=") != std::string::npos);
+    CHECK(stale_log_message.find("generation=") != std::string::npos);
+
+    tc_log_set_callback(nullptr);
     tc_shader_program_shutdown();
 }

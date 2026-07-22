@@ -394,6 +394,25 @@ NB_MODULE(_skeleton_native, m) {
         return tc_skeleton_is_loaded(handle.handle);
     }, nb::arg("handle"), "Check if skeleton data is loaded");
 
+    m.def("tc_skeleton_get_all_info", []() {
+        nb::list result;
+        size_t count = 0;
+        tc_skeleton_info* infos = tc_skeleton_get_all_info(&count);
+        for (size_t i = 0; i < count; ++i) {
+            nb::dict info;
+            info["handle"] = nb::make_tuple(infos[i].handle.index, infos[i].handle.generation);
+            info["uuid"] = std::string(infos[i].uuid);
+            info["name"] = infos[i].name ? std::string(infos[i].name) : "";
+            info["ref_count"] = infos[i].ref_count;
+            info["version"] = infos[i].version;
+            info["bone_count"] = infos[i].bone_count;
+            info["is_loaded"] = infos[i].is_loaded != 0;
+            result.append(info);
+        }
+        free(infos);
+        return result;
+    });
+
     m.def("tc_skeleton_set_load_callback", [](termin::TcSkeleton& handle, nb::callable callback) {
         tc_skeleton* skeleton = handle.get();
         if (!skeleton) {

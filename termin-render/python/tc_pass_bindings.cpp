@@ -14,6 +14,7 @@ extern "C" {
 #include "render/tc_frame_graph.h"
 #include "render/tc_pass.h"
 #include "render/tc_pipeline.h"
+#include "render/tc_pipeline_template_registry.h"
 #include "tc_pipeline_registry.h"
 #include "inspect/tc_inspect.h"
 #include <tcbase/tc_log.h>
@@ -971,6 +972,28 @@ void bind_tc_pass_runtime(nb::module_& m) {
 
     m.def("tc_pipeline_registry_count", []() {
         return tc_pipeline_registry_count();
+    });
+
+    m.def("tc_pipeline_template_get_all_info", []() {
+        nb::list result;
+        size_t count = 0;
+        tc_pipeline_template_info* infos = tc_pipeline_template_get_all_info(&count);
+        for (size_t i = 0; i < count; ++i) {
+            nb::dict info;
+            info["handle"] = nb::make_tuple(infos[i].handle.index, infos[i].handle.generation);
+            info["uuid"] = std::string(infos[i].uuid);
+            info["name"] = infos[i].name ? std::string(infos[i].name) : "";
+            info["ref_count"] = infos[i].ref_count;
+            info["version"] = infos[i].version;
+            info["descriptor_version"] = infos[i].descriptor_version;
+            info["pass_count"] = infos[i].pass_count;
+            info["resource_count"] = infos[i].resource_count;
+            info["dependency_count"] = infos[i].dependency_count;
+            info["is_loaded"] = infos[i].is_loaded != 0;
+            result.append(info);
+        }
+        free(infos);
+        return result;
     });
 
     m.def("tc_pipeline_registry_get_all_info", []() {

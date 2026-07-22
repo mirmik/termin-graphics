@@ -340,7 +340,7 @@ bool tc_texture_ensure_loaded_ptr(tc_texture* tex) {
 
 tc_texture* tc_texture_get(tc_texture_handle h) {
     if (!g_texture_initialized) return NULL;
-    return (tc_texture*)tc_pool_get(&g_texture_pool, h);
+    return (tc_texture*)tc_pool_get_checked(&g_texture_pool, h, "tc_texture");
 }
 
 bool tc_texture_is_valid(tc_texture_handle h) {

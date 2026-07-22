@@ -1296,6 +1296,7 @@ void bind_tc_material(nb::module_& m) {
             d["version"] = infos[i].version;
             d["phase_count"] = infos[i].phase_count;
             d["texture_count"] = infos[i].texture_count;
+            d["is_loaded"] = infos[i].is_loaded != 0;
             result.append(d);
         }
 

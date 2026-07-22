@@ -339,7 +339,7 @@ bool tc_mesh_ensure_loaded_ptr(tc_mesh* mesh) {
 
 tc_mesh* tc_mesh_get(tc_mesh_handle h) {
     if (!g_initialized) return NULL;
-    return (tc_mesh*)tc_pool_get(&g_mesh_pool, h);
+    return (tc_mesh*)tc_pool_get_checked(&g_mesh_pool, h, "tc_mesh");
 }
 
 bool tc_mesh_is_valid(tc_mesh_handle h) {

@@ -202,7 +202,7 @@ tc_skeleton_handle tc_skeleton_declare(const char* uuid, const char* name) {
 
 tc_skeleton* tc_skeleton_get(tc_skeleton_handle h) {
     if (!g_initialized) return NULL;
-    return (tc_skeleton*)tc_pool_get(&g_skeleton_pool, h);
+    return (tc_skeleton*)tc_pool_get_checked(&g_skeleton_pool, h, "tc_skeleton");
 }
 
 bool tc_skeleton_is_valid(tc_skeleton_handle h) {

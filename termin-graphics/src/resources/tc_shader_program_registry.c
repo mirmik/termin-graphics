@@ -143,8 +143,9 @@ tc_shader_program_handle tc_shader_program_get_or_create(const char* uuid, const
 }
 
 tc_shader_program* tc_shader_program_get(tc_shader_program_handle handle) {
-    if (!g_program_initialized || tc_shader_program_handle_is_invalid(handle)) return NULL;
-    return (tc_shader_program*)tc_pool_get(&g_program_pool, handle);
+    if (!g_program_initialized) return NULL;
+    return (tc_shader_program*)tc_pool_get_checked(
+        &g_program_pool, handle, "tc_shader_program");
 }
 
 bool tc_shader_program_is_valid(tc_shader_program_handle handle) {
@@ -157,6 +158,43 @@ bool tc_shader_program_contains(const char* uuid) {
 
 size_t tc_shader_program_count(void) {
     return g_program_initialized ? tc_pool_count(&g_program_pool) : 0;
+}
+
+tc_shader_program_info* tc_shader_program_get_all_info(size_t* count) {
+    if (!count) return NULL;
+    *count = 0;
+    const size_t program_count = tc_shader_program_count();
+    if (program_count == 0) return NULL;
+
+    tc_shader_program_info* infos =
+        (tc_shader_program_info*)calloc(program_count, sizeof(*infos));
+    if (!infos) {
+        tc_log_error("tc_shader_program_get_all_info: allocation failed");
+        return NULL;
+    }
+
+    size_t output_index = 0;
+    for (uint32_t index = 0;
+         index < g_program_pool.capacity && output_index < program_count;
+         ++index) {
+        if (g_program_pool.states[index] != TC_SLOT_OCCUPIED) continue;
+        tc_shader_program* program =
+            (tc_shader_program*)tc_pool_get_unchecked(&g_program_pool, index);
+        tc_shader_program_info* info = &infos[output_index++];
+        info->handle.index = index;
+        info->handle.generation = g_program_pool.generations[index];
+        memcpy(info->uuid, program->header.uuid, sizeof(info->uuid));
+        info->name = program->header.name;
+        info->source_path = program->source_path;
+        info->language = program->language;
+        info->ref_count = program->header.ref_count;
+        info->version = program->header.version;
+        info->property_count = program->property_count;
+        info->phase_count = program->phase_count;
+        info->is_loaded = program->header.is_loaded;
+    }
+    *count = output_index;
+    return infos;
 }
 
 static bool destroy_program(tc_shader_program_handle handle) {

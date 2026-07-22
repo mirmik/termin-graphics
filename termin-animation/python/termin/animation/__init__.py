@@ -4,7 +4,7 @@ from termin_nanobind.runtime import preload_sdk_libs
 
 preload_sdk_libs("termin_animation")
 
-from termin.animation._animation_native import TcAnimationClip  # noqa: F401
+from termin.animation._animation_native import TcAnimationClip, tc_animation_get_all_info
 from termin.animation.channel import channel_data_from_fbx, channel_data_from_glb
 from termin.animation.clip import clip_from_fbx, clip_from_glb
 from termin.animation.clip_io import load_animation_clip, save_animation_clip
@@ -21,6 +21,7 @@ def __getattr__(name: str):
 
 __all__ = [
     "TcAnimationClip",
+    "tc_animation_get_all_info",
     "AnimationClipAsset",
     "clip_from_fbx",
     "clip_from_glb",

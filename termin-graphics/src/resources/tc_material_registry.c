@@ -176,15 +176,8 @@ tc_material_handle tc_material_get_or_create(const char* uuid, const char* name)
 }
 
 tc_material* tc_material_get(tc_material_handle h) {
-    if (!g_material_initialized || tc_material_handle_is_invalid(h)) {
-        return NULL;
-    }
-
-    if (!tc_pool_is_valid(&g_material_pool, h)) {
-        return NULL;
-    }
-
-    return (tc_material*)tc_pool_get(&g_material_pool, h);
+    if (!g_material_initialized) return NULL;
+    return (tc_material*)tc_pool_get_checked(&g_material_pool, h, "tc_material");
 }
 
 bool tc_material_is_valid(tc_material_handle h) {
@@ -626,6 +619,7 @@ tc_material_info* tc_material_get_all_info(size_t* count) {
         infos[idx].version = mat->header.version;
         infos[idx].phase_count = mat->phase_count;
         infos[idx].texture_count = mat->texture_handle_count;
+        infos[idx].is_loaded = mat->header.is_loaded;
         idx++;
     }
 

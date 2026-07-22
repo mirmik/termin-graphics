@@ -401,7 +401,7 @@ tc_shader_handle tc_shader_get_or_create(const char* uuid) {
 
 tc_shader* tc_shader_get(tc_shader_handle h) {
     if (!g_shader_initialized) return NULL;
-    return (tc_shader*)tc_pool_get(&g_shader_pool, h);
+    return (tc_shader*)tc_pool_get_checked(&g_shader_pool, h, "tc_shader");
 }
 
 bool tc_shader_is_valid(tc_shader_handle h) {

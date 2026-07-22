@@ -206,7 +206,7 @@ tc_animation_handle tc_animation_declare(const char* uuid, const char* name) {
 
 tc_animation* tc_animation_get(tc_animation_handle h) {
     if (!g_initialized) return NULL;
-    return (tc_animation*)tc_pool_get(&g_animation_pool, h);
+    return (tc_animation*)tc_pool_get_checked(&g_animation_pool, h, "tc_animation");
 }
 
 bool tc_animation_is_valid(tc_animation_handle h) {

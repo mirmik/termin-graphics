@@ -121,8 +121,9 @@ tc_pipeline_template_handle tc_pipeline_template_declare(const char* uuid, const
 }
 
 tc_pipeline_template* tc_pipeline_template_get(tc_pipeline_template_handle handle) {
-    if (!g_initialized || tc_pipeline_template_handle_is_invalid(handle)) return NULL;
-    return (tc_pipeline_template*)tc_pool_get(&g_pool, handle);
+    if (!g_initialized) return NULL;
+    return (tc_pipeline_template*)tc_pool_get_checked(
+        &g_pool, handle, "tc_pipeline_template");
 }
 
 bool tc_pipeline_template_is_valid(tc_pipeline_template_handle handle) {
@@ -131,6 +132,43 @@ bool tc_pipeline_template_is_valid(tc_pipeline_template_handle handle) {
 
 size_t tc_pipeline_template_count(void) {
     return g_initialized ? tc_pool_count(&g_pool) : 0;
+}
+
+tc_pipeline_template_info* tc_pipeline_template_get_all_info(size_t* count) {
+    if (!count) return NULL;
+    *count = 0;
+    const size_t template_count = tc_pipeline_template_count();
+    if (template_count == 0) return NULL;
+
+    tc_pipeline_template_info* infos =
+        (tc_pipeline_template_info*)calloc(template_count, sizeof(*infos));
+    if (!infos) {
+        tc_log_error("tc_pipeline_template_get_all_info: allocation failed");
+        return NULL;
+    }
+
+    size_t output_index = 0;
+    for (uint32_t index = 0;
+         index < g_pool.capacity && output_index < template_count;
+         ++index) {
+        if (g_pool.states[index] != TC_SLOT_OCCUPIED) continue;
+        tc_pipeline_template* pipeline_template =
+            (tc_pipeline_template*)tc_pool_get_unchecked(&g_pool, index);
+        tc_pipeline_template_info* info = &infos[output_index++];
+        info->handle.index = index;
+        info->handle.generation = g_pool.generations[index];
+        memcpy(info->uuid, pipeline_template->header.uuid, sizeof(info->uuid));
+        info->name = pipeline_template->header.name;
+        info->ref_count = pipeline_template->header.ref_count;
+        info->version = pipeline_template->header.version;
+        info->descriptor_version = pipeline_template->descriptor_version;
+        info->pass_count = pipeline_template->pass_count;
+        info->resource_count = pipeline_template->resource_count;
+        info->dependency_count = pipeline_template->dependency_count;
+        info->is_loaded = pipeline_template->header.is_loaded;
+    }
+    *count = output_index;
+    return infos;
 }
 
 static bool destroy_pipeline_template(tc_pipeline_template_handle handle) {
