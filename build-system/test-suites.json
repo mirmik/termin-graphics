@@ -96,32 +96,23 @@
   "suite_defaults": {
     "pytest": {
       "profiles": ["pr", "linux-full", "windows-d3d11"],
-      "environment": "sdk-source-overlay",
-      "platforms": ["linux", "windows"],
-      "capabilities": []
+      "platforms": ["linux", "windows"]
     },
     "ctest": {
       "profiles": ["pr", "linux-full", "windows-d3d11"],
-      "environment": "cmake-top-level",
-      "platforms": ["linux", "windows"],
-      "capabilities": ["host"]
+      "platforms": ["linux", "windows"]
     },
     "process-smoke": {
       "profiles": ["editor-smoke"],
-      "environment": "sdk-installed",
       "platforms": ["linux", "windows"],
-      "capabilities": ["editor"]
+      "required_capabilities": ["editor"]
     },
     "device": {
-      "environment": "device-toolchain",
-      "platforms": ["android", "quest"],
-      "capabilities": ["device"]
+      "platforms": ["android", "quest"]
     },
     "manual": {
       "profiles": ["manual"],
-      "environment": "human",
-      "platforms": ["linux", "windows", "android", "quest"],
-      "capabilities": ["human"]
+      "platforms": ["linux", "windows", "android", "quest"]
     }
   },
   "profiles": [
@@ -198,9 +189,8 @@
       "executor": "process-smoke",
       "roots": ["scripts/smoke-termin-app-installed-bundle"],
       "profiles": ["sdk-installed"],
-      "environment": "installed-termin-app",
       "platforms": ["linux"],
-      "capabilities": ["installed-sdk", "termin-app-bundle"],
+      "required_capabilities": ["installed-sdk", "termin-app-bundle"],
       "reason": "Proves imports and tests against termin-app's installed bundle rather than the checkout source overlay."
     },
     {
@@ -209,9 +199,8 @@
       "executor": "process-smoke",
       "roots": ["scripts/validate-tgfx2-d3d11-bound-path.ps1"],
       "profiles": ["windows-d3d11-bound"],
-      "environment": "windows-d3d11-build",
       "platforms": ["windows"],
-      "capabilities": ["d3d11"],
+      "required_capabilities": ["d3d11"],
       "reason": "Focused Windows build-and-run smoke for the D3D11 bound-resource and optional present paths."
     },
     {
@@ -221,8 +210,6 @@
       "roots": ["build-android-apk.sh"],
       "profiles": ["device-android"],
       "platforms": ["android"],
-      "capabilities": ["android-sdk"],
-      "environment": "android-build",
       "reason": "Build-only Android gate; deployment/runtime requires a separately attached device."
     },
     {
@@ -232,8 +219,6 @@
       "roots": ["build-quest-openxr-apk.sh"],
       "profiles": ["device-quest"],
       "platforms": ["quest"],
-      "capabilities": ["android-sdk", "openxr-sdk", "quest-device"],
-      "environment": "quest-build",
       "reason": "Quest/OpenXR package gate; a connected headset is required for runtime execution."
     },
     {
@@ -314,8 +299,7 @@
       "id": "termin-build-tools-tests",
       "module": "termin-build-tools",
       "executor": "pytest",
-      "roots": ["termin-build-tools/tests"],
-      "environment": "bootstrap-python"
+      "roots": ["termin-build-tools/tests"]
     },
     {
       "id": "termin-collision-tests",
@@ -525,8 +509,7 @@
       "id": "termin-qopt-tests",
       "module": "termin-qopt",
       "executor": "pytest",
-      "roots": ["termin-qopt/tests"],
-      "capabilities": ["scipy"]
+      "roots": ["termin-qopt/tests"]
     },
     {
       "id": "termin-render-passes-tests",
