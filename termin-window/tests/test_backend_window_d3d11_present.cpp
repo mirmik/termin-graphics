@@ -33,13 +33,17 @@ bool close_enough(float a, float b) {
 
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
     force_d3d11_backend();
+    const bool immediate = argc > 1 && std::strcmp(argv[1], "immediate") == 0;
+    const tgfx::PresentationMode requested_mode = immediate
+        ? tgfx::PresentationMode::Immediate
+        : tgfx::PresentationMode::VSync;
 
     try {
         auto graphics_session = termin::create_native_windowed_graphics();
         auto window = graphics_session->create_window(
-            {"BackendWindow D3D11 present smoke", 320, 240});
+            {"BackendWindow D3D11 present smoke", 320, 240, requested_mode});
         auto& win = *window;
         tgfx::IRenderDevice* dev = &graphics_session->graphics().device();
         if (!dev) {
@@ -48,6 +52,18 @@ int main() {
         }
         if (dev->backend_type() != tgfx::BackendType::D3D11) {
             std::fprintf(stderr, "BackendWindow D3D11 smoke: backend is not D3D11\n");
+            return 1;
+        }
+        if (win.requested_presentation_mode() != requested_mode ||
+            win.presentation_mode() != requested_mode) {
+            std::fprintf(
+                stderr,
+                "BackendWindow D3D11 smoke: presentation contract mismatch "
+                "requested=%s effective=%s\n",
+                immediate ? "immediate" : "vsync",
+                win.presentation_mode() == tgfx::PresentationMode::Immediate
+                    ? "immediate"
+                    : "vsync");
             return 1;
         }
 
@@ -147,7 +163,11 @@ int main() {
         window.reset();
         graphics_session->close();
 
-        std::printf("BackendWindow D3D11 present smoke OK: %dx%d\n", fb_w, fb_h);
+        std::printf(
+            "BackendWindow D3D11 present smoke OK: %dx%d mode=%s\n",
+            fb_w,
+            fb_h,
+            immediate ? "immediate" : "vsync");
         return 0;
     } catch (const std::exception& e) {
         std::fprintf(stderr, "BackendWindow D3D11 smoke failed: %s\n", e.what());

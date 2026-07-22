@@ -573,7 +573,9 @@ SDLBackendWindow::SDLBackendWindow(
             *d3d_dev,
             get_sdl_hwnd(window_),
             static_cast<uint32_t>(fb_w),
-            static_cast<uint32_t>(fb_h));
+            static_cast<uint32_t>(fb_h),
+            impl_->requested_presentation_mode);
+        impl_->presentation_mode = impl_->d3d11_swapchain->presentation_mode();
     }
 #endif
     else {

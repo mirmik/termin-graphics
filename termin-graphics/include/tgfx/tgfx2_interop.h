@@ -63,9 +63,13 @@ TGFX2_API void tgfx2_interop_blit_texture(
 //
 // WPF hosts that own an HWND can create a tgfx2-backed DXGI swapchain and
 // present any texture produced by the current D3D11 tgfx2 device. The returned
-// pointer is an opaque tgfx::D3D11Swapchain* and must be released with
-// tgfx2_interop_destroy_d3d11_swapchain. Functions return 1 on success and 0
-// on error; failures are logged through tc_log.
+// pointer is an opaque tgfx::D3D11Swapchain* configured for VSync and must be
+// released with tgfx2_interop_destroy_d3d11_swapchain. The legacy
+// sync_interval argument must therefore remain in the VSync range 1..4;
+// passing 0 fails explicitly instead of emulating VSync-off without the
+// required construction-time DXGI tearing flags. Functions return 1 on
+// success and 0 on error; failures are logged through tc_log. The separate
+// D3DImage bridge below is not a swapchain and is unaffected by this policy.
 TGFX2_API void* tgfx2_interop_create_d3d11_swapchain(
     void* hwnd,
     uint32_t width,

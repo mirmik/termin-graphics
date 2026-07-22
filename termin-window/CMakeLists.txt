@@ -225,15 +225,24 @@ if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL
         PRIVATE termin_window)
     termin_copy_sdl2_runtime(termin_window_backend_d3d11_present)
     add_test(NAME termin_window_backend_d3d11_present
-        COMMAND termin_window_backend_d3d11_present)
-    set_tests_properties(termin_window_backend_d3d11_present PROPERTIES
+        COMMAND termin_window_backend_d3d11_present vsync)
+    add_test(NAME termin_window_backend_d3d11_present_immediate
+        COMMAND termin_window_backend_d3d11_present immediate)
+    set_tests_properties(
+        termin_window_backend_d3d11_present
+        termin_window_backend_d3d11_present_immediate
+        PROPERTIES
         TIMEOUT 10
         SKIP_RETURN_CODE 77
         SKIP_REGULAR_EXPRESSION "SDL_InitSubSystem failed|No available video device|D3D11CreateDevice failed")
     if(COMMAND termin_add_test_labels)
-        termin_add_test_labels(termin_window_backend_d3d11_present
-            "termin:capability:window"
-            "termin:capability:d3d11")
+        foreach(_d3d11_test IN ITEMS
+                termin_window_backend_d3d11_present
+                termin_window_backend_d3d11_present_immediate)
+            termin_add_test_labels(${_d3d11_test}
+                "termin:capability:window"
+                "termin:capability:d3d11")
+        endforeach()
     endif()
 endif()
 

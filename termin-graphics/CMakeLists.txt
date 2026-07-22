@@ -536,6 +536,15 @@ if(BUILD_TGFX2_TESTS)
     add_test(NAME tgfx2_front_face_contract_test COMMAND tgfx2_front_face_contract_test)
     set_tests_properties(tgfx2_front_face_contract_test PROPERTIES TIMEOUT 10)
 
+    add_executable(tgfx2_d3d11_presentation_test
+        tests/test_tgfx2_d3d11_presentation.cpp)
+    target_link_libraries(tgfx2_d3d11_presentation_test PRIVATE termin_graphics2)
+    termin_set_rpath_test(tgfx2_d3d11_presentation_test)
+    add_test(NAME tgfx2_d3d11_presentation_test
+        COMMAND tgfx2_d3d11_presentation_test)
+    set_tests_properties(tgfx2_d3d11_presentation_test PROPERTIES TIMEOUT 10)
+    termin_add_test_labels(tgfx2_d3d11_presentation_test)
+
     add_executable(tgfx2_sdf_test tests/test_tgfx2_sdf.cpp)
     target_compile_definitions(tgfx2_sdf_test PRIVATE
         TGFX2_TEST_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf")

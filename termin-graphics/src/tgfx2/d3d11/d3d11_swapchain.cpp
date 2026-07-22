@@ -22,8 +22,14 @@ void throw_if_failed(HRESULT hr, const char* what) {
 
 } // namespace
 
-D3D11Swapchain::D3D11Swapchain(D3D11RenderDevice& device, HWND hwnd, uint32_t width, uint32_t height)
+D3D11Swapchain::D3D11Swapchain(
+    D3D11RenderDevice& device,
+    HWND hwnd,
+    uint32_t width,
+    uint32_t height,
+    PresentationMode presentation_mode)
     : device_(device),
+      presentation_(resolve_d3d11_presentation(presentation_mode, false)),
       width_(std::max(1u, width)),
       height_(std::max(1u, height)) {
     if (!hwnd) {
@@ -34,6 +40,7 @@ D3D11Swapchain::D3D11Swapchain(D3D11RenderDevice& device, HWND hwnd, uint32_t wi
 }
 
 D3D11Swapchain::~D3D11Swapchain() {
+    device_.wait_idle();
     release_backbuffer_texture();
 }
 
@@ -46,29 +53,69 @@ void D3D11Swapchain::create_swapchain(HWND hwnd) {
     Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
     throw_if_failed(dxgi_device->GetAdapter(&adapter), "IDXGIDevice::GetAdapter");
 
-    Microsoft::WRL::ComPtr<IDXGIFactory> factory;
+    Microsoft::WRL::ComPtr<IDXGIFactory2> factory;
     throw_if_failed(
-        adapter->GetParent(__uuidof(IDXGIFactory), reinterpret_cast<void**>(factory.GetAddressOf())),
-        "IDXGIAdapter::GetParent(IDXGIFactory)");
+        adapter->GetParent(__uuidof(IDXGIFactory2), reinterpret_cast<void**>(factory.GetAddressOf())),
+        "IDXGIAdapter::GetParent(IDXGIFactory2)");
 
-    DXGI_SWAP_CHAIN_DESC desc{};
-    desc.BufferDesc.Width = width_;
-    desc.BufferDesc.Height = height_;
-    desc.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    desc.BufferDesc.RefreshRate.Numerator = 0;
-    desc.BufferDesc.RefreshRate.Denominator = 1;
+    bool tearing_supported = false;
+    Microsoft::WRL::ComPtr<IDXGIFactory5> factory5;
+    if (SUCCEEDED(factory.As(&factory5)) && factory5) {
+        BOOL native_tearing_supported = FALSE;
+        const HRESULT feature_hr = factory5->CheckFeatureSupport(
+            DXGI_FEATURE_PRESENT_ALLOW_TEARING,
+            &native_tearing_supported,
+            sizeof(native_tearing_supported));
+        if (SUCCEEDED(feature_hr)) {
+            tearing_supported = native_tearing_supported == TRUE;
+        } else {
+            tc::Log::warn(
+                "D3D11Swapchain: DXGI tearing capability query failed: HRESULT=0x%08X",
+                static_cast<unsigned>(feature_hr));
+        }
+    }
+
+    presentation_ = resolve_d3d11_presentation(
+        presentation_.requested_mode,
+        tearing_supported);
+    if (!presentation_.supported) {
+        tc::Log::error(
+            "D3D11Swapchain: requested presentation mode 'immediate' requires "
+            "DXGI_FEATURE_PRESENT_ALLOW_TEARING support");
+        throw std::runtime_error(
+            "D3D11Swapchain: requested presentation mode 'immediate' is unsupported: "
+            "DXGI_FEATURE_PRESENT_ALLOW_TEARING is unavailable");
+    }
+    swapchain_flags_ = presentation_.allow_tearing
+        ? static_cast<uint32_t>(DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING)
+        : 0u;
+
+    DXGI_SWAP_CHAIN_DESC1 desc{};
+    desc.Width = width_;
+    desc.Height = height_;
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.Stereo = FALSE;
     desc.SampleDesc.Count = 1;
     desc.SampleDesc.Quality = 0;
     desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     desc.BufferCount = 2;
-    desc.OutputWindow = hwnd;
-    desc.Windowed = TRUE;
-    desc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+    desc.Scaling = DXGI_SCALING_STRETCH;
+    desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    desc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+    desc.Flags = swapchain_flags_;
 
     throw_if_failed(
-        factory->CreateSwapChain(device_.native_device(), &desc, &swapchain_),
-        "IDXGIFactory::CreateSwapChain");
-    factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
+        factory->CreateSwapChainForHwnd(
+            device_.native_device(),
+            hwnd,
+            &desc,
+            nullptr,
+            nullptr,
+            &swapchain_),
+        "IDXGIFactory2::CreateSwapChainForHwnd");
+    throw_if_failed(
+        factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER),
+        "IDXGIFactory::MakeWindowAssociation");
 }
 
 void D3D11Swapchain::release_backbuffer_texture() {
@@ -106,13 +153,35 @@ void D3D11Swapchain::refresh_backbuffer_texture() {
     }
 }
 
+bool D3D11Swapchain::present() {
+    return present(presentation_.sync_interval);
+}
+
 bool D3D11Swapchain::present(uint32_t sync_interval) {
-    HRESULT hr = swapchain_->Present(sync_interval, 0);
+    const bool valid_interval = presentation_.effective_mode == PresentationMode::VSync
+        ? sync_interval >= 1 && sync_interval <= 4
+        : sync_interval == 0;
+    if (!valid_interval) {
+        tc::Log::error(
+            "D3D11Swapchain::present: sync interval %u conflicts with construction-time "
+            "presentation mode '%s'",
+            sync_interval,
+            presentation_.effective_mode == PresentationMode::VSync ? "vsync" : "immediate");
+        return false;
+    }
+    const UINT present_flags = presentation_.allow_tearing
+        ? DXGI_PRESENT_ALLOW_TEARING
+        : 0u;
+    HRESULT hr = swapchain_->Present(sync_interval, present_flags);
     if (FAILED(hr)) {
         tc::Log::error("D3D11Swapchain::present failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
         return false;
     }
     return true;
+}
+
+bool D3D11Swapchain::compose_and_present(TextureHandle color_texture) {
+    return compose_and_present(color_texture, presentation_.sync_interval);
 }
 
 bool D3D11Swapchain::compose_and_present(TextureHandle color_texture, uint32_t sync_interval) {
@@ -174,7 +243,12 @@ void D3D11Swapchain::resize(uint32_t width, uint32_t height) {
     device_.wait_idle();
     release_backbuffer_texture();
     throw_if_failed(
-        swapchain_->ResizeBuffers(0, width_, height_, DXGI_FORMAT_UNKNOWN, 0),
+        swapchain_->ResizeBuffers(
+            0,
+            width_,
+            height_,
+            DXGI_FORMAT_UNKNOWN,
+            swapchain_flags_),
         "IDXGISwapChain::ResizeBuffers");
     refresh_backbuffer_texture();
 }
