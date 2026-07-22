@@ -1,0 +1,41 @@
+def terminReleaseRequested = gradle.startParameter.taskNames.any {
+    it.toLowerCase(Locale.ROOT).endsWith("release")
+}
+
+if (terminReleaseRequested) {
+    def signingEnvironment = [
+            keystore     : System.getenv("TERMIN_ANDROID_SIGNING_KEYSTORE"),
+            keyAlias     : System.getenv("TERMIN_ANDROID_SIGNING_KEY_ALIAS"),
+            storePassword: System.getenv("TERMIN_ANDROID_SIGNING_STORE_PASSWORD"),
+            keyPassword  : System.getenv("TERMIN_ANDROID_SIGNING_KEY_PASSWORD"),
+    ]
+    def missing = signingEnvironment.findAll { _, value -> !value }.keySet()
+    if (!missing.isEmpty()) {
+        throw new GradleException(
+                "Android release signing is not configured. Missing values: ${missing.join(', ')}. " +
+                "Set TERMIN_ANDROID_SIGNING_KEYSTORE, TERMIN_ANDROID_SIGNING_KEY_ALIAS, " +
+                "TERMIN_ANDROID_SIGNING_STORE_PASSWORD, and TERMIN_ANDROID_SIGNING_KEY_PASSWORD."
+        )
+    }
+
+    def keystoreFile = file(signingEnvironment.keystore)
+    if (!keystoreFile.isFile()) {
+        throw new GradleException("Android release signing keystore does not exist: ${keystoreFile}")
+    }
+
+    android {
+        signingConfigs {
+            release {
+                storeFile keystoreFile
+                keyAlias signingEnvironment.keyAlias
+                storePassword signingEnvironment.storePassword
+                keyPassword signingEnvironment.keyPassword
+            }
+        }
+        buildTypes {
+            release {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
