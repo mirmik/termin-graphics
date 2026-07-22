@@ -107,30 +107,24 @@ if (-not $ProcessSmokeDisabled) {
             }
             $ProcessRoot = Join-Path (Join-Path $ScriptDir "build\process-smoke") $ProcessSmokeProfile
             New-Item -ItemType Directory -Force -Path $ProcessRoot | Out-Null
-            $PlanPath = if ($env:TERMIN_PROCESS_SMOKE_PLAN) {
-                $env:TERMIN_PROCESS_SMOKE_PLAN
-            } else {
-                Join-Path $ProcessRoot "expected.json"
-            }
+            $PlanPath = Join-Path $ProcessRoot "expected.json"
             $ReportPath = Join-Path $ProcessRoot "execution-manifest.json"
             $LogDir = Join-Path $ProcessRoot "logs"
             $RepositoryControl = @(
                 "-m", "termin_build.repository_control",
                 "--repo-root", $ScriptDir
             )
-            if (-not $env:TERMIN_PROCESS_SMOKE_PLAN) {
-                $ExpectedJson = & $PythonExe @RepositoryControl plan $ProcessSmokeProfile `
-                    --platform windows --json
-                if ($LASTEXITCODE -ne 0) {
-                    throw "Process-smoke expected plan generation failed"
-                }
-                $Utf8NoBom = [Text.UTF8Encoding]::new($false)
-                [IO.File]::WriteAllText(
-                    $PlanPath,
-                    ($ExpectedJson -join [Environment]::NewLine) + [Environment]::NewLine,
-                    $Utf8NoBom
-                )
+            $ExpectedJson = & $PythonExe @RepositoryControl plan $ProcessSmokeProfile `
+                --platform windows --json
+            if ($LASTEXITCODE -ne 0) {
+                throw "Process-smoke expected plan generation failed"
             }
+            $Utf8NoBom = [Text.UTF8Encoding]::new($false)
+            [IO.File]::WriteAllText(
+                $PlanPath,
+                ($ExpectedJson -join [Environment]::NewLine) + [Environment]::NewLine,
+                $Utf8NoBom
+            )
             $Capabilities = @()
             if ($env:TERMIN_PROCESS_SMOKE_CAPABILITIES) {
                 $Capabilities = $env:TERMIN_PROCESS_SMOKE_CAPABILITIES -split "[,;\s]+" |
@@ -153,7 +147,6 @@ if (-not $ProcessSmokeDisabled) {
                 --configuration $BuildType `
                 --process-timeout $Timeout `
                 --process-log-dir $LogDir `
-                --plan-file $PlanPath `
                 --report-output $ReportPath `
                 @CapabilityArgs
             $ProcessExit = $LASTEXITCODE

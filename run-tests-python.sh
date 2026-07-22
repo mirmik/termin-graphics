@@ -132,9 +132,6 @@ else
     fi
 
     PLANNER_PLAN_ARGS=()
-    if [[ -n "${TERMIN_TEST_PLAN:-}" ]]; then
-        PLANNER_PLAN_ARGS+=(--plan-file "${TERMIN_TEST_PLAN}")
-    fi
     if [[ -n "${TERMIN_TEST_EXECUTION_MANIFEST:-}" ]]; then
         PLANNER_PLAN_ARGS+=(--report-output "${TERMIN_TEST_EXECUTION_MANIFEST}")
     fi

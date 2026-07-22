@@ -97,7 +97,6 @@ if [[ "$FULL" -eq 1 && "$NO_EDITOR_SMOKE" -eq 0 ]]; then
                 --capability editor \
                 --configuration "$TEST_BUILD_TYPE" \
                 --process-log-dir "$PROCESS_SMOKE_ROOT/logs" \
-                --plan-file "$PROCESS_SMOKE_PLAN" \
                 --report-output "$PROCESS_SMOKE_REPORT" || PROCESS_EXIT=$?
         VERIFY_EXIT=0
         PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \

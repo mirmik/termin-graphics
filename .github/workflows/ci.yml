@@ -14,38 +14,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ── Planner inventory ──────────────────────────────────────────
-  plan-pr-linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.10"
-
-      - name: Validate manifests and generate PR plan
-        env:
-          PYTHONPATH: ${{ github.workspace }}/termin-build-tools
-        run: |
-          python -m termin_build.repository_control --repo-root . check
-          mkdir -p build/ci-plans
-          python -m termin_build.repository_control --repo-root . \
-            plan pr --platform linux --json > build/ci-plans/pr-linux.json
-          python -m termin_build.repository_control --repo-root . \
-            plan pr --platform windows --json > build/ci-plans/pr-windows.json
-          python -m termin_build.repository_control --repo-root . \
-            plan sdk-installed --platform linux --json > build/ci-plans/sdk-installed-linux.json
-          python -m termin_build.repository_control --repo-root . \
-            plan windows-d3d11-bound --platform windows --json > build/ci-plans/windows-d3d11-bound.json
-
-      - uses: actions/upload-artifact@v5
-        with:
-          name: ci-plans
-          path: build/ci-plans/
-          retention-days: 1
-
   # ── 0. Python lint ─────────────────────────────────────────────
   lint-python:
     runs-on: ubuntu-latest
@@ -126,7 +94,6 @@ jobs:
 
   # ── 0d. D3D11 tgfx2 smoke ─────────────────────────────────────
   tgfx2-d3d11-bound-windows:
-    needs: plan-pr-linux
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -138,15 +105,8 @@ jobs:
         with:
           python-version: "3.10"
 
-      - uses: actions/download-artifact@v5
-        with:
-          name: ci-plans
-          path: build/ci-plans/
-
       - name: Validate D3D11 bound resource path
         shell: pwsh
-        env:
-          TERMIN_PROCESS_SMOKE_PLAN: ${{ github.workspace }}\build\ci-plans\windows-d3d11-bound.json
         run: |
           .\run-tests.ps1 --process-smoke-only `
             --process-smoke-profile=windows-d3d11-bound
@@ -187,7 +147,7 @@ jobs:
 
   # ── 2. Test C++ libraries ────────────────────────────────────────
   test-cpp-libs:
-    needs: [build-cpp-libs, plan-pr-linux]
+    needs: build-cpp-libs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -205,17 +165,10 @@ jobs:
           name: sdk-cpp
           path: sdk/
 
-      - uses: actions/download-artifact@v5
-        with:
-          name: ci-plans
-          path: build/ci-plans/
-
       - name: Restore SDK executable permissions
         run: chmod +x sdk/bin/*
 
       - name: Run C++ tests
-        env:
-          TERMIN_TEST_PLAN: ${{ github.workspace }}/build/ci-plans/pr-linux.json
         run: ./run-tests-cpp.sh
 
       - uses: actions/upload-artifact@v5
@@ -229,7 +182,6 @@ jobs:
           retention-days: 7
 
   test-cpp-windows:
-    needs: plan-pr-linux
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -241,20 +193,13 @@ jobs:
         with:
           python-version: "3.10"
 
-      - uses: actions/download-artifact@v5
-        with:
-          name: ci-plans
-          path: build/ci-plans/
-
       - name: Build C++ SDK dependencies
         shell: pwsh
         run: .\build-sdk-cpp.ps1 --no-vulkan --no-opengl --no-sdl
 
       - name: Run repository-controlled C++ tests
         shell: pwsh
-        run: |
-          $env:TERMIN_TEST_PLAN = Join-Path $pwd "build\ci-plans\pr-windows.json"
-          .\run-tests-cpp.ps1 --no-vulkan --no-opengl --no-sdl
+        run: .\run-tests-cpp.ps1 --no-vulkan --no-opengl --no-sdl
 
       - uses: actions/upload-artifact@v5
         if: always()
@@ -312,7 +257,7 @@ jobs:
 
   # ── 4. Test pip packages ───────────────────────────────────────
   test-pip-packages:
-    needs: [build-bindings, plan-pr-linux]
+    needs: build-bindings
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -332,11 +277,6 @@ jobs:
 
       - name: Resolve SDK Python layout
         uses: ./.github/actions/resolve-sdk-python
-
-      - uses: actions/download-artifact@v5
-        with:
-          name: ci-plans
-          path: build/ci-plans/
 
       - name: Restore SDK executable permissions
         run: chmod +x sdk/bin/*
@@ -359,7 +299,6 @@ jobs:
             exit 1
           fi
           ./setup-sdk-python-env.sh
-          TERMIN_TEST_PLAN=${{ github.workspace }}/build/ci-plans/pr-linux.json \
           TERMIN_TEST_EXECUTION_MANIFEST=${{ github.workspace }}/build/python-execution-manifest.json \
             ./run-tests-python.sh
 
@@ -370,7 +309,7 @@ jobs:
           path: build/python-execution-manifest.json
           retention-days: 7
 
-  verify-pr-linux-plan:
+  verify-pr-linux-coverage:
     needs: [test-cpp-libs, test-pip-packages]
     runs-on: ubuntu-latest
     if: ${{ always() && needs.test-cpp-libs.result == 'success' && needs.test-pip-packages.result == 'success' }}
@@ -381,11 +320,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.10"
-
-      - uses: actions/download-artifact@v5
-        with:
-          name: ci-plans
-          path: build/ci-plans/
 
       - uses: actions/download-artifact@v5
         with:
@@ -401,14 +335,18 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/termin-build-tools
         run: |
-          python -m termin_build.repository_control verify-plan-execution \
-            --plan build/ci-plans/pr-linux.json \
-            --ctest build/ci-results/ctest/ctest-execution-manifest.json \
-            --python build/ci-results/python/python-execution-manifest.json
+          mkdir -p build/ci-results
+          python -m termin_build.repository_control --repo-root . check
+          python -m termin_build.repository_control --repo-root . \
+            plan pr --platform linux --json > build/ci-results/expected-pr-linux.json
+          python -m termin_build.repository_control verify-execution \
+            --expected build/ci-results/expected-pr-linux.json \
+            --manifest build/ci-results/ctest/ctest-execution-manifest.json \
+            --manifest build/ci-results/python/python-execution-manifest.json
 
   # ── 5. Build & test termin ───────────────────────────────────────
   test-termin:
-    needs: [build-bindings, plan-pr-linux]
+    needs: build-bindings
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -430,11 +368,6 @@ jobs:
 
       - name: Resolve SDK Python layout
         uses: ./.github/actions/resolve-sdk-python
-
-      - uses: actions/download-artifact@v5
-        with:
-          name: ci-plans
-          path: build/ci-plans/
 
       - name: Restore SDK executable permissions
         run: chmod +x sdk/bin/*
@@ -483,15 +416,16 @@ jobs:
           LD_LIBRARY_PATH: ${{ github.workspace }}/sdk/lib
         run: |
           sdk/bin/termin_python -m termin_build.repository_control \
+            --repo-root . plan sdk-installed --platform linux --json \
+            > build/expected-sdk-installed-linux.json
+          sdk/bin/termin_python -m termin_build.repository_control \
             --repo-root . run sdk-installed --platform linux \
             --executor process-smoke \
-            --plan-file ${{ github.workspace }}/build/ci-plans/sdk-installed-linux.json \
             --report-output build/termin-app-installed-execution-manifest.json
           sdk/bin/termin_python -m termin_build.repository_control \
-            verify-suite-execution \
-            --plan ${{ github.workspace }}/build/ci-plans/sdk-installed-linux.json \
-            --manifest build/termin-app-installed-execution-manifest.json \
-            --executor process-smoke
+            verify-execution \
+            --expected build/expected-sdk-installed-linux.json \
+            --manifest build/termin-app-installed-execution-manifest.json
 
       - uses: actions/upload-artifact@v5
         if: always()

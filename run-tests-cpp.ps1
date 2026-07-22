@@ -282,9 +282,6 @@ $CtestPlanArgs = @(
     "--platform", "windows",
     "--config", $BuildType
 ) + $RepositoryCapabilities
-if ($env:TERMIN_TEST_PLAN) {
-    $CtestPlanArgs += @("--plan-file", $env:TERMIN_TEST_PLAN)
-}
 $CtestSelectionPath = Join-Path $BuildDir "ctest-selection.json"
 $CtestSelection = & $PythonExe @RepositoryControl @CtestPlanArgs --json
 if ($LASTEXITCODE -ne 0) {

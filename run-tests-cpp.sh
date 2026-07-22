@@ -233,9 +233,6 @@ CTEST_PLAN_COMMAND=(
     --platform linux
     "${REPOSITORY_CAPABILITIES[@]}"
 )
-if [[ -n "${TERMIN_TEST_PLAN:-}" ]]; then
-    CTEST_PLAN_COMMAND+=(--plan-file "${TERMIN_TEST_PLAN}")
-fi
 CTEST_SELECTION_JSON="$BUILD_DIR/ctest-selection.json"
 if ! "${CTEST_PLAN_COMMAND[@]}" --json > "$CTEST_SELECTION_JSON"; then
     echo "ERROR: CTest planner selection failed" >&2
