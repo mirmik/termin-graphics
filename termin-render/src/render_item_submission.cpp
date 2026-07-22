@@ -300,19 +300,22 @@ RenderItemTaskRejection mesh_render_item_task_shader_planner(
         break;
     }
 
+    MaterialShaderOverrideRequest override_request{};
+    override_request.original_shader = TcShader(request.candidate_shader);
+    override_request.vertex_transform_kind = out_plan.vertex_transform_kind;
+    override_request.pass_contract = *request.contract->shader_contract;
+    override_request.debug_context = request.contract->debug_pass_name
+        ? request.contract->debug_pass_name
+        : "MeshRenderItemPlanner";
+    TcShader planned = assemble_material_shader_override(override_request);
+
     const tc_mesh_handle mesh_handle = request.item->payload.mesh.mesh_handle;
     tc_mesh* mesh = tc_mesh_get(mesh_handle);
-    if (mesh && transform && transform->has_value()) {
-        for (const MaterialPipelineSemantic& required :
-             transform->value().vertex_inputs.mesh_attributes) {
-            if (tc_vertex_layout_find(&mesh->layout, required.name.c_str())) {
-                continue;
-            }
-
-            // A malformed phase declaration can be planned every frame. Keep
-            // the diagnostic useful without turning it into a render-loop log
-            // flood. The mesh version is part of the key so a later resource
-            // edit can be diagnosed again if it is still incompatible.
+    if (mesh) {
+        auto reject_missing_semantic = [&](const char* contract_name,
+                                           const char* semantic) {
+            // A malformed declaration can be planned every frame. Keep the
+            // diagnostic useful without turning it into a render-loop flood.
             static std::mutex diagnostic_mutex;
             static std::unordered_map<std::string, uint32_t> diagnosed_versions;
             std::string diagnostic_key = request.contract->debug_pass_name
@@ -321,9 +324,9 @@ RenderItemTaskRejection mesh_render_item_task_shader_planner(
             diagnostic_key += '|';
             diagnostic_key += mesh->header.uuid;
             diagnostic_key += '|';
-            diagnostic_key += transform->value().debug_name;
+            diagnostic_key += contract_name ? contract_name : "vertex_contract";
             diagnostic_key += '|';
-            diagnostic_key += required.name;
+            diagnostic_key += semantic;
             bool should_log = false;
             {
                 std::lock_guard<std::mutex> lock(diagnostic_mutex);
@@ -341,21 +344,44 @@ RenderItemTaskRejection mesh_render_item_task_shader_planner(
                     request.contract->debug_pass_name
                         ? request.contract->debug_pass_name
                         : "<unknown>",
-                    required.name.c_str());
+                    semantic);
             }
-            out_detail = "mesh layout does not satisfy the pass vertex-input contract";
-            return RenderItemTaskRejection::MeshVertexInputMismatch;
+        };
+
+        bool checked_planned_shader = false;
+        if (planned.is_valid()) {
+            tc_shader_contract_view shader_contract{};
+            if (tc_shader_get_contract_view(planned.get(), &shader_contract)) {
+                checked_planned_shader = true;
+                for (uint32_t i = 0; i < shader_contract.vertex_input_count; ++i) {
+                    const tc_shader_contract_vertex_input& required =
+                        shader_contract.vertex_inputs[i];
+                    if (!required.required || tc_vertex_layout_find(
+                            &mesh->layout, required.semantic)) {
+                        continue;
+                    }
+                    reject_missing_semantic(planned.uuid(), required.semantic);
+                    out_detail =
+                        "mesh layout does not satisfy the planned shader vertex-input contract";
+                    return RenderItemTaskRejection::MeshVertexInputMismatch;
+                }
+            }
+        }
+        if (!checked_planned_shader && transform && transform->has_value()) {
+            for (const MaterialPipelineSemantic& required :
+                 transform->value().vertex_inputs.mesh_attributes) {
+                if (tc_vertex_layout_find(&mesh->layout, required.name.c_str())) {
+                    continue;
+                }
+                reject_missing_semantic(
+                    transform->value().debug_name.c_str(), required.name.c_str());
+                out_detail =
+                    "mesh layout does not satisfy the pass vertex-input contract";
+                return RenderItemTaskRejection::MeshVertexInputMismatch;
+            }
         }
     }
 
-    MaterialShaderOverrideRequest override_request{};
-    override_request.original_shader = TcShader(request.candidate_shader);
-    override_request.vertex_transform_kind = out_plan.vertex_transform_kind;
-    override_request.pass_contract = *request.contract->shader_contract;
-    override_request.debug_context = request.contract->debug_pass_name
-        ? request.contract->debug_pass_name
-        : "MeshRenderItemPlanner";
-    TcShader planned = assemble_material_shader_override(override_request);
     if (!planned.is_valid()) {
         out_detail = "failed to assemble the mesh shader";
         return RenderItemTaskRejection::ShaderPlanningRejected;

@@ -44,6 +44,10 @@ struct TcShaderCreateInfo {
     std::string uuid;
     tc_shader_language language = TC_SHADER_LANGUAGE_UNSPECIFIED;
     tc_shader_artifact_policy artifact_policy = TC_SHADER_ARTIFACT_OPTIONAL;
+    // Optional authored ABI contract. The descriptor and every array it
+    // references only need to remain alive for the duration of from_sources();
+    // the shader registry takes an owned copy.
+    const tc_shader_contract_desc* declared_contract = nullptr;
 
     tc_shader_create_desc to_c_desc() const {
         return {
@@ -307,6 +311,17 @@ public:
         tc_shader_handle h = tc_shader_from_sources_desc(&desc);
         if (tc_shader_handle_is_invalid(h)) {
             return TcShader();
+        }
+        if (create_info.declared_contract) {
+            tc_shader* shader = tc_shader_get(h);
+            if (!shader || !tc_shader_set_contract(shader, create_info.declared_contract)) {
+                tc_log_error(
+                    "TcShader::from_sources failed to attach declared contract to shader '%s'",
+                    create_info.sources.name.empty()
+                        ? (create_info.uuid.empty() ? "<unnamed>" : create_info.uuid.c_str())
+                        : create_info.sources.name.c_str());
+                return TcShader();
+            }
         }
         return TcShader(h);
     }

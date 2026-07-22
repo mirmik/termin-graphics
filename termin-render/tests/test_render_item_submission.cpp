@@ -4,6 +4,7 @@ GUARD_TEST_MAIN();
 
 #include <termin/render/render_item_submission.hpp>
 #include <termin/render/render_task.hpp>
+#include <tgfx/tgfx_material_handle.hpp>
 #include <tgfx/resources/tc_mesh_registry.h>
 
 #include <array>
@@ -377,6 +378,8 @@ FragmentOutput fs_main() {
 
 TEST_CASE("RenderItem planner preserves a compact authored static vertex contract") {
     tc_shader_init();
+    tc_material_init();
+    tc_mesh_init();
 
     termin::TcShaderCreateInfo create_info{};
     create_info.sources.vertex = R"(
@@ -403,8 +406,6 @@ FragmentOutput fs_main() {
     create_info.sources.fragment_entry = "fs_main";
     create_info.language = TC_SHADER_LANGUAGE_SLANG;
     create_info.artifact_policy = TC_SHADER_ARTIFACT_REQUIRED;
-    termin::TcShader candidate = termin::TcShader::from_sources(create_info);
-    REQUIRE(candidate.is_valid());
 
     tc_shader_contract_vertex_input position{};
     std::snprintf(position.semantic, sizeof(position.semantic), "%s", "position");
@@ -414,13 +415,31 @@ FragmentOutput fs_main() {
     shader_contract_desc.source_kind = TC_SHADER_CONTRACT_SOURCE_DECLARED;
     shader_contract_desc.vertex_inputs = &position;
     shader_contract_desc.vertex_input_count = 1;
-    REQUIRE(tc_shader_set_contract(candidate.get(), &shader_contract_desc));
+    create_info.declared_contract = &shader_contract_desc;
+    termin::TcMaterialPhaseFromSourcesInfo phase_info{};
+    phase_info.shader = create_info;
+    phase_info.phase_mark = "editor_debug_transparent";
+    phase_info.state = tc_render_state_transparent();
+    termin::TcMaterial material = termin::TcMaterial::create(
+        "static-position-debug-material",
+        "static-position-debug-material-test");
+    REQUIRE(material.is_valid());
+    tc_material_phase* phase = material.add_phase_from_sources(phase_info);
+    REQUIRE(phase != nullptr);
+    termin::TcShader candidate(phase->shader);
+    REQUIRE(candidate.is_valid());
+    REQUIRE(tc_shader_has_contract(candidate.get()));
 
     tc_render_item item{};
     item.kind = TC_RENDER_ITEM_KIND_MESH;
     item.flags = TC_RENDER_ITEM_FLAG_HAS_MODEL_MATRIX;
-    tc_material_phase phase{};
-
+    const tc_mesh_handle mesh_handle = tc_mesh_create(
+        "static-position-debug-material-mesh");
+    REQUIRE(!tc_mesh_handle_is_invalid(mesh_handle));
+    tc_mesh* mesh = tc_mesh_get(mesh_handle);
+    REQUIRE(mesh != nullptr);
+    mesh->layout = tc_vertex_layout_pos();
+    item.payload.mesh.mesh_handle = mesh_handle;
     termin::MaterialPipelinePassContract shader_contract{};
     shader_contract.debug_name = "static_color";
     shader_contract.required_material_fragment_input =
@@ -449,7 +468,7 @@ FragmentOutput fs_main() {
 
     termin::RenderItemTaskPlanningRequest request{};
     request.item = &item;
-    request.material_phase = &phase;
+    request.material_phase = phase;
     request.candidate_shader = candidate.handle;
     request.contract = &contract;
 
@@ -466,6 +485,8 @@ FragmentOutput fs_main() {
             termin::MaterialMeshVertexInput::FullMaterial) ==
         termin::MaterialMeshVertexInput::Position);
 
+    tc_mesh_shutdown();
+    tc_material_shutdown();
     tc_shader_shutdown();
 }
 

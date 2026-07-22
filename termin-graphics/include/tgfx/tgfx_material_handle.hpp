@@ -212,13 +212,12 @@ public:
         tc_material* m = get();
         if (!m) return nullptr;
 
-        const tc_shader_create_desc shader_desc = info.shader.to_c_desc();
-        tc_shader_handle sh = tc_shader_from_sources_desc(&shader_desc);
-        if (tc_shader_handle_is_invalid(sh)) return nullptr;
+        TcShader shader = TcShader::from_sources(info.shader);
+        if (!shader.is_valid()) return nullptr;
 
         tc_material_phase* phase = tc_material_add_phase(
             m,
-            sh,
+            shader.handle,
             info.phase_mark.c_str(),
             info.priority);
         if (phase) {
