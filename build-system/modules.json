@@ -2,11 +2,17 @@
   "schema": 1,
   "description": "Repository module identity catalog. Python-backed module identities are derived from the canonical package manifest; this file declares modules that are not Python distributions.",
   "python_package_manifest": "build-system/packages.json",
+  "application_python_payload_manifest": "build-system/application-python-payloads.json",
   "modules": [
     {
       "id": "termin-android",
       "path": "termin-android",
       "kinds": ["cmake", "platform"]
+    },
+    {
+      "id": "termin-app",
+      "path": "termin-app",
+      "kinds": ["application", "cmake", "documentation"]
     },
     {
       "id": "termin-cli",
