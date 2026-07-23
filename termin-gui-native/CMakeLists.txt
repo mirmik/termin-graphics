@@ -317,6 +317,30 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     set_tests_properties(termin_gui_native_application_host_injection_test PROPERTIES
         TIMEOUT 15
         SKIP_RETURN_CODE 77)
+    termin_gui_native_add_test(termin_gui_native_offscreen_application_test
+        tests/test_offscreen_application.cpp
+    )
+    target_link_libraries(termin_gui_native_offscreen_application_test
+        PRIVATE termin_gui_native_application_host)
+    if(TARGET termin_shaderc)
+        set(_termin_gui_native_offscreen_test_shaderc "$<TARGET_FILE:termin_shaderc>")
+        add_dependencies(termin_gui_native_offscreen_application_test termin_shaderc)
+    else()
+        find_program(_termin_gui_native_offscreen_test_shaderc
+            NAMES termin_shaderc
+            HINTS ${CMAKE_PREFIX_PATH}
+            PATH_SUFFIXES bin
+            REQUIRED)
+    endif()
+    target_compile_definitions(termin_gui_native_offscreen_application_test
+        PRIVATE
+            TERMIN_GUI_NATIVE_TEST_FONT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf"
+            TERMIN_GUI_NATIVE_TEST_SHADERC="${_termin_gui_native_offscreen_test_shaderc}"
+    )
+    set_tests_properties(termin_gui_native_offscreen_application_test PROPERTIES
+        TIMEOUT 30
+        SKIP_RETURN_CODE 77
+        ENVIRONMENT "DISPLAY=;WAYLAND_DISPLAY=")
     termin_gui_native_add_test(termin_gui_native_dynamic_texture_lease_test
         tests/test_dynamic_texture_lease.cpp
     )

@@ -2,14 +2,17 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <termin/gui_native/application_host_export.h>
 #include <termin/gui_native/document.hpp>
 #include <termin/platform/backend_window.hpp>
+#include <tgfx2/enums.hpp>
 
 namespace tgfx {
 class GraphicsHost;
@@ -60,10 +63,103 @@ struct StandaloneGuiApplicationConfig {
     bool enable_shader_dev_compile = true;
 };
 
+struct OffscreenGuiApplicationConfig {
+    GuiApplicationConfig gui;
+    int width = 1280;
+    int height = 720;
+    tgfx::BackendType backend = tgfx::BackendType::Vulkan;
+    // Shader configuration follows the same installed-SDK resolution contract
+    // as StandaloneGuiApplication, without creating a native window.
+    std::string sdk_root;
+    std::string shader_compiler_path;
+    std::string slang_compiler_path;
+    std::string shader_cache_root;
+    std::string shader_artifact_root;
+    bool enable_shader_dev_compile = true;
+};
+
 class GuiWindowHost;
 class GuiApplicationHost;
 class DynamicTextureLease;
 struct GuiApplicationHostLeaseState;
+
+// Ordered backend-neutral input and application close state. Implementations
+// may accept events from another thread, but poll_event() is drained only by
+// the GuiApplicationHost owner thread.
+class TERMIN_GUI_NATIVE_HOST_API GuiInputSource {
+  public:
+    virtual ~GuiInputSource() = default;
+    virtual bool poll_event(WindowEvent& event) = 0;
+    virtual bool should_close() const = 0;
+    virtual void request_close() = 0;
+};
+
+// Explicit platform capabilities used by Document interaction. A
+// GuiApplicationHost requires all three capabilities; implementations that do
+// not provide one must report it during construction instead of silently
+// turning the operation into a no-op.
+class TERMIN_GUI_NATIVE_HOST_API GuiPlatformServices {
+  public:
+    virtual ~GuiPlatformServices() = default;
+    virtual bool supports_text_input() const noexcept = 0;
+    virtual bool supports_clipboard() const noexcept = 0;
+    virtual bool supports_cursor() const noexcept = 0;
+    virtual bool set_text_input_enabled(bool enabled) = 0;
+    virtual std::string clipboard_text() const = 0;
+    virtual bool set_clipboard_text(const std::string& text) = 0;
+    virtual bool set_cursor(WindowCursor cursor) = 0;
+};
+
+// Thread-safe producer queue with owner-thread draining. This is the canonical
+// source for automation and the future offscreen composition.
+class TERMIN_GUI_NATIVE_HOST_API QueuedGuiInputSource final : public GuiInputSource {
+  public:
+    QueuedGuiInputSource();
+    ~QueuedGuiInputSource() override;
+
+    QueuedGuiInputSource(const QueuedGuiInputSource&) = delete;
+    QueuedGuiInputSource& operator=(const QueuedGuiInputSource&) = delete;
+    QueuedGuiInputSource(QueuedGuiInputSource&&) = delete;
+    QueuedGuiInputSource& operator=(QueuedGuiInputSource&&) = delete;
+
+    void push_event(WindowEvent event);
+    bool poll_event(WindowEvent& event) override;
+    bool should_close() const override;
+    void request_close() override;
+
+  private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
+// Meaningful platform implementation for tests, automation and the future
+// offscreen composition. State remains observable instead of disappearing
+// into window-shaped no-ops.
+class TERMIN_GUI_NATIVE_HOST_API InMemoryGuiPlatformServices final : public GuiPlatformServices {
+  public:
+    InMemoryGuiPlatformServices();
+    ~InMemoryGuiPlatformServices() override;
+
+    InMemoryGuiPlatformServices(const InMemoryGuiPlatformServices&) = delete;
+    InMemoryGuiPlatformServices& operator=(const InMemoryGuiPlatformServices&) = delete;
+    InMemoryGuiPlatformServices(InMemoryGuiPlatformServices&&) = delete;
+    InMemoryGuiPlatformServices& operator=(InMemoryGuiPlatformServices&&) = delete;
+
+    bool supports_text_input() const noexcept override;
+    bool supports_clipboard() const noexcept override;
+    bool supports_cursor() const noexcept override;
+    bool set_text_input_enabled(bool enabled) override;
+    std::string clipboard_text() const override;
+    bool set_clipboard_text(const std::string& text) override;
+    bool set_cursor(WindowCursor cursor) override;
+
+    bool text_input_enabled() const;
+    WindowCursor cursor() const;
+
+  private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
 
 // Presentation-neutral destination for a completed native GUI frame. The
 // endpoint is borrowed by GuiApplicationHost and must outlive it.
@@ -108,12 +204,13 @@ using GuiWindowFrame = GuiFrame;
 using GuiWindowFrameExtension = GuiFrameExtension;
 
 // Shared native GUI frame implementation. It borrows one canonical graphics
-// domain, one Document and one frame endpoint. Input and platform services are
-// supplied by a surrounding composition such as GuiWindowHost.
+// domain, one Document and the three typed environment boundaries. All
+// borrowed objects must outlive it.
 class TERMIN_GUI_NATIVE_HOST_API GuiApplicationHost {
   public:
     GuiApplicationHost(tgfx::GraphicsHost& graphics, Document& document,
-                       GuiApplicationConfig config, GuiFrameEndpoint& frame_endpoint);
+                       GuiApplicationConfig config, GuiFrameEndpoint& frame_endpoint,
+                       GuiInputSource& input_source, GuiPlatformServices& platform_services);
     ~GuiApplicationHost();
 
     GuiApplicationHost(const GuiApplicationHost&) = delete;
@@ -126,7 +223,9 @@ class TERMIN_GUI_NATIVE_HOST_API GuiApplicationHost {
     tgfx::IRenderDevice& device();
     const tgfx::IRenderDevice& device() const;
 
+    size_t pump_events();
     bool render_frame();
+    bool tick();
     void run_deferred();
     void defer(std::function<void()> callback);
     void request_repaint();
@@ -136,6 +235,8 @@ class TERMIN_GUI_NATIVE_HOST_API GuiApplicationHost {
     std::unique_ptr<GuiFrameExtension> remove_frame_extension(GuiFrameExtension& extension);
 
     void wait_idle();
+    bool should_close() const;
+    void request_close();
     void close();
     bool is_open() const;
 
@@ -226,6 +327,52 @@ class TERMIN_GUI_NATIVE_HOST_API StandaloneGuiApplication {
     const Document& document() const;
     GuiWindowHost& window_host();
     const GuiWindowHost& window_host() const;
+    void close();
+    bool is_open() const;
+
+  private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
+// Owning, display-independent composition for automation, remote tools and
+// server rendering. It uses an isolated graphics domain and the same
+// GuiApplicationHost frame/input/platform contracts as GuiWindowHost.
+class TERMIN_GUI_NATIVE_HOST_API OffscreenGuiApplication {
+  public:
+    explicit OffscreenGuiApplication(OffscreenGuiApplicationConfig config);
+    ~OffscreenGuiApplication();
+
+    OffscreenGuiApplication(const OffscreenGuiApplication&) = delete;
+    OffscreenGuiApplication& operator=(const OffscreenGuiApplication&) = delete;
+    OffscreenGuiApplication(OffscreenGuiApplication&&) noexcept;
+    OffscreenGuiApplication& operator=(OffscreenGuiApplication&&) noexcept;
+
+    tgfx::GraphicsHost& graphics();
+    const tgfx::GraphicsHost& graphics() const;
+    Document& document();
+    const Document& document() const;
+    GuiApplicationHost& application_host();
+    const GuiApplicationHost& application_host() const;
+    QueuedGuiInputSource& input_source();
+    InMemoryGuiPlatformServices& platform_services();
+
+    void push_event(WindowEvent event);
+    size_t pump_events();
+    bool render_frame();
+    bool tick();
+    void resize(int width, int height);
+    std::pair<int, int> framebuffer_size() const;
+    uint64_t frame_generation() const;
+    tgfx::TextureHandle latest_frame_texture() const;
+    std::pair<int, int> latest_frame_size() const;
+    std::vector<float> read_frame_rgba_float();
+
+    void request_repaint();
+    bool repaint_requested() const;
+    bool should_close() const;
+    void request_close();
+    void wait_idle();
     void close();
     bool is_open() const;
 

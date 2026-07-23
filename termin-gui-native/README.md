@@ -33,11 +33,13 @@ while (!host.should_close()) {
 its `Document`. Its borrowed `GuiWindowHost` owns the window and its platform
 services while delegating layout, paint, renderer, color-target, frame
 extensions, repaint/deferred work and GPU teardown to a presentation-neutral
-`GuiApplicationHost`. A typed `GuiFrameEndpoint` maps completed frames to the
-window; isolated/offscreen compositions can supply a different endpoint
-without copying the native UI frame loop. Multiple `GuiWindowHost` instances
-can borrow one session without claiming another device. Empty font and shader
-paths resolve
+`GuiApplicationHost`. Typed `GuiFrameEndpoint`, `GuiInputSource` and
+`GuiPlatformServices` boundaries provide presentation, ordered input/close
+state, and clipboard/cursor/text-input behavior. The windowed composition
+backs all three with one `BackendWindow`; automation can use
+`QueuedGuiInputSource` and `InMemoryGuiPlatformServices` without constructing
+or inheriting a window. Multiple `GuiWindowHost` instances can borrow one
+session without claiming another device. Empty font and shader paths resolve
 first from `TERMIN_UI_FONT`, `TERMIN_SHADERC`, `TERMIN_SLANGC` and `TERMIN_SDK`,
 then relative to the loaded SDK library. All paths remain explicitly
 overridable through `StandaloneGuiApplicationConfig`. Shader configuration is
@@ -66,10 +68,39 @@ For editor-owned graphics domains, construct `GuiWindowHost(session, document,
 keeps both borrowed owners alive, rejects closing the document or session
 before the host, and exposes no raw device or context addresses.
 
+Display-independent tools can use the same host without SDL, a swapchain or a
+desktop connection:
+
+```cpp
+termin::gui_native::OffscreenGuiApplicationConfig config;
+config.width = 640;
+config.height = 480;
+config.backend = tgfx::BackendType::Vulkan;
+termin::gui_native::OffscreenGuiApplication application(config);
+
+application.render_frame();
+const uint64_t generation = application.frame_generation();
+const std::vector<float> rgba = application.read_frame_rgba_float();
+```
+
+`OffscreenGuiApplication` owns an isolated `GraphicsHost`, `Document`, queued
+input, in-memory clipboard/cursor/text-input services and a resizable frame
+endpoint. `push_event()` feeds the same backend-neutral `WindowEvent` path as a
+real window. Each published frame has a generation, texture and captured
+extent; synchronous RGBA-float readback is explicit. Resizing changes the next
+render extent without reinterpreting the previously published frame.
+
+Python exposes the same composition as `OffscreenGuiApplication`, including
+`push_key()`, `push_text()`, `push_pointer_move()`, `resize()` and an owning
+`numpy.float32[height, width, 4]` result from `read_frame_rgba_float()`.
+`DynamicTextureLease` accepts either a window host or an offscreen application.
+
 The C++ `GuiApplicationHost` constructor is the lower-level integration point
-for an existing graphics domain, document and frame endpoint. It deliberately
-does not poll events or own a window. Application code should normally use
-`GuiWindowHost`; the isolated owning composition is tracked by #744.
+for an existing graphics domain, document and the three environment
+boundaries. It owns the common event/deferred/render tick but does not own a
+window or provide platform behavior itself. Missing clipboard, cursor or
+text-input capabilities are rejected during construction. Application code
+should normally use `GuiWindowHost` or `OffscreenGuiApplication`.
 
 The current foundation includes:
 
