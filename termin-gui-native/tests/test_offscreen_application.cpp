@@ -4,6 +4,7 @@
 #include <exception>
 
 #include <termin/gui_native/application_host.hpp>
+#include <termin/gui_native/native_widget.hpp>
 #include <termin/gui_native/text_input.hpp>
 
 #include <tgfx2/device_factory.hpp>
@@ -16,6 +17,17 @@ tgfx::BackendType offscreen_backend() {
     if (tgfx::backend_is_compiled(tgfx::BackendType::D3D11)) return tgfx::BackendType::D3D11;
     return tgfx::BackendType::Null;
 }
+
+class PaintProbe final : public termin::gui_native::NativeWidget {
+  public:
+    PaintProbe() : NativeWidget("OffscreenOverlayPaintProbe") {}
+
+    void paint(tc_ui_document_handle, tc_ui_paint_context*) override {
+        ++paint_count;
+    }
+
+    size_t paint_count = 0;
+};
 
 } // namespace
 
@@ -57,7 +69,17 @@ int main() {
         application.document().adopt(text_input);
         application.document().add_root(*text_input);
         application.document().set_focus(*text_input);
+        auto* overlay = new PaintProbe();
+        application.document().adopt(overlay);
+        if (!application.document().show_overlay(*overlay)) {
+            std::fprintf(stderr, "offscreen composition did not accept an overlay\n");
+            return 1;
+        }
         application.render_frame();
+        if (overlay->paint_count != 1) {
+            std::fprintf(stderr, "offscreen composition did not paint the overlay stack\n");
+            return 1;
+        }
 
         termin::WindowEvent key;
         key.type = termin::WindowEventType::KeyPressed;

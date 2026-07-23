@@ -701,7 +701,7 @@ bool GuiApplicationHost::render_frame() {
     tc_ui_draw_list_clear(impl_->draw_list.get());
     impl_->document->layout_roots(
         tc_ui_rect{0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)});
-    impl_->document->paint_roots(impl_->paint_context.get());
+    impl_->document->paint(impl_->paint_context.get());
     impl_->context->begin_pass(impl_->color_target, tgfx::TextureHandle{},
                                impl_->config.clear_color.data(), 1.0f, false);
     impl_->renderer.render(*impl_->context, impl_->draw_list.get(), width, height);
