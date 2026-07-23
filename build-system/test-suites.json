@@ -237,6 +237,7 @@
     {"id": "termin-components-render-tests-native", "module": "termin-components-render", "executor": "ctest", "roots": ["termin-components/termin-components-render/tests"]},
     {"id": "termin-csg-tests-native", "module": "termin-csg", "executor": "ctest", "roots": ["termin-csg/tests"]},
     {"id": "termin-display-tests-native", "module": "termin-display", "executor": "ctest", "roots": ["termin-display/tests"]},
+    {"id": "termin-dispatch-tests-native", "module": "termin-dispatch", "executor": "ctest", "roots": ["termin-dispatch/tests"]},
     {"id": "termin-window-tests-native", "module": "termin-window", "executor": "ctest", "roots": ["termin-window/tests"]},
     {"id": "termin-engine-tests-native", "module": "termin-engine", "executor": "ctest", "roots": ["termin-engine/tests"]},
     {"id": "termin-graphics-tests-native", "module": "termin-graphics", "executor": "ctest", "roots": ["termin-graphics/tests"]},
@@ -288,6 +289,12 @@
       "module": "termin-base",
       "executor": "pytest",
       "roots": ["termin-base/tests/python"]
+    },
+    {
+      "id": "termin-dispatch-tests-python",
+      "module": "termin-dispatch",
+      "executor": "pytest",
+      "roots": ["termin-dispatch/tests/python"]
     },
     {
       "id": "termin-bootstrap-tests",

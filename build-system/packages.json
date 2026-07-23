@@ -19,6 +19,13 @@
       ]
     },
     {
+      "path": "termin-dispatch",
+      "distribution": "termin-dispatch",
+      "native_extensions": [
+        {"extension": "termin.dispatch._dispatch_native", "target": "_dispatch_native"}
+      ]
+    },
+    {
       "path": "termin-image",
       "distribution": "termin-image",
       "native_extensions": [

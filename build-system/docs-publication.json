@@ -68,6 +68,7 @@
     "termin-csharp/docs",
     "termin-default-assets/docs",
     "termin-display/docs",
+    "termin-dispatch/docs",
     "termin-window/docs",
     "termin-engine/docs",
     "termin-glb/docs",
