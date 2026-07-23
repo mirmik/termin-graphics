@@ -85,8 +85,7 @@ class ColorPicker;
 struct GuiApplicationHostLeaseState;
 
 // Ordered backend-neutral input and application close state. Implementations
-// may accept events from another thread, but poll_event() is drained only by
-// the GuiApplicationHost owner thread.
+// may accept and drain events from different threads.
 class TERMIN_GUI_NATIVE_HOST_API GuiInputSource {
   public:
     virtual ~GuiInputSource() = default;
@@ -111,8 +110,7 @@ class TERMIN_GUI_NATIVE_HOST_API GuiPlatformServices {
     virtual bool set_cursor(WindowCursor cursor) = 0;
 };
 
-// Thread-safe producer queue with owner-thread draining. This is the canonical
-// source for automation and the future offscreen composition.
+// Thread-safe producer queue used by automation and offscreen composition.
 class TERMIN_GUI_NATIVE_HOST_API QueuedGuiInputSource final : public GuiInputSource {
   public:
     QueuedGuiInputSource();
@@ -227,8 +225,6 @@ class TERMIN_GUI_NATIVE_HOST_API GuiApplicationHost {
     size_t pump_events();
     bool render_frame();
     bool tick();
-    size_t run_deferred();
-    void defer(std::function<void()> callback);
     void request_repaint();
     bool repaint_requested() const;
     void set_event_interceptor(std::function<bool(const WindowEvent&)> interceptor);
@@ -287,11 +283,6 @@ class TERMIN_GUI_NATIVE_HOST_API GuiWindowHost {
     size_t pump_events();
     bool render_frame();
     bool tick();
-    size_t run_deferred();
-
-    // Submission is thread-safe; callbacks execute on the owner thread at the
-    // beginning of a later tick. Nested submissions wait for the next tick.
-    void defer(std::function<void()> callback);
     void request_repaint();
     bool repaint_requested() const;
     void set_event_interceptor(std::function<bool(const WindowEvent&)> interceptor);

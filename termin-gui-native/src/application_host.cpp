@@ -8,7 +8,6 @@
 #include <filesystem>
 #include <mutex>
 #include <stdexcept>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -397,15 +396,12 @@ struct GuiApplicationHost::Impl {
     int framebuffer_height = 0;
     size_t rendered_frames = 0;
     std::atomic<bool> repaint_requested{true};
-    std::mutex deferred_mutex;
-    std::deque<std::function<void()>> deferred_callbacks;
     std::vector<std::unique_ptr<GuiFrameExtension>> extensions;
     std::function<bool(const WindowEvent&)> event_interceptor;
     std::function<void(GuiFrame&)> before_ui_frame;
     std::function<void(GuiFrame&)> after_ui_frame;
     std::vector<tc_widget_handle> color_pickers;
     std::shared_ptr<GuiApplicationHostLeaseState> texture_leases;
-    std::thread::id owner_thread = std::this_thread::get_id();
     std::string clipboard_buffer;
     bool closed = false;
 
@@ -485,12 +481,8 @@ struct GuiApplicationHost::Impl {
             document->set_clipboard(&clipboard_get, &clipboard_set, this);
             document->set_cursor_changed_callback(&cursor_changed, this);
             texture_leases = std::make_shared<GuiApplicationHostLeaseState>();
-            texture_leases->owner_thread = owner_thread;
             texture_leases->request_repaint = [this]() {
                 facade->request_repaint();
-            };
-            texture_leases->defer = [this](std::function<void()> callback) {
-                facade->defer(std::move(callback));
             };
             texture_leases->graphics = graphics;
             texture_leases->document = document;
@@ -506,14 +498,6 @@ struct GuiApplicationHost::Impl {
             document->detach_application_host();
             throw;
         }
-    }
-
-    void require_owner_thread(const char* operation) const {
-        if (std::this_thread::get_id() == owner_thread) return;
-        const std::string message =
-            std::string("GuiApplicationHost::") + operation + " requires the owner thread";
-        tc_log_error("[gui-native-host] %s", message.c_str());
-        throw std::logic_error(message);
     }
 
     void require_open(const char* operation) const {
@@ -547,7 +531,6 @@ struct GuiApplicationHost::Impl {
 
     void close() {
         if (closed) return;
-        require_owner_thread("close");
         if (!document || !document->valid()) {
             tc_log_error("[gui-native-host] Document was closed before GuiApplicationHost");
             throw std::logic_error("GuiApplicationHost requires Document to outlive it");
@@ -556,10 +539,6 @@ struct GuiApplicationHost::Impl {
             tc_log_error("[gui-native-host] GraphicsHost was closed before "
                          "GuiApplicationHost");
             throw std::logic_error("GuiApplicationHost requires GraphicsHost to outlive it");
-        }
-        {
-            const std::lock_guard<std::mutex> lock(deferred_mutex);
-            deferred_callbacks.clear();
         }
         for (auto iterator = extensions.rbegin(); iterator != extensions.rend(); ++iterator) {
             (*iterator)->detach(*facade);
@@ -642,7 +621,6 @@ const tgfx::IRenderDevice& GuiApplicationHost::device() const {
 }
 
 size_t GuiApplicationHost::pump_events() {
-    impl_->require_owner_thread("pump_events");
     impl_->require_open("pump_events");
     size_t event_count = 0;
     WindowEvent event;
@@ -664,7 +642,6 @@ size_t GuiApplicationHost::pump_events() {
 }
 
 bool GuiApplicationHost::render_frame() {
-    impl_->require_owner_thread("render_frame");
     impl_->require_open("render_frame");
     const auto [width, height] = impl_->frame_endpoint->framebuffer_size();
     if (width <= 0 || height <= 0) return false;
@@ -729,62 +706,16 @@ bool GuiApplicationHost::render_frame() {
     }
     impl_->frame_endpoint->publish_frame(impl_->color_target);
     ++impl_->rendered_frames;
-    {
-        const std::lock_guard<std::mutex> lock(impl_->deferred_mutex);
-        if (!impl_->deferred_callbacks.empty()) {
-            impl_->repaint_requested.store(true, std::memory_order_release);
-        }
-    }
     return true;
 }
 
 bool GuiApplicationHost::tick() {
-    impl_->require_owner_thread("tick");
     pump_events();
-    run_deferred();
     if (should_close()) return false;
     if (continuous_rendering() || repaint_requested()) {
         render_frame();
     }
     return true;
-}
-
-size_t GuiApplicationHost::run_deferred() {
-    impl_->require_owner_thread("run_deferred");
-    impl_->require_open("run_deferred");
-    std::deque<std::function<void()>> callbacks;
-    {
-        const std::lock_guard<std::mutex> lock(impl_->deferred_mutex);
-        callbacks.swap(impl_->deferred_callbacks);
-    }
-    for (auto& callback : callbacks) {
-        try {
-            callback();
-        } catch (const std::exception& error) {
-            tc_log_error("[gui-native-host] deferred callback failed: %s", error.what());
-            throw;
-        } catch (...) {
-            tc_log_error("[gui-native-host] deferred callback failed with unknown exception");
-            throw;
-        }
-    }
-    return callbacks.size();
-}
-
-void GuiApplicationHost::defer(std::function<void()> callback) {
-    if (!callback) {
-        tc_log_error("[gui-native-host] cannot defer an empty callback");
-        throw std::invalid_argument("GuiApplicationHost::defer requires a callback");
-    }
-    if (!impl_ || impl_->closed) {
-        tc_log_error("[gui-native-host] cannot defer work after close");
-        throw std::logic_error("GuiApplicationHost::defer called after close");
-    }
-    {
-        const std::lock_guard<std::mutex> lock(impl_->deferred_mutex);
-        impl_->deferred_callbacks.push_back(std::move(callback));
-    }
-    request_repaint();
 }
 
 void GuiApplicationHost::request_repaint() {
@@ -798,7 +729,6 @@ bool GuiApplicationHost::repaint_requested() const {
 
 void GuiApplicationHost::set_event_interceptor(
     std::function<bool(const WindowEvent&)> interceptor) {
-    impl_->require_owner_thread("set_event_interceptor");
     impl_->require_open("set_event_interceptor");
     impl_->event_interceptor = std::move(interceptor);
 }
@@ -806,7 +736,6 @@ void GuiApplicationHost::set_event_interceptor(
 void GuiApplicationHost::set_frame_callbacks(
     std::function<void(GuiFrame&)> before_ui_frame,
     std::function<void(GuiFrame&)> after_ui_frame) {
-    impl_->require_owner_thread("set_frame_callbacks");
     impl_->require_open("set_frame_callbacks");
     impl_->before_ui_frame = std::move(before_ui_frame);
     impl_->after_ui_frame = std::move(after_ui_frame);
@@ -814,7 +743,6 @@ void GuiApplicationHost::set_frame_callbacks(
 }
 
 void GuiApplicationHost::register_color_picker(ColorPicker& picker) {
-    impl_->require_owner_thread("register_color_picker");
     impl_->require_open("register_color_picker");
     if (!tc_ui_document_handle_eq(picker.document(), impl_->document->get())) {
         host_error("GuiApplicationHost cannot register a ColorPicker from another Document");
@@ -830,7 +758,6 @@ void GuiApplicationHost::register_color_picker(ColorPicker& picker) {
 }
 
 void GuiApplicationHost::unregister_color_picker(ColorPicker& picker) {
-    impl_->require_owner_thread("unregister_color_picker");
     impl_->require_open("unregister_color_picker");
     impl_->renderer.release_color_picker_surfaces(picker);
     const tc_widget_handle handle = picker.handle();
@@ -845,7 +772,6 @@ void GuiApplicationHost::unregister_color_picker(ColorPicker& picker) {
 
 GuiFrameExtension&
 GuiApplicationHost::install_frame_extension(std::unique_ptr<GuiFrameExtension> extension) {
-    impl_->require_owner_thread("install_frame_extension");
     impl_->require_open("install_frame_extension");
     if (!extension) {
         host_error("GuiApplicationHost cannot install a null frame extension");
@@ -858,7 +784,6 @@ GuiApplicationHost::install_frame_extension(std::unique_ptr<GuiFrameExtension> e
 
 std::unique_ptr<GuiFrameExtension>
 GuiApplicationHost::remove_frame_extension(GuiFrameExtension& extension) {
-    impl_->require_owner_thread("remove_frame_extension");
     impl_->require_open("remove_frame_extension");
     const auto iterator =
         std::find_if(impl_->extensions.begin(), impl_->extensions.end(),
@@ -873,7 +798,6 @@ GuiApplicationHost::remove_frame_extension(GuiFrameExtension& extension) {
 }
 
 void GuiApplicationHost::wait_idle() {
-    impl_->require_owner_thread("wait_idle");
     device().wait_idle();
 }
 
@@ -882,7 +806,6 @@ bool GuiApplicationHost::should_close() const {
 }
 
 void GuiApplicationHost::request_close() {
-    impl_->require_owner_thread("request_close");
     impl_->require_open("request_close");
     impl_->input_source->request_close();
 }
@@ -920,7 +843,6 @@ std::shared_ptr<GuiApplicationHostLeaseState> GuiApplicationHost::texture_lease_
         tc_log_error("[gui-native-host] texture lease requested from an empty host");
         throw std::logic_error("GuiApplicationHost has no implementation");
     }
-    impl_->require_owner_thread("texture_lease_state");
     impl_->require_open("texture_lease_state");
     return impl_->texture_leases;
 }
@@ -1009,7 +931,6 @@ struct GuiWindowHost::Impl {
     std::unique_ptr<BackendWindowInputSource> input_source;
     std::unique_ptr<BackendWindowPlatformServices> platform_services;
     std::unique_ptr<GuiApplicationHost> application_host;
-    std::thread::id owner_thread = std::this_thread::get_id();
     bool closed = false;
 
     Impl(tgfx::GraphicsHost& graphics_ref, Document& document_ref, GuiWindowConfig config,
@@ -1029,14 +950,6 @@ struct GuiWindowHost::Impl {
             *platform_services);
     }
 
-    void require_owner_thread(const char* operation) const {
-        if (std::this_thread::get_id() == owner_thread) return;
-        const std::string message =
-            std::string("GuiWindowHost::") + operation + " requires the owner thread";
-        tc_log_error("[gui-native-host] %s", message.c_str());
-        throw std::logic_error(message);
-    }
-
     void require_open(const char* operation) const {
         if (!closed && window && application_host && application_host->is_open()) {
             return;
@@ -1049,7 +962,6 @@ struct GuiWindowHost::Impl {
 
     void close() {
         if (closed) return;
-        require_owner_thread("close");
         if (!document || !document->valid()) {
             tc_log_error("[gui-native-host] Document was closed before GuiWindowHost");
             throw std::logic_error("GuiWindowHost requires Document to outlive it");
@@ -1132,14 +1044,6 @@ bool GuiWindowHost::render_frame() {
 
 bool GuiWindowHost::tick() {
     return application_host().tick();
-}
-
-size_t GuiWindowHost::run_deferred() {
-    return application_host().run_deferred();
-}
-
-void GuiWindowHost::defer(std::function<void()> callback) {
-    application_host().defer(std::move(callback));
 }
 
 void GuiWindowHost::request_repaint() {
@@ -1332,7 +1236,6 @@ struct OffscreenGuiApplication::Impl {
     InMemoryGuiPlatformServices platform_services;
     std::unique_ptr<OffscreenFrameEndpoint> frame_endpoint;
     std::unique_ptr<GuiApplicationHost> application_host;
-    std::thread::id owner_thread = std::this_thread::get_id();
     bool closed = false;
 
     explicit Impl(OffscreenGuiApplicationConfig application_config)
@@ -1343,14 +1246,6 @@ struct OffscreenGuiApplication::Impl {
         frame_endpoint = std::make_unique<OffscreenFrameEndpoint>(config.width, config.height);
         application_host = std::make_unique<GuiApplicationHost>(
             *graphics, document, config.gui, *frame_endpoint, input_source, platform_services);
-    }
-
-    void require_owner_thread(const char* operation) const {
-        if (std::this_thread::get_id() == owner_thread) return;
-        const std::string message =
-            std::string("OffscreenGuiApplication::") + operation + " requires the owner thread";
-        tc_log_error("[gui-native-host] %s", message.c_str());
-        throw std::logic_error(message);
     }
 
     void require_open(const char* operation) const {
@@ -1376,7 +1271,6 @@ struct OffscreenGuiApplication::Impl {
 
     void close() {
         if (closed) return;
-        require_owner_thread("close");
         if (application_host) {
             application_host->close();
             application_host.reset();
@@ -1461,7 +1355,6 @@ bool OffscreenGuiApplication::tick() {
 }
 
 void OffscreenGuiApplication::resize(int width, int height) {
-    impl_->require_owner_thread("resize");
     impl_->require_open("resize");
     if (width <= 0 || height <= 0) {
         host_error("OffscreenGuiApplication::resize requires positive dimensions");
@@ -1491,7 +1384,6 @@ std::pair<int, int> OffscreenGuiApplication::latest_frame_size() const {
 }
 
 std::vector<float> OffscreenGuiApplication::read_frame_rgba_float() {
-    impl_->require_owner_thread("read_frame_rgba_float");
     impl_->require_open("read_frame_rgba_float");
     const tgfx::TextureHandle texture = impl_->frame_endpoint->latest_texture();
     if (!texture) {

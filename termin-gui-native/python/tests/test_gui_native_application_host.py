@@ -31,6 +31,10 @@ def test_application_host_types_are_public_and_document_close_is_idempotent():
     assert GuiWindowHost.__module__ == "termin.gui_native._gui_native"
     assert GuiWindowAdapter.__module__ == "termin.gui_native._gui_native"
     assert not hasattr(_gui_native, "PythonGuiWindowAdapter")
+    assert not hasattr(GuiWindowHost, "defer")
+    assert not hasattr(GuiWindowHost, "run_deferred")
+    assert not hasattr(GuiWindowAdapter, "defer")
+    assert not hasattr(GuiWindowAdapter, "run_deferred")
     assert OffscreenGuiComposition.__module__ == "termin.gui_native._gui_native"
     assert OffscreenGuiApplication is OffscreenGuiComposition
     assert OffscreenGuiApplication.__module__ == "termin.gui_native._gui_native"
@@ -169,7 +173,7 @@ def test_installed_sdk_offscreen_cpp_consumer_without_display(tmp_path):
     os.environ.get("TERMIN_GUI_NATIVE_LIVE_TEST") != "1",
     reason="requires an SDL presentation backend",
 )
-def test_gui_window_host_lifecycle_keepalive_and_deferred_callback():
+def test_gui_window_host_lifecycle_keepalive_and_cross_thread_access():
     session = WindowedGraphicsSession.create_native()
     document = Document()
     host = GuiWindowHost(
@@ -186,22 +190,11 @@ def test_gui_window_host_lifecycle_keepalive_and_deferred_callback():
     with pytest.raises(RuntimeError, match="presentation windows"):
         session.close()
 
-    callbacks = []
-    submitter = threading.Thread(
-        target=lambda: host.defer(lambda: callbacks.append("owner-thread"))
-    )
+    submitter = threading.Thread(target=host.request_repaint)
     submitter.start()
     submitter.join()
     assert host.tick()
-    assert callbacks == ["owner-thread"]
     assert host.rendered_frame_count == 1
-
-    def fail_callback():
-        raise ValueError("deferred callback failure")
-
-    host.defer(fail_callback)
-    with pytest.raises(ValueError, match="deferred callback failure"):
-        host.tick()
 
     # The binding owns Python references to both borrowed C++ owners.
     del session
@@ -309,10 +302,8 @@ application = StandaloneGuiApplication(
     height=64,
     continuous_rendering=False,
 )
-called = []
-application.window_host.defer(lambda: called.append(True))
+application.window_host.request_repaint()
 assert application.tick()
-assert called == [True]
 application.close()
 """
     result = subprocess.run(

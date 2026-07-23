@@ -6,7 +6,6 @@
 #include <filesystem>
 #include <mutex>
 #include <stdexcept>
-#include <thread>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -316,7 +315,6 @@ struct OffscreenGuiComposition::Impl {
     std::deque<QueuedInput> input_queue;
     std::atomic<bool> accepting_input{true};
     std::atomic<bool> close_requested{false};
-    std::thread::id owner_thread = std::this_thread::get_id();
     bool closed = false;
 
     explicit Impl(OffscreenGuiCompositionConfig composition_config)
@@ -329,16 +327,7 @@ struct OffscreenGuiComposition::Impl {
             *graphics, document, config.renderer, *sink, platform);
     }
 
-    void require_owner(const char* operation) const {
-        if (std::this_thread::get_id() != owner_thread) {
-            offscreen_error(
-                std::string("OffscreenGuiComposition::") + operation +
-                " requires the owner thread");
-        }
-    }
-
     void require_open(const char* operation) const {
-        require_owner(operation);
         if (closed || !graphics || graphics->is_closed() || !document.valid() ||
             !renderer || !renderer->is_open()) {
             offscreen_error(
@@ -356,7 +345,6 @@ struct OffscreenGuiComposition::Impl {
 
     void close() {
         if (closed) return;
-        require_owner("close");
         accepting_input.store(false, std::memory_order_release);
         {
             const std::lock_guard<std::mutex> lock(input_mutex);
@@ -492,7 +480,6 @@ bool OffscreenGuiComposition::render_frame() {
 bool OffscreenGuiComposition::tick() {
     impl_->require_open("tick");
     pump_input();
-    impl_->renderer->run_deferred();
     if (should_close()) return false;
     if (impl_->config.continuous_rendering ||
         impl_->renderer->repaint_requested()) {

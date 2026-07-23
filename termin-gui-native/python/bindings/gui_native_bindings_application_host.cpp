@@ -412,20 +412,9 @@ void bind_gui_native_application_host(nb::module_ &m) {
           nb::arg("continuous_rendering") = true)
       .def("pump_events",
            [](PythonGuiWindowHost &self) { return self.get().pump_events(); })
-      .def("run_deferred",
-           [](PythonGuiWindowHost &self) { return self.get().run_deferred(); })
       .def("render_frame",
            [](PythonGuiWindowHost &self) { return self.get().render_frame(); })
       .def("tick", [](PythonGuiWindowHost &self) { return self.get().tick(); })
-      .def("defer",
-           [](PythonGuiWindowHost &self, nb::object callback) {
-             if (!nb::isinstance<nb::callable>(callback))
-               throw std::invalid_argument("callback must be callable");
-             self.get().defer([callback = std::move(callback)]() {
-               nb::gil_scoped_acquire gil;
-               callback();
-             });
-           })
       .def(
           "set_event_interceptor",
           [](PythonGuiWindowHost &self, nb::object callback) {
@@ -599,21 +588,6 @@ void bind_gui_native_application_host(nb::module_ &m) {
           },
           nb::arg("window_manager"), nb::arg("handle"),
           nb::arg("interceptor").none() = nb::none())
-      .def("run_deferred",
-           [](GuiWindowAdapter &self) {
-             return self.renderer().run_deferred();
-           })
-      .def(
-          "defer",
-          [](GuiWindowAdapter &self, nb::object callback) {
-            if (!nb::isinstance<nb::callable>(callback))
-              throw std::invalid_argument("callback must be callable");
-            self.renderer().defer([callback = std::move(callback)]() {
-              nb::gil_scoped_acquire gil;
-              callback();
-            });
-          },
-          nb::arg("callback"))
       .def(
           "set_before_frame_callback",
           [](GuiWindowAdapter &self, nb::object callback) {

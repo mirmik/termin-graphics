@@ -322,24 +322,18 @@ void test_stale_canvas_and_host_shutdown() {
     assert(shutdown_rejected);
 }
 
-void test_owner_thread_enforced() {
+void test_cross_thread_update_is_allowed() {
     Fixture fixture;
     termin::gui_native::DynamicTextureLease lease(*fixture.host);
     std::vector<uint8_t> pixels(4, 1);
-    bool rejected = false;
     std::thread worker([&] {
-        try {
-            lease.set_rgba8(1, 1, pixels);
-        } catch (const std::logic_error&) {
-            rejected = true;
-        }
+        lease.set_rgba8(1, 1, pixels);
     });
     worker.join();
-    assert(rejected);
-    assert(lease.empty());
+    assert(!lease.empty());
 }
 
-void test_off_thread_finalization_defers_gpu_release() {
+void test_off_thread_finalization_releases_immediately() {
     Fixture fixture;
     auto lease = std::make_unique<termin::gui_native::DynamicTextureLease>(
         *fixture.host);
@@ -350,8 +344,6 @@ void test_off_thread_finalization_defers_gpu_release() {
         lease.reset();
     });
     worker.join();
-    assert(destroy_count(*fixture.device, owned.id) == 0);
-    fixture.host->close();
     assert(destroy_count(*fixture.device, owned.id) == 1);
 }
 
@@ -362,8 +354,8 @@ int main() {
         test_owned_updates_resize_and_canvas_binding();
         test_borrowed_ownership_and_domain_validation();
         test_stale_canvas_and_host_shutdown();
-        test_owner_thread_enforced();
-        test_off_thread_finalization_defers_gpu_release();
+        test_cross_thread_update_is_allowed();
+        test_off_thread_finalization_releases_immediately();
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "dynamic texture lease test failed: %s\n", error.what());

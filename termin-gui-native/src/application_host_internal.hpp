@@ -3,7 +3,6 @@
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <thread>
 #include <vector>
 
 namespace tgfx {
@@ -17,9 +16,7 @@ class DynamicTextureRecord;
 
 struct GuiApplicationHostLeaseState {
     std::mutex mutex;
-    std::thread::id owner_thread;
     std::function<void()> request_repaint;
-    std::function<void(std::function<void()>)> defer;
     tgfx::GraphicsHost* graphics = nullptr;
     Document* document = nullptr;
     bool open = true;

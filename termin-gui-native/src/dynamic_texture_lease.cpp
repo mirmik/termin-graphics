@@ -6,7 +6,6 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -88,13 +87,9 @@ require_active(const std::shared_ptr<DynamicTextureRecord>& record, const char* 
         lease_error(std::string("DynamicTextureLease::") + operation +
                     " called after host destruction");
     }
-    if (std::this_thread::get_id() != state->owner_thread) {
-        lease_error(std::string("DynamicTextureLease::") + operation +
-                    " requires the GuiApplicationHost owner thread");
-    }
     {
         const std::lock_guard<std::mutex> lock(state->mutex);
-        if (!state->open || !state->request_repaint || !state->defer ||
+        if (!state->open || !state->request_repaint ||
             !state->graphics || !state->document ||
             !state->document->valid()) {
             lease_error(std::string("DynamicTextureLease::") + operation +
@@ -186,7 +181,7 @@ bool reset_record(GuiApplicationHostLeaseState& state, DynamicTextureRecord& rec
     return stale;
 }
 
-void release_on_owner_thread(const std::shared_ptr<DynamicTextureRecord>& record) noexcept {
+void release_record(const std::shared_ptr<DynamicTextureRecord>& record) noexcept {
     if (!record || record->ownership == DynamicTextureOwnership::Released)
         return;
     auto state = record->state.lock();
@@ -198,7 +193,7 @@ void release_on_owner_thread(const std::shared_ptr<DynamicTextureRecord>& record
         bool open = false;
         {
             const std::lock_guard<std::mutex> lock(state->mutex);
-            open = state->open && state->request_repaint && state->defer &&
+            open = state->open && state->request_repaint &&
                    state->graphics && state->document &&
                    state->document->valid();
         }
@@ -223,31 +218,7 @@ void release_on_owner_thread(const std::shared_ptr<DynamicTextureRecord>& record
 void dispose_record(const std::shared_ptr<DynamicTextureRecord>& record) noexcept {
     if (!record || record->ownership == DynamicTextureOwnership::Released)
         return;
-    auto state = record->state.lock();
-    if (state && std::this_thread::get_id() != state->owner_thread) {
-        try {
-            std::function<void(std::function<void()>)> defer;
-            {
-                const std::lock_guard<std::mutex> lock(state->mutex);
-                if (state->open)
-                    defer = state->defer;
-            }
-            if (defer) {
-                tc_log_error("[gui-native-texture] lease finalized off the owner thread; "
-                             "deferring deterministic release");
-                defer([record]() noexcept { release_on_owner_thread(record); });
-            }
-        } catch (const std::exception& error) {
-            tc_log_error("[gui-native-texture] failed to defer lease release; "
-                         "host shutdown will reclaim it: %s",
-                         error.what());
-        } catch (...) {
-            tc_log_error("[gui-native-texture] failed to defer lease release; "
-                         "host shutdown will reclaim it");
-        }
-        return;
-    }
-    release_on_owner_thread(record);
+    release_record(record);
 }
 
 } // namespace
@@ -295,7 +266,6 @@ void GuiApplicationHostLeaseState::close_all() noexcept {
     }
     const std::lock_guard<std::mutex> lock(mutex);
     request_repaint = {};
-    defer = {};
     graphics = nullptr;
     document = nullptr;
 }
@@ -477,7 +447,7 @@ void DynamicTextureLease::release() {
         return;
     }
     require_active(impl_->record, "release");
-    release_on_owner_thread(impl_->record);
+    release_record(impl_->record);
 }
 
 DynamicTextureOwnership DynamicTextureLease::ownership() const {

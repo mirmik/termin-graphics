@@ -2,7 +2,6 @@
 
 #include <optional>
 #include <stdexcept>
-#include <thread>
 #include <utility>
 
 #include <tcbase/tc_log.h>
@@ -89,7 +88,6 @@ struct GuiWindowAdapter::Impl {
     BorrowedWindowEndpoint endpoint;
     BorrowedWindowPlatformServices platform;
     std::unique_ptr<DocumentRenderer> renderer;
-    std::thread::id owner_thread = std::this_thread::get_id();
     bool closed = false;
 
     Impl(tgfx::GraphicsHost& graphics_ref, Document& document_ref,
@@ -104,15 +102,7 @@ struct GuiWindowAdapter::Impl {
             *graphics, *document, std::move(config), endpoint, platform);
     }
 
-    void require_owner(const char* operation) const {
-        if (std::this_thread::get_id() != owner_thread) {
-            adapter_error(
-                std::string("GuiWindowAdapter::") + operation + " requires the owner thread");
-        }
-    }
-
     void require_open(const char* operation) const {
-        require_owner(operation);
         if (closed || !renderer || !renderer->is_open()) {
             adapter_error(
                 std::string("GuiWindowAdapter::") + operation + " called after close");
@@ -121,7 +111,6 @@ struct GuiWindowAdapter::Impl {
 
     void close() {
         if (closed) return;
-        require_owner("close");
         if (renderer) {
             renderer->close();
             renderer.reset();

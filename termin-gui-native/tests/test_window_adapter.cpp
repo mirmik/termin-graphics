@@ -2,6 +2,7 @@
 #include <cstring>
 #include <exception>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <termin/gui_native/text_input.hpp>
@@ -93,6 +94,18 @@ int main() {
             &adapter.document() != &document || window.close_count != 0) {
             std::fprintf(stderr, "adapter did not establish borrowed services\n");
             return 1;
+        }
+        std::exception_ptr cross_thread_error;
+        std::thread worker([&] {
+            try {
+                adapter.renderer().request_repaint();
+            } catch (...) {
+                cross_thread_error = std::current_exception();
+            }
+        });
+        worker.join();
+        if (cross_thread_error) {
+            std::rethrow_exception(cross_thread_error);
         }
 
         auto* input = new termin::gui_native::TextInput();

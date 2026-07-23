@@ -4,11 +4,9 @@
 
 #include <algorithm>
 #include <atomic>
-#include <deque>
 #include <exception>
 #include <mutex>
 #include <stdexcept>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -74,12 +72,9 @@ struct DocumentRenderer::Impl {
     int target_height = 0;
     size_t rendered_frames = 0;
     std::atomic<bool> repaint_requested{true};
-    std::mutex deferred_mutex;
-    std::deque<std::function<void()>> deferred_callbacks;
     std::function<void(tgfx::RenderContext2&)> before_frame;
     std::vector<tc_widget_handle> color_pickers;
     std::shared_ptr<GuiApplicationHostLeaseState> texture_leases;
-    std::thread::id owner_thread = std::this_thread::get_id();
     std::string clipboard_buffer;
     bool closed = false;
 
@@ -114,12 +109,8 @@ struct DocumentRenderer::Impl {
             document->set_clipboard(&clipboard_get, &clipboard_set, this);
             document->set_cursor_changed_callback(&cursor_changed, this);
             texture_leases = std::make_shared<GuiApplicationHostLeaseState>();
-            texture_leases->owner_thread = owner_thread;
             texture_leases->request_repaint = [this]() {
                 facade->request_repaint();
-            };
-            texture_leases->defer = [this](std::function<void()> callback) {
-                facade->defer(std::move(callback));
             };
             texture_leases->graphics = graphics;
             texture_leases->document = document;
@@ -190,16 +181,7 @@ struct DocumentRenderer::Impl {
         }
     }
 
-    void require_owner(const char* operation) const {
-        if (std::this_thread::get_id() != owner_thread) {
-            renderer_error(
-                std::string("DocumentRenderer::") + operation +
-                " requires the owner thread");
-        }
-    }
-
     void require_open(const char* operation) const {
-        require_owner(operation);
         if (closed || !graphics || graphics->is_closed() || !document ||
             !document->valid() || !frame_sink || !platform) {
             renderer_error(
@@ -226,16 +208,11 @@ struct DocumentRenderer::Impl {
 
     void close() {
         if (closed) return;
-        require_owner("close");
         if (!document || !document->valid()) {
             renderer_error("Document must outlive DocumentRenderer");
         }
         if (!graphics || graphics->is_closed()) {
             renderer_error("GraphicsHost must outlive DocumentRenderer");
-        }
-        {
-            const std::lock_guard<std::mutex> lock(deferred_mutex);
-            deferred_callbacks.clear();
         }
         before_frame = {};
         color_pickers.clear();
@@ -406,12 +383,6 @@ bool DocumentRenderer::render_frame() {
     impl_->context->end_frame();
     impl_->frame_sink->publish_frame(impl_->color_target);
     ++impl_->rendered_frames;
-    {
-        const std::lock_guard<std::mutex> lock(impl_->deferred_mutex);
-        if (!impl_->deferred_callbacks.empty()) {
-            impl_->repaint_requested.store(true, std::memory_order_release);
-        }
-    }
     return true;
 }
 
@@ -451,45 +422,6 @@ void DocumentRenderer::unregister_color_picker(ColorPicker& picker) {
             }),
         impl_->color_pickers.end());
     request_repaint();
-}
-
-void DocumentRenderer::defer(std::function<void()> callback) {
-    if (!callback) {
-        renderer_error("DocumentRenderer::defer requires a callback");
-    }
-    if (!impl_ || impl_->closed) {
-        renderer_error("DocumentRenderer::defer called after close");
-    }
-    {
-        const std::lock_guard<std::mutex> lock(impl_->deferred_mutex);
-        impl_->deferred_callbacks.push_back(std::move(callback));
-    }
-    request_repaint();
-}
-
-size_t DocumentRenderer::run_deferred() {
-    impl_->require_open("run_deferred");
-    std::deque<std::function<void()>> callbacks;
-    {
-        const std::lock_guard<std::mutex> lock(impl_->deferred_mutex);
-        callbacks.swap(impl_->deferred_callbacks);
-    }
-    for (auto& callback : callbacks) {
-        try {
-            callback();
-        } catch (const std::exception& error) {
-            tc_log_error(
-                "[gui-native-document-renderer] deferred callback failed: %s",
-                error.what());
-            throw;
-        } catch (...) {
-            tc_log_error(
-                "[gui-native-document-renderer] deferred callback failed with "
-                "an unknown exception");
-            throw;
-        }
-    }
-    return callbacks.size();
 }
 
 void DocumentRenderer::request_repaint() {

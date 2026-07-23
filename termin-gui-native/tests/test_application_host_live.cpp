@@ -81,19 +81,11 @@ int main() {
             std::fprintf(stderr, "event-driven host rendered without a repaint request\n");
             return 1;
         }
-        int deferred_step = 0;
-        host.defer([&host, &deferred_step] {
-            deferred_step = 1;
-            host.defer([&deferred_step] { deferred_step = 2; });
-        });
-        if (!host.repaint_requested() || !host.tick() || deferred_step != 1 ||
+        std::thread repaint_worker([&host] { host.request_repaint(); });
+        repaint_worker.join();
+        if (!host.repaint_requested() || !host.tick() ||
             host.rendered_frame_count() != first_frame_count + 1) {
-            std::fprintf(stderr, "deferred repaint was not executed deterministically\n");
-            return 1;
-        }
-        if (!host.tick() || deferred_step != 2 ||
-            host.rendered_frame_count() != first_frame_count + 2) {
-            std::fprintf(stderr, "nested deferred work did not wait for the next tick\n");
+            std::fprintf(stderr, "cross-thread repaint request was rejected\n");
             return 1;
         }
         const auto initial_desc = host.device().texture_desc(host.color_target());

@@ -81,8 +81,6 @@ class TERMIN_GUI_NATIVE_HOST_API DocumentRenderer {
         std::function<void(tgfx::RenderContext2&)> callback);
     void register_color_picker(ColorPicker& picker);
     void unregister_color_picker(ColorPicker& picker);
-    void defer(std::function<void()> callback);
-    size_t run_deferred();
     void request_repaint();
     bool repaint_requested() const;
     size_t rendered_frame_count() const;
