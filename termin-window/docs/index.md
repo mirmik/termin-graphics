@@ -15,6 +15,9 @@ graphics abstraction. Applications obtain renderer state from
 `session->graphics()` and create any number of equal `BackendWindow`
 presentation targets with `session->create_window()`. All GPU consumers and
 windows must be destroyed before `session->close()`.
+Each window reports the `GraphicsHost` identity that created it; this is an
+identity/validation hook for injected composition and does not expose device
+or context ownership through the window abstraction.
 Windows consume `termin::WindowEvent`; the public application path covers
 title, logical/framebuffer size, text input, event polling, semantic system
 cursors, clipboard text, and presentation without exposing
@@ -34,5 +37,7 @@ target_link_libraries(app PRIVATE termin_window::termin_window)
 Engine input routing remains in `termin-display` and is attached through its
 neutral window input bridge. `termin_gui_native::window_input` translates the
 portable pointer, wheel, keyboard, text, and HiDPI coordinates into native GUI
-document events. `termin_gui_native::application_host` owns the render target,
-font/shader-tool defaults, frame loop primitives and deterministic teardown.
+document events. `termin_gui_native::application_host` provides a borrowed
+per-window `GuiWindowHost` for render targets, input and frame-loop primitives,
+plus a separate `StandaloneGuiApplication` composition root that owns
+shader-tool defaults and the canonical session.

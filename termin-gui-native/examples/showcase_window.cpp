@@ -79,13 +79,13 @@ bool write_ppm_screenshot(tgfx::IRenderDevice& device, tgfx::TextureHandle targe
 
 int run_showcase_window(const char* title) {
     try {
-        Document document;
-        ShowcaseRefs showcase = build_showcase(document);
-        ApplicationHostConfig host_config;
-        host_config.window = WindowConfig{
+        StandaloneGuiApplicationConfig host_config;
+        host_config.gui.window = WindowConfig{
             title ? title : "termin-gui-native showcase", 800, 600};
-        host_config.font_size = 15;
-        ApplicationHost host(document, std::move(host_config));
+        host_config.gui.font_size = 15;
+        StandaloneGuiApplication application(std::move(host_config));
+        ShowcaseRefs showcase = build_showcase(application.document());
+        GuiWindowHost& host = application.window_host();
 
         const double max_seconds = example_seconds();
         const std::filesystem::path capture_path = screenshot_path();

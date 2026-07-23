@@ -1,3 +1,4 @@
+#include <stdexcept>
 #include <type_traits>
 
 #include "termin/platform/backend_window.hpp"
@@ -21,6 +22,9 @@ concept ExposesGraphicsContext = requires(T& value) {
 class FakeWindow final : public termin::BackendWindow {
 public:
     tgfx::BackendType backend_type() const override { return {}; }
+    tgfx::GraphicsHost& graphics_host() const override {
+        throw std::logic_error("fake window has no graphics domain");
+    }
     tgfx::PresentationMode requested_presentation_mode() const override { return {}; }
     tgfx::PresentationMode presentation_mode() const override { return {}; }
     bool should_close() const override { return false; }

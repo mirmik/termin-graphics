@@ -1,7 +1,8 @@
 #include <termin/gui_native/document.hpp>
 
 #include <stdexcept>
-#include <utility>
+
+#include <tcbase/tc_log.h>
 
 namespace termin::gui_native {
 
@@ -12,20 +13,68 @@ Document::Document() : _document(tc_ui_document_create()) {
 }
 
 Document::~Document() {
-    close();
+    if (_active_window_hosts != 0) {
+        tc_log_error(
+            "[gui-native-document] destroyed with %zu live GuiWindowHost binding(s)",
+            _active_window_hosts);
+    }
+    destroy_document();
 }
 
-Document::Document(Document&& other) noexcept : _document(std::exchange(other._document, tc_ui_document_handle_invalid())) {}
-
-Document& Document::operator=(Document&& other) noexcept {
-    if (this != &other) {
-        close();
-        _document = std::exchange(other._document, tc_ui_document_handle_invalid());
+Document::Document(Document&& other) {
+    if (other._active_window_hosts != 0) {
+        tc_log_error("[gui-native-document] cannot move a Document with a live GuiWindowHost");
+        throw std::logic_error("cannot move a Document with a live GuiWindowHost");
     }
+    _document = other._document;
+    other._document = tc_ui_document_handle_invalid();
+}
+
+Document& Document::operator=(Document&& other) {
+    if (this == &other) return *this;
+    if (_active_window_hosts != 0 || other._active_window_hosts != 0) {
+        tc_log_error(
+            "[gui-native-document] cannot move-assign a Document with a live GuiWindowHost");
+        throw std::logic_error("cannot move-assign a Document with a live GuiWindowHost");
+    }
+    destroy_document();
+    _document = other._document;
+    other._document = tc_ui_document_handle_invalid();
     return *this;
 }
 
+void Document::attach_window_host() {
+    if (!valid()) {
+        tc_log_error("[gui-native-document] cannot attach a host after close");
+        throw std::logic_error("Document is closed");
+    }
+    if (_active_window_hosts != 0) {
+        tc_log_error(
+            "[gui-native-document] a Document supports exactly one active GuiWindowHost");
+        throw std::logic_error("Document already has an active GuiWindowHost");
+    }
+    ++_active_window_hosts;
+}
+
+void Document::detach_window_host() {
+    if (_active_window_hosts == 0) {
+        tc_log_error("[gui-native-document] GuiWindowHost binding count underflow");
+        return;
+    }
+    --_active_window_hosts;
+}
+
 void Document::close() {
+    if (_active_window_hosts != 0) {
+        tc_log_error(
+            "[gui-native-document] close rejected with %zu live GuiWindowHost binding(s)",
+            _active_window_hosts);
+        throw std::logic_error("Document::close requires GuiWindowHost to close first");
+    }
+    destroy_document();
+}
+
+void Document::destroy_document() noexcept {
     if (!tc_ui_document_handle_is_invalid(_document)) {
         tc_ui_document_destroy(_document);
         _document = tc_ui_document_handle_invalid();

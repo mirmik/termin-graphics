@@ -150,6 +150,12 @@ if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL)
         PRIVATE termin_window)
     termin_copy_sdl2_runtime(termin_window_multiwindow_event_routing)
 
+    add_executable(termin_window_sdl_window_system_lifecycle
+        tests/test_sdl_window_system_lifecycle.cpp)
+    target_link_libraries(termin_window_sdl_window_system_lifecycle
+        PRIVATE termin_window)
+    termin_copy_sdl2_runtime(termin_window_sdl_window_system_lifecycle)
+
 endif()
 
 if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL
@@ -166,6 +172,14 @@ if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL
     add_test(NAME termin_window_multiwindow_event_routing
         COMMAND termin_window_multiwindow_event_routing)
     set_tests_properties(termin_window_multiwindow_event_routing PROPERTIES
+        TIMEOUT 10
+        ENVIRONMENT "TERMIN_BACKEND=opengl"
+        SKIP_RETURN_CODE 77
+        SKIP_REGULAR_EXPRESSION "SDL_InitSubSystem failed|No available video device|Could not initialize OpenGL")
+
+    add_test(NAME termin_window_sdl_window_system_lifecycle
+        COMMAND termin_window_sdl_window_system_lifecycle)
+    set_tests_properties(termin_window_sdl_window_system_lifecycle PROPERTIES
         TIMEOUT 10
         ENVIRONMENT "TERMIN_BACKEND=opengl"
         SKIP_RETURN_CODE 77
@@ -204,6 +218,9 @@ if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL
             "termin:capability:window"
             "termin:capability:opengl")
         termin_add_test_labels(termin_window_multiwindow_event_routing
+            "termin:capability:window"
+            "termin:capability:opengl")
+        termin_add_test_labels(termin_window_sdl_window_system_lifecycle
             "termin:capability:window"
             "termin:capability:opengl")
         if(TGFX2_ENABLE_VULKAN)

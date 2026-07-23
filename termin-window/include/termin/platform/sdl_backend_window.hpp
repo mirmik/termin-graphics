@@ -38,6 +38,7 @@ public:
     SDLBackendWindow& operator=(const SDLBackendWindow&) = delete;
 
     tgfx::BackendType backend_type() const override;
+    tgfx::GraphicsHost& graphics_host() const override;
     tgfx::PresentationMode requested_presentation_mode() const override;
     tgfx::PresentationMode presentation_mode() const override;
 

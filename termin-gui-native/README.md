@@ -16,10 +16,12 @@ target_link_libraries(app PRIVATE termin_gui_native::application_host)
 ```
 
 ```cpp
-termin::gui_native::Document document;
-termin::gui_native::ApplicationHostConfig config;
-config.window = {"My utility", 640, 480};
-termin::gui_native::ApplicationHost host(document, config);
+termin::gui_native::StandaloneGuiApplicationConfig config;
+config.gui.window = {"My utility", 640, 480};
+termin::gui_native::StandaloneGuiApplication application(config);
+
+auto& document = application.document();
+auto& host = application.window_host();
 
 while (!host.should_close()) {
     update_application_state();
@@ -27,12 +29,17 @@ while (!host.should_close()) {
 }
 ```
 
-The host owns window event routing, text input, the draw list/renderer, the
-document clipboard and cursor bridges, the resizable color target, frame
-submission and deterministic GPU teardown. Empty font and shader paths resolve
+`StandaloneGuiApplication` owns the canonical `WindowedGraphicsSession` and
+its `Document`. Its borrowed `GuiWindowHost` owns window event routing, text
+input, the draw list/renderer, document clipboard and cursor bridges, the
+resizable color target, frame submission and deterministic per-window GPU
+teardown. Multiple `GuiWindowHost` instances can borrow one session without
+claiming another device. Empty font and shader paths resolve
 first from `TERMIN_UI_FONT`, `TERMIN_SHADERC`, `TERMIN_SLANGC` and `TERMIN_SDK`,
 then relative to the loaded SDK library. All paths remain explicitly
-overridable through `ApplicationHostConfig`. Continuous rendering is the
+overridable through `StandaloneGuiApplicationConfig`. Shader configuration is
+applied once to the standalone application's canonical `GraphicsHost`; a
+borrowed per-window host never mutates it. Continuous rendering is the
 default; event-driven tools can disable it and schedule work with `defer()` and
 `request_repaint()`.
 

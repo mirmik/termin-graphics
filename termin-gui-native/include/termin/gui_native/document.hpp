@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 #include <tcbase/tc_trent.hpp>
 #include <termin/gui_native/export.h>
 #include <termin/gui_native/tc_ui_serialization.h>
@@ -7,17 +9,25 @@
 
 namespace termin::gui_native {
 
+class GuiWindowHost;
+
 class Document {
 private:
     tc_ui_document_handle _document = tc_ui_document_handle_invalid();
+    size_t _active_window_hosts = 0;
+
+    void attach_window_host();
+    void detach_window_host();
+    void destroy_document() noexcept;
+    friend class GuiWindowHost;
 
 public:
     TERMIN_GUI_NATIVE_API Document();
     TERMIN_GUI_NATIVE_API ~Document();
     Document(const Document&) = delete;
     Document& operator=(const Document&) = delete;
-    TERMIN_GUI_NATIVE_API Document(Document&& other) noexcept;
-    TERMIN_GUI_NATIVE_API Document& operator=(Document&& other) noexcept;
+    TERMIN_GUI_NATIVE_API Document(Document&& other);
+    TERMIN_GUI_NATIVE_API Document& operator=(Document&& other);
     TERMIN_GUI_NATIVE_API void close();
     bool valid() const { return tc_ui_document_is_valid(_document); }
     tc_ui_document_handle get() { return _document; }

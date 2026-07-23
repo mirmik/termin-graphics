@@ -237,10 +237,37 @@ struct SDLWindowSystem::Impl {
     SDL_GLContext gl_context = nullptr;
     size_t live_windows = 0;
     bool closed = false;
+
+    ~Impl() {
+        release_bootstrap_resources();
+    }
+
+    void release_bootstrap_resources() noexcept {
+        // The device must die while its platform context is still valid.
+        prepared_device.reset();
+        if (gl_context) {
+            SDL_GL_DeleteContext(gl_context);
+            gl_context = nullptr;
+        }
+        if (gl_bootstrap_window) {
+            SDL_DestroyWindow(gl_bootstrap_window);
+            gl_bootstrap_window = nullptr;
+        }
+    }
+
+    void abandon_bootstrap_resources() noexcept {
+        // A lifetime violation may leave presentation windows referring to
+        // these resources. Do not tear their dependencies down underneath
+        // them; the error is already terminal and has been logged.
+        (void)prepared_device.release();
+        gl_context = nullptr;
+        gl_bootstrap_window = nullptr;
+    }
 };
 
 struct SDLBackendWindow::Impl {
     SDLWindowSystem* window_system = nullptr;
+    tgfx::GraphicsHost* graphics_host = nullptr;
     tgfx::BackendType backend = tgfx::BackendType::OpenGL;
     tgfx::PresentationMode requested_presentation_mode = tgfx::PresentationMode::VSync;
     tgfx::PresentationMode presentation_mode = tgfx::PresentationMode::VSync;
@@ -378,31 +405,23 @@ SDLWindowSystem::SDLWindowSystem()
 }
 
 SDLWindowSystem::~SDLWindowSystem() {
-    if (impl_ && impl_->live_windows != 0) {
+    if (!impl_) return;
+    if (impl_->live_windows != 0) {
         tc_log_error(
             "[SDLWindowSystem] destroyed with %zu live presentation window(s)",
             impl_->live_windows);
-    }
-    if (impl_) {
         // Do not pretend recovery is possible: live windows still contain
         // non-owning device/system references. Their owner violated the
         // WindowedGraphicsSession lifetime contract.
+        impl_->abandon_bootstrap_resources();
         return;
     }
-    if (impl_) {
-        // A host created through create_graphics_host() is externally owned
-        // and must already be closed by the session. A merely prepared device
-        // is still ours and must die before the GL bootstrap context.
-        impl_->prepared_device.reset();
-        if (impl_->gl_context) {
-            SDL_GL_DeleteContext(impl_->gl_context);
-            impl_->gl_context = nullptr;
-        }
-        if (impl_->gl_bootstrap_window) {
-            SDL_DestroyWindow(impl_->gl_bootstrap_window);
-            impl_->gl_bootstrap_window = nullptr;
-        }
-    }
+    // A host created through create_graphics_host() is externally owned and
+    // must already be closed by the session. A merely prepared device is
+    // still ours and must die before the GL bootstrap context. Impl repeats
+    // this idempotently so partially constructed systems receive the same
+    // teardown order during stack unwinding.
+    impl_->release_bootstrap_resources();
 }
 
 std::unique_ptr<tgfx::GraphicsHost> SDLWindowSystem::create_graphics_host() {
@@ -447,15 +466,7 @@ void SDLWindowSystem::close(tgfx::GraphicsHost& graphics) {
     }
     graphics.close();
     impl_->graphics_host = nullptr;
-    impl_->prepared_device.reset();
-    if (impl_->gl_context) {
-        SDL_GL_DeleteContext(impl_->gl_context);
-        impl_->gl_context = nullptr;
-    }
-    if (impl_->gl_bootstrap_window) {
-        SDL_DestroyWindow(impl_->gl_bootstrap_window);
-        impl_->gl_bootstrap_window = nullptr;
-    }
+    impl_->release_bootstrap_resources();
     impl_->closed = true;
 }
 
@@ -485,6 +496,7 @@ SDLBackendWindow::SDLBackendWindow(
     : impl_(std::make_unique<Impl>())
 {
     impl_->window_system = &window_system;
+    impl_->graphics_host = &graphics;
     impl_->backend = graphics.device().backend_type();
     impl_->requested_presentation_mode = presentation_mode;
     impl_->presentation_mode = presentation_mode;
@@ -602,9 +614,17 @@ SDLBackendWindow::SDLBackendWindow(
             window_ = nullptr;
         }
         impl_->device_ref = nullptr;
+        impl_->graphics_host = nullptr;
         impl_->window_system = nullptr;
         throw;
     }
+}
+
+tgfx::GraphicsHost& SDLBackendWindow::graphics_host() const {
+    if (!impl_ || !impl_->graphics_host || impl_->graphics_host->is_closed()) {
+        throw std::logic_error("SDLBackendWindow: graphics host is unavailable");
+    }
+    return *impl_->graphics_host;
 }
 
 void SDLBackendWindow::maximize() {
@@ -762,6 +782,7 @@ void SDLBackendWindow::close() {
     }
 #endif
     impl_->device_ref = nullptr;
+    impl_->graphics_host = nullptr;
     if (window_) {
         SDL_DestroyWindow(window_);
         window_ = nullptr;

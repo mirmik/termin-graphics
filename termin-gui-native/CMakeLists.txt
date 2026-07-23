@@ -304,6 +304,18 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
         TIMEOUT 15
         SKIP_RETURN_CODE 77
         SKIP_REGULAR_EXPRESSION "No available video device|Vulkan support is either not configured in SDL|Could not initialize OpenGL")
+    termin_gui_native_add_test(termin_gui_native_application_host_injection_test
+        tests/test_application_host_injection.cpp
+    )
+    target_link_libraries(termin_gui_native_application_host_injection_test
+        PRIVATE termin_gui_native_application_host)
+    target_compile_definitions(termin_gui_native_application_host_injection_test
+        PRIVATE
+            TERMIN_GUI_NATIVE_TEST_FONT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf"
+    )
+    set_tests_properties(termin_gui_native_application_host_injection_test PROPERTIES
+        TIMEOUT 15
+        SKIP_RETURN_CODE 77)
     termin_gui_native_add_test(termin_gui_native_renderer_pixel_smoke
         tests/test_draw_list_renderer_pixel_smoke.cpp
     )

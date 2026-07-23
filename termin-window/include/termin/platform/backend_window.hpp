@@ -49,6 +49,10 @@ public:
     BackendWindow& operator=(const BackendWindow&) = delete;
 
     virtual tgfx::BackendType backend_type() const = 0;
+    // Identity of the canonical graphics domain that created this window.
+    // This deliberately exposes no device/context ownership; composition
+    // layers use it only to reject cross-domain window injection.
+    virtual tgfx::GraphicsHost& graphics_host() const = 0;
     virtual tgfx::PresentationMode requested_presentation_mode() const = 0;
     virtual tgfx::PresentationMode presentation_mode() const = 0;
 

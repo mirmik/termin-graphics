@@ -8,8 +8,31 @@
 #include <termin/gui_native/application_host.hpp>
 
 #include <tgfx2/i_render_device.hpp>
+#include <tgfx2/graphics_host.hpp>
+#include <tgfx2/shader_artifact_resolver.hpp>
 
 namespace {
+
+class CountingExtension final
+    : public termin::gui_native::GuiWindowFrameExtension {
+public:
+    CountingExtension(int& before, int& after, int& detach)
+        : before_(before), after_(after), detach_(detach) {}
+
+    void before_ui_frame(termin::gui_native::GuiWindowFrame& frame) override {
+        ++before_;
+        if (&frame.graphics() != &frame.host().graphics()) {
+            throw std::logic_error("frame extension received another graphics domain");
+        }
+    }
+    void after_ui_frame(termin::gui_native::GuiWindowFrame&) override { ++after_; }
+    void detach(termin::gui_native::GuiWindowHost&) noexcept override { ++detach_; }
+
+private:
+    int& before_;
+    int& after_;
+    int& detach_;
+};
 
 bool unavailable_window_system(const char* message) {
     return message &&
@@ -23,14 +46,29 @@ bool unavailable_window_system(const char* message) {
 
 int main() {
     try {
-        termin::gui_native::Document document;
-        termin::gui_native::ApplicationHostConfig config;
-        config.window = termin::WindowConfig{"application host lifecycle", 320, 200};
-        config.font_path = TERMIN_GUI_NATIVE_TEST_FONT;
+        termin::gui_native::StandaloneGuiApplicationConfig config;
+        config.gui.window = termin::WindowConfig{"application host lifecycle", 320, 200};
+        config.gui.font_path = TERMIN_GUI_NATIVE_TEST_FONT;
         config.shader_compiler_path = TERMIN_GUI_NATIVE_TEST_SHADERC;
-        config.continuous_rendering = false;
+        config.gui.continuous_rendering = false;
 
-        termin::gui_native::ApplicationHost host(document, std::move(config));
+        termin::gui_native::StandaloneGuiApplication application(std::move(config));
+        auto& host = application.window_host();
+        int extension_before = 0;
+        int extension_after = 0;
+        int extension_detach = 0;
+        host.install_frame_extension(std::make_unique<CountingExtension>(
+            extension_before, extension_after, extension_detach));
+        bool live_document_close_rejected = false;
+        try {
+            application.document().close();
+        } catch (const std::logic_error&) {
+            live_document_close_rejected = true;
+        }
+        if (!live_document_close_rejected || !application.document().valid()) {
+            std::fprintf(stderr, "Document did not diagnose a live GuiWindowHost\n");
+            return 1;
+        }
         if (!host.render_frame()) {
             std::fprintf(stderr, "application host produced no initial frame\n");
             return 1;
@@ -84,6 +122,46 @@ int main() {
             return 1;
         }
         host.wait_idle();
+
+        // Two hosts borrow the same domain without another device/interop
+        // claim. The second uses the lower-level injected-window path.
+        auto& session = application.graphics_session();
+        termin::gui_native::Document second_document;
+        termin::gui_native::GuiWindowConfig second_config;
+        second_config.window = {"borrowed host replacement", 240, 160};
+        second_config.font_path = TERMIN_GUI_NATIVE_TEST_FONT;
+        auto injected_window = session.create_window(second_config.window);
+        termin::gui_native::GuiWindowHost second_host(
+            session.graphics(),
+            second_document,
+            second_config,
+            std::move(injected_window));
+        if (&second_host.graphics() != &session.graphics() || !second_host.render_frame()) {
+            std::fprintf(stderr, "injected GuiWindowHost did not reuse the graphics domain\n");
+            return 1;
+        }
+        bool live_window_close_rejected = false;
+        try {
+            session.close();
+        } catch (const std::logic_error&) {
+            live_window_close_rejected = true;
+        }
+        if (!live_window_close_rejected || session.graphics().is_closed()) {
+            std::fprintf(stderr, "session did not diagnose a live GuiWindowHost\n");
+            return 1;
+        }
+        host.close();
+        if (session.graphics().is_closed() || !second_host.render_frame()) {
+            std::fprintf(stderr, "closing one GuiWindowHost damaged the shared domain\n");
+            return 1;
+        }
+        if (extension_before == 0 || extension_before != extension_after ||
+            extension_detach != 1) {
+            std::fprintf(stderr, "frame extension lifecycle was not deterministic\n");
+            return 1;
+        }
+        second_host.close();
+        application.close();
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "application host lifecycle failed: %s\n", error.what());
