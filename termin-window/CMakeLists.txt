@@ -39,7 +39,10 @@ if(TERMIN_WINDOW_HAS_SDL)
     endforeach()
 endif()
 
-set(TERMIN_WINDOW_SOURCES src/backend_window.cpp)
+set(TERMIN_WINDOW_SOURCES
+    src/backend_window.cpp
+    src/window_manager.cpp
+)
 if(TERMIN_WINDOW_HAS_SDL)
     list(APPEND TERMIN_WINDOW_SOURCES src/sdl_backend_window.cpp)
 endif()
@@ -134,6 +137,27 @@ if(TERMIN_WINDOW_BUILD_TESTS)
     if(COMMAND termin_add_test_labels)
         termin_add_test_labels(termin_window_public_contract
             "termin:capability:host")
+    endif()
+
+endif()
+
+if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL)
+    add_executable(termin_window_manager_live
+        tests/test_window_manager_live.cpp)
+    target_link_libraries(termin_window_manager_live PRIVATE termin_window)
+    termin_copy_sdl2_runtime(termin_window_manager_live)
+    add_test(NAME termin_window_manager_live
+        COMMAND termin_window_manager_live)
+    set_tests_properties(termin_window_manager_live PROPERTIES
+        TIMEOUT 10
+        ENVIRONMENT "TERMIN_BACKEND=opengl;SDL_VIDEODRIVER=offscreen"
+        SKIP_RETURN_CODE 77
+        SKIP_REGULAR_EXPRESSION "SDL_InitSubSystem failed|No available video device|Could not initialize OpenGL")
+    if(COMMAND termin_add_test_labels)
+        termin_add_test_labels(termin_window_manager_live
+            "termin:capability:host"
+            "termin:capability:window"
+            "termin:capability:opengl")
     endif()
 endif()
 

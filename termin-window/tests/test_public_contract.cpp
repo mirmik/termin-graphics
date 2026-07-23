@@ -2,6 +2,7 @@
 #include <type_traits>
 
 #include "termin/platform/backend_window.hpp"
+#include "termin/window/window_manager.hpp"
 #include "tgfx2/graphics_host.hpp"
 #ifdef TERMIN_WINDOW_HAS_SDL
 #include "termin/platform/sdl_backend_window.hpp"
@@ -68,6 +69,15 @@ int main() {
     static_assert(!ExposesGraphicsDevice<termin::BackendWindow>);
     static_assert(!ExposesGraphicsContext<termin::BackendWindow>);
     static_assert(!std::is_constructible_v<tgfx::GraphicsHost, tgfx::IRenderDevice&>);
+    static_assert(!std::is_copy_constructible_v<termin::WindowManager>);
+    static_assert(!std::is_move_constructible_v<termin::WindowManager>);
+    static_assert(std::is_trivially_copyable_v<termin::WindowHandle>);
+    static_assert(sizeof(termin::WindowHandle) == sizeof(uint32_t) * 2);
+    if (termin::WindowHandle{}) return 1;
+    if (!(termin::WindowHandle{1, 2} == termin::WindowHandle{1, 2})) return 1;
+    if (termin::WindowHandleHash{}({1, 2}) != termin::WindowHandleHash{}({1, 2})) {
+        return 1;
+    }
     FakeWindow window;
     bool handled = false;
     window.set_event_handler([&handled](const termin::WindowEvent& event) {

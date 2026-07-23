@@ -4,6 +4,54 @@ include(CMakeFindDependencyMacro)
 find_dependency(termin_base)
 find_dependency(termin_graphics)
 find_dependency(termin_inspect)
-find_dependency(termin_window)
 
 include("${CMAKE_CURRENT_LIST_DIR}/termin_gui_nativeTargets.cmake")
+
+set(_termin_gui_native_window_components
+    window_input
+    application_host
+    window_adapter)
+set(_termin_gui_native_need_window FALSE)
+foreach(_termin_gui_native_component IN LISTS termin_gui_native_FIND_COMPONENTS)
+    if(_termin_gui_native_component IN_LIST _termin_gui_native_window_components)
+        set(_termin_gui_native_need_window TRUE)
+    elseif(NOT _termin_gui_native_component STREQUAL "core"
+           AND NOT _termin_gui_native_component STREQUAL "document_renderer"
+           AND NOT _termin_gui_native_component STREQUAL "offscreen")
+        set(termin_gui_native_FOUND FALSE)
+        set(termin_gui_native_NOT_FOUND_MESSAGE
+            "Unsupported termin_gui_native component: ${_termin_gui_native_component}")
+    endif()
+endforeach()
+
+if(_termin_gui_native_need_window)
+    find_dependency(termin_window)
+    if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/termin_gui_nativeWindowTargets.cmake")
+        set(termin_gui_native_FOUND FALSE)
+        set(termin_gui_native_NOT_FOUND_MESSAGE
+            "This termin_gui_native package was built without window integration")
+    else()
+        include("${CMAKE_CURRENT_LIST_DIR}/termin_gui_nativeWindowTargets.cmake")
+    endif()
+endif()
+
+foreach(_termin_gui_native_component IN LISTS termin_gui_native_FIND_COMPONENTS)
+    if(_termin_gui_native_component STREQUAL "core")
+        set(termin_gui_native_core_FOUND TRUE)
+    elseif(_termin_gui_native_component STREQUAL "document_renderer"
+           OR _termin_gui_native_component STREQUAL "offscreen")
+        if(TARGET termin_gui_native::${_termin_gui_native_component})
+            set(termin_gui_native_${_termin_gui_native_component}_FOUND TRUE)
+        else()
+            set(termin_gui_native_${_termin_gui_native_component}_FOUND FALSE)
+        endif()
+    elseif(_termin_gui_native_component IN_LIST _termin_gui_native_window_components)
+        if(TARGET termin_gui_native::${_termin_gui_native_component})
+            set(termin_gui_native_${_termin_gui_native_component}_FOUND TRUE)
+        else()
+            set(termin_gui_native_${_termin_gui_native_component}_FOUND FALSE)
+        endif()
+    endif()
+endforeach()
+
+check_required_components(termin_gui_native)

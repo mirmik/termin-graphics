@@ -7,100 +7,55 @@ Declarative native documents use the deliberately limited, versioned
 toolkit-neutral description before materializing a native `Document`; it does
 not import or emulate `tcgui`.
 
-Standalone C++ applications can use the installed application host without
-depending on `termin-display` or SDL APIs:
+The installed widget/document and rendering targets have no native-window
+dependency:
 
 ```cmake
-find_package(termin_gui_native CONFIG REQUIRED)
-target_link_libraries(app PRIVATE termin_gui_native::application_host)
+find_package(termin_gui_native CONFIG REQUIRED COMPONENTS offscreen)
+target_link_libraries(tool PRIVATE termin_gui_native::offscreen)
 ```
 
 ```cpp
-termin::gui_native::StandaloneGuiApplicationConfig config;
-config.gui.window = {"My utility", 640, 480};
-termin::gui_native::StandaloneGuiApplication application(config);
-
-auto& document = application.document();
-auto& host = application.window_host();
-
-while (!host.should_close()) {
-    update_application_state();
-    host.tick();
-}
-```
-
-`StandaloneGuiApplication` owns the canonical `WindowedGraphicsSession` and
-its `Document`. Its borrowed `GuiWindowHost` owns the window and its platform
-services while delegating layout, paint, renderer, color-target, frame
-extensions, repaint/deferred work and GPU teardown to a presentation-neutral
-`GuiApplicationHost`. Typed `GuiFrameEndpoint`, `GuiInputSource` and
-`GuiPlatformServices` boundaries provide presentation, ordered input/close
-state, and clipboard/cursor/text-input behavior. The windowed composition
-backs all three with one `BackendWindow`; automation can use
-`QueuedGuiInputSource` and `InMemoryGuiPlatformServices` without constructing
-or inheriting a window. Multiple `GuiWindowHost` instances can borrow one
-session without claiming another device. Empty font and shader paths resolve
-first from `TERMIN_UI_FONT`, `TERMIN_SHADERC`, `TERMIN_SLANGC` and `TERMIN_SDK`,
-then relative to the loaded SDK library. All paths remain explicitly
-overridable through `StandaloneGuiApplicationConfig`. Shader configuration is
-applied once to the standalone application's canonical `GraphicsHost`; a
-borrowed per-window host never mutates it. Continuous rendering is the
-default; event-driven tools can disable it and schedule work with `defer()` and
-`request_repaint()`.
-
-The installed Python package exposes the same ownership model:
-
-```python
-from termin.gui_native import StandaloneGuiApplication
-
-with StandaloneGuiApplication(
-    title="My utility",
-    width=640,
-    height=480,
-) as application:
-    document = application.document
-    while application.tick():
-        update_application_state(document)
-```
-
-For editor-owned graphics domains, construct `GuiWindowHost(session, document,
-...)` with the typed `termin.display.WindowedGraphicsSession`. The binding
-keeps both borrowed owners alive, rejects closing the document or session
-before the host, and exposes no raw device or context addresses.
-
-Display-independent tools can use the same host without SDL, a swapchain or a
-desktop connection:
-
-```cpp
-termin::gui_native::OffscreenGuiApplicationConfig config;
+termin::gui_native::OffscreenGuiCompositionConfig config;
 config.width = 640;
 config.height = 480;
-config.backend = tgfx::BackendType::Vulkan;
-termin::gui_native::OffscreenGuiApplication application(config);
-
-application.render_frame();
-const uint64_t generation = application.frame_generation();
-const std::vector<float> rgba = application.read_frame_rgba_float();
+termin::gui_native::OffscreenGuiComposition composition(config);
+composition.render_frame();
+std::vector<float> rgba = composition.read_frame_rgba_float();
 ```
 
-`OffscreenGuiApplication` owns an isolated `GraphicsHost`, `Document`, queued
-input, in-memory clipboard/cursor/text-input services and a resizable frame
-endpoint. `push_event()` feeds the same backend-neutral `WindowEvent` path as a
-real window. Each published frame has a generation, texture and captured
-extent; synchronous RGBA-float readback is explicit. Resizing changes the next
-render extent without reinterpreting the previously published frame.
+`DocumentRenderer` is the shared borrowed layout/paint/GPU primitive.
+`OffscreenGuiComposition` owns an isolated `GraphicsHost`, a `Document`, that
+renderer, a thread-safe normalized input queue, in-memory
+clipboard/cursor/text-input services and a resizable texture sink. It owns no
+application loop, `BackendWindow`, `WindowManager` or emulated display.
+Published frames have a generation, texture and captured extent; synchronous
+RGBA-float readback is explicit.
 
-Python exposes the same composition as `OffscreenGuiApplication`, including
+Windowed applications explicitly opt into the optional adapter:
+
+```cmake
+find_package(termin_gui_native CONFIG REQUIRED COMPONENTS window_adapter)
+target_link_libraries(app PRIVATE termin_gui_native::window_adapter)
+```
+
+`GuiWindowAdapter` borrows one application-owned `BackendWindow`,
+`GraphicsHost` and `Document`. The application supplies a per-window event
+batch from `termin::WindowManager`; the adapter translates pointer/key/text
+input and explicitly renders/presents when asked. Adapter teardown releases
+only UI resources and cannot close the window, manager or graphics session.
+Window roles, scheduling and process-exit policy stay in the application.
+
+Python exposes the new composition as `OffscreenGuiComposition`, including
 `push_key()`, `push_text()`, `push_pointer_move()`, `resize()` and an owning
 `numpy.float32[height, width, 4]` result from `read_frame_rgba_float()`.
-`DynamicTextureLease` accepts either a window host or an offscreen application.
+`OffscreenGuiApplication` remains a compatibility alias during the #760
+consumer migration. `DynamicTextureLease` binds directly to the shared
+`DocumentRenderer`.
 
-The C++ `GuiApplicationHost` constructor is the lower-level integration point
-for an existing graphics domain, document and the three environment
-boundaries. It owns the common event/deferred/render tick but does not own a
-window or provide platform behavior itself. Missing clipboard, cursor or
-text-input capabilities are rejected during construction. Application code
-should normally use `GuiWindowHost` or `OffscreenGuiApplication`.
+The older `GuiApplicationHost`, `GuiWindowHost` and
+`StandaloneGuiApplication` API is available only through the explicit
+`application_host` package component and is transitional.
 
 The current foundation includes:
 

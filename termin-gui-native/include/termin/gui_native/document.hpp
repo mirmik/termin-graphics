@@ -11,6 +11,7 @@ namespace termin::gui_native {
 
 class GuiApplicationHost;
 class GuiWindowHost;
+class DocumentRenderer;
 
 class Document {
   private:
@@ -22,6 +23,7 @@ class Document {
     void destroy_document() noexcept;
     friend class GuiApplicationHost;
     friend class GuiWindowHost;
+    friend class DocumentRenderer;
 
   public:
     TERMIN_GUI_NATIVE_API Document();

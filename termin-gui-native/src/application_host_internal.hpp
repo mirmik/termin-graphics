@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -13,12 +14,12 @@ namespace termin::gui_native {
 
 class Document;
 class DynamicTextureRecord;
-class GuiApplicationHost;
 
 struct GuiApplicationHostLeaseState {
     std::mutex mutex;
     std::thread::id owner_thread;
-    GuiApplicationHost* host = nullptr;
+    std::function<void()> request_repaint;
+    std::function<void(std::function<void()>)> defer;
     tgfx::GraphicsHost* graphics = nullptr;
     Document* document = nullptr;
     bool open = true;

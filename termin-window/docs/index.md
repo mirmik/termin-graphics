@@ -26,6 +26,14 @@ SDL's process-global queue is routed through per-window pending queues, so
 polling one `BackendWindow` does not consume events addressed to another and a
 global quit request reaches every registered window.
 
+The target framework-neutral `WindowManager` owns a collection of
+`BackendWindow` objects created on one borrowed `WindowedGraphicsSession`. It
+publishes stable generational handles, ordered per-window event batches and
+deterministic close order. Application code owns the mapping from those
+handles to UI-framework or raw-rendering content, render scheduling,
+main/secondary roles and exit policy. See
+[Framework-Neutral Window Management](../../docs/architecture/2026-07-23-framework-neutral-window-management.md).
+
 The concrete `termin::SDLBackendWindow` remains available as an escape hatch
 for integrations that need an SDL native handle. Applications link through:
 
@@ -35,9 +43,9 @@ target_link_libraries(app PRIVATE termin_window::termin_window)
 ```
 
 Engine input routing remains in `termin-display` and is attached through its
-neutral window input bridge. `termin_gui_native::window_input` translates the
+neutral window input bridge. `termin_gui_native::window_adapter` translates
 portable pointer, wheel, keyboard, text, and HiDPI coordinates into native GUI
-document events. `termin_gui_native::application_host` provides a borrowed
-per-window `GuiWindowHost` for render targets, input and frame-loop primitives,
-plus a separate `StandaloneGuiApplication` composition root that owns
-shader-tool defaults and the canonical session.
+document events and borrows one manager-owned window for platform services and
+presentation. It never owns or closes that window. The current
+`termin_gui_native::application_host` ownership API is transitional.
+`termin-window` does not depend on either UI target.

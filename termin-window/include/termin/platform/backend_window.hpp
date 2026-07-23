@@ -21,6 +21,7 @@ class GraphicsHost;
 namespace termin {
 
 class BackendWindow;
+class WindowManager;
 using BackendWindowPtr = std::unique_ptr<BackendWindow>;
 
 enum class WindowCursor {
@@ -123,6 +124,11 @@ private:
     BackendWindowSystemPtr windows_;
     std::unique_ptr<tgfx::GraphicsHost> graphics_;
     bool closed_ = false;
+    size_t active_window_managers_ = 0;
+
+    void attach_window_manager();
+    void detach_window_manager() noexcept;
+    friend class WindowManager;
 
 public:
     WindowedGraphicsSession(
@@ -136,6 +142,7 @@ public:
     tgfx::GraphicsHost& graphics();
     const tgfx::GraphicsHost& graphics() const;
     BackendWindowPtr create_window(const WindowConfig& config);
+    bool is_closed() const noexcept { return closed_; }
     void close();
 };
 

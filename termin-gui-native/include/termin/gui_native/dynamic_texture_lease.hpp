@@ -14,8 +14,10 @@ class GraphicsHost;
 namespace termin::gui_native {
 
 class Canvas;
+class DocumentRenderer;
 class GuiApplicationHost;
 class GuiWindowHost;
+struct GuiApplicationHostLeaseState;
 
 enum class DynamicTextureOwnership {
     Empty,
@@ -35,6 +37,7 @@ enum class CanvasTextureLayer {
 class TERMIN_GUI_NATIVE_HOST_API DynamicTextureLease {
   public:
     explicit DynamicTextureLease(GuiApplicationHost& host);
+    explicit DynamicTextureLease(DocumentRenderer& renderer);
     explicit DynamicTextureLease(GuiWindowHost& host);
     ~DynamicTextureLease();
 
@@ -64,6 +67,8 @@ class TERMIN_GUI_NATIVE_HOST_API DynamicTextureLease {
     bool released() const;
 
   private:
+    explicit DynamicTextureLease(
+        std::shared_ptr<GuiApplicationHostLeaseState> state);
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

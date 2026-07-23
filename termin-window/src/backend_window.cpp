@@ -40,6 +40,12 @@ WindowedGraphicsSession::WindowedGraphicsSession(
 
 WindowedGraphicsSession::~WindowedGraphicsSession() {
     if (closed_) return;
+    if (active_window_managers_ != 0) {
+        tc_log_error(
+            "[WindowedGraphicsSession] destroyed with %zu live WindowManager instance(s)",
+            active_window_managers_);
+        return;
+    }
     if (windows_ && windows_->live_window_count() != 0) {
         tc_log_error(
             "[WindowedGraphicsSession] destroyed with %zu live presentation window(s)",
@@ -74,8 +80,39 @@ BackendWindowPtr WindowedGraphicsSession::create_window(const WindowConfig& conf
     return windows_->create_window(graphics(), config);
 }
 
+void WindowedGraphicsSession::attach_window_manager() {
+    if (closed_) {
+        tc_log_error(
+            "[WindowedGraphicsSession] cannot attach WindowManager after close");
+        throw std::logic_error(
+            "WindowedGraphicsSession cannot attach WindowManager after close");
+    }
+    if (active_window_managers_ != 0) {
+        tc_log_error(
+            "[WindowedGraphicsSession] only one WindowManager may own the window collection");
+        throw std::logic_error(
+            "WindowedGraphicsSession already has an active WindowManager");
+    }
+    ++active_window_managers_;
+}
+
+void WindowedGraphicsSession::detach_window_manager() noexcept {
+    if (active_window_managers_ == 0) {
+        tc_log_error(
+            "[WindowedGraphicsSession] WindowManager attachment count underflow");
+        return;
+    }
+    --active_window_managers_;
+}
+
 void WindowedGraphicsSession::close() {
     if (closed_) return;
+    if (active_window_managers_ != 0) {
+        tc_log_error(
+            "[WindowedGraphicsSession] close requires WindowManager to close first");
+        throw std::logic_error(
+            "WindowedGraphicsSession::close requires WindowManager to close first");
+    }
     if (windows_->live_window_count() != 0) {
         throw std::logic_error(
             "WindowedGraphicsSession::close requires all presentation windows to be closed");

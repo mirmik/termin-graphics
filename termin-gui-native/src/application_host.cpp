@@ -486,7 +486,12 @@ struct GuiApplicationHost::Impl {
             document->set_cursor_changed_callback(&cursor_changed, this);
             texture_leases = std::make_shared<GuiApplicationHostLeaseState>();
             texture_leases->owner_thread = owner_thread;
-            texture_leases->host = facade;
+            texture_leases->request_repaint = [this]() {
+                facade->request_repaint();
+            };
+            texture_leases->defer = [this](std::function<void()> callback) {
+                facade->defer(std::move(callback));
+            };
             texture_leases->graphics = graphics;
             texture_leases->document = document;
         } catch (...) {

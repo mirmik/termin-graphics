@@ -13,6 +13,7 @@ from termin.gui_native import (
     DynamicTextureLease,
     DynamicTextureOwnership,
     GuiWindowHost,
+    OffscreenGuiComposition,
     OffscreenGuiApplication,
     StandaloneGuiApplication,
     WindowKey,
@@ -26,13 +27,15 @@ def test_application_host_types_are_public_and_document_close_is_idempotent():
     document.close()
     assert document.closed
     assert GuiWindowHost.__module__ == "termin.gui_native._gui_native"
+    assert OffscreenGuiComposition.__module__ == "termin.gui_native._gui_native"
+    assert OffscreenGuiApplication is OffscreenGuiComposition
     assert OffscreenGuiApplication.__module__ == "termin.gui_native._gui_native"
     assert StandaloneGuiApplication.__module__ == "termin.gui_native._gui_native"
     assert DynamicTextureLease.__module__ == "termin.gui_native._gui_native"
 
 
 def test_offscreen_application_renders_reads_pixels_and_accepts_synthetic_input():
-    application = OffscreenGuiApplication(
+    application = OffscreenGuiComposition(
         width=64,
         height=48,
         continuous_rendering=False,
@@ -86,9 +89,9 @@ def test_installed_sdk_offscreen_python_consumer_without_display():
         }
     )
     script = """
-from termin.gui_native import OffscreenGuiApplication
+from termin.gui_native import OffscreenGuiComposition
 
-application = OffscreenGuiApplication(
+application = OffscreenGuiComposition(
     width=32,
     height=24,
     continuous_rendering=False,

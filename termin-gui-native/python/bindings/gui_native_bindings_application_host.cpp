@@ -16,6 +16,7 @@
 #include <tcbase/tc_log.h>
 #include <termin/gui_native/application_host.hpp>
 #include <termin/gui_native/dynamic_texture_lease.hpp>
+#include <termin/gui_native/offscreen_composition.hpp>
 #include <tgfx2/device_factory.hpp>
 #include <tgfx2/graphics_host.hpp>
 
@@ -27,8 +28,8 @@ using termin::gui_native::DynamicTextureLease;
 using termin::gui_native::DynamicTextureOwnership;
 using termin::gui_native::GuiWindowConfig;
 using termin::gui_native::GuiWindowHost;
-using termin::gui_native::OffscreenGuiApplication;
-using termin::gui_native::OffscreenGuiApplicationConfig;
+using termin::gui_native::OffscreenGuiComposition;
+using termin::gui_native::OffscreenGuiCompositionConfig;
 using termin::gui_native::StandaloneGuiApplication;
 using termin::gui_native::StandaloneGuiApplicationConfig;
 using CanvasRef = termin::gui_native::python_bindings::CanvasRef;
@@ -101,6 +102,32 @@ int32_t python_key_code(termin::WindowKey key) {
   default:
     return -1;
   }
+}
+
+termin::WindowCursor compatibility_window_cursor(tc_ui_cursor_intent cursor) {
+  switch (cursor) {
+  case TC_UI_CURSOR_TEXT:
+    return termin::WindowCursor::Text;
+  case TC_UI_CURSOR_HAND:
+    return termin::WindowCursor::Hand;
+  case TC_UI_CURSOR_CROSSHAIR:
+    return termin::WindowCursor::Crosshair;
+  case TC_UI_CURSOR_MOVE:
+    return termin::WindowCursor::Move;
+  case TC_UI_CURSOR_RESIZE_HORIZONTAL:
+    return termin::WindowCursor::ResizeHorizontal;
+  case TC_UI_CURSOR_RESIZE_VERTICAL:
+    return termin::WindowCursor::ResizeVertical;
+  case TC_UI_CURSOR_RESIZE_NWSE:
+    return termin::WindowCursor::ResizeNWSE;
+  case TC_UI_CURSOR_RESIZE_NESW:
+    return termin::WindowCursor::ResizeNESW;
+  case TC_UI_CURSOR_INHERIT:
+  case TC_UI_CURSOR_DEFAULT:
+  case TC_UI_CURSOR_INTENT_COUNT:
+    return termin::WindowCursor::Default;
+  }
+  return termin::WindowCursor::Default;
 }
 
 nb::dict python_window_event(const termin::WindowEvent &event) {
@@ -269,9 +296,9 @@ private:
 
 class PythonOffscreenGuiApplication {
 public:
-  explicit PythonOffscreenGuiApplication(OffscreenGuiApplicationConfig config)
+  explicit PythonOffscreenGuiApplication(OffscreenGuiCompositionConfig config)
       : application_(
-            std::make_unique<OffscreenGuiApplication>(std::move(config))),
+            std::make_unique<OffscreenGuiComposition>(std::move(config))),
         document_(std::make_unique<PythonDocument>(application_->document())) {}
 
   ~PythonOffscreenGuiApplication() {
@@ -291,7 +318,7 @@ public:
     }
   }
 
-  OffscreenGuiApplication &get() const {
+  OffscreenGuiComposition &get() const {
     if (!application_)
       throw std::runtime_error("OffscreenGuiApplication is closed");
     return *application_;
@@ -314,7 +341,7 @@ public:
   bool is_open() const { return application_ && application_->is_open(); }
 
 private:
-  std::unique_ptr<OffscreenGuiApplication> application_;
+  std::unique_ptr<OffscreenGuiComposition> application_;
   std::unique_ptr<PythonDocument> document_;
 };
 
@@ -543,7 +570,7 @@ void bind_gui_native_application_host(nb::module_ &m) {
       .value("RESIZE_NWSE", termin::WindowCursor::ResizeNWSE)
       .value("RESIZE_NESW", termin::WindowCursor::ResizeNESW);
 
-  nb::class_<PythonOffscreenGuiApplication>(m, "OffscreenGuiApplication")
+  nb::class_<PythonOffscreenGuiApplication>(m, "OffscreenGuiComposition")
       .def(
           "__init__",
           [](PythonOffscreenGuiApplication *self, int width, int height,
@@ -556,15 +583,15 @@ void bind_gui_native_application_host(nb::module_ &m) {
              const std::string &shader_cache_root,
              const std::string &shader_artifact_root,
              bool enable_shader_dev_compile) {
-            OffscreenGuiApplicationConfig config;
+            OffscreenGuiCompositionConfig config;
             config.width = width;
             config.height = height;
             config.backend = offscreen_backend(backend);
-            config.gui.font_path = font_path;
-            config.gui.font_size = font_size;
-            config.gui.clear_color = clear_color;
-            config.gui.enable_text_input = enable_text_input;
-            config.gui.continuous_rendering = continuous_rendering;
+            config.renderer.font_path = font_path;
+            config.renderer.font_size = font_size;
+            config.renderer.clear_color = clear_color;
+            config.renderer.enable_text_input = enable_text_input;
+            config.continuous_rendering = continuous_rendering;
             config.sdk_root = sdk_root;
             config.shader_compiler_path = shader_compiler_path;
             config.slang_compiler_path = slang_compiler_path;
@@ -595,7 +622,7 @@ void bind_gui_native_application_host(nb::module_ &m) {
           nb::rv_policy::reference_internal)
       .def("pump_events",
            [](PythonOffscreenGuiApplication &self) {
-             return self.get().pump_events();
+             return self.get().pump_input();
            })
       .def("render_frame",
            [](PythonOffscreenGuiApplication &self) {
@@ -611,38 +638,26 @@ void bind_gui_native_application_host(nb::module_ &m) {
           "push_pointer_move",
           [](PythonOffscreenGuiApplication &self, float x, float y,
              uint32_t modifiers) {
-            termin::WindowEvent event;
-            event.type = termin::WindowEventType::PointerMoved;
-            event.pointer.logical_position = {x, y};
-            event.pointer.framebuffer_position = {x, y};
-            event.pointer.modifiers = modifiers;
-            self.get().push_event(event);
+            self.get().push_pointer(tc_ui_pointer_event{
+                TC_UI_POINTER_MOVE, x, y, 0, 0,
+                static_cast<int32_t>(modifiers), 0.0f, 0.0f});
           },
           nb::arg("x"), nb::arg("y"), nb::arg("modifiers") = 0)
       .def(
           "push_key",
           [](PythonOffscreenGuiApplication &self, termin::WindowKey key,
              bool pressed, uint32_t modifiers, bool repeat) {
-            termin::WindowEvent event;
-            event.type = pressed ? termin::WindowEventType::KeyPressed
-                                 : termin::WindowEventType::KeyReleased;
-            event.key.key = key;
-            event.key.modifiers = modifiers;
-            event.key.repeat = repeat;
-            self.get().push_event(event);
+            self.get().push_key(tc_ui_key_event{
+                pressed ? TC_UI_KEY_DOWN : TC_UI_KEY_UP,
+                python_key_code(key), 0, static_cast<int32_t>(modifiers),
+                repeat});
           },
           nb::arg("key"), nb::arg("pressed") = true, nb::arg("modifiers") = 0,
           nb::arg("repeat") = false)
       .def(
           "push_text",
           [](PythonOffscreenGuiApplication &self, const std::string &text) {
-            if (text.size() >= termin::WindowTextEvent::Capacity)
-              throw std::invalid_argument(
-                  "text event exceeds WindowTextEvent capacity");
-            termin::WindowEvent event;
-            event.type = termin::WindowEventType::TextInput;
-            std::memcpy(event.text.utf8.data(), text.c_str(), text.size() + 1);
-            self.get().push_event(event);
+            self.get().push_text(text);
           },
           nb::arg("text"))
       .def("request_repaint",
@@ -688,7 +703,8 @@ void bind_gui_native_application_host(nb::module_ &m) {
                    })
       .def_prop_ro("cursor",
                    [](PythonOffscreenGuiApplication &self) {
-                     return self.get().platform_services().cursor();
+                     return compatibility_window_cursor(
+                         self.get().platform_services().cursor());
                    })
       .def_prop_ro("text_input_enabled",
                    [](PythonOffscreenGuiApplication &self) {
@@ -710,6 +726,8 @@ void bind_gui_native_application_host(nb::module_ &m) {
         return false;
       });
 
+  m.attr("OffscreenGuiApplication") = m.attr("OffscreenGuiComposition");
+
   nb::class_<DynamicTextureLease>(m, "DynamicTextureLease")
       .def(
           "__init__",
@@ -721,8 +739,7 @@ void bind_gui_native_application_host(nb::module_ &m) {
           "__init__",
           [](DynamicTextureLease *self,
              PythonOffscreenGuiApplication &application) {
-            new (self)
-                DynamicTextureLease(application.get().application_host());
+            new (self) DynamicTextureLease(application.get().renderer());
           },
           nb::arg("application"), nb::keep_alive<1, 2>())
       .def(
