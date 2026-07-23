@@ -71,7 +71,6 @@ def run_demo(title: str, make_widget: Callable[[], object],
         if w <= 0 or h <= 0:
             continue
         tex = ui.render_compose(w, h, background_color=bg)
-        ui.process_deferred()
         if tex is not None:
             window.present(tex)
 

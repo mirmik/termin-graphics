@@ -4,6 +4,7 @@ import struct
 import numpy as np
 import pytest
 
+from termin.glb import loader as glb_loader_module
 from termin.default_assets.resource_manager import DefaultResourceManager
 from termin.glb.asset import GLBAsset
 from termin.glb.instantiator import _glb_mesh_to_tc_mesh
@@ -104,6 +105,40 @@ def _write_triangle_gltf(tmp_path):
     gltf_path = tmp_path / "triangle.gltf"
     gltf_path.write_text(json.dumps(gltf), encoding="utf-8")
     return gltf_path
+
+
+def test_glb_load_logs_realtime_mesh_phases(tmp_path, monkeypatch):
+    messages = []
+    monkeypatch.setattr(glb_loader_module.log, "info", messages.append)
+
+    gltf_path = _write_triangle_gltf(tmp_path)
+    scene_data = load_glb_file(gltf_path)
+
+    assert len(scene_data.meshes) == 1
+    begin_index = next(i for i, message in enumerate(messages) if "[GLBLoad] begin" in message)
+    primitive_begin_index = next(
+        i for i, message in enumerate(messages)
+        if "[GLBLoad] primitive-begin" in message
+    )
+    deduplicate_begin_index = next(
+        i for i, message in enumerate(messages)
+        if "[GLBLoad] deduplicate-begin" in message
+    )
+    deduplicate_end_index = next(
+        i for i, message in enumerate(messages)
+        if "[GLBLoad] deduplicate-end" in message
+    )
+    complete_index = next(
+        i for i, message in enumerate(messages)
+        if "[GLBLoad] complete" in message
+    )
+
+    assert begin_index < primitive_begin_index < deduplicate_begin_index
+    assert deduplicate_begin_index < deduplicate_end_index < complete_index
+    assert "source_indices=3" in messages[deduplicate_end_index]
+    assert "unique_vertices=3" in messages[deduplicate_end_index]
+    assert "duration_ms=" in messages[deduplicate_end_index]
+    assert "thread=" in messages[deduplicate_end_index]
 
 
 def test_load_gltf_with_external_bin_and_texture(tmp_path):

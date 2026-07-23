@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Protocol, cast
+import threading
+import time
+from typing import TYPE_CHECKING, Dict, Iterator, Protocol, cast
 
 from tcbase import log
 from termin_assets import DataAsset, EmbeddedAssetSpec, get_resource_manager
@@ -81,6 +84,35 @@ class GLBAsset(DataAsset["GLBSceneData"]):
 
     def _source_path_string(self) -> str | None:
         return str(self._source_path) if self._source_path else None
+
+    @contextmanager
+    def _load_stage(self, stage: str, **fields: object) -> Iterator[None]:
+        started_at = time.perf_counter()
+        thread_id = threading.get_ident()
+        details = "".join(
+            f" {key}='{value}'" if isinstance(value, str) else f" {key}={value}"
+            for key, value in fields.items()
+        )
+        source_path = self._source_path_string() or ""
+        log.info(
+            f"[GLBAsset] stage-begin stage={stage}{details} "
+            f"name='{self.name}' path='{source_path}' thread={thread_id}"
+        )
+        try:
+            yield
+        except Exception:
+            log.error(
+                f"[GLBAsset] stage-failed stage={stage}{details} "
+                f"duration_ms={(time.perf_counter() - started_at) * 1000.0:.3f} "
+                f"name='{self.name}' path='{source_path}' thread={thread_id}",
+                exc_info=True,
+            )
+            raise
+        log.info(
+            f"[GLBAsset] stage-end stage={stage}{details} "
+            f"duration_ms={(time.perf_counter() - started_at) * 1000.0:.3f} "
+            f"name='{self.name}' path='{source_path}' thread={thread_id}"
+        )
 
     def _get_or_create_child_asset(
         self,
@@ -276,31 +308,39 @@ class GLBAsset(DataAsset["GLBSceneData"]):
 
         spec_changed = False
 
-        # Create mesh assets for any meshes not in spec
-        for glb_mesh in self._data.meshes:
-            if glb_mesh.name not in self._mesh_assets:
-                self._create_new_mesh_asset(glb_mesh.name)
-                spec_changed = True
+        with self._load_stage(
+            "discover-children",
+            meshes=len(self._data.meshes),
+            skins=len(self._data.skins),
+            animations=len(self._data.animations),
+        ):
+            # Create mesh assets for any meshes not in spec
+            for glb_mesh in self._data.meshes:
+                if glb_mesh.name not in self._mesh_assets:
+                    self._create_new_mesh_asset(glb_mesh.name)
+                    spec_changed = True
 
-        # Create skeleton assets for any skins not in spec
-        for i, _skin in enumerate(self._data.skins):
-            skeleton_key = "skeleton" if i == 0 else f"skeleton_{i}"
-            if skeleton_key not in self._skeleton_assets:
-                self._create_new_skeleton_asset(skeleton_key, i)
-                spec_changed = True
+            # Create skeleton assets for any skins not in spec
+            for i, _skin in enumerate(self._data.skins):
+                skeleton_key = "skeleton" if i == 0 else f"skeleton_{i}"
+                if skeleton_key not in self._skeleton_assets:
+                    self._create_new_skeleton_asset(skeleton_key, i)
+                    spec_changed = True
 
-        # Create animation assets for any animations not in spec
-        for glb_anim in self._data.animations:
-            if glb_anim.name not in self._animation_assets:
-                self._create_new_animation_asset(glb_anim.name)
-                spec_changed = True
+            # Create animation assets for any animations not in spec
+            for glb_anim in self._data.animations:
+                if glb_anim.name not in self._animation_assets:
+                    self._create_new_animation_asset(glb_anim.name)
+                    spec_changed = True
 
         # Populate all child assets with data
-        self._populate_child_assets()
+        with self._load_stage("publish-children"):
+            self._populate_child_assets()
 
         # Save spec if new child assets were created
         if spec_changed and self._source_path:
-            self.save_spec_file()
+            with self._load_stage("save-spec"):
+                self.save_spec_file()
 
     def _make_mesh_load_callback(self, mesh_name: str):
         """Create a load callback that triggers GLBAsset loading for a specific mesh."""
@@ -392,59 +432,62 @@ class GLBAsset(DataAsset["GLBSceneData"]):
 
         # Populate mesh assets
         for mesh_name, asset in self._mesh_assets.items():
-            for glb_mesh in self._data.meshes:
-                if glb_mesh.name == mesh_name:
-                    tc_mesh = asset.cached_data
-                    if tc_mesh is not None and tc_mesh.is_valid:
-                        # Mesh was declared, populate existing entry
-                        if not tc_mesh_is_loaded(tc_mesh):
-                            _populate_tc_mesh_from_glb(tc_mesh, glb_mesh)
-                    else:
-                        # Create new mesh entry with asset's UUID
-                        tc_mesh = _glb_mesh_to_tc_mesh(glb_mesh, asset.uuid)
-                    asset.set_runtime_data(tc_mesh, loaded=True)
-                    break
+            with self._load_stage("publish-mesh", child=mesh_name):
+                for glb_mesh in self._data.meshes:
+                    if glb_mesh.name == mesh_name:
+                        tc_mesh = asset.cached_data
+                        if tc_mesh is not None and tc_mesh.is_valid:
+                            # Mesh was declared, populate existing entry
+                            if not tc_mesh_is_loaded(tc_mesh):
+                                _populate_tc_mesh_from_glb(tc_mesh, glb_mesh)
+                        else:
+                            # Create new mesh entry with asset's UUID
+                            tc_mesh = _glb_mesh_to_tc_mesh(glb_mesh, asset.uuid)
+                        asset.set_runtime_data(tc_mesh, loaded=True)
+                        break
 
         # Populate skeleton assets
         for skeleton_key, asset in self._skeleton_assets.items():
-            # Parse skeleton_key to get index
-            if skeleton_key == "skeleton":
-                index = 0
-            else:
-                index = int(skeleton_key.split("_")[-1])
+            with self._load_stage("publish-skeleton", child=skeleton_key):
+                # Parse skeleton_key to get index
+                if skeleton_key == "skeleton":
+                    index = 0
+                else:
+                    index = int(skeleton_key.split("_")[-1])
 
-            if index < len(self._data.skins):
-                tc_skel = asset.cached_data
-                if tc_skel is not None and tc_skel.is_valid:
-                    # Skeleton was declared, populate existing entry
-                    if not tc_skeleton_is_loaded(tc_skel):
-                        _populate_tc_skeleton_from_glb(
-                            tc_skel,
+                if index < len(self._data.skins):
+                    tc_skel = asset.cached_data
+                    if tc_skel is not None and tc_skel.is_valid:
+                        # Skeleton was declared, populate existing entry
+                        if not tc_skeleton_is_loaded(tc_skel):
+                            _populate_tc_skeleton_from_glb(
+                                tc_skel,
+                                self._data.skins[index],
+                                self._data.nodes,
+                            )
+                    else:
+                        # Create new skeleton entry with asset's UUID
+                        tc_skel = _glb_skin_to_tc_skeleton(
                             self._data.skins[index],
                             self._data.nodes,
+                            asset.uuid,
                         )
-                else:
-                    # Create new skeleton entry with asset's UUID
-                    tc_skel = _glb_skin_to_tc_skeleton(
-                        self._data.skins[index],
-                        self._data.nodes,
-                        asset.uuid,
-                    )
-                asset.set_runtime_data(tc_skel, loaded=True)
+                    asset.set_runtime_data(tc_skel, loaded=True)
 
         # Populate animation assets
         for anim_name, asset in self._animation_assets.items():
-            for glb_anim in self._data.animations:
-                if glb_anim.name != anim_name:
-                    continue
-                clip = asset.cached_data
-                if clip is not None and clip.is_valid:
-                    if not tc_animation_is_loaded(clip):
-                        clip_from_glb(glb_anim, asset.uuid)
-                else:
-                    clip = clip_from_glb(glb_anim, asset.uuid)
-                asset.set_runtime_data(clip, loaded=True)
-                break
+            with self._load_stage("publish-animation", child=anim_name):
+                for glb_anim in self._data.animations:
+                    if glb_anim.name != anim_name:
+                        continue
+                    clip = asset.cached_data
+                    if clip is not None and clip.is_valid:
+                        if not tc_animation_is_loaded(clip):
+                            clip_from_glb(glb_anim, asset.uuid)
+                    else:
+                        clip = clip_from_glb(glb_anim, asset.uuid)
+                    asset.set_runtime_data(clip, loaded=True)
+                    break
 
     def _create_new_mesh_asset(self, mesh_name: str) -> "MeshAsset":
         """Get or create a MeshAsset for a mesh discovered during load via ResourceManager."""

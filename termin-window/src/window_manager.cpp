@@ -6,7 +6,6 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
-#include <thread>
 #include <utility>
 
 extern "C" {
@@ -42,7 +41,6 @@ struct WindowManager::Impl {
     };
 
     WindowedGraphicsSession* session = nullptr;
-    std::thread::id owner_thread = std::this_thread::get_id();
     std::vector<Slot> slots;
     std::vector<uint32_t> free_slots;
     std::vector<WindowHandle> creation_order;
@@ -53,16 +51,7 @@ struct WindowManager::Impl {
         session->attach_window_manager();
     }
 
-    void require_owner(const char* operation) const {
-        if (std::this_thread::get_id() != owner_thread) {
-            manager_logic_error(
-                std::string("WindowManager::") + operation +
-                " requires the owner thread");
-        }
-    }
-
     void require_open(const char* operation) const {
-        require_owner(operation);
         if (!open || !session) {
             manager_logic_error(
                 std::string("WindowManager::") + operation +
@@ -233,7 +222,6 @@ size_t WindowManager::pending_event_count(WindowHandle handle) const {
 
 void WindowManager::close() {
     if (!impl_ || !impl_->open) return;
-    impl_->require_owner("close");
 
     while (!impl_->creation_order.empty()) {
         impl_->destroy(impl_->creation_order.back());

@@ -78,7 +78,6 @@ def main():
         if w <= 0 or h <= 0:
             continue
         tex = ui.render_compose(w, h, background_color=_t.bg_primary)
-        ui.process_deferred()
         if tex is not None:
             window.present(tex)
 

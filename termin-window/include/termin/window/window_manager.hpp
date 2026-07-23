@@ -66,7 +66,7 @@ public:
     size_t pending_event_count(WindowHandle handle) const;
 
     // Closes all windows in reverse creation order and detaches from the
-    // borrowed session. Idempotent on the owner thread.
+    // borrowed session. Idempotent.
     void close();
     bool is_open() const noexcept;
 };

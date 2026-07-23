@@ -51,7 +51,7 @@ typedef struct tc_ui_document_inspect_snapshot {
     uint64_t theme_revision;
 } tc_ui_document_inspect_snapshot;
 
-/* Captures an owner-thread, point-in-time copy. On failure out_snapshot is unchanged. */
+/* Captures a point-in-time copy. On failure out_snapshot is unchanged. */
 TERMIN_GUI_NATIVE_API bool
 tc_ui_document_capture_snapshot(tc_ui_document_handle document,
                                 tc_ui_document_inspect_snapshot* out_snapshot);

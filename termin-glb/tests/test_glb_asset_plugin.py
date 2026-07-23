@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from termin_assets import AssetContext, PreLoadResult
+from termin.glb import asset as glb_asset_module
 from termin.glb.asset import GLBAsset
 from termin.glb.asset_plugin import GLBImportPlugin, GLBRuntimePlugin
 
@@ -24,6 +25,20 @@ class FakeResourceManager:
         self._assets_by_uuid[asset.uuid] = asset
         if source_path:
             asset.source_path = source_path
+
+
+def test_glb_asset_stage_logs_begin_and_end(monkeypatch):
+    messages = []
+    monkeypatch.setattr(glb_asset_module.log, "info", messages.append)
+    asset = GLBAsset(name="robot", source_path="/tmp/robot.glb")
+
+    with asset._load_stage("publish-mesh", child="Body"):
+        pass
+
+    assert "[GLBAsset] stage-begin stage=publish-mesh child='Body'" in messages[0]
+    assert "[GLBAsset] stage-end stage=publish-mesh child='Body'" in messages[1]
+    assert "duration_ms=" in messages[1]
+    assert "thread=" in messages[1]
 
 
 def test_glb_import_plugin_preloads_meta_uuid(tmp_path):

@@ -10,12 +10,76 @@ import json
 import struct
 import base64
 import mimetypes
+import threading
+import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, Iterator, List, Optional
 
 import numpy as np
 
 from tcbase import log
+
+
+class _GLBLoadTrace:
+    """Realtime timing trace for one GLB/glTF parse operation."""
+
+    def __init__(self, source: str):
+        self.source = source
+        self.thread_id = threading.get_ident()
+        self.started_at = time.perf_counter()
+
+    def begin(self) -> None:
+        log.info(f"[GLBLoad] begin source='{self.source}' thread={self.thread_id}")
+
+    def complete(self, scene_data: "GLBSceneData") -> None:
+        log.info(
+            f"[GLBLoad] complete source='{self.source}' "
+            f"meshes={len(scene_data.meshes)} nodes={len(scene_data.nodes)} "
+            f"materials={len(scene_data.materials)} textures={len(scene_data.textures)} "
+            f"skins={len(scene_data.skins)} animations={len(scene_data.animations)} "
+            f"duration_ms={(time.perf_counter() - self.started_at) * 1000.0:.3f} "
+            f"thread={self.thread_id}"
+        )
+
+    def failed(self) -> None:
+        log.error(
+            f"[GLBLoad] failed source='{self.source}' "
+            f"duration_ms={(time.perf_counter() - self.started_at) * 1000.0:.3f} "
+            f"thread={self.thread_id}",
+            exc_info=True,
+        )
+
+    @contextmanager
+    def stage(self, name: str, **fields: object) -> Iterator[None]:
+        details = self._format_fields(fields)
+        started_at = time.perf_counter()
+        log.info(
+            f"[GLBLoad] stage-begin stage={name}{details} "
+            f"source='{self.source}' thread={self.thread_id}"
+        )
+        try:
+            yield
+        except Exception:
+            log.error(
+                f"[GLBLoad] stage-failed stage={name}{details} "
+                f"duration_ms={(time.perf_counter() - started_at) * 1000.0:.3f} "
+                f"source='{self.source}' thread={self.thread_id}",
+                exc_info=True,
+            )
+            raise
+        log.info(
+            f"[GLBLoad] stage-end stage={name}{details} "
+            f"duration_ms={(time.perf_counter() - started_at) * 1000.0:.3f} "
+            f"source='{self.source}' thread={self.thread_id}"
+        )
+
+    @staticmethod
+    def _format_fields(fields: dict[str, object]) -> str:
+        return "".join(
+            f" {key}='{value}'" if isinstance(value, str) else f" {key}={value}"
+            for key, value in fields.items()
+        )
 
 
 # ---------- DATA CLASSES ----------
@@ -546,10 +610,22 @@ def _decompose_node_matrix(matrix_values: Any, node_index: int) -> tuple[np.ndar
 
 # ---------- PARSING FUNCTIONS ----------
 
-def _parse_meshes(gltf: dict, buffers: list[bytes], scene_data: GLBSceneData):
+def _parse_meshes(
+    gltf: dict,
+    buffers: list[bytes],
+    scene_data: GLBSceneData,
+    trace: _GLBLoadTrace | None = None,
+):
     """Parse all meshes from glTF."""
     for mesh_idx, mesh in enumerate(gltf.get("meshes", [])):
         mesh_name = mesh.get("name", f"Mesh_{mesh_idx}")
+        mesh_started_at = time.perf_counter()
+        if trace is not None:
+            log.info(
+                f"[GLBLoad] mesh-begin mesh_index={mesh_idx} name='{mesh_name}' "
+                f"primitives={len(mesh.get('primitives', []))} "
+                f"source='{trace.source}' thread={trace.thread_id}"
+            )
         scene_data.mesh_index_map[mesh_idx] = []
 
         primitive_records: list[dict[str, Any]] = []
@@ -565,10 +641,26 @@ def _parse_meshes(gltf: dict, buffers: list[bytes], scene_data: GLBSceneData):
         has_weights = False
 
         for prim_idx, primitive in enumerate(mesh.get("primitives", [])):
+            primitive_started_at = time.perf_counter()
             attributes = primitive.get("attributes", {})
+            if trace is not None:
+                log.info(
+                    f"[GLBLoad] primitive-begin mesh_index={mesh_idx} "
+                    f"primitive_index={prim_idx} name='{mesh_name}' "
+                    f"attributes={len(attributes)} source='{trace.source}' "
+                    f"thread={trace.thread_id}"
+                )
 
             # Vertices (required)
             if "POSITION" not in attributes:
+                if trace is not None:
+                    log.info(
+                        f"[GLBLoad] primitive-end mesh_index={mesh_idx} "
+                        f"primitive_index={prim_idx} name='{mesh_name}' status=skipped "
+                        f"duration_ms="
+                        f"{(time.perf_counter() - primitive_started_at) * 1000.0:.3f} "
+                        f"source='{trace.source}' thread={trace.thread_id}"
+                    )
                 continue
             vertices = _read_float_vertex_attribute(gltf, buffers, attributes["POSITION"], "POSITION")
 
@@ -657,8 +749,24 @@ def _parse_meshes(gltf: dict, buffers: list[bytes], scene_data: GLBSceneData):
                 material_slot=material_slot,
             ))
             next_first_index += len(indices)
+            if trace is not None:
+                log.info(
+                    f"[GLBLoad] primitive-end mesh_index={mesh_idx} "
+                    f"primitive_index={prim_idx} name='{prim_name}' "
+                    f"vertices={len(vertices)} indices={len(indices)} "
+                    f"duration_ms="
+                    f"{(time.perf_counter() - primitive_started_at) * 1000.0:.3f} "
+                    f"source='{trace.source}' thread={trace.thread_id}"
+                )
 
         if not primitive_records:
+            if trace is not None:
+                log.info(
+                    f"[GLBLoad] mesh-end mesh_index={mesh_idx} name='{mesh_name}' "
+                    f"status=skipped duration_ms="
+                    f"{(time.perf_counter() - mesh_started_at) * 1000.0:.3f} "
+                    f"source='{trace.source}' thread={trace.thread_id}"
+                )
             continue
 
         vertex_map: dict[tuple, int] = {}
@@ -677,6 +785,15 @@ def _parse_meshes(gltf: dict, buffers: list[bytes], scene_data: GLBSceneData):
             if data is None:
                 return fallback
             return tuple(data[index].tolist())
+
+        total_source_indices = sum(len(record["indices"]) for record in primitive_records)
+        deduplicate_started_at = time.perf_counter()
+        if trace is not None:
+            log.info(
+                f"[GLBLoad] deduplicate-begin mesh_index={mesh_idx} name='{mesh_name}' "
+                f"source_indices={total_source_indices} source='{trace.source}' "
+                f"thread={trace.thread_id}"
+            )
 
         for record in primitive_records:
             local_indices: list[int] = []
@@ -730,6 +847,15 @@ def _parse_meshes(gltf: dict, buffers: list[bytes], scene_data: GLBSceneData):
 
             index_chunks.append(np.asarray(local_indices, dtype=np.uint32))
 
+        if trace is not None:
+            log.info(
+                f"[GLBLoad] deduplicate-end mesh_index={mesh_idx} name='{mesh_name}' "
+                f"source_indices={total_source_indices} unique_vertices={len(vertex_out)} "
+                f"duration_ms="
+                f"{(time.perf_counter() - deduplicate_started_at) * 1000.0:.3f} "
+                f"source='{trace.source}' thread={trace.thread_id}"
+            )
+
         vertices = np.asarray(vertex_out, dtype=np.float32)
         normals = np.asarray(normal_out, dtype=np.float32) if has_normals else None
         uvs = np.asarray(uv_out, dtype=np.float32) if has_uvs else None
@@ -752,6 +878,13 @@ def _parse_meshes(gltf: dict, buffers: list[bytes], scene_data: GLBSceneData):
             joint_weights=joint_weights,
             submeshes=submeshes,
         ))
+        if trace is not None:
+            log.info(
+                f"[GLBLoad] mesh-end mesh_index={mesh_idx} name='{mesh_name}' "
+                f"vertices={len(vertices)} indices={len(indices)} "
+                f"duration_ms={(time.perf_counter() - mesh_started_at) * 1000.0:.3f} "
+                f"source='{trace.source}' thread={trace.thread_id}"
+            )
 
 
 def _parse_materials(gltf: dict, scene_data: GLBSceneData):
@@ -1011,21 +1144,44 @@ def _parse_animations(gltf: dict, buffers: list[bytes], scene_data: GLBSceneData
 
 # ---------- PUBLIC API ----------
 
-def _build_scene_data(gltf: dict, buffers: list[bytes], base_path: Path | None = None) -> GLBSceneData:
+def _build_scene_data(
+    gltf: dict,
+    buffers: list[bytes],
+    base_path: Path | None = None,
+    trace: _GLBLoadTrace | None = None,
+) -> GLBSceneData:
     """Parse glTF JSON and buffers into scene data."""
     scene_data = GLBSceneData()
 
-    _parse_nodes(gltf, scene_data)
-    _parse_materials(gltf, scene_data)
-    _parse_textures(gltf, buffers, scene_data, base_path)
-    _parse_meshes(gltf, buffers, scene_data)
-    _parse_skins(gltf, buffers, scene_data)
-    _parse_animations(gltf, buffers, scene_data)
+    if trace is None:
+        _parse_nodes(gltf, scene_data)
+        _parse_materials(gltf, scene_data)
+        _parse_textures(gltf, buffers, scene_data, base_path)
+        _parse_meshes(gltf, buffers, scene_data)
+        _parse_skins(gltf, buffers, scene_data)
+        _parse_animations(gltf, buffers, scene_data)
+        return scene_data
 
+    with trace.stage("nodes", count=len(gltf.get("nodes", []))):
+        _parse_nodes(gltf, scene_data)
+    with trace.stage("materials", count=len(gltf.get("materials", []))):
+        _parse_materials(gltf, scene_data)
+    with trace.stage("textures", count=len(gltf.get("textures", []))):
+        _parse_textures(gltf, buffers, scene_data, base_path)
+    with trace.stage("meshes", count=len(gltf.get("meshes", []))):
+        _parse_meshes(gltf, buffers, scene_data, trace)
+    with trace.stage("skins", count=len(gltf.get("skins", []))):
+        _parse_skins(gltf, buffers, scene_data)
+    with trace.stage("animations", count=len(gltf.get("animations", []))):
+        _parse_animations(gltf, buffers, scene_data)
     return scene_data
 
 
-def load_glb_file(path: str | Path) -> GLBSceneData:
+def load_glb_file(
+    path: str | Path,
+    *,
+    _trace: _GLBLoadTrace | None = None,
+) -> GLBSceneData:
     """Load a GLB or JSON glTF file and return scene data.
 
     Args:
@@ -1035,9 +1191,14 @@ def load_glb_file(path: str | Path) -> GLBSceneData:
         GLBSceneData containing meshes, materials, textures, animations, nodes
     """
     path = Path(path)
+    trace = _trace or _GLBLoadTrace(str(path))
+    owns_trace = _trace is None
+    if owns_trace:
+        trace.begin()
 
-    with open(path, "rb") as f:
-        data = f.read()
+    with trace.stage("read-file"):
+        with open(path, "rb") as f:
+            data = f.read()
 
     # Parse header
     if len(data) < 12:
@@ -1047,9 +1208,14 @@ def load_glb_file(path: str | Path) -> GLBSceneData:
     if magic != b"glTF":
         if path.suffix.lower() != ".gltf":
             raise ValueError(f"Invalid GLB magic: {magic}")
-        gltf = json.loads(data.decode("utf-8"))
-        buffers = _load_gltf_buffers(gltf, path.parent)
-        return _build_scene_data(gltf, buffers, path.parent)
+        with trace.stage("parse-json", bytes=len(data)):
+            gltf = json.loads(data.decode("utf-8"))
+        with trace.stage("read-external-buffers", count=len(gltf.get("buffers", []))):
+            buffers = _load_gltf_buffers(gltf, path.parent)
+        scene_data = _build_scene_data(gltf, buffers, path.parent, trace)
+        if owns_trace:
+            trace.complete(scene_data)
+        return scene_data
 
     version, length = struct.unpack("<II", data[4:12])
     if version != 2:
@@ -1079,10 +1245,14 @@ def load_glb_file(path: str | Path) -> GLBSceneData:
     if json_data is None:
         raise ValueError("No JSON chunk found in GLB")
 
-    gltf = json.loads(json_data)
+    with trace.stage("parse-json", bytes=len(json_data)):
+        gltf = json.loads(json_data)
     buffers = [bin_data or b""]
 
-    return _build_scene_data(gltf, buffers, path.parent)
+    scene_data = _build_scene_data(gltf, buffers, path.parent, trace)
+    if owns_trace:
+        trace.complete(scene_data)
+    return scene_data
 
 
 def convert_y_up_to_z_up(scene_data: GLBSceneData) -> None:
@@ -1369,19 +1539,25 @@ def load_glb_file_normalized(
     Returns:
         GLBSceneData (possibly transformed)
     """
-    scene_data = load_glb_file(path)
+    trace = _GLBLoadTrace(str(path))
+    trace.begin()
+    scene_data = load_glb_file(path, _trace=trace)
 
     # Coordinate conversion first (before scale normalization)
     if convert_to_z_up:
-        convert_y_up_to_z_up(scene_data)
+        with trace.stage("convert-y-up-to-z-up"):
+            convert_y_up_to_z_up(scene_data)
 
     # Blender-specific fix (after coordinate conversion)
     if blender_z_up_fix:
-        apply_blender_z_up_fix(scene_data)
+        with trace.stage("apply-blender-z-up-fix"):
+            apply_blender_z_up_fix(scene_data)
 
     if normalize_scale:
-        normalize_glb_scale(scene_data)
+        with trace.stage("normalize-scale"):
+            normalize_glb_scale(scene_data)
 
+    trace.complete(scene_data)
     return scene_data
 
 
@@ -1403,6 +1579,9 @@ def load_glb_file_from_buffer(
     Returns:
         GLBSceneData (possibly transformed)
     """
+    trace = _GLBLoadTrace("<memory>")
+    trace.begin()
+
     # Parse header
     if len(data) < 12:
         raise ValueError("Data too small to be valid GLB")
@@ -1439,20 +1618,25 @@ def load_glb_file_from_buffer(
     if json_data is None:
         raise ValueError("No JSON chunk found in GLB")
 
-    gltf = json.loads(json_data)
+    with trace.stage("parse-json", bytes=len(json_data)):
+        gltf = json.loads(json_data)
     buffers = [bin_data or b""]
 
-    scene_data = _build_scene_data(gltf, buffers)
+    scene_data = _build_scene_data(gltf, buffers, trace=trace)
 
     # Coordinate conversion first (before scale normalization)
     if convert_to_z_up:
-        convert_y_up_to_z_up(scene_data)
+        with trace.stage("convert-y-up-to-z-up"):
+            convert_y_up_to_z_up(scene_data)
 
     # Blender-specific fix (after coordinate conversion)
     if blender_z_up_fix:
-        apply_blender_z_up_fix(scene_data)
+        with trace.stage("apply-blender-z-up-fix"):
+            apply_blender_z_up_fix(scene_data)
 
     if normalize_scale:
-        normalize_glb_scale(scene_data)
+        with trace.stage("normalize-scale"):
+            normalize_glb_scale(scene_data)
 
+    trace.complete(scene_data)
     return scene_data
