@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 #include <tcbase/input_enums.hpp>
 
@@ -19,6 +20,7 @@ enum class WindowEventType : uint8_t {
     KeyPressed,
     KeyReleased,
     TextInput,
+    FileDropped,
 };
 
 enum class WindowKey : uint16_t {
@@ -93,12 +95,19 @@ struct WindowResizeEvent {
     int framebuffer_height = 0;
 };
 
+struct WindowFileDropEvent {
+    std::string path;
+    WindowPoint logical_position;
+    uint32_t modifiers = WindowModifierNone;
+};
+
 struct WindowEvent {
     WindowEventType type = WindowEventType::None;
     WindowPointerEvent pointer;
     WindowKeyEvent key;
     WindowTextEvent text;
     WindowResizeEvent resize;
+    WindowFileDropEvent file_drop;
 };
 
 } // namespace termin

@@ -164,46 +164,47 @@ tcbase::MouseButton translate_pointer_button(uint8_t button) {
     }
 }
 
-WindowKey translate_key(SDL_Keycode key) {
-    if (key >= SDLK_a && key <= SDLK_z) {
+WindowKey translate_key(SDL_Scancode key) {
+    if (key >= SDL_SCANCODE_A && key <= SDL_SCANCODE_Z) {
         return static_cast<WindowKey>(
             static_cast<uint16_t>(WindowKey::A) +
-            static_cast<uint16_t>(key - SDLK_a));
+            static_cast<uint16_t>(key - SDL_SCANCODE_A));
     }
-    if (key >= SDLK_0 && key <= SDLK_9) {
+    if (key >= SDL_SCANCODE_1 && key <= SDL_SCANCODE_9) {
         return static_cast<WindowKey>(
-            static_cast<uint16_t>(WindowKey::Digit0) +
-            static_cast<uint16_t>(key - SDLK_0));
+            static_cast<uint16_t>(WindowKey::Digit1) +
+            static_cast<uint16_t>(key - SDL_SCANCODE_1));
     }
     switch (key) {
-        case SDLK_TAB: return WindowKey::Tab;
-        case SDLK_RETURN:
-        case SDLK_KP_ENTER: return WindowKey::Enter;
-        case SDLK_SPACE: return WindowKey::Space;
-        case SDLK_ESCAPE: return WindowKey::Escape;
-        case SDLK_BACKSPACE: return WindowKey::Backspace;
-        case SDLK_DELETE: return WindowKey::Delete;
-        case SDLK_RIGHT: return WindowKey::Right;
-        case SDLK_LEFT: return WindowKey::Left;
-        case SDLK_DOWN: return WindowKey::Down;
-        case SDLK_UP: return WindowKey::Up;
-        case SDLK_HOME: return WindowKey::Home;
-        case SDLK_END: return WindowKey::End;
-        case SDLK_INSERT: return WindowKey::Insert;
-        case SDLK_PAGEUP: return WindowKey::PageUp;
-        case SDLK_PAGEDOWN: return WindowKey::PageDown;
-        case SDLK_F1: return WindowKey::F1;
-        case SDLK_F2: return WindowKey::F2;
-        case SDLK_F3: return WindowKey::F3;
-        case SDLK_F4: return WindowKey::F4;
-        case SDLK_F5: return WindowKey::F5;
-        case SDLK_F6: return WindowKey::F6;
-        case SDLK_F7: return WindowKey::F7;
-        case SDLK_F8: return WindowKey::F8;
-        case SDLK_F9: return WindowKey::F9;
-        case SDLK_F10: return WindowKey::F10;
-        case SDLK_F11: return WindowKey::F11;
-        case SDLK_F12: return WindowKey::F12;
+        case SDL_SCANCODE_0: return WindowKey::Digit0;
+        case SDL_SCANCODE_TAB: return WindowKey::Tab;
+        case SDL_SCANCODE_RETURN:
+        case SDL_SCANCODE_KP_ENTER: return WindowKey::Enter;
+        case SDL_SCANCODE_SPACE: return WindowKey::Space;
+        case SDL_SCANCODE_ESCAPE: return WindowKey::Escape;
+        case SDL_SCANCODE_BACKSPACE: return WindowKey::Backspace;
+        case SDL_SCANCODE_DELETE: return WindowKey::Delete;
+        case SDL_SCANCODE_RIGHT: return WindowKey::Right;
+        case SDL_SCANCODE_LEFT: return WindowKey::Left;
+        case SDL_SCANCODE_DOWN: return WindowKey::Down;
+        case SDL_SCANCODE_UP: return WindowKey::Up;
+        case SDL_SCANCODE_HOME: return WindowKey::Home;
+        case SDL_SCANCODE_END: return WindowKey::End;
+        case SDL_SCANCODE_INSERT: return WindowKey::Insert;
+        case SDL_SCANCODE_PAGEUP: return WindowKey::PageUp;
+        case SDL_SCANCODE_PAGEDOWN: return WindowKey::PageDown;
+        case SDL_SCANCODE_F1: return WindowKey::F1;
+        case SDL_SCANCODE_F2: return WindowKey::F2;
+        case SDL_SCANCODE_F3: return WindowKey::F3;
+        case SDL_SCANCODE_F4: return WindowKey::F4;
+        case SDL_SCANCODE_F5: return WindowKey::F5;
+        case SDL_SCANCODE_F6: return WindowKey::F6;
+        case SDL_SCANCODE_F7: return WindowKey::F7;
+        case SDL_SCANCODE_F8: return WindowKey::F8;
+        case SDL_SCANCODE_F9: return WindowKey::F9;
+        case SDL_SCANCODE_F10: return WindowKey::F10;
+        case SDL_SCANCODE_F11: return WindowKey::F11;
+        case SDL_SCANCODE_F12: return WindowKey::F12;
         default: return WindowKey::Unknown;
     }
 }
@@ -921,7 +922,7 @@ bool SDLBackendWindow::poll_event(WindowEvent& out_event) {
                 out_event.type = ev.type == SDL_KEYDOWN
                     ? WindowEventType::KeyPressed
                     : WindowEventType::KeyReleased;
-                out_event.key.key = translate_key(ev.key.keysym.sym);
+                out_event.key.key = translate_key(ev.key.keysym.scancode);
                 out_event.key.native_key = static_cast<int32_t>(ev.key.keysym.sym);
                 out_event.key.native_scancode = static_cast<int32_t>(ev.key.keysym.scancode);
                 out_event.key.modifiers = translate_modifiers(
@@ -940,6 +941,22 @@ bool SDLBackendWindow::poll_event(WindowEvent& out_event) {
                     out_event.text.utf8[length] = '\0';
                 }
                 return true;
+
+            case SDL_DROPFILE: {
+                out_event.type = WindowEventType::FileDropped;
+                if (ev.drop.file) {
+                    out_event.file_drop.path = ev.drop.file;
+                    SDL_free(ev.drop.file);
+                }
+                int x = 0;
+                int y = 0;
+                SDL_GetMouseState(&x, &y);
+                out_event.file_drop.logical_position = {
+                    static_cast<float>(x), static_cast<float>(y)};
+                out_event.file_drop.modifiers =
+                    translate_modifiers(SDL_GetModState());
+                return true;
+            }
 
             default:
                 continue;

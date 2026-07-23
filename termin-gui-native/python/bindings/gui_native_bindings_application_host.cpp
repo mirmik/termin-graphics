@@ -32,6 +32,7 @@ using termin::gui_native::OffscreenGuiApplicationConfig;
 using termin::gui_native::StandaloneGuiApplication;
 using termin::gui_native::StandaloneGuiApplicationConfig;
 using CanvasRef = termin::gui_native::python_bindings::CanvasRef;
+using ColorPickerRef = termin::gui_native::python_bindings::ColorPickerRef;
 using PythonDocument = termin::gui_native::python_bindings::Document;
 
 using Rgba8Array = nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu>;
@@ -60,6 +61,76 @@ Rgba8View rgba8_view(const Rgba8Array &array, const char *operation) {
                    std::span<const uint8_t>(
                        array.data(), static_cast<size_t>(width) *
                                          static_cast<size_t>(height) * 4)};
+}
+
+int32_t python_key_code(termin::WindowKey key) {
+  if (key >= termin::WindowKey::A && key <= termin::WindowKey::Z)
+    return 'A' + static_cast<int32_t>(key) -
+           static_cast<int32_t>(termin::WindowKey::A);
+  if (key >= termin::WindowKey::Digit0 && key <= termin::WindowKey::Digit9)
+    return '0' + static_cast<int32_t>(key) -
+           static_cast<int32_t>(termin::WindowKey::Digit0);
+  if (key >= termin::WindowKey::F1 && key <= termin::WindowKey::F12)
+    return 290 + static_cast<int32_t>(key) -
+           static_cast<int32_t>(termin::WindowKey::F1);
+  switch (key) {
+  case termin::WindowKey::Tab:
+    return 9;
+  case termin::WindowKey::Enter:
+    return 13;
+  case termin::WindowKey::Space:
+    return 32;
+  case termin::WindowKey::Escape:
+    return 256;
+  case termin::WindowKey::Backspace:
+    return 259;
+  case termin::WindowKey::Delete:
+    return 261;
+  case termin::WindowKey::Right:
+    return 262;
+  case termin::WindowKey::Left:
+    return 263;
+  case termin::WindowKey::Down:
+    return 264;
+  case termin::WindowKey::Up:
+    return 265;
+  case termin::WindowKey::Home:
+    return 268;
+  case termin::WindowKey::End:
+    return 269;
+  default:
+    return -1;
+  }
+}
+
+nb::dict python_window_event(const termin::WindowEvent &event) {
+  nb::dict result;
+  switch (event.type) {
+  case termin::WindowEventType::KeyPressed:
+  case termin::WindowEventType::KeyReleased:
+    result["type"] = event.type == termin::WindowEventType::KeyPressed
+                         ? "key_down"
+                         : "key_up";
+    result["key"] = python_key_code(event.key.key);
+    result["scancode"] = event.key.native_scancode;
+    result["mods"] = event.key.modifiers;
+    result["repeat"] = event.key.repeat;
+    break;
+  case termin::WindowEventType::FileDropped:
+    result["type"] = "file_drop";
+    result["path"] = event.file_drop.path;
+    result["x"] = event.file_drop.logical_position.x;
+    result["y"] = event.file_drop.logical_position.y;
+    result["mods"] = event.file_drop.modifiers;
+    break;
+  case termin::WindowEventType::CloseRequested:
+    result["type"] = "window_close";
+    break;
+  default:
+    result["type"] = "other";
+    break;
+  }
+  return result;
 }
 
 GuiWindowConfig make_window_config(std::string title, int width, int height,
@@ -308,6 +379,8 @@ void bind_gui_native_application_host(nb::module_ &m) {
           nb::arg("continuous_rendering") = true)
       .def("pump_events",
            [](PythonGuiWindowHost &self) { return self.get().pump_events(); })
+      .def("run_deferred",
+           [](PythonGuiWindowHost &self) { return self.get().run_deferred(); })
       .def("render_frame",
            [](PythonGuiWindowHost &self) { return self.get().render_frame(); })
       .def("tick", [](PythonGuiWindowHost &self) { return self.get().tick(); })
@@ -320,6 +393,65 @@ void bind_gui_native_application_host(nb::module_ &m) {
                callback();
              });
            })
+      .def(
+          "set_event_interceptor",
+          [](PythonGuiWindowHost &self, nb::object callback) {
+            if (callback.is_none()) {
+              self.get().set_event_interceptor({});
+              return;
+            }
+            if (!nb::isinstance<nb::callable>(callback))
+              throw std::invalid_argument("callback must be callable or None");
+            self.get().set_event_interceptor(
+                [callback = std::move(callback)](
+                    const termin::WindowEvent &event) {
+                  nb::gil_scoped_acquire gil;
+                  return nb::cast<bool>(callback(python_window_event(event)));
+                });
+          },
+          nb::arg("callback").none())
+      .def(
+          "set_frame_callbacks",
+          [](PythonGuiWindowHost &self, nb::object before, nb::object after) {
+            if (!before.is_none() && !nb::isinstance<nb::callable>(before))
+              throw std::invalid_argument(
+                  "before_ui_frame must be callable or None");
+            if (!after.is_none() && !nb::isinstance<nb::callable>(after))
+              throw std::invalid_argument(
+                  "after_ui_frame must be callable or None");
+            std::function<void(termin::gui_native::GuiFrame &)> before_callback;
+            std::function<void(termin::gui_native::GuiFrame &)> after_callback;
+            if (!before.is_none()) {
+              before_callback = [callback = std::move(before)](
+                                    termin::gui_native::GuiFrame &) {
+                nb::gil_scoped_acquire gil;
+                callback();
+              };
+            }
+            if (!after.is_none()) {
+              after_callback = [callback = std::move(after)](
+                                   termin::gui_native::GuiFrame &) {
+                nb::gil_scoped_acquire gil;
+                callback();
+              };
+            }
+            self.get().set_frame_callbacks(std::move(before_callback),
+                                           std::move(after_callback));
+          },
+          nb::arg("before_ui_frame").none() = nb::none(),
+          nb::arg("after_ui_frame").none() = nb::none())
+      .def(
+          "register_color_picker",
+          [](PythonGuiWindowHost &self, const ColorPickerRef &picker) {
+            self.get().register_color_picker(picker.get());
+          },
+          nb::arg("picker"))
+      .def(
+          "unregister_color_picker",
+          [](PythonGuiWindowHost &self, const ColorPickerRef &picker) {
+            self.get().unregister_color_picker(picker.get());
+          },
+          nb::arg("picker"))
       .def("request_repaint",
            [](PythonGuiWindowHost &self) { self.get().request_repaint(); })
       .def_prop_ro("repaint_requested",
@@ -351,6 +483,16 @@ void bind_gui_native_application_host(nb::module_ &m) {
                      return std::array<int, 2>{self.get().framebuffer_width(),
                                                self.get().framebuffer_height()};
                    })
+      .def_prop_ro("color_target",
+                   [](PythonGuiWindowHost &self) {
+                     return self.get().color_target();
+                   })
+      .def_prop_ro(
+          "window",
+          [](PythonGuiWindowHost &self) -> termin::BackendWindow & {
+            return self.get().window();
+          },
+          nb::rv_policy::reference_internal)
       .def_prop_ro(
           "graphics",
           [](PythonGuiWindowHost &self) -> tgfx::GraphicsHost & {

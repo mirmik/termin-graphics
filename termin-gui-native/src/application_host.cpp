@@ -21,6 +21,7 @@
 #include <tcbase/tc_log.h>
 
 #include <termin/gui_native/draw_list_renderer.hpp>
+#include <termin/gui_native/color_picker.hpp>
 #include <termin/gui_native/window_input.hpp>
 
 #include <tgfx2/descriptors.hpp>
@@ -399,6 +400,10 @@ struct GuiApplicationHost::Impl {
     std::mutex deferred_mutex;
     std::deque<std::function<void()>> deferred_callbacks;
     std::vector<std::unique_ptr<GuiFrameExtension>> extensions;
+    std::function<bool(const WindowEvent&)> event_interceptor;
+    std::function<void(GuiFrame&)> before_ui_frame;
+    std::function<void(GuiFrame&)> after_ui_frame;
+    std::vector<tc_widget_handle> color_pickers;
     std::shared_ptr<GuiApplicationHostLeaseState> texture_leases;
     std::thread::id owner_thread = std::this_thread::get_id();
     std::string clipboard_buffer;
@@ -555,6 +560,10 @@ struct GuiApplicationHost::Impl {
             (*iterator)->detach(*facade);
         }
         extensions.clear();
+        event_interceptor = {};
+        before_ui_frame = {};
+        after_ui_frame = {};
+        color_pickers.clear();
         try {
             if (!platform_services->set_text_input_enabled(false)) {
                 tc_log_error("[gui-native-host] platform service rejected text-input shutdown");
@@ -637,7 +646,13 @@ size_t GuiApplicationHost::pump_events() {
         if (event.type == WindowEventType::CloseRequested) {
             impl_->input_source->request_close();
         }
-        dispatch_window_event(*impl_->document, event);
+        bool consumed = false;
+        if (impl_->event_interceptor) {
+            consumed = impl_->event_interceptor(event);
+        }
+        if (!consumed) {
+            dispatch_window_event(*impl_->document, event);
+        }
     }
     if (event_count > 0) request_repaint();
     return event_count;
@@ -651,6 +666,10 @@ bool GuiApplicationHost::render_frame() {
     impl_->repaint_requested.store(false, std::memory_order_release);
     impl_->ensure_color_target(width, height);
     GuiFrame frame(*this, width, height);
+    impl_->context->begin_frame();
+    if (impl_->before_ui_frame) {
+        impl_->before_ui_frame(frame);
+    }
     for (const auto& extension : impl_->extensions) {
         try {
             extension->before_ui_frame(frame);
@@ -663,11 +682,26 @@ bool GuiApplicationHost::render_frame() {
         }
     }
 
+    for (auto iterator = impl_->color_pickers.begin();
+         iterator != impl_->color_pickers.end();) {
+        tc_widget* widget =
+            tc_ui_document_resolve_widget(impl_->document->get(), *iterator);
+        auto* picker =
+            widget ? dynamic_cast<ColorPicker*>(static_cast<Widget*>(widget->body))
+                   : nullptr;
+        if (!picker) {
+            tc_log_error("[gui-native-host] registered ColorPicker was destroyed "
+                         "without host unregistration");
+            iterator = impl_->color_pickers.erase(iterator);
+            continue;
+        }
+        impl_->renderer.sync_color_picker_surfaces(*impl_->context, *picker);
+        ++iterator;
+    }
     tc_ui_draw_list_clear(impl_->draw_list.get());
     impl_->document->layout_roots(
         tc_ui_rect{0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)});
     impl_->document->paint_roots(impl_->paint_context.get());
-    impl_->context->begin_frame();
     impl_->context->begin_pass(impl_->color_target, tgfx::TextureHandle{},
                                impl_->config.clear_color.data(), 1.0f, false);
     impl_->renderer.render(*impl_->context, impl_->draw_list.get(), width, height);
@@ -684,6 +718,9 @@ bool GuiApplicationHost::render_frame() {
             tc_log_error("[gui-native-host] after_ui_frame failed with unknown exception");
             throw;
         }
+    }
+    if (impl_->after_ui_frame) {
+        impl_->after_ui_frame(frame);
     }
     impl_->frame_endpoint->publish_frame(impl_->color_target);
     ++impl_->rendered_frames;
@@ -707,7 +744,7 @@ bool GuiApplicationHost::tick() {
     return true;
 }
 
-void GuiApplicationHost::run_deferred() {
+size_t GuiApplicationHost::run_deferred() {
     impl_->require_owner_thread("run_deferred");
     impl_->require_open("run_deferred");
     std::deque<std::function<void()>> callbacks;
@@ -726,6 +763,7 @@ void GuiApplicationHost::run_deferred() {
             throw;
         }
     }
+    return callbacks.size();
 }
 
 void GuiApplicationHost::defer(std::function<void()> callback) {
@@ -751,6 +789,53 @@ void GuiApplicationHost::request_repaint() {
 
 bool GuiApplicationHost::repaint_requested() const {
     return impl_ && impl_->repaint_requested.load(std::memory_order_acquire);
+}
+
+void GuiApplicationHost::set_event_interceptor(
+    std::function<bool(const WindowEvent&)> interceptor) {
+    impl_->require_owner_thread("set_event_interceptor");
+    impl_->require_open("set_event_interceptor");
+    impl_->event_interceptor = std::move(interceptor);
+}
+
+void GuiApplicationHost::set_frame_callbacks(
+    std::function<void(GuiFrame&)> before_ui_frame,
+    std::function<void(GuiFrame&)> after_ui_frame) {
+    impl_->require_owner_thread("set_frame_callbacks");
+    impl_->require_open("set_frame_callbacks");
+    impl_->before_ui_frame = std::move(before_ui_frame);
+    impl_->after_ui_frame = std::move(after_ui_frame);
+    request_repaint();
+}
+
+void GuiApplicationHost::register_color_picker(ColorPicker& picker) {
+    impl_->require_owner_thread("register_color_picker");
+    impl_->require_open("register_color_picker");
+    if (!tc_ui_document_handle_eq(picker.document(), impl_->document->get())) {
+        host_error("GuiApplicationHost cannot register a ColorPicker from another Document");
+    }
+    const tc_widget_handle handle = picker.handle();
+    if (std::none_of(impl_->color_pickers.begin(), impl_->color_pickers.end(),
+                     [handle](tc_widget_handle candidate) {
+                         return tc_widget_handle_eq(candidate, handle);
+                     })) {
+        impl_->color_pickers.push_back(handle);
+        request_repaint();
+    }
+}
+
+void GuiApplicationHost::unregister_color_picker(ColorPicker& picker) {
+    impl_->require_owner_thread("unregister_color_picker");
+    impl_->require_open("unregister_color_picker");
+    impl_->renderer.release_color_picker_surfaces(picker);
+    const tc_widget_handle handle = picker.handle();
+    impl_->color_pickers.erase(
+        std::remove_if(impl_->color_pickers.begin(), impl_->color_pickers.end(),
+                       [handle](tc_widget_handle candidate) {
+                           return tc_widget_handle_eq(candidate, handle);
+                       }),
+        impl_->color_pickers.end());
+    request_repaint();
 }
 
 GuiFrameExtension&
@@ -1044,6 +1129,10 @@ bool GuiWindowHost::tick() {
     return application_host().tick();
 }
 
+size_t GuiWindowHost::run_deferred() {
+    return application_host().run_deferred();
+}
+
 void GuiWindowHost::defer(std::function<void()> callback) {
     application_host().defer(std::move(callback));
 }
@@ -1056,6 +1145,26 @@ void GuiWindowHost::request_repaint() {
 bool GuiWindowHost::repaint_requested() const {
     return impl_ && !impl_->closed && impl_->application_host &&
            impl_->application_host->repaint_requested();
+}
+
+void GuiWindowHost::set_event_interceptor(
+    std::function<bool(const WindowEvent&)> interceptor) {
+    application_host().set_event_interceptor(std::move(interceptor));
+}
+
+void GuiWindowHost::set_frame_callbacks(
+    std::function<void(GuiFrame&)> before_ui_frame,
+    std::function<void(GuiFrame&)> after_ui_frame) {
+    application_host().set_frame_callbacks(std::move(before_ui_frame),
+                                           std::move(after_ui_frame));
+}
+
+void GuiWindowHost::register_color_picker(ColorPicker& picker) {
+    application_host().register_color_picker(picker);
+}
+
+void GuiWindowHost::unregister_color_picker(ColorPicker& picker) {
+    application_host().unregister_color_picker(picker);
 }
 
 GuiWindowFrameExtension&

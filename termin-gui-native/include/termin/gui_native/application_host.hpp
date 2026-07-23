@@ -81,6 +81,7 @@ struct OffscreenGuiApplicationConfig {
 class GuiWindowHost;
 class GuiApplicationHost;
 class DynamicTextureLease;
+class ColorPicker;
 struct GuiApplicationHostLeaseState;
 
 // Ordered backend-neutral input and application close state. Implementations
@@ -226,10 +227,15 @@ class TERMIN_GUI_NATIVE_HOST_API GuiApplicationHost {
     size_t pump_events();
     bool render_frame();
     bool tick();
-    void run_deferred();
+    size_t run_deferred();
     void defer(std::function<void()> callback);
     void request_repaint();
     bool repaint_requested() const;
+    void set_event_interceptor(std::function<bool(const WindowEvent&)> interceptor);
+    void set_frame_callbacks(std::function<void(GuiFrame&)> before_ui_frame,
+                             std::function<void(GuiFrame&)> after_ui_frame = {});
+    void register_color_picker(ColorPicker& picker);
+    void unregister_color_picker(ColorPicker& picker);
 
     GuiFrameExtension& install_frame_extension(std::unique_ptr<GuiFrameExtension> extension);
     std::unique_ptr<GuiFrameExtension> remove_frame_extension(GuiFrameExtension& extension);
@@ -281,12 +287,18 @@ class TERMIN_GUI_NATIVE_HOST_API GuiWindowHost {
     size_t pump_events();
     bool render_frame();
     bool tick();
+    size_t run_deferred();
 
     // Submission is thread-safe; callbacks execute on the owner thread at the
     // beginning of a later tick. Nested submissions wait for the next tick.
     void defer(std::function<void()> callback);
     void request_repaint();
     bool repaint_requested() const;
+    void set_event_interceptor(std::function<bool(const WindowEvent&)> interceptor);
+    void set_frame_callbacks(std::function<void(GuiFrame&)> before_ui_frame,
+                             std::function<void(GuiFrame&)> after_ui_frame = {});
+    void register_color_picker(ColorPicker& picker);
+    void unregister_color_picker(ColorPicker& picker);
 
     GuiWindowFrameExtension&
     install_frame_extension(std::unique_ptr<GuiWindowFrameExtension> extension);

@@ -55,6 +55,11 @@ int main() {
         int extension_before = 0;
         int extension_after = 0;
         int extension_detach = 0;
+        int callback_before = 0;
+        int callback_after = 0;
+        host.set_frame_callbacks(
+            [&callback_before](termin::gui_native::GuiFrame&) { ++callback_before; },
+            [&callback_after](termin::gui_native::GuiFrame&) { ++callback_after; });
         host.install_frame_extension(std::make_unique<CountingExtension>(
             extension_before, extension_after, extension_detach));
         bool live_document_close_rejected = false;
@@ -149,7 +154,9 @@ int main() {
             std::fprintf(stderr, "closing one GuiWindowHost damaged the shared domain\n");
             return 1;
         }
-        if (extension_before == 0 || extension_before != extension_after || extension_detach != 1) {
+        if (extension_before == 0 || extension_before != extension_after ||
+            callback_before != extension_before || callback_after != extension_after ||
+            extension_detach != 1) {
             std::fprintf(stderr, "frame extension lifecycle was not deterministic\n");
             return 1;
         }
