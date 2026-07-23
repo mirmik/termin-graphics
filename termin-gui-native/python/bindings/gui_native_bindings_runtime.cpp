@@ -711,31 +711,69 @@ bool deserialize_python_registered_widget(tc_widget *widget,
 }
 
 Document::Document()
-    : state_(std::make_shared<DocumentState>()), clipboard_getter_(nb::none()),
+    : state_(std::make_shared<DocumentState>()),
+      owned_document_(std::make_unique<termin::gui_native::Document>()),
+      native_document_(owned_document_.get()), clipboard_getter_(nb::none()),
       clipboard_setter_(nb::none()), cursor_changed_handler_(nb::none()) {
-  state_->document = tc_ui_document_create();
-  if (tc_ui_document_handle_is_invalid(state_->document)) {
-    throw std::runtime_error("failed to create tc_ui_document");
-  }
+  state_->document = native_document_->get();
   register_document_state(state_);
 }
 
-Document::~Document() { close(); }
+Document::Document(termin::gui_native::Document &document)
+    : state_(std::make_shared<DocumentState>()), native_document_(&document),
+      clipboard_getter_(nb::none()), clipboard_setter_(nb::none()),
+      cursor_changed_handler_(nb::none()) {
+  state_->document = native_document_->get();
+  if (tc_ui_document_handle_is_invalid(state_->document))
+    throw std::runtime_error("cannot bind a closed native UI document");
+  register_document_state(state_);
+}
+
+Document::~Document() {
+  try {
+    close();
+  } catch (const std::exception &error) {
+    tc_log_error("[termin-gui-native/python] Document finalization failed: %s",
+                 error.what());
+  } catch (...) {
+    tc_log_error(
+        "[termin-gui-native/python] Document finalization failed with unknown exception");
+  }
+}
 
 void Document::close() {
   if (state_ && !tc_ui_document_handle_is_invalid(state_->document)) {
-    tc_ui_document_set_cursor_changed_callback(state_->document, nullptr, nullptr);
-    unregister_document_state(state_->document);
-    tc_ui_document_destroy(state_->document);
+    const tc_ui_document_handle document = state_->document;
+    if (native_document().active_window_host_count() != 0) {
+      native_document().close();
+    }
+    tc_ui_document_set_cursor_changed_callback(document, nullptr, nullptr);
+    native_document().close();
+    unregister_document_state(document);
     state_->document = tc_ui_document_handle_invalid();
     state_->pending_exception = nullptr;
   }
+}
+
+void Document::invalidate_borrowed() noexcept {
+  if (!state_ || tc_ui_document_handle_is_invalid(state_->document))
+    return;
+  unregister_document_state(state_->document);
+  state_->document = tc_ui_document_handle_invalid();
+  state_->pending_exception = nullptr;
+  native_document_ = nullptr;
 }
 
 tc_ui_document_handle Document::get() const {
   if (is_closed())
     throw std::runtime_error("native UI document is closed");
   return state_->document;
+}
+
+termin::gui_native::Document &Document::native_document() const {
+  if (!native_document_ || is_closed())
+    throw std::runtime_error("native UI document is closed");
+  return *native_document_;
 }
 
 bool Document::is_closed() const {

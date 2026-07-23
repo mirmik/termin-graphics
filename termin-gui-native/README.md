@@ -43,6 +43,26 @@ borrowed per-window host never mutates it. Continuous rendering is the
 default; event-driven tools can disable it and schedule work with `defer()` and
 `request_repaint()`.
 
+The installed Python package exposes the same ownership model:
+
+```python
+from termin.gui_native import StandaloneGuiApplication
+
+with StandaloneGuiApplication(
+    title="My utility",
+    width=640,
+    height=480,
+) as application:
+    document = application.document
+    while application.tick():
+        update_application_state(document)
+```
+
+For editor-owned graphics domains, construct `GuiWindowHost(session, document,
+...)` with the typed `termin.display.WindowedGraphicsSession`. The binding
+keeps both borrowed owners alive, rejects closing the document or session
+before the host, and exposes no raw device or context addresses.
+
 The current foundation includes:
 
 - `tc_ui_document` is implemented in C and adopts widget objects while owning

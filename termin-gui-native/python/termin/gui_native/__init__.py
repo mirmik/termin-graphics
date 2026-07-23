@@ -4,7 +4,14 @@ from typing import Protocol, runtime_checkable
 
 from termin_nanobind.runtime import preload_sdk_libs
 
-preload_sdk_libs("nanobind", "termin_base", "termin_graphics2", "termin_gui_native")
+preload_sdk_libs(
+    "nanobind",
+    "termin_base",
+    "termin_graphics2",
+    "termin_window",
+    "termin_gui_native",
+    "termin_gui_native_application_host",
+)
 
 from termin.gui_native._gui_native import (  # noqa: E402
     Button,
@@ -52,6 +59,7 @@ from termin.gui_native._gui_native import (  # noqa: E402
     GraphicsItem,
     GraphicsScene,
     GroupBox,
+    GuiWindowHost,
     FontRole,
     IconButton,
     ImageWidget,
@@ -90,6 +98,7 @@ from termin.gui_native._gui_native import (  # noqa: E402
     Size,
     SliderEdit,
     SpinBox,
+    StandaloneGuiApplication,
     Style,
     StyleField,
     StyleOverride,
@@ -368,6 +377,7 @@ __all__ = [
     "GraphicsItem",
     "GraphicsScene",
     "GroupBox",
+    "GuiWindowHost",
     "FontRole",
     "IconButton",
     "ImageWidget",
@@ -409,6 +419,7 @@ __all__ = [
     "Size",
     "SliderEdit",
     "SpinBox",
+    "StandaloneGuiApplication",
     "Style",
     "StyleField",
     "StyleOverride",

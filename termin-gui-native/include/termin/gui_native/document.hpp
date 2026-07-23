@@ -30,6 +30,7 @@ public:
     TERMIN_GUI_NATIVE_API Document& operator=(Document&& other);
     TERMIN_GUI_NATIVE_API void close();
     bool valid() const { return tc_ui_document_is_valid(_document); }
+    size_t active_window_host_count() const { return _active_window_hosts; }
     tc_ui_document_handle get() { return _document; }
     tc_ui_document_handle get() const { return _document; }
     TERMIN_GUI_NATIVE_API tc_widget_handle adopt(Widget* widget);

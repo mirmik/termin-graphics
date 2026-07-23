@@ -12,6 +12,7 @@
 #include <string>
 
 #include <tcbase/tc_log.h>
+#include <termin/gui_native/document.hpp>
 #include <termin/gui_native/draw_list_renderer.hpp>
 #include <termin/gui_native/tc_ui_document.h>
 #include <termin/gui_native/widgets.hpp>
@@ -277,6 +278,8 @@ bool deserialize_python_registered_widget(tc_widget *widget,
 class Document {
 private:
   std::shared_ptr<DocumentState> state_;
+  std::unique_ptr<termin::gui_native::Document> owned_document_;
+  termin::gui_native::Document *native_document_ = nullptr;
   nb::object clipboard_getter_;
   nb::object clipboard_setter_;
   nb::object cursor_changed_handler_;
@@ -284,13 +287,16 @@ private:
 
 public:
   Document();
+  explicit Document(termin::gui_native::Document &document);
   ~Document();
   void close();
+  void invalidate_borrowed() noexcept;
 
   Document(const Document &) = delete;
   Document &operator=(const Document &) = delete;
 
   tc_ui_document_handle get() const;
+  termin::gui_native::Document &native_document() const;
   bool is_closed() const;
   WidgetHandle adopt(nb::object object, const std::string &debug_name);
   WidgetRef ref(WidgetHandle handle) const;

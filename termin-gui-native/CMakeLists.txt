@@ -382,10 +382,11 @@ if(TERMIN_BUILD_PYTHON)
         python/bindings/gui_native_bindings_views_collections.cpp
         python/bindings/gui_native_bindings_views_controls.cpp
         python/bindings/gui_native_bindings_document.cpp
+        python/bindings/gui_native_bindings_application_host.cpp
     )
     target_link_libraries(_gui_native
         PRIVATE
-            termin_gui_native
+            termin_gui_native_application_host
     )
     target_include_directories(_gui_native
         PRIVATE

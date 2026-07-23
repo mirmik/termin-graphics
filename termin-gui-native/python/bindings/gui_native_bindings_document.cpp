@@ -211,6 +211,13 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
   nb::class_<Document>(m, "Document")
       .def(nb::init<>())
       .def("close", &Document::close)
+      .def("__enter__", [](Document &self) -> Document & { return self; },
+           nb::rv_policy::reference_internal)
+      .def("__exit__",
+           [](Document &self, nb::handle, nb::handle, nb::handle) {
+             self.close();
+             return false;
+           })
       .def_prop_ro("closed", &Document::is_closed)
       .def_prop_rw(
           "debug_name",
