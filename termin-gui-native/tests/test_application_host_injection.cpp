@@ -3,8 +3,11 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <termin/gui_native/application_host.hpp>
+#include <termin/gui_native/canvas.hpp>
+#include <termin/gui_native/dynamic_texture_lease.hpp>
 
 #include <tgfx2/device_factory.hpp>
 #include <tgfx2/graphics_host.hpp>
@@ -101,8 +104,45 @@ int main() {
             std::fprintf(stderr, "GuiWindowHost changed process-global shader state\n");
             return 1;
         }
+
+        auto* canvas = new termin::gui_native::Canvas();
+        document.adopt(canvas);
+        termin::gui_native::DynamicTextureLease texture_lease(host);
+        texture_lease.bind_canvas(*canvas);
+        std::vector<uint8_t> pixels(4 * 3 * 4, 127);
+        texture_lease.set_rgba8(4, 3, pixels);
+        if (!texture_lease.texture() ||
+            canvas->texture_id() != texture_lease.texture().id) {
+            std::fprintf(stderr, "dynamic texture did not bind to Canvas\n");
+            return 1;
+        }
+        const std::vector<uint8_t> region(2 * 2 * 4, 255);
+        texture_lease.update_region_rgba8(1, 1, 2, 2, region);
+        pixels.resize(2 * 5 * 4);
+        texture_lease.set_rgba8(2, 5, pixels);
+        texture_lease.clear();
+
+        tgfx::TextureDesc borrowed_description;
+        borrowed_description.width = 3;
+        borrowed_description.height = 2;
+        borrowed_description.usage = tgfx::TextureUsage::Sampled;
+        const tgfx::TextureHandle borrowed =
+            graphics->device().create_texture(borrowed_description);
+        texture_lease.borrow(*graphics, borrowed);
+        texture_lease.clear();
+        if (!tgfx::has_flag(
+                graphics->device().texture_desc(borrowed).usage,
+                tgfx::TextureUsage::Sampled)) {
+            std::fprintf(stderr, "lease destroyed a borrowed texture\n");
+            return 1;
+        }
+        graphics->device().destroy(borrowed);
+        pixels.assign(2 * 2 * 4, 63);
+        texture_lease.set_rgba8(2, 2, pixels);
+
         host.close();
-        if (!window_closed || graphics->is_closed()) {
+        if (!window_closed || graphics->is_closed() ||
+            !texture_lease.released()) {
             std::fprintf(stderr, "injected host violated borrowed ownership\n");
             return 1;
         }

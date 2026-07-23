@@ -149,6 +149,7 @@ target_link_libraries(termin_gui_native_window_input
 
 add_library(termin_gui_native_application_host SHARED
     src/application_host.cpp
+    src/dynamic_texture_lease.cpp
 )
 add_library(termin_gui_native::application_host ALIAS termin_gui_native_application_host)
 set_target_properties(termin_gui_native_application_host PROPERTIES
@@ -316,6 +317,15 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     set_tests_properties(termin_gui_native_application_host_injection_test PROPERTIES
         TIMEOUT 15
         SKIP_RETURN_CODE 77)
+    termin_gui_native_add_test(termin_gui_native_dynamic_texture_lease_test
+        tests/test_dynamic_texture_lease.cpp
+    )
+    target_link_libraries(termin_gui_native_dynamic_texture_lease_test
+        PRIVATE termin_gui_native_application_host)
+    target_compile_definitions(termin_gui_native_dynamic_texture_lease_test
+        PRIVATE
+            TERMIN_GUI_NATIVE_TEST_FONT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf"
+    )
     termin_gui_native_add_test(termin_gui_native_renderer_pixel_smoke
         tests/test_draw_list_renderer_pixel_smoke.cpp
     )

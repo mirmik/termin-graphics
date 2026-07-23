@@ -1,4 +1,5 @@
 #include "termin/gui_native/application_host.hpp"
+#include "application_host_internal.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -285,6 +286,7 @@ struct GuiWindowHost::Impl {
     std::mutex deferred_mutex;
     std::deque<std::function<void()>> deferred_callbacks;
     std::vector<std::unique_ptr<GuiWindowFrameExtension>> extensions;
+    std::shared_ptr<GuiWindowHostLeaseState> texture_leases;
     std::thread::id owner_thread = std::this_thread::get_id();
     std::string clipboard_buffer;
     bool closed = false;
@@ -366,6 +368,11 @@ struct GuiWindowHost::Impl {
         renderer.bind_text_measurer(document->get());
         document->set_clipboard(&clipboard_get, &clipboard_set, this);
         document->set_cursor_changed_callback(&cursor_changed, this);
+        texture_leases = std::make_shared<GuiWindowHostLeaseState>();
+        texture_leases->owner_thread = owner_thread;
+        texture_leases->host = facade;
+        texture_leases->graphics = graphics;
+        texture_leases->document = document;
     }
 
     void require_owner_thread(const char* operation) const {
@@ -424,6 +431,7 @@ struct GuiWindowHost::Impl {
             (*iterator)->detach(*facade);
         }
         extensions.clear();
+        texture_leases->close_all();
         window->set_text_input_enabled(false);
         device->wait_idle();
         renderer.release_gpu();
@@ -640,6 +648,16 @@ size_t GuiWindowHost::rendered_frame_count() const { return impl_ ? impl_->rende
 int GuiWindowHost::framebuffer_width() const { return impl_ ? impl_->framebuffer_width : 0; }
 int GuiWindowHost::framebuffer_height() const { return impl_ ? impl_->framebuffer_height : 0; }
 tgfx::TextureHandle GuiWindowHost::color_target() const { return impl_ ? impl_->color_target : tgfx::TextureHandle{}; }
+
+std::shared_ptr<GuiWindowHostLeaseState> GuiWindowHost::texture_lease_state() const {
+    if (!impl_) {
+        tc_log_error("[gui-native-host] texture lease requested from an empty host");
+        throw std::logic_error("GuiWindowHost has no implementation");
+    }
+    impl_->require_owner_thread("texture_lease_state");
+    impl_->require_open("texture_lease_state");
+    return impl_->texture_leases;
+}
 
 GuiWindowFrame::GuiWindowFrame(GuiWindowHost& host, int width, int height)
     : host_(&host), width_(width), height_(height) {}

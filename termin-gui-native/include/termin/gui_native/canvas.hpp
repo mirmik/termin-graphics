@@ -31,6 +31,9 @@ public:
     void set_texture(uint32_t texture_id, tc_ui_size image_size = {});
     void clear_texture();
     void set_overlay_texture(uint32_t texture_id);
+    uint32_t texture_id() const { return texture_id_; }
+    uint32_t overlay_texture_id() const { return overlay_texture_id_; }
+    tc_ui_size image_size() const { return image_size_; }
     tc_ui_texture_sampling texture_sampling() const { return texture_sampling_; }
     void set_texture_sampling(tc_ui_texture_sampling sampling);
     void set_paint_callback(PaintCallback callback);

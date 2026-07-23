@@ -2,23 +2,63 @@
 #include "gui_native_bindings_shared.hpp"
 
 #include <array>
+#include <limits>
 #include <memory>
+#include <span>
 #include <string>
 #include <utility>
 
+#include <nanobind/ndarray.h>
 #include <nanobind/stl/array.h>
 
 #include <tcbase/tc_log.h>
 #include <termin/gui_native/application_host.hpp>
+#include <termin/gui_native/dynamic_texture_lease.hpp>
+#include <tgfx2/graphics_host.hpp>
 
 namespace {
 
 using termin::WindowedGraphicsSession;
 using termin::gui_native::GuiWindowHost;
 using termin::gui_native::GuiWindowConfig;
+using termin::gui_native::CanvasTextureLayer;
+using termin::gui_native::DynamicTextureLease;
+using termin::gui_native::DynamicTextureOwnership;
 using termin::gui_native::StandaloneGuiApplication;
 using termin::gui_native::StandaloneGuiApplicationConfig;
+using CanvasRef = termin::gui_native::python_bindings::CanvasRef;
 using PythonDocument = termin::gui_native::python_bindings::Document;
+
+using Rgba8Array =
+    nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu>;
+
+struct Rgba8View {
+  uint32_t width = 0;
+  uint32_t height = 0;
+  std::span<const uint8_t> pixels;
+};
+
+Rgba8View rgba8_view(const Rgba8Array &array, const char *operation) {
+  if (array.ndim() != 3 || array.shape(2) != 4) {
+    throw std::invalid_argument(
+        std::string(operation) +
+        " requires a C-contiguous uint8 array with shape (height, width, 4)");
+  }
+  if (array.shape(0) == 0 || array.shape(1) == 0 ||
+      array.shape(0) > std::numeric_limits<uint32_t>::max() ||
+      array.shape(1) > std::numeric_limits<uint32_t>::max()) {
+    throw std::invalid_argument(
+        std::string(operation) + " requires positive uint32-sized dimensions");
+  }
+  const auto height = static_cast<uint32_t>(array.shape(0));
+  const auto width = static_cast<uint32_t>(array.shape(1));
+  return Rgba8View{
+      width,
+      height,
+      std::span<const uint8_t>(
+          array.data(),
+          static_cast<size_t>(width) * static_cast<size_t>(height) * 4)};
+}
 
 GuiWindowConfig make_window_config(
     std::string title, int width, int height,
@@ -156,6 +196,16 @@ private:
 } // namespace
 
 void bind_gui_native_application_host(nb::module_ &m) {
+  nb::enum_<DynamicTextureOwnership>(m, "DynamicTextureOwnership")
+      .value("EMPTY", DynamicTextureOwnership::Empty)
+      .value("OWNED", DynamicTextureOwnership::Owned)
+      .value("BORROWED", DynamicTextureOwnership::Borrowed)
+      .value("RELEASED", DynamicTextureOwnership::Released);
+
+  nb::enum_<CanvasTextureLayer>(m, "CanvasTextureLayer")
+      .value("IMAGE", CanvasTextureLayer::Image)
+      .value("OVERLAY", CanvasTextureLayer::Overlay);
+
   nb::class_<PythonGuiWindowHost>(m, "GuiWindowHost")
       .def(
           "__init__",
@@ -223,6 +273,12 @@ void bind_gui_native_application_host(nb::module_ &m) {
         return std::array<int, 2>{self.get().framebuffer_width(),
                                   self.get().framebuffer_height()};
       })
+      .def_prop_ro(
+          "graphics",
+          [](PythonGuiWindowHost &self) -> tgfx::GraphicsHost & {
+            return self.get().graphics();
+          },
+          nb::rv_policy::reference_internal)
       .def("__enter__",
            [](PythonGuiWindowHost &self) -> PythonGuiWindowHost & {
              return self;
@@ -233,6 +289,75 @@ void bind_gui_native_application_host(nb::module_ &m) {
              self.close();
              return false;
            });
+
+  nb::class_<DynamicTextureLease>(m, "DynamicTextureLease")
+      .def(
+          "__init__",
+          [](DynamicTextureLease *self, PythonGuiWindowHost &host) {
+            new (self) DynamicTextureLease(host.get());
+          },
+          nb::arg("host"), nb::keep_alive<1, 2>())
+      .def(
+          "set_rgba8",
+          [](DynamicTextureLease &self, const Rgba8Array &data) {
+            const Rgba8View view =
+                rgba8_view(data, "DynamicTextureLease.set_rgba8");
+            self.set_rgba8(view.width, view.height, view.pixels);
+          },
+          nb::arg("data"))
+      .def(
+          "update_region_rgba8",
+          [](DynamicTextureLease &self, uint32_t x, uint32_t y,
+             const Rgba8Array &data) {
+            const Rgba8View view =
+                rgba8_view(data, "DynamicTextureLease.update_region_rgba8");
+            self.update_region_rgba8(
+                x, y, view.width, view.height, view.pixels);
+          },
+          nb::arg("x"), nb::arg("y"), nb::arg("data"))
+      .def(
+          "borrow",
+          [](DynamicTextureLease &self, tgfx::GraphicsHost &texture_owner,
+             tgfx::TextureHandle texture) {
+            self.borrow(texture_owner, texture);
+          },
+          nb::arg("texture_owner"), nb::arg("texture"))
+      .def(
+          "bind_canvas",
+          [](DynamicTextureLease &self, const CanvasRef &canvas,
+             CanvasTextureLayer layer) {
+            self.bind_canvas(canvas.get(), layer);
+          },
+          nb::arg("canvas"),
+          nb::arg("layer") = CanvasTextureLayer::Image)
+      .def(
+          "unbind_canvas",
+          [](DynamicTextureLease &self, const CanvasRef &canvas,
+             CanvasTextureLayer layer) {
+            self.unbind_canvas(canvas.get(), layer);
+          },
+          nb::arg("canvas"),
+          nb::arg("layer") = CanvasTextureLayer::Image)
+      .def("clear", &DynamicTextureLease::clear)
+      .def("close", &DynamicTextureLease::release)
+      .def_prop_ro("ownership", &DynamicTextureLease::ownership)
+      .def_prop_ro("texture", &DynamicTextureLease::texture)
+      .def_prop_ro("width", &DynamicTextureLease::width)
+      .def_prop_ro("height", &DynamicTextureLease::height)
+      .def_prop_ro("empty", &DynamicTextureLease::empty)
+      .def_prop_ro("closed", &DynamicTextureLease::released)
+      .def(
+          "__enter__",
+          [](DynamicTextureLease &self) -> DynamicTextureLease & {
+            return self;
+          },
+          nb::rv_policy::reference_internal)
+      .def(
+          "__exit__",
+          [](DynamicTextureLease &self, nb::handle, nb::handle, nb::handle) {
+            self.release();
+            return false;
+          });
 
   nb::class_<PythonStandaloneGuiApplication>(m, "StandaloneGuiApplication")
       .def(

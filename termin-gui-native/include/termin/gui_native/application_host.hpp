@@ -41,6 +41,8 @@ struct StandaloneGuiApplicationConfig {
 };
 
 class GuiWindowHost;
+class DynamicTextureLease;
+struct GuiWindowHostLeaseState;
 
 // Narrow frame services for native extensions. RenderContext2 is intentionally
 // absent so an extension cannot nest or take over the host-owned frame.
@@ -125,6 +127,8 @@ public:
     tgfx::TextureHandle color_target() const;
 
 private:
+    friend class DynamicTextureLease;
+    std::shared_ptr<GuiWindowHostLeaseState> texture_lease_state() const;
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

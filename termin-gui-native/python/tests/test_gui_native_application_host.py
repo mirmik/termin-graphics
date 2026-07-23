@@ -4,10 +4,14 @@ import threading
 from pathlib import Path
 
 import pytest
+import numpy as np
 
 from termin.display import WindowedGraphicsSession
 from termin.gui_native import (
+    CanvasTextureLayer,
     Document,
+    DynamicTextureLease,
+    DynamicTextureOwnership,
     GuiWindowHost,
     StandaloneGuiApplication,
 )
@@ -21,6 +25,7 @@ def test_application_host_types_are_public_and_document_close_is_idempotent():
     assert document.closed
     assert GuiWindowHost.__module__ == "termin.gui_native._gui_native"
     assert StandaloneGuiApplication.__module__ == "termin.gui_native._gui_native"
+    assert DynamicTextureLease.__module__ == "termin.gui_native._gui_native"
 
 
 @pytest.mark.skipif(
@@ -97,6 +102,49 @@ def test_standalone_application_exposes_document_and_ordered_close():
     assert application.closed
     assert document.closed
     assert host.closed
+
+
+@pytest.mark.skipif(
+    os.environ.get("TERMIN_GUI_NATIVE_LIVE_TEST") != "1",
+    reason="requires an SDL presentation backend",
+)
+def test_dynamic_texture_lease_updates_canvas_and_follows_host_lifetime():
+    application = StandaloneGuiApplication(
+        title="Python dynamic texture lease test",
+        width=96,
+        height=64,
+        continuous_rendering=False,
+    )
+    canvas = application.document.create_canvas()
+    assert application.document.add_root(canvas.handle)
+    lease = DynamicTextureLease(application.window_host)
+    lease.bind_canvas(canvas)
+
+    pixels = np.zeros((3, 4, 4), dtype=np.uint8)
+    pixels[:, :, 0] = 255
+    lease.set_rgba8(pixels)
+    first_id = lease.texture.id
+    assert first_id
+    assert lease.ownership == DynamicTextureOwnership.OWNED
+    assert (lease.width, lease.height) == (4, 3)
+    assert application.tick()
+
+    lease.update_region_rgba8(
+        1, 1, np.full((1, 2, 4), 127, dtype=np.uint8)
+    )
+    lease.set_rgba8(np.full((5, 2, 4), 64, dtype=np.uint8))
+    assert lease.texture.id != first_id
+    assert (lease.width, lease.height) == (2, 5)
+
+    lease.bind_canvas(canvas, CanvasTextureLayer.OVERLAY)
+    lease.unbind_canvas(canvas, CanvasTextureLayer.OVERLAY)
+    lease.clear()
+    assert lease.empty
+    lease.set_rgba8(pixels)
+    application.close()
+    assert lease.closed
+    with pytest.raises(RuntimeError, match="after release"):
+        lease.set_rgba8(pixels)
 
 
 @pytest.mark.skipif(
