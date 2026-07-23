@@ -13,29 +13,31 @@ Document::Document() : _document(tc_ui_document_create()) {
 }
 
 Document::~Document() {
-    if (_active_window_hosts != 0) {
-        tc_log_error(
-            "[gui-native-document] destroyed with %zu live GuiWindowHost binding(s)",
-            _active_window_hosts);
+    if (_active_application_hosts != 0) {
+        tc_log_error("[gui-native-document] destroyed with %zu live GUI application "
+                     "host binding(s)",
+                     _active_application_hosts);
     }
     destroy_document();
 }
 
 Document::Document(Document&& other) {
-    if (other._active_window_hosts != 0) {
-        tc_log_error("[gui-native-document] cannot move a Document with a live GuiWindowHost");
-        throw std::logic_error("cannot move a Document with a live GuiWindowHost");
+    if (other._active_application_hosts != 0) {
+        tc_log_error("[gui-native-document] cannot move a Document with a live GUI "
+                     "application host");
+        throw std::logic_error("cannot move a Document with a live GUI application host");
     }
     _document = other._document;
     other._document = tc_ui_document_handle_invalid();
 }
 
 Document& Document::operator=(Document&& other) {
-    if (this == &other) return *this;
-    if (_active_window_hosts != 0 || other._active_window_hosts != 0) {
-        tc_log_error(
-            "[gui-native-document] cannot move-assign a Document with a live GuiWindowHost");
-        throw std::logic_error("cannot move-assign a Document with a live GuiWindowHost");
+    if (this == &other)
+        return *this;
+    if (_active_application_hosts != 0 || other._active_application_hosts != 0) {
+        tc_log_error("[gui-native-document] cannot move-assign a Document with a live "
+                     "GUI application host");
+        throw std::logic_error("cannot move-assign a Document with a live GUI application host");
     }
     destroy_document();
     _document = other._document;
@@ -43,33 +45,33 @@ Document& Document::operator=(Document&& other) {
     return *this;
 }
 
-void Document::attach_window_host() {
+void Document::attach_application_host() {
     if (!valid()) {
         tc_log_error("[gui-native-document] cannot attach a host after close");
         throw std::logic_error("Document is closed");
     }
-    if (_active_window_hosts != 0) {
-        tc_log_error(
-            "[gui-native-document] a Document supports exactly one active GuiWindowHost");
-        throw std::logic_error("Document already has an active GuiWindowHost");
+    if (_active_application_hosts != 0) {
+        tc_log_error("[gui-native-document] a Document supports exactly one active GUI "
+                     "application host");
+        throw std::logic_error("Document already has an active GUI application host");
     }
-    ++_active_window_hosts;
+    ++_active_application_hosts;
 }
 
-void Document::detach_window_host() {
-    if (_active_window_hosts == 0) {
-        tc_log_error("[gui-native-document] GuiWindowHost binding count underflow");
+void Document::detach_application_host() {
+    if (_active_application_hosts == 0) {
+        tc_log_error("[gui-native-document] GUI application host binding count underflow");
         return;
     }
-    --_active_window_hosts;
+    --_active_application_hosts;
 }
 
 void Document::close() {
-    if (_active_window_hosts != 0) {
-        tc_log_error(
-            "[gui-native-document] close rejected with %zu live GuiWindowHost binding(s)",
-            _active_window_hosts);
-        throw std::logic_error("Document::close requires GuiWindowHost to close first");
+    if (_active_application_hosts != 0) {
+        tc_log_error("[gui-native-document] close rejected with %zu live GUI application "
+                     "host binding(s)",
+                     _active_application_hosts);
+        throw std::logic_error("Document::close requires its GUI application host to close first");
     }
     destroy_document();
 }
@@ -82,11 +84,8 @@ void Document::destroy_document() noexcept {
 }
 
 tc_widget_handle Document::adopt(Widget* widget) {
-    return tc_ui_document_adopt_widget(
-        _document,
-        widget ? widget->c_widget() : nullptr,
-        &Widget::delete_owned_widget
-    );
+    return tc_ui_document_adopt_widget(_document, widget ? widget->c_widget() : nullptr,
+                                       &Widget::delete_owned_widget);
 }
 
 tc::trent Document::serialize() const {
@@ -105,7 +104,7 @@ void Document::restore(const tc::trent& serialized) {
 }
 
 tc_ui_style Document::resolve_style(const Widget& widget, uint32_t extra_state_flags) const {
-    tc_ui_style style {};
+    tc_ui_style style{};
     if (!tc_ui_document_resolve_style(_document, widget.c_widget(), extra_state_flags, &style)) {
         throw std::runtime_error("failed to resolve native UI widget style");
     }

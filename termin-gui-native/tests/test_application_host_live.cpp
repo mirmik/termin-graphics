@@ -7,15 +7,14 @@
 
 #include <termin/gui_native/application_host.hpp>
 
-#include <tgfx2/i_render_device.hpp>
 #include <tgfx2/graphics_host.hpp>
+#include <tgfx2/i_render_device.hpp>
 #include <tgfx2/shader_artifact_resolver.hpp>
 
 namespace {
 
-class CountingExtension final
-    : public termin::gui_native::GuiWindowFrameExtension {
-public:
+class CountingExtension final : public termin::gui_native::GuiWindowFrameExtension {
+  public:
     CountingExtension(int& before, int& after, int& detach)
         : before_(before), after_(after), detach_(detach) {}
 
@@ -26,9 +25,9 @@ public:
         }
     }
     void after_ui_frame(termin::gui_native::GuiWindowFrame&) override { ++after_; }
-    void detach(termin::gui_native::GuiWindowHost&) noexcept override { ++detach_; }
+    void detach(termin::gui_native::GuiApplicationHost&) noexcept override { ++detach_; }
 
-private:
+  private:
     int& before_;
     int& after_;
     int& detach_;
@@ -36,10 +35,9 @@ private:
 
 bool unavailable_window_system(const char* message) {
     return message &&
-        (std::strstr(message, "No available video device") ||
-         std::strstr(message, "Vulkan support is either not configured in SDL") ||
-         std::strstr(message, "Could not initialize OpenGL") ||
-         std::strstr(message, "DISPLAY"));
+           (std::strstr(message, "No available video device") ||
+            std::strstr(message, "Vulkan support is either not configured in SDL") ||
+            std::strstr(message, "Could not initialize OpenGL") || std::strstr(message, "DISPLAY"));
 }
 
 } // namespace
@@ -93,8 +91,7 @@ int main() {
             std::fprintf(stderr, "nested deferred work did not wait for the next tick\n");
             return 1;
         }
-        const auto initial_desc =
-            host.device().texture_desc(host.color_target());
+        const auto initial_desc = host.device().texture_desc(host.color_target());
         if (initial_desc.width != static_cast<uint32_t>(host.framebuffer_width()) ||
             initial_desc.height != static_cast<uint32_t>(host.framebuffer_height())) {
             std::fprintf(stderr, "unexpected initial color target dimensions\n");
@@ -105,15 +102,15 @@ int main() {
         for (int attempt = 0; attempt < 50; ++attempt) {
             host.pump_events();
             const auto [width, height] = host.window().window_size();
-            if (width == 400 && height == 240) break;
+            if (width == 400 && height == 240)
+                break;
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         if (!host.render_frame()) {
             std::fprintf(stderr, "application host produced no resized frame\n");
             return 1;
         }
-        const auto resized_desc =
-            host.device().texture_desc(host.color_target());
+        const auto resized_desc = host.device().texture_desc(host.color_target());
         if (resized_desc.width != static_cast<uint32_t>(host.framebuffer_width()) ||
             resized_desc.height != static_cast<uint32_t>(host.framebuffer_height()) ||
             (resized_desc.width == initial_desc.width &&
@@ -131,11 +128,8 @@ int main() {
         second_config.window = {"borrowed host replacement", 240, 160};
         second_config.font_path = TERMIN_GUI_NATIVE_TEST_FONT;
         auto injected_window = session.create_window(second_config.window);
-        termin::gui_native::GuiWindowHost second_host(
-            session.graphics(),
-            second_document,
-            second_config,
-            std::move(injected_window));
+        termin::gui_native::GuiWindowHost second_host(session.graphics(), second_document,
+                                                      second_config, std::move(injected_window));
         if (&second_host.graphics() != &session.graphics() || !second_host.render_frame()) {
             std::fprintf(stderr, "injected GuiWindowHost did not reuse the graphics domain\n");
             return 1;
@@ -155,8 +149,7 @@ int main() {
             std::fprintf(stderr, "closing one GuiWindowHost damaged the shared domain\n");
             return 1;
         }
-        if (extension_before == 0 || extension_before != extension_after ||
-            extension_detach != 1) {
+        if (extension_before == 0 || extension_before != extension_after || extension_detach != 1) {
             std::fprintf(stderr, "frame extension lifecycle was not deterministic\n");
             return 1;
         }

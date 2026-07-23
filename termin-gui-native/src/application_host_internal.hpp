@@ -13,12 +13,12 @@ namespace termin::gui_native {
 
 class Document;
 class DynamicTextureRecord;
-class GuiWindowHost;
+class GuiApplicationHost;
 
-struct GuiWindowHostLeaseState {
+struct GuiApplicationHostLeaseState {
     std::mutex mutex;
     std::thread::id owner_thread;
-    GuiWindowHost* host = nullptr;
+    GuiApplicationHost* host = nullptr;
     tgfx::GraphicsHost* graphics = nullptr;
     Document* document = nullptr;
     bool open = true;

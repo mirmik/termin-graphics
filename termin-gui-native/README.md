@@ -30,11 +30,14 @@ while (!host.should_close()) {
 ```
 
 `StandaloneGuiApplication` owns the canonical `WindowedGraphicsSession` and
-its `Document`. Its borrowed `GuiWindowHost` owns window event routing, text
-input, the draw list/renderer, document clipboard and cursor bridges, the
-resizable color target, frame submission and deterministic per-window GPU
-teardown. Multiple `GuiWindowHost` instances can borrow one session without
-claiming another device. Empty font and shader paths resolve
+its `Document`. Its borrowed `GuiWindowHost` owns the window and its platform
+services while delegating layout, paint, renderer, color-target, frame
+extensions, repaint/deferred work and GPU teardown to a presentation-neutral
+`GuiApplicationHost`. A typed `GuiFrameEndpoint` maps completed frames to the
+window; isolated/offscreen compositions can supply a different endpoint
+without copying the native UI frame loop. Multiple `GuiWindowHost` instances
+can borrow one session without claiming another device. Empty font and shader
+paths resolve
 first from `TERMIN_UI_FONT`, `TERMIN_SHADERC`, `TERMIN_SLANGC` and `TERMIN_SDK`,
 then relative to the loaded SDK library. All paths remain explicitly
 overridable through `StandaloneGuiApplicationConfig`. Shader configuration is
@@ -62,6 +65,11 @@ For editor-owned graphics domains, construct `GuiWindowHost(session, document,
 ...)` with the typed `termin.display.WindowedGraphicsSession`. The binding
 keeps both borrowed owners alive, rejects closing the document or session
 before the host, and exposes no raw device or context addresses.
+
+The C++ `GuiApplicationHost` constructor is the lower-level integration point
+for an existing graphics domain, document and frame endpoint. It deliberately
+does not poll events or own a window. Application code should normally use
+`GuiWindowHost`; the isolated owning composition is tracked by #744.
 
 The current foundation includes:
 

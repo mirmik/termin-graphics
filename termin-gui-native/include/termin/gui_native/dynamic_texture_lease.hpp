@@ -14,6 +14,7 @@ class GraphicsHost;
 namespace termin::gui_native {
 
 class Canvas;
+class GuiApplicationHost;
 class GuiWindowHost;
 
 enum class DynamicTextureOwnership {
@@ -32,7 +33,8 @@ enum class CanvasTextureLayer {
 // this object owns upload/recreate/release policy and validates the graphics
 // domain and host/document lifetime on every operation.
 class TERMIN_GUI_NATIVE_HOST_API DynamicTextureLease {
-public:
+  public:
+    explicit DynamicTextureLease(GuiApplicationHost& host);
     explicit DynamicTextureLease(GuiWindowHost& host);
     ~DynamicTextureLease();
 
@@ -41,23 +43,12 @@ public:
     DynamicTextureLease(DynamicTextureLease&&) noexcept;
     DynamicTextureLease& operator=(DynamicTextureLease&&) noexcept;
 
-    void set_rgba8(
-        uint32_t width,
-        uint32_t height,
-        std::span<const uint8_t> pixels);
-    void update_region_rgba8(
-        uint32_t x,
-        uint32_t y,
-        uint32_t width,
-        uint32_t height,
-        std::span<const uint8_t> pixels);
-    void borrow(
-        tgfx::GraphicsHost& texture_owner,
-        tgfx::TextureHandle texture);
+    void set_rgba8(uint32_t width, uint32_t height, std::span<const uint8_t> pixels);
+    void update_region_rgba8(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
+                             std::span<const uint8_t> pixels);
+    void borrow(tgfx::GraphicsHost& texture_owner, tgfx::TextureHandle texture);
 
-    void bind_canvas(
-        Canvas& canvas,
-        CanvasTextureLayer layer = CanvasTextureLayer::Image);
+    void bind_canvas(Canvas& canvas, CanvasTextureLayer layer = CanvasTextureLayer::Image);
     void unbind_canvas(Canvas& canvas, CanvasTextureLayer layer);
 
     // clear() returns the lease to Empty and keeps it reusable. release()
@@ -72,7 +63,7 @@ public:
     bool empty() const;
     bool released() const;
 
-private:
+  private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

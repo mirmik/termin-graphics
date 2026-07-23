@@ -56,23 +56,19 @@ size_t rgba8_byte_count(uint32_t width, uint32_t height) {
     return static_cast<size_t>(width) * static_cast<size_t>(height) * channels;
 }
 
-void require_byte_count(
-    std::span<const uint8_t> pixels,
-    uint32_t width,
-    uint32_t height) {
+void require_byte_count(std::span<const uint8_t> pixels, uint32_t width, uint32_t height) {
     const size_t expected = rgba8_byte_count(width, height);
     if (pixels.size() != expected) {
-        lease_argument_error(
-            "RGBA8 pixel buffer has " + std::to_string(pixels.size()) +
-            " bytes; expected " + std::to_string(expected));
+        lease_argument_error("RGBA8 pixel buffer has " + std::to_string(pixels.size()) +
+                             " bytes; expected " + std::to_string(expected));
     }
 }
 
 } // namespace
 
 class DynamicTextureRecord {
-public:
-    std::weak_ptr<GuiWindowHostLeaseState> state;
+  public:
+    std::weak_ptr<GuiApplicationHostLeaseState> state;
     tgfx::TextureHandle texture{};
     DynamicTextureOwnership ownership = DynamicTextureOwnership::Empty;
     uint32_t width = 0;
@@ -82,12 +78,10 @@ public:
 
 namespace {
 
-std::shared_ptr<GuiWindowHostLeaseState> require_active(
-    const std::shared_ptr<DynamicTextureRecord>& record,
-    const char* operation) {
+std::shared_ptr<GuiApplicationHostLeaseState>
+require_active(const std::shared_ptr<DynamicTextureRecord>& record, const char* operation) {
     if (!record || record->ownership == DynamicTextureOwnership::Released) {
-        lease_error(std::string("DynamicTextureLease::") + operation +
-                    " called after release");
+        lease_error(std::string("DynamicTextureLease::") + operation + " called after release");
     }
     auto state = record->state.lock();
     if (!state) {
@@ -96,12 +90,12 @@ std::shared_ptr<GuiWindowHostLeaseState> require_active(
     }
     if (std::this_thread::get_id() != state->owner_thread) {
         lease_error(std::string("DynamicTextureLease::") + operation +
-                    " requires the GuiWindowHost owner thread");
+                    " requires the GuiApplicationHost owner thread");
     }
     {
         const std::lock_guard<std::mutex> lock(state->mutex);
-        if (!state->open || !state->host || !state->graphics ||
-            !state->document || !state->document->valid()) {
+        if (!state->open || !state->host || !state->graphics || !state->document ||
+            !state->document->valid()) {
             lease_error(std::string("DynamicTextureLease::") + operation +
                         " called after host or document shutdown");
         }
@@ -113,29 +107,20 @@ std::shared_ptr<GuiWindowHostLeaseState> require_active(
     return state;
 }
 
-Canvas* resolve_canvas(
-    const GuiWindowHostLeaseState& state,
-    const CanvasBinding& binding,
-    const char* operation,
-    bool log_failure) {
-    tc_widget* widget = tc_ui_document_resolve_widget(
-        state.document->get(), binding.handle);
-    auto* canvas = widget ? dynamic_cast<Canvas*>(
-                                static_cast<Widget*>(widget->body))
-                          : nullptr;
+Canvas* resolve_canvas(const GuiApplicationHostLeaseState& state, const CanvasBinding& binding,
+                       const char* operation, bool log_failure) {
+    tc_widget* widget = tc_ui_document_resolve_widget(state.document->get(), binding.handle);
+    auto* canvas = widget ? dynamic_cast<Canvas*>(static_cast<Widget*>(widget->body)) : nullptr;
     if (!canvas && log_failure) {
-        tc_log_error(
-            "[gui-native-texture] DynamicTextureLease::%s encountered a "
-            "stale or non-Canvas binding",
-            operation);
+        tc_log_error("[gui-native-texture] DynamicTextureLease::%s encountered a "
+                     "stale or non-Canvas binding",
+                     operation);
     }
     return canvas;
 }
 
-void validate_bindings(
-    const GuiWindowHostLeaseState& state,
-    const DynamicTextureRecord& record,
-    const char* operation) {
+void validate_bindings(const GuiApplicationHostLeaseState& state,
+                       const DynamicTextureRecord& record, const char* operation) {
     for (const CanvasBinding& binding : record.bindings) {
         if (!resolve_canvas(state, binding, operation, true)) {
             lease_error(std::string("DynamicTextureLease::") + operation +
@@ -144,19 +129,12 @@ void validate_bindings(
     }
 }
 
-void apply_binding(
-    Canvas& canvas,
-    CanvasTextureLayer layer,
-    tgfx::TextureHandle texture,
-    uint32_t width,
-    uint32_t height) {
+void apply_binding(Canvas& canvas, CanvasTextureLayer layer, tgfx::TextureHandle texture,
+                   uint32_t width, uint32_t height) {
     if (layer == CanvasTextureLayer::Image) {
         if (texture) {
-            canvas.set_texture(
-                texture.id,
-                tc_ui_size{
-                    static_cast<float>(width),
-                    static_cast<float>(height)});
+            canvas.set_texture(texture.id,
+                               tc_ui_size{static_cast<float>(width), static_cast<float>(height)});
         } else {
             canvas.clear_texture();
         }
@@ -165,24 +143,18 @@ void apply_binding(
     }
 }
 
-void apply_bindings(
-    const GuiWindowHostLeaseState& state,
-    const DynamicTextureRecord& record) {
+void apply_bindings(const GuiApplicationHostLeaseState& state, const DynamicTextureRecord& record) {
     for (const CanvasBinding& binding : record.bindings) {
         Canvas* canvas = resolve_canvas(state, binding, "apply", false);
         // All callers validate first or are host-shutdown cleanup paths.
         if (canvas) {
-            apply_binding(
-                *canvas, binding.layer, record.texture,
-                record.width, record.height);
+            apply_binding(*canvas, binding.layer, record.texture, record.width, record.height);
         }
     }
 }
 
-bool clear_canvas_bindings(
-    const GuiWindowHostLeaseState& state,
-    DynamicTextureRecord& record,
-    const char* operation) {
+bool clear_canvas_bindings(const GuiApplicationHostLeaseState& state, DynamicTextureRecord& record,
+                           const char* operation) {
     bool stale = false;
     for (const CanvasBinding& binding : record.bindings) {
         Canvas* canvas = resolve_canvas(state, binding, operation, true);
@@ -195,9 +167,7 @@ bool clear_canvas_bindings(
     return stale;
 }
 
-void destroy_owned_texture(
-    GuiWindowHostLeaseState& state,
-    DynamicTextureRecord& record) {
+void destroy_owned_texture(GuiApplicationHostLeaseState& state, DynamicTextureRecord& record) {
     if (record.ownership == DynamicTextureOwnership::Owned && record.texture) {
         state.graphics->device().destroy(record.texture);
     }
@@ -206,10 +176,8 @@ void destroy_owned_texture(
     record.height = 0;
 }
 
-bool reset_record(
-    GuiWindowHostLeaseState& state,
-    DynamicTextureRecord& record,
-    const char* operation) {
+bool reset_record(GuiApplicationHostLeaseState& state, DynamicTextureRecord& record,
+                  const char* operation) {
     const bool stale = clear_canvas_bindings(state, record, operation);
     destroy_owned_texture(state, record);
     record.ownership = DynamicTextureOwnership::Empty;
@@ -217,9 +185,9 @@ bool reset_record(
     return stale;
 }
 
-void release_on_owner_thread(
-    const std::shared_ptr<DynamicTextureRecord>& record) noexcept {
-    if (!record || record->ownership == DynamicTextureOwnership::Released) return;
+void release_on_owner_thread(const std::shared_ptr<DynamicTextureRecord>& record) noexcept {
+    if (!record || record->ownership == DynamicTextureOwnership::Released)
+        return;
     auto state = record->state.lock();
     if (!state) {
         record->ownership = DynamicTextureOwnership::Released;
@@ -229,8 +197,8 @@ void release_on_owner_thread(
         bool open = false;
         {
             const std::lock_guard<std::mutex> lock(state->mutex);
-            open = state->open && state->host && state->graphics &&
-                state->document && state->document->valid();
+            open = state->open && state->host && state->graphics && state->document &&
+                   state->document->valid();
         }
         if (open && !state->graphics->is_closed()) {
             reset_record(*state, *record, "release");
@@ -240,46 +208,40 @@ void release_on_owner_thread(
             record->height = 0;
         }
     } catch (const std::exception& error) {
-        tc_log_error(
-            "[gui-native-texture] lease release cleanup failed: %s",
-            error.what());
+        tc_log_error("[gui-native-texture] lease release cleanup failed: %s", error.what());
     } catch (...) {
-        tc_log_error(
-            "[gui-native-texture] lease release cleanup failed with unknown exception");
+        tc_log_error("[gui-native-texture] lease release cleanup failed with "
+                     "unknown exception");
     }
     record->ownership = DynamicTextureOwnership::Released;
     record->bindings.clear();
     state->unregister_record(record.get());
 }
 
-void dispose_record(
-    const std::shared_ptr<DynamicTextureRecord>& record) noexcept {
-    if (!record || record->ownership == DynamicTextureOwnership::Released) return;
+void dispose_record(const std::shared_ptr<DynamicTextureRecord>& record) noexcept {
+    if (!record || record->ownership == DynamicTextureOwnership::Released)
+        return;
     auto state = record->state.lock();
     if (state && std::this_thread::get_id() != state->owner_thread) {
         try {
-            GuiWindowHost* host = nullptr;
+            GuiApplicationHost* host = nullptr;
             {
                 const std::lock_guard<std::mutex> lock(state->mutex);
-                if (state->open) host = state->host;
+                if (state->open)
+                    host = state->host;
             }
             if (host) {
-                tc_log_error(
-                    "[gui-native-texture] lease finalized off the owner thread; "
-                    "deferring deterministic release");
-                host->defer([record]() noexcept {
-                    release_on_owner_thread(record);
-                });
+                tc_log_error("[gui-native-texture] lease finalized off the owner thread; "
+                             "deferring deterministic release");
+                host->defer([record]() noexcept { release_on_owner_thread(record); });
             }
         } catch (const std::exception& error) {
-            tc_log_error(
-                "[gui-native-texture] failed to defer lease release; "
-                "host shutdown will reclaim it: %s",
-                error.what());
+            tc_log_error("[gui-native-texture] failed to defer lease release; "
+                         "host shutdown will reclaim it: %s",
+                         error.what());
         } catch (...) {
-            tc_log_error(
-                "[gui-native-texture] failed to defer lease release; "
-                "host shutdown will reclaim it");
+            tc_log_error("[gui-native-texture] failed to defer lease release; "
+                         "host shutdown will reclaim it");
         }
         return;
     }
@@ -288,7 +250,7 @@ void dispose_record(
 
 } // namespace
 
-void GuiWindowHostLeaseState::register_record(
+void GuiApplicationHostLeaseState::register_record(
     const std::shared_ptr<DynamicTextureRecord>& record) {
     const std::lock_guard<std::mutex> lock(mutex);
     if (!open) {
@@ -297,38 +259,34 @@ void GuiWindowHostLeaseState::register_record(
     records.push_back(record);
 }
 
-void GuiWindowHostLeaseState::unregister_record(
-    const DynamicTextureRecord* record) {
+void GuiApplicationHostLeaseState::unregister_record(const DynamicTextureRecord* record) {
     const std::lock_guard<std::mutex> lock(mutex);
     records.erase(
-        std::remove_if(
-            records.begin(), records.end(),
-            [record](const auto& candidate) {
-                return candidate.get() == record;
-            }),
+        std::remove_if(records.begin(), records.end(),
+                       [record](const auto& candidate) { return candidate.get() == record; }),
         records.end());
 }
 
-void GuiWindowHostLeaseState::close_all() noexcept {
+void GuiApplicationHostLeaseState::close_all() noexcept {
     std::vector<std::shared_ptr<DynamicTextureRecord>> pending;
     {
         const std::lock_guard<std::mutex> lock(mutex);
-        if (!open) return;
+        if (!open)
+            return;
         open = false;
         pending.swap(records);
     }
     for (const auto& record : pending) {
-        if (!record || record->ownership == DynamicTextureOwnership::Released) continue;
+        if (!record || record->ownership == DynamicTextureOwnership::Released)
+            continue;
         try {
             clear_canvas_bindings(*this, *record, "host_close");
             destroy_owned_texture(*this, *record);
         } catch (const std::exception& error) {
-            tc_log_error(
-                "[gui-native-texture] host shutdown cleanup failed: %s",
-                error.what());
+            tc_log_error("[gui-native-texture] host shutdown cleanup failed: %s", error.what());
         } catch (...) {
-            tc_log_error(
-                "[gui-native-texture] host shutdown cleanup failed with unknown exception");
+            tc_log_error("[gui-native-texture] host shutdown cleanup failed with "
+                         "unknown exception");
         }
         record->ownership = DynamicTextureOwnership::Released;
         record->bindings.clear();
@@ -343,7 +301,7 @@ struct DynamicTextureLease::Impl {
     std::shared_ptr<DynamicTextureRecord> record;
 };
 
-DynamicTextureLease::DynamicTextureLease(GuiWindowHost& host)
+DynamicTextureLease::DynamicTextureLease(GuiApplicationHost& host)
     : impl_(std::make_unique<Impl>()) {
     auto state = host.texture_lease_state();
     impl_->record = std::make_shared<DynamicTextureRecord>();
@@ -351,40 +309,40 @@ DynamicTextureLease::DynamicTextureLease(GuiWindowHost& host)
     state->register_record(impl_->record);
 }
 
+DynamicTextureLease::DynamicTextureLease(GuiWindowHost& host)
+    : DynamicTextureLease(host.application_host()) {}
+
 DynamicTextureLease::~DynamicTextureLease() {
-    if (impl_) dispose_record(impl_->record);
+    if (impl_)
+        dispose_record(impl_->record);
 }
 
 DynamicTextureLease::DynamicTextureLease(DynamicTextureLease&& other) noexcept
     : impl_(std::move(other.impl_)) {}
 
-DynamicTextureLease& DynamicTextureLease::operator=(
-    DynamicTextureLease&& other) noexcept {
-    if (this == &other) return *this;
-    if (impl_ && impl_->record &&
-        impl_->record->ownership != DynamicTextureOwnership::Released) {
+DynamicTextureLease& DynamicTextureLease::operator=(DynamicTextureLease&& other) noexcept {
+    if (this == &other)
+        return *this;
+    if (impl_ && impl_->record && impl_->record->ownership != DynamicTextureOwnership::Released) {
         dispose_record(impl_->record);
     }
     impl_ = std::move(other.impl_);
     return *this;
 }
 
-void DynamicTextureLease::set_rgba8(
-    uint32_t width,
-    uint32_t height,
-    std::span<const uint8_t> pixels) {
+void DynamicTextureLease::set_rgba8(uint32_t width, uint32_t height,
+                                    std::span<const uint8_t> pixels) {
     auto state = require_active(impl_ ? impl_->record : nullptr, "set_rgba8");
     auto& record = *impl_->record;
     require_byte_count(pixels, width, height);
     if (record.ownership == DynamicTextureOwnership::Borrowed) {
-        lease_error(
-            "DynamicTextureLease::set_rgba8 requires clear() before replacing "
-            "a borrowed texture");
+        lease_error("DynamicTextureLease::set_rgba8 requires clear() before replacing "
+                    "a borrowed texture");
     }
     validate_bindings(*state, record, "set_rgba8");
     auto& device = state->graphics->device();
-    if (record.ownership == DynamicTextureOwnership::Owned &&
-        record.width == width && record.height == height) {
+    if (record.ownership == DynamicTextureOwnership::Owned && record.width == width &&
+        record.height == height) {
         device.upload_texture(record.texture, pixels);
         state->host->request_repaint();
         return;
@@ -394,8 +352,7 @@ void DynamicTextureLease::set_rgba8(
     description.width = width;
     description.height = height;
     description.format = tgfx::PixelFormat::RGBA8_UNorm;
-    description.usage =
-        tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
+    description.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
     const tgfx::TextureHandle replacement = device.create_texture(description);
     if (!replacement) {
         lease_error("DynamicTextureLease::set_rgba8 failed to create a texture");
@@ -415,53 +372,40 @@ void DynamicTextureLease::set_rgba8(
     state->host->request_repaint();
 }
 
-void DynamicTextureLease::update_region_rgba8(
-    uint32_t x,
-    uint32_t y,
-    uint32_t width,
-    uint32_t height,
-    std::span<const uint8_t> pixels) {
-    auto state = require_active(
-        impl_ ? impl_->record : nullptr, "update_region_rgba8");
+void DynamicTextureLease::update_region_rgba8(uint32_t x, uint32_t y, uint32_t width,
+                                              uint32_t height, std::span<const uint8_t> pixels) {
+    auto state = require_active(impl_ ? impl_->record : nullptr, "update_region_rgba8");
     auto& record = *impl_->record;
     if (record.ownership != DynamicTextureOwnership::Owned) {
-        lease_error(
-            "DynamicTextureLease::update_region_rgba8 requires an owned texture");
+        lease_error("DynamicTextureLease::update_region_rgba8 requires an owned texture");
     }
     require_byte_count(pixels, width, height);
-    if (x > record.width || y > record.height ||
-        width > record.width - x || height > record.height - y) {
-        lease_argument_error(
-            "DynamicTextureLease::update_region_rgba8 region is out of bounds");
+    if (x > record.width || y > record.height || width > record.width - x ||
+        height > record.height - y) {
+        lease_argument_error("DynamicTextureLease::update_region_rgba8 region is out of bounds");
     }
     validate_bindings(*state, record, "update_region_rgba8");
-    state->graphics->device().upload_texture_region(
-        record.texture, x, y, width, height, pixels);
+    state->graphics->device().upload_texture_region(record.texture, x, y, width, height, pixels);
     state->host->request_repaint();
 }
 
-void DynamicTextureLease::borrow(
-    tgfx::GraphicsHost& texture_owner,
-    tgfx::TextureHandle texture) {
+void DynamicTextureLease::borrow(tgfx::GraphicsHost& texture_owner, tgfx::TextureHandle texture) {
     auto state = require_active(impl_ ? impl_->record : nullptr, "borrow");
     auto& record = *impl_->record;
     if (record.ownership != DynamicTextureOwnership::Empty) {
-        lease_error(
-            "DynamicTextureLease::borrow requires an empty lease; call clear() first");
+        lease_error("DynamicTextureLease::borrow requires an empty lease; call "
+                    "clear() first");
     }
     if (&texture_owner != state->graphics) {
-        lease_argument_error(
-            "DynamicTextureLease::borrow rejected a texture from another GraphicsHost");
+        lease_argument_error("DynamicTextureLease::borrow rejected a texture from "
+                             "another GraphicsHost");
     }
     if (!texture) {
-        lease_argument_error(
-            "DynamicTextureLease::borrow requires a valid texture handle");
+        lease_argument_error("DynamicTextureLease::borrow requires a valid texture handle");
     }
-    const tgfx::TextureDesc description =
-        state->graphics->device().texture_desc(texture);
+    const tgfx::TextureDesc description = state->graphics->device().texture_desc(texture);
     if (!tgfx::has_flag(description.usage, tgfx::TextureUsage::Sampled)) {
-        lease_argument_error(
-            "DynamicTextureLease::borrow requires a live sampled texture");
+        lease_argument_error("DynamicTextureLease::borrow requires a live sampled texture");
     }
     validate_bindings(*state, record, "borrow");
     record.texture = texture;
@@ -472,57 +416,45 @@ void DynamicTextureLease::borrow(
     state->host->request_repaint();
 }
 
-void DynamicTextureLease::bind_canvas(
-    Canvas& canvas,
-    CanvasTextureLayer layer) {
+void DynamicTextureLease::bind_canvas(Canvas& canvas, CanvasTextureLayer layer) {
     auto state = require_active(impl_ ? impl_->record : nullptr, "bind_canvas");
-    if (!tc_ui_document_handle_eq(
-            canvas.document(), state->document->get())) {
-        lease_argument_error(
-            "DynamicTextureLease::bind_canvas rejected a Canvas from another Document");
+    if (!tc_ui_document_handle_eq(canvas.document(), state->document->get())) {
+        lease_argument_error("DynamicTextureLease::bind_canvas rejected a Canvas "
+                             "from another Document");
     }
-    tc_widget* resolved = tc_ui_document_resolve_widget(
-        state->document->get(), canvas.handle());
+    tc_widget* resolved = tc_ui_document_resolve_widget(state->document->get(), canvas.handle());
     if (!resolved || resolved != canvas.c_widget()) {
-        lease_error(
-            "DynamicTextureLease::bind_canvas requires a live Canvas");
+        lease_error("DynamicTextureLease::bind_canvas requires a live Canvas");
     }
     const auto duplicate = std::find_if(
         impl_->record->bindings.begin(), impl_->record->bindings.end(),
         [&canvas, layer](const CanvasBinding& binding) {
-            return binding.layer == layer &&
-                same_handle(binding.handle, canvas.handle());
+            return binding.layer == layer && same_handle(binding.handle, canvas.handle());
         });
     if (duplicate == impl_->record->bindings.end()) {
         impl_->record->bindings.push_back(CanvasBinding{canvas.handle(), layer});
     }
-    apply_binding(
-        canvas, layer, impl_->record->texture,
-        impl_->record->width, impl_->record->height);
+    apply_binding(canvas, layer, impl_->record->texture, impl_->record->width,
+                  impl_->record->height);
     state->host->request_repaint();
 }
 
-void DynamicTextureLease::unbind_canvas(
-    Canvas& canvas,
-    CanvasTextureLayer layer) {
+void DynamicTextureLease::unbind_canvas(Canvas& canvas, CanvasTextureLayer layer) {
     auto state = require_active(impl_ ? impl_->record : nullptr, "unbind_canvas");
-    if (!tc_ui_document_handle_eq(
-            canvas.document(), state->document->get())) {
-        lease_argument_error(
-            "DynamicTextureLease::unbind_canvas rejected a Canvas from another Document");
+    if (!tc_ui_document_handle_eq(canvas.document(), state->document->get())) {
+        lease_argument_error("DynamicTextureLease::unbind_canvas rejected a Canvas "
+                             "from another Document");
     }
     const auto iterator = std::find_if(
         impl_->record->bindings.begin(), impl_->record->bindings.end(),
         [&canvas, layer](const CanvasBinding& binding) {
-            return binding.layer == layer &&
-                same_handle(binding.handle, canvas.handle());
+            return binding.layer == layer && same_handle(binding.handle, canvas.handle());
         });
-    if (iterator == impl_->record->bindings.end()) return;
-    tc_widget* resolved = tc_ui_document_resolve_widget(
-        state->document->get(), canvas.handle());
+    if (iterator == impl_->record->bindings.end())
+        return;
+    tc_widget* resolved = tc_ui_document_resolve_widget(state->document->get(), canvas.handle());
     if (!resolved || resolved != canvas.c_widget()) {
-        lease_error(
-            "DynamicTextureLease::unbind_canvas encountered a stale Canvas");
+        lease_error("DynamicTextureLease::unbind_canvas encountered a stale Canvas");
     }
     apply_binding(canvas, layer, {}, 0, 0);
     impl_->record->bindings.erase(iterator);
@@ -532,15 +464,13 @@ void DynamicTextureLease::unbind_canvas(
 void DynamicTextureLease::clear() {
     auto state = require_active(impl_ ? impl_->record : nullptr, "clear");
     if (reset_record(*state, *impl_->record, "clear")) {
-        lease_error(
-            "DynamicTextureLease::clear encountered a stale Canvas binding; "
-            "the texture was still released");
+        lease_error("DynamicTextureLease::clear encountered a stale Canvas binding; "
+                    "the texture was still released");
     }
 }
 
 void DynamicTextureLease::release() {
-    if (!impl_ || !impl_->record ||
-        impl_->record->ownership == DynamicTextureOwnership::Released) {
+    if (!impl_ || !impl_->record || impl_->record->ownership == DynamicTextureOwnership::Released) {
         return;
     }
     require_active(impl_->record, "release");
@@ -548,9 +478,7 @@ void DynamicTextureLease::release() {
 }
 
 DynamicTextureOwnership DynamicTextureLease::ownership() const {
-    return impl_ && impl_->record
-        ? impl_->record->ownership
-        : DynamicTextureOwnership::Released;
+    return impl_ && impl_->record ? impl_->record->ownership : DynamicTextureOwnership::Released;
 }
 
 tgfx::TextureHandle DynamicTextureLease::texture() const {
@@ -565,9 +493,7 @@ uint32_t DynamicTextureLease::height() const {
     return impl_ && impl_->record ? impl_->record->height : 0;
 }
 
-bool DynamicTextureLease::empty() const {
-    return ownership() == DynamicTextureOwnership::Empty;
-}
+bool DynamicTextureLease::empty() const { return ownership() == DynamicTextureOwnership::Empty; }
 
 bool DynamicTextureLease::released() const {
     return ownership() == DynamicTextureOwnership::Released;
