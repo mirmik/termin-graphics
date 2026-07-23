@@ -147,6 +147,18 @@ int main() {
             std::fprintf(stderr, "adapter clipboard service was not connected\n");
             return 1;
         }
+        size_t before_frame_count = 0;
+        adapter.renderer().set_before_frame_callback(
+            [&before_frame_count](tgfx::RenderContext2&) {
+                ++before_frame_count;
+            });
+        if (!adapter.render_and_present() || before_frame_count != 1 ||
+            window.present_count != 1 || !window.last_presented) {
+            std::fprintf(
+                stderr,
+                "adapter did not execute renderer extensions before presentation\n");
+            return 1;
+        }
 
         termin::WindowEvent pointer_away;
         pointer_away.type = termin::WindowEventType::PointerMoved;

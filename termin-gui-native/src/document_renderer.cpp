@@ -2,6 +2,7 @@
 
 #include "application_host_internal.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <deque>
 #include <exception>
@@ -9,9 +10,11 @@
 #include <stdexcept>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include <tcbase/tc_log.h>
 
+#include <termin/gui_native/color_picker.hpp>
 #include <termin/gui_native/draw_list_renderer.hpp>
 
 #include <tgfx2/descriptors.hpp>
@@ -73,6 +76,8 @@ struct DocumentRenderer::Impl {
     std::atomic<bool> repaint_requested{true};
     std::mutex deferred_mutex;
     std::deque<std::function<void()>> deferred_callbacks;
+    std::function<void(tgfx::RenderContext2&)> before_frame;
+    std::vector<tc_widget_handle> color_pickers;
     std::shared_ptr<GuiApplicationHostLeaseState> texture_leases;
     std::thread::id owner_thread = std::this_thread::get_id();
     std::string clipboard_buffer;
@@ -232,6 +237,8 @@ struct DocumentRenderer::Impl {
             const std::lock_guard<std::mutex> lock(deferred_mutex);
             deferred_callbacks.clear();
         }
+        before_frame = {};
+        color_pickers.clear();
         try {
             if (!platform->set_text_input_enabled(false)) {
                 tc_log_error(
@@ -353,6 +360,38 @@ bool DocumentRenderer::render_frame() {
     impl_->ensure_target(width, height);
 
     impl_->context->begin_frame();
+    if (impl_->before_frame) {
+        try {
+            impl_->before_frame(*impl_->context);
+        } catch (const std::exception& error) {
+            tc_log_error(
+                "[gui-native-document-renderer] before-frame callback failed: %s",
+                error.what());
+            throw;
+        } catch (...) {
+            tc_log_error(
+                "[gui-native-document-renderer] before-frame callback failed with "
+                "an unknown exception");
+            throw;
+        }
+    }
+    for (auto iterator = impl_->color_pickers.begin();
+         iterator != impl_->color_pickers.end();) {
+        tc_widget* widget =
+            tc_ui_document_resolve_widget(impl_->document->get(), *iterator);
+        auto* picker = widget
+            ? dynamic_cast<ColorPicker*>(static_cast<Widget*>(widget->body))
+            : nullptr;
+        if (!picker) {
+            tc_log_error(
+                "[gui-native-document-renderer] registered ColorPicker was "
+                "destroyed without renderer unregistration");
+            iterator = impl_->color_pickers.erase(iterator);
+            continue;
+        }
+        impl_->renderer.sync_color_picker_surfaces(*impl_->context, *picker);
+        ++iterator;
+    }
     tc_ui_draw_list_clear(impl_->draw_list.get());
     impl_->document->layout_roots(
         tc_ui_rect{0.0f, 0.0f, static_cast<float>(width),
@@ -374,6 +413,44 @@ bool DocumentRenderer::render_frame() {
         }
     }
     return true;
+}
+
+void DocumentRenderer::set_before_frame_callback(
+    std::function<void(tgfx::RenderContext2&)> callback) {
+    impl_->require_open("set_before_frame_callback");
+    impl_->before_frame = std::move(callback);
+    request_repaint();
+}
+
+void DocumentRenderer::register_color_picker(ColorPicker& picker) {
+    impl_->require_open("register_color_picker");
+    if (!tc_ui_document_handle_eq(picker.document(), impl_->document->get())) {
+        renderer_error(
+            "DocumentRenderer cannot register a ColorPicker from another Document");
+    }
+    const tc_widget_handle handle = picker.handle();
+    if (std::none_of(
+            impl_->color_pickers.begin(), impl_->color_pickers.end(),
+            [handle](tc_widget_handle candidate) {
+                return tc_widget_handle_eq(candidate, handle);
+            })) {
+        impl_->color_pickers.push_back(handle);
+        request_repaint();
+    }
+}
+
+void DocumentRenderer::unregister_color_picker(ColorPicker& picker) {
+    impl_->require_open("unregister_color_picker");
+    impl_->renderer.release_color_picker_surfaces(picker);
+    const tc_widget_handle handle = picker.handle();
+    impl_->color_pickers.erase(
+        std::remove_if(
+            impl_->color_pickers.begin(), impl_->color_pickers.end(),
+            [handle](tc_widget_handle candidate) {
+                return tc_widget_handle_eq(candidate, handle);
+            }),
+        impl_->color_pickers.end());
+    request_repaint();
 }
 
 void DocumentRenderer::defer(std::function<void()> callback) {

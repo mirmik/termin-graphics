@@ -566,6 +566,7 @@ if(TERMIN_BUILD_PYTHON)
         PRIVATE
             termin_gui_native_application_host
             termin_gui_native_offscreen
+            termin_gui_native_window_adapter
     )
     target_include_directories(_gui_native
         PRIVATE

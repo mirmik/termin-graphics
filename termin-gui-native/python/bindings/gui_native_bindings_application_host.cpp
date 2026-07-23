@@ -17,15 +17,21 @@
 #include <termin/gui_native/application_host.hpp>
 #include <termin/gui_native/dynamic_texture_lease.hpp>
 #include <termin/gui_native/offscreen_composition.hpp>
+#include <termin/gui_native/window_adapter.hpp>
+#include <termin/window/window_manager.hpp>
 #include <tgfx2/device_factory.hpp>
 #include <tgfx2/graphics_host.hpp>
 
 namespace {
 
 using termin::WindowedGraphicsSession;
+using termin::WindowHandle;
+using termin::WindowManager;
 using termin::gui_native::CanvasTextureLayer;
+using termin::gui_native::DocumentRendererConfig;
 using termin::gui_native::DynamicTextureLease;
 using termin::gui_native::DynamicTextureOwnership;
+using termin::gui_native::GuiWindowAdapter;
 using termin::gui_native::GuiWindowConfig;
 using termin::gui_native::GuiWindowHost;
 using termin::gui_native::OffscreenGuiComposition;
@@ -538,6 +544,162 @@ void bind_gui_native_application_host(nb::module_ &m) {
              return false;
            });
 
+  nb::class_<GuiWindowAdapter>(m, "GuiWindowAdapter")
+      .def(
+          "__init__",
+          [](GuiWindowAdapter *self, WindowManager &manager,
+             WindowHandle handle, PythonDocument &document,
+             const std::string &font_path, int font_size,
+             std::array<float, 4> clear_color, bool enable_text_input) {
+            if (font_size <= 0)
+              throw std::invalid_argument("font_size must be positive");
+            DocumentRendererConfig config;
+            config.font_path = font_path;
+            config.font_size = font_size;
+            config.clear_color = clear_color;
+            config.enable_text_input = enable_text_input;
+            termin::BackendWindow &window = manager.window(handle);
+            new (self) GuiWindowAdapter(
+                window.graphics_host(), document.native_document(),
+                std::move(config), window);
+          },
+          nb::arg("window_manager"), nb::arg("handle"), nb::arg("document"),
+          nb::arg("font_path"), nb::arg("font_size") = 14,
+          nb::arg("clear_color") =
+              std::array<float, 4>{0.03f, 0.035f, 0.045f, 1.0f},
+          nb::arg("enable_text_input") = true,
+          nb::keep_alive<1, 2>(), nb::keep_alive<1, 4>())
+      .def(
+          "consume_pending_events",
+          [](GuiWindowAdapter &self, WindowManager &manager,
+             WindowHandle handle, nb::object interceptor) {
+            if (!interceptor.is_none() &&
+                !nb::isinstance<nb::callable>(interceptor))
+              throw std::invalid_argument(
+                  "event interceptor must be callable or None");
+            if (&manager.window(handle) != &self.window())
+              throw std::invalid_argument(
+                  "window handle does not identify this GuiWindowAdapter window");
+            std::vector<termin::WindowEvent> events =
+                manager.take_events(handle);
+            std::vector<termin::WindowEvent> unconsumed;
+            unconsumed.reserve(events.size());
+            for (const termin::WindowEvent &event : events) {
+              bool consumed = false;
+              if (!interceptor.is_none())
+                consumed =
+                    nb::cast<bool>(interceptor(python_window_event(event)));
+              if (!consumed)
+                unconsumed.push_back(event);
+            }
+            self.consume_events(unconsumed);
+            if (!events.empty())
+              self.request_repaint();
+            return events.size();
+          },
+          nb::arg("window_manager"), nb::arg("handle"),
+          nb::arg("interceptor").none() = nb::none())
+      .def("run_deferred",
+           [](GuiWindowAdapter &self) {
+             return self.renderer().run_deferred();
+           })
+      .def(
+          "defer",
+          [](GuiWindowAdapter &self, nb::object callback) {
+            if (!nb::isinstance<nb::callable>(callback))
+              throw std::invalid_argument("callback must be callable");
+            self.renderer().defer([callback = std::move(callback)]() {
+              nb::gil_scoped_acquire gil;
+              callback();
+            });
+          },
+          nb::arg("callback"))
+      .def(
+          "set_before_frame_callback",
+          [](GuiWindowAdapter &self, nb::object callback) {
+            if (!callback.is_none() &&
+                !nb::isinstance<nb::callable>(callback))
+              throw std::invalid_argument(
+                  "before-frame callback must be callable or None");
+            if (callback.is_none()) {
+              self.renderer().set_before_frame_callback({});
+              return;
+            }
+            self.renderer().set_before_frame_callback(
+                [callback = std::move(callback)](tgfx::RenderContext2 &) {
+                  nb::gil_scoped_acquire gil;
+                  callback();
+                });
+          },
+          nb::arg("callback").none() = nb::none())
+      .def(
+          "register_color_picker",
+          [](GuiWindowAdapter &self, const ColorPickerRef &picker) {
+            self.renderer().register_color_picker(picker.get());
+          },
+          nb::arg("picker"))
+      .def(
+          "unregister_color_picker",
+          [](GuiWindowAdapter &self, const ColorPickerRef &picker) {
+            self.renderer().unregister_color_picker(picker.get());
+          },
+          nb::arg("picker"))
+      .def("render_frame",
+           [](GuiWindowAdapter &self) {
+             return self.render_and_present();
+           })
+      .def("request_repaint",
+           [](GuiWindowAdapter &self) {
+             self.request_repaint();
+           })
+      .def_prop_ro("repaint_requested",
+                   [](GuiWindowAdapter &self) {
+                     return self.repaint_requested();
+                   })
+      .def_prop_ro("should_close",
+                   [](GuiWindowAdapter &self) {
+                     return self.window().should_close();
+                   })
+      .def("request_close",
+           [](GuiWindowAdapter &self) {
+             self.window().set_should_close(true);
+           })
+      .def("wait_idle",
+           [](GuiWindowAdapter &self) {
+             self.wait_idle();
+           })
+      .def("close", &GuiWindowAdapter::close)
+      .def_prop_ro("closed",
+                   [](GuiWindowAdapter &self) {
+                     return !self.is_open();
+                   })
+      .def_prop_ro("rendered_frame_count",
+                   [](GuiWindowAdapter &self) {
+                     return self.renderer().rendered_frame_count();
+                   })
+      .def_prop_ro("framebuffer_size",
+                   [](GuiWindowAdapter &self) {
+                     const auto [width, height] =
+                         self.renderer().framebuffer_size();
+                     return std::array<int, 2>{width, height};
+                   })
+      .def_prop_ro("color_target",
+                   [](GuiWindowAdapter &self) {
+                     return self.renderer().color_target();
+                   })
+      .def_prop_ro(
+          "window",
+          [](GuiWindowAdapter &self) -> termin::BackendWindow & {
+            return self.window();
+          },
+          nb::rv_policy::reference_internal)
+      .def_prop_ro(
+          "graphics",
+          [](GuiWindowAdapter &self) -> tgfx::GraphicsHost & {
+            return self.renderer().graphics();
+          },
+          nb::rv_policy::reference_internal);
+
   nb::enum_<termin::WindowKey>(m, "WindowKey")
       .value("UNKNOWN", termin::WindowKey::Unknown)
       .value("TAB", termin::WindowKey::Tab)
@@ -735,6 +897,12 @@ void bind_gui_native_application_host(nb::module_ &m) {
             new (self) DynamicTextureLease(host.get());
           },
           nb::arg("host"), nb::keep_alive<1, 2>())
+      .def(
+          "__init__",
+          [](DynamicTextureLease *self, GuiWindowAdapter &adapter) {
+            new (self) DynamicTextureLease(adapter.renderer());
+          },
+          nb::arg("adapter"), nb::keep_alive<1, 2>())
       .def(
           "__init__",
           [](DynamicTextureLease *self,

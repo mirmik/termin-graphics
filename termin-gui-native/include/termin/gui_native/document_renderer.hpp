@@ -14,10 +14,12 @@
 namespace tgfx {
 class GraphicsHost;
 class IRenderDevice;
+class RenderContext2;
 }
 
 namespace termin::gui_native {
 
+class ColorPicker;
 class DynamicTextureLease;
 struct GuiApplicationHostLeaseState;
 
@@ -75,6 +77,10 @@ class TERMIN_GUI_NATIVE_HOST_API DocumentRenderer {
     std::pair<int, int> framebuffer_size() const;
     bool render_frame();
 
+    void set_before_frame_callback(
+        std::function<void(tgfx::RenderContext2&)> callback);
+    void register_color_picker(ColorPicker& picker);
+    void unregister_color_picker(ColorPicker& picker);
     void defer(std::function<void()> callback);
     size_t run_deferred();
     void request_repaint();

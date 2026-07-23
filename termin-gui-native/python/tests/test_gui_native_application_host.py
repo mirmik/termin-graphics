@@ -7,12 +7,14 @@ import pytest
 import numpy as np
 
 from termin.display import WindowedGraphicsSession
+from termin.gui_native import _gui_native
 from termin.gui_native import (
     CanvasTextureLayer,
     Document,
     DynamicTextureLease,
     DynamicTextureOwnership,
     GuiWindowHost,
+    GuiWindowAdapter,
     OffscreenGuiComposition,
     OffscreenGuiApplication,
     StandaloneGuiApplication,
@@ -27,6 +29,8 @@ def test_application_host_types_are_public_and_document_close_is_idempotent():
     document.close()
     assert document.closed
     assert GuiWindowHost.__module__ == "termin.gui_native._gui_native"
+    assert GuiWindowAdapter.__module__ == "termin.gui_native._gui_native"
+    assert not hasattr(_gui_native, "PythonGuiWindowAdapter")
     assert OffscreenGuiComposition.__module__ == "termin.gui_native._gui_native"
     assert OffscreenGuiApplication is OffscreenGuiComposition
     assert OffscreenGuiApplication.__module__ == "termin.gui_native._gui_native"
