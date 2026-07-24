@@ -7,6 +7,40 @@ set(TERMIN_SDK_PREFIX "${PACKAGE_PREFIX_DIR}")
 set(TERMIN_CMAKE_PACKAGE_ROOT "${PACKAGE_PREFIX_DIR}/lib/cmake")
 set(TERMIN_SDK_LIB_DIR "${PACKAGE_PREFIX_DIR}/lib")
 
+# Native SDK consumers must use the Python ABI bundled with this SDK. Seed
+# FindPython before a consumer asks for Interpreter/Development so a pyenv or
+# system Python cannot be combined with Termin's native extension graph.
+if(WIN32)
+    set(_termin_python_executable "${PACKAGE_PREFIX_DIR}/bin/termin_python.exe")
+else()
+    set(_termin_python_executable "${PACKAGE_PREFIX_DIR}/bin/termin_python")
+endif()
+if(EXISTS "${_termin_python_executable}")
+    file(GLOB _termin_python_include_dirs LIST_DIRECTORIES TRUE
+        "${PACKAGE_PREFIX_DIR}/include/python3.*")
+    list(LENGTH _termin_python_include_dirs _termin_python_include_count)
+    if(_termin_python_include_count EQUAL 1)
+        list(GET _termin_python_include_dirs 0 _termin_python_include_dir)
+        set(Python_EXECUTABLE "${_termin_python_executable}" CACHE FILEPATH
+            "Python interpreter bundled with the active Termin SDK" FORCE)
+        set(Python_INCLUDE_DIR "${_termin_python_include_dir}" CACHE PATH
+            "Python headers bundled with the active Termin SDK" FORCE)
+        if(WIN32)
+            file(GLOB _termin_python_libraries
+                "${PACKAGE_PREFIX_DIR}/lib/python*.lib")
+        else()
+            file(GLOB _termin_python_libraries
+                "${PACKAGE_PREFIX_DIR}/lib/libpython3.*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        endif()
+        list(LENGTH _termin_python_libraries _termin_python_library_count)
+        if(_termin_python_library_count EQUAL 1)
+            list(GET _termin_python_libraries 0 _termin_python_library)
+            set(Python_LIBRARY "${_termin_python_library}" CACHE FILEPATH
+                "Python library bundled with the active Termin SDK" FORCE)
+        endif()
+    endif()
+endif()
+
 find_dependency(termin_base CONFIG REQUIRED)
 
 if(NOT TARGET termin::termin)
