@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "version": "3.14.6",
+  "python_abi": {
+    "version": "3.14",
+    "free_threaded": true,
+    "py_gil_disabled": true
+  },
+  "platforms": {
+    "linux-x86_64": {
+      "kind": "source",
+      "url": "https://www.python.org/ftp/python/3.14.6/Python-3.14.6.tar.xz",
+      "sha256": "143b1dddefaec3bd2e21e3b839b34a2b7fb9842272883c576420d605e9f30c63",
+      "archive_root": "Python-3.14.6",
+      "configure_args": [
+        "--disable-gil",
+        "--enable-shared",
+        "--with-ensurepip=install",
+        "--disable-test-modules"
+      ]
+    },
+    "windows-x86_64": {
+      "kind": "nuget",
+      "url": "https://api.nuget.org/v3-flatcontainer/python-freethreaded/3.14.6/python-freethreaded.3.14.6.nupkg",
+      "sha256": "349e2e7fa2279437c821833baa8c937a7ef9e82c1cbca7ee2b4a9324ca68d2b5",
+      "runtime_root": "tools"
+    }
+  }
+}

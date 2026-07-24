@@ -112,6 +112,48 @@ if(TERMIN_BUILD_PYTHON)
     find_package(Python 3.10 COMPONENTS Interpreter Development REQUIRED)
     set(Python_EXECUTABLE "${Python_EXECUTABLE}" CACHE FILEPATH "Python interpreter used for Termin bindings" FORCE)
 
+    set(TERMIN_EXPECTED_PYTHON_ABI_VERSION "" CACHE STRING
+        "Required Python major.minor ABI for Termin bindings")
+    option(TERMIN_REQUIRE_FREE_THREADED_PYTHON
+        "Reject a GIL-enabled Python when building Termin bindings" OFF)
+    execute_process(
+        COMMAND "${Python_EXECUTABLE}" -I -c
+            "import sys, sysconfig; print(f'{sys.version_info.major}.{sys.version_info.minor}|{sysconfig.get_config_var(\"SOABI\") or \"\"}|{int(bool(sysconfig.get_config_var(\"Py_GIL_DISABLED\") or 0))}')"
+        OUTPUT_VARIABLE TERMIN_PYTHON_ABI_PROBE
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE TERMIN_PYTHON_ABI_PROBE_RESULT
+        ERROR_VARIABLE TERMIN_PYTHON_ABI_PROBE_ERROR
+    )
+    if(NOT TERMIN_PYTHON_ABI_PROBE_RESULT EQUAL 0)
+        message(FATAL_ERROR
+            "Failed to inspect Python ABI for ${Python_EXECUTABLE}: "
+            "${TERMIN_PYTHON_ABI_PROBE_ERROR}")
+    endif()
+    string(REPLACE "|" ";" TERMIN_PYTHON_ABI_FIELDS "${TERMIN_PYTHON_ABI_PROBE}")
+    list(LENGTH TERMIN_PYTHON_ABI_FIELDS TERMIN_PYTHON_ABI_FIELD_COUNT)
+    if(NOT TERMIN_PYTHON_ABI_FIELD_COUNT EQUAL 3)
+        message(FATAL_ERROR
+            "Malformed Python ABI probe for ${Python_EXECUTABLE}: "
+            "${TERMIN_PYTHON_ABI_PROBE}")
+    endif()
+    list(GET TERMIN_PYTHON_ABI_FIELDS 0 TERMIN_PYTHON_ABI_VERSION)
+    list(GET TERMIN_PYTHON_ABI_FIELDS 1 TERMIN_PYTHON_SOABI)
+    list(GET TERMIN_PYTHON_ABI_FIELDS 2 TERMIN_PYTHON_GIL_DISABLED)
+    if(TERMIN_EXPECTED_PYTHON_ABI_VERSION
+       AND NOT TERMIN_PYTHON_ABI_VERSION STREQUAL TERMIN_EXPECTED_PYTHON_ABI_VERSION)
+        message(FATAL_ERROR
+            "Python ABI version mismatch: expected "
+            "${TERMIN_EXPECTED_PYTHON_ABI_VERSION}, got "
+            "${TERMIN_PYTHON_ABI_VERSION} (${TERMIN_PYTHON_SOABI})")
+    endif()
+    if(TERMIN_REQUIRE_FREE_THREADED_PYTHON
+       AND (NOT TERMIN_PYTHON_GIL_DISABLED STREQUAL "1"
+            OR NOT TERMIN_PYTHON_SOABI MATCHES "^cpython-[0-9]+t($|-)"))
+        message(FATAL_ERROR
+            "Free-threaded Python is required, got SOABI "
+            "${TERMIN_PYTHON_SOABI} from ${Python_EXECUTABLE}")
+    endif()
+
     execute_process(
         COMMAND "${Python_EXECUTABLE}" -c "import nanobind, pathlib; print(pathlib.Path(nanobind.__file__).resolve().parent / 'cmake')"
         OUTPUT_VARIABLE TERMIN_NANOBIND_CMAKE_DIR
