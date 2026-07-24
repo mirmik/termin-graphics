@@ -224,6 +224,7 @@ if(TERMIN_BUILD_PYTHON)
         set(TERMIN_NANOBIND_PROFILE_FREE_THREADED 0)
     endif()
     include(termin-nanobind-sdk/cmake/TerminNanobindProfile.cmake)
+    add_subdirectory(termin-python-host)
 endif()
 
 add_subdirectory(termin-base)

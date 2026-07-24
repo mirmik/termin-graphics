@@ -50,6 +50,11 @@
       "kinds": ["cmake", "platform"]
     },
     {
+      "id": "termin-python-host",
+      "path": "termin-python-host",
+      "kinds": ["cmake", "runtime"]
+    },
+    {
       "id": "termin-runtime",
       "path": "termin-runtime",
       "kinds": ["cmake", "runtime"]
