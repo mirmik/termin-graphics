@@ -23,7 +23,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.14"
 
       - name: Install Ruff
         run: pip install ruff
@@ -42,10 +42,15 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.14"
 
-      - name: Install nanobind
-        run: pip install nanobind
+      - name: Prepare canonical Python build environment
+        env:
+          PYTHONPATH: ${{ github.workspace }}/termin-build-tools
+        run: |
+          python -m termin_build.sdk --repo-root . prepare-python-toolchain
+          echo "PYTHON_BIN=${{ github.workspace }}/build/python-runtime/build-env/bin/python" >> "$GITHUB_ENV"
+          echo "PYTHON_EXECUTABLE=${{ github.workspace }}/build/python-runtime/build-env/bin/python" >> "$GITHUB_ENV"
 
       - name: Install Linux build dependencies
         uses: ./.github/actions/setup-linux-build
@@ -71,7 +76,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.14"
 
       - name: Install test dependencies
         run: python -m pip install pytest setuptools wheel
@@ -103,7 +108,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.14"
 
       - name: Validate D3D11 bound resource path
         shell: pwsh
@@ -131,7 +136,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.14"
 
       - name: Install Linux build dependencies
         uses: ./.github/actions/setup-linux-build
@@ -191,7 +196,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.14"
 
       - name: Build C++ SDK dependencies
         shell: pwsh
@@ -223,7 +228,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.14"
 
       - name: Install Linux build dependencies
         uses: ./.github/actions/setup-linux-build
@@ -236,8 +241,13 @@ jobs:
       - name: Restore SDK executable permissions
         run: chmod +x sdk/bin/*
 
-      - name: Install nanobind
-        run: pip install nanobind
+      - name: Prepare canonical Python build environment
+        env:
+          PYTHONPATH: ${{ github.workspace }}/termin-build-tools
+        run: |
+          python -m termin_build.sdk --repo-root . prepare-python-toolchain
+          echo "PYTHON_BIN=${{ github.workspace }}/build/python-runtime/build-env/bin/python" >> "$GITHUB_ENV"
+          echo "PYTHON_EXECUTABLE=${{ github.workspace }}/build/python-runtime/build-env/bin/python" >> "$GITHUB_ENV"
 
       - name: Build bindings
         run: ./build-sdk-bindings.sh
@@ -246,8 +256,8 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/termin-build-tools
         run: |
-          python -m termin_build.sdk --repo-root . install-python
-          python -m termin_build.sdk --repo-root . verify-sdk
+          "$PYTHON_BIN" -m termin_build.sdk --repo-root . install-python
+          "$PYTHON_BIN" -m termin_build.sdk --repo-root . verify-sdk
 
       - uses: actions/upload-artifact@v5
         with:
@@ -265,7 +275,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.14"
 
       - name: Install Linux build dependencies
         uses: ./.github/actions/setup-linux-build
@@ -284,9 +294,7 @@ jobs:
       - name: Install pip packages
         env:
           TERMIN_BINDINGS_DIR: ${{ env.SDK_SITE_PACKAGES }}
-        run: |
-          pip install nanobind numpy Pillow PyYAML pytest
-          ./install-pip-packages.sh
+        run: ./install-pip-packages.sh
 
       - name: Run Python tests
         env:
@@ -319,7 +327,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.14"
 
       - uses: actions/download-artifact@v5
         with:
@@ -356,7 +364,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.14"
 
       - name: Install Linux build dependencies
         uses: ./.github/actions/setup-linux-build
@@ -375,9 +383,7 @@ jobs:
       - name: Install pip packages
         env:
           TERMIN_BINDINGS_DIR: ${{ env.SDK_SITE_PACKAGES }}
-        run: |
-          pip install nanobind numpy Pillow PyYAML pytest PyOpenGL glfw pysdl2 pysdl2-dll pyassimp scipy
-          ./install-pip-packages.sh --editable
+        run: ./install-pip-packages.sh --editable
 
       - name: Build termin bundle
         env:
@@ -446,7 +452,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.14"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -472,9 +478,7 @@ jobs:
       - name: Install pip packages
         env:
           TERMIN_BINDINGS_DIR: ${{ env.SDK_SITE_PACKAGES }}
-        run: |
-          pip install nanobind numpy Pillow PyYAML
-          ./install-pip-packages.sh
+        run: ./install-pip-packages.sh
 
       - name: Build termin
         env:

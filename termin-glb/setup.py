@@ -10,7 +10,7 @@ setup(
     description="GLB/glTF importer, asset, and runtime instantiation support for Termin",
     author="mirmik",
     author_email="mirmikns@yandex.ru",
-    python_requires=">=3.10",
+    python_requires=">=3.14",
     packages=find_namespace_packages(where="python", include=["termin.glb", "termin.glb.*"]),
     package_dir={"": "python"},
     install_requires=[

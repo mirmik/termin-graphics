@@ -38,6 +38,7 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
+include(TerminPython)
 
 # --- GLAD (static library) ---
 # Kept even when TGFX2_ENABLE_OPENGL=OFF: some legacy headers/bindings still
@@ -393,7 +394,7 @@ if(TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS)
             "Enable D3D11 or Vulkan+shaderc, or disable TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS.")
     endif()
     if(NOT Python_EXECUTABLE)
-        find_package(Python 3.10 COMPONENTS Interpreter REQUIRED)
+        termin_require_canonical_python(Interpreter)
     endif()
 
     set(_termin_builtin_shader_artifact_targets "")

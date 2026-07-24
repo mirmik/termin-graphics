@@ -21,7 +21,7 @@ setup(
     description="Native image codecs for Termin texture and tooling paths",
     author="mirmik",
     author_email="mirmikns@yandex.ru",
-    python_requires=">=3.8",
+    python_requires=">=3.14",
     packages=["termin.image"],
     package_dir={"termin.image": "python/termin/image"},
     install_requires=[

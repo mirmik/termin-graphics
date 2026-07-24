@@ -180,6 +180,12 @@ if ($PytestTargets.Count -gt 0) {
         $Failures.Add("manifest Python suites")
     }
 
+    Invoke-TestSuite "free-threaded SDK import graph" @(
+        "-m", "termin_build.sdk",
+        "--repo-root", $ScriptDir,
+        "verify-python-import-graph",
+        "--sdk-prefix", $env:TERMIN_SDK
+    )
     Invoke-TestSuite "termin-modules import smoke" @("-c", "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())")
     Invoke-TestSuite "Python lint" @("-m", "ruff", "check", $ScriptDir)
 }

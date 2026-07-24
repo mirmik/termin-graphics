@@ -19,7 +19,7 @@ setup(
     description="Rendering framework Python bindings (thin; requires termin SDK at runtime)",
     author="mirmik",
     author_email="mirmikns@yandex.ru",
-    python_requires=">=3.8",
+    python_requires=">=3.14",
     packages=["termin.render", "termin.render_framework", "termin_render_framework_specs"],
     package_dir={
         "termin.render": "python/termin/render",

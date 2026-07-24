@@ -143,6 +143,11 @@ else
         failures+=("manifest Python suites")
     fi
 
+run_suite "free-threaded SDK import graph" \
+    "${PYTHON_COMMAND[@]}" -m termin_build.sdk \
+        --repo-root "$SCRIPT_DIR" verify-python-import-graph \
+        --sdk-prefix "$TERMIN_SDK"
+
 run_suite "termin-modules import smoke" \
     "${PYTHON_COMMAND[@]}" -c "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())"
 

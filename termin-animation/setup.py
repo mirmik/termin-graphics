@@ -19,7 +19,7 @@ setup(
     description="Animation clip Python bindings (thin; requires termin SDK at runtime)",
     author="mirmik",
     author_email="mirmikns@yandex.ru",
-    python_requires=">=3.8",
+    python_requires=">=3.14",
     packages=["termin.animation", "termin.animation_components", "termin_animation_component_specs"],
     package_dir={
         "termin.animation": "python/termin/animation",

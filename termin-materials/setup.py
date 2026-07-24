@@ -20,7 +20,7 @@ setup(
     description="Termin material and shader-format runtime",
     author="mirmik",
     author_email="mirmikns@yandex.ru",
-    python_requires=">=3.8",
+    python_requires=">=3.14",
     packages=["termin.materials"],
     package_dir={"termin.materials": "python/termin/materials"},
     install_requires=["tcbase", "tgfx", "termin-nanobind"],

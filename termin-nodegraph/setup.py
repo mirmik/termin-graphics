@@ -10,7 +10,7 @@ setup(
     description="Abstract node graph engine and tcgui adapter",
     author="mirmik",
     author_email="mirmikns@yandex.ru",
-    python_requires=">=3.8",
+    python_requires=">=3.14",
     packages=find_packages(where="python"),
     package_dir={"": "python"},
     install_requires=[

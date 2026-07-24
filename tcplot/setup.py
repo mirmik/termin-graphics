@@ -26,7 +26,7 @@ setup(
     description="Lightweight plotting library on top of tgfx2 / tcgui",
     author="mirmik",
     author_email="mirmikns@yandex.ru",
-    python_requires=">=3.8",
+    python_requires=">=3.14",
     packages=["tcplot"],
     package_dir={"tcplot": "python/tcplot"},
     install_requires=[

@@ -22,7 +22,7 @@ setup(
     description="Mesh library with Python bindings",
     author="mirmik",
     author_email="mirmikns@yandex.ru",
-    python_requires=">=3.8",
+    python_requires=">=3.14",
     packages=[
         "tmesh",
         *find_namespace_packages(

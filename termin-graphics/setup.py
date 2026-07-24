@@ -22,7 +22,7 @@ setup(
     description="Graphics backend library with Python bindings",
     author="mirmik",
     author_email="mirmikns@yandex.ru",
-    python_requires=">=3.8",
+    python_requires=">=3.14",
     packages=["tgfx"],
     package_dir={"tgfx": "python/tgfx"},
     install_requires=["tcbase", "tmesh", "termin-nanobind", "numpy"],

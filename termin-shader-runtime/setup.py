@@ -10,7 +10,7 @@ setup(
     description="Shared shader tool resolution and source-project runtime helpers",
     author="mirmik",
     author_email="mirmikns@yandex.ru",
-    python_requires=">=3.10",
+    python_requires=">=3.14",
     py_modules=[
         "termin.shader_runtime",
         "termin.shader_tools",

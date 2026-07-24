@@ -546,7 +546,7 @@ if(TERMIN_GUI_NATIVE_BUILD_EXAMPLES)
 endif()
 
 if(TERMIN_BUILD_PYTHON)
-    find_package(Python 3.8 COMPONENTS Interpreter Development REQUIRED)
+    find_package(Python 3.14 COMPONENTS Interpreter Development REQUIRED)
     find_package(nanobind CONFIG REQUIRED)
 
     nanobind_add_module(_gui_native NB_SHARED

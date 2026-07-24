@@ -21,7 +21,7 @@ setup(
     description="Experimental native Termin UI document Python bindings",
     author="mirmik",
     author_email="mirmikns@yandex.ru",
-    python_requires=">=3.8",
+    python_requires=">=3.14",
     packages=["termin.gui_native"],
     package_dir={"termin.gui_native": "python/termin/gui_native"},
     install_requires=[
