@@ -88,13 +88,22 @@ if [[ "$FULL" -eq 1 && "$NO_EDITOR_SMOKE" -eq 0 ]]; then
             > "$PROCESS_SMOKE_PLAN"; then
         failures+=("Editor smoke plan")
     else
+        EDITOR_SMOKE_CAPABILITIES=(--capability editor)
+        if command -v xvfb-run >/dev/null 2>&1 \
+            && command -v Xvfb >/dev/null 2>&1 \
+            && command -v xauth >/dev/null 2>&1 \
+            && command -v glxinfo >/dev/null 2>&1; then
+            EDITOR_SMOKE_CAPABILITIES+=(--capability virtual-display)
+        else
+            echo "Virtual-display editor smoke is inapplicable: xvfb-run, Xvfb, xauth, or glxinfo is missing."
+        fi
         PROCESS_EXIT=0
         PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
             "$PROCESS_PYTHON" -m termin_build.repository_control \
                 --repo-root "$SCRIPT_DIR" run editor-smoke \
                 --platform linux \
                 --executor process-smoke \
-                --capability editor \
+                "${EDITOR_SMOKE_CAPABILITIES[@]}" \
                 --configuration "$TEST_BUILD_TYPE" \
                 --process-log-dir "$PROCESS_SMOKE_ROOT/logs" \
                 --report-output "$PROCESS_SMOKE_REPORT" || PROCESS_EXIT=$?

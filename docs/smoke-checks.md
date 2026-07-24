@@ -23,8 +23,9 @@ or build-system changes:
 
 The full gate enables C++ window tests, Python tests marked `full`, and
 editor-process module hot-reload smokes. On headless Linux the smoke scripts use
-`xvfb-run` when available. If the editor smoke stage is not relevant or the host
-cannot launch the editor, run `./run-tests.sh --full --no-editor-smoke`.
+the canonical `scripts/termin-editor-virtual-display` wrapper when its Xvfb/Mesa
+dependencies are available. If the editor smoke stage is not relevant or the
+host cannot launch the editor, run `./run-tests.sh --full --no-editor-smoke`.
 
 ## Render And Shader Matrix
 
@@ -40,6 +41,7 @@ cannot launch the editor, run `./run-tests.sh --full --no-editor-smoke`.
 | Engine frame limiter | `ctest --test-dir build/Release-tests -R '^termin_engine_frame_cadence_test$' --output-on-failure` and `./run-tests-python.sh termin-engine/tests/test_engine_frame_limit.py` | Positive `target_fps` values provide cadence deadlines, while zero selects Unlimited mode without a software frame deadline. |
 | Native UI headless QA | `ctest --test-dir build/Release-tests -R '^termin_gui_native_(showcase_test|renderer_pixel_smoke)$' --output-on-failure` | Stable C++ showcase structure plus real offscreen pixels for texture, text, rounded geometry and nested clipping on compiled Vulkan/D3D11 headless backends. |
 | Native UI Python showcase | `sdk/bin/termin_python --termin-overlay build/python-envs/test/overlay.json -m pytest termin-gui-native/python/tests/test_gui_native.py -q` | The Python-built native control tree has stable layout/paint totals, shared models, focus reachability, clipping and long UTF-8 fixtures. |
+| Virtual-display editor E2E | `scripts/smoke-editor-virtual-display` | Xvfb starts on a unique display, Mesa llvmpipe exposes OpenGL 4.6/GLSL 4.60, the real SDL editor publishes an isolated MCP session, project/scene state is reachable, and MCP requests a clean shutdown. |
 | Built-in render pass shaders | `ctest --test-dir build/Release-tests -R '^termin_render_passes_builtin_shader_sources_test$' --output-on-failure` | Built-in shader sources/catalog entries and render-pass shader templates remain loadable. |
 | DebugTrianglePass pixel smoke | `ctest --test-dir build/Release-tests -R '^termin_render_passes_debug_triangle_pixel_smoke$' --output-on-failure` | Vulkan offscreen execution of a real `termin-render-passes` FramePass, built-in shader catalog lookup, RenderContext2 pass recording, texture output, and pixel readback work. |
 | ColorPass mesh/material pixel smoke | `ctest --test-dir build/Release-tests -R '^termin_render_passes_color_pass_pixel_smoke$' --output-on-failure` | Vulkan offscreen `ColorPass` rendering of a scene `MeshRenderer`, opaque material phase routing, material UBO color binding, mesh bridge draw, and pixel readback work. |

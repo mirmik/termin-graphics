@@ -184,6 +184,15 @@
       "reason": "Runs the installed editor with an empty OpenGL shader cache and verifies built-in engine shader sources and artifacts."
     },
     {
+      "id": "editor-virtual-display-smoke",
+      "module": "termin-app",
+      "executor": "process-smoke",
+      "roots": ["scripts/smoke-editor-virtual-display"],
+      "platforms": ["linux"],
+      "required_capabilities": ["virtual-display"],
+      "reason": "Runs the installed editor through Xvfb and Mesa llvmpipe, verifies MCP project/scene access, and requests clean shutdown."
+    },
+    {
       "id": "termin-app-installed-bundle-acceptance",
       "module": "termin-app",
       "executor": "process-smoke",
