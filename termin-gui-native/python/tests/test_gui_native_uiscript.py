@@ -4,7 +4,7 @@ import sys
 import pytest
 
 from termin.gui_native import (
-    Document,
+    tc_ui_document_create,
     DrawList,
     PaintContext,
     PointerEvent,
@@ -74,7 +74,7 @@ def test_uiscript_v1_rejects_unsupported_or_ambiguous_input(source, message):
 
 
 def test_uiscript_materialization_lookup_reload_and_teardown():
-    document = Document()
+    document = tc_ui_document_create()
     loader = UiScriptLoader()
     loaded = loader.load_string(CAMERA_SCRIPT, document=document)
 
@@ -136,7 +136,7 @@ root:
 
 
 def test_uiscript_failed_reload_preserves_old_tree_and_cleans_attempt():
-    document = Document()
+    document = tc_ui_document_create()
     loader = UiScriptLoader()
     loaded = loader.load_string(CAMERA_SCRIPT, document=document)
 

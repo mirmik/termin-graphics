@@ -1,8 +1,11 @@
+#include <termin/gui_native/tc_document.hpp>
+
 #include "widgets_test_support.hpp"
 
 namespace termin_gui_native_test {
 void test_containers_register_and_replace_canonical_children() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &first_box = ui.make_root<HStack>("first-box");
@@ -65,10 +68,13 @@ void test_containers_register_and_replace_canonical_children() {
   assert(tabs.child_count() == 2);
   assert(tabs.child_at(0) == tab_first.c_widget());
   assert(tabs.child_at(1) == tab_second.c_widget());
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_common_visibility_enabled_and_mouse_transparent_state() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
   auto &root = ui.make_root<HStack>("root");
   auto &hidden = ui.make<Panel>("hidden");
@@ -97,10 +103,13 @@ void test_common_visibility_enabled_and_mouse_transparent_state() {
   assert(tc_widget_handle_eq(hit, root.handle()));
   root.set_mouse_transparent(true);
   assert(tc_widget_handle_is_invalid(document.hit_test(20.0f, 20.0f)));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_cpp_theme_style_facade_inheritance_and_state() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
   auto &root = ui.make_root<HStack>("style-root");
   auto &button = ui.make<Button>("Styled");
@@ -133,6 +142,8 @@ void test_cpp_theme_style_facade_inheritance_and_state() {
   assert(button.has_dirty_flags(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT |
                                 TC_WIDGET_DIRTY_STATE));
   assert(near(document.resolve_style(button).accent.r, 0.91f));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_collection_and_selection_models_are_reusable() {
@@ -174,7 +185,8 @@ void test_collection_and_selection_models_are_reusable() {
 }
 
 void test_list_widget_virtualizes_large_models_and_reconciles_selection() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto model = std::make_shared<CollectionModel>();
@@ -230,10 +242,13 @@ void test_list_widget_virtualizes_large_models_and_reconciles_selection() {
   list.layout(document.get(), list.bounds());
   assert(list.selection().selected_indices().empty());
   assert(near(list.scroll_y(), 0.0f));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_list_widget_pointer_keyboard_and_multi_selection() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto model = std::make_shared<CollectionModel>();
@@ -309,10 +324,13 @@ void test_list_widget_pointer_keyboard_and_multi_selection() {
   assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
   assert(list.selection().selected_indices().size() == model->size() - 1);
   assert(changes.size() >= 5);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_list_widget_model_notifications_preserve_lifetime_and_shift_selection() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
   auto model = std::make_shared<CollectionModel>();
   model->set_items({
@@ -346,6 +364,8 @@ void test_list_widget_model_notifications_preserve_lifetime_and_shift_selection(
   });
   destroying_model->erase(0);
   assert(!tc_ui_document_is_alive(document.get(), destroying_handle));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_tree_model_stable_ids_move_and_expansion_reconcile() {
@@ -395,7 +415,8 @@ void test_tree_model_stable_ids_move_and_expansion_reconcile() {
 }
 
 void test_tree_widget_virtualizes_large_expanded_model() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto model = std::make_shared<TreeModel>();
@@ -440,10 +461,13 @@ void test_tree_widget_virtualizes_large_expanded_model() {
   assert(tree.select_node(last_child));
   assert(tree.scroll_y() > 250000.0f);
   assert(tree.visible_range().first > 10000);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_tree_widget_pointer_keyboard_signals_and_lifetime() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto model = std::make_shared<TreeModel>();
@@ -546,10 +570,13 @@ void test_tree_widget_pointer_keyboard_signals_and_lifetime() {
   });
   destroying_model->erase(destroying_child);
   assert(!tc_ui_document_is_alive(document.get(), destroying_handle));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_tree_widget_drag_drop_positions_and_capture() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto model = std::make_shared<TreeModel>();
@@ -593,6 +620,8 @@ void test_tree_widget_drag_drop_positions_and_capture() {
   assert(dropped == first);
   assert(target == second);
   assert(position == TreeDropPosition::Inside);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_table_models_preserve_row_ids_and_validate_columns() {
@@ -688,7 +717,8 @@ void test_tree_table_model_preserves_identity_and_validates_hierarchy() {
 }
 
 void test_tree_table_widget_expansion_navigation_and_columns() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
   auto model = std::make_shared<TreeTableModel>();
   model->set_rows({
@@ -740,10 +770,13 @@ void test_tree_table_widget_expansion_navigation_and_columns() {
   table.set_expanded(render, false);
   assert(table.visible_count() == 2);
   assert(near(table.content_height(), table.row_height() * 2.0f));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_file_grid_widget_virtualizes_large_model_and_responsive_layout() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto model = std::make_shared<CollectionModel>();
@@ -798,6 +831,8 @@ void test_file_grid_widget_virtualizes_large_model_and_responsive_layout() {
   document.layout_roots(tc_ui_rect{0.0f, 0.0f, 112.0f, 128.0f});
   assert(grid.column_count() == 2);
   assert(grid.row_count() == 5000);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 CommandData test_command(std::string id, std::string label, bool enabled = true,
@@ -853,7 +888,8 @@ void test_command_model_stable_ids_validation_and_mutation() {
 }
 
 void test_tool_bar_layout_activation_capture_and_model_lifetime() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto model = std::make_shared<CommandModel>();
@@ -948,10 +984,13 @@ void test_tool_bar_layout_activation_capture_and_model_lifetime() {
   const tc_widget_handle handle = toolbar.handle();
   assert(tc_ui_document_destroy_widget(document.get(), handle));
   assert(weak_model.expired());
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_status_bar_explicit_message_lifecycle_and_utf8_validation() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto &status = ui.make_root<StatusBar>("Ready");
@@ -981,10 +1020,13 @@ void test_status_bar_explicit_message_lifecycle_and_utf8_validation() {
     rejected_utf8 = true;
   }
   assert(rejected_utf8);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_menu_overlay_navigation_submenus_scrolling_and_dismissal() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto recent = std::make_shared<CommandModel>();
@@ -1078,10 +1120,13 @@ void test_menu_overlay_navigation_submenus_scrolling_and_dismissal() {
   assert(!menu.open());
   assert(document.overlay_count() == 0);
   assert(recent->contains(recent_scene));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_menu_bar_adjacent_switching_shortcuts_and_overlay_lifetime() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto file = std::make_shared<CommandModel>();
@@ -1161,10 +1206,13 @@ void test_menu_bar_adjacent_switching_shortcuts_and_overlay_lifetime() {
 
   const tc_widget_handle bar_handle = bar.handle();
   assert(tc_ui_document_destroy_widget(document.get(), bar_handle));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_dialog_modal_stack_focus_actions_and_exactly_once_results() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto &background = ui.make_root<TextInput>("Background");
@@ -1265,10 +1313,13 @@ void test_dialog_modal_stack_focus_actions_and_exactly_once_results() {
   const tc_widget_handle dialog_handle = dialog.handle();
   assert(tc_ui_document_destroy_widget(document.get(), dialog_handle));
   assert(!tc_ui_document_is_alive(document.get(), content_handle));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_message_box_and_input_dialog_share_modal_result_contract() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto &message = ui.make<MessageBox>("Delete", "Delete selected entity?",
@@ -1309,10 +1360,13 @@ void test_message_box_and_input_dialog_share_modal_result_contract() {
   assert(input.show(document.get(), tc_ui_rect{0.0f, 0.0f, 640.0f, 480.0f}));
   assert(document.dispatch_key_event(escape) == TC_UI_EVENT_HANDLED);
   assert(values.size() == 2 && !values[1].has_value());
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_file_grid_widget_input_scrollbar_signals_and_lifetime() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto model = std::make_shared<CollectionModel>();
@@ -1437,10 +1491,13 @@ void test_file_grid_widget_input_scrollbar_signals_and_lifetime() {
   });
   destroying_model->erase(0);
   assert(!tc_ui_document_is_alive(document.get(), destroying_handle));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_table_widget_virtualizes_large_model_and_lays_out_columns() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto model = std::make_shared<TableModel>();
@@ -1490,10 +1547,13 @@ void test_table_widget_virtualizes_large_model_and_lays_out_columns() {
   assert(table.select_row(9999));
   assert(table.scroll_y() > 239000.0f);
   assert(table.visible_range().first > 9990);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_table_widget_pointer_keyboard_resize_signals_and_lifetime() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto model = std::make_shared<TableModel>();
@@ -1612,11 +1672,14 @@ void test_table_widget_pointer_keyboard_resize_signals_and_lifetime() {
       });
   destroying_model->erase(destroying_first);
   assert(!tc_ui_document_is_alive(document.get(), destroying_handle));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_host_click_count_drives_collection_activation() {
   {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     DocumentBuilder ui(document);
     auto model = std::make_shared<CollectionModel>();
     model->append(CollectionItem{"item", "Item"});
@@ -1641,9 +1704,11 @@ void test_host_click_count_drives_collection_activation() {
     pointer.click_count = 3;
     assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
     assert(activations == 1);
+    tc_ui_document_destroy(document_handle);
   }
   {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     DocumentBuilder ui(document);
     auto model = std::make_shared<TreeModel>();
     model->append_root(CollectionItem{"first", "First"});
@@ -1670,9 +1735,11 @@ void test_host_click_count_drives_collection_activation() {
     pointer.click_count = 3;
     assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
     assert(activated == node);
+    tc_ui_document_destroy(document_handle);
   }
   {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     DocumentBuilder ui(document);
     auto model = std::make_shared<TableModel>();
     const TableRowId row = model->append(TableRowData{"row", {"Row"}, true});
@@ -1695,9 +1762,11 @@ void test_host_click_count_drives_collection_activation() {
     pointer.click_count = 2;
     assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
     assert(activated == row);
+    tc_ui_document_destroy(document_handle);
   }
   {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     DocumentBuilder ui(document);
     auto model = std::make_shared<CollectionModel>();
     model->append(CollectionItem{"file", "File"});
@@ -1718,6 +1787,7 @@ void test_host_click_count_drives_collection_activation() {
     pointer.click_count = 2;
     assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
     assert(activations == 1);
+    tc_ui_document_destroy(document_handle);
   }
 }
 

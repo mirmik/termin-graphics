@@ -10,7 +10,6 @@ import weakref
 from tcbase import MouseButton
 from termin.gui_native import (
     Color,
-    Document,
     GraphicsItem,
     GraphicsScene,
     KeyCode,
@@ -19,6 +18,7 @@ from termin.gui_native import (
     PointerEventType,
     Rect,
     Size,
+    TcDocument,
 )
 
 from tcnodegraph.controller import GraphController
@@ -123,7 +123,7 @@ def _distance_sq_to_segment(point: Point, start: Point, end: Point) -> float:
 class NativeNodeGraphView:
     """Own a native scene projection and graph editing interaction state."""
 
-    document: Document
+    document: TcDocument
     graph: Graph
     controller: GraphController
     scene: GraphicsScene
@@ -571,7 +571,7 @@ class NativeNodeGraphView:
 
 
 def build_native_node_graph_view(
-    document: Document,
+    document: TcDocument,
     graph: Graph,
     *,
     request_render: Callable[[], None],

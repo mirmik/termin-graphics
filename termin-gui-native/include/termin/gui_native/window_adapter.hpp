@@ -14,7 +14,7 @@ namespace termin::gui_native {
 // the window, its WindowManager, or the shared GraphicsHost.
 class TERMIN_GUI_NATIVE_HOST_API GuiWindowAdapter {
   public:
-    GuiWindowAdapter(tgfx::GraphicsHost& graphics, Document& document,
+    GuiWindowAdapter(tgfx::GraphicsHost& graphics, TcDocument document,
                      DocumentRendererConfig config, BackendWindow& window);
     ~GuiWindowAdapter();
 
@@ -25,8 +25,7 @@ class TERMIN_GUI_NATIVE_HOST_API GuiWindowAdapter {
 
     BackendWindow& window();
     const BackendWindow& window() const;
-    Document& document();
-    const Document& document() const;
+    TcDocument document() const;
     DocumentRenderer& renderer();
     const DocumentRenderer& renderer() const;
 

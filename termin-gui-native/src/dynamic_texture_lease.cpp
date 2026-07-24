@@ -12,7 +12,7 @@
 #include <tcbase/tc_log.h>
 
 #include <termin/gui_native/canvas.hpp>
-#include <termin/gui_native/document.hpp>
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/document_renderer.hpp>
 
 #include <tgfx2/descriptors.hpp>
@@ -90,8 +90,7 @@ require_active(const std::shared_ptr<DynamicTextureRecord>& record, const char* 
     {
         const std::lock_guard<std::mutex> lock(state->mutex);
         if (!state->open || !state->request_repaint ||
-            !state->graphics || !state->document ||
-            !state->document->valid()) {
+            !state->graphics || !state->document.valid()) {
             lease_error(std::string("DynamicTextureLease::") + operation +
                         " called after host or document shutdown");
         }
@@ -105,7 +104,7 @@ require_active(const std::shared_ptr<DynamicTextureRecord>& record, const char* 
 
 Canvas* resolve_canvas(const GuiApplicationHostLeaseState& state, const CanvasBinding& binding,
                        const char* operation, bool log_failure) {
-    tc_widget* widget = tc_ui_document_resolve_widget(state.document->get(), binding.handle);
+    tc_widget* widget = tc_ui_document_resolve_widget(state.document.handle(), binding.handle);
     auto* canvas = widget ? dynamic_cast<Canvas*>(static_cast<Widget*>(widget->body)) : nullptr;
     if (!canvas && log_failure) {
         tc_log_error("[gui-native-texture] DynamicTextureLease::%s encountered a "
@@ -194,8 +193,7 @@ void release_record(const std::shared_ptr<DynamicTextureRecord>& record) noexcep
         {
             const std::lock_guard<std::mutex> lock(state->mutex);
             open = state->open && state->request_repaint &&
-                   state->graphics && state->document &&
-                   state->document->valid();
+                   state->graphics && state->document.valid();
         }
         if (open && !state->graphics->is_closed()) {
             reset_record(*state, *record, "release");
@@ -267,7 +265,7 @@ void GuiApplicationHostLeaseState::close_all() noexcept {
     const std::lock_guard<std::mutex> lock(mutex);
     request_repaint = {};
     graphics = nullptr;
-    document = nullptr;
+    document = TcDocument{};
 }
 
 struct DynamicTextureLease::Impl {
@@ -391,11 +389,11 @@ void DynamicTextureLease::borrow(tgfx::GraphicsHost& texture_owner, tgfx::Textur
 
 void DynamicTextureLease::bind_canvas(Canvas& canvas, CanvasTextureLayer layer) {
     auto state = require_active(impl_ ? impl_->record : nullptr, "bind_canvas");
-    if (!tc_ui_document_handle_eq(canvas.document(), state->document->get())) {
+    if (!tc_ui_document_handle_eq(canvas.document(), state->document.handle())) {
         lease_argument_error("DynamicTextureLease::bind_canvas rejected a Canvas "
-                             "from another Document");
+                             "from another tc_ui_document");
     }
-    tc_widget* resolved = tc_ui_document_resolve_widget(state->document->get(), canvas.handle());
+    tc_widget* resolved = tc_ui_document_resolve_widget(state->document.handle(), canvas.handle());
     if (!resolved || resolved != canvas.c_widget()) {
         lease_error("DynamicTextureLease::bind_canvas requires a live Canvas");
     }
@@ -414,9 +412,9 @@ void DynamicTextureLease::bind_canvas(Canvas& canvas, CanvasTextureLayer layer) 
 
 void DynamicTextureLease::unbind_canvas(Canvas& canvas, CanvasTextureLayer layer) {
     auto state = require_active(impl_ ? impl_->record : nullptr, "unbind_canvas");
-    if (!tc_ui_document_handle_eq(canvas.document(), state->document->get())) {
+    if (!tc_ui_document_handle_eq(canvas.document(), state->document.handle())) {
         lease_argument_error("DynamicTextureLease::unbind_canvas rejected a Canvas "
-                             "from another Document");
+                             "from another tc_ui_document");
     }
     const auto iterator = std::find_if(
         impl_->record->bindings.begin(), impl_->record->bindings.end(),
@@ -425,7 +423,7 @@ void DynamicTextureLease::unbind_canvas(Canvas& canvas, CanvasTextureLayer layer
         });
     if (iterator == impl_->record->bindings.end())
         return;
-    tc_widget* resolved = tc_ui_document_resolve_widget(state->document->get(), canvas.handle());
+    tc_widget* resolved = tc_ui_document_resolve_widget(state->document.handle(), canvas.handle());
     if (!resolved || resolved != canvas.c_widget()) {
         lease_error("DynamicTextureLease::unbind_canvas encountered a stale Canvas");
     }

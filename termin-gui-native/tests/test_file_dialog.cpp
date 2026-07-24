@@ -1,3 +1,4 @@
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/widgets.hpp>
 
 #include <algorithm>
@@ -209,7 +210,8 @@ void test_modes_creation_and_failed_navigation_are_transactional() {
 }
 
 void test_overlay_vetoes_invalid_accept_and_emits_one_typed_result() {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     document.set_text_measurer(&measure_text, nullptr);
     DocumentBuilder ui(document);
     auto file_system = std::make_shared<FakeFileSystem>();
@@ -237,6 +239,7 @@ void test_overlay_vetoes_invalid_accept_and_emits_one_typed_result() {
     assert(dialog.activate("cancel", document.get()));
     assert(results.size() == 2);
     assert(!results[1]);
+    tc_ui_document_destroy(document_handle);
 }
 
 } // namespace

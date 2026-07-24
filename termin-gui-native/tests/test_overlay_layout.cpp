@@ -1,4 +1,4 @@
-#include <termin/gui_native/document.hpp>
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/h_stack.hpp>
 #include <termin/gui_native/icon_button.hpp>
 #include <termin/gui_native/overlay_layout.hpp>
@@ -9,7 +9,8 @@
 using namespace termin::gui_native;
 
 int main() {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     auto* composition = new OverlayLayout("viewport-composition");
     auto* viewport = new Viewport3D();
     auto* overlay = new OverlayLayout("controls-overlay");
@@ -48,5 +49,6 @@ int main() {
     assert(document.remove_root(*composition));
     assert(tc_ui_document_destroy_widget_recursive(document.get(), composition->handle()));
     assert(tc_ui_document_live_widget_count(document.get()) == 0);
+    tc_ui_document_destroy(document_handle);
     return 0;
 }

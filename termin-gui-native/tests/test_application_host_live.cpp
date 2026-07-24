@@ -62,14 +62,11 @@ int main() {
             [&callback_after](termin::gui_native::GuiFrame&) { ++callback_after; });
         host.install_frame_extension(std::make_unique<CountingExtension>(
             extension_before, extension_after, extension_detach));
-        bool live_document_close_rejected = false;
-        try {
-            application.document().close();
-        } catch (const std::logic_error&) {
-            live_document_close_rejected = true;
-        }
-        if (!live_document_close_rejected || !application.document().valid()) {
-            std::fprintf(stderr, "Document did not diagnose a live GuiWindowHost\n");
+        const auto copied_document = application.document();
+        if (!copied_document.valid() ||
+            !tc_ui_document_handle_eq(copied_document.handle(),
+                                      application.document().handle())) {
+            std::fprintf(stderr, "TcDocument copy changed the application document\n");
             return 1;
         }
         if (!host.render_frame()) {
@@ -120,7 +117,9 @@ int main() {
         // Two hosts borrow the same domain without another device/interop
         // claim. The second uses the lower-level injected-window path.
         auto& session = application.graphics_session();
-        termin::gui_native::Document second_document;
+        const tc_ui_document_handle second_document_handle =
+            tc_ui_document_create();
+        termin::gui_native::TcDocument second_document(second_document_handle);
         termin::gui_native::GuiWindowConfig second_config;
         second_config.window = {"borrowed host replacement", 240, 160};
         second_config.font_path = TERMIN_GUI_NATIVE_TEST_FONT;
@@ -153,6 +152,7 @@ int main() {
             return 1;
         }
         second_host.close();
+        tc_ui_document_destroy(second_document_handle);
         application.close();
         return 0;
     } catch (const std::exception& error) {

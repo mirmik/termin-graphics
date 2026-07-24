@@ -4,7 +4,7 @@ Native UI document implementation under active `termin-gui` migration.
 
 Declarative native documents use the deliberately limited, versioned
 [`uiscript: 1` dialect](docs/uiscript-v1.md). The loader validates into a
-toolkit-neutral description before materializing a native `Document`; it does
+toolkit-neutral description before materializing into a `tc_ui_document`; it does
 not import or emulate `tcgui`.
 
 The installed widget/document and rendering targets have no native-window
@@ -25,8 +25,8 @@ std::vector<float> rgba = composition.read_frame_rgba_float();
 ```
 
 `DocumentRenderer` is the shared borrowed layout/paint/GPU primitive.
-`OffscreenGuiComposition` owns an isolated `GraphicsHost`, a `Document`, that
-renderer, a thread-safe normalized input queue, in-memory
+`OffscreenGuiComposition` owns an isolated `GraphicsHost`, a
+`tc_ui_document`, that renderer, a thread-safe normalized input queue, in-memory
 clipboard/cursor/text-input services and a resizable texture sink. It owns no
 application loop, `BackendWindow`, `WindowManager` or emulated display.
 Published frames have a generation, texture and captured extent; synchronous
@@ -40,7 +40,8 @@ target_link_libraries(app PRIVATE termin_gui_native::window_adapter)
 ```
 
 `GuiWindowAdapter` borrows one application-owned `BackendWindow`,
-`GraphicsHost` and `Document`. The application supplies a per-window event
+`GraphicsHost` and `tc_ui_document` through a `TcDocument` handle. The
+application supplies a per-window event
 batch from `termin::WindowManager`; the adapter translates pointer/key/text
 input and explicitly renders/presents when asked. Adapter teardown releases
 only UI resources and cannot close the window, manager or graphics session.
@@ -61,6 +62,10 @@ The current foundation includes:
 
 - `tc_ui_document` is implemented in C and adopts widget objects while owning
   handle slots and generations;
+- C++ and Python expose the same copyable, non-owning `TcDocument` handle
+  value. The handle has no destructor-driven lifetime behavior; composition
+  roots create and destroy the registry object explicitly with
+  `tc_ui_document_create`/`tc_ui_document_destroy`;
 - the C implementation keeps its single private document state in
   `tc_ui_document_internal.h`. Lifecycle, slot ownership, roots and services
   live in `tc_ui_document.c`; common `tc_widget` state and canonical-tree
@@ -158,7 +163,7 @@ The current foundation includes:
   default `FontAtlas` is configured for text. Its offscreen pixel smoke covers
   text, sampled texture, rounded geometry and nested clip intersection on every
   compiled headless backend (Vulkan on Linux and Vulkan/D3D11 on Windows);
-- `build_showcase(Document&)` and `build_python_showcase(Document)` provide
+- `build_showcase(TcDocument)` and `build_python_showcase(TcDocument)` provide
   deterministic C++-built and Python-built native control trees. Their
   headless snapshots fix widget/model state, focus reachability, long UTF-8
   text clipping and draw-command totals without a desktop window;
@@ -292,10 +297,10 @@ The current foundation includes:
 - the document-owned Python shim retains its Python body until the C deleter
   runs under the GIL; stale refs remain safe after widget or document teardown;
 - Python widget classes can be registered with `register_widget_type` and
-  instantiated by type name through `Document.create_registered_widget`.
+  instantiated by type name through `TcDocument.create_registered_widget`.
   `WidgetRef` exposes the registered type, implementation language and explicit
   ownership policy; constructor failures roll back without leaving a live slot;
-- Python `Document.inspect_snapshot()` converts the same C snapshot into plain
+- Python `TcDocument.inspect_snapshot()` converts the same C snapshot into plain
   dictionaries, lists, value objects and generation handles. It does not retain
   widgets or expose live native pointers, so editor tooling and MCP diagnostics
   can safely keep a point-in-time result;
@@ -310,8 +315,8 @@ The current foundation includes:
   topology. Any validation, factory or hook failure recursively destroys all
   created widgets. Only registered types are serializable; this makes missing
   type migration explicit instead of silently producing incomplete documents;
-- C++ exposes the schema as owning `tc::trent` through `Document::serialize`
-  and `Document::restore`. Python exposes detached primitive/list/dict data with
+- C++ exposes the schema as owning `tc::trent` through `TcDocument::serialize`
+  and `TcDocument::restore`. Python exposes detached primitive/list/dict data with
   explicit paired hooks on `register_widget_type`; unsupported Python objects
   are rejected rather than reflected or stringified;
 - `examples/ui_rect_window.py` mirrors the C++ rectangle-window example.

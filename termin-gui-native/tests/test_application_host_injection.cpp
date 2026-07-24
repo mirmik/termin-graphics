@@ -58,7 +58,8 @@ int main() {
         const tgfx::BackendType backend = headless_backend();
         if (backend == tgfx::BackendType::Null) return 77;
         auto graphics = tgfx::GraphicsHost::create_isolated(backend);
-        termin::gui_native::Document document;
+        const tc_ui_document_handle document_handle = tc_ui_document_create();
+        termin::gui_native::TcDocument document(document_handle);
         termin::gui_native::GuiApplicationConfig config;
         config.font_path = TERMIN_GUI_NATIVE_TEST_FONT;
 
@@ -77,14 +78,11 @@ int main() {
             std::fprintf(stderr, "platform text-input configuration was not applied\n");
             return 1;
         }
-        bool live_document_move_rejected = false;
-        try {
-            termin::gui_native::Document moved(std::move(document));
-        } catch (const std::logic_error&) {
-            live_document_move_rejected = true;
-        }
-        if (!live_document_move_rejected || !document.valid()) {
-            std::fprintf(stderr, "Document move did not diagnose a live GuiApplicationHost\n");
+        const termin::gui_native::TcDocument copied_document = document;
+        if (!copied_document.valid() ||
+            !tc_ui_document_handle_eq(copied_document.handle(),
+                                      document.handle())) {
+            std::fprintf(stderr, "TcDocument did not preserve its borrowed handle value\n");
             return 1;
         }
         if (std::string(termin::tgfx2_get_shader_compiler_path()) !=
@@ -175,7 +173,10 @@ int main() {
             std::fprintf(stderr, "presentation-neutral host violated borrowed ownership\n");
             return 1;
         }
-        termin::gui_native::Document rejected_document;
+        const tc_ui_document_handle rejected_document_handle =
+            tc_ui_document_create();
+        termin::gui_native::TcDocument rejected_document(
+            rejected_document_handle);
         MissingClipboardPlatform missing_clipboard;
         bool missing_capability_rejected = false;
         try {
@@ -185,12 +186,12 @@ int main() {
         } catch (const std::runtime_error&) {
             missing_capability_rejected = true;
         }
-        if (!missing_capability_rejected ||
-            rejected_document.active_application_host_count() != 0) {
+        if (!missing_capability_rejected || !rejected_document.valid()) {
             std::fprintf(stderr, "missing platform capability was not diagnosed atomically\n");
             return 1;
         }
-        rejected_document.close();
+        tc_ui_document_destroy(rejected_document_handle);
+        tc_ui_document_destroy(document_handle);
         graphics->close();
         return 0;
     } catch (const std::exception& error) {

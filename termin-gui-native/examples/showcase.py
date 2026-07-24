@@ -10,11 +10,12 @@ import time
 import tgfx
 from termin.display import WindowedGraphicsSession, quit_sdl
 from termin.gui_native import (
-    Document,
     DrawList,
     DrawListRenderer,
     PaintContext,
     Rect,
+    tc_ui_document_create,
+    tc_ui_document_destroy,
     build_python_showcase,
 )
 
@@ -44,12 +45,13 @@ def main() -> int:
     if not tgfx.configure_default_shader_runtime("termin-gui-native-python-showcase"):
         return 77
 
+    document = None
     try:
         runtime = WindowedGraphicsSession.create_native()
         window = runtime.create_window("termin-gui-native Python showcase", 800, 600)
         graphics = tgfx.Tgfx2Context.from_runtime(runtime.graphics)
         context = graphics.context
-        document = Document()
+        document = tc_ui_document_create()
         build_python_showcase(document)
         draw_list = DrawList()
         paint_context = PaintContext(draw_list)
@@ -110,6 +112,9 @@ def main() -> int:
         ):
             return 77
         return 1
+    finally:
+        if document is not None:
+            tc_ui_document_destroy(document)
 
 
 if __name__ == "__main__":

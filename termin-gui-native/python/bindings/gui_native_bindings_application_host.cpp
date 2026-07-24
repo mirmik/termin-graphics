@@ -38,9 +38,9 @@ using termin::gui_native::OffscreenGuiComposition;
 using termin::gui_native::OffscreenGuiCompositionConfig;
 using termin::gui_native::StandaloneGuiApplication;
 using termin::gui_native::StandaloneGuiApplicationConfig;
+using termin::gui_native::TcDocument;
 using CanvasRef = termin::gui_native::python_bindings::CanvasRef;
 using ColorPickerRef = termin::gui_native::python_bindings::ColorPickerRef;
-using PythonDocument = termin::gui_native::python_bindings::Document;
 
 using Rgba8Array = nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu>;
 
@@ -194,9 +194,9 @@ public:
       : session_keepalive_(std::move(session_object)),
         document_keepalive_(std::move(document_object)) {
     auto &session = nb::cast<WindowedGraphicsSession &>(session_keepalive_);
-    auto &document = nb::cast<PythonDocument &>(document_keepalive_);
+    const auto document = nb::cast<TcDocument>(document_keepalive_);
     owned_ = std::make_unique<GuiWindowHost>(
-        session, document.native_document(), std::move(config));
+        session, document, std::move(config));
     host_ = owned_.get();
   }
 
@@ -250,9 +250,11 @@ public:
   explicit PythonStandaloneGuiApplication(StandaloneGuiApplicationConfig config)
       : application_(
             std::make_unique<StandaloneGuiApplication>(std::move(config))),
-        document_(std::make_unique<PythonDocument>(application_->document())),
+        document_(application_->document()),
         window_host_(std::make_unique<PythonGuiWindowHost>(
-            application_->window_host())) {}
+            application_->window_host())) {
+    termin::gui_native::python_bindings::require_document_state(document_);
+  }
 
   ~PythonStandaloneGuiApplication() {
     try {
@@ -274,18 +276,19 @@ public:
   void close() {
     if (!application_)
       return;
-    application_->close();
     window_host_->invalidate_borrowed();
-    document_->invalidate_borrowed();
+    termin::gui_native::python_bindings::release_document_state(document_);
+    application_->close();
+    document_ = TcDocument{};
     application_.reset();
   }
 
   bool is_open() const { return application_ && application_->is_open(); }
 
-  PythonDocument &document() const {
-    if (!document_)
+  TcDocument document() const {
+    if (!document_.valid())
       throw std::runtime_error("StandaloneGuiApplication has no document");
-    return *document_;
+    return document_;
   }
 
   PythonGuiWindowHost &window_host() const {
@@ -296,7 +299,7 @@ public:
 
 private:
   std::unique_ptr<StandaloneGuiApplication> application_;
-  std::unique_ptr<PythonDocument> document_;
+  TcDocument document_;
   std::unique_ptr<PythonGuiWindowHost> window_host_;
 };
 
@@ -305,7 +308,9 @@ public:
   explicit PythonOffscreenGuiApplication(OffscreenGuiCompositionConfig config)
       : application_(
             std::make_unique<OffscreenGuiComposition>(std::move(config))),
-        document_(std::make_unique<PythonDocument>(application_->document())) {}
+        document_(application_->document()) {
+    termin::gui_native::python_bindings::require_document_state(document_);
+  }
 
   ~PythonOffscreenGuiApplication() {
     try {
@@ -330,17 +335,18 @@ public:
     return *application_;
   }
 
-  PythonDocument &document() const {
-    if (!document_)
+  TcDocument document() const {
+    if (!document_.valid())
       throw std::runtime_error("OffscreenGuiApplication has no document");
-    return *document_;
+    return document_;
   }
 
   void close() {
     if (!application_)
       return;
+    termin::gui_native::python_bindings::release_document_state(document_);
     application_->close();
-    document_->invalidate_borrowed();
+    document_ = TcDocument{};
     application_.reset();
   }
 
@@ -348,7 +354,7 @@ public:
 
 private:
   std::unique_ptr<OffscreenGuiComposition> application_;
-  std::unique_ptr<PythonDocument> document_;
+  TcDocument document_;
 };
 
 tgfx::BackendType offscreen_backend(const std::string &name) {
@@ -537,7 +543,7 @@ void bind_gui_native_application_host(nb::module_ &m) {
       .def(
           "__init__",
           [](GuiWindowAdapter *self, WindowManager &manager,
-             WindowHandle handle, PythonDocument &document,
+             WindowHandle handle, TcDocument document,
              const std::string &font_path, int font_size,
              std::array<float, 4> clear_color, bool enable_text_input) {
             if (font_size <= 0)
@@ -549,8 +555,7 @@ void bind_gui_native_application_host(nb::module_ &m) {
             config.enable_text_input = enable_text_input;
             termin::BackendWindow &window = manager.window(handle);
             new (self) GuiWindowAdapter(
-                window.graphics_host(), document.native_document(),
-                std::move(config), window);
+                window.graphics_host(), document, std::move(config), window);
           },
           nb::arg("window_manager"), nb::arg("handle"), nb::arg("document"),
           nb::arg("font_path"), nb::arg("font_size") = 14,
@@ -748,8 +753,7 @@ void bind_gui_native_application_host(nb::module_ &m) {
           nb::arg("shader_cache_root") = "",
           nb::arg("shader_artifact_root") = "",
           nb::arg("enable_shader_dev_compile") = true)
-      .def_prop_ro("document", &PythonOffscreenGuiApplication::document,
-                   nb::rv_policy::reference_internal)
+      .def_prop_ro("document", &PythonOffscreenGuiApplication::document)
       .def_prop_ro(
           "graphics",
           [](PythonOffscreenGuiApplication &self) -> tgfx::GraphicsHost & {
@@ -981,8 +985,7 @@ void bind_gui_native_application_host(nb::module_ &m) {
           nb::arg("shader_cache_root") = "",
           nb::arg("shader_artifact_root") = "",
           nb::arg("enable_shader_dev_compile") = true)
-      .def_prop_ro("document", &PythonStandaloneGuiApplication::document,
-                   nb::rv_policy::reference_internal)
+      .def_prop_ro("document", &PythonStandaloneGuiApplication::document)
       .def_prop_ro("window_host", &PythonStandaloneGuiApplication::window_host,
                    nb::rv_policy::reference_internal)
       .def("tick",

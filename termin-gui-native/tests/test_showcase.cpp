@@ -1,3 +1,4 @@
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/showcase.hpp>
 #include <termin/gui_native/widgets.hpp>
 
@@ -72,7 +73,8 @@ void require_equal(size_t actual, size_t expected, const char *label) {
 }
 
 void test_showcase_builds_stable_headless_snapshot() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   document.set_text_measurer(&measure_test_text, nullptr);
   ShowcaseRefs refs = build_showcase(document);
 
@@ -149,6 +151,7 @@ void test_showcase_builds_stable_headless_snapshot() {
 
   tc_ui_paint_context_destroy(paint_context);
   tc_ui_draw_list_destroy(draw_list);
+  tc_ui_document_destroy(document_handle);
 }
 
 } // namespace

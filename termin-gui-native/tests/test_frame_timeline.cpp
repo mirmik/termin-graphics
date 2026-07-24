@@ -1,3 +1,4 @@
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/widgets.hpp>
 
 #include <cassert>
@@ -55,7 +56,8 @@ void test_model_validation_and_selection_reconciliation() {
 }
 
 void test_pointer_keyboard_zoom_and_visible_projection() {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     auto model = std::make_shared<FrameTimelineModel>();
     auto* timeline = new FrameTimelineWidget(model);
     assert(!tc_widget_handle_is_invalid(document.adopt(timeline)));
@@ -86,6 +88,7 @@ void test_pointer_keyboard_zoom_and_visible_projection() {
     wheel.modifiers = TC_UI_MOD_CTRL;
     assert(document.dispatch_pointer_event(wheel) == TC_UI_EVENT_HANDLED);
     assert(timeline->window_size() == 22);
+    tc_ui_document_destroy(document_handle);
 }
 
 void test_model_incremental_append_and_capacity() {

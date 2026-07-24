@@ -1,3 +1,4 @@
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/widgets.hpp>
 
 #include <cassert>
@@ -69,7 +70,8 @@ void test_scene_ownership_hit_testing_and_selection() {
 }
 
 void test_view_transform_drag_pan_zoom_paint_and_input_forwarding() {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     auto scene = std::make_shared<GraphicsScene>();
     auto item = std::make_shared<GraphicsItem>("node");
     item->set_position({10.0f, 20.0f});
@@ -136,10 +138,12 @@ void test_view_transform_drag_pan_zoom_paint_and_input_forwarding() {
     tc_ui_paint_context_destroy(context);
     tc_ui_draw_list_destroy(draw_list);
     assert(tc_ui_document_destroy_widget(document.get(), view_handle));
+    tc_ui_document_destroy(document_handle);
 }
 
 void test_embedded_widget_uses_canonical_document_tree_and_detaches() {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     auto scene = std::make_shared<GraphicsScene>();
     auto item = std::make_shared<GraphicsItem>("editor");
     item->set_position({15.0f, 12.0f});
@@ -170,6 +174,7 @@ void test_embedded_widget_uses_canonical_document_tree_and_detaches() {
     assert(button->parent_widget() == nullptr);
     assert(tc_ui_document_is_alive(document.get(), button_handle));
     assert(tc_ui_document_destroy_widget(document.get(), button_handle));
+    tc_ui_document_destroy(document_handle);
 }
 
 } // namespace

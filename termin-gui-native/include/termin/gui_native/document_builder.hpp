@@ -5,16 +5,16 @@
 #include <type_traits>
 #include <utility>
 
-#include <termin/gui_native/document.hpp>
+#include <termin/gui_native/tc_document.hpp>
 
 namespace termin::gui_native {
 
 class DocumentBuilder {
 private:
-    Document& document_;
+    TcDocument document_;
 
 public:
-    explicit DocumentBuilder(Document& document) : document_(document) {}
+    explicit DocumentBuilder(TcDocument document) : document_(document) {}
     template<typename T, typename... Args> T& make(Args&&... args) {
         static_assert(std::is_base_of_v<Widget, T>, "T must derive from Widget");
         auto widget = std::make_unique<T>(std::forward<Args>(args)...);

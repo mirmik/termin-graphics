@@ -307,7 +307,8 @@ tc_ui_cursor_intent InMemoryDocumentPlatformServices::cursor() const {
 struct OffscreenGuiComposition::Impl {
     OffscreenGuiCompositionConfig config;
     std::unique_ptr<tgfx::GraphicsHost> graphics;
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_handle_invalid();
+    TcDocument document;
     InMemoryDocumentPlatformServices platform;
     std::unique_ptr<OffscreenFrameSink> sink;
     std::unique_ptr<DocumentRenderer> renderer;
@@ -323,8 +324,20 @@ struct OffscreenGuiComposition::Impl {
         graphics = tgfx::GraphicsHost::create_isolated(config.backend);
         graphics->configure_shader_artifacts(resolver);
         sink = std::make_unique<OffscreenFrameSink>(config.width, config.height);
-        renderer = std::make_unique<DocumentRenderer>(
-            *graphics, document, config.renderer, *sink, platform);
+        document_handle = tc_ui_document_create();
+        if (tc_ui_document_handle_is_invalid(document_handle)) {
+            offscreen_error("could not create tc_ui_document");
+        }
+        document = TcDocument(document_handle);
+        try {
+            renderer = std::make_unique<DocumentRenderer>(
+                *graphics, document, config.renderer, *sink, platform);
+        } catch (...) {
+            tc_ui_document_destroy(document_handle);
+            document = TcDocument{};
+            document_handle = tc_ui_document_handle_invalid();
+            throw;
+        }
     }
 
     void require_open(const char* operation) const {
@@ -355,7 +368,11 @@ struct OffscreenGuiComposition::Impl {
             renderer.reset();
         }
         if (sink) sink->clear_published_texture();
-        document.close();
+        if (!tc_ui_document_handle_is_invalid(document_handle)) {
+            tc_ui_document_destroy(document_handle);
+            document = TcDocument{};
+            document_handle = tc_ui_document_handle_invalid();
+        }
         if (graphics) {
             graphics->close();
             graphics.reset();
@@ -392,11 +409,7 @@ const tgfx::GraphicsHost& OffscreenGuiComposition::graphics() const {
     impl_->require_open("graphics");
     return *impl_->graphics;
 }
-Document& OffscreenGuiComposition::document() {
-    impl_->require_open("document");
-    return impl_->document;
-}
-const Document& OffscreenGuiComposition::document() const {
+TcDocument OffscreenGuiComposition::document() const {
     impl_->require_open("document");
     return impl_->document;
 }

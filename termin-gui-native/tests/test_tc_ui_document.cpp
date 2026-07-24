@@ -1,9 +1,11 @@
 #include <termin/gui_native/tc_ui_document.h>
+#include <termin/gui_native/tc_document.hpp>
 
 #include <cassert>
 #include <cstdlib>
 #include <string>
 #include <vector>
+#include <type_traits>
 
 struct TestWidget {
     tc_widget widget {};
@@ -1007,6 +1009,26 @@ static void test_cursor_intent_inheritance_transitions_and_lifetime() {
     tc_ui_document_destroy(document);
 }
 
+static void test_tc_document_is_a_non_owning_handle_value() {
+    using termin::gui_native::TcDocument;
+    static_assert(std::is_trivially_copy_constructible_v<TcDocument>);
+    static_assert(std::is_trivially_copy_assignable_v<TcDocument>);
+    static_assert(std::is_trivially_destructible_v<TcDocument>);
+
+    const tc_ui_document_handle handle = tc_ui_document_create();
+    assert(!tc_ui_document_handle_is_invalid(handle));
+    {
+        const TcDocument first(handle);
+        const TcDocument second = first;
+        assert(first.valid());
+        assert(second.valid());
+        assert(tc_ui_document_handle_eq(first.handle(), second.handle()));
+    }
+    assert(tc_ui_document_is_valid(handle));
+    tc_ui_document_destroy(handle);
+    assert(!tc_ui_document_is_valid(handle));
+}
+
 int main() {
     test_init_defaults_and_common_state();
     test_borrowed_widget_can_be_adopted_and_released();
@@ -1030,5 +1052,6 @@ int main() {
     test_tooltip_rect_is_host_driven_and_clamped();
     test_theme_style_resolution_inheritance_and_invalidation();
     test_cursor_intent_inheritance_transitions_and_lifetime();
+    test_tc_document_is_a_non_owning_handle_value();
     return EXIT_SUCCESS;
 }

@@ -1,3 +1,4 @@
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/widgets.hpp>
 
 #include <cassert>
@@ -74,7 +75,8 @@ std::vector<const tc_ui_draw_command*> commands_of_type(const tc_ui_draw_list* d
 }
 
 void test_surface_resize_paint_input_and_drag_contract() {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     auto trace = std::make_shared<HostTrace>();
     auto host = std::make_shared<TestSurfaceHost>(trace);
     auto* viewport = new Viewport3D();
@@ -131,10 +133,12 @@ void test_surface_resize_paint_input_and_drag_contract() {
     tc_ui_paint_context_destroy(context);
     tc_ui_draw_list_destroy(draw_list);
     assert(tc_ui_document_destroy_widget(document.get(), handle));
+    tc_ui_document_destroy(document_handle);
 }
 
 void test_detach_destroy_and_stale_surface_are_safe() {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     auto trace = std::make_shared<HostTrace>();
     std::weak_ptr<TestSurfaceHost> weak_host;
     auto* viewport = new Viewport3D();
@@ -170,10 +174,12 @@ void test_detach_destroy_and_stale_surface_are_safe() {
     assert(!weak_host2.expired());
     assert(tc_ui_document_destroy_widget(document.get(), handle2));
     assert(weak_host2.expired());
+    tc_ui_document_destroy(document_handle);
 }
 
 void test_pointer_coordinates_scale_to_display_pixels() {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     auto trace = std::make_shared<HostTrace>();
     trace->size = {200, 100};
     trace->resize_updates_size = false;
@@ -189,6 +195,7 @@ void test_pointer_coordinates_scale_to_display_pixels() {
            TC_UI_EVENT_HANDLED);
     assert((trace->moves.back() == std::tuple<double, double>{50.0, 20.0}));
     assert(tc_ui_document_destroy_widget(document.get(), handle));
+    tc_ui_document_destroy(document_handle);
 }
 
 } // namespace

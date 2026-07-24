@@ -46,7 +46,7 @@ class TERMIN_GUI_NATIVE_HOST_API InMemoryDocumentPlatformServices final
 };
 
 // Owning no-display composition. It owns an isolated graphics domain,
-// Document, renderer, synthetic input queue and in-memory services. It owns no
+// explicit tc_ui_document, renderer, synthetic input queue and in-memory services. It owns no
 // application or OS-window lifecycle.
 class TERMIN_GUI_NATIVE_HOST_API OffscreenGuiComposition {
   public:
@@ -60,8 +60,7 @@ class TERMIN_GUI_NATIVE_HOST_API OffscreenGuiComposition {
 
     tgfx::GraphicsHost& graphics();
     const tgfx::GraphicsHost& graphics() const;
-    Document& document();
-    const Document& document() const;
+    TcDocument document() const;
     DocumentRenderer& renderer();
     const DocumentRenderer& renderer() const;
     InMemoryDocumentPlatformServices& platform_services();

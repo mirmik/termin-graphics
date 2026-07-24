@@ -107,7 +107,7 @@ int main() {
             return 1;
         }
 
-        auto& document = application.document();
+        auto document = application.document();
         document.clear_focus(*text_input);
         application.request_close();
         if (!application.should_close()) {

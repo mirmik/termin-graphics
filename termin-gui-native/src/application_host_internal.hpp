@@ -5,20 +5,21 @@
 #include <mutex>
 #include <vector>
 
+#include <termin/gui_native/tc_document.hpp>
+
 namespace tgfx {
 class GraphicsHost;
 }
 
 namespace termin::gui_native {
 
-class Document;
 class DynamicTextureRecord;
 
 struct GuiApplicationHostLeaseState {
     std::mutex mutex;
     std::function<void()> request_repaint;
     tgfx::GraphicsHost* graphics = nullptr;
-    Document* document = nullptr;
+    TcDocument document;
     bool open = true;
     std::vector<std::shared_ptr<DynamicTextureRecord>> records;
 

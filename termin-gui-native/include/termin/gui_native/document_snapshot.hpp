@@ -1,7 +1,7 @@
 #pragma once
 
 #include <span>
-#include <termin/gui_native/document.hpp>
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/tc_ui_snapshot.h>
 
 namespace termin::gui_native {
@@ -13,7 +13,7 @@ class DocumentSnapshot {
   public:
     TERMIN_GUI_NATIVE_API explicit DocumentSnapshot(tc_ui_document_handle document);
 
-    TERMIN_GUI_NATIVE_API explicit DocumentSnapshot(const Document& document);
+    TERMIN_GUI_NATIVE_API explicit DocumentSnapshot(TcDocument document);
 
     TERMIN_GUI_NATIVE_API ~DocumentSnapshot();
 

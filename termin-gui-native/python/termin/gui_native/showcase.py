@@ -11,7 +11,7 @@ from ._gui_native import (
     CommandData,
     CommandKind,
     CommandModel,
-    Document,
+    TcDocument,
     FrameTimeModel,
     Size,
     TableColumn,
@@ -34,14 +34,14 @@ class PythonShowcase:
     models: tuple[Any, ...]
 
 
-def _widget(document: Document, reference: Any) -> WidgetRef:
+def _widget(document: TcDocument, reference: Any) -> WidgetRef:
     if isinstance(reference, WidgetRef):
         return reference
     return document.ref(reference.handle)
 
 
 def _append(
-    document: Document,
+    document: TcDocument,
     parent: WidgetRef,
     reference: Any,
     *,
@@ -55,7 +55,7 @@ def _append(
     return child
 
 
-def build_python_showcase(document: Document) -> PythonShowcase:
+def build_python_showcase(document: TcDocument) -> PythonShowcase:
     """Build a real native-widget tree from Python without compatibility widgets."""
 
     root = document.create_vstack("python-showcase-root")

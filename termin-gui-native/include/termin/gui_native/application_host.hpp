@@ -10,7 +10,7 @@
 #include <vector>
 
 #include <termin/gui_native/application_host_export.h>
-#include <termin/gui_native/document.hpp>
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/platform/backend_window.hpp>
 #include <tgfx2/enums.hpp>
 
@@ -94,7 +94,7 @@ class TERMIN_GUI_NATIVE_HOST_API GuiInputSource {
     virtual void request_close() = 0;
 };
 
-// Explicit platform capabilities used by Document interaction. A
+// Explicit platform capabilities used by tc_ui_document interaction. A
 // GuiApplicationHost requires all three capabilities; implementations that do
 // not provide one must report it during construction instead of silently
 // turning the operation into a no-op.
@@ -203,11 +203,11 @@ using GuiWindowFrame = GuiFrame;
 using GuiWindowFrameExtension = GuiFrameExtension;
 
 // Shared native GUI frame implementation. It borrows one canonical graphics
-// domain, one Document and the three typed environment boundaries. All
+// domain, one TcDocument and the three typed environment boundaries. All
 // borrowed objects must outlive it.
 class TERMIN_GUI_NATIVE_HOST_API GuiApplicationHost {
   public:
-    GuiApplicationHost(tgfx::GraphicsHost& graphics, Document& document,
+    GuiApplicationHost(tgfx::GraphicsHost& graphics, TcDocument document,
                        GuiApplicationConfig config, GuiFrameEndpoint& frame_endpoint,
                        GuiInputSource& input_source, GuiPlatformServices& platform_services);
     ~GuiApplicationHost();
@@ -255,14 +255,14 @@ class TERMIN_GUI_NATIVE_HOST_API GuiApplicationHost {
     std::unique_ptr<Impl> impl_;
 };
 
-// Per-window adapter. It borrows the canonical graphics domain and Document,
+// Per-window adapter. It borrows the canonical graphics domain and TcDocument,
 // owns its BackendWindow and delegates all UI/frame work to one
 // GuiApplicationHost. Both borrowed objects must outlive the host.
 class TERMIN_GUI_NATIVE_HOST_API GuiWindowHost {
   public:
-    GuiWindowHost(WindowedGraphicsSession& graphics_session, Document& document,
+    GuiWindowHost(WindowedGraphicsSession& graphics_session, TcDocument document,
                   GuiWindowConfig config);
-    GuiWindowHost(tgfx::GraphicsHost& graphics, Document& document, GuiWindowConfig config,
+    GuiWindowHost(tgfx::GraphicsHost& graphics, TcDocument document, GuiWindowConfig config,
                   BackendWindowPtr window);
     ~GuiWindowHost();
 
@@ -312,7 +312,7 @@ class TERMIN_GUI_NATIVE_HOST_API GuiWindowHost {
     std::unique_ptr<Impl> impl_;
 };
 
-// One-window convenience composition. It owns one session, one Document and
+// One-window convenience composition. It owns one session, one UI document and
 // one GuiWindowHost in the required shutdown order.
 class TERMIN_GUI_NATIVE_HOST_API StandaloneGuiApplication {
   public:
@@ -326,8 +326,7 @@ class TERMIN_GUI_NATIVE_HOST_API StandaloneGuiApplication {
 
     WindowedGraphicsSession& graphics_session();
     const WindowedGraphicsSession& graphics_session() const;
-    Document& document();
-    const Document& document() const;
+    TcDocument document() const;
     GuiWindowHost& window_host();
     const GuiWindowHost& window_host() const;
     void close();
@@ -353,8 +352,7 @@ class TERMIN_GUI_NATIVE_HOST_API OffscreenGuiApplication {
 
     tgfx::GraphicsHost& graphics();
     const tgfx::GraphicsHost& graphics() const;
-    Document& document();
-    const Document& document() const;
+    TcDocument document() const;
     GuiApplicationHost& application_host();
     const GuiApplicationHost& application_host() const;
     QueuedGuiInputSource& input_source();

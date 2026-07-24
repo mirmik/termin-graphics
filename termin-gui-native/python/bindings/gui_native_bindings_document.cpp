@@ -208,65 +208,72 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
       .def("pop_clip",
            [](PaintContext &self) { tc_ui_painter_pop_clip(self.get()); });
 
-  nb::class_<Document>(m, "Document")
-      .def(nb::init<>())
-      .def("close", &Document::close)
-      .def("__enter__", [](Document &self) -> Document & { return self; },
-           nb::rv_policy::reference_internal)
-      .def("__exit__",
-           [](Document &self, nb::handle, nb::handle, nb::handle) {
-             self.close();
-             return false;
+  m.def("tc_ui_document_create", []() {
+    termin::gui_native::TcDocument document{tc_ui_document_create()};
+    require_document_state(document);
+    return document;
+  });
+  m.def("tc_ui_document_destroy", [](termin::gui_native::TcDocument &self) {
+    const tc_ui_document_handle handle = checked_document_handle(self);
+    release_document_state(self);
+    tc_ui_document_destroy(handle);
+    self = termin::gui_native::TcDocument{};
+  });
+
+  nb::class_<termin::gui_native::TcDocument>(m, "TcDocument")
+      .def("__eq__",
+           [](const termin::gui_native::TcDocument &self,
+              const termin::gui_native::TcDocument &other) {
+             return self == other;
            })
-      .def_prop_ro("closed", &Document::is_closed)
+      .def_prop_ro("valid",
+                   [](const termin::gui_native::TcDocument &self) {
+                     return self.valid();
+                   })
       .def_prop_rw(
           "debug_name",
-          [](const Document &self) {
-            const char *name = tc_ui_document_debug_name(self.get());
+          [](const termin::gui_native::TcDocument &self) {
+            const char *name = tc_ui_document_debug_name(checked_document_handle(self));
             return std::string(name ? name : "");
           },
-          [](Document &self, const std::string &name) {
-            if (!tc_ui_document_set_debug_name(self.get(), name.c_str()))
+          [](termin::gui_native::TcDocument &self, const std::string &name) {
+            if (!tc_ui_document_set_debug_name(checked_document_handle(self), name.c_str()))
               throw std::runtime_error("failed to set native UI document debug name");
           })
       .def("inspect_snapshot", &document_snapshot_to_python)
-      .def("serialize", &Document::serialize)
-      .def("restore", &Document::restore, nb::arg("serialized"))
+      .def("serialize", &document_serialize)
+      .def("restore", &document_restore, nb::arg("serialized"))
       .def_prop_rw(
           "theme",
-          [](const Document &self) {
-            return Theme{*tc_ui_document_theme(self.get())};
+          [](const termin::gui_native::TcDocument &self) {
+            return Theme{*tc_ui_document_theme(checked_document_handle(self))};
           },
-          [](Document &self, const Theme &theme) {
-            if (!tc_ui_document_set_theme(self.get(), &theme.value)) {
+          [](termin::gui_native::TcDocument &self, const Theme &theme) {
+            if (!tc_ui_document_set_theme(checked_document_handle(self), &theme.value)) {
               throw std::invalid_argument("invalid native UI theme");
             }
           })
       .def_prop_ro("theme_revision",
-                   [](const Document &self) {
-                     return tc_ui_document_theme_revision(self.get());
+                   [](const termin::gui_native::TcDocument &self) {
+                     return tc_ui_document_theme_revision(checked_document_handle(self));
                    })
-      .def(
-          "adopt",
-          [](Document &self, nb::object widget, const std::string &debug_name) {
-            return self.adopt(std::move(widget), debug_name);
-          },
+      .def("adopt", &document_adopt,
           nb::arg("widget"), nb::arg("debug_name") = "")
-      .def("create_registered_widget", &Document::create_registered_widget,
+      .def("create_registered_widget", &document_create_registered_widget,
            nb::arg("type_name"))
       .def(
           "add_root",
-          [](Document &self, WidgetHandle handle) {
-            return tc_ui_document_add_root(self.get(), handle.handle);
+          [](termin::gui_native::TcDocument &self, WidgetHandle handle) {
+            return tc_ui_document_add_root(checked_document_handle(self), handle.handle);
           },
           nb::arg("handle"))
       .def(
           "adopt_root",
-          [](Document &self, nb::object widget, const std::string &debug_name) {
-            WidgetHandle handle = self.adopt(std::move(widget), debug_name);
-            if (!tc_ui_document_add_root(self.get(), handle.handle)) {
-              tc_ui_document_destroy_widget(self.get(), handle.handle);
-              self.throw_pending_exception();
+          [](termin::gui_native::TcDocument &self, nb::object widget, const std::string &debug_name) {
+            WidgetHandle handle = document_adopt(self, std::move(widget), debug_name);
+            if (!tc_ui_document_add_root(checked_document_handle(self), handle.handle)) {
+              tc_ui_document_destroy_widget(checked_document_handle(self), handle.handle);
+              throw_pending_document_exception(self);
               throw std::runtime_error("failed to add Python widget root");
             }
             return handle;
@@ -274,56 +281,56 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
           nb::arg("widget"), nb::arg("debug_name") = "")
       .def(
           "remove_root",
-          [](Document &self, WidgetHandle handle) {
-            return tc_ui_document_remove_root(self.get(), handle.handle);
+          [](termin::gui_native::TcDocument &self, WidgetHandle handle) {
+            return tc_ui_document_remove_root(checked_document_handle(self), handle.handle);
           },
           nb::arg("handle"))
       .def(
           "destroy_widget",
-          [](Document &self, WidgetHandle handle) {
+          [](termin::gui_native::TcDocument &self, WidgetHandle handle) {
             bool destroyed =
-                tc_ui_document_destroy_widget(self.get(), handle.handle);
-            self.throw_pending_exception();
+                tc_ui_document_destroy_widget(checked_document_handle(self), handle.handle);
+            throw_pending_document_exception(self);
             return destroyed;
           },
           nb::arg("handle"))
       .def(
           "destroy_widget_recursive",
-          [](Document &self, WidgetHandle handle) {
+          [](termin::gui_native::TcDocument &self, WidgetHandle handle) {
             bool destroyed = tc_ui_document_destroy_widget_recursive(
-                self.get(), handle.handle);
-            self.throw_pending_exception();
+                checked_document_handle(self), handle.handle);
+            throw_pending_document_exception(self);
             return destroyed;
           },
           nb::arg("handle"))
       .def(
           "is_alive",
-          [](const Document &self, WidgetHandle handle) {
-            if (self.is_closed())
+          [](const termin::gui_native::TcDocument &self, WidgetHandle handle) {
+            if (!self.valid())
               return false;
-            return tc_ui_document_is_alive(self.get(), handle.handle);
+            return tc_ui_document_is_alive(checked_document_handle(self), handle.handle);
           },
           nb::arg("handle"))
       .def_prop_ro("live_widget_count",
-                   [](const Document &self) {
-                     return tc_ui_document_live_widget_count(self.get());
+                   [](const termin::gui_native::TcDocument &self) {
+                     return tc_ui_document_live_widget_count(checked_document_handle(self));
                    })
       .def_prop_ro("root_count",
-                   [](const Document &self) {
-                     return tc_ui_document_root_count(self.get());
+                   [](const termin::gui_native::TcDocument &self) {
+                     return tc_ui_document_root_count(checked_document_handle(self));
                    })
       .def(
           "root_at",
-          [](const Document &self, size_t index) {
-            return WidgetHandle{tc_ui_document_root_at(self.get(), index)};
+          [](const termin::gui_native::TcDocument &self, size_t index) {
+            return WidgetHandle{tc_ui_document_root_at(checked_document_handle(self), index)};
           },
           nb::arg("index"))
-      .def("ref", &Document::ref, nb::arg("handle"))
+      .def("ref", &document_ref, nb::arg("handle"))
       .def(
           "measure_text",
-          [](Document &self, const std::string &text, float font_size) {
+          [](termin::gui_native::TcDocument &self, const std::string &text, float font_size) {
             tc_ui_text_metrics metrics{};
-            if (!tc_ui_document_measure_text(self.get(), text.data(),
+            if (!tc_ui_document_measure_text(checked_document_handle(self), text.data(),
                                              text.size(), font_size,
                                              &metrics)) {
               throw std::runtime_error("text measurement failed");
@@ -331,37 +338,37 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
             return metrics;
           },
           nb::arg("text"), nb::arg("font_size"))
-      .def("set_clipboard_handlers", &Document::set_clipboard_handlers,
+      .def("set_clipboard_handlers", &set_document_clipboard_handlers,
            nb::arg("getter"), nb::arg("setter"))
-      .def("set_cursor_changed_handler", &Document::set_cursor_changed_handler,
+      .def("set_cursor_changed_handler", &set_document_cursor_changed_handler,
            nb::arg("handler").none())
       .def(
           "create_hstack",
-          [](Document &self, const std::string &debug_name) {
-            return self.make_native<termin::gui_native::HStack>(
+          [](termin::gui_native::TcDocument &self, const std::string &debug_name) {
+            return document_make_native<termin::gui_native::HStack>(self,
                 debug_name.c_str());
           },
           nb::arg("debug_name") = "HStack")
       .def(
           "create_vstack",
-          [](Document &self, const std::string &debug_name) {
-            return self.make_native<termin::gui_native::VStack>(
+          [](termin::gui_native::TcDocument &self, const std::string &debug_name) {
+            return document_make_native<termin::gui_native::VStack>(self,
                 debug_name.c_str());
           },
           nb::arg("debug_name") = "VStack")
       .def(
           "create_panel",
-          [](Document &self, const std::string &debug_name) {
-            return self.make_native<termin::gui_native::Panel>(
+          [](termin::gui_native::TcDocument &self, const std::string &debug_name) {
+            return document_make_native<termin::gui_native::Panel>(self,
                 debug_name.c_str());
           },
           nb::arg("debug_name") = "Panel")
       .def(
           "create_label",
-          [](Document &self, const std::string &text,
+          [](termin::gui_native::TcDocument &self, const std::string &text,
              const std::string &debug_name) {
             WidgetRef result =
-                self.make_native<termin::gui_native::Label>(text);
+                document_make_native<termin::gui_native::Label>(self, text);
             termin::gui_native::Widget *widget =
                 static_cast<termin::gui_native::Widget *>(
                     result.resolve_checked()->body);
@@ -371,10 +378,10 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
           nb::arg("text"), nb::arg("debug_name") = "Label")
       .def(
           "create_button",
-          [](Document &self, const std::string &text,
+          [](termin::gui_native::TcDocument &self, const std::string &text,
              const std::string &debug_name) {
             ButtonRef result{
-                self.make_native<termin::gui_native::Button>(text)};
+                document_make_native<termin::gui_native::Button>(self, text)};
             termin::gui_native::Widget *widget =
                 static_cast<termin::gui_native::Widget *>(
                     result.widget.resolve_checked()->body);
@@ -384,32 +391,32 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
           nb::arg("text") = "", nb::arg("debug_name") = "Button")
       .def(
           "create_checkbox",
-          [](Document &self, bool checked) {
+          [](termin::gui_native::TcDocument &self, bool checked) {
             return CheckboxRef{
-                self.make_native<termin::gui_native::Checkbox>(checked)};
+                document_make_native<termin::gui_native::Checkbox>(self, checked)};
           },
           nb::arg("checked") = false)
       .def(
           "create_group_box",
-          [](Document &self, const std::string &title,
+          [](termin::gui_native::TcDocument &self, const std::string &title,
              const std::string &debug_name) {
             return GroupBoxRef{
-                self.make_native<termin::gui_native::GroupBox>(
+                document_make_native<termin::gui_native::GroupBox>(self,
                     title, debug_name.c_str())};
           },
           nb::arg("title") = "", nb::arg("debug_name") = "GroupBox")
       .def(
           "create_scroll_area",
-          [](Document &self, const std::string &debug_name) {
+          [](termin::gui_native::TcDocument &self, const std::string &debug_name) {
             return ScrollAreaRef{
-                self.make_native<termin::gui_native::ScrollArea>(
+                document_make_native<termin::gui_native::ScrollArea>(self,
                     debug_name.c_str())};
           },
           nb::arg("debug_name") = "ScrollArea")
       .def(
           "create_splitter",
-          [](Document &self, bool horizontal, const std::string &debug_name) {
-            return SplitterRef{self.make_native<termin::gui_native::Splitter>(
+          [](termin::gui_native::TcDocument &self, bool horizontal, const std::string &debug_name) {
+            return SplitterRef{document_make_native<termin::gui_native::Splitter>(self,
                 horizontal ? termin::gui_native::Orientation::Horizontal
                            : termin::gui_native::Orientation::Vertical,
                 debug_name.c_str())};
@@ -417,183 +424,184 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
           nb::arg("horizontal") = true, nb::arg("debug_name") = "Splitter")
       .def(
           "create_tab_view",
-          [](Document &self, const std::string &debug_name) {
-            return TabViewRef{self.make_native<termin::gui_native::TabView>(
+          [](termin::gui_native::TcDocument &self, const std::string &debug_name) {
+            return TabViewRef{document_make_native<termin::gui_native::TabView>(self,
                 debug_name.c_str())};
           },
           nb::arg("debug_name") = "TabView")
       .def(
           "create_text_input",
-          [](Document &self, const std::string &text) {
+          [](termin::gui_native::TcDocument &self, const std::string &text) {
             return TextInputRef{
-                self.make_native<termin::gui_native::TextInput>(text)};
+                document_make_native<termin::gui_native::TextInput>(self, text)};
           },
           nb::arg("text") = "")
       .def(
           "create_text_area",
-          [](Document &self, const std::string &text) {
+          [](termin::gui_native::TcDocument &self, const std::string &text) {
             return TextAreaRef{
-                self.make_native<termin::gui_native::TextArea>(text)};
+                document_make_native<termin::gui_native::TextArea>(self, text)};
           },
           nb::arg("text") = "")
       .def(
           "create_rich_text_view",
-          [](Document &self,
+          [](termin::gui_native::TcDocument &self,
              std::shared_ptr<termin::gui_native::RichTextModel> model) {
             return RichTextViewRef{
-                self.make_native<termin::gui_native::RichTextView>(
+                document_make_native<termin::gui_native::RichTextView>(self,
                     std::move(model))};
           },
           nb::arg("model") = nullptr)
       .def(
           "create_frame_time_graph",
-          [](Document &self,
+          [](termin::gui_native::TcDocument &self,
              std::shared_ptr<termin::gui_native::FrameTimeModel> model) {
             return FrameTimeGraphRef{
-                self.make_native<termin::gui_native::FrameTimeGraph>(
+                document_make_native<termin::gui_native::FrameTimeGraph>(self,
                     std::move(model))};
           },
           nb::arg("model") = nullptr)
       .def(
           "create_frame_timeline",
-          [](Document &self,
+          [](termin::gui_native::TcDocument &self,
              std::shared_ptr<termin::gui_native::FrameTimelineModel> model) {
             return FrameTimelineWidgetRef{
-                self.make_native<termin::gui_native::FrameTimelineWidget>(
+                document_make_native<termin::gui_native::FrameTimelineWidget>(self,
                     std::move(model))};
           },
           nb::arg("model") = nullptr)
       .def("create_viewport3d",
-           [](Document &self) {
+           [](termin::gui_native::TcDocument &self) {
              return Viewport3DRef{
-                 self.make_native<termin::gui_native::Viewport3D>()};
+                 document_make_native<termin::gui_native::Viewport3D>(self)};
            })
       .def(
           "create_overlay_layout",
-          [](Document &self, const std::string &debug_name) {
+          [](termin::gui_native::TcDocument &self, const std::string &debug_name) {
             return OverlayLayoutRef{
-                self.make_native<termin::gui_native::OverlayLayout>(
+                document_make_native<termin::gui_native::OverlayLayout>(self,
                     debug_name.c_str())};
           },
           nb::arg("debug_name") = "OverlayLayout")
       .def(
           "create_scene_view",
-          [](Document &self,
+          [](termin::gui_native::TcDocument &self,
              std::shared_ptr<termin::gui_native::GraphicsScene> scene) {
-            return SceneViewRef{self.make_native<termin::gui_native::SceneView>(
+            return SceneViewRef{document_make_native<termin::gui_native::SceneView>(self,
                 std::move(scene))};
           },
           nb::arg("scene") = nullptr)
       .def(
           "create_spin_box",
-          [](Document &self, float value) {
+          [](termin::gui_native::TcDocument &self, float value) {
             return SpinBoxRef{
-                self.make_native<termin::gui_native::SpinBox>(value)};
+                document_make_native<termin::gui_native::SpinBox>(self, value)};
           },
           nb::arg("value") = 0.0f)
       .def(
           "create_slider_edit",
-          [](Document &self, float value) {
+          [](termin::gui_native::TcDocument &self, float value) {
             return SliderEditRef{
-                self.make_native<termin::gui_native::SliderEdit>(value)};
+                document_make_native<termin::gui_native::SliderEdit>(self, value)};
           },
           nb::arg("value") = 0.0f)
       .def(
           "create_list_widget",
-          [](Document &self,
+          [](termin::gui_native::TcDocument &self,
              std::shared_ptr<termin::gui_native::CollectionModel> model) {
             return ListWidgetRef{
-                self.make_native<termin::gui_native::ListWidget>(
+                document_make_native<termin::gui_native::ListWidget>(self,
                     std::move(model))};
           },
           nb::arg("model") = nullptr)
       .def(
           "create_file_grid_widget",
-          [](Document &self,
+          [](termin::gui_native::TcDocument &self,
              std::shared_ptr<termin::gui_native::CollectionModel> model) {
             return FileGridWidgetRef{
-                self.make_native<termin::gui_native::FileGridWidget>(
+                document_make_native<termin::gui_native::FileGridWidget>(self,
                     std::move(model))};
           },
           nb::arg("model") = nullptr)
       .def(
           "create_tool_bar",
-          [](Document &self,
+          [](termin::gui_native::TcDocument &self,
              std::shared_ptr<termin::gui_native::CommandModel> model) {
-            return ToolBarRef{self.make_native<termin::gui_native::ToolBar>(
+            return ToolBarRef{document_make_native<termin::gui_native::ToolBar>(self,
                 std::move(model))};
           },
           nb::arg("model") = nullptr)
       .def(
           "create_status_bar",
-          [](Document &self, const std::string &text) {
+          [](termin::gui_native::TcDocument &self, const std::string &text) {
             return StatusBarRef{
-                self.make_native<termin::gui_native::StatusBar>(text)};
+                document_make_native<termin::gui_native::StatusBar>(self, text)};
           },
           nb::arg("text") = "Ready")
       .def(
           "create_menu",
-          [](Document &self,
+          [](termin::gui_native::TcDocument &self,
              std::shared_ptr<termin::gui_native::CommandModel> model) {
             return MenuRef{
-                self.make_native<termin::gui_native::Menu>(std::move(model))};
+                document_make_native<termin::gui_native::Menu>(self, std::move(model))};
           },
           nb::arg("model") = nullptr)
       .def("create_menu_bar",
-           [](Document &self) {
-             return MenuBarRef{self.make_native<termin::gui_native::MenuBar>()};
+           [](termin::gui_native::TcDocument &self) {
+             return MenuBarRef{
+                 document_make_native<termin::gui_native::MenuBar>(self)};
            })
       .def(
           "create_dialog",
-          [](Document &self, const std::string &title) {
+          [](termin::gui_native::TcDocument &self, const std::string &title) {
             return DialogRef{
-                self.make_native<termin::gui_native::Dialog>(title)};
+                document_make_native<termin::gui_native::Dialog>(self, title)};
           },
           nb::arg("title") = "")
       .def(
           "create_message_box",
-          [](Document &self, const std::string &title,
+          [](termin::gui_native::TcDocument &self, const std::string &title,
              const std::string &message,
              termin::gui_native::MessageBoxKind kind) {
             return MessageBoxRef{
-                self.make_native<termin::gui_native::MessageBox>(title, message,
+                document_make_native<termin::gui_native::MessageBox>(self, title, message,
                                                                  kind)};
           },
           nb::arg("title"), nb::arg("message"),
           nb::arg("kind") = termin::gui_native::MessageBoxKind::Information)
       .def(
           "create_input_dialog",
-          [](Document &self, const std::string &title,
+          [](termin::gui_native::TcDocument &self, const std::string &title,
              const std::string &message, const std::string &value) {
             return InputDialogRef{
-                self.make_native<termin::gui_native::InputDialog>(
+                document_make_native<termin::gui_native::InputDialog>(self,
                     title, message, value)};
           },
           nb::arg("title"), nb::arg("message") = "", nb::arg("value") = "")
       .def(
           "create_file_dialog",
-          [](Document &self, termin::gui_native::FileDialogMode mode) {
+          [](termin::gui_native::TcDocument &self, termin::gui_native::FileDialogMode mode) {
             return FileDialogOverlayRef{
-                self.make_native<termin::gui_native::FileDialogOverlay>(mode)};
+                document_make_native<termin::gui_native::FileDialogOverlay>(self, mode)};
           },
           nb::arg("mode"))
       .def(
           "create_color_picker",
-          [](Document &self,
+          [](termin::gui_native::TcDocument &self,
              std::shared_ptr<termin::gui_native::ColorPickerModel> model) {
             return ColorPickerRef{
-                self.make_native<termin::gui_native::ColorPicker>(
+                document_make_native<termin::gui_native::ColorPicker>(self,
                     std::move(model))};
           },
           nb::arg("model") = nullptr)
       .def(
           "create_color_dialog",
-          [](Document &self, std::optional<tc_ui_color> initial,
+          [](termin::gui_native::TcDocument &self, std::optional<tc_ui_color> initial,
              bool show_alpha, const std::string &title) {
             const tc_ui_color resolved_initial =
                 initial.value_or(tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f});
             return ColorDialogRef{
-                self.make_native<termin::gui_native::ColorDialog>(
+                document_make_native<termin::gui_native::ColorDialog>(self,
                     termin::gui_native::Color{
                         resolved_initial.r, resolved_initial.g,
                         resolved_initial.b, resolved_initial.a},
@@ -603,24 +611,24 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
           nb::arg("title") = "Color Picker")
       .def(
           "create_tree_widget",
-          [](Document &self,
+          [](termin::gui_native::TcDocument &self,
              std::shared_ptr<termin::gui_native::TreeModel> model,
              std::shared_ptr<termin::gui_native::TreeExpansionModel>
                  expansion) {
             return TreeWidgetRef{
-                self.make_native<termin::gui_native::TreeWidget>(
+                document_make_native<termin::gui_native::TreeWidget>(self,
                     std::move(model), std::move(expansion))};
           },
           nb::arg("model") = nullptr, nb::arg("expansion") = nullptr)
       .def(
           "create_tree_table_widget",
-          [](Document &self,
+          [](termin::gui_native::TcDocument &self,
              std::shared_ptr<termin::gui_native::TreeTableModel> model,
              std::shared_ptr<termin::gui_native::TableColumnModel> columns,
              std::shared_ptr<termin::gui_native::TreeExpansionModel>
                  expansion) {
             return TreeTableWidgetRef{
-                self.make_native<termin::gui_native::TreeTableWidget>(
+                document_make_native<termin::gui_native::TreeTableWidget>(self,
                     std::move(model), std::move(columns),
                     std::move(expansion))};
           },
@@ -628,189 +636,190 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
           nb::arg("expansion") = nullptr)
       .def(
           "create_table_widget",
-          [](Document &self,
+          [](termin::gui_native::TcDocument &self,
              std::shared_ptr<termin::gui_native::TableModel> model,
              std::shared_ptr<termin::gui_native::TableColumnModel> columns) {
             return TableWidgetRef{
-                self.make_native<termin::gui_native::TableWidget>(
+                document_make_native<termin::gui_native::TableWidget>(self,
                     std::move(model), std::move(columns))};
           },
           nb::arg("model") = nullptr, nb::arg("columns") = nullptr)
       .def("create_combo_box",
-           [](Document &self) {
+           [](termin::gui_native::TcDocument &self) {
              return ComboBoxRef{
-                 self.make_native<termin::gui_native::ComboBox>()};
+                 document_make_native<termin::gui_native::ComboBox>(self)};
            })
       .def(
           "create_icon_button",
-          [](Document &self, const std::string &icon) {
+          [](termin::gui_native::TcDocument &self, const std::string &icon) {
             return IconButtonRef{
-                self.make_native<termin::gui_native::IconButton>(icon)};
+                document_make_native<termin::gui_native::IconButton>(self, icon)};
           },
           nb::arg("icon") = "")
       .def(
           "create_progress_bar",
-          [](Document &self, float value) {
+          [](termin::gui_native::TcDocument &self, float value) {
             return ProgressBarRef{
-                self.make_native<termin::gui_native::ProgressBar>(value)};
+                document_make_native<termin::gui_native::ProgressBar>(self, value)};
           },
           nb::arg("value") = 0.0f)
       .def("create_image_widget",
-           [](Document &self) {
+           [](termin::gui_native::TcDocument &self) {
              return ImageWidgetRef{
-                 self.make_native<termin::gui_native::ImageWidget>()};
+                 document_make_native<termin::gui_native::ImageWidget>(self)};
            })
       .def("create_canvas",
-           [](Document &self) {
-             return CanvasRef{self.make_native<termin::gui_native::Canvas>()};
+           [](termin::gui_native::TcDocument &self) {
+             return CanvasRef{
+                 document_make_native<termin::gui_native::Canvas>(self)};
            })
       .def(
           "layout_roots",
-          [](Document &self, tc_ui_rect rect) {
-            tc_ui_document_layout_roots(self.get(), rect);
-            self.throw_pending_exception();
+          [](termin::gui_native::TcDocument &self, tc_ui_rect rect) {
+            tc_ui_document_layout_roots(checked_document_handle(self), rect);
+            throw_pending_document_exception(self);
           },
           nb::arg("rect"))
       .def(
           "paint_roots",
-          [](Document &self, PaintContext &context) {
-            tc_ui_document_paint_roots(self.get(), context.get());
-            self.throw_pending_exception();
+          [](termin::gui_native::TcDocument &self, PaintContext &context) {
+            tc_ui_document_paint_roots(checked_document_handle(self), context.get());
+            throw_pending_document_exception(self);
           },
           nb::arg("context"))
       .def(
           "paint",
-          [](Document &self, PaintContext &context) {
-            tc_ui_document_paint(self.get(), context.get());
-            self.throw_pending_exception();
+          [](termin::gui_native::TcDocument &self, PaintContext &context) {
+            tc_ui_document_paint(checked_document_handle(self), context.get());
+            throw_pending_document_exception(self);
           },
           nb::arg("context"))
       .def(
           "show_overlay",
-          [](Document &self, WidgetHandle handle, uint32_t flags) {
+          [](termin::gui_native::TcDocument &self, WidgetHandle handle, uint32_t flags) {
             bool shown =
-                tc_ui_document_show_overlay(self.get(), handle.handle, flags);
-            self.throw_pending_exception();
+                tc_ui_document_show_overlay(checked_document_handle(self), handle.handle, flags);
+            throw_pending_document_exception(self);
             return shown;
           },
           nb::arg("handle"), nb::arg("flags") = 0)
       .def(
           "dismiss_overlay",
-          [](Document &self, WidgetHandle handle,
+          [](termin::gui_native::TcDocument &self, WidgetHandle handle,
              tc_ui_overlay_dismiss_reason reason) {
             bool dismissed = tc_ui_document_dismiss_overlay(
-                self.get(), handle.handle, reason);
-            self.throw_pending_exception();
+                checked_document_handle(self), handle.handle, reason);
+            throw_pending_document_exception(self);
             return dismissed;
           },
           nb::arg("handle"),
           nb::arg("reason") = TC_UI_OVERLAY_DISMISS_PROGRAMMATIC)
       .def_prop_ro("overlay_count",
-                   [](const Document &self) {
-                     return tc_ui_document_overlay_count(self.get());
+                   [](const termin::gui_native::TcDocument &self) {
+                     return tc_ui_document_overlay_count(checked_document_handle(self));
                    })
       .def(
           "overlay_at",
-          [](const Document &self, size_t index) {
-            return WidgetHandle{tc_ui_document_overlay_at(self.get(), index)};
+          [](const termin::gui_native::TcDocument &self, size_t index) {
+            return WidgetHandle{tc_ui_document_overlay_at(checked_document_handle(self), index)};
           },
           nb::arg("index"))
       .def(
           "overlay_flags_at",
-          [](const Document &self, size_t index) {
-            return tc_ui_document_overlay_flags_at(self.get(), index);
+          [](const termin::gui_native::TcDocument &self, size_t index) {
+            return tc_ui_document_overlay_flags_at(checked_document_handle(self), index);
           },
           nb::arg("index"))
       .def(
           "hit_test",
-          [](Document &self, float x, float y) {
-            tc_widget_handle handle = tc_ui_document_hit_test(self.get(), x, y);
-            self.throw_pending_exception();
+          [](termin::gui_native::TcDocument &self, float x, float y) {
+            tc_widget_handle handle = tc_ui_document_hit_test(checked_document_handle(self), x, y);
+            throw_pending_document_exception(self);
             return WidgetHandle{handle};
           },
           nb::arg("x"), nb::arg("y"))
       .def(
           "dispatch_pointer_event",
-          [](Document &self, const tc_ui_pointer_event &event) {
+          [](termin::gui_native::TcDocument &self, const tc_ui_pointer_event &event) {
             tc_ui_event_result result =
-                tc_ui_document_dispatch_pointer_event(self.get(), &event);
-            self.throw_pending_exception();
+                tc_ui_document_dispatch_pointer_event(checked_document_handle(self), &event);
+            throw_pending_document_exception(self);
             return result;
           },
           nb::arg("event"))
       .def(
           "dispatch_key_event",
-          [](Document &self, const tc_ui_key_event &event) {
+          [](termin::gui_native::TcDocument &self, const tc_ui_key_event &event) {
             tc_ui_event_result result =
-                tc_ui_document_dispatch_key_event(self.get(), &event);
-            self.throw_pending_exception();
+                tc_ui_document_dispatch_key_event(checked_document_handle(self), &event);
+            throw_pending_document_exception(self);
             return result;
           },
           nb::arg("event"))
       .def(
           "dispatch_text_event",
-          [](Document &self, const std::string &text) {
+          [](termin::gui_native::TcDocument &self, const std::string &text) {
             const tc_ui_text_event event{text.c_str()};
             tc_ui_event_result result =
-                tc_ui_document_dispatch_text_event(self.get(), &event);
-            self.throw_pending_exception();
+                tc_ui_document_dispatch_text_event(checked_document_handle(self), &event);
+            throw_pending_document_exception(self);
             return result;
           },
           nb::arg("text"))
       .def_prop_ro("hovered_widget",
-                   [](const Document &self) {
+                   [](const termin::gui_native::TcDocument &self) {
                      return WidgetHandle{
-                         tc_ui_document_hovered_widget(self.get())};
+                         tc_ui_document_hovered_widget(checked_document_handle(self))};
                    })
       .def_prop_ro("cursor_intent",
-                   [](const Document &self) {
-                     return tc_ui_document_cursor_intent(self.get());
+                   [](const termin::gui_native::TcDocument &self) {
+                     return tc_ui_document_cursor_intent(checked_document_handle(self));
                    })
       .def_prop_ro("pointer_capture",
-                   [](const Document &self) {
+                   [](const termin::gui_native::TcDocument &self) {
                      return WidgetHandle{
-                         tc_ui_document_pointer_capture(self.get())};
+                         tc_ui_document_pointer_capture(checked_document_handle(self))};
                    })
       .def_prop_ro("pressed_widget",
-                   [](const Document &self) {
+                   [](const termin::gui_native::TcDocument &self) {
                      return WidgetHandle{
-                         tc_ui_document_pressed_widget(self.get())};
+                         tc_ui_document_pressed_widget(checked_document_handle(self))};
                    })
       .def(
           "set_pointer_capture",
-          [](Document &self, WidgetHandle handle) {
-            return tc_ui_document_set_pointer_capture(self.get(),
+          [](termin::gui_native::TcDocument &self, WidgetHandle handle) {
+            return tc_ui_document_set_pointer_capture(checked_document_handle(self),
                                                       handle.handle);
           },
           nb::arg("handle"))
       .def(
           "release_pointer_capture",
-          [](Document &self, WidgetHandle handle) {
-            return tc_ui_document_release_pointer_capture(self.get(),
+          [](termin::gui_native::TcDocument &self, WidgetHandle handle) {
+            return tc_ui_document_release_pointer_capture(checked_document_handle(self),
                                                           handle.handle);
           },
           nb::arg("handle"))
       .def_prop_ro("focused_widget",
-                   [](const Document &self) {
+                   [](const termin::gui_native::TcDocument &self) {
                      return WidgetHandle{
-                         tc_ui_document_focused_widget(self.get())};
+                         tc_ui_document_focused_widget(checked_document_handle(self))};
                    })
       .def(
           "set_focus",
-          [](Document &self, WidgetHandle handle) {
-            return tc_ui_document_set_focus(self.get(), handle.handle);
+          [](termin::gui_native::TcDocument &self, WidgetHandle handle) {
+            return tc_ui_document_set_focus(checked_document_handle(self), handle.handle);
           },
           nb::arg("handle"))
       .def(
           "clear_focus",
-          [](Document &self, WidgetHandle handle) {
-            return tc_ui_document_clear_focus(self.get(), handle.handle);
+          [](termin::gui_native::TcDocument &self, WidgetHandle handle) {
+            return tc_ui_document_clear_focus(checked_document_handle(self), handle.handle);
           },
           nb::arg("handle"))
       .def("focus_next",
-           [](Document &self) { return tc_ui_document_focus_next(self.get()); })
-      .def("focus_previous", [](Document &self) {
-        return tc_ui_document_focus_previous(self.get());
+           [](termin::gui_native::TcDocument &self) { return tc_ui_document_focus_next(checked_document_handle(self)); })
+      .def("focus_previous", [](termin::gui_native::TcDocument &self) {
+        return tc_ui_document_focus_previous(checked_document_handle(self));
       });
 
   nb::class_<termin::gui_native::UiDrawListRenderer>(m, "DrawListRenderer")
@@ -820,8 +829,8 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
            nb::arg("path"), nb::arg("default_size_px") = 14)
       .def(
           "bind_text_measurer",
-          [](termin::gui_native::UiDrawListRenderer &self, Document &document) {
-            self.bind_text_measurer(document.get());
+          [](termin::gui_native::UiDrawListRenderer &self, termin::gui_native::TcDocument &document) {
+            self.bind_text_measurer(checked_document_handle(document));
           },
           nb::arg("document"), nb::keep_alive<2, 1>())
       .def(

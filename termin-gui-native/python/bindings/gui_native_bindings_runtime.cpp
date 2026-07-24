@@ -8,8 +8,7 @@ namespace termin::gui_native::python_bindings {
 namespace {
 
 std::mutex g_document_states_mutex;
-std::unordered_map<uint64_t, std::weak_ptr<DocumentState>>
-    g_document_states;
+std::unordered_map<uint64_t, std::shared_ptr<DocumentState>> g_document_states;
 
 uint64_t document_key(tc_ui_document_handle handle) {
   return (static_cast<uint64_t>(handle.index) << 32) | handle.generation;
@@ -211,7 +210,30 @@ void unregister_document_state(tc_ui_document_handle document) {
 std::shared_ptr<DocumentState> find_document_state(tc_ui_document_handle document) {
   std::lock_guard<std::mutex> lock(g_document_states_mutex);
   const auto found = g_document_states.find(document_key(document));
-  return found == g_document_states.end() ? nullptr : found->second.lock();
+  return found == g_document_states.end() ? nullptr : found->second;
+}
+
+tc_ui_document_handle
+checked_document_handle(const termin::gui_native::TcDocument &document) {
+  if (!document.valid()) {
+    throw std::runtime_error("native UI document handle is stale or invalid");
+  }
+  return document.handle();
+}
+
+std::shared_ptr<DocumentState>
+require_document_state(const termin::gui_native::TcDocument &document) {
+  const tc_ui_document_handle handle = checked_document_handle(document);
+  if (auto state = find_document_state(handle)) {
+    return state;
+  }
+  auto state = std::make_shared<DocumentState>();
+  state->document = handle;
+  state->clipboard_getter = nb::none();
+  state->clipboard_setter = nb::none();
+  state->cursor_changed_handler = nb::none();
+  register_document_state(state);
+  return state;
 }
 
 bool WidgetRef::alive() const {
@@ -710,112 +732,53 @@ bool deserialize_python_registered_widget(tc_widget *widget,
   }
 }
 
-Document::Document()
-    : state_(std::make_shared<DocumentState>()),
-      owned_document_(std::make_unique<termin::gui_native::Document>()),
-      native_document_(owned_document_.get()), clipboard_getter_(nb::none()),
-      clipboard_setter_(nb::none()), cursor_changed_handler_(nb::none()) {
-  state_->document = native_document_->get();
-  register_document_state(state_);
-}
-
-Document::Document(termin::gui_native::Document &document)
-    : state_(std::make_shared<DocumentState>()), native_document_(&document),
-      clipboard_getter_(nb::none()), clipboard_setter_(nb::none()),
-      cursor_changed_handler_(nb::none()) {
-  state_->document = native_document_->get();
-  if (tc_ui_document_handle_is_invalid(state_->document))
-    throw std::runtime_error("cannot bind a closed native UI document");
-  register_document_state(state_);
-}
-
-Document::~Document() {
-  try {
-    close();
-  } catch (const std::exception &error) {
-    tc_log_error("[termin-gui-native/python] Document finalization failed: %s",
-                 error.what());
-  } catch (...) {
-    tc_log_error(
-        "[termin-gui-native/python] Document finalization failed with unknown exception");
-  }
-}
-
-void Document::close() {
-  if (state_ && !tc_ui_document_handle_is_invalid(state_->document)) {
-    const tc_ui_document_handle document = state_->document;
-    if (native_document().active_window_host_count() != 0) {
-      native_document().close();
-    }
-    tc_ui_document_set_cursor_changed_callback(document, nullptr, nullptr);
-    native_document().close();
-    unregister_document_state(document);
-    state_->document = tc_ui_document_handle_invalid();
-    state_->pending_exception = nullptr;
-  }
-}
-
-void Document::invalidate_borrowed() noexcept {
-  if (!state_ || tc_ui_document_handle_is_invalid(state_->document))
-    return;
-  unregister_document_state(state_->document);
-  state_->document = tc_ui_document_handle_invalid();
-  state_->pending_exception = nullptr;
-  native_document_ = nullptr;
-}
-
-tc_ui_document_handle Document::get() const {
-  if (is_closed())
-    throw std::runtime_error("native UI document is closed");
-  return state_->document;
-}
-
-termin::gui_native::Document &Document::native_document() const {
-  if (!native_document_ || is_closed())
-    throw std::runtime_error("native UI document is closed");
-  return *native_document_;
-}
-
-bool Document::is_closed() const {
-  return !state_ || tc_ui_document_handle_is_invalid(state_->document);
-}
-
-WidgetHandle Document::adopt(nb::object object, const std::string &debug_name) {
-  auto widget = std::make_unique<PythonWidget>(object, debug_name, state_);
+WidgetHandle document_adopt(termin::gui_native::TcDocument document,
+                            nb::object object,
+                            const std::string &debug_name) {
+  const auto state = require_document_state(document);
+  const tc_ui_document_handle handle_document =
+      checked_document_handle(document);
+  auto widget = std::make_unique<PythonWidget>(object, debug_name, state);
   tc_widget_handle handle = tc_ui_document_adopt_widget(
-      get(), &widget->widget, &PythonWidget::delete_widget);
+      handle_document, &widget->widget, &PythonWidget::delete_widget);
   if (tc_widget_handle_is_invalid(handle)) {
     throw std::runtime_error("failed to adopt Python widget");
   }
   PythonWidget *adopted_widget = widget.release();
   try {
-    object.attr("_bind_native")(WidgetRef{state_, handle});
+    object.attr("_bind_native")(WidgetRef{state, handle});
     adopted_widget->callbacks_enabled = true;
   } catch (...) {
-    tc_ui_document_destroy_widget(get(), handle);
+    tc_ui_document_destroy_widget(handle_document, handle);
     throw;
   }
   return WidgetHandle{handle};
 }
 
-WidgetRef Document::ref(WidgetHandle handle) const {
-  return WidgetRef{state_, handle.handle};
+WidgetRef document_ref(termin::gui_native::TcDocument document,
+                       WidgetHandle handle) {
+  return WidgetRef{require_document_state(document), handle.handle};
 }
 
-WidgetRef Document::create_registered_widget(const std::string &type_name) {
+WidgetRef document_create_registered_widget(
+    termin::gui_native::TcDocument document,
+    const std::string &type_name) {
+  const auto state = require_document_state(document);
   const tc_widget_handle handle =
-      tc_ui_document_create_registered_widget(get(), type_name.c_str());
-  throw_pending_exception();
+      tc_ui_document_create_registered_widget(
+          checked_document_handle(document), type_name.c_str());
+  throw_pending_document_exception(document);
   if (tc_widget_handle_is_invalid(handle)) {
     throw std::runtime_error("failed to create registered widget type '" +
                              type_name + "'");
   }
-  return WidgetRef{state_, handle};
+  return WidgetRef{state, handle};
 }
 
-nb::object Document::serialize() {
-  tc_value value = tc_ui_document_serialize(get());
-  throw_pending_exception();
+nb::object document_serialize(termin::gui_native::TcDocument document) {
+  tc_value value =
+      tc_ui_document_serialize(checked_document_handle(document));
+  throw_pending_document_exception(document);
   if (value.type != TC_VALUE_DICT) {
     throw std::runtime_error("failed to serialize native UI document");
   }
@@ -829,81 +792,116 @@ nb::object Document::serialize() {
   }
 }
 
-void Document::restore(nb::object serialized) {
+void document_restore(termin::gui_native::TcDocument document,
+                      nb::object serialized) {
   tc_value value = python_to_tc_value(std::move(serialized));
-  bool restored = tc_ui_document_restore(get(), &value);
+  bool restored =
+      tc_ui_document_restore(checked_document_handle(document), &value);
   tc_value_free(&value);
-  throw_pending_exception();
+  throw_pending_document_exception(document);
   if (!restored) {
     throw std::runtime_error("failed to restore native UI document");
   }
 }
 
-void Document::throw_pending_exception() {
-  if (state_->pending_exception) {
-    std::exception_ptr exception = state_->pending_exception;
-    state_->pending_exception = nullptr;
+void throw_pending_document_exception(
+    termin::gui_native::TcDocument document) {
+  const auto state = require_document_state(document);
+  if (state->pending_exception) {
+    std::exception_ptr exception = state->pending_exception;
+    state->pending_exception = nullptr;
     std::rethrow_exception(exception);
   }
 }
 
-void Document::set_clipboard_handlers(nb::object getter, nb::object setter) {
-  clipboard_getter_ = std::move(getter);
-  clipboard_setter_ = std::move(setter);
-  tc_ui_document_set_clipboard(
-      get(), clipboard_getter_.is_none() ? nullptr : &Document::clipboard_get,
-      clipboard_setter_.is_none() ? nullptr : &Document::clipboard_set, this);
-}
+namespace {
 
-void Document::set_cursor_changed_handler(nb::object handler) {
-  cursor_changed_handler_ = std::move(handler);
-  tc_ui_document_set_cursor_changed_callback(
-      get(), cursor_changed_handler_.is_none() ? nullptr : &Document::cursor_changed,
-      cursor_changed_handler_.is_none() ? nullptr : this);
-}
-
-void Document::cursor_changed(void *user_data, tc_ui_cursor_intent cursor) {
-  auto *self = static_cast<Document *>(user_data);
+void document_cursor_changed(void *user_data, tc_ui_cursor_intent cursor) {
+  auto *state = static_cast<DocumentState *>(user_data);
   try {
     nb::gil_scoped_acquire gil;
-    self->cursor_changed_handler_(cursor);
+    state->cursor_changed_handler(cursor);
   } catch (...) {
-    if (!self->state_->pending_exception) {
-      self->state_->pending_exception = std::current_exception();
+    if (!state->pending_exception) {
+      state->pending_exception = std::current_exception();
     }
     tc_log_error("[termin-gui-native/python] cursor changed handler failed");
   }
 }
 
-const char *Document::clipboard_get(void *user_data) {
-  auto *self = static_cast<Document *>(user_data);
+const char *document_clipboard_get(void *user_data) {
+  auto *state = static_cast<DocumentState *>(user_data);
   try {
     nb::gil_scoped_acquire gil;
-    self->clipboard_buffer_ = nb::cast<std::string>(self->clipboard_getter_());
-    return self->clipboard_buffer_.c_str();
+    state->clipboard_buffer =
+        nb::cast<std::string>(state->clipboard_getter());
+    return state->clipboard_buffer.c_str();
   } catch (...) {
-    if (!self->state_->pending_exception) {
-      self->state_->pending_exception = std::current_exception();
+    if (!state->pending_exception) {
+      state->pending_exception = std::current_exception();
     }
     tc_log_error("[termin-gui-native/python] clipboard getter failed");
     return nullptr;
   }
 }
 
-bool Document::clipboard_set(void *user_data, const char *text,
-                             size_t byte_length) {
-  auto *self = static_cast<Document *>(user_data);
+bool document_clipboard_set(void *user_data, const char *text,
+                            size_t byte_length) {
+  auto *state = static_cast<DocumentState *>(user_data);
   try {
     nb::gil_scoped_acquire gil;
-    self->clipboard_setter_(std::string(text ? text : "", byte_length));
+    state->clipboard_setter(
+        std::string(text ? text : "", byte_length));
     return true;
   } catch (...) {
-    if (!self->state_->pending_exception) {
-      self->state_->pending_exception = std::current_exception();
+    if (!state->pending_exception) {
+      state->pending_exception = std::current_exception();
     }
     tc_log_error("[termin-gui-native/python] clipboard setter failed");
     return false;
   }
+}
+
+} // namespace
+
+void set_document_clipboard_handlers(
+    termin::gui_native::TcDocument document, nb::object getter,
+    nb::object setter) {
+  const auto state = require_document_state(document);
+  state->clipboard_getter = std::move(getter);
+  state->clipboard_setter = std::move(setter);
+  tc_ui_document_set_clipboard(
+      checked_document_handle(document),
+      state->clipboard_getter.is_none() ? nullptr : &document_clipboard_get,
+      state->clipboard_setter.is_none() ? nullptr : &document_clipboard_set,
+      state.get());
+}
+
+void set_document_cursor_changed_handler(
+    termin::gui_native::TcDocument document, nb::object handler) {
+  const auto state = require_document_state(document);
+  state->cursor_changed_handler = std::move(handler);
+  tc_ui_document_set_cursor_changed_callback(
+      checked_document_handle(document),
+      state->cursor_changed_handler.is_none() ? nullptr
+                                               : &document_cursor_changed,
+      state->cursor_changed_handler.is_none() ? nullptr : state.get());
+}
+
+void release_document_state(termin::gui_native::TcDocument document) {
+  if (tc_ui_document_handle_is_invalid(document.handle())) {
+    return;
+  }
+  if (document.valid()) {
+    tc_ui_document_set_cursor_changed_callback(
+        document.handle(), nullptr, nullptr);
+    tc_ui_document_set_clipboard(document.handle(), nullptr, nullptr, nullptr);
+  }
+  if (const auto state = find_document_state(document.handle())) {
+    state->document = tc_ui_document_handle_invalid();
+    state->pending_exception = nullptr;
+  }
+  unregister_document_state(document.handle());
 }
 
 nb::object snapshot_handle_or_none(tc_widget_handle handle) {
@@ -911,8 +909,9 @@ nb::object snapshot_handle_or_none(tc_widget_handle handle) {
                                              : nb::cast(WidgetHandle{handle});
 }
 
-nb::dict document_snapshot_to_python(const Document &document) {
-  DocumentSnapshot snapshot(document.get());
+nb::dict document_snapshot_to_python(
+    const termin::gui_native::TcDocument &document) {
+  DocumentSnapshot snapshot(checked_document_handle(document));
   nb::dict result;
   nb::list widgets;
   for (const tc_ui_widget_snapshot &widget : snapshot.widgets()) {

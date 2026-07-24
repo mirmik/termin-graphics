@@ -67,7 +67,7 @@ inline bool test_text_measure(void *, const char *text, size_t byte_length,
   return true;
 }
 
-inline void install_test_text_measurer(Document &document) {
+inline void install_test_text_measurer(TcDocument document) {
   document.set_text_measurer(&test_text_measure, nullptr);
 }
 
@@ -88,7 +88,7 @@ inline bool test_clipboard_set(void *user_data, const char *text, size_t byte_le
   return true;
 }
 
-inline void install_test_clipboard(Document &document, TestClipboard &clipboard) {
+inline void install_test_clipboard(TcDocument document, TestClipboard &clipboard) {
   document.set_clipboard(&test_clipboard_get, &test_clipboard_set, &clipboard);
 }
 

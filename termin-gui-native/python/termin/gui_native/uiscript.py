@@ -17,7 +17,9 @@ import yaml
 
 from termin.gui_native._gui_native import (
     Color,
-    Document,
+    TcDocument,
+    tc_ui_document_create,
+    tc_ui_document_destroy,
     OverlayAnchor,
     Point,
     Size,
@@ -58,7 +60,7 @@ class UiScriptDescription:
 
 @dataclass(frozen=True)
 class _WidgetType:
-    factory: Callable[[Document, UiScriptNode], Any]
+    factory: Callable[[TcDocument, UiScriptNode], Any]
     properties: frozenset[str]
     container: bool
 
@@ -81,7 +83,7 @@ class UiScriptRegistry:
     def register(
         self,
         type_name: str,
-        factory: Callable[[Document, UiScriptNode], Any],
+        factory: Callable[[TcDocument, UiScriptNode], Any],
         *,
         properties: set[str] | frozenset[str] = frozenset(),
         container: bool = False,
@@ -330,16 +332,18 @@ class LoadedUiScript:
 
     def __init__(
         self,
-        document: Document,
+        document: TcDocument,
         description: UiScriptDescription,
         root: MaterializedWidget,
         widgets: Mapping[str, MaterializedWidget],
+        owns_document: bool = False,
     ) -> None:
         self.document = document
         self.description = description
         self.root = root
         self._widgets = MappingProxyType(dict(widgets))
         self._closed = False
+        self._owns_document = owns_document
 
     @property
     def widgets(self) -> Mapping[str, MaterializedWidget]:
@@ -357,6 +361,8 @@ class LoadedUiScript:
         self._closed = True
         if self.root.widget.alive:
             self.document.destroy_widget_recursive(self.root.widget.handle)
+        if self._owns_document:
+            tc_ui_document_destroy(self.document)
 
     def __enter__(self) -> "LoadedUiScript":
         return self
@@ -372,7 +378,7 @@ class UiScriptLoader:
         self.registry = registry or default_uiscript_registry()
         self.parser = UiScriptParser(self.registry)
 
-    def load(self, path: str | Path, document: Document | None = None) -> LoadedUiScript:
+    def load(self, path: str | Path, document: TcDocument | None = None) -> LoadedUiScript:
         source_path = Path(path)
         try:
             source = source_path.read_text(encoding="utf-8")
@@ -385,7 +391,7 @@ class UiScriptLoader:
         self,
         source: str,
         *,
-        document: Document | None = None,
+        document: TcDocument | None = None,
         source_name: str = "<string>",
     ) -> LoadedUiScript:
         try:
@@ -399,9 +405,10 @@ class UiScriptLoader:
         self,
         description: UiScriptDescription,
         *,
-        document: Document | None = None,
+        document: TcDocument | None = None,
     ) -> LoadedUiScript:
-        target = document or Document()
+        owns_document = document is None
+        target = document if document is not None else tc_ui_document_create()
         adopted: list[Any] = []
         named: dict[str, MaterializedWidget] = {}
 
@@ -472,14 +479,18 @@ class UiScriptLoader:
             root = build(description.root)
             if not target.add_root(root.widget.handle):
                 raise _fail(description.root.source_path, "native document rejected root")
-            return LoadedUiScript(target, description, root, named)
+            return LoadedUiScript(target, description, root, named, owns_document=owns_document)
         except Exception:
             for widget in reversed(adopted):
                 if widget.alive:
                     target.destroy_widget_recursive(widget.handle)
+            if owns_document:
+                tc_ui_document_destroy(target)
             raise
 
     def reload(self, loaded: LoadedUiScript, source: str) -> LoadedUiScript:
         replacement = self.load_string(source, document=loaded.document, source_name="<reload>")
+        replacement._owns_document = loaded._owns_document
+        loaded._owns_document = False
         loaded.close()
         return replacement

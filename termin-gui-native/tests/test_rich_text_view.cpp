@@ -1,3 +1,4 @@
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/widgets.hpp>
 
 #include <cassert>
@@ -90,7 +91,8 @@ void test_model_owns_structured_utf8_and_parses_small_html_subset() {
 }
 
 void test_view_wrap_keeps_model_text_and_copy_selection_stable() {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     document.set_text_measurer(&measure_text, nullptr);
     Clipboard clipboard;
     document.set_clipboard(nullptr, &set_clipboard, &clipboard);
@@ -119,10 +121,12 @@ void test_view_wrap_keeps_model_text_and_copy_selection_stable() {
     assert(view->model()->text() == "short");
     assert(tc_ui_document_destroy_widget_recursive(document.get(), handle));
     assert(!tc_ui_document_is_alive(document.get(), handle));
+    tc_ui_document_destroy(document_handle);
 }
 
 void test_view_paint_scrollbar_capture_and_styled_commands() {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     document.set_text_measurer(&measure_text, nullptr);
     auto model = std::make_shared<RichTextModel>();
     RichTextStyle bold;
@@ -162,6 +166,7 @@ void test_view_paint_scrollbar_capture_and_styled_commands() {
 
     tc_ui_paint_context_destroy(context);
     tc_ui_draw_list_destroy(draw_list);
+    tc_ui_document_destroy(document_handle);
 }
 
 } // namespace

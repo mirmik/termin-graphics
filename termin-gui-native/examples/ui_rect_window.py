@@ -10,12 +10,13 @@ import tgfx
 from termin.display import WindowedGraphicsSession, quit_sdl
 from termin.gui_native import (
     Color,
-    Document,
+    tc_ui_document_create,
     DrawList,
     DrawListRenderer,
     PaintContext,
     Point,
     Rect,
+    tc_ui_document_destroy,
     Widget,
 )
 
@@ -68,13 +69,14 @@ def main() -> int:
     if not tgfx.configure_default_shader_runtime("termin-gui-native-example"):
         return 77
 
+    document = None
     try:
         runtime = WindowedGraphicsSession.create_native()
         window = runtime.create_window("termin-gui-native Python rectangle example", 800, 600)
         graphics = tgfx.Tgfx2Context.from_runtime(runtime.graphics)
         context = graphics.context
 
-        document = Document()
+        document = tc_ui_document_create()
         document.adopt_root(DemoWidget(), "DemoWidget")
         draw_list = DrawList()
         paint_context = PaintContext(draw_list)
@@ -137,6 +139,9 @@ def main() -> int:
         ):
             return 77
         return 1
+    finally:
+        if document is not None:
+            tc_ui_document_destroy(document)
 
 
 if __name__ == "__main__":

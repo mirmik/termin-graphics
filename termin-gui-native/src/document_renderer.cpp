@@ -58,7 +58,7 @@ tgfx::TextureHandle create_color_target(
 struct DocumentRenderer::Impl {
     DocumentRenderer* facade;
     tgfx::GraphicsHost* graphics;
-    Document* document;
+    TcDocument document;
     DocumentRendererConfig config;
     DocumentFrameSink* frame_sink;
     DocumentPlatformServices* platform;
@@ -79,15 +79,15 @@ struct DocumentRenderer::Impl {
     bool closed = false;
 
     Impl(DocumentRenderer& renderer_facade, tgfx::GraphicsHost& graphics_ref,
-         Document& document_ref, DocumentRendererConfig renderer_config,
+         TcDocument document_ref, DocumentRendererConfig renderer_config,
          DocumentFrameSink& sink, DocumentPlatformServices& services)
-        : facade(&renderer_facade), graphics(&graphics_ref), document(&document_ref),
+        : facade(&renderer_facade), graphics(&graphics_ref), document(document_ref),
           config(std::move(renderer_config)), frame_sink(&sink), platform(&services),
           device(&graphics_ref.device()), context(&graphics_ref.context()),
           draw_list(tc_ui_draw_list_create()),
           paint_context(tc_ui_paint_context_create(draw_list.get())) {
-        if (!document->valid()) {
-            renderer_error("DocumentRenderer requires a live Document");
+        if (!document.valid()) {
+            renderer_error("DocumentRenderer requires a live TcDocument");
         }
         if (config.font_path.empty()) {
             renderer_error("DocumentRenderer requires a resolved font path");
@@ -100,14 +100,13 @@ struct DocumentRenderer::Impl {
                 "DocumentRenderer failed to load UI font: " + config.font_path);
         }
 
-        document->attach_application_host();
         try {
             if (!platform->set_text_input_enabled(config.enable_text_input)) {
                 renderer_error("DocumentRenderer platform rejected text-input configuration");
             }
-            renderer.bind_text_measurer(document->get());
-            document->set_clipboard(&clipboard_get, &clipboard_set, this);
-            document->set_cursor_changed_callback(&cursor_changed, this);
+            renderer.bind_text_measurer(document.handle());
+            document.set_clipboard(&clipboard_get, &clipboard_set, this);
+            document.set_cursor_changed_callback(&cursor_changed, this);
             texture_leases = std::make_shared<GuiApplicationHostLeaseState>();
             texture_leases->request_repaint = [this]() {
                 facade->request_repaint();
@@ -115,16 +114,15 @@ struct DocumentRenderer::Impl {
             texture_leases->graphics = graphics;
             texture_leases->document = document;
         } catch (...) {
-            document->set_cursor_changed_callback(nullptr, nullptr);
-            document->set_clipboard(nullptr, nullptr, nullptr);
-            document->set_text_measurer(nullptr, nullptr);
+            document.set_cursor_changed_callback(nullptr, nullptr);
+            document.set_clipboard(nullptr, nullptr, nullptr);
+            document.set_text_measurer(nullptr, nullptr);
             try {
                 platform->set_text_input_enabled(false);
             } catch (...) {
                 tc_log_error(
                     "[gui-native-document-renderer] failed to roll back text input");
             }
-            document->detach_application_host();
             throw;
         }
     }
@@ -182,8 +180,8 @@ struct DocumentRenderer::Impl {
     }
 
     void require_open(const char* operation) const {
-        if (closed || !graphics || graphics->is_closed() || !document ||
-            !document->valid() || !frame_sink || !platform) {
+        if (closed || !graphics || graphics->is_closed() ||
+            !document.valid() || !frame_sink || !platform) {
             renderer_error(
                 std::string("DocumentRenderer::") + operation +
                 " called after dependency shutdown");
@@ -208,8 +206,8 @@ struct DocumentRenderer::Impl {
 
     void close() {
         if (closed) return;
-        if (!document || !document->valid()) {
-            renderer_error("Document must outlive DocumentRenderer");
+        if (!document.valid()) {
+            renderer_error("TcDocument must outlive DocumentRenderer");
         }
         if (!graphics || graphics->is_closed()) {
             renderer_error("GraphicsHost must outlive DocumentRenderer");
@@ -229,8 +227,8 @@ struct DocumentRenderer::Impl {
             tc_log_error(
                 "[gui-native-document-renderer] text-input shutdown failed with unknown exception");
         }
-        document->set_cursor_changed_callback(nullptr, nullptr);
-        document->set_clipboard(nullptr, nullptr, nullptr);
+        document.set_cursor_changed_callback(nullptr, nullptr);
+        document.set_clipboard(nullptr, nullptr, nullptr);
         texture_leases->close_all();
         device->wait_idle();
         renderer.release_gpu();
@@ -239,9 +237,8 @@ struct DocumentRenderer::Impl {
             device->invalidate_render_target_cache();
             color_target = {};
         }
-        document->set_text_measurer(nullptr, nullptr);
-        document->detach_application_host();
-        document = nullptr;
+        document.set_text_measurer(nullptr, nullptr);
+        document = TcDocument{};
         frame_sink = nullptr;
         platform = nullptr;
         context = nullptr;
@@ -252,7 +249,7 @@ struct DocumentRenderer::Impl {
 };
 
 DocumentRenderer::DocumentRenderer(
-    tgfx::GraphicsHost& graphics, Document& document,
+    tgfx::GraphicsHost& graphics, TcDocument document,
     DocumentRendererConfig config, DocumentFrameSink& frame_sink,
     DocumentPlatformServices& platform_services)
     : impl_(std::make_unique<Impl>(
@@ -291,27 +288,22 @@ const tgfx::IRenderDevice& DocumentRenderer::device() const {
     return graphics().device();
 }
 
-Document& DocumentRenderer::document() {
+TcDocument DocumentRenderer::document() const {
     impl_->require_open("document");
-    return *impl_->document;
-}
-
-const Document& DocumentRenderer::document() const {
-    impl_->require_open("document");
-    return *impl_->document;
+    return impl_->document;
 }
 
 tc_ui_event_result DocumentRenderer::dispatch_pointer(
     const tc_ui_pointer_event& event) {
     impl_->require_open("dispatch_pointer");
-    const tc_ui_event_result result = impl_->document->dispatch_pointer_event(event);
+    const tc_ui_event_result result = impl_->document.dispatch_pointer_event(event);
     request_repaint();
     return result;
 }
 
 tc_ui_event_result DocumentRenderer::dispatch_key(const tc_ui_key_event& event) {
     impl_->require_open("dispatch_key");
-    const tc_ui_event_result result = impl_->document->dispatch_key_event(event);
+    const tc_ui_event_result result = impl_->document.dispatch_key_event(event);
     request_repaint();
     return result;
 }
@@ -319,7 +311,7 @@ tc_ui_event_result DocumentRenderer::dispatch_key(const tc_ui_key_event& event) 
 tc_ui_event_result DocumentRenderer::dispatch_text(const std::string& utf8) {
     impl_->require_open("dispatch_text");
     const tc_ui_text_event event{utf8.c_str()};
-    const tc_ui_event_result result = impl_->document->dispatch_text_event(event);
+    const tc_ui_event_result result = impl_->document.dispatch_text_event(event);
     request_repaint();
     return result;
 }
@@ -355,7 +347,7 @@ bool DocumentRenderer::render_frame() {
     for (auto iterator = impl_->color_pickers.begin();
          iterator != impl_->color_pickers.end();) {
         tc_widget* widget =
-            tc_ui_document_resolve_widget(impl_->document->get(), *iterator);
+            tc_ui_document_resolve_widget(impl_->document.handle(), *iterator);
         auto* picker = widget
             ? dynamic_cast<ColorPicker*>(static_cast<Widget*>(widget->body))
             : nullptr;
@@ -370,10 +362,10 @@ bool DocumentRenderer::render_frame() {
         ++iterator;
     }
     tc_ui_draw_list_clear(impl_->draw_list.get());
-    impl_->document->layout_roots(
+    impl_->document.layout_roots(
         tc_ui_rect{0.0f, 0.0f, static_cast<float>(width),
                    static_cast<float>(height)});
-    impl_->document->paint(impl_->paint_context.get());
+    impl_->document.paint(impl_->paint_context.get());
     impl_->context->begin_pass(
         impl_->color_target, tgfx::TextureHandle{},
         impl_->config.clear_color.data(), 1.0f, false);
@@ -395,9 +387,9 @@ void DocumentRenderer::set_before_frame_callback(
 
 void DocumentRenderer::register_color_picker(ColorPicker& picker) {
     impl_->require_open("register_color_picker");
-    if (!tc_ui_document_handle_eq(picker.document(), impl_->document->get())) {
+    if (!tc_ui_document_handle_eq(picker.document(), impl_->document.handle())) {
         renderer_error(
-            "DocumentRenderer cannot register a ColorPicker from another Document");
+            "DocumentRenderer cannot register a ColorPicker from another tc_ui_document");
     }
     const tc_widget_handle handle = picker.handle();
     if (std::none_of(

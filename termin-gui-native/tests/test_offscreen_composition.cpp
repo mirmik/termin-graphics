@@ -62,7 +62,7 @@ int main() {
             TC_UI_KEY_DOWN, TC_UI_KEY_A, 0, 0, false});
         composition.push_text("headless");
         if (composition.pump_input() != 2 || input->text() != "headless") {
-            std::fprintf(stderr, "normalized input did not reach the Document\n");
+            std::fprintf(stderr, "normalized input did not reach the tc_ui_document\n");
             return 1;
         }
 

@@ -1,8 +1,11 @@
+#include <termin/gui_native/tc_document.hpp>
+
 #include "widgets_test_support.hpp"
 
 namespace termin_gui_native_test {
 void test_box_layout_sets_child_bounds_and_paints() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &root = ui.make_root<BoxLayout>(Orientation::Vertical, "root");
@@ -35,10 +38,13 @@ void test_box_layout_sets_child_bounds_and_paints() {
 
   tc_ui_paint_context_destroy(paint_context);
   tc_ui_draw_list_destroy(draw_list);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_widget_metadata_is_owned_and_exposed() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   std::string debug_name = "initial-debug";
@@ -64,10 +70,13 @@ void test_widget_metadata_is_owned_and_exposed() {
   root.set_name({});
   assert(root.name() == nullptr);
   assert(tc_widget_name(root.c_widget()) == nullptr);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_dirty_flags_track_layout_paint_and_state_changes() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
@@ -99,10 +108,13 @@ void test_dirty_flags_track_layout_paint_and_state_changes() {
   slider.clear_dirty(TC_WIDGET_DIRTY_STATE);
   assert(!slider.has_dirty_flags(TC_WIDGET_DIRTY_STATE));
   assert(slider.has_dirty_flags(TC_WIDGET_DIRTY_PAINT));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_box_layout_child_policies_allocate_primary_axis() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
@@ -131,10 +143,13 @@ void test_box_layout_child_policies_allocate_primary_axis() {
   assert(near(flex_one.bounds().width, 80.0f));
   assert(near(flex_two.bounds().x, 160.0f));
   assert(near(flex_two.bounds().width, 140.0f));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_hstack_vstack_wrappers_use_expected_orientation() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &root = ui.make_root<VStack>("root-vstack");
@@ -154,10 +169,13 @@ void test_hstack_vstack_wrappers_use_expected_orientation() {
   assert(near(bottom.bounds().y, row.bounds().height));
   assert(near(left.bounds().x, 0.0f));
   assert(near(right.bounds().x, left.bounds().width));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_grid_layout_tracks_spans_and_hit_test() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &grid = ui.make_root<GridLayout>("grid");
@@ -193,10 +211,13 @@ void test_grid_layout_tracks_spans_and_hit_test() {
   assert(near(bottom.bounds().height, 66.0f));
   assert(
       tc_widget_handle_eq(document.hit_test(125.0f, 35.0f), bottom.handle()));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_grid_layout_recursive_destroy_children() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &grid = ui.make_root<GridLayout>("grid");
@@ -209,10 +230,13 @@ void test_grid_layout_recursive_destroy_children() {
   assert(
       tc_ui_document_destroy_widget_recursive(document.get(), grid.handle()));
   assert(tc_ui_document_live_widget_count(document.get()) == 0);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_group_box_lays_out_content_and_routes_hit_test() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &group = ui.make_root<GroupBox>("Settings");
@@ -237,10 +261,13 @@ void test_group_box_lays_out_content_and_routes_hit_test() {
   assert(count_commands(draw_list, TC_UI_DRAW_POP_CLIP) == 2);
   tc_ui_paint_context_destroy(paint_context);
   tc_ui_draw_list_destroy(draw_list);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_group_box_recursive_destroy_content() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &group = ui.make_root<GroupBox>("Settings");
@@ -251,10 +278,13 @@ void test_group_box_recursive_destroy_content() {
   assert(
       tc_ui_document_destroy_widget_recursive(document.get(), group.handle()));
   assert(tc_ui_document_live_widget_count(document.get()) == 0);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_splitter_layout_drag_and_hit_test() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &splitter = ui.make_root<Splitter>(Orientation::Horizontal, "splitter");
@@ -305,10 +335,13 @@ void test_splitter_layout_drag_and_hit_test() {
   event.type = TC_UI_POINTER_UP;
   assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_HANDLED);
   assert(tc_widget_handle_is_invalid(document.pointer_capture()));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_splitter_recursive_destroy_children() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &splitter = ui.make_root<Splitter>(Orientation::Vertical, "splitter");
@@ -321,10 +354,13 @@ void test_splitter_recursive_destroy_children() {
   assert(tc_ui_document_destroy_widget_recursive(document.get(),
                                                  splitter.handle()));
   assert(tc_ui_document_live_widget_count(document.get()) == 0);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_scroll_area_lays_out_content_with_clip_and_scroll() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &scroll = ui.make_root<ScrollArea>("scroll");
@@ -365,10 +401,13 @@ void test_scroll_area_lays_out_content_with_clip_and_scroll() {
 
   tc_ui_paint_context_destroy(paint_context);
   tc_ui_draw_list_destroy(draw_list);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_scroll_area_can_fit_content_to_disabled_scroll_axis() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &scroll = ui.make_root<ScrollArea>("scroll");
@@ -387,10 +426,13 @@ void test_scroll_area_can_fit_content_to_disabled_scroll_axis() {
   scroll.set_scroll(50.0f, 40.0f);
   assert(near(scroll.scroll_x(), 0.0f));
   assert(near(scroll.scroll_y(), 40.0f));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_scroll_area_wheel_clamps_and_recursive_destroy_content() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &scroll = ui.make_root<ScrollArea>("scroll");
@@ -416,10 +458,13 @@ void test_scroll_area_wheel_clamps_and_recursive_destroy_content() {
   assert(
       tc_ui_document_destroy_widget_recursive(document.get(), scroll.handle()));
   assert(tc_ui_document_live_widget_count(document.get()) == 0);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_tab_view_switches_selected_page_and_clips_paint() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &tabs = ui.make_root<TabView>("tabs");
@@ -461,10 +506,13 @@ void test_tab_view_switches_selected_page_and_clips_paint() {
   assert(saw_body_clip);
   tc_ui_paint_context_destroy(paint_context);
   tc_ui_draw_list_destroy(draw_list);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_tab_view_recursive_destroy_pages() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &tabs = ui.make_root<TabView>("tabs");
@@ -477,10 +525,13 @@ void test_tab_view_recursive_destroy_pages() {
   assert(
       tc_ui_document_destroy_widget_recursive(document.get(), tabs.handle()));
   assert(tc_ui_document_live_widget_count(document.get()) == 0);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_tab_view_page_mutation_and_selection_signal() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &tabs = ui.make_root<TabView>("tabs");
@@ -502,10 +553,13 @@ void test_tab_view_page_mutation_and_selection_signal() {
   assert(tabs.selected_index() == 0);
   assert(second.parent_widget() == nullptr);
   assert((selected == std::vector<size_t>{1, 0}));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_box_layout_shrinks_flexible_children_before_overflowing() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
@@ -527,10 +581,13 @@ void test_box_layout_shrinks_flexible_children_before_overflowing() {
   assert(near(stretch_one.bounds().width, 25.0f));
   assert(near(stretch_two.bounds().x, 155.0f));
   assert(near(stretch_two.bounds().width, 25.0f));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_box_layout_respects_child_extent_limits() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
@@ -547,10 +604,13 @@ void test_box_layout_respects_child_extent_limits() {
   assert(near(capped.bounds().width, 80.0f));
   assert(near(uncapped.bounds().x, 80.0f));
   assert(near(uncapped.bounds().width, 220.0f));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_box_layout_allows_preferred_overflow_when_no_child_can_shrink() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
@@ -565,10 +625,13 @@ void test_box_layout_allows_preferred_overflow_when_no_child_can_shrink() {
   assert(near(first.bounds().width, 80.0f));
   assert(near(second.bounds().x, 80.0f));
   assert(near(second.bounds().width, 60.0f));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_document_hit_test_returns_deepest_child() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
@@ -583,10 +646,13 @@ void test_document_hit_test_returns_deepest_child() {
   assert(
       tc_widget_handle_eq(document.hit_test(150.0f, 10.0f), second.handle()));
   assert(tc_widget_handle_is_invalid(document.hit_test(250.0f, 10.0f)));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_document_hit_test_prefers_topmost_root() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &bottom = ui.make_root<Panel>("bottom-root");
@@ -598,10 +664,13 @@ void test_document_hit_test_prefers_topmost_root() {
   assert(tc_widget_handle_eq(document.hit_test(20.0f, 20.0f), top.handle()));
   assert(
       !tc_widget_handle_eq(document.hit_test(20.0f, 20.0f), bottom.handle()));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_box_layout_hit_test_skips_stale_child_handles() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
@@ -613,10 +682,13 @@ void test_box_layout_hit_test_skips_stale_child_handles() {
   assert(tc_ui_document_destroy_widget(document.get(), child_handle));
 
   assert(tc_widget_handle_eq(document.hit_test(10.0f, 10.0f), root.handle()));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_pointer_dispatch_updates_hovered_widget() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
@@ -641,10 +713,13 @@ void test_pointer_dispatch_updates_hovered_widget() {
   event.x = 240.0f;
   document.dispatch_pointer_event(event);
   assert(tc_widget_handle_is_invalid(document.hovered_widget()));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_pointer_capture_routes_events_outside_bounds_until_release() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
@@ -674,10 +749,13 @@ void test_pointer_capture_routes_events_outside_bounds_until_release() {
   assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_HANDLED);
   assert(probe.up_count == 1);
   assert(tc_widget_handle_is_invalid(document.pointer_capture()));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_destroy_clears_hover_and_pointer_capture() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
@@ -696,10 +774,13 @@ void test_destroy_clears_hover_and_pointer_capture() {
   assert(tc_ui_document_destroy_widget(document.get(), probe.handle()));
   assert(tc_widget_handle_is_invalid(document.hovered_widget()));
   assert(tc_widget_handle_is_invalid(document.pointer_capture()));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_focus_and_key_text_dispatch_follow_focused_widget() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
@@ -736,10 +817,13 @@ void test_focus_and_key_text_dispatch_follow_focused_widget() {
   assert(tc_widget_handle_is_invalid(document.focused_widget()));
   assert(document.dispatch_key_event(key) == TC_UI_EVENT_IGNORED);
   assert(focusable.key_count == 1);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_focus_api_rejects_non_focusable_and_clears_on_destroy() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
 
   auto &focusable = ui.make_root<FocusProbe>();
@@ -756,10 +840,13 @@ void test_focus_api_rejects_non_focusable_and_clears_on_destroy() {
   assert(document.set_focus(focusable));
   assert(tc_ui_document_destroy_widget(document.get(), focusable.handle()));
   assert(tc_widget_handle_is_invalid(document.focused_widget()));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_recursive_destroy_removes_container_children() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
   auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
   auto &child = ui.make<Panel>("child");
@@ -771,10 +858,13 @@ void test_recursive_destroy_removes_container_children() {
   assert(tc_ui_document_live_widget_count(document.get()) == 0);
   assert(!tc_ui_document_is_alive(document.get(), root.handle()));
   assert(!tc_ui_document_is_alive(document.get(), child.handle()));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_controls_handle_pointer_events() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
   auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
   auto &checkbox = ui.make<Checkbox>(false);
@@ -811,10 +901,13 @@ void test_controls_handle_pointer_events() {
   slider_event.type = TC_UI_POINTER_UP;
   assert(document.dispatch_pointer_event(slider_event) == TC_UI_EVENT_HANDLED);
   assert(tc_widget_handle_is_invalid(document.pointer_capture()));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_separator_layout_and_paint_command() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
   auto &root = ui.make_root<BoxLayout>(Orientation::Vertical, "root");
   root.set_padding(EdgeInsets{});
@@ -842,10 +935,13 @@ void test_separator_layout_and_paint_command() {
   assert(saw_fill);
   tc_ui_paint_context_destroy(paint_context);
   tc_ui_draw_list_destroy(draw_list);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_text_input_focus_text_edit_and_submit() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
@@ -900,10 +996,13 @@ void test_text_input_focus_text_edit_and_submit() {
   key.key = TC_UI_KEY_ENTER;
   assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
   assert(submitted == 1);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_text_widgets_clip_text_paint() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto &root = ui.make_root<BoxLayout>(Orientation::Vertical, "root");
@@ -949,10 +1048,13 @@ void test_text_widgets_clip_text_paint() {
 
   tc_ui_paint_context_destroy(paint_context);
   tc_ui_draw_list_destroy(draw_list);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_text_measurement_uses_proportional_metrics() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto &narrow = ui.make<Label>("iii", 20.0f);
@@ -966,10 +1068,13 @@ void test_text_measurement_uses_proportional_metrics() {
   assert(near(wide_size.width, 54.0f));
   assert(wide_size.width > narrow_size.width * 3.0f);
   assert(near(narrow_size.height, 24.0f));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_text_input_edits_utf8_at_codepoint_boundaries() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   const std::string initial = "a\xc3\xa9\xf0\x9f\x99\x82"
@@ -1009,10 +1114,13 @@ void test_text_input_edits_utf8_at_codepoint_boundaries() {
   invalid.text = "\xc3(";
   assert(document.dispatch_text_event(invalid) == TC_UI_EVENT_IGNORED);
   assert(input.text() == "a\xf0\x9f\x99\x82\xc3\xa9");
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_text_input_scrolls_to_keep_caret_inside_clip() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto &input = ui.make_root<TextInput>("WWWWWWWWWWWW");
@@ -1049,10 +1157,13 @@ void test_text_input_scrolls_to_keep_caret_inside_clip() {
 
   tc_ui_paint_context_destroy(paint_context);
   tc_ui_draw_list_destroy(draw_list);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_text_input_utf8_selection_and_host_clipboard() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   TestClipboard clipboard;
   install_test_clipboard(document, clipboard);
@@ -1097,10 +1208,13 @@ void test_text_input_utf8_selection_and_host_clipboard() {
   assert(count_commands(draw_list, TC_UI_DRAW_FILL_RECT) >= 1);
   tc_ui_paint_context_destroy(context);
   tc_ui_draw_list_destroy(draw_list);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_text_area_multiline_utf8_editing_navigation_and_scroll() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   TestClipboard clipboard;
   install_test_clipboard(document, clipboard);
@@ -1155,10 +1269,13 @@ void test_text_area_multiline_utf8_editing_navigation_and_scroll() {
   assert(count_commands(draw_list, TC_UI_DRAW_POP_CLIP) == 1);
   tc_ui_paint_context_destroy(context);
   tc_ui_draw_list_destroy(draw_list);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_spin_box_numeric_edit_buttons_and_keys() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   TestClipboard clipboard;
   install_test_clipboard(document, clipboard);
@@ -1223,10 +1340,13 @@ void test_spin_box_numeric_edit_buttons_and_keys() {
   assert(!spin.editing());
   assert(near(spin.value(), 7.5f));
   assert(changes == 2);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_slider_edit_owns_canonical_children_and_syncs_values() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto &edit = ui.make_root<SliderEdit>(2.0f);
@@ -1255,10 +1375,13 @@ void test_slider_edit_owns_canonical_children_and_syncs_values() {
   const tc_widget_handle root_handle = edit.handle();
   assert(tc_ui_document_destroy_widget_recursive(document.get(), root_handle));
   assert(tc_ui_document_live_widget_count(document.get()) == 0);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_combo_box_overlay_selection_and_destruction() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto &combo = ui.make_root<ComboBox>();
@@ -1308,10 +1431,13 @@ void test_combo_box_overlay_selection_and_destruction() {
       tc_ui_document_destroy_widget_recursive(document.get(), combo.handle()));
   assert(!tc_ui_document_is_alive(document.get(), popup_handle));
   assert(tc_ui_document_live_widget_count(document.get()) == 0);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_icon_image_and_canvas_media_contracts() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   install_test_text_measurer(document);
   DocumentBuilder ui(document);
   auto &root = ui.make_root<VStack>("media-root");
@@ -1403,10 +1529,13 @@ void test_icon_image_and_canvas_media_contracts() {
   assert(
       tc_ui_document_destroy_widget_recursive(document.get(), root.handle()));
   assert(tc_ui_document_live_widget_count(document.get()) == 0);
+
+  tc_ui_document_destroy(document_handle);
 }
 
 void test_widget_signals_are_emitted_from_interactions() {
-  Document document;
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
   DocumentBuilder ui(document);
   auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
   auto &button = ui.make<Button>("Run");
@@ -1479,6 +1608,8 @@ void test_widget_signals_are_emitted_from_interactions() {
   event.type = TC_UI_POINTER_UP;
   assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_HANDLED);
   assert(tc_widget_handle_is_invalid(document.pointer_capture()));
+
+  tc_ui_document_destroy(document_handle);
 }
 
 

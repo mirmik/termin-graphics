@@ -10,7 +10,8 @@ from termin.display import WindowedGraphicsSession
 from termin.gui_native import _gui_native
 from termin.gui_native import (
     CanvasTextureLayer,
-    Document,
+    tc_ui_document_create,
+    tc_ui_document_destroy,
     DynamicTextureLease,
     DynamicTextureOwnership,
     GuiWindowHost,
@@ -22,12 +23,11 @@ from termin.gui_native import (
 )
 
 
-def test_application_host_types_are_public_and_document_close_is_idempotent():
-    document = Document()
-    assert not document.closed
-    document.close()
-    document.close()
-    assert document.closed
+def test_application_host_types_are_public_and_document_destroy_is_explicit():
+    document = tc_ui_document_create()
+    assert document.valid
+    tc_ui_document_destroy(document)
+    assert not document.valid
     assert GuiWindowHost.__module__ == "termin.gui_native._gui_native"
     assert GuiWindowAdapter.__module__ == "termin.gui_native._gui_native"
     assert not hasattr(_gui_native, "PythonGuiWindowAdapter")
@@ -48,6 +48,7 @@ def test_offscreen_application_renders_reads_pixels_and_accepts_synthetic_input(
         height=48,
         continuous_rendering=False,
     )
+    document = application.document
     assert application.frame_generation == 0
     assert application.render_frame()
     assert application.frame_generation == 1
@@ -81,7 +82,7 @@ def test_offscreen_application_renders_reads_pixels_and_accepts_synthetic_input(
     application.close()
     assert application.closed
     assert lease.closed
-    assert application.document.closed
+    assert not document.valid
 
 
 def test_installed_sdk_offscreen_python_consumer_without_display():
@@ -175,7 +176,7 @@ def test_installed_sdk_offscreen_cpp_consumer_without_display(tmp_path):
 )
 def test_gui_window_host_lifecycle_keepalive_and_cross_thread_access():
     session = WindowedGraphicsSession.create_native()
-    document = Document()
+    document = tc_ui_document_create()
     host = GuiWindowHost(
         session,
         document,
@@ -185,8 +186,7 @@ def test_gui_window_host_lifecycle_keepalive_and_cross_thread_access():
         continuous_rendering=False,
     )
 
-    with pytest.raises(RuntimeError, match="GuiWindowHost"):
-        document.close()
+    assert document.valid
     with pytest.raises(RuntimeError, match="presentation windows"):
         session.close()
 
@@ -198,12 +198,13 @@ def test_gui_window_host_lifecycle_keepalive_and_cross_thread_access():
 
     # The binding owns Python references to both borrowed C++ owners.
     del session
-    del document
     assert host.tick()
 
     host.close()
     host.close()
     assert host.closed
+    tc_ui_document_destroy(document)
+    assert not document.valid
     with pytest.raises(RuntimeError, match="closed"):
         host.tick()
 
@@ -222,7 +223,7 @@ def test_standalone_application_exposes_document_and_ordered_close():
     document = application.document
     host = application.window_host
 
-    assert not document.closed
+    assert document.valid
     assert not host.closed
     host.request_repaint()
     assert application.tick()
@@ -230,7 +231,7 @@ def test_standalone_application_exposes_document_and_ordered_close():
     application.close()
     application.close()
     assert application.closed
-    assert document.closed
+    assert not document.valid
     assert host.closed
 
 

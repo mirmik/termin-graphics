@@ -380,7 +380,7 @@ WindowCursor InMemoryGuiPlatformServices::cursor() const {
 
 struct GuiApplicationHost::Impl {
     GuiApplicationHost* facade = nullptr;
-    Document* document = nullptr;
+    TcDocument document;
     GuiApplicationConfig config;
     tgfx::GraphicsHost* graphics = nullptr;
     GuiFrameEndpoint* frame_endpoint = nullptr;
@@ -446,16 +446,16 @@ struct GuiApplicationHost::Impl {
         }
     }
 
-    Impl(GuiApplicationHost& host, tgfx::GraphicsHost& graphics_ref, Document& document_ref,
+    Impl(GuiApplicationHost& host, tgfx::GraphicsHost& graphics_ref, TcDocument document_ref,
          GuiApplicationConfig host_config, GuiFrameEndpoint& endpoint, GuiInputSource& input,
          GuiPlatformServices& platform)
-        : facade(&host), document(&document_ref), config(std::move(host_config)),
+        : facade(&host), document(document_ref), config(std::move(host_config)),
           graphics(&graphics_ref), frame_endpoint(&endpoint), input_source(&input),
           platform_services(&platform), draw_list(tc_ui_draw_list_create()),
           paint_context(tc_ui_paint_context_create(draw_list.get())) {
         resolve_gui_application_config(config);
-        if (!document->valid()) {
-            host_error("GuiApplicationHost requires a live Document");
+        if (!document.valid()) {
+            host_error("GuiApplicationHost requires a live TcDocument");
         }
         device = &graphics->device();
         context = &graphics->context();
@@ -471,15 +471,14 @@ struct GuiApplicationHost::Impl {
         if (!renderer.set_default_font_path(config.font_path, config.font_size)) {
             host_error("GuiApplicationHost failed to load UI font: " + config.font_path);
         }
-        document->attach_application_host();
         try {
             if (!platform_services->set_text_input_enabled(config.enable_text_input)) {
                 host_error("GuiApplicationHost platform service rejected text-input "
                            "configuration");
             }
-            renderer.bind_text_measurer(document->get());
-            document->set_clipboard(&clipboard_get, &clipboard_set, this);
-            document->set_cursor_changed_callback(&cursor_changed, this);
+            renderer.bind_text_measurer(document.get());
+            document.set_clipboard(&clipboard_get, &clipboard_set, this);
+            document.set_cursor_changed_callback(&cursor_changed, this);
             texture_leases = std::make_shared<GuiApplicationHostLeaseState>();
             texture_leases->request_repaint = [this]() {
                 facade->request_repaint();
@@ -487,22 +486,21 @@ struct GuiApplicationHost::Impl {
             texture_leases->graphics = graphics;
             texture_leases->document = document;
         } catch (...) {
-            document->set_cursor_changed_callback(nullptr, nullptr);
-            document->set_clipboard(nullptr, nullptr, nullptr);
-            document->set_text_measurer(nullptr, nullptr);
+            document.set_cursor_changed_callback(nullptr, nullptr);
+            document.set_clipboard(nullptr, nullptr, nullptr);
+            document.set_text_measurer(nullptr, nullptr);
             try {
                 platform_services->set_text_input_enabled(false);
             } catch (...) {
                 tc_log_error("[gui-native-host] failed to roll back text-input configuration");
             }
-            document->detach_application_host();
             throw;
         }
     }
 
     void require_open(const char* operation) const {
         if (!closed && frame_endpoint && input_source && platform_services && graphics &&
-            !graphics->is_closed() && document && document->valid()) {
+            !graphics->is_closed() && document.valid()) {
             return;
         }
         const std::string message =
@@ -531,9 +529,9 @@ struct GuiApplicationHost::Impl {
 
     void close() {
         if (closed) return;
-        if (!document || !document->valid()) {
-            tc_log_error("[gui-native-host] Document was closed before GuiApplicationHost");
-            throw std::logic_error("GuiApplicationHost requires Document to outlive it");
+        if (!document.valid()) {
+            tc_log_error("[gui-native-host] TcDocument was destroyed before GuiApplicationHost");
+            throw std::logic_error("GuiApplicationHost requires tc_ui_document to outlive it");
         }
         if (!graphics || graphics->is_closed()) {
             tc_log_error("[gui-native-host] GraphicsHost was closed before "
@@ -558,8 +556,8 @@ struct GuiApplicationHost::Impl {
             tc_log_error("[gui-native-host] text-input shutdown failed with unknown "
                          "exception");
         }
-        document->set_cursor_changed_callback(nullptr, nullptr);
-        document->set_clipboard(nullptr, nullptr, nullptr);
+        document.set_cursor_changed_callback(nullptr, nullptr);
+        document.set_clipboard(nullptr, nullptr, nullptr);
         texture_leases->close_all();
         device->wait_idle();
         renderer.release_gpu();
@@ -568,9 +566,8 @@ struct GuiApplicationHost::Impl {
             device->invalidate_render_target_cache();
             color_target = {};
         }
-        document->set_text_measurer(nullptr, nullptr);
-        document->detach_application_host();
-        document = nullptr;
+        document.set_text_measurer(nullptr, nullptr);
+        document = TcDocument{};
         frame_endpoint = nullptr;
         input_source = nullptr;
         platform_services = nullptr;
@@ -581,7 +578,7 @@ struct GuiApplicationHost::Impl {
     }
 };
 
-GuiApplicationHost::GuiApplicationHost(tgfx::GraphicsHost& graphics, Document& document,
+GuiApplicationHost::GuiApplicationHost(tgfx::GraphicsHost& graphics, TcDocument document,
                                        GuiApplicationConfig config,
                                        GuiFrameEndpoint& frame_endpoint,
                                        GuiInputSource& input_source,
@@ -634,7 +631,7 @@ size_t GuiApplicationHost::pump_events() {
             consumed = impl_->event_interceptor(event);
         }
         if (!consumed) {
-            dispatch_window_event(*impl_->document, event);
+            dispatch_window_event(impl_->document, event);
         }
     }
     if (event_count > 0) request_repaint();
@@ -667,7 +664,7 @@ bool GuiApplicationHost::render_frame() {
     for (auto iterator = impl_->color_pickers.begin();
          iterator != impl_->color_pickers.end();) {
         tc_widget* widget =
-            tc_ui_document_resolve_widget(impl_->document->get(), *iterator);
+            tc_ui_document_resolve_widget(impl_->document.get(), *iterator);
         auto* picker =
             widget ? dynamic_cast<ColorPicker*>(static_cast<Widget*>(widget->body))
                    : nullptr;
@@ -681,9 +678,9 @@ bool GuiApplicationHost::render_frame() {
         ++iterator;
     }
     tc_ui_draw_list_clear(impl_->draw_list.get());
-    impl_->document->layout_roots(
+    impl_->document.layout_roots(
         tc_ui_rect{0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)});
-    impl_->document->paint(impl_->paint_context.get());
+    impl_->document.paint(impl_->paint_context.get());
     impl_->context->begin_pass(impl_->color_target, tgfx::TextureHandle{},
                                impl_->config.clear_color.data(), 1.0f, false);
     impl_->renderer.render(*impl_->context, impl_->draw_list.get(), width, height);
@@ -744,8 +741,8 @@ void GuiApplicationHost::set_frame_callbacks(
 
 void GuiApplicationHost::register_color_picker(ColorPicker& picker) {
     impl_->require_open("register_color_picker");
-    if (!tc_ui_document_handle_eq(picker.document(), impl_->document->get())) {
-        host_error("GuiApplicationHost cannot register a ColorPicker from another Document");
+    if (!tc_ui_document_handle_eq(picker.document(), impl_->document.get())) {
+        host_error("GuiApplicationHost cannot register a ColorPicker from another tc_ui_document");
     }
     const tc_widget_handle handle = picker.handle();
     if (std::none_of(impl_->color_pickers.begin(), impl_->color_pickers.end(),
@@ -924,7 +921,7 @@ class BackendWindowPlatformServices final : public GuiPlatformServices {
 } // namespace
 
 struct GuiWindowHost::Impl {
-    Document* document = nullptr;
+    TcDocument document;
     tgfx::GraphicsHost* graphics = nullptr;
     BackendWindowPtr window;
     std::unique_ptr<BackendWindowFrameEndpoint> frame_endpoint;
@@ -933,9 +930,9 @@ struct GuiWindowHost::Impl {
     std::unique_ptr<GuiApplicationHost> application_host;
     bool closed = false;
 
-    Impl(tgfx::GraphicsHost& graphics_ref, Document& document_ref, GuiWindowConfig config,
+    Impl(tgfx::GraphicsHost& graphics_ref, TcDocument document_ref, GuiWindowConfig config,
          BackendWindowPtr backend_window)
-        : document(&document_ref), graphics(&graphics_ref), window(std::move(backend_window)) {
+        : document(document_ref), graphics(&graphics_ref), window(std::move(backend_window)) {
         if (!window) {
             host_error("GuiWindowHost requires a non-null BackendWindow");
         }
@@ -946,7 +943,7 @@ struct GuiWindowHost::Impl {
         input_source = std::make_unique<BackendWindowInputSource>(*window);
         platform_services = std::make_unique<BackendWindowPlatformServices>(*window);
         application_host = std::make_unique<GuiApplicationHost>(
-            *graphics, *document, config.application_config(), *frame_endpoint, *input_source,
+            *graphics, document, config.application_config(), *frame_endpoint, *input_source,
             *platform_services);
     }
 
@@ -962,9 +959,9 @@ struct GuiWindowHost::Impl {
 
     void close() {
         if (closed) return;
-        if (!document || !document->valid()) {
-            tc_log_error("[gui-native-host] Document was closed before GuiWindowHost");
-            throw std::logic_error("GuiWindowHost requires Document to outlive it");
+        if (!document.valid()) {
+            tc_log_error("[gui-native-host] tc_ui_document was destroyed before GuiWindowHost");
+            throw std::logic_error("GuiWindowHost requires tc_ui_document to outlive it");
         }
         if (!graphics || graphics->is_closed()) {
             tc_log_error("[gui-native-host] GraphicsHost was closed before GuiWindowHost");
@@ -977,19 +974,19 @@ struct GuiWindowHost::Impl {
         frame_endpoint.reset();
         window->close();
         window.reset();
-        document = nullptr;
+        document = TcDocument{};
         graphics = nullptr;
         closed = true;
     }
 };
 
-GuiWindowHost::GuiWindowHost(WindowedGraphicsSession& graphics_session, Document& document,
+GuiWindowHost::GuiWindowHost(WindowedGraphicsSession& graphics_session, TcDocument document,
                              GuiWindowConfig config)
     : GuiWindowHost(graphics_session.graphics(), document, config,
                     graphics_session.create_window(config.window)) {
 }
 
-GuiWindowHost::GuiWindowHost(tgfx::GraphicsHost& graphics, Document& document,
+GuiWindowHost::GuiWindowHost(tgfx::GraphicsHost& graphics, TcDocument document,
                              GuiWindowConfig config, BackendWindowPtr window)
     : impl_(std::make_unique<Impl>(graphics, document, std::move(config), std::move(window))) {
 }
@@ -1118,7 +1115,8 @@ tgfx::TextureHandle GuiWindowHost::color_target() const {
 struct StandaloneGuiApplication::Impl {
     StandaloneGuiApplicationConfig config;
     std::unique_ptr<WindowedGraphicsSession> graphics_session;
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_handle_invalid();
+    TcDocument document;
     std::unique_ptr<GuiWindowHost> window_host;
     bool closed = false;
 
@@ -1127,7 +1125,20 @@ struct StandaloneGuiApplication::Impl {
         const termin::ShaderArtifactResolver resolver = resolve_standalone_config(config);
         graphics_session = create_native_windowed_graphics();
         graphics_session->graphics().configure_shader_artifacts(resolver);
-        window_host = std::make_unique<GuiWindowHost>(*graphics_session, document, config.gui);
+        document_handle = tc_ui_document_create();
+        if (tc_ui_document_handle_is_invalid(document_handle)) {
+            host_error("StandaloneGuiApplication failed to create tc_ui_document");
+        }
+        document = TcDocument(document_handle);
+        try {
+            window_host =
+                std::make_unique<GuiWindowHost>(*graphics_session, document, config.gui);
+        } catch (...) {
+            tc_ui_document_destroy(document_handle);
+            document = TcDocument{};
+            document_handle = tc_ui_document_handle_invalid();
+            throw;
+        }
     }
 
     void close() {
@@ -1136,7 +1147,11 @@ struct StandaloneGuiApplication::Impl {
             window_host->close();
             window_host.reset();
         }
-        document.close();
+        if (!tc_ui_document_handle_is_invalid(document_handle)) {
+            tc_ui_document_destroy(document_handle);
+            document = TcDocument{};
+            document_handle = tc_ui_document_handle_invalid();
+        }
         if (graphics_session) {
             graphics_session->close();
             graphics_session.reset();
@@ -1169,10 +1184,7 @@ WindowedGraphicsSession& StandaloneGuiApplication::graphics_session() {
 const WindowedGraphicsSession& StandaloneGuiApplication::graphics_session() const {
     return *impl_->graphics_session;
 }
-Document& StandaloneGuiApplication::document() {
-    return impl_->document;
-}
-const Document& StandaloneGuiApplication::document() const {
+TcDocument StandaloneGuiApplication::document() const {
     return impl_->document;
 }
 GuiWindowHost& StandaloneGuiApplication::window_host() {
@@ -1231,7 +1243,8 @@ class OffscreenFrameEndpoint final : public GuiFrameEndpoint {
 struct OffscreenGuiApplication::Impl {
     OffscreenGuiApplicationConfig config;
     std::unique_ptr<tgfx::GraphicsHost> graphics;
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_handle_invalid();
+    TcDocument document;
     QueuedGuiInputSource input_source;
     InMemoryGuiPlatformServices platform_services;
     std::unique_ptr<OffscreenFrameEndpoint> frame_endpoint;
@@ -1244,8 +1257,21 @@ struct OffscreenGuiApplication::Impl {
         graphics = tgfx::GraphicsHost::create_isolated(config.backend);
         graphics->configure_shader_artifacts(resolver);
         frame_endpoint = std::make_unique<OffscreenFrameEndpoint>(config.width, config.height);
-        application_host = std::make_unique<GuiApplicationHost>(
-            *graphics, document, config.gui, *frame_endpoint, input_source, platform_services);
+        document_handle = tc_ui_document_create();
+        if (tc_ui_document_handle_is_invalid(document_handle)) {
+            host_error("OffscreenGuiApplication failed to create tc_ui_document");
+        }
+        document = TcDocument(document_handle);
+        try {
+            application_host = std::make_unique<GuiApplicationHost>(
+                *graphics, document, config.gui, *frame_endpoint, input_source,
+                platform_services);
+        } catch (...) {
+            tc_ui_document_destroy(document_handle);
+            document = TcDocument{};
+            document_handle = tc_ui_document_handle_invalid();
+            throw;
+        }
     }
 
     void require_open(const char* operation) const {
@@ -1276,7 +1302,11 @@ struct OffscreenGuiApplication::Impl {
             application_host.reset();
         }
         if (frame_endpoint) frame_endpoint->clear_published_texture();
-        document.close();
+        if (!tc_ui_document_handle_is_invalid(document_handle)) {
+            tc_ui_document_destroy(document_handle);
+            document = TcDocument{};
+            document_handle = tc_ui_document_handle_invalid();
+        }
         if (graphics) {
             graphics->close();
             graphics.reset();
@@ -1312,11 +1342,7 @@ const tgfx::GraphicsHost& OffscreenGuiApplication::graphics() const {
     impl_->require_open("graphics");
     return *impl_->graphics;
 }
-Document& OffscreenGuiApplication::document() {
-    impl_->require_open("document");
-    return impl_->document;
-}
-const Document& OffscreenGuiApplication::document() const {
+TcDocument OffscreenGuiApplication::document() const {
     impl_->require_open("document");
     return impl_->document;
 }

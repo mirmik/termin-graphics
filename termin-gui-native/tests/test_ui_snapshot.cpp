@@ -1,3 +1,4 @@
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/document_snapshot.hpp>
 
 #include <cassert>
@@ -42,7 +43,8 @@ struct SnapshotWidget {
 };
 
 void test_empty_snapshot_has_explicit_empty_and_invalid_state() {
-    termin::gui_native::Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    termin::gui_native::TcDocument document(document_handle);
     termin::gui_native::DocumentSnapshot snapshot(document);
     assert(snapshot.widgets().empty());
     assert(snapshot.children().empty());
@@ -52,10 +54,12 @@ void test_empty_snapshot_has_explicit_empty_and_invalid_state() {
     assert(tc_widget_handle_is_invalid(snapshot.data().pressed));
     assert(tc_widget_handle_is_invalid(snapshot.data().pointer_capture));
     assert(tc_widget_handle_is_invalid(snapshot.data().focused));
+    tc_ui_document_destroy(document_handle);
 }
 
 void test_snapshot_copies_topology_metadata_and_interaction_state() {
-    termin::gui_native::Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    termin::gui_native::TcDocument document(document_handle);
     SnapshotWidget root("root-debug");
     SnapshotWidget child("child-debug");
     SnapshotWidget overlay("overlay-debug");
@@ -130,28 +134,26 @@ void test_snapshot_copies_topology_metadata_and_interaction_state() {
     assert(!tc_ui_document_is_alive(document.get(), root_handle));
     assert(std::strcmp(root_data->stable_id, "root-stable") == 0);
     assert(tc_widget_handle_eq(snapshot.children()[root_data->child_offset], child_handle));
+    tc_ui_document_destroy(document_handle);
 }
 
 void test_document_and_snapshot_move_lifetimes() {
-    termin::gui_native::Document source;
-    termin::gui_native::Document moved(std::move(source));
-    assert(tc_ui_document_handle_is_invalid(source.get()));
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    termin::gui_native::TcDocument source(document_handle);
+    termin::gui_native::TcDocument moved(std::move(source));
+    assert(!tc_ui_document_handle_is_invalid(source.get()));
     assert(!tc_ui_document_handle_is_invalid(moved.get()));
 
-    termin::gui_native::Document replacement;
-    replacement = std::move(moved);
-    assert(tc_ui_document_handle_is_invalid(moved.get()));
-    assert(!tc_ui_document_handle_is_invalid(replacement.get()));
-
-    termin::gui_native::DocumentSnapshot snapshot(replacement);
+    termin::gui_native::DocumentSnapshot snapshot(moved);
     termin::gui_native::DocumentSnapshot moved_snapshot(std::move(snapshot));
     assert(snapshot.widgets().empty());
     assert(moved_snapshot.widgets().empty());
 
-    termin::gui_native::DocumentSnapshot replacement_snapshot(replacement);
+    termin::gui_native::DocumentSnapshot replacement_snapshot(moved);
     replacement_snapshot = std::move(moved_snapshot);
     assert(moved_snapshot.widgets().empty());
     assert(replacement_snapshot.widgets().empty());
+    tc_ui_document_destroy(document_handle);
 }
 
 } // namespace

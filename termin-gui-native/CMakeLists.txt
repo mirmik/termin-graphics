@@ -44,7 +44,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
 
 add_library(termin_gui_native SHARED
-    src/document.cpp
+    src/tc_document.cpp
     src/document_snapshot.cpp
     src/draw_list_renderer.cpp
     src/showcase.cpp
@@ -257,7 +257,7 @@ if(NOT WIN32)
 endif()
 
 # Optional borrowed binding between one application-owned BackendWindow and
-# one native-widget Document. Applications opt into this target explicitly;
+# one native-widget tc_ui_document. Applications opt into this target explicitly;
 # neither termin-window nor the widget/document core depends on it.
 add_library(termin_gui_native_window_adapter SHARED
     src/window_adapter.cpp

@@ -1,3 +1,4 @@
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/widgets.hpp>
 
 #include <cassert>
@@ -71,7 +72,8 @@ void test_color_model_round_trip_and_revisions() {
 }
 
 void test_picker_surfaces_paint_and_pointer_capture() {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     document.set_text_measurer(&measure_text, nullptr);
     DocumentBuilder ui(document);
     auto model = std::make_shared<ColorPickerModel>(Color{1.0f, 0.0f, 0.0f, 1.0f}, true);
@@ -130,10 +132,12 @@ void test_picker_surfaces_paint_and_pointer_capture() {
     assert(near(model->alpha(), 0.0f));
     pointer.type = TC_UI_POINTER_UP;
     assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+    tc_ui_document_destroy(document_handle);
 }
 
 void test_color_dialog_typed_result_and_cancel() {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     document.set_text_measurer(&measure_text, nullptr);
     DocumentBuilder ui(document);
     auto& dialog = ui.make<ColorDialog>(Color{1.0f, 0.0f, 0.0f, 0.5f}, true);
@@ -151,6 +155,7 @@ void test_color_dialog_typed_result_and_cancel() {
     assert(dialog.show(document.get(), tc_ui_rect{0.0f, 0.0f, 640.0f, 480.0f}));
     assert(dialog.activate("cancel", document.get()));
     assert(results.size() == 2 && !results[1]);
+    tc_ui_document_destroy(document_handle);
 }
 
 } // namespace

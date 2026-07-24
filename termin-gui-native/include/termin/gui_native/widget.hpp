@@ -98,6 +98,3 @@ protected:
 };
 
 } // namespace termin::gui_native
-
-// Kept for source compatibility with existing consumers of widget.hpp.
-#include <termin/gui_native/document.hpp>

@@ -34,7 +34,9 @@ from termin.gui_native._gui_native import (  # noqa: E402
     Constraints,
     CanvasTextureLayer,
     CursorIntent,
-    Document,
+    TcDocument,
+    tc_ui_document_create,
+    tc_ui_document_destroy,
     DynamicTextureLease,
     DynamicTextureOwnership,
     Dialog,
@@ -199,7 +201,7 @@ class ViewportSurfaceHost(Protocol):
 
 
 class Widget:
-    """Base class for Python widgets adopted by ``Document``."""
+    """Base class for Python widgets adopted by ``TcDocument``."""
 
     debug_name: str | None = None
     _native: WidgetRef | None = None
@@ -360,7 +362,9 @@ __all__ = [
     "ComboBox",
     "Constraints",
     "CursorIntent",
-    "Document",
+    "TcDocument",
+    "tc_ui_document_create",
+    "tc_ui_document_destroy",
     "DynamicTextureLease",
     "DynamicTextureOwnership",
     "Dialog",

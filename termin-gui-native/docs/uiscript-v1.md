@@ -48,6 +48,6 @@ point to reach a lower sibling such as `Viewport3D`. Layout is recomputed from
 the current parent rectangle after every resize.
 
 `LoadedUiScript.close()` recursively destroys the owned root. Reload first
-builds a complete replacement tree in the same `Document`, then destroys the
+builds a complete replacement tree in the same `tc_ui_document`, then destroys the
 old tree. A parse, factory, property, or parenting failure destroys everything
 created by that attempt and leaves the previous loaded tree alive.

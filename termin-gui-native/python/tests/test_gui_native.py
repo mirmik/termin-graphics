@@ -5,11 +5,13 @@ from pathlib import Path
 
 import pytest
 
+import termin.gui_native as gui_native
 from termin.gui_native import (
     Color,
     Constraints,
     CursorIntent,
-    Document,
+    tc_ui_document_create,
+    tc_ui_document_destroy,
     DrawCommandType,
     DrawList,
     DrawListRenderer,
@@ -55,6 +57,13 @@ from termin.gui_native import (
 )
 
 
+def test_python_exposes_only_the_non_owning_tc_document_handle():
+    assert gui_native.TcDocument is not None
+    assert not hasattr(gui_native, "Document")
+    assert not hasattr(gui_native.TcDocument, "close")
+    assert not hasattr(gui_native.TcDocument, "__enter__")
+
+
 def _bundled_font_path() -> Path:
     sdk_root = os.environ.get("TERMIN_SDK")
     if not sdk_root:
@@ -86,7 +95,7 @@ class DemoWidget(Widget):
 
 
 def test_python_native_showcase_builds_stable_headless_snapshot():
-    document = Document()
+    document = tc_ui_document_create()
     showcase = build_python_showcase(document)
     renderer = DrawListRenderer()
     assert renderer.set_default_font_path(str(_bundled_font_path()), 14)
@@ -119,7 +128,7 @@ def test_python_native_showcase_builds_stable_headless_snapshot():
 
 
 def test_python_box_layout_policies_padding_spacing_and_limits():
-    document = Document()
+    document = tc_ui_document_create()
     root = document.create_vstack("policy-root")
     fixed = document.create_label("Fixed")
     preferred = document.create_label("Preferred")
@@ -172,7 +181,7 @@ def test_python_registered_widget_type_identity_lifetime_and_reload():
         assert has_widget_type(type_name)
         assert type_name in registered_widget_types()
 
-        document = Document()
+        document = tc_ui_document_create()
         parent = document.create_registered_widget(type_name)
         child = document.create_registered_widget(type_name)
         stale_handle = parent.handle
@@ -217,7 +226,7 @@ def test_python_registered_widget_constructor_failure_rolls_back():
     assert unregister_widget_type(type_name)
     try:
         register_widget_type(type_name, fail_factory, owner="test.python")
-        document = Document()
+        document = tc_ui_document_create()
         with pytest.raises(RuntimeError, match="registered constructor failed"):
             document.create_registered_widget(type_name)
         assert document.live_widget_count == 0
@@ -259,8 +268,8 @@ def test_python_widget_owner_reload_invalidates_nested_trees_and_stale_refs():
         del parent_factory
         del sibling_factory
 
-        first_document = Document()
-        second_document = Document()
+        first_document = tc_ui_document_create()
+        second_document = tc_ui_document_create()
         parent = first_document.create_registered_widget(parent_type)
         foreign_child = first_document.create_registered_widget(foreign_type)
         sibling = second_document.create_registered_widget(sibling_type)
@@ -296,7 +305,7 @@ def test_python_widget_owner_reload_invalidates_nested_trees_and_stale_refs():
 
 
 def test_python_document_inspect_snapshot_is_neutral_and_independent():
-    document = Document()
+    document = tc_ui_document_create()
     root = Widget()
     child = Widget()
     overlay = Widget()
@@ -380,7 +389,7 @@ def test_python_registered_widget_document_serialization_round_trip_and_rollback
             serialize_state=serialize_state,
             deserialize_state=deserialize_state,
         )
-        source = Document()
+        source = tc_ui_document_create()
         parent = source.create_registered_widget(type_name)
         child = source.create_registered_widget(type_name)
         created[0].value = 41
@@ -405,7 +414,7 @@ def test_python_registered_widget_document_serialization_round_trip_and_rollback
         assert serialized["widgets"][0]["children"] == [1]
         assert serialized["roots"] == [0]
 
-        restored = Document()
+        restored = tc_ui_document_create()
         restored.restore(serialized)
         assert len(created) == 4
         assert created[2].value == 41
@@ -430,7 +439,7 @@ def test_python_registered_widget_document_serialization_round_trip_and_rollback
 
         malformed = source.serialize()
         malformed["widgets"][0]["children"][0] = 0
-        rejected = Document()
+        rejected = tc_ui_document_create()
         with pytest.raises(RuntimeError, match="failed to restore"):
             rejected.restore(malformed)
         assert rejected.live_widget_count == 0
@@ -444,7 +453,7 @@ def test_python_registered_widget_document_serialization_round_trip_and_rollback
 
 
 def test_python_widget_paint_builds_draw_list():
-    document = Document()
+    document = tc_ui_document_create()
     widget = DemoWidget()
     handle = document.adopt_root(widget, "DemoWidget")
     assert handle
@@ -520,7 +529,7 @@ def test_python_paint_exception_propagates():
         def paint(self, context):
             raise RuntimeError("paint failed")
 
-    document = Document()
+    document = tc_ui_document_create()
     document.adopt_root(FailingWidget(), "FailingWidget")
 
     draw_list = DrawList()
@@ -568,7 +577,7 @@ def test_python_widget_complete_vtable_and_common_state():
         def focus_event(self, focused):
             self.focus_events.append(focused)
 
-    document = Document()
+    document = tc_ui_document_create()
     widget = InteractiveWidget()
     handle = document.adopt_root(widget, "InteractiveWidget")
     widget.focusable = True
@@ -603,7 +612,7 @@ def test_python_widget_complete_vtable_and_common_state():
 
 def test_python_routing_bubbles_and_survives_target_destroy():
     events = []
-    document = Document()
+    document = tc_ui_document_create()
 
     class Parent(Widget):
         def pointer_event(self, event):
@@ -641,7 +650,7 @@ def test_python_routing_bubbles_and_survives_target_destroy():
 
 def test_python_cursor_intents_inherit_notify_and_reset():
     changes = []
-    document = Document()
+    document = tc_ui_document_create()
     parent = Widget()
     child = Widget()
     document.adopt_root(parent, "cursor-parent")
@@ -681,7 +690,7 @@ def test_python_cursor_intents_inherit_notify_and_reset():
 
 
 def test_builtin_widgets_publish_semantic_cursor_intents():
-    document = Document()
+    document = tc_ui_document_create()
     assert document.create_text_input().widget.cursor_intent == CursorIntent.Text
     assert document.create_text_area().widget.cursor_intent == CursorIntent.Text
     assert document.create_button().widget.cursor_intent == CursorIntent.Hand
@@ -690,7 +699,7 @@ def test_builtin_widgets_publish_semantic_cursor_intents():
 
 
 def test_python_focus_events_and_tab_traversal():
-    document = Document()
+    document = tc_ui_document_create()
     root = Widget()
     first = Widget()
     skipped = Widget()
@@ -747,7 +756,7 @@ def test_python_overlay_order_dismissal_and_tooltip_placement():
         def overlay_dismissed(self, reason):
             dismissals.append(reason)
 
-    document = Document()
+    document = tc_ui_document_create()
     root = OverlayWidget("root")
     popup = OverlayWidget("popup")
     tooltip = OverlayWidget("tooltip")
@@ -795,7 +804,7 @@ def test_python_widget_tree_recursive_destroy_and_stale_refs():
         def on_destroy(self):
             destroyed.append(self.name)
 
-    document = Document()
+    document = tc_ui_document_create()
     parent = TrackedWidget("parent")
     child = TrackedWidget("child")
     parent_handle = document.adopt_root(parent, "parent")
@@ -825,7 +834,7 @@ def test_document_retain_and_deleter_own_python_widget_lifetime():
         def on_destroy(self):
             destroyed.append("destroyed")
 
-    document = Document()
+    document = tc_ui_document_create()
     widget = RetainedWidget()
     weak_widget = weakref.ref(widget)
     handle = document.adopt(widget, "retained")
@@ -842,13 +851,14 @@ def test_document_retain_and_deleter_own_python_widget_lifetime():
     assert not native.alive
 
 
-def test_document_destruction_invalidates_widget_refs():
+def test_explicit_document_destruction_invalidates_widget_refs():
     widget = Widget()
-    document = Document()
+    document = tc_ui_document_create()
     document.adopt(widget, "document-child")
     native = widget.native
     assert native.alive
 
+    tc_ui_document_destroy(document)
     del document
     gc.collect()
 
@@ -871,7 +881,7 @@ def test_python_base_widget_routes_canonical_children():
             self.pointer_events.append(event.type)
             return EventResult.Handled
 
-    document = Document()
+    document = tc_ui_document_create()
     parent = Widget()
     child = ChildWidget()
     document.adopt_root(parent, "parent")
@@ -901,8 +911,8 @@ def test_python_widget_rejects_double_adoption_without_false_destroy():
         def on_destroy(self):
             destroyed.append("destroyed")
 
-    first_document = Document()
-    second_document = Document()
+    first_document = tc_ui_document_create()
+    second_document = tc_ui_document_create()
     widget = TrackedWidget()
     first_handle = first_document.adopt(widget, "tracked")
 
@@ -921,7 +931,7 @@ def test_python_widget_rejects_double_adoption_without_false_destroy():
 
 
 def test_widget_ref_wraps_native_cpp_widgets_without_duplicate_state():
-    document = Document()
+    document = tc_ui_document_create()
     root = document.create_hstack("native-root")
     panel = document.create_panel("native-panel")
     label = document.create_label("native", "native-label")
@@ -945,7 +955,7 @@ def test_widget_ref_wraps_native_cpp_widgets_without_duplicate_state():
 
 
 def test_theme_style_inheritance_state_and_runtime_update():
-    document = Document()
+    document = tc_ui_document_create()
     parent = Widget()
     child = Widget()
     document.adopt_root(parent, "style-parent")
@@ -985,7 +995,7 @@ def test_theme_style_inheritance_state_and_runtime_update():
 
 
 def test_default_theme_borders_are_opt_in():
-    document = Document()
+    document = tc_ui_document_create()
 
     assert document.theme.role(StyleRole.Generic).base.border_width == 0.0
     assert document.theme.role(StyleRole.Panel).base.border_width == 0.0
@@ -996,7 +1006,7 @@ def test_default_theme_borders_are_opt_in():
 
 
 def test_renderer_font_exposes_document_text_metrics():
-    document = Document()
+    document = tc_ui_document_create()
     renderer = DrawListRenderer()
     assert renderer.set_default_font_path(str(_bundled_font_path()), 14)
     renderer.bind_text_measurer(document)
@@ -1021,7 +1031,7 @@ def test_native_rich_text_model_view_wrap_selection_and_lifetime():
     assert segment.style.color.g == pytest.approx(250 / 255.0)
 
     model.set_lines([[RichTextSegment("alpha beta gamma", RichTextStyle(Color(0.2, 0.8, 0.3, 1.0), True))]])
-    document = Document()
+    document = tc_ui_document_create()
     renderer = DrawListRenderer()
     assert renderer.set_default_font_path(str(_bundled_font_path()), 14)
     renderer.bind_text_measurer(document)
@@ -1060,7 +1070,7 @@ def test_native_frame_time_graph_uses_bounded_injected_model():
         model.add_sample(sample)
     assert model.samples == [15.0, 20.0, 40.0]
 
-    document = Document()
+    document = tc_ui_document_create()
     graph = document.create_frame_time_graph(model)
     assert graph.model is model
     assert graph.target_frame_ms == pytest.approx(1000 / 60)
@@ -1097,7 +1107,7 @@ def test_native_frame_timeline_selection_follow_and_projection():
             for index in range(1, 11)
         ]
     )
-    document = Document()
+    document = tc_ui_document_create()
     timeline = document.create_frame_timeline(model)
     selected = []
     timeline.connect_selection_changed(selected.append)
@@ -1122,7 +1132,7 @@ def test_native_frame_timeline_selection_follow_and_projection():
 
 def test_native_text_input_utf8_selection_uses_injected_clipboard():
     clipboard = {"text": ""}
-    document = Document()
+    document = tc_ui_document_create()
     document.set_clipboard_handlers(
         lambda: clipboard["text"],
         lambda text: clipboard.__setitem__("text", text),
@@ -1162,7 +1172,7 @@ def test_native_text_input_utf8_selection_uses_injected_clipboard():
 
 def test_native_text_area_multiline_selection_and_navigation():
     clipboard = {"text": ""}
-    document = Document()
+    document = tc_ui_document_create()
     document.set_clipboard_handlers(
         lambda: clipboard["text"],
         lambda text: clipboard.__setitem__("text", text),
@@ -1192,7 +1202,7 @@ def test_native_text_area_multiline_selection_and_navigation():
 
 
 def test_native_basic_input_and_media_widget_factories():
-    document = Document()
+    document = tc_ui_document_create()
 
     button = document.create_button("Apply")
     button.widget.bounds = Rect(0.0, 0.0, 80.0, 28.0)
@@ -1404,7 +1414,7 @@ def test_native_basic_input_and_media_widget_factories():
 
 
 def test_native_value_setters_propagate_callback_exceptions_immediately():
-    document = Document()
+    document = tc_ui_document_create()
 
     def fail_spin(_value):
         raise ValueError("spin callback failed")

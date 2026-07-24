@@ -96,7 +96,7 @@ std::optional<tc_ui_text_event> make_text_event(const WindowEvent& event) {
 }
 
 tc_ui_event_result dispatch_window_event(
-    Document& document,
+    TcDocument document,
     const WindowEvent& event) {
     if (const auto pointer = make_pointer_event(event)) {
         return document.dispatch_pointer_event(*pointer);

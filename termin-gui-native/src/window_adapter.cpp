@@ -83,23 +83,23 @@ class BorrowedWindowPlatformServices final : public DocumentPlatformServices {
 
 struct GuiWindowAdapter::Impl {
     tgfx::GraphicsHost* graphics;
-    Document* document;
+    TcDocument document;
     BackendWindow* window;
     BorrowedWindowEndpoint endpoint;
     BorrowedWindowPlatformServices platform;
     std::unique_ptr<DocumentRenderer> renderer;
     bool closed = false;
 
-    Impl(tgfx::GraphicsHost& graphics_ref, Document& document_ref,
+    Impl(tgfx::GraphicsHost& graphics_ref, TcDocument document_ref,
          DocumentRendererConfig config, BackendWindow& window_ref)
-        : graphics(&graphics_ref), document(&document_ref), window(&window_ref),
+        : graphics(&graphics_ref), document(document_ref), window(&window_ref),
           endpoint(window_ref), platform(window_ref) {
         if (&window->graphics_host() != graphics) {
             adapter_error(
                 "GuiWindowAdapter requires the window and renderer to share one GraphicsHost");
         }
         renderer = std::make_unique<DocumentRenderer>(
-            *graphics, *document, std::move(config), endpoint, platform);
+            *graphics, document, std::move(config), endpoint, platform);
     }
 
     void require_open(const char* operation) const {
@@ -119,7 +119,7 @@ struct GuiWindowAdapter::Impl {
     }
 };
 
-GuiWindowAdapter::GuiWindowAdapter(tgfx::GraphicsHost& graphics, Document& document,
+GuiWindowAdapter::GuiWindowAdapter(tgfx::GraphicsHost& graphics, TcDocument document,
                                    DocumentRendererConfig config, BackendWindow& window)
     : impl_(std::make_unique<Impl>(
           graphics, document, std::move(config), window)) {}
@@ -145,14 +145,9 @@ const BackendWindow& GuiWindowAdapter::window() const {
     return *impl_->window;
 }
 
-Document& GuiWindowAdapter::document() {
+TcDocument GuiWindowAdapter::document() const {
     impl_->require_open("document");
-    return *impl_->document;
-}
-
-const Document& GuiWindowAdapter::document() const {
-    impl_->require_open("document");
-    return *impl_->document;
+    return impl_->document;
 }
 
 DocumentRenderer& GuiWindowAdapter::renderer() {

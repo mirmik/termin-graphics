@@ -13,7 +13,10 @@ int main() {
     static_assert(!std::is_move_constructible_v<termin::gui_native::GuiApplicationHost>);
     static_assert(!std::is_copy_constructible_v<termin::gui_native::GuiWindowHost>);
     static_assert(!std::is_move_constructible_v<termin::gui_native::GuiWindowHost>);
-    static_assert(std::is_move_constructible_v<termin::gui_native::Document>);
+    static_assert(std::is_trivially_copy_constructible_v<
+                  termin::gui_native::TcDocument>);
+    static_assert(std::is_trivially_destructible_v<
+                  termin::gui_native::TcDocument>);
     static_assert(!std::is_copy_constructible_v<termin::gui_native::StandaloneGuiApplication>);
     static_assert(std::is_move_constructible_v<termin::gui_native::StandaloneGuiApplication>);
     static_assert(!std::is_copy_constructible_v<termin::gui_native::OffscreenGuiApplication>);

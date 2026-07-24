@@ -14,7 +14,7 @@ from termin.gui_native import (
     CommandData,
     CommandKind,
     CommandModel,
-    Document,
+    tc_ui_document_create,
     DialogAction,
     DialogDismissReason,
     DrawCommandType,
@@ -59,7 +59,7 @@ def _collection_item(index, *, enabled=True, subtitle=""):
 
 
 def test_native_list_widget_model_selection_and_virtualized_paint():
-    document = Document()
+    document = tc_ui_document_create()
     model = CollectionModel()
     model.set_items([_collection_item(index, subtitle="even" if index % 2 == 0 else "odd") for index in range(10_000)])
     revision = model.revision
@@ -101,7 +101,7 @@ def test_native_list_widget_model_selection_and_virtualized_paint():
 
 
 def test_native_list_widget_input_callbacks_and_model_lifetime():
-    document = Document()
+    document = tc_ui_document_create()
     model = CollectionModel()
     model.set_items(
         [
@@ -150,7 +150,7 @@ def test_native_list_widget_input_callbacks_and_model_lifetime():
 
 
 def test_host_click_count_is_exposed_and_drives_list_activation():
-    document = Document()
+    document = tc_ui_document_create()
     model = CollectionModel()
     model.append(CollectionItem("item", "Item"))
     widget = document.create_list_widget(model)
@@ -175,7 +175,7 @@ def test_host_click_count_is_exposed_and_drives_list_activation():
 
 
 def test_native_list_widget_callback_exceptions_propagate():
-    document = Document()
+    document = tc_ui_document_create()
     model = CollectionModel()
     model.append(_collection_item(0))
     widget = document.create_list_widget(model)
@@ -189,7 +189,7 @@ def test_native_list_widget_callback_exceptions_propagate():
 
 
 def test_native_file_grid_widget_virtualizes_responsive_layout_and_textures():
-    document = Document()
+    document = tc_ui_document_create()
     model = CollectionModel()
     model.set_items(
         [
@@ -234,7 +234,7 @@ def test_native_file_grid_widget_virtualizes_responsive_layout_and_textures():
 
 
 def test_native_file_grid_widget_draws_semantic_icon_without_gpu_texture():
-    document = Document()
+    document = tc_ui_document_create()
     model = CollectionModel()
     model.append(CollectionItem("folder", "Assets", "Folder", icon="folder"))
     widget = document.create_file_grid_widget(model)
@@ -248,7 +248,7 @@ def test_native_file_grid_widget_draws_semantic_icon_without_gpu_texture():
 
 
 def test_native_file_grid_widget_input_callbacks_lifetime_and_errors():
-    document = Document()
+    document = tc_ui_document_create()
     model = CollectionModel()
     model.set_items(
         [CollectionItem(f"file-{index}", f"File {index}", ".txt", enabled=index != 3) for index in range(20)]
@@ -341,7 +341,7 @@ def test_native_file_grid_widget_input_callbacks_lifetime_and_errors():
 
 
 def test_native_command_model_toolbar_and_status_bar_contracts():
-    document = Document()
+    document = tc_ui_document_create()
     model = CommandModel()
     save = model.append(
         CommandData(
@@ -397,7 +397,7 @@ def test_native_command_model_toolbar_and_status_bar_contracts():
 
 
 def test_native_toolbar_model_lifetime_and_callback_errors():
-    document = Document()
+    document = tc_ui_document_create()
     model = CommandModel()
     model.append(CommandData("run", "Run"))
     toolbar = document.create_tool_bar(model)
@@ -422,7 +422,7 @@ def test_native_toolbar_model_lifetime_and_callback_errors():
 
 
 def test_native_menu_and_menu_bar_overlay_shortcut_contracts():
-    document = Document()
+    document = tc_ui_document_create()
     submenu = CommandModel()
     submenu.append(CommandData("recent-scene", "Scene.termin"))
     model = CommandModel()
@@ -468,7 +468,7 @@ def test_native_menu_and_menu_bar_overlay_shortcut_contracts():
 
 
 def test_native_dialog_message_box_and_input_dialog_contracts():
-    document = Document()
+    document = tc_ui_document_create()
     dialog = document.create_dialog("Confirm")
     dialog.actions = [
         DialogAction("apply", "Apply", is_default=True),
@@ -541,7 +541,7 @@ def test_native_file_dialog_model_and_overlay_contract(tmp_path: Path):
     save.file_name = "scene.termin"
     assert save.confirm().path == str(tmp_path / "scene.termin")
 
-    document = Document()
+    document = tc_ui_document_create()
     dialog = document.create_file_dialog(FileDialogMode.OpenFile)
     dialog.set_initial_directory(str(tmp_path))
     dialog.set_filters([FileDialogFilter("Text", ["*.txt"])])
@@ -564,7 +564,7 @@ def test_native_color_picker_surfaces_and_dialog_contract():
     assert model.color.g == pytest.approx(1.0)
     assert model.color.b == pytest.approx(1.0)
 
-    document = Document()
+    document = tc_ui_document_create()
     picker = document.create_color_picker(model)
     assert picker.model is model
     sv = picker.surface(ColorPickerSurfaceKind.SaturationValue)
@@ -599,7 +599,7 @@ def test_native_color_picker_surfaces_and_dialog_contract():
 
 
 def test_native_tree_model_widget_virtualization_and_navigation():
-    document = Document()
+    document = tc_ui_document_create()
     model = TreeModel()
     expansion = TreeExpansionModel()
     roots = []
@@ -645,7 +645,7 @@ def test_native_tree_model_widget_virtualization_and_navigation():
 
 
 def test_native_tree_widget_pointer_callbacks_reconcile_and_propagate_errors():
-    document = Document()
+    document = tc_ui_document_create()
     model = TreeModel()
     root = model.append_root(CollectionItem("root", "Root"))
     first = model.append_child(root, CollectionItem("first", "First"))
@@ -709,7 +709,7 @@ def test_native_tree_widget_pointer_callbacks_reconcile_and_propagate_errors():
 
 
 def test_native_tree_widget_drag_drop_signal_reports_position():
-    document = Document()
+    document = tc_ui_document_create()
     model = TreeModel()
     first = model.append_root(CollectionItem("first", "First"))
     second = model.append_root(CollectionItem("second", "Second"))
@@ -758,7 +758,7 @@ def test_native_tree_table_preserves_identity_expansion_and_columns():
     )
     expansion = TreeExpansionModel()
     expansion.set_expanded(root, True)
-    document = Document()
+    document = tc_ui_document_create()
     widget = document.create_tree_table_widget(model, columns, expansion)
     assert document.add_root(widget.handle)
     document.layout_roots(Rect(0.0, 0.0, 320.0, 150.0))
@@ -783,7 +783,7 @@ def test_native_tree_table_preserves_identity_expansion_and_columns():
 
 
 def test_native_table_widget_models_layout_and_virtualized_paint():
-    document = Document()
+    document = tc_ui_document_create()
     model = TableModel()
     model.set_rows([TableRowData(f"row-{index}", [f"Row {index}", str(index), "Ready"]) for index in range(10_000)])
     columns = TableColumnModel()
@@ -835,7 +835,7 @@ def test_native_table_widget_models_layout_and_virtualized_paint():
 
 
 def test_native_table_widget_input_resize_callbacks_lifetime_and_errors():
-    document = Document()
+    document = tc_ui_document_create()
     model = TableModel()
     first = model.append(TableRowData("first", ["First", "1"]))
     model.append(TableRowData("disabled", ["Disabled", "2"], enabled=False))
@@ -967,7 +967,7 @@ def test_native_viewport3d_surface_protocol_input_drag_and_lifetime():
             self.calls.append(("text", codepoint))
             return True
 
-    document = Document()
+    document = tc_ui_document_create()
     viewport = document.create_viewport3d()
     assert document.add_root(viewport.handle)
     surface = SurfaceHost()
@@ -1073,7 +1073,7 @@ def test_native_viewport3d_stale_surface_and_destroy_release_are_safe():
         def dispatch_text(self, codepoint):
             raise AssertionError("stale surface must not receive input")
 
-    document = Document()
+    document = tc_ui_document_create()
     viewport = document.create_viewport3d()
     assert document.add_root(viewport.handle)
     surface = StaleSurface()
@@ -1139,7 +1139,7 @@ def test_native_scene_view_model_transform_drag_callbacks_and_embedding():
     assert scene.add_item(edge)
     assert scene.hit_test(50.0, 2.0) is edge
 
-    document = Document()
+    document = tc_ui_document_create()
     view = document.create_scene_view(scene)
     assert document.add_root(view.handle)
     document.layout_roots(Rect(100.0, 50.0, 400.0, 300.0))
@@ -1207,7 +1207,7 @@ def test_native_scene_transform_and_scene_view_handler_errors_propagate():
     world = transform.screen_to_world(screen)
     assert (world.x, world.y) == pytest.approx((3.0, 4.0))
 
-    document = Document()
+    document = tc_ui_document_create()
     view = document.create_scene_view()
     assert document.add_root(view.handle)
     document.layout_roots(Rect(0.0, 0.0, 100.0, 100.0))

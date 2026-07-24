@@ -1,4 +1,4 @@
-#include <termin/gui_native/document.hpp>
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/tc_ui_serialization.h>
 #include <termin/gui_native/tc_widget_registry.h>
 
@@ -115,7 +115,8 @@ void test_document_round_trip_preserves_structure_common_and_type_state() {
     tc_value* schema = tc_value_dict_get(&serialized, "$schema");
     assert(schema && std::strcmp(schema->data.s, TC_UI_DOCUMENT_SCHEMA) == 0);
 
-    termin::gui_native::Document restored_owner;
+    tc_ui_document_handle restored_handle = tc_ui_document_create();
+    termin::gui_native::TcDocument restored_owner(restored_handle);
     const tc::trent serialized_cpp = tc::trent::copy_of(serialized);
     restored_owner.restore(serialized_cpp);
     tc_ui_document_handle restored = restored_owner.get();
@@ -159,6 +160,7 @@ void test_document_round_trip_preserves_structure_common_and_type_state() {
     assert(tc_ui_document_live_widget_count(rejected) == 0);
 
     tc_ui_document_destroy(rejected);
+    tc_ui_document_destroy(restored_handle);
     tc_ui_document_destroy(source);
     tc_value_free(&serialized);
     assert(tc_widget_registry_unregister("test.ui.SerializableWidget"));

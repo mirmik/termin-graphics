@@ -12,8 +12,8 @@
 #include <string>
 
 #include <tcbase/tc_log.h>
-#include <termin/gui_native/document.hpp>
 #include <termin/gui_native/draw_list_renderer.hpp>
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/tc_ui_document.h>
 #include <termin/gui_native/widgets.hpp>
 #include <tgfx2/render_context.hpp>
@@ -71,8 +71,6 @@ public:
   tc_ui_paint_context *get() const;
 };
 
-class Document;
-
 struct WidgetHandle {
   tc_widget_handle handle = tc_widget_handle_invalid();
 };
@@ -107,6 +105,10 @@ struct Theme {
 struct DocumentState {
   tc_ui_document_handle document = tc_ui_document_handle_invalid();
   std::exception_ptr pending_exception;
+  nb::object clipboard_getter;
+  nb::object clipboard_setter;
+  nb::object cursor_changed_handler;
+  std::string clipboard_buffer;
 };
 
 tc_value python_to_tc_value(nb::object value);
@@ -114,6 +116,10 @@ nb::object tc_value_to_python(const tc_value *value);
 void register_document_state(const std::shared_ptr<DocumentState> &state);
 void unregister_document_state(tc_ui_document_handle document);
 std::shared_ptr<DocumentState> find_document_state(tc_ui_document_handle document);
+std::shared_ptr<DocumentState>
+require_document_state(const termin::gui_native::TcDocument &document);
+tc_ui_document_handle
+checked_document_handle(const termin::gui_native::TcDocument &document);
 
 struct WidgetRef {
   std::shared_ptr<DocumentState> state;
@@ -275,61 +281,41 @@ bool deserialize_python_registered_widget(tc_widget *widget,
                                           const tc_value *state,
                                           void *userdata);
 
-class Document {
-private:
-  std::shared_ptr<DocumentState> state_;
-  std::unique_ptr<termin::gui_native::Document> owned_document_;
-  termin::gui_native::Document *native_document_ = nullptr;
-  nb::object clipboard_getter_;
-  nb::object clipboard_setter_;
-  nb::object cursor_changed_handler_;
-  std::string clipboard_buffer_;
+WidgetHandle document_adopt(termin::gui_native::TcDocument document,
+                            nb::object object, const std::string &debug_name);
+WidgetRef document_ref(termin::gui_native::TcDocument document,
+                       WidgetHandle handle);
+WidgetRef document_create_registered_widget(
+    termin::gui_native::TcDocument document, const std::string &type_name);
+nb::object document_serialize(termin::gui_native::TcDocument document);
+void document_restore(termin::gui_native::TcDocument document,
+                      nb::object serialized);
+void throw_pending_document_exception(
+    termin::gui_native::TcDocument document);
+void set_document_clipboard_handlers(termin::gui_native::TcDocument document,
+                                     nb::object getter, nb::object setter);
+void set_document_cursor_changed_handler(
+    termin::gui_native::TcDocument document, nb::object handler);
+void release_document_state(termin::gui_native::TcDocument document);
 
-public:
-  Document();
-  explicit Document(termin::gui_native::Document &document);
-  ~Document();
-  void close();
-  void invalidate_borrowed() noexcept;
-
-  Document(const Document &) = delete;
-  Document &operator=(const Document &) = delete;
-
-  tc_ui_document_handle get() const;
-  termin::gui_native::Document &native_document() const;
-  bool is_closed() const;
-  WidgetHandle adopt(nb::object object, const std::string &debug_name);
-  WidgetRef ref(WidgetHandle handle) const;
-  WidgetRef create_registered_widget(const std::string &type_name);
-  nb::object serialize();
-  void restore(nb::object serialized);
-
-  template <typename T, typename... Args>
-  WidgetRef make_native(Args &&...args) {
+template <typename T, typename... Args>
+WidgetRef document_make_native(termin::gui_native::TcDocument document,
+                               Args &&...args) {
+    const auto state = require_document_state(document);
     auto widget = std::make_unique<T>(std::forward<Args>(args)...);
     tc_widget_handle handle = tc_ui_document_adopt_widget(
-        get(), widget->c_widget(),
+        checked_document_handle(document), widget->c_widget(),
         &termin::gui_native::Widget::delete_owned_widget);
     if (tc_widget_handle_is_invalid(handle)) {
       throw std::runtime_error("failed to adopt native widget");
     }
     widget.release();
-    return WidgetRef{state_, handle};
-  }
-
-  void throw_pending_exception();
-  void set_clipboard_handlers(nb::object getter, nb::object setter);
-  void set_cursor_changed_handler(nb::object handler);
-
-private:
-  static const char *clipboard_get(void *user_data);
-  static bool clipboard_set(void *user_data, const char *text,
-                            size_t byte_length);
-  static void cursor_changed(void *user_data, tc_ui_cursor_intent cursor);
-};
+    return WidgetRef{state, handle};
+}
 
 nb::object snapshot_handle_or_none(tc_widget_handle handle);
-nb::dict document_snapshot_to_python(const Document &document);
+nb::dict document_snapshot_to_python(
+    const termin::gui_native::TcDocument &document);
 DrawCommand command_at_checked(const DrawList &draw_list, size_t index);
 
 } // namespace termin::gui_native::python_bindings

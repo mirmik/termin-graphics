@@ -3,7 +3,6 @@ import weakref
 
 from tcnodegraph import Graph, GraphController, build_native_node_graph_view
 from termin.gui_native import (
-    Document,
     DrawCommandType,
     DrawList,
     EventResult,
@@ -14,6 +13,8 @@ from termin.gui_native import (
     PointerEvent,
     PointerEventType,
     Rect,
+    tc_ui_document_create,
+    tc_ui_document_destroy,
 )
 
 
@@ -34,7 +35,7 @@ def test_native_node_graph_projects_connects_drags_deletes_and_releases():
     target = controller.create_node("target", title="Target", x=350.0, y=0.0)
     target.params["enabled"] = True
     controller.add_input_socket(target.id, "color", "fbo")
-    document = Document()
+    document = tc_ui_document_create()
     renders = []
     native = build_native_node_graph_view(
         document,
@@ -74,8 +75,9 @@ def test_native_node_graph_projects_connects_drags_deletes_and_releases():
     assert not graph.edges
     assert renders
 
-    native.close()
     native_ref = weakref.ref(native)
+    native.close()
+    tc_ui_document_destroy(document)
     del native
     gc.collect()
     assert native_ref() is None

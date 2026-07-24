@@ -83,7 +83,8 @@ int main() {
         if (backend == tgfx::BackendType::Null) return 77;
 
         auto graphics = tgfx::GraphicsHost::create_isolated(backend);
-        termin::gui_native::Document document;
+        const tc_ui_document_handle document_handle = tc_ui_document_create();
+        termin::gui_native::TcDocument document(document_handle);
         BorrowedTestWindow window(*graphics, backend);
         termin::gui_native::DocumentRendererConfig config;
         config.font_path = TERMIN_GUI_NATIVE_TEST_FONT;
@@ -91,7 +92,9 @@ int main() {
         termin::gui_native::GuiWindowAdapter adapter(
             *graphics, document, config, window);
         if (!window.text_input_enabled || &adapter.window() != &window ||
-            &adapter.document() != &document || window.close_count != 0) {
+            !tc_ui_document_handle_eq(adapter.document().handle(),
+                                      document.handle()) ||
+            window.close_count != 0) {
             std::fprintf(stderr, "adapter did not establish borrowed services\n");
             return 1;
         }
@@ -185,7 +188,7 @@ int main() {
             return 1;
         }
 
-        document.close();
+        tc_ui_document_destroy(document_handle);
         graphics->close();
         return 0;
     } catch (const std::exception& error) {

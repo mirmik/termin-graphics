@@ -11,7 +11,8 @@ DocumentSnapshot::DocumentSnapshot(tc_ui_document_handle document) {
     }
 }
 
-DocumentSnapshot::DocumentSnapshot(const Document& document) : DocumentSnapshot(document.get()) {}
+DocumentSnapshot::DocumentSnapshot(TcDocument document)
+    : DocumentSnapshot(document.handle()) {}
 
 DocumentSnapshot::~DocumentSnapshot() {
     tc_ui_document_snapshot_destroy(&snapshot_);

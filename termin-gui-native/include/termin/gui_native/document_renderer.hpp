@@ -8,7 +8,7 @@
 #include <utility>
 
 #include <termin/gui_native/application_host_export.h>
-#include <termin/gui_native/document.hpp>
+#include <termin/gui_native/tc_document.hpp>
 #include <tgfx2/handles.hpp>
 
 namespace tgfx {
@@ -50,11 +50,11 @@ class TERMIN_GUI_NATIVE_HOST_API DocumentPlatformServices {
     virtual bool set_cursor(tc_ui_cursor_intent cursor) = 0;
 };
 
-// Renderer/interaction binding for one borrowed Document and GraphicsHost.
+// Renderer/interaction binding for one borrowed TcDocument and GraphicsHost.
 // It has no application loop, window ownership, or close policy.
 class TERMIN_GUI_NATIVE_HOST_API DocumentRenderer {
   public:
-    DocumentRenderer(tgfx::GraphicsHost& graphics, Document& document,
+    DocumentRenderer(tgfx::GraphicsHost& graphics, TcDocument document,
                      DocumentRendererConfig config, DocumentFrameSink& frame_sink,
                      DocumentPlatformServices& platform_services);
     ~DocumentRenderer();
@@ -68,8 +68,7 @@ class TERMIN_GUI_NATIVE_HOST_API DocumentRenderer {
     const tgfx::GraphicsHost& graphics() const;
     tgfx::IRenderDevice& device();
     const tgfx::IRenderDevice& device() const;
-    Document& document();
-    const Document& document() const;
+    TcDocument document() const;
 
     tc_ui_event_result dispatch_pointer(const tc_ui_pointer_event& event);
     tc_ui_event_result dispatch_key(const tc_ui_key_event& event);

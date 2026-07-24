@@ -166,10 +166,13 @@ private:
 struct Fixture {
     RecordingDevice* device = nullptr;
     std::unique_ptr<tgfx::GraphicsHost> graphics;
-    termin::gui_native::Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_handle_invalid();
+    termin::gui_native::TcDocument document;
     std::unique_ptr<termin::gui_native::GuiWindowHost> host;
 
     Fixture() {
+        document_handle = tc_ui_document_create();
+        document = termin::gui_native::TcDocument(document_handle);
         auto owned_device = std::make_unique<RecordingDevice>();
         device = owned_device.get();
         graphics = tgfx::GraphicsHost::adopt_isolated_device(
@@ -185,7 +188,8 @@ struct Fixture {
 
     ~Fixture() {
         if (host && host->is_open()) host->close();
-        document.close();
+        tc_ui_document_destroy(document_handle);
+        document = termin::gui_native::TcDocument{};
         if (graphics && !graphics->is_closed()) graphics->close();
     }
 };

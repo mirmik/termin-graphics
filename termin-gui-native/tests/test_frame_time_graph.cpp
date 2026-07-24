@@ -1,3 +1,4 @@
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/widgets.hpp>
 
 #include <cassert>
@@ -59,7 +60,8 @@ void test_model_bounds_history_and_validates_samples() {
 }
 
 void test_graph_empty_and_threshold_bars_are_deterministic() {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     document.set_text_measurer(&measure_text, nullptr);
     auto model = std::make_shared<FrameTimeModel>();
     model->set_max_samples(3);
@@ -98,6 +100,7 @@ void test_graph_empty_and_threshold_bars_are_deterministic() {
     assert(graph->model()->samples().size() == 3);
     tc_ui_paint_context_destroy(context);
     tc_ui_draw_list_destroy(draw_list);
+    tc_ui_document_destroy(document_handle);
 }
 
 } // namespace

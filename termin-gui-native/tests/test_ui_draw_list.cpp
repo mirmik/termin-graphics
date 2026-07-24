@@ -1,3 +1,4 @@
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/draw_list_renderer.hpp>
 #include <termin/gui_native/widget.hpp>
 
@@ -6,7 +7,7 @@
 #include <string>
 #include <type_traits>
 
-using termin::gui_native::Document;
+using termin::gui_native::TcDocument;
 using termin::gui_native::UiDrawListRenderer;
 using termin::gui_native::Widget;
 
@@ -64,7 +65,8 @@ const tc_widget_vtable TestPaintWidget::VTABLE {
 };
 
 void test_widget_paint_builds_draw_list() {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
     tc_ui_paint_context* paint_context = tc_ui_paint_context_create(draw_list);
 
@@ -105,10 +107,12 @@ void test_widget_paint_builds_draw_list() {
 
     tc_ui_paint_context_destroy(paint_context);
     tc_ui_draw_list_destroy(draw_list);
+    tc_ui_document_destroy(document_handle);
 }
 
 void test_renderer_font_binds_document_text_measurement() {
-    Document document;
+    tc_ui_document_handle document_handle = tc_ui_document_create();
+    TcDocument document(document_handle);
     UiDrawListRenderer renderer;
     const std::string font_path = std::string(TERMIN_GUI_NATIVE_SOURCE_DIR) +
         "/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf";
@@ -123,6 +127,7 @@ void test_renderer_font_binds_document_text_measurement() {
     assert(prefix.width > 0.0f);
     assert(full.ascent > 0.0f);
     assert(full.line_height >= full.ascent);
+    tc_ui_document_destroy(document_handle);
 }
 
 void test_extended_commands_own_variable_data_and_preserve_legacy_values() {

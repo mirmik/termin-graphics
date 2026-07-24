@@ -4,7 +4,7 @@
 
 namespace termin::gui_native {
 
-ShowcaseRefs build_showcase(Document &document) {
+ShowcaseRefs build_showcase(TcDocument document) {
   DocumentBuilder ui(document);
   ShowcaseRefs refs;
 

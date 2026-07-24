@@ -1,6 +1,6 @@
 #pragma once
 
-#include <termin/gui_native/widget.hpp>
+#include <termin/gui_native/tc_document.hpp>
 
 namespace termin::gui_native {
 
@@ -38,6 +38,6 @@ struct ShowcaseRefs {
   TabView *tabs = nullptr;
 };
 
-ShowcaseRefs build_showcase(Document &document);
+ShowcaseRefs build_showcase(TcDocument document);
 
 } // namespace termin::gui_native
