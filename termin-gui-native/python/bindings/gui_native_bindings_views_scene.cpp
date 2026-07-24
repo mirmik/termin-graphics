@@ -96,7 +96,7 @@ void bind_gui_native_scene_views(nb::module_ &m) {
                   }
                 });
           },
-          nb::arg("callback"))
+          nb::arg("callback").none())
       .def(
           "set_hit_test_callback",
           [](termin::gui_native::GraphicsItem &self, nb::object callback) {
@@ -121,7 +121,7 @@ void bind_gui_native_scene_views(nb::module_ &m) {
                   }
                 });
           },
-          nb::arg("callback"));
+          nb::arg("callback").none());
 
   nb::class_<termin::gui_native::GraphicsScene>(m, "GraphicsScene")
       .def(nb::init<>())
@@ -622,7 +622,7 @@ void bind_gui_native_scene_views(nb::module_ &m) {
                   }
                 });
           },
-          nb::arg("callback"))
+          nb::arg("callback").none())
       .def(
           "dispatch_external_drag",
           [](const Viewport3DRef &self,

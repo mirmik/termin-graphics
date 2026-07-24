@@ -1468,6 +1468,11 @@ def test_native_basic_input_and_media_widget_factories():
         DrawCommandType.Line,
         DrawCommandType.PopClip,
     ]
+    canvas.set_paint_callback(None)
+    canvas.set_paint_callback(None)
+    canvas.widget.paint(PaintContext(DrawList()))
+    assert paints == [True]
+    tc_ui_document_destroy(document)
 
 
 def test_native_value_setters_propagate_callback_exceptions_immediately():

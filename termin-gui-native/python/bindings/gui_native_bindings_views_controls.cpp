@@ -340,7 +340,7 @@ void bind_gui_native_control_views(nb::module_ &m) {
               }
             });
           },
-          nb::arg("callback"));
+          nb::arg("callback").none());
 
   nb::enum_<tc_ui_draw_command_type>(m, "DrawCommandType")
       .value("FillRect", TC_UI_DRAW_FILL_RECT)

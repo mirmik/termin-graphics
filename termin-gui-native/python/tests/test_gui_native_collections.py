@@ -1034,6 +1034,10 @@ def test_native_viewport3d_surface_protocol_input_drag_and_lifetime():
     )
     assert viewport.dispatch_external_drag(drag)
     assert drops == ["file:///tmp/scene.tscene"]
+    viewport.set_external_drag_handler(None)
+    viewport.set_external_drag_handler(None)
+    assert not viewport.dispatch_external_drag(drag)
+    assert drops == ["file:///tmp/scene.tscene"]
 
     del surface
     gc.collect()
@@ -1152,6 +1156,13 @@ def test_native_scene_view_model_transform_drag_callbacks_and_embedding():
     document.paint_roots(PaintContext(draw_list))
     assert painted == [("node-a", 1.0)]
     assert any(command.type == DrawCommandType.FillRect for command in draw_list.commands)
+    node.set_paint_callback(None)
+    node.set_paint_callback(None)
+    edge.set_hit_test_callback(None)
+    edge.set_hit_test_callback(None)
+    document.paint_roots(PaintContext(DrawList()))
+    assert painted == [("node-a", 1.0)]
+    assert scene.hit_test(150.0, 2.0) is None
 
     moved = []
     view.connect_item_moved(lambda item: moved.append(item.stable_id))
