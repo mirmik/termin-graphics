@@ -1142,6 +1142,10 @@ def test_native_text_input_utf8_selection_uses_injected_clipboard():
     submitted = []
     widget.connect_changed(changed.append)
     widget.connect_submitted(submitted.append)
+    widget.placeholder = "Enter scene name"
+    assert widget.placeholder == "Enter scene name"
+    widget.placeholder = "Enter scene identifier"
+    assert widget.placeholder == "Enter scene identifier"
     assert document.add_root(widget.handle)
     assert document.set_focus(widget.handle)
 
@@ -1169,6 +1173,11 @@ def test_native_text_input_utf8_selection_uses_injected_clipboard():
     assert document.dispatch_key_event(key) == EventResult.Handled
     assert submitted == ["aé🙂b"]
 
+    widget.text = ""
+    assert changed[-1] == ""
+    widget.placeholder = ""
+    assert widget.placeholder == ""
+
 
 def test_native_text_area_multiline_selection_and_navigation():
     clipboard = {"text": ""}
@@ -1178,6 +1187,10 @@ def test_native_text_area_multiline_selection_and_navigation():
         lambda text: clipboard.__setitem__("text", text),
     )
     area = document.create_text_area("aé\nwide\n🙂z")
+    changed = []
+    area.connect_changed(changed.append)
+    area.placeholder = "Enter prompt"
+    assert area.placeholder == "Enter prompt"
     assert document.add_root(area.handle)
     assert document.set_focus(area.handle)
 
@@ -1199,6 +1212,50 @@ def test_native_text_area_multiline_selection_and_navigation():
     key.key = KeyCode.Home
     assert document.dispatch_key_event(key) == EventResult.Handled
     assert area.caret == 9
+
+    area.text = ""
+    assert changed == ["a🙂z", "aé\nwide\n🙂z", ""]
+    area.placeholder = "Enter negative prompt"
+    assert area.placeholder == "Enter negative prompt"
+    area.placeholder = ""
+    assert area.placeholder == ""
+
+
+@pytest.mark.parametrize(
+    ("factory", "text", "placeholder", "runtime_type"),
+    [
+        (lambda document, value: document.create_text_input(value),
+         "scene-01", "Enter scene name", "termin.gui.TextInput"),
+        (lambda document, value: document.create_text_area(value),
+         "prompt\nline two", "Enter prompt", "termin.gui.TextArea"),
+    ],
+)
+def test_native_editable_text_serialization_preserves_placeholder(
+    factory, text, placeholder, runtime_type
+):
+    source = tc_ui_document_create()
+    widget = factory(source, text)
+    widget.placeholder = placeholder
+    widget.widget.stable_id = "editable-text"
+    assert source.add_root(widget.handle)
+
+    serialized = source.serialize()
+    assert serialized["widgets"][0]["type"] == runtime_type
+    assert serialized["widgets"][0]["state"] == {
+        "text": text,
+        "placeholder": placeholder,
+    }
+
+    restored = tc_ui_document_create()
+    restored.restore(serialized)
+    assert restored.serialize() == serialized
+
+    malformed = source.serialize()
+    malformed["widgets"][0]["state"]["placeholder"] = 42
+    rejected = tc_ui_document_create()
+    with pytest.raises(RuntimeError, match="failed to restore"):
+        rejected.restore(malformed)
+    assert rejected.live_widget_count == 0
 
 
 def test_native_basic_input_and_media_widget_factories():

@@ -1,6 +1,9 @@
 #include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/tc_ui_serialization.h>
 #include <termin/gui_native/tc_widget_registry.h>
+#include <termin/gui_native/document_builder.hpp>
+#include <termin/gui_native/text_area.hpp>
+#include <termin/gui_native/text_input.hpp>
 
 #include <cassert>
 #include <cstdlib>
@@ -167,9 +170,54 @@ void test_document_round_trip_preserves_structure_common_and_type_state() {
     tc_runtime_type_registry_clear();
 }
 
+void test_editable_text_round_trip_preserves_persistent_state() {
+    using namespace termin::gui_native;
+
+    tc_runtime_type_registry_clear();
+    tc_ui_document_handle source_handle = tc_ui_document_create();
+    TcDocument source(source_handle);
+    DocumentBuilder source_builder(source);
+    auto& input = source_builder.make_root<TextInput>("Scene 01");
+    input.set_placeholder("Enter scene name");
+    auto& area = source_builder.make_root<TextArea>("Prompt\nsecond line");
+    area.set_placeholder("Enter prompt");
+
+    const tc::trent serialized = source.serialize();
+    tc_value* records = tc_value_dict_get(const_cast<tc_value*>(serialized.raw()), "widgets");
+    assert(records && records->type == TC_VALUE_LIST && records->data.list.count == 2);
+    tc_value* input_record = tc_value_list_get(records, 0);
+    tc_value* input_state = tc_value_dict_get(input_record, "state");
+    assert(std::strcmp(tc_value_dict_get(input_record, "type")->data.s,
+                       "termin.gui.TextInput") == 0);
+    assert(std::strcmp(tc_value_dict_get(input_state, "text")->data.s, "Scene 01") == 0);
+    assert(std::strcmp(tc_value_dict_get(input_state, "placeholder")->data.s,
+                       "Enter scene name") == 0);
+
+    tc_ui_document_handle restored_handle = tc_ui_document_create();
+    TcDocument restored(restored_handle);
+    restored.restore(serialized);
+    assert(tc_ui_document_live_widget_count(restored_handle) == 2);
+    const tc::trent reserialized = restored.serialize();
+    tc_value* restored_records =
+        tc_value_dict_get(const_cast<tc_value*>(reserialized.raw()), "widgets");
+    tc_value* area_record = tc_value_list_get(restored_records, 1);
+    tc_value* area_state = tc_value_dict_get(area_record, "state");
+    assert(std::strcmp(tc_value_dict_get(area_record, "type")->data.s,
+                       "termin.gui.TextArea") == 0);
+    assert(std::strcmp(tc_value_dict_get(area_state, "text")->data.s,
+                       "Prompt\nsecond line") == 0);
+    assert(std::strcmp(tc_value_dict_get(area_state, "placeholder")->data.s,
+                       "Enter prompt") == 0);
+
+    tc_ui_document_destroy(restored_handle);
+    tc_ui_document_destroy(source_handle);
+    tc_runtime_type_registry_clear();
+}
+
 } // namespace
 
 int main() {
     test_document_round_trip_preserves_structure_common_and_type_state();
+    test_editable_text_round_trip_preserves_persistent_state();
     return EXIT_SUCCESS;
 }

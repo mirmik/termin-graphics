@@ -53,6 +53,7 @@ add_library(termin_gui_native SHARED
     src/tc_ui_serialization.c
     src/tc_widget.c
     src/tc_widget_registry.c
+    src/builtin_widget_registration.cpp
     src/tc_ui_interaction.c
     src/tc_ui_draw_list.cpp
     src/widgets_helpers.cpp

@@ -30,6 +30,19 @@ void TextInput::set_text(std::string text) {
     emit_changed();
 }
 
+void TextInput::set_placeholder(std::string placeholder) {
+    if (!valid_utf8(placeholder)) {
+        tc_log_error("[termin-gui-native] TextInput rejected invalid UTF-8 placeholder");
+        return;
+    }
+    if (placeholder_ == placeholder) {
+        return;
+    }
+    placeholder_ = std::move(placeholder);
+    update_unmeasured_size();
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+}
+
 void TextInput::set_caret(size_t caret) {
     const size_t next = utf8_floor_boundary(text_, caret);
     if (caret_ == next) {
@@ -83,7 +96,8 @@ tc_ui_size TextInput::measure(tc_ui_document_handle document, tc_ui_constraints 
     const tc_ui_style style = computed_style(document);
     tc_ui_text_metrics metrics {};
     tc_ui_size measured = preferred_size();
-    if (measure_text(document, text_, style.font_size, metrics)) {
+    const std::string& displayed = text_.empty() ? placeholder_ : text_;
+    if (measure_text(document, displayed, style.font_size, metrics)) {
         measured.width = std::max(
             style.min_width,
             metrics.width + style.padding_left + style.padding_right + style.border_width * 2.0f
@@ -115,7 +129,9 @@ void TextInput::paint(tc_ui_document_handle document, tc_ui_paint_context* conte
     }
     const tc_ui_rect text_clip = text_clip_rect(document);
     tc_ui_text_metrics metrics {};
-    const bool has_metrics = measure_text(document, text_, style.font_size, metrics);
+    const std::string& displayed = text_.empty() ? placeholder_ : text_;
+    const bool has_placeholder = text_.empty() && !placeholder_.empty();
+    const bool has_metrics = measure_text(document, displayed, style.font_size, metrics);
     const float line_height = has_metrics && metrics.line_height > 0.0f
         ? metrics.line_height
         : style.font_size;
@@ -151,12 +167,16 @@ void TextInput::paint(tc_ui_document_handle document, tc_ui_paint_context* conte
             selection_color
         );
     }
+    tc_ui_color text_color = style.foreground;
+    if (has_placeholder) {
+        text_color.a *= 0.55f;
+    }
     tc_ui_painter_draw_text(
         context,
-        text_.c_str(),
+        displayed.c_str(),
         tc_ui_point {text_x, baseline},
         style.font_size,
-        style.foreground
+        text_color
     );
     if (focused) {
         float caret_width = 0.0f;

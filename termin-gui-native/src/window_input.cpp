@@ -39,6 +39,17 @@ int32_t translate_key(WindowKey key) {
         case WindowKey::Up: return TC_UI_KEY_UP_ARROW;
         case WindowKey::Home: return TC_UI_KEY_HOME;
         case WindowKey::End: return TC_UI_KEY_END;
+        case WindowKey::Apostrophe: return '\'';
+        case WindowKey::Comma: return ',';
+        case WindowKey::Minus: return '-';
+        case WindowKey::Period: return '.';
+        case WindowKey::Slash: return '/';
+        case WindowKey::Semicolon: return ';';
+        case WindowKey::Equals: return '=';
+        case WindowKey::LeftBracket: return '[';
+        case WindowKey::Backslash: return '\\';
+        case WindowKey::RightBracket: return ']';
+        case WindowKey::Grave: return '`';
         default: return TC_UI_KEY_UNKNOWN;
     }
 }

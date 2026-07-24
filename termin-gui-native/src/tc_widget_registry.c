@@ -98,6 +98,9 @@ bool tc_widget_registry_initialize(void) {
     static const char* builtin_owner = "termin-gui-native";
     tc_runtime_type_descriptor* descriptor;
 
+    if (tc_runtime_type_registry_has_type(builtin_type)) {
+        return true;
+    }
     descriptor = tc_runtime_type_descriptor_create(builtin_type, builtin_owner, NULL);
     if (!descriptor || !tc_runtime_type_registry_commit_descriptor(descriptor)) {
         tc_log_error("[termin-gui-native] failed to publish builtin widget parent '%s'",
@@ -293,6 +296,86 @@ static void release_unadopted_result(const tc_widget_factory_result* result) {
     }
 }
 
+bool tc_ui_document_adopt_registered_widget(tc_ui_document_handle document,
+                                            const char* type_name,
+                                            tc_widget_factory_result* result,
+                                            tc_widget_handle* out_handle) {
+    tc_widget_factory_record* record;
+    tc_widget* adopted;
+    tc_widget_handle handle = tc_widget_handle_invalid();
+    if (out_handle) {
+        *out_handle = handle;
+    }
+    if (!result || !result->widget || !out_handle || tc_ui_document_handle_is_invalid(document) ||
+        !tc_ui_document_is_valid(document) || !type_name || !type_name[0]) {
+        tc_log_error("[termin-gui-native] registered widget adoption requires document, type and widget");
+        release_unadopted_result(result);
+        if (result) {
+            *result = (tc_widget_factory_result){NULL, NULL, TC_WIDGET_BORROWED};
+        }
+        return false;
+    }
+    record = factory_record(type_name);
+    if (!record) {
+        tc_log_error("[termin-gui-native] unknown registered widget type '%s'", type_name);
+        release_unadopted_result(result);
+        *result = (tc_widget_factory_result){NULL, NULL, TC_WIDGET_BORROWED};
+        return false;
+    }
+    if ((result->ownership == TC_WIDGET_OWNED && !result->deleter) ||
+        (result->ownership == TC_WIDGET_BORROWED && result->deleter) ||
+        (result->ownership != TC_WIDGET_OWNED && result->ownership != TC_WIDGET_BORROWED)) {
+        tc_log_error("[termin-gui-native] registered widget '%s' has inconsistent ownership policy",
+                     type_name);
+        release_unadopted_result(result);
+        *result = (tc_widget_factory_result){NULL, NULL, TC_WIDGET_BORROWED};
+        return false;
+    }
+    if (!tc_ui_document_handle_is_invalid(result->widget->document) ||
+        !tc_widget_handle_is_invalid(result->widget->handle) ||
+        result->widget->runtime_type_link.type_name) {
+        tc_log_error("[termin-gui-native] registered widget '%s' is already live", type_name);
+        release_unadopted_result(result);
+        *result = (tc_widget_factory_result){NULL, NULL, TC_WIDGET_BORROWED};
+        return false;
+    }
+
+    result->widget->native_language = record->descriptor.language;
+    handle = result->ownership == TC_WIDGET_OWNED
+        ? tc_ui_document_adopt_widget(document, result->widget, result->deleter)
+        : tc_ui_document_attach_borrowed_widget(document, result->widget);
+    if (tc_widget_handle_is_invalid(handle)) {
+        release_unadopted_result(result);
+        *result = (tc_widget_factory_result){NULL, NULL, TC_WIDGET_BORROWED};
+        return false;
+    }
+    result->widget = NULL;
+    result->deleter = NULL;
+    adopted = tc_ui_document_resolve_widget(document, handle);
+    if (!adopted) {
+        tc_log_error("[termin-gui-native] registered widget '%s' disappeared during adoption",
+                     type_name);
+        return false;
+    }
+    if (!tc_runtime_type_registry_link_instance(type_name, &adopted->runtime_type_link, adopted)) {
+        tc_ui_document_destroy_widget_recursive(document, handle);
+        return false;
+    }
+    if (record->descriptor.after_adopt &&
+        !record->descriptor.after_adopt(document, adopted, handle, record->descriptor.userdata)) {
+        tc_log_error("[termin-gui-native] widget factory '%s' failed after adoption", type_name);
+        tc_ui_document_destroy_widget_recursive(document, handle);
+        return false;
+    }
+    if (!tc_ui_document_is_alive(document, handle)) {
+        tc_log_error("[termin-gui-native] widget factory '%s' destroyed its adopted widget",
+                     type_name);
+        return false;
+    }
+    *out_handle = handle;
+    return true;
+}
+
 tc_widget_handle tc_ui_document_create_registered_widget(tc_ui_document_handle document,
                                                           const char* type_name) {
     tc_widget_factory_record* record;
@@ -314,46 +397,7 @@ tc_widget_handle tc_ui_document_create_registered_widget(tc_ui_document_handle d
         release_unadopted_result(&result);
         return handle;
     }
-    if ((result.ownership == TC_WIDGET_OWNED && !result.deleter) ||
-        (result.ownership == TC_WIDGET_BORROWED && result.deleter) ||
-        (result.ownership != TC_WIDGET_OWNED && result.ownership != TC_WIDGET_BORROWED)) {
-        tc_log_error(
-            "[termin-gui-native] widget factory '%s' returned inconsistent ownership policy",
-            type_name);
-        release_unadopted_result(&result);
-        return handle;
-    }
-    if (!tc_ui_document_handle_is_invalid(result.widget->document) ||
-        !tc_widget_handle_is_invalid(result.widget->handle) ||
-        result.widget->runtime_type_link.type_name) {
-        tc_log_error("[termin-gui-native] widget factory '%s' returned a live widget", type_name);
-        release_unadopted_result(&result);
-        return handle;
-    }
-
-    result.widget->native_language = record->descriptor.language;
-    handle = result.ownership == TC_WIDGET_OWNED
-        ? tc_ui_document_adopt_widget(document, result.widget, result.deleter)
-        : tc_ui_document_attach_borrowed_widget(document, result.widget);
-    if (tc_widget_handle_is_invalid(handle)) {
-        release_unadopted_result(&result);
-        return handle;
-    }
-    if (!tc_runtime_type_registry_link_instance(type_name, &result.widget->runtime_type_link,
-                                                result.widget)) {
-        tc_ui_document_destroy_widget_recursive(document, handle);
-        return tc_widget_handle_invalid();
-    }
-    if (record->descriptor.after_adopt &&
-        !record->descriptor.after_adopt(document, result.widget, handle,
-                                        record->descriptor.userdata)) {
-        tc_log_error("[termin-gui-native] widget factory '%s' failed after adoption", type_name);
-        tc_ui_document_destroy_widget_recursive(document, handle);
-        return tc_widget_handle_invalid();
-    }
-    if (!tc_ui_document_is_alive(document, handle)) {
-        tc_log_error("[termin-gui-native] widget factory '%s' destroyed its adopted widget",
-                     type_name);
+    if (!tc_ui_document_adopt_registered_widget(document, type_name, &result, &handle)) {
         return tc_widget_handle_invalid();
     }
     return handle;

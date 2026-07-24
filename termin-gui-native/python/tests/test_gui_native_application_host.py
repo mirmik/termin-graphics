@@ -62,8 +62,10 @@ def test_offscreen_application_renders_reads_pixels_and_accepts_synthetic_input(
     assert application.document.set_focus(text_input.handle)
     assert application.render_frame()
     application.push_key(WindowKey.A)
+    application.push_key(WindowKey.LEFT_BRACKET)
+    application.push_key(WindowKey.RIGHT_BRACKET)
     application.push_text("headless")
-    assert application.pump_events() == 2
+    assert application.pump_events() == 4
     assert text_input.text == "headless"
 
     lease = DynamicTextureLease(application)

@@ -12,6 +12,7 @@
 #include <string>
 
 #include <tcbase/tc_log.h>
+#include <termin/gui_native/builtin_widget_registration.hpp>
 #include <termin/gui_native/draw_list_renderer.hpp>
 #include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/tc_ui_document.h>
@@ -303,13 +304,30 @@ WidgetRef document_make_native(termin::gui_native::TcDocument document,
                                Args &&...args) {
     const auto state = require_document_state(document);
     auto widget = std::make_unique<T>(std::forward<Args>(args)...);
-    tc_widget_handle handle = tc_ui_document_adopt_widget(
-        checked_document_handle(document), widget->c_widget(),
-        &termin::gui_native::Widget::delete_owned_widget);
-    if (tc_widget_handle_is_invalid(handle)) {
-      throw std::runtime_error("failed to adopt native widget");
+    tc_widget_handle handle = tc_widget_handle_invalid();
+    if constexpr (termin::gui_native::NativeWidgetRuntimeType<T>::name) {
+      if (!termin::gui_native::register_builtin_widget_types()) {
+        throw std::runtime_error("failed to register built-in native UI widget types");
+      }
+      tc_widget_factory_result result{
+          widget.release()->c_widget(), &termin::gui_native::Widget::delete_owned_widget,
+          TC_WIDGET_OWNED};
+      if (!tc_ui_document_adopt_registered_widget(
+              checked_document_handle(document),
+              termin::gui_native::NativeWidgetRuntimeType<T>::name, &result, &handle)) {
+        throw std::runtime_error("failed to adopt registered native widget");
+      }
+    } else {
+      handle = tc_ui_document_adopt_widget(
+          checked_document_handle(document), widget->c_widget(),
+          &termin::gui_native::Widget::delete_owned_widget);
+      if (!tc_widget_handle_is_invalid(handle)) {
+        widget.release();
+      }
     }
-    widget.release();
+    if (tc_widget_handle_is_invalid(handle)) {
+        throw std::runtime_error("failed to adopt native widget");
+    }
     return WidgetRef{state, handle};
 }
 

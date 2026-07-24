@@ -47,6 +47,11 @@ int main() {
     assert(gui_key->modifiers == TC_UI_MOD_CTRL);
     assert(gui_key->repeat);
 
+    key.key.key = termin::WindowKey::LeftBracket;
+    assert(termin::gui_native::make_key_event(key)->key == '[');
+    key.key.key = termin::WindowKey::RightBracket;
+    assert(termin::gui_native::make_key_event(key)->key == ']');
+
     termin::WindowEvent text;
     text.type = termin::WindowEventType::TextInput;
     std::strcpy(text.text.utf8.data(), "A\xD0\x96");

@@ -205,6 +205,17 @@ WindowKey translate_key(SDL_Scancode key) {
         case SDL_SCANCODE_F10: return WindowKey::F10;
         case SDL_SCANCODE_F11: return WindowKey::F11;
         case SDL_SCANCODE_F12: return WindowKey::F12;
+        case SDL_SCANCODE_APOSTROPHE: return WindowKey::Apostrophe;
+        case SDL_SCANCODE_COMMA: return WindowKey::Comma;
+        case SDL_SCANCODE_MINUS: return WindowKey::Minus;
+        case SDL_SCANCODE_PERIOD: return WindowKey::Period;
+        case SDL_SCANCODE_SLASH: return WindowKey::Slash;
+        case SDL_SCANCODE_SEMICOLON: return WindowKey::Semicolon;
+        case SDL_SCANCODE_EQUALS: return WindowKey::Equals;
+        case SDL_SCANCODE_LEFTBRACKET: return WindowKey::LeftBracket;
+        case SDL_SCANCODE_BACKSLASH: return WindowKey::Backslash;
+        case SDL_SCANCODE_RIGHTBRACKET: return WindowKey::RightBracket;
+        case SDL_SCANCODE_GRAVE: return WindowKey::Grave;
         default: return WindowKey::Unknown;
     }
 }

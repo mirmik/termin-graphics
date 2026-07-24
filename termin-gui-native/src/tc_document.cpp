@@ -1,5 +1,7 @@
 #include <termin/gui_native/tc_document.hpp>
 
+#include <termin/gui_native/builtin_widget_registration.hpp>
+
 #include <stdexcept>
 
 namespace termin::gui_native {
@@ -19,6 +21,9 @@ tc::trent TcDocument::serialize() const {
 }
 
 void TcDocument::restore(const tc::trent& serialized) const {
+    if (!register_builtin_widget_types()) {
+        throw std::runtime_error("failed to register built-in native UI widget types");
+    }
     if (!tc_ui_document_restore(handle_, serialized.raw())) {
         throw std::runtime_error("failed to restore native UI document");
     }

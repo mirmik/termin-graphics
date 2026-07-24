@@ -105,6 +105,28 @@ int32_t python_key_code(termin::WindowKey key) {
     return 268;
   case termin::WindowKey::End:
     return 269;
+  case termin::WindowKey::Apostrophe:
+    return '\'';
+  case termin::WindowKey::Comma:
+    return ',';
+  case termin::WindowKey::Minus:
+    return '-';
+  case termin::WindowKey::Period:
+    return '.';
+  case termin::WindowKey::Slash:
+    return '/';
+  case termin::WindowKey::Semicolon:
+    return ';';
+  case termin::WindowKey::Equals:
+    return '=';
+  case termin::WindowKey::LeftBracket:
+    return '[';
+  case termin::WindowKey::Backslash:
+    return '\\';
+  case termin::WindowKey::RightBracket:
+    return ']';
+  case termin::WindowKey::Grave:
+    return '`';
   default:
     return -1;
   }
@@ -145,6 +167,7 @@ nb::dict python_window_event(const termin::WindowEvent &event) {
                          ? "key_down"
                          : "key_up";
     result["key"] = python_key_code(event.key.key);
+    result["native_key"] = event.key.native_key;
     result["scancode"] = event.key.native_scancode;
     result["mods"] = event.key.modifiers;
     result["repeat"] = event.key.repeat;
@@ -693,6 +716,17 @@ void bind_gui_native_application_host(nb::module_ &m) {
       .value("UP", termin::WindowKey::Up)
       .value("HOME", termin::WindowKey::Home)
       .value("END", termin::WindowKey::End)
+      .value("APOSTROPHE", termin::WindowKey::Apostrophe)
+      .value("COMMA", termin::WindowKey::Comma)
+      .value("MINUS", termin::WindowKey::Minus)
+      .value("PERIOD", termin::WindowKey::Period)
+      .value("SLASH", termin::WindowKey::Slash)
+      .value("SEMICOLON", termin::WindowKey::Semicolon)
+      .value("EQUALS", termin::WindowKey::Equals)
+      .value("LEFT_BRACKET", termin::WindowKey::LeftBracket)
+      .value("BACKSLASH", termin::WindowKey::Backslash)
+      .value("RIGHT_BRACKET", termin::WindowKey::RightBracket)
+      .value("GRAVE", termin::WindowKey::Grave)
       .value("A", termin::WindowKey::A)
       .value("C", termin::WindowKey::C)
       .value("V", termin::WindowKey::V)

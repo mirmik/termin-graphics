@@ -13,6 +13,7 @@ class TextArea : public NativeWidget {
 private:
     struct Line { size_t start; size_t end; };
     std::string text_;
+    std::string placeholder_;
     size_t caret_ = 0;
     size_t selection_anchor_ = SIZE_MAX;
     bool selecting_ = false;
@@ -24,6 +25,9 @@ private:
 public:
     explicit TextArea(std::string text = {});
     const std::string& text() const { return text_; }
+    // The placeholder is rendered while text is empty, including while focused.
+    // It is presentation-only and never becomes editable text or emits changed().
+    const std::string& placeholder() const { return placeholder_; }
     size_t caret() const { return caret_; }
     bool has_selection() const;
     size_t selection_start() const;
@@ -32,10 +36,13 @@ public:
     float scroll_x() const { return scroll_x_; }
     float scroll_y() const { return scroll_y_; }
     void set_text(std::string text);
+    void set_placeholder(std::string placeholder);
     void set_caret(size_t caret);
     void select(size_t anchor, size_t caret);
     void select_all();
     void clear_selection();
+    // changed() is emitted for every effective text mutation, whether it was
+    // initiated by set_text() or by user input.
     Signal<TextArea&, const std::string&>& changed() { return changed_; }
     const Signal<TextArea&, const std::string&>& changed() const { return changed_; }
     tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;

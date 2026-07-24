@@ -374,6 +374,11 @@ void bind_gui_native_widgets(nb::module_& m) {
         .def_prop_rw("text",
             [](const TextInputRef& self) { return self.get().text(); },
             [](const TextInputRef& self, const std::string& value) { self.get().set_text(value); })
+        .def_prop_rw("placeholder",
+            [](const TextInputRef& self) { return self.get().placeholder(); },
+            [](const TextInputRef& self, const std::string& value) {
+                self.get().set_placeholder(value);
+            })
         .def_prop_rw("caret",
             [](const TextInputRef& self) { return self.get().caret(); },
             [](const TextInputRef& self, size_t value) { self.get().set_caret(value); })
@@ -436,6 +441,11 @@ void bind_gui_native_widgets(nb::module_& m) {
         .def_prop_rw("text",
             [](const TextAreaRef& self) { return self.get().text(); },
             [](const TextAreaRef& self, const std::string& value) { self.get().set_text(value); })
+        .def_prop_rw("placeholder",
+            [](const TextAreaRef& self) { return self.get().placeholder(); },
+            [](const TextAreaRef& self, const std::string& value) {
+                self.get().set_placeholder(value);
+            })
         .def_prop_rw("caret",
             [](const TextAreaRef& self) { return self.get().caret(); },
             [](const TextAreaRef& self, size_t value) { self.get().set_caret(value); })
@@ -457,7 +467,23 @@ void bind_gui_native_widgets(nb::module_& m) {
             self.get().select(anchor, caret);
         }, nb::arg("anchor"), nb::arg("caret"))
         .def("select_all", [](const TextAreaRef& self) { self.get().select_all(); })
-        .def("clear_selection", [](const TextAreaRef& self) { self.get().clear_selection(); });
+        .def("clear_selection", [](const TextAreaRef& self) { self.get().clear_selection(); })
+        .def("connect_changed", [](const TextAreaRef& self, nb::object callback) {
+            auto state = self.widget.state;
+            return self.get().changed().connect(
+                [state, callback = std::move(callback)](
+                    termin::gui_native::TextArea&, const std::string& text) {
+                    try {
+                        nb::gil_scoped_acquire gil;
+                        callback(text);
+                    } catch (...) {
+                        if (state && !state->pending_exception)
+                            state->pending_exception = std::current_exception();
+                        tc_log_error(
+                            "[termin-gui-native/python] TextArea changed callback failed");
+                    }
+                });
+        }, nb::arg("callback"));
 
     nb::class_<SpinBoxRef>(m, "SpinBox")
         .def_prop_ro("widget", [](const SpinBoxRef& self) { return self.widget; })

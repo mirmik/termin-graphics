@@ -11,6 +11,7 @@ namespace termin::gui_native {
 class TextInput : public NativeWidget {
 private:
     std::string text_;
+    std::string placeholder_;
     size_t caret_ = 0;
     size_t selection_anchor_ = SIZE_MAX;
     bool selecting_ = false;
@@ -21,6 +22,9 @@ private:
 public:
     explicit TextInput(std::string text = {});
     const std::string& text() const { return text_; }
+    // The placeholder is rendered while text is empty, including while focused.
+    // It is presentation-only and never becomes editable text or emits changed().
+    const std::string& placeholder() const { return placeholder_; }
     size_t caret() const { return caret_; }
     bool has_selection() const;
     size_t selection_start() const;
@@ -28,10 +32,13 @@ public:
     std::string selected_text() const;
     float scroll_x() const { return scroll_x_; }
     void set_text(std::string text);
+    void set_placeholder(std::string placeholder);
     void set_caret(size_t caret);
     void select(size_t anchor, size_t caret);
     void select_all();
     void clear_selection();
+    // changed() is emitted for every effective text mutation, whether it was
+    // initiated by set_text() or by user input.
     Signal<TextInput&, const std::string&>& changed() { return changed_; }
     const Signal<TextInput&, const std::string&>& changed() const { return changed_; }
     Signal<TextInput&, const std::string&>& submitted() { return submitted_; }

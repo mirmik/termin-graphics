@@ -49,6 +49,18 @@ void TextArea::set_text(std::string text) {
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT);
 }
 
+void TextArea::set_placeholder(std::string placeholder) {
+    if (!valid_utf8(placeholder)) {
+        tc_log_error("[termin-gui-native] TextArea rejected invalid UTF-8 placeholder");
+        return;
+    }
+    if (placeholder_ == placeholder) {
+        return;
+    }
+    placeholder_ = std::move(placeholder);
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+}
+
 void TextArea::set_caret(size_t caret) {
     move_caret(caret, false);
 }
@@ -233,13 +245,19 @@ void TextArea::paint(tc_ui_document_handle document, tc_ui_paint_context* contex
                 );
             }
         }
-        const std::string line_text = text_.substr(line.start, line.end - line.start);
+        const std::string line_text = text_.empty()
+            ? placeholder_
+            : text_.substr(line.start, line.end - line.start);
+        tc_ui_color text_color = style.foreground;
+        if (text_.empty() && !placeholder_.empty()) {
+            text_color.a *= 0.55f;
+        }
         tc_ui_painter_draw_text(
             context,
             line_text.c_str(),
             tc_ui_point {clip.x - scroll_x_, row_y + ascent},
             style.font_size,
-            style.foreground
+            text_color
         );
     }
 

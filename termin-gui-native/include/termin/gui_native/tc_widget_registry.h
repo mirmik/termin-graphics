@@ -80,6 +80,16 @@ TERMIN_GUI_NATIVE_API bool tc_widget_registry_deserialize_state(tc_widget* widge
 TERMIN_GUI_NATIVE_API tc_widget_handle
 tc_ui_document_create_registered_widget(tc_ui_document_handle document, const char* type_name);
 
+/*
+ * Consumes a newly constructed factory result and adopts it through the same
+ * runtime-link and after-adopt path used by registered factory creation.
+ * The result is cleared on return; owned widgets are either owned by the
+ * document or destroyed during rollback.
+ */
+TERMIN_GUI_NATIVE_API bool tc_ui_document_adopt_registered_widget(
+    tc_ui_document_handle document, const char* type_name,
+    tc_widget_factory_result* result, tc_widget_handle* out_handle);
+
 #ifdef __cplusplus
 }
 #endif

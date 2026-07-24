@@ -997,6 +997,32 @@ void test_text_input_focus_text_edit_and_submit() {
   assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
   assert(submitted == 1);
 
+  input.set_text({});
+  assert(changed == 4);
+  input.set_placeholder("First placeholder");
+  assert(input.placeholder() == "First placeholder");
+  input.set_placeholder("Replacement placeholder");
+  assert(input.placeholder() == "Replacement placeholder");
+
+  tc_ui_draw_list *draw_list = tc_ui_draw_list_create();
+  tc_ui_paint_context *context = tc_ui_paint_context_create(draw_list);
+  document.paint_roots(context);
+  bool saw_placeholder = false;
+  for (size_t index = 0; index < tc_ui_draw_list_command_count(draw_list); ++index) {
+    const tc_ui_draw_command *command = tc_ui_draw_list_command_at(draw_list, index);
+    if (command && command->type == TC_UI_DRAW_TEXT && command->text &&
+        std::strcmp(command->text, "Replacement placeholder") == 0) {
+      saw_placeholder = true;
+      break;
+    }
+  }
+  assert(saw_placeholder);
+  tc_ui_paint_context_destroy(context);
+  tc_ui_draw_list_destroy(draw_list);
+
+  input.set_placeholder({});
+  assert(input.placeholder().empty());
+
   tc_ui_document_destroy(document_handle);
 }
 
@@ -1223,6 +1249,8 @@ void test_text_area_multiline_utf8_editing_navigation_and_scroll() {
       ui.make_root<TextArea>("a\xc3\xa9\nWWWWWWWW\n\xf0\x9f\x99\x82z\nlast");
   document.layout_roots(tc_ui_rect{10.0f, 20.0f, 70.0f, 42.0f});
   assert(document.set_focus(area));
+  int changed = 0;
+  area.changed().connect([&changed](TextArea &, const std::string &) { ++changed; });
   assert(area.scroll_y() > 0.0f);
   area.set_caret(12);
   document.layout_roots(tc_ui_rect{10.0f, 20.0f, 70.0f, 42.0f});
@@ -1260,15 +1288,35 @@ void test_text_area_multiline_utf8_editing_navigation_and_scroll() {
   tc_ui_text_event text{"Q"};
   assert(document.dispatch_text_event(text) == TC_UI_EVENT_HANDLED);
   assert(area.text() == "a\xc3\xa9\nWWWWWWWW\nQ\nlast");
+  assert(changed == 3);
+
+  area.set_text({});
+  assert(changed == 4);
+  area.set_placeholder("First placeholder");
+  assert(area.placeholder() == "First placeholder");
+  area.set_placeholder("Replacement placeholder");
+  assert(area.placeholder() == "Replacement placeholder");
 
   tc_ui_draw_list *draw_list = tc_ui_draw_list_create();
   tc_ui_paint_context *context = tc_ui_paint_context_create(draw_list);
   document.paint_roots(context);
-  assert(count_commands(draw_list, TC_UI_DRAW_TEXT) >= 2);
+  bool saw_placeholder = false;
+  for (size_t index = 0; index < tc_ui_draw_list_command_count(draw_list); ++index) {
+    const tc_ui_draw_command *command = tc_ui_draw_list_command_at(draw_list, index);
+    if (command && command->type == TC_UI_DRAW_TEXT && command->text &&
+        std::strcmp(command->text, "Replacement placeholder") == 0) {
+      saw_placeholder = true;
+      break;
+    }
+  }
+  assert(saw_placeholder);
   assert(count_commands(draw_list, TC_UI_DRAW_PUSH_CLIP) == 1);
   assert(count_commands(draw_list, TC_UI_DRAW_POP_CLIP) == 1);
   tc_ui_paint_context_destroy(context);
   tc_ui_draw_list_destroy(draw_list);
+
+  area.set_placeholder({});
+  assert(area.placeholder().empty());
 
   tc_ui_document_destroy(document_handle);
 }

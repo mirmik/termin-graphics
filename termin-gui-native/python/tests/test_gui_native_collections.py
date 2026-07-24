@@ -465,6 +465,9 @@ def test_native_menu_and_menu_bar_overlay_shortcut_contracts():
     assert bar_activations[0][2:] == ("save", True)
     assert bar.dispatch_shortcut(KeyCode.F7.value, 0)
     assert bar_activations[1][2:] == ("profiler", True)
+    model.append(CommandData("grow-brush", "Grow brush", shortcut="Ctrl+]"))
+    assert bar.dispatch_shortcut(ord("]"), int(ModifierFlag.Ctrl))
+    assert bar_activations[2][2:] == ("grow-brush", False)
 
 
 def test_native_dialog_message_box_and_input_dialog_contracts():
