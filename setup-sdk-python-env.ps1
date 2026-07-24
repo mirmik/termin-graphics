@@ -24,12 +24,24 @@ $ToolsRequirements = Join-Path $ScriptDir "build-system\python-test-requirements
 $ToolsStamp = Join-Path $EnvRoot "python-test-requirements.txt"
 $OverlayManifest = Join-Path $EnvRoot "overlay.json"
 $BuildToolsRoot = Join-Path $ScriptDir "termin-build-tools"
+$PythonBuildEnv = if ($env:TERMIN_PYTHON_BUILD_ENV) {
+    $env:TERMIN_PYTHON_BUILD_ENV
+} else {
+    Join-Path $ScriptDir "build\python-runtime\build-env"
+}
+$TestToolsPython = if ($env:TERMIN_TEST_TOOLS_PYTHON) {
+    $env:TERMIN_TEST_TOOLS_PYTHON
+} else {
+    Join-Path $PythonBuildEnv "Scripts\python.exe"
+}
 
 if (-not (Test-Path $SdkPython -PathType Leaf)) {
     throw "Isolated SDK Python launcher is missing: $SdkPython. Run .\build-sdk.ps1 --no-wheels first."
 }
 
-$BootstrapPython = if ($env:PYTHON_BOOTSTRAP) { $env:PYTHON_BOOTSTRAP } else { "python" }
+if (-not (Test-Path $TestToolsPython -PathType Leaf)) {
+    throw "Pinned SDK Python build frontend is missing: $TestToolsPython. Run .\build-sdk.ps1 --no-wheels first."
+}
 if ($Force -and (Test-Path $ToolsSite)) {
     Remove-Item -Recurse -Force $ToolsSite
 }
@@ -40,7 +52,7 @@ $ToolsCurrent = (Test-Path (Join-Path $ToolsSite "ruff")) -and `
     ((Get-FileHash $ToolsRequirements).Hash -eq (Get-FileHash $ToolsStamp).Hash)
 if ($Force -or -not $ToolsCurrent) {
     Write-Host "Installing test-only tools into: $ToolsSite"
-    & $BootstrapPython -I -m pip install `
+    & $TestToolsPython -I -m pip install `
         --no-deps `
         --ignore-installed `
         --upgrade `

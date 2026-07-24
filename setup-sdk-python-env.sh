@@ -12,6 +12,8 @@ OVERLAY_MANIFEST="$ENV_ROOT/overlay.json"
 SDK_ROOT="${TERMIN_SDK:-$SCRIPT_DIR/sdk}"
 SDK_PYTHON="$SDK_ROOT/bin/termin_python"
 BUILD_TOOLS_ROOT="$SCRIPT_DIR/termin-build-tools"
+PYTHON_BUILD_ENV="${TERMIN_PYTHON_BUILD_ENV:-$SCRIPT_DIR/build/python-runtime/build-env}"
+TEST_TOOLS_PYTHON="${TERMIN_TEST_TOOLS_PYTHON:-$PYTHON_BUILD_ENV/bin/python}"
 FORCE=0
 
 for arg in "$@"; do
@@ -32,9 +34,9 @@ if [[ ! -x "$SDK_PYTHON" ]]; then
     exit 1
 fi
 
-BOOTSTRAP_PYTHON="${PYTHON_BOOTSTRAP:-$(command -v python3 || command -v python || true)}"
-if [[ -z "$BOOTSTRAP_PYTHON" ]]; then
-    echo "ERROR: bootstrap Python was not found." >&2
+if [[ ! -x "$TEST_TOOLS_PYTHON" ]]; then
+    echo "ERROR: pinned SDK Python build frontend is missing: $TEST_TOOLS_PYTHON" >&2
+    echo "Run ./build-sdk.sh --no-wheels first." >&2
     exit 1
 fi
 
@@ -46,7 +48,7 @@ mkdir -p "$TOOLS_SITE"
 if [[ $FORCE -eq 1 || ! -d "$TOOLS_SITE/ruff" || ! -f "$TOOLS_STAMP" ]] \
     || ! cmp -s "$TOOLS_REQUIREMENTS" "$TOOLS_STAMP"; then
     echo "Installing test-only tools into: $TOOLS_SITE"
-    "$BOOTSTRAP_PYTHON" -I -m pip install \
+    "$TEST_TOOLS_PYTHON" -I -m pip install \
         --no-deps \
         --ignore-installed \
         --upgrade \
