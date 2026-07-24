@@ -23,7 +23,6 @@ TGFX_API tc_mesh_handle tc_mesh_find(const char* uuid);
 TGFX_API tc_mesh_handle tc_mesh_find_by_name(const char* name);
 TGFX_API tc_mesh_handle tc_mesh_get_or_create(const char* uuid);
 TGFX_API tc_mesh_handle tc_mesh_declare(const char* uuid, const char* name);
-TGFX_API void tc_mesh_set_load_callback(tc_mesh_handle h, tc_mesh_load_fn callback, void* user_data);
 TGFX_API bool tc_mesh_is_loaded(tc_mesh_handle h);
 TGFX_API bool tc_mesh_ensure_loaded(tc_mesh_handle h);
 TGFX_API bool tc_mesh_ensure_loaded_ptr(tc_mesh* mesh);
@@ -59,8 +58,7 @@ typedef struct tc_mesh_info {
     size_t stride;
     size_t memory_bytes;
     uint8_t is_loaded;
-    uint8_t has_load_callback;
-    uint8_t _pad[6];
+    uint8_t _pad[7];
 } tc_mesh_info;
 
 TGFX_API tc_mesh_info* tc_mesh_get_all_info(size_t* count);

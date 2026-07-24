@@ -8,50 +8,11 @@
 #include "termin/animation/tc_animation_handle.hpp"
 #include "termin/inspect/tc_kind.hpp"
 #include <tcbase/tc_log.hpp>
-#include <mutex>
 #include <stdexcept>
 
 namespace nb = nanobind;
 using namespace termin;
 using namespace termin::animation;
-
-namespace {
-
-static std::mutex g_animation_callback_mutex;
-static std::unordered_map<std::string, nb::callable> g_animation_python_callbacks;
-
-void cleanup_animation_callbacks() {
-    std::lock_guard<std::mutex> lock(g_animation_callback_mutex);
-    g_animation_python_callbacks.clear();
-}
-
-static bool animation_python_load_callback_wrapper(tc_animation* animation, void* user_data) {
-    (void)user_data;
-    if (!animation) return false;
-
-    std::string uuid(animation->header.uuid);
-
-    nb::callable callback;
-    {
-        std::lock_guard<std::mutex> lock(g_animation_callback_mutex);
-        auto it = g_animation_python_callbacks.find(uuid);
-        if (it == g_animation_python_callbacks.end()) {
-            return false;
-        }
-        callback = it->second;
-    }
-
-    nb::gil_scoped_acquire gil;
-    try {
-        nb::object result = callback(nb::cast(animation, nb::rv_policy::reference));
-        return nb::cast<bool>(result);
-    } catch (const std::exception& e) {
-        tc::Log::error("Python animation load callback failed for '%s': %s", uuid.c_str(), e.what());
-        return false;
-    }
-}
-
-} // namespace
 
 void bind_tc_animation_clip(nb::module_& m) {
     nb::class_<tc_animation>(m, "TcAnimationData")
@@ -336,38 +297,6 @@ NB_MODULE(_animation_native, m) {
         return result;
     });
 
-    m.def("tc_animation_set_load_callback", [](TcAnimationClip& handle, nb::callable callback) {
-        tc_animation* animation = handle.get();
-        if (!animation) {
-            throw std::runtime_error("Invalid animation handle");
-        }
-
-        std::string uuid(animation->header.uuid);
-        {
-            std::lock_guard<std::mutex> lock(g_animation_callback_mutex);
-            g_animation_python_callbacks[uuid] = callback;
-        }
-
-        tc_animation_set_load_callback(handle.handle, animation_python_load_callback_wrapper, nullptr);
-    }, nb::arg("handle"), nb::arg("callback"),
-       "Set Python callback for lazy animation loading");
-
-    m.def("tc_animation_clear_load_callback", [](TcAnimationClip& handle) {
-        tc_animation* animation = handle.get();
-        if (!animation) return;
-
-        std::string uuid(animation->header.uuid);
-        {
-            std::lock_guard<std::mutex> lock(g_animation_callback_mutex);
-            g_animation_python_callbacks.erase(uuid);
-        }
-
-        tc_animation_set_load_callback(handle.handle, nullptr, nullptr);
-    }, nb::arg("handle"), "Clear load callback for animation");
-
     m.def("register_animation_kind_handlers", &register_animation_kind_handlers,
         "Register tc_animation_clip kind handlers explicitly.");
-
-    nb::module_ atexit = nb::module_::import_("atexit");
-    atexit.attr("register")(nb::cpp_function(&cleanup_animation_callbacks));
 }

@@ -237,26 +237,16 @@ bool tc_skeleton_is_loaded(tc_skeleton_handle h) {
     return skeleton->header.is_loaded != 0;
 }
 
-void tc_skeleton_set_load_callback(tc_skeleton_handle h, tc_skeleton_load_fn callback, void* user_data) {
-    tc_skeleton* skeleton = tc_skeleton_get(h);
-    if (!skeleton) return;
-    skeleton->header.load_callback = (tc_resource_load_fn)callback;
-    skeleton->header.load_user_data = user_data;
-}
-
 bool tc_skeleton_ensure_loaded(tc_skeleton_handle h) {
     tc_skeleton* skeleton = tc_skeleton_get(h);
     if (!skeleton) return false;
 
-    if (skeleton->header.is_loaded) return true;
-    if (!skeleton->header.load_callback) {
-        tc_log_warn("tc_skeleton_ensure_loaded: skeleton '%s' has no load callback", skeleton->header.uuid);
-        return false;
-    }
-
-    bool success = skeleton->header.load_callback(skeleton, skeleton->header.load_user_data);
-    if (success) {
-        skeleton->header.is_loaded = 1;
+    bool success = tc_resource_header_ensure_loaded(&skeleton->header);
+    if (!success) {
+        tc_log_error(
+            "tc_skeleton_ensure_loaded: resource loader failed for '%s'",
+            skeleton->header.uuid
+        );
     }
     return success;
 }

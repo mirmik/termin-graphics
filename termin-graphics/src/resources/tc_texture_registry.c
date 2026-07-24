@@ -276,8 +276,6 @@ tc_texture_handle tc_texture_declare(const char* uuid, const char* name) {
     tex->header.ref_count = 0;
     tex->header.pool_index = h.index;
     tex->header.is_loaded = 0;
-    tex->header.load_callback = NULL;
-    tex->header.load_user_data = NULL;
     tex->flip_y = 1;
     tex->storage_kind = TC_TEXTURE_STORAGE_CPU_FIRST;
     tex->usage = TC_TEXTURE_USAGE_SAMPLED;
@@ -295,18 +293,6 @@ tc_texture_handle tc_texture_declare(const char* uuid, const char* name) {
     return h;
 }
 
-void tc_texture_set_load_callback(
-    tc_texture_handle h,
-    tc_resource_load_fn callback,
-    void* user_data
-) {
-    tc_texture* tex = tc_texture_get(h);
-    if (!tex) return;
-
-    tex->header.load_callback = callback;
-    tex->header.load_user_data = user_data;
-}
-
 bool tc_texture_is_loaded(tc_texture_handle h) {
     tc_texture* tex = tc_texture_get(h);
     if (!tex) return false;
@@ -321,20 +307,10 @@ bool tc_texture_ensure_loaded(tc_texture_handle h) {
 
 bool tc_texture_ensure_loaded_ptr(tc_texture* tex) {
     if (!tex) return false;
-    if (tex->header.is_loaded) return true;
-
-    if (!tex->header.load_callback) {
-        tc_log(TC_LOG_WARN, "tc_texture_ensure_loaded_ptr: texture '%s' has no load callback", tex->header.uuid);
-        return false;
+    bool success = tc_resource_header_ensure_loaded(&tex->header);
+    if (!success) {
+        tc_log(TC_LOG_ERROR, "tc_texture_ensure_loaded_ptr: resource loader failed for '%s'", tex->header.uuid);
     }
-
-    bool success = tex->header.load_callback(tex, tex->header.load_user_data);
-    if (success) {
-        tex->header.is_loaded = 1;
-    } else {
-        tc_log(TC_LOG_ERROR, "tc_texture_ensure_loaded_ptr: load callback failed for '%s'", tex->header.uuid);
-    }
-
     return success;
 }
 
@@ -640,7 +616,6 @@ static bool collect_texture_info(tc_texture_handle h, tc_texture* tex, void* use
     info->channels = tex->channels;
     info->format = tex->format;
     info->is_loaded = tex->header.is_loaded;
-    info->has_load_callback = tex->header.load_callback != NULL;
     info->memory_bytes = (size_t)tex->width * tex->height * tex->channels;
 
     return true;

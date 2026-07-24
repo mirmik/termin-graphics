@@ -51,14 +51,6 @@ TC_API size_t tc_skeleton_count(void);
 // Check if skeleton data is loaded
 TC_API bool tc_skeleton_is_loaded(tc_skeleton_handle h);
 
-// Set load callback for lazy loading
-typedef bool (*tc_skeleton_load_fn)(tc_skeleton* skeleton, void* user_data);
-TC_API void tc_skeleton_set_load_callback(
-    tc_skeleton_handle h,
-    tc_skeleton_load_fn callback,
-    void* user_data
-);
-
 // Ensure skeleton is loaded
 TC_API bool tc_skeleton_ensure_loaded(tc_skeleton_handle h);
 

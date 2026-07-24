@@ -30,7 +30,6 @@ TGFX_API tc_texture_handle tc_texture_get_or_create(const char* uuid);
 TGFX_API tc_texture_handle tc_texture_get_white_1x1(void);
 TGFX_API tc_texture_handle tc_texture_get_normal_1x1(void);
 TGFX_API tc_texture_handle tc_texture_declare(const char* uuid, const char* name);
-TGFX_API void tc_texture_set_load_callback(tc_texture_handle h, tc_resource_load_fn callback, void* user_data);
 TGFX_API bool tc_texture_is_loaded(tc_texture_handle h);
 TGFX_API bool tc_texture_ensure_loaded(tc_texture_handle h);
 TGFX_API bool tc_texture_ensure_loaded_ptr(tc_texture* tex);
@@ -56,8 +55,7 @@ typedef struct tc_texture_info {
     uint8_t channels;
     uint8_t format;
     uint8_t is_loaded;
-    uint8_t has_load_callback;
-    uint8_t _pad[6];
+    uint8_t _pad[7];
     size_t memory_bytes;
 } tc_texture_info;
 

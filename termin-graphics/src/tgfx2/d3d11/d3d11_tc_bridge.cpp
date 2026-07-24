@@ -216,7 +216,7 @@ void D3D11RenderDevice::invalidate_tc_shader_cache(uint32_t pool_index) {
 TextureHandle D3D11RenderDevice::ensure_tc_texture(tc_texture* tex) {
     if (!tex) return {};
 
-    if (!tex->header.is_loaded && tex->header.load_callback) {
+    if (!tex->header.is_loaded) {
         tc_texture_ensure_loaded_ptr(tex);
     }
 

@@ -167,11 +167,10 @@ class GLBAsset(DataAsset["GLBSceneData"]):
     def _create_mesh_assets(self, mesh_uuids: Dict[str, str]) -> None:
         """Get or create child MeshAssets with UUIDs from spec via ResourceManager.
 
-        Also declares meshes in tc_mesh registry with lazy load callback.
+        Also declares meshes for process-wide UUID lazy loading.
         """
         from tmesh import (
             tc_mesh_declare,
-            tc_mesh_set_load_callback,
             tc_mesh_is_loaded,
         )
 
@@ -186,19 +185,15 @@ class GLBAsset(DataAsset["GLBSceneData"]):
             # Declare mesh in tc_mesh registry if not already loaded
             tc_mesh = tc_mesh_declare(mesh_uuid, full_name)
             if tc_mesh.is_valid and not tc_mesh_is_loaded(tc_mesh):
-                # Set load callback that will trigger GLBAsset loading
-                tc_mesh_set_load_callback(tc_mesh, self._make_mesh_load_callback(mesh_name))
-                # Store handle in MeshAsset
                 asset.set_runtime_data(tc_mesh, loaded=False)
 
     def _create_skeleton_assets(self, skeleton_uuids: Dict[str, str]) -> None:
         """Get or create child SkeletonAssets with UUIDs from spec via ResourceManager.
 
-        Also declares skeletons in tc_skeleton registry with lazy load callback.
+        Also declares skeletons for process-wide UUID lazy loading.
         """
         from termin.skeleton._skeleton_native import (
             tc_skeleton_declare,
-            tc_skeleton_set_load_callback,
             tc_skeleton_is_loaded,
         )
 
@@ -216,20 +211,16 @@ class GLBAsset(DataAsset["GLBSceneData"]):
             # Declare skeleton in tc_skeleton registry if not already loaded
             tc_skel = tc_skeleton_declare(skeleton_uuid, skeleton_name)
             if tc_skel.is_valid and not tc_skeleton_is_loaded(tc_skel):
-                # Set load callback that will trigger GLBAsset loading
-                tc_skeleton_set_load_callback(tc_skel, self._make_skeleton_load_callback(skeleton_key))
-                # Store handle in SkeletonAsset
                 asset.set_runtime_data(tc_skel, loaded=False)
 
     def _create_animation_assets(self, animation_uuids: Dict[str, str]) -> None:
         """Get or create child AnimationClipAssets with UUIDs from spec via ResourceManager.
 
-        Also declares animations in tc_animation registry with lazy load callback.
+        Also declares animations for process-wide UUID lazy loading.
         """
         from termin.animation._animation_native import (
             tc_animation_declare,
             tc_animation_is_loaded,
-            tc_animation_set_load_callback,
         )
 
         for anim_name, anim_uuid in animation_uuids.items():
@@ -244,7 +235,6 @@ class GLBAsset(DataAsset["GLBSceneData"]):
             # as the gameplay key, so callers can still play "Walk" on each player.
             tc_anim = tc_animation_declare(anim_uuid, anim_name)
             if tc_anim.is_valid and not tc_animation_is_loaded(tc_anim):
-                tc_animation_set_load_callback(tc_anim, self._make_animation_load_callback(anim_name))
                 asset.set_runtime_data(tc_anim, loaded=False)
 
     def _build_spec_data(self) -> dict:
@@ -341,81 +331,6 @@ class GLBAsset(DataAsset["GLBSceneData"]):
         if spec_changed and self._source_path:
             with self._load_stage("save-spec"):
                 self.save_spec_file()
-
-    def _make_mesh_load_callback(self, mesh_name: str):
-        """Create a load callback that triggers GLBAsset loading for a specific mesh."""
-        def load_callback(tc_mesh_data) -> bool:
-            # Load the parent GLBAsset if not loaded
-            self.ensure_loaded()
-
-            # Find the GLB mesh data and populate tc_mesh
-            if self._data is None:
-                return False
-
-            for glb_mesh in self._data.meshes:
-                if glb_mesh.name == mesh_name:
-                    from termin.glb.instantiator import _populate_tc_mesh_from_glb
-                    from tmesh import TcMesh
-
-                    tc_mesh = TcMesh.from_uuid(tc_mesh_data.uuid)
-                    if tc_mesh.is_valid:
-                        return _populate_tc_mesh_from_glb(tc_mesh, glb_mesh)
-
-            return False
-
-        return load_callback
-
-    def _make_skeleton_load_callback(self, skeleton_key: str):
-        """Create a load callback that triggers GLBAsset loading for a specific skeleton."""
-        def load_callback(tc_skeleton_data) -> bool:
-            # Load the parent GLBAsset if not loaded
-            self.ensure_loaded()
-
-            if self._data is None:
-                return False
-
-            # Parse skeleton_key to get index
-            if skeleton_key == "skeleton":
-                index = 0
-            else:
-                index = int(skeleton_key.split("_")[-1])
-
-            if index < len(self._data.skins):
-                from termin.glb.instantiator import _populate_tc_skeleton_from_glb
-                from termin.skeleton import TcSkeleton
-
-                tc_skel = TcSkeleton.from_uuid(tc_skeleton_data.uuid)
-                if tc_skel.is_valid:
-                    return _populate_tc_skeleton_from_glb(
-                        tc_skel,
-                        self._data.skins[index],
-                        self._data.nodes,
-                    )
-
-            return False
-
-        return load_callback
-
-    def _make_animation_load_callback(self, anim_name: str):
-        """Create a load callback that triggers GLBAsset loading for a specific animation."""
-        def load_callback(tc_animation_data) -> bool:
-            self.ensure_loaded()
-
-            if self._data is None:
-                return False
-            if tc_animation_data.is_loaded:
-                return True
-
-            from termin.animation import clip_from_glb
-
-            for glb_anim in self._data.animations:
-                if glb_anim.name == anim_name:
-                    clip = clip_from_glb(glb_anim, tc_animation_data.uuid)
-                    return clip.is_valid
-
-            return False
-
-        return load_callback
 
     def _populate_child_assets(self) -> None:
         """Fill all child assets with extracted data from loaded GLB."""

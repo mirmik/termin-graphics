@@ -5,9 +5,7 @@
 #include <nanobind/stl/tuple.h>
 #include <nanobind/ndarray.h>
 #include <cstring>
-#include <mutex>
 #include <stdexcept>
-#include <unordered_map>
 
 #include "tgfx/tgfx_texture_handle.hpp"
 
@@ -18,46 +16,6 @@ extern "C" {
 namespace nb = nanobind;
 
 using namespace termin;
-
-namespace {
-
-static std::mutex g_texture_callback_mutex;
-static std::unordered_map<std::string, nb::callable> g_texture_python_callbacks;
-
-void cleanup_texture_callbacks() {
-    std::lock_guard<std::mutex> lock(g_texture_callback_mutex);
-    g_texture_python_callbacks.clear();
-}
-
-static bool python_texture_load_callback_wrapper(void* resource, void* user_data) {
-    (void)user_data;
-    auto* tex = static_cast<tc_texture*>(resource);
-    if (!tex) return false;
-
-    std::string uuid(tex->header.uuid);
-
-    nb::callable callback;
-    {
-        std::lock_guard<std::mutex> lock(g_texture_callback_mutex);
-        auto it = g_texture_python_callbacks.find(uuid);
-        if (it == g_texture_python_callbacks.end()) {
-            return false;
-        }
-        callback = it->second;
-    }
-
-    nb::gil_scoped_acquire gil;
-    try {
-        tc_texture_handle h = tc_texture_find(uuid.c_str());
-        nb::object result = callback(nb::cast(TcTexture(h)));
-        return nb::cast<bool>(result);
-    } catch (const std::exception& e) {
-        tc_log_error("Python texture load callback failed for '%s': %s", uuid.c_str(), e.what());
-        return false;
-    }
-}
-
-} // anonymous namespace
 
 namespace tgfx_bindings {
 
@@ -222,7 +180,6 @@ void bind_texture(nb::module_& m) {
             d["channels"] = infos[i].channels;
             d["format"] = infos[i].format;
             d["is_loaded"] = (bool)infos[i].is_loaded;
-            d["has_load_callback"] = (bool)infos[i].has_load_callback;
             d["memory_bytes"] = infos[i].memory_bytes;
             result.append(d);
         }
@@ -246,39 +203,6 @@ void bind_texture(nb::module_& m) {
         return tc_texture_ensure_loaded(handle.handle);
     }, nb::arg("handle"), "Ensure texture is loaded (triggers callback if needed)");
 
-    m.def("tc_texture_set_load_callback", [](TcTexture& handle, nb::callable callback) {
-        tc_texture* tex = handle.get();
-        if (!tex) {
-            throw std::runtime_error("Invalid texture handle");
-        }
-
-        std::string uuid(tex->header.uuid);
-
-        {
-            std::lock_guard<std::mutex> lock(g_texture_callback_mutex);
-            g_texture_python_callbacks[uuid] = callback;
-        }
-
-        tc_texture_set_load_callback(handle.handle, python_texture_load_callback_wrapper, nullptr);
-    }, nb::arg("handle"), nb::arg("callback"),
-       "Set Python callback for lazy texture loading");
-
-    m.def("tc_texture_clear_load_callback", [](TcTexture& handle) {
-        tc_texture* tex = handle.get();
-        if (!tex) return;
-
-        std::string uuid(tex->header.uuid);
-
-        {
-            std::lock_guard<std::mutex> lock(g_texture_callback_mutex);
-            g_texture_python_callbacks.erase(uuid);
-        }
-
-        tc_texture_set_load_callback(handle.handle, nullptr, nullptr);
-    }, nb::arg("handle"), "Clear load callback for texture");
-
-    nb::module_ atexit = nb::module_::import_("atexit");
-    atexit.attr("register")(nb::cpp_function(&cleanup_texture_callbacks));
 }
 
 } // namespace tgfx_bindings

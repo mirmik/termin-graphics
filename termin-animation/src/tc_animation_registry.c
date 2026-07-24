@@ -241,26 +241,16 @@ bool tc_animation_is_loaded(tc_animation_handle h) {
     return animation->header.is_loaded != 0;
 }
 
-void tc_animation_set_load_callback(tc_animation_handle h, tc_animation_load_fn callback, void* user_data) {
-    tc_animation* animation = tc_animation_get(h);
-    if (!animation) return;
-    animation->header.load_callback = (tc_resource_load_fn)callback;
-    animation->header.load_user_data = user_data;
-}
-
 bool tc_animation_ensure_loaded(tc_animation_handle h) {
     tc_animation* animation = tc_animation_get(h);
     if (!animation) return false;
 
-    if (animation->header.is_loaded) return true;
-    if (!animation->header.load_callback) {
-        tc_log_warn("tc_animation_ensure_loaded: animation '%s' has no load callback", animation->header.uuid);
-        return false;
-    }
-
-    bool success = animation->header.load_callback(animation, animation->header.load_user_data);
-    if (success) {
-        animation->header.is_loaded = 1;
+    bool success = tc_resource_header_ensure_loaded(&animation->header);
+    if (!success) {
+        tc_log_error(
+            "tc_animation_ensure_loaded: resource loader failed for '%s'",
+            animation->header.uuid
+        );
     }
     return success;
 }

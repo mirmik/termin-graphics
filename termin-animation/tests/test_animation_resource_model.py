@@ -6,8 +6,8 @@ from termin.animation._animation_native import (
     tc_animation_declare,
     tc_animation_ensure_loaded,
     tc_animation_is_loaded,
-    tc_animation_set_load_callback,
 )
+from tcbase import clear_resource_loader, set_resource_loader
 from termin.glb.loader import GLBAnimationChannel, GLBAnimationClip
 
 
@@ -38,17 +38,20 @@ def test_clip_from_glb_fills_declared_animation_uuid() -> None:
     assert TcAnimationClip.from_uuid(animation_uuid).uuid == animation_uuid
 
 
-def test_declared_animation_load_callback_populates_same_resource() -> None:
+def test_declared_animation_process_loader_populates_same_resource() -> None:
     animation_uuid = str(uuid.uuid4())
     declared = tc_animation_declare(animation_uuid, "Walk")
 
-    def load_animation(animation_data) -> bool:
-        clip = clip_from_glb(_glb_clip(), animation_data.uuid)
+    def load_animation(resource_uuid: str) -> bool:
+        assert resource_uuid == animation_uuid
+        clip = clip_from_glb(_glb_clip(), resource_uuid)
         return clip.is_valid
 
-    tc_animation_set_load_callback(declared, load_animation)
-
-    assert tc_animation_ensure_loaded(declared)
-    assert declared.uuid == animation_uuid
-    assert tc_animation_is_loaded(declared)
-    assert declared.channel_count == 1
+    set_resource_loader(load_animation)
+    try:
+        assert tc_animation_ensure_loaded(declared)
+        assert declared.uuid == animation_uuid
+        assert tc_animation_is_loaded(declared)
+        assert declared.channel_count == 1
+    finally:
+        clear_resource_loader()

@@ -51,14 +51,6 @@ TC_API size_t tc_animation_count(void);
 // Check if animation data is loaded
 TC_API bool tc_animation_is_loaded(tc_animation_handle h);
 
-// Set load callback for lazy loading
-typedef bool (*tc_animation_load_fn)(tc_animation* animation, void* user_data);
-TC_API void tc_animation_set_load_callback(
-    tc_animation_handle h,
-    tc_animation_load_fn callback,
-    void* user_data
-);
-
 // Ensure animation is loaded
 TC_API bool tc_animation_ensure_loaded(tc_animation_handle h);
 

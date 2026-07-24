@@ -5,8 +5,6 @@
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/optional.h>
 #include <optional>
-#include <unordered_map>
-#include <mutex>
 #include <cstdio>
 #include <cstring>
 #include <utility>
@@ -24,41 +22,6 @@ namespace nb = nanobind;
 using namespace termin;
 
 namespace {
-
-// Python callback storage for lazy loading
-static std::mutex g_callback_mutex;
-static std::unordered_map<std::string, nb::callable> g_python_callbacks;
-
-void cleanup_mesh_callbacks() {
-    std::lock_guard<std::mutex> lock(g_callback_mutex);
-    g_python_callbacks.clear();
-}
-
-static bool python_load_callback_wrapper(tc_mesh* mesh, void* user_data) {
-    (void)user_data;
-    if (!mesh) return false;
-
-    std::string uuid(mesh->header.uuid);
-
-    nb::callable callback;
-    {
-        std::lock_guard<std::mutex> lock(g_callback_mutex);
-        auto it = g_python_callbacks.find(uuid);
-        if (it == g_python_callbacks.end()) {
-            return false;
-        }
-        callback = it->second;
-    }
-
-    nb::gil_scoped_acquire gil;
-    try {
-        nb::object result = callback(nb::cast(mesh, nb::rv_policy::reference));
-        return nb::cast<bool>(result);
-    } catch (const std::exception& e) {
-        tc_log_error("Python mesh load callback failed for '%s': %s", uuid.c_str(), e.what());
-        return false;
-    }
-}
 
 // Helper: create 2D numpy array of floats
 template<typename T>
@@ -798,7 +761,6 @@ void bind_mesh(nb::module_& m) {
                 d["stride"] = infos[i].stride;
                 d["memory_bytes"] = infos[i].memory_bytes;
                 d["is_loaded"] = (bool)infos[i].is_loaded;
-                d["has_load_callback"] = (bool)infos[i].has_load_callback;
                 tc_mesh* mesh = tc_mesh_get(infos[i].handle);
                 if (mesh) {
                     d["pool_index"] = mesh->header.pool_index;
@@ -825,40 +787,6 @@ void bind_mesh(nb::module_& m) {
         return tc_mesh_ensure_loaded(handle.handle);
     }, nb::arg("handle"), "Ensure mesh is loaded (triggers callback if needed)");
 
-    m.def("tc_mesh_set_load_callback", [](TcMesh& handle, nb::callable callback) {
-        tc_mesh* mesh = handle.get();
-        if (!mesh) {
-            throw std::runtime_error("Invalid mesh handle");
-        }
-
-        std::string uuid(mesh->header.uuid);
-
-        {
-            std::lock_guard<std::mutex> lock(g_callback_mutex);
-            g_python_callbacks[uuid] = callback;
-        }
-
-        tc_mesh_set_load_callback(handle.handle, python_load_callback_wrapper, nullptr);
-    }, nb::arg("handle"), nb::arg("callback"),
-       "Set Python callback for lazy loading");
-
-    m.def("tc_mesh_clear_load_callback", [](TcMesh& handle) {
-        tc_mesh* mesh = handle.get();
-        if (!mesh) return;
-
-        std::string uuid(mesh->header.uuid);
-
-        {
-            std::lock_guard<std::mutex> lock(g_callback_mutex);
-            g_python_callbacks.erase(uuid);
-        }
-
-        tc_mesh_set_load_callback(handle.handle, nullptr, nullptr);
-    }, nb::arg("handle"), "Clear load callback for mesh");
-
-    // Register cleanup with Python's atexit module
-    nb::module_ atexit = nb::module_::import_("atexit");
-    atexit.attr("register")(nb::cpp_function(&cleanup_mesh_callbacks));
 }
 
 } // namespace tmesh_bindings

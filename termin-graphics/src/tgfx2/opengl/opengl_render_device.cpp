@@ -377,7 +377,7 @@ bool load_opengl_shader_artifact_source(
 TextureHandle OpenGLRenderDevice::ensure_tc_texture(tc_texture* tex) {
     if (!tex) return {};
 
-    if (!tex->header.is_loaded && tex->header.load_callback) {
+    if (!tex->header.is_loaded) {
         tc_texture_ensure_loaded_ptr(tex);
     }
 

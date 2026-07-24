@@ -262,8 +262,6 @@ tc_mesh_handle tc_mesh_declare(const char* uuid, const char* name) {
     mesh->header.ref_count = 0;
     mesh->header.pool_index = h.index;
     mesh->header.is_loaded = 0;  // NOT loaded yet
-    mesh->header.load_callback = NULL;
-    mesh->header.load_user_data = NULL;
 
     if (name && name[0] != '\0') {
         mesh->header.name = tc_intern_string(name);
@@ -279,18 +277,6 @@ tc_mesh_handle tc_mesh_declare(const char* uuid, const char* name) {
     return h;
 }
 
-void tc_mesh_set_load_callback(
-    tc_mesh_handle h,
-    tc_mesh_load_fn callback,
-    void* user_data
-) {
-    tc_mesh* mesh = tc_mesh_get(h);
-    if (!mesh) return;
-
-    mesh->header.load_callback = (tc_resource_load_fn)callback;
-    mesh->header.load_user_data = user_data;
-}
-
 bool tc_mesh_is_loaded(tc_mesh_handle h) {
     tc_mesh* mesh = tc_mesh_get(h);
     if (!mesh) return false;
@@ -301,39 +287,19 @@ bool tc_mesh_ensure_loaded(tc_mesh_handle h) {
     tc_mesh* mesh = tc_mesh_get(h);
     if (!mesh) return false;
 
-    if (mesh->header.is_loaded) return true;
-
-    if (!mesh->header.load_callback) {
-        tc_log(TC_LOG_WARN, "tc_mesh_ensure_loaded: mesh '%s' has no load callback", mesh->header.uuid);
-        return false;
+    bool success = tc_resource_header_ensure_loaded(&mesh->header);
+    if (!success) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_ensure_loaded: resource loader failed for '%s'", mesh->header.uuid);
     }
-
-    bool success = mesh->header.load_callback(mesh, mesh->header.load_user_data);
-    if (success) {
-        mesh->header.is_loaded = 1;
-    } else {
-        tc_log(TC_LOG_ERROR, "tc_mesh_ensure_loaded: load callback failed for '%s'", mesh->header.uuid);
-    }
-
     return success;
 }
 
 bool tc_mesh_ensure_loaded_ptr(tc_mesh* mesh) {
     if (!mesh) return false;
-    if (mesh->header.is_loaded) return true;
-
-    if (!mesh->header.load_callback) {
-        tc_log(TC_LOG_WARN, "tc_mesh_ensure_loaded_ptr: mesh '%s' has no load callback", mesh->header.uuid);
-        return false;
+    bool success = tc_resource_header_ensure_loaded(&mesh->header);
+    if (!success) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_ensure_loaded_ptr: resource loader failed for '%s'", mesh->header.uuid);
     }
-
-    bool success = mesh->header.load_callback(mesh, mesh->header.load_user_data);
-    if (success) {
-        mesh->header.is_loaded = 1;
-    } else {
-        tc_log(TC_LOG_ERROR, "tc_mesh_ensure_loaded_ptr: load callback failed for '%s'", mesh->header.uuid);
-    }
-
     return success;
 }
 
@@ -742,7 +708,6 @@ static bool collect_mesh_info(tc_mesh_handle h, tc_mesh* mesh, void* user_data) 
                          mesh->index_count * sizeof(uint32_t) +
                          mesh->submesh_count * sizeof(tc_submesh);
     info->is_loaded = mesh->header.is_loaded;
-    info->has_load_callback = mesh->header.load_callback != NULL;
 
     return true;
 }

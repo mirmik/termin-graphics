@@ -5,8 +5,6 @@
 #include <nanobind/stl/optional.h>
 #include <nanobind/ndarray.h>
 #include <iostream>
-#include <unordered_map>
-#include <mutex>
 
 #include "termin/geom/quat.hpp"
 #include "termin/geom/vec3.hpp"
@@ -16,46 +14,6 @@
 #include <tcbase/tc_log.hpp>
 
 namespace nb = nanobind;
-
-// ============================================================================
-// Python callback storage for lazy loading
-// ============================================================================
-
-static std::mutex g_skeleton_callback_mutex;
-static std::unordered_map<std::string, nb::callable> g_skeleton_python_callbacks;
-
-// Cleanup function to clear callbacks before Python shutdown
-void cleanup_skeleton_callbacks() {
-    std::lock_guard<std::mutex> lock(g_skeleton_callback_mutex);
-    g_skeleton_python_callbacks.clear();
-}
-
-// C callback wrapper that calls the stored Python callable
-static bool skeleton_python_load_callback_wrapper(tc_skeleton* skeleton, void* user_data) {
-    (void)user_data;
-    if (!skeleton) return false;
-
-    std::string uuid(skeleton->header.uuid);
-
-    nb::callable callback;
-    {
-        std::lock_guard<std::mutex> lock(g_skeleton_callback_mutex);
-        auto it = g_skeleton_python_callbacks.find(uuid);
-        if (it == g_skeleton_python_callbacks.end()) {
-            return false;
-        }
-        callback = it->second;
-    }
-
-    nb::gil_scoped_acquire gil;
-    try {
-        nb::object result = callback(nb::cast(skeleton, nb::rv_policy::reference));
-        return nb::cast<bool>(result);
-    } catch (const std::exception& e) {
-        tc::Log::error("Python skeleton load callback failed for '%s': %s", uuid.c_str(), e.what());
-        return false;
-    }
-}
 
 namespace {
 
@@ -413,38 +371,4 @@ NB_MODULE(_skeleton_native, m) {
         return result;
     });
 
-    m.def("tc_skeleton_set_load_callback", [](termin::TcSkeleton& handle, nb::callable callback) {
-        tc_skeleton* skeleton = handle.get();
-        if (!skeleton) {
-            throw std::runtime_error("Invalid skeleton handle");
-        }
-
-        std::string uuid(skeleton->header.uuid);
-
-        {
-            std::lock_guard<std::mutex> lock(g_skeleton_callback_mutex);
-            g_skeleton_python_callbacks[uuid] = callback;
-        }
-
-        tc_skeleton_set_load_callback(handle.handle, skeleton_python_load_callback_wrapper, nullptr);
-    }, nb::arg("handle"), nb::arg("callback"),
-       "Set Python callback for lazy loading");
-
-    m.def("tc_skeleton_clear_load_callback", [](termin::TcSkeleton& handle) {
-        tc_skeleton* skeleton = handle.get();
-        if (!skeleton) return;
-
-        std::string uuid(skeleton->header.uuid);
-
-        {
-            std::lock_guard<std::mutex> lock(g_skeleton_callback_mutex);
-            g_skeleton_python_callbacks.erase(uuid);
-        }
-
-        tc_skeleton_set_load_callback(handle.handle, nullptr, nullptr);
-    }, nb::arg("handle"), "Clear load callback for skeleton");
-
-    // Register cleanup with Python's atexit module
-    nb::module_ atexit = nb::module_::import_("atexit");
-    atexit.attr("register")(nb::cpp_function(&cleanup_skeleton_callbacks));
 }
