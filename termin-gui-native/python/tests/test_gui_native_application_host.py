@@ -12,10 +12,14 @@ from termin.gui_native import (
     CanvasTextureLayer,
     tc_ui_document_create,
     tc_ui_document_destroy,
+    CommandData,
+    CommandModel,
     DynamicTextureLease,
     DynamicTextureOwnership,
     GuiWindowHost,
     GuiWindowAdapter,
+    MenuBarEntry,
+    ModifierFlag,
     OffscreenGuiComposition,
     OffscreenGuiApplication,
     StandaloneGuiApplication,
@@ -68,6 +72,26 @@ def test_offscreen_application_renders_reads_pixels_and_accepts_synthetic_input(
     assert application.pump_events() == 4
     assert text_input.text == "headless"
 
+    commands = CommandModel()
+    redo = commands.append(CommandData("redo", "Redo", shortcut="Ctrl+Y"))
+    commands.append(CommandData("copy-global", "Copy", shortcut="Ctrl+C"))
+    menu_bar = application.document.create_menu_bar()
+    menu_bar.entries = [MenuBarEntry("edit", "Edit", commands)]
+    assert application.document.add_root(menu_bar.handle)
+    activations = []
+    menu_bar.connect_activated(
+        lambda _menu, _command, command: activations.append(command.stable_id)
+    )
+    application.set_unhandled_key_handler(menu_bar.dispatch_shortcut)
+    application.push_key(WindowKey.Y, modifiers=ModifierFlag.Ctrl)
+    assert application.pump_events() == 1
+    assert activations == ["redo"]
+    commands.set_enabled(redo, False)
+    application.push_key(WindowKey.Y, modifiers=ModifierFlag.Ctrl)
+    application.push_key(WindowKey.C, modifiers=ModifierFlag.Ctrl)
+    assert application.pump_events() == 2
+    assert activations == ["redo"]
+
     lease = DynamicTextureLease(application)
     lease.set_rgba8(np.full((2, 3, 4), 127, dtype=np.uint8))
     assert not lease.empty
@@ -100,7 +124,14 @@ def test_installed_sdk_offscreen_python_consumer_without_display():
         }
     )
     script = """
-from termin.gui_native import OffscreenGuiComposition
+from termin.gui_native import (
+    CommandData,
+    CommandModel,
+    MenuBarEntry,
+    ModifierFlag,
+    OffscreenGuiComposition,
+    WindowKey,
+)
 
 application = OffscreenGuiComposition(
     width=32,
@@ -111,6 +142,26 @@ assert application.render_frame()
 pixels = application.read_frame_rgba_float()
 assert pixels.shape == (24, 32, 4)
 assert application.frame_generation == 1
+text_input = application.document.create_text_input()
+assert application.document.add_root(text_input.handle)
+assert application.document.set_focus(text_input.handle)
+commands = CommandModel()
+redo = commands.append(CommandData("redo", "Redo", shortcut="Ctrl+Y"))
+commands.append(CommandData("copy-global", "Copy", shortcut="Ctrl+C"))
+menu_bar = application.document.create_menu_bar()
+menu_bar.entries = [MenuBarEntry("edit", "Edit", commands)]
+assert application.document.add_root(menu_bar.handle)
+activated = []
+menu_bar.connect_activated(lambda _menu, _command, command: activated.append(command.stable_id))
+application.set_unhandled_key_handler(menu_bar.dispatch_shortcut)
+application.push_key(WindowKey.Y, modifiers=ModifierFlag.Ctrl)
+assert application.pump_events() == 1
+assert activated == ["redo"]
+commands.set_enabled(redo, False)
+application.push_key(WindowKey.Y, modifiers=ModifierFlag.Ctrl)
+application.push_key(WindowKey.C, modifiers=ModifierFlag.Ctrl)
+assert application.pump_events() == 2
+assert activated == ["redo"]
 application.close()
 """
     result = subprocess.run(

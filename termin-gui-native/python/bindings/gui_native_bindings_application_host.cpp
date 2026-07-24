@@ -44,6 +44,23 @@ using ColorPickerRef = termin::gui_native::python_bindings::ColorPickerRef;
 
 using Rgba8Array = nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu>;
 
+void set_python_unhandled_key_handler(
+    termin::gui_native::DocumentRenderer& renderer, nb::object callback) {
+  if (!callback.is_none() && !nb::isinstance<nb::callable>(callback)) {
+    throw std::invalid_argument(
+        "unhandled key handler must be callable or None");
+  }
+  if (callback.is_none()) {
+    renderer.set_unhandled_key_handler({});
+    return;
+  }
+  renderer.set_unhandled_key_handler(
+      [callback = std::move(callback)](const tc_ui_key_event& event) {
+        nb::gil_scoped_acquire gil;
+        return nb::cast<bool>(callback(event.key, event.modifiers));
+      });
+}
+
 struct Rgba8View {
   uint32_t width = 0;
   uint32_t height = 0;
@@ -617,6 +634,13 @@ void bind_gui_native_application_host(nb::module_ &m) {
           nb::arg("window_manager"), nb::arg("handle"),
           nb::arg("interceptor").none() = nb::none())
       .def(
+          "set_unhandled_key_handler",
+          [](GuiWindowAdapter &self, nb::object callback) {
+            set_python_unhandled_key_handler(self.renderer(),
+                                             std::move(callback));
+          },
+          nb::arg("callback").none() = nb::none())
+      .def(
           "set_before_frame_callback",
           [](GuiWindowAdapter &self, nb::object callback) {
             if (!callback.is_none() &&
@@ -794,6 +818,13 @@ void bind_gui_native_application_host(nb::module_ &m) {
             return self.get().graphics();
           },
           nb::rv_policy::reference_internal)
+      .def(
+          "set_unhandled_key_handler",
+          [](PythonOffscreenGuiApplication &self, nb::object callback) {
+            set_python_unhandled_key_handler(self.get().renderer(),
+                                             std::move(callback));
+          },
+          nb::arg("callback").none() = nb::none())
       .def("pump_events",
            [](PythonOffscreenGuiApplication &self) {
              return self.get().pump_input();

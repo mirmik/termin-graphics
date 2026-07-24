@@ -47,6 +47,15 @@ input and explicitly renders/presents when asked. Adapter teardown releases
 only UI resources and cannot close the window, manager or graphics session.
 Window roles, scheduling and process-exit policy stay in the application.
 
+For application-owned global commands, both composition roots expose
+`set_unhandled_key_handler`. The handler is called synchronously only after a
+non-repeating key-down was ignored by the focused-widget route and document
+modal/overlay routing. It receives the normalized key and modifiers and returns
+whether it consumed the event. This permits an application to connect (for
+example) `MenuBar::dispatch_shortcut` without giving the toolkit ownership of
+the application's command policy. Replacing or clearing the handler releases
+the previous callback; it is also cleared when the renderer closes.
+
 Python exposes the new composition as `OffscreenGuiComposition`, including
 `push_key()`, `push_text()`, `push_pointer_move()`, `resize()` and an owning
 `numpy.float32[height, width, 4]` result from `read_frame_rgba_float()`.

@@ -6,6 +6,8 @@
 #include <vector>
 
 #include <termin/gui_native/text_input.hpp>
+#include <termin/gui_native/command_model.hpp>
+#include <termin/gui_native/menu_bar.hpp>
 #include <termin/gui_native/window_adapter.hpp>
 
 #include <tgfx2/device_factory.hpp>
@@ -149,6 +151,34 @@ int main() {
             window.cursor != termin::WindowCursor::Text ||
             !adapter.repaint_requested()) {
             std::fprintf(stderr, "adapter did not consume the routed event batch\n");
+            return 1;
+        }
+        auto commands = std::make_shared<termin::gui_native::CommandModel>();
+        commands->append(
+            termin::gui_native::CommandData{"redo", "Redo", {}, "Ctrl+Y"});
+        auto* menu_bar = new termin::gui_native::MenuBar();
+        document.adopt(menu_bar);
+        document.add_root(*menu_bar);
+        menu_bar->set_entries({{"edit", "Edit", commands}});
+        size_t global_activation_count = 0;
+        menu_bar->activated().connect(
+            [&global_activation_count](termin::gui_native::MenuBar&, size_t,
+                                       termin::gui_native::CommandId,
+                                       const termin::gui_native::CommandData&) {
+                ++global_activation_count;
+            });
+        adapter.renderer().set_unhandled_key_handler(
+            [menu_bar](const tc_ui_key_event& event) {
+                return menu_bar->dispatch_shortcut(event.key, event.modifiers);
+            });
+        termin::WindowEvent global_shortcut;
+        global_shortcut.type = termin::WindowEventType::KeyPressed;
+        global_shortcut.key.key = termin::WindowKey::Y;
+        global_shortcut.key.modifiers = termin::WindowModifierControl;
+        adapter.consume_events(std::span<const termin::WindowEvent>(&global_shortcut, 1));
+        if (global_activation_count != 1) {
+            std::fprintf(stderr,
+                         "window adapter did not route an unhandled global shortcut\n");
             return 1;
         }
         window.clipboard = "borrowed-read";

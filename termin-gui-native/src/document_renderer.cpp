@@ -72,6 +72,7 @@ struct DocumentRenderer::Impl {
     int target_height = 0;
     size_t rendered_frames = 0;
     std::atomic<bool> repaint_requested{true};
+    UnhandledKeyHandler unhandled_key_handler;
     std::function<void(tgfx::RenderContext2&)> before_frame;
     std::vector<tc_widget_handle> color_pickers;
     std::shared_ptr<GuiApplicationHostLeaseState> texture_leases;
@@ -212,6 +213,7 @@ struct DocumentRenderer::Impl {
         if (!graphics || graphics->is_closed()) {
             renderer_error("GraphicsHost must outlive DocumentRenderer");
         }
+        unhandled_key_handler = {};
         before_frame = {};
         color_pickers.clear();
         try {
@@ -303,7 +305,25 @@ tc_ui_event_result DocumentRenderer::dispatch_pointer(
 
 tc_ui_event_result DocumentRenderer::dispatch_key(const tc_ui_key_event& event) {
     impl_->require_open("dispatch_key");
-    const tc_ui_event_result result = impl_->document.dispatch_key_event(event);
+    tc_ui_event_result result = impl_->document.dispatch_key_event(event);
+    if (result == TC_UI_EVENT_IGNORED && event.type == TC_UI_KEY_DOWN &&
+        !event.repeat && impl_->unhandled_key_handler) {
+        try {
+            if (impl_->unhandled_key_handler(event)) {
+                result = TC_UI_EVENT_HANDLED;
+            }
+        } catch (const std::exception& error) {
+            tc_log_error(
+                "[gui-native-document-renderer] unhandled-key callback failed: %s",
+                error.what());
+            throw;
+        } catch (...) {
+            tc_log_error(
+                "[gui-native-document-renderer] unhandled-key callback failed with "
+                "an unknown exception");
+            throw;
+        }
+    }
     request_repaint();
     return result;
 }
@@ -376,6 +396,11 @@ bool DocumentRenderer::render_frame() {
     impl_->frame_sink->publish_frame(impl_->color_target);
     ++impl_->rendered_frames;
     return true;
+}
+
+void DocumentRenderer::set_unhandled_key_handler(UnhandledKeyHandler handler) {
+    impl_->require_open("set_unhandled_key_handler");
+    impl_->unhandled_key_handler = std::move(handler);
 }
 
 void DocumentRenderer::set_before_frame_callback(

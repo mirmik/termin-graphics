@@ -54,6 +54,12 @@ class TERMIN_GUI_NATIVE_HOST_API DocumentPlatformServices {
 // It has no application loop, window ownership, or close policy.
 class TERMIN_GUI_NATIVE_HOST_API DocumentRenderer {
   public:
+    // Called synchronously for an unhandled, non-repeating key-down after the
+    // document has applied focus and modal/overlay routing. Return true when
+    // the application consumed the key. The renderer does not own application
+    // command policy or the callback's captured objects.
+    using UnhandledKeyHandler = std::function<bool(const tc_ui_key_event&)>;
+
     DocumentRenderer(tgfx::GraphicsHost& graphics, TcDocument document,
                      DocumentRendererConfig config, DocumentFrameSink& frame_sink,
                      DocumentPlatformServices& platform_services);
@@ -76,6 +82,7 @@ class TERMIN_GUI_NATIVE_HOST_API DocumentRenderer {
     std::pair<int, int> framebuffer_size() const;
     bool render_frame();
 
+    void set_unhandled_key_handler(UnhandledKeyHandler handler);
     void set_before_frame_callback(
         std::function<void(tgfx::RenderContext2&)> callback);
     void register_color_picker(ColorPicker& picker);

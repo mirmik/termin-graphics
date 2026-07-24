@@ -4,6 +4,8 @@
 #include <vector>
 
 #include <termin/gui_native/dynamic_texture_lease.hpp>
+#include <termin/gui_native/command_model.hpp>
+#include <termin/gui_native/menu_bar.hpp>
 #include <termin/gui_native/offscreen_composition.hpp>
 #include <termin/gui_native/text_input.hpp>
 
@@ -63,6 +65,46 @@ int main() {
         composition.push_text("headless");
         if (composition.pump_input() != 2 || input->text() != "headless") {
             std::fprintf(stderr, "normalized input did not reach the tc_ui_document\n");
+            return 1;
+        }
+
+        auto commands = std::make_shared<termin::gui_native::CommandModel>();
+        const termin::gui_native::CommandId redo = commands->append(
+            termin::gui_native::CommandData{"redo", "Redo", {}, "Ctrl+Y"});
+        commands->append(
+            termin::gui_native::CommandData{"copy-global", "Copy", {}, "Ctrl+C"});
+        auto* menu_bar = new termin::gui_native::MenuBar();
+        composition.document().adopt(menu_bar);
+        composition.document().add_root(*menu_bar);
+        menu_bar->set_entries({{"edit", "Edit", commands}});
+        std::vector<std::string> activated;
+        menu_bar->activated().connect(
+            [&activated](termin::gui_native::MenuBar&, size_t,
+                         termin::gui_native::CommandId,
+                         const termin::gui_native::CommandData& command) {
+                activated.push_back(command.stable_id);
+            });
+        composition.renderer().set_unhandled_key_handler(
+            [menu_bar](const tc_ui_key_event& event) {
+                return menu_bar->dispatch_shortcut(event.key, event.modifiers);
+            });
+        composition.push_key(tc_ui_key_event{
+            TC_UI_KEY_DOWN, TC_UI_KEY_Y, 0, TC_UI_MOD_CTRL, false});
+        if (composition.pump_input() != 1 ||
+            activated != std::vector<std::string>{"redo"}) {
+            std::fprintf(stderr,
+                         "offscreen composition did not route an unhandled global shortcut\n");
+            return 1;
+        }
+        commands->set_enabled(redo, false);
+        composition.push_key(tc_ui_key_event{
+            TC_UI_KEY_DOWN, TC_UI_KEY_Y, 0, TC_UI_MOD_CTRL, false});
+        composition.push_key(tc_ui_key_event{
+            TC_UI_KEY_DOWN, TC_UI_KEY_C, 0, TC_UI_MOD_CTRL, false});
+        if (composition.pump_input() != 2 ||
+            activated != std::vector<std::string>{"redo"}) {
+            std::fprintf(stderr,
+                         "offscreen composition bypassed disabled or focused-widget shortcuts\n");
             return 1;
         }
 
