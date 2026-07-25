@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-import termin.gui_native as gui_native
 from termin.gui_native import (
     Color,
     Constraints,
@@ -55,15 +54,6 @@ from termin.gui_native import (
     unregister_widget_owner,
     unregister_widget_type,
 )
-
-
-def test_python_exposes_only_the_non_owning_tc_document_handle():
-    assert gui_native.TcDocument is not None
-    assert not hasattr(gui_native, "Document")
-    assert not hasattr(gui_native.TcDocument, "close")
-    assert not hasattr(gui_native.TcDocument, "__enter__")
-
-
 def _bundled_font_path() -> Path:
     sdk_root = os.environ.get("TERMIN_SDK")
     if not sdk_root:

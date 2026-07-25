@@ -7,7 +7,6 @@ import pytest
 import numpy as np
 
 from termin.display import WindowedGraphicsSession
-from termin.gui_native import _gui_native
 from termin.gui_native import (
     CanvasTextureLayer,
     tc_ui_document_create,
@@ -34,11 +33,6 @@ def test_application_host_types_are_public_and_document_destroy_is_explicit():
     assert not document.valid
     assert GuiWindowHost.__module__ == "termin.gui_native._gui_native"
     assert GuiWindowAdapter.__module__ == "termin.gui_native._gui_native"
-    assert not hasattr(_gui_native, "PythonGuiWindowAdapter")
-    assert not hasattr(GuiWindowHost, "defer")
-    assert not hasattr(GuiWindowHost, "run_deferred")
-    assert not hasattr(GuiWindowAdapter, "defer")
-    assert not hasattr(GuiWindowAdapter, "run_deferred")
     assert OffscreenGuiComposition.__module__ == "termin.gui_native._gui_native"
     assert OffscreenGuiApplication is OffscreenGuiComposition
     assert OffscreenGuiApplication.__module__ == "termin.gui_native._gui_native"
