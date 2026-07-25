@@ -557,6 +557,110 @@ void test_tab_view_page_mutation_and_selection_signal() {
   tc_ui_document_destroy(document_handle);
 }
 
+void test_tab_view_focus_traversal_uses_only_selected_page() {
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
+  DocumentBuilder ui(document);
+
+  auto &tabs = ui.make_root<TabView>("tabs");
+  auto &first_page =
+      ui.make<BoxLayout>(Orientation::Vertical, "first-page");
+  auto &second_page =
+      ui.make<BoxLayout>(Orientation::Vertical, "second-page");
+  auto &first_a = ui.make<FocusProbe>();
+  auto &first_b = ui.make<FocusProbe>();
+  auto &second_a = ui.make<FocusProbe>();
+  auto &second_b = ui.make<FocusProbe>();
+  first_page.add_preferred_child(first_a);
+  first_page.add_preferred_child(first_b);
+  second_page.add_preferred_child(second_a);
+  second_page.add_preferred_child(second_b);
+  tabs.add_page("First", first_page);
+  tabs.add_page("Second", second_page);
+
+  assert(first_page.tree_participating());
+  assert(!second_page.tree_participating());
+  assert(document.focus_next());
+  assert(tc_widget_handle_eq(document.focused_widget(), first_a.handle()));
+  assert(document.focus_next());
+  assert(tc_widget_handle_eq(document.focused_widget(), first_b.handle()));
+
+  tabs.set_selected_index(1);
+  assert(tc_widget_handle_is_invalid(document.focused_widget()));
+  assert(!first_page.tree_participating());
+  assert(second_page.tree_participating());
+  assert(document.focus_next());
+  assert(tc_widget_handle_eq(document.focused_widget(), second_a.handle()));
+  assert(document.focus_previous());
+  assert(tc_widget_handle_eq(document.focused_widget(), second_b.handle()));
+
+  tc_ui_document_destroy(document_handle);
+}
+
+void test_tab_view_removing_selected_page_clears_focus_and_restores_reuse_state() {
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
+  DocumentBuilder ui(document);
+
+  auto &tabs = ui.make_root<TabView>("tabs");
+  auto &first = ui.make<FocusProbe>();
+  auto &second = ui.make<FocusProbe>();
+  tabs.add_page("First", first);
+  tabs.add_page("Second", second);
+  tabs.set_selected_index(1);
+  assert(document.set_focus(second));
+
+  assert(tabs.remove_page(1));
+  assert(tc_widget_handle_is_invalid(document.focused_widget()));
+  assert(second.parent_widget() == nullptr);
+  assert(second.tree_participating());
+  assert(first.tree_participating());
+  assert(document.focus_next());
+  assert(tc_widget_handle_eq(document.focused_widget(), first.handle()));
+
+  tabs.add_page("Second again", second);
+  assert(second.parent_widget() == tabs.c_widget());
+  assert(!second.tree_participating());
+  assert(second.visible());
+  assert(second.enabled());
+
+  tc_ui_document_destroy(document_handle);
+}
+
+void test_tab_view_selected_hidden_or_disabled_page_has_no_focus_fallback() {
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
+  DocumentBuilder ui(document);
+
+  auto &tabs = ui.make_root<TabView>("tabs");
+  auto &first = ui.make<FocusProbe>();
+  auto &second = ui.make<FocusProbe>();
+  tabs.add_page("First", first);
+  tabs.add_page("Second", second);
+  tabs.set_selected_index(1);
+
+  second.set_visible(false);
+  assert(!document.focus_next());
+  assert(tc_widget_handle_is_invalid(document.focused_widget()));
+  assert(first.visible());
+  assert(first.enabled());
+  assert(!first.tree_participating());
+
+  second.set_visible(true);
+  second.set_enabled(false);
+  assert(!document.focus_previous());
+  assert(tc_widget_handle_is_invalid(document.focused_widget()));
+  assert(second.tree_participating());
+
+  second.set_enabled(true);
+  assert(document.focus_next());
+  assert(tc_widget_handle_eq(document.focused_widget(), second.handle()));
+  assert(first.visible());
+  assert(first.enabled());
+
+  tc_ui_document_destroy(document_handle);
+}
+
 void test_box_layout_shrinks_flexible_children_before_overflowing() {
   tc_ui_document_handle document_handle = tc_ui_document_create();
   TcDocument document(document_handle);

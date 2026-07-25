@@ -60,7 +60,8 @@ static void dispatch_focus_event_to_widget(
 bool tc_ui_internal_widget_effectively_interactive(const tc_widget* widget) {
     const tc_widget* current = widget;
     while (current) {
-        if (!tc_widget_is_visible(current) || !tc_widget_is_enabled(current)) {
+        if (!tc_widget_is_visible(current) || !tc_widget_is_enabled(current) ||
+            !tc_widget_is_tree_participating(current)) {
             return false;
         }
         current = current->parent;
@@ -678,7 +679,8 @@ static bool collect_focusables_in_tree(
     if (!widget) {
         return true;
     }
-    interactive = ancestors_interactive && tc_widget_is_visible(widget) && tc_widget_is_enabled(widget);
+    interactive = ancestors_interactive && tc_widget_is_visible(widget) &&
+        tc_widget_is_enabled(widget) && tc_widget_is_tree_participating(widget);
     if (!interactive) {
         return true;
     }

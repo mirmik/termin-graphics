@@ -290,6 +290,7 @@ typedef enum tc_widget_flag {
     TC_WIDGET_VISIBLE = 1u << 4,
     TC_WIDGET_ENABLED = 1u << 5,
     TC_WIDGET_MOUSE_TRANSPARENT = 1u << 6,
+    TC_WIDGET_TREE_PARTICIPATING = 1u << 7,
     TC_WIDGET_DIRTY_MASK = TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE
 } tc_widget_flag;
 
@@ -493,6 +494,11 @@ TERMIN_GUI_NATIVE_API void tc_widget_set_visible(tc_widget* widget, bool visible
 TERMIN_GUI_NATIVE_API bool tc_widget_is_visible(const tc_widget* widget);
 TERMIN_GUI_NATIVE_API void tc_widget_set_enabled(tc_widget* widget, bool enabled);
 TERMIN_GUI_NATIVE_API bool tc_widget_is_enabled(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API void tc_widget_set_tree_participating(
+    tc_widget* widget,
+    bool participating
+);
+TERMIN_GUI_NATIVE_API bool tc_widget_is_tree_participating(const tc_widget* widget);
 TERMIN_GUI_NATIVE_API void tc_widget_set_mouse_transparent(tc_widget* widget, bool mouse_transparent);
 TERMIN_GUI_NATIVE_API bool tc_widget_is_mouse_transparent(const tc_widget* widget);
 TERMIN_GUI_NATIVE_API bool tc_widget_set_cursor_intent(

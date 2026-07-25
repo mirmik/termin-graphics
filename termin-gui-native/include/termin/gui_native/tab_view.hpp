@@ -36,6 +36,7 @@ public:
     tc_ui_event_result pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) override;
     tc_widget_handle hit_test(tc_ui_document_handle document, float x, float y) override;
 private:
+    void sync_page_participation();
     tc_ui_rect page_rect() const;
     float tab_width(tc_ui_document_handle document, size_t index) const;
     tc_ui_rect tab_rect(tc_ui_document_handle document, size_t index) const;

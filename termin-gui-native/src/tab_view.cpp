@@ -32,6 +32,7 @@ void TabView::add_page(std::string title, tc_widget_handle handle) {
     if (child_count() == 1) {
         selected_index_ = 0;
     }
+    sync_page_participation();
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
@@ -42,6 +43,9 @@ bool TabView::remove_page(size_t index) {
   }
   const tc_widget_handle handle = pages_[index].handle;
   const bool removed_selected = selected_index_ == index;
+  if (tc_widget* removed = child_at(index)) {
+    tc_widget_set_tree_participating(removed, false);
+  }
   detach_if_child(c_widget(), handle);
   pages_.erase(pages_.begin() + static_cast<std::ptrdiff_t>(index));
   const size_t previous = selected_index_;
@@ -52,6 +56,10 @@ bool TabView::remove_page(size_t index) {
   } else if (selected_index_ >= pages_.size()) {
     selected_index_ = pages_.size() - 1;
   }
+  if (tc_widget* removed = tc_ui_document_resolve_widget(document(), handle)) {
+    tc_widget_set_tree_participating(removed, true);
+  }
+  sync_page_participation();
   mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_LAYOUT |
              TC_WIDGET_DIRTY_PAINT);
   if (!pages_.empty() && (selected_index_ != previous || removed_selected)) {
@@ -90,8 +98,17 @@ void TabView::set_selected_index(size_t index) {
         return;
     }
     selected_index_ = index;
+    sync_page_participation();
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
     selection_changed_.emit(*this, selected_index_);
+}
+
+void TabView::sync_page_participation() {
+    for (size_t index = 0; index < child_count(); ++index) {
+        if (tc_widget* page = child_at(index)) {
+            tc_widget_set_tree_participating(page, index == selected_index_);
+        }
+    }
 }
 
 tc_ui_size TabView::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {

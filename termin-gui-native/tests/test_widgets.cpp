@@ -22,6 +22,9 @@ int main() {
   test_tab_view_switches_selected_page_and_clips_paint();
   test_tab_view_recursive_destroy_pages();
   test_tab_view_page_mutation_and_selection_signal();
+  test_tab_view_focus_traversal_uses_only_selected_page();
+  test_tab_view_removing_selected_page_clears_focus_and_restores_reuse_state();
+  test_tab_view_selected_hidden_or_disabled_page_has_no_focus_fallback();
   test_box_layout_shrinks_flexible_children_before_overflowing();
   test_box_layout_respects_child_extent_limits();
   test_box_layout_allows_preferred_overflow_when_no_child_can_shrink();

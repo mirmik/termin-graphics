@@ -64,7 +64,7 @@ void tc_widget_init_unowned(
     widget->ownership_policy = TC_WIDGET_BORROWED;
     widget->body = body;
     tc_runtime_type_instance_link_init(&widget->runtime_type_link);
-    widget->flags = TC_WIDGET_VISIBLE | TC_WIDGET_ENABLED;
+    widget->flags = TC_WIDGET_VISIBLE | TC_WIDGET_ENABLED | TC_WIDGET_TREE_PARTICIPATING;
     widget->cursor_intent = TC_UI_CURSOR_INHERIT;
     widget->style_role = TC_UI_STYLE_GENERIC;
 }
@@ -227,6 +227,18 @@ void tc_widget_set_enabled(tc_widget* widget, bool enabled) {
 
 bool tc_widget_is_enabled(const tc_widget* widget) {
     return widget && (widget->flags & TC_WIDGET_ENABLED) != 0;
+}
+
+void tc_widget_set_tree_participating(tc_widget* widget, bool participating) {
+    bool changed = widget && tc_widget_is_tree_participating(widget) != participating;
+    set_widget_flag(widget, TC_WIDGET_TREE_PARTICIPATING, participating);
+    if (changed && !participating) {
+        tc_ui_internal_invalidate_subtree_interaction_state(widget);
+    }
+}
+
+bool tc_widget_is_tree_participating(const tc_widget* widget) {
+    return widget && (widget->flags & TC_WIDGET_TREE_PARTICIPATING) != 0;
 }
 
 void tc_widget_set_mouse_transparent(tc_widget* widget, bool mouse_transparent) {

@@ -50,6 +50,10 @@ public:
     bool visible() const { return tc_widget_is_visible(&_widget); }
     void set_enabled(bool enabled) { tc_widget_set_enabled(&_widget, enabled); }
     bool enabled() const { return tc_widget_is_enabled(&_widget); }
+    void set_tree_participating(bool participating) {
+        tc_widget_set_tree_participating(&_widget, participating);
+    }
+    bool tree_participating() const { return tc_widget_is_tree_participating(&_widget); }
     void set_mouse_transparent(bool mouse_transparent) {
         tc_widget_set_mouse_transparent(&_widget, mouse_transparent);
     }
