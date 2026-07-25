@@ -1058,6 +1058,37 @@ void bind_tc_pass_runtime(nb::module_& m) {
         return result;
     });
 
+    m.def("tc_pass_registry_get_class", [](const std::string& type_name) {
+        auto& classes = python_pass_classes();
+        auto it = classes.find(type_name);
+        if (it == classes.end()) {
+            return nb::object(nb::none());
+        }
+        return nb::object(*(it->second));
+    }, nb::arg("type_name"));
+
+    m.def("tc_pass_registry_bind_class_projection", [](
+        const std::string& type_name,
+        nb::object cls) {
+        if (!tc_pass_registry_has(type_name.c_str())) {
+            tc_log(
+                TC_LOG_ERROR,
+                "[PassRegistry] cannot bind Python projection for unknown pass '%s'",
+                type_name.c_str());
+            return false;
+        }
+        if (!PyType_Check(cls.ptr())) {
+            tc_log(
+                TC_LOG_ERROR,
+                "[PassRegistry] Python projection for '%s' is not a class",
+                type_name.c_str());
+            return false;
+        }
+        python_pass_classes()[type_name] =
+            std::make_shared<nb::object>(std::move(cls));
+        return true;
+    }, nb::arg("type_name"), nb::arg("cls"));
+
     m.def("tc_pass_registry_register_python", [](
         const std::string& type_name,
         nb::object cls,

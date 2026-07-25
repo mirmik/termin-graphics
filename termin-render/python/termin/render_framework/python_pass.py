@@ -6,6 +6,7 @@ from typing import Any, Callable
 from termin.render_framework._render_framework_native import (
     TcPass,
     TcPassRef,
+    tc_pass_registry_clear_python,
     tc_pass_registry_is_native,
     tc_pass_registry_register_python,
     tc_pass_registry_unregister_python,
@@ -55,6 +56,7 @@ def shutdown_python_passes() -> None:
         except Exception as exc:
             _log_cleanup_error(f"[PythonFramePass] failed to unregister pass type '{type_name}': {exc}")
     _registered_python_pass_types.clear()
+    tc_pass_registry_clear_python()
 
 
 def unregister_python_pass_owner(owner: str) -> None:
@@ -307,13 +309,17 @@ class PythonFramePass:
 
 
 def deserialize_pass(data: dict, resource_manager=None):
+    from termin.render_framework._render_framework_native import (
+        tc_pass_registry_get_class,
+    )
+
     pass_type = data.get("type")
     if pass_type is None:
         raise ValueError("Missing 'type' in pass data")
     if resource_manager is None:
         raise ValueError("deserialize_pass requires resource_manager")
 
-    pass_cls = resource_manager.get_frame_pass(pass_type)
+    pass_cls = tc_pass_registry_get_class(pass_type)
     if pass_cls is None:
         raise ValueError(f"Unknown pass type: {pass_type}")
 
