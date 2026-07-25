@@ -8,7 +8,7 @@ import sys
 import time
 
 import tgfx
-from termin.display import WindowedGraphicsSession, quit_sdl
+from termin.display.window import WindowedGraphicsSession, quit_sdl
 from termin.gui_native import (
     DrawList,
     DrawListRenderer,

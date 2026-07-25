@@ -70,7 +70,8 @@ example skip code `77` with an error message.
 | --- | --- | --- |
 | Runtime package exporter/loader | `./run-tests-python.sh --full termin-project-build/tests/test_runtime_package_exporter.py` and `ctest --test-dir build/Release-tests -R termin_runtime_package_loader_test --output-on-failure` | Runtime manifests, shader artifacts, assets, and the canonical native loader remain coherent. |
 | Desktop build profile path | `./run-tests-python.sh termin-project-build/tests/test_project_build_profile_backend.py termin-project-build/tests/test_project_build_target_common.py termin-project-build/tests/test_project_build_target_preflight.py` | Build profile dispatch, target preflight, and host/tool checks remain deterministic. |
-| Relocatable desktop bundle | Run the project-specific relocated bundle smoke, for example the Chess bundle smoke tracked separately. | The packaged host can run outside the source tree with bundled assets, Python packages, and shader artifacts. |
+| Relocated editor SDK | Run `scripts/smoke-relocated-sdk` on Linux or `scripts/smoke-relocated-sdk.ps1` on Windows after an SDK build. | A copied SDK passes artifact, runtime and app-payload manifests and starts bundled Python/editor/launcher diagnostics without checkout or ambient Python. |
+| Relocatable desktop project bundle | Run the project-specific relocated bundle smoke, for example the Chess bundle smoke tracked separately. | The packaged project host can run outside the source tree with bundled assets, Python packages, and shader artifacts. |
 
 ## CI Jobs To Watch
 

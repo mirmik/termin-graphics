@@ -15,7 +15,7 @@ from tcgui.widgets.ui import UI
 from tcgui.widgets.label import Label
 from tcgui.widgets.vstack import VStack
 from tcgui.widgets.theme import current_theme as _t
-from termin.display import WindowedGraphicsSession, quit_sdl
+from termin.display.window import WindowedGraphicsSession, quit_sdl
 from tgfx import Tgfx2Context, configure_default_shader_runtime
 
 

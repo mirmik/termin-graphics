@@ -321,7 +321,9 @@ struct OffscreenGuiComposition::Impl {
     explicit Impl(OffscreenGuiCompositionConfig composition_config)
         : config(std::move(composition_config)) {
         const termin::ShaderArtifactResolver resolver = resolve_config(config);
-        graphics = tgfx::GraphicsHost::create_isolated(config.backend);
+        graphics = config.application_graphics_domain
+            ? tgfx::GraphicsHost::create_application(config.backend)
+            : tgfx::GraphicsHost::create_isolated(config.backend);
         graphics->configure_shader_artifacts(resolver);
         sink = std::make_unique<OffscreenFrameSink>(config.width, config.height);
         document_handle = tc_ui_document_create();

@@ -46,6 +46,6 @@ Engine input routing remains in `termin-display` and is attached through its
 neutral window input bridge. `termin_gui_native::window_adapter` translates
 portable pointer, wheel, keyboard, text, and HiDPI coordinates into native GUI
 document events and borrows one manager-owned window for platform services and
-presentation. It never owns or closes that window. The current
-`termin_gui_native::application_host` ownership API is transitional.
-`termin-window` does not depend on either UI target.
+presentation. It never owns or closes that window. Applications retain window,
+graphics-session, loop, and exit-policy ownership. `termin-window` does not
+depend on either UI target.

@@ -220,7 +220,6 @@ $cmakeArgs += @(
     "-DTERMIN_ENABLE_OPENGL=$TerminEnableOpenGl",
     "-DTERMIN_BUILD_EDITOR_MINIMAL=ON",
     "-DTERMIN_BUILD_LAUNCHER=ON",
-    "-DTERMIN_BUNDLE_PYTHON=ON",
     "-DPython_EXECUTABLE=$pythonExec"
 )
 

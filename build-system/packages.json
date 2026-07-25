@@ -87,7 +87,13 @@
       "path": "termin-gui-native",
       "distribution": "termin-gui-native",
       "native_extensions": [
-        {"extension": "termin.gui_native._gui_native", "target": "_gui_native"}
+        {"extension": "termin.gui_native._gui_native", "target": "_gui_native"},
+        {
+          "extension": "termin.gui_native._gui_native_window",
+          "target": "_gui_native_window",
+          "optional": true,
+          "features": ["sdl"]
+        }
       ]
     },
     {

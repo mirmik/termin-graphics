@@ -190,8 +190,7 @@ $cmakeArgs += @(
     "-DTERMIN_ENABLE_SDL=$TerminEnableSdl",
     "-DTERMIN_ENABLE_OPENGL=$TerminEnableOpenGl",
     "-DTERMIN_BUILD_EDITOR_MINIMAL=ON",
-    "-DTERMIN_BUILD_LAUNCHER=ON",
-    "-DTERMIN_BUNDLE_PYTHON=ON"
+    "-DTERMIN_BUILD_LAUNCHER=ON"
 )
 
 & cmake @cmakeArgs

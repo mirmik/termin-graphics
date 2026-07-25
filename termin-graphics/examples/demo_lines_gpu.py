@@ -8,7 +8,7 @@ import math
 import sdl2
 
 from tcbase import MouseButton
-from termin.display import WindowedGraphicsSession, quit_sdl
+from termin.display.window import WindowedGraphicsSession, quit_sdl
 from termin.geombase import OrbitCamera
 from tgfx import (
     CULL_NONE,

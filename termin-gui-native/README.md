@@ -59,13 +59,9 @@ the previous callback; it is also cleared when the renderer closes.
 Python exposes the new composition as `OffscreenGuiComposition`, including
 `push_key()`, `push_text()`, `push_pointer_move()`, `resize()` and an owning
 `numpy.float32[height, width, 4]` result from `read_frame_rgba_float()`.
-`OffscreenGuiApplication` remains a compatibility alias during the #760
-consumer migration. `DynamicTextureLease` binds directly to the shared
-`DocumentRenderer`.
-
-The older `GuiApplicationHost`, `GuiWindowHost` and
-`StandaloneGuiApplication` API is available only through the explicit
-`application_host` package component and is transitional.
+`DynamicTextureLease` binds directly to the shared `DocumentRenderer`.
+Window integrations import the separate `termin.gui_native.window` module;
+the core offscreen Python module does not load `termin-window` or SDL.
 
 The current foundation includes:
 

@@ -7,7 +7,7 @@
 #include <string>
 #include <utility>
 
-#include <termin/gui_native/application_host_export.h>
+#include <termin/gui_native/document_renderer_export.h>
 #include <termin/gui_native/tc_document.hpp>
 #include <tgfx2/handles.hpp>
 
@@ -21,7 +21,7 @@ namespace termin::gui_native {
 
 class ColorPicker;
 class DynamicTextureLease;
-struct GuiApplicationHostLeaseState;
+struct DocumentRendererLeaseState;
 
 struct DocumentRendererConfig {
     std::string font_path;
@@ -32,7 +32,7 @@ struct DocumentRendererConfig {
 
 // Presentation destination selected by the composition root. Implementations
 // may present to a borrowed window or publish an offscreen texture.
-class TERMIN_GUI_NATIVE_HOST_API DocumentFrameSink {
+class TERMIN_GUI_NATIVE_RENDERER_API DocumentFrameSink {
   public:
     virtual ~DocumentFrameSink() = default;
     virtual std::pair<int, int> framebuffer_size() const = 0;
@@ -41,7 +41,7 @@ class TERMIN_GUI_NATIVE_HOST_API DocumentFrameSink {
 
 // Environment services needed by retained document interaction. This
 // contract contains no OS-window types.
-class TERMIN_GUI_NATIVE_HOST_API DocumentPlatformServices {
+class TERMIN_GUI_NATIVE_RENDERER_API DocumentPlatformServices {
   public:
     virtual ~DocumentPlatformServices() = default;
     virtual bool set_text_input_enabled(bool enabled) = 0;
@@ -52,7 +52,7 @@ class TERMIN_GUI_NATIVE_HOST_API DocumentPlatformServices {
 
 // Renderer/interaction binding for one borrowed TcDocument and GraphicsHost.
 // It has no application loop, window ownership, or close policy.
-class TERMIN_GUI_NATIVE_HOST_API DocumentRenderer {
+class TERMIN_GUI_NATIVE_RENDERER_API DocumentRenderer {
   public:
     // Called synchronously for an unhandled, non-repeating key-down after the
     // document has applied focus and modal/overlay routing. Return true when
@@ -97,7 +97,7 @@ class TERMIN_GUI_NATIVE_HOST_API DocumentRenderer {
 
   private:
     friend class DynamicTextureLease;
-    std::shared_ptr<GuiApplicationHostLeaseState> texture_lease_state() const;
+    std::shared_ptr<DocumentRendererLeaseState> texture_lease_state() const;
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

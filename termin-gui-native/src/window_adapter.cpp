@@ -187,6 +187,10 @@ bool GuiWindowAdapter::repaint_requested() const {
     return renderer().repaint_requested();
 }
 
+bool GuiWindowAdapter::should_close() const {
+    return window().should_close();
+}
+
 void GuiWindowAdapter::wait_idle() {
     renderer().wait_idle();
 }

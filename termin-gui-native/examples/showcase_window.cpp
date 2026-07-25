@@ -9,14 +9,19 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include <termin/gui_native/application_host.hpp>
 #include <termin/gui_native/showcase.hpp>
+#include <termin/gui_native/tc_ui_document.h>
+#include <termin/gui_native/tc_document.hpp>
+#include <termin/gui_native/window_adapter.hpp>
 #include <termin/gui_native/widgets.hpp>
+#include <termin/platform/backend_window.hpp>
+#include <termin/window/window_manager.hpp>
 
 #include <tgfx2/i_render_device.hpp>
 
@@ -39,6 +44,25 @@ double example_seconds() {
 std::filesystem::path screenshot_path() {
     const char* value = std::getenv("TERMIN_GUI_NATIVE_SCREENSHOT");
     return value && value[0] != '\0' ? std::filesystem::path(value) : std::filesystem::path{};
+}
+
+std::string resolve_font_path() {
+    if (const char* configured = std::getenv("TERMIN_UI_FONT"); configured && configured[0]) {
+        return configured;
+    }
+    const std::filesystem::path sdk_root =
+        std::getenv("TERMIN_SDK") ? std::getenv("TERMIN_SDK") : std::filesystem::path{};
+    const std::filesystem::path candidates[] = {
+        sdk_root / "share" / "termin" / "fonts" / "DroidSans.ttf",
+        std::filesystem::path("sdk/share/termin/fonts/DroidSans.ttf"),
+        std::filesystem::path("/usr/local/share/termin/fonts/DroidSans.ttf"),
+    };
+    for (const auto& candidate : candidates) {
+        if (!candidate.empty() && std::filesystem::is_regular_file(candidate)) {
+            return candidate.string();
+        }
+    }
+    throw std::runtime_error("cannot find UI font; set TERMIN_UI_FONT or TERMIN_SDK");
 }
 
 bool write_ppm_screenshot(tgfx::IRenderDevice& device, tgfx::TextureHandle target, int width,
@@ -79,21 +103,27 @@ bool write_ppm_screenshot(tgfx::IRenderDevice& device, tgfx::TextureHandle targe
 
 int run_showcase_window(const char* title) {
     try {
-        StandaloneGuiApplicationConfig host_config;
-        host_config.gui.window = WindowConfig{
-            title ? title : "termin-gui-native showcase", 800, 600};
-        host_config.gui.font_size = 15;
-        StandaloneGuiApplication application(std::move(host_config));
-        ShowcaseRefs showcase = build_showcase(application.document());
-        GuiWindowHost& host = application.window_host();
+        auto session = create_native_windowed_graphics();
+        WindowManager windows(*session);
+        const WindowHandle handle = windows.create_window(WindowConfig{
+            title ? title : "termin-gui-native showcase", 800, 600});
+        const tc_ui_document_handle document_handle = tc_ui_document_create();
+        TcDocument document(document_handle);
+        DocumentRendererConfig renderer_config;
+        renderer_config.font_path = resolve_font_path();
+        renderer_config.font_size = 15;
+        GuiWindowAdapter adapter(
+            session->graphics(), document, renderer_config, windows.window(handle));
+        ShowcaseRefs showcase = build_showcase(document);
 
         const double max_seconds = example_seconds();
         const std::filesystem::path capture_path = screenshot_path();
         const auto start = std::chrono::steady_clock::now();
 
-        while (!host.should_close()) {
-            host.pump_events();
-            if (host.should_close()) {
+        while (!windows.window(handle).should_close()) {
+            windows.pump_events();
+            adapter.consume_events(windows.take_events(handle));
+            if (windows.window(handle).should_close()) {
                 break;
             }
             const auto now = std::chrono::steady_clock::now();
@@ -106,15 +136,15 @@ int run_showcase_window(const char* title) {
                 showcase.slider->set_value(
                     static_cast<float>((std::sin(elapsed * 0.6) + 1.0) * 0.5));
             }
-            if (!host.render_frame()) {
+            if (!adapter.render_and_present()) {
                 continue;
             }
             if (!capture_path.empty() &&
                 !write_ppm_screenshot(
-                    host.device(),
-                    host.color_target(),
-                    host.framebuffer_width(),
-                    host.framebuffer_height(),
+                    adapter.renderer().device(),
+                    adapter.renderer().color_target(),
+                    adapter.renderer().framebuffer_size().first,
+                    adapter.renderer().framebuffer_size().second,
                     capture_path)) {
                 throw std::runtime_error("failed to capture deterministic native UI screenshot");
             }
@@ -131,7 +161,11 @@ int run_showcase_window(const char* title) {
             }
         }
 
-        host.wait_idle();
+        adapter.wait_idle();
+        adapter.close();
+        tc_ui_document_destroy(document_handle);
+        windows.close();
+        session->close();
         return 0;
     } catch (const std::exception& e) {
         std::fprintf(stderr, "termin-gui-native showcase example failed: %s\n", e.what());

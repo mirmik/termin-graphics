@@ -150,7 +150,7 @@ if(WIN32)
         WINDOWS_EXPORT_ALL_SYMBOLS ON)
 endif()
 target_compile_definitions(termin_gui_native_document_renderer
-    PRIVATE TERMIN_GUI_NATIVE_HOST_EXPORTS)
+    PRIVATE TERMIN_GUI_NATIVE_RENDERER_EXPORTS)
 target_include_directories(termin_gui_native_document_renderer
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -180,7 +180,7 @@ if(WIN32)
         WINDOWS_EXPORT_ALL_SYMBOLS ON)
 endif()
 target_compile_definitions(termin_gui_native_offscreen
-    PRIVATE TERMIN_GUI_NATIVE_HOST_EXPORTS)
+    PRIVATE TERMIN_GUI_NATIVE_OFFSCREEN_EXPORTS)
 target_include_directories(termin_gui_native_offscreen
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -221,42 +221,6 @@ target_link_libraries(termin_gui_native_window_input
         termin_window::termin_window
 )
 
-add_library(termin_gui_native_application_host SHARED
-    src/application_host.cpp
-    src/dynamic_texture_lease_window.cpp
-)
-add_library(termin_gui_native::application_host ALIAS termin_gui_native_application_host)
-set_target_properties(termin_gui_native_application_host PROPERTIES
-    EXPORT_NAME application_host
-)
-if(WIN32)
-    set_target_properties(termin_gui_native_application_host PROPERTIES
-        WINDOWS_EXPORT_ALL_SYMBOLS ON)
-endif()
-target_compile_definitions(termin_gui_native_application_host
-    PRIVATE TERMIN_GUI_NATIVE_HOST_EXPORTS)
-target_include_directories(termin_gui_native_application_host
-    PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
-)
-target_link_libraries(termin_gui_native_application_host
-    PUBLIC
-        termin_gui_native
-        termin_gui_native_document_renderer
-        termin_window::termin_window
-    PRIVATE
-        termin_gui_native_window_input
-        ${CMAKE_DL_LIBS}
-)
-termin_set_rpath_lib(termin_gui_native_application_host)
-if(NOT WIN32)
-    set_target_properties(termin_gui_native_application_host PROPERTIES
-        BUILD_WITH_INSTALL_RPATH FALSE
-        BUILD_RPATH "$ORIGIN;$<TARGET_FILE_DIR:termin_gui_native>;$<TARGET_FILE_DIR:termin_window::termin_window>;$<TARGET_FILE_DIR:tgfx::termin_graphics2>;$<TARGET_FILE_DIR:tcbase::termin_base>"
-    )
-endif()
-
 # Optional borrowed binding between one application-owned BackendWindow and
 # one native-widget tc_ui_document. Applications opt into this target explicitly;
 # neither termin-window nor the widget/document core depends on it.
@@ -272,7 +236,7 @@ if(WIN32)
         WINDOWS_EXPORT_ALL_SYMBOLS ON)
 endif()
 target_compile_definitions(termin_gui_native_window_adapter
-    PRIVATE TERMIN_GUI_NATIVE_HOST_EXPORTS)
+    PRIVATE TERMIN_GUI_NATIVE_WINDOW_ADAPTER_EXPORTS)
 target_include_directories(termin_gui_native_window_adapter
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -410,73 +374,6 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     set_tests_properties(termin_gui_native_window_adapter_test PROPERTIES
         TIMEOUT 15
         SKIP_RETURN_CODE 77)
-    termin_gui_native_add_test(termin_gui_native_application_host_contract_test
-        tests/test_application_host_contract.cpp
-    )
-    target_link_libraries(termin_gui_native_application_host_contract_test
-        PRIVATE termin_gui_native_application_host)
-    termin_gui_native_add_test(termin_gui_native_application_host_live_test
-        tests/test_application_host_live.cpp
-    )
-    target_link_libraries(termin_gui_native_application_host_live_test
-        PRIVATE termin_gui_native_application_host)
-    if(TARGET termin_shaderc)
-        set(_termin_gui_native_test_shaderc "$<TARGET_FILE:termin_shaderc>")
-        add_dependencies(termin_gui_native_application_host_live_test termin_shaderc)
-    else()
-        find_program(_termin_gui_native_test_shaderc
-            NAMES termin_shaderc
-            HINTS ${CMAKE_PREFIX_PATH}
-            PATH_SUFFIXES bin
-            REQUIRED)
-    endif()
-    target_compile_definitions(termin_gui_native_application_host_live_test
-        PRIVATE
-            TERMIN_GUI_NATIVE_TEST_FONT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf"
-            TERMIN_GUI_NATIVE_TEST_SHADERC="${_termin_gui_native_test_shaderc}"
-    )
-    set_tests_properties(termin_gui_native_application_host_live_test PROPERTIES
-        TIMEOUT 15
-        SKIP_RETURN_CODE 77
-        SKIP_REGULAR_EXPRESSION "No available video device|Vulkan support is either not configured in SDL|Could not initialize OpenGL")
-    termin_gui_native_add_test(termin_gui_native_application_host_injection_test
-        tests/test_application_host_injection.cpp
-    )
-    target_link_libraries(termin_gui_native_application_host_injection_test
-        PRIVATE termin_gui_native_application_host)
-    target_compile_definitions(termin_gui_native_application_host_injection_test
-        PRIVATE
-            TERMIN_GUI_NATIVE_TEST_FONT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf"
-    )
-    set_tests_properties(termin_gui_native_application_host_injection_test PROPERTIES
-        TIMEOUT 15
-        SKIP_RETURN_CODE 77)
-    termin_gui_native_add_test(termin_gui_native_offscreen_application_test
-        tests/test_offscreen_application.cpp
-    )
-    target_link_libraries(termin_gui_native_offscreen_application_test
-        PRIVATE termin_gui_native_application_host)
-    if(TARGET termin_shaderc)
-        add_dependencies(termin_gui_native_offscreen_application_test termin_shaderc)
-    endif()
-    target_compile_definitions(termin_gui_native_offscreen_application_test
-        PRIVATE
-            TERMIN_GUI_NATIVE_TEST_FONT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf"
-            TERMIN_GUI_NATIVE_TEST_SHADERC="${_termin_gui_native_offscreen_test_shaderc}"
-    )
-    set_tests_properties(termin_gui_native_offscreen_application_test PROPERTIES
-        TIMEOUT 30
-        SKIP_RETURN_CODE 77
-        ENVIRONMENT "DISPLAY=;WAYLAND_DISPLAY=")
-    termin_gui_native_add_test(termin_gui_native_dynamic_texture_lease_test
-        tests/test_dynamic_texture_lease.cpp
-    )
-    target_link_libraries(termin_gui_native_dynamic_texture_lease_test
-        PRIVATE termin_gui_native_application_host)
-    target_compile_definitions(termin_gui_native_dynamic_texture_lease_test
-        PRIVATE
-            TERMIN_GUI_NATIVE_TEST_FONT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf"
-    )
     endif()
     termin_gui_native_add_test(termin_gui_native_offscreen_composition_test
         tests/test_offscreen_composition.cpp
@@ -512,7 +409,7 @@ if(TERMIN_GUI_NATIVE_BUILD_EXAMPLES)
     )
     target_link_libraries(termin_gui_native_example_support
         PRIVATE
-            termin_gui_native_application_host
+            termin_gui_native_window_adapter
     )
     target_include_directories(termin_gui_native_example_support
         PUBLIC
@@ -520,7 +417,7 @@ if(TERMIN_GUI_NATIVE_BUILD_EXAMPLES)
     )
     if(NOT WIN32)
         set_target_properties(termin_gui_native_example_support PROPERTIES
-            BUILD_RPATH "$<TARGET_FILE_DIR:termin_gui_native>;$<TARGET_FILE_DIR:termin_gui_native_application_host>;$<TARGET_FILE_DIR:termin_window::termin_window>;$<TARGET_FILE_DIR:tgfx::termin_graphics2>;$<TARGET_FILE_DIR:tcbase::termin_base>"
+            BUILD_RPATH "$<TARGET_FILE_DIR:termin_gui_native>;$<TARGET_FILE_DIR:termin_gui_native_window_adapter>;$<TARGET_FILE_DIR:termin_window::termin_window>;$<TARGET_FILE_DIR:tgfx::termin_graphics2>;$<TARGET_FILE_DIR:tcbase::termin_base>"
         )
     endif()
 
@@ -541,7 +438,7 @@ if(TERMIN_GUI_NATIVE_BUILD_EXAMPLES)
     )
     if(NOT WIN32)
         set_target_properties(termin_gui_native_showcase termin_gui_native_rect_window PROPERTIES
-            BUILD_RPATH "$<TARGET_FILE_DIR:termin_gui_native>;$<TARGET_FILE_DIR:termin_gui_native_application_host>;$<TARGET_FILE_DIR:termin_window::termin_window>;$<TARGET_FILE_DIR:tgfx::termin_graphics2>;$<TARGET_FILE_DIR:tcbase::termin_base>"
+            BUILD_RPATH "$<TARGET_FILE_DIR:termin_gui_native>;$<TARGET_FILE_DIR:termin_gui_native_window_adapter>;$<TARGET_FILE_DIR:termin_window::termin_window>;$<TARGET_FILE_DIR:tgfx::termin_graphics2>;$<TARGET_FILE_DIR:tcbase::termin_base>"
         )
     endif()
 endif()
@@ -561,13 +458,11 @@ if(TERMIN_BUILD_PYTHON)
         python/bindings/gui_native_bindings_views_collections.cpp
         python/bindings/gui_native_bindings_views_controls.cpp
         python/bindings/gui_native_bindings_document.cpp
-        python/bindings/gui_native_bindings_application_host.cpp
+        python/bindings/gui_native_bindings_offscreen.cpp
     )
     target_link_libraries(_gui_native
         PRIVATE
-            termin_gui_native_application_host
             termin_gui_native_offscreen
-            termin_gui_native_window_adapter
     )
     target_include_directories(_gui_native
         PRIVATE
@@ -575,6 +470,19 @@ if(TERMIN_BUILD_PYTHON)
     )
     termin_set_rpath_python(_gui_native)
     install(TARGETS _gui_native DESTINATION lib/python/termin/gui_native)
+
+    if(TERMIN_GUI_NATIVE_BUILD_WINDOW_INTEGRATION)
+        nanobind_add_module(_gui_native_window NB_SHARED
+            python/bindings/gui_native_window_module.cpp
+            python/bindings/gui_native_bindings_window_adapter.cpp
+        )
+        target_link_libraries(_gui_native_window
+            PRIVATE termin_gui_native_window_adapter)
+        target_include_directories(_gui_native_window
+            PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
+        termin_set_rpath_python(_gui_native_window)
+        install(TARGETS _gui_native_window DESTINATION lib/python/termin/gui_native)
+    endif()
     install(DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/python/termin/gui_native/
             DESTINATION lib/python/termin/gui_native
             FILES_MATCHING PATTERN "*.py")
@@ -596,7 +504,6 @@ install(TARGETS
 if(TERMIN_GUI_NATIVE_BUILD_WINDOW_INTEGRATION)
     install(TARGETS
         termin_gui_native_window_input
-        termin_gui_native_application_host
         termin_gui_native_window_adapter
         EXPORT termin_gui_nativeWindowTargets
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

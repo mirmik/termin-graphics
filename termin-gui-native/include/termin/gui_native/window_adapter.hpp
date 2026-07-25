@@ -5,6 +5,7 @@
 #include <span>
 
 #include <termin/gui_native/document_renderer.hpp>
+#include <termin/gui_native/window_adapter_export.h>
 #include <termin/platform/backend_window.hpp>
 
 namespace termin::gui_native {
@@ -12,7 +13,7 @@ namespace termin::gui_native {
 // Borrowed native-widget binding for one application-owned BackendWindow.
 // The adapter owns only GUI rendering/input state. It never creates or closes
 // the window, its WindowManager, or the shared GraphicsHost.
-class TERMIN_GUI_NATIVE_HOST_API GuiWindowAdapter {
+class TERMIN_GUI_NATIVE_WINDOW_ADAPTER_API GuiWindowAdapter {
   public:
     GuiWindowAdapter(tgfx::GraphicsHost& graphics, TcDocument document,
                      DocumentRendererConfig config, BackendWindow& window);
@@ -35,6 +36,7 @@ class TERMIN_GUI_NATIVE_HOST_API GuiWindowAdapter {
     bool render_and_present();
     void request_repaint();
     bool repaint_requested() const;
+    bool should_close() const;
     void wait_idle();
     void close();
     bool is_open() const;

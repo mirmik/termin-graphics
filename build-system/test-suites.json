@@ -8,7 +8,6 @@
       ".venv",
       "build",
       "sdk",
-      "termin-app/install",
       "termin-thirdparty"
     ],
     "exclude_directory_names": ["__pycache__", "build"]
@@ -20,7 +19,6 @@
       ".git",
       "build",
       "sdk",
-      "termin-app/install",
       "termin-thirdparty"
     ],
     "exclude_directory_names": ["__pycache__", "build"],
@@ -193,14 +191,14 @@
       "reason": "Runs the installed editor through Xvfb and Mesa llvmpipe, verifies MCP project/scene access, and requests clean shutdown."
     },
     {
-      "id": "termin-app-installed-bundle-acceptance",
-      "module": "termin-app",
+      "id": "relocated-sdk-acceptance",
+      "module": "termin-build-tools",
       "executor": "process-smoke",
-      "roots": ["scripts/smoke-termin-app-installed-bundle"],
+      "roots": ["scripts/smoke-relocated-sdk.py"],
       "profiles": ["sdk-installed"],
-      "platforms": ["linux"],
-      "required_capabilities": ["installed-sdk", "termin-app-bundle"],
-      "reason": "Proves imports and tests against termin-app's installed bundle rather than the checkout source overlay."
+      "platforms": ["linux", "windows"],
+      "required_capabilities": ["installed-sdk", "sdk-relocation"],
+      "reason": "Copies the manifest-verified SDK and exercises bundled editor, launcher, player, and Python hosts under the same hostile-environment contract on Linux and Windows."
     },
     {
       "id": "tgfx2-d3d11-bound-smoke",

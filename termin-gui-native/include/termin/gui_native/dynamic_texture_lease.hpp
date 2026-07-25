@@ -4,7 +4,7 @@
 #include <memory>
 #include <span>
 
-#include <termin/gui_native/application_host_export.h>
+#include <termin/gui_native/document_renderer_export.h>
 #include <tgfx2/handles.hpp>
 
 namespace tgfx {
@@ -15,9 +15,7 @@ namespace termin::gui_native {
 
 class Canvas;
 class DocumentRenderer;
-class GuiApplicationHost;
-class GuiWindowHost;
-struct GuiApplicationHostLeaseState;
+struct DocumentRendererLeaseState;
 
 enum class DynamicTextureOwnership {
     Empty,
@@ -34,11 +32,9 @@ enum class CanvasTextureLayer {
 // Host-bound RGBA8 texture lifetime. Canvas remains a non-owning consumer;
 // this object owns upload/recreate/release policy and validates the graphics
 // domain and host/document lifetime on every operation.
-class TERMIN_GUI_NATIVE_HOST_API DynamicTextureLease {
+class TERMIN_GUI_NATIVE_RENDERER_API DynamicTextureLease {
   public:
-    explicit DynamicTextureLease(GuiApplicationHost& host);
     explicit DynamicTextureLease(DocumentRenderer& renderer);
-    explicit DynamicTextureLease(GuiWindowHost& host);
     ~DynamicTextureLease();
 
     DynamicTextureLease(const DynamicTextureLease&) = delete;
@@ -68,7 +64,7 @@ class TERMIN_GUI_NATIVE_HOST_API DynamicTextureLease {
 
   private:
     explicit DynamicTextureLease(
-        std::shared_ptr<GuiApplicationHostLeaseState> state);
+        std::shared_ptr<DocumentRendererLeaseState> state);
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

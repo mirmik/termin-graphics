@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <termin/gui_native/document_renderer.hpp>
+#include <termin/gui_native/offscreen_export.h>
 #include <tgfx2/enums.hpp>
 
 namespace termin::gui_native {
@@ -18,6 +19,7 @@ struct OffscreenGuiCompositionConfig {
     int height = 720;
     tgfx::BackendType backend = tgfx::BackendType::Vulkan;
     bool continuous_rendering = true;
+    bool application_graphics_domain = false;
     std::string sdk_root;
     std::string shader_compiler_path;
     std::string slang_compiler_path;
@@ -26,7 +28,7 @@ struct OffscreenGuiCompositionConfig {
     bool enable_shader_dev_compile = true;
 };
 
-class TERMIN_GUI_NATIVE_HOST_API InMemoryDocumentPlatformServices final
+class TERMIN_GUI_NATIVE_OFFSCREEN_API InMemoryDocumentPlatformServices final
     : public DocumentPlatformServices {
   public:
     InMemoryDocumentPlatformServices();
@@ -45,10 +47,12 @@ class TERMIN_GUI_NATIVE_HOST_API InMemoryDocumentPlatformServices final
     std::unique_ptr<Impl> impl_;
 };
 
-// Owning no-display composition. It owns an isolated graphics domain,
-// explicit tc_ui_document, renderer, synthetic input queue and in-memory services. It owns no
-// application or OS-window lifecycle.
-class TERMIN_GUI_NATIVE_HOST_API OffscreenGuiComposition {
+// Owning no-display composition. It owns a graphics domain, explicit
+// tc_ui_document, renderer, synthetic input queue and in-memory services. The
+// domain is isolated by default; an application composition root can
+// explicitly claim the process graphics domain for engine integration. It owns
+// no application or OS-window lifecycle.
+class TERMIN_GUI_NATIVE_OFFSCREEN_API OffscreenGuiComposition {
   public:
     explicit OffscreenGuiComposition(OffscreenGuiCompositionConfig config);
     ~OffscreenGuiComposition();

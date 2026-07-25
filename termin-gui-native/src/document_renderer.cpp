@@ -1,6 +1,6 @@
 #include <termin/gui_native/document_renderer.hpp>
 
-#include "application_host_internal.hpp"
+#include "document_renderer_internal.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -75,7 +75,7 @@ struct DocumentRenderer::Impl {
     UnhandledKeyHandler unhandled_key_handler;
     std::function<void(tgfx::RenderContext2&)> before_frame;
     std::vector<tc_widget_handle> color_pickers;
-    std::shared_ptr<GuiApplicationHostLeaseState> texture_leases;
+    std::shared_ptr<DocumentRendererLeaseState> texture_leases;
     std::string clipboard_buffer;
     bool closed = false;
 
@@ -108,7 +108,7 @@ struct DocumentRenderer::Impl {
             renderer.bind_text_measurer(document.handle());
             document.set_clipboard(&clipboard_get, &clipboard_set, this);
             document.set_cursor_changed_callback(&cursor_changed, this);
-            texture_leases = std::make_shared<GuiApplicationHostLeaseState>();
+            texture_leases = std::make_shared<DocumentRendererLeaseState>();
             texture_leases->request_repaint = [this]() {
                 facade->request_repaint();
             };
@@ -474,7 +474,7 @@ bool DocumentRenderer::is_open() const {
     return impl_ && !impl_->closed;
 }
 
-std::shared_ptr<GuiApplicationHostLeaseState>
+std::shared_ptr<DocumentRendererLeaseState>
 DocumentRenderer::texture_lease_state() const {
     impl_->require_open("texture_lease_state");
     return impl_->texture_leases;

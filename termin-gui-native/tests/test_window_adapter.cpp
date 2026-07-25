@@ -94,12 +94,19 @@ int main() {
         termin::gui_native::GuiWindowAdapter adapter(
             *graphics, document, config, window);
         if (!window.text_input_enabled || &adapter.window() != &window ||
+            adapter.should_close() ||
             !tc_ui_document_handle_eq(adapter.document().handle(),
                                       document.handle()) ||
             window.close_count != 0) {
             std::fprintf(stderr, "adapter did not establish borrowed services\n");
             return 1;
         }
+        window.set_should_close(true);
+        if (!adapter.should_close()) {
+            std::fprintf(stderr, "adapter did not expose borrowed close state\n");
+            return 1;
+        }
+        window.set_should_close(false);
         std::exception_ptr cross_thread_error;
         std::thread worker([&] {
             try {

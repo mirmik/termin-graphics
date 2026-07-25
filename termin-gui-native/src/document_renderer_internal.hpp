@@ -15,7 +15,7 @@ namespace termin::gui_native {
 
 class DynamicTextureRecord;
 
-struct GuiApplicationHostLeaseState {
+struct DocumentRendererLeaseState {
     std::mutex mutex;
     std::function<void()> request_repaint;
     tgfx::GraphicsHost* graphics = nullptr;

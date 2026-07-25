@@ -15,7 +15,7 @@ import sdl2
 
 from tcbase import MouseButton
 from tcgui.widgets.ui import UI
-from termin.display import WindowedGraphicsSession, quit_sdl
+from termin.display.window import WindowedGraphicsSession, quit_sdl
 from tgfx import Tgfx2Context, configure_default_shader_runtime
 
 

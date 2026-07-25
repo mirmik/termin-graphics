@@ -10,7 +10,6 @@
       "dist",
       "node_modules",
       "sdk",
-      "termin-app/install",
       "termin-csharp/Termin.Native/Generated",
       "termin-thirdparty",
       "thirdparty"
