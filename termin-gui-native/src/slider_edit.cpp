@@ -149,9 +149,53 @@ void SliderEdit::layout(tc_ui_document_handle document, tc_ui_rect rect) {
 }
 
 void SliderEdit::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
-    if (label_.empty()) return;
-    const tc_ui_style style = computed_style(document);
-    tc_ui_painter_draw_text(context, label_.c_str(), tc_ui_point {bounds().x, bounds().y + 13.0f}, 11.0f, style.foreground);
+    if (!label_.empty()) {
+        const tc_ui_style style = computed_style(document);
+        tc_ui_painter_draw_text(
+            context,
+            label_.c_str(),
+            tc_ui_point {bounds().x, bounds().y + 13.0f},
+            11.0f,
+            style.foreground
+        );
+    }
+    tc_ui_painter_push_clip(context, bounds());
+    paint_widget(
+        tc_ui_document_resolve_widget(document, slider_handle_),
+        document,
+        context
+    );
+    paint_widget(
+        tc_ui_document_resolve_widget(document, spin_box_handle_),
+        document,
+        context
+    );
+    tc_ui_painter_pop_clip(context);
+}
+
+tc_widget_handle SliderEdit::hit_test(
+    tc_ui_document_handle document,
+    float x,
+    float y
+) {
+    if (!visible() || !rect_contains(bounds(), x, y)) {
+        return tc_widget_handle_invalid();
+    }
+    for (const tc_widget_handle child_handle :
+         {spin_box_handle_, slider_handle_}) {
+        tc_widget* child =
+            tc_ui_document_resolve_widget(document, child_handle);
+        if (!child || !tc_widget_is_visible(child) || !child->vtable ||
+            !child->vtable->hit_test) {
+            continue;
+        }
+        const tc_widget_handle hit =
+            child->vtable->hit_test(child, document, x, y);
+        if (!tc_widget_handle_is_invalid(hit)) {
+            return hit;
+        }
+    }
+    return mouse_transparent() ? tc_widget_handle_invalid() : handle();
 }
 
 void SliderEdit::on_destroy(tc_ui_document_handle document) {

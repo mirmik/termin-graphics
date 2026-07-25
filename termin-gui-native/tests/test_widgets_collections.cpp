@@ -473,10 +473,17 @@ void test_tree_widget_pointer_keyboard_signals_and_lifetime() {
   auto model = std::make_shared<TreeModel>();
   const TreeNodeId root =
       model->append_root(CollectionItem{"root", "Root", {}, true});
-  const TreeNodeId first =
-      model->append_child(root, CollectionItem{"first", "First", {}, true});
-  const TreeNodeId disabled = model->append_child(
-      root, CollectionItem{"disabled", "Disabled", {}, false});
+  CollectionItem first_item{"first", "First", {}, true};
+  first_item.primary_toggle = true;
+  first_item.primary_checked = true;
+  first_item.primary_toggle_label = "Visible";
+  first_item.secondary_toggle = true;
+  first_item.secondary_toggle_label = "Solo";
+  const TreeNodeId first = model->append_child(root, first_item);
+  CollectionItem disabled_item{"disabled", "Disabled", {}, false};
+  disabled_item.primary_toggle = true;
+  const TreeNodeId disabled =
+      model->append_child(root, disabled_item);
   const TreeNodeId last =
       model->append_child(root, CollectionItem{"last", "Last", {}, true});
   std::weak_ptr<TreeModel> weak_model = model;
@@ -489,6 +496,7 @@ void test_tree_widget_pointer_keyboard_signals_and_lifetime() {
   TreeNodeId activated = kInvalidTreeNodeId;
   TreeNodeId delete_requested = kInvalidTreeNodeId;
   TreeNodeId context_requested = kInvalidTreeNodeId;
+  std::vector<std::pair<TreeNodeId, int>> toggles;
   tree.selection_changed().connect(
       [&selections](TreeWidget &, TreeNodeId node) {
         selections.push_back(node);
@@ -500,6 +508,11 @@ void test_tree_widget_pointer_keyboard_signals_and_lifetime() {
   tree.activated().connect(
       [&activated](TreeWidget &, TreeNodeId node, const CollectionItem &) {
         activated = node;
+      });
+  tree.toggle_activated().connect(
+      [&toggles](TreeWidget &, TreeNodeId node, int toggle_index,
+                 const CollectionItem &) {
+        toggles.emplace_back(node, toggle_index);
       });
   tree.delete_requested().connect(
       [&delete_requested](TreeWidget &, TreeNodeId node,
@@ -526,11 +539,34 @@ void test_tree_widget_pointer_keyboard_signals_and_lifetime() {
   assert(context_requested == root);
   pointer.button = 0;
 
+  pointer.x = 40.0f;
+  pointer.y = 45.0f;
+  pointer.type = TC_UI_POINTER_DOWN;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+  pointer.type = TC_UI_POINTER_UP;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+  assert(toggles.back() == std::make_pair(first, 0));
+  assert(tree.selected_node() == root);
+
+  pointer.x = 40.0f;
+  pointer.y = 75.0f;
+  pointer.type = TC_UI_POINTER_DOWN;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_IGNORED);
+  assert(toggles.size() == 1);
+
   tc_ui_key_event key{};
   key.type = TC_UI_KEY_DOWN;
   key.key = TC_UI_KEY_DOWN_ARROW;
   assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
   assert(tree.selected_node() == first);
+  key.key = TC_UI_KEY_SPACE;
+  assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+  assert(toggles.back() == std::make_pair(first, 0));
+  key.modifiers = TC_UI_MOD_SHIFT;
+  assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+  assert(toggles.back() == std::make_pair(first, 1));
+  key.modifiers = 0;
+  key.key = TC_UI_KEY_DOWN_ARROW;
   assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
   assert(tree.selected_node() == last);
   assert(tree.selected_node() != disabled);
@@ -976,6 +1012,22 @@ void test_tool_bar_layout_activation_capture_and_model_lifetime() {
   pointer.x = toolbar.item_rects()[3].x + 2.0f;
   assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_IGNORED);
   assert(activated.size() == 1);
+
+  assert(toolbar.keyboard_index() == 2);
+  tc_ui_key_event key{};
+  key.type = TC_UI_KEY_DOWN;
+  key.key = TC_UI_KEY_LEFT;
+  assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+  assert(toolbar.keyboard_index() == 0);
+  key.key = TC_UI_KEY_ENTER;
+  assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+  assert(activated == std::vector<CommandId>({snap, save}));
+  key.key = TC_UI_KEY_END;
+  assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+  assert(toolbar.keyboard_index() == 2);
+  key.key = TC_UI_KEY_SPACE;
+  assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+  assert(!model->command(snap).data.checked);
 
   model->set_enabled(save, false);
   assert(!model->command(save).data.enabled);

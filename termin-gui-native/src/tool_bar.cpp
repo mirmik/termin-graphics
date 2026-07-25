@@ -10,6 +10,7 @@ ToolBar::ToolBar(std::shared_ptr<CommandModel> model)
     : NativeWidget("ToolBar"), model_(model ? std::move(model) : std::make_shared<CommandModel>()) {
     set_style_role(TC_UI_STYLE_PANEL);
     set_cursor_intent(TC_UI_CURSOR_HAND);
+    set_focusable(true);
     set_preferred_size(tc_ui_size{400.0f, 40.0f});
     observed_revision_ = model_->revision();
     connect_model();
@@ -36,6 +37,7 @@ void ToolBar::set_model(std::shared_ptr<CommandModel> model) {
     observed_revision_ = model_->revision();
     hovered_ = SIZE_MAX;
     pressed_ = SIZE_MAX;
+    keyboard_ = SIZE_MAX;
     item_rects_.clear();
     connect_model();
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
@@ -49,6 +51,11 @@ void ToolBar::on_model_changed(const CommandChange& change) {
     } else if (hovered_ >= model_->size()) {
         hovered_ = SIZE_MAX;
     }
+    if (keyboard_ >= model_->size() ||
+        (keyboard_ != SIZE_MAX &&
+         (model_->command_at(keyboard_).data.kind != CommandKind::Action ||
+          !model_->command_at(keyboard_).data.enabled)))
+        keyboard_ = SIZE_MAX;
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
@@ -58,6 +65,8 @@ void ToolBar::sync_model() {
     observed_revision_ = model_->revision();
     hovered_ = SIZE_MAX;
     pressed_ = SIZE_MAX;
+    if (keyboard_ >= model_->size())
+        keyboard_ = SIZE_MAX;
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
@@ -176,6 +185,11 @@ void ToolBar::paint(tc_ui_document_handle document, tc_ui_paint_context* context
             highlight.a *= index == pressed_ ? 0.48f : (command.checked ? 0.36f : 0.20f);
             tc_ui_painter_fill_rounded_rect(context, rect, 4.0f, highlight);
         }
+        if (index == keyboard_ &&
+            tc_widget_handle_eq(
+                tc_ui_document_focused_widget(document), handle())) {
+            tc_ui_painter_stroke_rect(context, rect, style.accent, 1.5f);
+        }
         tc_ui_color foreground = style.foreground;
         if (!command.enabled)
             foreground.a *= 0.45f;
@@ -220,6 +234,35 @@ size_t ToolBar::index_at(float x, float y) const {
     return SIZE_MAX;
 }
 
+size_t ToolBar::first_enabled(int direction) const {
+    if (model_->empty())
+        return SIZE_MAX;
+    std::ptrdiff_t index =
+        direction > 0 ? 0 : static_cast<std::ptrdiff_t>(model_->size()) - 1;
+    while (index >= 0 && index < static_cast<std::ptrdiff_t>(model_->size())) {
+        const CommandData& command =
+            model_->command_at(static_cast<size_t>(index)).data;
+        if (command.kind == CommandKind::Action && command.enabled)
+            return static_cast<size_t>(index);
+        index += direction;
+    }
+    return SIZE_MAX;
+}
+
+size_t ToolBar::next_enabled(size_t from, int direction) const {
+    if (from == SIZE_MAX)
+        return first_enabled(direction);
+    std::ptrdiff_t index = static_cast<std::ptrdiff_t>(from) + direction;
+    while (index >= 0 && index < static_cast<std::ptrdiff_t>(model_->size())) {
+        const CommandData& command =
+            model_->command_at(static_cast<size_t>(index)).data;
+        if (command.kind == CommandKind::Action && command.enabled)
+            return static_cast<size_t>(index);
+        index += direction;
+    }
+    return from;
+}
+
 bool ToolBar::activate(size_t index) {
     if (index >= model_->size())
         return false;
@@ -259,6 +302,8 @@ tc_ui_event_result ToolBar::pointer_event(tc_ui_document_handle document,
             return TC_UI_EVENT_IGNORED;
         }
         pressed_ = index;
+        keyboard_ = index;
+        tc_ui_document_set_focus(document, handle());
         tc_ui_document_set_pointer_capture(document, handle());
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
         return TC_UI_EVENT_HANDLED;
@@ -271,6 +316,40 @@ tc_ui_event_result ToolBar::pointer_event(tc_ui_document_handle document,
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
         if (inside)
             activate(pressed);
+        return TC_UI_EVENT_HANDLED;
+    }
+    return TC_UI_EVENT_IGNORED;
+}
+
+tc_ui_event_result ToolBar::key_event(tc_ui_document_handle,
+                                      const tc_ui_key_event* event) {
+    if (!event || event->type != TC_UI_KEY_DOWN)
+        return TC_UI_EVENT_IGNORED;
+    sync_model();
+    size_t next = keyboard_;
+    if (event->key == TC_UI_KEY_HOME)
+        next = first_enabled(1);
+    else if (event->key == TC_UI_KEY_END)
+        next = first_enabled(-1);
+    else if (event->key == TC_UI_KEY_LEFT)
+        next = next_enabled(keyboard_, -1);
+    else if (event->key == TC_UI_KEY_RIGHT)
+        next = next_enabled(keyboard_, 1);
+    else if (event->key == TC_UI_KEY_ENTER || event->key == TC_UI_KEY_SPACE) {
+        if (keyboard_ == SIZE_MAX)
+            keyboard_ = first_enabled(1);
+        if (keyboard_ != SIZE_MAX) {
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+            activate(keyboard_);
+            return TC_UI_EVENT_HANDLED;
+        }
+        return TC_UI_EVENT_IGNORED;
+    } else {
+        return TC_UI_EVENT_IGNORED;
+    }
+    if (next != SIZE_MAX) {
+        keyboard_ = next;
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
         return TC_UI_EVENT_HANDLED;
     }
     return TC_UI_EVENT_IGNORED;

@@ -383,6 +383,18 @@ def test_native_command_model_toolbar_and_status_bar_contracts():
     assert document.dispatch_pointer_event(pointer) == EventResult.Handled
     assert activations == [(2, snap, "snap", True)]
     assert model.command(snap).data.checked
+    assert toolbar.keyboard_index == 2
+    key = KeyEvent()
+    key.type = KeyEventType.Down
+    key.key = KeyCode.Left
+    assert document.dispatch_key_event(key) == EventResult.Handled
+    assert toolbar.keyboard_index == 0
+    key.key = KeyCode.Enter
+    assert document.dispatch_key_event(key) == EventResult.Handled
+    assert activations[-1][1] == save
+    key.key = KeyCode.End
+    assert document.dispatch_key_event(key) == EventResult.Handled
+    assert toolbar.keyboard_index == 2
     model.set_enabled(save, False)
     assert not model.command(save).data.enabled
 
@@ -709,6 +721,69 @@ def test_native_tree_widget_pointer_callbacks_reconcile_and_propagate_errors():
     widget.connect_selection_changed(fail_selection)
     with pytest.raises(RuntimeError, match="tree selection failed"):
         widget.select(first)
+
+
+def test_native_tree_widget_row_toggles_pointer_keyboard_and_paint():
+    document = tc_ui_document_create()
+    model = TreeModel()
+    item = CollectionItem(
+        "layer",
+        "Layer",
+        primary_toggle=True,
+        primary_checked=True,
+        primary_toggle_label="Visible",
+        secondary_toggle=True,
+        secondary_checked=False,
+        secondary_toggle_label="Solo",
+    )
+    node = model.append_root(item)
+    widget = document.create_tree_widget(model)
+    assert document.add_root(widget.handle)
+    widget.set_row_height(30.0)
+    document.layout_roots(Rect(0.0, 0.0, 220.0, 60.0))
+
+    projected = model.node(node).item
+    assert projected.primary_toggle_label == "Visible"
+    assert projected.primary_checked
+    assert projected.secondary_toggle_label == "Solo"
+
+    draw_list = DrawList()
+    document.paint_roots(PaintContext(draw_list))
+    assert sum(
+        command.type == DrawCommandType.StrokeRect
+        for command in draw_list.commands
+    ) >= 3
+
+    toggles = []
+    widget.connect_toggle_activated(
+        lambda selected, index, current:
+        toggles.append((selected, index, current.stable_id)))
+    pointer = PointerEvent()
+    pointer.type = PointerEventType.Down
+    pointer.button = 0
+    pointer.x = 22.0
+    pointer.y = 15.0
+    assert document.dispatch_pointer_event(pointer) == EventResult.Handled
+    pointer.type = PointerEventType.Up
+    assert document.dispatch_pointer_event(pointer) == EventResult.Handled
+    assert toggles == [(node, 0, "layer")]
+    assert widget.selected_node == 0
+
+    assert widget.select(node)
+    key = KeyEvent()
+    key.type = KeyEventType.Down
+    key.key = KeyCode.Space
+    key.modifiers = int(ModifierFlag.Shift)
+    assert document.dispatch_key_event(key) == EventResult.Handled
+    assert toggles[-1] == (node, 1, "layer")
+
+    disabled = CollectionItem(
+        "layer", "Layer", enabled=False, primary_toggle=True)
+    model.update(node, disabled)
+    pointer.type = PointerEventType.Down
+    pointer.x = 22.0
+    assert document.dispatch_pointer_event(pointer) == EventResult.Ignored
+    assert len(toggles) == 2
 
 
 def test_native_tree_widget_drag_drop_signal_reports_position():

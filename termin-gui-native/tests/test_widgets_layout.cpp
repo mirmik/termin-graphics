@@ -1407,18 +1407,68 @@ void test_slider_edit_owns_canonical_children_and_syncs_values() {
   assert(edit.child_count() == 2);
   assert(tc_ui_document_is_alive(document.get(), edit.slider_handle()));
   assert(tc_ui_document_is_alive(document.get(), edit.spin_box_handle()));
+  tc_widget *slider_widget =
+      tc_ui_document_resolve_widget(document.get(), edit.slider_handle());
+  tc_widget *spin_widget =
+      tc_ui_document_resolve_widget(document.get(), edit.spin_box_handle());
+  assert(tc_widget_bounds(slider_widget).width > 0.0f);
+  assert(tc_widget_bounds(spin_widget).width > 0.0f);
+
+  tc_ui_draw_list *draw_list = tc_ui_draw_list_create();
+  tc_ui_paint_context *paint_context = tc_ui_paint_context_create(draw_list);
+  document.paint_roots(paint_context);
+  assert(count_commands(draw_list, TC_UI_DRAW_LINE) >= 2);
+  assert(count_commands(draw_list, TC_UI_DRAW_FILL_RECT) >= 3);
+  assert(count_commands(draw_list, TC_UI_DRAW_TEXT) >= 4);
+  tc_ui_paint_context_destroy(paint_context);
+  tc_ui_draw_list_destroy(draw_list);
+
+  const tc_ui_rect slider_bounds = tc_widget_bounds(slider_widget);
+  assert(tc_widget_handle_eq(
+      document.hit_test(
+          slider_bounds.x + slider_bounds.width * 0.5f,
+          slider_bounds.y + slider_bounds.height * 0.5f),
+      edit.slider_handle()));
+  const tc_ui_rect spin_bounds = tc_widget_bounds(spin_widget);
+  assert(tc_widget_handle_eq(
+      document.hit_test(
+          spin_bounds.x + spin_bounds.width * 0.5f,
+          spin_bounds.y + spin_bounds.height * 0.5f),
+      edit.spin_box_handle()));
 
   int changes = 0;
   edit.changed().connect([&changes](SliderEdit &, float) { ++changes; });
-  tc_widget *slider_widget =
-      tc_ui_document_resolve_widget(document.get(), edit.slider_handle());
+  tc_ui_pointer_event pointer{};
+  pointer.type = TC_UI_POINTER_DOWN;
+  pointer.x = slider_bounds.x + slider_bounds.width - 1.0f;
+  pointer.y = slider_bounds.y + slider_bounds.height * 0.5f;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+  pointer.type = TC_UI_POINTER_UP;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+  assert(near(edit.value(), 10.0f));
+  assert(changes == 1);
+  assert(near(static_cast<SpinBox *>(spin_widget->body)->value(), 10.0f));
+
+  assert(tc_ui_document_set_focus(document.get(), edit.spin_box_handle()));
+  tc_ui_key_event key{};
+  key.type = TC_UI_KEY_DOWN;
+  key.key = TC_UI_KEY_DOWN_ARROW;
+  assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+  assert(near(edit.value(), 9.5f));
+  assert(changes == 2);
+
   auto *slider = static_cast<Slider *>(slider_widget->body);
   slider->set_value(7.0f);
   assert(near(edit.value(), 7.0f));
-  tc_widget *spin_widget =
-      tc_ui_document_resolve_widget(document.get(), edit.spin_box_handle());
   assert(near(static_cast<SpinBox *>(spin_widget->body)->value(), 7.0f));
-  assert(changes == 1);
+  assert(changes == 3);
+
+  const tc_widget_handle slider_handle = edit.slider_handle();
+  const tc_widget_handle spin_box_handle = edit.spin_box_handle();
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 360.0f, 52.0f});
+  assert(edit.child_count() == 2);
+  assert(tc_widget_handle_eq(edit.slider_handle(), slider_handle));
+  assert(tc_widget_handle_eq(edit.spin_box_handle(), spin_box_handle));
 
   const tc_widget_handle root_handle = edit.handle();
   assert(tc_ui_document_destroy_widget_recursive(document.get(), root_handle));

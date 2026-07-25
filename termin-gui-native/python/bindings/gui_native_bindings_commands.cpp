@@ -91,6 +91,11 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                          const size_t index = self.get().hovered_index();
                          return index == SIZE_MAX ? -1 : static_cast<int64_t>(index);
                      })
+        .def_prop_ro("keyboard_index",
+                     [](const ToolBarRef& self) -> int64_t {
+                         const size_t index = self.get().keyboard_index();
+                         return index == SIZE_MAX ? -1 : static_cast<int64_t>(index);
+                     })
         .def_prop_ro("hovered_tooltip",
                      [](const ToolBarRef& self) { return self.get().hovered_tooltip(); })
         .def_prop_rw(

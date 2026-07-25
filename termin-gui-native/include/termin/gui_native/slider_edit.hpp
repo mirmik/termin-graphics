@@ -39,6 +39,7 @@ public:
     tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
     void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
     void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+    tc_widget_handle hit_test(tc_ui_document_handle document, float x, float y) override;
     void on_destroy(tc_ui_document_handle document) override;
 private:
     bool ensure_children(tc_ui_document_handle document);

@@ -26,6 +26,8 @@ private:
   TreeNodeId selected_ = kInvalidTreeNodeId;
   TreeNodeId hovered_ = kInvalidTreeNodeId;
   TreeNodeId pressed_ = kInvalidTreeNodeId;
+  TreeNodeId pressed_toggle_node_ = kInvalidTreeNodeId;
+  int pressed_toggle_index_ = -1;
   LogicalClickTracker<std::string> activation_clicks_{std::string{}};
   TreeNodeId drag_target_ = kInvalidTreeNodeId;
   TreeDropPosition drag_position_ = TreeDropPosition::Root;
@@ -43,6 +45,8 @@ private:
   Signal<TreeWidget &, TreeNodeId> selection_changed_;
   Signal<TreeWidget &, TreeNodeId, bool> expansion_changed_;
   Signal<TreeWidget &, TreeNodeId, const CollectionItem &> activated_;
+  Signal<TreeWidget &, TreeNodeId, int, const CollectionItem &>
+      toggle_activated_;
   Signal<TreeWidget &, TreeNodeId, const CollectionItem &> delete_requested_;
   Signal<TreeWidget &, TreeNodeId, float, float> context_menu_requested_;
   Signal<TreeWidget &, TreeNodeId, TreeNodeId, TreeDropPosition>
@@ -93,6 +97,10 @@ public:
   Signal<TreeWidget &, TreeNodeId, const CollectionItem &> &activated() {
     return activated_;
   }
+  Signal<TreeWidget &, TreeNodeId, int, const CollectionItem &> &
+  toggle_activated() {
+    return toggle_activated_;
+  }
   Signal<TreeWidget &, TreeNodeId, const CollectionItem &> &delete_requested() {
     return delete_requested_;
   }
@@ -127,6 +135,10 @@ private:
   TreeNodeId first_enabled_child(TreeNodeId node) const;
   bool select_from_navigation(TreeNodeId node);
   bool point_in_toggle(const TreeVisibleRow &row, float x) const;
+  int row_toggle_at(const TreeVisibleRow &row, const CollectionItem &item,
+                    float x) const;
+  float row_toggle_left(const TreeVisibleRow &row) const;
+  void clear_toggle_press();
   TreeDropPosition drop_position_at(size_t index, float y) const;
   void clear_drag_state();
 };

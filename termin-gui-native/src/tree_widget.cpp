@@ -67,6 +67,7 @@ void TreeWidget::set_model(std::shared_ptr<TreeModel> model) {
   disconnect_models();
   const bool selection_changed = selected_ != kInvalidTreeNodeId;
   clear_drag_state();
+  clear_toggle_press();
   model_ = model ? std::move(model) : std::make_shared<TreeModel>();
   selected_ = kInvalidTreeNodeId;
   hovered_ = kInvalidTreeNodeId;
@@ -84,6 +85,7 @@ void TreeWidget::set_expansion_model(
     std::shared_ptr<TreeExpansionModel> expansion) {
   disconnect_models();
   clear_drag_state();
+  clear_toggle_press();
   expansion_ =
       expansion ? std::move(expansion) : std::make_shared<TreeExpansionModel>();
   expansion_->reconcile(*model_);
@@ -108,6 +110,9 @@ void TreeWidget::on_model_changed(const TreeChange &) {
   }
   if (pressed_ != kInvalidTreeNodeId && !model_->contains(pressed_))
     clear_drag_state();
+  if (pressed_toggle_node_ != kInvalidTreeNodeId &&
+      !model_->contains(pressed_toggle_node_))
+    clear_toggle_press();
   rebuild_visible();
   clamp_scroll();
   mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_STATE |
@@ -388,7 +393,44 @@ void TreeWidget::paint(tc_ui_document_handle document, tc_ui_paint_context *cont
             tc_ui_point{toggle_x + 3.0f, row.y + row.height * 0.66f},
             std::max(9.0f, style.font_size - 1.0f), foreground);
       }
-      const float text_x = toggle_x + toggle_size_ + item_padding_;
+      float text_x = toggle_x + toggle_size_ + item_padding_;
+      const float accessory_size = std::min(14.0f, row_height_ - 8.0f);
+      const float accessory_y = row.y + (row.height - accessory_size) * 0.5f;
+      const auto draw_toggle = [&](bool checked, bool secondary) {
+        const tc_ui_rect box{text_x, accessory_y, accessory_size,
+                             accessory_size};
+        tc_ui_color toggle_color =
+            secondary ? tc_ui_color{0.85f, 0.68f, 0.14f, 1.0f}
+                      : style.accent;
+        if (!node.item.enabled)
+          toggle_color.a *= 0.45f;
+        if (checked) {
+          tc_ui_color fill = toggle_color;
+          fill.a *= 0.78f;
+          tc_ui_painter_fill_rounded_rect(context, box, 2.5f, fill);
+          tc_ui_color mark{1.0f, 1.0f, 1.0f, toggle_color.a};
+          tc_ui_painter_draw_line(
+              context,
+              tc_ui_point{box.x + box.width * 0.22f,
+                          box.y + box.height * 0.53f},
+              tc_ui_point{box.x + box.width * 0.43f,
+                          box.y + box.height * 0.74f},
+              mark, 1.8f);
+          tc_ui_painter_draw_line(
+              context,
+              tc_ui_point{box.x + box.width * 0.43f,
+                          box.y + box.height * 0.74f},
+              tc_ui_point{box.x + box.width * 0.80f,
+                          box.y + box.height * 0.27f},
+              mark, 1.8f);
+        }
+        tc_ui_painter_stroke_rect(context, box, toggle_color, 1.0f);
+        text_x += accessory_size + item_padding_;
+      };
+      if (node.item.primary_toggle)
+        draw_toggle(node.item.primary_checked, false);
+      if (node.item.secondary_toggle)
+        draw_toggle(node.item.secondary_checked, true);
       tc_ui_painter_draw_text(context, node.item.text.c_str(),
                               tc_ui_point{text_x, row.y + row.height * 0.66f},
                               style.font_size, foreground);
@@ -427,6 +469,25 @@ bool TreeWidget::point_in_toggle(const TreeVisibleRow &row, float x) const {
   return x >= left && x < left + toggle_size_;
 }
 
+float TreeWidget::row_toggle_left(const TreeVisibleRow &row) const {
+  return bounds().x + static_cast<float>(row.depth) * indent_size_ +
+         toggle_size_ + item_padding_;
+}
+
+int TreeWidget::row_toggle_at(const TreeVisibleRow &row,
+                              const CollectionItem &item, float x) const {
+  const float extent = std::min(14.0f, row_height_ - 8.0f);
+  float left = row_toggle_left(row);
+  if (item.primary_toggle) {
+    if (x >= left && x < left + extent)
+      return 0;
+    left += extent + item_padding_;
+  }
+  if (item.secondary_toggle && x >= left && x < left + extent)
+    return 1;
+  return -1;
+}
+
 TreeDropPosition TreeWidget::drop_position_at(size_t index, float y) const {
   if (index == SIZE_MAX)
     return TreeDropPosition::Root;
@@ -446,6 +507,12 @@ void TreeWidget::clear_drag_state() {
   drag_target_ = kInvalidTreeNodeId;
   drag_position_ = TreeDropPosition::Root;
   dragging_ = false;
+  mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+}
+
+void TreeWidget::clear_toggle_press() {
+  pressed_toggle_node_ = kInvalidTreeNodeId;
+  pressed_toggle_index_ = -1;
   mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
 }
 
@@ -477,6 +544,24 @@ tc_ui_event_result TreeWidget::pointer_event(tc_ui_document_handle document,
       mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
       return TC_UI_EVENT_HANDLED;
     }
+  }
+  if (event->type == TC_UI_POINTER_UP &&
+      pressed_toggle_node_ != kInvalidTreeNodeId && captured) {
+    const TreeNodeId node_id = pressed_toggle_node_;
+    const int toggle_index = pressed_toggle_index_;
+    tc_ui_document_release_pointer_capture(document, handle());
+    clear_toggle_press();
+    const size_t index = row_index_at(event->x, event->y);
+    if (index != SIZE_MAX && visible_[index].node == node_id &&
+        model_->contains(node_id)) {
+      const TreeVisibleRow row = visible_[index];
+      const TreeNode &node = model_->node(node_id);
+      if (node.item.enabled &&
+          row_toggle_at(row, node.item, event->x) == toggle_index) {
+        toggle_activated_.emit(*this, node_id, toggle_index, node.item);
+      }
+    }
+    return TC_UI_EVENT_HANDLED;
   }
   if (event->type == TC_UI_POINTER_UP && pressed_ != kInvalidTreeNodeId &&
       captured) {
@@ -527,6 +612,17 @@ tc_ui_event_result TreeWidget::pointer_event(tc_ui_document_handle document,
     if (event->button == tcbase::mouse_button_value(tcbase::MouseButton::LEFT))
       activation_clicks_.clear();
     return TC_UI_EVENT_IGNORED;
+  }
+  const int toggle_index = row_toggle_at(row, node.item, event->x);
+  if (event->button ==
+          tcbase::mouse_button_value(tcbase::MouseButton::LEFT) &&
+      toggle_index >= 0) {
+    activation_clicks_.clear();
+    pressed_toggle_node_ = node.id;
+    pressed_toggle_index_ = toggle_index;
+    tc_ui_document_set_pointer_capture(document, handle());
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+    return TC_UI_EVENT_HANDLED;
   }
   const bool selected = select_node(node.id, false) || selected_ == node.id;
   if (event->button == tcbase::mouse_button_value(tcbase::MouseButton::RIGHT)) {
@@ -605,6 +701,16 @@ tc_ui_event_result TreeWidget::key_event(tc_ui_document_handle,
   if (!model_->contains(selected_))
     return TC_UI_EVENT_IGNORED;
   const TreeNode &selected = model_->node(selected_);
+  if (event->key == TC_UI_KEY_SPACE && selected.item.enabled) {
+    const bool secondary = (event->modifiers & TC_UI_MOD_SHIFT) != 0;
+    const int toggle_index = secondary ? 1 : 0;
+    const bool present = secondary ? selected.item.secondary_toggle
+                                   : selected.item.primary_toggle;
+    if (present) {
+      toggle_activated_.emit(*this, selected_, toggle_index, selected.item);
+      return TC_UI_EVENT_HANDLED;
+    }
+  }
   if (event->key == TC_UI_KEY_RIGHT) {
     if (!selected.children.empty() && !expansion_->expanded(selected_)) {
       set_expanded(selected_, true);

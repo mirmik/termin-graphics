@@ -18,17 +18,35 @@ struct CollectionItem {
     // not require a renderer-owned GPU allocation, which makes it suitable for stable UI
     // affordances such as project-browser file types.
     std::string icon;
+    bool primary_toggle = false;
+    bool primary_checked = false;
+    std::string primary_toggle_label;
+    bool secondary_toggle = false;
+    bool secondary_checked = false;
+    std::string secondary_toggle_label;
 
     CollectionItem() = default;
     CollectionItem(std::string stable_id_value, std::string text_value,
                    std::string subtitle_value = {}, bool enabled_value = true,
-                   uint32_t texture_id_value = 0, std::string icon_value = {})
+                   uint32_t texture_id_value = 0, std::string icon_value = {},
+                   bool primary_toggle_value = false,
+                   bool primary_checked_value = false,
+                   std::string primary_toggle_label_value = {},
+                   bool secondary_toggle_value = false,
+                   bool secondary_checked_value = false,
+                   std::string secondary_toggle_label_value = {})
         : stable_id(std::move(stable_id_value)),
           text(std::move(text_value)),
           subtitle(std::move(subtitle_value)),
           enabled(enabled_value),
           texture_id(texture_id_value),
-          icon(std::move(icon_value)) {}
+          icon(std::move(icon_value)),
+          primary_toggle(primary_toggle_value),
+          primary_checked(primary_checked_value),
+          primary_toggle_label(std::move(primary_toggle_label_value)),
+          secondary_toggle(secondary_toggle_value),
+          secondary_checked(secondary_checked_value),
+          secondary_toggle_label(std::move(secondary_toggle_label_value)) {}
 };
 enum class CollectionChangeKind { Reset, Insert, Update, Erase };
 struct CollectionChange { CollectionChangeKind kind = CollectionChangeKind::Reset; size_t index = 0; size_t count = 0; };

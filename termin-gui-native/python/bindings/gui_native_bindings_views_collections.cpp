@@ -661,6 +661,27 @@ void bind_gui_native_collection_views(nb::module_ &m) {
           },
           nb::arg("callback"))
       .def(
+          "connect_toggle_activated",
+          [](const TreeWidgetRef &self, nb::object callback) {
+            auto state = self.widget.state;
+            return self.get().toggle_activated().connect(
+                [state, callback = std::move(callback)](
+                    termin::gui_native::TreeWidget &,
+                    termin::gui_native::TreeNodeId node, int toggle_index,
+                    const termin::gui_native::CollectionItem &item) {
+                  try {
+                    nb::gil_scoped_acquire gil;
+                    callback(node, toggle_index, item);
+                  } catch (...) {
+                    if (state && !state->pending_exception)
+                      state->pending_exception = std::current_exception();
+                    tc_log_error("[termin-gui-native/python] TreeWidget "
+                                 "toggle callback failed");
+                  }
+                });
+          },
+          nb::arg("callback"))
+      .def(
           "connect_delete_requested",
           [](const TreeWidgetRef &self, nb::object callback) {
             auto state = self.widget.state;

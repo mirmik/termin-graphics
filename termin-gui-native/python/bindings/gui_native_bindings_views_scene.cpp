@@ -178,21 +178,45 @@ void bind_gui_native_scene_views(nb::module_ &m) {
           "__init__",
           [](termin::gui_native::CollectionItem *self, std::string stable_id,
              std::string text, std::string subtitle, bool enabled,
-             uint32_t texture_id, std::string icon) {
+             uint32_t texture_id, std::string icon, bool primary_toggle,
+             bool primary_checked, std::string primary_toggle_label,
+             bool secondary_toggle, bool secondary_checked,
+             std::string secondary_toggle_label) {
             new (self) termin::gui_native::CollectionItem{
                 std::move(stable_id), std::move(text),
                 std::move(subtitle),  enabled,
-                texture_id,           std::move(icon)};
+                texture_id,           std::move(icon),
+                primary_toggle,       primary_checked,
+                std::move(primary_toggle_label),
+                secondary_toggle,     secondary_checked,
+                std::move(secondary_toggle_label)};
           },
           nb::arg("stable_id"), nb::arg("text"), nb::arg("subtitle") = "",
           nb::arg("enabled") = true, nb::arg("texture_id") = 0,
-          nb::arg("icon") = "")
+          nb::arg("icon") = "", nb::arg("primary_toggle") = false,
+          nb::arg("primary_checked") = false,
+          nb::arg("primary_toggle_label") = "",
+          nb::arg("secondary_toggle") = false,
+          nb::arg("secondary_checked") = false,
+          nb::arg("secondary_toggle_label") = "")
       .def_rw("stable_id", &termin::gui_native::CollectionItem::stable_id)
       .def_rw("text", &termin::gui_native::CollectionItem::text)
       .def_rw("subtitle", &termin::gui_native::CollectionItem::subtitle)
       .def_rw("enabled", &termin::gui_native::CollectionItem::enabled)
       .def_rw("texture_id", &termin::gui_native::CollectionItem::texture_id)
-      .def_rw("icon", &termin::gui_native::CollectionItem::icon);
+      .def_rw("icon", &termin::gui_native::CollectionItem::icon)
+      .def_rw("primary_toggle",
+              &termin::gui_native::CollectionItem::primary_toggle)
+      .def_rw("primary_checked",
+              &termin::gui_native::CollectionItem::primary_checked)
+      .def_rw("primary_toggle_label",
+              &termin::gui_native::CollectionItem::primary_toggle_label)
+      .def_rw("secondary_toggle",
+              &termin::gui_native::CollectionItem::secondary_toggle)
+      .def_rw("secondary_checked",
+              &termin::gui_native::CollectionItem::secondary_checked)
+      .def_rw("secondary_toggle_label",
+              &termin::gui_native::CollectionItem::secondary_toggle_label);
 
   nb::class_<termin::gui_native::CollectionModel>(m, "CollectionModel")
       .def(nb::init<>())
