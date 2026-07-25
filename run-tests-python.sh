@@ -5,6 +5,7 @@
 #
 # Flags:
 #   --full       Include pytest tests marked full
+#   --jobs N     Run up to N manifest-selected pytest suites concurrently
 #   test paths   Run only selected pytest targets after environment setup;
 #                selected runs skip the repo-wide Python lint suite.
 #   --help, -h   Show this help
@@ -14,11 +15,25 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTEST_TARGETS=()
 FULL=0
+PYTEST_JOBS="${TERMIN_PYTEST_JOBS:-1}"
 
-for arg in "$@"; do
+while (( $# > 0 )); do
+    arg="$1"
+    shift
     case "$arg" in
         --full)
             FULL=1
+            ;;
+        --jobs)
+            if (( $# == 0 )); then
+                echo "ERROR: --jobs requires a positive integer." >&2
+                exit 1
+            fi
+            PYTEST_JOBS="$1"
+            shift
+            ;;
+        --jobs=*)
+            PYTEST_JOBS="${arg#--jobs=}"
             ;;
         --no-venv)
             echo "--no-venv is no longer supported; run ./setup-sdk-python-env.sh first." >&2
@@ -29,6 +44,7 @@ for arg in "$@"; do
             echo ""
             echo "  (no flags)  Use SDK Python + checkout overlay and run working tests"
             echo "  --full      Include pytest tests marked full"
+            echo "  --jobs N    Run up to N manifest-selected pytest suites concurrently"
             echo "  pytest-target"
             echo "              Run only selected pytest target(s), e.g. termin-app/tests/test_game_mode_model.py"
             echo "              Selected runs skip the repo-wide Python lint suite."
@@ -38,6 +54,11 @@ for arg in "$@"; do
         *) PYTEST_TARGETS+=("$arg") ;;
     esac
 done
+
+if [[ ! "$PYTEST_JOBS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: --jobs must be a positive integer, got: $PYTEST_JOBS" >&2
+    exit 1
+fi
 
 # --- TERMIN_SDK ---
 if [[ -z "${TERMIN_SDK:-}" ]]; then
@@ -145,6 +166,7 @@ else
     if ! "${PYTHON_COMMAND[@]}" -m termin_build.repository_control \
         --repo-root "$SCRIPT_DIR" run "$TEST_PROFILE" \
         --platform linux --executor pytest --python "$PYTHON_BIN" \
+        --pytest-jobs "$PYTEST_JOBS" \
         --python-arg=--termin-overlay --python-arg="$OVERLAY_MANIFEST" \
         "${PLANNER_PLAN_ARGS[@]}"; then
         failures+=("manifest Python suites")
