@@ -55,6 +55,8 @@ echo "TERMIN_SDK: $TERMIN_SDK"
 
 PYTHON_BIN="${PYTHON_BIN:-$TERMIN_SDK/bin/termin_python}"
 OVERLAY_MANIFEST="${TERMIN_PYTHON_OVERLAY:-$SCRIPT_DIR/build/python-envs/test/overlay.json}"
+BUILD_TOOLS_ROOT="$SCRIPT_DIR/termin-build-tools"
+TOOLS_REQUIREMENTS="$SCRIPT_DIR/build-system/python-test-requirements.txt"
 if [[ ! -x "$PYTHON_BIN" ]]; then
     echo "ERROR: SDK Python launcher is missing: $PYTHON_BIN" >&2
     echo "Run ./build-sdk.sh --no-wheels first." >&2
@@ -65,6 +67,11 @@ if [[ ! -f "$OVERLAY_MANIFEST" ]]; then
     echo "Run ./setup-sdk-python-env.sh first." >&2
     exit 1
 fi
+ENVIRONMENT_BOOTSTRAP='import sys; sys.path.insert(0, sys.argv.pop(1)); from termin_build.python_test_environment import main; raise SystemExit(main())'
+"$PYTHON_BIN" -c "$ENVIRONMENT_BOOTSTRAP" "$BUILD_TOOLS_ROOT" \
+    validate \
+    --environment-root "$(dirname "$OVERLAY_MANIFEST")" \
+    --requirements "$TOOLS_REQUIREMENTS" || exit 1
 PYTHON_COMMAND=("$PYTHON_BIN" --termin-overlay "$OVERLAY_MANIFEST")
 echo "Python: $PYTHON_BIN"
 echo "Overlay: $OVERLAY_MANIFEST"

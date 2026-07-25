@@ -63,12 +63,21 @@ if ($env:TERMIN_SDK) {
 
 $PythonBin = if ($env:PYTHON_BIN) { $env:PYTHON_BIN } else { Join-Path $env:TERMIN_SDK "bin\termin_python.exe" }
 $OverlayManifest = if ($env:TERMIN_PYTHON_OVERLAY) { $env:TERMIN_PYTHON_OVERLAY } else { Join-Path $ScriptDir "build\python-envs\test\overlay.json" }
+$BuildToolsRoot = Join-Path $ScriptDir "termin-build-tools"
+$ToolsRequirements = Join-Path $ScriptDir "build-system\python-test-requirements.txt"
 if (-not (Test-Path $PythonBin -PathType Leaf)) {
     throw "SDK Python launcher is missing: $PythonBin"
 }
 if (-not (Test-Path $OverlayManifest -PathType Leaf)) {
     throw "Python test overlay is missing: $OverlayManifest. Run .\setup-sdk-python-env.ps1 first."
 }
+$EnvironmentRoot = Split-Path -Parent $OverlayManifest
+$EnvironmentBootstrap = "import sys; sys.path.insert(0, sys.argv.pop(1)); from termin_build.python_test_environment import main; raise SystemExit(main())"
+& $PythonBin -c $EnvironmentBootstrap $BuildToolsRoot `
+    validate `
+    --environment-root $EnvironmentRoot `
+    --requirements $ToolsRequirements
+if ($LASTEXITCODE -ne 0) { throw "Python test environment validation failed" }
 $PythonPrefixArgs = @("--termin-overlay", $OverlayManifest)
 Write-Host "Python: $PythonBin"
 Write-Host "Overlay: $OverlayManifest"
