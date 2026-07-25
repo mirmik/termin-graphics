@@ -80,7 +80,7 @@ BUILD_TOOLS_ROOT="$SCRIPT_DIR/termin-build-tools"
 TOOLS_REQUIREMENTS="$SCRIPT_DIR/build-system/python-test-requirements.txt"
 if [[ ! -x "$PYTHON_BIN" ]]; then
     echo "ERROR: SDK Python launcher is missing: $PYTHON_BIN" >&2
-    echo "Run ./build-sdk.sh --no-wheels first." >&2
+    echo "Run ./build-sdk.sh first." >&2
     exit 1
 fi
 if [[ ! -f "$OVERLAY_MANIFEST" ]]; then

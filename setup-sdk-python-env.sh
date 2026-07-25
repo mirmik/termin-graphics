@@ -29,13 +29,13 @@ done
 
 if [[ ! -x "$SDK_PYTHON" ]]; then
     echo "ERROR: isolated SDK Python launcher is missing: $SDK_PYTHON" >&2
-    echo "Run ./build-sdk.sh --no-wheels first." >&2
+    echo "Run ./build-sdk.sh first." >&2
     exit 1
 fi
 
 if [[ ! -x "$TEST_TOOLS_PYTHON" ]]; then
     echo "ERROR: pinned SDK Python build frontend is missing: $TEST_TOOLS_PYTHON" >&2
-    echo "Run ./build-sdk.sh --no-wheels first." >&2
+    echo "Run ./build-sdk.sh first." >&2
     exit 1
 fi
 

@@ -23,16 +23,6 @@ if (-not $pythonCommand) {
 }
 
 $orchestratorArgs = @($args)
-$hasWheelFlag = $false
-foreach ($arg in $orchestratorArgs) {
-    if ($arg -eq "--no-wheels" -or $arg -eq "--wheels") {
-        $hasWheelFlag = $true
-        break
-    }
-}
-if (-not $hasWheelFlag) {
-    $orchestratorArgs += "--no-wheels"
-}
 
 $oldPythonPath = $env:PYTHONPATH
 $env:PYTHONPATH = (Join-Path $ScriptDir "termin-build-tools")

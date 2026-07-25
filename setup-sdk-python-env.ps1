@@ -35,11 +35,11 @@ $TestToolsPython = if ($env:TERMIN_TEST_TOOLS_PYTHON) {
 }
 
 if (-not (Test-Path $SdkPython -PathType Leaf)) {
-    throw "Isolated SDK Python launcher is missing: $SdkPython. Run .\build-sdk.ps1 --no-wheels first."
+    throw "Isolated SDK Python launcher is missing: $SdkPython. Run .\build-sdk.ps1 first."
 }
 
 if (-not (Test-Path $TestToolsPython -PathType Leaf)) {
-    throw "Pinned SDK Python build frontend is missing: $TestToolsPython. Run .\build-sdk.ps1 --no-wheels first."
+    throw "Pinned SDK Python build frontend is missing: $TestToolsPython. Run .\build-sdk.ps1 first."
 }
 $EnvironmentBootstrap = "import sys; sys.path.insert(0, sys.argv.pop(1)); from termin_build.python_test_environment import main; raise SystemExit(main())"
 $PrepareArgs = @(
