@@ -268,9 +268,10 @@ void bind_gui_native_window_adapter(nb::module_& m) {
 
     m.def(
         "dynamic_texture_lease",
-        [](GuiWindowAdapter& adapter) {
-            return std::make_unique<DynamicTextureLease>(adapter.renderer());
+        [](GuiWindowAdapter& adapter) -> DynamicTextureLease* {
+            return new DynamicTextureLease(adapter.renderer());
         },
         nb::arg("adapter"),
+        nb::rv_policy::take_ownership,
         nb::keep_alive<0, 1>());
 }
