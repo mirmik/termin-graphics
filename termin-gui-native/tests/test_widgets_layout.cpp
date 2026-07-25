@@ -437,8 +437,8 @@ void test_scroll_area_wheel_clamps_and_recursive_destroy_content() {
 
   auto &scroll = ui.make_root<ScrollArea>("scroll");
   auto &content = ui.make<VStack>("scroll-content");
-  auto &child = ui.make<Panel>("child");
-  content.add_fixed_child(child, 180.0f);
+  auto &area = ui.make<TextArea>("short text");
+  content.add_fixed_child(area, 180.0f);
   scroll.set_content(content);
   document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 50.0f});
 

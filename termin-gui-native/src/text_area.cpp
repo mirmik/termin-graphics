@@ -289,7 +289,12 @@ tc_ui_event_result TextArea::pointer_event(
         const float height = line_height(document);
         const float content_height = static_cast<float>(lines().size()) * height;
         const float max_scroll = std::max(0.0f, content_height - text_clip_rect(document).height);
-        scroll_y_ = clamp_float(scroll_y_ - event->wheel_y * height * 3.0f, 0.0f, max_scroll);
+        const float next_scroll = clamp_float(
+            scroll_y_ - event->wheel_y * height * 3.0f, 0.0f, max_scroll);
+        if (next_scroll == scroll_y_) {
+            return TC_UI_EVENT_IGNORED;
+        }
+        scroll_y_ = next_scroll;
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
         return TC_UI_EVENT_HANDLED;
     }
