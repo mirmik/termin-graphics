@@ -4,6 +4,8 @@
 #include <cstring>
 #include <string>
 
+#include <termin/render/render_export.hpp>
+
 #ifdef _MSC_VER
 #define tc_strdup _strdup
 #else
@@ -66,8 +68,11 @@ public:
         _c->viewport_name = name.empty() ? nullptr : tc_strdup(name.c_str());
     }
 
-    void* object_ptr() const;
-    bool set_field(const std::string& field_name, const tc_value& value);
+    RENDER_API void* object_ptr() const;
+    RENDER_API bool set_field(
+        const std::string& field_name,
+        const tc_value& value
+    );
 
     tc_pass* ptr() const { return _c; }
 };

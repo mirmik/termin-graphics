@@ -43,7 +43,7 @@ macro(termin_require_canonical_python)
             "${Python_EXECUTABLE}")
     endif()
     if(NOT TERMIN_PYTHON_GIL_DISABLED STREQUAL "1"
-       OR NOT TERMIN_PYTHON_SOABI MATCHES "^cpython-314t($|-)")
+       OR NOT TERMIN_PYTHON_SOABI MATCHES "^(cpython-|cp)314t($|-)")
         message(FATAL_ERROR
             "Termin requires free-threaded CPython "
             "${TERMIN_CANONICAL_PYTHON_VERSION}t, got "
@@ -56,4 +56,19 @@ macro(termin_require_canonical_python)
         "${TERMIN_CANONICAL_PYTHON_VERSION}t")
     set(Python_EXECUTABLE "${Python_EXECUTABLE}" CACHE FILEPATH
         "Canonical free-threaded Python used by Termin" FORCE)
+
+    # nanobind persists interpreter-derived ABI values as INTERNAL cache
+    # entries. Recompute them before the root nanobind target is configured so
+    # an existing build tree cannot retain a suffix from the previous runtime.
+    # Subprojects invoke this macro again after nanobind is loaded, so clearing
+    # the values unconditionally would erase the active configuration.
+    if(NOT TARGET nanobind-ft
+       AND DEFINED NB_SUFFIX
+       AND NOT NB_SUFFIX MATCHES "^\\.(cpython-|cp)314t")
+        unset(NB_SOABI CACHE)
+        unset(NB_SUFFIX CACHE)
+        unset(NB_SUFFIX_S CACHE)
+        unset(NB_ABI CACHE)
+        unset(NB_FREE_THREADED CACHE)
+    endif()
 endmacro()

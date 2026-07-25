@@ -132,6 +132,10 @@ if(TERMIN_WINDOW_BUILD_TESTS)
     add_executable(termin_window_public_contract
         tests/test_public_contract.cpp)
     target_link_libraries(termin_window_public_contract PRIVATE termin_window)
+    if(TERMIN_WINDOW_HAS_SDL)
+        target_compile_definitions(termin_window_public_contract
+            PRIVATE SDL_MAIN_HANDLED)
+    endif()
     add_test(NAME termin_window_public_contract
         COMMAND termin_window_public_contract)
     if(COMMAND termin_add_test_labels)
@@ -145,6 +149,8 @@ if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL)
     add_executable(termin_window_manager_live
         tests/test_window_manager_live.cpp)
     target_link_libraries(termin_window_manager_live PRIVATE termin_window)
+    target_compile_definitions(termin_window_manager_live
+        PRIVATE SDL_MAIN_HANDLED)
     termin_copy_sdl2_runtime(termin_window_manager_live)
     add_test(NAME termin_window_manager_live
         COMMAND termin_window_manager_live)
@@ -172,12 +178,16 @@ if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL)
         tests/test_multiwindow_event_routing.cpp)
     target_link_libraries(termin_window_multiwindow_event_routing
         PRIVATE termin_window)
+    target_compile_definitions(termin_window_multiwindow_event_routing
+        PRIVATE SDL_MAIN_HANDLED)
     termin_copy_sdl2_runtime(termin_window_multiwindow_event_routing)
 
     add_executable(termin_window_sdl_window_system_lifecycle
         tests/test_sdl_window_system_lifecycle.cpp)
     target_link_libraries(termin_window_sdl_window_system_lifecycle
         PRIVATE termin_window)
+    target_compile_definitions(termin_window_sdl_window_system_lifecycle
+        PRIVATE SDL_MAIN_HANDLED)
     termin_copy_sdl2_runtime(termin_window_sdl_window_system_lifecycle)
 
 endif()

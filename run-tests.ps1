@@ -96,8 +96,10 @@ if (-not $ProcessSmokeDisabled) {
     }
     if ($ProcessSmokeProfile) {
         try {
-            $PythonCommand = Get-Command python -ErrorAction Stop
-            $PythonExe = $PythonCommand.Path
+            $PythonExe = Join-Path $ScriptDir "sdk\bin\termin_python.exe"
+            if (-not (Test-Path $PythonExe -PathType Leaf)) {
+                throw "Bundled SDK Python is missing: $PythonExe. Run .\build-sdk.ps1 first."
+            }
             $env:PYTHONPATH = (Join-Path $ScriptDir "termin-build-tools") + $(
                 if ($env:PYTHONPATH) { [IO.Path]::PathSeparator + $env:PYTHONPATH } else { "" }
             )

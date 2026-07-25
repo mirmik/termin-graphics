@@ -47,22 +47,23 @@ class FakeFileSystem final : public FileDialogFileSystem {
     std::string normalize(std::string_view path, std::string_view base,
                           std::string& error) const override {
         error.clear();
-        std::string value(path);
+        std::string value = canonical(path);
+        const std::string canonical_base = canonical(base);
         if (value.empty() || value == ".")
-            return base.empty() ? "/root" : std::string(base);
+            return canonical_base.empty() ? "/root" : canonical_base;
         if (value == "..") {
-            const size_t separator = std::string(base).find_last_of('/');
-            return separator == 0 ? "/" : std::string(base).substr(0, separator);
+            const size_t separator = canonical_base.find_last_of('/');
+            return separator == 0 ? "/" : canonical_base.substr(0, separator);
         }
         if (value.front() != '/')
-            value = std::string(base) + "/" + value;
+            value = canonical_base + "/" + value;
         while (value.size() > 1 && value.back() == '/')
             value.pop_back();
         return value;
     }
 
     bool inspect(std::string_view path, FileDialogEntry& entry, std::string& error) const override {
-        const std::string value(path);
+        const std::string value = canonical(path);
         error.clear();
         if (directories_.contains(value)) {
             entry = FileDialogEntry{name(value), value, true, 0, 1};
@@ -79,7 +80,7 @@ class FakeFileSystem final : public FileDialogFileSystem {
 
     std::vector<FileDialogEntry> list(std::string_view directory,
                                       std::string& error) const override {
-        const std::string parent(directory);
+        const std::string parent = canonical(directory);
         error.clear();
         if (failing_directories_.contains(parent)) {
             error = "directory is unavailable";
@@ -103,8 +104,7 @@ class FakeFileSystem final : public FileDialogFileSystem {
     }
 
     bool create_directory(std::string_view path, std::string& error) override {
-        std::string value(path);
-        std::replace(value.begin(), value.end(), '\\', '/');
+        const std::string value = canonical(path);
         error.clear();
         if (directories_.contains(value) || files_.contains(value)) {
             error = "path already exists";
@@ -121,6 +121,12 @@ class FakeFileSystem final : public FileDialogFileSystem {
     void fail_listing(std::string path) { failing_directories_.insert(std::move(path)); }
 
   private:
+    static std::string canonical(std::string_view path) {
+        std::string value(path);
+        std::replace(value.begin(), value.end(), '\\', '/');
+        return value;
+    }
+
     static std::string name(const std::string& path) {
         if (path == "/")
             return "/";

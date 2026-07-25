@@ -6,12 +6,14 @@
 #include <chrono>
 #include <cstdint>
 
+#include "tgfx2/tgfx2_api.h"
+
 namespace tgfx {
 
 // Process-wide diagnostics gate. The environment is sampled once so disabled
 // instrumentation costs only an inline load/branch and never performs an
 // atomic RMW or reads the clock in a backend hot path.
-extern const bool g_vulkan_stats_enabled;
+extern TGFX2_API const bool g_vulkan_stats_enabled;
 
 inline bool vulkan_stats_enabled() noexcept {
     return g_vulkan_stats_enabled;

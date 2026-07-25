@@ -7,6 +7,7 @@
 
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/render_camera.hpp>
+#include <termin/render/render_export.hpp>
 #include <termin/lighting/light.hpp>
 #include <termin/tc_scene.hpp>
 #include <core/tc_entity_pool.h>
@@ -64,9 +65,9 @@ public:
     // only until the enclosing RenderEngine execution returns.
     std::vector<FrameGraphCaptureRequest*> debug_internal_capture_requests;
 
-    const std::string* requested_internal_symbol() const;
-    bool should_capture_internal(const char* symbol) const;
-    bool capture_internal(
+    RENDER_API const std::string* requested_internal_symbol() const;
+    RENDER_API bool should_capture_internal(const char* symbol) const;
+    RENDER_API bool capture_internal(
         const char* symbol,
         tgfx::TextureHandle texture,
         int width = 0,

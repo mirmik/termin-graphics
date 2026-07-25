@@ -139,6 +139,15 @@ switch ($WindowTestsMode) {
 
 $buildBinDir = Join-Path $BuildDir "bin"
 $buildLibDir = Join-Path $BuildDir "lib"
+$PythonForCMake = if ($env:PYTHON_BIN) {
+    $env:PYTHON_BIN
+} else {
+    Join-Path $ScriptDir "build\python-runtime\build-env\Scripts\python.exe"
+}
+if (-not (Test-Path $PythonForCMake -PathType Leaf)) {
+    Write-Error "Pinned SDK Python is required for CMake test configuration: $PythonForCMake. Run .\build-sdk.ps1 first."
+    exit 1
+}
 
 $pathEntries = @(
     (Join-Path $buildBinDir $BuildType),
@@ -207,6 +216,7 @@ $cmakeArgs += @(
     "-DCMAKE_INSTALL_PREFIX=$SdkPrefix",
     "-DCMAKE_BUILD_RPATH=$((Join-Path $SdkPrefix 'lib'));$((Join-Path $BuildDir 'bin'))",
     "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
+    "-DPython_EXECUTABLE=$PythonForCMake",
     "-DTERMIN_USE_CCACHE=$TerminUseCcache",
     "-DTERMIN_ENABLE_UNITY_BUILD=$TerminEnableUnityBuild",
     "-DTERMIN_ENABLE_PCH=$TerminEnablePch",
