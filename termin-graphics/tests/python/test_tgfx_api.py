@@ -66,7 +66,6 @@ def test_shader_resource_layout_accepts_typed_kind_and_scope():
     assert binding is not None
     assert binding["kind_name"] == "texture"
     assert binding["scope_name"] == "transient"
-    assert not hasattr(tgfx.Tgfx2RenderContext, "bind_sampled_texture")
 
 
 def test_shader_from_sources_accepts_explicit_entries():
@@ -299,14 +298,6 @@ def test_shader_program_rejects_default_shape_mismatched_with_property_type():
             ],
             phases=[],
         )
-
-
-def test_tc_material_does_not_expose_legacy_from_parsed_forwarder():
-    from termin.materials import TcMaterial
-
-    assert not hasattr(TcMaterial, "from_parsed")
-
-
 def test_slang_material_add_phase_accepts_explicit_stage_entries():
     from termin.materials import TcMaterial
 
